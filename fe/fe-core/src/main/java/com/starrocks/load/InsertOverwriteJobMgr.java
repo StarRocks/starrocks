@@ -19,11 +19,12 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -40,8 +41,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -49,9 +48,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 
 public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(InsertOverwriteJobMgr.class);
+    private static final int MEMORY_JOB_SAMPLES = 10;
 
     @SerializedName(value = "overwriteJobMap")
     private Map<Long, InsertOverwriteJob> overwriteJobMap;
@@ -74,7 +75,7 @@ public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable, Mem
         ThreadFactory threadFactory = new DefaultThreadFactory("cancel-thread");
         this.cancelJobExecutorService = Executors.newSingleThreadExecutor(threadFactory);
         this.runningJobs = Lists.newArrayList();
-        this.lock = new FairReentrantReadWriteLock();
+        this.lock = new ReentrantReadWriteLock();
     }
 
     public void executeJob(ConnectContext context, StmtExecutor stmtExecutor, InsertOverwriteJob job) throws Exception {
@@ -147,7 +148,7 @@ public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable, Mem
 
     public void replayCreateInsertOverwrite(CreateInsertOverwriteJobLog jobInfo) {
         InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(jobInfo.getJobId(),
-                jobInfo.getDbId(), jobInfo.getTableId(), jobInfo.getTargetPartitionIds());
+                jobInfo.getDbId(), jobInfo.getTableId(), jobInfo.getTargetPartitionIds(), jobInfo.isDynamicOverwrite());
         boolean registered = registerOverwriteJob(insertOverwriteJob);
         if (!registered) {
             LOG.warn("register insert overwrite job failed. jobId:{}", insertOverwriteJob.getJobId());
@@ -229,10 +230,7 @@ public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable, Mem
         }
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
+
 
     public static InsertOverwriteJobMgr read(DataInput in) throws IOException {
         String json = Text.readString(in);
@@ -256,8 +254,8 @@ public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable, Mem
         }
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.INSERT_OVERWRITE_JOB_MGR, 1);
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.INSERT_OVERWRITE_JOB_MGR, 1);
         writer.writeJson(this);
         writer.close();
     }
@@ -272,5 +270,14 @@ public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable, Mem
     @Override
     public Map<String, Long> estimateCount() {
         return ImmutableMap.of("insertOverwriteJobs", (long) overwriteJobMap.size());
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> samples = overwriteJobMap.values()
+                .stream()
+                .limit(MEMORY_JOB_SAMPLES)
+                .collect(Collectors.toList());
+        return Lists.newArrayList(Pair.create(samples, (long) overwriteJobMap.size()));
     }
 }

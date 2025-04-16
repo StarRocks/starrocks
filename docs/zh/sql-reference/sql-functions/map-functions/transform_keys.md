@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # transform_keys
 
-## 功能
+
 
 对 Map 中的 key 进行 Lambda 转换。有关 Lambda 函数的详细信息，参见 [Lambda expression](../Lambda_expression.md)。
 

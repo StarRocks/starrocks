@@ -39,6 +39,7 @@
 
 #include "common/logging.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/mem_pool.h"
 #include "runtime/string_value.h"
 #include "simd/multi_version.h"
 #include "util/coding.h"
@@ -589,7 +590,7 @@ std::string HyperLogLog::to_string() const {
                                    estimate_cardinality(), _type);
     case HLL_DATA_SPARSE:
     case HLL_DATA_FULL: {
-        return strings::Substitute("cardinality:$1\ntype:$2", estimate_cardinality(), _type);
+        return strings::Substitute("cardinality:$0\ntype:$1", estimate_cardinality(), _type);
     }
     default:
         return {};
@@ -599,79 +600,6 @@ std::string HyperLogLog::to_string() const {
 void HyperLogLog::clear() {
     _type = HLL_DATA_EMPTY;
     _hash_set.clear();
-}
-
-DataSketchesHll::DataSketchesHll(const Slice& src) {
-    if (!deserialize(src)) {
-        LOG(WARNING) << "Failed to init DataSketchHll from slice, will be reset to 0.";
-    }
-}
-
-bool DataSketchesHll::is_valid(const Slice& slice) {
-    if (slice.size < 1) {
-        return false;
-    }
-
-    const uint8_t preInts = static_cast<const uint8_t*>((uint8_t*)slice.data)[0];
-    if (preInts == datasketches::hll_constants::HLL_PREINTS ||
-        preInts == datasketches::hll_constants::HASH_SET_PREINTS ||
-        preInts == datasketches::hll_constants::LIST_PREINTS) {
-        return true;
-    } else {
-        return false;
-    }
-}
-
-void DataSketchesHll::update(uint64_t hash_value) {
-    _sketch.update(hash_value);
-}
-
-void DataSketchesHll::merge(const DataSketchesHll& other) {
-    datasketches::hll_union u(MAX_HLL_LOG_K);
-    u.update(_sketch);
-    u.update(other._sketch);
-    _sketch = u.get_result(HLL_TGT_TYPE);
-}
-
-size_t DataSketchesHll::max_serialized_size() const {
-    return _sketch.get_max_updatable_serialization_bytes(HLL_LOG_K, HLL_TGT_TYPE);
-}
-
-size_t DataSketchesHll::serialize_size() const {
-    return _sketch.get_compact_serialization_bytes();
-}
-
-size_t DataSketchesHll::serialize(uint8_t* dst) const {
-    auto serialize_compact = _sketch.serialize_compact();
-    std::copy(serialize_compact.begin(), serialize_compact.end(), dst);
-    return _sketch.get_compact_serialization_bytes();
-}
-
-bool DataSketchesHll::deserialize(const Slice& slice) {
-    // can be called only when _sketch is empty
-    DCHECK(_sketch.is_empty());
-
-    // check if input length is valid
-    if (!is_valid(slice)) {
-        return false;
-    }
-
-    try {
-        _sketch = datasketches::hll_sketch::deserialize((uint8_t*)slice.data, slice.size);
-    } catch (std::logic_error& e) {
-        LOG(WARNING) << "DataSketchesHll deserialize error: " << e.what();
-        return false;
-    }
-
-    return true;
-}
-
-int64_t DataSketchesHll::estimate_cardinality() const {
-    return _sketch.get_estimate();
-}
-
-std::string DataSketchesHll::to_string() const {
-    return _sketch.to_string();
 }
 
 } // namespace starrocks

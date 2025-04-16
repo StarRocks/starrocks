@@ -41,7 +41,6 @@
 #include "common/status.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "gen_cpp/MVMaintenance_types.h"
-#include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "util/countdown_latch.h"
 #include "util/priority_thread_pool.hpp"
@@ -90,6 +89,9 @@ public:
     void fetch_data(google::protobuf::RpcController* controller, const PFetchDataRequest* request,
                     PFetchDataResult* result, google::protobuf::Closure* done) override;
 
+    void fetch_datacache(google::protobuf::RpcController* controller, const PFetchDataCacheRequest* request,
+                         PFetchDataCacheResponse* response, google::protobuf::Closure* done) override;
+
     void tablet_writer_open(google::protobuf::RpcController* controller, const PTabletWriterOpenRequest* request,
                             PTabletWriterOpenResult* response, google::protobuf::Closure* done) override;
 
@@ -121,6 +123,9 @@ public:
 
     void tablet_writer_cancel(google::protobuf::RpcController* controller, const PTabletWriterCancelRequest* request,
                               PTabletWriterCancelResult* response, google::protobuf::Closure* done) override;
+
+    void load_diagnose(google::protobuf::RpcController* controller, const PLoadDiagnoseRequest* request,
+                       PLoadDiagnoseResult* response, google::protobuf::Closure* done) override;
 
     void trigger_profile_report(google::protobuf::RpcController* controller,
                                 const PTriggerProfileReportRequest* request, PTriggerProfileReportResult* result,
@@ -180,6 +185,16 @@ public:
                                   const PProcessDictionaryCacheRequest* request,
                                   PProcessDictionaryCacheResult* response, google::protobuf::Closure* done) override;
 
+    void fetch_arrow_schema(google::protobuf::RpcController* controller, const PFetchArrowSchemaRequest* request,
+                            PFetchArrowSchemaResult* result, google::protobuf::Closure* done) override;
+
+    void stream_load(google::protobuf::RpcController* controller, const PStreamLoadRequest* request,
+                     PStreamLoadResponse* response, google::protobuf::Closure* done) override;
+
+    void update_transaction_state(google::protobuf::RpcController* controller,
+                                  const PUpdateTransactionStateRequest* request,
+                                  PUpdateTransactionStateResponse* response, google::protobuf::Closure* done) override;
+
 private:
     void _transmit_chunk(::google::protobuf::RpcController* controller,
                          const ::starrocks::PTransmitChunkParams* request, ::starrocks::PTransmitChunkResult* response,
@@ -202,6 +217,9 @@ private:
 
     void _fetch_data(google::protobuf::RpcController* controller, const PFetchDataRequest* request,
                      PFetchDataResult* result, google::protobuf::Closure* done);
+
+    void _fetch_datacache(google::protobuf::RpcController* controller, const PFetchDataCacheRequest* request,
+                          PFetchDataCacheResponse* response, google::protobuf::Closure* done);
 
     void _get_info_impl(const PProxyRequest* request, PProxyResult* response, google::protobuf::Closure* done,
                         int timeout_ms);

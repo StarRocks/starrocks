@@ -20,13 +20,14 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateFunction;
+import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -37,6 +38,7 @@ import com.starrocks.sql.ast.FunctionArgsDef;
 import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.thrift.TFunctionBinaryType;
 import org.apache.commons.codec.binary.Hex;
+import org.apache.commons.lang.StringUtils;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -80,13 +82,9 @@ public class CreateFunctionAnalyzer {
         functionName.analyze(context.getDatabase());
         FunctionArgsDef argsDef = stmt.getArgsDef();
         TypeDef returnType = stmt.getReturnType();
-        try {
-            // check argument
-            argsDef.analyze();
-            returnType.analyze();
-        } catch (AnalysisException e) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e);
-        }
+        // check argument
+        argsDef.analyze();
+        returnType.analyze();
     }
 
     public String computeMd5(CreateFunctionStmt stmt) {
@@ -191,10 +189,10 @@ public class CreateFunctionAnalyzer {
         Method method = mainClass.getMethod(CreateFunctionStmt.EVAL_METHOD_NAME, true);
         mainClass.checkMethodNonStaticAndPublic(method);
         mainClass.checkArgumentCount(method, argsDef.getArgTypes().length);
-        mainClass.checkReturnUdfType(method, returnType.getType());
+        mainClass.checkScalarReturnUdfType(method, returnType.getType());
         for (int i = 0; i < method.getParameters().length; i++) {
             Parameter p = method.getParameters()[i];
-            mainClass.checkUdfType(method, argsDef.getArgTypes()[i], p.getType(), p.getName());
+            mainClass.checkScalarUdfType(method, argsDef.getArgTypes()[i], p.getType(), p.getName());
         }
     }
 
@@ -368,6 +366,8 @@ public class CreateFunctionAnalyzer {
                     .put(PrimitiveType.CHAR, String.class)
                     .put(PrimitiveType.VARCHAR, String.class)
                     .build();
+    private static final Class<?> JAVA_ARRAY_CLASS_TYPE = List.class;
+    private static final Class<?> JAVA_MAP_CLASS_TYPE = Map.class;
 
     public static class UDFInternalClassLoader extends URLClassLoader {
         public UDFInternalClassLoader(String udfPath) throws IOException {
@@ -512,6 +512,57 @@ public class CreateFunctionAnalyzer {
                                 cls.getCanonicalName()));
             }
         }
+
+        private void checkScalarReturnUdfType(Method method, Type expType) {
+            checkScalarUdfType(method, expType, method.getReturnType(), CreateFunctionStmt.RETURN_FIELD_NAME);
+        }
+
+        private void checkScalarUdfType(Method method, Type expType, Class<?> ptype, String pname) {
+            if (!(expType instanceof ScalarType)) {
+                if (expType.isArrayType()) {
+                    if (!ptype.equals(JAVA_ARRAY_CLASS_TYPE)) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                                String.format("UDF class '%s' method '%s' parameter %s[%s] type does not match %s",
+                                        clazz.getCanonicalName(), method.getName(), pname, ptype.getCanonicalName(),
+                                        JAVA_ARRAY_CLASS_TYPE.getCanonicalName()));
+                    }
+                    ArrayType arrayType = (ArrayType) expType;
+                    if (PRIMITIVE_TYPE_TO_JAVA_CLASS_TYPE.containsKey(arrayType.getItemType().getPrimitiveType())) {
+                        return;
+                    }
+                }
+
+                if (expType.isMapType()) {
+                    MapType mapType = (MapType) expType;
+                    if (!ptype.equals(JAVA_MAP_CLASS_TYPE)) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                                String.format("UDF class '%s' method '%s' parameter %s[%s] type does not match %s",
+                                        clazz.getCanonicalName(), method.getName(), pname, ptype.getCanonicalName(),
+                                        JAVA_ARRAY_CLASS_TYPE.getCanonicalName()));
+                    }
+                    if (PRIMITIVE_TYPE_TO_JAVA_CLASS_TYPE.containsKey(mapType.getKeyType().getPrimitiveType())
+                            && PRIMITIVE_TYPE_TO_JAVA_CLASS_TYPE.containsKey(mapType.getValueType().getPrimitiveType())) {
+                        return;
+                    }
+                }
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        String.format("UDF class '%s' method '%s' does not support non-scalar type '%s'",
+                                clazz.getCanonicalName(), method.getName(), expType));
+            }
+            ScalarType scalarType = (ScalarType) expType;
+            Class<?> cls = PRIMITIVE_TYPE_TO_JAVA_CLASS_TYPE.get(scalarType.getPrimitiveType());
+            if (cls == null) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        String.format("UDF class '%s' method '%s' does not support type '%s'",
+                                clazz.getCanonicalName(), method.getName(), scalarType));
+            }
+            if (!cls.equals(ptype)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        String.format("UDF class '%s' method '%s' parameter %s[%s] type does not match %s",
+                                clazz.getCanonicalName(), method.getName(), pname, ptype.getCanonicalName(),
+                                cls.getCanonicalName()));
+            }
+        }
     }
 
     private void analyzePython(CreateFunctionStmt stmt) {
@@ -525,6 +576,11 @@ public class CreateFunctionAnalyzer {
         }
         String symbol = properties.get(CreateFunctionStmt.SYMBOL_KEY);
         String inputType = properties.getOrDefault(CreateFunctionStmt.INPUT_TYPE, "scalar");
+        String objectFile = stmt.getProperties().get(CreateFunctionStmt.FILE_KEY);
+
+        if (isInline && !StringUtils.equals(objectFile, "inline")) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_OBJECT, "inline function file should be 'inline'");
+        }
 
         if (!inputType.equalsIgnoreCase("arrow") && !inputType.equalsIgnoreCase("scalar")) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_OBJECT, "unknown input type:", inputType);
@@ -533,7 +589,6 @@ public class CreateFunctionAnalyzer {
         FunctionName functionName = stmt.getFunctionName();
         FunctionArgsDef argsDef = stmt.getArgsDef();
         TypeDef returnType = stmt.getReturnType();
-        String objectFile = stmt.getProperties().get(CreateFunctionStmt.FILE_KEY);
         String isolation = stmt.getProperties().get(CreateFunctionStmt.ISOLATION_KEY);
 
         ScalarFunction.ScalarFunctionBuilder scalarFunctionBuilder =

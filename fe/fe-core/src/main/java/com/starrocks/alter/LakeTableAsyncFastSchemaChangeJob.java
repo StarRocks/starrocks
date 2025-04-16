@@ -25,20 +25,15 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.TabletMetadataUpdateAgentTask;
 import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.ListUtils;
 
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -47,7 +42,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.inactiveRelatedMaterializedViews;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -66,6 +60,11 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
     @SerializedName(value = "schemaInfos")
     private List<IndexSchemaInfo> schemaInfos;
     private Set<String> partitionsWithSchemaFile = new HashSet<>();
+
+    // for deserialization
+    public LakeTableAsyncFastSchemaChangeJob() {
+        super(JobType.SCHEMA_CHANGE);
+    }
 
     LakeTableAsyncFastSchemaChangeJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs) {
         super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
@@ -86,11 +85,13 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
 
     @Override
     protected TabletMetadataUpdateAgentTask createTask(PhysicalPartition partition, MaterializedIndex index, long nodeId,
-            Set<Long> tablets) {
+                                                       Set<Long> tablets) {
         String tag = String.format("%d_%d", partition.getId(), index.getId());
         TabletMetadataUpdateAgentTask task = null;
+        boolean needUpdateSchema = false;
         for (IndexSchemaInfo info : schemaInfos) {
             if (info.indexId == index.getId()) {
+                needUpdateSchema = true;
                 // `Set.add()` returns true means this set did not already contain the specified element
                 boolean createSchemaFile = partitionsWithSchemaFile.add(tag);
                 task = TabletMetadataUpdateAgentTaskFactory.createTabletSchemaUpdateTask(nodeId,
@@ -98,18 +99,27 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
                 break;
             }
         }
+
+        // if the index is not in schemaInfos, it means the schema of index are not needed to be modified,
+        // but we still need to update the tablet meta to improve the meta version
+        if (!needUpdateSchema) {
+            task = TabletMetadataUpdateAgentTaskFactory.createTabletSchemaUpdateTask(nodeId,
+                    new ArrayList<>(tablets), null, false);
+        }
+
         return task;
     }
 
     @Override
+    protected LakeTableAsyncFastSchemaChangeJob getShadowCopy() {
+        LakeTableAsyncFastSchemaChangeJob copied = new LakeTableAsyncFastSchemaChangeJob();
+        copyOnlyForNonFirstLog(copied);
+        return copied;
+    }
+
+    @Override
     protected void updateCatalog(Database db, LakeTable table) {
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
-        try {
-            updateCatalogUnprotected(db, table);
-        } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
-        }
+        updateCatalogUnprotected(db, table);
     }
 
     private void updateCatalogUnprotected(Database db, LakeTable table) {
@@ -144,18 +154,15 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
         table.rebuildFullSchema();
 
         // If modified columns are already done, inactive related mv
-        inactiveRelatedMaterializedViews(db, table, droppedOrModifiedColumns);
+        AlterMVJobExecutor.inactiveRelatedMaterializedViews(db, table, droppedOrModifiedColumns);
     }
 
     @Override
     protected void restoreState(LakeTableAlterMetaJobBase job) {
-        this.schemaInfos = new ArrayList<>(((LakeTableAsyncFastSchemaChangeJob) job).schemaInfos);
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
+        List<IndexSchemaInfo> jobSchemaInfos = ((LakeTableAsyncFastSchemaChangeJob) job).schemaInfos;
+        if (jobSchemaInfos != null && !jobSchemaInfos.isEmpty()) {
+            this.schemaInfos = new ArrayList<>(jobSchemaInfos);
+        }
     }
 
     private static class IndexSchemaInfo {

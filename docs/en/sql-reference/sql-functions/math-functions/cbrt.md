@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # cbrt
 
-## Description
+
 
 Computes the cube root of the argument.
 

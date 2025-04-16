@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Data Cache observability
@@ -7,6 +7,10 @@ displayed_sidebar: "English"
 In earlier versions, there are no rich metrics or efficient methods to monitor the performance, usage, and health of [Data Cache](./data_cache.md).
 
 In v3.3, StarRocks improves the observability of Data Cache by offering efficient monitoring methods and more metrics. Users can now check the overall disk and memory usage of the data cache, and related metrics, enhancing monitoring of cache usage.
+
+> **NOTE**
+>
+> From v3.4.0 onwards, queries against external catalogs and cloud-native tables (in shared-data clusters) use a unified Data Cache instance. Therefore, unless otherwise specified, the following methods default to displaying the metrics of the Data Cache instance itself, which includes the cache usage of queries against both external catalogs and cloud-native tables.
 
 ## SQL commands
 
@@ -76,9 +80,44 @@ mysql> select * from information_schema.be_datacache_metrics;
 
 ## API call
 
-### Method
+Since v3.3.2, StarRocks provides two APIs to get cache metrics, which reflect the cache state at different levels:
 
-You can call the following API to view detailed metrics of Data Cache on a BE node.
+- `/api/datacache/app_stat`: the actual cache hit rate of queries, calculated as `Remote Read Bytes / (Remote Read Bytes + Data Cache Read Bytes)`.
+- `/api/datacache/stat`: the underlying execution state of Data Cache. This interface is mainly used for maintenance and bottleneck identification of Data Cache. It does not reflect the actual hit rate of the query. Common users do not need to pay attention to this interface.
+
+### View cache hit metrics
+
+View the cache hit metrics by accessing the following API interface:
+
+```bash
+http://${BE_HOST}:${BE_HTTP_PORT}/api/datacache/app_stat
+```
+
+Return:
+
+```bash
+{
+    "hit_bytes": 4008,
+    "miss_bytes": 2004,
+    "hit_rate": 0.67,
+    "hit_bytes_last_minute": 4008,
+    "miss_bytes_last_minute": 2004, "hit_rate": 0.67, "hit_bytes_last_minute": 4008,
+    "hit_rate_last_minute": 0.67
+}
+```
+
+| **Metric**             | **Description**                                      |
+| ---------------------- | ---------------------------------------------------- |
+| hit_bytes              | Number of bytes read from the cache.                 |
+| miss_bytes             | Number of bytes read from remote storage.            |
+| hit_rate               | Cache hit rate, calculated as `(hit_bytes / (hit_bytes + miss_bytes))`. |
+| hit_bytes_last_minute  | Number of bytes read from the cache in the last minute. |
+| miss_bytes_last_minute | Number of bytes read from the remote storage in the last minute. |
+| hit_rate_last_minute   | Cache hit rate in the last minute.                   |
+
+### View the underlying execution state of Data Cache
+
+You can get more detailed metrics on the Data Cache by accessing the following API interfaces.
 
 ```Bash
 http://${BE_HOST}:${BE_HTTP_PORT}/api/datacache/stat
@@ -86,7 +125,7 @@ http://${BE_HOST}:${BE_HTTP_PORT}/api/datacache/stat
 
 The following figure shows the returned metrics.
 
-![img](../assets/data_cache_observe.png)
+![img](../_assets/data_cache_observe.png)
 
 ### Metric description
 

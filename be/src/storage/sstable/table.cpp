@@ -27,18 +27,20 @@ struct Table::Rep {
     ~Rep() {
         delete filter;
         delete[] filter_data;
+        filter_data_size = 0;
         delete index_block;
     }
 
     Options options;
     Status status;
-    RandomAccessFile* file;
-    uint64_t cache_id;
-    FilterBlockReader* filter;
-    const char* filter_data;
+    RandomAccessFile* file = nullptr;
+    uint64_t cache_id = 0;
+    FilterBlockReader* filter = nullptr;
+    const char* filter_data = nullptr;
+    size_t filter_data_size = 0;
 
     BlockHandle metaindex_handle; // Handle to metaindex_block: saved from footer
-    Block* index_block;
+    Block* index_block = nullptr;
 };
 
 Status Table::Open(const Options& options, RandomAccessFile* file, uint64_t size, Table** table) {
@@ -135,7 +137,8 @@ void Table::ReadFilter(const Slice& filter_handle_value) {
         return;
     }
     if (block.heap_allocated) {
-        rep_->filter_data = block.data.get_data(); // Will need to delete later
+        rep_->filter_data = block.data.get_data();      // Will need to delete later
+        rep_->filter_data_size = block.data.get_size(); // mem tracker will track this piece of memory.
     }
     rep_->filter = new FilterBlockReader(rep_->options.filter_policy, block.data);
 }
@@ -186,19 +189,18 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options, const Slice&
                 if (options.stat != nullptr) {
                     options.stat->block_cnt_from_cache++;
                 }
-                TRACE_COUNTER_INCREMENT("read_block_hit_cache_cnt", 1);
             } else {
                 s = ReadBlock(table->rep_->file, options, handle, &contents);
                 if (s.ok()) {
                     block = new Block(contents);
                     if (contents.cachable && options.fill_cache) {
-                        cache_handle = block_cache->insert(key, block, block->size(), &DeleteCachedBlock);
+                        size_t block_size = block->size();
+                        cache_handle = block_cache->insert(key, block, block_size, block_size, &DeleteCachedBlock);
                     }
                 }
                 if (options.stat != nullptr) {
                     options.stat->block_cnt_from_file++;
                 }
-                TRACE_COUNTER_INCREMENT("read_block_miss_cache_cnt", 1);
             }
         } else {
             BlockContents contents;
@@ -209,7 +211,6 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options, const Slice&
             if (options.stat != nullptr) {
                 options.stat->block_cnt_from_file++;
             }
-            TRACE_COUNTER_INCREMENT("read_block_miss_cache_cnt", 1);
         }
     }
 
@@ -252,21 +253,29 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
         return false;
     };
 
+    int64_t continue_block_read_cnt = 0;
+    int64_t sst_bloom_filter_rows = 0;
+    int64_t multiget_t1_us = 0;
+    int64_t multiget_t2_us = 0;
+    int64_t multiget_t3_us = 0;
     size_t i = 0;
     bool founded = false;
     for (auto it = begin; it != end; ++it, ++i) {
         auto& k = keys[*it];
+        int64_t t0 = butil::gettimeofday_us();
         if (current_block_itr_ptr != nullptr && current_block_itr_ptr->Valid()) {
             // keep searching current block
             ASSIGN_OR_RETURN(founded, search_in_block(k, &(*values)[i], current_block_itr_ptr.get()));
             if (founded) {
-                TRACE_COUNTER_INCREMENT("continue_block_read", 1);
+                continue_block_read_cnt++;
                 continue;
             } else {
                 current_block_itr_ptr.reset(nullptr);
             }
         }
+        int64_t t1 = butil::gettimeofday_us();
         iiter->Seek(k);
+        int64_t t2 = butil::gettimeofday_us();
         if (iiter->Valid()) {
             Slice handle_value = iiter->value();
             FilterBlockReader* filter = rep_->filter;
@@ -274,21 +283,33 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
             if (filter != nullptr && handle.DecodeFrom(&handle_value).ok() &&
                 !filter->KeyMayMatch(handle.offset(), k)) {
                 // Not found
-                TRACE_COUNTER_INCREMENT("sst_bloom_filter_rows", 1);
+                sst_bloom_filter_rows++;
             } else {
-                auto start_ts = butil::gettimeofday_us();
                 current_block_itr_ptr.reset(BlockReader(this, options, iiter->value()));
-                auto end_ts = butil::gettimeofday_us();
-                TRACE_COUNTER_INCREMENT("read_block", end_ts - start_ts);
                 ASSIGN_OR_RETURN(founded, search_in_block(k, &(*values)[i], current_block_itr_ptr.get()));
             }
         }
+        int64_t t3 = butil::gettimeofday_us();
+        multiget_t1_us += t1 - t0;
+        multiget_t2_us += t2 - t1;
+        multiget_t3_us += t3 - t2;
     }
     if (s.ok()) {
         s = iiter->status();
     }
     delete iiter;
+    TRACE_COUNTER_INCREMENT("continue_block_read_cnt", continue_block_read_cnt);
+    TRACE_COUNTER_INCREMENT("sst_bloom_filter_rows", sst_bloom_filter_rows);
+    TRACE_COUNTER_INCREMENT("multiget_t1_us", multiget_t1_us);
+    TRACE_COUNTER_INCREMENT("multiget_t2_us", multiget_t2_us);
+    TRACE_COUNTER_INCREMENT("multiget_t3_us", multiget_t3_us);
     return s;
+}
+
+size_t Table::memory_usage() const {
+    const size_t index_block_sz = (rep_->index_block != nullptr) ? rep_->index_block->size() : 0;
+    const size_t filter_data_sz = rep_->filter_data_size;
+    return index_block_sz + filter_data_sz;
 }
 
 // If new container wants to be supported in MultiGet, the initialization can be added here.

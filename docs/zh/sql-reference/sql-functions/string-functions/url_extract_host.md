@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # url_extract_host
 
-## 功能
+
 
 从一个 URL 中截取 host 部分。
 

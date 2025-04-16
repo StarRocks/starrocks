@@ -27,6 +27,7 @@ import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.SlotProvider;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -93,6 +94,10 @@ public class JobSpec {
     private boolean needQueued = false;
     private boolean enableGroupLevelQueue = false;
 
+    private boolean incrementalScanRanges = false;
+
+    private boolean isSyncStreamLoad = false;
+
     public static class Factory {
         private Factory() {
         }
@@ -104,12 +109,14 @@ public class JobSpec {
                                             TQueryType queryType) {
             TQueryOptions queryOptions = context.getSessionVariable().toThrift();
             queryOptions.setQuery_type(queryType);
+            queryOptions.setQuery_timeout(context.getExecTimeout());
 
             TQueryGlobals queryGlobals = genQueryGlobals(context.getStartTimeInstant(),
                     context.getSessionVariable().getTimeZone());
             if (context.getLastQueryId() != null) {
                 queryGlobals.setLast_query_id(context.getLastQueryId().toString());
             }
+            queryGlobals.setConnector_scan_node_number(scanNodes.stream().filter(x -> x.isRunningAsConnectorOperator()).count());
 
             return new Builder()
                     .queryId(context.getExecutionId())
@@ -119,7 +126,7 @@ public class JobSpec {
                     .enableStreamPipeline(false)
                     .isBlockQuery(false)
                     .needReport(context.getSessionVariable().isEnableProfile() ||
-                            context.getSessionVariable().isEnableBigQueryProfile())
+                            context.getSessionVariable().isEnableBigQueryProfile() || queryType == TQueryType.LOAD)
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
                     .commonProperties(context)
@@ -139,6 +146,7 @@ public class JobSpec {
             if (context.getLastQueryId() != null) {
                 queryGlobals.setLast_query_id(context.getLastQueryId().toString());
             }
+            queryGlobals.setConnector_scan_node_number(scanNodes.stream().filter(x -> x.isRunningAsConnectorOperator()).count());
 
             return new Builder()
                     .queryId(context.getExecutionId())
@@ -298,6 +306,7 @@ public class JobSpec {
                     .enablePipeline(false)
                     .resourceGroup(null)
                     .warehouseId(planner.getWarehouseId())
+                    .setSyncStreamLoad()
                     .build();
         }
 
@@ -396,6 +405,10 @@ public class JobSpec {
         this.loadJobId = loadJobId;
     }
 
+    public TLoadJobType getLoadJobType() {
+        return queryOptions.getLoad_job_type();
+    }
+
     public boolean isSetLoadJobId() {
         return loadJobId != UNINITIALIZED_LOAD_JOB_ID;
     }
@@ -488,6 +501,14 @@ public class JobSpec {
         return planProtocol;
     }
 
+    public boolean isIncrementalScanRanges() {
+        return incrementalScanRanges;
+    }
+
+    public void setIncrementalScanRanges(boolean v) {
+        incrementalScanRanges = v;
+    }
+
     public void reset() {
         fragments.forEach(PlanFragment::reset);
     }
@@ -499,14 +520,16 @@ public class JobSpec {
             return GlobalStateMgr.getCurrentState().getGlobalSlotProvider();
         }
     }
+
     public boolean hasOlapTableSink() {
         for (PlanFragment fragment : fragments) {
             if (fragment.hasOlapTableSink()) {
                 return true;
             }
         }
-        return false;
+        return isSyncStreamLoad;
     }
+
     public static class Builder {
         private final JobSpec instance = new JobSpec();
 
@@ -602,6 +625,11 @@ public class JobSpec {
             return this;
         }
 
+        private Builder setSyncStreamLoad() {
+            instance.isSyncStreamLoad = true;
+            return this;
+        }
+
         /**
          * Whether it can use pipeline engine.
          *
@@ -617,19 +645,8 @@ public class JobSpec {
         }
 
         private boolean isEnableQueue(ConnectContext connectContext) {
-            if (connectContext != null && connectContext.getSessionVariable() != null &&
-                    !connectContext.getSessionVariable().isEnableQueryQueue()) {
-                return false;
-            }
-            if (instance.isStatisticsJob()) {
-                return GlobalVariable.isEnableQueryQueueStatistic();
-            }
-
-            if (instance.isLoadType()) {
-                return GlobalVariable.isEnableQueryQueueLoad();
-            }
-
-            return GlobalVariable.isEnableQueryQueueSelect();
+            BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
+            return slotManager.isEnableQueryQueue(connectContext, instance);
         }
 
         private boolean needCheckQueue() {

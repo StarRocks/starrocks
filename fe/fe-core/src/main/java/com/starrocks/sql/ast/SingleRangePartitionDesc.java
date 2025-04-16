@@ -42,10 +42,6 @@ public class SingleRangePartitionDesc extends SinglePartitionDesc {
     }
 
     public void analyze(int partColNum, Map<String, String> tableProperties) throws AnalysisException {
-        if (isAnalyzed) {
-            return;
-        }
-
         FeNameFormat.checkPartitionName(getPartitionName());
         partitionKeyDesc.analyze(partColNum);
 
@@ -54,7 +50,6 @@ public class SingleRangePartitionDesc extends SinglePartitionDesc {
         } else {
             analyzeProperties(tableProperties, null);
         }
-        isAnalyzed = true;
     }
 
     @Override

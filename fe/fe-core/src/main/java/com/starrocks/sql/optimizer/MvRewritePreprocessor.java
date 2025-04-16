@@ -41,22 +41,23 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.mv.MVPlanValidationResult;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
-import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -64,21 +65,18 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rule.RuleSetType;
+import com.starrocks.sql.optimizer.rule.mv.MVCorrelation;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteStrategy;
+import com.starrocks.sql.optimizer.rule.mv.MaterializedViewWrapper;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -87,9 +85,7 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.catalog.MvRefreshArbiter.getPartitionNamesToRefreshForMv;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.getMvPartialPartitionPredicates;
 
 public class MvRewritePreprocessor {
     private static final Logger LOG = LogManager.getLogger(MvRewritePreprocessor.class);
@@ -97,6 +93,7 @@ public class MvRewritePreprocessor {
     private final ColumnRefFactory queryColumnRefFactory;
     private final OptimizerContext context;
     private final ColumnRefSet requiredColumns;
+    private final QueryMaterializationContext queryMaterializationContext;
 
     public MvRewritePreprocessor(ConnectContext connectContext,
                                  ColumnRefFactory queryColumnRefFactory,
@@ -106,170 +103,74 @@ public class MvRewritePreprocessor {
         this.queryColumnRefFactory = queryColumnRefFactory;
         this.context = context;
         this.requiredColumns = requiredColumns;
+        this.queryMaterializationContext = context.getQueryMaterializationContext() == null ?
+                new QueryMaterializationContext() : context.getQueryMaterializationContext();
     }
 
-    @VisibleForTesting
-    public class MvWithPlanContext {
-        private final MaterializedView mv;
-        private final MvPlanContext mvPlanContext;
-        public MvWithPlanContext(MaterializedView mv, MvPlanContext mvPlanContext) {
-            this.mv = mv;
-            this.mvPlanContext = mvPlanContext;
-        }
-
-        public MaterializedView getMv() {
-            return mv;
-        }
-
-        public MvPlanContext getMvPlanContext() {
-            return mvPlanContext;
-        }
-    }
-
-    /**
-     * To avoid MvRewriteProcessor cost too much optimizer time, reduce all related mvs to a limited size.
-     * <h3>Why to Choose The Best Related MVs Strategy</h3>
-     *
-     * <p>Why still to choose limited related mvs from all active mvs?</p>
-     *
-     * <p>1. optimizer time cost. Even there is MVPlanCache to reduce mv optimizer plan time, but it still may cost
-     * too much time for mv preprocessor, because mv optimizer plan costs too much time because of cold start when
-     * MVPlanCache has no cache, or MVPlanCache has exceeded limited capacity which is 1000 by default.</p>
-     *
-     * <p>2. check mv's freshness for each mv will cost too much time if there are too many mvs.</p>
-     *
-     * <h3>How to Choose The Best Related MVs Strategy</h3>
-     * <p>
-     *     Choose the best related mvs from all active mvs as following order:
-     *     1. find the max intersected table num between mv and query which means it's better for rewrite.
-     *     2. find the latest fresh mv which means its freshness is better.
-     * </p>
-     *
-     * <h3>More Information</h3>
-     * <p>
-     *  NOTE: there are still some limitations about this ordering algorithm:
-     *  1. consider repeated tables in one mv later which one table can be used repeatedly in one mv.
-     *  2. consider random factor so can cache and use more mvs.
-     * </p>
-     */
-    public static class MVCorrelation implements Comparable<MVCorrelation> {
-        private final MaterializedView mv;
-        private final long mvQueryIntersectedTablesNum;
-        private final int mvQueryScanOpNumDiff;
-        private final long mvRefreshTimestamp;
-
-        public MVCorrelation(MaterializedView mv,
-                             long mvQueryIntersectedTablesNum,
-                             int mvQueryScanOpNumDiff,
-                             long mvRefreshTimestamp) {
-            this.mv = mv;
-            this.mvQueryIntersectedTablesNum = mvQueryIntersectedTablesNum;
-            this.mvQueryScanOpNumDiff = mvQueryScanOpNumDiff;
-            this.mvRefreshTimestamp = mvRefreshTimestamp;
-        }
-
-        public MaterializedView getMv() {
-            return this.mv;
-        }
-
-        public static long getMvQueryIntersectedTableNum(List<BaseTableInfo> baseTableInfos,
-                                                         Set<String> queryTableNames) {
-            return baseTableInfos.stream()
-                    .filter(baseTableInfo -> {
-                        String baseTableName = baseTableInfo.getTableName();
-                        // assert not null
-                        if (Strings.isNullOrEmpty(baseTableName)) {
-                            return false;
-                        }
-                        return queryTableNames.contains(baseTableName);
-                    }).count();
-        }
-
-        public static int getMvQueryScanOpDiff(List<MvPlanContext> planContexts,
-                                               int mvBaseTableSize,
-                                               int queryScanOpNum) {
-            int diff = Math.abs(queryScanOpNum - mvBaseTableSize);
-            if (planContexts == null || planContexts.isEmpty()) {
-                return diff;
-            }
-            return planContexts.stream()
-                    .map(mvPlanContext -> mvPlanContext.getMvScanOpNum())
-                    .map(num -> Math.abs(queryScanOpNum - num))
-                    .min(Comparator.comparing(Integer::intValue))
-                    .orElse(diff);
-        }
-
-        @Override
-        public int compareTo(@NotNull MVCorrelation other) {
-            // 1. compare intersected table nums, larger is better.
-            int result = Long.compare(this.mvQueryIntersectedTablesNum, other.mvQueryIntersectedTablesNum);
-            if (result != 0) {
-                return result;
-            }
-            // 2. compare base table num diff,  less is better
-            result = Integer.compare(other.mvQueryScanOpNumDiff, this.mvQueryScanOpNumDiff);
-            if (result != 0) {
-                return result;
-            }
-            // 3. compare refresh timestamp, larger is better.
-            return Long.compare(this.mvRefreshTimestamp, other.mvRefreshTimestamp);
-        }
-
-        @Override
-        public String toString() {
-            return String.format("Correlation: mv=%s, mvQueryInteractedTablesNum=%s, " +
-                    "mvQueryScanOpNumDiff=%s, mvRefreshTimestamp=%s", mv.getName(),
-                    mvQueryIntersectedTablesNum, mvQueryScanOpNumDiff, mvRefreshTimestamp);
-        }
-    }
-
-    public void prepare(OptExpression queryOptExpression, MvRewriteStrategy strategy) {
-        SessionVariable sessionVariable = connectContext.getSessionVariable();
-        // MV Rewrite will be used when cbo is enabled.
-        if (context.getOptimizerConfig().isRuleBased() || sessionVariable.isDisableMaterializedViewRewrite() ||
-                !sessionVariable.isEnableMaterializedViewRewrite()) {
-            return;
-        }
-
-        try (Timer ignored = Tracers.watchScope("preprocessMvs")) {
+    public void prepare(OptExpression queryOptExpression) {
+        try (Timer ignored = Tracers.watchScope("MVPreprocess")) {
             Set<Table> queryTables = MvUtils.getAllTables(queryOptExpression).stream().collect(Collectors.toSet());
             logMVParams(connectContext, queryTables);
 
-            QueryMaterializationContext queryMaterializationContext = new QueryMaterializationContext();
+            // use a new context rather than reuse the existed context to avoid cache conflict.
             try {
                 // 1. get related mvs for all input tables
-                Set<MaterializedView> relatedMVs = getRelatedMVs(queryTables, context.getOptimizerConfig().isRuleBased());
+                Set<MaterializedViewWrapper> relatedMVs =
+                        getRelatedMVs(queryTables, context.getOptimizerOptions().isRuleBased());
+                if (relatedMVs.isEmpty()) {
+                    return;
+                }
+
+                // filter mvs which is set by config: including/excluding mvs
+                Set<MaterializedViewWrapper> relatedMVWrappers = getRelatedMVsByConfig(relatedMVs);
+                logMVPrepare(connectContext, "Choose {}/{} mvs after user config", relatedMVWrappers.size(), relatedMVs.size());
+                // add into queryMaterializationContext for later use
+                if (relatedMVWrappers.isEmpty()) {
+                    return;
+                }
+                this.queryMaterializationContext.addRelatedMVs(
+                        relatedMVWrappers.stream().map(MaterializedViewWrapper::getMV).collect(Collectors.toSet()));
 
                 // 2. choose best related mvs by user's config or related mv limit
-                Set<MaterializedView> selectedRelatedMVs;
-                try (Timer t1 = Tracers.watchScope("chooseCandidates")) {
-                    selectedRelatedMVs = chooseBestRelatedMVs(queryTables, relatedMVs, queryOptExpression);
+                List<MaterializedViewWrapper> candidateMVs;
+                try (Timer t1 = Tracers.watchScope("MVChooseCandidates")) {
+                    candidateMVs = chooseBestRelatedMVs(queryTables, relatedMVWrappers, queryOptExpression);
+                }
+                if (candidateMVs.isEmpty()) {
+                    return;
                 }
 
                 // 3. convert to mv with planContext, skip if mv has no valid plan(not SPJG)
-                Set<MvWithPlanContext> mvWithPlanContexts;
-                try (Timer t2 = Tracers.watchScope("generateMvPlan")) {
-                    mvWithPlanContexts = getMvWithPlanContext(selectedRelatedMVs);
+                List<MaterializedViewWrapper> mvWithPlanContexts;
+                try (Timer t2 = Tracers.watchScope("MVGenerateMvPlan")) {
+                    mvWithPlanContexts = getMvWithPlanContext(candidateMVs);
+                }
+                if (mvWithPlanContexts.isEmpty()) {
+                    return;
                 }
 
                 // 4. process related mvs to candidates
-                try (Timer t3 = Tracers.watchScope("validateMv")) {
+                try (Timer t3 = Tracers.watchScope("MVPrepareRelatedMVs")) {
                     prepareRelatedMVs(queryTables, mvWithPlanContexts);
                 }
 
+                // To avoid disturbing queries without mv, only initialize materialized view context
+                // when there are candidate mvs.
+                if (CollectionUtils.isNotEmpty(context.getCandidateMvs())) {
+                    // it's safe used in the optimize context here since the query mv context is not shared across the
+                    // connect-context.
+                    connectContext.setQueryMVContext(queryMaterializationContext);
+                }
+
                 // 5. process relate mvs with views
-                try (Timer t4 = Tracers.watchScope("mvWithView")) {
+                try (Timer t4 = Tracers.watchScope("MVProcessWithView")) {
                     processPlanWithView(queryMaterializationContext, connectContext, queryOptExpression,
                             queryColumnRefFactory, requiredColumns);
                 }
 
-                // add queryMaterializationContext into context
-                if (context.getCandidateMvs() != null && !context.getCandidateMvs().isEmpty()) {
-                    context.setQueryMaterializationContext(queryMaterializationContext);
+                if (queryMaterializationContext.getValidCandidateMVs().size() > 1) {
+                    queryMaterializationContext.setEnableQueryContextCache(true);
                 }
-
-                // initialize mv rewrite strategy finally
-                MvRewriteStrategy.prepareRewriteStrategy(context, connectContext, queryOptExpression, strategy);
             } catch (Exception e) {
                 List<String> tableNames = queryTables.stream().map(Table::getName).collect(Collectors.toList());
                 logMVPrepare(connectContext, "Prepare query tables {} for mv failed:{}", tableNames, e.getMessage());
@@ -309,6 +210,10 @@ public class MvRewritePreprocessor {
                 sessionVariable.isEnableSyncMaterializedViewRewrite());
         logMVPrepare(connectContext, "  enable_view_based_mv_rewrite: {}",
                 sessionVariable.isEnableViewBasedMvRewrite());
+        logMVPrepare(connectContext, "  enable_materialized_view_text_match_rewrite: {}",
+                sessionVariable.isEnableMaterializedViewTextMatchRewrite());
+        logMVPrepare(connectContext, "  enable_materialized_view_multi_stages_rewrite: {}",
+                sessionVariable.isEnableMaterializedViewMultiStagesRewrite());
 
         // limit
         logMVPrepare(connectContext, "---------------------------------");
@@ -347,58 +252,53 @@ public class MvRewritePreprocessor {
         }
         List<LogicalViewScanOperator> viewScans = Lists.newArrayList();
         // process equivalent operator，construct logical plan with view
-        OptExpression logicalPlanWithView = extractLogicalPlanWithView(logicOperatorTree, viewScans, columnRefFactory);
+        OptExpression logicalPlanWithView = extractLogicalPlanWithView(logicOperatorTree, viewScans);
+        if (queryMaterializationContext != null && queryMaterializationContext.getValidCandidateMVs().isEmpty()) {
+            return;
+        }
+
         if (viewScans.isEmpty()) {
             // means there is no plan with view
             return;
         }
         // optimize logical plan with view
-        OptExpression optimizedPlan = optimizeViewPlan(
+        OptExpression optimizedPlan = MvUtils.optimizeViewPlan(
                 logicalPlanWithView, connectContext, requiredColumns, columnRefFactory);
-        queryMaterializationContext.setLogicalTreeWithView(optimizedPlan);
-        queryMaterializationContext.setViewScans(viewScans);
+        queryMaterializationContext.setQueryOptPlanWithView(optimizedPlan);
+        queryMaterializationContext.setQueryViewScanOps(viewScans);
     }
 
-    private OptExpression optimizeViewPlan(OptExpression logicalTree,
-                                           ConnectContext connectContext,
-                                           ColumnRefSet requiredColumns,
-                                           ColumnRefFactory columnRefFactory) {
-        OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
-        optimizerConfig.disableRuleSet(RuleSetType.SINGLE_TABLE_MV_REWRITE);
-        optimizerConfig.disableRuleSet(RuleSetType.MULTI_TABLE_MV_REWRITE);
-        Optimizer optimizer = new Optimizer(optimizerConfig);
-        OptExpression optimizedViewPlan = optimizer.optimize(connectContext, logicalTree,
-                new PhysicalPropertySet(), requiredColumns, columnRefFactory);
-        return optimizedViewPlan;
-    }
 
     private OptExpression extractLogicalPlanWithView(OptExpression logicalTree,
-                                                     List<LogicalViewScanOperator> viewScans,
-                                                     ColumnRefFactory columnRefFactory) {
+                                                     List<LogicalViewScanOperator> viewScans) {
         List<OptExpression> inputs = Lists.newArrayList();
         if (logicalTree.getOp().getEquivalentOp() != null) {
             LogicalViewScanOperator viewScanOperator = logicalTree.getOp().getEquivalentOp().cast();
-            // collect LogicalViewScanOperator to original logical tree,
-            // which will be used in mv union rewrite
-            // should use cloned plan because the following optimizeViewPlan will change the plan
+            // If the view scan operator is not rewritten, needs to use the original plan to replace the view scan operator.
+            // We don't need to evaluate the original plan directly, if view-based-rewrite successes, the original plan will
+            // not be used, so use Lazy Evaluator here.
+            // 1. Collect LogicalViewScanOperator to an original logical tree which will be used in mv union rewrite.
+            // 2. Clone the original plan because the following optimizeViewPlan will change the plan
             OptExpression clonePlan = MvUtils.cloneExpression(logicalTree);
-            OptExpression optimizedViewPlan = optimizeViewPlan(
-                    clonePlan, connectContext, viewScanOperator.getOutputColumnSet(), columnRefFactory);
-            viewScanOperator.setOriginalPlan(optimizedViewPlan);
+            viewScanOperator.setOriginalPlanEvaluator(new LogicalViewScanOperator.OptPlanEvaluator(clonePlan,
+                    connectContext, viewScanOperator.getOutputColumnSet(), queryColumnRefFactory));
             viewScans.add(viewScanOperator);
+
+            // replace the original plan with a new view scan operator
             LogicalViewScanOperator.Builder builder = new LogicalViewScanOperator.Builder();
             builder.withOperator(viewScanOperator);
             builder.setProjection(null);
-            LogicalViewScanOperator clone = builder.build();
-            OptExpression viewScanExpr = OptExpression.create(clone);
-            // should add a projection to make predicate pushdown rules work right
+            LogicalViewScanOperator clonedViewScanOp = builder.build();
+            OptExpression viewScanExpr = OptExpression.create(clonedViewScanOp);
+
+            // add a projection to make predicate push-down rules work.
             Projection projection = viewScanOperator.getProjection();
             LogicalProjectOperator projectOperator = new LogicalProjectOperator(projection.getColumnRefMap());
             OptExpression projectionExpr = OptExpression.create(projectOperator, viewScanExpr);
             return projectionExpr;
         } else {
             for (OptExpression input : logicalTree.getInputs()) {
-                OptExpression newInput = extractLogicalPlanWithView(input, viewScans, columnRefFactory);
+                OptExpression newInput = extractLogicalPlanWithView(input, viewScans);
                 inputs.add(newInput);
             }
             Operator.Builder builder = OperatorBuilderFactory.build(logicalTree.getOp());
@@ -419,13 +319,13 @@ public class MvRewritePreprocessor {
     }
 
     @VisibleForTesting
-    public Set<MaterializedView> getRelatedMVs(Set<Table> queryTables,
-                                               boolean isRuleBased) {
+    public Set<MaterializedViewWrapper> getRelatedMVs(Set<Table> queryTables,
+                                                      boolean isRuleBased) {
         if (Config.enable_experimental_mv
                 && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()
                 && !isRuleBased) {
             // related asynchronous materialized views
-            Set<MaterializedView> relatedMVs = getRelatedAsyncMVs(queryTables);
+            Set<MaterializedViewWrapper> relatedMVs = getRelatedAsyncMVs(queryTables);
 
             // related synchronous materialized views
             if (connectContext.getSessionVariable().isEnableSyncMaterializedViewRewrite()) {
@@ -444,7 +344,7 @@ public class MvRewritePreprocessor {
         return Arrays.stream(str.split(",")).map(String::trim).collect(Collectors.toSet());
     }
 
-    private Set<MaterializedView> getRelatedMVsByConfig(Set<MaterializedView> relatedMVs) {
+    private Set<MaterializedViewWrapper> getRelatedMVsByConfig(Set<MaterializedViewWrapper> relatedMVs) {
         // filter mvs by including/excluding settings
         String queryExcludingMVNames = connectContext.getSessionVariable().getQueryExcludingMVNames();
         String queryIncludingMVNames = connectContext.getSessionVariable().getQueryIncludingMVNames();
@@ -457,25 +357,29 @@ public class MvRewritePreprocessor {
         final Set<String> queryExcludingMVNamesSet = splitQueryMVNamesConfig(queryExcludingMVNames);
         final Set<String> queryIncludingMVNamesSet = splitQueryMVNamesConfig(queryIncludingMVNames);
 
-        return relatedMVs.stream()
-                .filter(mv -> queryIncludingMVNamesSet.isEmpty() || queryIncludingMVNamesSet.contains(mv.getName()))
-                .filter(mv -> queryExcludingMVNamesSet.isEmpty() || !queryExcludingMVNamesSet.contains(mv.getName()))
+        return relatedMVs
+                .stream()
+                .filter(wrapper -> queryIncludingMVNamesSet.isEmpty()
+                        || queryIncludingMVNamesSet.contains(wrapper.getMV().getName()))
+                .filter(wrapper -> queryExcludingMVNamesSet.isEmpty()
+                        || !queryExcludingMVNamesSet.contains(wrapper.getMV().getName()))
                 .collect(Collectors.toSet());
     }
 
-    private List<MvWithPlanContext> getMVWithContext(MaterializedView mv) {
+    private List<MaterializedViewWrapper> getMVWithContext(MaterializedViewWrapper wrapper) {
+        final MaterializedView mv = wrapper.getMV();
         if (!mv.isActive()) {
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "inactive");
             return null;
         }
 
-        List<MvPlanContext> mvPlanContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv,
-                connectContext.getSessionVariable().isEnableMaterializedViewPlanCache());
+        List<MvPlanContext> mvPlanContexts = CachingMvPlanContextBuilder.getInstance()
+                .getPlanContext(connectContext.getSessionVariable(), mv);
         if (CollectionUtils.isEmpty(mvPlanContexts)) {
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "invalid query plan");
             return null;
         }
-        List<MvWithPlanContext> mvWithPlanContexts = Lists.newArrayList();
+        List<MaterializedViewWrapper> mvWithPlanContexts = Lists.newArrayList();
         for (int i = 0; i < mvPlanContexts.size(); i++) {
             MvPlanContext mvPlanContext = mvPlanContexts.get(i);
             if (!mvPlanContext.isValidMvPlan()) {
@@ -483,7 +387,7 @@ public class MvRewritePreprocessor {
                         i, mvPlanContexts.size(), mvPlanContext.getInvalidReason());
                 continue;
             }
-            mvWithPlanContexts.add(new MvWithPlanContext(mv, mvPlanContext));
+            mvWithPlanContexts.add(MaterializedViewWrapper.create(mv, wrapper.getLevel(), mvPlanContext));
         }
         return mvWithPlanContexts;
     }
@@ -515,108 +419,131 @@ public class MvRewritePreprocessor {
 
     /**
      * Check if the MV is eligible for query rewrite
-     *
+     * NOTE: This method can be time-costing if mv's defined plan is not in the plan cache and is complex,
+     * so it's better to use it with force=false.
      * @param force build the MV plan even if it's not in the plan cache
      */
-    public static Pair<Boolean, String> isMVValidToRewriteQuery(ConnectContext connectContext,
-                                                                MaterializedView mv,
-                                                                boolean force,
-                                                                Set<Table> queryTables) {
+    public static MVPlanValidationResult isMVValidToRewriteQuery(ConnectContext connectContext,
+                                                                 MaterializedView mv,
+                                                                 boolean force,
+                                                                 Set<Table> queryTables,
+                                                                 boolean isNoPlanAsInvalid) {
         if (!mv.isActive())  {
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "is not active");
-            return Pair.create(false, "MV is not active");
+            return MVPlanValidationResult.invalid("MV is not active");
         }
         if (!mv.isEnableRewrite()) {
             String message = PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE + "=" +
                     mv.getTableProperty().getMvQueryRewriteSwitch();
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), message);
-            return Pair.create(false, message);
+            return MVPlanValidationResult.invalid(message);
         }
         // if mv is a subset of query tables, it can be used for rewrite.
         if (CollectionUtils.isNotEmpty(queryTables) &&
                 !canMVRewriteIfMVHasExtraTables(connectContext, mv, queryTables)) {
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "MV contains extra tables besides FK-PK");
-            return Pair.create(false, "MV contains extra tables besides FK-PK");
+            return MVPlanValidationResult.invalid("MV contains extra tables besides FK-PK");
         }
+        SessionVariable sessionVariable  = connectContext == null ? SessionVariable.DEFAULT_SESSION_VARIABLE
+                : connectContext.getSessionVariable();
         // if mv is in plan cache(avoid building plan), check whether it's valid
-        if (connectContext == null || connectContext.getSessionVariable().isEnableMaterializedViewPlanCache()) {
-            List<MvPlanContext> planContexts = force ?
-                            CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, false) :
-                            CachingMvPlanContextBuilder.getInstance().getPlanContextFromCacheIfPresent(mv);
-            if (CollectionUtils.isNotEmpty(planContexts) &&
-                    planContexts.stream().noneMatch(MvPlanContext::isValidMvPlan)) {
-                logMVPrepare(connectContext, "MV {} has no valid plan from {} plan contexts",
-                        mv.getName(), planContexts.size());
-                String message = planContexts.stream()
-                        .map(MvPlanContext::getInvalidReason)
-                        .collect(Collectors.joining(";"));
-                OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), message);
-                return Pair.create(false, "no valid plan: " + message);
-            }
+        final List<MvPlanContext> planContexts = force ?
+                CachingMvPlanContextBuilder.getInstance()
+                        .getOrLoadPlanContext(sessionVariable, mv) :
+                CachingMvPlanContextBuilder.getInstance()
+                        .getPlanContextIfPresent(sessionVariable, mv);
+        // if mv is not in plan cache, we cannot determine whether it's valid
+        if (isNoPlanAsInvalid && CollectionUtils.isEmpty(planContexts)) {
+            return MVPlanValidationResult.unknown("MV plan is not in cache, valid check is unknown");
         }
-        return Pair.create(true, null);
+        if (CollectionUtils.isNotEmpty(planContexts) &&
+                planContexts.stream().noneMatch(MvPlanContext::isValidMvPlan)) {
+            logMVPrepare(connectContext, "MV {} has no valid plan from {} plan contexts",
+                    mv.getName(), planContexts.size());
+            String message = planContexts.stream()
+                    .map(MvPlanContext::getInvalidReason)
+                    .collect(Collectors.joining(";"));
+            OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), message);
+            return MVPlanValidationResult.invalid("no valid plan: " + message);
+        }
+        return MVPlanValidationResult.valid();
     }
 
-    private Set<MaterializedView> chooseBestRelatedMVsByCorrelations(Set<Table> queryTables,
-                                                                     Set<MaterializedView> validMVs,
-                                                                     OptExpression queryOptExpression,
-                                                                     int maxRelatedMVsLimit) {
+    private List<MaterializedViewWrapper> chooseBestRelatedMVsByCorrelations(Set<Table> queryTables,
+                                                                             Set<MaterializedViewWrapper> validMVs,
+                                                                             OptExpression queryOptExpression,
+                                                                             int maxRelatedMVsLimit) {
         int queryScanOpNum = MvUtils.getOlapScanNode(queryOptExpression).size();
         Set<String> queryTableNames = queryTables.stream().map(t -> t.getName()).collect(Collectors.toSet());
-        Queue<MVCorrelation> bestRelatedMVs = new PriorityQueue<>(maxRelatedMVsLimit);
-        for (MaterializedView mv : validMVs) {
+        List<MVCorrelation> mvCorrelations = Lists.newArrayList();
+        for (MaterializedViewWrapper wrapper : validMVs) {
+            MaterializedView mv = wrapper.getMV();
             List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
             long mvQueryInteractedTableNum = MVCorrelation.getMvQueryIntersectedTableNum(baseTableInfos, queryTableNames);
-            List<MvPlanContext> planContexts =
-                    CachingMvPlanContextBuilder.getInstance().getPlanContextFromCacheIfPresent(mv);
+            List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance()
+                            .getPlanContextIfPresent(connectContext.getSessionVariable(), mv);
             int mvQueryScanOpDiff = MVCorrelation.getMvQueryScanOpDiff(planContexts, baseTableInfos.size(), queryScanOpNum);
             MVCorrelation mvCorrelation = new MVCorrelation(mv, mvQueryInteractedTableNum,
-                    mvQueryScanOpDiff, mv.getLastRefreshTime());
-            if (bestRelatedMVs.size() < maxRelatedMVsLimit) {
-                bestRelatedMVs.add(mvCorrelation);
-            } else if (bestRelatedMVs.peek().compareTo(mvCorrelation) < 0) {
+                    mvQueryScanOpDiff, mv.getLastRefreshTime(), wrapper.getLevel());
+            mvCorrelations.add(mvCorrelation);
+        }
+        return chooseBestRelatedMVsByCorrelations(mvCorrelations, maxRelatedMVsLimit);
+    }
+
+    @VisibleForTesting
+    public List<MaterializedViewWrapper> chooseBestRelatedMVsByCorrelations(Collection<MVCorrelation> mvCorrelations,
+                                                                            int maxRelatedMVsLimit) {
+        Queue<MVCorrelation> queue = new PriorityQueue<>(maxRelatedMVsLimit);
+        for (MVCorrelation mvCorrelation : mvCorrelations) {
+            if (queue.size() < maxRelatedMVsLimit) {
+                queue.add(mvCorrelation);
+            } else if (queue.peek().compareTo(mvCorrelation) < 0) {
                 // if the peek is less than new mv(larger is better), poll it and add new one
-                bestRelatedMVs.poll();
-                bestRelatedMVs.add(mvCorrelation);
+                queue.poll();
+                queue.add(mvCorrelation);
             }
         }
         logMVPrepare(connectContext, "Choose the best {} related mvs from all {} mvs because related " +
                         "mv exceeds max config limit {}",
-                bestRelatedMVs.size(), validMVs.size(), maxRelatedMVsLimit);
-        return bestRelatedMVs.stream().map(cor -> cor.getMv()).collect(Collectors.toSet());
+                queue.size(), mvCorrelations.size(), maxRelatedMVsLimit);
+        // ensure the best related mv is at the first
+        List<MaterializedViewWrapper> result = Lists.newArrayList();
+        while (!queue.isEmpty()) {
+            result.add(queue.poll().getWrapper());
+        }
+        Collections.reverse(result);
+        return result;
     }
 
+    /**
+     * Choose the best related mvs for the query rewrite that ensures the best related mv is at the first.
+     */
     @VisibleForTesting
-    public Set<MaterializedView> chooseBestRelatedMVs(Set<Table> queryTables,
-                                                      Set<MaterializedView> relatedMVs,
-                                                      OptExpression queryOptExpression) {
-        // 1. filter mvs which is set by config: including/excluding mvs
-        Set<MaterializedView> validMVs = getRelatedMVsByConfig(relatedMVs);
-        logMVPrepare(connectContext, "Choose {}/{} mvs after user config", validMVs.size(), relatedMVs.size());
-
-        // 2. choose all valid mvs and filter mvs that cannot be rewritten for the query
-        validMVs = validMVs.stream()
-                .filter(mv -> isMVValidToRewriteQuery(connectContext, mv, false, queryTables).first)
+    public List<MaterializedViewWrapper> chooseBestRelatedMVs(Set<Table> queryTables,
+                                                              Set<MaterializedViewWrapper> relatedMVs,
+                                                              OptExpression queryOptExpression) {
+        // choose all valid mvs and filter mvs that cannot be rewritten for the query
+        Set<MaterializedViewWrapper> validMVs = relatedMVs.stream()
+                .filter(wrapper ->
+                        isMVValidToRewriteQuery(connectContext, wrapper.getMV(), false, queryTables, false).isValid())
                 .collect(Collectors.toSet());
         logMVPrepare(connectContext, "Choose {}/{} valid mvs after checking valid",
                 validMVs.size(), relatedMVs.size());
 
-        // 3. choose max config related mvs for mv rewrite to avoid too much optimize time
+        // choose max config related mvs for mv rewrite to avoid too much optimize time
         int maxRelatedMVsLimit = connectContext.getSessionVariable().getCboMaterializedViewRewriteRelatedMVsLimit();
-        if (validMVs.size() <= maxRelatedMVsLimit) {
-            return validMVs;
-        }
         return chooseBestRelatedMVsByCorrelations(queryTables, validMVs, queryOptExpression, maxRelatedMVsLimit);
     }
 
     @VisibleForTesting
-    public Set<MvWithPlanContext> getMvWithPlanContext(Set<MaterializedView> validMVs) {
+    public List<MaterializedViewWrapper> getMvWithPlanContext(List<MaterializedViewWrapper> validMVs) {
         // filter mvs which are active and have valid plans
-        Set<MvWithPlanContext> mvWithPlanContexts = Sets.newHashSet();
-        for (MaterializedView mv : validMVs) {
+        final List<MaterializedViewWrapper> mvWithPlanContexts = Lists.newArrayList();
+        for (MaterializedViewWrapper wrapper : validMVs) {
+            MaterializedView mv = wrapper.getMV();
             try {
-                List<MvWithPlanContext> mvWithPlanContext = getMVWithContext(mv);
-                if (mvWithPlanContext != null) {
+                final List<MaterializedViewWrapper> mvWithPlanContext = getMVWithContext(wrapper);
+                if (CollectionUtils.isNotEmpty(mvWithPlanContext)) {
                     mvWithPlanContexts.addAll(mvWithPlanContext);
                 }
             } catch (Exception e) {
@@ -630,23 +557,20 @@ public class MvRewritePreprocessor {
         return mvWithPlanContexts;
     }
 
-    private Set<MaterializedView> getRelatedAsyncMVs(Set<Table> queryTables) {
+    private Set<MaterializedViewWrapper> getRelatedAsyncMVs(Set<Table> queryTables) {
         int maxLevel = connectContext.getSessionVariable().getNestedMvRewriteMaxLevel();
         // get all related materialized views, include nested mvs
         return MvUtils.getRelatedMvs(connectContext, maxLevel, queryTables);
     }
 
-    private Set<MaterializedView> getRelatedSyncMVs(Set<Table> queryTables) {
-        Set<MaterializedView> relatedMvs = Sets.newHashSet();
+    private Set<MaterializedViewWrapper> getRelatedSyncMVs(Set<Table> queryTables) {
         // get all related materialized views, include nested mvs
-        for (Table table : queryTables) {
-            if (!(table instanceof OlapTable)) {
-                continue;
-            }
-            OlapTable olapTable = (OlapTable) table;
-            relatedMvs.addAll(getTableRelatedSyncMVs(olapTable));
-        }
-        return relatedMvs;
+        return queryTables.stream()
+                .filter(table -> table instanceof OlapTable)
+                .map(table -> getTableRelatedSyncMVs((OlapTable) table))
+                .flatMap(Set::stream)
+                .map(mv -> MaterializedViewWrapper.create(mv, 0))
+                .collect(Collectors.toSet());
     }
 
     private Set<MaterializedView> getTableRelatedSyncMVs(OlapTable olapTable) {
@@ -670,7 +594,7 @@ public class MvRewritePreprocessor {
                 long dbId = indexMeta.getDbId();
                 String viewDefineSql = indexMeta.getViewDefineSql();
                 String mvName = olapTable.getIndexNameById(indexId);
-                Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
 
                 // distribution info
                 DistributionInfo baseTableDistributionInfo = olapTable.getDefaultDistributionInfo();
@@ -679,9 +603,9 @@ public class MvRewritePreprocessor {
                         indexMeta.getSchema().stream().map(Column::getName).collect(Collectors.toSet());
                 if (baseTableDistributionInfo.getType() == DistributionInfoType.HASH) {
                     HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) baseTableDistributionInfo;
-                    Set<String> distributedColumns =
-                            hashDistributionInfo.getDistributionColumns().stream().map(Column::getName)
-                                    .collect(Collectors.toSet());
+                    Set<String> distributedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+                    distributedColumns.addAll(MetaUtils.getColumnNamesByColumnIds(
+                            olapTable.getIdToColumn(), hashDistributionInfo.getDistributionColumns()));
                     // NOTE: SyncMV's column may not be equal to base table's exactly.
                     List<Column> newDistributionColumns = Lists.newArrayList();
                     for (Column mvColumn : indexMeta.getSchema()) {
@@ -701,7 +625,8 @@ public class MvRewritePreprocessor {
                 PartitionInfo mvPartitionInfo = basePartitionInfo;
                 // Set single partition if sync mv' columns do not contain partition by columns.
                 if (basePartitionInfo.isPartitioned()) {
-                    if (basePartitionInfo.getPartitionColumns().stream()
+                    List<Column> partitionColumns = basePartitionInfo.getPartitionColumns(olapTable.getIdToColumn());
+                    if (partitionColumns.stream()
                             .anyMatch(x -> !mvColumnNames.contains(x.getName())) ||
                             !(basePartitionInfo instanceof ExpressionRangePartitionInfo)) {
                         mvPartitionInfo = new SinglePartitionInfo();
@@ -710,8 +635,15 @@ public class MvRewritePreprocessor {
                 // refresh schema
                 MaterializedView.MvRefreshScheme mvRefreshScheme =
                         new MaterializedView.MvRefreshScheme(MaterializedView.RefreshType.SYNC);
-                MaterializedView mv = new MaterializedView(db, mvName, indexMeta, olapTable,
-                        mvPartitionInfo, mvDistributionInfo, mvRefreshScheme);
+                MaterializedView mv;
+                if (olapTable.isCloudNativeTable()) {
+                    mv = new LakeMaterializedView(db, mvName, indexMeta, olapTable,
+                            mvPartitionInfo, mvDistributionInfo, mvRefreshScheme);
+                } else {
+                    mv = new MaterializedView(db, mvName, indexMeta, olapTable,
+                            mvPartitionInfo, mvDistributionInfo, mvRefreshScheme);
+                }
+
                 mv.setViewDefineSql(viewDefineSql);
                 mv.setBaseIndexId(indexId);
                 relatedMvs.add(mv);
@@ -724,41 +656,34 @@ public class MvRewritePreprocessor {
     }
 
     public void prepareRelatedMVs(Set<Table> queryTables,
-                                  Set<MvWithPlanContext> mvWithPlanContexts) {
+                                  List<MaterializedViewWrapper> mvWithPlanContexts) {
         if (mvWithPlanContexts.isEmpty()) {
             return;
         }
 
-        for (MvWithPlanContext mvWithPlanContext : mvWithPlanContexts) {
-            MaterializedView mv = mvWithPlanContext.getMv();
-            MvPlanContext mvPlanContext = mvWithPlanContext.getMvPlanContext();
+        for (MaterializedViewWrapper wrapper : mvWithPlanContexts) {
+            MaterializedView mv = wrapper.getMV();
+            MvPlanContext mvPlanContext = wrapper.getMvPlanContext();
             try {
                 // mv's partitions to refresh
-                MvUpdateInfo mvUpdateInfo = getPartitionNamesToRefreshForMv(mv, true);
+                MvUpdateInfo mvUpdateInfo = queryMaterializationContext.getOrInitMVTimelinessInfos(mv);
                 if (mvUpdateInfo == null || !mvUpdateInfo.isValidRewrite()) {
                     OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "stale partitions {}", mvUpdateInfo);
                     continue;
                 }
                 Set<String> partitionNamesToRefresh = mvUpdateInfo.getMvToRefreshPartitionNames();
-                if (!checkMvPartitionNamesToRefresh(mv, partitionNamesToRefresh, mvPlanContext)) {
+                if (!checkMvPartitionNamesToRefresh(connectContext, mv, partitionNamesToRefresh, mvPlanContext)) {
                     continue;
                 }
-                logMVPrepare(mv, "MV' partitions to refresh: {}", partitionNamesToRefresh);
+                logMVPrepare(mv, "MV' partitions to refresh: {}/{}", partitionNamesToRefresh.size(),
+                        MvUtils.shrinkToSize(partitionNamesToRefresh, Config.max_mv_task_run_meta_message_values_length));
 
-                // mv's partial partition predicates
-                ScalarOperator mvPartialPartitionPredicates =
-                        mvPartialPartitionPredicate(mv, mvPlanContext, partitionNamesToRefresh);
-                if (mvPartialPartitionPredicates == null) {
-                    OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "partition compensate fail");
-                    continue;
-                }
-                logMVPrepare(mv, "MV compensate partition predicate: {}", mvPartialPartitionPredicates);
                 MaterializationContext materializationContext = buildMaterializationContext(context, mv, mvPlanContext,
-                        mvPartialPartitionPredicates, mvUpdateInfo, queryTables);
+                        mvUpdateInfo, queryTables, wrapper.getLevel());
                 if (materializationContext == null) {
                     continue;
                 }
-                context.addCandidateMvs(materializationContext);
+                queryMaterializationContext.addValidCandidateMV(materializationContext);
                 logMVPrepare(connectContext, mv, "Prepare MV {} success", mv.getName());
             } catch (Exception e) {
                 List<String> tableNames = queryTables.stream().map(Table::getName).collect(Collectors.toList());
@@ -768,7 +693,7 @@ public class MvRewritePreprocessor {
         }
         // all base table related mvs
         List<String> relatedMvNames = mvWithPlanContexts.stream()
-                .map(mvWithPlanContext -> mvWithPlanContext.getMv().getName())
+                .map(mvWithPlanContext -> mvWithPlanContext.getMV().getName())
                 .collect(Collectors.toList());
         // all mvs that match SPJG pattern and can ben used to try mv rewrite
         List<String> candidateMvNames = context.getCandidateMvs().stream()
@@ -784,18 +709,19 @@ public class MvRewritePreprocessor {
      * @param mvPlanContext: the associated materialized view context
      * @return partition names to refresh if the mv is valid for rewrite, otherwise null
      */
-    public static boolean checkMvPartitionNamesToRefresh(MaterializedView mv,
+    public static boolean checkMvPartitionNamesToRefresh(ConnectContext context,
+                                                         MaterializedView mv,
                                                          Set<String> partitionNamesToRefresh,
                                                          MvPlanContext mvPlanContext) {
         Preconditions.checkState(mvPlanContext != null);
         OptExpression mvPlan = mvPlanContext.getLogicalPlan();
         Preconditions.checkState(mvPlan != null);
         PartitionInfo partitionInfo = mv.getPartitionInfo();
-        if (partitionInfo instanceof SinglePartitionInfo) {
+        if (partitionInfo.isUnPartitioned()) {
             if (!partitionNamesToRefresh.isEmpty()) {
                 StringBuilder sb = new StringBuilder();
                 for (BaseTableInfo base : mv.getBaseTableInfos()) {
-                    Optional<Table> baseTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(base);
+                    Optional<Table> baseTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, base);
                     if (!baseTable.isPresent() || baseTable.get().isView()) {
                         continue;
                     }
@@ -831,34 +757,6 @@ public class MvRewritePreprocessor {
     }
 
     /**
-     * Get mv's compensated partial partition predicates for partitioned MV.
-     */
-    private static ScalarOperator mvPartialPartitionPredicate(MaterializedView mv,
-                                                              MvPlanContext mvPlanContext,
-                                                              Set<String> partitionNamesToRefresh) {
-        OptExpression mvPlan = mvPlanContext.getLogicalPlan();
-        ScalarOperator mvPartialPartitionPredicates = ConstantOperator.TRUE;
-        // TODO: support list partition
-        if (mv.getPartitionInfo() instanceof ExpressionRangePartitionInfo && !partitionNamesToRefresh.isEmpty()) {
-            // when mv is partitioned and there are some refreshed partitions,
-            // when should calculate the latest partition range predicates for partition-by base table
-            try {
-                mvPartialPartitionPredicates = getMvPartialPartitionPredicates(mv, mvPlan, partitionNamesToRefresh);
-                if (mvPartialPartitionPredicates == null) {
-                    logMVPrepare(mv, "Partitioned MV {} is outdated which contains some partitions " +
-                            "to be refreshed: {}, and cannot compensate it to predicate", mv.getName(), partitionNamesToRefresh);
-                    return null;
-                }
-            } catch (AnalysisException e) {
-                logMVPrepare(mv, "Get partitioned MV {} with to-refresh partitions {} predicate failed: " +
-                        "{}", mv.getName(), partitionNamesToRefresh, DebugUtil.getStackTrace(e));
-                return null;
-            }
-        }
-        return mvPartialPartitionPredicates;
-    }
-
-    /**
      * Build materialization context for the given materialized view.
      * @param mv: the input materialized view
      * @param mvPlanContext: the associated materialized view context
@@ -869,16 +767,16 @@ public class MvRewritePreprocessor {
     public static MaterializationContext buildMaterializationContext(OptimizerContext context,
                                                                      MaterializedView mv,
                                                                      MvPlanContext mvPlanContext,
-                                                                     ScalarOperator mvPartialPartitionPredicates,
                                                                      MvUpdateInfo mvUpdateInfo,
-                                                                     Set<Table> queryTables) {
+                                                                     Set<Table> queryTables,
+                                                                     int level) {
         Preconditions.checkState(mvPlanContext != null);
         OptExpression mvPlan = mvPlanContext.getLogicalPlan();
         Preconditions.checkState(mvPlan != null);
 
         // Add mv info into dump info
         if (context.getDumpInfo() != null) {
-            String dbName = GlobalStateMgr.getCurrentState().getDb(mv.getDbId()).getFullName();
+            String dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId()).getFullName();
             context.getDumpInfo().addTable(dbName, mv);
         }
 
@@ -892,14 +790,14 @@ public class MvRewritePreprocessor {
         MaterializationContext materializationContext =
                 new MaterializationContext(context, copiedMV, mvPlan, context.getColumnRefFactory(),
                         mvPlanContext.getRefFactory(), baseTables, intersectingTables,
-                        mvPartialPartitionPredicates, mvUpdateInfo, mvOutputColumns);
+                        mvUpdateInfo, mvOutputColumns, level);
         // generate scan mv plan here to reuse it in rule applications
         LogicalOlapScanOperator scanMvOp = createScanMvOperator(mv,
                 materializationContext.getQueryRefFactory(), mvUpdateInfo.getMvToRefreshPartitionNames());
         materializationContext.setScanMvOperator(scanMvOp);
         // should keep the sequence of schema
         List<ColumnRefOperator> scanMvOutputColumns = Lists.newArrayList();
-        for (Column column : getMvOutputColumns(copiedMV)) {
+        for (Column column : copiedMV.getOrderedOutputColumns()) {
             scanMvOutputColumns.add(scanMvOp.getColumnReference(column));
         }
         Preconditions.checkState(mvOutputColumns.size() == scanMvOutputColumns.size());
@@ -920,24 +818,6 @@ public class MvRewritePreprocessor {
     }
 
     /**
-     * Get mv's ordered columns by defined output columns order.
-     * @param mv: mv to check
-     * @return: mv's defined output columns in the defined order
-     */
-    public static List<Column> getMvOutputColumns(MaterializedView mv) {
-        if (mv.getQueryOutputIndices() == null || mv.getQueryOutputIndices().isEmpty()) {
-            return mv.getBaseSchema();
-        } else {
-            List<Column> schema = mv.getBaseSchema();
-            List<Column> outputColumns = Lists.newArrayList();
-            for (Integer index : mv.getQueryOutputIndices()) {
-                outputColumns.add(schema.get(index));
-            }
-            return outputColumns;
-        }
-    }
-
-    /**
      * Make a LogicalOlapScanOperator by using MV's schema which includes:
      * - partition infos.
      * - distribution infos.
@@ -954,7 +834,7 @@ public class MvRewritePreprocessor {
 
         // first add base schema to avoid replaced in full schema.
         Set<String> columnNames = Sets.newHashSet();
-        for (Column column : mv.getBaseSchema()) {
+        for (Column column : mv.getBaseSchemaWithoutGeneratedColumn()) {
             ColumnRefOperator columnRef = columnRefFactory.create(column.getName(),
                     column.getType(),
                     column.isAllowNull());
@@ -993,7 +873,7 @@ public class MvRewritePreprocessor {
             }
         }
         final PartitionNames partitionNames = new PartitionNames(false, selectedPartitionNames);
-
+        // MV's selected partition ids/tablet ids are necessary for MV rewrite.
         return LogicalOlapScanOperator.builder()
                 .setTable(mv)
                 .setColRefToColumnMetaMap(colRefToColumnMetaMapBuilder.build())
@@ -1017,7 +897,8 @@ public class MvRewritePreprocessor {
         DistributionInfo distributionInfo = mv.getDefaultDistributionInfo();
         if (distributionInfo.getType() == DistributionInfoType.HASH) {
             HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
-            List<Column> distributedColumns = hashDistributionInfo.getDistributionColumns();
+            List<Column> distributedColumns = MetaUtils.getColumnsByColumnIds(mv,
+                    hashDistributionInfo.getDistributionColumns());
             List<Integer> hashDistributeColumns = new ArrayList<>();
             for (Column distributedColumn : distributedColumns) {
                 hashDistributeColumns.add(columnMetaToColRefMap.get(distributedColumn).getId());

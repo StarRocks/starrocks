@@ -54,7 +54,7 @@ namespace starrocks {
 
 ResultSink::ResultSink(const RowDescriptor& row_desc, const std::vector<TExpr>& t_output_expr, const TResultSink& sink,
                        int buffer_size)
-        : _t_output_expr(t_output_expr), _buf_size(buffer_size) {
+        : _row_desc(row_desc), _t_output_expr(t_output_expr), _buf_size(buffer_size) {
     if (!sink.__isset.type || sink.type == TResultSinkType::MYSQL_PROTOCAL) {
         _sink_type = TResultSinkType::MYSQL_PROTOCAL;
     } else {
@@ -113,6 +113,8 @@ Status ResultSink::prepare(RuntimeState* state) {
     case TResultSinkType::VARIABLE:
         _writer.reset(new (std::nothrow) VariableResultWriter(_sender.get(), _output_expr_ctxs, _profile));
         break;
+    case TResultSinkType::CUSTOMIZED:
+        return Status::InternalError("Non-pipeline not support CUSTOMIZED format");
     default:
         return Status::InternalError("Unknown result sink type");
     }

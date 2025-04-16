@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 降级 StarRocks
@@ -22,6 +22,12 @@ displayed_sidebar: "Chinese"
 
   出于兼容性和安全原因，我们强烈建议您将 StarRocks 集群按**大版本逐级降级**。例如，要将 StarRocks v2.5 集群降级到 v2.2，需要按照以下顺序降级：v2.5.x --> v2.4.x --> v2.3.x --> v2.2.x。
 
+  :::warning
+
+  升级至 v3.3 后，请勿直接将集群降级至 v3.2.0、v3.2.1 或 v3.2.2，否则会导致元数据丢失。您必须降级到 v3.2.3 或更高版本以避免出现此问题。
+
+  :::
+
 - **重大版本降级**
 
   - 您无法跨版本降级至 v1.19，必须先降级至 v2.0。
@@ -43,7 +49,7 @@ StarRocks 的降级流程与 [升级流程](../deployment/upgrade.md#升级流�
 
 - **通用兼容性配置**
 
-降级前，请关闭 Tablet Clone。
+降级前，请关闭 Tablet Clone。如果您已经关闭 Balancer，可以跳过该步骤。
 
 ```SQL
 ADMIN SET FRONTEND CONFIG ("tablet_sched_max_scheduling_tablets" = "0");
@@ -73,9 +79,27 @@ ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
 
 通过降级正确性测试后，您可以先降级 FE 节点。您必须先降级 Follower FE 节点，然后再降级 Leader FE 节点。
 
+:::note
+
+如需将 v3.3.0 及以上集群降级至 v3.2，需在降级前执行以下操作：
+
+1. 确保降级前的 v3.3 集群中发起的所有 ALTER TABLE SCHEMA CHANGE 事物已完成或取消。
+2. 通过以下命令清理所有事务历史记录：
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG ("history_job_keep_max_second" = "0");
+   ```
+
+3. 通过以下命令确认无历史记录遗留：
+
+   ```SQL
+   SHOW PROC '/jobs/<db>/schema_change';
+   ```
+:::
+
 1. 生成新的元数据快照。
 
-   a. 执行 [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 创建新的元数据快照文件。
+   a. 执行 [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md) 创建新的元数据快照文件。
 
    b. 通过查看 Leader FE 节点的日志文件 **fe.log** 确认元数据快照文件是否推送完成。如果日志打印以下内容，则说明快照文件推送完成：
 

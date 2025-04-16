@@ -50,6 +50,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.ShowDataDistributionStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.Warehouse;
@@ -73,15 +74,15 @@ public class MetadataViewer {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
 
-        Database db = globalStateMgr.getDb(dbName);
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exsit");
         }
 
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
-            Table tbl = db.getTable(tblName);
+            Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
             if (tbl == null || tbl.getType() != TableType.OLAP) {
                 throw new DdlException("Table does not exist or is not OLAP table: " + tblName);
             }
@@ -173,7 +174,7 @@ public class MetadataViewer {
                 }
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         return result;
@@ -202,15 +203,15 @@ public class MetadataViewer {
         List<List<String>> result = Lists.newArrayList();
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        Database db = globalStateMgr.getDb(dbName);
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exsit");
         }
 
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
-            Table tbl = db.getTable(tblName);
+            Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
             if (tbl == null || !tbl.isNativeTableOrMaterializedView()) {
                 throw new DdlException("Table does not exist or is not native table: " + tblName);
             }
@@ -271,7 +272,7 @@ public class MetadataViewer {
             }
 
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         return result;
@@ -295,6 +296,94 @@ public class MetadataViewer {
 
         }
         return allComputeNodeIds;
+    }
+
+    public static List<List<String>> getDataDistribution(ShowDataDistributionStmt stmt) throws DdlException {
+        return getDataDistribution(stmt.getDbName(), stmt.getTblName(), stmt.getPartitionNames());
+    }
+
+    public static List<List<String>> getDataDistribution(
+            String dbName, String tblName, PartitionNames partitionNames) throws DdlException {
+
+        DecimalFormat df = new DecimalFormat("00.00 %");
+        List<List<String>> result = Lists.newArrayList();
+
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+        if (db == null) {
+            throw new DdlException("Database " + dbName + " does not exsit");
+        }
+
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+        try {
+            Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
+            if (tbl == null || !tbl.isNativeTableOrMaterializedView()) {
+                throw new DdlException("Table does not exist or is not native table: " + tblName);
+            }
+
+            OlapTable olapTable = (OlapTable) tbl;
+
+            List<Long> partitionIds = Lists.newArrayList();
+            if (partitionNames == null) {
+                for (Partition partition : olapTable.getPartitions()) {
+                    partitionIds.add(partition.getId());
+                }
+            } else {
+                for (String partitionName : partitionNames.getPartitionNames()) {
+                    Partition partition = olapTable.getPartition(partitionName, partitionNames.isTemp());
+                    if (partition == null) {
+                        throw new DdlException("Partition does not exist: " + partitionName);
+                    }
+                    partitionIds.add(partition.getId());
+                }
+            }
+
+            Collections.sort(partitionIds);
+            for (long partitionId : partitionIds) {
+                Partition partition = olapTable.getPartition(partitionId);
+                DistributionInfo distributionInfo = partition.getDistributionInfo();
+
+                List<Long> rowCountStatistics = Lists.newArrayListWithCapacity(distributionInfo.getBucketNum());
+                List<Long> dataSizeStatistics = Lists.newArrayListWithCapacity(distributionInfo.getBucketNum());
+                for (long i = 0; i < distributionInfo.getBucketNum(); i++) {
+                    rowCountStatistics.add(0L);
+                    dataSizeStatistics.add(0L);
+                }
+
+                long totalRowCount = 0;
+                long totalDataSize = 0;
+                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                    long version = physicalPartition.getVisibleVersion();
+                    for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                        List<Long> tabletIds = index.getTabletIdsInOrder();
+                        for (int i = 0; i < tabletIds.size(); i++) {
+                            Tablet tablet = index.getTablet(tabletIds.get(i));
+                            long rowCount = tablet.getRowCount(version);
+                            long dataSize = tablet.getDataSize(true);
+                            rowCountStatistics.set(i, rowCountStatistics.get(i) + rowCount);
+                            dataSizeStatistics.set(i, dataSizeStatistics.get(i) + dataSize);
+                            totalRowCount += rowCount;
+                            totalDataSize += dataSize;
+                        }
+                    }
+                }
+
+                for (int i = 0; i < distributionInfo.getBucketNum(); i++) {
+                    List<String> row = Lists.newArrayList();
+                    row.add(partition.getName());
+                    row.add(String.valueOf(i));
+                    row.add(String.valueOf(rowCountStatistics.get(i)));
+                    row.add(totalRowCount == 0L ? "0.00 %" : df.format((double) rowCountStatistics.get(i) / totalRowCount));
+                    row.add(String.valueOf(dataSizeStatistics.get(i)));
+                    row.add(totalDataSize == 0L ? "0.00 %" : df.format((double) dataSizeStatistics.get(i) / totalDataSize));
+                    result.add(row);
+                }
+            }
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.READ);
+        }
+        return result;
     }
 
     private static String graph(int num, int totalNum, int mod) {

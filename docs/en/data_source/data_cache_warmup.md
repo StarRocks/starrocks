@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Data cache warmup
@@ -105,7 +105,7 @@ In verbose mode,  an extra metric will be returned:
 
 ## Periodic scheduling of CACHE SELECT tasks
 
-You can use CACHE SELECT with [SUBMIT TASK](../sql-reference/sql-statements/data-manipulation/SUBMIT_TASK.md) to achieve periodic warmup. For example, the following case warms up the `lineitem` table every 5 minutes:
+You can use CACHE SELECT with [SUBMIT TASK](../sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK.md) to achieve periodic warmup. For example, the following case warms up the `lineitem` table every 5 minutes:
 
 ```plaintext
 mysql> submit task always_cache schedule every(interval 5 minute) as cache select l_orderkey

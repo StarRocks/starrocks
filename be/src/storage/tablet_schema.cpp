@@ -137,6 +137,9 @@ TabletColumn::TabletColumn(const TabletColumn& rhs)
     if (rhs._extra_fields != nullptr) {
         _extra_fields = new ExtraFields(*rhs._extra_fields);
     }
+    if (rhs._agg_state_desc != nullptr) {
+        _agg_state_desc = new AggStateDesc(*rhs._agg_state_desc);
+    }
 }
 
 TabletColumn::TabletColumn(TabletColumn&& rhs) noexcept
@@ -149,8 +152,10 @@ TabletColumn::TabletColumn(TabletColumn&& rhs) noexcept
           _precision(rhs._precision),
           _scale(rhs._scale),
           _flags(rhs._flags),
-          _extra_fields(rhs._extra_fields) {
+          _extra_fields(rhs._extra_fields),
+          _agg_state_desc(rhs._agg_state_desc) {
     rhs._extra_fields = nullptr;
+    rhs._agg_state_desc = nullptr;
 }
 
 TabletColumn::TabletColumn(const ColumnPB& column) {
@@ -163,6 +168,7 @@ TabletColumn::TabletColumn(const TColumn& column) {
 
 TabletColumn::~TabletColumn() {
     delete _extra_fields;
+    delete _agg_state_desc;
 }
 
 void TabletColumn::swap(TabletColumn* rhs) {
@@ -177,6 +183,7 @@ void TabletColumn::swap(TabletColumn* rhs) {
     swap(_scale, rhs->_scale);
     swap(_flags, rhs->_flags);
     swap(_extra_fields, rhs->_extra_fields);
+    swap(_agg_state_desc, rhs->_agg_state_desc);
 }
 
 TabletColumn& TabletColumn::operator=(const TabletColumn& rhs) {
@@ -243,6 +250,13 @@ void TabletColumn::init_from_pb(const ColumnPB& column) {
         sub_column.init_from_pb(column.children_columns(i));
         add_sub_column(std::move(sub_column));
     }
+    // agg state type info
+    if (column.has_agg_state_desc()) {
+        VLOG(2) << "column contains agg state type info, add into extra fields";
+        auto& agg_state_desc_pb = column.agg_state_desc();
+        auto desc = AggStateDesc::from_protobuf(agg_state_desc_pb);
+        _agg_state_desc = new AggStateDesc(std::move(desc));
+    }
 }
 
 void TabletColumn::init_from_thrift(const TColumn& tcolumn) {
@@ -279,6 +293,11 @@ void TabletColumn::to_schema_pb(ColumnPB* column) const {
     column->set_has_bitmap_index(has_bitmap_index());
     for (int i = 0; i < subcolumn_count(); i++) {
         subcolumn(i).to_schema_pb(column->add_children_columns());
+    }
+    if (has_agg_state_desc()) {
+        auto* agg_state_desc = get_agg_state_desc();
+        auto* agg_state_pb = column->mutable_agg_state_desc();
+        agg_state_desc->to_protobuf(agg_state_pb);
     }
 }
 
@@ -351,14 +370,27 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchemaCSPtr& src_
         partial_tablet_schema_pb.set_bf_fpp(src_tablet_schema->bf_fpp());
     }
     std::vector<ColumnId> sort_key_idxes;
+    // from referenced column name to index, used for build sort key idxes later.
+    std::map<std::string, uint32_t> col_name_to_idx;
     uint32_t cid = 0;
     for (const auto referenced_column_id : referenced_column_ids) {
         auto* tablet_column = partial_tablet_schema_pb.add_column();
         src_tablet_schema->column(referenced_column_id).to_schema_pb(tablet_column);
-        if (src_tablet_schema->column(referenced_column_id).is_sort_key()) {
-            sort_key_idxes.emplace_back(cid);
+        col_name_to_idx[tablet_column->name()] = cid++;
+    }
+    // build sort key idxes
+    for (const auto& sort_key_idx : src_tablet_schema->sort_key_idxes()) {
+        std::string col_name = std::string(src_tablet_schema->column(sort_key_idx).name());
+        if (col_name_to_idx.count(col_name) <= 0) {
+            // sort key column is not in referenced column, skip it.
+            continue;
         }
-        cid++;
+        sort_key_idxes.emplace_back(col_name_to_idx[col_name]);
+    }
+    const auto* indexes = src_tablet_schema->indexes();
+    for (const auto& index : *indexes) {
+        TabletIndexPB* index_pb = partial_tablet_schema_pb.add_table_indices();
+        index.to_schema_pb(index_pb);
     }
     partial_tablet_schema_pb.mutable_sort_key_idxes()->Add(sort_key_idxes.begin(), sort_key_idxes.end());
     return std::make_shared<TabletSchema>(partial_tablet_schema_pb);
@@ -450,6 +482,7 @@ void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
     _index_map_col_unique_id.clear();
     _cols.clear();
     _compression_type = schema.compression_type();
+    _compression_level = schema.compression_level();
     for (auto& column_pb : schema.column()) {
         TabletColumn column;
         column.init_from_pb(column_pb);
@@ -518,6 +551,7 @@ Status TabletSchema::_build_current_tablet_schema(int64_t schema_id, int32_t ver
     _num_short_key_columns = column_param.short_key_column_count();
     _num_rows_per_row_block = ori_tablet_schema.num_rows_per_row_block();
     _compression_type = ori_tablet_schema.compression_type();
+    _compression_level = ori_tablet_schema.compression_level();
 
     // todo(yixiu): unique_id
     _next_column_unique_id = ori_tablet_schema.next_column_unique_id();
@@ -592,6 +626,7 @@ void TabletSchema::to_schema_pb(TabletSchemaPB* tablet_schema_pb) const {
     }
     tablet_schema_pb->set_next_column_unique_id(_next_column_unique_id);
     tablet_schema_pb->set_compression_type(_compression_type);
+    tablet_schema_pb->set_compression_level(_compression_level);
     tablet_schema_pb->mutable_sort_key_idxes()->Add(_sort_key_idxes.begin(), _sort_key_idxes.end());
     tablet_schema_pb->mutable_sort_key_unique_ids()->Add(_sort_key_uids.begin(), _sort_key_uids.end());
     tablet_schema_pb->set_schema_version(_schema_version);
@@ -652,6 +687,20 @@ size_t TabletSchema::field_index(std::string_view field_name) const {
         if (column.name() == field_name) {
             return ordinal;
         }
+    }
+    return -1;
+}
+
+size_t TabletSchema::field_index(std::string_view field_name, std::string_view extra_column_name) const {
+    int ordinal = -1;
+    for (auto& column : _cols) {
+        ordinal++;
+        if (column.name() == field_name) {
+            return ordinal;
+        }
+    }
+    if (field_name == extra_column_name) {
+        return ordinal + 1;
     }
     return -1;
 }
@@ -743,6 +792,16 @@ std::string TabletColumn::debug_string() const {
 
 bool operator!=(const TabletSchema& a, const TabletSchema& b) {
     return !(a == b);
+}
+
+bool TabletSchema::has_separate_sort_key() const {
+    RETURN_IF(_sort_key_idxes.size() != _num_key_columns, true);
+    for (size_t i = 0; i < _sort_key_idxes.size(); ++i) {
+        if (_sort_key_idxes[i] != i) {
+            return true;
+        }
+    }
+    return false;
 }
 
 std::string TabletSchema::debug_string() const {

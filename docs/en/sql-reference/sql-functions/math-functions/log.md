@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # log
 
-## Description
+
 
 Calculates the logarithm of a number to a specified base (or radix). If the base is not specified, this function is equivalent to [ln](../math-functions/ln.md).
 

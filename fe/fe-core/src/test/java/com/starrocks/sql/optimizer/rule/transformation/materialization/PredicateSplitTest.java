@@ -177,4 +177,41 @@ public class PredicateSplitTest {
             Assert.assertEquals(predicate, predicateSplit.getResidualPredicates());
         }
     }
+
+    @Test
+    public void testSplitPredicate2() {
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+        ColumnRefOperator columnRef1 = columnRefFactory.create("col1", Type.INT, false);
+        BinaryPredicateOperator predicate1 = new BinaryPredicateOperator(
+                BinaryType.EQ, columnRef1, ConstantOperator.createInt(1));
+        ScalarOperator predicate2 =  CompoundPredicateOperator.or(
+                new BinaryPredicateOperator(BinaryType.EQ, columnRef1, ConstantOperator.createInt(1)),
+                new BinaryPredicateOperator(BinaryType.EQ, columnRef1, ConstantOperator.createInt(2))
+        );
+
+        ScalarOperator andPredicate = Utils.compoundAnd(predicate1, predicate2);
+        PredicateSplit result = PredicateSplit.splitPredicate(andPredicate);
+        Assert.assertNull(result.getEqualPredicates());
+        Assert.assertNull(result.getResidualPredicates());
+        Assert.assertEquals(predicate1, result.getRangePredicates());
+    }
+
+    @Test
+    public void testSplitPredicate3() {
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+        ColumnRefOperator columnRef1 = columnRefFactory.create("col1", Type.INT, false);
+        BinaryPredicateOperator predicate1 = new BinaryPredicateOperator(
+                BinaryType.EQ, columnRef1, ConstantOperator.createInt(1));
+        ScalarOperator predicate2 =  CompoundPredicateOperator.or(
+                new BinaryPredicateOperator(BinaryType.EQ, columnRef1, ConstantOperator.createInt(3)),
+                new BinaryPredicateOperator(BinaryType.EQ, columnRef1, ConstantOperator.createInt(2))
+        );
+
+        ScalarOperator andPredicate = Utils.compoundAnd(predicate1, predicate2);
+        PredicateSplit result = PredicateSplit.splitPredicate(andPredicate);
+        System.out.println(result);
+        Assert.assertNull(result.getEqualPredicates());
+        Assert.assertNull(result.getResidualPredicates());
+        Assert.assertEquals(ConstantOperator.FALSE, result.getRangePredicates());
+    }
 }

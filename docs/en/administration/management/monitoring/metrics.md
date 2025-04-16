@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # General Monitoring Metrics
@@ -512,6 +512,24 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Bytes
 - Type: Average
 - Description: Used disk capacity.
+
+### encryption_keys_created
+
+- Unit: Count
+- Type: Cumulative
+- Description: number of file encryption keys created for file encryption
+
+### encryption_keys_unwrapped
+
+- Unit: Count
+- Type: Cumulative
+- Description: number of encryption meta unwrapped for file decryption
+
+### encryption_keys_in_cache
+
+- Unit: Count
+- Type: Instantaneous
+- Description: number of encryption keys currently in key cache
 
 ### starrocks_fe_meta_log_count
 
@@ -1628,6 +1646,7 @@ For more information on how to build a monitoring service for your StarRocks clu
   starrocks_fe_routine_load_jobs{state="PAUSED"} 0
   starrocks_fe_routine_load_jobs{state="STOPPED"} 0
   starrocks_fe_routine_load_jobs{state="CANCELLED"} 1
+  starrocks_fe_routine_load_jobs{state="UNSTABLE"} 0
   ```
 
 ### starrocks_fe_routine_load_paused

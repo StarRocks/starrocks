@@ -14,6 +14,7 @@
 
 #include "storage/meta_reader.h"
 
+#include <sstream>
 #include <utility>
 #include <vector>
 
@@ -33,8 +34,8 @@
 
 namespace starrocks {
 
-std::vector<std::string> SegmentMetaCollecter::support_collect_fields = {"flat_json_meta", "dict_merge", "max", "min",
-                                                                         "count"};
+std::vector<std::string> SegmentMetaCollecter::support_collect_fields = {
+        META_FLAT_JSON_META, META_DICT_MERGE, META_MAX, META_MIN, META_COUNT_ROWS, META_COUNT_COL};
 
 Status SegmentMetaCollecter::parse_field_and_colname(const std::string& item, std::string* field,
                                                      std::string* col_name) {
@@ -71,7 +72,7 @@ Status MetaReader::_read(Chunk* chunk, size_t n) {
 
     std::vector<Column*> columns;
     for (size_t i = 0; i < _collect_context.seg_collecter_params.fields.size(); ++i) {
-        const ColumnPtr& col = chunk->get_column_by_index(i);
+        ColumnPtr& col = chunk->get_column_by_index(i);
         columns.emplace_back(col.get());
     }
 
@@ -115,32 +116,32 @@ Status MetaReader::_fill_result_chunk(Chunk* chunk) {
         auto s_id = _collect_context.result_slot_ids[i];
         auto slot = _params.desc_tbl->get_slot_descriptor(s_id);
         const auto& field = _collect_context.seg_collecter_params.fields[i];
-        if (field == "dict_merge") {
+        if (field == META_DICT_MERGE) {
             TypeDescriptor item_desc;
             item_desc.type = TYPE_VARCHAR;
             TypeDescriptor desc;
             desc.type = TYPE_ARRAY;
             desc.children.emplace_back(item_desc);
-            ColumnPtr column = ColumnHelper::create_column(desc, _has_count_agg);
+            MutableColumnPtr column = ColumnHelper::create_column(desc, _has_count_agg);
             chunk->append_column(std::move(column), slot->id());
-        } else if (field == "count") {
+        } else if (field == META_COUNT_COL || field == META_COUNT_ROWS) {
             TypeDescriptor item_desc;
             item_desc.type = TYPE_BIGINT;
             TypeDescriptor desc;
             desc.type = TYPE_BIGINT;
             desc.children.emplace_back(item_desc);
-            ColumnPtr column = ColumnHelper::create_column(desc, false);
+            MutableColumnPtr column = ColumnHelper::create_column(desc, true);
             chunk->append_column(std::move(column), slot->id());
-        } else if (field == "flat_json_meta") {
+        } else if (field == META_FLAT_JSON_META) {
             TypeDescriptor item_desc;
             item_desc.type = TYPE_VARCHAR;
             TypeDescriptor desc;
             desc.type = TYPE_ARRAY;
             desc.children.emplace_back(item_desc);
-            ColumnPtr column = ColumnHelper::create_column(desc, false);
+            MutableColumnPtr column = ColumnHelper::create_column(desc, false);
             chunk->append_column(std::move(column), slot->id());
         } else {
-            ColumnPtr column = ColumnHelper::create_column(slot->type(), _has_count_agg);
+            MutableColumnPtr column = ColumnHelper::create_column(slot->type(), true);
             chunk->append_column(std::move(column), slot->id());
         }
     }
@@ -184,7 +185,11 @@ Status SegmentMetaCollecter::open() {
 
 Status SegmentMetaCollecter::_init_return_column_iterators() {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_segment->file_name()));
-    ASSIGN_OR_RETURN(_read_file, fs->new_random_access_file(_segment->file_name()));
+    RandomAccessFileOptions ropts;
+    if (_segment->encryption_info()) {
+        ropts.encryption_info = *_segment->encryption_info();
+    }
+    ASSIGN_OR_RETURN(_read_file, fs->new_random_access_file(ropts, _segment->file_name()));
 
     auto max_cid = _params->cids.empty() ? 0 : *std::max_element(_params->cids.begin(), _params->cids.end());
     _column_iterators.resize(max_cid + 1);
@@ -219,30 +224,61 @@ Status SegmentMetaCollecter::collect(std::vector<Column*>* dsts) {
 }
 
 Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, Column* column, LogicalType type) {
-    if (name == "dict_merge") {
+    if (name == META_DICT_MERGE) {
         return _collect_dict(cid, column, type);
-    } else if (name == "max") {
+    } else if (name == META_MAX) {
         return _collect_max(cid, column, type);
-    } else if (name == "min") {
+    } else if (name == META_MIN) {
         return _collect_min(cid, column, type);
-    } else if (name == "count") {
-        return _collect_count(column, type);
-    } else if (name == "flat_json_meta") {
+    } else if (name == META_COUNT_ROWS) {
+        return _collect_rows(column, type);
+    } else if (name == META_FLAT_JSON_META) {
         return _collect_flat_json(cid, column);
+    } else if (name == META_COUNT_COL) {
+        return _collect_count(cid, column, type);
     }
     return Status::NotSupported("Not Support Collect Meta: " + name);
 }
 
-Status SegmentMetaCollecter::_collect_flat_json(ColumnId cid, Column* column) {
-    if (cid >= _segment->num_columns()) {
-        return Status::NotFound("error column id");
+std::string append_read_name(const ColumnReader* col_reader) {
+    std::stringstream stream;
+    if (col_reader->column_type() == LogicalType::TYPE_JSON) {
+        for (const auto& sub_reader : *col_reader->sub_readers()) {
+            stream << fmt::format("{}({}), ", sub_reader->name(), type_to_string(sub_reader->column_type()));
+        }
+        auto str = stream.str();
+        return str.substr(0, str.size() - 2);
     }
+    if (col_reader->column_type() == LogicalType::TYPE_ARRAY) {
+        auto child = append_read_name((*col_reader->sub_readers())[0].get());
+        if (!child.empty()) {
+            stream << "[" << child << "]";
+        }
+    } else if (col_reader->column_type() == LogicalType::TYPE_MAP) {
+        auto child = append_read_name((*col_reader->sub_readers())[1].get());
+        if (!child.empty()) {
+            stream << "{" << child << "}";
+        }
+    } else if (col_reader->column_type() == LogicalType::TYPE_STRUCT) {
+        for (const auto& sub_reader : *col_reader->sub_readers()) {
+            auto child = append_read_name(sub_reader.get());
+            if (!child.empty()) {
+                stream << sub_reader->name() << "(" << child << "), ";
+            }
+        }
+        auto str = stream.str();
+        return str.substr(0, str.size() - 2);
+    }
+    return stream.str();
+}
 
+Status SegmentMetaCollecter::_collect_flat_json(ColumnId cid, Column* column) {
     const ColumnReader* col_reader = _segment->column(cid);
     if (col_reader == nullptr) {
         return Status::NotFound("don't found column");
     }
-    if (col_reader->column_type() != TYPE_JSON) {
+
+    if (!is_semi_type(col_reader->column_type())) {
         return Status::InternalError("column type mismatch");
     }
 
@@ -253,11 +289,11 @@ Status SegmentMetaCollecter::_collect_flat_json(ColumnId cid, Column* column) {
 
     ArrayColumn* array_column = down_cast<ArrayColumn*>(column);
     size_t size = array_column->offsets_column()->get_data().back();
-    for (const auto& sub_reader : *col_reader->sub_readers()) {
-        std::string str = fmt::format("{}({})", sub_reader->name(), type_to_string(sub_reader->column_type()));
-        array_column->elements_column()->append_datum(Slice(str));
+    auto res = append_read_name(col_reader);
+    if (!res.empty()) {
+        array_column->elements_column()->append_datum(Slice(res));
+        array_column->offsets_column()->append(size + 1);
     }
-    array_column->offsets_column()->append(size + col_reader->sub_readers()->size());
     return Status::OK();
 }
 
@@ -274,8 +310,9 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, Column* column, Logical
         RETURN_IF_ERROR(_column_iterators[cid]->fetch_all_dict_words(&words));
     }
 
-    if (words.size() > DICT_DECODE_MAX_SIZE) {
-        return Status::GlobalDictError("global dict greater than DICT_DECODE_MAX_SIZE");
+    if (words.size() > _params->low_cardinality_threshold) {
+        return Status::GlobalDictError(fmt::format("global dict size:{} greater than low_cardinality_threshold:{}",
+                                                   words.size(), _params->low_cardinality_threshold));
     }
 
     // array<string> has none dict, return directly
@@ -332,25 +369,43 @@ Status SegmentMetaCollecter::__collect_max_or_min(ColumnId cid, Column* column, 
     }
     const ZoneMapPB* segment_zone_map_pb = col_reader->segment_zone_map();
     TypeInfoPtr type_info = get_type_info(delegate_type(type));
-    if constexpr (!is_max) {
+    if constexpr (!is_max) { // min
         Datum min;
         if (!segment_zone_map_pb->has_null()) {
             RETURN_IF_ERROR(datum_from_string(type_info.get(), &min, segment_zone_map_pb->min(), nullptr));
             column->append_datum(min);
+        } else {
+            column->append_nulls(1);
         }
     } else if constexpr (is_max) {
         Datum max;
         if (segment_zone_map_pb->has_not_null()) {
             RETURN_IF_ERROR(datum_from_string(type_info.get(), &max, segment_zone_map_pb->max(), nullptr));
             column->append_datum(max);
+        } else {
+            column->append_nulls(1);
         }
     }
     return Status::OK();
 }
 
-Status SegmentMetaCollecter::_collect_count(Column* column, LogicalType type) {
+Status SegmentMetaCollecter::_collect_rows(Column* column, LogicalType type) {
     uint32_t num_rows = _segment->num_rows();
     column->append_datum(int64_t(num_rows));
+    return Status::OK();
+}
+
+Status SegmentMetaCollecter::_collect_count(ColumnId cid, Column* column, LogicalType type) {
+    if (!_column_iterators[cid]) {
+        return Status::InvalidArgument("Invalid Collect Params.");
+    }
+
+    uint32_t num_rows = _segment->num_rows();
+    size_t nulls = 0;
+    RETURN_IF_ERROR(_column_iterators[cid]->seek_to_first());
+    RETURN_IF_ERROR(_column_iterators[cid]->null_count(&nulls));
+    column->append_datum(int64_t(num_rows - nulls));
+
     return Status::OK();
 }
 

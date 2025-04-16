@@ -154,6 +154,8 @@ Status SpillableAggregateDistinctBlockingSinkOperatorFactory::prepare(RuntimeSta
     _spill_options->plan_node_id = _plan_node_id;
     _spill_options->encode_level = state->spill_encode_level();
     _spill_options->wg = state->fragment_ctx()->workgroup();
+    _spill_options->enable_buffer_read = state->enable_spill_buffer_read();
+    _spill_options->max_read_buffer_bytes = state->max_spill_read_buffer_bytes_per_driver();
 
     return Status::OK();
 }
@@ -180,6 +182,7 @@ Status SpillableAggregateDistinctBlockingSourceOperator::prepare(RuntimeState* s
     RETURN_IF_ERROR(AggregateDistinctBlockingSourceOperator::prepare(state));
     RETURN_IF_ERROR(_stream_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
     RETURN_IF_ERROR(_stream_aggregator->open(state));
+    _accumulator.set_max_size(state->chunk_size());
     return Status::OK();
 }
 

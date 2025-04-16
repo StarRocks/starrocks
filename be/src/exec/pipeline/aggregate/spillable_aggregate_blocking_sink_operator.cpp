@@ -27,7 +27,11 @@
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
+#include "util/failpoint/fail_point.h"
 #include "util/race_detect.h"
+
+DEFINE_FAIL_POINT(spill_always_streaming);
+DEFINE_FAIL_POINT(spill_always_selection_streaming);
 
 namespace starrocks::pipeline {
 bool SpillableAggregateBlockingSinkOperator::need_input() const {
@@ -56,7 +60,7 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
         _aggregator->spiller()->cancel();
     }
 
-    if (!_aggregator->spiller()->spilled()) {
+    if (!_aggregator->spiller()->spilled() && _streaming_chunks.empty()) {
         RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
         return Status::OK();
     }
@@ -108,6 +112,8 @@ Status SpillableAggregateBlockingSinkOperator::prepare(RuntimeState* state) {
     _peak_revocable_mem_bytes = _unique_metrics->AddHighWaterMarkCounter(
             "PeakRevocableMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
     _hash_table_spill_times = ADD_COUNTER(_unique_metrics.get(), "HashTableSpillTimes", TUnit::UNIT);
+    _agg_group_by_with_limit = false;
+    _aggregator->params()->enable_pipeline_share_limit = false;
 
     return Status::OK();
 }
@@ -165,29 +171,49 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
     // goal: control buffered data memory usage, aggregate data as much as possible before spill
     // this strategy is similar to the LIMITED_MEM mode in agg streaming
 
-    if (_streaming_bytes + ht_mem_usage > max_mem_usage) {
+    bool always_streaming = false;
+    bool always_selection_streaming = false;
+
+    FAIL_POINT_TRIGGER_EXECUTE(spill_always_streaming, {
+        if (_aggregator->hash_map_variant().size() != 0) {
+            always_streaming = true;
+        }
+    });
+    FAIL_POINT_TRIGGER_EXECUTE(spill_always_selection_streaming, {
+        if (_aggregator->hash_map_variant().size() != 0) {
+            always_selection_streaming = true;
+        }
+    });
+
+    // if hash table don't need expand or it's still very small after expansion, just put all data into it
+    bool build_hash_table =
+            !ht_need_expansion || (ht_need_expansion && _streaming_bytes + ht_mem_usage * 2 <= max_mem_usage);
+    build_hash_table = build_hash_table && !always_selection_streaming;
+    if (_streaming_bytes + ht_mem_usage > max_mem_usage || always_streaming) {
         // if current memory usage exceeds limit,
         // use force streaming mode and spill all data
         SCOPED_TIMER(_aggregator->streaming_timer());
         ChunkPtr res = std::make_shared<Chunk>();
-        RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(chunk.get(), &res));
+        RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(chunk.get(), &res, true));
         _add_streaming_chunk(res);
         return _spill_all_data(state, true);
-    } else if (!ht_need_expansion || (ht_need_expansion && _streaming_bytes + ht_mem_usage * 2 <= max_mem_usage)) {
-        // if hash table don't need expand or it's still very small after expansion, just put all data into it
+    } else if (build_hash_table) {
         SCOPED_TIMER(_aggregator->agg_compute_timer());
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(chunk_size));
-        TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
+        TRY_CATCH_ALLOC_SCOPE_START()
+        _aggregator->build_hash_map(chunk_size);
+        _aggregator->try_convert_to_two_level_map();
         RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(chunk.get(), chunk_size));
+        TRY_CATCH_ALLOC_SCOPE_END()
 
         _aggregator->update_num_input_rows(chunk_size);
         RETURN_IF_ERROR(_aggregator->check_has_error());
         _continuous_low_reduction_chunk_num = 0;
     } else {
+        TRY_CATCH_ALLOC_SCOPE_START()
         // selective preaggregation
         {
             SCOPED_TIMER(_aggregator->agg_compute_timer());
-            TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map_with_selection(chunk_size));
+            _aggregator->build_hash_map_with_selection(chunk_size);
         }
 
         size_t hit_count = SIMD::count_zero(_aggregator->streaming_selection());
@@ -195,7 +221,7 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
         if (hit_count == 0) {
             // put all data into buffer
             ChunkPtr tmp = std::make_shared<Chunk>();
-            RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(chunk.get(), &tmp));
+            RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(chunk.get(), &tmp, true));
             _add_streaming_chunk(std::move(tmp));
         } else if (hit_count == _aggregator->streaming_selection().size()) {
             // very high reduction
@@ -210,7 +236,7 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
             {
                 SCOPED_TIMER(_aggregator->streaming_timer());
                 ChunkPtr res = std::make_shared<Chunk>();
-                RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming_with_selection(chunk.get(), &res));
+                RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming_with_selection(chunk.get(), &res, true));
                 _add_streaming_chunk(std::move(res));
             }
         }
@@ -219,10 +245,11 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
         }
 
         _aggregator->update_num_input_rows(hit_count);
+        TRY_CATCH_ALLOC_SCOPE_END()
         RETURN_IF_ERROR(_aggregator->check_has_error());
     }
-    // finally, check memory usage of streaming_chunks and hash table, decide wether to spill
 
+    // finally, check memory usage of streaming_chunks and hash table, decide whether to spill
     size_t revocable_mem_bytes = _streaming_bytes + _aggregator->hash_map_memory_usage();
     set_revocable_mem_bytes(revocable_mem_bytes);
     if (revocable_mem_bytes > max_mem_usage) {
@@ -260,11 +287,9 @@ std::function<StatusOr<ChunkPtr>()> SpillableAggregateBlockingSinkOperator::_bui
             return chunk;
         }
         if (should_spill_hash_table) {
-            bool use_intermediate_as_output = true;
             if (!_aggregator->is_ht_eos()) {
                 auto chunk = std::make_shared<Chunk>();
-                RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(state->chunk_size(), &chunk,
-                                                                       &use_intermediate_as_output));
+                RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(state->chunk_size(), &chunk, true));
                 return chunk;
             }
             COUNTER_UPDATE(_aggregator->input_row_count(), _aggregator->num_input_rows());
@@ -301,9 +326,12 @@ Status SpillableAggregateBlockingSinkOperatorFactory::prepare(RuntimeState* stat
     _spill_options->spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
     _spill_options->block_manager = state->query_ctx()->spill_manager()->block_manager();
     _spill_options->name = "agg-blocking-spill";
+    _spill_options->enable_block_compaction = state->spill_enable_compaction();
     _spill_options->plan_node_id = _plan_node_id;
     _spill_options->encode_level = state->spill_encode_level();
     _spill_options->wg = state->fragment_ctx()->workgroup();
+    _spill_options->enable_buffer_read = state->enable_spill_buffer_read();
+    _spill_options->max_read_buffer_bytes = state->max_spill_read_buffer_bytes_per_driver();
 
     return Status::OK();
 }

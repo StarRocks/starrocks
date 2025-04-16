@@ -64,6 +64,11 @@ under the License.
             <scope>provided</scope>
         </dependency>
 
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-handler</artifactId>
+        </dependency>
+
         <!-- https://mvnrepository.com/artifact/com.google.code.gson/gson -->
         <dependency>
             <groupId>com.google.code.gson</groupId>
@@ -114,6 +119,12 @@ under the License.
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>io.netty</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
             <scope>provided</scope>
         </dependency>
 
@@ -256,7 +267,7 @@ under the License.
                     <dependency>
                         <groupId>com.puppycrawl.tools</groupId>
                         <artifactId>checkstyle</artifactId>
-                        <version>8.40</version>
+                        <version>${puppycrawl.version}</version>
                     </dependency>
                 </dependencies>
                 <configuration>
@@ -435,10 +446,9 @@ under the License.
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
-                    <version>3.8.1</version>
+                    <version>3.13.0</version>
+                    <!-- Do not change the version unless all external Spark clusters have upgraded JDK to a higher version.  -->
                     <configuration>
-                        <source>1.8</source>
-                        <target>1.8</target>
                         <release>8</release>
                     </configuration>
                 </plugin>

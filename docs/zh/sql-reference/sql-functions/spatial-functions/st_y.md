@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # ST_Y
 
-## 功能
+
 
 当 point 是一个合法的 POINT 类型时，返回对应的 Y 坐标值。
 

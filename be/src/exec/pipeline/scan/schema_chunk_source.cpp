@@ -15,6 +15,7 @@
 #include "exec/pipeline/scan/schema_chunk_source.h"
 
 #include <boost/algorithm/string.hpp>
+#include <mutex>
 
 #include "exec/schema_scanner.h"
 #include "exec/workgroup/work_group.h"
@@ -81,7 +82,13 @@ Status SchemaChunkSource::prepare(RuntimeState* state) {
     }
     _accumulator.set_desired_size(state->chunk_size());
 
-    return _schema_scanner->start(state);
+    return {};
+}
+
+Status SchemaChunkSource::start(RuntimeState* state) {
+    Status st = Status::OK();
+    std::call_once(_start_once, [&]() { st = _schema_scanner->start(state); });
+    return st;
 }
 
 void SchemaChunkSource::close(RuntimeState* state) {}
@@ -109,7 +116,7 @@ Status SchemaChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
         DCHECK(dest_slot_descs[i]->is_materialized());
         int j = _index_map[i];
         SlotDescriptor* src_slot = src_slot_descs[j];
-        ColumnPtr column = ColumnHelper::create_column(src_slot->type(), src_slot->is_nullable());
+        MutableColumnPtr column = ColumnHelper::create_column(src_slot->type(), src_slot->is_nullable());
         column->reserve(state->chunk_size());
         chunk_src->append_column(std::move(column), src_slot->id());
     }
@@ -120,7 +127,7 @@ Status SchemaChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     }
 
     for (auto dest_slot_desc : dest_slot_descs) {
-        ColumnPtr column = ColumnHelper::create_column(dest_slot_desc->type(), dest_slot_desc->is_nullable());
+        MutableColumnPtr column = ColumnHelper::create_column(dest_slot_desc->type(), dest_slot_desc->is_nullable());
         chunk_dst->append_column(std::move(column), dest_slot_desc->id());
     }
 
@@ -162,8 +169,4 @@ Status SchemaChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     return Status::OK();
 }
 
-const workgroup::WorkGroupScanSchedEntity* SchemaChunkSource::_scan_sched_entity(const workgroup::WorkGroup* wg) const {
-    DCHECK(wg != nullptr);
-    return wg->scan_sched_entity();
-}
 } // namespace starrocks::pipeline

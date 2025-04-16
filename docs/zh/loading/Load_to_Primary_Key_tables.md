@@ -1,11 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 keywords: ['zhujian']
 ---
 
 # 通过导入实现数据变更
 
-StarRocks 的[主键表](../table_design/table_types/primary_key_table.md)支持通过 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)、[Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 或 [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md) 导入作业，对 StarRocks 表进行数据变更，包括插入、更新和删除数据。不支持通过 [Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md) 导入作业或 [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md) 语句对 StarRocks 表进行数据变更。
+StarRocks 的[主键表](../table_design/table_types/primary_key_table.md)支持通过 [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)、[Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) 或 [Routine Load](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) 导入作业，对 StarRocks 表进行数据变更，包括插入、更新和删除数据。不支持通过 [Spark Load](../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md) 导入作业或 [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md) 语句对 StarRocks 表进行数据变更。
 
 StarRocks 还支持部分更新 (Partial Update) 和条件更新 (Conditional Update)。
 
@@ -55,7 +55,7 @@ StarRocks 的主键表目前支持 UPSERT 和 DELETE 操作，不支持区分 IN
 
 ### Broker Load
 
-参见[从 HDFS 导入](../loading/hdfs_load.md)或[从云存储导入](../loading/cloud_storage_load.md)中的“背景信息”小节。
+参见[从 HDFS 导入](../loading/hdfs_load.md)或[从云存储导入](../loading/objectstorage.mdx)中的“背景信息”小节。
 
 ### Routine Load
 
@@ -63,7 +63,7 @@ StarRocks 的主键表目前支持 UPSERT 和 DELETE 操作，不支持区分 IN
 
 ## 基本操作
 
-下面通过几个示例来展示具体的导入操作。有关使用 Stream Load、Broker Load 和 Routine Load 导入数据的详细语法和参数介绍，请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)、[BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 和 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)。
+下面通过几个示例来展示具体的导入操作。有关使用 Stream Load、Broker Load 和 Routine Load 导入数据的详细语法和参数介绍，请参见 [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)、[BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) 和 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md)。
 
 ### UPSERT
 
@@ -106,7 +106,7 @@ StarRocks 的主键表目前支持 UPSERT 和 DELETE 操作，不支持区分 IN
 
       > **说明**
       >
-      > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/Data_distribution.md#设置分桶数量)。
+      > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/data_distribution/Data_distribution.md#设置分桶数量)。
 
    b. 向 `table1` 表中插入一条数据，如下所示：
 
@@ -267,7 +267,7 @@ SELECT * FROM table1;
 
       > **说明**
       >
-      > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/Data_distribution.md#设置分桶数量)。
+      > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/data_distribution/Data_distribution.md#设置分桶数量)。
 
    b. 向 `table2` 表中插入数据，如下所示：
 
@@ -379,7 +379,7 @@ SELECT * FROM table2;
 
       > **说明**
       >
-      > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/Data_distribution.md#设置分桶数量)。
+      > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/data_distribution/Data_distribution.md#设置分桶数量)。
 
    b. 向 `table3` 表中插入数据，如下所示：
 
@@ -463,11 +463,13 @@ SELECT * FROM table3;
 
 ## 部分更新
 
-自 StarRocks v2.2 起，主键表支持部分更新 (Partial Update)，您可以选择只更新部分指定的列。这里以 CSV 格式的数据文件为例进行说明。
+主键表还支持部分列更新（Partial Updates），并且针对不同的数据更新场景，提供了行模式和列模式两种部分列更新，在不影响查询性能的同时，尽可能地降低部分更新的开销，从而能够保证更新的实时性。行模式比较适用于较多列且小批量的实时更新场景。列模式适用于少数列并且大量行的批处理更新场景。
 
 > **注意**
 >
-> 在部分更新模式下，如果要更新的行不存在，那么 StarRocks 会插入新的一行，并自动对缺失的列填充默认值。
+> 部分更新时，如果要更新的行不存在，那么 StarRocks 会插入新的一行，并自动对缺失的列填充默认值。如果没有定义默认值，则自动填充 `0`。
+
+如下以 CSV 格式的数据文件为例进行说明。
 
 ### 数据样例
 
@@ -501,7 +503,7 @@ SELECT * FROM table3;
 
       > **说明**
       >
-      > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/Data_distribution.md#设置分桶数量)。
+      > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/data_distribution/Data_distribution.md#设置分桶数量)。
 
    b. 向 `table4` 表中插入一条数据，如下所示：
 
@@ -528,7 +530,7 @@ SELECT * FROM table3;
 
   > **说明**
   >
-  > 使用 Stream Load 导入数据时，需要设置 `partial_update` 为 `true`，以开启部分更新特性。另外，还需要在 `columns` 中声明待更新数据的列的名称。
+  > 使用 Stream Load 导入数据时，需要设置 `partial_update` 为 `true`，以开启部分更新特性，默认为行模式部分更新，如果需要使用列模式部分更新，则需要设置 `partial_update_mode` 为 `column`。另外，还需要在 `columns` 中声明待更新数据的列的名称。
 
 - 通过 Broker Load 导入：
 
@@ -549,7 +551,7 @@ SELECT * FROM table3;
 
   > **说明**
   >
-  > 使用 Broker Load 导入数据时，需要设置 `partial_update` 为 `true`，以开启部分更新特性。另外，还需要在 `column_list` 中声明待更新数据的列的名称。
+  > 使用 Broker Load 导入数据时，需要设置 `partial_update` 为 `true`，以开启部分更新特性，默认为行模式部分更新，如果需要使用列模式部分更新，则需要设置 `partial_update_mode` 为 `column`。另外，还需要在 `column_list` 中声明待更新数据的列的名称。
 
 - 通过 Routine Load 导入：
 
@@ -571,7 +573,8 @@ SELECT * FROM table3;
 
   > **说明**
   >
-  > 使用 Routine Load 导入数据时，需要设置 `partial_update` 为 `true`，以开启部分更新特性。另外，还需要在 `COLUMNS` 中声明待更新数据的列的名称。
+  > - 使用 Routine Load 导入数据时，需要设置 `partial_update` 为 `true`，以开启部分更新特性。另外，还需要在 `COLUMNS` 中声明待更新数据的列的名称。
+  > - Routine Load 仅支持行模式部分更新，不支持列模式部分更新。
 
 ### 查询数据
 
@@ -636,7 +639,7 @@ SELECT * FROM table4;
 
       > **说明**
       >
-      > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/Data_distribution.md#设置分桶数量)。
+      > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/data_distribution/Data_distribution.md#设置分桶数量)。
 
    b. 向 `table5` 表中插入两条数据，如下所示：
 

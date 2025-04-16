@@ -37,10 +37,9 @@ package com.starrocks.analysis;
 import com.google.common.collect.Lists;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserAuthenticationInfo;
+import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.common.ErrorReportException;
-import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.MockedAuth;
-import com.starrocks.privilege.AuthorizationMgr;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SetExecutor;
 import com.starrocks.qe.SqlModeHelper;
@@ -54,7 +53,6 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -62,18 +60,17 @@ import org.junit.Test;
 
 public class SetPassVarTest {
 
-    @Mocked
     private ConnectContext ctx;
 
     @Before
     public void setUp() {
-        MockedAuth.mockedConnectContext(ctx, "root", "192.168.1.1");
+        ctx = new ConnectContext();
         UserIdentity currentUser = new UserIdentity("root", "192.168.1.1");
         ctx.setCurrentUserIdentity(currentUser);
     }
 
     @Test
-    public void testNormal() throws UserException {
+    public void testNormal() throws StarRocksException {
         SetPassVar stmt;
 
         //  mode: SET PASSWORD FOR 'testUser' = 'testPass';
@@ -148,6 +145,7 @@ public class SetPassVarTest {
         authenticationManager.createUser(createUserStmt);
         return createUserStmt.getUserIdentity();
     }
+
     @Test
     public void testSetPasswordInNewPrivilege() throws Exception {
 

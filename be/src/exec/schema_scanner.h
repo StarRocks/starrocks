@@ -91,7 +91,7 @@ class SchemaScanner {
 public:
     struct ColumnDesc {
         const char* name;
-        LogicalType type;
+        TypeDescriptor type;
         int size;
         bool is_null;
     };

@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # asin
 
-## Description
+
 
 Computes the arc sine of the argument.
 

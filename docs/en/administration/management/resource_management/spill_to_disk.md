@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+sidebar_position: 50
 ---
 
 # Spill to disk
@@ -19,6 +20,7 @@ Currently, StarRocks' spilling feature supports the following operators:
 - Aggregate operators
 - Sort operators
 - Hash join (LEFT JOIN, RIGHT JOIN, FULL JOIN, OUTER JOIN, SEMI JOIN, and INNER JOIN) operators
+- CTE operators (Supported from v3.3.4 onwards)
 
 ## Enable intermediate result spilling
 
@@ -56,12 +58,12 @@ Follow these steps to enable intermediate result spilling:
    | enable_spill | false       | Whether to enable intermediate result spilling. If it is set to `true`, StarRocks spills the intermediate results to disk to reduce the memory usage when processing aggregate, sort, or join operators in queries. |
    | spill_mode   | auto        | The execution mode of intermediate result spilling. Valid values:<ul><li>`auto`: Spilling is automatically triggered when the memory usage threshold is reached.</li><li>`force`: StarRocks forcibly executes spilling for all relevant operators, regardless of memory usage.</li></ul>This variable takes effect only when the variable `enable_spill` is set to `true`. |
 
-## Spill intermediate result to object storage
+## [Preview] Spill intermediate result to object storage
 
 From v3.3.0 onwards, StarRocks supports spilling intermediate results to object storage.
 
 :::tip
-Before enabling spilling to object storage, you must create a storage volume to define the object storage you want to use. For detailed instruction on creating a storage volume, see [CREATE STORAGE VOLUME](../../../sql-reference/sql-statements/Administration/CREATE_STORAGE_VOLUME.md).
+Before enabling spilling to object storage, you must create a storage volume to define the object storage you want to use. For detailed instruction on creating a storage volume, see [CREATE STORAGE VOLUME](../../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md).
 :::
 
 After you have enabled spilling in the previous step, you can further set these system variables to allow the intermediate results to be spilled to object storage:

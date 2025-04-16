@@ -51,7 +51,6 @@ public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, 
     }
 
     public void validate(OptExpression root) {
-        root.initRowOutputInfo();
         visit(root, null);
     }
 

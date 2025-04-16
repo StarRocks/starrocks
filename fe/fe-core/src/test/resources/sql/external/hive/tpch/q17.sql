@@ -45,6 +45,7 @@ OutPut Exchange Id: 12
 |  predicates: CAST(5: l_quantity AS DECIMAL128(38,9)) < 0.2 * 47: avg
 |  cardinality: 300019
 |  column statistics:
+|  * l_partkey-->[1.0, 2.0E7, 0.0, 8.0, 20000.0] ESTIMATE
 |  * l_quantity-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
 |  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 300018.951] ESTIMATE
 |  * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 20000.0] ESTIMATE
@@ -55,6 +56,7 @@ OutPut Exchange Id: 12
 |  partition by: [17: p_partkey, INT, true]
 |  cardinality: 600038
 |  column statistics:
+|  * l_partkey-->[1.0, 2.0E7, 0.0, 8.0, 20000.0] ESTIMATE
 |  * l_quantity-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
 |  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 600037.902] ESTIMATE
 |  * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 20000.0] ESTIMATE
@@ -115,6 +117,7 @@ TABLE: lineitem
 NON-PARTITION PREDICATES: 2: l_partkey IS NOT NULL
 partitions=1/1
 avgRowSize=24.0
+dataCacheOptions={populate: false}
 cardinality: 600037902
 probe runtime filters:
 - filter_id = 0, probe_expr = (2: l_partkey)
@@ -142,10 +145,10 @@ NON-PARTITION PREDICATES: 20: p_brand = 'Brand#35', 23: p_container = 'JUMBO CAS
 MIN/MAX PREDICATES: 20: p_brand <= 'Brand#35', 20: p_brand >= 'Brand#35', 23: p_container <= 'JUMBO CASE', 23: p_container >= 'JUMBO CASE'
 partitions=1/1
 avgRowSize=28.0
+dataCacheOptions={populate: false}
 cardinality: 20000
 column statistics:
 * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 20000.0] ESTIMATE
 * p_brand-->[-Infinity, Infinity, 0.0, 10.0, 25.0] ESTIMATE
 * p_container-->[-Infinity, Infinity, 0.0, 10.0, 40.0] ESTIMATE
 [end]
-

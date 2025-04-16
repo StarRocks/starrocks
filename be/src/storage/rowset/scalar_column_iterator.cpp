@@ -34,6 +34,7 @@
 
 #include "storage/rowset/scalar_column_iterator.h"
 
+#include "common/status.h"
 #include "storage/column_predicate.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitshuffle_page.h"
@@ -52,8 +53,9 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
     _opts = opts;
 
     IndexReadOptions index_opts;
-    index_opts.use_page_cache = config::enable_ordinal_index_memory_page_cache || !config::disable_storage_page_cache;
-    index_opts.kept_in_memory = config::enable_ordinal_index_memory_page_cache;
+    index_opts.use_page_cache = !opts.temporary_data && opts.use_page_cache &&
+                                (config::enable_ordinal_index_memory_page_cache || !config::disable_storage_page_cache);
+    index_opts.kept_in_memory = !opts.temporary_data && config::enable_ordinal_index_memory_page_cache;
     index_opts.lake_io_opts = opts.lake_io_opts;
     index_opts.read_file = _opts.read_file;
     index_opts.stats = _opts.stats;
@@ -230,6 +232,31 @@ Status ScalarColumnIterator::next_batch(size_t* n, Column* dst) {
     return Status::OK();
 }
 
+Status ScalarColumnIterator::null_count(size_t* count) {
+    if (!_reader->is_nullable()) {
+        *count = 0;
+        return Status::OK();
+    }
+    bool eos = false;
+    while (!eos) {
+        *count += _page->read_null_count();
+        _current_ordinal += _page->num_rows();
+        RETURN_IF_ERROR(_load_next_page(&eos));
+        if (eos) {
+            // release shareBufferStream
+            if (config::io_coalesce_lake_read_enable && _opts.is_io_coalesce) {
+                auto shared_buffer_stream = dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file);
+                if (shared_buffer_stream != nullptr) {
+                    shared_buffer_stream->release();
+                }
+            }
+            break;
+        }
+    }
+    _opts.stats->bytes_read += static_cast<int64_t>(*count);
+    return Status::OK();
+}
+
 Status ScalarColumnIterator::next_batch(const SparseRange<>& range, Column* dst) {
     size_t prev_bytes = dst->byte_size();
     SparseRangeIterator<> iter = range.new_iterator();
@@ -381,8 +408,9 @@ Status ScalarColumnIterator::get_row_ranges_by_zone_map(const std::vector<const 
         }
 
         IndexReadOptions opts;
-        opts.use_page_cache = config::enable_zonemap_index_memory_page_cache || !config::disable_storage_page_cache;
-        opts.kept_in_memory = config::enable_zonemap_index_memory_page_cache;
+        opts.use_page_cache = !_opts.temporary_data && _opts.use_page_cache &&
+                              (config::enable_zonemap_index_memory_page_cache || !config::disable_storage_page_cache);
+        opts.kept_in_memory = !_opts.temporary_data && config::enable_zonemap_index_memory_page_cache;
         opts.lake_io_opts = _opts.lake_io_opts;
         opts.read_file = _opts.read_file;
         opts.stats = _opts.stats;
@@ -422,7 +450,7 @@ Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(const std::vector<co
     }
 
     IndexReadOptions opts;
-    opts.use_page_cache = !config::disable_storage_page_cache;
+    opts.use_page_cache = !_opts.temporary_data && !config::disable_storage_page_cache && _opts.use_page_cache;
     opts.kept_in_memory = false;
     opts.lake_io_opts = _opts.lake_io_opts;
     opts.read_file = _opts.read_file;
@@ -646,6 +674,49 @@ bool ScalarColumnIterator::_contains_deleted_row(uint32_t page_index) const {
     }
     // if there is no zone map should be treated as DEL_PARTIAL_SATISFIED
     return true;
+}
+
+StatusOr<std::vector<std::pair<int64_t, int64_t>>> ScalarColumnIterator::get_io_range_vec(const SparseRange<>& range,
+                                                                                          Column* dst) {
+    (void)dst;
+    std::vector<std::pair<int64_t, int64_t>> res;
+    auto reader = get_column_reader();
+    if (reader == nullptr) {
+        // should't happen
+        return Status::InvalidArgument(fmt::format("column reader for {} is nullptr", _opts.read_file->filename()));
+    }
+
+    std::vector<std::pair<int, int>> page_index;
+    int prev_page_index = -1;
+    for (auto index = 0; index < range.size(); index++) {
+        auto row_start = range[index].begin();
+        auto row_end = range[index].end() - 1;
+        OrdinalPageIndexIterator iter_start;
+        OrdinalPageIndexIterator iter_end;
+        RETURN_IF_ERROR(reader->seek_at_or_before(row_start, &iter_start));
+        RETURN_IF_ERROR(reader->seek_at_or_before(row_end, &iter_end));
+
+        if (prev_page_index == iter_start.page_index()) {
+            // merge page index
+            page_index.back().second = iter_end.page_index();
+        } else {
+            page_index.emplace_back(std::make_pair(iter_start.page_index(), iter_end.page_index()));
+        }
+
+        prev_page_index = iter_end.page_index();
+    }
+
+    for (auto pair : page_index) {
+        OrdinalPageIndexIterator iter_start;
+        OrdinalPageIndexIterator iter_end;
+        RETURN_IF_ERROR(reader->seek_by_page_index(pair.first, &iter_start));
+        RETURN_IF_ERROR(reader->seek_by_page_index(pair.second, &iter_end));
+        auto offset = iter_start.page().offset;
+        auto size = iter_end.page().offset - offset + iter_end.page().size;
+        res.emplace_back(offset, size);
+    }
+
+    return res;
 }
 
 } // namespace starrocks

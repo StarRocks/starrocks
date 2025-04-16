@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # bitmap_to_binary
 
-## 功能
+
 
 将 Bitmap 根据 StarRocks 定义的规则，转换为二进制字符串。
 

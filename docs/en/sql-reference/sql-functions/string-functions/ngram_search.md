@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # ngram_search
 
-## Description
+
 
 Calculate the ngram similarity of the two strings.
 

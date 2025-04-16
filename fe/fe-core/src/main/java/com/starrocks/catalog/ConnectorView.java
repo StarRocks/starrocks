@@ -18,6 +18,7 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.ErrorType;
@@ -26,6 +27,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static java.util.Objects.requireNonNull;
 
@@ -51,9 +53,11 @@ public abstract class ConnectorView extends Table {
         String sqlDialect = sessionVariable.getSqlDialect();
         QueryStatement queryStatement = doGetQueryStatement(sessionVariable);
         sessionVariable.setSqlDialect(sqlDialect);
-
+        List<String> cteRelationNames = queryStatement.getQueryRelation().getCteRelations()
+                .stream().map(CTERelation::getName)
+                .collect(Collectors.toList());
         List<TableRelation> tableRelations = AnalyzerUtils.collectTableRelations(queryStatement);
-        formatRelations(tableRelations);
+        formatRelations(tableRelations, cteRelationNames);
         return queryStatement;
     }
 
@@ -84,7 +88,7 @@ public abstract class ConnectorView extends Table {
         return null;
     }
 
-    protected abstract void formatRelations(List<TableRelation> tableRelations);
+    protected abstract void formatRelations(List<TableRelation> tableRelations, List<String> cteRelationNames);
 
     public String getInlineViewDef() {
         return inlineViewDef;

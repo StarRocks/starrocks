@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # substring_index
 
-## 功能
+
 
 从给定字符串中截取第 `count` 个分隔符之前或之后的字符串。
 

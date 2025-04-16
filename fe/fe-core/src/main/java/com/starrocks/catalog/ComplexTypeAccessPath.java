@@ -14,6 +14,8 @@
 
 package com.starrocks.catalog;
 
+import java.util.Objects;
+
 public class ComplexTypeAccessPath {
     private final ComplexTypeAccessPathType accessPathType;
 
@@ -35,5 +37,26 @@ public class ComplexTypeAccessPath {
 
     public String getStructSubfieldName() {
         return this.structSubfieldName;
+    }
+
+    @Override
+    public final boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof ComplexTypeAccessPath)) {
+            return false;
+        }
+
+        ComplexTypeAccessPath that = (ComplexTypeAccessPath) o;
+        return accessPathType == that.accessPathType &&
+                Objects.equals(structSubfieldName, that.structSubfieldName);
+    }
+
+    @Override
+    public int hashCode() {
+        int result = Objects.hashCode(accessPathType);
+        result = 31 * result + Objects.hashCode(structSubfieldName);
+        return result;
     }
 }

@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # str2date
 
-## 功能
+
 
 按照 `format` 指定的格式将 `str` 转换为 DATE 类型的值。如果转换结果不对，返回 NULL。
 

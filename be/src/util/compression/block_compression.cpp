@@ -34,6 +34,8 @@
 
 #include "util/compression/block_compression.h"
 
+#include "common/config.h"
+
 #ifdef __x86_64__
 #include <libdeflate.h>
 #endif
@@ -148,7 +150,7 @@ private:
             }
         }
 
-        int32_t acceleration = 1;
+        int32_t acceleration = config::lz4_acceleration;
         size_t compressed_size =
                 LZ4_compress_fast_continue(ctx, input.data, output->data, input.size, output->size, acceleration);
 
@@ -718,11 +720,27 @@ public:
 
 class ZstdBlockCompression final : public BlockCompressionCodec {
 public:
-    ZstdBlockCompression() : BlockCompressionCodec(CompressionTypePB::ZSTD) {}
+    ZstdBlockCompression() : BlockCompressionCodec(CompressionTypePB::ZSTD), _level(-1) {}
+    ZstdBlockCompression(int level) : BlockCompressionCodec(CompressionTypePB::ZSTD), _level(level) {}
 
     static const ZstdBlockCompression* instance() {
         static ZstdBlockCompression s_instance;
         return &s_instance;
+    }
+
+    static const ZstdBlockCompression* instance(int level) {
+        if (level < 1 || level > 22) {
+            return nullptr;
+        }
+
+        static ZstdBlockCompression s_instances[22] = {
+                ZstdBlockCompression(1),  ZstdBlockCompression(2),  ZstdBlockCompression(3),  ZstdBlockCompression(4),
+                ZstdBlockCompression(5),  ZstdBlockCompression(6),  ZstdBlockCompression(7),  ZstdBlockCompression(8),
+                ZstdBlockCompression(9),  ZstdBlockCompression(10), ZstdBlockCompression(11), ZstdBlockCompression(12),
+                ZstdBlockCompression(13), ZstdBlockCompression(14), ZstdBlockCompression(15), ZstdBlockCompression(16),
+                ZstdBlockCompression(17), ZstdBlockCompression(18), ZstdBlockCompression(19), ZstdBlockCompression(20),
+                ZstdBlockCompression(21), ZstdBlockCompression(22)};
+        return &s_instances[level - 1];
     }
 
     ~ZstdBlockCompression() override = default;
@@ -753,6 +771,23 @@ private:
         }
         compression::ZSTDCompressionContext* context = ref.value().get();
         ZSTD_CCtx* ctx = context->ctx;
+        size_t ret;
+
+        // Every zstd compression context get from pool will be inited by default
+        // with level = ZSTD_CLEVEL_DEFAULT(3). And the context will be return to the
+        // pool by reseting back to level = ZSTD_CLEVEL_DEFAULT(3).
+        // What we should do here is simply set the level as we wanted.
+        if (_level != -1) {
+            if (_level < 1 || _level > 22) {
+                return Status::InternalError(strings::Substitute("ZSTD with invalid compression level: $0", _level));
+            }
+            ret = ZSTD_CCtx_setParameter(ctx, ZSTD_c_compressionLevel, _level);
+            if (ZSTD_isError(ret)) {
+                context->compression_fail = true;
+                return Status::InternalError(
+                        strings::Substitute("ZSTD set level failed: $0", ZSTD_getErrorString(ZSTD_getErrorCode(ret))));
+            }
+        }
 
         [[maybe_unused]] faststring* compression_buffer = nullptr;
         [[maybe_unused]] size_t max_len = 0;
@@ -783,7 +818,6 @@ private:
         out_buf.size = output->size;
         out_buf.pos = 0;
 
-        size_t ret;
         for (auto& input : inputs) {
             ZSTD_inBuffer in_buf;
             in_buf.src = input.data;
@@ -846,6 +880,7 @@ private:
         }
         compression::ZSTDDecompressContext* context = ref.value().get();
         ZSTD_DCtx* ctx = context->ctx;
+        // Decompression context does not depend on level parameter
 
         if (output->data == nullptr) {
             // We may pass a NULL 0-byte output buffer but some zstd versions
@@ -865,6 +900,8 @@ private:
         output->size = ret;
         return Status::OK();
     }
+
+    int _level;
 };
 
 class GzipBlockCompression : public ZlibBlockCompression {
@@ -1075,7 +1112,7 @@ public:
     size_t max_compressed_len(size_t len) const override { return size_t(-1); }
 };
 
-Status get_block_compression_codec(CompressionTypePB type, const BlockCompressionCodec** codec) {
+Status get_block_compression_codec(CompressionTypePB type, const BlockCompressionCodec** codec, int compression_level) {
     switch (type) {
     case CompressionTypePB::NO_COMPRESSION:
         *codec = nullptr;
@@ -1093,7 +1130,11 @@ Status get_block_compression_codec(CompressionTypePB type, const BlockCompressio
         *codec = ZlibBlockCompression::instance();
         break;
     case CompressionTypePB::ZSTD:
-        *codec = ZstdBlockCompression::instance();
+        if (compression_level != -1) {
+            *codec = ZstdBlockCompression::instance(compression_level);
+        } else {
+            *codec = ZstdBlockCompression::instance();
+        }
         break;
     case CompressionTypePB::GZIP:
 #ifdef __x86_64__

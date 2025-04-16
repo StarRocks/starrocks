@@ -45,6 +45,7 @@
 #include "testutil/sync_point.h"
 #include "util/cpu_info.h"
 #include "util/scoped_cleanup.h"
+#include "util/stack_util.h"
 #include "util/thread.h"
 
 namespace starrocks {
@@ -91,6 +92,16 @@ ThreadPoolBuilder& ThreadPoolBuilder::set_idle_timeout(const MonoDelta& idle_tim
     return *this;
 }
 
+ThreadPoolBuilder& ThreadPoolBuilder::set_cpuids(const CpuUtil::CpuIds& cpuids) {
+    _cpuids = cpuids;
+    return *this;
+}
+
+ThreadPoolBuilder& ThreadPoolBuilder::set_borrowed_cpuids(const std::vector<CpuUtil::CpuIds>& borrowed_cpuids) {
+    _borrowed_cpuids = borrowed_cpuids;
+    return *this;
+}
+
 Status ThreadPoolBuilder::build(std::unique_ptr<ThreadPool>* pool) const {
     pool->reset(new ThreadPool(*this));
     RETURN_IF_ERROR((*pool)->init());
@@ -114,14 +125,14 @@ Status ThreadPoolToken::submit_func(std::function<void()> f, ThreadPool::Priorit
 }
 
 void ThreadPoolToken::shutdown() {
+    // Define the to_release queue before acquiring the lock, so that tasks in the queue
+    // are destructed after the lock is released. This is important because the task's
+    // destructors may acquire locks, etc., so this also prevents lock inversions.
+    PriorityQueue<ThreadPool::NUM_PRIORITY, ThreadPool::Task> to_release;
     std::unique_lock l(_pool->_lock);
     _pool->check_not_pool_thread_unlocked();
 
-    // Clear the queue under the lock, but defer the releasing of the tasks
-    // outside the lock, in case there are concurrent threads wanting to access
-    // the ThreadPool. The task's destructors may acquire locks, etc, so this
-    // also prevents lock inversions.
-    PriorityQueue<ThreadPool::NUM_PRIORITY, ThreadPool::Task> to_release = std::move(_entries);
+    to_release = std::move(_entries);
     _pool->_total_queued_tasks -= to_release.size();
 
     switch (state()) {
@@ -161,8 +172,6 @@ void ThreadPoolToken::shutdown() {
     default:
         break;
     }
-    // releasing the tasks outside of lock
-    l.unlock();
 }
 
 void ThreadPoolToken::wait() {
@@ -250,7 +259,9 @@ ThreadPool::ThreadPool(const ThreadPoolBuilder& builder)
           _num_threads_pending_start(0),
           _active_threads(0),
           _total_queued_tasks(0),
-          _tokenless(new_token(ExecutionMode::CONCURRENT)) {}
+          _tokenless(new_token(ExecutionMode::CONCURRENT)),
+          _cpuids(builder._cpuids),
+          _borrowed_cpuids(builder._borrowed_cpuids) {}
 
 ThreadPool::~ThreadPool() noexcept {
     // There should only be one live token: the one used in tokenless submission.
@@ -281,6 +292,10 @@ bool ThreadPool::is_pool_status_ok() {
 }
 
 void ThreadPool::shutdown() {
+    // Define the to_release queue before acquiring the lock, so that tasks in the queue
+    // are destructed after the lock is released. This is important because the task's
+    // destructors may acquire locks, etc., so this also prevents lock inversions.
+    std::deque<PriorityQueue<NUM_PRIORITY, Task>> to_release;
     std::unique_lock l(_lock);
     check_not_pool_thread_unlocked();
 
@@ -289,13 +304,7 @@ void ThreadPool::shutdown() {
     // concern though because shutting down a pool typically requires clients to
     // be quiesced first, so there's no danger of a client getting confused.
     _pool_status = Status::ServiceUnavailable("The pool has been shut down.");
-
-    // Clear the various queues under the lock, but defer the releasing
-    // of the tasks outside the lock, in case there are concurrent threads
-    // wanting to access the ThreadPool. The task's destructors may acquire
-    // locks, etc, so this also prevents lock inversions.
     _queue.clear();
-    std::deque<PriorityQueue<NUM_PRIORITY, Task>> to_release;
     for (auto* t : _tokens) {
         if (!t->_entries.empty()) {
             to_release.emplace_back(std::move(t->_entries));
@@ -452,7 +461,7 @@ Status ThreadPool::do_submit(std::shared_ptr<Runnable> r, ThreadPoolToken* token
             }
             // If we failed to create a thread, but there are still some other
             // worker threads, log a warning message and continue.
-            LOG(ERROR) << "Thread pool failed to create thread: " << status.to_string();
+            LOG(ERROR) << "Thread pool failed to create thread: " << status.to_string() << "\n" << get_stack_trace();
         }
     }
 
@@ -487,6 +496,65 @@ Status ThreadPool::update_max_threads(int max_threads) {
     return Status::OK();
 }
 
+Status ThreadPool::update_min_threads(int min_threads) {
+    if (min_threads > this->_max_threads) {
+        std::string err_msg = strings::Substitute("invalid min threads num $0 :  max threads num: $1",
+                                                  std::to_string(min_threads), std::to_string(this->_max_threads));
+        LOG(WARNING) << err_msg;
+        return Status::InvalidArgument(err_msg);
+    } else {
+        _min_threads.store(min_threads, std::memory_order_release);
+        LOG(INFO) << "ThreadPool " << _name << " update min threads : " << _min_threads.load(std::memory_order_acquire);
+    }
+    return Status::OK();
+}
+
+static void _bind_cpus_inlock(Thread* thread, const size_t thread_index, const CpuUtil::CpuIds& cpuids,
+                              const std::vector<CpuUtil::CpuIds>& borrowed_cpuids) {
+    if (borrowed_cpuids.empty() || thread_index < cpuids.size()) {
+        CpuUtil::bind_cpus(thread, cpuids);
+        return;
+    }
+
+    // Assign the thread to all cpuids (including cpuids and borrowed_cpuids) in a round-robin manner
+    // based on thread_index.
+
+    size_t num_total_cpuids = cpuids.size();
+    for (const auto& cur_borrowed_cpuids : borrowed_cpuids) {
+        num_total_cpuids += cur_borrowed_cpuids.size();
+    }
+
+    if (num_total_cpuids == 0) {
+        CpuUtil::bind_cpus(thread, cpuids);
+        return;
+    }
+
+    const size_t normalized_thread_index = thread_index % num_total_cpuids;
+    if (normalized_thread_index < cpuids.size()) {
+        CpuUtil::bind_cpus(thread, cpuids);
+        return;
+    }
+    size_t num_threads = cpuids.size();
+    for (const auto& cur_borrowed_cpuids : borrowed_cpuids) {
+        num_threads += cur_borrowed_cpuids.size();
+        if (normalized_thread_index < num_threads) {
+            CpuUtil::bind_cpus(thread, cur_borrowed_cpuids);
+            return;
+        }
+    }
+}
+
+void ThreadPool::bind_cpus(const CpuUtil::CpuIds& cpuids, const std::vector<CpuUtil::CpuIds>& borrowed_cpuids) {
+    std::lock_guard<std::mutex> lock(_lock);
+    _cpuids = cpuids;
+    _borrowed_cpuids = borrowed_cpuids;
+
+    int i = 0;
+    for (auto* thread : _threads) {
+        _bind_cpus_inlock(thread, i++, cpuids, borrowed_cpuids);
+    }
+}
+
 void ThreadPool::dispatch_thread() {
     std::unique_lock l(_lock);
     auto current_thread = Thread::current_thread();
@@ -500,6 +568,8 @@ void ThreadPool::dispatch_thread() {
 
     // Owned by this worker thread and added/removed from _idle_threads as needed.
     IdleThread me;
+
+    _bind_cpus_inlock(current_thread, _num_threads - 1, _cpuids, _borrowed_cpuids);
 
     while (true) {
         // Note: Status::Aborted() is used to indicate normal shutdown.
@@ -629,6 +699,22 @@ void ThreadPool::check_not_pool_thread_unlocked() {
                 "name '$1' called pool function that would result in deadlock",
                 _name, current->name());
     }
+}
+
+Status ConcurrencyLimitedThreadPoolToken::submit(std::shared_ptr<Runnable> task,
+                                                 std::chrono::system_clock::time_point deadline) {
+    if (!_sem->try_acquire_until(deadline)) {
+        auto t = MilliSecondsSinceEpochFromTimePoint(deadline);
+        return Status::TimedOut(fmt::format("acquire semaphore reached deadline={}", t));
+    }
+    auto token_task =
+            std::make_shared<AutoCleanRunnable>([t = std::move(task)] { t->run(); }, [sem = _sem] { sem->release(); });
+    return _pool->submit(std::move(token_task));
+}
+
+Status ConcurrencyLimitedThreadPoolToken::submit_func(std::function<void()> f,
+                                                      std::chrono::system_clock::time_point deadline) {
+    return submit(std::make_shared<FunctionRunnable>(std::move(f)), deadline);
 }
 
 std::ostream& operator<<(std::ostream& o, ThreadPoolToken::State s) {

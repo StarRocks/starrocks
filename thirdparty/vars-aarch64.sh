@@ -40,10 +40,10 @@ HYPERSCAN_SOURCE="hyperscan-5.3.0.aarch64"
 HYPERSCAN_MD5SUM="ef337257bde6583242a739fab6fb161f"
 
 # async-profiler
-ASYNC_PROFILER_DOWNLOAD="https://github.com/async-profiler/async-profiler/releases/download/v2.9/async-profiler-2.9-linux-arm64.tar.gz"
-ASYNC_PROFILER_NAME="async-profiler-2.9-linux-arm64.tar.gz"
-ASYNC_PROFILER_SOURCE="async-profiler-2.9-linux-arm64"
-ASYNC_PROFILER_MD5SUM="d31a70d2c176146a46dffc15948040ed"
+ASYNC_PROFILER_DOWNLOAD="https://github.com/async-profiler/async-profiler/releases/download/v3.0/async-profiler-3.0-linux-arm64.tar.gz"
+ASYNC_PROFILER_NAME="async-profiler-3.0-linux-arm64.tar.gz"
+ASYNC_PROFILER_SOURCE="async-profiler-3.0-linux-arm64"
+ASYNC_PROFILER_MD5SUM="27ba04b14b84b9709aa97fb08737d13d"
 
 # jindosdk for Aliyun OSS
 JINDOSDK_DOWNLOAD="https://cdn-thirdparty.starrocks.com/jindosdk-4.6.8-linux-el7-aarch64.tar.gz"
@@ -52,7 +52,7 @@ JINDOSDK_SOURCE="jindosdk-4.6.8-linux-el7-aarch64"
 JINDOSDK_MD5SUM="27a4e2cd9a403c6e21079a866287d88b"
 
 # starcache
-STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.3.0/starcache-centos7_arm64.tar.gz"
+STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.4.0-rc03/starcache-centos7_arm64.tar.gz"
 STARCACHE_NAME="starcache.tar.gz"
 STARCACHE_SOURCE="starcache"
-STARCACHE_MD5SUM="adbf4b31877d57231f31cb07e68091cd"
+STARCACHE_MD5SUM="0ae57f587e69f4c1424ddb2b15e1aaa9"

@@ -1,0 +1,18 @@
+-- name: test_xxh3
+
+create table t0 (id int, a string, b string);
+
+insert into t0(id, a, b) values (0, "hello",  "world"), (1, "hello", "starrocks");
+
+
+select bit_shift_right(xx_hash3_128(a), 64),
+    bitand(xx_hash3_128(a), 18446744073709551615),
+    a,
+    bit_shift_right(xx_hash3_128(b), 64),
+    bitand(xx_hash3_128(b), 18446744073709551615),
+    b    
+   from t0 where id = 1;
+
+select bit_shift_right(xx_hash3_128(a,b), 64),
+    bitand(xx_hash3_128(a,b), 18446744073709551615),    
+    concat(a, b) from t0 order by id;

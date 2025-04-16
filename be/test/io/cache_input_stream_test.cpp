@@ -16,7 +16,7 @@
 
 #include <gtest/gtest.h>
 
-#include "block_cache/block_cache.h"
+#include "cache/block_cache/block_cache.h"
 #include "fs/fs_util.h"
 #include "testutil/assert.h"
 
@@ -57,8 +57,6 @@ public:
         options.mem_space_size = 100 * 1024 * 1024;
 #ifdef WITH_STARCACHE
         options.engine = "starcache";
-#else
-        options.engine = "cachelib";
 #endif
         options.enable_checksum = false;
         options.max_concurrent_inserts = 1500000;
@@ -76,8 +74,11 @@ public:
         }
     }
 
-    void SetUp() override {}
-    void TearDown() override {}
+    void SetUp() override {
+        _saved_enable_auto_adjust = config::datacache_auto_adjust_enable;
+        config::datacache_auto_adjust_enable = false;
+    }
+    void TearDown() override { config::datacache_auto_adjust_enable = _saved_enable_auto_adjust; }
 
     static void read_stream_data(io::SeekableInputStream* stream, int64_t offset, int64_t size, char* data) {
         ASSERT_OK(stream->seek(offset));
@@ -103,6 +104,9 @@ public:
     }
 
     static const int64_t block_size;
+
+private:
+    bool _saved_enable_auto_adjust = false;
 };
 
 const int64_t CacheInputStreamTest::block_size = 256 * 1024;
@@ -324,9 +328,12 @@ TEST_F(CacheInputStreamTest, test_read_with_zero_range) {
 }
 
 TEST_F(CacheInputStreamTest, test_read_with_adaptor) {
+    const std::string cache_dir = "./cache_input_stream_cache_dir";
+    fs::create_directories(cache_dir);
+
     CacheOptions options = cache_options();
     // Because the cache adaptor only work for disk cache.
-    options.disk_spaces.push_back({.path = "./block_disk_cache", .size = 300 * 1024 * 1024});
+    options.disk_spaces.push_back({.path = cache_dir, .size = 300 * 1024 * 1024});
     options.enable_tiered_cache = false;
     ASSERT_OK(BlockCache::instance()->init(options));
 
@@ -366,8 +373,8 @@ TEST_F(CacheInputStreamTest, test_read_with_adaptor) {
         // Record read latencyr to ensure cache latency > remote latency
         // so all blocks read from remote.
         for (size_t i = 0; i < kAdaptorWindowSize; ++i) {
-            cache->record_read_cache(read_size, 1000000000);
-            cache->record_read_remote(read_size, 10);
+            cache->record_read_local_cache(read_size, 1000000000);
+            cache->record_read_remote_storage(read_size, 10, true);
         }
         char buffer[read_size];
         read_stream_data(&cache_stream, 0, read_size, buffer);
@@ -380,8 +387,8 @@ TEST_F(CacheInputStreamTest, test_read_with_adaptor) {
         // Record read latencyr to ensure cache latency < remote latency
         // so all blocks read from cache.
         for (size_t i = 0; i < kAdaptorWindowSize; ++i) {
-            cache->record_read_cache(read_size, 10);
-            cache->record_read_remote(read_size, 1000000000);
+            cache->record_read_local_cache(read_size, 10);
+            cache->record_read_remote_storage(read_size, 1000000000, true);
         }
         char buffer[read_size];
         read_stream_data(&cache_stream, 0, read_size, buffer);
@@ -389,6 +396,7 @@ TEST_F(CacheInputStreamTest, test_read_with_adaptor) {
         ASSERT_TRUE(check_data_content(buffer + block_size, block_size, 'b'));
         ASSERT_EQ(stats.read_cache_count, block_count);
     }
+    fs::remove_all(cache_dir);
 }
 
 TEST_F(CacheInputStreamTest, test_read_with_shared_buffer) {
@@ -476,6 +484,48 @@ TEST_F(CacheInputStreamTest, test_peek) {
         auto str_view = res.value();
         ASSERT_EQ(str_view.length(), peek_size);
     }
+}
+
+TEST_F(CacheInputStreamTest, test_try_peer_cache) {
+    CacheOptions options = cache_options();
+    ASSERT_OK(BlockCache::instance()->init(options));
+
+    const int64_t block_count = 3;
+
+    int64_t data_size = block_size * block_count;
+    char data[data_size + 1];
+    gen_test_data(data, data_size, block_size);
+
+    const std::string file_name = "test_try_peer_cache";
+    std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
+    std::shared_ptr<io::SharedBufferedInputStream> sb_stream(
+            new io::SharedBufferedInputStream(stream, file_name, data_size));
+    io::CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
+    cache_stream.set_enable_populate_cache(true);
+
+    cache_stream.set_peer_cache_node("1.1.1.1:1");
+    ASSERT_EQ(cache_stream._peer_host, "1.1.1.1");
+    ASSERT_EQ(cache_stream._peer_port, 1);
+    // Replace with a invalid ip for test
+    cache_stream._peer_host = "127.0.0.1";
+    auto& stats = cache_stream.stats();
+
+    // first read from backend
+    for (int i = 0; i < block_count; ++i) {
+        char buffer[block_size];
+        read_stream_data(&cache_stream, i * block_size, block_size, buffer);
+        ASSERT_TRUE(check_data_content(buffer, block_size, 'a' + i));
+    }
+    ASSERT_EQ(stats.read_cache_count, 0);
+    ASSERT_EQ(stats.write_cache_count, block_count);
+
+    // first read from local cache
+    for (int i = 0; i < block_count; ++i) {
+        char buffer[block_size];
+        read_stream_data(&cache_stream, i * block_size, block_size, buffer);
+        ASSERT_TRUE(check_data_content(buffer, block_size, 'a' + i));
+    }
+    ASSERT_EQ(stats.read_cache_count, block_count);
 }
 
 } // namespace starrocks::io

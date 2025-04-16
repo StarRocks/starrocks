@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # version
 
-## Description
+
 
 Returns the current version of the MySQL database.
 

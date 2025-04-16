@@ -19,6 +19,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
+#include "exec/hdfs_scanner.h"
 #include "exprs/expr.h"
 #include "exprs/runtime_filter_bank.h"
 #include "formats/orc/column_reader.h"
@@ -108,9 +109,6 @@ public:
     static void build_column_name_set(std::unordered_set<std::string>* name_set,
                                       const std::vector<std::string>* hive_column_names, const orc::Type& root_type,
                                       bool case_sensitive, bool use_orc_column_names);
-    static std::string format_column_name(const std::string& col_name, bool case_sensitive) {
-        return case_sensitive ? col_name : boost::algorithm::to_lower_copy(col_name);
-    }
 
     void set_runtime_state(RuntimeState* state) { _state = state; }
     RuntimeState* runtime_state() { return _state; }
@@ -128,8 +126,8 @@ public:
     Status lazy_seek_to(uint64_t rowInStripe);
     void lazy_filter_on_cvb(Filter* filter);
     StatusOr<ChunkPtr> get_lazy_chunk();
-    ColumnPtr get_row_delete_filter(const std::set<int64_t>& deleted_pos);
-    size_t get_row_delete_number(const std::set<int64_t>& deleted_pos);
+    StatusOr<MutableColumnPtr> get_row_delete_filter(const SkipRowsContextPtr& skip_rows_ctx);
+    size_t get_row_delete_number(const SkipRowsContextPtr& skip_rows_ctx);
 
     bool is_implicit_castable(TypeDescriptor& starrocks_type, const TypeDescriptor& orc_type);
 
@@ -154,7 +152,7 @@ private:
     Status _add_conjunct(const Expr* conjunct,
                          const std::unordered_map<SlotId, size_t>& slot_id_to_pos_in_src_slot_descriptors,
                          std::unique_ptr<orc::SearchArgumentBuilder>& builder);
-    bool _add_runtime_filter(const uint64_t column_id, const SlotDescriptor* slot_desc, const JoinRuntimeFilter* rf,
+    bool _add_runtime_filter(const uint64_t column_id, const SlotDescriptor* slot_desc, const RuntimeFilter* rf,
                              std::unique_ptr<orc::SearchArgumentBuilder>& builder);
 
     void _try_implicit_cast(TypeDescriptor* from, const TypeDescriptor& to);

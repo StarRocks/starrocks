@@ -24,21 +24,29 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.List;
+
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
 
 public class AnalyzeInsertTest {
@@ -93,7 +101,7 @@ public class AnalyzeInsertTest {
     @Test
     public void testInsertOverwriteWhenSchemaChange() throws Exception {
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
-                .getDb("test").getTable("t0");
+                .getLocalMetastore().getDb("test").getTable("t0");
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
         analyzeFail("insert overwrite t0 select * from t0;",
                 "table state is SCHEMA_CHANGE, please wait to insert overwrite until table state is normal");
@@ -106,11 +114,15 @@ public class AnalyzeInsertTest {
                 "Unknown catalog 'err_catalog'");
 
         MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
-        new MockUp<MetaUtils>() {
+
+        new MockUp<MetadataMgr>() {
             @Mock
-            public Database getDatabase(String catalogName, String tableName) {
+            public Database getDb(ConnectContext context, String catalogName, String dbName) {
                 return new Database();
             }
+        };
+
+        new MockUp<MetaUtils>() {
             @Mock
             public Table getSessionAwareTable(ConnectContext context, Database database, TableName tableName) {
                 return null;
@@ -127,6 +139,10 @@ public class AnalyzeInsertTest {
         };
         new Expectations(metadata) {
             {
+                metadata.getDb((ConnectContext) any, anyString, anyString);
+                minTimes = 0;
+                result = new Database();
+
                 icebergTable.supportInsert();
                 result = true;
                 minTimes = 0;
@@ -137,6 +153,10 @@ public class AnalyzeInsertTest {
 
         new Expectations(metadata) {
             {
+                metadata.getDb((ConnectContext) any, anyString, anyString);
+                minTimes = 0;
+                result = new Database();
+
                 icebergTable.getBaseSchema();
                 result = ImmutableList.of(new Column("c1", Type.INT));
                 minTimes = 0;
@@ -149,12 +169,14 @@ public class AnalyzeInsertTest {
     public void testPartitionedIcebergTable(@Mocked IcebergTable icebergTable) {
         MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
 
-        new MockUp<MetaUtils>() {
+        new MockUp<MetadataMgr>() {
             @Mock
-            public Database getDatabase(String catalogName, String databaseName) {
+            public Database getDb(String catalogName, String dbName) {
                 return new Database();
             }
+        };
 
+        new MockUp<MetaUtils>() {
             @Mock
             public Table getSessionAwareTable(ConnectContext context, Database database, TableName tableName) {
                 return icebergTable;
@@ -163,6 +185,10 @@ public class AnalyzeInsertTest {
 
         new Expectations(metadata) {
             {
+                metadata.getDb((ConnectContext) any, anyString, anyString);
+                minTimes = 0;
+                result = new Database();
+
                 icebergTable.supportInsert();
                 result = true;
                 minTimes = 0;
@@ -233,11 +259,14 @@ public class AnalyzeInsertTest {
 
     @Test
     public void testInsertHiveNonManagedTable(@Mocked HiveTable hiveTable) {
-        new MockUp<MetaUtils>() {
+        new MockUp<MetadataMgr>() {
             @Mock
-            public Database getDatabase(String catalogName, String databaseName) {
-                return null;
+            public Database getDb(ConnectContext context, String catalogName, String dbName) {
+                return new Database();
             }
+        };
+
+        new MockUp<MetaUtils>() {
             @Mock
             public Table getSessionAwareTable(ConnectContext conntext, Database database, TableName tableName) {
                 return hiveTable;
@@ -350,6 +379,21 @@ public class AnalyzeInsertTest {
                 "got invalid parameter \"single\" = \"false-false\", expect a boolean value (true or false).");
 
         analyzeFail("insert into files ( \n" +
+                        "\t\"path\" = \"s3://path/to/directory/\", \n" +
+                        "\t\"format\"=\"parquet\", \n" +
+                        "\t\"compression\" = \"uncompressed\", \n" +
+                        "\t\"parquet.use_legacy_encoding\"=\"f\" ) \n" +
+                        "select \"abc\" as k1, 123 as k2",
+                "got invalid parameter \"parquet.use_legacy_encoding\" = \"f\", expect a boolean value (true or false).");
+
+        analyzeSuccess("insert into files ( \n" +
+                        "\t\"path\" = \"s3://path/to/directory/\", \n" +
+                        "\t\"format\"=\"parquet\", \n" +
+                        "\t\"compression\" = \"uncompressed\", \n" +
+                        "\t\"parquet.use_legacy_encoding\"=\"true\" ) \n" +
+                        "select \"abc\" as k1, 123 as k2");
+
+        analyzeFail("insert into files ( \n" +
                 "\t\"path\" = \"s3://path/to/directory/\", \n" +
                 "\t\"format\"=\"parquet\", \n" +
                 "\t\"compression\" = \"uncompressed\", \n" +
@@ -361,5 +405,34 @@ public class AnalyzeInsertTest {
                 "\t\"format\"=\"parquet\", \n" +
                 "\t\"compression\" = \"uncompressed\" ) \n" +
                 "select 1 as a, 2 as a", "expect column names to be distinct, but got duplicate(s): [a]");
+    }
+
+    @Test
+    public void testInsertFailAbortTransaction() throws Exception {
+        StarRocksAssert starRocksAssert = getStarRocksAssert();
+        ConnectContext connectContext = getConnectContext();
+        starRocksAssert.withDatabase("insert_fail").withTable("create table insert_fail.t1 (k1 int, k2 int) " +
+                "distributed by hash(k1) buckets 1 properties ('replication_num' = '1')");
+
+        String insertSql = "insert into insert_fail.t1 values (1)";
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        StatementBase statement = SqlParser.parseSingleStatement(insertSql, connectContext.getSessionVariable().getSqlMode());
+        try {
+            new StmtExecutor(connectContext, statement).execute();
+        } catch (Exception e) {
+            Assert.assertTrue(
+                    e.getMessage().contains("Inserted target column count: 2 doesn't match select/value column count: 1"));
+        }
+
+        List<List<String>> results = starRocksAssert.show("show proc '/transactions/insert_fail'");
+        Assert.assertEquals(2, results.size());
+        for (List<String> row : results) {
+            Assert.assertEquals(2, row.size());
+            if (row.get(0).equals("running")) {
+                Assert.assertEquals("0", row.get(1));
+            } else if (row.get(0).equals("finished")) {
+                Assert.assertEquals("1", row.get(1));
+            }
+        }
     }
 }

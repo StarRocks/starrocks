@@ -25,11 +25,14 @@ import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class LoadTrackingLogsSystemTable {
+    public static final String NAME = "load_tracking_logs";
+
     public static SystemTable create() {
         return new SystemTable(SystemId.LOAD_TRACKING_LOGS_ID,
-                "load_tracking_logs",
+                NAME,
                 Table.TableType.SCHEMA,
                 builder()
+                        .column("ID", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("JOB_ID", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("LABEL", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("DATABASE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))

@@ -40,12 +40,15 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.LabelName;
+import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
@@ -57,6 +60,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
@@ -67,8 +71,8 @@ import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
-import com.starrocks.common.PatternMatcher;
-import com.starrocks.common.UserException;
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.proc.ComputeNodeProcDir;
 import com.starrocks.common.proc.OptimizeProcDir;
@@ -76,9 +80,10 @@ import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.mysql.MysqlCommand;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
+import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
@@ -101,6 +106,7 @@ import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowEnginesStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
+import com.starrocks.sql.ast.ShowIndexStmt;
 import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowProcedureStmt;
@@ -111,11 +117,11 @@ import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
-import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataCacheMetrics;
@@ -129,6 +135,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
@@ -160,6 +167,11 @@ public class ShowExecutorTest {
     @Mocked
     MetadataMgr metadataMgr;
 
+    @BeforeClass
+    public static void beforeClass() {
+        FeConstants.runningUnitTest = true;
+    }
+
     @Before
     public void setUp() throws Exception {
         ctx = new ConnectContext(null);
@@ -169,6 +181,10 @@ public class ShowExecutorTest {
         Column column2 = new Column("col2", Type.DOUBLE);
         column1.setIsKey(true);
         column2.setIsKey(true);
+        Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
+        idToColumn.put(column1.getColumnId(), column1);
+        idToColumn.put(column2.getColumnId(), column2);
+
         // mock index 1
         MaterializedIndex index1 = new MaterializedIndex();
 
@@ -176,17 +192,28 @@ public class ShowExecutorTest {
         MaterializedIndex index2 = new MaterializedIndex();
 
         // mock partition
-        Partition partition = Deencapsulation.newInstance(Partition.class);
-        new Expectations(partition) {
+        PhysicalPartition physicalPartition = Deencapsulation.newInstance(PhysicalPartition.class);
+        new Expectations(physicalPartition) {
             {
-                partition.getBaseIndex();
+                physicalPartition.getBaseIndex();
                 minTimes = 0;
                 result = index1;
             }
         };
 
+        // mock partition
+        Partition partition = Deencapsulation.newInstance(Partition.class);
+        new Expectations(partition) {
+            {
+                partition.getDefaultPhysicalPartition();
+                minTimes = 0;
+                result = physicalPartition;
+            }
+        };
+
         // mock table
         OlapTable table = new OlapTable();
+        table.setId(10001);
         new Expectations(table) {
             {
                 table.getName();
@@ -200,6 +227,10 @@ public class ShowExecutorTest {
                 table.getBaseSchema();
                 minTimes = 0;
                 result = Lists.newArrayList(column1, column2);
+
+                table.getIdToColumn();
+                minTimes = 0;
+                result = idToColumn;
 
                 table.getKeysType();
                 minTimes = 0;
@@ -225,9 +256,13 @@ public class ShowExecutorTest {
                 minTimes = 0;
                 result = partition;
 
-                table.getCopiedBfColumns();
+                table.getBfColumnNames();
                 minTimes = 0;
                 result = null;
+
+                table.getIdToColumn();
+                minTimes = 0;
+                result = idToColumn;
             }
         };
 
@@ -258,6 +293,10 @@ public class ShowExecutorTest {
                 minTimes = 0;
                 result = 1000L;
 
+                mv.getIdToColumn();
+                minTimes = 0;
+                result = idToColumn;
+
                 mv.getViewDefineSql();
                 minTimes = 0;
                 result = "select col1, col2 from table1";
@@ -278,8 +317,8 @@ public class ShowExecutorTest {
                 minTimes = 0;
                 result = new ExpressionRangePartitionInfo(
                         Collections.singletonList(
-                                new SlotRef(
-                                        new TableName("test", "testMv"), column1.getName())),
+                                ColumnIdExpr.create(new SlotRef(
+                                        new TableName("test", "testMv"), column1.getName()))),
                         Collections.singletonList(column1), PartitionType.RANGE);
 
                 mv.getDefaultDistributionInfo();
@@ -302,6 +341,10 @@ public class ShowExecutorTest {
                 minTimes = 0;
                 result = new TableProperty(
                         Collections.singletonMap(PROPERTIES_STORAGE_COOLDOWN_TIME, "100"));
+
+                mv.getIdToColumn();
+                minTimes = 0;
+                result = idToColumn;
             }
         };
 
@@ -337,54 +380,71 @@ public class ShowExecutorTest {
 
         // mock globalStateMgr.
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+        LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
         new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getDb("testDb");
+                /*
+                globalStateMgr.getLocalMetastore().getDb("testDb");
                 minTimes = 0;
                 result = db;
 
-                globalStateMgr.getDb("emptyDb");
+
+                globalStateMgr.getLocalMetastore().getDb("emptyDb");
                 minTimes = 0;
                 result = null;
+
+                 */
 
                 GlobalStateMgr.getCurrentState();
                 minTimes = 0;
                 result = globalStateMgr;
 
+                globalStateMgr.getLocalMetastore();
+                minTimes = 0;
+                result = localMetastore;
+
                 globalStateMgr.getMetadataMgr();
                 minTimes = 0;
                 result = metadataMgr;
 
-                metadataMgr.listDbNames("default_catalog");
+                metadataMgr.listDbNames((ConnectContext) any, "default_catalog");
                 minTimes = 0;
                 result = Lists.newArrayList("testDb");
 
-                metadataMgr.getDb("default_catalog", "testDb");
+                metadataMgr.getDb((ConnectContext) any, "default_catalog", "testDb");
                 minTimes = 0;
                 result = db;
 
-                metadataMgr.getDb("default_catalog", "emptyDb");
+                metadataMgr.getDb((ConnectContext) any, "default_catalog", "emptyDb");
                 minTimes = 0;
                 result = null;
 
-                metadataMgr.getTable("default_catalog", "testDb",
-                        "testTbl");
+                metadataMgr.getTable((ConnectContext) any, "default_catalog", "testDb", "testTbl");
                 minTimes = 0;
                 result = table;
             }
         };
 
-        // mock scheduler
-        ConnectScheduler scheduler = new ConnectScheduler(10);
-        new Expectations(scheduler) {
-            {
-                scheduler.listConnection("testUser", null);
-                minTimes = 0;
-                result = Lists.newArrayList(ctx.toThreadInfo());
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                if (dbName.equalsIgnoreCase("emptyDb")) {
+                    return null;
+                }
+                return db;
+            }
+
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return db.getTable(tblName);
+            }
+
+            @Mock
+            public List<Table> getTables(Long dbId) {
+                return db.getTables();
             }
         };
 
-        ctx.setConnectScheduler(scheduler);
         ctx.setGlobalStateMgr(AccessTestUtil.fetchAdminCatalog());
         ctx.setQualifiedUser("testUser");
 
@@ -430,7 +490,7 @@ public class ShowExecutorTest {
     }
 
     @Test
-    public void testShowPartitions(@Mocked Analyzer analyzer) throws UserException {
+    public void testShowPartitions(@Mocked Analyzer analyzer) throws StarRocksException {
 
         new MockUp<SystemInfoService>() {
             @Mock
@@ -444,6 +504,7 @@ public class ShowExecutorTest {
         OlapTable olapTable = listPartitionInfoTest.findTableForMultiListPartition();
         Database db = new Database();
 
+        /*
         new Expectations(db) {
             {
                 db.getTable(anyString);
@@ -456,6 +517,8 @@ public class ShowExecutorTest {
             }
         };
 
+         */
+
         new MockUp<MetaUtils>() {
             @Mock
             public Table getSessionAwareTable(ConnectContext ctx, Database db, TableName tableName) {
@@ -465,12 +528,15 @@ public class ShowExecutorTest {
 
         new Expectations() {
             {
-                globalStateMgr.getDb(0);
+                globalStateMgr.getLocalMetastore().getDb(0);
                 minTimes = 0;
                 result = db;
+
+                globalStateMgr.getLocalMetastore().getTable(anyLong, anyLong);
+                minTimes = 0;
+                result = olapTable;
             }
         };
-
 
         // Ok to test
         ShowPartitionsStmt stmt = new ShowPartitionsStmt(new TableName("testDb", "testTbl"),
@@ -491,9 +557,9 @@ public class ShowExecutorTest {
         Assert.assertEquals(partitionKey2, "dt, province");
 
         String values1 = resultSet.getResultRows().get(0).get(7);
-        Assert.assertEquals(values1, "(('2022-04-15', 'guangdong'), ('2022-04-15', 'tianjin'))");
+        Assert.assertEquals(values1, "[[\"2022-04-15\",\"guangdong\"],[\"2022-04-15\",\"tianjin\"]]");
         String values2 = resultSet.getResultRows().get(1).get(7);
-        Assert.assertEquals(values2, "(('2022-04-16', 'shanghai'), ('2022-04-16', 'beijing'))");
+        Assert.assertEquals(values2, "[[\"2022-04-16\",\"shanghai\"],[\"2022-04-16\",\"beijing\"]]");
     }
 
     @Test
@@ -524,7 +590,6 @@ public class ShowExecutorTest {
                 ctx.getSessionVariable().getSqlMode()).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
-
         ShowResultSet resultSet;
         try {
             resultSet = ShowExecutor.execute(stmt, ctx);
@@ -533,48 +598,6 @@ public class ShowExecutorTest {
             e.printStackTrace();
             Assert.fail();
         }
-    }
-
-    @Test
-    public void testShowVariable() throws AnalysisException, DdlException {
-        // Mock variable
-        VariableMgr variableMgr = new VariableMgr();
-        List<List<String>> rows = Lists.newArrayList();
-        rows.add(Lists.newArrayList("var1", "abc"));
-        rows.add(Lists.newArrayList("var2", "abc"));
-        new Expectations(variableMgr) {
-            {
-                VariableMgr.dump((SetType) any, (SessionVariable) any, (PatternMatcher) any);
-                minTimes = 0;
-                result = rows;
-
-                VariableMgr.dump((SetType) any, (SessionVariable) any, null);
-                minTimes = 0;
-                result = rows;
-            }
-        };
-
-        ShowVariablesStmt stmt = new ShowVariablesStmt(SetType.SESSION, "var%");
-
-        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
-        Assert.assertEquals(2, resultSet.getMetaData().getColumnCount());
-        Assert.assertEquals(2, resultSet.getResultRows().get(0).size());
-
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("var1", resultSet.getString(0));
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("var2", resultSet.getString(0));
-        Assert.assertFalse(resultSet.next());
-
-        stmt = new ShowVariablesStmt(SetType.SESSION, null);
-
-        resultSet = ShowExecutor.execute(stmt, ctx);
-
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("var1", resultSet.getString(0));
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("var2", resultSet.getString(0));
-        Assert.assertFalse(resultSet.next());
     }
 
     @Test
@@ -644,7 +667,6 @@ public class ShowExecutorTest {
                 ctx.getSessionVariable()).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
-
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
 
         Assert.assertTrue(resultSet.next());
@@ -658,7 +680,6 @@ public class ShowExecutorTest {
         stmt = (ShowColumnStmt) com.starrocks.sql.parser.SqlParser.parse("show full columns from testTbl in testDb",
                 ctx.getSessionVariable()).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-
 
         resultSet = ShowExecutor.execute(stmt, ctx);
 
@@ -674,7 +695,6 @@ public class ShowExecutorTest {
         stmt = (ShowColumnStmt) com.starrocks.sql.parser.SqlParser.parse("show full fields from testTbl in testDb",
                 ctx.getSessionVariable()).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-
 
         resultSet = ShowExecutor.execute(stmt, ctx);
 
@@ -706,7 +726,6 @@ public class ShowExecutorTest {
         ShowColumnStmt stmt = new ShowColumnStmt(new TableName("emptyDb", "testTable"), null, null, false);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
-
         expectedEx.expect(SemanticException.class);
         expectedEx.expectMessage("Unknown database 'emptyDb'");
         ShowExecutor.execute(stmt, ctx);
@@ -715,19 +734,21 @@ public class ShowExecutorTest {
         stmt = new ShowColumnStmt(new TableName("testDb", "emptyTable"), null, null, true);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
-
         expectedEx.expect(SemanticException.class);
         expectedEx.expectMessage("Unknown table 'testDb.emptyTable'");
         ShowExecutor.execute(stmt, ctx);
     }
 
     @Test
-    public void testShowBackendsSharedDataMode(@Mocked StarOSAgent starosAgent) throws AnalysisException, DdlException {
+    public void testShowBackendsSharedDataMode(@Mocked StarOSAgent starosAgent) {
         SystemInfoService clusterInfo = AccessTestUtil.fetchSystemInfoService();
 
         // mock backends
         Backend backend = new Backend(1L, "127.0.0.1", 12345);
-        backend.updateResourceUsage(0, 100L, 1L, 30);
+        backend.setCpuCores(16);
+        backend.setMemLimitBytes(100L);
+        backend.updateResourceUsage(0, 1L, 30);
+        backend.setAlive(false);
         clusterInfo.addBackend(backend);
 
         NodeMgr nodeMgr = new NodeMgr();
@@ -782,20 +803,27 @@ public class ShowExecutorTest {
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
 
-        Assert.assertEquals(31, resultSet.getMetaData().getColumnCount());
+        Assert.assertEquals(33, resultSet.getMetaData().getColumnCount());
         Assert.assertEquals("BackendId", resultSet.getMetaData().getColumn(0).getName());
-        Assert.assertEquals("NumRunningQueries", resultSet.getMetaData().getColumn(23).getName());
-        Assert.assertEquals("MemUsedPct", resultSet.getMetaData().getColumn(24).getName());
-        Assert.assertEquals("CpuUsedPct", resultSet.getMetaData().getColumn(25).getName());
-        Assert.assertEquals("DataCacheMetrics", resultSet.getMetaData().getColumn(26).getName());
-        Assert.assertEquals("StarletPort", resultSet.getMetaData().getColumn(28).getName());
-        Assert.assertEquals("WorkerId", resultSet.getMetaData().getColumn(29).getName());
+        Assert.assertEquals("CpuCores", resultSet.getMetaData().getColumn(22).getName());
+        Assert.assertEquals("MemLimit", resultSet.getMetaData().getColumn(23).getName());
+        Assert.assertEquals("NumRunningQueries", resultSet.getMetaData().getColumn(24).getName());
+        Assert.assertEquals("MemUsedPct", resultSet.getMetaData().getColumn(25).getName());
+        Assert.assertEquals("CpuUsedPct", resultSet.getMetaData().getColumn(26).getName());
+        Assert.assertEquals("DataCacheMetrics", resultSet.getMetaData().getColumn(27).getName());
+        Assert.assertEquals("StatusCode", resultSet.getMetaData().getColumn(29).getName());
+        Assert.assertEquals("StarletPort", resultSet.getMetaData().getColumn(30).getName());
+        Assert.assertEquals("WorkerId", resultSet.getMetaData().getColumn(31).getName());
 
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("1", resultSet.getString(0));
-        Assert.assertEquals("0", resultSet.getString(23));
-        Assert.assertEquals("N/A", resultSet.getString(26));
-        Assert.assertEquals(String.valueOf(workerId), resultSet.getString(29));
+
+        Assert.assertEquals("16", resultSet.getString(22));
+        Assert.assertEquals("100.000B", resultSet.getString(23));
+        Assert.assertEquals("0", resultSet.getString(24));
+        Assert.assertEquals("N/A", resultSet.getString(27));
+        Assert.assertEquals("CONNECTING", resultSet.getString(29));
+        Assert.assertEquals(String.valueOf(workerId), resultSet.getString(31));
         Assert.assertEquals(String.valueOf(tabletNum), resultSet.getString(11));
     }
 
@@ -804,12 +832,15 @@ public class ShowExecutorTest {
         SystemInfoService clusterInfo = AccessTestUtil.fetchSystemInfoService();
 
         ComputeNode node = new ComputeNode(1L, "127.0.0.1", 80);
-        node.updateResourceUsage(10, 100L, 1L, 30);
+        node.setCpuCores(16);
+        node.setMemLimitBytes(100L);
+        node.updateResourceUsage(10, 1L, 30);
         TDataCacheMetrics tDataCacheMetrics = new TDataCacheMetrics();
         tDataCacheMetrics.setStatus(TDataCacheStatus.NORMAL);
         tDataCacheMetrics.setDisk_quota_bytes(1024 * 1024 * 1024);
         tDataCacheMetrics.setMem_quota_bytes(1024 * 1024 * 1024);
         node.updateDataCacheMetrics(DataCacheMetrics.buildFromThrift(tDataCacheMetrics));
+        node.setAlive(true);
         clusterInfo.addComputeNode(node);
 
         NodeMgr nodeMgr = new NodeMgr();
@@ -836,13 +867,6 @@ public class ShowExecutorTest {
                 globalStateMgr.getWarehouseMgr();
                 minTimes = 0;
                 result = warehouseManager;
-            }
-        };
-
-        new MockUp<BackendCoreStat>() {
-            @Mock
-            int getCoresOfBe(long beId) {
-                return 16;
             }
         };
 
@@ -874,12 +898,14 @@ public class ShowExecutorTest {
         }
 
         Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("16", resultSet.getString(13));
-        Assert.assertEquals("10", resultSet.getString(14));
-        Assert.assertEquals("1.00 %", resultSet.getString(15));
-        Assert.assertEquals("3.0 %", resultSet.getString(16));
-        Assert.assertEquals("Status: Normal, DiskUsage: 0B/1GB, MemUsage: 0B/1GB", resultSet.getString(17));
-        Assert.assertEquals(String.valueOf(tabletNum), resultSet.getString(22));
+        Assert.assertEquals("16", resultSet.getString(13)); // CpuCores
+        Assert.assertEquals("100.000B", resultSet.getString(14)); // MemLimit
+        Assert.assertEquals("10", resultSet.getString(15));
+        Assert.assertEquals("1.00 %", resultSet.getString(16));
+        Assert.assertEquals("3.0 %", resultSet.getString(17));
+        Assert.assertEquals("Status: Normal, DiskUsage: 0B/1GB, MemUsage: 0B/1GB", resultSet.getString(18));
+        Assert.assertEquals("OK", resultSet.getString(20));
+        Assert.assertEquals(String.valueOf(tabletNum), resultSet.getString(24));
     }
 
     @Test
@@ -940,7 +966,7 @@ public class ShowExecutorTest {
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
 
-        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("testDb", (String) null);
+        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("default_catalog", "testDb", (String) null);
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         verifyShowMaterializedViewResult(resultSet);
@@ -948,7 +974,7 @@ public class ShowExecutorTest {
 
     @Test
     public void testShowMaterializedViewFromUnknownDatabase() throws DdlException, AnalysisException {
-        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("emptyDb", (String) null);
+        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("default_catalog", "emptyDb", (String) null);
 
         expectedEx.expect(SemanticException.class);
         expectedEx.expectMessage("Unknown database 'emptyDb'");
@@ -960,12 +986,12 @@ public class ShowExecutorTest {
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
 
-        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("testDb", "bcd%");
+        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("default_catalog", "testDb", "bcd%");
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         Assert.assertFalse(resultSet.next());
 
-        stmt = new ShowMaterializedViewsStmt("testDb", "%test%");
+        stmt = new ShowMaterializedViewsStmt("default_catalog", "testDb", "%test%");
 
         resultSet = ShowExecutor.execute(stmt, ctx);
         verifyShowMaterializedViewResult(resultSet);
@@ -1000,14 +1026,15 @@ public class ShowExecutorTest {
         Assert.assertEquals("", resultSet.getString(12));
         Assert.assertEquals("false", resultSet.getString(13));
         System.out.println(resultSet.getResultRows());
-        for (int i = 14; i < mvSchemaTable.size() - 4; i++) {
+        for (int i = 14; i < mvSchemaTable.size() - 5; i++) {
             System.out.println(i);
             Assert.assertEquals("", resultSet.getString(i));
         }
-        Assert.assertEquals("10", resultSet.getString(mvSchemaTable.size() - 4));
-        Assert.assertEquals(expectedSqlText, resultSet.getString(mvSchemaTable.size() - 3));
-        Assert.assertEquals("", resultSet.getString(mvSchemaTable.size() - 2));
-        Assert.assertEquals("VALID", resultSet.getString(mvSchemaTable.size() - 1));
+        Assert.assertEquals("10", resultSet.getString(mvSchemaTable.size() - 5));
+        Assert.assertEquals(expectedSqlText, resultSet.getString(mvSchemaTable.size() - 4));
+        Assert.assertEquals("", resultSet.getString(mvSchemaTable.size() - 3));
+        Assert.assertTrue(resultSet.getString(mvSchemaTable.size() - 2).contains("UNKNOWN"));
+        Assert.assertEquals("", resultSet.getString(mvSchemaTable.size() - 1));
         Assert.assertFalse(resultSet.next());
     }
 
@@ -1022,7 +1049,8 @@ public class ShowExecutorTest {
     @Test
     public void testShowAlterTable() throws AnalysisException, DdlException {
         ShowAlterStmt stmt = new ShowAlterStmt(ShowAlterStmt.AlterType.OPTIMIZE, "testDb", null, null, null);
-        stmt.setNode(new OptimizeProcDir(globalStateMgr.getSchemaChangeHandler(), globalStateMgr.getDb("testDb")));
+        stmt.setNode(new OptimizeProcDir(globalStateMgr.getSchemaChangeHandler(),
+                globalStateMgr.getLocalMetastore().getDb("testDb")));
 
         ShowExecutor.execute(stmt, ctx);
     }
@@ -1031,12 +1059,12 @@ public class ShowExecutorTest {
     public void testShowCreateExternalCatalogTable() throws DdlException, AnalysisException {
         new MockUp<MetadataMgr>() {
             @Mock
-            public Database getDb(String catalogName, String dbName) {
+            public Database getDb(ConnectContext context, String catalogName, String dbName) {
                 return new Database();
             }
 
             @Mock
-            public Table getTable(String catalogName, String dbName, String tblName) {
+            public Table getTable(ConnectContext context, String catalogName, String dbName, String tblName) {
                 List<Column> fullSchema = new ArrayList<>();
                 Column columnId = new Column("id", Type.INT, true);
                 columnId.setComment("id");
@@ -1076,9 +1104,72 @@ public class ShowExecutorTest {
                         "  `year` int(11) DEFAULT NULL,\n" +
                         "  `dt` int(11) DEFAULT NULL\n" +
                         ")\n" +
-                        "PARTITION BY ( year, dt )\n" +
+                        "PARTITION BY (year, dt)\n" +
                         "PROPERTIES (\"location\" = \"hdfs://hadoop/hive/warehouse/test.db/test\");",
                 resultSet.getResultRows().get(0).get(1));
+    }
+
+    @Test
+    public void testShowCreateHiveExternalTable() {
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(ConnectContext context, String catalogName, String dbName) {
+                return new Database();
+            }
+
+            @Mock
+            public Table getTable(ConnectContext context, String catalogName, String dbName, String tblName) {
+                List<Column> fullSchema = new ArrayList<>();
+                Column columnId = new Column("id", Type.INT, true);
+                columnId.setComment("id");
+                Column columnName = new Column("name", Type.VARCHAR);
+                Column columnYear = new Column("year", Type.INT);
+                Column columnDt = new Column("dt", Type.INT);
+                fullSchema.add(columnId);
+                fullSchema.add(columnName);
+                fullSchema.add(columnYear);
+                fullSchema.add(columnDt);
+                List<String> partitions = Lists.newArrayList();
+                partitions.add("year");
+                partitions.add("dt");
+                HiveTable.Builder tableBuilder = HiveTable.builder()
+                        .setId(1)
+                        .setTableName("test_table")
+                        .setCatalogName("hive_catalog")
+                        .setResourceName(toResourceName("hive_catalog", "hive"))
+                        .setHiveDbName("hive_db")
+                        .setHiveTableName("test_table")
+                        .setPartitionColumnNames(partitions)
+                        .setFullSchema(fullSchema)
+                        .setTableLocation("hdfs://hadoop/hive/warehouse/test.db/test")
+                        .setCreateTime(10000)
+                        .setHiveTableType(HiveTable.HiveTableType.EXTERNAL_TABLE);
+                return tableBuilder.build();
+            }
+        };
+
+        ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("hive_catalog", "hive_db", "test_table"),
+                ShowCreateTableStmt.CreateTableType.TABLE);
+
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
+        Assert.assertEquals("test_table", resultSet.getResultRows().get(0).get(0));
+        Assert.assertEquals("CREATE EXTERNAL TABLE `test_table` (\n" +
+                        "  `id` int(11) DEFAULT NULL COMMENT \"id\",\n" +
+                        "  `name` varchar DEFAULT NULL,\n" +
+                        "  `year` int(11) DEFAULT NULL,\n" +
+                        "  `dt` int(11) DEFAULT NULL\n" +
+                        ")\n" +
+                        "PARTITION BY (year, dt)\n" +
+                        "PROPERTIES (\"location\" = \"hdfs://hadoop/hive/warehouse/test.db/test\");",
+                resultSet.getResultRows().get(0).get(1));
+    }
+
+    @Test
+    public void testShowKeysFromTable() {
+        ShowIndexStmt stmt = new ShowIndexStmt("test_db",
+                new TableName(null, "test_db", "test_table"));
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
+        Assert.assertEquals(0, resultSet.getResultRows().size());
     }
 
     @Test
@@ -1133,7 +1224,7 @@ public class ShowExecutorTest {
             }
         };
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        ShowBasicStatsMetaStmt stmt = new ShowBasicStatsMetaStmt(null);
+        ShowBasicStatsMetaStmt stmt = new ShowBasicStatsMetaStmt(null, List.of(), LimitElement.NO_LIMIT, NodePosition.ZERO);
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         Assert.assertEquals("hive0.testDb", resultSet.getResultRows().get(0).get(0));
@@ -1205,5 +1296,30 @@ public class ShowExecutorTest {
         List<String> row2 = resultSet.getResultRows().get(1);
         Assert.assertEquals("[0, test1, test1, test1, -1, NULL, NULL]", row1.toString());
         Assert.assertEquals("[1, test2, test2, test2, -1, 'hello', \"hello\"=\"world\", \"ni\"=\"hao\"]", row2.toString());
+    }
+
+    @Test
+    public void testShouldMarkIdleCheck() {
+        StmtExecutor stmtExecutor = new StmtExecutor(new ConnectContext(),
+                SqlParser.parseSingleStatement("select @@query_timeout", SqlModeHelper.MODE_DEFAULT));
+
+        Assert.assertFalse(stmtExecutor.shouldMarkIdleCheck(
+                SqlParser.parseSingleStatement("select @@query_timeout", SqlModeHelper.MODE_DEFAULT)));
+
+        Assert.assertFalse(stmtExecutor.shouldMarkIdleCheck(
+                SqlParser.parseSingleStatement("SET NAMES utf8mb4", SqlModeHelper.MODE_DEFAULT)));
+
+        Assert.assertTrue(stmtExecutor.shouldMarkIdleCheck(
+                SqlParser.parseSingleStatement("SET password = 'xxx'", SqlModeHelper.MODE_DEFAULT)));
+
+        Assert.assertTrue(stmtExecutor.shouldMarkIdleCheck(
+                SqlParser.parseSingleStatement("select sleep(10)", SqlModeHelper.MODE_DEFAULT)));
+
+        Assert.assertFalse(stmtExecutor.shouldMarkIdleCheck(
+                SqlParser.parseSingleStatement("show users", SqlModeHelper.MODE_DEFAULT)));
+
+        Assert.assertFalse(stmtExecutor.shouldMarkIdleCheck(
+                SqlParser.parseSingleStatement("admin set frontend config('proc_profile_cpu_enable' = 'true')",
+                        SqlModeHelper.MODE_DEFAULT)));
     }
 }

@@ -37,10 +37,12 @@ package com.starrocks.alter;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJobV2.JobState;
+import com.starrocks.analysis.TableName;
 import com.starrocks.backup.CatalogMocker;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -50,11 +52,13 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Partition.PartitionState;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.SchemaVersionAndHash;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.DDLTestBase;
@@ -62,9 +66,8 @@ import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.ReorderColumnsClause;
+import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
-import com.starrocks.warehouse.DefaultWarehouse;
-import com.starrocks.warehouse.Warehouse;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.hadoop.util.ThreadUtil;
@@ -91,7 +94,7 @@ import java.util.Map;
 import static org.junit.Assert.assertEquals;
 
 public class SchemaChangeJobV2Test extends DDLTestBase {
-    private static String fileName = "./SchemaChangeV2Test";
+    private static final String TEST_FILE_NAME = SchemaChangeJobV2Test.class.getCanonicalName();
     private AlterTableStmt alterTableStmt;
 
     @Rule
@@ -114,10 +117,11 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
     @Test
     public void testAddSchemaChange() throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
-        Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
-        OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable1);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable1);
 
-        schemaChangeHandler.process(alterTableStmt.getOps(), db, olapTable);
+        schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
         Assert.assertEquals(1, alterJobsV2.size());
         Assert.assertEquals(OlapTableState.NORMAL, olapTable.getState());
@@ -127,18 +131,19 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
     @Test
     public void testSchemaChange1() throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
-        Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
-        OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable1);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable1);
         olapTable.setUseFastSchemaEvolution(false);
         Partition testPartition = olapTable.getPartition(GlobalStateMgrTestUtil.testTable1);
 
-        schemaChangeHandler.process(alterTableStmt.getOps(), db, olapTable);
+        schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
         Assert.assertEquals(1, alterJobsV2.size());
         SchemaChangeJobV2 schemaChangeJob = (SchemaChangeJobV2) alterJobsV2.values().stream().findAny().get();
         alterJobsV2.clear();
 
-        MaterializedIndex baseIndex = testPartition.getBaseIndex();
+        MaterializedIndex baseIndex = testPartition.getDefaultPhysicalPartition().getBaseIndex();
         assertEquals(IndexState.NORMAL, baseIndex.getState());
         assertEquals(PartitionState.NORMAL, testPartition.getState());
         assertEquals(OlapTableState.SCHEMA_CHANGE, olapTable.getState());
@@ -154,9 +159,12 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         // runPendingJob
         schemaChangeJob.runPendingJob();
         Assert.assertEquals(JobState.WAITING_TXN, schemaChangeJob.getJobState());
-        Assert.assertEquals(2, testPartition.getMaterializedIndices(IndexExtState.ALL).size());
-        Assert.assertEquals(1, testPartition.getMaterializedIndices(IndexExtState.VISIBLE).size());
-        Assert.assertEquals(1, testPartition.getMaterializedIndices(IndexExtState.SHADOW).size());
+        Assert.assertEquals(2, testPartition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(IndexExtState.ALL).size());
+        Assert.assertEquals(1, testPartition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(IndexExtState.VISIBLE).size());
+        Assert.assertEquals(1, testPartition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(IndexExtState.SHADOW).size());
 
         // runWaitingTxnJob
         schemaChangeJob.runWaitingTxnJob();
@@ -181,18 +189,19 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
     @Test
     public void testSchemaChangeWhileTabletNotStable() throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
-        Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
-        OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable1);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable1);
         olapTable.setUseFastSchemaEvolution(false);
         Partition testPartition = olapTable.getPartition(GlobalStateMgrTestUtil.testTable1);
 
-        schemaChangeHandler.process(alterTableStmt.getOps(), db, olapTable);
+        schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
         Assert.assertEquals(1, alterJobsV2.size());
         SchemaChangeJobV2 schemaChangeJob = (SchemaChangeJobV2) alterJobsV2.values().stream().findAny().get();
         alterJobsV2.clear();
 
-        MaterializedIndex baseIndex = testPartition.getBaseIndex();
+        MaterializedIndex baseIndex = testPartition.getDefaultPhysicalPartition().getBaseIndex();
         assertEquals(IndexState.NORMAL, baseIndex.getState());
         assertEquals(PartitionState.NORMAL, testPartition.getState());
         assertEquals(OlapTableState.SCHEMA_CHANGE, olapTable.getState());
@@ -214,9 +223,12 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         replica1.setState(Replica.ReplicaState.NORMAL);
         schemaChangeJob.runPendingJob();
         Assert.assertEquals(JobState.WAITING_TXN, schemaChangeJob.getJobState());
-        Assert.assertEquals(2, testPartition.getMaterializedIndices(IndexExtState.ALL).size());
-        Assert.assertEquals(1, testPartition.getMaterializedIndices(IndexExtState.VISIBLE).size());
-        Assert.assertEquals(1, testPartition.getMaterializedIndices(IndexExtState.SHADOW).size());
+        Assert.assertEquals(2, testPartition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(IndexExtState.ALL).size());
+        Assert.assertEquals(1, testPartition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(IndexExtState.VISIBLE).size());
+        Assert.assertEquals(1, testPartition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(IndexExtState.SHADOW).size());
 
         // runWaitingTxnJob
         schemaChangeJob.runWaitingTxnJob();
@@ -236,7 +248,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
     }
 
     @Test
-    public void testModifyDynamicPartitionNormal() throws UserException {
+    public void testModifyDynamicPartitionNormal() throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         ArrayList<AlterClause> alterClauses = new ArrayList<>();
         Map<String, String> properties = new HashMap<>();
@@ -249,7 +261,22 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         Database db = CatalogMocker.mockDb();
         OlapTable olapTable = (OlapTable) db.getTable(CatalogMocker.TEST_TBL2_ID);
         olapTable.setUseFastSchemaEvolution(false);
-        schemaChangeHandler.process(alterClauses, db, olapTable);
+
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
+            }
+
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return olapTable;
+            }
+        };
+        TableName tableName = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db.getFullName(), olapTable.getName());
+        new AlterJobExecutor().process(new AlterTableStmt(tableName, alterClauses), ctx);
+
+        //schemaChangeHandler.process(alterClauses, db, olapTable);
         Assert.assertTrue(olapTable.getTableProperty().getDynamicPartitionProperty().isExists());
         Assert.assertTrue(olapTable.getTableProperty().getDynamicPartitionProperty().isEnabled());
         Assert.assertEquals("day", olapTable.getTableProperty().getDynamicPartitionProperty().getTimeUnit());
@@ -261,36 +288,49 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         ArrayList<AlterClause> tmpAlterClauses = new ArrayList<>();
         properties.put(DynamicPartitionProperty.ENABLE, "false");
         tmpAlterClauses.add(new ModifyTablePropertiesClause(properties));
-        schemaChangeHandler.process(tmpAlterClauses, db, olapTable);
+        new AlterJobExecutor().process(new AlterTableStmt(tableName, tmpAlterClauses), ctx);
         Assert.assertFalse(olapTable.getTableProperty().getDynamicPartitionProperty().isEnabled());
         // set dynamic_partition.time_unit = week
         tmpAlterClauses = new ArrayList<>();
         properties.put(DynamicPartitionProperty.TIME_UNIT, "week");
         tmpAlterClauses.add(new ModifyTablePropertiesClause(properties));
-        schemaChangeHandler.process(tmpAlterClauses, db, olapTable);
+        new AlterJobExecutor().process(new AlterTableStmt(tableName, tmpAlterClauses), ctx);
+
         Assert.assertEquals("week", olapTable.getTableProperty().getDynamicPartitionProperty().getTimeUnit());
         // set dynamic_partition.end = 10
         tmpAlterClauses = new ArrayList<>();
         properties.put(DynamicPartitionProperty.END, "10");
         tmpAlterClauses.add(new ModifyTablePropertiesClause(properties));
-        schemaChangeHandler.process(tmpAlterClauses, db, olapTable);
+        new AlterJobExecutor().process(new AlterTableStmt(tableName, tmpAlterClauses), ctx);
+
         Assert.assertEquals(10, olapTable.getTableProperty().getDynamicPartitionProperty().getEnd());
         // set dynamic_partition.prefix = p1
         tmpAlterClauses = new ArrayList<>();
         properties.put(DynamicPartitionProperty.PREFIX, "p1");
         tmpAlterClauses.add(new ModifyTablePropertiesClause(properties));
-        schemaChangeHandler.process(tmpAlterClauses, db, olapTable);
+        new AlterJobExecutor().process(new AlterTableStmt(tableName, tmpAlterClauses), ctx);
+
         Assert.assertEquals("p1", olapTable.getTableProperty().getDynamicPartitionProperty().getPrefix());
         // set dynamic_partition.buckets = 3
         tmpAlterClauses = new ArrayList<>();
         properties.put(DynamicPartitionProperty.BUCKETS, "3");
         tmpAlterClauses.add(new ModifyTablePropertiesClause(properties));
-        schemaChangeHandler.process(tmpAlterClauses, db, olapTable);
+        new AlterJobExecutor().process(new AlterTableStmt(tableName, tmpAlterClauses), ctx);
+
         Assert.assertEquals(3, olapTable.getTableProperty().getDynamicPartitionProperty().getBuckets());
     }
 
+    @Test
+    public void testModifyDynamicPropertyTrim() throws Exception {
+        String sql = "ALTER TABLE testDb1.testTable1 SET(\"dynamic_partition.buckets \"=\"1\")";
+        AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+
+        ModifyTablePropertiesClause modifyTablePropertiesClause = (ModifyTablePropertiesClause) stmt.getAlterClauseList().get(0);
+        Assert.assertEquals("1", modifyTablePropertiesClause.getProperties().get("dynamic_partition.buckets"));
+    }
+
     public void modifyDynamicPartitionWithoutTableProperty(String propertyKey, String propertyValue, String expectErrMsg)
-            throws UserException {
+                throws StarRocksException {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         ArrayList<AlterClause> alterClauses = new ArrayList<>();
         Map<String, String> properties = new HashMap<>();
@@ -300,28 +340,41 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         Database db = CatalogMocker.mockDb();
         OlapTable olapTable = (OlapTable) db.getTable(CatalogMocker.TEST_TBL2_ID);
 
-        expectedEx.expect(DdlException.class);
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
+            }
+
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return olapTable;
+            }
+        };
+        TableName tableName = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db.getFullName(), olapTable.getName());
+
+        expectedEx.expect(AlterJobException.class);
         expectedEx.expectMessage(expectErrMsg);
-        schemaChangeHandler.process(alterClauses, db, olapTable);
+        new AlterJobExecutor().process(new AlterTableStmt(tableName, alterClauses), ctx);
     }
 
     @Test
-    public void testModifyDynamicPartitionWithoutTableProperty() throws UserException {
+    public void testModifyDynamicPartitionWithoutTableProperty() throws AlterJobException, StarRocksException {
         modifyDynamicPartitionWithoutTableProperty(DynamicPartitionProperty.ENABLE, "false",
-                "not a dynamic partition table");
+                    "not a dynamic partition table");
         modifyDynamicPartitionWithoutTableProperty(DynamicPartitionProperty.TIME_UNIT, "day",
-                DynamicPartitionProperty.ENABLE);
+                    DynamicPartitionProperty.ENABLE);
         modifyDynamicPartitionWithoutTableProperty(DynamicPartitionProperty.END, "3", DynamicPartitionProperty.ENABLE);
         modifyDynamicPartitionWithoutTableProperty(DynamicPartitionProperty.PREFIX, "p",
-                DynamicPartitionProperty.ENABLE);
+                    DynamicPartitionProperty.ENABLE);
         modifyDynamicPartitionWithoutTableProperty(DynamicPartitionProperty.BUCKETS, "30",
-                DynamicPartitionProperty.ENABLE);
+                    DynamicPartitionProperty.ENABLE);
     }
 
     @Test
     public void testSerializeOfSchemaChangeJob() throws IOException {
         // prepare file
-        File file = new File(fileName);
+        File file = new File(TEST_FILE_NAME);
         file.createNewFile();
         file.deleteOnExit();
         DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
@@ -360,51 +413,69 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
             }
         };
 
-        GlobalStateMgr.getCurrentState().initDefaultWarehouse();
-
-        new MockUp<WarehouseManager>() {
+        MockedWarehouseManager mockedWarehouseManager = new MockedWarehouseManager();
+        new MockUp<GlobalStateMgr>() {
             @Mock
-            public Warehouse getWarehouse(long warehouseId) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-
-            @Mock
-            public List<Long> getAllComputeNodeIds(long warehouseId) {
-                return Lists.newArrayList(1L);
+            public WarehouseManager getWarehouseMgr() {
+                return mockedWarehouseManager;
             }
         };
 
         String stmt = "alter table testDb1.testTable1 order by (v1, v2)";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
-        ReorderColumnsClause clause = (ReorderColumnsClause) alterTableStmt.getOps().get(0);
+        ReorderColumnsClause clause = (ReorderColumnsClause) alterTableStmt.getAlterClauseList().get(0);
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
-        OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable1);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable1);
 
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         AlterJobV2 alterJobV2 = schemaChangeHandler.analyzeAndCreateJob(Lists.newArrayList(clause), db, olapTable);
         Assert.assertEquals(0L, alterJobV2.warehouseId);
 
-
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouse(long warehouseId) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-
-            @Mock
-            public List<Long> getAllComputeNodeIds(long warehouseId) {
-                return Lists.newArrayList();
-            }
-        };
-
+        mockedWarehouseManager.setAllComputeNodeIds(Lists.newArrayList());
         try {
             alterJobV2 = schemaChangeHandler.analyzeAndCreateJob(Lists.newArrayList(clause), db, olapTable);
             Assert.fail();
         } catch (DdlException e) {
             Assert.assertTrue(e.getMessage().contains("no available compute nodes"));
         }
+    }
+
+    @Test
+    public void testCancelPendingJobWithFlag() throws Exception {
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable1);
+        olapTable.setUseFastSchemaEvolution(false);
+        Partition testPartition = olapTable.getPartition(GlobalStateMgrTestUtil.testTable1);
+
+        schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
+        Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
+        Assert.assertEquals(1, alterJobsV2.size());
+        SchemaChangeJobV2 schemaChangeJob = (SchemaChangeJobV2) alterJobsV2.values().stream().findAny().get();
+        alterJobsV2.clear();
+
+        MaterializedIndex baseIndex = testPartition.getDefaultPhysicalPartition().getBaseIndex();
+        assertEquals(IndexState.NORMAL, baseIndex.getState());
+        assertEquals(PartitionState.NORMAL, testPartition.getState());
+        assertEquals(OlapTableState.SCHEMA_CHANGE, olapTable.getState());
+
+        LocalTablet baseTablet = (LocalTablet) baseIndex.getTablets().get(0);
+        List<Replica> replicas = baseTablet.getImmutableReplicas();
+        Replica replica1 = replicas.get(0);
+
+        assertEquals(1, replica1.getVersion());
+        assertEquals(-1, replica1.getLastFailedVersion());
+        assertEquals(1, replica1.getLastSuccessVersion());
+
+        schemaChangeJob.setIsCancelling(true);
+        schemaChangeJob.runPendingJob();
+        schemaChangeJob.setIsCancelling(false);
+
+        schemaChangeJob.setWaitingCreatingReplica(true);
+        schemaChangeJob.cancel("");
+        schemaChangeJob.setWaitingCreatingReplica(false);
     }
 }

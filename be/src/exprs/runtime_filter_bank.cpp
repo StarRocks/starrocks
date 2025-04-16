@@ -14,13 +14,18 @@
 
 #include "exprs/runtime_filter_bank.h"
 
+#include <runtime/runtime_filter_worker.h>
+#include <serde/column_array_serde.h>
+
 #include <memory>
 #include <thread>
 
 #include "column/column.h"
 #include "exec/pipeline/runtime_filter_types.h"
+#include "exprs/dictmapping_expr.h"
 #include "exprs/in_const_predicate.hpp"
 #include "exprs/literal.h"
+#include "exprs/min_max_predicate.h"
 #include "exprs/runtime_filter.h"
 #include "exprs/runtime_filter_layout.h"
 #include "gen_cpp/RuntimeFilter_types.h"
@@ -35,16 +40,16 @@
 #include "util/time.h"
 
 namespace starrocks {
+RuntimeFilter* RuntimeFilterHelper::transmit_to_runtime_empty_filter(ObjectPool* pool, RuntimeFilter* rf) {
+    const auto* min_max_filter = rf->get_min_max_filter();
+    const auto* membership_filter = rf->get_membership_filter();
+    RuntimeFilter* filter = type_dispatch_filter(
+            membership_filter->logical_type(), static_cast<RuntimeFilter*>(nullptr),
+            [&]<LogicalType LT>() -> RuntimeFilter* {
+                return new ComposedRuntimeEmptyFilter<LT>(*down_cast<const MinMaxRuntimeFilter<LT>*>(min_max_filter),
+                                                          *membership_filter);
+            });
 
-struct FilterBuilder {
-    template <LogicalType ltype>
-    JoinRuntimeFilter* operator()() {
-        return new RuntimeBloomFilter<ltype>();
-    }
-};
-
-JoinRuntimeFilter* RuntimeFilterHelper::create_join_runtime_filter(ObjectPool* pool, LogicalType type) {
-    JoinRuntimeFilter* filter = type_dispatch_filter(type, (JoinRuntimeFilter*)nullptr, FilterBuilder());
     if (pool != nullptr && filter != nullptr) {
         return pool->add(filter);
     } else {
@@ -52,106 +57,413 @@ JoinRuntimeFilter* RuntimeFilterHelper::create_join_runtime_filter(ObjectPool* p
     }
 }
 
-size_t RuntimeFilterHelper::max_runtime_filter_serialized_size(const JoinRuntimeFilter* rf) {
+template <template <LogicalType> typename FilterType>
+static RuntimeFilter* create_runtime_filter_helper(ObjectPool* pool, LogicalType type, int8_t join_mode) {
+    RuntimeFilter* filter = type_dispatch_filter(type, static_cast<RuntimeFilter*>(nullptr), [&]<LogicalType LT>() {
+        RuntimeFilter* rf = new FilterType<LT>();
+        rf->get_membership_filter()->set_join_mode(join_mode);
+        return rf;
+    });
+
+    if (pool != nullptr && filter != nullptr) {
+        return pool->add(filter);
+    } else {
+        return filter;
+    }
+}
+
+RuntimeFilter* RuntimeFilterHelper::create_runtime_empty_filter(ObjectPool* pool, LogicalType type, int8_t join_mode) {
+    return create_runtime_filter_helper<ComposedRuntimeEmptyFilter>(pool, type, join_mode);
+}
+
+RuntimeFilter* RuntimeFilterHelper::create_runtime_bloom_filter(ObjectPool* pool, LogicalType type, int8_t join_mode) {
+    return create_runtime_filter_helper<ComposedRuntimeBloomFilter>(pool, type, join_mode);
+}
+
+RuntimeFilter* RuntimeFilterHelper::create_runtime_bitset_filter(ObjectPool* pool, LogicalType type, int8_t join_mode) {
+    RuntimeFilter* filter =
+            type_dispatch_bitset_filter(type, static_cast<RuntimeFilter*>(nullptr), [&]<LogicalType LT>() {
+                RuntimeFilter* rf = new ComposedRuntimeBitsetFilter<LT>();
+                rf->get_membership_filter()->set_join_mode(join_mode);
+                return rf;
+            });
+
+    if (pool != nullptr && filter != nullptr) {
+        return pool->add(filter);
+    } else {
+        return filter;
+    }
+}
+
+RuntimeFilter* RuntimeFilterHelper::create_join_runtime_filter(ObjectPool* pool, RuntimeFilterSerializeType rf_type,
+                                                               LogicalType ltype, int8_t join_mode) {
+    switch (rf_type) {
+    case RuntimeFilterSerializeType::EMPTY_FILTER:
+        return create_runtime_empty_filter(pool, ltype, join_mode);
+    case RuntimeFilterSerializeType::BLOOM_FILTER:
+        return create_runtime_bloom_filter(pool, ltype, join_mode);
+    case RuntimeFilterSerializeType::BITSET_FILTER:
+        return create_runtime_bitset_filter(pool, ltype, join_mode);
+    case RuntimeFilterSerializeType::NONE:
+    default:
+        return nullptr;
+    }
+}
+
+template <LogicalType LT, typename CppType = RunTimeCppType<LT>>
+static std::pair<CppType, CppType> calc_min_max_from_columns(const Columns& columns, size_t column_offset) {
+    auto min_value = std::numeric_limits<CppType>::max();
+    auto max_value = std::numeric_limits<CppType>::min();
+    for (const auto& col : columns) {
+        if (!col->is_nullable()) {
+            const auto& values = GetContainer<LT>::get_data(col.get());
+            for (size_t i = column_offset; i < values.size(); i++) {
+                min_value = std::min(min_value, values[i]);
+                max_value = std::max(max_value, values[i]);
+            }
+        } else {
+            const auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(col);
+            const auto& values = GetContainer<LT>::get_data(nullable_column->data_column().get());
+            if (!nullable_column->has_null()) {
+                for (size_t i = column_offset; i < values.size(); i++) {
+                    min_value = std::min(min_value, values[i]);
+                    max_value = std::max(max_value, values[i]);
+                }
+            } else {
+                const auto& null_data = nullable_column->immutable_null_column_data();
+                for (size_t i = column_offset; i < values.size(); i++) {
+                    if (null_data[i] == 0) {
+                        min_value = std::min(min_value, values[i]);
+                        max_value = std::max(max_value, values[i]);
+                    }
+                }
+            }
+        }
+    }
+
+    return {min_value, max_value};
+}
+
+struct try_create_runtime_bitset_filter {
+    template <LogicalType LT>
+    RuntimeFilter* operator()(const pipeline::RuntimeMembershipFilterBuildParam& param, size_t column_offset,
+                              size_t row_count) {
+        static auto cache_sizes = [] {
+            static constexpr size_t DEFAULT_L2_CACHE_SIZE = 1 * 1024 * 1024;
+            static constexpr size_t DEFAULT_L3_CACHE_SIZE = 32 * 1024 * 1024;
+
+            const auto& cache_sizes = CpuInfo::get_cache_sizes();
+            const auto cur_l2_cache_size = cache_sizes[CpuInfo::L2_CACHE];
+            const auto cur_l3_cache_size = cache_sizes[CpuInfo::L3_CACHE];
+            return std::pair{cur_l2_cache_size ? cur_l2_cache_size : DEFAULT_L2_CACHE_SIZE,
+                             cur_l3_cache_size ? cur_l3_cache_size : DEFAULT_L3_CACHE_SIZE};
+        }();
+        const auto& [l2_cache_size, l3_cache_size] = cache_sizes;
+
+        const auto [min_value, max_value] = calc_min_max_from_columns<LT>(param.columns, column_offset);
+        const size_t value_interval = static_cast<size_t>(RuntimeBitsetFilter<LT>::to_numeric(max_value)) -
+                                      RuntimeBitsetFilter<LT>::to_numeric(min_value) + 1;
+
+        VLOG_FILE << "[BITSET] min_value=" << min_value << ", max_value=" << max_value
+                  << ", value_interval=" << value_interval;
+
+        if (min_value > max_value || value_interval == 0) { // Overflow.
+            return nullptr;
+        }
+
+        const size_t bitset_memory_usage = (value_interval + 7) / 8;
+        const size_t bloom_memory_usage = row_count;
+        if (bitset_memory_usage <= bloom_memory_usage ||
+            (bitset_memory_usage <= bloom_memory_usage * 4 && bitset_memory_usage <= l2_cache_size) ||
+            (bitset_memory_usage <= bloom_memory_usage * 2 && bitset_memory_usage <= l3_cache_size)) {
+            auto* rf = new ComposedRuntimeBitsetFilter<LT>();
+            rf->membership_filter().set_min_max(min_value, max_value);
+            return rf;
+        }
+
+        return nullptr;
+    }
+};
+
+RuntimeFilter* RuntimeFilterHelper::create_join_runtime_filter(ObjectPool* pool, LogicalType type, int8_t join_mode,
+                                                               const pipeline::RuntimeMembershipFilterBuildParam& param,
+                                                               size_t column_offset, size_t row_count) {
+    RuntimeFilter* filter =
+            type_dispatch_bitset_filter(type, static_cast<RuntimeFilter*>(nullptr), try_create_runtime_bitset_filter(),
+                                        param, column_offset, row_count);
+    if (filter == nullptr) { // Fall back to runtime bloom filter.
+        return create_runtime_bloom_filter(pool, type, join_mode);
+    } else {
+        if (pool != nullptr) {
+            return pool->add(filter);
+        } else {
+            return filter;
+        }
+    }
+}
+
+static uint8_t get_rf_version(const RuntimeState* state) {
+    if (state->func_version() >= TFunctionVersion::type::RUNTIME_FILTER_SERIALIZE_VERSION_3) {
+        return RF_VERSION_V3;
+    } else if (state->func_version() >= TFunctionVersion::type::RUNTIME_FILTER_SERIALIZE_VERSION_2) {
+        return RF_VERSION_V2;
+    }
+    return RF_VERSION;
+}
+
+size_t RuntimeFilterHelper::max_runtime_filter_serialized_size(int rf_version, const RuntimeFilter* rf) {
+    // 1. rf_version
     size_t size = RF_VERSION_SZ;
+    // 2. rf_type
+    if (rf_version >= RF_VERSION_V3) {
+        size += sizeof(RuntimeFilterSerializeType);
+    }
+    // 3. the specific rf.
     size += rf->max_serialized_size();
     return size;
 }
 
-size_t RuntimeFilterHelper::serialize_runtime_filter(int rf_version, const JoinRuntimeFilter* rf, uint8_t* data) {
+size_t RuntimeFilterHelper::max_runtime_filter_serialized_size(RuntimeState* state, const RuntimeFilter* rf) {
+    const uint8_t rf_version = get_rf_version(state);
+    return max_runtime_filter_serialized_size(rf_version, rf);
+}
+
+size_t RuntimeFilterHelper::serialize_runtime_filter(int rf_version, const RuntimeFilter* rf, uint8_t* data) {
     size_t offset = 0;
-    // put version at the head.
+
+    // 1. rf_version
     memcpy(data + offset, &rf_version, RF_VERSION_SZ);
     offset += RF_VERSION_SZ;
+
+    // 2. rf_type
+    if (rf_version >= RF_VERSION_V3) {
+        const RuntimeFilterSerializeType type = rf->type();
+        memcpy(data + offset, &type, sizeof(type));
+        offset += sizeof(type);
+    }
+
+    // 3. the specific rf.
     offset += rf->serialize(rf_version, data + offset);
+
     return offset;
 }
 
-size_t RuntimeFilterHelper::serialize_runtime_filter(RuntimeState* state, const JoinRuntimeFilter* rf, uint8_t* data) {
-    int32_t rf_version = RF_VERSION;
-    if (state->func_version() >= TFunctionVersion::RUNTIME_FILTER_SERIALIZE_VERSION_2) {
-        rf_version = RF_VERSION_V2;
-    }
+size_t RuntimeFilterHelper::serialize_runtime_filter(RuntimeState* state, const RuntimeFilter* rf, uint8_t* data) {
+    const uint8_t rf_version = get_rf_version(state);
     return serialize_runtime_filter(rf_version, rf, data);
 }
 
-int RuntimeFilterHelper::deserialize_runtime_filter(ObjectPool* pool, JoinRuntimeFilter** rf, const uint8_t* data,
+int RuntimeFilterHelper::deserialize_runtime_filter(ObjectPool* pool, RuntimeFilter** rf, const uint8_t* data,
                                                     size_t size) {
     *rf = nullptr;
 
     size_t offset = 0;
 
-    // read version first.
+    // 1. rf_version
     uint8_t version = 0;
     memcpy(&version, data, sizeof(version));
     offset += sizeof(version);
-    if (version != RF_VERSION && version != RF_VERSION_V2) {
+    if (version < RF_VERSION_V2) {
         // version mismatch and skip this chunk.
         LOG(WARNING) << "unrecognized version:" << version;
         return 0;
     }
 
-    // peek logical type.
-    LogicalType ltype = TYPE_UNKNOWN;
-    if (version == RF_VERSION) {
-        RuntimeFilterSerializeType::PrimitiveType type;
-        memcpy(&type, data + offset, sizeof(type));
-        ltype = RuntimeFilterSerializeType::from_serialize_type(type);
-    } else {
-        TPrimitiveType::type type;
-        memcpy(&type, data + offset, sizeof(type));
-        ltype = thrift_to_type(type);
+    // 2. rf_type
+    RuntimeFilterSerializeType rf_type = RuntimeFilterSerializeType::BLOOM_FILTER;
+    if (version >= RF_VERSION_V3) {
+        memcpy(&rf_type, data + offset, sizeof(rf_type));
+        offset += sizeof(rf_type);
     }
-    JoinRuntimeFilter* filter = create_join_runtime_filter(pool, ltype);
+    if (rf_type > RuntimeFilterSerializeType::BITSET_FILTER) {
+        LOG(WARNING) << "unrecognized runtime filter type:" << static_cast<int>(rf_type);
+        return 0;
+    }
+
+    // 3. peek logical type.
+    TPrimitiveType::type tltype;
+    memcpy(&tltype, data + offset, sizeof(tltype));
+    LogicalType ltype = thrift_to_type(tltype);
+
+    // 4. deserialize the specific rf.
+    RuntimeFilter* filter = create_join_runtime_filter(pool, rf_type, ltype, TJoinDistributionMode::NONE);
     DCHECK(filter != nullptr);
     if (filter != nullptr) {
         offset += filter->deserialize(version, data + offset);
         DCHECK(offset == size);
         *rf = filter;
     }
+
     return version;
 }
 
-JoinRuntimeFilter* RuntimeFilterHelper::create_runtime_bloom_filter(ObjectPool* pool, LogicalType type) {
-    JoinRuntimeFilter* filter = create_join_runtime_filter(pool, type);
-    return filter;
+size_t RuntimeFilterHelper::max_runtime_filter_serialized_size_for_skew_boradcast_join(const ColumnPtr& column) {
+    size_t size = RF_VERSION_SZ;
+    size += (sizeof(bool) + sizeof(size_t) + sizeof(bool) + sizeof(bool));
+    size += serde::ColumnArraySerde::max_serialized_size(*column);
+    return size;
 }
 
+size_t RuntimeFilterHelper::serialize_runtime_filter_for_skew_broadcast_join(const ColumnPtr& column, bool eq_null,
+                                                                             uint8_t* data) {
+    size_t offset = 0;
+#define JRF_COPY_FIELD_TO(field)                  \
+    memcpy(data + offset, &field, sizeof(field)); \
+    offset += sizeof(field);
+    // put version at the head.
+    JRF_COPY_FIELD_TO(RF_VERSION_V2);
+    JRF_COPY_FIELD_TO(eq_null);
+    size_t num_rows = column->size();
+    JRF_COPY_FIELD_TO(num_rows);
+    bool is_nullable = column->is_nullable();
+    JRF_COPY_FIELD_TO(is_nullable)
+    bool is_const = column->is_constant();
+    JRF_COPY_FIELD_TO(is_const);
+
+    uint8_t* cur = data + offset;
+    cur = serde::ColumnArraySerde::serialize(*column, cur);
+    offset += (cur - (data + offset));
+
+    return offset;
+}
+
+// |version|eq_null|num_rows|is_null|is_const|type|column_data|
+int RuntimeFilterHelper::deserialize_runtime_filter_for_skew_broadcast_join(ObjectPool* pool,
+                                                                            SkewBroadcastRfMaterial** material,
+                                                                            const uint8_t* data, size_t size,
+                                                                            const PTypeDesc& ptype) {
+    *material = nullptr;
+    SkewBroadcastRfMaterial* rf_material = pool->add(new SkewBroadcastRfMaterial());
+    size_t offset = 0;
+
+#define JRF_COPY_FIELD_FROM(field)                \
+    memcpy(&field, data + offset, sizeof(field)); \
+    offset += sizeof(field);
+
+    // read version first.
+    uint8_t version = 0;
+    JRF_COPY_FIELD_FROM(version);
+    if (version != RF_VERSION_V2) {
+        LOG(WARNING) << "unrecognized version:" << version;
+        return 0;
+    }
+
+    // read eq_null
+    bool eq_null;
+    JRF_COPY_FIELD_FROM(eq_null);
+
+    // read key column [num_rows,is_null, is_const,type,column_data]
+    size_t num_rows = 0;
+    JRF_COPY_FIELD_FROM(num_rows);
+
+    bool is_null;
+    JRF_COPY_FIELD_FROM(is_null);
+
+    bool is_const;
+    JRF_COPY_FIELD_FROM(is_const);
+
+    TypeDescriptor type_descriptor = TypeDescriptor::from_protobuf(ptype);
+
+    auto columnPtr = ColumnHelper::create_column(type_descriptor, is_null, is_const, num_rows);
+
+    const uint8_t* cur = data + offset;
+    cur = serde::ColumnArraySerde::deserialize(cur, columnPtr.get());
+    offset += (cur - (data + offset));
+
+    DCHECK(offset == size);
+
+    rf_material->build_type = type_descriptor.type;
+    rf_material->eq_null = eq_null;
+    rf_material->key_column = columnPtr;
+
+    *material = rf_material;
+    return version;
+}
+
+template <template <LogicalType> typename FilterType, bool is_skew_join>
 struct FilterIniter {
-    template <LogicalType ltype>
-    auto operator()(const ColumnPtr& column, size_t column_offset, JoinRuntimeFilter* expr, bool eq_null) {
-        using ColumnType = typename RunTimeTypeTraits<ltype>::ColumnType;
-        auto* filter = (RuntimeBloomFilter<ltype>*)(expr);
+    template <LogicalType LT>
+    Status operator()(const ColumnPtr& column, size_t column_offset, RuntimeFilter* expr, bool eq_null) {
+        auto* filter = down_cast<FilterType<LT>*>(expr);
 
         if (column->is_nullable()) {
             auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column);
-            const auto& data_array = GetContainer<ltype>().get_data(nullable_column->data_column().get());
-            for (size_t j = column_offset; j < data_array.size(); j++) {
-                if (!nullable_column->is_null(j)) {
-                    filter->insert(data_array[j]);
-                } else {
-                    if (eq_null) {
-                        filter->insert_null();
+            const auto& data_array = GetContainer<LT>::get_data(nullable_column->data_column().get());
+            if (!nullable_column->has_null()) {
+                for (size_t j = column_offset; j < data_array.size(); j++) {
+                    if constexpr (is_skew_join) {
+                        filter->insert_skew_values(data_array[j]);
+                    } else {
+                        filter->insert(data_array[j]);
+                    }
+                }
+            } else {
+                for (size_t j = column_offset; j < data_array.size(); j++) {
+                    if (!nullable_column->is_null(j)) {
+                        filter->insert(data_array[j]);
+                    } else {
+                        if (eq_null) {
+                            filter->insert_null();
+                        }
                     }
                 }
             }
         } else {
-            const auto& data_array = GetContainer<ltype>().get_data(column.get());
+            const auto& data_array = GetContainer<LT>::get_data(column.get());
             for (size_t j = column_offset; j < data_array.size(); j++) {
-                filter->insert(data_array[j]);
+                if constexpr (is_skew_join) {
+                    filter->insert_skew_values(data_array[j]);
+                } else {
+                    filter->insert(data_array[j]);
+                }
             }
         }
-        return nullptr;
+        return Status::OK();
     }
 };
 
-Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, LogicalType type,
-                                                      JoinRuntimeFilter* filter, size_t column_offset, bool eq_null) {
+Status RuntimeFilterHelper::fill_runtime_filter(const ColumnPtr& column, LogicalType type, RuntimeFilter* filter,
+                                                size_t column_offset, bool eq_null, bool is_skew_join) {
     if (column->has_large_column()) {
         return Status::NotSupported("unsupported build runtime filter for large binary column");
     }
-    type_dispatch_filter(type, nullptr, FilterIniter(), column, column_offset, filter, eq_null);
+
+    const auto rf_type = filter->type();
+    switch (rf_type) {
+    case RuntimeFilterSerializeType::BLOOM_FILTER:
+        if (is_skew_join) {
+            return type_dispatch_filter(type, Status::OK(), FilterIniter<ComposedRuntimeBloomFilter, true>(), column,
+                                        column_offset, filter, eq_null);
+        } else {
+            return type_dispatch_filter(type, Status::OK(), FilterIniter<ComposedRuntimeBloomFilter, false>(), column,
+                                        column_offset, filter, eq_null);
+        }
+    case RuntimeFilterSerializeType::BITSET_FILTER: {
+        const auto error_status = Status::NotSupported("runtime bitset filter do not support the logical type: " +
+                                                       std::string(logical_type_to_string(type)));
+        return type_dispatch_bitset_filter(type, error_status, FilterIniter<ComposedRuntimeBitsetFilter, false>(),
+                                           column, column_offset, filter, eq_null);
+    }
+    case RuntimeFilterSerializeType::EMPTY_FILTER:
+        return type_dispatch_filter(type, Status::OK(), FilterIniter<ComposedRuntimeEmptyFilter, false>(), column,
+                                    column_offset, filter, eq_null);
+    case RuntimeFilterSerializeType::NONE:
+    default:
+        return Status::NotSupported("unsupported build runtime filter: " + filter->debug_string());
+    }
+}
+
+Status RuntimeFilterHelper::fill_runtime_filter(const Columns& columns, LogicalType type, RuntimeFilter* filter,
+                                                size_t column_offset, bool eq_null) {
+    for (const auto& column : columns) {
+        RETURN_IF_ERROR(fill_runtime_filter(column, type, filter, column_offset, eq_null));
+    }
     return Status::OK();
+}
+
+Status RuntimeFilterHelper::fill_runtime_filter(const pipeline::RuntimeMembershipFilterBuildParam& param,
+                                                LogicalType type, RuntimeFilter* filter, size_t column_offset) {
+    return fill_runtime_filter(param.columns, type, filter, column_offset, param.eq_null);
 }
 
 StatusOr<ExprContext*> RuntimeFilterHelper::rewrite_runtime_filter_in_cross_join_node(ObjectPool* pool,
@@ -170,10 +482,10 @@ StatusOr<ExprContext*> RuntimeFilterHelper::rewrite_runtime_filter_in_cross_join
             col = ColumnHelper::create_const_null_column(1);
         } else {
             auto data_col = down_cast<NullableColumn*>(res.get())->data_column();
-            col = std::make_shared<ConstColumn>(data_col, 1);
+            col = ConstColumn::create(std::move(data_col), 1);
         }
     } else {
-        col = std::make_shared<ConstColumn>(res, 1);
+        col = ConstColumn::create(std::move(res), 1);
     }
 
     auto literal = pool->add(new VectorizedLiteral(std::move(col), right_child->type()));
@@ -182,23 +494,9 @@ StatusOr<ExprContext*> RuntimeFilterHelper::rewrite_runtime_filter_in_cross_join
     new_expr->clear_children();
     new_expr->add_child(new_left);
     new_expr->add_child(literal);
-    return pool->add(new ExprContext(new_expr));
-}
-
-struct FilterZoneMapWithMinMaxOp {
-    template <LogicalType ltype>
-    bool operator()(const JoinRuntimeFilter* expr, const Column* min_column, const Column* max_column) {
-        using CppType = RunTimeCppType<ltype>;
-        auto* filter = (RuntimeBloomFilter<ltype>*)(expr);
-        const CppType* min_value = ColumnHelper::unpack_cpp_data_one_value<ltype>(min_column);
-        const CppType* max_value = ColumnHelper::unpack_cpp_data_one_value<ltype>(max_column);
-        return filter->filter_zonemap_with_min_max(min_value, max_value);
-    }
-};
-
-bool RuntimeFilterHelper::filter_zonemap_with_min_max(LogicalType type, const JoinRuntimeFilter* filter,
-                                                      const Column* min_column, const Column* max_column) {
-    return type_dispatch_filter(type, false, FilterZoneMapWithMinMaxOp(), filter, min_column, max_column);
+    auto expr = pool->add(new ExprContext(new_expr));
+    expr->set_build_from_only_in_filter(true);
+    return expr;
 }
 
 Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilterDescription& desc,
@@ -227,6 +525,13 @@ Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilter
     if (desc.__isset.broadcast_grf_destinations) {
         _broadcast_grf_destinations = desc.broadcast_grf_destinations;
     }
+    if (desc.__isset.is_broad_cast_join_in_skew) {
+        _is_broad_cast_in_skew = desc.is_broad_cast_join_in_skew;
+    }
+    if (desc.__isset.skew_shuffle_filter_id) {
+        _skew_shuffle_filter_id = desc.skew_shuffle_filter_id;
+    }
+
     WithLayoutMixin::init(desc);
     RETURN_IF_ERROR(Expr::create_expr_tree(pool, desc.build_expr, &_build_expr_ctx, state));
     return Status::OK();
@@ -326,8 +631,10 @@ std::string RuntimeFilterProbeDescriptor::debug_string() const {
     } else {
         ss << "nullptr";
     }
+    ss << ", is_local=" << _is_local;
+    ss << ", is_topn=" << _is_topn_filter;
     ss << ", rf=";
-    const JoinRuntimeFilter* rf = _runtime_filter.load();
+    const RuntimeFilter* rf = _runtime_filter.load();
     if (rf != nullptr) {
         ss << rf->debug_string();
     } else {
@@ -379,10 +686,15 @@ void RuntimeFilterProbeCollector::close(RuntimeState* state) {
 
 // do_evaluate is reentrant, can be called concurrently by multiple operators that shared the same
 // RuntimeFilterProbeCollector.
-void RuntimeFilterProbeCollector::do_evaluate(Chunk* chunk, RuntimeBloomFilterEvalContext& eval_context) {
-    if ((eval_context.input_chunk_nums++ & 31) == 0) {
+void RuntimeFilterProbeCollector::do_evaluate(Chunk* chunk, RuntimeMembershipFilterEvalContext& eval_context) {
+    if (eval_context.mode == RuntimeMembershipFilterEvalContext::Mode::M_ONLY_TOPN) {
         update_selectivity(chunk, eval_context);
         return;
+    } else {
+        if ((eval_context.input_chunk_nums++ & 31) == 0) {
+            update_selectivity(chunk, eval_context);
+            return;
+        }
     }
 
     auto& seletivity_map = eval_context.selectivity;
@@ -397,14 +709,21 @@ void RuntimeFilterProbeCollector::do_evaluate(Chunk* chunk, RuntimeBloomFilterEv
 
     for (auto& kv : seletivity_map) {
         RuntimeFilterProbeDescriptor* rf_desc = kv.second;
-        const JoinRuntimeFilter* filter = rf_desc->runtime_filter(eval_context.driver_sequence);
-        if (filter == nullptr || filter->always_true()) {
+        const RuntimeFilter* filter = rf_desc->runtime_filter(eval_context.driver_sequence);
+        bool skip_topn = eval_context.mode == RuntimeMembershipFilterEvalContext::Mode::M_WITHOUT_TOPN;
+        if ((skip_topn && rf_desc->is_topn_filter()) || filter == nullptr || filter->always_true()) {
             continue;
         }
+        if (rf_desc->has_push_down_to_storage()) {
+            continue;
+        }
+
         auto* ctx = rf_desc->probe_expr_ctx();
         ColumnPtr column = EVALUATE_NULL_IF_ERROR(ctx, ctx->root(), chunk);
+
         // for colocate grf
         compute_hash_values(chunk, column.get(), rf_desc, eval_context);
+
         filter->evaluate(column.get(), &eval_context.running_context);
 
         auto true_count = SIMD::count_nonzero(selection);
@@ -420,7 +739,7 @@ void RuntimeFilterProbeCollector::do_evaluate(Chunk* chunk, RuntimeBloomFilterEv
 }
 
 void RuntimeFilterProbeCollector::do_evaluate_partial_chunk(Chunk* partial_chunk,
-                                                            RuntimeBloomFilterEvalContext& eval_context) {
+                                                            RuntimeMembershipFilterEvalContext& eval_context) {
     auto& selection = eval_context.running_context.selection;
     eval_context.running_context.use_merged_selection = false;
     eval_context.running_context.compatibility =
@@ -430,27 +749,36 @@ void RuntimeFilterProbeCollector::do_evaluate_partial_chunk(Chunk* partial_chunk
     // without computing each rf's selectivity
     for (auto kv : _descriptors) {
         RuntimeFilterProbeDescriptor* rf_desc = kv.second;
-        const JoinRuntimeFilter* filter = rf_desc->runtime_filter(eval_context.driver_sequence);
+        const RuntimeFilter* filter = rf_desc->runtime_filter(eval_context.driver_sequence);
         if (filter == nullptr || filter->always_true()) {
             continue;
         }
 
-        auto is_existent_slot_ref = [&](ExprContext* expr) {
-            auto* root = expr->root();
-            if (!root->is_slotref()) {
+        auto only_reference_existent_slots = [&](ExprContext* expr) {
+            std::vector<SlotId> slot_ids;
+            int n = expr->root()->get_slot_ids(&slot_ids);
+            DCHECK(slot_ids.size() == n);
+
+            // do not allow struct subfield
+            if (expr->root()->get_subfields(nullptr) > 0) {
                 return false;
             }
 
-            auto* col_ref = down_cast<ColumnRef*>(root);
-            return partial_chunk->is_slot_exist(col_ref->slot_id());
+            for (auto slot_id : slot_ids) {
+                if (!partial_chunk->is_slot_exist(slot_id)) {
+                    return false;
+                }
+            }
+
+            return true;
         };
 
         auto* probe_expr = rf_desc->probe_expr_ctx();
         auto* partition_by_exprs = rf_desc->partition_by_expr_contexts();
 
-        bool can_use_rf_on_partial_chunk = is_existent_slot_ref(probe_expr);
+        bool can_use_rf_on_partial_chunk = only_reference_existent_slots(probe_expr);
         for (auto* part_by_expr : *partition_by_exprs) {
-            can_use_rf_on_partial_chunk &= is_existent_slot_ref(part_by_expr);
+            can_use_rf_on_partial_chunk &= only_reference_existent_slots(part_by_expr);
         }
 
         // skip runtime filter that references a non-existent column for the partial chunk
@@ -494,7 +822,7 @@ void RuntimeFilterProbeCollector::evaluate(Chunk* chunk) {
     evaluate(chunk, _eval_context);
 }
 
-void RuntimeFilterProbeCollector::evaluate(Chunk* chunk, RuntimeBloomFilterEvalContext& eval_context) {
+void RuntimeFilterProbeCollector::evaluate(Chunk* chunk, RuntimeMembershipFilterEvalContext& eval_context) {
     if (_descriptors.empty()) return;
     size_t before = chunk->num_rows();
     if (before == 0) return;
@@ -511,7 +839,7 @@ void RuntimeFilterProbeCollector::evaluate(Chunk* chunk, RuntimeBloomFilterEvalC
 }
 
 void RuntimeFilterProbeCollector::evaluate_partial_chunk(Chunk* partial_chunk,
-                                                         RuntimeBloomFilterEvalContext& eval_context) {
+                                                         RuntimeMembershipFilterEvalContext& eval_context) {
     if (_descriptors.empty()) return;
     size_t before = partial_chunk->num_rows();
     if (before == 0) return;
@@ -529,10 +857,10 @@ void RuntimeFilterProbeCollector::evaluate_partial_chunk(Chunk* partial_chunk,
 
 void RuntimeFilterProbeCollector::compute_hash_values(Chunk* chunk, Column* column,
                                                       RuntimeFilterProbeDescriptor* rf_desc,
-                                                      RuntimeBloomFilterEvalContext& eval_context) {
+                                                      RuntimeMembershipFilterEvalContext& eval_context) {
     // TODO: Hash values will be computed multi times for runtime filters with the same partition_by_exprs.
     SCOPED_TIMER(eval_context.join_runtime_filter_hash_timer);
-    const JoinRuntimeFilter* filter = rf_desc->runtime_filter(eval_context.driver_sequence);
+    const RuntimeFilter* filter = rf_desc->runtime_filter(eval_context.driver_sequence);
     DCHECK(filter);
     if (filter->num_hash_partitions() == 0) {
         return;
@@ -543,7 +871,7 @@ void RuntimeFilterProbeCollector::compute_hash_values(Chunk* chunk, Column* colu
     } else {
         // Used to hold generated columns
         std::vector<ColumnPtr> column_holders;
-        std::vector<Column*> partition_by_columns;
+        std::vector<const Column*> partition_by_columns;
         for (auto& partition_ctx : *(rf_desc->partition_by_expr_contexts())) {
             ColumnPtr partition_column = EVALUATE_NULL_IF_ERROR(partition_ctx, partition_ctx->root(), chunk);
             partition_by_columns.push_back(partition_column.get());
@@ -553,7 +881,7 @@ void RuntimeFilterProbeCollector::compute_hash_values(Chunk* chunk, Column* colu
     }
 }
 
-void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeBloomFilterEvalContext& eval_context) {
+void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeMembershipFilterEvalContext& eval_context) {
     size_t chunk_size = chunk->num_rows();
     auto& merged_selection = eval_context.running_context.merged_selection;
     auto& use_merged_selection = eval_context.running_context.use_merged_selection;
@@ -565,8 +893,21 @@ void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeBloomF
     seletivity_map.clear();
     for (auto& kv : _descriptors) {
         RuntimeFilterProbeDescriptor* rf_desc = kv.second;
-        const JoinRuntimeFilter* filter = rf_desc->runtime_filter(eval_context.driver_sequence);
-        if (filter == nullptr || filter->always_true()) {
+        const RuntimeFilter* filter = rf_desc->runtime_filter(eval_context.driver_sequence);
+        bool should_use =
+                eval_context.mode == RuntimeMembershipFilterEvalContext::Mode::M_ONLY_TOPN && rf_desc->is_topn_filter();
+        if (filter == nullptr || (!should_use && filter->always_true())) {
+            continue;
+        }
+        if (eval_context.mode == RuntimeMembershipFilterEvalContext::Mode::M_WITHOUT_TOPN &&
+            rf_desc->is_topn_filter()) {
+            continue;
+        } else if (eval_context.mode == RuntimeMembershipFilterEvalContext::Mode::M_ONLY_TOPN &&
+                   !rf_desc->is_topn_filter()) {
+            continue;
+        }
+
+        if (rf_desc->has_push_down_to_storage()) {
             continue;
         }
         auto& selection = eval_context.running_context.use_merged_selection
@@ -610,11 +951,31 @@ void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeBloomF
                     dest[j] = src[j] & dest[j];
                 }
             }
+        } else if (rf_desc->is_topn_filter() &&
+                   eval_context.mode == RuntimeMembershipFilterEvalContext::Mode::M_ONLY_TOPN) {
+            seletivity_map.emplace(selectivity, rf_desc);
         }
     }
     if (!seletivity_map.empty()) {
         chunk->filter(merged_selection);
     }
+}
+
+static bool contains_dict_mapping_expr(Expr* expr) {
+    if (typeid(*expr) == typeid(DictMappingExpr)) {
+        return true;
+    }
+
+    return std::any_of(expr->children().begin(), expr->children().end(),
+                       [](Expr* child) { return contains_dict_mapping_expr(child); });
+}
+
+static bool contains_dict_mapping_expr(RuntimeFilterProbeDescriptor* probe_desc) {
+    auto* probe_expr_ctx = probe_desc->probe_expr_ctx();
+    if (probe_expr_ctx == nullptr) {
+        return false;
+    }
+    return contains_dict_mapping_expr(probe_expr_ctx->root());
 }
 
 void RuntimeFilterProbeCollector::push_down(const RuntimeState* state, TPlanNodeId target_plan_node_id,
@@ -628,8 +989,10 @@ void RuntimeFilterProbeCollector::push_down(const RuntimeState* state, TPlanNode
             ++iter;
             continue;
         }
-        if (desc->is_bound(tuple_ids) && !(state->broadcast_join_right_offsprings().contains(target_plan_node_id) &&
-                                           state->shuffle_hash_bucket_rf_ids().contains(desc->filter_id()))) {
+        if (desc->is_bound(tuple_ids) &&
+            !(state->broadcast_join_right_offsprings().contains(target_plan_node_id) &&
+              state->non_broadcast_rf_ids().contains(desc->filter_id())) &&
+            !contains_dict_mapping_expr(desc)) {
             add_descriptor(desc);
             if (desc->is_local()) {
                 local_rf_waiting_set.insert(desc->build_plan_node_id());
@@ -683,8 +1046,8 @@ void RuntimeFilterProbeCollector::wait(bool on_scan_node) {
             auto* rf = (*it)->runtime_filter(-1);
             // find runtime filter in cache.
             if (rf == nullptr) {
-                JoinRuntimeFilterPtr t = _runtime_state->exec_env()->runtime_filter_cache()->get(
-                        _runtime_state->query_id(), (*it)->filter_id());
+                RuntimeFilterPtr t = _runtime_state->exec_env()->runtime_filter_cache()->get(_runtime_state->query_id(),
+                                                                                             (*it)->filter_id());
                 if (t != nullptr) {
                     VLOG_FILE << "RuntimeFilterCollector::wait: rf found in cache. filter_id = " << (*it)->filter_id()
                               << ", plan_node_id = " << _plan_node_id
@@ -717,8 +1080,9 @@ void RuntimeFilterProbeCollector::wait(bool on_scan_node) {
     }
 }
 
-void RuntimeFilterProbeDescriptor::set_runtime_filter(const JoinRuntimeFilter* rf) {
-    const JoinRuntimeFilter* expected = nullptr;
+void RuntimeFilterProbeDescriptor::set_runtime_filter(const RuntimeFilter* rf) {
+    auto notify = DeferOp([this]() { _observable.notify_source_observers(); });
+    const RuntimeFilter* expected = nullptr;
     _runtime_filter.compare_exchange_strong(expected, rf, std::memory_order_seq_cst, std::memory_order_seq_cst);
     if (_ready_timestamp == 0 && rf != nullptr && _latency_timer != nullptr) {
         _ready_timestamp = UnixMillis();
@@ -726,120 +1090,18 @@ void RuntimeFilterProbeDescriptor::set_runtime_filter(const JoinRuntimeFilter* r
     }
 }
 
-void RuntimeFilterProbeDescriptor::set_shared_runtime_filter(const std::shared_ptr<const JoinRuntimeFilter>& rf) {
-    std::shared_ptr<const JoinRuntimeFilter> old_value = nullptr;
+void RuntimeFilterProbeDescriptor::set_shared_runtime_filter(const std::shared_ptr<const RuntimeFilter>& rf) {
+    std::shared_ptr<const RuntimeFilter> old_value = nullptr;
     if (std::atomic_compare_exchange_strong(&_shared_runtime_filter, &old_value, rf)) {
         set_runtime_filter(_shared_runtime_filter.get());
     }
 }
 
-// ========================================================
-template <LogicalType Type>
-class MinMaxPredicate : public Expr {
-public:
-    using CppType = RunTimeCppType<Type>;
-    MinMaxPredicate(SlotId slot_id, const CppType& min_value, const CppType& max_value)
-            : Expr(TypeDescriptor(Type), false), _slot_id(slot_id), _min_value(min_value), _max_value(max_value) {
-        _node_type = TExprNodeType::RUNTIME_FILTER_MIN_MAX_EXPR;
-    }
-    ~MinMaxPredicate() override = default;
-    Expr* clone(ObjectPool* pool) const override {
-        return pool->add(new MinMaxPredicate<Type>(_slot_id, _min_value, _max_value));
-    }
-
-    bool is_constant() const override { return false; }
-    bool is_bound(const std::vector<TupleId>& tuple_ids) const override { return false; }
-
-    StatusOr<ColumnPtr> evaluate_with_filter(ExprContext* context, Chunk* ptr, uint8_t* filter) override {
-        const ColumnPtr col = ptr->get_column_by_slot_id(_slot_id);
-        size_t size = col->size();
-
-        std::shared_ptr<BooleanColumn> result(new BooleanColumn(size, 1));
-        uint8_t* res = result->get_data().data();
-
-        if (col->only_null()) {
-            return result;
-        }
-
-        if (col->is_constant()) {
-            CppType value = ColumnHelper::get_const_value<Type>(col);
-            if (!(value >= _min_value && value <= _max_value)) {
-                memset(res, 0x0, size);
-            }
-            return result;
-        }
-
-        // NOTE(yan): make sure following code can be compiled into SIMD instructions:
-        // in original version, we use
-        //   1. memcpy filter -> res
-        //   2. res[i] = res[i] && (null_data[i] || (data[i] >= _min_value && data[i] <= _max_value));
-        // but they can not be compiled into SIMD instructions.
-        if (col->is_nullable()) {
-            auto tmp = ColumnHelper::as_raw_column<NullableColumn>(col);
-            uint8_t* __restrict__ null_data = tmp->null_column_data().data();
-            CppType* __restrict__ data = ColumnHelper::cast_to_raw<Type>(tmp->data_column())->get_data().data();
-            for (int i = 0; i < size; i++) {
-                res[i] = (data[i] >= _min_value && data[i] <= _max_value);
-            }
-            // we take null as true value.
-            for (int i = 0; i < size; i++) {
-                res[i] = res[i] | null_data[i];
-            }
-        } else {
-            CppType* data = ColumnHelper::cast_to_raw<Type>(col)->get_data().data();
-            for (int i = 0; i < size; i++) {
-                res[i] = (data[i] >= _min_value && data[i] <= _max_value);
-            }
-        }
-
-        // NOTE(yan): filter can be used optionally.
-        // if (filter != nullptr) {
-        //     for (int i = 0; i < size; i++) {
-        //         res[i] = res[i] & filter[i];
-        //     }
-        // }
-
-        return result;
-    }
-
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
-        return evaluate_with_filter(context, ptr, nullptr);
-    }
-
-    int get_slot_ids(std::vector<SlotId>* slot_ids) const override {
-        slot_ids->emplace_back(_slot_id);
-        return 1;
-    }
-
-private:
-    SlotId _slot_id;
-    const CppType _min_value;
-    const CppType _max_value;
-};
-
-class MinMaxPredicateBuilder {
-public:
-    MinMaxPredicateBuilder(ObjectPool* pool, SlotId slot_id, const JoinRuntimeFilter* filter)
-            : _pool(pool), _slot_id(slot_id), _filter(filter) {}
-
-    template <LogicalType ltype>
-    Expr* operator()() {
-        auto* bloom_filter = (RuntimeBloomFilter<ltype>*)(_filter);
-        MinMaxPredicate<ltype>* p =
-                _pool->add(new MinMaxPredicate<ltype>(_slot_id, bloom_filter->min_value(), bloom_filter->max_value()));
-        return p;
-    }
-
-private:
-    ObjectPool* _pool;
-    SlotId _slot_id;
-    const JoinRuntimeFilter* _filter;
-};
-
 void RuntimeFilterHelper::create_min_max_value_predicate(ObjectPool* pool, SlotId slot_id, LogicalType slot_type,
-                                                         const JoinRuntimeFilter* filter, Expr** min_max_predicate) {
+                                                         const RuntimeFilter* filter, Expr** min_max_predicate) {
     *min_max_predicate = nullptr;
-    if (filter == nullptr || filter->has_null()) return;
+    if (filter == nullptr) return;
+    // TODO, if you want to enable it for string, pls adapt for low-cardinality string
     if (slot_type == TYPE_CHAR || slot_type == TYPE_VARCHAR) return;
     auto res = type_dispatch_filter(slot_type, (Expr*)nullptr, MinMaxPredicateBuilder(pool, slot_id, filter));
     *min_max_predicate = res;

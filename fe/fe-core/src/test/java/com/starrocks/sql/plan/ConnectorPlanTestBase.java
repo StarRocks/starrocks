@@ -15,6 +15,7 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
@@ -26,6 +27,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.delta.DeltaLakeMetadata;
@@ -39,6 +42,9 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DropCatalogStmt;
+import io.delta.kernel.types.BasePrimitiveType;
+import io.delta.kernel.types.StructField;
+import io.delta.kernel.types.StructType;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.paimon.catalog.Catalog;
@@ -55,7 +61,6 @@ import org.apache.paimon.table.sink.BatchTableCommit;
 import org.apache.paimon.table.sink.BatchTableWrite;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataTypes;
-import org.elasticsearch.common.Strings;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.rules.TemporaryFolder;
@@ -170,14 +175,14 @@ public class ConnectorPlanTestBase extends PlanTestBase {
     public static void createPaimonTable(Catalog catalog, String db) throws Exception {
         catalog.createDatabase(db, false);
 
-        // create partitioned table
-        createParitionedTable(catalog, db);
+        // create unpartitioned table
+        createPaimonUnpartitionedTable(catalog, db);
 
         // create partitioned table
-        createUnPartitionedTable(catalog, db);
+        createPaimonParitionedTable(catalog, db);
     }
 
-    private static void createUnPartitionedTable(Catalog catalog, String db) throws Exception {
+    private static void createPaimonUnpartitionedTable(Catalog catalog, String db) throws Exception {
         Identifier identifier = Identifier.create(db, "unpartitioned_table");
         Schema schema = new Schema(
                 Lists.newArrayList(
@@ -199,12 +204,12 @@ public class ConnectorPlanTestBase extends PlanTestBase {
             GenericRow genericRow = new GenericRow(3);
             genericRow.setField(0, BinaryString.fromString(String.valueOf(i)));
             genericRow.setField(1, BinaryString.fromString("2"));
-            batchTableWrite.write(genericRow);
+            batchTableWrite.write(genericRow, 1);
         }
         batchTableCommit.commit(batchTableWrite.prepareCommit());
     }
 
-    private static void createParitionedTable(Catalog catalog, String db) throws Exception {
+    private static void createPaimonParitionedTable(Catalog catalog, String db) throws Exception {
         Identifier identifier = Identifier.create(db, "partitioned_table");
         Schema schema = new Schema(
                 Lists.newArrayList(
@@ -228,7 +233,7 @@ public class ConnectorPlanTestBase extends PlanTestBase {
             genericRow.setField(0, BinaryString.fromString("1"));
             genericRow.setField(1, BinaryString.fromString("2"));
             genericRow.setField(2, (int) LocalDate.now().toEpochDay() + i);
-            batchTableWrite.write(genericRow);
+            batchTableWrite.write(genericRow, 1);
         }
         batchTableCommit.commit(batchTableWrite.prepareCommit());
     }
@@ -237,8 +242,7 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         Options catalogOptions = new Options();
         catalogOptions.set(CatalogOptions.WAREHOUSE, warehouse);
         CatalogContext catalogContext = CatalogContext.create(catalogOptions);
-        Catalog catalog = CatalogFactory.createCatalog(catalogContext);
-        return catalog;
+        return CatalogFactory.createCatalog(catalogContext);
     }
 
     private static void mockPaimonCatalogImpl(MockedMetadataMgr metadataMgr, String warehouse) throws Exception {
@@ -254,15 +258,9 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog("paimon", MOCK_PAIMON_CATALOG_NAME, "", properties);
         //register paimon catalog
         PaimonMetadata paimonMetadata =
-                new PaimonMetadata(MOCK_PAIMON_CATALOG_NAME, new HdfsEnvironment(), paimonNativeCatalog);
+                new PaimonMetadata(MOCK_PAIMON_CATALOG_NAME, new HdfsEnvironment(), paimonNativeCatalog,
+                        new ConnectorProperties(ConnectorType.PAIMON, properties));
         metadataMgr.registerMockedMetadata(MOCK_PAIMON_CATALOG_NAME, paimonMetadata);
-    }
-
-    public static void mockKuduCatalog(ConnectContext ctx) throws DdlException {
-        GlobalStateMgr gsmMgr = ctx.getGlobalStateMgr();
-        MockedMetadataMgr metadataMgr = new MockedMetadataMgr(gsmMgr.getLocalMetastore(), gsmMgr.getConnectorMgr());
-        gsmMgr.setMetadataMgr(metadataMgr);
-        mockKuduCatalogImpl(metadataMgr);
     }
 
     private static void mockKuduCatalogImpl(MockedMetadataMgr metadataMgr) throws DdlException {
@@ -291,13 +289,18 @@ public class ConnectorPlanTestBase extends PlanTestBase {
                 MOCK_TABLE_MAP = new CaseInsensitiveMap<>();
 
         public MockedDeltaLakeMetadata() {
-            super(null, null, null);
+            super(null, null, null, null, new ConnectorProperties(ConnectorType.DELTALAKE));
 
             long tableId = GlobalStateMgr.getCurrentState().getNextId();
             List<Column> columns = ImmutableList.<Column>builder()
                     .add(new Column("col1", Type.INT))
                     .add(new Column("col2", Type.STRING))
                     .build();
+
+            StructType structType = new StructType(List.of(new StructField("col1",
+                            BasePrimitiveType.createPrimitive("integer"), false),
+                    new StructField("col2", BasePrimitiveType.createPrimitive("string"), false)));
+
             List<String> partitionNames = new ArrayList<>();
             long createTime = System.currentTimeMillis();
             DeltaLakeTable table = new DeltaLakeTable(tableId, MOCKED_CATALOG_NAME, MOCKED_DB_NAME, MOCKED_TABLE_NAME,
@@ -307,19 +310,18 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         }
 
         @Override
-        public com.starrocks.catalog.Table getTable(String dbName, String tblName) {
+        public com.starrocks.catalog.Table getTable(ConnectContext context, String dbName, String tblName) {
             return MOCK_TABLE_MAP.get(tblName);
         }
 
         @Override
-        public Database getDb(String dbName) {
+        public Database getDb(ConnectContext context, String dbName) {
             return new Database(GlobalStateMgr.getCurrentState().getNextId(), dbName);
         }
     }
 
     private static void mockDeltaLakeCatalog(MockedMetadataMgr metadataMgr) throws Exception {
         final String catalogName = MockedDeltaLakeMetadata.MOCKED_CATALOG_NAME;
-        final String dbName = MockedDeltaLakeMetadata.MOCKED_DB_NAME;
         CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
 
         // create catalog

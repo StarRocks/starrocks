@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # array_unique_agg
 
-## 功能
+
 
 将一列中的 distinct 值（包括空值 null）串联成一个数组（多行转一行）。
 

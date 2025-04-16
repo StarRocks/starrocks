@@ -14,17 +14,20 @@
 
 #include "connector/lake_connector.h"
 
+#include <vector>
+
+#include "column/column_access_path.h"
 #include "exec/connector_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
 #include "runtime/global_dict/parser.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/lake/tablet.h"
-#include "storage/olap_runtime_range_pruner.hpp"
 #include "storage/predicate_parser.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/projection_iterator.h"
 #include "storage/rowset/short_key_range_option.h"
+#include "storage/runtime_range_pruner.hpp"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks::connector {
@@ -57,8 +60,22 @@ Status LakeDataSource::open(RuntimeState* state) {
 
     init_counter(state);
 
+    // init column access paths
+    if (thrift_lake_scan_node.__isset.column_access_paths) {
+        for (int i = 0; i < thrift_lake_scan_node.column_access_paths.size(); ++i) {
+            auto st = ColumnAccessPath::create(thrift_lake_scan_node.column_access_paths[i], state, state->obj_pool());
+            if (LIKELY(st.ok())) {
+                _column_access_paths.emplace_back(std::move(st.value()));
+            } else {
+                LOG(WARNING) << "Failed to create column access path: "
+                             << thrift_lake_scan_node.column_access_paths[i].type << "index: " << i
+                             << ", error: " << st.status();
+            }
+        }
+    }
+
     // eval const conjuncts
-    RETURN_IF_ERROR(OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &_status));
+    RETURN_IF_ERROR(ScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &_status));
     DictOptimizeParser::rewrite_descriptor(state, _conjunct_ctxs, thrift_lake_scan_node.dict_string_id_to_int_ids,
                                            &(tuple_desc->decoded_slots()));
 
@@ -75,7 +92,7 @@ Status LakeDataSource::open(RuntimeState* state) {
         enable_column_expr_predicate = thrift_lake_scan_node.enable_column_expr_predicate;
     }
 
-    OlapScanConjunctsManagerOptions opts;
+    ScanConjunctsManagerOptions opts;
     opts.conjunct_ctxs_ptr = &_conjunct_ctxs;
     opts.tuple_desc = tuple_desc;
     opts.obj_pool = &_obj_pool;
@@ -86,10 +103,10 @@ Status LakeDataSource::open(RuntimeState* state) {
     opts.max_scan_key_num = max_scan_key_num;
     opts.enable_column_expr_predicate = enable_column_expr_predicate;
     opts.pred_tree_params = state->fragment_ctx()->pred_tree_params();
-    opts.driver_sequence = runtime_bloom_filter_eval_context.driver_sequence;
+    opts.driver_sequence = runtime_membership_filter_eval_context.driver_sequence;
 
-    _conjuncts_manager = std::make_unique<OlapScanConjunctsManager>(std::move(opts));
-    OlapScanConjunctsManager& cm = *_conjuncts_manager;
+    _conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
+    ScanConjunctsManager& cm = *_conjuncts_manager;
 
     // Parse conjuncts via _conjuncts_manager.
     RETURN_IF_ERROR(cm.parse_conjuncts());
@@ -116,8 +133,7 @@ void LakeDataSource::close(RuntimeState* state) {
 }
 
 Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
-    chunk->reset(ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size(),
-                                               _runtime_state->use_column_pool()));
+    chunk->reset(ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size()));
     auto* chunk_ptr = chunk->get();
 
     do {
@@ -234,15 +250,20 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
                                           std::vector<uint32_t>& reader_columns) {
     const TLakeScanNode& thrift_lake_scan_node = _provider->_t_lake_scan_node;
     bool skip_aggregation = thrift_lake_scan_node.is_preaggregation;
-    auto parser = _obj_pool.add(new PredicateParser(_tablet_schema));
+    auto parser = _obj_pool.add(new OlapPredicateParser(_tablet_schema));
     _params.is_pipeline = true;
     _params.reader_type = READER_QUERY;
     _params.skip_aggregation = skip_aggregation;
     _params.profile = _runtime_profile;
     _params.runtime_state = _runtime_state;
-    _params.use_page_cache = !config::disable_storage_page_cache && _scan_range.fill_data_cache;
+    _params.use_page_cache =
+            !config::disable_storage_page_cache && _scan_range.fill_data_cache && !_scan_range.skip_page_cache;
     _params.lake_io_opts.fill_data_cache = _scan_range.fill_data_cache;
-    _params.runtime_range_pruner = OlapRuntimeScanRangePruner(parser, _conjuncts_manager->unarrived_runtime_filters());
+    _params.lake_io_opts.skip_disk_cache = _scan_range.skip_disk_cache;
+    _params.runtime_range_pruner = RuntimeScanRangePruner(parser, _conjuncts_manager->unarrived_runtime_filters());
+    _params.lake_io_opts.cache_file_only = _runtime_state->query_options().__isset.enable_cache_select &&
+                                           _runtime_state->query_options().enable_cache_select &&
+                                           config::lake_cache_select_in_physical_way;
     _params.splitted_scan_rows = _provider->get_splitted_scan_rows();
     _params.scan_dop = _provider->get_scan_dop();
 
@@ -320,6 +341,9 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
         }
     }
     starrocks::Schema child_schema = ChunkHelper::convert_schema(_tablet_schema, reader_columns);
+    RETURN_IF_ERROR(init_column_access_paths(&child_schema));
+    // will modify schema field, need to copy schema
+    RETURN_IF_ERROR(prune_schema_by_access_paths(&child_schema));
 
     // need to split
     bool need_split = _provider->could_split() && _split_context == nullptr;
@@ -328,8 +352,8 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
         _params.plan_node_id = _morsel->get_plan_node_id();
         _params.scan_range = _morsel->get_scan_range();
     }
-    ASSIGN_OR_RETURN(_reader,
-                     _tablet.new_reader(std::move(child_schema), need_split, _provider->could_split_physically()));
+    ASSIGN_OR_RETURN(_reader, _tablet.new_reader(std::move(child_schema), need_split,
+                                                 _provider->could_split_physically(), _morsel->rowsets()));
     if (reader_columns.size() == scanner_columns.size()) {
         _prj_iter = _reader;
     } else {
@@ -361,6 +385,98 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     return Status::OK();
 }
 
+Status LakeDataSource::init_column_access_paths(Schema* schema) {
+    // column access paths
+    int64_t leaf_size = 0;
+    std::vector<ColumnAccessPathPtr> new_one;
+    for (const auto& path : _column_access_paths) {
+        auto& root = path->path();
+        int32_t index = _tablet_schema->field_index(root);
+        auto field = schema->get_field_by_name(root);
+        if (index >= 0 && field != nullptr) {
+            auto res = path->convert_by_index(field.get(), index);
+            // read whole data, doesn't effect query
+            if (LIKELY(res.ok())) {
+                new_one.emplace_back(std::move(res.value()));
+                leaf_size += path->leaf_size();
+            } else {
+                LOG(WARNING) << "failed to convert column access path: " << res.status();
+            }
+        } else {
+            LOG(WARNING) << "failed to find column in schema: " << root;
+        }
+    }
+    _column_access_paths = std::move(new_one);
+    _params.column_access_paths = &_column_access_paths;
+
+    // update counter
+    COUNTER_SET(_pushdown_access_paths_counter, leaf_size);
+    return Status::OK();
+}
+
+Status prune_field_by_access_paths(Field* field, ColumnAccessPath* path) {
+    if (path->children().size() < 1) {
+        return Status::OK();
+    }
+    if (field->type()->type() == LogicalType::TYPE_ARRAY) {
+        DCHECK_EQ(path->children().size(), 1);
+        DCHECK_EQ(field->sub_fields().size(), 1);
+        RETURN_IF_ERROR(prune_field_by_access_paths(&field->sub_fields()[0], path->children()[0].get()));
+    } else if (field->type()->type() == LogicalType::TYPE_MAP) {
+        DCHECK_EQ(path->children().size(), 1);
+        auto child_path = path->children()[0].get();
+        if (child_path->is_index() || child_path->is_all()) {
+            DCHECK_EQ(field->sub_fields().size(), 2);
+            RETURN_IF_ERROR(prune_field_by_access_paths(&field->sub_fields()[1], child_path));
+        } else {
+            return Status::OK();
+        }
+    } else if (field->type()->type() == LogicalType::TYPE_STRUCT) {
+        std::unordered_map<std::string_view, ColumnAccessPath*> path_index;
+        for (auto& child_path : path->children()) {
+            path_index[child_path->path()] = child_path.get();
+        }
+
+        std::vector<Field> new_fields;
+        for (auto& child_fields : field->sub_fields()) {
+            auto iter = path_index.find(child_fields.name());
+            if (iter != path_index.end()) {
+                auto child_path = iter->second;
+                RETURN_IF_ERROR(prune_field_by_access_paths(&child_fields, child_path));
+                new_fields.emplace_back(child_fields);
+            }
+        }
+
+        field->set_sub_fields(std::move(new_fields));
+    }
+    return Status::OK();
+}
+
+Status LakeDataSource::prune_schema_by_access_paths(Schema* schema) {
+    if (_column_access_paths.empty()) {
+        return Status::OK();
+    }
+
+    // schema
+    for (auto& path : _column_access_paths) {
+        if (path->is_from_predicate()) {
+            continue;
+        }
+        auto& root = path->path();
+        auto field = schema->get_field_by_name(root);
+        if (field == nullptr) {
+            LOG(WARNING) << "failed to find column in schema: " << root;
+            continue;
+        }
+        // field maybe modified, so we need to deep copy
+        auto new_field = std::make_shared<Field>(*field);
+        schema->set_field_by_name(new_field, root);
+        RETURN_IF_ERROR(prune_field_by_access_paths(new_field.get(), path.get()));
+    }
+
+    return Status::OK();
+}
+
 Status LakeDataSource::build_scan_range(RuntimeState* state) {
     // Get key_ranges and not_push_down_conjuncts from _conjuncts_manager.
     RETURN_IF_ERROR(_conjuncts_manager->get_key_ranges(&_key_ranges));
@@ -383,6 +499,9 @@ Status LakeDataSource::build_scan_range(RuntimeState* state) {
 }
 
 void LakeDataSource::init_counter(RuntimeState* state) {
+    _access_path_hits_counter = ADD_COUNTER(_runtime_profile, "AccessPathHits", TUnit::UNIT);
+    _access_path_unhits_counter = ADD_COUNTER(_runtime_profile, "AccessPathUnhits", TUnit::UNIT);
+
     _bytes_read_counter = ADD_COUNTER(_runtime_profile, "BytesRead", TUnit::BYTES);
     _rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
 
@@ -394,6 +513,8 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _raw_rows_counter = ADD_COUNTER(_runtime_profile, "RawRowsRead", TUnit::UNIT);
     _pushdown_predicates_counter =
             ADD_COUNTER_SKIP_MERGE(_runtime_profile, "PushdownPredicates", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
+    _pushdown_access_paths_counter =
+            ADD_COUNTER_SKIP_MERGE(_runtime_profile, "PushdownAccessPaths", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
 
     _get_delvec_timer = ADD_TIMER(_runtime_profile, "GetDelVec");
     _get_delta_column_group_timer = ADD_TIMER(_runtime_profile, "GetDeltaColumnGroup");
@@ -600,6 +721,62 @@ void LakeDataSource::update_counter() {
         _runtime_state->update_num_datacache_write_time_ns(_reader->stats().io_ns_write_local_disk);
         _runtime_state->update_num_datacache_count(1);
     }
+
+    if (_reader->stats().flat_json_hits.size() > 0 || _reader->stats().merge_json_hits.size() > 0) {
+        std::string access_path_hits = "AccessPathHits";
+        int64_t total = 0;
+        for (auto& [k, v] : _reader->stats().flat_json_hits) {
+            std::string path = fmt::format("[Hit]{}", k);
+            auto* path_counter = _runtime_profile->get_counter(path);
+            if (path_counter == nullptr) {
+                path_counter = ADD_CHILD_COUNTER(_runtime_profile, path, TUnit::UNIT, access_path_hits);
+            }
+            total += v;
+            COUNTER_UPDATE(path_counter, v);
+        }
+        for (auto& [k, v] : _reader->stats().merge_json_hits) {
+            std::string merge_path = fmt::format("[HitMerge]{}", k);
+            auto* path_counter = _runtime_profile->get_counter(merge_path);
+            if (path_counter == nullptr) {
+                path_counter = ADD_CHILD_COUNTER(_runtime_profile, merge_path, TUnit::UNIT, access_path_hits);
+            }
+            total += v;
+            COUNTER_UPDATE(path_counter, v);
+        }
+        COUNTER_UPDATE(_access_path_hits_counter, total);
+    }
+    if (_reader->stats().dynamic_json_hits.size() > 0) {
+        std::string access_path_unhits = "AccessPathUnhits";
+        int64_t total = 0;
+        for (auto& [k, v] : _reader->stats().dynamic_json_hits) {
+            std::string path = fmt::format("[Unhit]{}", k);
+            auto* path_counter = _runtime_profile->get_counter(path);
+            if (path_counter == nullptr) {
+                path_counter = ADD_CHILD_COUNTER(_runtime_profile, path, TUnit::UNIT, access_path_unhits);
+            }
+            total += v;
+            COUNTER_UPDATE(path_counter, v);
+        }
+        COUNTER_UPDATE(_access_path_unhits_counter, total);
+    }
+
+    std::string parent_name = "SegmentRead";
+    if (_reader->stats().json_init_ns > 0) {
+        RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "FlatJsonInit", parent_name);
+        COUNTER_UPDATE(c, _reader->stats().json_init_ns);
+    }
+    if (_reader->stats().json_cast_ns > 0) {
+        RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "FlatJsonCast", parent_name);
+        COUNTER_UPDATE(c, _reader->stats().json_cast_ns);
+    }
+    if (_reader->stats().json_merge_ns > 0) {
+        RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "FlatJsonMerge", parent_name);
+        COUNTER_UPDATE(c, _reader->stats().json_merge_ns);
+    }
+    if (_reader->stats().json_flatten_ns > 0) {
+        RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "FlatJsonFlatten", parent_name);
+        COUNTER_UPDATE(c, _reader->stats().json_flatten_ns);
+    }
 }
 
 // ================================
@@ -636,29 +813,30 @@ DataSourceProviderPtr LakeConnector::create_data_source_provider(ConnectorScanNo
 StatusOr<pipeline::MorselQueuePtr> LakeDataSourceProvider::convert_scan_range_to_morsel_queue(
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
-        size_t num_total_scan_ranges) {
-    auto morsel_queue = DataSourceProvider::convert_scan_range_to_morsel_queue(
-            scan_ranges, node_id, pipeline_dop, enable_tablet_internal_parallel, tablet_internal_parallel_mode,
-            num_total_scan_ranges);
-    if (enable_tablet_internal_parallel) {
-        int64_t scan_dop;
+        size_t num_total_scan_ranges, size_t scan_parallelism) {
+    int64_t lake_scan_parallelism = 0;
+    if (!scan_ranges.empty() && enable_tablet_internal_parallel) {
         ASSIGN_OR_RETURN(_could_split, _could_tablet_internal_parallel(scan_ranges, pipeline_dop, num_total_scan_ranges,
-                                                                       tablet_internal_parallel_mode, &scan_dop,
-                                                                       &splitted_scan_rows));
+                                                                       tablet_internal_parallel_mode,
+                                                                       &lake_scan_parallelism, &splitted_scan_rows));
         if (_could_split) {
             ASSIGN_OR_RETURN(_could_split_physically, _could_split_tablet_physically(scan_ranges));
         }
     }
-    return morsel_queue;
+
+    return DataSourceProvider::convert_scan_range_to_morsel_queue(
+            scan_ranges, node_id, pipeline_dop, enable_tablet_internal_parallel, tablet_internal_parallel_mode,
+            num_total_scan_ranges, (size_t)lake_scan_parallelism);
 }
 
 StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
         const std::vector<TScanRangeParams>& scan_ranges, int32_t pipeline_dop, size_t num_total_scan_ranges,
-        TTabletInternalParallelMode::type tablet_internal_parallel_mode, int64_t* scan_dop,
+        TTabletInternalParallelMode::type tablet_internal_parallel_mode, int64_t* scan_parallelism,
         int64_t* splitted_scan_rows) const {
     //if (_t_lake_scan_node.use_pk_index) {
     //    return false;
     //}
+
     bool force_split = tablet_internal_parallel_mode == TTabletInternalParallelMode::type::FORCE_SPLIT;
     // The enough number of tablets shouldn't use tablet internal parallel.
     if (!force_split && num_total_scan_ranges >= pipeline_dop) {
@@ -687,15 +865,14 @@ StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
     *splitted_scan_rows =
             std::max(config::tablet_internal_parallel_min_splitted_scan_rows,
                      std::min(*splitted_scan_rows, config::tablet_internal_parallel_max_splitted_scan_rows));
-    // scan_dop is restricted in the range [1, dop].
-    *scan_dop = num_table_rows / *splitted_scan_rows;
-    *scan_dop = std::max<int64_t>(1, std::min<int64_t>(*scan_dop, pipeline_dop));
+    *scan_parallelism = num_table_rows / *splitted_scan_rows;
 
     if (force_split) {
         return true;
     }
 
-    bool could = *scan_dop >= pipeline_dop || *scan_dop >= config::tablet_internal_parallel_min_scan_dop;
+    bool could =
+            *scan_parallelism >= pipeline_dop || *scan_parallelism >= config::tablet_internal_parallel_min_scan_dop;
     return could;
 }
 

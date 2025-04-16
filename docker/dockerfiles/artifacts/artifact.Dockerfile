@@ -21,7 +21,7 @@ ARG BUILD_ROOT
 COPY . ${BUILD_ROOT}
 WORKDIR ${BUILD_ROOT}
 # clean and build Frontend and Spark Dpp application
-RUN --mount=type=cache,target=/root/.m2/ STARROCKS_VERSION=${RELEASE_VERSION} BUILD_TYPE=${BUILD_TYPE} MAVEN_OPTS=${MAVEN_OPTS} ./build.sh --fe --clean
+RUN --mount=type=cache,target=/root/.m2/ STARROCKS_VERSION=${RELEASE_VERSION} BUILD_TYPE=${BUILD_TYPE} MAVEN_OPTS=${MAVEN_OPTS} ./build.sh --fe --with-maven-batch-mode ON --clean
 
 
 FROM ${builder} as broker-builder
@@ -44,12 +44,15 @@ COPY . ${BUILD_ROOT}
 WORKDIR ${BUILD_ROOT}
 RUN --mount=type=cache,target=/root/.m2/ STARROCKS_VERSION=${RELEASE_VERSION} BUILD_TYPE=${BUILD_TYPE} MAVEN_OPTS=${MAVEN_OPTS} ./build.sh --be --enable-shared-data --clean -j `nproc`
 
-FROM ubuntu:22.04 as datadog-downloader
+FROM ubuntu:22.04 as downloader
 
 RUN apt-get update -y && apt-get install -y --no-install-recommends wget tar xz-utils
 
 # download the latest dd-java-agent
 ADD 'https://dtdg.co/latest-java-tracer' /datadog/dd-java-agent.jar
+
+# download the latest arthas
+ADD 'https://arthas.aliyun.com/arthas-boot.jar' /arthas/arthas-boot.jar
 
 # Get ddprof for BE profiling
 RUN imagearch=$(arch | sed 's/aarch64/arm64/; s/x86_64/amd64/') \
@@ -69,7 +72,9 @@ COPY --from=fe-builder ${BUILD_ROOT}/output /release/fe_artifacts
 COPY --from=be-builder ${BUILD_ROOT}/output /release/be_artifacts
 COPY --from=broker-builder ${BUILD_ROOT}/fs_brokers/apache_hdfs_broker/output /release/broker_artifacts
 
-COPY --from=datadog-downloader /datadog/dd-java-agent.jar /release/fe_artifacts/fe/datadog/dd-java-agent.jar
-COPY --from=datadog-downloader /datadog/ddprof /release/be_artifacts/be/datadog/ddprof
+COPY --from=downloader /arthas/arthas-boot.jar /release/fe_artifacts/fe/arthas/arthas-boot.jar
+COPY --from=downloader /datadog/dd-java-agent.jar /release/fe_artifacts/fe/datadog/dd-java-agent.jar
+COPY --from=downloader /datadog/ddprof /release/be_artifacts/be/datadog/ddprof
+
 
 WORKDIR /release

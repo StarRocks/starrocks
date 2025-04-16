@@ -18,6 +18,7 @@
 #include "runtime/mem_pool.h"
 #include "storage/chunk_iterator.h"
 #include "storage/delete_predicates.h"
+#include "storage/lake/versioned_tablet.h"
 #include "storage/tablet_reader_params.h"
 #include "types_fwd.h"
 
@@ -58,9 +59,12 @@ public:
     TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
                  bool need_split, bool could_split_physically);
     TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
-                 std::vector<RowsetPtr> rowsets);
+                 bool need_split, bool could_split_physically, std::vector<RowsetPtr> rowsets);
     TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
-                 std::vector<RowsetPtr> rowsets, bool is_key, RowSourceMaskBuffer* mask_buffer);
+                 std::vector<RowsetPtr> rowsets, std::shared_ptr<const TabletSchema> tablet_schema);
+    TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
+                 std::vector<RowsetPtr> rowsets, bool is_key, RowSourceMaskBuffer* mask_buffer,
+                 std::shared_ptr<const TabletSchema> tablet_schema);
     ~TabletReader() override;
 
     DISALLOW_COPY_AND_MOVE(TabletReader);
@@ -79,7 +83,16 @@ public:
 
     size_t merged_rows() const override { return _collect_iter->merged_rows(); }
 
+    void set_tablet(std::shared_ptr<VersionedTablet> tablet) { _tablet = tablet; }
+
     void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) { split_tasks->swap(_split_tasks); }
+
+    static Status parse_seek_range(const TabletSchema& tablet_schema,
+                                   TabletReaderParams::RangeStartOperation range_start_op,
+                                   TabletReaderParams::RangeEndOperation range_end_op,
+                                   const std::vector<OlapTuple>& range_start_key,
+                                   const std::vector<OlapTuple>& range_end_key, std::vector<SeekRange>* ranges,
+                                   MemPool* mempool);
 
 protected:
     Status do_get_next(Chunk* chunk) override;
@@ -98,16 +111,10 @@ private:
     Status init_delete_predicates(const TabletReaderParams& read_params, DeletePredicates* dels);
 
     Status init_collector(const TabletReaderParams& read_params);
+    Status init_compaction_column_paths(const TabletReaderParams& read_params);
 
     static Status to_seek_tuple(const TabletSchema& tablet_schema, const OlapTuple& input, SeekTuple* tuple,
                                 MemPool* mempool);
-
-    static Status parse_seek_range(const TabletSchema& tablet_schema,
-                                   TabletReaderParams::RangeStartOperation range_start_op,
-                                   TabletReaderParams::RangeEndOperation range_end_op,
-                                   const std::vector<OlapTuple>& range_start_key,
-                                   const std::vector<OlapTuple>& range_end_key, std::vector<SeekRange>* ranges,
-                                   MemPool* mempool);
 
     TabletManager* _tablet_mgr;
     std::shared_ptr<const TabletMetadataPB> _tablet_metadata;
@@ -133,6 +140,8 @@ private:
     bool _is_vertical_merge = false;
     bool _is_key = false;
     RowSourceMaskBuffer* _mask_buffer = nullptr;
+
+    std::shared_ptr<VersionedTablet> _tablet;
 
     // used for table internal parallel
     bool _need_split = false;

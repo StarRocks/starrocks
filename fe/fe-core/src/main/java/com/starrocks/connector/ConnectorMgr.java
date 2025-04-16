@@ -16,7 +16,6 @@
 package com.starrocks.connector;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.memory.MemoryTrackable;
 
@@ -26,20 +25,21 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 // ConnectorMgr is responsible for managing all ConnectorFactory, and for creating Connector
 public class ConnectorMgr {
     private final ConcurrentHashMap<String, CatalogConnector> connectors = new ConcurrentHashMap<>();
-    private final ReadWriteLock connectorLock = new FairReentrantReadWriteLock();
+    private final ReadWriteLock connectorLock = new ReentrantReadWriteLock();
 
-    public CatalogConnector createConnector(ConnectorContext context) throws StarRocksConnectorException {
+    public CatalogConnector createConnector(ConnectorContext context, boolean isReplay) throws StarRocksConnectorException {
         String catalogName = context.getCatalogName();
         CatalogConnector connector = null;
         readLock();
         try {
-            connector = ConnectorFactory.createConnector(context);
             Preconditions.checkState(!connectors.containsKey(catalogName),
                     "Connector of catalog '%s' already exists", catalogName);
+            connector = ConnectorFactory.createConnector(context, isReplay);
             if (connector == null) {
                 return null;
             }
@@ -53,6 +53,21 @@ public class ConnectorMgr {
         try {
             connectors.put(catalogName, connector);
             return connector;
+        } finally {
+            writeUnLock();
+        }
+    }
+
+    public CatalogConnector createHiddenConnector(ConnectorContext context, boolean isReplay) throws StarRocksConnectorException {
+        return ConnectorFactory.createConnector(context, isReplay);
+    }
+
+    public void addConnector(String catalogName, CatalogConnector connector) {
+        writeLock();
+        try {
+            Preconditions.checkState(!connectors.containsKey(catalogName),
+                    "Connector of catalog '%s' already exists", catalogName);
+            connectors.put(catalogName, connector);
         } finally {
             writeUnLock();
         }
@@ -132,5 +147,11 @@ public class ConnectorMgr {
             readUnlock();
         }
         return memoryTrackers;
+    }
+
+    public void shutdown() {
+        for (CatalogConnector cc : connectors.values()) {
+            cc.shutdown();
+        }
     }
 }

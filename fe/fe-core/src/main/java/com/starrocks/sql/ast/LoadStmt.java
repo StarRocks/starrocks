@@ -338,14 +338,6 @@ public class LoadStmt extends DdlStmt {
         }
     }
 
-    @Override
-    public boolean needAuditEncryption() {
-        if (brokerDesc != null || resourceDesc != null) {
-            return true;
-        }
-        return false;
-    }
-
     public String getVersion() {
         return version;
     }

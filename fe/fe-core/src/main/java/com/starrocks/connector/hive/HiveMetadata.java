@@ -16,29 +16,44 @@ package com.starrocks.connector.hive;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Version;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.RemoteFileOperations;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.PartitionUpdate.UpdateMode;
+import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -58,6 +73,7 @@ import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.Table.TableType.HIVE;
+import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 import static com.starrocks.connector.PartitionUtil.toPartitionValues;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
@@ -70,18 +86,20 @@ public class HiveMetadata implements ConnectorMetadata {
     private final HiveMetastoreOperations hmsOps;
     private final RemoteFileOperations fileOps;
     private final HiveStatisticsProvider statisticsProvider;
-    private final Optional<CacheUpdateProcessor> cacheUpdateProcessor;
+    private final Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor;
     private Executor updateExecutor;
     private Executor refreshOthersFeExecutor;
+    private final ConnectorProperties properties;
 
     public HiveMetadata(String catalogName,
                         HdfsEnvironment hdfsEnvironment,
                         HiveMetastoreOperations hmsOps,
                         RemoteFileOperations fileOperations,
                         HiveStatisticsProvider statisticsProvider,
-                        Optional<CacheUpdateProcessor> cacheUpdateProcessor,
+                        Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor,
                         Executor updateExecutor,
-                        Executor refreshOthersFeExecutor) {
+                        Executor refreshOthersFeExecutor,
+                        ConnectorProperties properties) {
         this.catalogName = catalogName;
         this.hdfsEnvironment = hdfsEnvironment;
         this.hmsOps = hmsOps;
@@ -90,6 +108,7 @@ public class HiveMetadata implements ConnectorMetadata {
         this.cacheUpdateProcessor = cacheUpdateProcessor;
         this.updateExecutor = updateExecutor;
         this.refreshOthersFeExecutor = refreshOthersFeExecutor;
+        this.properties = properties;
     }
 
     @Override
@@ -98,21 +117,21 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listDbNames() {
+    public List<String> listDbNames(ConnectContext context) {
         return hmsOps.getAllDatabaseNames();
     }
 
     @Override
     public void createDb(String dbName, Map<String, String> properties) throws AlreadyExistsException {
-        if (dbExists(dbName)) {
+        if (dbExists(new ConnectContext(), dbName)) {
             throw new AlreadyExistsException("Database Already Exists");
         }
         hmsOps.createDb(dbName, properties);
     }
 
     @Override
-    public void dropDb(String dbName, boolean isForceDrop) throws MetaNotFoundException {
-        if (listTableNames(dbName).size() != 0) {
+    public void dropDb(ConnectContext context, String dbName, boolean isForceDrop) throws MetaNotFoundException {
+        if (listTableNames(context, dbName).size() != 0) {
             throw new StarRocksConnectorException("Database %s not empty", dbName);
         }
 
@@ -120,7 +139,7 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Database getDb(String dbName) {
+    public Database getDb(ConnectContext context, String dbName) {
         Database database;
         try {
             database = hmsOps.getDb(dbName);
@@ -133,7 +152,7 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listTableNames(String dbName) {
+    public List<String> listTableNames(ConnectContext context, String dbName) {
         return hmsOps.getAllTableNames(dbName);
     }
 
@@ -152,27 +171,27 @@ public class HiveMetadata implements ConnectorMetadata {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
         if (isResourceMappingCatalog(catalogName)) {
-            HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) GlobalStateMgr.getCurrentState()
-                    .getMetadata().getTable(dbName, tableName);
-            if (hmsTable != null) {
+            Table table = GlobalStateMgr.getCurrentState()
+                    .getLocalMetastore().getTable(dbName, tableName);
+            if (table != null) {
                 cacheUpdateProcessor.ifPresent(processor -> processor.invalidateTable(
-                        hmsTable.getDbName(), hmsTable.getTableName(), hmsTable.getTableLocation()));
+                        table.getCatalogDBName(), table.getCatalogTableName(), table));
             }
         } else {
-            if (!stmt.isForceDrop()) {
-                throw new DdlException(String.format("Table location will be cleared." +
-                        " 'Force' must be set when dropping a hive table." +
-                        " Please execute 'drop table %s.%s.%s force'", stmt.getCatalogName(), dbName, tableName));
+            HiveTable hiveTable = null;
+            try {
+                hiveTable = (HiveTable) getTable(new ConnectContext(), dbName, tableName);
+            } catch (Exception e) {
+                // ignore not found exception
             }
-
-            HiveTable hiveTable = (HiveTable) getTable(dbName, tableName);
             if (hiveTable == null && stmt.isSetIfExists()) {
                 LOG.warn("Table {}.{} doesn't exist", dbName, tableName);
                 return;
             }
-
-            if (hiveTable.getHiveTableType() != HiveTable.HiveTableType.MANAGED_TABLE) {
-                throw new StarRocksConnectorException("Only support to drop hive managed table");
+            if (hiveTable.getHiveTableType() == HiveTable.HiveTableType.MANAGED_TABLE && !stmt.isForceDrop()) {
+                throw new DdlException(String.format("Table location will be cleared." +
+                        " 'Force' must be set when dropping a hive table." +
+                        " Please execute 'drop table %s.%s.%s force'", stmt.getCatalogName(), dbName, tableName));
             }
 
             hmsOps.dropTable(dbName, tableName);
@@ -181,10 +200,13 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Table getTable(String dbName, String tblName) {
+    public Table getTable(ConnectContext context, String dbName, String tblName) {
         Table table;
         try {
             table = hmsOps.getTable(dbName, tblName);
+        } catch (StarRocksConnectorException e) {
+            LOG.error("Failed to get hive table [{}.{}.{}]", catalogName, dbName, tblName, e);
+            throw e;
         } catch (Exception e) {
             LOG.error("Failed to get hive table [{}.{}.{}]", catalogName, dbName, tblName, e);
             return null;
@@ -194,12 +216,12 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public boolean tableExists(String dbName, String tblName) {
+    public boolean tableExists(ConnectContext context, String dbName, String tblName) {
         return hmsOps.tableExists(dbName, tblName);
     }
 
     @Override
-    public List<String> listPartitionNames(String dbName, String tblName, long snapshotId) {
+    public List<String> listPartitionNames(String dbName, String tblName, ConnectorMetadatRequestContext requestContext) {
         return hmsOps.getPartitionKeys(dbName, tblName);
     }
 
@@ -209,42 +231,69 @@ public class HiveMetadata implements ConnectorMetadata {
         return hmsOps.getPartitionKeysByValue(dbName, tblName, partitionValues);
     }
 
-    @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
-                                                   long snapshotId, ScalarOperator predicate,
-                                                   List<String> fieldNames, long limit) {
+    private List<Partition> buildGetRemoteFilesPartitions(Table table, GetRemoteFilesParams params) {
         ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
-        HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
-
-        if (((HiveMetaStoreTable) table).isUnPartitioned()) {
-            partitions.add(hmsOps.getPartition(hmsTbl.getDbName(), hmsTbl.getTableName(), Lists.newArrayList()));
+        if (table.isUnPartitioned()) {
+            partitions.add(hmsOps.getPartition(table.getCatalogDBName(), table.getCatalogTableName(), Lists.newArrayList()));
         } else {
-            Map<String, Partition> existingPartitions = hmsOps.getPartitionByPartitionKeys(table, partitionKeys);
-            for (PartitionKey partitionKey : partitionKeys) {
-                String hivePartitionName = toHivePartitionName(hmsTbl.getPartitionColumnNames(), partitionKey);
+            // convert partition keys to partition names.
+            // and handle partition names in following code.
+            // in most cases, we use partition keys. but in some cases,  we use partition names.
+            // so partition keys has higher priority than partition names.
+            List<String> partitionNames = params.getPartitionNames();
+            if (params.getPartitionKeys() != null) {
+                partitionNames =
+                        params.getPartitionKeys().stream().map(x -> toHivePartitionName(table.getPartitionColumnNames(), x))
+                                .collect(
+                                        Collectors.toList());
+            }
+            // check existences
+            Map<String, Partition> existingPartitions = hmsOps.getPartitionByNames(table, partitionNames);
+            for (String hivePartitionName : partitionNames) {
                 Partition partition = existingPartitions.get(hivePartitionName);
                 if (partition != null) {
                     partitions.add(partition);
-                } else {
+                } else if (params.isCheckPartitionExistence()) {
                     LOG.error("Partition {} doesn't exist", hivePartitionName);
                     throw new StarRocksConnectorException("Partition %s doesn't exist", hivePartitionName);
                 }
             }
         }
+        return partitions.build();
+    }
 
-        boolean useRemoteFileCache = true;
-        if (table instanceof HiveTable) {
-            useRemoteFileCache = ((HiveTable) table).isUseMetadataCache();
+    @Override
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+        List<Partition> partitions = buildGetRemoteFilesPartitions(table, params);
+
+        boolean useCache = true;
+        // if we disable cache explicitly
+        if (!params.isUseCache()) {
+            useCache = false;
         }
 
-        return fileOps.getRemoteFiles(partitions.build(), useRemoteFileCache);
+        GetRemoteFilesParams updatedParams = params.copy();
+        updatedParams.setUseCache(useCache);
+        return fileOps.getRemoteFiles(table, partitions, updatedParams);
+    }
+
+    @Override
+    public RemoteFileInfoSource getRemoteFilesAsync(Table table, GetRemoteFilesParams params) {
+        return fileOps.getRemoteFilesAsync(table, params, (p) -> this.buildGetRemoteFilesPartitions(table, p));
+    }
+
+    @Override
+    public List<PartitionInfo> getRemotePartitions(Table table, List<String> partitionNames) {
+        ImmutableList.Builder<Partition> partitionBuilder = ImmutableList.builder();
+        Map<String, Partition> existingPartitions = hmsOps.getPartitionByNames(table, partitionNames);
+        partitionBuilder.addAll(existingPartitions.values());
+        return fileOps.getRemotePartitions(partitionBuilder.build());
     }
 
     @Override
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
-        HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
-        if (hmsTbl.isUnPartitioned()) {
-            return Lists.newArrayList(hmsOps.getPartition(hmsTbl.getDbName(), hmsTbl.getTableName(),
+        if (table.isUnPartitioned()) {
+            return Lists.newArrayList(hmsOps.getPartition(table.getCatalogDBName(), table.getCatalogTableName(),
                     Lists.newArrayList()));
         } else {
             ImmutableList.Builder<PartitionInfo> partitions = ImmutableList.builder();
@@ -260,7 +309,12 @@ public class HiveMetadata implements ConnectorMetadata {
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate,
-                                         long limit) {
+                                         long limit,
+                                         TableVersionRange version) {
+        if (!properties.enableGetTableStatsFromExternalMetadata()) {
+            return StatisticsUtils.buildDefaultStatistics(columns.keySet());
+        }
+
         Statistics statistics = null;
         List<ColumnRefOperator> columnRefOperators = Lists.newArrayList(columns.keySet());
         try {
@@ -287,9 +341,7 @@ public class HiveMetadata implements ConnectorMetadata {
             for (ColumnRefOperator column : columnRefOperators) {
                 session.getDumpInfo().addTableStatistics(table, column.getName(), statistics.getColumnStatistic(column));
             }
-
-            HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
-            session.getDumpInfo().getHMSTable(hmsTable.getResourceName(), hmsTable.getDbName(), table.getName())
+            session.getDumpInfo().getHMSTable(table.getResourceName(), table.getCatalogDBName(), table.getName())
                     .setScanRowCount(statistics.getOutputRowCount());
         }
 
@@ -306,12 +358,12 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void finishSink(String dbName, String tableName, List<TSinkCommitInfo> commitInfos) {
+    public void finishSink(String dbName, String tableName, List<TSinkCommitInfo> commitInfos, String branch) {
         if (commitInfos.isEmpty()) {
             LOG.warn("No commit info on {}.{} after hive sink", dbName, tableName);
             return;
         }
-        HiveTable table = (HiveTable) getTable(dbName, tableName);
+        HiveTable table = (HiveTable) getTable(new ConnectContext(), dbName, tableName);
         String stagingDir = commitInfos.get(0).getStaging_dir();
         boolean isOverwrite = commitInfos.get(0).isIs_overwrite();
 
@@ -343,7 +395,9 @@ public class HiveMetadata implements ConnectorMetadata {
 
         HiveCommitter committer = new HiveCommitter(
                 hmsOps, fileOps, updateExecutor, refreshOthersFeExecutor, table, new Path(stagingDir));
-        committer.commit(partitionUpdates);
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HIVE.SINK.commit")) {
+            committer.commit(partitionUpdates);
+        }
     }
 
     @Override
@@ -373,5 +427,62 @@ public class HiveMetadata implements ConnectorMetadata {
     @Override
     public CloudConfiguration getCloudConfiguration() {
         return hdfsEnvironment.getCloudConfiguration();
+    }
+
+    @Override
+    public void alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
+        // (FIXME) add this api just for tests of external table
+        List<AlterClause> alterClauses = stmt.getAlterClauseList();
+        for (AlterClause alterClause : alterClauses) {
+            if (alterClause instanceof AddPartitionClause) {
+                addPartition(context, stmt, alterClause);
+            } else {
+                throw new StarRocksConnectorException("This connector doesn't support alter table type: %s",
+                        alterClause.getOpType());
+            }
+        }
+    }
+
+    private void addPartition(ConnectContext context, AlterTableStmt stmt, AlterClause alterClause) {
+        HiveTable table = (HiveTable) getTable(context, stmt.getDbName(), stmt.getTableName());
+        AddPartitionClause addPartitionClause = (AddPartitionClause) alterClause;
+        List<String> partitionColumns = table.getPartitionColumnNames();
+        // now do not support to specify location of hive partition in add partition
+        if (!(addPartitionClause.getPartitionDesc() instanceof SingleItemListPartitionDesc)) {
+            return;
+        }
+        SingleItemListPartitionDesc partitionDesc = (SingleItemListPartitionDesc) addPartitionClause.getPartitionDesc();
+        String tablePath = table.getTableLocation();
+        String partitionString = partitionColumns.get(0) + "=" + partitionDesc.getValues().get(0);
+        String partitionPath = tablePath + "/" + partitionString;
+        HivePartition hivePartition = HivePartition.builder()
+                .setDatabaseName(table.getCatalogDBName())
+                .setTableName(table.getCatalogTableName())
+                .setColumns(table.getDataColumnNames().stream()
+                        .map(table::getColumn)
+                        .collect(Collectors.toList()))
+                .setValues(partitionDesc.getValues())
+                .setParameters(ImmutableMap.<String, String>builder()
+                        .put("starrocks_version", Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH)
+                        .put(STARROCKS_QUERY_ID, ConnectContext.get().getQueryId().toString())
+                        .buildOrThrow())
+                .setStorageFormat(table.getStorageFormat())
+                .setLocation(partitionPath)
+                .build();
+        HivePartitionWithStats partitionWithStats =
+                new HivePartitionWithStats(partitionString, hivePartition, HivePartitionStats.empty());
+        hmsOps.addPartitions(table.getCatalogDBName(), table.getCatalogTableName(), Lists.newArrayList(partitionWithStats));
+    }
+
+    public static boolean useMetadataCache() {
+        if (ConnectContext.get() == null) {
+            return true;
+        }
+
+        if (ConnectContext.get().getUseConnectorMetadataCache().isEmpty()) {
+            return true;
+        }
+
+        return ConnectContext.get().getUseConnectorMetadataCache().get();
     }
 }

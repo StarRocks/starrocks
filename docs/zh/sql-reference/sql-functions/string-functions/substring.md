@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # substr, substring
 
-## 功能
+
 
 从一个字符串 (`str`) 的指定位置(`pos`) 开始截取指定长度 (`len`) 的字符。
 

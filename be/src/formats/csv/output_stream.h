@@ -109,6 +109,8 @@ public:
 
     virtual std::size_t size() { return 0; }
 
+    std::size_t buffer_size() { return _end - _buff; }
+
 protected:
     virtual Status _sync(const char* data, size_t size) = 0;
 

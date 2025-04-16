@@ -12,10 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-if (CLANG_TIDY_PATH)
-    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
-endif()
-
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/serde")
 
 # where to put generated binaries
@@ -24,5 +20,6 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/serde")
 add_library(Serde STATIC
         encode_context.cpp
         column_array_serde.cpp
+        compress_strategy.cpp
         protobuf_serde.cpp
         )

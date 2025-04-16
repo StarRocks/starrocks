@@ -1,0 +1,47 @@
+-- name: test_mv_refresh_with_delete
+
+create database db_${uuid0};
+use db_${uuid0};
+CREATE TABLE `t1` (
+    `k1` date,
+    `k2` int,
+    `k3` int
+)
+DUPLICATE KEY(`k1`)
+PARTITION BY RANGE (k1) (
+START ("2020-10-01") END ("2022-03-04") EVERY (INTERVAL 15 day)
+)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3;
+CREATE TABLE `t2` (
+    `k1` date,
+    `k2` int,
+    `k3` int
+)
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3;
+
+INSERT INTO t1 VALUES ("2020-11-10",1,1);
+INSERT INTO t2 VALUES ("2020-11-10",2,2);
+
+CREATE MATERIALIZED VIEW test_mv1
+PARTITION BY k3
+DISTRIBUTED BY HASH(k1) BUCKETS 10
+REFRESH ASYNC
+PROPERTIES ("partition_refresh_number"="-1")
+AS SELECT t2.k1 as k1, t2.k2 as k2, t1.k1 as k3, t1.k2 as k4
+FROM t1 join t2 on t1.k1=t2.k1;
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1")
+select * from test_mv1 order by k1, k2;
+
+INSERT INTO t2 VALUES ("2020-11-10",3, 3);
+INSERT INTO t1 VALUES ("2020-11-10",4,4);
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1")
+select * from test_mv1 order by k1, k2;
+
+DELETE FROM t2 WHERE k2=2;
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1")
+select * from test_mv1 order by k1, k2;
+
+drop table t1;
+drop table t2;
+drop database db_${uuid0} force;

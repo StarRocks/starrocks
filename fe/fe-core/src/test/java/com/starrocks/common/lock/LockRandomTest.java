@@ -14,7 +14,7 @@
 
 package com.starrocks.common.lock;
 
-import com.starrocks.common.util.concurrent.lock.IllegalLockStateException;
+import com.starrocks.common.util.concurrent.lock.LockException;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -54,7 +54,7 @@ public class LockRandomTest {
                         } finally {
                             locker.release(1L, LockType.WRITE);
                         }
-                    } catch (IllegalLockStateException ie) {
+                    } catch (LockException ie) {
                         Assert.fail();
                     }
                 }
@@ -103,7 +103,7 @@ public class LockRandomTest {
                                 locker.release(1L, LockType.READ);
                             }
                         }
-                    } catch (IllegalLockStateException ie) {
+                    } catch (LockException ie) {
                         Assert.fail();
                     }
                 }
@@ -152,7 +152,7 @@ public class LockRandomTest {
                                 locker.release(1L, LockType.INTENTION_SHARED);
                             }
                         }
-                    } catch (IllegalLockStateException ie) {
+                    } catch (LockException ie) {
                         Assert.fail();
                     }
                 }
@@ -201,7 +201,7 @@ public class LockRandomTest {
                                 locker.release(1L, LockType.INTENTION_EXCLUSIVE);
                             }
                         }
-                    } catch (IllegalLockStateException ie) {
+                    } catch (LockException ie) {
                         Assert.fail();
                     }
                 }

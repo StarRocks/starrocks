@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # array_generate
 
-## 功能
+
 
 生成一个包含数值元素的数组，数值范围在 `start` 和 `end` 之间，步长为 `step`。
 

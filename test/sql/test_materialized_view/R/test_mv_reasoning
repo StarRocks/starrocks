@@ -67,10 +67,10 @@ TRACE REASON MV
     WHERE c2 > 1
     GROUP BY c4;
 -- result:
-    MV rewrite fail for mv1: Rewrite group by key failed: 4: c4 
-    MV rewrite fail for mv1: Rewrite rollup aggregate failed, cannot rewrite group by keys: [4: c4] 
-    MV rewrite fail for mv1: Rewrite group by key failed: 4: c4 
-    MV rewrite fail for mv1: Rewrite rollup aggregate failed, cannot rewrite group by keys: [4: c4] 
+    [RBO] [PHASE1] MV rewrite fail for mv1: Rewrite group by key failed: 4: c4 
+    [RBO] [PHASE1] MV rewrite fail for mv1: Rewrite rollup aggregate failed, cannot rewrite group by keys: [4: c4] 
+    [RBO] [PHASE2] MV rewrite fail for mv1: Rewrite group by key failed: 4: c4 
+    [RBO] [PHASE2] MV rewrite fail for mv1: Rewrite rollup aggregate failed, cannot rewrite group by keys: [4: c4] 
 -- !result
 TRACE REASON MV
     SELECT c1, sum(c3), count(c3)
@@ -78,8 +78,8 @@ TRACE REASON MV
     WHERE c4 > 'a'
     GROUP BY c1;
 -- result:
-    MV rewrite fail for mv1: Rewrite scalar operator failed: 4: c4 > a cannot be rewritten 
-    MV rewrite fail for mv1: Rewrite scalar operator failed: 4: c4 > a cannot be rewritten 
+    [RBO] [PHASE1] MV rewrite fail for mv1: Rewrite scalar operator failed: 4: c4 > a cannot be rewritten 
+    [RBO] [PHASE2] MV rewrite fail for mv1: Rewrite scalar operator failed: 4: c4 > a cannot be rewritten 
 -- !result
 DROP MATERIALIZED VIEW mv1;
 -- result:
@@ -104,23 +104,23 @@ TRACE REASON MV
     FROM t1
     GROUP BY c1, c2, c4;
 -- result:
-    MV rewrite fail for mv1: Rewrite projection failed: cannot totally rewrite expr 4: c4 
-    MV rewrite fail for mv1: Rewrite projection failed: cannot totally rewrite expr 4: c4 
+    [RBO] [PHASE1] MV rewrite fail for mv1: Rewrite projection failed: cannot totally rewrite expr 4: c4 
+    [RBO] [PHASE2] MV rewrite fail for mv1: Rewrite projection failed: cannot totally rewrite expr 4: c4 
 -- !result
 TRACE REASON MV
     SELECT c1, c2, c4
     FROM t1;
 -- result:
-    MV rewrite fail for mv1: Rewrite projection failed: cannot totally rewrite expr 4: c4 
-    MV rewrite fail for mv1: Rewrite projection failed: cannot totally rewrite expr 4: c4 
+    [RBO] [PHASE1] MV rewrite fail for mv1: Rewrite projection failed: cannot totally rewrite expr 4: c4 
+    [RBO] [PHASE2] MV rewrite fail for mv1: Rewrite projection failed: cannot totally rewrite expr 4: c4 
 -- !result
 TRACE REASON MV
     SELECT c1, c2
     FROM t1
     WHERE c4='a';
 -- result:
-    MV rewrite fail for mv1: Rewrite scalar operator failed: 4: c4 = a cannot be rewritten 
-    MV rewrite fail for mv1: Rewrite scalar operator failed: 4: c4 = a cannot be rewritten 
+    [RBO] [PHASE1] MV rewrite fail for mv1: Rewrite scalar operator failed: 4: c4 = a cannot be rewritten 
+    [RBO] [PHASE2] MV rewrite fail for mv1: Rewrite scalar operator failed: 4: c4 = a cannot be rewritten 
 -- !result
 ALTER MATERIALIZED VIEW mv1 INACTIVE;
 -- result:
@@ -149,5 +149,5 @@ TRACE REASON MV
     FROM t1
     ORDER BY c1;
 -- result:
-    MV rewrite fail for mv1: invalid query plan 0/1: MV contains non-SPJG operators(no view rewrite): LOGICAL_TOPN 
+    MV rewrite fail for mv1: MV contains non-SPJG operators(no view rewrite): LOGICAL_TOPN 
 -- !result

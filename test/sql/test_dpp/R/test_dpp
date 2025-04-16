@@ -1,0 +1,62 @@
+-- name: test_dpp
+create external catalog hive_catalog_${uuid0} PROPERTIES ("type"="hive", "hive.metastore.uris"="${hive_metastore_uris}");
+-- result:
+-- !result
+create database hive_catalog_${uuid0}.hive_db_${uuid0};
+-- result:
+-- !result
+create table hive_catalog_${uuid0}.hive_db_${uuid0}.fact (payload string, dt date) partition by(dt);
+-- result:
+-- !result
+insert into hive_catalog_${uuid0}.hive_db_${uuid0}.fact values ('A', date '2020-01-01'), ('B', date '2020-01-02'), ('C', date '2020-01-03');
+-- result:
+-- !result
+create table hive_catalog_${uuid0}.hive_db_${uuid0}.dim (dt string);
+-- result:
+-- !result
+insert into hive_catalog_${uuid0}.hive_db_${uuid0}.dim values ("2020-01-01");
+-- result:
+-- !result
+set disable_join_reorder = true;
+-- result:
+-- !result
+set enable_dynamic_prune_scan_range = true;
+-- result:
+-- !result
+select * from hive_catalog_${uuid0}.hive_db_${uuid0}.fact as f join hive_catalog_${uuid0}.hive_db_${uuid0}.dim as d where f.dt = d.dt;
+-- result:
+A	2020-01-01	2020-01-01
+-- !result
+select * from hive_catalog_${uuid0}.hive_db_${uuid0}.fact as f join hive_catalog_${uuid0}.hive_db_${uuid0}.dim as d where f.dt + interval 1 day = d.dt;
+-- result:
+-- !result
+select * from hive_catalog_${uuid0}.hive_db_${uuid0}.fact as f join hive_catalog_${uuid0}.hive_db_${uuid0}.dim as d where f.dt - interval 1 day = d.dt;
+-- result:
+B	2020-01-02	2020-01-01
+-- !result
+set enable_dynamic_prune_scan_range = false;
+-- result:
+-- !result
+select * from hive_catalog_${uuid0}.hive_db_${uuid0}.fact as f join hive_catalog_${uuid0}.hive_db_${uuid0}.dim as d where f.dt = d.dt;
+-- result:
+A	2020-01-01	2020-01-01
+-- !result
+select * from hive_catalog_${uuid0}.hive_db_${uuid0}.fact as f join hive_catalog_${uuid0}.hive_db_${uuid0}.dim as d where f.dt + interval 1 day = d.dt;
+-- result:
+-- !result
+select * from hive_catalog_${uuid0}.hive_db_${uuid0}.fact as f join hive_catalog_${uuid0}.hive_db_${uuid0}.dim as d where f.dt - interval 1 day = d.dt;
+-- result:
+B	2020-01-02	2020-01-01
+-- !result
+drop table hive_catalog_${uuid0}.hive_db_${uuid0}.fact force;
+-- result:
+-- !result
+drop table hive_catalog_${uuid0}.hive_db_${uuid0}.dim force;
+-- result:
+-- !result
+drop database hive_catalog_${uuid0}.hive_db_${uuid0};
+-- result:
+-- !result
+drop catalog hive_catalog_${uuid0};
+-- result:
+-- !result

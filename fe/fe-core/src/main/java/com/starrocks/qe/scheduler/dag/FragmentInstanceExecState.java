@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PPlanFragmentCancelReason;
@@ -95,6 +96,8 @@ public class FragmentInstanceExecState {
     private final TNetworkAddress address;
     private final long lastMissingHeartbeatTime;
 
+    private FragmentInstance fragmentInstance;
+
     /**
      * Create a fake backendExecState, only user for stream load profile.
      */
@@ -127,7 +130,6 @@ public class FragmentInstanceExecState {
                 request,
                 profile,
                 worker, address, worker.getLastMissingHeartbeatTime());
-
     }
 
     private FragmentInstanceExecState(JobSpec jobSpec,
@@ -141,6 +143,10 @@ public class FragmentInstanceExecState {
                                       TNetworkAddress address,
                                       long lastMissingHeartbeatTime) {
         this.jobSpec = jobSpec;
+        // fake fragment instance exec state
+        if (jobSpec == null) {
+            state = State.EXECUTING;
+        }
         this.fragmentId = fragmentId;
         this.fragmentIndex = fragmentIndex;
         this.instanceId = instanceId;
@@ -159,6 +165,7 @@ public class FragmentInstanceExecState {
         try {
             TSerializer serializer = AttachmentRequest.getSerializer(jobSpec.getPlanProtocol());
             serializedRequest = serializer.serialize(requestToDeploy);
+            requestToDeploy = null;
         } catch (TException ignore) {
             // throw exception means serializedRequest will be empty, and then we will treat it as not serialized
         }
@@ -169,7 +176,7 @@ public class FragmentInstanceExecState {
      * The state transitions to DEPLOYING.
      */
     public void deployAsync() {
-        transitionState(State.DEPLOYING);
+        transitionState(State.CREATED, State.DEPLOYING);
 
         TNetworkAddress brpcAddress = worker.getBrpcAddress();
         try {
@@ -284,9 +291,11 @@ public class FragmentInstanceExecState {
             failure = e;
         }
 
+        MetricRepo.COUNTER_BRPC_EXEC_PLAN_FRAGMENT.increase(1L);
         if (code == TStatusCode.OK) {
             transitionState(State.DEPLOYING, State.EXECUTING);
         } else {
+            MetricRepo.COUNTER_BRPC_EXEC_PLAN_FRAGMENT_ERROR.increase(1L);
             transitionState(State.DEPLOYING, State.FAILED);
 
             if (errMsg == null) {
@@ -319,9 +328,6 @@ public class FragmentInstanceExecState {
             case EXECUTING:
             case CANCELLING:
             default:
-                if (params.isSetProfile()) {
-                    profile.update(params.profile);
-                }
                 if (params.isDone()) {
                     if (params.getStatus() == null || params.getStatus().getStatus_code() == TStatusCode.OK) {
                         transitionState(State.FINISHED);
@@ -330,6 +336,12 @@ public class FragmentInstanceExecState {
                     }
                 }
                 return true;
+        }
+    }
+
+    public synchronized void updateRunningProfile(TReportExecStatusParams execStatusParams) {
+        if (execStatusParams.isSetProfile()) {
+            profile.update(execStatusParams.profile);
         }
     }
 
@@ -364,7 +376,8 @@ public class FragmentInstanceExecState {
                     jobSpec.getQueryId(), instanceId, cancelReason,
                     jobSpec.isEnablePipeline());
         } catch (RpcException e) {
-            LOG.warn("cancel plan fragment get a exception, address={}:{}", brpcAddress.getHostname(), brpcAddress.getPort(), e);
+            LOG.warn("cancel plan fragment get a exception, address={}:{}", brpcAddress.getHostname(),
+                    brpcAddress.getPort(), e);
             SimpleScheduler.addToBlocklist(worker.getId());
             return false;
         }
@@ -482,5 +495,21 @@ public class FragmentInstanceExecState {
         public boolean isTerminal() {
             return this == FINISHED || this == FAILED;
         }
+    }
+
+    public FragmentInstance getFragmentInstance() {
+        return fragmentInstance;
+    }
+
+    public void setFragmentInstance(FragmentInstance fragmentInstance) {
+        this.fragmentInstance = fragmentInstance;
+    }
+
+    public TExecPlanFragmentParams getRequestToDeploy() {
+        return requestToDeploy;
+    }
+
+    public void setRequestToDeploy(TExecPlanFragmentParams requestToDeploy) {
+        this.requestToDeploy = requestToDeploy;
     }
 }

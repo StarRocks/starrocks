@@ -22,12 +22,18 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorTableVersion;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.SerializedMetaSpec;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.hive.HiveMetadata;
+import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -48,6 +54,7 @@ import static com.starrocks.catalog.Table.TableType.HIVE;
 import static com.starrocks.catalog.Table.TableType.HUDI;
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
 import static com.starrocks.catalog.Table.TableType.KUDU;
+import static com.starrocks.catalog.Table.TableType.PAIMON;
 import static java.util.Objects.requireNonNull;
 
 public class UnifiedMetadata implements ConnectorMetadata {
@@ -81,7 +88,7 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     private Table.TableType getTableType(String dbName, String tblName) {
-        Table table = hiveMetadata.getTable(dbName, tblName);
+        Table table = hiveMetadata.getTable(new ConnectContext(), dbName, tblName);
         if (table == null || table.isHiveView()) {
             return HIVE; // use hive metadata by default
         }
@@ -93,6 +100,9 @@ public class UnifiedMetadata implements ConnectorMetadata {
         }
         if (isDeltaLakeTable(table.getProperties())) {
             return DELTALAKE;
+        }
+        if (isPaimonTable(table.getProperties())) {
+            return PAIMON;
         }
         if (table.isKuduTable()) {
             return KUDU;
@@ -111,6 +121,9 @@ public class UnifiedMetadata implements ConnectorMetadata {
 
     private ConnectorMetadata metadataOfTable(Table table) {
         Table.TableType type = getTableType(table);
+        if (table.isHiveView()) {
+            type = HIVE;
+        }
         return metadataMap.get(type);
     }
 
@@ -120,19 +133,27 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listDbNames() {
-        return hiveMetadata.listDbNames();
+    public TableVersionRange getTableVersionRange(String dbName, Table table,
+                                                  Optional<ConnectorTableVersion> startVersion,
+                                                  Optional<ConnectorTableVersion> endVersion) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        return metadata.getTableVersionRange(dbName, table, startVersion, endVersion);
     }
 
     @Override
-    public List<String> listTableNames(String dbName) {
-        return hiveMetadata.listTableNames(dbName);
+    public List<String> listDbNames(ConnectContext context) {
+        return hiveMetadata.listDbNames(context);
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName, long snapshotId) {
+    public List<String> listTableNames(ConnectContext context, String dbName) {
+        return hiveMetadata.listTableNames(context, dbName);
+    }
+
+    @Override
+    public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
         ConnectorMetadata metadata = metadataOfTable(databaseName, tableName);
-        return metadata.listPartitionNames(databaseName, tableName, snapshotId);
+        return metadata.listPartitionNames(databaseName, tableName, requestContext);
     }
 
     @Override
@@ -143,29 +164,33 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Table getTable(String dbName, String tblName) {
+    public Table getTable(ConnectContext context, String dbName, String tblName) {
         ConnectorMetadata metadata = metadataOfTable(dbName, tblName);
-        return metadata.getTable(dbName, tblName);
+        return metadata.getTable(context, dbName, tblName);
     }
 
     @Override
-    public boolean tableExists(String dbName, String tblName) {
-        ConnectorMetadata metadata = metadataOfTable(dbName, tblName);
-        return metadata.tableExists(dbName, tblName);
+    public boolean tableExists(ConnectContext context, String dbName, String tblName) {
+        return hiveMetadata.tableExists(context, dbName, tblName);
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys, long snapshotId,
-                                                   ScalarOperator predicate, List<String> fieldNames, long limit) {
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
         ConnectorMetadata metadata = metadataOfTable(table);
-        return metadata.getRemoteFileInfos(table, partitionKeys, snapshotId, predicate, fieldNames, limit);
+        return metadata.getRemoteFiles(table, params);
+    }
+
+    @Override
+    public RemoteFileInfoSource getRemoteFilesAsync(Table table, GetRemoteFilesParams params) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        return metadata.getRemoteFilesAsync(table, params);
     }
 
     @Override
     public SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName,
-                                             long snapshotId, String serializedPredicate) {
+                                                    long snapshotId, String serializedPredicate, MetadataTableType type) {
         ConnectorMetadata metadata = metadataOfTable(dbName, tableName);
-        return metadata.getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate);
+        return metadata.getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate, type);
     }
 
     @Override
@@ -175,16 +200,11 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<PartitionKey> getPrunedPartitions(Table table, ScalarOperator predicate, long limit) {
-        ConnectorMetadata metadata = metadataOfTable(table);
-        return metadata.getPrunedPartitions(table, predicate, limit);
-    }
-
-    @Override
     public Statistics getTableStatistics(OptimizerContext session, Table table, Map<ColumnRefOperator, Column> columns,
-                                         List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit) {
+                                         List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit,
+                                         TableVersionRange version) {
         ConnectorMetadata metadata = metadataOfTable(table);
-        return metadata.getTableStatistics(session, table, columns, partitionKeys, predicate, limit);
+        return metadata.getTableStatistics(session, table, columns, partitionKeys, predicate, limit, version);
     }
 
     @Override
@@ -210,8 +230,8 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public boolean dbExists(String dbName) {
-        return hiveMetadata.dbExists(dbName);
+    public boolean dbExists(ConnectContext context, String dbName) {
+        return hiveMetadata.dbExists(context, dbName);
     }
 
     @Override
@@ -220,13 +240,13 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void dropDb(String dbName, boolean isForceDrop) throws DdlException, MetaNotFoundException {
-        hiveMetadata.dropDb(dbName, isForceDrop);
+    public void dropDb(ConnectContext context, String dbName, boolean isForceDrop) throws DdlException, MetaNotFoundException {
+        hiveMetadata.dropDb(context, dbName, isForceDrop);
     }
 
     @Override
-    public Database getDb(String name) {
-        return hiveMetadata.getDb(name);
+    public Database getDb(ConnectContext context, String name) {
+        return hiveMetadata.getDb(context, name);
     }
 
     @Override
@@ -243,9 +263,9 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
+    public void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos, String branch) {
         ConnectorMetadata metadata = metadataOfTable(dbName, table);
-        metadata.finishSink(dbName, table, commitInfos);
+        metadata.finishSink(dbName, table, commitInfos, branch);
     }
 
     @Override

@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -48,9 +48,19 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
 
     @Override
     public ScalarOperator visitCall(CallOperator call, ScalarOperatorRewriteContext context) {
-        if (call.isAggregate() || notAllConstant(call.getChildren())) {
+        if (call.isAggregate()) {
             return call;
         }
+
+        if (notAllConstant(call.getChildren())) {
+            if (call.getFunction() != null && call.getFunction().isMetaFunction()) {
+                String errMsg = String.format("Meta function %s does not support non-constant arguments",
+                        call.getFunction().getFunctionName());
+                throw new SemanticException(errMsg);
+            }
+            return call;
+        }
+
         return ScalarOperatorEvaluator.INSTANCE.evaluation(call, needMonotonicFunc);
     }
 

@@ -30,7 +30,7 @@ public class GroupingSetsTest extends PlanTestBase {
         PlanTestBase.beforeClass();
         Config.alter_scheduler_interval_millisecond = 1;
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
         setTableStatistics(t0, NUM_TABLE0_ROWS);
         FeConstants.runningUnitTest = true;
     }
@@ -164,6 +164,7 @@ public class GroupingSetsTest extends PlanTestBase {
                 "  5:EXCHANGE"));
         connectContext.getSessionVariable().setEnableRewriteGroupingSetsToUnionAll(false);
     }
+
     @Test
     public void testRollupToUnionRewrite1() throws Exception {
         connectContext.getSessionVariable().setEnableRewriteGroupingSetsToUnionAll(true);
@@ -180,9 +181,9 @@ public class GroupingSetsTest extends PlanTestBase {
                 "  |  <slot 15> : 15: sum\n" +
                 "  |  <slot 18> : 0"));
         Assert.assertTrue(plan.contains("  7:Project\n" +
-                        "  |  <slot 8> : 8: sum\n" +
-                        "  |  <slot 9> : NULL\n" +
-                        "  |  <slot 12> : 1"));
+                "  |  <slot 8> : 8: sum\n" +
+                "  |  <slot 9> : NULL\n" +
+                "  |  <slot 12> : 1"));
         connectContext.getSessionVariable().setEnableRewriteGroupingSetsToUnionAll(false);
     }
 
@@ -215,5 +216,180 @@ public class GroupingSetsTest extends PlanTestBase {
                 "  |  <slot 15> : 15: count\n" +
                 "  |  <slot 19> : 0\n"));
         connectContext.getSessionVariable().setEnableRewriteGroupingSetsToUnionAll(false);
+    }
+
+    @Test
+    public void testPushDownGroupingSetNormal() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        try {
+            String sql = "select t1b, t1c, t1d, sum(t1g) " +
+                    "   from test_all_type group by rollup(t1b, t1c, t1d)";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "    HASH_PARTITIONED: 2: t1b, 3: t1c, 4: t1d\n" +
+                    "\n" +
+                    "  1:AGGREGATE (update serialize)\n" +
+                    "  |  STREAMING\n" +
+                    "  |  output: sum(7: t1g)\n" +
+                    "  |  group by: 2: t1b, 3: t1c, 4: t1d");
+            assertContains(plan, "  7:REPEAT_NODE\n" +
+                    "  |  repeat: repeat 2 lines [[], [14], [14, 15]]");
+
+            sql = "select t1b, t1c, t1d, GROUPING_ID(t1c), GROUPING(t1d), sum(t1g) " +
+                    "   from test_all_type group by rollup(t1b, t1c, t1d)";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                    "  |  STREAMING\n" +
+                    "  |  aggregate: sum[([7: t1g, BIGINT, true]); " +
+                    "args: BIGINT; result: BIGINT; args nullable: true; result nullable: true]\n" +
+                    "  |  group by: [2: t1b, SMALLINT, true], [3: t1c, INT, true], [4: t1d, BIGINT, true]\n" +
+                    "  |  cardinality: 1\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+            assertContains(plan, "  15:Project\n" +
+                    "  |  output columns:\n" +
+                    "  |  23 <-> [23: sum, BIGINT, true]\n" +
+                    "  |  24 <-> [24: t1b, SMALLINT, true]\n" +
+                    "  |  25 <-> [25: t1c, INT, true]\n" +
+                    "  |  26 <-> [26: t1d, BIGINT, true]\n" +
+                    "  |  28 <-> 0\n" +
+                    "  |  29 <-> 0");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+        }
+    }
+
+    @Test
+    public void testPushDownGroupingSetErrorFn() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        try {
+            String sql = "select t1b, t1c, t1d, count(t1g) " +
+                    "   from test_all_type group by rollup(t1b, t1c, t1d)";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:REPEAT_NODE\n" +
+                    "  |  repeat: repeat 3 lines [[], [2], [2, 3], [2, 3, 4]]\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+        }
+    }
+
+    @Test
+    public void testPushDownGroupingSetErrorKeys() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        try {
+            String sql = "select t1b, t1c, sum(t1g) " +
+                    "   from test_all_type group by rollup(t1b, t1c)";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:REPEAT_NODE\n" +
+                    "  |  repeat: repeat 2 lines [[], [2], [2, 3]]\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+        }
+    }
+
+    @Test
+    public void testPushDownGroupingSetErrorGroup() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        try {
+            String sql = "select t1b, t1c, t1d, id_date, count(t1g) " +
+                    "   from test_all_type " +
+                    "   group by grouping sets(" +
+                    "   (t1b)," +
+                    "   (t1c, id_date)," +
+                    "   (t1b, t1c, t1d)" +
+                    "   )";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:REPEAT_NODE\n" +
+                    "  |  repeat: repeat 2 lines [[2], [3, 9], [2, 3, 4]]\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+        }
+    }
+
+    @Test
+    public void testPushDownGroupingSetSomeGroupKey() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        try {
+            String sql = "select distinct t1b, x1, x2 from ( " +
+                    "   select t1b, t1c, grouping_id(t1b) x1, grouping_id(t1c, t1d) x2 " +
+                    "   from test_all_type " +
+                    "   group by rollup(t1b, t1c, t1d, id_date) ) xxx";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                    "  |  STREAMING\n" +
+                    "  |  group by: 2: t1b\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+            assertContains(plan, "  7:REPEAT_NODE\n" +
+                    "  |  repeat: repeat 3 lines [[], [14], [14], [14]]\n");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+        }
+    }
+
+    @Test
+    public void testPushDownGroupingSetDecimal() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        try {
+            String sql = "select t1b, t1c, t1d, sum(id_decimal) " +
+                    "   from test_all_type group by rollup(t1b, t1c, t1d)";
+            String plan = getCostExplain(sql);
+            System.out.println(plan);
+            assertContains(plan, "  8:AGGREGATE (update serialize)\n" +
+                    "  |  STREAMING\n" +
+                    "  |  aggregate: sum[([13: sum, DECIMAL128(38,2), true]); args: DECIMAL128; " +
+                    "result: DECIMAL128(38,2); args nullable: true; result nullable: true]");
+            assertContains(plan, "  10:AGGREGATE (merge finalize)\n" +
+                    "  |  aggregate: sum[([17: sum, DECIMAL128(38,2), true]); args: DECIMAL128; " +
+                    "result: DECIMAL128(38,2); args nullable: true; result nullable: true]");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+        }
+    }
+
+    @Test
+    public void testPushDownGroupingID() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        try {
+            String sql = "select * from (" +
+                    "   select grouping(t1b, t1c) as aa, t1b, t1c, t1d, sum(id_decimal) " +
+                    "   from test_all_type group by rollup(t1b, t1c, t1d)) tt" +
+                    "   where aa = 'aa';";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  6:REPEAT_NODE\n" +
+                    "  |  repeat: repeat 2 lines [[], [15], [16, 15]]\n" +
+                    "  |  PREDICATES: CAST(18: GROUPING AS VARCHAR(1048576)) = 'aa'");
+            assertNotContains(plan, "UNION");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+        }
+    }
+
+    @Test
+    public void testNotEliminateConstantGroupByColumnInGroupingSets() throws Exception {
+        String sql = "select v1, v2,v3, cnt\n" +
+                "from(\n" +
+                "select v1, v2, v3, count(*) as cnt\n" +
+                "from  (\n" +
+                "select v1, 1 as v2, v3, 1 as metric\n" +
+                "from t0\n" +
+                ") t2\n" +
+                "group by cube(v1,v2,v3)\n" +
+                ")t3;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan, plan.contains("  6:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 3> : 3: v3\n" +
+                "  |  <slot 6> : 6: v2\n" +
+                "  |  <slot 7> : 7: count\n" +
+                "  |  \n" +
+                "  5:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(7: count)\n" +
+                "  |  group by: 1: v1, 6: v2, 3: v3, 8: GROUPING_ID"));
     }
 }

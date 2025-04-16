@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # map_concat
 
-## 功能
+
 
 将多个 Map 合并成一个 Map。如果多个 Map 中都存在 Key 值相同的键值对，该函数仅保留最后一个出现的键值对（LAST WIN 原则）。比如，`SELECT map_concat(map{1:3},map{1:'4'});` 返回 `{1:"4"}`。
 

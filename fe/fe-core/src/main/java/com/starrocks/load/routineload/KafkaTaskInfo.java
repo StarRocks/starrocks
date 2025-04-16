@@ -39,9 +39,8 @@ import com.google.gson.Gson;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.server.GlobalStateMgr;
@@ -49,7 +48,6 @@ import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TKafkaLoadInfo;
 import com.starrocks.thrift.TLoadSourceType;
-import com.starrocks.thrift.TPlanFragment;
 import com.starrocks.thrift.TRoutineLoadTask;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.DatabaseTransactionMgr;
@@ -60,6 +58,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+
+import static com.starrocks.common.ErrorCode.ERR_ROUTINE_LOAD_OFFSET_INVALID;
 
 public class KafkaTaskInfo extends RoutineLoadTaskInfo {
     private static final Logger LOG = LogManager.getLogger(KafkaTaskInfo.class);
@@ -111,7 +111,7 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
     }
 
     @Override
-    public boolean readyToExecute() throws UserException {
+    public boolean readyToExecute() throws StarRocksException {
         if (checkReadyToExecuteFast()) {
             return true;
         }
@@ -135,9 +135,7 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
                     return true;
                 } else if (latestOffset < consumeOffset) {
                     throw new RoutineLoadPauseException(
-                            "there is no data in partition: " + partitionId + " at offset: " + consumeOffset + ". " +
-                                    "you can modify kafka_offsets by alter routine load, then resume the job. " +
-                                    "refer to " + FeConstants.DOCUMENT_ALTER_ROUTINE_LOAD);
+                            ERR_ROUTINE_LOAD_OFFSET_INVALID.formatErrorMsg(consumeOffset, latestOffset, partitionId));
                 }
             }
         }
@@ -164,7 +162,7 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
     }
 
     @Override
-    public TRoutineLoadTask createRoutineLoadTask() throws UserException {
+    public TRoutineLoadTask createRoutineLoadTask() throws StarRocksException {
         KafkaRoutineLoadJob routineLoadJob = (KafkaRoutineLoadJob) job;
 
         // init tRoutineLoadTask and create plan fragment
@@ -173,12 +171,12 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         tRoutineLoadTask.setId(queryId);
         tRoutineLoadTask.setJob_id(routineLoadJob.getId());
         tRoutineLoadTask.setTxn_id(txnId);
-        Database database = GlobalStateMgr.getCurrentState().getDb(routineLoadJob.getDbId());
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(routineLoadJob.getDbId());
         if (database == null) {
             throw new MetaNotFoundException("database " + routineLoadJob.getDbId() + " does not exist");
         }
         tRoutineLoadTask.setDb(database.getFullName());
-        Table tbl = database.getTable(routineLoadJob.getTableId());
+        Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), routineLoadJob.getTableId());
         if (tbl == null) {
             throw new MetaNotFoundException("table " + routineLoadJob.getTableId() + " does not exist");
         }
@@ -238,7 +236,7 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         return latestPartOffset;
     }
 
-    private TExecPlanFragmentParams plan(RoutineLoadJob routineLoadJob) throws UserException {
+    private TExecPlanFragmentParams plan(RoutineLoadJob routineLoadJob) throws StarRocksException {
         TUniqueId loadId = new TUniqueId(id.getMostSignificantBits(), id.getLeastSignificantBits());
         // plan for each task, in case table has change(rollup or schema change)
         TExecPlanFragmentParams tExecPlanFragmentParams = routineLoadJob.plan(loadId, txnId, label);
@@ -247,8 +245,6 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
                     getStreamLoadMgr().getTaskByLabel(label);
             setStreamLoadTask(streamLoadTask);
         }
-        TPlanFragment tPlanFragment = tExecPlanFragmentParams.getFragment();
-        tPlanFragment.getOutput_sink().getOlap_table_sink().setTxn_id(txnId);
         return tExecPlanFragmentParams;
     }
 }

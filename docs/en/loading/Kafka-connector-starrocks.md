@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Load data using Kafka connector
@@ -15,6 +15,13 @@ The Kafka connector can seamlessly integrate with Kafka Connect, which allows St
 - Need finer control over load batch sizes, parallelism, and other parameters to achieve a balance between load speed and resource utilization.
 
 ## Preparations
+
+### Version requirements
+
+| Connector | Kafka                    | StarRocks | Java |
+|-----------|--------------------------|-----------| ---- |
+| 1.0.4     | 3.4                      | 2.5 and later | 8    |
+| 1.0.3     | 3.4                      | 2.5 and later | 8    |
 
 ### Set up Kafka environment
 
@@ -98,7 +105,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
 
 2. Configure and run the Kafka Connect.
 
-   1. Configure the Kafka Connect. In the configuration file **config/connect-standalone.properties** in the **config** directory, configure the following parameters. For more parameters and descriptions, see [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running).
+   1. Configure the Kafka Connect. In the configuration file **config/connect-standalone.properties** in the **config** directory, configure the following parameters. For more parameters and descriptions, see [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running). Note that the following examples use starrocks-kafka-connector version `1.0.3`. If you use a newer version, you need to make corresponding changes.
 
         ```yaml
         # The addresses of Kafka brokers. Multiple addresses of Kafka brokers need to be separated by commas (,).
@@ -289,7 +296,7 @@ The data is successfully loaded when the above result is returned.
 ### bufferflush.intervalms
 
 **Required**: NO<br/>
-**Default value**: 300000<br/>
+**Default value**: 1000<br/>
 **Description**: Interval for sending a batch of data which controls the load latency. Range: [1000, 3600000].
 
 ### connect.timeoutms
@@ -302,15 +309,39 @@ The data is successfully loaded when the above result is returned.
 
 **Required**:<br/>
 **Default value**:<br/>
-**Description**: Stream Load parameters o control load behavior. For example, the parameter `sink.properties.format` specifies the format used for Stream Load, such as CSV or JSON. For a list of supported parameters and their descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM LOAD.md).
+**Description**: Stream Load parameters o control load behavior. For example, the parameter `sink.properties.format` specifies the format used for Stream Load, such as CSV or JSON. For a list of supported parameters and their descriptions, see [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md).
 
 ### sink.properties.format
 
 **Required**: NO<br/>
 **Default value**: json<br/>
-**Description**: The format used for Stream Load. The Kafka connector will transform each batch of data to the format before sending them to StarRocks. Valid values: `csv` and `json`. For more information, see [CSV parameters](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#csv-parameters) and [JSON parameters](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#json-parameters).
+**Description**: The format used for Stream Load. The Kafka connector will transform each batch of data to the format before sending them to StarRocks. Valid values: `csv` and `json`. For more information, see [CSV parameters](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#csv-parameters) and [JSON parameters](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#json-parameters).
 
-## Limits
+### sink.properties.partial_update
+
+**Required**:  NO<br/>
+**Default value**: `FALSE`<br/>
+**Description**: Whether to use partial updates. Valid values: `TRUE` and `FALSE`. Default value: `FALSE`, indicating to disable this feature.
+
+### sink.properties.partial_update_mode
+
+**Required**:  NO<br/>
+**Default value**: `row`<br/>
+**Description**: Specifies the mode for partial updates. Valid values: `row` and `column`. <ul><li> The value `row` (default) means partial updates in row mode, which is more suitable for real-time updates with many columns and small batches.</li><li>The value `column` means partial updates in column mode, which is more suitable for batch updates with few columns and many rows. In such scenarios, enabling the column mode offers faster update speeds. For example, in a table with 100 columns, if only 10 columns (10% of the total) are updated for all rows, the update speed of the column mode is 10 times faster.</li></ul>
+
+## Usage Notes
+
+### Flush Policy
+
+The Kafka connector will buffer the data in memory, and flush them in batch to StarRocks via Stream Load. The flush will be triggered when any of the following conditions are met:
+
+- The bytes of buffered rows reaches the limit `bufferflush.maxbytes`.
+- The elapsed time since the last flush reaches the limit `bufferflush.intervalms`.
+- The interval at which the connector tries committing offsets for tasks is reached. The interval is controlled by the Kafka Connect configuration [`offset.flush.interval.ms`](https://docs.confluent.io/platform/current/connect/references/allconfigs.html), and the default values is `60000`.
+
+For lower data latency, adjust these configurations in the Kafka connector settings. However, more frequent flushes will increase CPU and I/O usage.
+
+### Limits
 
 - It is not supported to flatten a single message from a Kafka topic into multiple data rows and load into StarRocks.
 - The sink of the Kafka connector provided by StarRocks guarantees at-least-once semantics.
@@ -319,26 +350,482 @@ The data is successfully loaded when the above result is returned.
 
 ### Load Debezium-formatted CDC data
 
-If the Kafka data is in Debezium CDC format and the StarRocks table is a Primary Key table, you also need to configure the `transforms` parameter and other related parameters in the configuration file **connect-StarRocks-sink.properties** for the Kafka connector provided by StarRocks.
+Debezium is a popular Change Data Capture (CDC) tool that supports monitoring data changes in various database systems and streaming these changes to Kafka. The following example demonstrates how to configure and use the Kafka connector to write PostgreSQL changes to a **Primary Key table** in StarRocks.
 
-:::info
+#### Step 1: Install and start Kafka
 
-In this example, the Kafka connector provided by StarRocks is a sink connector that can continuously consume data from Kafka and load data into StarRocks.
+> **NOTE**
+>
+> You can skip this step if you have your own Kafka environment.
 
-:::
+1. [Download](https://dlcdn.apache.org/kafka/) the latest Kafka release from the official site and extract the package.
 
-```Properties
-transforms=addfield,unwrap
-transforms.addfield.type=com.starrocks.connector.kafka.transforms.AddOpFieldForDebeziumRecord
-transforms.unwrap.type=io.debezium.transforms.ExtractNewRecordState
-transforms.unwrap.drop.tombstones=true
-transforms.unwrap.delete.handling.mode
+   ```Bash
+   tar -xzf kafka_2.13-3.7.0.tgz
+   cd kafka_2.13-3.7.0
+   ```
+
+2. Start the Kafka environment.
+
+   Generate a Kafka cluster UUID.
+
+   ```Bash
+   KAFKA_CLUSTER_ID="$(bin/kafka-storage.sh random-uuid)"
+   ```
+
+   Format the log directories.
+
+   ```Bash
+   bin/kafka-storage.sh format -t $KAFKA_CLUSTER_ID -c config/kraft/server.properties
+   ```
+
+   Start the Kafka server.
+
+   ```Bash
+   bin/kafka-server-start.sh config/kraft/server.properties
+   ```
+
+#### Step 2: Configure PostgreSQL
+
+1. Make sure the PostgreSQL user is granted `REPLICATION` privileges.
+
+2. Adjust PostgreSQL configuration.
+
+   Set `wal_level` to `logical` in **postgresql.conf**.
+
+   ```Properties
+   wal_level = logical
+   ```
+
+   Restart the PostgreSQL server to apply changes.
+
+   ```Bash
+   pg_ctl restart
+   ```
+
+3. Prepare the dataset.
+
+   Create a table and insert test data.
+
+   ```SQL
+   CREATE TABLE customers (
+     id int primary key ,
+     first_name varchar(65533) NULL,
+     last_name varchar(65533) NULL ,
+     email varchar(65533) NULL 
+   );
+
+   INSERT INTO customers VALUES (1,'a','a','a@a.com');
+   ```
+
+4. Verify the CDC log messages in Kafka.
+
+    ```Json
+    {
+        "schema": {
+            "type": "struct",
+            "fields": [
+                {
+                    "type": "struct",
+                    "fields": [
+                        {
+                            "type": "int32",
+                            "optional": false,
+                            "field": "id"
+                        },
+                        {
+                            "type": "string",
+                            "optional": true,
+                            "field": "first_name"
+                        },
+                        {
+                            "type": "string",
+                            "optional": true,
+                            "field": "last_name"
+                        },
+                        {
+                            "type": "string",
+                            "optional": true,
+                            "field": "email"
+                        }
+                    ],
+                    "optional": true,
+                    "name": "test.public.customers.Value",
+                    "field": "before"
+                },
+                {
+                    "type": "struct",
+                    "fields": [
+                        {
+                            "type": "int32",
+                            "optional": false,
+                            "field": "id"
+                        },
+                        {
+                            "type": "string",
+                            "optional": true,
+                            "field": "first_name"
+                        },
+                        {
+                            "type": "string",
+                            "optional": true,
+                            "field": "last_name"
+                        },
+                        {
+                            "type": "string",
+                            "optional": true,
+                            "field": "email"
+                        }
+                    ],
+                    "optional": true,
+                    "name": "test.public.customers.Value",
+                    "field": "after"
+                },
+                {
+                    "type": "struct",
+                    "fields": [
+                        {
+                            "type": "string",
+                            "optional": false,
+                            "field": "version"
+                        },
+                        {
+                            "type": "string",
+                            "optional": false,
+                            "field": "connector"
+                        },
+                        {
+                            "type": "string",
+                            "optional": false,
+                            "field": "name"
+                        },
+                        {
+                            "type": "int64",
+                            "optional": false,
+                            "field": "ts_ms"
+                        },
+                        {
+                            "type": "string",
+                            "optional": true,
+                            "name": "io.debezium.data.Enum",
+                            "version": 1,
+                            "parameters": {
+                                "allowed": "true,last,false,incremental"
+                            },
+                            "default": "false",
+                            "field": "snapshot"
+                        },
+                        {
+                            "type": "string",
+                            "optional": false,
+                            "field": "db"
+                        },
+                        {
+                            "type": "string",
+                            "optional": true,
+                            "field": "sequence"
+                        },
+                        {
+                            "type": "string",
+                            "optional": false,
+                            "field": "schema"
+                        },
+                        {
+                            "type": "string",
+                            "optional": false,
+                            "field": "table"
+                        },
+                        {
+                            "type": "int64",
+                            "optional": true,
+                            "field": "txId"
+                        },
+                        {
+                            "type": "int64",
+                            "optional": true,
+                            "field": "lsn"
+                        },
+                        {
+                            "type": "int64",
+                            "optional": true,
+                            "field": "xmin"
+                        }
+                    ],
+                    "optional": false,
+                    "name": "io.debezium.connector.postgresql.Source",
+                    "field": "source"
+                },
+                {
+                    "type": "string",
+                    "optional": false,
+                    "field": "op"
+                },
+                {
+                    "type": "int64",
+                    "optional": true,
+                    "field": "ts_ms"
+                },
+                {
+                    "type": "struct",
+                    "fields": [
+                        {
+                            "type": "string",
+                            "optional": false,
+                            "field": "id"
+                        },
+                        {
+                            "type": "int64",
+                            "optional": false,
+                            "field": "total_order"
+                        },
+                        {
+                            "type": "int64",
+                            "optional": false,
+                            "field": "data_collection_order"
+                        }
+                    ],
+                    "optional": true,
+                    "name": "event.block",
+                    "version": 1,
+                    "field": "transaction"
+                }
+            ],
+            "optional": false,
+            "name": "test.public.customers.Envelope",
+            "version": 1
+        },
+        "payload": {
+            "before": null,
+            "after": {
+                "id": 1,
+                "first_name": "a",
+                "last_name": "a",
+                "email": "a@a.com"
+            },
+            "source": {
+                "version": "2.5.3.Final",
+                "connector": "postgresql",
+                "name": "test",
+                "ts_ms": 1714283798721,
+                "snapshot": "false",
+                "db": "postgres",
+                "sequence": "[\"22910216\",\"22910504\"]",
+                "schema": "public",
+                "table": "customers",
+                "txId": 756,
+                "lsn": 22910504,
+                "xmin": null
+            },
+            "op": "c",
+            "ts_ms": 1714283798790,
+            "transaction": null
+        }
+    }
+    ```
+
+#### Step 3: Configure StarRocks
+
+Create a Primary Key table in StarRocks with the same schema as the source table in PostgreSQL.
+
+```SQL
+CREATE TABLE `customers` (
+  `id` int(11) COMMENT "",
+  `first_name` varchar(65533) NULL COMMENT "",
+  `last_name` varchar(65533) NULL COMMENT "",
+  `email` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`id`) 
+DISTRIBUTED BY hash(id) buckets 1
+PROPERTIES (
+"bucket_size" = "4294967296",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"fast_schema_evolution" = "true"
+);
 ```
 
-In the above configurations, we specify `transforms=addfield,unwrap`.
+#### Step 4: Install connector
 
-- The `op` field of the Debezium-formatted CDC data records the SQL operation on each data row from the upstream database. The values `c`, `u`, and `d` represent create, update, and delete, respectively. If the StarRocks table is a Primary Key table, you need to specify the addfield transform. The addfield transform adds a `__op` field for each data row to mark the SQL operation on each data row. To form a complete data row, the addfield transform also retrieves the values of other columns from the `before` or `after` fields based on the value of the `op` field in the Debezium-formatted CDC data. Finally, the data will be converted into JSON or CSV format and written into StarRocks. The addfield transform class is `com.Starrocks.Kafka.Transforms.AddOpFieldForDebeziumRecord`. It is included in the Kafka connector JAR file, so you do not need to manually install it.
+1. Download the connectors and extract the packages in the **plugins** directory.
 
-    If the StarRocks table is not a Primary Key table, you do not need to specify the addfield transform.
+   ```Bash
+   mkdir plugins
+   tar -zxvf debezium-debezium-connector-postgresql-2.5.3.zip -C plugins
+   tar -zxvf starrocks-kafka-connector-1.0.3.tar.gz -C plugins
+   ```
 
-- The unwrap transform is provided by Debezium and is used to unwrap Debezium's complex data structure based on the operation type. For more information, see [New Record State Extraction](https://debezium.io/documentation/reference/stable/transformations/event-flattening.html).
+   This directory is the value of the configuration item `plugin.path` in **config/connect-standalone.properties**.
+
+   ```Properties
+   plugin.path=/path/to/kafka_2.13-3.7.0/plugins
+   ```
+
+2. Configure the PostgreSQL source connector in **pg-source.properties**.
+
+   ```Json
+   {
+     "name": "inventory-connector",
+     "config": {
+       "connector.class": "io.debezium.connector.postgresql.PostgresConnector", 
+       "plugin.name": "pgoutput",
+       "database.hostname": "localhost", 
+       "database.port": "5432", 
+       "database.user": "postgres", 
+       "database.password": "", 
+       "database.dbname" : "postgres", 
+       "topic.prefix": "test"
+     }
+   }
+   ```
+
+3. Configure the StarRocks sink connector in **sr-sink.properties**.
+
+   ```Json
+   {
+       "name": "starrocks-kafka-connector",
+       "config": {
+           "connector.class": "com.starrocks.connector.kafka.StarRocksSinkConnector",
+           "tasks.max": "1",
+           "topics": "test.public.customers",
+           "starrocks.http.url": "172.26.195.69:28030",
+           "starrocks.database.name": "test",
+           "starrocks.username": "root",
+           "starrocks.password": "StarRocks@123",
+           "sink.properties.strip_outer_array": "true",
+           "connect.timeoutms": "3000",
+           "starrocks.topic2table.map": "test.public.customers:customers",
+           "transforms": "addfield,unwrap",
+           "transforms.addfield.type": "com.starrocks.connector.kafka.transforms.AddOpFieldForDebeziumRecord",
+           "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+           "transforms.unwrap.drop.tombstones": "true",
+           "transforms.unwrap.delete.handling.mode": "rewrite"
+       }
+   }
+   ```
+
+   > **NOTE**
+   >
+   > - If the StarRocks table is not a Primary Key table, you do not need to specify the `addfield` transform.
+   > - The unwrap transform is provided by Debezium and is used to unwrap Debezium's complex data structure based on the operation type. For more information, see [New Record State Extraction](https://debezium.io/documentation/reference/stable/transformations/event-flattening.html).
+
+4. Configure Kafka Connect.
+
+   Configure the following configuration items in the Kafka Connect configuration file **config/connect-standalone.properties**.
+
+   ```Properties
+   # The addresses of Kafka brokers. Multiple addresses of Kafka brokers need to be separated by commas (,).
+   # Note that this example uses PLAINTEXT as the security protocol to access the Kafka cluster.
+   # If you use other security protocol to access the Kafka cluster, configure the relevant information in this part.
+
+   bootstrap.servers=<kafka_broker_ip>:9092
+   offset.storage.file.filename=/tmp/connect.offsets
+   key.converter=org.apache.kafka.connect.json.JsonConverter
+   value.converter=org.apache.kafka.connect.json.JsonConverter
+   key.converter.schemas.enable=true
+   value.converter.schemas.enable=false
+
+   # The absolute path of the starrocks-kafka-connector after extraction. For example:
+   plugin.path=/home/kafka-connect/starrocks-kafka-connector-1.0.3
+
+   # Parameters that control the flush policy. For more information, see the Usage Note section.
+   offset.flush.interval.ms=10000
+   bufferflush.maxbytes = xxx
+   bufferflush.intervalms = xxx
+   ```
+
+   For descriptions of more parameters, see [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running).
+
+#### Step 5: Start Kafka Connect in Standalone Mode
+
+Run Kafka Connect in standalone mode to initiate the connectors.
+
+```Bash
+bin/connect-standalone.sh config/connect-standalone.properties config/pg-source.properties config/sr-sink.properties 
+```
+
+#### Step 6: Verify data ingestion
+
+Test the following operations and ensure the data is correctly ingested into StarRocks.
+
+##### INSERT
+
+- In PostgreSQL:
+
+```Plain
+postgres=# insert into customers values (2,'b','b','b@b.com');
+INSERT 0 1
+postgres=# select * from customers;
+ id | first_name | last_name |  email  
+----+------------+-----------+---------
+  1 | a          | a         | a@a.com
+  2 | b          | b         | b@b.com
+(2 rows)
+```
+
+- In StarRocks:
+
+```Plain
+MySQL [test]> select * from customers;
++------+------------+-----------+---------+
+| id   | first_name | last_name | email   |
++------+------------+-----------+---------+
+|    1 | a          | a         | a@a.com |
+|    2 | b          | b         | b@b.com |
++------+------------+-----------+---------+
+2 rows in set (0.01 sec)
+```
+
+##### UPDATE
+
+- In PostgreSQL:
+
+```Plain
+postgres=# update customers set email='c@c.com';
+UPDATE 2
+postgres=# select * from customers;
+ id | first_name | last_name |  email  
+----+------------+-----------+---------
+  1 | a          | a         | c@c.com
+  2 | b          | b         | c@c.com
+(2 rows)
+```
+
+- In StarRocks:
+
+```Plain
+MySQL [test]> select * from customers;
++------+------------+-----------+---------+
+| id   | first_name | last_name | email   |
++------+------------+-----------+---------+
+|    1 | a          | a         | c@c.com |
+|    2 | b          | b         | c@c.com |
++------+------------+-----------+---------+
+2 rows in set (0.00 sec)
+```
+
+##### DELETE
+
+- In PostgreSQL:
+
+```Plain
+postgres=# delete from customers where id=1;
+DELETE 1
+postgres=# select * from customers;
+ id | first_name | last_name |  email  
+----+------------+-----------+---------
+  2 | b          | b         | c@c.com
+(1 row)
+```
+
+- In StarRocks:
+
+```Plain
+MySQL [test]> select * from customers;
++------+------------+-----------+---------+
+| id   | first_name | last_name | email   |
++------+------------+-----------+---------+
+|    2 | b          | b         | c@c.com |
++------+------------+-----------+---------+
+1 row in set (0.00 sec)
+```

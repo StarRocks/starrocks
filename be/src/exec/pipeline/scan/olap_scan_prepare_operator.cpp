@@ -83,8 +83,15 @@ StatusOr<ChunkPtr> OlapScanPrepareOperator::pull_chunk(RuntimeState* state) {
     }
     _morsel_queue->set_tablet_rowsets(std::move(tablet_rowsets));
 
+    if ((_morsel_queue->type() == MorselQueue::Type::LOGICAL_SPLIT ||
+         _morsel_queue->type() == MorselQueue::Type::PHYSICAL_SPLIT) &&
+        !tablets.empty()) {
+        _morsel_queue->set_tablet_schema(tablets[0]->tablet_schema());
+    }
+
     DeferOp defer([&]() {
         _ctx->set_prepare_finished();
+        _ctx->notify_observers();
         TEST_SYNC_POINT("OlapScnPrepareOperator::pull_chunk::after_set_prepare_finished");
     });
 

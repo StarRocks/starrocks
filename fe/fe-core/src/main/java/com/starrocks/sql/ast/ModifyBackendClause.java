@@ -70,7 +70,6 @@ public class ModifyBackendClause extends BackendClause {
         return backendHostPort;
     }
 
-    @Override
     public Map<String, String> getProperties() {
         return properties;
     }

@@ -32,12 +32,11 @@ struct CSVWriterOptions : FileWriterOptions {
 // TODO(letian-jiang): support escaping
 class CSVFileWriter final : public FileWriter {
 public:
-    CSVFileWriter(std::string location, std::unique_ptr<csv::OutputStream> output_stream,
-                  const std::vector<std::string>& column_names, const std::vector<TypeDescriptor>& types,
+    CSVFileWriter(std::string location, std::shared_ptr<csv::OutputStream> output_stream,
+                  std::vector<std::string> column_names, std::vector<TypeDescriptor> types,
                   std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
-                  TCompressionType::type compression_type, const std::shared_ptr<CSVWriterOptions>& writer_options,
-                  const std::function<void()> rollback_action, PriorityThreadPool* executors,
-                  RuntimeState* runtime_state);
+                  TCompressionType::type compression_type, std::shared_ptr<CSVWriterOptions> writer_options,
+                  std::function<void()> rollback_action);
 
     ~CSVFileWriter() override;
 
@@ -45,9 +44,11 @@ public:
 
     int64_t get_written_bytes() override;
 
-    std::future<Status> write(ChunkPtr chunk) override;
+    int64_t get_allocated_bytes() override;
 
-    std::future<CommitResult> commit() override;
+    Status write(Chunk* chunk) override;
+
+    CommitResult commit() override;
 
 private:
     const std::string _location;
@@ -58,8 +59,6 @@ private:
     TCompressionType::type _compression_type = TCompressionType::UNKNOWN_COMPRESSION;
     std::shared_ptr<CSVWriterOptions> _writer_options;
     const std::function<void()> _rollback_action;
-    PriorityThreadPool* _executors = nullptr;
-    RuntimeState* _runtime_state = nullptr;
 
     int64_t _num_rows = 0;
     // (nullable converter, not-null converter)
@@ -69,14 +68,13 @@ private:
 class CSVFileWriterFactory : public FileWriterFactory {
 public:
     CSVFileWriterFactory(std::shared_ptr<FileSystem> fs, TCompressionType::type compression_type,
-                         const std::map<std::string, std::string>& options,
-                         const std::vector<std::string>& column_names,
+                         std::map<std::string, std::string> options, std::vector<std::string> column_names,
                          std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                          PriorityThreadPool* executors, RuntimeState* runtime_state);
 
     Status init() override;
 
-    StatusOr<std::shared_ptr<FileWriter>> create(const std::string& path) const override;
+    StatusOr<WriterAndStream> create(const std::string& path) const override;
 
 private:
     std::shared_ptr<FileSystem> _fs;

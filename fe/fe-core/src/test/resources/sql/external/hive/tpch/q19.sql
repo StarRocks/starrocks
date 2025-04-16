@@ -76,6 +76,7 @@ NON-PARTITION PREDICATES: 20: p_brand IN ('Brand#45', 'Brand#11', 'Brand#21'), 2
 MIN/MAX PREDICATES: 20: p_brand >= 'Brand#11', 20: p_brand <= 'Brand#45', 22: p_size <= 15, 23: p_container >= 'LG BOX', 23: p_container <= 'SM PKG', 22: p_size >= 1
 partitions=1/1
 avgRowSize=32.0
+dataCacheOptions={populate: false}
 cardinality: 5714286
 column statistics:
 * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 5714285.714285714] ESTIMATE
@@ -108,6 +109,7 @@ NON-PARTITION PREDICATES: 5: l_quantity >= 5, 5: l_quantity <= 35, 15: l_shipmod
 MIN/MAX PREDICATES: 5: l_quantity >= 5, 5: l_quantity <= 35, 15: l_shipmode >= 'AIR', 15: l_shipmode <= 'AIR REG', 14: l_shipinstruct <= 'DELIVER IN PERSON', 14: l_shipinstruct >= 'DELIVER IN PERSON'
 partitions=1/1
 avgRowSize=67.0
+dataCacheOptions={populate: false}
 cardinality: 26240725
 probe runtime filters:
 - filter_id = 0, probe_expr = (2: l_partkey)

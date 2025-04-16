@@ -37,17 +37,17 @@ public:
     bool has_output() const override;
     bool is_finished() const override;
 
-    [[nodiscard]] Status set_finishing(RuntimeState* state) override;
-    [[nodiscard]] Status set_finished(RuntimeState* state) override;
+    Status set_finishing(RuntimeState* state) override;
+    Status set_finished(RuntimeState* state) override;
 
-    [[nodiscard]] Status prepare(RuntimeState* state) override;
+    Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
-    [[nodiscard]] StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
-    [[nodiscard]] Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
 
 private:
-    [[nodiscard]] StatusOr<ChunkPtr> _pull_spilled_chunk(RuntimeState* state);
+    StatusOr<ChunkPtr> _pull_spilled_chunk(RuntimeState* state);
 
     bool _is_finished = false;
     bool _has_last_chunk = true;
@@ -64,9 +64,11 @@ public:
 
     ~SpillableAggregateBlockingSourceOperatorFactory() override = default;
 
-    [[nodiscard]] Status prepare(RuntimeState* state) override;
+    Status prepare(RuntimeState* state) override;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
+
+    bool support_event_scheduler() const override { return false; }
 
 private:
     AggregatorFactoryPtr _hash_aggregator_factory;

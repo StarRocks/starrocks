@@ -65,6 +65,17 @@ select count(*) from struct_in_struct where c_struct_struct.c_struct.c0 in ('55'
 -- result:
 200
 -- !result
+select * from struct_in_struct where (c0 in (101, 1000)) or (c0 > 5000 and c0 < 5005) or (c0 in (9001, 10000));
+-- result:
+101	9900	{"c0":"1","c1":"0"}	{"c0":"1","c_struct":{"c0":"1","c1":"0"}}
+1000	9001	None	None
+5001	5000	{"c0":"1","c1":"0"}	{"c0":"1","c_struct":{"c0":"1","c1":"0"}}
+5002	4999	{"c0":"2","c1":"99"}	{"c0":"2","c_struct":{"c0":"2","c1":"99"}}
+5003	4998	{"c0":"3","c1":"98"}	{"c0":"3","c_struct":{"c0":"3","c1":"98"}}
+5004	4997	{"c0":"4","c1":"97"}	{"c0":"4","c_struct":{"c0":"4","c1":"97"}}
+9001	1000	{"c0":"1","c1":"0"}	{"c0":"1","c_struct":{"c0":"1","c1":"0"}}
+10000	1	None	None
+-- !result
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_parquet_struct_in_struct/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
 -- result:
 0

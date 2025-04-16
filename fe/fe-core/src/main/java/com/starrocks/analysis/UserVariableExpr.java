@@ -14,6 +14,9 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.base.Preconditions;
+import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -47,6 +50,7 @@ public class UserVariableExpr extends Expr {
 
     public void setValue(Expr value) {
         this.value = value;
+        this.type = value.getType();
     }
 
     @Override
@@ -60,14 +64,8 @@ public class UserVariableExpr extends Expr {
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        if (!super.equals(o)) {
+    public boolean equalsWithoutChild(Object o) {
+        if (!super.equalsWithoutChild(o)) {
             return false;
         }
         UserVariableExpr that = (UserVariableExpr) o;
@@ -77,5 +75,24 @@ public class UserVariableExpr extends Expr {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), name, value);
+    }
+
+    @Override
+    public boolean isNullable() {
+        Preconditions.checkState(value != null, "should analyze UserVariableExpr first then invoke isNullable");
+        return value.isNullable();
+    }
+
+    @Override
+    public String toSqlImpl() {
+        return "@" + name;
+    }
+
+    @Override
+    public Expr uncheckedCastTo(Type targetType) throws AnalysisException {
+        Preconditions.checkState(value != null, "should analyze UserVariableExpr first then cast its value");
+        UserVariableExpr userVariableExpr = new UserVariableExpr(this);
+        userVariableExpr.setValue(value.uncheckedCastTo(targetType));
+        return userVariableExpr;
     }
 }

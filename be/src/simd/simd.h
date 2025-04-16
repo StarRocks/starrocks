@@ -16,24 +16,38 @@
 
 #include <cstdint>
 #include <cstring>
+#include <type_traits>
 #include <vector>
+
+#include "column/column.h"
 #ifdef __SSE2__
 #include <emmintrin.h>
 #elif defined(__ARM_NEON) && defined(__aarch64__)
 #include <arm_acle.h>
 #include <arm_neon.h>
 #endif
+#ifdef __AVX2__
+#include <emmintrin.h>
+#include <immintrin.h>
+#endif
 
 namespace SIMD {
 
-// Count the number of zeros of 8-bit signed integers.
-inline size_t count_zero(const int8_t* data, size_t size) {
+template <typename T>
+concept Integer8BitType = std::is_same_v<T, int8_t> || std::is_same_v<T, uint8_t>;
+
+template <typename T>
+concept Integer32BitType = std::is_same_v<T, int32_t> || std::is_same_v<T, uint32_t>;
+
+// Count the number of zeros of 8-bit integers.
+template <Integer8BitType T>
+inline size_t count_zero(const T* data, size_t size) {
     size_t count = 0;
-    const int8_t* end = data + size;
+    const T* end = data + size;
 
 #if defined(__SSE2__) && defined(__POPCNT__)
     const __m128i zero16 = _mm_setzero_si128();
-    const int8_t* end64 = data + (size / 64 * 64);
+    const T* end64 = data + (size / 64 * 64);
 
     for (; data < end64; data += 64) {
         count += __builtin_popcountll(static_cast<uint64_t>(_mm_movemask_epi8(_mm_cmpeq_epi8(
@@ -48,6 +62,16 @@ inline size_t count_zero(const int8_t* data, size_t size) {
                                                _mm_loadu_si128(reinterpret_cast<const __m128i*>(data + 48)), zero16)))
                                        << 48u));
     }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+    const T* end16 = data + (size / 16 * 16);
+    for (; data < end16; data += 16) {
+        uint8x16_t vdata = vld1q_u8(data);
+        // result[i] = vdata[i] == 0 ? 0xFF : 0x00
+        uint8x16_t result = vceqq_u8(vdata, vdupq_n_u8(0));
+        // result[i] = result[i] & 0x1
+        result = vandq_u8(result, vdupq_n_u8(1));
+        count += vaddvq_u8(result);
+    }
 #endif
 
     for (; data < end; ++data) {
@@ -56,14 +80,16 @@ inline size_t count_zero(const int8_t* data, size_t size) {
     return count;
 }
 
-inline size_t count_zero(const uint32_t* data, size_t size) {
+// Count the number of zeros of 32-bit integers.
+template <Integer32BitType T>
+inline size_t count_zero(const T* data, size_t size) {
     size_t count = 0;
-    const uint32_t* end = data + size;
+    const T* end = data + size;
 
 #if defined(__SSE2__) && defined(__POPCNT__)
     // count per 16 int
     const __m128i zero16 = _mm_setzero_si128();
-    const uint32_t* end16 = data + (size / 16 * 16);
+    const T* end16 = data + (size / 16 * 16);
 
     for (; data < end16; data += 16) {
         count += __builtin_popcountll(static_cast<uint64_t>(_mm_movemask_ps(_mm_cvtepi32_ps(_mm_cmpeq_epi32(
@@ -78,6 +104,16 @@ inline size_t count_zero(const uint32_t* data, size_t size) {
                                                _mm_loadu_si128(reinterpret_cast<const __m128i*>(data + 12)), zero16))))
                                        << 12u));
     }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+    const T* end4 = data + (size / 4 * 4);
+    for (; data < end4; data += 4) {
+        uint32x4_t vdata = vld1q_u32(data);
+        // result[i] = vdata[i] == 0 ? 0xFF : 0x00
+        uint32x4_t result = vceqq_u32(vdata, vdupq_n_u32(0));
+        // result[i] = result[i] & 0x1
+        result = vandq_u32(result, vdupq_n_u32(1));
+        count += vaddvq_u32(result);
+    }
 #endif
 
     for (; data < end; ++data) {
@@ -86,52 +122,40 @@ inline size_t count_zero(const uint32_t* data, size_t size) {
     return count;
 }
 
-inline size_t count_zero(const std::vector<uint32_t>& nums) {
+template <typename Container, typename T = typename Container::value_type>
+inline size_t count_zero(const Container& nums) {
+    static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t) || sizeof(T) == sizeof(uint32_t)),
+                  "only 8-bit or 32-bit integral types are supported");
     return count_zero(nums.data(), nums.size());
 }
 
-inline size_t count_nonzero(const std::vector<uint32_t>& nums) {
-    return nums.size() - count_zero(nums.data(), nums.size());
-}
-
-// Count the number of zeros of 8-bit unsigned integers.
-inline size_t count_zero(const uint8_t* data, size_t size) {
-    return count_zero(reinterpret_cast<const int8_t*>(data), size);
-}
-
-inline size_t count_zero(const std::vector<int8_t>& nums) {
-    return count_zero(nums.data(), nums.size());
-}
-
-inline size_t count_zero(const std::vector<uint8_t>& nums, size_t size) {
+template <typename Container, typename T = typename Container::value_type>
+inline size_t count_zero(const Container& nums, size_t size) {
+    static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t) || sizeof(T) == sizeof(uint32_t)),
+                  "only 8-bit or 32-bit integral types are supported");
     return count_zero(nums.data(), size);
 }
 
-inline size_t count_zero(const std::vector<uint8_t>& nums) {
-    return count_zero(nums.data(), nums.size());
-}
-
-// Count the number of nonzeros of 8-bit signed integers.
-inline size_t count_nonzero(const int8_t* data, size_t size) {
+template <typename T>
+inline size_t count_nonzero(const T* data, size_t size) {
+    static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t) || sizeof(T) == sizeof(uint32_t)),
+                  "only 8-bit or 32-bit integral types are supported");
     return size - count_zero(data, size);
 }
 
-// Count the number of nonzeros of 8-bit unsigned integers.
-inline size_t count_nonzero(const uint8_t* data, size_t size) {
-    return size - count_zero(data, size);
-}
-
-inline size_t count_nonzero(const std::vector<uint8_t>& list) {
-    return count_nonzero(list.data(), list.size());
-}
-
-inline size_t count_nonzero(const std::vector<int8_t>& list) {
-    return count_nonzero(list.data(), list.size());
+template <typename Container, typename T = typename Container::value_type>
+inline size_t count_nonzero(const Container& nums) {
+    static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t) || sizeof(T) == sizeof(uint32_t)),
+                  "only 8-bit or 32-bit integral types are supported");
+    return count_nonzero(nums.data(), nums.size());
 }
 
 // NOTE: memchr is much faster than a plain SIMD implementation
-template <class T>
-inline static size_t find_byte(const std::vector<T>& list, size_t start, size_t count, T byte) {
+template <typename Container, typename T = typename Container::value_type>
+inline static size_t find_byte(const Container& list, size_t start, size_t count, T byte) {
+    static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t)),
+                  "only 8-bit integral types are supported");
+
     if (start >= list.size()) {
         return start;
     }
@@ -143,8 +167,11 @@ inline static size_t find_byte(const std::vector<T>& list, size_t start, size_t 
     return (T*)p - list.data();
 }
 
-template <class T>
-inline static size_t find_byte(const std::vector<T>& list, size_t start, T byte) {
+template <typename Container, typename T = typename Container::value_type>
+inline static size_t find_byte(const Container& list, size_t start, T byte) {
+    static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t)),
+                  "only 8-bit integral types are supported");
+
     if (start >= list.size()) {
         return start;
     }
@@ -156,41 +183,97 @@ inline static size_t find_byte(const std::vector<T>& list, size_t start, T byte)
 }
 
 // Find position for zero byte, return size of list if not found
-inline size_t find_zero(const std::vector<uint8_t>& list, size_t start) {
-    return find_byte<uint8_t>(list, start, 0);
+template <typename Container, typename T = typename Container::value_type>
+inline size_t find_zero(const Container& list, size_t start) {
+    static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t)),
+                  "only 8-bit integral types are supported");
+    return find_byte(list, start, static_cast<T>(0));
 }
 
-inline size_t find_nonzero(const std::vector<uint8_t>& list, size_t start) {
-    return find_byte<uint8_t>(list, start, 1);
+template <typename Container, typename T = typename Container::value_type>
+inline size_t find_zero(const Container& list, size_t start, size_t count) {
+    static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t)),
+                  "only 8-bit integral types are supported");
+    return find_byte(list, start, count, static_cast<T>(0));
 }
 
-inline size_t find_nonzero(const std::vector<uint8_t>& list, size_t start, size_t count) {
-    return find_byte<uint8_t>(list, start, count, 1);
+template <typename Container, typename T = typename Container::value_type>
+inline size_t find_nonzero(const Container& list, size_t start) {
+    static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t)),
+                  "only 8-bit integral types are supported");
+    return find_byte(list, start, static_cast<T>(1));
 }
 
-inline size_t find_zero(const std::vector<int8_t>& list, size_t start) {
-    return find_byte<int8_t>(list, start, 0);
+template <typename Container, typename T = typename Container::value_type>
+inline size_t find_nonzero(const Container& list, size_t start, size_t count) {
+    static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t)),
+                  "only 8-bit integral types are supported");
+    return find_byte(list, start, count, static_cast<T>(1));
 }
 
-inline size_t find_zero(const std::vector<uint8_t>& list, size_t start, size_t count) {
-    return find_byte<uint8_t>(list, start, count, 0);
-}
-
-inline bool contain_zero(const std::vector<uint8_t>& list) {
+template <typename Container, typename T = typename Container::value_type>
+inline bool contain_zero(const Container& list) {
+    static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t)),
+                  "only 8-bit integral types are supported");
     return find_zero(list, 0) < list.size();
 }
 
-inline bool contain_nonzero(const std::vector<uint8_t>& list) {
+template <typename Container, typename T = typename Container::value_type>
+inline bool contain_nonzero(const Container& list) {
+    static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t)),
+                  "only 8-bit integral types are supported");
     return find_nonzero(list, 0) < list.size();
 }
 
-inline bool contain_nonzero(const std::vector<uint8_t>& list, size_t start) {
+template <typename Container, typename T = typename Container::value_type>
+inline bool contain_nonzero(const Container& list, size_t start) {
+    static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t)),
+                  "only 8-bit integral types are supported");
     return find_nonzero(list, start) < list.size();
 }
 
-inline bool contain_nonzero(const std::vector<uint8_t>& list, size_t start, size_t count) {
+template <typename Container, typename T = typename Container::value_type>
+inline bool contain_nonzero(const Container& list, size_t start, size_t count) {
+    static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t)),
+                  "only 8-bit integral types are supported");
     size_t pos = find_nonzero(list, start, count);
     return pos < list.size() && pos < start + count;
+}
+
+/// NOTE that `contains_nonzero_bit` is different from `contain_nonzero`.
+/// - `contains_nonzero_bit` returns true if any element of data is not zero.
+/// - `contain_nonzero` returns true if any element of data is **ONE**.
+template <Integer8BitType T>
+inline bool contains_nonzero_bit(const T* data, size_t size) {
+    const T* end = data + size;
+
+#if defined(__AVX2__)
+    constexpr size_t W = 32;
+    const T* end32 = data + (size / W * W);
+    for (; data < end32; data += W) {
+        const __m256i vdata = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(data));
+        if (!_mm256_testz_si256(vdata, vdata)) {
+            return true;
+        }
+    }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+    constexpr size_t W = 16;
+    const T* end16 = data + (size / W * W);
+    for (; data < end16; data += W) {
+        uint8x16_t vdata = vld1q_u8(data);
+        if (vmaxvq_u8(vdata) != 0) {
+            return true;
+        }
+    }
+#endif
+
+    for (; data < end; ++data) {
+        if (*data != 0) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 #if defined(__ARM_NEON) && defined(__aarch64__)

@@ -116,6 +116,7 @@ Status RoutineLoadTaskExecutor::get_kafka_partition_meta(const PKafkaMetaProxyRe
     }
 
     Status st = std::static_pointer_cast<KafkaDataConsumer>(consumer)->get_partition_meta(partition_ids, timeout_ms);
+    // if get partition meta failed, should not return consumer because the KafkaConsumer may be closed.
     if (st.ok()) {
         _data_consumer_pool.return_consumer(consumer);
     }
@@ -324,7 +325,7 @@ Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
         return Status::InternalError("unknown load source type");
     }
 
-    VLOG(1) << "receive a new routine load task: " << ctx->brief();
+    VLOG(2) << "receive a new routine load task: " << ctx->brief();
     // register the task
     ctx->ref();
     _task_map[ctx->id] = ctx;

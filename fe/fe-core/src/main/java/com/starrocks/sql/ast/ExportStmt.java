@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BrokerDesc;
@@ -32,6 +33,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
@@ -175,24 +177,18 @@ public class ExportStmt extends StatementBase {
         return includeQueryId;
     }
 
-    @Override
-    public boolean needAuditEncryption() {
-        return brokerDesc != null;
-    }
-
     public void checkTable(GlobalStateMgr globalStateMgr) {
-        Database db = globalStateMgr.getDb(tblName.getDb());
+        Database db = globalStateMgr.getLocalMetastore().getDb(tblName.getDb());
         if (db == null) {
             throw new SemanticException("Db does not exist. name: " + tblName.getDb());
         }
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
-        try {
-            Table table = db.getTable(tblName.getTbl());
-            if (table == null) {
-                throw new SemanticException("Table[" + tblName.getTbl() + "] does not exist");
-            }
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName.getTbl());
+        if (table == null) {
+            throw new SemanticException("Table[" + tblName.getTbl() + "] does not exist");
+        }
 
+        try (AutoCloseableLock ignore =
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.READ)) {
             Table.TableType tblType = table.getType();
             switch (tblType) {
                 case MYSQL:
@@ -205,7 +201,7 @@ public class ExportStmt extends StatementBase {
                 case VIEW:
                 default:
                     throw new SemanticException("Table[" + tblName.getTbl() + "] is " + tblType +
-                            " type, do not support EXPORT.");
+                                " type, do not support EXPORT.");
             }
 
             if (partitions != null) {
@@ -237,8 +233,6 @@ public class ExportStmt extends StatementBase {
                     }
                 }
             }
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
         }
     }
 

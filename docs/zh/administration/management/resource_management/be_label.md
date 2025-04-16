@@ -1,18 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 使用标签管理 BE 节点
 
-自 3.3.0 版本起，StarRocks 支持基于 BE 节点所在机架、数据中心等信息，使用标签对 BE 节点进行分组，这样可以保证数据可以按机架、数据中心等信息均匀分布，应对某些机架断电、或数据中心故障情况下的灾备需求。
-
-## 功能简介
-
-高可靠数据存储的核心：**所有相同副本不在同一个位置，尽可能均匀分布，以避免单个位置出现故障导致相同副本记录的那部分数据丢失。**
-
-目前 StarRocks 中 Tablet 以多副本 (Replica) 的形式分布在 BE 节点时，只保证所有相同的副本不放置在同一个 BE 中，如此确实避免一个 BE 节点的异常影响服务的可用性。然而在实际场景中集群范围可能覆盖多个机架或者多个数据中心，如果副本分布没有考虑整体集群部署范围中的 BE 节点所在机架或者数据中心等位置情况，可能导致所有相同的副本放置在同一个机架或者数据中心中，则某个机架断电，或某个数据中心出现故障，则会导致这些相同副本记录的那部分数据丢失。
-
-为了进一步提高数据可靠性，自 3.3.0 起，StarRocks 支持基于 BE 节点所在机架、数据中心等信息，使用标签对 BE 节点进行分组，这样 StarRocks 可以感知到 BE 节点的地理位置情况。StarRocks 通过在副本分布时确保相同副本均衡分布在各个标签中，同时相同副本也均衡分布在同一标签内的 BE 节点中。可以保证数据可以按机架、数据中心等信息均匀分布，以避免区域性故障影响服务的可用性。
+自 3.2.8 版本起，StarRocks 支持使用标签对 BE 节点进行分组。您在建表或创建异步物化视图时可以通过指定和 BE 节点相同标签来使数据副本分布到指定的标签所对应的 BE 节点上。数据副本在相同标签的节点下会均匀分布，该特性可以提高数据高可用和资源隔离性能。
 
 ## 使用方式
 
@@ -31,9 +23,9 @@ ALTER SYSTEM MODIFY BACKEND "172.xx.xx.51:9050" SET ("labels.location" = "rack:r
 
 添加标签后，可以执行 `SHOW BACKENDS;`，在返回结果的 `Location` 字段中查看 BE 节点的标签。
 
-如果需要修改  BE 节点的标签，可以执行  `ALTER SYSTEM MODIFY BACKEND ``"172.xx.xx.48:9050" SET ("labels.location" = "rack:xxx");`。
+如果需要修改  BE 节点的标签，可以执行  `ALTER SYSTEM MODIFY BACKEND "172.xx.xx.48:9050" SET ("labels.location" = "rack:xxx");`。
 
-### 为表添加标签
+### 使用标签指定表的数据在 BE 节点上的分布
 
 如果您需要指定表的数据分布的位置，比如分布在两个机架中 rack1 和 rack2，则您可以为表添加标签。
 
@@ -41,14 +33,14 @@ ALTER SYSTEM MODIFY BACKEND "172.xx.xx.51:9050" SET ("labels.location" = "rack:r
 
 :::note
 
-- 表所在标签中的全部 BE 节点数必须大于副本数，否则会报错 `Table replication num should be less than of equal to the number of available BE nodes`.
-- 为表添加的标签必须已经存在，否则会报错  `Getting analyzing error. Detail message: Cannot find any backend with location: rack:xxx`.
+- 为表指定的标签所包含的 BE 节点数如果小于副本数，将会优先保证数据的副本数满足要求，这种情况下并不能保证副本按照标签进行分布。
+- 为表指定的标签必须已经存在，否则会报错 `Getting analyzing error. Detail message: Cannot find any backend with location: rack:xxx`。
 
 :::
 
 #### 建表时
 
-建表时指定表的数据分布在 rack 1 和 rack 2，则可以执行如下语句：
+建表时指定表的数据分布在 rack 1 和 rack 2，可以通过设置表属性 `"labels.location"` 的值来指定数据分布的标签：
 
 ```SQL
 CREATE TABLE example_table (
@@ -65,7 +57,7 @@ PROPERTIES
 
 对于新建的表，表属性 `labels.location` 默认为 `*` ，表示副本在所有标签中均匀分布。
 
-如果新建的表的数据分布无需感知集群中服务器的地理位置信息，可以手动设置表属性 `"labels.location" ``= ``""`。
+如果新建的表的数据分布无需感知集群中服务器的地理位置信息，可以手动设置表属性 `"labels.location" = ""`。
 
 #### 建表后
 
@@ -78,10 +70,60 @@ ALTER TABLE example_table
 
 :::note
 
-如果表是升级至 3.3.0 版本之前已经创建的历史表，默认不使用标签分布数据。如果需要按照标签分布历史表数据，则可以执行如下语句，为历史表添加标签：
+如果您升级 StarRocks 至 3.2.8 或者以后版本，对于升级前已经创建的历史表，默认不使用标签分布数据。如果需要按照标签分布历史表数据，则可以执行如下语句，为历史表添加标签：
 
 ```SQL
 ALTER TABLE example_table1
+    SET ("labels.location" = "rack:rack1,rack:rack2");
+```
+
+:::
+
+### 使用标签指定物化视图的数据在 BE 节点上的分布
+
+如果您需要指定异步物化视图的数据分布的位置，比如分布在两个机架中 rack1 和 rack2，则您可以为物化视图添加标签。
+
+添加标签后，物化视图中相同 Tablet 的副本按 Round Robin 的方式选取所在的标签。并且同一标签中如果同一 Tablet 的副本存在多个，则这些同一 Tablet 的多个副本会尽可能均匀分布在该标签内的不同的 BE 节点上。
+
+:::note
+
+- 为物化视图指定的标签所包含的 BE 节点数如果小于副本数，将会优先保证数据的副本数满足要求，这种情况下并不能保证副本按照标签进行分布。
+- 为物化视图指定的标签必须已经存在，否则会报错  `Getting analyzing error. Detail message: Cannot find any backend with location: rack:xxx`。
+
+:::
+
+#### 建物化视图时
+
+建物化视图时指定物化视图的数据分布在 rack 1 和 rack 2，则可以执行如下语句：
+
+```SQL
+CREATE MATERIALIZED VIEW mv_example_mv
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"labels.location" = "rack:rack1,rack:rack2")
+as 
+select order_id, dt from example_table;
+```
+
+对于新建的物化视图，属性 `labels.location` 默认为 `*` ，表示副本在所有标签中均匀分布。
+
+如果新建的物化视图的数据分布无需感知集群中服务器的地理位置信息，可以手动设置物化视图属性 `"labels.location" = ""`。
+
+#### 建物化视图后
+
+建物化视图后如果需要修改物化视图的数据分布位置，例如修改为 rack 1、rack 2 和 rack 3，则可以执行如下语句：
+
+```SQL
+ALTER MATERIALIZED VIEW mv_example_mv
+    SET ("labels.location" = "rack:rack1,rack:rack2,rack:rack3");
+```
+
+:::note
+
+如果您升级 StarRocks 至 3.2.8 或者以后版本，对于升级前已经创建的物化视图，默认不使用标签分布数据。如果需要按照标签分布历史物化视图的数据，则可以执行如下语句，为物化视图添加标签：
+
+```SQL
+ALTER TABLE example_mv1
     SET ("labels.location" = "rack:rack1,rack:rack2");
 ```
 

@@ -21,18 +21,23 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
@@ -42,7 +47,6 @@ import com.starrocks.connector.elasticsearch.EsUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -51,6 +55,7 @@ import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
+import com.starrocks.sql.ast.Identifier;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.ListPartitionDesc;
@@ -76,7 +81,7 @@ public class CreateTableAnalyzer {
 
     public static void analyze(CreateTableStmt statement, ConnectContext context) {
         final TableName tableNameObject = statement.getDbTbl();
-        MetaUtils.normalizationTableName(context, tableNameObject);
+        tableNameObject.normalization(context);
 
         final String catalogName = tableNameObject.getCatalog();
         MetaUtils.checkCatalogExistAndReport(catalogName);
@@ -84,11 +89,15 @@ public class CreateTableAnalyzer {
         final String tableName = tableNameObject.getTbl();
         FeNameFormat.checkTableName(tableName);
 
-        Database db = MetaUtils.getDatabase(catalogName, tableNameObject.getDb());
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, tableNameObject.getDb());
+        if (db == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, tableNameObject.getDb());
+        }
         if (statement instanceof CreateTemporaryTableStmt) {
             analyzeTemporaryTable(statement, context, catalogName, db, tableName);
         } else {
-            if (db.getTable(tableName) != null && !statement.isSetIfNotExists()) {
+            if (GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .tableExists(context, catalogName, tableNameObject.getDb(), tableName) && !statement.isSetIfNotExists()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
             }
         }
@@ -96,6 +105,7 @@ public class CreateTableAnalyzer {
         analyzeEngineName(statement, catalogName);
         analyzeCharsetName(statement);
 
+        analyzeMultiExprsPartition(statement, tableNameObject);
         preCheckColumnRef(statement);
         analyzeKeysDesc(statement);
         analyzeSortKeys(statement);
@@ -129,7 +139,7 @@ public class CreateTableAnalyzer {
         }
     }
 
-    private static void analyzeEngineName(CreateTableStmt stmt, String catalogName) {
+    protected static void analyzeEngineName(CreateTableStmt stmt, String catalogName) {
         String engineName = stmt.getEngineName();
 
         if (CatalogMgr.isInternalCatalog(catalogName)) {
@@ -184,6 +194,10 @@ public class CreateTableAnalyzer {
         List<ColumnDef> columnDefs = statement.getColumnDefs();
         if (columnDefs == null || columnDefs.isEmpty()) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_TABLE_MUST_HAVE_COLUMNS);
+        }
+
+        if (columnDefs.size() > Config.max_column_number_per_table) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_TOO_MANY_COLUMNS, Config.max_column_number_per_table);
         }
 
         Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
@@ -245,7 +259,7 @@ public class CreateTableAnalyzer {
                 throw new SemanticException("BITMAP_UNION must be used in AGG_KEYS", keysDesc.getPos());
             }
 
-            Column col = columnDef.toColumn();
+            Column col = columnDef.toColumn(null);
             if (keysDesc != null && (keysDesc.getKeysType() == KeysType.UNIQUE_KEYS
                     || keysDesc.getKeysType() == KeysType.PRIMARY_KEYS ||
                     keysDesc.getKeysType() == KeysType.DUP_KEYS)) {
@@ -284,6 +298,10 @@ public class CreateTableAnalyzer {
             } else {
                 int keyLength = 0;
                 for (ColumnDef columnDef : columnDefs) {
+                    // generated column should not be key
+                    if (columnDef.isGeneratedColumn()) {
+                        break;
+                    }
                     keyLength += columnDef.getType().getIndexSize();
                     if (keysColumnNames.size() >= FeConstants.SHORTKEY_MAX_COLUMN_COUNT
                             || keyLength > FeConstants.SHORTKEY_MAXSIZE_BYTES) {
@@ -450,6 +468,72 @@ public class CreateTableAnalyzer {
         }
     }
 
+    public static void analyzeMultiExprsPartition(CreateTableStmt stmt, TableName tableName) {
+        PartitionDesc partitionDesc = stmt.getPartitionDesc();
+        if (partitionDesc == null || !(partitionDesc instanceof ListPartitionDesc)) {
+            return;
+        }
+        ListPartitionDesc listPartitionDesc = (ListPartitionDesc) partitionDesc;
+        if (!listPartitionDesc.isAutoPartitionTable()) {
+            return;
+        }
+        List<ParseNode> multiDescList = listPartitionDesc.getMultiDescList();
+        if (multiDescList == null || multiDescList.isEmpty()) {
+            return;
+        }
+        List<ColumnDef> columnDefs = stmt.getColumnDefs();
+        List<String> partitionColumnList = Lists.newArrayList();
+        List<PartitionDesc> partitionDescList = Lists.newArrayList();
+        List<Expr> partitionExprs = Lists.newArrayList();
+        int placeHolderSlotId = 0;
+        for (ParseNode partitionExpr : multiDescList) {
+            if (partitionExpr instanceof Identifier) {
+                Identifier identifier = (Identifier) partitionExpr;
+                partitionColumnList.add(identifier.getValue());
+            }
+            if (partitionExpr instanceof FunctionCallExpr) {
+                FunctionCallExpr expr = (FunctionCallExpr) (((Expr) partitionExpr).clone());
+                ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
+                                new RelationFields(columnDefs.stream().map(col -> new Field(col.getName(),
+                                        col.getType(), null, null)).collect(Collectors.toList()))),
+                        ConnectContext.buildInner());
+                String columnName = FeConstants.GENERATED_PARTITION_COLUMN_PREFIX + placeHolderSlotId++;
+                partitionColumnList.add(columnName);
+                Type type = expr.getType();
+                if (type.isScalarType()) {
+                    ScalarType scalarType = (ScalarType) type;
+                    if (scalarType.isWildcardChar()) {
+                        type = ScalarType.createCharType(ScalarType.getOlapMaxVarcharLength());
+                    } else if (scalarType.isWildcardVarchar()) {
+                        type = ScalarType.createVarcharType(ScalarType.getOlapMaxVarcharLength());
+                    }
+                }
+                TypeDef typeDef = new TypeDef(type);
+                try {
+                    typeDef.analyze();
+                } catch (Exception e) {
+                    throw new SemanticException("Generate partition column " + columnName
+                            + " for multi expression partition error: " + e.getMessage(), partitionDesc.getPos());
+                }
+                // generated column expression should be saved in unanalyzed way in meta
+                ColumnDef generatedPartitionColumn = new ColumnDef(
+                        columnName, typeDef, null, false, null, null, true,
+                        ColumnDef.DefaultValueDef.NOT_SET, null, (FunctionCallExpr) partitionExpr, "");
+                columnDefs.add(generatedPartitionColumn);
+                partitionExprs.add((FunctionCallExpr) partitionExpr);
+            }
+        }
+        for (ColumnDef columnDef : columnDefs) {
+            if (partitionColumnList.contains(columnDef.getName())) {
+                columnDef.setIsPartitionColumn(true);
+            }
+        }
+        listPartitionDesc = new ListPartitionDesc(partitionColumnList, partitionDescList);
+        listPartitionDesc.setAutoPartitionTable(true);
+        listPartitionDesc.setPartitionExprs(partitionExprs);
+        stmt.setPartitionDesc(listPartitionDesc);
+    }
+
     public static void analyzePartitionDesc(CreateTableStmt stmt) {
         String engineName = stmt.getEngineName();
         PartitionDesc partitionDesc = stmt.getPartitionDesc();
@@ -457,13 +541,24 @@ public class CreateTableAnalyzer {
             if (partitionDesc != null) {
                 if (partitionDesc.getType() == PartitionType.RANGE || partitionDesc.getType() == PartitionType.LIST) {
                     try {
+                        PartitionDescAnalyzer.analyze(partitionDesc);
                         partitionDesc.analyze(stmt.getColumnDefs(), stmt.getProperties());
                     } catch (AnalysisException e) {
                         throw new SemanticException(e.getMessage());
                     }
+                    if (partitionDesc instanceof ListPartitionDesc) {
+                        ListPartitionDesc listPartitionDesc = (ListPartitionDesc) partitionDesc;
+                        if (listPartitionDesc.getPartitionExprs() != null && !listPartitionDesc.getPartitionExprs().isEmpty()
+                                && (stmt.getKeysDesc().getKeysType() == KeysType.AGG_KEYS
+                                || stmt.getKeysDesc().getKeysType() == KeysType.UNIQUE_KEYS)) {
+                            throw new SemanticException("expression partition base on generated column"
+                                    + " doest not support AGG_KEYS or UNIQUE_KEYS", partitionDesc.getPos());
+                        }
+                    }
                 } else if (partitionDesc instanceof ExpressionPartitionDesc) {
                     ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
                     try {
+                        PartitionDescAnalyzer.analyze(partitionDesc);
                         expressionPartitionDesc.analyze(stmt.getColumnDefs(), stmt.getProperties());
                     } catch (AnalysisException e) {
                         throw new SemanticException(e.getMessage());
@@ -525,6 +620,10 @@ public class CreateTableAnalyzer {
                 throw new SemanticException(keysDesc.getKeysType().toSql() + (stmt.isHasReplace() ? " with replace " : "")
                         + " must use hash distribution", distributionDesc.getPos());
             }
+            if (distributionDesc.getBuckets() > Config.max_bucket_number_per_partition && stmt.isOlapEngine()
+                    && stmt.getPartitionDesc() != null && stmt.getPartitionDesc().getType() != PartitionType.UNPARTITIONED) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_TOO_MANY_BUCKETS, Config.max_bucket_number_per_partition);
+            }
             Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
             columnSet.addAll(columnDefs.stream().map(ColumnDef::getName).collect(Collectors.toSet()));
             distributionDesc.analyze(columnSet);
@@ -555,10 +654,6 @@ public class CreateTableAnalyzer {
             throw new SemanticException("Generated Column does not support AGG table");
         }
 
-        if (RunMode.isSharedDataMode()) {
-            throw new SemanticException("Does not support generated column in shared data cluster yet");
-        }
-
         final TableName tableNameObject = stmt.getDbTbl();
 
         List<Column> columns = stmt.getColumns();
@@ -575,10 +670,10 @@ public class CreateTableAnalyzer {
 
             if (column.isGeneratedColumn()) {
                 if (keysDesc.containsCol(column.getName())) {
-                    throw new SemanticException("Generated Column can not be KEY");
+                    throw new SemanticException("Generated Column " + column.getName() + " can not be KEY");
                 }
 
-                Expr expr = column.generatedColumnExpr();
+                Expr expr = column.getGeneratedColumnExpr(columns);
 
                 List<DictionaryGetExpr> dictionaryGetExprs = Lists.newArrayList();
                 expr.collect(DictionaryGetExpr.class, dictionaryGetExprs);
@@ -639,6 +734,16 @@ public class CreateTableAnalyzer {
 
         List<Index> indexes = new ArrayList<>();
         if (CollectionUtils.isNotEmpty(indexDefs)) {
+            List<String> vectorIndexNames = indexDefs.stream()
+                    .filter(indexDef -> indexDef.getIndexType() == IndexDef.IndexType.VECTOR)
+                    .map(IndexDef::getIndexName)
+                    .toList();
+            if (vectorIndexNames.size() > 1) {
+                throw new SemanticException(
+                        String.format("At most one vector index is allowed for a table, but %d were found: %s",
+                                vectorIndexNames.size(), vectorIndexNames));
+            }
+
             Set<String> distinct = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
             Set<List<String>> distinctCol = new HashSet<>();
 
@@ -647,12 +752,14 @@ public class CreateTableAnalyzer {
                 if (!statement.isOlapEngine()) {
                     throw new SemanticException("index only support in olap engine at current version", indexDef.getPos());
                 }
+                List<ColumnId> columnIds = new ArrayList<>(indexDef.getColumns().size());
                 for (String indexColName : indexDef.getColumns()) {
                     boolean found = false;
                     for (Column column : columns) {
                         if (column.getName().equalsIgnoreCase(indexColName)) {
                             indexDef.checkColumn(column, keysDesc.getKeysType());
                             found = true;
+                            columnIds.add(column.getColumnId());
                             break;
                         }
                     }
@@ -663,7 +770,7 @@ public class CreateTableAnalyzer {
                                 indexDef.getPos());
                     }
                 }
-                indexes.add(new Index(indexDef.getIndexName(), indexDef.getColumns(), indexDef.getIndexType(),
+                indexes.add(new Index(indexDef.getIndexName(), columnIds, indexDef.getIndexType(),
                         indexDef.getComment(), indexDef.getProperties()));
 
                 distinct.add(indexDef.getIndexName());

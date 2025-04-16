@@ -11,7 +11,7 @@ on:
 
 jobs:
   sync:
-    runs-on: [self-hosted, quick]
+    runs-on: [self-hosted, sync]
     if: github.event.pull_request.merged == true && github.repository == 'StarRocks/starrocks'
     env:
       PR_NUMBER: ${{ github.event.number }}

@@ -43,6 +43,7 @@
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/descriptors.pb.h"
 #include "gen_cpp/olap_file.pb.h"
+#include "runtime/agg_state_desc.h"
 #include "storage/aggregate_type.h"
 #include "storage/olap_define.h"
 #include "storage/tablet_index.h"
@@ -159,10 +160,24 @@ public:
         ext->default_value = std::move(value);
     }
 
+    bool has_agg_state_desc() const { return _agg_state_desc != nullptr; }
+    AggStateDesc* get_agg_state_desc() const { return _agg_state_desc; }
+
     void add_sub_column(const TabletColumn& sub_column);
     void add_sub_column(TabletColumn&& sub_column);
     uint32_t subcolumn_count() const { return _extra_fields ? _extra_fields->sub_columns.size() : 0; }
-    const TabletColumn& subcolumn(uint32_t i) const { return _extra_fields->sub_columns[i]; }
+    const TabletColumn& subcolumn(uint32_t i) const {
+        if (i >= subcolumn_count()) {
+            throw std::out_of_range("Index i is out of range");
+        }
+        return _extra_fields->sub_columns[i];
+    }
+    const TabletColumn* subcolumn_ptr(uint32_t i) const {
+        if (i >= subcolumn_count()) {
+            return nullptr;
+        }
+        return &(_extra_fields->sub_columns[i]);
+    }
 
     friend bool operator==(const TabletColumn& a, const TabletColumn& b);
     friend bool operator!=(const TabletColumn& a, const TabletColumn& b);
@@ -229,6 +244,7 @@ private:
     uint8_t _flags = 0;
 
     ExtraFields* _extra_fields = nullptr;
+    AggStateDesc* _agg_state_desc = nullptr;
 };
 
 bool operator==(const TabletColumn& a, const TabletColumn& b);
@@ -272,6 +288,7 @@ public:
     size_t estimate_row_size(size_t variable_len) const;
     int32_t field_index(int32_t col_unique_id) const;
     size_t field_index(std::string_view field_name) const;
+    size_t field_index(std::string_view field_name, std::string_view extra_column_name) const;
     const TabletColumn& column(size_t ordinal) const;
     const std::vector<TabletColumn>& columns() const;
     const std::vector<ColumnId> sort_key_idxes() const { return _sort_key_idxes; }
@@ -286,6 +303,7 @@ public:
     bool has_bf_fpp() const { return _has_bf_fpp; }
     double bf_fpp() const { return _bf_fpp; }
     CompressionTypePB compression_type() const { return _compression_type; }
+    int compression_level() const { return _compression_level; }
     void append_column(TabletColumn column);
 
     int32_t schema_version() const { return _schema_version; }
@@ -312,6 +330,8 @@ public:
         }
     }
     void set_num_short_key_columns(uint16_t num_short_key_columns) { _num_short_key_columns = num_short_key_columns; }
+
+    bool has_separate_sort_key() const;
 
     std::string debug_string() const;
 
@@ -365,6 +385,8 @@ private:
 
     uint8_t _keys_type = static_cast<uint8_t>(DUP_KEYS);
     CompressionTypePB _compression_type = CompressionTypePB::LZ4_FRAME;
+    // only use for zstd compression type
+    int _compression_level = -1;
 
     std::unordered_map<int32_t, int32_t> _unique_id_to_index;
 

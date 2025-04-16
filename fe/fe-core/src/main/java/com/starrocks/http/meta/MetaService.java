@@ -43,6 +43,8 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.leader.MetaHelper;
+import com.starrocks.persist.ImageFormatVersion;
+import com.starrocks.persist.ImageLoader;
 import com.starrocks.persist.MetaCleaner;
 import com.starrocks.persist.Storage;
 import com.starrocks.persist.StorageInfo;
@@ -58,17 +60,21 @@ import org.apache.logging.log4j.Logger;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 public class MetaService {
-    private static final int TIMEOUT_SECOND = 10;
+    private static final Logger LOG = LogManager.getLogger(MetaService.class);
+
+    public static final int DOWNLOAD_TIMEOUT_SECOND = 10;
 
     public static class ImageAction extends MetaBaseAction {
         private static final String VERSION = "version";
         private static final String SUBDIR = "subdir";
+        private static final String IMAGE_FORMAT_VERSION = "image_format_version";
 
         public ImageAction(ActionController controller, File imageDir) {
             super(controller, imageDir);
@@ -89,12 +95,17 @@ public class MetaService {
             }
 
             String subDirStr = request.getSingleParameter(SUBDIR);
-            File realDir = null;
             if (Strings.isNullOrEmpty(subDirStr)) {
-                realDir = imageDir;
-            } else {
-                realDir = new File(imageDir.getAbsolutePath() + subDirStr);
+                subDirStr = "";
             }
+
+            ImageFormatVersion imageFormatVersion = ImageFormatVersion.v1;
+            String imageFormatStr = request.getSingleParameter(IMAGE_FORMAT_VERSION);
+            if (!Strings.isNullOrEmpty(imageFormatStr)) {
+                imageFormatVersion = ImageFormatVersion.valueOf(imageFormatStr);
+            }
+
+            File realDir = new File(getRealImageDir(imageDir.getAbsolutePath(), subDirStr, imageFormatVersion));
 
             long version = checkLongParam(versionStr);
             if (version < 0) {
@@ -108,7 +119,18 @@ public class MetaService {
                 return;
             }
 
-            writeFileResponse(request, response, imageFile);
+            String checksum = null;
+            if (imageFormatVersion == ImageFormatVersion.v2) {
+                File checksumFile = Storage.getChecksumFile(realDir, version);
+                if (checksumFile.exists()) {
+                    try {
+                        checksum = new String(Files.readAllBytes(Path.of(checksumFile.getAbsolutePath())));
+                    } catch (IOException e) {
+                        LOG.warn("get checksum from file {} failed", checksumFile.getAbsoluteFile(), e);
+                    }
+                }
+            }
+            writeFileResponse(request, response, imageFile, checksum);
         }
     }
 
@@ -136,8 +158,9 @@ public class MetaService {
             }
 
             try {
-                Storage currentStorageInfo = new Storage(realDir.getAbsolutePath());
-                StorageInfo storageInfo = new StorageInfo(currentStorageInfo.getImageJournalId());
+                ImageLoader imageLoader = new ImageLoader(realDir.getAbsolutePath());
+                StorageInfo storageInfo = new StorageInfo(imageLoader.getImageJournalId(),
+                        imageLoader.getImageFormatVersion());
 
                 response.setContentType("application/json");
                 Gson gson = new Gson();
@@ -166,7 +189,7 @@ public class MetaService {
         @Override
         public void executeGet(BaseRequest request, BaseResponse response) {
             File versionFile = new File(imageDir, Storage.VERSION_FILE);
-            writeFileResponse(request, response, versionFile);
+            writeFileResponse(request, response, versionFile, null);
         }
     }
 
@@ -177,6 +200,7 @@ public class MetaService {
         private static final String PORT = "port";
         private static final String SUBDIR = "subdir";
         private static final String FOR_GLOBAL_STATE = "for_global_state";
+        private static final String IMAGE_FORMAT_VERSION = "image_format_version";
 
         public PutAction(ActionController controller, File imageDir) {
             super(controller, imageDir);
@@ -240,16 +264,27 @@ public class MetaService {
                 return;
             }
 
+            String formatStr = request.getSingleParameter(IMAGE_FORMAT_VERSION);
+            ImageFormatVersion imageFormatVersion = ImageFormatVersion.v1;
+            if (!Strings.isNullOrEmpty(formatStr)) {
+                imageFormatVersion = ImageFormatVersion.valueOf(formatStr);
+            }
+
             String url = "http://" + NetUtils.getHostPortInAccessibleFormat(machine, Integer.parseInt(portStr)) + 
-                    "/image?version=" + versionStr + "&subdir=" + subDirStr;
+                    "/image?version=" + versionStr
+                    + "&subdir=" + subDirStr
+                    + "&image_format_version=" + imageFormatVersion;
             String filename = Storage.IMAGE + "." + versionStr;
 
-            String realDir = GlobalStateMgr.getCurrentState().getImageDir() + subDirStr;
+            String realDir = getRealImageDir(GlobalStateMgr.getCurrentState().getImageDir(),
+                    subDirStr, imageFormatVersion);
             File dir = new File(realDir);
             try {
-                OutputStream out = MetaHelper.getOutputStream(filename, dir);
-                MetaHelper.getRemoteFile(url, TIMEOUT_SECOND * 1000, out);
-                MetaHelper.complete(filename, dir);
+                if (Files.exists(Path.of(realDir + "/" + filename))) {
+                    LOG.info("image file : {} version: {} already exists, ignore", filename, imageFormatVersion);
+                } else {
+                    MetaHelper.downloadImageFile(url, DOWNLOAD_TIMEOUT_SECOND * 1000, versionStr, dir);
+                }
                 writeResponse(request, response);
             } catch (FileNotFoundException e) {
                 LOG.warn("file not found. file: {}", filename, e);
@@ -273,6 +308,14 @@ public class MetaService {
             } catch (IOException e) {
                 LOG.error("Follower/Observer delete old image file fail.", e);
             }
+        }
+    }
+
+    private static String getRealImageDir(String imageMetaDir, String subDir, ImageFormatVersion imageFormatVersion) {
+        if (imageFormatVersion == ImageFormatVersion.v1) {
+            return imageMetaDir + subDir;
+        } else {
+            return imageMetaDir + subDir + "/" + imageFormatVersion;
         }
     }
 
@@ -320,7 +363,7 @@ public class MetaService {
         public void executeGet(BaseRequest request, BaseResponse response) {
             String host = request.getSingleParameter(HOST);
             try {
-                host = URLDecoder.decode(host,  StandardCharsets.UTF_8.toString());
+                host = URLDecoder.decode(host, StandardCharsets.UTF_8.toString());
             } catch (UnsupportedEncodingException e) {
                 throw new RuntimeException(e);
             }
@@ -370,7 +413,7 @@ public class MetaService {
                 Storage storage = new Storage(imageDir.getAbsolutePath());
                 response.updateHeader(MetaBaseAction.TOKEN, storage.getToken());
             } catch (IOException e) {
-                LOG.error(e);
+                LOG.error(e.getMessage(), e);
             }
             writeResponse(request, response);
         }

@@ -36,6 +36,8 @@ package com.starrocks.http.rest;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Strings;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -47,8 +49,6 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -90,17 +90,16 @@ public class TableRowCountAction extends RestBaseAction {
                 throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST, "{database}/{table} must be selected");
             }
             // check privilege for select, otherwise return HTTP 401
-            Authorizer.checkTableAction(ConnectContext.get().getCurrentUserIdentity(), ConnectContext.get().getCurrentRoleIds(),
-                    dbName, tableName, PrivilegeType.SELECT);
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+            Authorizer.checkTableAction(ConnectContext.get(), dbName, tableName, PrivilegeType.SELECT);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
             if (db == null) {
                 throw new StarRocksHttpException(HttpResponseStatus.NOT_FOUND,
                         "Database [" + dbName + "] " + "does not exists");
             }
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.WRITE);
+            locker.lockDatabase(db.getId(), LockType.WRITE);
             try {
-                Table table = db.getTable(tableName);
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
                 if (table == null) {
                     throw new StarRocksHttpException(HttpResponseStatus.NOT_FOUND,
                             "Table [" + tableName + "] " + "does not exists");
@@ -115,7 +114,7 @@ public class TableRowCountAction extends RestBaseAction {
                 resultMap.put("status", 200);
                 resultMap.put("size", olapTable.proximateRowCount());
             } finally {
-                locker.unLockDatabase(db, LockType.WRITE);
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
             }
         } catch (StarRocksHttpException e) {
             // status code  should conforms to HTTP semantic

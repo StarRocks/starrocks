@@ -17,9 +17,12 @@
 #include <brpc/controller.h>
 #include <gtest/gtest.h>
 
+#include <memory>
+
 #include "common/utils.h"
 #include "exec/tablet_sink_index_channel.h"
 #include "runtime/exec_env.h"
+#include "service/brpc_service_test_util.h"
 
 namespace starrocks {
 
@@ -33,19 +36,6 @@ TEST_F(InternalServiceTest, test_get_info_timeout_invalid) {
     auto st = Status(response.status());
     ASSERT_TRUE(st.is_time_out());
 }
-
-class MockClosure : public ::google::protobuf::Closure {
-public:
-    MockClosure() = default;
-    ~MockClosure() override = default;
-
-    void Run() override { _run.store(true); }
-
-    bool has_run() { return _run.load(); }
-
-private:
-    std::atomic_bool _run = false;
-};
 
 TEST_F(InternalServiceTest, test_tablet_writer_add_chunks_via_http) {
     BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance());
@@ -65,7 +55,7 @@ TEST_F(InternalServiceTest, test_tablet_writer_add_chunks_via_http) {
         r->set_txn_id(1000);
         r->set_index_id(2000);
         r->set_sender_id(3000);
-        stream_load::serialize_to_iobuf<PTabletWriterAddChunksRequest>(req, &cntl.request_attachment());
+        serialize_to_iobuf<PTabletWriterAddChunksRequest>(req, &cntl.request_attachment());
         PHttpRequest request;
         PTabletWriterAddBatchResult response;
         MockClosure closure;
@@ -114,7 +104,7 @@ TEST_F(InternalServiceTest, test_tablet_writer_add_chunk_via_http) {
         r->set_txn_id(1000);
         r->set_index_id(2000);
         r->set_sender_id(3000);
-        stream_load::serialize_to_iobuf<PTabletWriterAddChunksRequest>(req, &cntl.request_attachment());
+        serialize_to_iobuf<PTabletWriterAddChunksRequest>(req, &cntl.request_attachment());
         PHttpRequest request;
         PTabletWriterAddBatchResult response;
         MockClosure closure;
@@ -128,7 +118,7 @@ TEST_F(InternalServiceTest, test_tablet_writer_add_chunk_via_http) {
         req.set_txn_id(1000);
         req.set_index_id(2000);
         req.set_sender_id(3000);
-        stream_load::serialize_to_iobuf<PTabletWriterAddChunkRequest>(req, &cntl.request_attachment());
+        serialize_to_iobuf<PTabletWriterAddChunkRequest>(req, &cntl.request_attachment());
         PHttpRequest request;
         PTabletWriterAddBatchResult response;
         MockClosure closure;
@@ -145,6 +135,89 @@ TEST_F(InternalServiceTest, test_tablet_writer_add_chunk_via_http) {
         service.PInternalServiceImplBase::tablet_writer_add_chunk_via_http(&cntl, &request, &response, &closure);
         auto st = Status(response.status());
         ASSERT_TRUE(st.is_not_supported());
+    }
+}
+
+TEST_F(InternalServiceTest, test_load_diagnose) {
+    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance());
+    PLoadDiagnoseRequest request;
+    request.set_txn_id(1);
+    request.mutable_id()->set_hi(0);
+    request.mutable_id()->set_lo(0);
+    request.set_profile(true);
+    request.set_stack_trace(true);
+    PLoadDiagnoseResult response;
+    brpc::Controller cntl;
+    MockClosure closure;
+    service.load_diagnose(&cntl, &request, &response, &closure);
+    ASSERT_TRUE(response.has_profile_status());
+    auto st = Status(response.profile_status());
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.message().find("can't find the load channel") != std::string::npos);
+    ASSERT_TRUE(response.has_stack_trace_status());
+    st = Status(response.stack_trace_status());
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.message().find("can't find the load channel") != std::string::npos);
+}
+
+TEST_F(InternalServiceTest, test_fetch_datacache_via_brpc) {
+    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance());
+
+    PFetchDataCacheRequest request;
+    PFetchDataCacheResponse response;
+    request.set_request_id(0);
+    request.set_cache_key("test_file");
+    request.set_offset(0);
+    request.set_size(1024);
+
+    {
+        brpc::Controller cntl;
+        MockClosure closure;
+        service._fetch_datacache(&cntl, &request, &response, &closure);
+        auto st = Status(response.status());
+        ASSERT_FALSE(st.ok());
+    }
+
+    std::shared_ptr<BlockCache> cache(new BlockCache);
+    {
+        CacheOptions options;
+        options.mem_space_size = 20 * 1024 * 1024;
+        options.block_size = 256 * 1024 * 1024;
+        options.max_concurrent_inserts = 100000;
+        options.max_flying_memory_mb = 100;
+        options.engine = "starcache";
+        options.inline_item_count_limit = 1000;
+        Status status = cache->init(options);
+        ASSERT_TRUE(status.ok());
+
+        const size_t cache_size = 1024;
+        const std::string cache_key = "test_file";
+        std::string value(cache_size, 'a');
+        Status st = cache->write(cache_key, 0, cache_size, value.c_str());
+        ASSERT_TRUE(st.ok());
+
+        CacheEnv* cache_env = CacheEnv::GetInstance();
+        cache_env->_block_cache = cache;
+    }
+
+    {
+        brpc::Controller cntl;
+        MockClosure closure;
+        service.fetch_datacache(&cntl, &request, &response, &closure);
+        for (int retry = 3; retry > 0; --retry) {
+            if (closure.has_run()) {
+                break;
+            }
+            sleep(1);
+        }
+        auto st = Status(response.status());
+        // Read cache data.
+        ASSERT_TRUE(st.ok()) << st.message();
+
+        IOBuffer buffer;
+        cntl.response_attachment().swap(buffer.raw_buf());
+        std::string target_value(1024, 'a');
+        ASSERT_EQ(buffer.const_raw_buf().to_string(), target_value);
     }
 }
 

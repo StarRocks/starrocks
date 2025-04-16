@@ -68,7 +68,7 @@ protected:
             full_path = join_path(join_path(kTestDir, kMetadataDirectoryName), name);
         } else if (is_txn_log(name) || is_txn_slog(name) || is_txn_vlog(name) || is_combined_txn_log(name)) {
             full_path = join_path(join_path(kTestDir, kTxnLogDirectoryName), name);
-        } else if (is_segment(name) || is_delvec(name) || is_del(name)) {
+        } else if (is_segment(name) || is_delvec(name) || is_del(name) || is_sst(name)) {
             full_path = join_path(join_path(kTestDir, kSegmentDirectoryName), name);
         } else {
             CHECK(false) << name;
@@ -268,6 +268,8 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
     create_data_file("00000000000059e4_7c6505a3-f2b0-441d-9ea9-9781b87c0eda.dat");
     create_data_file("00000000000059e4_e231b341-dfc9-4fe6-9a0e-8b03868539dc.dat");
 
+    const int64_t grace_timestamp = 1687331159;
+
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
         {
         "id": 100,
@@ -290,7 +292,8 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
                 "name": "00000000000059e3_9ae981b3-7d4b-49e9-9723-d7f752686154.delvec",
                 "size": 128
             }
-        ]
+        ],
+        "commit_time": 1687331159
         }
         )DEL")));
 
@@ -315,7 +318,8 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
                 "data_size": 4096
             }
         ],
-        "prev_garbage_version": 2
+        "prev_garbage_version": 2,
+        "commit_time": 1687331159
         }
         )DEL")));
 
@@ -337,7 +341,8 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
                 "data_size": 1024
             }
         ],
-        "prev_garbage_version": 3
+        "prev_garbage_version": 3,
+        "commit_time": 1687331159
         }
         )DEL")));
 
@@ -365,7 +370,8 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
                 "data_size": 1024
             }
         ],
-        "prev_garbage_version": 3
+        "prev_garbage_version": 3,
+        "commit_time": 1687331159
         }
         )DEL")));
 
@@ -380,7 +386,8 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
                 ],
                 "data_size": 2048 
             }
-        ]
+        ],
+        "commit_time": 1687331159
         }
         )DEL")));
 
@@ -388,7 +395,8 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
         {
         "id": 101,
         "version": 5,
-        "prev_garbage_version": 4
+        "prev_garbage_version": 4,
+        "commit_time": 1687331159
         }
         )DEL")));
 
@@ -403,7 +411,8 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
                 ],
                 "data_size": 2048 
             }
-        ]
+        ],
+        "commit_time": 1687331159
         }
         )DEL")));
 
@@ -411,7 +420,8 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
         {
         "id": 102,
         "version": 5,
-        "prev_garbage_version": 4
+        "prev_garbage_version": 4,
+        "commit_time": 1687331159
         }
         )DEL")));
 
@@ -501,10 +511,11 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
         ASSERT_NE(0, response.status().status_code());
         EXPECT_EQ(0, response.vacuumed_files());
         EXPECT_EQ(0, response.vacuumed_file_size());
+        EXPECT_EQ(0, response.vacuumed_version());
 
         ensure_all_files_exist();
     }
-    // Invalid request: "tablet_ids()" is empty
+    // Invalid request: "tablet_ids()" and "tablet_infos" are empty
     {
         VacuumRequest request;
         VacuumResponse response;
@@ -515,10 +526,11 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         ASSERT_NE(0, response.status().status_code());
-        EXPECT_TRUE(MatchPattern(response.status().error_msgs(0), "*tablet_ids is empty*"))
+        EXPECT_TRUE(MatchPattern(response.status().error_msgs(0), "*both tablet_ids and tablet_infos are empty*"))
                 << response.status().error_msgs(0);
         EXPECT_EQ(0, response.vacuumed_files());
         EXPECT_EQ(0, response.vacuumed_file_size());
+        EXPECT_EQ(0, response.vacuumed_version());
 
         ensure_all_files_exist();
     }
@@ -538,6 +550,7 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
                 << response.status().error_msgs(0);
         EXPECT_EQ(0, response.vacuumed_files());
         EXPECT_EQ(0, response.vacuumed_file_size());
+        EXPECT_EQ(0, response.vacuumed_version());
 
         ensure_all_files_exist();
     }
@@ -558,6 +571,7 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
                 << response.status().error_msgs(0);
         EXPECT_EQ(0, response.vacuumed_files());
         EXPECT_EQ(0, response.vacuumed_file_size());
+        EXPECT_EQ(0, response.vacuumed_version());
 
         ensure_all_files_exist();
     }
@@ -569,13 +583,14 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
         request.add_tablet_ids(101);
         request.add_tablet_ids(100);
         request.set_min_retain_version(5);
-        request.set_grace_timestamp(::time(nullptr) - 60);
+        request.set_grace_timestamp(grace_timestamp - 60);
         request.set_min_active_txn_id(12344);
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
         EXPECT_EQ(0, response.vacuumed_files());
         EXPECT_EQ(0, response.vacuumed_file_size());
+        EXPECT_EQ(1, response.vacuumed_version());
 
         ensure_all_files_exist();
     }
@@ -587,7 +602,7 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
         request.add_tablet_ids(101);
         request.add_tablet_ids(100);
         request.set_min_retain_version(5);
-        request.set_grace_timestamp(::time(nullptr) + 10);
+        request.set_grace_timestamp(grace_timestamp + 10);
         request.set_min_active_txn_id(12345);
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
@@ -599,6 +614,7 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
         // 1 txn slog file
         EXPECT_EQ(15, response.vacuumed_files());
         EXPECT_GT(response.vacuumed_file_size(), 0);
+        EXPECT_EQ(5, response.vacuumed_version());
 
         EXPECT_FALSE(file_exist(tablet_metadata_filename(100, 2)));
         EXPECT_FALSE(file_exist(tablet_metadata_filename(100, 3)));
@@ -687,6 +703,7 @@ TEST_P(LakeVacuumTest, test_delete_tablets_02) {
     create_data_file("00000000000359e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat");
     create_data_file("00000000000459e4_3d9c9edb-a69d-4a06-9093-a9f557e4c3b0.dat");
     create_data_file("00000000000459e3_9ae981b3-7d4b-49e9-9723-d7f752686154.delvec");
+    create_data_file("0000000000011111_9ae981b3-7d4b-49e9-9723-d7f752686154.sst");
 
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
         {
@@ -766,6 +783,13 @@ TEST_P(LakeVacuumTest, test_delete_tablets_02) {
                 }
             ]
         },
+        "sstable_meta": {
+            "sstables": [
+                {
+                    "filename": "0000000000011111_9ae981b3-7d4b-49e9-9723-d7f752686154.sst"
+                }
+            ]
+        },
         "prev_garbage_version": 3
         }
         )DEL")));
@@ -786,6 +810,7 @@ TEST_P(LakeVacuumTest, test_delete_tablets_02) {
         EXPECT_FALSE(file_exist("00000000000359e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"));
         EXPECT_FALSE(file_exist("00000000000459e4_3d9c9edb-a69d-4a06-9093-a9f557e4c3b0.dat"));
         EXPECT_FALSE(file_exist("00000000000459e3_9ae981b3-7d4b-49e9-9723-d7f752686154.delvec"));
+        EXPECT_FALSE(file_exist("0000000000011111_9ae981b3-7d4b-49e9-9723-d7f752686154.sst"));
     }
     {
         DeleteTabletRequest request;
@@ -1233,6 +1258,8 @@ TEST_P(LakeVacuumTest, test_datafile_gc) {
 
     create_data_file("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat");
     create_data_file("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat");
+    create_data_file("0000000000011111_a542395a-bff5-48a7-a3a7-2ed05691b58c.sst");
+    create_data_file("0000000000022222_a542395a-bff5-48a7-a3a7-2ed05691b58c.sst");
 
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
         {
@@ -1253,17 +1280,28 @@ TEST_P(LakeVacuumTest, test_datafile_gc) {
                 ],
                 "data_size": 4096
             }
-        ]
+        ],
+        "sstable_meta": {
+            "sstables": [
+                {
+                    "filename": "0000000000022222_a542395a-bff5-48a7-a3a7-2ed05691b58c.sst"
+                }
+            ]
+        }
         }
         )DEL")));
 
     ASSERT_OK(datafile_gc(kTestDir, join_path(kTestDir, "audit.log"), 0, false));
     EXPECT_TRUE(file_exist("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));
     EXPECT_TRUE(file_exist("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"));
+    EXPECT_TRUE(file_exist("0000000000011111_a542395a-bff5-48a7-a3a7-2ed05691b58c.sst"));
+    EXPECT_TRUE(file_exist("0000000000022222_a542395a-bff5-48a7-a3a7-2ed05691b58c.sst"));
 
     ASSERT_OK(datafile_gc(kTestDir, "", 0, true));
     EXPECT_TRUE(file_exist("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));
     EXPECT_FALSE(file_exist("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"));
+    EXPECT_FALSE(file_exist("0000000000011111_a542395a-bff5-48a7-a3a7-2ed05691b58c.sst"));
+    EXPECT_TRUE(file_exist("0000000000022222_a542395a-bff5-48a7-a3a7-2ed05691b58c.sst"));
 }
 
 TEST_P(LakeVacuumTest, test_vacuum_combined_txn_log) {
@@ -1303,6 +1341,121 @@ TEST_P(LakeVacuumTest, test_vacuum_combined_txn_log) {
         ASSERT_TRUE(response.has_status());
         ASSERT_EQ(TStatusCode::OK, response.status().status_code());
         EXPECT_FALSE(file_exist(combined_txn_log_filename(1000)));
+    }
+}
+
+TEST_P(LakeVacuumTest, test_vacuumed_version) {
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 10001,
+        "version": 2,
+        "rowsets": [
+            {
+                "segments": [
+                    "00000000000059e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"
+                ],
+                "data_size": 4096
+            }
+        ],
+        "prev_garbage_version": 0,
+        "commit_time": 1687331159
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 10001,
+        "version": 3,
+        "rowsets": [
+            {
+                "segments": [
+                    "00000000000059e5_5b3c5f4b-2675-4b7a-b5e0-4006cc285815.dat"
+                ],
+                "data_size": 100
+            }
+        ],
+        "prev_garbage_version": 2,
+        "commit_time": 1687331160
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 10001,
+        "version": 4,
+        "rowsets": [
+            {
+                "segments": [
+                    "00000000000059e5_5b3c5f4b-2675-4b7a-b5e0-4006cc285815.dat"
+                ],
+                "data_size": 4096
+            }
+        ],
+        "prev_garbage_version": 3,
+        "commit_time": 1687331161
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 10002,
+        "version": 4,
+        "rowsets": [
+            {
+                "segments": [
+                    "00000000000059e5_5b3c5f4b-2675-4b7a-b5e0-4006cc285815.dat"
+                ],
+                "data_size": 4096
+            }
+        ],
+        "prev_garbage_version": 3,
+        "commit_time": 1687331162
+        }
+        )DEL")));
+
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(true);
+        request.add_tablet_ids(10001);
+        request.add_tablet_ids(10002);
+        request.set_min_retain_version(4);
+        request.set_grace_timestamp(1687331158);
+        request.set_min_active_txn_id(12344);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_EQ(1, response.vacuumed_version());
+    }
+
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(true);
+        request.add_tablet_ids(10001);
+        request.add_tablet_ids(10002);
+        request.set_min_retain_version(4);
+        request.set_grace_timestamp(1687331161);
+        request.set_min_active_txn_id(12344);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_EQ(3, response.vacuumed_version());
+    }
+
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(true);
+        request.add_tablet_ids(10001);
+        request.add_tablet_ids(10002);
+        request.set_min_retain_version(4);
+        request.set_grace_timestamp(1687331162);
+        request.set_min_active_txn_id(12344);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_EQ(3, response.vacuumed_version());
     }
 }
 
@@ -1390,7 +1543,8 @@ TEST(LakeVacuumTest2, test_delete_files_retry) {
 TEST(LakeVacuumTest2, test_delete_files_retry2) {
     WritableFileOptions options;
     options.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
-    ASSIGN_OR_ABORT(auto f1, fs::new_writable_file(options, "test_vacuum_delete_files_retry2.txt"));
+    std::string testFile("test_vacuum_delete_files_retry2.txt");
+    ASSIGN_OR_ABORT(auto f1, fs::new_writable_file(options, testFile));
     ASSERT_OK(f1->append("111"));
     ASSERT_OK(f1->close());
 
@@ -1409,19 +1563,21 @@ TEST(LakeVacuumTest2, test_delete_files_retry2) {
         attempts++;
         SyncPoint::GetInstance()->ClearCallBack("PosixFileSystem::delete_file");
         SyncPoint::GetInstance()->DisableProcessing();
+        fs::delete_file(testFile);
     });
 
-    auto future2 = delete_files_callable({"test_vacuum_delete_files_retry2.txt"});
+    auto future2 = delete_files_callable({testFile});
     ASSERT_TRUE(future2.valid());
     ASSERT_FALSE(future2.get().ok());
-    ASSERT_TRUE(fs::path_exist("test_vacuum_delete_files_retry2.txt"));
+    ASSERT_TRUE(fs::path_exist(testFile));
     EXPECT_EQ(0, attempts);
 }
 
 TEST(LakeVacuumTest2, test_delete_files_retry3) {
     WritableFileOptions options;
     options.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
-    ASSIGN_OR_ABORT(auto f1, fs::new_writable_file(options, "test_vacuum_delete_files_retry3.txt"));
+    std::string testFile("test_vacuum_delete_files_retry3.txt");
+    ASSIGN_OR_ABORT(auto f1, fs::new_writable_file(options, testFile));
     ASSERT_OK(f1->append("111"));
     ASSERT_OK(f1->close());
 
@@ -1440,12 +1596,13 @@ TEST(LakeVacuumTest2, test_delete_files_retry3) {
         attempts++;
         SyncPoint::GetInstance()->ClearCallBack("PosixFileSystem::delete_file");
         SyncPoint::GetInstance()->DisableProcessing();
+        fs::delete_file(testFile);
     });
 
-    auto future = delete_files_callable({"test_vacuum_delete_files_retry3.txt"});
+    auto future = delete_files_callable({testFile});
     ASSERT_TRUE(future.valid());
     ASSERT_FALSE(future.get().ok());
-    ASSERT_TRUE(fs::path_exist("test_vacuum_delete_files_retry3.txt"));
+    ASSERT_TRUE(fs::path_exist(testFile));
     EXPECT_EQ(0, attempts);
 }
 

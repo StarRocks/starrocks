@@ -46,8 +46,8 @@ import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TPublishVersionRequest;
 import com.starrocks.thrift.TTabletVersionPair;
 import com.starrocks.thrift.TTaskType;
-import com.starrocks.thrift.TTxnType;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionType;
 import io.opentelemetry.api.trace.Span;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -68,12 +68,21 @@ public class PublishVersionTask extends AgentTask {
     private final TransactionState txnState;
     private Span span;
     private boolean enableSyncPublish;
-    private TTxnType txnType;
+    private TransactionType txnType;
     private final long globalTransactionId;
+    private boolean isVersionOverwrite = false;
 
     public PublishVersionTask(long backendId, long transactionId, long globalTransactionId, long dbId, long commitTimestamp,
                               List<TPartitionVersionInfo> partitionVersionInfos, String traceParent, Span txnSpan,
-                              long createTime, TransactionState state, boolean enableSyncPublish, TTxnType txnType) {
+                              long createTime, TransactionState state, boolean enableSyncPublish, TransactionType txnType) {
+        this(backendId, transactionId, globalTransactionId, dbId, commitTimestamp, partitionVersionInfos,
+                traceParent, txnSpan, createTime, state, enableSyncPublish, txnType, false);
+    }
+
+    public PublishVersionTask(long backendId, long transactionId, long globalTransactionId, long dbId, long commitTimestamp,
+                              List<TPartitionVersionInfo> partitionVersionInfos, String traceParent, Span txnSpan,
+                              long createTime, TransactionState state, boolean enableSyncPublish,
+                              TransactionType txnType, boolean isVersionOverwrite) {
         super(null, backendId, TTaskType.PUBLISH_VERSION, dbId, -1L, -1L, -1L, -1L, transactionId, createTime, traceParent);
         this.transactionId = transactionId;
         this.globalTransactionId = globalTransactionId;
@@ -84,6 +93,7 @@ public class PublishVersionTask extends AgentTask {
         this.txnState = state;
         this.enableSyncPublish = enableSyncPublish;
         this.txnType = txnType;
+        this.isVersionOverwrite = isVersionOverwrite;
         if (txnSpan != null) {
             span = TraceManager.startSpan("publish_version_task", txnSpan);
             span.setAttribute("backend_id", backendId);
@@ -99,8 +109,12 @@ public class PublishVersionTask extends AgentTask {
         publishVersionRequest.setCommit_timestamp(commitTimestamp);
         publishVersionRequest.setTxn_trace_parent(traceParent);
         publishVersionRequest.setEnable_sync_publish(enableSyncPublish);
-        publishVersionRequest.setTxn_type(txnType);
+        publishVersionRequest.setTxn_type(txnType.toThrift());
         publishVersionRequest.setGtid(globalTransactionId);
+        if (isVersionOverwrite) {
+            publishVersionRequest.setIs_version_overwrite(isVersionOverwrite);
+        }
+        LOG.debug("publish version request: {}", publishVersionRequest);
         return publishVersionRequest;
     }
 
@@ -175,7 +189,7 @@ public class PublishVersionTask extends AgentTask {
             LOG.warn("backend not found or no replicas on backend, backendid={}", backendId);
             return;
         }
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             LOG.warn("db not found dbid={}", dbId);
             return;
@@ -190,7 +204,7 @@ public class PublishVersionTask extends AgentTask {
             LOG.info("during publish version some tablets were dropped(maybe by alter), tabletIds={}", droppedTablets);
         }
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
             // TODO: persistent replica version
             for (int i = 0; i < tabletVersions.size(); i++) {
@@ -202,7 +216,7 @@ public class PublishVersionTask extends AgentTask {
                 replica.updateVersion(tabletVersion.version);
             }
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
             if (span != null) {
                 span.addEvent("update_replica_version_finish");
             }

@@ -15,17 +15,17 @@
 package com.starrocks.common;
 
 import com.starrocks.common.util.FrontendDaemon;
-import com.starrocks.common.util.concurrent.FairReentrantLock;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class ConfigRefreshDaemon extends FrontendDaemon {
     private static final int REFRESH_INTERVAL_MS = 10000;
 
     private final List<ConfigRefreshListener> listeners = new ArrayList<>();
-    private final Lock lock = new FairReentrantLock();
+    private final Lock lock = new ReentrantLock();
 
     public ConfigRefreshDaemon() {
         super("config-refresh-daemon", REFRESH_INTERVAL_MS);

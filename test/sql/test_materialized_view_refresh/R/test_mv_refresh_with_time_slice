@@ -1,0 +1,86 @@
+-- name: test_mv_refresh_with_time_slice
+CREATE TABLE `t1` (
+  `id` int(11) NOT NULL,
+  `dt` date NOT NULL
+) ENGINE=OLAP 
+PRIMARY KEY(`id`, `dt`)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+      "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t1 VALUES
+ (1,"2020-07-02"),(2,"2020-07-05"),(3,"2020-07-08"),(4,"2020-07-11"),
+ (1,"2020-07-16"),(2,"2020-07-19"),(3,"2020-07-22"),(4,"2020-07-25"),
+ (2,"2020-06-15"),(3,"2020-06-18"),(4,"2020-06-21"),(5,"2020-06-24"),
+ (2,"2020-07-02"),(3,"2020-07-05"),(4,"2020-07-08"),(5,"2020-07-11"),
+ (2,"2020-07-16"),(3,"2020-07-19"),(4,"2020-07-22"),(5,"2020-07-25");
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv1 PARTITION BY date_trunc("month", dt1) 
+REFRESH DEFERRED MANUAL 
+PROPERTIES (
+      "replication_num" = "1",
+      "session.insert_max_filter_ratio" = "1",
+      "session.query_debug_options" = "{'mvRefreshTraceMode':'LOGS', 'mvRefreshTraceModule':'OPTIMIZER'}"
+)
+AS SELECT time_slice(dt, interval 5 day) as dt1, sum(id) FROM t1 GROUP BY dt1;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv2 PARTITION BY date_trunc("month", dt1) 
+REFRESH DEFERRED MANUAL 
+PROPERTIES (
+      "replication_num" = "1",
+      "session.insert_max_filter_ratio" = "1",
+      "session.query_debug_options" = "{'mvRefreshTraceMode':'LOGS', 'mvRefreshTraceModule':'OPTIMIZER'}"
+)
+AS SELECT dt as dt1, sum(id) FROM t1 GROUP BY dt1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv2 WITH SYNC MODE;
+select * from mv1 order by 1 limit 5;
+-- result:
+2020-06-15 00:00:00	5
+2020-06-20 00:00:00	9
+2020-06-30 00:00:00	3
+2020-07-05 00:00:00	12
+2020-07-10 00:00:00	9
+-- !result
+select * from mv2 order by 1 limit 5;
+-- result:
+2020-06-15	2
+2020-06-18	3
+2020-06-21	4
+2020-06-24	5
+2020-07-02	3
+-- !result
+INSERT INTO t1 VALUES (1,"2020-07-02"),(2,"2020-07-05"),(3,"2020-07-08"),(4,"2020-07-11");
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv2 WITH SYNC MODE;
+select * from mv1 order by 1 limit 5;
+-- result:
+2020-06-15 00:00:00	5
+2020-06-20 00:00:00	9
+2020-06-30 00:00:00	3
+2020-07-05 00:00:00	12
+2020-07-10 00:00:00	9
+-- !result
+select * from mv2 order by 1 limit 5;
+-- result:
+2020-06-15	2
+2020-06-18	3
+2020-06-21	4
+2020-06-24	5
+2020-07-02	3
+-- !result
+drop materialized view mv1;
+-- result:
+-- !result
+drop materialized view mv2;
+-- result:
+-- !result

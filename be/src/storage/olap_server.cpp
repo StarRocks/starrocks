@@ -117,7 +117,7 @@ Status StorageEngine::start_bg_threads() {
     // convert store map to vector
     std::vector<DataDir*> data_dirs;
     for (auto& tmp_store : _store_map) {
-        data_dirs.push_back(tmp_store.second);
+        data_dirs.push_back(tmp_store.second.get());
     }
     const auto data_dir_num = static_cast<int32_t>(data_dirs.size());
 
@@ -180,21 +180,8 @@ Status StorageEngine::start_bg_threads() {
             }
         }
     } else {
-        int32_t max_task_num = 0;
-        // new compaction framework
-        if (config::base_compaction_num_threads_per_disk >= 0 &&
-            config::cumulative_compaction_num_threads_per_disk >= 0) {
-            max_task_num = static_cast<int32_t>(StorageEngine::instance()->get_store_num() *
-                                                (config::cumulative_compaction_num_threads_per_disk +
-                                                 config::base_compaction_num_threads_per_disk));
-        } else {
-            // When cumulative_compaction_num_threads_per_disk or config::base_compaction_num_threads_per_disk is less than 0,
-            // there is no limit to _max_task_num if max_compaction_concurrency is also less than 0, and here we set maximum value to be 20.
-            max_task_num = std::min(20, static_cast<int32_t>(StorageEngine::instance()->get_store_num() * 5));
-        }
-        if (config::max_compaction_concurrency > 0 && config::max_compaction_concurrency < max_task_num) {
-            max_task_num = config::max_compaction_concurrency;
-        }
+        _compaction_manager->set_max_compaction_concurrency(config::max_compaction_concurrency);
+        int32_t max_task_num = _compaction_manager->compute_max_compaction_task_num();
 
         (void)Compaction::init(max_task_num);
 
@@ -254,8 +241,15 @@ Status StorageEngine::start_bg_threads() {
         Thread::set_thread_name(_adjust_cache_thread, "adjust_cache");
     }
 
+    start_schedule_apply_thread();
+
     LOG(INFO) << "All backgroud threads of storage engine have started.";
     return Status::OK();
+}
+
+void StorageEngine::start_schedule_apply_thread() {
+    _schedule_apply_thread = std::thread([this] { _schedule_apply_thread_callback(nullptr); });
+    Thread::set_thread_name(_schedule_apply_thread, "schedule_apply");
 }
 
 void evict_pagecache(StoragePageCache* cache, int64_t bytes_to_dec, std::atomic<bool>& stoped) {
@@ -826,8 +820,12 @@ void* StorageEngine::_path_gc_thread_callback(void* arg) {
         LOG(INFO) << "try to perform path gc by rowsetid!";
         // perform path gc by rowset id
         ((DataDir*)arg)->perform_path_gc_by_rowsetid();
+
+        LOG(INFO) << "try to perform path gc by dcg files!";
         // perform dcg files gc
         ((DataDir*)arg)->perform_delta_column_files_gc();
+        // perform crm files gc
+        ((DataDir*)arg)->perform_crm_gc(config::unused_crm_file_threshold_second);
 
         int32_t interval = config::path_gc_check_interval_second;
         if (interval <= 0) {
@@ -854,6 +852,7 @@ void* StorageEngine::_path_scan_thread_callback(void* arg) {
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         LOG(INFO) << "try to perform path scan!";
         ((DataDir*)arg)->perform_path_scan();
+        ((DataDir*)arg)->perform_tmp_path_scan();
 
         int32_t interval = config::path_scan_interval_second;
         if (interval <= 0) {
@@ -905,6 +904,43 @@ void* StorageEngine::_tablet_checkpoint_callback(void* arg) {
         }
     }
 
+    return nullptr;
+}
+
+void* StorageEngine::_schedule_apply_thread_callback(void* arg) {
+#ifdef GOOGLE_PROFILER
+    ProfilerRegisterThread();
+#endif
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
+        {
+            auto wait_timeout = std::chrono::seconds(1);
+            std::unique_lock<std::mutex> ul(_schedule_apply_mutex);
+            while (_schedule_apply_tasks.empty() && !_bg_worker_stopped.load(std::memory_order_consume)) {
+                _apply_tablet_changed_cv.wait_for(ul, wait_timeout);
+            }
+
+            if (_bg_worker_stopped.load(std::memory_order_consume)) {
+                break;
+            }
+
+            auto time_point = std::chrono::steady_clock::now();
+            while (!_bg_worker_stopped.load(std::memory_order_consume) && !_schedule_apply_tasks.empty() &&
+                   _schedule_apply_tasks.top().first <= time_point) {
+                auto tablet_id = _schedule_apply_tasks.top().second;
+                _schedule_apply_tasks.pop();
+                auto tablet = _tablet_manager->get_tablet(tablet_id);
+                if (tablet == nullptr || tablet->updates() == nullptr) {
+                    continue;
+                }
+                tablet->updates()->check_for_apply();
+            }
+
+            if (!_bg_worker_stopped.load(std::memory_order_consume) && !_schedule_apply_tasks.empty()) {
+                auto wait_time = _schedule_apply_tasks.top().first;
+                _apply_tablet_changed_cv.wait_until(ul, wait_time);
+            }
+        }
+    }
     return nullptr;
 }
 

@@ -44,7 +44,7 @@ public enum ConnectorType {
     KUDU("kudu", KuduConnector.class, null),
     UNIFIED("unified", UnifiedConnector.class, null);
 
-    public static Set<ConnectorType> SUPPORT_TYPE_SET = EnumSet.of(
+    public static final Set<ConnectorType> SUPPORT_TYPE_SET = EnumSet.of(
             ES,
             HIVE,
             ICEBERG,
@@ -63,9 +63,9 @@ public enum ConnectorType {
         this.configClass = configClass;
     }
 
-    private String name;
-    private Class<Connector> connectorClass;
-    private Class<ConnectorConfig> configClass;
+    private final String name;
+    private final Class<Connector> connectorClass;
+    private final Class<ConnectorConfig> configClass;
 
     public String getName() {
         return name;

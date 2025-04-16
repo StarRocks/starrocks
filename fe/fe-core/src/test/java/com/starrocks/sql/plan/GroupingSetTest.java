@@ -28,6 +28,15 @@ public class GroupingSetTest extends PlanTestBase {
     }
 
     @Test
+    public void testGroupByRollup() throws Exception {
+        String sql = "select * from (select v1, v2, v3, grouping_id(v1, v3), grouping(v2) " +
+                "from t0 group by rollup(v1, v2, v3)) x where coalesce(v1, v2, v3) = 1;";
+        String planFragment = getFragmentPlan(sql);
+        assertNotContains(planFragment, "PREAGGREGATION: ON\n" +
+                "     PREDICATES: coalesce(1: v1, 2: v2, 3: v3) = 1");
+    }
+
+    @Test
     public void testPredicateOnRepeatNode() throws Exception {
         FeConstants.runningUnitTest = true;
         String sql = "select * from (select v1, v2, sum(v3) from t0 group by rollup(v1, v2)) as xx where v1 is null;";
@@ -45,7 +54,7 @@ public class GroupingSetTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("1:REPEAT_NODE\n" +
                 "  |  repeat: repeat 2 lines [[], [1], [1, 2]]\n" +
                 "  |  PREDICATES: 1: v1 IS NOT NULL"));
-        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+        Assert.assertTrue(plan, plan.contains("0:OlapScanNode\n" +
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 1: v1 IS NOT NULL"));
@@ -98,7 +107,7 @@ public class GroupingSetTest extends PlanTestBase {
         starRocksAssert.query(sql).analysisError("cannot use GROUPING functions without");
 
         sql = "select k10 from baseall group by k10, GROUPING(1193275260000);";
-        starRocksAssert.query(sql).analysisError("grouping functions only support column");
+        starRocksAssert.query(sql).analysisError("GROUP BY clause cannot contain grouping.");
 
         sql = "select k10 from baseall group by k10 having GROUPING(1193275260000) > 2;";
         starRocksAssert.query(sql).analysisError("HAVING clause cannot contain grouping");
@@ -304,9 +313,9 @@ public class GroupingSetTest extends PlanTestBase {
                 "    ) tev,unnest(x2) \n" +
                 ") tev group by GROUPING SETS((u2, r1)) ";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "8:Project\n" +
+        assertContains(plan, "  8:Project\n" +
                 "  |  <slot 10> : 10: unnest\n" +
-                "  |  <slot 11> : datediff(CAST(split(9: array_join, ',')[2] AS DATETIME), CAST(10: unnest AS DATETIME))\n" +
+                "  |  <slot 11> : datediff(CAST(13: expr AS DATETIME), CAST(10: unnest AS DATETIME))\n" +
                 "  |  \n" +
                 "  7:TableValueFunction\n" +
                 "  |  tableFunctionName: unnest\n" +
@@ -315,6 +324,22 @@ public class GroupingSetTest extends PlanTestBase {
                 "  |  \n" +
                 "  6:Project\n" +
                 "  |  <slot 6> : 6: array_agg\n" +
-                "  |  <slot 9> : array_join(7: array_agg, ',')");
+                "  |  <slot 13> : split(array_join(7: array_agg, ','), ',')[2]");
+    }
+
+    @Test
+    public void testPushDownGroupingSetNormal() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        connectContext.getSessionVariable().setCboCteReuse(false);
+        try {
+            String sql = "select t1b, t1c, t1d, sum(t1g) " +
+                    "   from test_all_type group by rollup(t1b, t1c, t1d)";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  5:REPEAT_NODE\n" +
+                    "  |  repeat: repeat 2 lines [[], [14], [14, 15]]");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+            connectContext.getSessionVariable().setCboCteReuse(true);
+        }
     }
 }

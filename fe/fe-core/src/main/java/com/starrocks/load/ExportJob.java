@@ -54,7 +54,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MysqlTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
@@ -65,14 +65,15 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
-import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.fs.HdfsUtil;
@@ -91,6 +92,8 @@ import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.ExportStmt;
@@ -98,7 +101,6 @@ import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.task.AgentClient;
 import com.starrocks.thrift.TAgentResult;
 import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TInternalScanRange;
@@ -112,6 +114,7 @@ import com.starrocks.thrift.TUniqueId;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.thrift.TException;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -235,9 +238,9 @@ public class ExportJob implements Writable, GsonPostProcessable {
         return warehouseId;
     }
 
-    public void setJob(ExportStmt stmt) throws UserException {
+    public void setJob(ExportStmt stmt) throws StarRocksException {
         String dbName = stmt.getTblName().getDb();
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exist");
         }
@@ -262,30 +265,29 @@ public class ExportJob implements Writable, GsonPostProcessable {
         this.partitions = stmt.getPartitions();
         this.columnNames = stmt.getColumnNames();
 
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
-        try {
-            this.dbId = db.getId();
-            this.exportTable = db.getTable(stmt.getTblName().getTbl());
-            if (exportTable == null) {
-                throw new DdlException("Table " + stmt.getTblName().getTbl() + " does not exist");
-            }
-            this.tableId = exportTable.getId();
-            this.tableName = stmt.getTblName();
+        this.dbId = db.getId();
+        this.exportTable = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), stmt.getTblName().getTbl());
+        if (exportTable == null) {
+            throw new DdlException("Table " + stmt.getTblName().getTbl() + " does not exist");
+        }
+        this.tableId = exportTable.getId();
+        this.tableName = stmt.getTblName();
+
+        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(this.tableId),
+                    LockType.READ)) {
             genExecFragment(stmt);
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
         }
 
         this.sql = stmt.toSql();
     }
 
-    private void genExecFragment(ExportStmt stmt) throws UserException {
+    private void genExecFragment(ExportStmt stmt) throws StarRocksException {
         registerToDesc();
         plan(stmt);
     }
 
-    private void registerToDesc() throws UserException {
+    private void registerToDesc() throws StarRocksException {
         TableRef ref = new TableRef(tableName, null, partitions == null ? null : new PartitionNames(false, partitions));
         BaseTableRef tableRef = new BaseTableRef(ref, exportTable, tableName);
         exportTupleDesc = desc.createTupleDescriptor();
@@ -303,7 +305,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
         } else {
             for (String columnName : columnNames) {
                 if (!nameToColumn.containsKey(columnName)) {
-                    throw new UserException("Column [" + columnName + "] does not exist in table.");
+                    throw new StarRocksException("Column [" + columnName + "] does not exist in table.");
                 }
                 exportColumns.add(nameToColumn.get(columnName));
             }
@@ -318,7 +320,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
         desc.computeMemLayout();
     }
 
-    private void plan(ExportStmt stmt) throws UserException {
+    private void plan(ExportStmt stmt) throws StarRocksException {
         List<PlanFragment> fragments = Lists.newArrayList();
         List<ScanNode> scanNodes = Lists.newArrayList();
 
@@ -336,7 +338,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
         genCoordinators(stmt, fragments, scanNodes);
     }
 
-    private void genTaskFragments(List<PlanFragment> fragments, List<ScanNode> scanNodes) throws UserException {
+    private void genTaskFragments(List<PlanFragment> fragments, List<ScanNode> scanNodes) throws StarRocksException {
         Preconditions.checkNotNull(tabletLocations);
 
         for (TScanRangeLocations tablet : tabletLocations) {
@@ -360,7 +362,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
                 long dataSize = 0L;
                 if (tabletMeta.isLakeTablet()) {
-                    Partition partition = exportTable.getPartition(tabletMeta.getPartitionId());
+                    PhysicalPartition partition = exportTable.getPhysicalPartition(tabletMeta.getPhysicalPartitionId());
                     if (partition != null) {
                         MaterializedIndex index = partition.getIndex(tabletMeta.getIndexId());
                         if (index != null) {
@@ -390,10 +392,10 @@ public class ExportJob implements Writable, GsonPostProcessable {
         }
 
         LOG.info("total {} tablets of export job {}, and assign them to {} coordinators",
-                tabletLocations.size(), id, fragments.size());
+                    tabletLocations.size(), id, fragments.size());
     }
 
-    private ScanNode genScanNode() throws UserException {
+    private ScanNode genScanNode() throws StarRocksException {
         ScanNode scanNode = null;
         switch (exportTable.getType()) {
             case OLAP:
@@ -409,7 +411,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 scanNode = new MysqlScanNode(new PlanNodeId(0), exportTupleDesc, (MysqlTable) this.exportTable);
                 break;
             default:
-                throw new UserException("Unsupported table type: " + exportTable.getType());
+                throw new StarRocksException("Unsupported table type: " + exportTable.getType());
         }
 
         scanNode.finalizeStats(analyzer);
@@ -418,30 +420,31 @@ public class ExportJob implements Writable, GsonPostProcessable {
 
     private OlapScanNode genOlapScanNodeByLocation(List<TScanRangeLocations> locations) {
         return OlapScanNode.createOlapScanNodeByLocation(
-                new PlanNodeId(nextId.getAndIncrement()),
-                exportTupleDesc,
-                "OlapScanNodeForExport",
-                locations,
-                warehouseId);
+                    new PlanNodeId(nextId.getAndIncrement()),
+                    exportTupleDesc,
+                    "OlapScanNodeForExport",
+                    locations,
+                    warehouseId);
     }
 
-    private PlanFragment genPlanFragment(Table.TableType type, ScanNode scanNode, int taskIdx) throws UserException {
+    private PlanFragment genPlanFragment(Table.TableType type, ScanNode scanNode, int taskIdx) throws
+            StarRocksException {
         PlanFragment fragment = null;
         switch (exportTable.getType()) {
             case OLAP:
             case CLOUD_NATIVE:
                 fragment = new PlanFragment(
-                        new PlanFragmentId(nextId.getAndIncrement()), scanNode, DataPartition.RANDOM);
+                            new PlanFragmentId(nextId.getAndIncrement()), scanNode, DataPartition.RANDOM);
                 break;
             case MYSQL:
                 fragment = new PlanFragment(
-                        new PlanFragmentId(nextId.getAndIncrement()), scanNode, DataPartition.UNPARTITIONED);
+                            new PlanFragmentId(nextId.getAndIncrement()), scanNode, DataPartition.UNPARTITIONED);
                 break;
             default:
                 break;
         }
         if (fragment == null) {
-            throw new UserException("invalid table type:" + exportTable.getType());
+            throw new StarRocksException("invalid table type:" + exportTable.getType());
         }
         fragment.setOutputExprs(createOutputExprs());
 
@@ -451,12 +454,12 @@ public class ExportJob implements Writable, GsonPostProcessable {
             HdfsUtil.getTProperties(exportTempPath, brokerDesc, hdfsProperties);
         }
         fragment.setSink(new ExportSink(exportTempPath, fileNamePrefix + taskIdx + "_", columnSeparator,
-                rowDelimiter, brokerDesc, hdfsProperties));
+                    rowDelimiter, brokerDesc, hdfsProperties));
         try {
             fragment.createDataSink(TResultSinkType.MYSQL_PROTOCAL);
         } catch (Exception e) {
             LOG.info("Fragment finalize failed. e=", e);
-            throw new UserException("Fragment finalize failed");
+            throw new StarRocksException("Fragment finalize failed");
         }
 
         return fragment;
@@ -487,11 +490,11 @@ public class ExportJob implements Writable, GsonPostProcessable {
             ScanNode scanNode = nodes.get(i);
             TUniqueId queryId = new TUniqueId(uuid.getMostSignificantBits() + i, uuid.getLeastSignificantBits());
             Coordinator coord = getCoordinatorFactory().createBrokerExportScheduler(
-                    id, queryId, desc, Lists.newArrayList(fragment), Lists.newArrayList(scanNode),
-                    TimeUtils.DEFAULT_TIME_ZONE, stmt.getExportStartTime(), Maps.newHashMap(), getMemLimit(), warehouseId);
+                        id, queryId, desc, Lists.newArrayList(fragment), Lists.newArrayList(scanNode),
+                        TimeUtils.DEFAULT_TIME_ZONE, stmt.getExportStartTime(), Maps.newHashMap(), getMemLimit(), warehouseId);
             this.coordList.add(coord);
             LOG.info("split export job to tasks. job id: {}, job query id: {}, task idx: {}, task query id: {}",
-                    id, DebugUtil.printId(this.queryId), i, DebugUtil.printId(queryId));
+                        id, DebugUtil.printId(this.queryId), i, DebugUtil.printId(queryId));
         }
         LOG.info("create {} coordinators for export job: {}", coordList.size(), id);
     }
@@ -503,12 +506,12 @@ public class ExportJob implements Writable, GsonPostProcessable {
     // Also, if the version has been compacted in one BE's tablet, coord will return 
     // 'version already been compacted' error msg, find a new replica may be able to 
     // alleviate this problem.
-    public Coordinator resetCoord(int taskIndex, TUniqueId newQueryId) throws UserException {
+    public Coordinator resetCoord(int taskIndex, TUniqueId newQueryId) throws StarRocksException {
         Coordinator coord = coordList.get(taskIndex);
         OlapScanNode olapScanNode = (OlapScanNode) coord.getScanNodes().get(0);
         List<TScanRangeLocations> locations = olapScanNode.getScanRangeLocations(0);
         if (locations.size() == 0) {
-            throw new UserException("SubExportTask " + taskIndex + " scan range is empty");
+            throw new StarRocksException("SubExportTask " + taskIndex + " scan range is empty");
         }
 
         OlapScanNode newOlapScanNode = new OlapScanNode(new PlanNodeId(0), exportTupleDesc, "OlapScanNodeForExport");
@@ -531,8 +534,8 @@ public class ExportJob implements Writable, GsonPostProcessable {
         PlanFragment newFragment = genPlanFragment(exportTable.getType(), newTaskScanNode, taskIndex);
 
         Coordinator newCoord = getCoordinatorFactory().createBrokerExportScheduler(
-                id, newQueryId, desc, Lists.newArrayList(newFragment), Lists.newArrayList(newTaskScanNode),
-                TimeUtils.DEFAULT_TIME_ZONE, coord.getStartTimeMs(), Maps.newHashMap(), getMemLimit(), warehouseId);
+                    id, newQueryId, desc, Lists.newArrayList(newFragment), Lists.newArrayList(newTaskScanNode),
+                    TimeUtils.DEFAULT_TIME_ZONE, coord.getStartTimeMs(), Maps.newHashMap(), getMemLimit(), warehouseId);
         this.coordList.set(taskIndex, newCoord);
         LOG.info("reset coordinator for export job: {}, taskIdx: {}", id, taskIndex);
         return newCoord;
@@ -743,7 +746,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
         }
         if (!isReplay) {
             GlobalStateMgr.getCurrentState().getEditLog().logExportUpdateState(id, newState, stateChangeTime,
-                    snapshotPaths, exportTempPath, exportedFiles, failMsg);
+                        snapshotPaths, exportTempPath, exportedFiles, failMsg);
         }
         return true;
     }
@@ -777,9 +780,16 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 continue;
             }
 
-            AgentClient client = new AgentClient(host, port);
-            TAgentResult result = client.releaseSnapshot(snapshotPath.second);
-            if (result == null || result.getStatus().getStatus_code() != TStatusCode.OK) {
+            try {
+                TAgentResult result = ThriftRPCRequestExecutor.callNoRetry(
+                            ThriftConnectionPool.backendPool,
+                            new TNetworkAddress(host, port),
+                            client -> client.release_snapshot(snapshotPath.second)
+                );
+                if (result.getStatus().getStatus_code() != TStatusCode.OK) {
+                    continue;
+                }
+            } catch (TException e) {
                 continue;
             }
         }
@@ -801,7 +811,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 String host = address.getHostname();
                 int port = address.getPort();
                 ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
-                        .getBackendOrComputeNodeWithBePort(host, port);
+                            .getBackendOrComputeNodeWithBePort(host, port);
                 if (!GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkNodeAvailable(node)) {
                     continue;
                 }
@@ -814,7 +824,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
                     lakeService.unlockTabletMetadata(request);
                 } catch (Throwable e) {
                     LOG.error("Fail to release metadata lock, job id {}, tablet id {}, version {}", id,
-                            tableId, internalScanRange.getVersion());
+                                tableId, internalScanRange.getVersion());
                 }
             }
         }
@@ -825,9 +835,9 @@ public class ExportJob implements Writable, GsonPostProcessable {
         return state == JobState.FINISHED || state == JobState.CANCELLED;
     }
 
-    public synchronized void cancel(ExportFailMsg.CancelType type, String msg) throws UserException {
+    public synchronized void cancel(ExportFailMsg.CancelType type, String msg) throws StarRocksException {
         if (isExportDone()) {
-            throw new UserException("Export job [" + queryId.toString() + "] is already finished or cancelled");
+            throw new StarRocksException("Export job [" + queryId.toString() + "] is already finished or cancelled");
         }
 
         cancelInternal(type, msg);
@@ -857,7 +867,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
                     BrokerUtil.deletePath(exportTempPath, brokerDesc);
                 }
                 LOG.info("remove export temp path success, path: {}", exportTempPath);
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 LOG.warn("remove export temp path fail, path: {}", exportTempPath);
             }
             // try to remove exported files
@@ -869,7 +879,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
                         BrokerUtil.deletePath(exportedFile, brokerDesc);
                     }
                     LOG.info("remove exported file success, path: {}", exportedFile);
-                } catch (UserException e) {
+                } catch (StarRocksException e) {
                     LOG.warn("remove exported file fail, path: {}", exportedFile);
                 }
             }
@@ -900,7 +910,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
                     BrokerUtil.deletePath(exportTempPath, brokerDesc);
                 }
                 LOG.info("remove export temp path success, path: {}", exportTempPath);
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 LOG.warn("remove export temp path fail, path: {}", exportTempPath);
             }
         } finally {
@@ -912,116 +922,22 @@ public class ExportJob implements Writable, GsonPostProcessable {
     @Override
     public String toString() {
         return "ExportJob [jobId=" + id
-                + ", dbId=" + dbId
-                + ", tableId=" + tableId
-                + ", state=" + state
-                + ", path=" + exportPath
-                + ", partitions=(" + StringUtils.join(partitions, ",") + ")"
-                + ", progress=" + progress
-                + ", createTimeMs=" + TimeUtils.longToTimeString(createTimeMs)
-                + ", exportStartTimeMs=" + TimeUtils.longToTimeString(startTimeMs)
-                + ", exportFinishTimeMs=" + TimeUtils.longToTimeString(finishTimeMs)
-                + ", failMsg=" + failMsg
-                + ", tmp files=(" + StringUtils.join(exportedTempFiles, ",") + ")"
-                + ", files=(" + StringUtils.join(exportedFiles, ",") + ")"
-                + "]";
+                    + ", dbId=" + dbId
+                    + ", tableId=" + tableId
+                    + ", state=" + state
+                    + ", path=" + exportPath
+                    + ", partitions=(" + StringUtils.join(partitions, ",") + ")"
+                    + ", progress=" + progress
+                    + ", createTimeMs=" + TimeUtils.longToTimeString(createTimeMs)
+                    + ", exportStartTimeMs=" + TimeUtils.longToTimeString(startTimeMs)
+                    + ", exportFinishTimeMs=" + TimeUtils.longToTimeString(finishTimeMs)
+                    + ", failMsg=" + failMsg
+                    + ", tmp files=(" + StringUtils.join(exportedTempFiles, ",") + ")"
+                    + ", files=(" + StringUtils.join(exportedFiles, ",") + ")"
+                    + "]";
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        // base infos
-        out.writeLong(id);
-        out.writeLong(dbId);
-        out.writeLong(tableId);
-        Text.writeString(out, exportPath);
-        Text.writeString(out, columnSeparator);
-        Text.writeString(out, rowDelimiter);
-        out.writeInt(properties.size());
-        for (Map.Entry<String, String> property : properties.entrySet()) {
-            Text.writeString(out, property.getKey());
-            Text.writeString(out, property.getValue());
-        }
 
-        // partitions
-        boolean hasPartition = (partitions != null);
-        if (hasPartition) {
-            out.writeBoolean(true);
-            int partitionSize = partitions.size();
-            out.writeInt(partitionSize);
-            for (String partitionName : partitions) {
-                Text.writeString(out, partitionName);
-            }
-        } else {
-            out.writeBoolean(false);
-        }
-
-        // task info
-        Text.writeString(out, state.name());
-        out.writeLong(createTimeMs);
-        out.writeLong(startTimeMs);
-        out.writeLong(finishTimeMs);
-        out.writeInt(progress);
-        failMsg.write(out);
-
-        if (brokerDesc == null) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            brokerDesc.write(out);
-        }
-
-        tableName.write(out);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        isReplayed = true;
-        id = in.readLong();
-        dbId = in.readLong();
-        tableId = in.readLong();
-        exportPath = Text.readString(in);
-        columnSeparator = Text.readString(in);
-        rowDelimiter = Text.readString(in);
-
-        GlobalStateMgr stateMgr = GlobalStateMgr.getCurrentState();
-        Database db = null;
-        if (stateMgr.getMetadata() != null) {
-            db = stateMgr.getDb(dbId);
-        }
-        if (db != null) {
-            exportTable = db.getTable(tableId);
-        }
-
-        int count = in.readInt();
-        for (int i = 0; i < count; i++) {
-            String propertyKey = Text.readString(in);
-            String propertyValue = Text.readString(in);
-            this.properties.put(propertyKey, propertyValue);
-        }
-
-        boolean hasPartition = in.readBoolean();
-        if (hasPartition) {
-            partitions = Lists.newArrayList();
-            int partitionSize = in.readInt();
-            for (int i = 0; i < partitionSize; ++i) {
-                String partitionName = Text.readString(in);
-                partitions.add(partitionName);
-            }
-        }
-
-        state = JobState.valueOf(Text.readString(in));
-        createTimeMs = in.readLong();
-        startTimeMs = in.readLong();
-        finishTimeMs = in.readLong();
-        progress = in.readInt();
-        failMsg.readFields(in);
-
-        if (in.readBoolean()) {
-            brokerDesc = BrokerDesc.read(in);
-        }
-
-        tableName = new TableName();
-        tableName.readFields(in);
-    }
 
     /**
      * for ut only
@@ -1077,11 +993,11 @@ public class ExportJob implements Writable, GsonPostProcessable {
         isReplayed = true;
         GlobalStateMgr stateMgr = GlobalStateMgr.getCurrentState();
         Database db = null;
-        if (stateMgr.getMetadata() != null) {
-            db = stateMgr.getDb(dbId);
+        if (stateMgr.getLocalMetastore() != null) {
+            db = stateMgr.getLocalMetastore().getDb(dbId);
         }
         if (db != null) {
-            exportTable = db.getTable(tableId);
+            exportTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         }
     }
 
@@ -1112,11 +1028,6 @@ public class ExportJob implements Writable, GsonPostProcessable {
         public void write(DataOutput out) throws IOException {
             out.writeLong(jobId);
             Text.writeString(out, state.name());
-        }
-
-        public void readFields(DataInput in) throws IOException {
-            jobId = in.readLong();
-            state = JobState.valueOf(Text.readString(in));
         }
     }
 
@@ -1189,20 +1100,20 @@ public class ExportJob implements Writable, GsonPostProcessable {
 
         public List<Pair<NetworkAddress, String>> serialize(List<Pair<TNetworkAddress, String>> snapshotPaths) {
             return snapshotPaths
-                    .stream()
-                    .map(snapshotPath
-                            -> Pair.create(new NetworkAddress(snapshotPath.first.hostname, snapshotPath.first.port),
-                            snapshotPath.second))
-                    .collect(Collectors.toList());
+                        .stream()
+                        .map(snapshotPath
+                                    -> Pair.create(new NetworkAddress(snapshotPath.first.hostname, snapshotPath.first.port),
+                                    snapshotPath.second))
+                        .collect(Collectors.toList());
         }
 
         public List<Pair<TNetworkAddress, String>> deserialize(List<Pair<NetworkAddress, String>> snapshotPaths) {
             return snapshotPaths
-                    .stream()
-                    .map(snapshotPath
-                            -> Pair.create(new TNetworkAddress(snapshotPath.first.hostname, snapshotPath.first.port),
-                            snapshotPath.second))
-                    .collect(Collectors.toList());
+                        .stream()
+                        .map(snapshotPath
+                                    -> Pair.create(new TNetworkAddress(snapshotPath.first.hostname, snapshotPath.first.port),
+                                    snapshotPath.second))
+                        .collect(Collectors.toList());
         }
     }
 
@@ -1240,8 +1151,8 @@ public class ExportJob implements Writable, GsonPostProcessable {
         @Override
         public boolean equals(Object obj) {
             return obj instanceof NetworkAddress
-                    && NetUtils.isSameIP(this.hostname, ((NetworkAddress) obj).hostname)
-                    && this.port == ((NetworkAddress) obj).port;
+                        && NetUtils.isSameIP(this.hostname, ((NetworkAddress) obj).hostname)
+                        && this.port == ((NetworkAddress) obj).port;
         }
 
         @Override

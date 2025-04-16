@@ -23,8 +23,8 @@ import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
-import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.MockUp;
@@ -33,11 +33,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
@@ -88,9 +84,7 @@ public class CatalogMgrTest {
 
         config.put("type", "paimon");
         final ExternalCatalog catalog1 = new ExternalCatalog(10000, "catalog_3", "", config);
-        Assert.assertThrows(DdlException.class, () -> {
-            catalogMgr.replayCreateCatalog(catalog1);
-        });
+        catalogMgr.replayCreateCatalog(catalog1);
     }
 
     @Test
@@ -100,9 +94,7 @@ public class CatalogMgrTest {
 
         config.put("type", "paimon");
         final ExternalCatalog catalog = new ExternalCatalog(10000, "catalog_0", "", config);
-        Assert.assertThrows(DdlException.class, () -> {
-            catalogMgr.replayCreateCatalog(catalog);
-        });
+        catalogMgr.replayCreateCatalog(catalog);
     }
 
     @Test
@@ -118,26 +110,12 @@ public class CatalogMgrTest {
         } catch (DdlException e) {
             Assert.assertTrue(e.getMessage().contains("Missing"));
         }
-    }
 
-    @Test
-    public void testLoadCatalog() throws IOException, DdlException {
-        CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
-        Assert.assertTrue(catalogMgr.catalogExists("hive_catalog"));
+        config.put("type", "test_unsupported");
 
-        File file = new File(fileName);
-        file.createNewFile();
-        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
-        catalogMgr.saveCatalogs(out, 0);
-        out.flush();
-        out.close();
-
-        catalogMgr.dropCatalog(new DropCatalogStmt("hive_catalog"));
-        Assert.assertFalse(catalogMgr.catalogExists("hive_catalog"));
-
-        DataInputStream in = new DataInputStream(new FileInputStream(file));
-        catalogMgr.loadCatalogs(in, 0);
-        Assert.assertTrue(catalogMgr.catalogExists("hive_catalog"));
+        Assert.assertThrows(DdlException.class, () -> {
+            catalogMgr.createCatalog("test_unsupported", "b", "", config);
+        });
     }
 
     @Test
@@ -145,10 +123,9 @@ public class CatalogMgrTest {
         CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
         Assert.assertTrue(catalogMgr.catalogExists("hive_catalog"));
 
-        UtFrameUtils.PseudoImage.setUpImageVersion();
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
-        catalogMgr.save(image.getDataOutputStream());
-        SRMetaBlockReader reader = new SRMetaBlockReader(image.getDataInputStream());
+        catalogMgr.save(image.getImageWriter());
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
 
         CatalogMgr loadCatalogMgr = new CatalogMgr(new ConnectorMgr());
         loadCatalogMgr.load(reader);
@@ -156,7 +133,7 @@ public class CatalogMgrTest {
 
         // test load with ddl exception
         loadCatalogMgr = new CatalogMgr(new ConnectorMgr());
-        reader = new SRMetaBlockReader(image.getDataInputStream());
+        reader = new SRMetaBlockReaderV2(image.getJsonReader());
         new MockUp<CatalogMgr>() {
             @mockit.Mock
             public void replayCreateCatalog(Catalog catalog) throws DdlException {

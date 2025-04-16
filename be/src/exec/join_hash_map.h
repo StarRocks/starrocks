@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "util/runtime_profile.h"
 #define JOIN_HASH_MAP_H
 
 #include <gen_cpp/PlanNodes_types.h>
@@ -101,8 +102,8 @@ struct JoinHashTableItems {
     //TODO: memory continues problem?
     ChunkPtr build_chunk = nullptr;
     Columns key_columns;
-    Buffer<HashTableSlotDescriptor> build_slots;
-    Buffer<HashTableSlotDescriptor> probe_slots;
+    std::vector<HashTableSlotDescriptor> build_slots;
+    std::vector<HashTableSlotDescriptor> probe_slots;
     // A hash value is the bucket index of the hash map. "JoinHashTableItems.first" is the
     // buckets of the hash map, and it holds the index of the first key value saved in each bucket,
     // while other keys can be found by following the indices saved in
@@ -115,6 +116,7 @@ struct JoinHashTableItems {
     Buffer<Slice> build_slice;
     ColumnPtr build_key_column = nullptr;
     uint32_t bucket_size = 0;
+    uint32_t log_bucket_size = 0;
     uint32_t row_count = 0; // real row count
     size_t build_column_count = 0;
     size_t output_build_column_count = 0;
@@ -129,8 +131,8 @@ struct JoinHashTableItems {
     float keys_per_bucket = 0;
     size_t used_buckets = 0;
     bool cache_miss_serious = false;
-    bool mor_reader_mode = false;
     bool enable_late_materialization = false;
+    bool is_collision_free_and_unique = false;
 
     float get_keys_per_bucket() const { return keys_per_bucket; }
     bool ht_cache_miss_serious() const { return cache_miss_serious; }
@@ -148,6 +150,8 @@ struct JoinHashTableItems {
                                   (probe_bytes > (1UL << 26) && keys_per_bucket > 1.5) || probe_bytes > (1UL << 27));
             VLOG_QUERY << "ht cache miss serious = " << cache_miss_serious << " row# = " << row_count
                        << " , bytes = " << probe_bytes << " , depth = " << keys_per_bucket;
+
+            is_collision_free_and_unique = used_buckets == row_count;
         }
     }
 
@@ -163,7 +167,7 @@ struct HashTableProbeState {
     Buffer<uint32_t> buckets;
     Buffer<uint32_t> next;
     Buffer<Slice> probe_slice;
-    Buffer<uint8_t>* null_array = nullptr;
+    const Buffer<uint8_t>* null_array = nullptr;
     ColumnPtr probe_key_column;
     const Columns* key_columns = nullptr;
     ColumnPtr build_index_column;
@@ -197,6 +201,7 @@ struct HashTableProbeState {
     RuntimeProfile::Counter* search_ht_timer = nullptr;
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
+    RuntimeProfile::Counter* probe_counter = nullptr;
 
     HashTableProbeState()
             : build_index_column(UInt32Column::create()),
@@ -238,10 +243,12 @@ struct HashTableProbeState {
               null_array(rhs.null_array),
               probe_key_column(rhs.probe_key_column == nullptr ? nullptr : rhs.probe_key_column->clone()),
               key_columns(rhs.key_columns),
-              build_index_column(rhs.build_index_column == nullptr ? UInt32Column::create_mutable()
-                                                                   : rhs.build_index_column->clone()),
-              probe_index_column(rhs.probe_index_column == nullptr ? UInt32Column::create_mutable()
-                                                                   : rhs.probe_index_column->clone()),
+              build_index_column(rhs.build_index_column == nullptr
+                                         ? UInt32Column::create()->as_mutable_ptr() // to MutableColumnPtr
+                                         : rhs.build_index_column->clone()),
+              probe_index_column(rhs.probe_index_column == nullptr
+                                         ? UInt32Column::create()->as_mutable_ptr() // to MutableColumnPtr
+                                         : rhs.probe_index_column->clone()),
               build_index(down_cast<UInt32Column*>(build_index_column.get())->get_data()),
               probe_index(down_cast<UInt32Column*>(probe_index_column.get())->get_data()),
               build_match_index(rhs.build_match_index),
@@ -256,7 +263,8 @@ struct HashTableProbeState {
               cur_row_match_count(rhs.cur_row_match_count),
               probe_pool(rhs.probe_pool == nullptr ? nullptr : std::make_unique<MemPool>()),
               search_ht_timer(rhs.search_ht_timer),
-              output_probe_column_timer(rhs.output_probe_column_timer) {}
+              output_probe_column_timer(rhs.output_probe_column_timer),
+              probe_counter(rhs.probe_counter) {}
 
     // Disable copy assignment.
     HashTableProbeState& operator=(const HashTableProbeState& rhs) = delete;
@@ -277,6 +285,7 @@ struct HashTableProbeState {
 struct HashTableParam {
     bool with_other_conjunct = false;
     bool enable_late_materialization = false;
+    bool enable_partition_hash_join = false;
     TJoinOp::type join_type = TJoinOp::INNER_JOIN;
     const RowDescriptor* build_row_desc = nullptr;
     const RowDescriptor* probe_row_desc = nullptr;
@@ -288,41 +297,49 @@ struct HashTableParam {
     RuntimeProfile::Counter* search_ht_timer = nullptr;
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
-    bool mor_reader_mode = false;
+    RuntimeProfile::Counter* probe_counter = nullptr;
 };
 
-template <class T>
+template <class T, size_t Size = sizeof(T)>
 struct JoinKeyHash {
-    static const uint32_t CRC_SEED = 0x811C9DC5;
-    std::size_t operator()(const T& value) const { return crc_hash_32(&value, sizeof(T), CRC_SEED); }
+    static constexpr uint32_t CRC_SEED = 0x811C9DC5;
+    uint32_t operator()(const T& value, uint32_t num_buckets, uint32_t num_log_buckets) const {
+        const size_t hash = crc_hash_32(&value, sizeof(T), CRC_SEED);
+        return hash & (num_buckets - 1);
+    }
 };
 
-// The hash func used by the bucketing of the colocate table is crc,
-// and the hash func used by HashJoin is also crc,
-// which leads to a high conflict rate of HashJoin and affects performance.
-// Therefore, there is no theoretical basis for adding an integer to the source value.
-// The current test shows that the +2, +4 pair does not change the conflict rate,
-// which may be related to the implementation of CRC or mod.
-template <>
-struct JoinKeyHash<int32_t> {
-    static const uint32_t CRC_SEED = 0x811C9DC5;
-    std::size_t operator()(const int32_t& value) const {
-#if defined(__x86_64__) && defined(__SSE4_2__)
-        size_t hash = _mm_crc32_u32(CRC_SEED, value + 2);
-#elif defined(__x86_64__)
-        size_t hash = crc_hash_32(&value, sizeof(value), CRC_SEED);
-#else
-        size_t hash = __crc32cw(CRC_SEED, value + 2);
-#endif
-        hash = (hash << 16u) | (hash >> 16u);
-        return hash;
+/// Apply multiplicative hashing for 4-byte or 8-byte keys.
+/// It only needs to perform arithmetic operations on the key as a whole, so the compiler can automatically vectorize it.
+template <typename T>
+struct JoinKeyHash<T, 4> {
+    uint32_t operator()(T value, uint32_t num_buckets, uint32_t num_log_buckets) const {
+        static constexpr uint32_t a = 2654435761u;
+        uint32_t v = *reinterpret_cast<uint32_t*>(&value);
+        v ^= v >> (32 - num_log_buckets);
+        const uint32_t fraction = v * a;
+        return fraction >> (32 - num_log_buckets);
+    }
+};
+
+template <typename T>
+struct JoinKeyHash<T, 8> {
+    uint32_t operator()(T value, uint32_t num_buckets, uint32_t num_log_buckets) const {
+        static constexpr uint64_t a = 11400714819323198485ull;
+        uint64_t v = *reinterpret_cast<uint64_t*>(&value);
+        v ^= v >> (64 - num_log_buckets);
+        const uint64_t fraction = v * a;
+        return fraction >> (64 - num_log_buckets);
     }
 };
 
 template <>
 struct JoinKeyHash<Slice> {
     static const uint32_t CRC_SEED = 0x811C9DC5;
-    std::size_t operator()(const Slice& slice) const { return crc_hash_32(slice.data, slice.size, CRC_SEED); }
+    uint32_t operator()(const Slice& slice, uint32_t num_buckets, uint32_t num_log_buckets) const {
+        const size_t hash = crc_hash_32(slice.data, slice.size, CRC_SEED);
+        return hash & (num_buckets - 1);
+    }
 };
 
 class JoinHashMapHelper {
@@ -331,7 +348,7 @@ public:
     const static uint32_t MAX_BUCKET_SIZE = 1 << 31;
 
     static uint32_t calc_bucket_size(uint32_t size) {
-        size_t expect_bucket_size = static_cast<size_t>(size) + (size - 1) / 7;
+        size_t expect_bucket_size = static_cast<size_t>(size) + (size - 1) / 4;
         // Limit the maximum hash table bucket size.
         if (expect_bucket_size >= MAX_BUCKET_SIZE) {
             return MAX_BUCKET_SIZE;
@@ -340,17 +357,18 @@ public:
     }
 
     template <typename CppType>
-    static uint32_t calc_bucket_num(const CppType& value, uint32_t bucket_size) {
+    static uint32_t calc_bucket_num(const CppType& value, uint32_t bucket_size, uint32_t num_log_buckets) {
         using HashFunc = JoinKeyHash<CppType>;
 
-        return HashFunc()(value) & (bucket_size - 1);
+        return HashFunc()(value, bucket_size, num_log_buckets);
     }
 
     template <typename CppType>
-    static void calc_bucket_nums(const Buffer<CppType>& data, uint32_t bucket_size, Buffer<uint32_t>* buckets,
-                                 uint32_t start, uint32_t count) {
+    static void calc_bucket_nums(const Buffer<CppType>& data, uint32_t bucket_size, uint32_t num_log_buckets,
+                                 Buffer<uint32_t>* buckets, uint32_t start, uint32_t count) {
+        DCHECK(count <= buckets->size());
         for (size_t i = 0; i < count; i++) {
-            (*buckets)[i] = calc_bucket_num<CppType>(data[start + i], bucket_size);
+            (*buckets)[i] = calc_bucket_num<CppType>(data[start + i], bucket_size, num_log_buckets);
         }
     }
 
@@ -597,13 +615,14 @@ private:
     void _copy_probe_column(ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot, bool to_nullable) {
         if (_probe_state->match_flag == JoinMatchFlag::ALL_MATCH_ONE) {
             if (to_nullable) {
-                ColumnPtr dest_column = NullableColumn::create(*src_column, NullColumn::create(_probe_state->count));
+                MutableColumnPtr dest_column = NullableColumn::create((*src_column)->as_mutable_ptr(),
+                                                                      NullColumn::create(_probe_state->count));
                 (*chunk)->append_column(std::move(dest_column), slot->id());
             } else {
                 (*chunk)->append_column(*src_column, slot->id());
             }
         } else {
-            ColumnPtr dest_column = ColumnHelper::create_column(slot->type(), to_nullable);
+            MutableColumnPtr dest_column = ColumnHelper::create_column(slot->type(), to_nullable);
             dest_column->append_selective(**src_column, _probe_state->probe_index.data(), 0, _probe_state->count);
             (*chunk)->append_column(std::move(dest_column), slot->id());
         }
@@ -613,7 +632,7 @@ private:
         if (_probe_state->match_flag == JoinMatchFlag::ALL_MATCH_ONE) {
             (*chunk)->append_column(*src_column, slot->id());
         } else {
-            ColumnPtr dest_column = ColumnHelper::create_column(slot->type(), true);
+            MutableColumnPtr dest_column = ColumnHelper::create_column(slot->type(), true);
             dest_column->append_selective(**src_column, _probe_state->probe_index.data(), 0, _probe_state->count);
             (*chunk)->append_column(std::move(dest_column), slot->id());
         }
@@ -623,17 +642,13 @@ private:
     void _build_output(ChunkPtr* chunk) {
         SCOPED_TIMER(_probe_state->output_build_column_timer);
 
-        if (_table_items->mor_reader_mode) {
-            return;
-        }
-
         for (size_t i = 0; i < _table_items->build_column_count; i++) {
             HashTableSlotDescriptor hash_table_slot = _table_items->build_slots[i];
             SlotDescriptor* slot = hash_table_slot.slot;
 
             bool output = is_lazy ? hash_table_slot.need_lazy_materialize : hash_table_slot.need_output;
             if (output) {
-                ColumnPtr dest_column = ColumnHelper::create_column(slot->type(), true);
+                MutableColumnPtr dest_column = ColumnHelper::create_column(slot->type(), true);
                 dest_column->append_nulls(_probe_state->count);
                 (*chunk)->append_column(std::move(dest_column), slot->id());
             }
@@ -699,6 +714,8 @@ private:
     // for one key inner join
     template <bool first_probe>
     void _probe_from_ht(RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data);
+    template <bool first_probe, bool is_collision_free_and_unique>
+    void _do_probe_from_ht(RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data);
 
     HashTableProbeState::ProbeCoroutine _probe_from_ht(RuntimeState* state, const Buffer<CppType>& build_data,
                                                        const Buffer<CppType>& probe_data);
@@ -816,7 +833,7 @@ public:
     // and the different probe state from this.
     JoinHashTable clone_readable_table();
     void set_probe_profile(RuntimeProfile::Counter* search_ht_timer, RuntimeProfile::Counter* output_probe_column_timer,
-                           RuntimeProfile::Counter* output_build_column_timer);
+                           RuntimeProfile::Counter* output_build_column_timer, RuntimeProfile::Counter* probe_counter);
 
     void create(const HashTableParam& param);
     void close();
@@ -829,11 +846,13 @@ public:
     Status lazy_output(RuntimeState* state, ChunkPtr* probe_chunk, ChunkPtr* result_chunk);
 
     void append_chunk(const ChunkPtr& chunk, const Columns& key_columns);
+    void merge_ht(const JoinHashTable& ht);
     // convert input column to spill schema order
-    StatusOr<ChunkPtr> convert_to_spill_schema(const ChunkPtr& chunk) const;
+    ChunkPtr convert_to_spill_schema(const ChunkPtr& chunk) const;
 
     const ChunkPtr& get_build_chunk() const { return _table_items->build_chunk; }
     Columns& get_key_columns() { return _table_items->key_columns; }
+    const Columns& get_key_columns() const { return _table_items->key_columns; }
     uint32_t get_row_count() const { return _table_items->row_count; }
     size_t get_probe_column_count() const { return _table_items->probe_column_count; }
     size_t get_output_probe_column_count() const { return _table_items->output_probe_column_count; }
@@ -849,13 +868,12 @@ public:
 private:
     void _init_probe_column(const HashTableParam& param);
     void _init_build_column(const HashTableParam& param);
-    void _init_mor_reader();
     void _init_join_keys();
 
     JoinHashMapType _choose_join_hash_map();
     static size_t _get_size_of_fixed_and_contiguous_type(LogicalType data_type);
 
-    [[nodiscard]] Status _upgrade_key_columns_if_overflow();
+    Status _upgrade_key_columns_if_overflow();
 
     void _remove_duplicate_index_for_left_outer_join(Filter* filter);
     void _remove_duplicate_index_for_left_semi_join(Filter* filter);

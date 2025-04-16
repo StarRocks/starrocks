@@ -1,12 +1,12 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
-import FEConfigMethod from '../../assets/commonMarkdown/FE_config_method.md'
+import FEConfigMethod from '../../_assets/commonMarkdown/FE_config_method.md'
 
-import AdminSetFrontendNote from '../../assets/commonMarkdown/FE_config_note.md'
+import AdminSetFrontendNote from '../../_assets/commonMarkdown/FE_config_note.md'
 
-import StaticFEConfigNote from '../../assets/commonMarkdown/StaticFE_config_note.md'
+import StaticFEConfigNote from '../../_assets/commonMarkdown/StaticFE_config_note.md'
 
 # FE Configuration
 
@@ -20,7 +20,7 @@ After your FE is started, you can run the ADMIN SHOW FRONTEND CONFIG command on 
 ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
 ```
 
-For detailed description of the returned fields, see [ADMIN SHOW CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SHOW_CONFIG.md).
+For detailed description of the returned fields, see [ADMIN SHOW CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SHOW_CONFIG.md).
 
 :::note
 You must have administrator privileges to run cluster administration-related commands.
@@ -30,7 +30,7 @@ You must have administrator privileges to run cluster administration-related com
 
 ### Configure FE dynamic parameters
 
-You can configure or modify the settings of FE dynamic parameters using [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md).
+You can configure or modify the settings of FE dynamic parameters using [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md).
 
 ```SQL
 ADMIN SET FRONTEND CONFIG ("key" = "value");
@@ -157,7 +157,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String[]
 - Unit: -
 - Is mutable: No
-- Description: The modules for which StarRocks generates audit log entries. By default, StarRocks generates audit logs for the slow_query module and the query module. Separate the module names with a comma (,) and a space.
+- Description: The modules for which StarRocks generates audit log entries. By default, StarRocks generates audit logs for the `slow_query` module and the `query` module. The `connection` module is supported from v3.0. Separate the module names with a comma (,) and a space.
 - Introduced in: -
 
 ##### qe_slow_log_ms
@@ -418,8 +418,17 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: Declares a selection strategy for servers that have multiple IP addresses. Note that at most one IP address must match the list specified by this parameter. The value of this parameter is a list that consists of entries, which are separated with semicolons (;) in CIDR notation, such as 10.10.10.0/24. If no IP address matches the entries in this list, an IP address will be randomly selected.
+- Description: Declares a selection strategy for servers that have multiple IP addresses. Note that at most one IP address must match the list specified by this parameter. The value of this parameter is a list that consists of entries, which are separated with semicolons (;) in CIDR notation, such as 10.10.10.0/24. If no IP address matches the entries in this list, an available IP address of the server will be randomly selected. From v3.3.0, StarRocks supports deployment based on IPv6. If the server has both IPv4 and IPv6 addresses, and this parameter is not specified, the system uses an IPv4 address by default. You can change this behavior by setting `net_use_ipv6_when_priority_networks_empty` to `true`.
 - Introduced in: -
+
+##### net_use_ipv6_when_priority_networks_empty
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: A boolean value to control whether to use IPv6 addresses preferentially when `priority_networks` is not specified. `true` indicates to allow the system to use an IPv6 address preferentially when the server that hosts the node has both IPv4 and IPv6 addresses and `priority_networks` is not specified.
+- Introduced in: v3.3.0
 
 ##### http_port
 
@@ -639,13 +648,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The length of the backlog queue held by the MySQL server in the FE node.
 - Introduced in: -
 
-##### mysql_service_nio_enabled
+##### mysql_service_nio_enable_keep_alive
 
 - Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: Specifies whether asynchronous I/O is enabled for the FE node.
+- Description: Enable TCP Keep-Alive for MySQL connections. Useful for long-idled connections behind load balancers.
 - Introduced in: -
 
 ##### mysql_service_io_threads_num
@@ -691,20 +700,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### qe_max_connection
 
-- Default: 1024
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description: The maximum number of connections that can be established by all users to the FE node.
-- Introduced in: -
-
-##### max_connection_scheduler_threads_num
-
 - Default: 4096
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: The maximum number of threads that are supported by the connection scheduler.
+- Description: The maximum number of connections that can be established by all users to the FE node. From v3.1.12 and v3.2.7 onwards, the default value has been changed from `1024` to `4096`.
 - Introduced in: -
 
 ### Metadata and cluster management
@@ -1101,7 +1101,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### lock_manager_enabled
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: No
@@ -1110,7 +1110,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### lock_manager_enable_using_fine_granularity_lock
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: No
@@ -1125,6 +1125,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: Whether to enable the Legacy Compatibility for Replication. StarRocks may behave differently between the old and new versions, causing problems during cross-cluster data migration. Therefore, you must enable Legacy Compatibility for the target cluster before data migration and disable it after data migration is completed. `true` indicates enabling this mode.
 - Introduced in: v3.1.10, v3.2.6
+
+##### automated_cluster_snapshot_interval_seconds
+
+- Default: 600
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The interval at which the Automated Cluster Snapshot tasks are triggered.
+- Introduced in: v3.4.2
 
 ### User, role, and privilege
 
@@ -1193,20 +1202,18 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to enable the creation of materialized views.
 - Introduced in: -
 
-<!--
 ##### enable_materialized_view_spill
 
 - Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: Whether to enable Intermediate Result Spilling for materialized view refresh tasks.
+- Introduced in: v3.1.1
 
 ##### enable_backup_materialized_view
 
-- Default: true
+- Default: false
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
@@ -1299,6 +1306,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: Whether to enable the system to automatically check and re-activate the asynchronous materialized views that are set inactive because their base tables (views) had undergone Schema Change or had been dropped and re-created. Please note that this feature will not re-activate the materialized views that are manually set inactive by users.
 - Introduced in: v3.1.6
+
+##### enable_active_materialized_view_schema_strict_check
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to strictly check the length consistency of data types when activating an inactive materialized view. When this item is set to `false`, the activation of the materialized view is not affected if the length of the data types has changed in the base table.
+- Introduced in: v3.3.4
 
 <!--
 ##### mv_active_checker_interval_seconds
@@ -1733,7 +1749,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Long
 - Unit: bytes
 - Is mutable: Yes
-- Description: The size of the largest partition for the automatic collection of statistics. If a partition exceeds this value, then sampled collection is performed instead of full.
+- Description: The data size threshold for the automatic collection of statistics. If the total size exceeds this value, then sampled collection is performed instead of full.
 - Introduced in: -
 
 ##### statistic_collect_max_row_count_per_query
@@ -1790,6 +1806,60 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The maximum number of rows to collect for a histogram.
 - Introduced in: -
 
+##### connector_table_query_trigger_task_schedule_interval
+
+- Default: 30
+- Type: Int
+- Unit: Second
+- Is mutable: Yes
+- Description: The interval at which the Scheduler thread schedules the query-trigger background tasks. This item is to replace `connector_table_query_trigger_analyze_schedule_interval` introduced in v3.4.0. Here, the background tasks refer `ANALYZE` tasks in v3.4，and the collection task of low-cardinality columns' dictionary in versions later than v3.4.  
+- Introduced in: v3.4.2
+
+##### connector_table_query_trigger_analyze_small_table_rows
+
+- Default: 10000000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The threshold for determining whether a table is a small table for query-trigger ANALYZE tasks.
+- Introduced in: v3.4.0
+
+##### connector_table_query_trigger_analyze_small_table_interval
+
+- Default: 2 * 3600
+- Type: Int
+- Unit: Second
+- Is mutable: Yes
+- Description: The interval for query-trigger ANALYZE tasks of small tables.
+- Introduced in: v3.4.0
+
+##### connector_table_query_trigger_analyze_large_table_interval
+
+- Default: 12 * 3600
+- Type: Int
+- Unit: Second
+- Is mutable: Yes
+- Description: The interval for query-trigger ANALYZE tasks of large tables.
+- Introduced in: v3.4.0
+
+##### connector_table_query_trigger_analyze_max_pending_task_num
+
+- Default: 100
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Maximum number of query-trigger ANALYZE tasks that are in Pending state on the FE.
+- Introduced in: v3.4.0
+
+##### connector_table_query_trigger_analyze_max_running_task_num
+
+- Default: 2
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Maximum number of query-trigger ANALYZE tasks that are in Running state on the FE.
+- Introduced in: v3.4.0
+
 ##### enable_local_replica_selection
 
 - Default: false
@@ -1807,6 +1877,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description:: The maximum recursion depth allowed by the partition pruner. Increasing the recursion depth can prune more elements but also increases CPU consumption.
 - Introduced in: -
+
+##### slow_query_analyze_threshold
+
+- Default: 5
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description:: The execution time threshold for queries to trigger the analysis of Query Feedback.
+- Introduced in: v3.4.0
 
 ### Loading and unloading
 
@@ -2126,7 +2205,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The maximum time for each Routine Load task within the cluster to consume data. Since v3.1.0, Routine Load job supports a new parameter `task_consume_second` in [job_properties](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
+- Description: The maximum time for each Routine Load task within the cluster to consume data. Since v3.1.0, Routine Load job supports a new parameter `task_consume_second` in [job_properties](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
 - Introduced in: -
 
 ##### routine_load_task_timeout_second
@@ -2135,7 +2214,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The timeout duration for each Routine Load task within the cluster. Since v3.1.0, Routine Load job supports a new parameter `task_timeout_second` in [job_properties](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
+- Description: The timeout duration for each Routine Load task within the cluster. Since v3.1.0, Routine Load job supports a new parameter `task_timeout_second` in [job_properties](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
 - Introduced in: -
 
 <!--
@@ -2373,7 +2452,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The longest duration the metadata can be retained after a database, table, or partition is dropped. If this duration expires, the data will be deleted and cannot be recovered through the [RECOVER](../../sql-reference/sql-statements/data-definition/backup_restore/RECOVER.md) command.
+- Description: The longest duration the metadata can be retained after a database, table, or partition is dropped. If this duration expires, the data will be deleted and cannot be recovered through the [RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) command.
 - Introduced in: -
 
 ##### enable_auto_tablet_distribution
@@ -2456,7 +2535,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### enable_fast_schema_evolution
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
@@ -2466,7 +2545,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 > **NOTE**
 >
 > - StarRocks shared-data clusters supports this parameter from v3.3.0.
-> - If you need to configure the fast schema evolution for a specific table, such as disabling fast schema evolution for a specific table, you can set the table property [`fast_schema_evolution`](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#set-fast-schema-evolution) at table creation.
+> - If you need to configure the fast schema evolution for a specific table, such as disabling fast schema evolution for a specific table, you can set the table property [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-fast-schema-evolution) at table creation.
 
 ##### recover_with_empty_tablet
 
@@ -2750,6 +2829,51 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The time interval at which the FE retrieves tablet statistics from each BE.
 - Introduced in: -
 
+##### max_automatic_partition_number
+
+- Default: 4096
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of automatically created partitions.
+- Introduced in: v3.1
+
+##### auto_partition_max_creation_number_per_load
+
+- Default: 4096
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of partitions can be created in a table (with Expression Partitioning strategy) by a loading task.
+- Introduced in: v3.3.2
+
+##### max_partition_number_per_table
+
+- Default: 100000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of partitions can be created in a table.
+- Introduced in: v3.3.2
+
+##### max_bucket_number_per_partition
+
+- Default: 1024
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of buckets can be created in a partition.
+- Introduced in: v3.3.2
+
+##### max_column_number_per_table
+
+- Default: 10000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of columns can be created in a table.
+- Introduced in: v3.3.2
+
 ### Shared-data
 
 ##### run_mode
@@ -2797,19 +2921,19 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: The cloud-native meta service RPC port.
+- Description: FE cloud-native metadata server RPC listen port.
 - Introduced in: -
 
-<!--
+
 ##### enable_load_volume_from_conf
 
-- Default: true
+- Default: false
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description:
-- Introduced in: -
--->
+- Description: Whether to allow StarRocks to create the built-in storage volume by using the object storage-related properties specified in the FE configuration file. The default value is changed from `true` to `false` from v3.4.1 onwards.
+- Introduced in: v3.1.0
+
 
 ##### cloud_native_storage_type
 
@@ -2817,19 +2941,17 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: The type of object storage you use. In shared-data mode, StarRocks supports storing data in Azure Blob (supported from v3.1.1 onwards), and object storages that are compatible with the S3 protocol (such as AWS S3, Google GCP, and MinIO). Valid value: `S3` (Default) and `AZBLOB`. If you specify this parameter as `S3`, you must add the parameters prefixed by `aws_s3`. If you specify this parameter as `AZBLOB`, you must add the parameters prefixed by `azure_blob`.
+- Description: The type of object storage you use. In shared-data mode, StarRocks supports storing data in HDFS, Azure Blob (supported from v3.1.1 onwards), Azure Data Lake Storage Gen2 (supported from v3.4.1 onwards), and object storages that are compatible with the S3 protocol (such as AWS S3, Google GCP, and MinIO). Valid value: `S3` (Default), `HDFS`, `AZBLOB`, and `ADLS2`. If you specify this parameter as `S3`, you must add the parameters prefixed by `aws_s3`. If you specify this parameter as `AZBLOB`, you must add the parameters prefixed by `azure_blob`. If you specify this parameter as `ADLS2`, you must add the parameters prefixed by `azure_adls2`. If you specify this parameter as `HDFS`, you only need to specify `cloud_native_hdfs_url`.
 - Introduced in: -
 
-<!--
 ##### cloud_native_hdfs_url
 
 - Default: Empty string
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description:
+- Description: The URL of the HDFS storage, for example, `hdfs://127.0.0.1:9000/user/xxx/starrocks/`.
 - Introduced in: -
--->
 
 ##### aws_s3_path
 
@@ -2952,6 +3074,42 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The shared access signatures (SAS) used to authorize requests for your Azure Blob Storage.
 - Introduced in: v3.1
 
+##### azure_adls2_endpoint
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The endpoint of your Azure Data Lake Storage Gen2 Account, for example, `https://test.dfs.core.windows.net`.
+- Introduced in: v3.4.1
+
+##### azure_adls2_path
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The Azure Data Lake Storage Gen2 path used to store data. It consists of the file system name and the directory name, for example, `testfilesystem/starrocks`.
+- Introduced in: v3.4.1
+
+##### azure_adls2_shared_key
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The Shared Key used to authorize requests for your Azure Data Lake Storage Gen2.
+- Introduced in: v3.4.1
+
+##### azure_adls2_sas_token
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The shared access signatures (SAS) used to authorize requests for your Azure Data Lake Storage Gen2.
+- Introduced in: v3.4.1
+
 <!--
 ##### starmgr_grpc_timeout_seconds
 
@@ -2983,20 +3141,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### lake_compaction_history_size
 
-- Default: 12
+- Default: 20
 - Type: Int
 - Unit: -
 - Is mutable: Yes
 - Description: The number of recent successful Compaction task records to keep in the memory of the Leader FE node in a shared-data cluster. You can view recent successful Compaction task records using the `SHOW PROC '/compactions'` command. Note that the Compaction history is stored in the FE process memory, and it will be lost if the FE process is restarted.
-- Introduced in: v3.1.0
-
-##### lake_compaction_fail_history_size
-
-- Default: 12
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: The number of recent failed Compaction task records to keep in the memory of the Leader FE node in a shared-data cluster. You can view recent failed Compaction task records using the `SHOW PROC '/compactions'` command. Note that the Compaction history is stored in the FE process memory, and it will be lost if the FE process is restarted.
 - Introduced in: v3.1.0
 
 ##### lake_publish_version_max_threads
@@ -3061,11 +3210,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### lake_autovacuum_grace_period_minutes
 
-- Default: 5
+- Default: 30
 - Type: Long
 - Unit: Minutes
 - Is mutable: Yes
-- Description: The time range for retaining historical data versions in a shared-data cluster. Historical data versions within this time range are not automatically cleaned via AutoVacuum after Compactions. You need to set this value greater than the maximum query time to avoid that the data accessed by running queries get deleted before the queries finish.
+- Description: The time range for retaining historical data versions in a shared-data cluster. Historical data versions within this time range are not automatically cleaned via AutoVacuum after Compactions. You need to set this value greater than the maximum query time to avoid that the data accessed by running queries get deleted before the queries finish. The default value has been changed from `5` to `30` since v3.3.0, v3.2.5, and v3.1.10.
 - Introduced in: v3.1.0
 
 ##### lake_autovacuum_stale_partition_threshold
@@ -3079,11 +3228,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### lake_enable_ingest_slowdown
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable Data Ingestion Slowdown in a shared-data cluster. When Data Ingestion Slowdown is enabled, if the Compaction Score of a partition exceeds `lake_ingest_slowdown_threshold`, loading tasks on that partition will be throttled down. This configuration only takes effect when `run_mode` is set to `shared_data`.
+- Description: Whether to enable Data Ingestion Slowdown in a shared-data cluster. When Data Ingestion Slowdown is enabled, if the Compaction Score of a partition exceeds `lake_ingest_slowdown_threshold`, loading tasks on that partition will be throttled down. This configuration only takes effect when `run_mode` is set to `shared_data`. From v3.3.6 onwards, the default value is chenged from `false` to `true`.
 - Introduced in: v3.2.0
 
 ##### lake_ingest_slowdown_threshold
@@ -3115,11 +3264,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### lake_compaction_score_upper_bound
 
-- Default: 0
+- Default: 2000
 - Type: Long
 - Unit: -
 - Is mutable: Yes
-- Description: The upper limit of the Compaction Score for a partition in a shared-data cluster. `0` indicates no upper limit. This item only takes effect when `lake_enable_ingest_slowdown` is set to `true`. When the Compaction Score of a partition reaches or exceeds this upper limit, all loading tasks on that partition will be indefinitely delayed until the Compaction Score drops below this value or the task times out.
+- Description: The upper limit of the Compaction Score for a partition in a shared-data cluster. `0` indicates no upper limit. This item only takes effect when `lake_enable_ingest_slowdown` is set to `true`. When the Compaction Score of a partition reaches or exceeds this upper limit, incoming loading tasks will be rejected. From v3.3.6 onwards, the default value is changed from `0` to `2000`.
 - Introduced in: v3.2.0
 
 ##### lake_compaction_disable_tables
@@ -3130,6 +3279,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: The table list of which compaction is disabled in shared-data mode. The format is `tableId1;tableId2`, seperated by semicolon, for example, `12345;98765`.
 - Introduced in: v3.1.11
+
+##### lake_enable_balance_tablets_between_workers
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to balance the number of tablets among Compute Nodes during the tablet migration of cloud-native tables in a shared-data cluster. `true` indicates to balance the tablets among Compute Nodes, and `false` indicates to disabling this feature.
+- Introduced in: v3.3.4
+
+##### lake_balance_tablets_threshold
+
+- Default: 0.15
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: The threshold the system used to judge the tablet balance among workers in a shared-data cluster, The imbalance factor is calculated as `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`. If the factor is greater than `lake_balance_tablets_threshold`, a tablet balance will be triggered. This item takes effect only when `lake_enable_balance_tablets_between_workers` is set to `true`.
+- Introduced in: v3.3.4
 
 ### Other
 
@@ -3644,9 +3811,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 -->
 
 <!--
-##### max_automatic_partition_number
+##### max_partition_number_per_table
 
-- Default: 4096
+- Default: 100000
 - Type: Long
 - Unit: -
 - Is mutable: Yes
@@ -4515,9 +4682,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 -->
 
 <!--
-##### stream_load_profile_collect_second
+##### load_profile_collect_threshold_second
 
-- Default: 10
+- Default: 0
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
@@ -4542,6 +4709,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: In each RESTORE operation, the maximum number of download tasks StarRocks assigned to a BE node. When this item is set to less than or equal to 0, no limit is imposed on the task number.
 - Introduced in: v3.1.0
+
+##### enable_colocate_restore
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable Backup and Restore for Colocate Tables. `true` indicates enabling Backup and Restore for Colocate Tables and `false` indicates disabling it.
+- Introduced in: v3.2.10, v3.3.3
 
 <!--
 ##### enable_persistent_index_by_default
@@ -4794,38 +4970,50 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Introduced in: -
 -->
 
-<!--
+##### replication_interval_ms
+
+- Default: 100
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The minimum time interval at which the replication tasks are scheduled.
+- Introduced in: v3.3.5
+
 ##### replication_max_parallel_table_count
 
 - Default: 100
 - Type: Int
-- Unit:
+- Unit: -
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: The maximum number of concurrent data synchronization tasks allowed. StarRocks creates one synchronization task for each table.
+- Introduced in: v3.3.5
 
-<!--
-##### replication_max_parallel_data_size_mb
+##### replication_max_parallel_replica_count
 
 - Default: 10240
 - Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of tablet replicas allowed for concurrent synchronization.
+- Introduced in: v3.3.5
+
+##### replication_max_parallel_data_size_mb
+
+- Default: 1048576
+- Type: Int
 - Unit: MB
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: The maximum size of data allowed for concurrent synchronization.
+- Introduced in: v3.3.5
 
-<!--
 ##### replication_transaction_timeout_sec
 
-- Default: 1 * 60 * 60
+- Default: 86400
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: The timeout duration for synchronization tasks.
+- Introduced in: v3.3.5
 
 ##### jdbc_meta_default_cache_enable
 
@@ -4871,6 +5059,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: The maximum amount of time after which a connection for accessing a JDBC catalog times out. Timed-out connections are considered idle.
 - Introduced in: -
+
+##### query_detail_explain_level
+
+- Default: COSTS
+- Type: String
+- Unit: -
+- Is mutable: true
+- Description: The detail level of query plan returned by the EXPLAIN statement. Valid values: COSTS, NORMAL, VERBOSE.
+- Introduced in: v3.2.12, v3.3.5
 
 <!--
 ##### max_varchar_length

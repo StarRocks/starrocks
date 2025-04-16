@@ -33,10 +33,10 @@ import java.util.List;
 import java.util.Set;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-public class MvRewriteUnionTest extends MvRewriteTestBase {
+public class MvRewriteUnionTest extends MVTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
 
         starRocksAssert.withTable(cluster, "depts");
         starRocksAssert.withTable(cluster, "emps");
@@ -406,8 +406,7 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                                                 "     PREAGGREGATION: ON\n" +
                                                 "     PREDICATES: 13: k1 < 6, 14: k2 LIKE 'a%'\n" +
                                                 "     partitions=1/3\n" +
-                                                "     rollup: mt1\n" +
-                                                "     tabletRatio=3/3"),
+                                                "     rollup: mt1"),
                                 Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1 != 3 and k2 like 'a%'",
                                         "     TABLE: mt1\n" +
                                                 "     PREAGGREGATION: ON\n" +

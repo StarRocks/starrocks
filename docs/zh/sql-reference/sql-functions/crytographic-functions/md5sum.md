@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # md5sum
 
-## 功能
+
 
 计算多个输入参数的 MD5 128-bit 校验和 (checksum)，以 32 字符的十六进制字符串表示。该函数可接收多个参数，与 md5() 函数相比，文件检查的效率更高。如果传入单个参数，md5sum 和 md5 计算结果相同。
 

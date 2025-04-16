@@ -55,7 +55,12 @@ Status ProtobufFileWithHeader::save(const ::google::protobuf::Message& message, 
     header.version = OLAP_DATA_VERSION_APPLIED;
     header.magic_number = OLAP_FIX_HEADER_MAGIC_NUMBER;
 
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_path));
+    std::shared_ptr<FileSystem> fs;
+    if (_fs) {
+        fs = _fs;
+    } else {
+        ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(_path));
+    }
     WritableFileOptions opts{.sync_on_close = sync, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(auto output_file, fs->new_writable_file(opts, _path));
     RETURN_IF_ERROR(output_file->append(Slice((const char*)(&header), sizeof(header))));
@@ -67,7 +72,12 @@ Status ProtobufFileWithHeader::save(const ::google::protobuf::Message& message, 
 
 Status ProtobufFileWithHeader::load(::google::protobuf::Message* message, bool fill_cache) {
     SequentialFileOptions opts{.skip_fill_local_cache = !fill_cache};
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_path));
+    std::shared_ptr<FileSystem> fs;
+    if (_fs) {
+        fs = _fs;
+    } else {
+        ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(_path));
+    }
     ASSIGN_OR_RETURN(auto input_file, fs->new_sequential_file(opts, _path));
 
     FixedFileHeader header;
@@ -140,7 +150,12 @@ Status ProtobufFile::save(const ::google::protobuf::Message& message, bool sync)
         return Status::InternalError(
                 fmt::format("failed to serialize protobuf to string, maybe the protobuf is too large. path={}", _path));
     }
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_path));
+    std::shared_ptr<FileSystem> fs;
+    if (_fs) {
+        fs = _fs;
+    } else {
+        ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(_path));
+    }
     WritableFileOptions opts{.sync_on_close = sync, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(auto output_file, fs->new_writable_file(opts, _path));
     RETURN_IF_ERROR(output_file->append(serialized_message));
@@ -150,7 +165,12 @@ Status ProtobufFile::save(const ::google::protobuf::Message& message, bool sync)
 
 Status ProtobufFile::load(::google::protobuf::Message* message, bool fill_cache) {
     RandomAccessFileOptions opts{.skip_fill_local_cache = !fill_cache};
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_path));
+    std::shared_ptr<FileSystem> fs;
+    if (_fs) {
+        fs = _fs;
+    } else {
+        ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(_path));
+    }
     ASSIGN_OR_RETURN(auto input_file, fs->new_random_access_file(opts, _path));
     ASSIGN_OR_RETURN(auto serialized_string, input_file->read_all());
     if (bool parsed = message->ParseFromString(serialized_string); !parsed) {

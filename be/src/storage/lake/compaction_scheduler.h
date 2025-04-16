@@ -58,24 +58,30 @@ public:
 
     void finish_task(std::unique_ptr<CompactionTaskContext>&& context);
 
-    bool has_error() const {
-        std::lock_guard l(_mtx);
-        return !_status.ok();
-    }
-
-    Status error() const {
-        std::lock_guard l(_mtx);
-        return _status;
-    }
+    // used to check if compaction should be aborted early
+    Status has_error() const;
 
     void update_status(const Status& st) {
         std::lock_guard l(_mtx);
         _status.update(st);
     }
 
-    bool timeout_exceeded() const { return butil::gettimeofday_ms() >= _timeout_deadline_ms; }
-
     int64_t timeout_ms() const;
+
+    bool allow_partial_success() const;
+
+    void set_last_check_time(int64_t now) {
+        std::lock_guard l(_txn_valid_check_mutex);
+        _last_check_time = now;
+    }
+
+    int64_t TEST_get_last_check_time() const {
+        std::lock_guard l(_txn_valid_check_mutex);
+        return _last_check_time;
+    }
+
+    // check if txn in FE still valid while compaction task (specified by `context`) is running
+    Status is_txn_still_valid();
 
 private:
     const static int64_t kDefaultTimeoutMs = 24L * 60 * 60 * 1000; // 1 day
@@ -87,6 +93,11 @@ private:
     ::google::protobuf::Closure* _done;
     Status _status;
     int64_t _timeout_deadline_ms;
+    // compaction's last check time in second, initialized when first put into task queue,
+    // used to help check whether it's valid periodically, task's in queue time is considered
+    int64_t _last_check_time;
+    // use lock to protect _last_check_time and prevent multiple rpc called
+    mutable std::mutex _txn_valid_check_mutex;
     std::vector<std::unique_ptr<CompactionTaskContext>> _contexts;
 };
 
@@ -100,6 +111,7 @@ struct CompactionTaskInfo {
     int runs;     // How many times the compaction task has been executed
     int progress; // 0-100
     bool skipped;
+    std::string profile; // detailed execution info, such as io stats
 };
 
 class CompactionScheduler {
@@ -215,14 +227,21 @@ public:
     // update at runtime
     void update_compact_threads(int32_t new_val);
 
+    void stop();
+
 private:
     friend class CompactionTaskCallback;
+
+    // abort all the compaction tasks in the task queue. Only expected to be invoked during stop()
+    void abort_all();
 
     void remove_states(const std::vector<std::unique_ptr<CompactionTaskContext>>& contexes);
 
     void thread_task(int id);
 
     Status do_compaction(std::unique_ptr<CompactionTaskContext> context);
+
+    void abort_compaction(std::unique_ptr<CompactionTaskContext> context);
 
     bool reschedule_task_if_needed(int id);
 
@@ -232,6 +251,7 @@ private:
     butil::LinkedList<CompactionTaskContext> _contexts;
     std::unique_ptr<ThreadPool> _threads;
     std::atomic<bool> _stopped{false};
+    std::mutex _mutex;
     WrapTaskQueues _task_queues;
 };
 
@@ -327,6 +347,7 @@ inline void CompactionScheduler::WrapTaskQueues::put_by_txn_id(int64_t txn_id,
                                                                std::unique_ptr<CompactionTaskContext>& context) {
     std::lock_guard<std::mutex> lock(_task_queues_mutex);
     int idx = _task_queue_safe_index(txn_id);
+    context->enqueue_time_sec = ::time(nullptr);
     _internal_task_queues[idx]->put(std::move(context));
 }
 
@@ -334,7 +355,9 @@ inline void CompactionScheduler::WrapTaskQueues::put_by_txn_id(
         int64_t txn_id, std::vector<std::unique_ptr<CompactionTaskContext>>& contexts) {
     std::lock_guard<std::mutex> lock(_task_queues_mutex);
     int idx = _task_queue_safe_index(txn_id);
+    int64_t now = ::time(nullptr);
     for (auto& context : contexts) {
+        context->enqueue_time_sec = now;
         _internal_task_queues[idx]->put(std::move(context));
     }
 }
@@ -378,6 +401,6 @@ inline void CompactionScheduler::WrapTaskQueues::steal_task(int start_index,
     DCHECK(*context == nullptr);
 }
 
-bool compaction_should_cancel(CompactionTaskContext* context);
+Status compaction_should_cancel(CompactionTaskContext* context);
 
 } // namespace starrocks::lake

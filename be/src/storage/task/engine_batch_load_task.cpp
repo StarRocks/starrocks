@@ -63,7 +63,7 @@ static StatusOr<int64_t> choose_any_version(int64_t tablet_id) {
     if (auto res = tablet_mgr->get_latest_cached_tablet_metadata(tablet_id); res != nullptr) {
         return res->version();
     }
-    ASSIGN_OR_RETURN(auto iter, tablet_mgr->list_tablet_metadata(tablet_id, true));
+    ASSIGN_OR_RETURN(auto iter, tablet_mgr->list_tablet_metadata(tablet_id));
     if (iter.has_next()) {
         ASSIGN_OR_RETURN(auto metadata, iter.next());
         return metadata->version();

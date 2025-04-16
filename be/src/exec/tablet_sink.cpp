@@ -47,6 +47,7 @@
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "common/statusor.h"
+#include "common/tracer.h"
 #include "config.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/tablet_sink_colocate_sender.h"
@@ -76,7 +77,7 @@ static const uint8_t VALID_SEL_OK = 0x1;
 // make sure the least bit is 1.
 static const uint8_t VALID_SEL_OK_AND_NULL = 0x3;
 
-namespace starrocks::stream_load {
+namespace starrocks {
 
 OlapTableSink::OlapTableSink(ObjectPool* pool, const std::vector<TExpr>& texprs, Status* status, RuntimeState* state)
         : _pool(pool), _rpc_http_min_size(state->get_rpc_http_min_size()) {
@@ -89,10 +90,12 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     DCHECK(t_sink.__isset.olap_table_sink);
     const auto& table_sink = t_sink.olap_table_sink;
     _merge_condition = table_sink.merge_condition;
+    _encryption_meta = table_sink.encryption_meta;
     _partial_update_mode = table_sink.partial_update_mode;
     _load_id.set_hi(table_sink.load_id.hi);
     _load_id.set_lo(table_sink.load_id.lo);
     _txn_id = table_sink.txn_id;
+    _sink_id = t_sink.__isset.sink_id ? t_sink.sink_id : 0;
     _txn_trace_parent = table_sink.txn_trace_parent;
     _span = Tracer::Instance().start_trace_or_add_span("olap_table_sink", _txn_trace_parent);
     _num_repicas = table_sink.num_replicas;
@@ -136,6 +139,12 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
         _load_channel_timeout_s = config::streaming_load_rpc_max_alive_time_sec;
     }
 
+    if (table_sink.__isset.dynamic_overwrite) {
+        _dynamic_overwrite = table_sink.dynamic_overwrite;
+    }
+    if (table_sink.__isset.ignore_out_of_partition) {
+        _ignore_out_of_partition = table_sink.ignore_out_of_partition;
+    }
     _enable_automatic_partition = _vectorized_partition->enable_automatic_partition();
     if (_enable_automatic_partition) {
         _automatic_partition_token =
@@ -146,16 +155,33 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
         _colocate_mv_index = table_sink.enable_colocate_mv_index && config::enable_load_colocate_mv;
     }
 
-    // Query context is only available for pipeline engine
-    auto query_ctx = state->query_ctx();
-    if (query_ctx) {
+    if (state->query_ctx()) {
+        // Query context is only available for pipeline engine (insert/broker load)
+        auto query_ctx = state->query_ctx();
         _load_channel_profile_config.set_enable_profile(query_ctx->get_enable_profile_flag());
         _load_channel_profile_config.set_big_query_profile_threshold_ns(
                 query_ctx->get_big_query_profile_threshold_ns());
         _load_channel_profile_config.set_runtime_profile_report_interval_ns(
                 query_ctx->get_runtime_profile_report_interval_ns());
+    } else {
+        // For non-pipeline engine (stream load/routine load), get the profile config from query options
+        auto& query_options = state->query_options();
+        bool enable_profile = query_options.__isset.enable_profile && query_options.enable_profile;
+        int64_t load_profile_collect_second =
+                query_options.__isset.load_profile_collect_second ? query_options.load_profile_collect_second : -1;
+        // when enable_profile and load_profile_collect_second are set, use big query threshold to control the profile
+        if (enable_profile && load_profile_collect_second > 0) {
+            _load_channel_profile_config.set_enable_profile(false);
+            _load_channel_profile_config.set_big_query_profile_threshold_ns(load_profile_collect_second * 1e9);
+        } else if (enable_profile) {
+            _load_channel_profile_config.set_enable_profile(true);
+            _load_channel_profile_config.set_big_query_profile_threshold_ns(-1);
+        } else {
+            _load_channel_profile_config.set_enable_profile(false);
+            _load_channel_profile_config.set_big_query_profile_threshold_ns(-1);
+        }
+        _load_channel_profile_config.set_runtime_profile_report_interval_ns(std::numeric_limits<int64_t>::max());
     }
-
     return Status::OK();
 }
 
@@ -170,6 +196,7 @@ void OlapTableSink::_prepare_profile(RuntimeState* state) {
     _profile->add_info_string("ReplicatedStorage", fmt::format("{}", _enable_replicated_storage));
     _profile->add_info_string("AutomaticPartition", fmt::format("{}", _enable_automatic_partition));
     _profile->add_info_string("AutomaticBucketSize", fmt::format("{}", _automatic_bucket_size));
+    _profile->add_info_string("DynamicOverwrite", fmt::format("{}", _dynamic_overwrite));
 
     _ts_profile = state->obj_pool()->add(new TabletSinkProfile());
     _ts_profile->runtime_profile = _profile;
@@ -191,6 +218,7 @@ void OlapTableSink::_prepare_profile(RuntimeState* state) {
     _ts_profile->server_rpc_timer = ADD_TIMER(_profile, "RpcServerSideTime");
     _ts_profile->server_wait_flush_timer = ADD_TIMER(_profile, "RpcServerWaitFlushTime");
     _ts_profile->alloc_auto_increment_timer = ADD_TIMER(_profile, "AllocAutoIncrementTime");
+    _ts_profile->update_load_channel_profile_timer = ADD_TIMER(_profile, "UpdateLoadChannelProfileTime");
 }
 
 void OlapTableSink::set_profile(RuntimeProfile* profile) {
@@ -402,6 +430,9 @@ Status OlapTableSink::_automatic_create_partition() {
     request.__set_db_id(_vectorized_partition->db_id());
     request.__set_table_id(_vectorized_partition->table_id());
     request.__set_partition_values(_partition_not_exist_row_values);
+    if (_dynamic_overwrite) {
+        request.__set_is_temp(true);
+    }
 
     LOG(INFO) << "load_id=" << print_id(_load_id) << ", txn_id: " << std::to_string(_txn_id)
               << " automatic partition rpc begin request " << request;
@@ -413,7 +444,7 @@ Status OlapTableSink::_automatic_create_partition() {
     do {
         if (retry_times++ > 1) {
             SleepFor(MonoDelta::FromMilliseconds(std::min(5000, timeout_ms)));
-            VLOG(1) << "load_id=" << print_id(_load_id) << ", txn_id: " << std::to_string(_txn_id)
+            VLOG(2) << "load_id=" << print_id(_load_id) << ", txn_id: " << std::to_string(_txn_id)
                     << " automatic partition rpc retry " << retry_times;
         }
         RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
@@ -577,6 +608,14 @@ Status OlapTableSink::_incremental_open_node_channel(const std::vector<TOlapTabl
 }
 
 Status OlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
+    return _send_chunk(state, chunk, false);
+}
+
+Status OlapTableSink::send_chunk_nonblocking(RuntimeState* state, Chunk* chunk) {
+    return _send_chunk(state, chunk, true);
+}
+
+Status OlapTableSink::_send_chunk(RuntimeState* state, Chunk* chunk, bool nonblocking) {
     SCOPED_TIMER(_profile->total_time_counter());
     DCHECK(chunk->num_rows() > 0);
     size_t num_rows = chunk->num_rows();
@@ -653,11 +692,12 @@ Status OlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
                         _is_automatic_partition_running.store(false, std::memory_order_release);
                     }));
 
-                    if (_nonblocking_send_chunk) {
+                    if (nonblocking) {
                         _has_automatic_partition = true;
                         return Status::EAgain("");
                     } else {
                         _automatic_partition_token->wait();
+                        RETURN_IF_ERROR(this->_automatic_partition_status);
                         // after the partition is created, go through the data again
                         RETURN_IF_ERROR(_vectorized_partition->find_tablets(chunk, &_partitions, &_tablet_indexes,
                                                                             &_validate_selection, &invalid_row_indexs,
@@ -665,6 +705,7 @@ Status OlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
                     }
                 }
             } else {
+                RETURN_IF_ERROR(this->_automatic_partition_status);
                 RETURN_IF_ERROR(_vectorized_partition->find_tablets(chunk, &_partitions, &_tablet_indexes,
                                                                     &_validate_selection, &invalid_row_indexs, _txn_id,
                                                                     nullptr));
@@ -685,30 +726,28 @@ Status OlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
             }
             _validate_select_idx.resize(selected_size);
 
-            if (num_rows_after_validate - _validate_select_idx.size() > 0) {
-                std::stringstream ss;
-                if (_enable_automatic_partition) {
-                    ss << "The row create partition failed since " << _automatic_partition_status.to_string();
-                } else {
+            if (!_ignore_out_of_partition) {
+                if (num_rows_after_validate - _validate_select_idx.size() > 0) {
+                    std::stringstream ss;
                     ss << "The row is out of partition ranges. Please add a new partition.";
-                }
-                if (!state->has_reached_max_error_msg_num() && invalid_row_indexs.size() > 0) {
-                    std::string debug_row = chunk->debug_row(invalid_row_indexs.back());
-                    state->append_error_msg_to_file(debug_row, ss.str());
-                }
-                for (auto i : invalid_row_indexs) {
-                    if (state->enable_log_rejected_record()) {
-                        state->append_rejected_record_to_file(chunk->rebuild_csv_row(i, ","), ss.str(), "");
-                    } else {
-                        break;
+                    if (!state->has_reached_max_error_msg_num() && invalid_row_indexs.size() > 0) {
+                        std::string debug_row = chunk->debug_row(invalid_row_indexs.back());
+                        state->append_error_msg_to_file(debug_row, ss.str());
+                    }
+                    for (auto i : invalid_row_indexs) {
+                        if (state->enable_log_rejected_record()) {
+                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(i, ","), ss.str(), "");
+                        } else {
+                            break;
+                        }
                     }
                 }
-            }
 
-            int64_t num_rows_load_filtered = num_rows - _validate_select_idx.size();
-            if (num_rows_load_filtered > 0) {
-                _number_filtered_rows += num_rows_load_filtered;
-                state->update_num_rows_load_filtered(num_rows_load_filtered);
+                int64_t num_rows_load_filtered = num_rows - _validate_select_idx.size();
+                if (num_rows_load_filtered > 0) {
+                    _number_filtered_rows += num_rows_load_filtered;
+                    state->update_num_rows_load_filtered(num_rows_load_filtered);
+                }
             }
             _number_output_rows += _validate_select_idx.size();
             state->update_num_rows_load_sink(_validate_select_idx.size());
@@ -732,7 +771,7 @@ Status OlapTableSink::_fill_auto_increment_id(Chunk* chunk) {
     }
     _has_auto_increment = true;
 
-    auto& slot = _output_tuple_desc->slots()[_auto_increment_slot_id];
+    SlotDescriptor* slot = _output_tuple_desc->get_slot_by_id(_auto_increment_slot_id);
     RETURN_IF_ERROR(_fill_auto_increment_id_internal(chunk, slot, _schema->table_id()));
 
     return Status::OK();
@@ -750,10 +789,10 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
         return Status::OK();
     }
 
-    ColumnPtr& data_col = std::dynamic_pointer_cast<NullableColumn>(col)->data_column();
-    std::vector<uint8_t> filter(std::dynamic_pointer_cast<NullableColumn>(col)->immutable_null_column_data());
+    ColumnPtr& data_col = NullableColumn::dynamic_pointer_cast(col)->data_column();
+    Filter filter(NullableColumn::dynamic_pointer_cast(col)->immutable_null_column_data());
 
-    std::vector<uint8_t> init_filter(chunk->num_rows(), 0);
+    Filter init_filter(chunk->num_rows(), 0);
 
     if (_keys_type == TKeysType::PRIMARY_KEYS && _output_tuple_desc->slots().back()->col_name() == "__op") {
         size_t op_column_id = chunk->num_columns() - 1;
@@ -779,7 +818,7 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
     // Here we just set 0 value in this case.
     uint32 del_rows = SIMD::count_nonzero(init_filter);
     if (del_rows != 0) {
-        RETURN_IF_ERROR((std::dynamic_pointer_cast<Int64Column>(data_col))
+        RETURN_IF_ERROR((Int64Column::dynamic_pointer_cast(data_col))
                                 ->fill_range(std::vector<int64_t>(del_rows, 0), init_filter));
     }
 
@@ -799,7 +838,7 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
             // it will be allocate in DeltaWriter.
             ids.assign(null_rows, 0);
         }
-        RETURN_IF_ERROR((std::dynamic_pointer_cast<Int64Column>(data_col))->fill_range(ids, filter));
+        RETURN_IF_ERROR((Int64Column::dynamic_pointer_cast(data_col))->fill_range(ids, filter));
         break;
     }
     default:
@@ -936,7 +975,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
     size_t num_rows = chunk->num_rows();
     for (int i = 0; i < _output_tuple_desc->slots().size(); ++i) {
         SlotDescriptor* desc = _output_tuple_desc->slots()[i];
-        const ColumnPtr& column_ptr = chunk->get_column_by_slot_id(desc->id());
+        ColumnPtr& column_ptr = chunk->get_column_by_slot_id(desc->id());
 
         // change validation selection value back to OK/FAILED
         // because in previous run, some validation selection value could
@@ -977,7 +1016,8 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
         // Validate column nullable info
         // Column nullable info need to respect slot nullable info
         if (desc->is_nullable() && !column_ptr->is_nullable()) {
-            ColumnPtr new_column = NullableColumn::create(column_ptr, NullColumn::create(num_rows, 0));
+            MutableColumnPtr new_column =
+                    NullableColumn::create(std::move(column_ptr)->as_mutable_ptr(), NullColumn::create(num_rows, 0));
             chunk->update_column(std::move(new_column), desc->id());
             // Auto increment column is not nullable but use NullableColumn to implement. We should skip the check for it.
         } else if (!desc->is_nullable() && column_ptr->is_nullable() &&
@@ -1049,7 +1089,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
         case TYPE_DECIMALV2: {
             column = ColumnHelper::get_data_column(column);
             auto* decimal = down_cast<DecimalColumn*>(column);
-            std::vector<DecimalV2Value>& datas = decimal->get_data();
+            Buffer<DecimalV2Value>& datas = decimal->get_data();
             int scale = desc->type().scale;
             for (size_t j = 0; j < num_rows; ++j) {
                 if (_validate_selection[j] == VALID_SEL_OK) {
@@ -1125,10 +1165,11 @@ void OlapTableSink::_padding_char_column(Chunk* chunk) {
 
             if (desc->is_nullable()) {
                 auto* nullable_column = down_cast<NullableColumn*>(column);
-                ColumnPtr new_column = NullableColumn::create(new_binary, nullable_column->null_column());
-                chunk->update_column(new_column, desc->id());
+                MutableColumnPtr new_column =
+                        NullableColumn::create(std::move(new_binary), nullable_column->null_column()->as_mutable_ptr());
+                chunk->update_column(std::move(new_column), desc->id());
             } else {
-                chunk->update_column(new_binary, desc->id());
+                chunk->update_column(std::move(new_binary), desc->id());
             }
         }
     }
@@ -1144,4 +1185,4 @@ Status OlapTableSink::reset_epoch(RuntimeState* state) {
     return Status::OK();
 }
 
-} // namespace starrocks::stream_load
+} // namespace starrocks

@@ -39,9 +39,8 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
     return Status::OK();
 }
 
-Status PersistentIndexSstable::build_sstable(
-        const phmap::btree_map<std::string, std::list<IndexValueWithVer>, std::less<>>& map, WritableFile* wf,
-        uint64_t* filesz) {
+Status PersistentIndexSstable::build_sstable(const phmap::btree_map<std::string, IndexValueWithVer, std::less<>>& map,
+                                             WritableFile* wf, uint64_t* filesz) {
     std::unique_ptr<sstable::FilterPolicy> filter_policy;
     filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
     sstable::Options options;
@@ -49,12 +48,10 @@ Status PersistentIndexSstable::build_sstable(
     sstable::TableBuilder builder(options, wf);
     for (const auto& [k, v] : map) {
         IndexValuesWithVerPB index_value_pb;
-        for (const auto& index_value_with_ver : v) {
-            auto* value = index_value_pb.add_values();
-            value->set_version(index_value_with_ver.first);
-            value->set_rssid(index_value_with_ver.second.get_rssid());
-            value->set_rowid(index_value_with_ver.second.get_rowid());
-        }
+        auto* value = index_value_pb.add_values();
+        value->set_version(v.first);
+        value->set_rssid(v.second.get_rssid());
+        value->set_rowid(v.second.get_rowid());
         builder.Add(Slice(k), Slice(index_value_pb.SerializeAsString()));
     }
     RETURN_IF_ERROR(builder.Finish());
@@ -65,11 +62,15 @@ Status PersistentIndexSstable::build_sstable(
 Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& key_indexes, int64_t version,
                                          IndexValue* values, KeyIndexSet* found_key_indexes) const {
     std::vector<std::string> index_value_with_vers(key_indexes.size());
+    sstable::ReadIOStat stat;
     sstable::ReadOptions options;
+    options.stat = &stat;
     auto start_ts = butil::gettimeofday_us();
     RETURN_IF_ERROR(_sst->MultiGet(options, keys, key_indexes.begin(), key_indexes.end(), &index_value_with_vers));
     auto end_ts = butil::gettimeofday_us();
-    TRACE_COUNTER_INCREMENT("multi_get", end_ts - start_ts);
+    TRACE_COUNTER_INCREMENT("multi_get_us", end_ts - start_ts);
+    TRACE_COUNTER_INCREMENT("read_block_hit_cache_cnt", stat.block_cnt_from_cache);
+    TRACE_COUNTER_INCREMENT("read_block_miss_cache_cnt", stat.block_cnt_from_file);
     size_t i = 0;
     for (auto& key_index : key_indexes) {
         // Index_value_with_vers is empty means key is not found in sst.
@@ -99,6 +100,10 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
         ++i;
     }
     return Status::OK();
+}
+
+size_t PersistentIndexSstable::memory_usage() const {
+    return (_sst != nullptr) ? _sst->memory_usage() : 0;
 }
 
 } // namespace starrocks::lake

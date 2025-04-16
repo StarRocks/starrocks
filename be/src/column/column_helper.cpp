@@ -25,16 +25,13 @@
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "simd/simd.h"
+#include "storage/chunk_helper.h"
 #include "types/logical_type_infra.h"
 #include "util/date_func.h"
 #include "util/percentile_value.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
-
-NullColumnPtr ColumnHelper::one_size_not_null_column = NullColumn::create(1, 0);
-
-NullColumnPtr ColumnHelper::one_size_null_column = NullColumn::create(1, 1);
 
 Filter& ColumnHelper::merge_nullable_filter(Column* column) {
     if (column->is_nullable()) {
@@ -56,11 +53,11 @@ Filter& ColumnHelper::merge_nullable_filter(Column* column) {
 
 void ColumnHelper::merge_two_filters(const ColumnPtr& column, Filter* __restrict filter, bool* all_zero) {
     if (column->is_nullable()) {
-        auto* nullable_column = as_raw_column<NullableColumn>(column);
+        const auto* nullable_column = as_raw_const_column<NullableColumn>(column);
 
         // NOTE(zc): Must use uint8_t* to enable auto-vectorized.
-        auto nulls = nullable_column->null_column_data().data();
-        auto datas = (down_cast<UInt8Column*>(nullable_column->mutable_data_column()))->get_data().data();
+        const auto nulls = nullable_column->null_column_data().data();
+        const auto datas = (down_cast<const UInt8Column*>(nullable_column->data_column().get()))->get_data().data();
         auto num_rows = nullable_column->size();
         // we treat null(1) as false(0)
         for (size_t j = 0; j < num_rows; ++j) {
@@ -68,7 +65,7 @@ void ColumnHelper::merge_two_filters(const ColumnPtr& column, Filter* __restrict
         }
     } else {
         size_t num_rows = column->size();
-        auto datas = as_raw_column<UInt8Column>(column)->get_data().data();
+        const auto datas = as_raw_const_column<UInt8Column>(column)->get_data().data();
         for (size_t j = 0; j < num_rows; ++j) {
             (*filter)[j] &= datas[j];
         }
@@ -194,10 +191,10 @@ size_t ColumnHelper::count_false_with_notnull(const starrocks::ColumnPtr& col) {
     }
 }
 
-ColumnPtr ColumnHelper::create_const_null_column(size_t chunk_size) {
+MutableColumnPtr ColumnHelper::create_const_null_column(size_t chunk_size) {
     auto nullable_column = NullableColumn::create(Int8Column::create(), NullColumn::create());
     nullable_column->append_nulls(1);
-    return ConstColumn::create(nullable_column, chunk_size);
+    return ConstColumn::create(std::move(nullable_column), chunk_size);
 }
 
 size_t ColumnHelper::find_nonnull(const Column* col, size_t start, size_t end) {
@@ -235,7 +232,7 @@ size_t ColumnHelper::last_nonnull(const Column* col, size_t start, size_t end) {
     return end;
 }
 
-int64_t ColumnHelper::find_first_not_equal(Column* column, int64_t target, int64_t start, int64_t end) {
+int64_t ColumnHelper::find_first_not_equal(const Column* column, int64_t target, int64_t start, int64_t end) {
     while (start + 1 < end) {
         int64_t mid = start + (end - start) / 2;
         if (column->compare_at(target, mid, *column, 1) == 0) {
@@ -253,9 +250,9 @@ int64_t ColumnHelper::find_first_not_equal(Column* column, int64_t target, int64
 // expression trees' return column should align return type when some return columns maybe diff from the required
 // return type, as well the null flag. e.g., concat_ws returns col from create_const_null_column(), it's type is
 // Nullable(int8), but required return type is nullable(string), so col need align return type to nullable(string).
-ColumnPtr ColumnHelper::align_return_type(const ColumnPtr& old_col, const TypeDescriptor& type_desc, size_t num_rows,
+ColumnPtr ColumnHelper::align_return_type(ColumnPtr&& old_col, const TypeDescriptor& type_desc, size_t num_rows,
                                           const bool is_nullable) {
-    ColumnPtr new_column = old_col;
+    MutableColumnPtr new_column = (std::move(*old_col)).mutate();
     if (old_col->only_null()) {
         new_column = ColumnHelper::create_column(type_desc, true);
         new_column->append_nulls(num_rows);
@@ -263,7 +260,7 @@ ColumnPtr ColumnHelper::align_return_type(const ColumnPtr& old_col, const TypeDe
         // Note: we must create a new column every time here,
         // because result_columns[i] is shared_ptr
         new_column = ColumnHelper::create_column(type_desc, false);
-        auto* const_column = down_cast<ConstColumn*>(old_col.get());
+        auto* const_column = down_cast<const ConstColumn*>(old_col.get());
         new_column->append(*const_column->data_column(), 0, 1);
         new_column->assign(num_rows, 0);
     }
@@ -273,13 +270,13 @@ ColumnPtr ColumnHelper::align_return_type(const ColumnPtr& old_col, const TypeDe
     return new_column;
 }
 
-ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool nullable) {
+MutableColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool nullable) {
     return create_column(type_desc, nullable, false, 0);
 }
 
 struct ColumnBuilder {
     template <LogicalType ltype>
-    ColumnPtr operator()(const TypeDescriptor& type_desc, size_t size) {
+    MutableColumnPtr operator()(const TypeDescriptor& type_desc, size_t size) {
         switch (ltype) {
         case TYPE_UNKNOWN:
         case TYPE_NULL:
@@ -301,8 +298,8 @@ struct ColumnBuilder {
     }
 };
 
-ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size,
-                                      bool use_adaptive_nullable_column) {
+MutableColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size,
+                                             bool use_adaptive_nullable_column) {
     auto type = type_desc.type;
     if (is_const && (nullable || type == TYPE_NULL)) {
         return ColumnHelper::create_const_null_column(size);
@@ -314,15 +311,15 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
         }
     }
 
-    ColumnPtr p;
+    MutableColumnPtr p;
     if (type_desc.type == LogicalType::TYPE_ARRAY) {
         auto offsets = UInt32Column::create(size);
         auto data = create_column(type_desc.children[0], true, is_const, size);
         p = ArrayColumn::create(std::move(data), std::move(offsets));
     } else if (type_desc.type == LogicalType::TYPE_MAP) {
-        auto offsets = UInt32Column ::create(size);
-        ColumnPtr keys = nullptr;
-        ColumnPtr values = nullptr;
+        MutableColumnPtr offsets = UInt32Column ::create(size);
+        MutableColumnPtr keys = nullptr;
+        MutableColumnPtr values = nullptr;
         if (type_desc.children[0].is_unknown_type()) {
             keys = create_column(TypeDescriptor{TYPE_NULL}, true, is_const, size);
         } else {
@@ -337,24 +334,24 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
     } else if (type_desc.type == LogicalType::TYPE_STRUCT) {
         size_t field_size = type_desc.children.size();
         DCHECK_EQ(field_size, type_desc.field_names.size());
-        Columns columns;
+        MutableColumns columns;
         for (size_t i = 0; i < field_size; i++) {
-            ColumnPtr field_column = create_column(type_desc.children[i], true, is_const, size);
-            columns.emplace_back(field_column);
+            auto field_column = create_column(type_desc.children[i], true, is_const, size);
+            columns.emplace_back(std::move(field_column));
         }
-        p = StructColumn::create(columns, type_desc.field_names);
+        p = StructColumn::create(std::move(columns), type_desc.field_names);
     } else {
         p = type_dispatch_column(type_desc.type, ColumnBuilder(), type_desc, size);
     }
 
     if (is_const) {
-        return ConstColumn::create(p, size);
+        return ConstColumn::create(std::move(p), size);
     }
     if (nullable) {
         if (use_adaptive_nullable_column) {
-            return AdaptiveNullableColumn::create(p, NullColumn::create(size, DATUM_NULL));
+            return AdaptiveNullableColumn::create(std::move(p), NullColumn::create(size, DATUM_NULL));
         } else {
-            return NullableColumn::create(p, NullColumn::create(size, DATUM_NULL));
+            return NullableColumn::create(std::move(p), NullColumn::create(size, DATUM_NULL));
         }
     }
     return p;
@@ -375,6 +372,13 @@ std::pair<bool, size_t> ColumnHelper::num_packed_rows(const Columns& columns) {
     }
 
     return {all_const, 1};
+}
+
+std::pair<bool, size_t> ColumnHelper::num_packed_rows(const Column* column) {
+    if (column->is_constant()) {
+        return {true, 1};
+    }
+    return {false, column->size()};
 }
 
 using ColumnsConstIterator = Columns::const_iterator;
@@ -407,7 +411,7 @@ size_t ColumnHelper::compute_bytes_size(ColumnsConstIterator const& begin, Colum
 }
 
 ColumnPtr ColumnHelper::convert_time_column_from_double_to_str(const ColumnPtr& column) {
-    auto get_binary_column = [](DoubleColumn* data_column, size_t size) -> ColumnPtr {
+    auto get_binary_column = [](const DoubleColumn* data_column, size_t size) -> MutableColumnPtr {
         auto new_data_column = BinaryColumn::create();
         new_data_column->reserve(size);
 
@@ -423,21 +427,33 @@ ColumnPtr ColumnHelper::convert_time_column_from_double_to_str(const ColumnPtr& 
     ColumnPtr res;
 
     if (column->only_null()) {
-        res = column;
+        res = std::move(column);
     } else if (column->is_nullable()) {
-        auto* nullable_column = down_cast<NullableColumn*>(column.get());
-        auto* data_column = down_cast<DoubleColumn*>(nullable_column->mutable_data_column());
-        res = NullableColumn::create(get_binary_column(data_column, column->size()), nullable_column->null_column());
+        auto* nullable_column = down_cast<const NullableColumn*>(column.get());
+        auto* data_column = down_cast<const DoubleColumn*>(nullable_column->data_column().get());
+        res = NullableColumn::create(get_binary_column(data_column, column->size()),
+                                     nullable_column->null_column()->as_mutable_ptr());
     } else if (column->is_constant()) {
-        auto* const_column = down_cast<ConstColumn*>(column.get());
+        auto* const_column = down_cast<const ConstColumn*>(column.get());
         std::string time_str = time_str_from_double(const_column->get(0).get_double());
         res = ColumnHelper::create_const_column<TYPE_VARCHAR>(time_str, column->size());
     } else {
-        auto* data_column = down_cast<DoubleColumn*>(column.get());
+        auto* data_column = down_cast<const DoubleColumn*>(column.get());
         res = get_binary_column(data_column, column->size());
     }
 
     return res;
+}
+
+std::tuple<UInt32Column::Ptr, ColumnPtr, NullColumnPtr> ColumnHelper::unpack_array_column(const ColumnPtr& column) {
+    DCHECK(!column->is_nullable() && !column->is_constant());
+    DCHECK(column->is_array());
+
+    const ArrayColumn* array_column = down_cast<const ArrayColumn*>(column.get());
+    auto elements_column = down_cast<const NullableColumn*>(array_column->elements_column().get())->data_column();
+    auto null_column = down_cast<const NullableColumn*>(array_column->elements_column().get())->null_column();
+    auto offsets_column = array_column->offsets_column();
+    return {offsets_column, elements_column, null_column};
 }
 
 template <class Ptr>
@@ -469,7 +485,7 @@ size_t ChunkSliceTemplate<Ptr>::skip(size_t skip_rows) {
 
 // Cutoff required rows from this chunk
 template <class Ptr>
-Ptr ChunkSliceTemplate<Ptr>::cutoff(size_t required_rows) {
+ChunkUniquePtr ChunkSliceTemplate<Ptr>::cutoff(size_t required_rows) {
     DCHECK(!empty());
     size_t cut_rows = std::min(rows(), required_rows);
     auto res = chunk->clone_empty(cut_rows);
@@ -482,7 +498,31 @@ Ptr ChunkSliceTemplate<Ptr>::cutoff(size_t required_rows) {
     return res;
 }
 
+// Specialized for SegmentedChunkPtr
+template <>
+ChunkUniquePtr ChunkSliceTemplate<SegmentedChunkPtr>::cutoff(size_t required_rows) {
+    DCHECK(!empty());
+    // cutoff a chunk from current segment, if it doesn't meet the requirement just let it be
+    ChunkPtr segment = chunk->segments()[segment_id];
+    size_t segment_offset = offset % chunk->segment_size();
+    size_t cut_rows = std::min(segment->num_rows() - segment_offset, required_rows);
+
+    auto res = segment->clone_empty(cut_rows);
+    res->append(*segment, segment_offset, cut_rows);
+    offset += cut_rows;
+
+    // move to next segment
+    segment_id = offset / chunk->segment_size();
+
+    if (empty()) {
+        chunk->reset();
+        offset = 0;
+    }
+    return res;
+}
+
 template struct ChunkSliceTemplate<ChunkPtr>;
 template struct ChunkSliceTemplate<ChunkUniquePtr>;
+template struct ChunkSliceTemplate<SegmentedChunkPtr>;
 
 } // namespace starrocks

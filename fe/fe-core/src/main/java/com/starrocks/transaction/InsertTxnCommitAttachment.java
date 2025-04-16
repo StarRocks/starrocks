@@ -18,13 +18,18 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
 public class InsertTxnCommitAttachment extends TxnCommitAttachment {
     @SerializedName("loadedRows")
     private long loadedRows;
+
+    @SerializedName("isVersionOverwrite")
+    private boolean isVersionOverwrite = false;
+
+    @SerializedName("partitionVersion")
+    private long partitionVersion;
 
     public InsertTxnCommitAttachment() {
         super(TransactionState.LoadJobSourceType.INSERT_STREAMING);
@@ -35,8 +40,22 @@ public class InsertTxnCommitAttachment extends TxnCommitAttachment {
         this.loadedRows = loadedRows;
     }
 
+    public InsertTxnCommitAttachment(long loadedRows, long partitionVersion) {
+        this(loadedRows);
+        this.isVersionOverwrite = true;
+        this.partitionVersion = partitionVersion;
+    }
+
     public long getLoadedRows() {
         return loadedRows;
+    }
+
+    public boolean getIsVersionOverwrite() {
+        return isVersionOverwrite;
+    }
+
+    public long getPartitionVersion() {
+        return partitionVersion;
     }
 
     @Override
@@ -44,13 +63,5 @@ public class InsertTxnCommitAttachment extends TxnCommitAttachment {
         super.write(out);
         String s = GsonUtils.GSON.toJson(this);
         Text.writeString(out, s);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        String s = Text.readString(in);
-        InsertTxnCommitAttachment insertTxnCommitAttachment =
-                GsonUtils.GSON.fromJson(s, InsertTxnCommitAttachment.class);
-        this.loadedRows = insertTxnCommitAttachment.getLoadedRows();
     }
 }

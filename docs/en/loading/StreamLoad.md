@@ -1,16 +1,16 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 keywords: ['Stream Load']
 ---
 
 # Load data from a local file system
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
 StarRocks provides two methods of loading data from a local file system:
 
-- Synchronous loading using [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)
-- Asynchronous loading using [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)
+- Synchronous loading using [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)
+- Asynchronous loading using [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)
 
 Each of these options has its own advantages:
 
@@ -56,7 +56,7 @@ The BE or CN that receives the load request runs as the Coordinator BE or CN to 
 
 The following figure shows the workflow of a Stream Load job.
 
-![Workflow of Stream Load](../assets/4.2-1.png)
+![Workflow of Stream Load](../_assets/4.2-1.png)
 
 ### Limits
 
@@ -64,7 +64,7 @@ Stream Load does not support loading the data of a CSV file that contains a JSON
 
 ### Typical example
 
-This section uses curl as an example to describe how to load the data of a CSV or JSON file from your local file system into StarRocks. For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md).
+This section uses curl as an example to describe how to load the data of a CSV or JSON file from your local file system into StarRocks. For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md).
 
 Note that in StarRocks some literals are used as reserved keywords by the SQL language. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Keywords](../sql-reference/sql-statements/keywords.md).
 
@@ -106,7 +106,7 @@ DISTRIBUTED BY HASH(`id`);
 
 :::note
 
-Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/Data_distribution.md#set-the-number-of-buckets).
+Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
 
 :::
 
@@ -126,7 +126,7 @@ curl --location-trusted -u <username>:<password> -H "label:123" \
 :::note
 
 - If you use an account for which no password is set, you need to input only `<username>:`.
-- You can use [SHOW FRONTENDS](../sql-reference/sql-statements/Administration/SHOW_FRONTENDS.md) to view the IP address and HTTP port of the FE node.
+- You can use [SHOW FRONTENDS](../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_FRONTENDS.md) to view the IP address and HTTP port of the FE node.
 
 :::
 
@@ -149,7 +149,7 @@ SELECT * FROM table1;
 
 #### Load JSON data
 
-Since v3.2.7, Stream Load supports compressing JSON data during transmission, reducing network bandwidth overhead. Users can specify different compression algorithms using parameters `compression` and `Content-Encoding`. Supported compression algorithms including GZIP, BZIP2, LZ4_FRAME, and ZSTD. For the syntax, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md).
+Since v3.2.7, Stream Load supports compressing JSON data during transmission, reducing network bandwidth overhead. Users can specify different compression algorithms using parameters `compression` and `Content-Encoding`. Supported compression algorithms including GZIP, BZIP2, LZ4_FRAME, and ZSTD. For the syntax, see [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md).
 
 ##### Prepare datasets
 
@@ -183,7 +183,7 @@ DISTRIBUTED BY HASH(`id`);
 
 :::note
 
-Since v2.5.7, StarRocks can set the number of(BUCKETS) automatically when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/Data_distribution.md#set-the-number-of-buckets).
+Since v2.5.7, StarRocks can set the number of(BUCKETS) automatically when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
 
 :::
 
@@ -203,13 +203,13 @@ curl -v --location-trusted -u <username>:<password> -H "strict_mode: true" \
 :::note
 
 - If you use an account for which no password is set, you need to input only `<username>:`.
-- You can use [SHOW FRONTENDS](../sql-reference/sql-statements/Administration/SHOW_FRONTENDS.md) to view the IP address and HTTP port of the FE node.
+- You can use [SHOW FRONTENDS](../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_FRONTENDS.md) to view the IP address and HTTP port of the FE node.
 
 :::
 
 `example2.json` consists of two keys, `name` and `code`, which are mapped onto the `id` and `city` columns of `table2`, as shown in the following figure.
 
-![JSON - Column Mapping](../assets/4.2-2.png)
+![JSON - Column Mapping](../_assets/4.2-2.png)
 
 The mappings shown in the preceding figure are described as follows:
 
@@ -225,7 +225,7 @@ In the preceding example, the value of `code` in `example2.json` is multiplied b
 
 :::
 
-For detailed mappings between `jsonpaths`, `columns`, and the columns of the StarRocks table, see the "Column mappings" section in [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md).
+For detailed mappings between `jsonpaths`, `columns`, and the columns of the StarRocks table, see the "Column mappings" section in [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md).
 
 After the load is complete, you can query `table2` to verify that the load is successful:
 
@@ -239,9 +239,77 @@ SELECT * FROM table2;
 4 rows in set (0.01 sec)
 ```
 
+#### Merge Stream Load requests
+
+From v3.4.0, the system supports merging multiple Stream Load requests.
+
+Merge Commit is an optimization for Stream Load, designed for high-concurrency, small-batch (from KB to tens of MB) real-time loading scenarios. In earlier versions, each Stream Load request would generate a transaction and a data version, which led to the following issues in high-concurrency loading scenarios:
+
+- Excessive data versions impact query performance, and limiting the number of versions may cause `too many versions` errors.
+- Data version merging through Compaction increases resource consumption.
+- It generates small files, increasing IOPS and I/O latency. And in shared-data clusters, this also raises cloud object storage costs.
+- Leader FE node, as the transaction manager, may become a single point of bottleneck.
+
+Merge Commit mitigates these issues by merging multiple concurrent Stream Load requests within a time window into a single transaction. This reduces the number of transactions and versions generated by high-concurrency requests, thereby improving loading performance.
+
+Merge Commit supports both synchronous and asynchronous modes. Each mode has advantages and disadvantages. You can choose based on your use cases.
+
+- **Synchronous mode**
+
+  The server returns only after the merged transaction is committed, ensuring the loading is successful and visible.
+
+- **Asynchronous mode**
+
+  The server returns immediately after receiving the data. This mode does not ensure the loading is successful.
+
+| **Mode**     | **Advantages**                                               | **Disadvantages**                                            |
+| ------------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| Synchronous  | <ul><li>Ensures data persistence and visibility upon request return.</li><li>Guarantees that multiple sequential loading requests from the same client are executed in order.</li></ul> | Each loading request from the client is blocked until the server closes the merge window. It may reduce the data processing capability of a single client if the window is excessively large. |
+| Asynchronous | Allows a single client to send subsequent loading requests without waiting for the server to close the merge window, improving loading throughput. | <ul><li>Does not guarantee data persistence or visibility upon return. The client must later verify the transaction status.</li><li>Does not guarantee that multiple sequential loading requests from the same client are executed in order.</li></ul> |
+
+##### Start a Stream Load
+
+- Run the following command to start a Stream Load job with Merge Commit enabled in synchronous mode, and set the merging window to `5000` milliseconds and degree of parallelism to `2`:
+
+  ```Bash
+  curl --location-trusted -u <username>:<password> \
+      -H "Expect:100-continue" \
+      -H "column_separator:," \
+      -H "columns: id, name, score" \
+      -H "enable_merge_commit:true" \
+      -H "merge_commit_interval_ms:5000" \
+      -H "merge_commit_parallel:2" \
+      -T example1.csv -XPUT \
+      http://<fe_host>:<fe_http_port>/api/mydatabase/table1/_stream_load
+  ```
+
+- Run the following command to start a Stream Load job with Merge Commit enabled in asynchronous mode, and set the merging window to `60000` milliseconds and degree of parallelism to `2`:
+
+  ```Bash
+  curl --location-trusted -u <username>:<password> \
+      -H "Expect:100-continue" \
+      -H "column_separator:," \
+      -H "columns: id, name, score" \
+      -H "enable_merge_commit:true" \
+      -H "merge_commit_async:true" \
+      -H "merge_commit_interval_ms:60000" \
+      -H "merge_commit_parallel:2" \
+      -T example1.csv -XPUT \
+      http://<fe_host>:<fe_http_port>/api/mydatabase/table1/_stream_load
+  ```
+
+:::note
+
+- Merge Commit only supports merging **homogeneous** loading requests into a single database and table. "Homogeneous" indicates that the Stream Load parameters are identical, including: common parameters, JSON format parameters, CSV format parameters, `opt_properties`, and Merge Commit parameters.
+- For loading CSV-formatted data, you must ensure that each row ends with a line separator. `skip_header` is not supported.
+- The server automatically generates labels for transactions. They will be ignored if specified.
+- Merge Commit merges multiple loading requests into a single transaction. If one request contains data quality issues, all requests in the transaction will fail.
+
+:::
+
 #### Check Stream Load progress
 
-After a load job is complete, StarRocks returns the result of the job in JSON format. For more information, see the "Return value" section in [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md).
+After a load job is complete, StarRocks returns the result of the job in JSON format. For more information, see the "Return value" section in [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md).
 
 Stream Load does not allow you to query the result of a load job by using the SHOW LOAD statement.
 
@@ -283,7 +351,7 @@ This section describes some system parameters that you need to configure if you 
 
   :::
 
-  Stream Load also provides the `timeout` parameter, which allows you to specify the timeout period of an individual load job. For more information, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md).
+  Stream Load also provides the `timeout` parameter, which allows you to specify the timeout period of an individual load job. For more information, see [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md).
 
 ### Usage notes
 
@@ -300,7 +368,7 @@ Broker Load is an asynchronous loading method. After you submit a load job, Star
 ### Limits
 
 - Currently Broker Load supports loading from a local file system only through a single broker whose version is v2.5 or later.
-- Highly concurrent queries against a single broker may cause issues such as timeout and OOM. To mitigate the impact, you can use the `pipeline_dop` variable (see [System variable](../reference/System_variable.md#pipeline_dop)) to set the query parallelism for Broker Load. For queries against a single broker, we recommend that you set `pipeline_dop` to a value smaller than `16`.
+- Highly concurrent queries against a single broker may cause issues such as timeout and OOM. To mitigate the impact, you can use the `pipeline_dop` variable (see [System variable](../sql-reference/System_variable.md#pipeline_dop)) to set the query parallelism for Broker Load. For queries against a single broker, we recommend that you set `pipeline_dop` to a value smaller than `16`.
 
 ### Typical example
 
@@ -379,13 +447,13 @@ This job has four main sections:
 - `LOAD` declaration: The source URI, source data format, and destination table name.
 - `PROPERTIES`: The timeout value and any other properties to apply to the load job.
 
-For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
+For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md).
 
 #### Check Broker Load progress
 
-In v3.0 and earlier, use the [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) statement or the curl command to view the progress of Broker Load jobs.
+In v3.0 and earlier, use the [SHOW LOAD](../sql-reference/sql-statements/loading_unloading/SHOW_LOAD.md) statement or the curl command to view the progress of Broker Load jobs.
 
-In v3.1 and later, you can view the progress of Broker Load jobs from the [`information_schema.loads`](../reference/information_schema/loads.md) view:
+In v3.1 and later, you can view the progress of Broker Load jobs from the [`information_schema.loads`](../sql-reference/information_schema/loads.md) view:
 
 ```SQL
 SELECT * FROM information_schema.loads;
@@ -418,7 +486,7 @@ SELECT * FROM mytable;
 
 #### Cancel a Broker Load job
 
-When a load job is not in the **CANCELLED** or **FINISHED** stage, you can use the [CANCEL LOAD](../sql-reference/sql-statements/data-manipulation/CANCEL_LOAD.md) statement to cancel the job.
+When a load job is not in the **CANCELLED** or **FINISHED** stage, you can use the [CANCEL LOAD](../sql-reference/sql-statements/loading_unloading/CANCEL_LOAD.md) statement to cancel the job.
 
 For example, you can execute the following statement to cancel a load job, whose label is `label_local`, in the database `mydatabase`:
 
@@ -462,6 +530,6 @@ This section introduces the second way. Detailed operations are as follows:
    - `BROKER`: You do not need to specify the broker name.
    - `PROPERTIES`: The timeout value and any other properties to apply to the load job.
 
-   For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
+   For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md).
 
 After you submit a job, you can view the load progress or cancel the job as needed. For detailed operations, see "[Check Broker Load progress](#check-broker-load-progress)" and "[Cancel a Broker Load job](#cancel-a-broker-load-job) in this topic.

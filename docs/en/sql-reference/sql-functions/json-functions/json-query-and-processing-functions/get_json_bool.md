@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # get_json_bool
 
-## Description
+
 
 Parses and gets the boolean value from a specified JSON path in a JSON string.
 

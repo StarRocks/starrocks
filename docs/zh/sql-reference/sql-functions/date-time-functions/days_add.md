@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # days_add
 
-## 功能
+
 
 向日期时间或日期加上指定的天数。
 

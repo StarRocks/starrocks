@@ -23,14 +23,14 @@
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SysFeLocks::_s_columns[] = {
-        {"lock_type", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"lock_object", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"lock_mode", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"start_time", TYPE_DATETIME, sizeof(DateTimeValue), true},
-        {"hold_time_ms", TYPE_BIGINT, sizeof(long), true},
-        {"thread_info", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"granted", TYPE_BOOLEAN, sizeof(bool), true},
-        {"waiter_list", TYPE_VARCHAR, sizeof(StringValue), true},
+        {"lock_type", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"lock_object", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"lock_mode", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"start_time", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"hold_time_ms", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
+        {"thread_info", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"granted", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), sizeof(bool), true},
+        {"waiter_list", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
 
 };
 

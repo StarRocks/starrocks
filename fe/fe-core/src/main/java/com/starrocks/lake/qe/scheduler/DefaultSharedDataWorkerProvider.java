@@ -42,8 +42,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.IntSupplier;
 import java.util.stream.Collectors;
+
+import static com.starrocks.qe.WorkerProviderHelper.getNextWorker;
 
 /**
  * WorkerProvider for SHARED_DATA mode. Compared to its counterpart for SHARED_NOTHING mode:
@@ -85,10 +86,10 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
             ImmutableMap<Long, ComputeNode> availableComputeNodes = filterAvailableWorkers(idToComputeNode);
             if (availableComputeNodes.isEmpty()) {
                 Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
-                ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
+                throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
             }
 
-            return new DefaultSharedDataWorkerProvider(idToComputeNode, availableComputeNodes);
+            return new DefaultSharedDataWorkerProvider(idToComputeNode, availableComputeNodes, warehouseId);
         }
     }
 
@@ -109,14 +110,18 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
 
     private final Set<Long> selectedWorkerIds;
 
+    private final long warehouseId;
+
     @VisibleForTesting
     public DefaultSharedDataWorkerProvider(ImmutableMap<Long, ComputeNode> id2ComputeNode,
-                                           ImmutableMap<Long, ComputeNode> availableID2ComputeNode
+                                           ImmutableMap<Long, ComputeNode> availableID2ComputeNode,
+                                           long warehouseId
     ) {
         this.id2ComputeNode = id2ComputeNode;
         this.availableID2ComputeNode = availableID2ComputeNode;
         this.selectedWorkerIds = Sets.newConcurrentHashSet();
         this.allComputeNodeIds = null;
+        this.warehouseId = warehouseId;
     }
 
     @Override
@@ -202,7 +207,7 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
 
     private void reportWorkerNotFoundException(long workerId) throws NonRecoverableException {
         throw new NonRecoverableException(
-                FeConstants.getNodeNotFoundError(true) + " nodeId: " + workerId + " " + this);
+                FeConstants.getNodeNotFoundError(true) + " nodeId: " + workerId + " " + computeNodesToString(false));
     }
 
     @Override
@@ -242,11 +247,25 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
 
     @Override
     public String toString() {
+        return computeNodesToString(true);
+    }
+
+    @Override
+    public long getWarehouseId() {
+        return warehouseId;
+    }
+    private String computeNodesToString(boolean allowNormalNodes) {
         StringBuilder out = new StringBuilder("compute node: ");
-        id2ComputeNode.forEach((backendID, backend) -> out.append(
-                String.format("[%s alive: %b, available: %b, inBlacklist: %b] ", backend.getHost(),
-                        backend.isAlive(), availableID2ComputeNode.containsKey(backendID),
-                        SimpleScheduler.isInBlocklist(backendID))));
+
+        id2ComputeNode.forEach((backendID, backend) -> {
+            if (allowNormalNodes || !backend.isAlive() || !availableID2ComputeNode.containsKey(backendID) ||
+                    SimpleScheduler.isInBlocklist(backendID)) {
+                out.append(
+                        String.format("[%s alive: %b, available: %b, inBlacklist: %b] ", backend.getHost(),
+                                backend.isAlive(), availableID2ComputeNode.containsKey(backendID),
+                                SimpleScheduler.isInBlocklist(backendID)));
+            }
+        });
         return out.toString();
     }
 
@@ -261,13 +280,9 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
         return NEXT_COMPUTE_NODE_INDEX.getAndIncrement();
     }
 
-    private static ComputeNode getNextWorker(ImmutableMap<Long, ComputeNode> workers,
-                                             IntSupplier getNextWorkerNodeIndex) {
-        if (workers.isEmpty()) {
-            return null;
-        }
-        int index = getNextWorkerNodeIndex.getAsInt() % workers.size();
-        return workers.values().asList().get(index);
+    @VisibleForTesting
+    static AtomicInteger getNextComputeNodeIndexer() {
+        return NEXT_COMPUTE_NODE_INDEX;
     }
 
     private static ImmutableMap<Long, ComputeNode> filterAvailableWorkers(ImmutableMap<Long, ComputeNode> workers) {

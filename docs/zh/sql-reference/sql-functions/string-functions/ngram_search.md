@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # ngram_search
 
-## 功能
+
 
 计算两个字符串的 ngram 相似度。
 

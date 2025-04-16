@@ -15,7 +15,7 @@
 package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TUniqueId;
 import org.junit.After;
@@ -44,7 +44,7 @@ public class TransactionStateBatchTest {
     }
 
     @Test
-    public void testSerDe() throws IOException, UserException {
+    public void testSerDe() throws IOException, StarRocksException {
         // 1. Write objects to file
         File file = new File(fileName);
         file.createNewFile();

@@ -41,6 +41,9 @@ CREATE TABLE ngram_index_default_2(
     INDEX idx_name1(username) USING NGRAMBF ("bloom_filter_fpp" = "0.05")
 )PROPERTIES ("replication_num" = "1");
 show index from ngram_index_default_2;
+-- if default value of gram_num is not set, be will crash when insert data
+insert into ngram_index_default_2 values ('2023-01-01',"chinese",3),('2023-01-02',"chineaaaaaaaaaaaab",4),('2023-01-03',"我爱吃烤全羊yangyangchin",4),('2023-01-04',"tonightisgreadnight",4);
+
 
 CREATE TABLE ngram_index_default_3(
     timestamp DATETIME NOT NULL,
@@ -81,6 +84,8 @@ select ngram_search(Username,"aabaa",4) as order_col from ngram_index_case_in_se
 
 select ngram_search_case_insensitive(Username,"aabaa",4) as order_col from ngram_index_case_in_sensitive order by order_col desc;
 
+select * from ngram_index_case_in_sensitive where Username like "AaBA_";
+
 
 ALTER TABLE ngram_index_case_in_sensitive ADD INDEX idx_name1(Username) USING NGRAMBF ('gram_num' = "4", "bloom_filter_fpp" = "0.01");
 function: wait_alter_table_finish()
@@ -89,6 +94,8 @@ function: wait_alter_table_finish()
 select * from ngram_index_case_in_sensitive order by ngram_search(Username,"aabaa",4) desc;
 -- function is case insensitive, index is sensitive, so index doesn't filter any data
 select * from ngram_index_case_in_sensitive order by ngram_search_case_insensitive(Username,"aabaa",4) desc;
+-- when index is case insensitve, like should behave correctly instead of return empty set
+select * from ngram_index_case_in_sensitive where Username like "AaBA_";
 
 drop index idx_name1 on ngram_index_case_in_sensitive;
 function: wait_alter_table_finish()
@@ -132,7 +139,7 @@ PROPERTIES (
 "replication_num" = "1",
 "bloom_filter_columns" = "c1,c2",
 "in_memory" = "false",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );

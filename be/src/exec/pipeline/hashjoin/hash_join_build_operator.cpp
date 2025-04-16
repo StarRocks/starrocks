@@ -14,12 +14,18 @@
 
 #include "exec/pipeline/hashjoin/hash_join_build_operator.h"
 
+#include <numeric>
 #include <utility>
 
+#include "exec/hash_joiner.h"
+#include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/runtime_filter_types.h"
+#include "exprs/runtime_filter_bank.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_filter_worker.h"
 #include "util/race_detect.h"
+
 namespace starrocks::pipeline {
 
 HashJoinBuildOperator::HashJoinBuildOperator(OperatorFactory* factory, int32_t id, const string& name,
@@ -48,12 +54,13 @@ Status HashJoinBuildOperator::prepare(RuntimeState* state) {
     _join_builder->ref();
 
     RETURN_IF_ERROR(_join_builder->prepare_builder(state, _unique_metrics.get()));
+    _join_builder->attach_build_observer(state, observer());
 
     return Status::OK();
 }
 void HashJoinBuildOperator::close(RuntimeState* state) {
     COUNTER_SET(_join_builder->build_metrics().hash_table_memory_usage,
-                _join_builder->hash_join_builder()->hash_table_mem_usage());
+                _join_builder->hash_join_builder()->ht_mem_usage());
     _join_builder->unref(state);
 
     Operator::close(state);
@@ -77,6 +84,8 @@ size_t HashJoinBuildOperator::output_amplification_factor() const {
 
 Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
     ONCE_DETECT(_set_finishing_once);
+    // notify probe side
+    auto notify = _join_builder->defer_notify_probe();
     DeferOp op([this]() { _is_finished = true; });
 
     if (state->is_cancelled()) {
@@ -97,6 +106,26 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
     auto& partial_bloom_filter_build_params = _join_builder->get_runtime_bloom_filter_build_params();
     auto& partial_bloom_filters = _join_builder->get_runtime_bloom_filters();
 
+    // for skew join's boradcast site, we need key column for runtime filter
+    bool is_skew_broadcast_join =
+            _join_builder->is_skew_join() && _distribution_mode == TJoinDistributionMode::BROADCAST;
+    std::vector<Columns> keyColumns;
+    std::vector<bool> null_safe;
+    std::vector<TypeDescriptor> type_descs;
+    if (is_skew_broadcast_join) {
+        keyColumns.reserve(partial_bloom_filter_build_params.size());
+        null_safe.reserve(partial_bloom_filter_build_params.size());
+        type_descs.reserve(partial_bloom_filter_build_params.size());
+        for (auto& param : partial_bloom_filter_build_params) {
+            if (UNLIKELY(!param.has_value())) {
+                return Status::InternalError("skew join build rf failed");
+            }
+            keyColumns.emplace_back(param.value().columns);
+            null_safe.emplace_back(param.value().eq_null);
+            type_descs.emplace_back(param.value()._type_descriptor);
+        }
+    }
+
     auto mem_tracker = state->query_ctx()->mem_tracker();
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker.get());
 
@@ -105,15 +134,17 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
     ((HashJoinBuildOperatorFactory*)_factory)
             ->retain_string_key_columns(_driver_sequence, _join_builder->string_key_columns());
 
+    if (partial_bloom_filters.size() != partial_bloom_filter_build_params.size()) {
+        // if in short-circuit mode, phase is EOS. partial_bloom_filter_build_params is empty.
+        DCHECK(_join_builder->is_done());
+    }
+
     // push colocate partial runtime filter
     bool is_colocate_runtime_filter = runtime_filter_hub()->is_colocate_runtime_filters(_plan_node_id);
     if (is_colocate_runtime_filter) {
         // init local colocate in/bloom filters
         RuntimeInFilterList in_filter_lists(partial_in_filters.begin(), partial_in_filters.end());
-        if (partial_bloom_filters.size() != partial_bloom_filter_build_params.size()) {
-            // if in short-circuit mode, phase is EOS. partial_bloom_filter_build_params is empty.
-            DCHECK(_join_builder->is_done());
-        } else {
+        if (partial_bloom_filters.size() == partial_bloom_filter_build_params.size()) {
             for (size_t i = 0; i < partial_bloom_filters.size(); ++i) {
                 if (partial_bloom_filter_build_params[i].has_value()) {
                     partial_bloom_filters[i]->set_or_concat(partial_bloom_filter_build_params[i]->runtime_filter.get(),
@@ -121,7 +152,7 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
                 }
             }
         }
-        RuntimeBloomFilterList bloom_filters(partial_bloom_filters.begin(), partial_bloom_filters.end());
+        RuntimeMembershipFilterList bloom_filters(partial_bloom_filters.begin(), partial_bloom_filters.end());
         runtime_filter_hub()->set_collector(_plan_node_id, _driver_sequence,
                                             std::make_unique<RuntimeFilterCollector>(in_filter_lists));
         state->runtime_filter_port()->publish_local_colocate_filters(bloom_filters);
@@ -142,8 +173,28 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
             auto&& in_filters = _partial_rf_merger->get_total_in_filters();
             auto&& bloom_filters = _partial_rf_merger->get_total_bloom_filters();
 
-            // publish runtime bloom-filters
-            state->runtime_filter_port()->publish_runtime_filters(bloom_filters);
+            {
+                size_t total_bf_bytes =
+                        std::accumulate(bloom_filters.begin(), bloom_filters.end(), 0ull,
+                                        [](size_t total, RuntimeFilterBuildDescriptor* desc) -> size_t {
+                                            if (desc->runtime_filter() == nullptr) {
+                                                return total;
+                                            }
+                                            return desc->runtime_filter()->get_membership_filter()->bf_alloc_size();
+                                        });
+                COUNTER_UPDATE(_join_builder->build_metrics().partial_runtime_bloom_filter_bytes, total_bf_bytes);
+            }
+
+            // publish runtime bloom
+            if (is_skew_broadcast_join) {
+                // for skew join's broadcast join, we only publish local in/bloom runtime filter, and send key columns to rf coordinator
+                // and rf coordinator will merge key column with shuffle join's bloom filter instance
+                state->runtime_filter_port()->publish_runtime_filters_for_skew_broadcast_join(bloom_filters, keyColumns,
+                                                                                              null_safe, type_descs);
+            } else {
+                state->runtime_filter_port()->publish_runtime_filters(bloom_filters);
+            }
+
             // move runtime filters into RuntimeFilterHub.
             runtime_filter_hub()->set_collector(_plan_node_id,
                                                 std::make_unique<RuntimeFilterCollector>(std::move(in_filters)));
@@ -153,6 +204,10 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
     _join_builder->enter_probe_phase();
 
     return Status::OK();
+}
+
+bool HashJoinBuildOperator::is_finished() const {
+    return _is_finished || _join_builder->is_finished();
 }
 
 HashJoinBuildOperatorFactory::HashJoinBuildOperatorFactory(

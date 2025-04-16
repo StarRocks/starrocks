@@ -32,12 +32,20 @@ namespace starrocks {
 static const std::string PRIORITY_CIDR_SEPARATOR = ";";
 
 std::string BackendOptions::_s_localhost;
+std::string BackendOptions::_s_local_ip;
 std::vector<CIDR> BackendOptions::_s_priority_cidrs;
 TBackend BackendOptions::_backend;
 bool BackendOptions::_bind_ipv6 = false;
 const char* _service_bind_address = "0.0.0.0";
 
-bool BackendOptions::init() {
+bool BackendOptions::_is_cn = false;
+
+bool BackendOptions::is_cn() {
+    return _is_cn;
+}
+
+bool BackendOptions::init(bool is_cn) {
+    _is_cn = is_cn;
     if (!analyze_priority_cidrs()) {
         return false;
     }
@@ -64,7 +72,7 @@ bool BackendOptions::init() {
             // Whether to use IPv4 or IPv6, it's configured by CIDR format.
             // If both IPv4 and IPv6 are configured, the config order decides priority.
             if (is_in_prior_network(addr_it->get_host_address())) {
-                _s_localhost = addr_it->get_host_address();
+                set_localhost(addr_it->get_host_address());
                 _bind_ipv6 = addr_it->is_ipv6();
                 break;
             }
@@ -87,10 +95,10 @@ bool BackendOptions::init() {
                 _bind_ipv6 = is_ipv6;
                 if (config::net_use_ipv6_when_priority_networks_empty) {
                     if (is_ipv6) {
-                        _s_localhost = addr_it->get_host_address();
+                        set_localhost(addr_it->get_host_address());
                     }
                 } else if (!is_ipv6) {
-                    _s_localhost = addr_it->get_host_address();
+                    set_localhost(addr_it->get_host_address());
                 }
                 if (!_s_localhost.empty()) {
                     // Use the first found one.
@@ -106,14 +114,19 @@ bool BackendOptions::init() {
 
     if (_s_localhost.empty()) {
         LOG(WARNING) << "failed to find one valid non-loopback address, use loopback address.";
-        _s_localhost = loopback;
+        set_localhost(loopback);
     }
     LOG(INFO) << "localhost " << _s_localhost;
+    LOG(INFO) << "local_ip " << _s_local_ip;
     return true;
 }
 
 std::string BackendOptions::get_localhost() {
     return _s_localhost;
+}
+
+std::string BackendOptions::get_local_ip() {
+    return _s_local_ip;
 }
 
 bool BackendOptions::is_bind_ipv6() {
@@ -140,6 +153,12 @@ TBackend BackendOptions::get_localBackend() {
 
 void BackendOptions::set_localhost(const std::string& host) {
     _s_localhost = host;
+    _s_local_ip = host;
+}
+
+void BackendOptions::set_localhost(const std::string& host, const std::string& ip) {
+    _s_localhost = host;
+    _s_local_ip = ip;
 }
 
 bool BackendOptions::analyze_priority_cidrs() {

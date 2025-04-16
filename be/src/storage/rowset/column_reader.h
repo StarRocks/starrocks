@@ -34,25 +34,21 @@
 
 #pragma once
 
-#include <algorithm>
-#include <bitset>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <utility>
 
 #include "column/datum.h"
-#include "column/fixed_length_column.h"
-#include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "gen_cpp/segment.pb.h"
-#include "runtime/mem_pool.h"
-#include "storage/inverted/inverted_index_iterator.h"
+#include "storage/index/inverted/inverted_index_iterator.h"
 #include "storage/predicate_tree/predicate_tree_fwd.h"
 #include "storage/range.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bloom_filter_index_reader.h"
 #include "storage/rowset/common.h"
+#include "storage/rowset/options.h"
 #include "storage/rowset/ordinal_page_index.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/segment.h"
@@ -68,6 +64,7 @@ class ColumnPredicate;
 class Column;
 class ZoneMapDetail;
 
+class BloomFilter;
 class BitmapIndexIterator;
 class BitmapIndexReader;
 class ColumnIterator;
@@ -87,14 +84,21 @@ struct NgramBloomFilterReaderOptions;
 // This will cache data shared by all reader
 class ColumnReader {
     struct private_type;
+    struct SubReaderId;
 
 public:
     // Create and initialize a ColumnReader.
     // This method will not take the ownership of |meta|.
     // Note that |meta| is mutable, this method may change its internal state.
     //
+    // The primary purpose of the |column| currently is to obtain the name and unique ID of the sub_column
+    // to support the add/drop field functionality of the struct column.
+    // It is important that the |column| needs to be consistent with the tablet schema corresponding to the segment.
+    // If you can ensure that this column does not involve a struct column, the |column| can be set to nullptr.
+    //
     // To developers: keep this method lightweight, should not incur any I/O.
-    static StatusOr<std::unique_ptr<ColumnReader>> create(ColumnMetaPB* meta, Segment* segment);
+    static StatusOr<std::unique_ptr<ColumnReader>> create(ColumnMetaPB* meta, Segment* segment,
+                                                          const TabletColumn* column);
 
     ColumnReader(const private_type&, Segment* segment);
     ~ColumnReader();
@@ -105,7 +109,8 @@ public:
     void operator=(ColumnReader&&) = delete;
 
     // create a new column iterator.
-    StatusOr<std::unique_ptr<ColumnIterator>> new_iterator(ColumnAccessPath* path = nullptr);
+    StatusOr<std::unique_ptr<ColumnIterator>> new_iterator(ColumnAccessPath* path = nullptr,
+                                                           const TabletColumn* column = nullptr);
 
     // Caller should free returned iterator after unused.
     // TODO: StatusOr<std::unique_ptr<ColumnIterator>> new_bitmap_index_iterator()
@@ -145,12 +150,18 @@ public:
 
     int32_t num_data_pages() { return _ordinal_index ? _ordinal_index->num_data_pages() : 0; }
 
-    // page-level zone map filter.
+    // Return the ordinal range of a page
+    std::pair<ordinal_t, ordinal_t> get_page_range(size_t page_index);
 
+    // page-level zone map filter.
     Status zone_map_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p,
                            const ::starrocks::ColumnPredicate* del_predicate,
                            std::unordered_set<uint32_t>* del_partial_filtered_pages, SparseRange<>* row_ranges,
                            const IndexReadOptions& opts, CompoundNodeType pred_relation);
+
+    // NOTE: RAW interface should be used carefully
+    // Return all page-level zonemap
+    StatusOr<std::vector<ZoneMapDetail>> get_raw_zone_map(const IndexReadOptions& opts);
 
     // segment-level zone map filter.
     // Return false to filter out this segment.
@@ -186,7 +197,12 @@ public:
 
     const std::vector<std::unique_ptr<ColumnReader>>* sub_readers() const { return _sub_readers.get(); }
 
+    bool has_remain_json() const { return _has_remain; }
+
 private:
+    StatusOr<std::unique_ptr<ColumnIterator>> _new_json_iterator(ColumnAccessPath* path = nullptr,
+                                                                 const TabletColumn* column = nullptr);
+
     const std::string& file_name() const { return _segment->file_name(); }
     template <bool is_original_bf>
     Status bloom_filter(const std::vector<const ColumnPredicate*>& predicates, SparseRange<>* row_ranges,
@@ -199,7 +215,7 @@ private:
     constexpr static uint8_t kHasAllDictEncodedMask = 2;
     constexpr static uint8_t kAllDictEncodedMask = 4;
 
-    Status _init(ColumnMetaPB* meta);
+    Status _init(ColumnMetaPB* meta, const TabletColumn* column);
 
     Status _load_zonemap_index(const IndexReadOptions& opts);
     Status _load_bitmap_index(const IndexReadOptions& opts);
@@ -218,6 +234,11 @@ private:
     NgramBloomFilterReaderOptions _get_reader_options_for_ngram() const;
 
     bool _inverted_index_loaded() const { return invoked(_inverted_index_load_once); }
+
+    StatusOr<std::unique_ptr<ColumnIterator>> _create_merge_struct_iter(ColumnAccessPath* path,
+                                                                        const TabletColumn* column);
+
+    void _update_sub_reader_pos(const TabletColumn* column, int pos);
 
     // ColumnReader will be resident in memory. When there are many columns in the table,
     // the meta in ColumnReader takes up a lot of memory,
@@ -247,6 +268,28 @@ private:
 
     using SubReaderList = std::vector<std::unique_ptr<ColumnReader>>;
     std::unique_ptr<SubReaderList> _sub_readers;
+    // Only used for struct column right now
+    // Use column names and unique IDs to distinguish sub-columns.
+    // The unnique id is always -1 for historical data, so the column name is needed.
+    // After support add/drop field for struct column, the following scenarios might occur:
+    //   1. Drop field v1
+    //   2. Add field v1
+    // The field `v1` in step 2 is different from the `v1` in step 1 and needs to be distinguished,
+    // So we also need to unqiue id.
+    struct SubReaderId {
+        std::string name;
+        int32_t id;
+
+        bool operator==(const SubReaderId& other) const { return id == other.id && name == other.name; }
+
+        bool operator<(const SubReaderId& other) const {
+            if (id != other.id) {
+                return id < other.id;
+            }
+            return name < other.name;
+        }
+    };
+    std::map<SubReaderId, int> _sub_reader_pos;
 
     // Pointer to its father segment, as the column reader
     // is never released before the end of the parent's life cycle,
@@ -259,6 +302,9 @@ private:
 
     // only for json flat column
     std::string _name;
+    bool _is_flat_json = false;
+    bool _has_remain = false;
+    std::unique_ptr<BloomFilter> _remain_filter;
 
     // only used for inverted index load
     OnceFlag _inverted_index_load_once;

@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # cast
 
-## 功能
+
 
 使用 CAST 函数，实现 JSON 类型数据与 SQL 类型间的相互转换。
 

@@ -16,7 +16,7 @@ PROPERTIES (
 "replication_num" = "1",
 "in_memory" = "false",
 "storage_format" = "DEFAULT",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "compression" = "LZ4"
 );
 -- result:
@@ -30,7 +30,7 @@ test_clear_stats.tbl	analyze	status	OK
 -- !result
 insert into _statistics_.column_statistics
 select
-table_id, 1 , column_name, db_id, table_name, partition_name, row_count, data_size, ndv, null_count,max, min, '2024-05-01'
+table_id, 1 , column_name, db_id, table_name, partition_name, row_count, data_size, ndv, null_count,max, min, '2024-05-01', collection_size  
 from _statistics_.column_statistics where table_name = 'test_clear_stats.tbl' limit 1;
 -- result:
 -- !result
@@ -65,13 +65,9 @@ analyze table test_clear_stats.tbl WITH SYNC MODE;
 -- result:
 test_clear_stats.tbl	analyze	status	OK
 -- !result
-select sleep(80);
+function: assert_clear_stale_stats("select count(*) from _statistics_.column_statistics where table_name = 'test_clear_stats.tbl'", 3)
 -- result:
-1
--- !result
-select count(*) <= 3 from _statistics_.column_statistics where table_name = 'test_clear_stats.tbl';
--- result:
-1
+None
 -- !result
 ADMIN SET FRONTEND CONFIG ("clear_stale_stats_interval_sec" = "43200");
 -- result:

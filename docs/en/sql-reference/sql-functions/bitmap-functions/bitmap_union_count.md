@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # bitmap_union_count
 
-## Description
+
 
 Returns the union of a set of bitmap values and returns the cardinality of the union. This function is supported from v2.3.
 

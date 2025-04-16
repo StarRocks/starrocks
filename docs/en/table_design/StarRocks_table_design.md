@@ -1,14 +1,17 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+sidebar_position: 10
 ---
 
 # Table overview
 
-import Replicanum from '../assets/commonMarkdown/replicanum.md'
+import Replicanum from '../_assets/commonMarkdown/replicanum.md'
 
 Tables are units of data storage. Understanding the table structure in StarRocks and how to design an efficient table structure helps optimize data organization and enhance query efficiency. Also, compared to traditional databases, StarRocks can store complex semi-structured data such as JSON, ARRAY, in a columnar manner to improve query performance.
 
 This topic introduces the table structure in StarRocks from both basic and general perspectives.
+
+From v3.3.1 onwards, StarRocks supports creating temporary tables in the Default Catalog.
 
 ## Get started with basic table structure
 
@@ -39,7 +42,7 @@ Since v3.3.0, the Duplicate Key table supports specifying the sort key using `OR
 
 <Replicanum />
 
-Execute [DESCRIBE](../sql-reference/sql-statements/Utility/DESCRIBE.md) to view the table schema.
+Execute [DESCRIBE](../sql-reference/sql-statements/table_bucket_part_index/DESCRIBE.md) to view the table schema.
 
 ```SQL
 MySQL [test]> DESCRIBE user_access;
@@ -56,7 +59,7 @@ MySQL [test]> DESCRIBE user_access;
 6 rows in set (0.00 sec)
 ```
 
-Execute [SHOW CREATE TABLE](../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_TABLE.md) to view the CREATE TABLE statement.
+Execute [SHOW CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/SHOW_CREATE_TABLE.md) to view the CREATE TABLE statement.
 
 ```SQL
 MySQL [example_db]> SHOW CREATE TABLE user_access\G
@@ -96,11 +99,11 @@ StarRocks provides four types of tables which are Duplicate Key tables, Primary 
 - Aggregate tables are suitable to store pre-aggregated data, helping reduce the amount of data scanned and calculated and improve efficiency for aggregation queries.
 - Unique tables are also suitable to store frequently updated realtime data. However this type of tables is being replaced by Primary Key tables, which are more powerful.
 
-### [Data distribution](./Data_distribution.md)
+### [Data distribution](data_distribution/Data_distribution.md)
 
 StarRocks uses a partitioning+bucketing two-tier data distribution strategy, to evenly distribute data across BEs. A well-designed data distribution strategy can effectively reduce the amount of data scanned and maximize StarRocks' concurrent processing capabilities, thereby increasing query performance.
 
-![img](../assets/table_design/table_overview.png)
+![img](../_assets/table_design/table_overview.png)
 
 #### Partitioning
 
@@ -117,11 +120,11 @@ StarRocks provides two bucketing methods:
 - Hash bucketing: Data is distributed into buckets based on the hash values of the bucketing key. You can select columns frequently used as condition columns in queries as bucketing columns, which helps improve query efficiency.
 - Random bucketing: Data is randomly distributed to buckets. This bucketing method is more simple and ease to use.
 
-### [Data types](../sql-reference/data-types/data-type-list.md)
+### [Data types](../sql-reference/data-types/README.md)
 
 In addition to basic data types such as NUMERIC, DATE, and STRING, StarRocks supports complex semi-structured data types, including ARRAY, JSON, MAP, and STRUCT.
 
-### [Index](./indexes/indexes_overview.md)
+### [Index](indexes/indexes.md)
 
 An index is a special data structure and is used as a pointer to data in a table. When the conditional columns in queries are indexed columns, StarRocks can swiftly locate the data that meets the conditions.
 
@@ -131,6 +134,42 @@ StarRocks provides built-in indexes: Prefix indexes, Ordinal indexes, and ZoneMa
 
 Constraints help ensure data integrity, consistency, and accuracy. The primary key columns in Primary Key tables must have unique and NOT NULL values. The aggregate key columns in Aggregate tables and the unique key columns in Unique Key tables must have unique values.
 
+### Temporary table
+
+When processing data, you might need to save intermediate results for future reuse. In early versions, StarRocks only supports using CTE (Common Table Expressions) to define temporary results within a single query. However, CTEs are merely logical constructs, do not physically store the results, and cannot be used across different queries, which presents certain limitations. If you choose to create tables to save intermediate results, you will need to manage the lifecycle of these tables, which can be costly.
+
+To address this issue, StarRocks introduces temporary tables in v3.3.1. Temporary tables allow you to temporarily store data (such as intermediate results from ETL processes) in a table, with their lifecycle bound to the session and managed by StarRocks. When the session ends, the temporary tables are automatically cleared. Temporary tables are only visible within the current session, and different sessions can create temporary tables with the same name.
+
+#### Usage
+
+You can use the `TEMPORARY` keyword in the following SQL statements to create and drop temporary tables:
+
+- [CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)
+- [CREATE TABLE AS SELECT](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md)
+- [CREATE TABLE LIKE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_LIKE.md)
+- [DROP TABLE](../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md)
+
+:::note
+
+Similar to other types of native tables, temporary tables must be create under a database under the Default Catalog. However, because temporary tables are session-based, they are not subject to unique naming constraints. You can create temporary tables with the same name in different sessions, or even create temporary tables with the same names as other non-temporary, native tables.
+
+If there are temporary and non-temporary tables with the same name in a database, the temporary table takes precedence. Within the session, all queries and operations on the tables with the same name will only affect the temporary table.
+
+:::
+
+#### Limitations
+
+While the usage of temporary tables is similar to that of native tables, there are some constraints and differences:
+
+- Temporary tables must be created in the Default Catalog.
+- Setting a colocate group is not supported. If the `colocate_with` property is explicitly specified during table creation, it will be ignored.
+- The `ENGINE` must be specified as `olap` during table creation.
+- ALTER TABLE statements are not supported.
+- Creating views and materialized views based on temporary tables is not supported.
+- EXPORT statements are not supported.
+- SELECT INTO OUTFILE statements are not supported.
+- Submitting asynchronous tasks with SUBMIT TASK for creating temporary tables is not supported.
+
 ### More features
 
-Apart from the above features, you can adopt more features based on your business requirements to design a more robust table structure. For example, using Bitmap and HLL columns to accelerate distinct counting, specifying generated columns or auto-increment columns to speed up some queries, configuring flexible and automatic storage cooldown methods to reduce maintenance costs, and configuring Colocate Join to speed up multi-table JOIN queries. For more details, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md).
+Apart from the above features, you can adopt more features based on your business requirements to design a more robust table structure. For example, using Bitmap and HLL columns to accelerate distinct counting, specifying generated columns or auto-increment columns to speed up some queries, configuring flexible and automatic storage cooldown methods to reduce maintenance costs, and configuring Colocate Join to speed up multi-table JOIN queries. For more details, see [CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md).

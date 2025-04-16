@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # json_each
 
-## Description
+
 
 Expands the outermost elements of a JSON object into a set of key-value pairs held in two columns and returns a table that consists of one row for each element.
 

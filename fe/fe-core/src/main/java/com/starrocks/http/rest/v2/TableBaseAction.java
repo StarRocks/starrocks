@@ -13,6 +13,8 @@
 // limitations under the License.
 package com.starrocks.http.rest.v2;
 
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -25,8 +27,6 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.rest.RestBaseAction;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -80,15 +80,14 @@ public abstract class TableBaseAction extends RestBaseAction {
                                          Function<OlapTable, T> tableFunction) throws AccessDeniedException {
         // check privilege for select, otherwise return 401 HTTP status
         checkTableAction(
-                ConnectContext.get().getCurrentUserIdentity(),
-                ConnectContext.get().getCurrentRoleIds(),
+                ConnectContext.get(),
                 catalogName,
                 dbName,
                 tableName,
                 PrivilegeType.SELECT
         );
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (null == db || !Optional.ofNullable(db.getCatalogName())
                 .orElse(DEFAULT_INTERNAL_CATALOG_NAME).equalsIgnoreCase(catalogName)) {
             throw new StarRocksHttpException(
@@ -97,9 +96,9 @@ public abstract class TableBaseAction extends RestBaseAction {
         }
 
         final Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
-            Table table = db.getTable(tableName);
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
             if (null == table) {
                 throw new StarRocksHttpException(
                         HttpResponseStatus.NOT_FOUND, ErrorCode.ERR_BAD_TABLE_ERROR.formatErrorMsg(tableName)
@@ -115,7 +114,7 @@ public abstract class TableBaseAction extends RestBaseAction {
 
             return tableFunction.apply((OlapTable) table);
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
     }
 

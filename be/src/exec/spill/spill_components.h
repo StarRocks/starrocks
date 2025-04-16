@@ -15,6 +15,7 @@
 #pragma once
 
 #include <functional>
+#include <memory>
 #include <queue>
 
 #include "column/vectorized_fwd.h"
@@ -106,7 +107,7 @@ public:
 protected:
     Status _decrease_running_flush_tasks();
 
-    const SpilledOptions& options();
+    const SpilledOptions& options() const;
 
     Spiller* _spiller;
     RuntimeState* _runtime_state;
@@ -163,11 +164,6 @@ public:
 
     const auto& mem_table() const { return _mem_table; }
 
-    SpillOutputDataStreamPtr& output_stream() { return _output_stream; }
-    void reset_output_stream() { _output_stream = nullptr; }
-
-    BlockGroup& block_group() { return _block_group; }
-
     Status acquire_stream(std::shared_ptr<SpillInputStream>* stream) override;
 
     Status acquire_stream(const SpillPartitionInfo* partition, std::shared_ptr<SpillInputStream>* stream) override;
@@ -178,15 +174,30 @@ public:
 
     Status yieldable_flush_task(workgroup::YieldContext& ctx, RuntimeState* state, const MemTablePtr& mem_table);
 
+    void add_block_group(BlockGroupPtr&& block_group) { _block_group_set.add_block_group(std::move(block_group)); }
+    size_t block_group_num_rows() const { return _block_group_set.num_rows(); }
+
 public:
     struct FlushContext : public SpillIOTaskContext {
+        FlushContext(std::shared_ptr<Spiller> spiller_) : spiller(std::move(spiller_)) {}
+        std::shared_ptr<Spiller> spiller;
         std::shared_ptr<SpillOutputDataStream> output;
+        std::shared_ptr<BlockGroup> block_group;
+        InputStreamPtr input_stream;
+        // only used in DCHECK
+        size_t compact_input_num_rows{};
     };
     using FlushContextPtr = std::shared_ptr<FlushContext>;
 
 private:
-    BlockGroup _block_group;
-    SpillOutputDataStreamPtr _output_stream;
+    // spill current mem-table to block group sets
+    Status _spill_mem_table(workgroup::YieldContext& yield_ctx, const MemTablePtr& mem_table);
+    // select small block group then compact to larger block group
+    Status _compact_mem_table(workgroup::YieldContext& yield_ctx);
+
+    bool _need_compact_block() const;
+
+    BlockGroupSet _block_group_set;
     MemTablePtr _mem_table;
     std::queue<MemTablePtr> _mem_table_pool;
     std::mutex _mutex;
@@ -212,6 +223,8 @@ struct SpilledPartition : public SpillPartitionInfo {
 
     bool is_spliting = false;
     std::unique_ptr<RawSpillerWriter> spill_writer;
+    BlockGroupPtr block_group;
+    SpillOutputDataStreamPtr spill_output_stream;
 };
 
 class PartitionedSpillerWriter final : public SpillerWriter {
@@ -293,6 +306,7 @@ public:
 
 public:
     struct PartitionedFlushContext : public SpillIOTaskContext {
+        PartitionedFlushContext(std::shared_ptr<Spiller> spiller_) : spiller(std::move(spiller_)) {}
         // used in spill stage
         struct SpillStageContext {
             size_t processing_idx{};
@@ -317,6 +331,7 @@ public:
         PartitionedFlushContext(PartitionedFlushContext&&) = default;
         PartitionedFlushContext& operator=(PartitionedFlushContext&&) = default;
 
+        std::shared_ptr<Spiller> spiller;
         SpillStageContext spill_stage_ctx;
         SplitStageContext split_stage_ctx;
     };
@@ -370,6 +385,7 @@ private:
 
     // level to partition
     std::map<int, std::vector<SpilledPartitionPtr>> _level_to_partitions;
+    size_t _total_partition_num = 0;
 
     std::unordered_map<int, SpilledPartition*> _id_to_partitions;
 

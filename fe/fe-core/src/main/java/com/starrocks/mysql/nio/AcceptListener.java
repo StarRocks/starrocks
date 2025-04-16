@@ -31,11 +31,13 @@
 // KIND, either express or implied.  See the License for the
 // specific language governing permissions and limitations
 // under the License.
+
 package com.starrocks.mysql.nio;
 
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.mysql.MysqlProto;
+import com.starrocks.mysql.NegotiateState;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.ConnectScheduler;
@@ -48,19 +50,16 @@ import org.xnio.channels.AcceptingChannel;
 
 import java.io.IOException;
 import java.net.SocketAddress;
-import javax.net.ssl.SSLContext;
 
 /**
  * listener for accept mysql connections.
  */
 public class AcceptListener implements ChannelListener<AcceptingChannel<StreamConnection>> {
     private static final Logger LOG = LogManager.getLogger(AcceptListener.class);
-    private ConnectScheduler connectScheduler;
-    private SSLContext sslContext;
+    private final ConnectScheduler connectScheduler;
 
-    public AcceptListener(ConnectScheduler connectScheduler, SSLContext sslContext) {
+    public AcceptListener(ConnectScheduler connectScheduler) {
         this.connectScheduler = connectScheduler;
-        this.sslContext = sslContext;
     }
 
     @Override
@@ -72,9 +71,10 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
             }
             // connection has been established, so need to call context.cleanup()
             // if exception happens.
-            NConnectContext context = new NConnectContext(connection, sslContext);
+            ConnectContext context = new ConnectContext(connection);
             context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-            connectScheduler.submit(context);
+            context.setConnectionId(connectScheduler.getNextConnectionId());
+            context.resetConnectionStartTime();
             int connectionId = context.getConnectionId();
             SocketAddress remoteAddr = connection.getPeerAddress();
             LOG.info("Connection established. remote={}, connectionId={}", remoteAddr, connectionId);
@@ -87,22 +87,28 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
                         context.setThreadLocalInfo();
                         LOG.info("Connection scheduled to worker thread {}. remote={}, connectionId={}",
                                 Thread.currentThread().getId(), remoteAddr, connectionId);
-                        context.setConnectScheduler(connectScheduler);
+
                         // authenticate check failed.
                         result = MysqlProto.negotiate(context);
-                        if (!result.isSuccess()) {
-                            throw new AfterConnectedException("mysql negotiate failed");
+                        if (result.state() != NegotiateState.OK) {
+                            throw new AfterConnectedException(result.state().getMsg());
                         }
                         Pair<Boolean, String> registerResult = connectScheduler.registerConnection(context);
                         if (registerResult.first) {
-                            connection.setCloseListener(
-                                    streamConnection -> connectScheduler.unregisterConnection(context));
-                            MysqlProto.sendResponsePacket(context);
+                            connection.setCloseListener(streamConnection -> connectScheduler.unregisterConnection(context));
                         } else {
                             context.getState().setError(registerResult.second);
                             MysqlProto.sendResponsePacket(context);
                             throw new AfterConnectedException(registerResult.second);
                         }
+
+                        result = MysqlProto.authenticate(context, result.authPacket());
+                        if (result.state() != NegotiateState.OK) {
+                            throw new AfterConnectedException(result.state().getMsg());
+                        }
+
+                        MysqlProto.sendResponsePacket(context);
+
                         context.setStartTime();
                         ConnectProcessor processor = new ConnectProcessor(context);
                         context.startAcceptQuery(processor);
@@ -121,9 +127,12 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
                         context.cleanup();
                         context.getState().setError(e.getMessage());
                     } finally {
-                        LogUtil.logConnectionInfoToAuditLogAndQueryQueue(context,
-                                result == null ? null : result.getAuthPacket());
-                        ConnectContext.remove();
+                        // Ignore the NegotiateState.READ_FIRST_AUTH_PKG_FAILED connections,
+                        // because this maybe caused by port probe.
+                        if (result != null && result.state() != NegotiateState.READ_FIRST_AUTH_PKG_FAILED) {
+                            LogUtil.logConnectionInfoToAuditLogAndQueryQueue(context, result.authPacket());
+                            ConnectContext.remove();
+                        }
                     }
                 });
             } catch (Throwable e) {

@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 toc_max_heading_level: 5
 ---
 
@@ -7,7 +7,7 @@ toc_max_heading_level: 5
 
 A Delta Lake catalog is a kind of external catalog that enables you to query data from Delta Lake without ingestion.
 
-Also, you can directly transform and load data from Delta Lake by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) based on Delta Lake catalogs. StarRocks supports Delta Lake catalogs from v2.5 onwards.
+Also, you can directly transform and load data from Delta Lake by using [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) based on Delta Lake catalogs. StarRocks supports Delta Lake catalogs from v2.5 onwards.
 
 To ensure successful SQL workloads on your Delta Lake cluster, your StarRocks cluster must be able to access the storage system and metastore of your Delta Lake cluster. StarRocks supports the following storage systems and metastores:
 
@@ -428,9 +428,7 @@ If you choose Google GCS as storage for your Delta Lake cluster, take one of the
 
 A set of parameters about how StarRocks updates the cached metadata of Delta Lake. This parameter set is optional.
 
-StarRocks implements the [automatic asynchronous update policy](#appendix-understand-metadata-automatic-asynchronous-update) by default.
-
-In most cases, you can ignore `MetadataUpdateParams` and do not need to tune the policy parameters in it, because the default values of these parameters already provide you with an out-of-the-box performance.
+From v3.3.3 onwards, Delta Lake Catalog supports [Metadata Local Cache and Retrieval](#appendix-metadata-local-cache-and-retrieval). In most cases, you can ignore `MetadataUpdateParams` and do not need to tune the policy parameters in it, because the default values of these parameters already provide you with an out-of-the-box performance.
 
 However, if the frequency of data updates in Delta Lake is high, you can tune these parameters to further optimize the performance of automatic asynchronous updates.
 
@@ -438,14 +436,15 @@ However, if the frequency of data updates in Delta Lake is high, you can tune th
 >
 > In most cases, if your Delta Lake data is updated at a granularity of 1 hour or less, the data update frequency is considered high.
 
-| Parameter                              | Required | Description                                                  |
-|----------------------------------------| -------- | ------------------------------------------------------------ |
-| enable_metastore_cache                 | No       | Specifies whether StarRocks caches the metadata of Delta Lake tables. Valid values: `true` and `false`. Default value: `true`. The value `true` enables the cache, and the value `false` disables the cache. |
-| enable_remote_file_cache               | No       | Specifies whether StarRocks caches the metadata of the underlying data files of Delta Lake tables or partitions. Valid values: `true` and `false`. Default value: `true`. The value `true` enables the cache, and the value `false` disables the cache. |
-| metastore_cache_refresh_interval_sec   | No       | The time interval at which StarRocks asynchronously updates the metadata of Delta Lake tables or partitions cached in itself. Unit: seconds. Default value: `7200`, which is 2 hours. |
-| remote_file_cache_refresh_interval_sec | No       | The time interval at which StarRocks asynchronously updates the metadata of the underlying data files of Delta Lake tables or partitions cached in itself. Unit: seconds. Default value: `60`. |
-| metastore_cache_ttl_sec                | No       | The time interval at which StarRocks automatically discards the metadata of Delta Lake tables or partitions cached in itself. Unit: seconds. Default value: `86400`, which is 24 hours. |
-| remote_file_cache_ttl_sec              | No       | The time interval at which StarRocks automatically discards the metadata of the underlying data files of Delta Lake tables or partitions cached in itself. Unit: seconds. Default value: `129600`, which is 36 hours. |
+| **Parameter**                                      | **Unit** | **Default** | **Description**                                |
+|----------------------------------------------------| -------- | ------------------------------------------------------------ |
+| enable_deltalake_table_cache                       | -        | true         | Whether to enable Table Cache in the metadata cache for Delta Lake. |
+| enable_deltalake_json_meta_cache                   | -        | true         | Whether to enable cache for Delta Log JSON files. |
+| deltalake_json_meta_cache_ttl_sec                  | Second   | 48 * 60 * 60 | Time-To-Live (TTL) for the Delta Log JSON file cache. |
+| deltalake_json_meta_cache_memory_usage_ratio       | -        | 0.1          | The maximum ratio of JVM Heap size occupied by the Delta Log JSON file cache. |
+| enable_deltalake_checkpoint_meta_cache             | -        | true         | Whether to enable cache for Delta Log Checkpoint files. |
+| deltalake_checkpoint_meta_cache_ttl_sec            | Second   | 48 * 60 * 60 | Time-To-Live (TTL) for the Delta Log Checkpoint file cache.  |
+| deltalake_checkpoint_meta_cache_memory_usage_ratio | -        | 0.1          | The maximum ratio of JVM Heap size occupied by the Delta Log Checkpoint file cache. |
 
 ### Examples
 
@@ -761,13 +760,13 @@ PROPERTIES
 
 ## View Delta Lake catalogs
 
-You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:
+You can use [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a Delta Lake catalog named `deltalake_catalog_glue`:
+You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a Delta Lake catalog named `deltalake_catalog_glue`:
 
 ```SQL
 SHOW CREATE CATALOG deltalake_catalog_glue;
@@ -777,7 +776,7 @@ SHOW CREATE CATALOG deltalake_catalog_glue;
 
 You can use one of the following methods to switch to a Delta Lake catalog and a database in it:
 
-- Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) to specify a Delta Lake catalog in the current session, and then use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to specify an active database:
+- Use [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) to specify a Delta Lake catalog in the current session, and then use [USE](../../sql-reference/sql-statements/Database/USE.md) to specify an active database:
 
   ```SQL
   -- Switch to a specified catalog in the current session:
@@ -786,7 +785,7 @@ You can use one of the following methods to switch to a Delta Lake catalog and a
   USE <db_name>
   ```
 
-- Directly use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to switch to a Delta Lake catalog and a database in it:
+- Directly use [USE](../../sql-reference/sql-statements/Database/USE.md) to switch to a Delta Lake catalog and a database in it:
 
   ```SQL
   USE <catalog_name>.<db_name>
@@ -794,7 +793,7 @@ You can use one of the following methods to switch to a Delta Lake catalog and a
 
 ## Drop a Delta Lake catalog
 
-You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) to drop an external catalog.
+You can use [DROP CATALOG](../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) to drop an external catalog.
 
 The following example drops a Delta Lake catalog named `deltalake_catalog_glue`:
 
@@ -820,7 +819,7 @@ You can use one of the following syntaxes to view the schema of a Delta Lake tab
 
 ## Query a Delta Lake table
 
-1. Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) to view the databases in your Delta Lake cluster:
+1. Use [SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) to view the databases in your Delta Lake cluster:
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>
@@ -828,7 +827,7 @@ You can use one of the following syntaxes to view the schema of a Delta Lake tab
 
 2. [Switch to a Delta Lake Catalog and a database in it](#switch-to-a-delta-lake-catalog-and-a-database-in-it).
 
-3. Use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the destination table in the specified database:
+3. Use [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) to query the destination table in the specified database:
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10
@@ -841,3 +840,30 @@ Suppose you have an OLAP table named `olap_tbl`, you can transform and load data
 ```SQL
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM deltalake_table
 ```
+
+## Configure metadata cache and update strategy
+
+From v3.3.3 onwards, Delta Lake Catalog supports [Metadata Local Cache and Retrieval](#appendix-metadata-local-cache-and-retrieval).
+
+You can configure the Delta Lake metadata cache refresh through the following FE parameters:
+
+| **Configuration item**                                       | **Default** | **Description**                                               |
+| ------------------------------------------------------------ | ----------- | ------------------------------------------------------------- |
+| enable_background_refresh_connector_metadata                 | `true`      | Whether to enable the periodic Delta Lake metadata cache refresh. After it is enabled, StarRocks polls the metastore (Hive Metastore or AWS Glue) of your Delta Lake cluster, and refreshes the cached metadata of the frequently accessed Delta Lake catalogs to perceive data changes. `true` indicates to enable the Delta Lake metadata cache refresh, and `false` indicates to disable it. |
+| background_refresh_metadata_interval_millis                  | `600000`    | The interval between two consecutive Delta Lake metadata cache refreshes. Unit: millisecond. |
+| background_refresh_metadata_time_secs_since_last_access_secs | `86400`     | The expiration time of a Delta Lake metadata cache refresh task. For the Delta Lake catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Delta Lake catalog that has not been accessed, StarRocks will not refresh its cached metadata. Unit: second. |
+
+## Appendix: Metadata Local Cache and Retrieval
+
+Because the repeated decompression and parsing of metadata files can introduce unnecessary delays, StarRocks employs a new metadata cache strategy of caching deserialized memory objects. By storing these deserialized files in memory, the system can bypass the decompression and parsing stages for subsequent queries. This caching mechanism allows direct access to the required metadata, significantly reducing retrieval times. As a result, the system becomes more responsive and better suited to meet high query demands and materialized view rewriting needs.
+
+You can configure this behavior through the Catalog property [MetadataUpdateParams](#metadataupdateparams) and [relevant configuration items](#configure-metadata-cache-and-update-strategy).
+
+## Feature support
+
+Currently, Delta Lake catalogs support the following table features:
+
+- V2 Checkpoint (From v3.3.0 onwards)
+- Timestamp without Timezone (From v3.3.1 onwards)
+- Column mapping (From v3.3.6 onwards)
+- Deletion Vector (From v3.4.1 onwards)

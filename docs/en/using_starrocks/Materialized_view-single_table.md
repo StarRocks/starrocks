@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+sidebar_position: 20
 ---
 
 # Synchronous materialized view
@@ -10,11 +11,11 @@ For a synchronous materialized view, all changes in the base table are simultane
 
 Synchronous materialized views in StarRocks can be created only on a single base table from [the default catalog](../data_source/catalog/default_catalog.md). They are essentially a special index for query acceleration rather than a physical table like asynchronous materialized views.
 
-From v2.4 onwards, StarRocks provides asynchronous materialized views, which supports creation on multiple tables and more aggregation operators. For the usage of **asynchronous materialized views**, see [Asynchronous materialized view](../using_starrocks/Materialized_view.md).
+From v2.4 onwards, StarRocks provides asynchronous materialized views, which supports creation on multiple tables and more aggregation operators. For the usage of **asynchronous materialized views**, see [Asynchronous materialized view](async_mv/Materialized_view.md).
 
 :::note
 - Synchronous materialized views support WHERE clauses from v3.1.8 onwards.
-- Currently, synchronous materialized view is not yet supported in the shared-data clusters.
+- Synchronous materialized views are supported in the shared-data clusters from v3.4.0 onwards.
 :::
 
 The following table compares the asynchronous materialized views (ASYNC MVs) in StarRocks v2.5, v2.4, and the synchronous materialized view (SYNC MV) in the perspective of features that they support:
@@ -141,7 +142,7 @@ It can be observed that the query takes about 0.02 seconds, and no synchronous m
 
 ## Create a synchronous materialized view
 
-You can create a synchronous materialized view based on a specific query statement using [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW.md).
+You can create a synchronous materialized view based on a specific query statement using [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md).
 
 Based on the table `sales_records` and the query statement mentioned above, the following example creates the synchronous materialized view `store_amt` to analyze the sum of sales amount in each store.
 
@@ -161,10 +162,11 @@ GROUP BY store_id;
 > - When using ALTER TABLE DROP COLUMN to drop a specific column in a base table, you need to ensure that all synchronous materialized views of the base table do not contain the dropped column, otherwise the drop operation cannot be performed. To drop a column that used in synchronous materialized views, you need to first drop all synchronous materialized views that contain the column, and then drop the column.
 > - Creating too many synchronous materialized views for a table will affect the data loading efficiency. When data is being loaded to the base table, the data in synchronous materialized views and base table are updated synchronously. If the base table contains `n` synchronous materialized views, the efficiency of loading data into the base table is about the same as that of loading data into `n` tables.
 > - Currently, StarRocks does not support creating multiple synchronous materialized views at the same time. A new synchronous materialized view can only be created when the previous one is completed.
+> - Materialized view can only be created in default_catalog. You could either create it with default_catalog.database.mv, or switch to default_catalog through `set catalog <default_catalog>` statement.
 
 ## Check the building status of a synchronous materialized view
 
-Creating a synchronous materialized view is an asynchronous operation. Executing CREATE MATERIALIZED VIEW successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of the synchronous materialized view in a database via [SHOW ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW.md).
+Creating a synchronous materialized view is an asynchronous operation. Executing CREATE MATERIALIZED VIEW successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of the synchronous materialized view in a database via [SHOW ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/SHOW_ALTER_MATERIALIZED_VIEW.md).
 
 ```Plain
 MySQL > SHOW ALTER MATERIALIZED VIEW\G
@@ -328,7 +330,7 @@ CANCEL ALTER TABLE ROLLUP FROM sales_records (12090);
 
 ### Drop an existing synchronous materialized view
 
-You can drop an existing synchronous materialized view with the [DROP MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/DROP_MATERIALIZED_VIEW.md) command.
+You can drop an existing synchronous materialized view with the [DROP MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/DROP_MATERIALIZED_VIEW.md) command.
 
 ```SQL
 DROP MATERIALIZED VIEW store_amt;

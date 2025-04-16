@@ -1,16 +1,20 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
-import BEConfigMethod from '../../assets/commonMarkdown/BE_config_method.md'
+import BEConfigMethod from '../../_assets/commonMarkdown/BE_config_method.md'
 
-import PostBEConfig from '../../assets/commonMarkdown/BE_dynamic_note.md'
+import CNConfigMethod from '../../_assets/commonMarkdown/CN_config_method.md'
 
-import StaticBEConfigNote from '../../assets/commonMarkdown/StaticBE_config_note.md'
+import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.md'
+
+import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.md'
 
 # BE Configuration
 
 <BEConfigMethod />
+
+<CNConfigMethod />
 
 
 ## View BE configuration items
@@ -48,8 +52,17 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: The CIDR-formatted IP address that is used to specify the priority IP address of a BE node if the machine that hosts the BE node has multiple IP addresses.
+- Description: Declares a selection strategy for servers that have multiple IP addresses. Note that at most one IP address must match the list specified by this parameter. The value of this parameter is a list that consists of entries, which are separated with semicolons (;) in CIDR notation, such as `10.10.10.0/24`. If no IP address matches the entries in this list, an available IP address of the server will be randomly selected. From v3.3.0, StarRocks supports deployment based on IPv6. If the server has both IPv4 and IPv6 addresses, and this parameter is not specified, the system uses an IPv4 address by default. You can change this behavior by setting `net_use_ipv6_when_priority_networks_empty` to `true`.
 - Introduced in: -
+
+##### net_use_ipv6_when_priority_networks_empty
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: A boolean value to control whether to use IPv6 addresses preferentially when `priority_networks` is not specified. `true` indicates to allow the system to use an IPv6 address preferentially when the server that hosts the node has both IPv4 and IPv6 addresses and `priority_networks` is not specified.
+- Introduced in: v3.3.0
 
 ##### mem_limit
 
@@ -340,8 +353,8 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Default: INFO
 - Type: String
 - Unit: -
-- Is mutable: No
-- Description: The severity levels into which system log entries are classified. Valid values: INFO, WARN, ERROR, and FATAL.
+- Is mutable: Yes (from v3.3.0, v3.2.7, and v3.1.12)
+- Description: The severity levels into which system log entries are classified. Valid values: INFO, WARN, ERROR, and FATAL. This item was changed to a dynamic configuration from v3.3.0, v3.2.7, and v3.1.12 onwards.
 - Introduced in: -
 
 ##### sys_log_roll_mode
@@ -491,6 +504,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Introduced in: The number of threads used to create a tablet. This configuration is changed to dynamic from v3.1.7 onwards.
 -->
 
+##### primary_key_limit_size
+
+- Default: 128
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The maximum size of a key column in Primary Key tables.
+- Introduced in: v2.5
+
 ##### drop_tablet_worker_count
 
 - Default: 3
@@ -508,6 +530,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Is mutable: Yes
 - Description: The number of threads used for Schema Change.
 - Introduced in: -
+
+##### avro_ignore_union_type_tag
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to strip the type tag from the JSON string serialized from the Avro Union data type.
+- Introduced in: v3.3.7, v3.4
 
 <!--
 ##### delete_worker_count_normal_priority
@@ -580,49 +611,41 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Introduced in: -
 -->
 
-<!--
 ##### upload_worker_count
 
-- Default: 1
+- Default: 0
 - Type: Int
 - Unit: -
-- Is mutable: No
-- Description:
+- Is mutable: Yes
+- Description: The maximum number of threads for the upload tasks of backup jobs on a BE node. `0` indicates setting the value to the number of CPU cores on the machine where the BE resides.
 - Introduced in: -
--->
 
-<!--
 ##### download_worker_count
 
-- Default: 1
+- Default: 0
 - Type: Int
 - Unit: -
-- Is mutable: No
-- Description:
+- Is mutable: Yes
+- Description: The maximum number of threads for the download tasks of restore jobs on a BE node. `0` indicates setting the value to the number of CPU cores on the machine where the BE resides.
 - Introduced in: -
--->
 
-<!--
 ##### make_snapshot_worker_count
 
 - Default: 5
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description:
+- Description: The maximum number of threads for the make snapshot tasks on a BE node.
 - Introduced in: -
--->
 
-<!--
 ##### release_snapshot_worker_count
 
 - Default: 5
 - Type: Int
 - Unit: -
-- Is mutable: No
-- Description:
+- Is mutable: Yes
+- Description: The maximum number of threads for the release snapshot tasks on a BE node.
 - Introduced in: -
--->
 
 ##### max_download_speed_kbps
 
@@ -698,27 +721,49 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The time interval at which to monitor health status of disks.
 - Introduced in: -
 
-<!--
 ##### replication_threads
 
 - Default: 0
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: The maximum number of threads used for replication. `0` indicates setting the thread number to four times the BE CPU core count.
+- Introduced in: v3.3.5
 
-<!--
+##### replication_max_speed_limit_kbps
+
+- Default: 50000
+- Type: Int
+- Unit: KB/s
+- Is mutable: Yes
+- Description: The maximum speed of each replication thread.
+- Introduced in: v3.3.5
+
+##### replication_min_speed_limit_kbps
+
+- Default: 50
+- Type: Int
+- Unit: KB/s
+- Is mutable: Yes
+- Description: The minimum speed of each replication thread.
+- Introduced in: v3.3.5
+##### replication_min_speed_time_seconds
+
+- Default: 300
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The time duration allowed for a replication thread to be under the minimum speed. Replication will fail if the time when the actual speed is lower than `replication_min_speed_limit_kbps` exceeds this value.
+- Introduced in: v3.3.5
+
 ##### clear_expired_replication_snapshots_interval_seconds
 
 - Default: 3600
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: The time interval at which the system clears the expired snapshots left by abnormal replications.
+- Introduced in: v3.3.5
 
 ##### unused_rowset_monitor_interval
 
@@ -1086,7 +1131,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum concurrency of compactions (including both Base Compaction and Cumulative Compaction). The value `-1` indicates that no limit is imposed on the concurrency. `0` indicates disabling compaction.
+- Description: The maximum concurrency of compactions (including both Base Compaction and Cumulative Compaction). The value `-1` indicates that no limit is imposed on the concurrency. `0` indicates disabling compaction. This parameter is mutable when the Event-based Compaction Framework is enabled.
 - Introduced in: -
 
 ##### compaction_trace_threshold
@@ -1252,19 +1297,27 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: The maximum percentage limit of memory resources that can be taken up by all load processes on a BE node.
+- Description: The soft limit (in percentage) of memory resources that can be taken up by all load processes on a BE node.
 - Introduced in: -
 
-<!--
+
+##### load_process_max_memory_hard_limit_ratio
+
+- Default: 2
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The hard limit (ratio) of memory resources that can be taken up by all load processes on a BE node. When `enable_new_load_on_memory_limit_exceeded` is set to `false`, and the memory consumption of all loading processes exceeds `load_process_max_memory_limit_percent * load_process_max_memory_hard_limit_ratio`, new loading processes will be rejected.
+- Introduced in: v3.3.2
+
 ##### enable_new_load_on_memory_limit_exceeded
 
-- Default: true
+- Default: false
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: Whether to allow new loading processes when the hard memory resource limit is reached. `true` indicates new loading processes will be allowed, and `false` indicates they will be rejected.
+- Introduced in: v3.3.2
 
 ##### sync_tablet_meta
 
@@ -1578,7 +1631,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of threads used to publish a version. When this value is set to less than or equal to `0`, the system uses half of the CPU core count as the value, so as to avoid insufficient thread resources when import concurrency is high but only a fixed number of threads are used. From v2.5, the default value has been changed from `8` to `0`.
+- Description: The maximum number of threads used to publish a version. When this value is set to less than or equal to `0`, the system uses the CPU core count as the value, so as to avoid insufficient thread resources when import concurrency is high but only a fixed number of threads are used. From v2.5, the default value has been changed from `8` to `0`.
 - Introduced in: -
 
 <!--
@@ -1653,11 +1706,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 <!--
 ##### stale_memtable_flush_time_sec
 
-- Default: 30
+- Default: 0
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description:
+- Description: 0 means prohibited. Other memtables whose last update time is greater than stale_memtable_flush_time_sec will be persisted when memory is insufficient.
 - Introduced in: -
 -->
 
@@ -1783,33 +1836,13 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The maximum size limit of memory resources that can be taken up by all load processes on a BE node.
 - Introduced in: -
 
-##### load_process_max_memory_limit_percent
-
-- Default: 30
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description: The maximum percentage limit of memory resources that can be taken up by all load processes on a BE node.
-- Introduced in: -
-
-<!--
-##### enable_new_load_on_memory_limit_exceeded
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
 ##### txn_commit_rpc_timeout_ms (Deprecated)
 
 - Default: 60000
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: The timeout for a transaction commit RPC. Since v3.1.0, this parameter is deprecated.
+- Description: The timeout for a transaction commit RPC. Since v3.2.0, this parameter is deprecated.
 - Introduced in: -
 
 ##### max_consumer_num_per_group
@@ -3037,7 +3070,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Default: false
 - Type: Boolean
 - Unit: -
-- Is mutable: Yes
+- Is mutable: No
 - Description:
 - Introduced in: -
 -->
@@ -3232,23 +3265,41 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The proportion of columns with the same name for Flat JSON. Extraction is not performed if the proportion of columns with the same name is lower than this value. This parameter takes effect only when `enable_json_flat` is set to `true`.
 - Introduced in: v3.3.0
 
-##### json_flat_internal_column_min_limit
-
-- Default: 5
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description: The minimum number of JSON fields for performing Flat JSON. Flat JSON is not performed if the number of JSON fields is less than this value. This parameter takes effect only when `enable_json_flat` is set to `true`.
-- Introduced in: v3.3.0
-
 ##### json_flat_column_max
 
-- Default: 20
+- Default: 100
 - Type: Int
 - Unit:
 - Is mutable: Yes
 - Description: The maximum number of sub-fields that can be extracted by Flat JSON. This parameter takes effect only when `enable_json_flat` is set to `true`.
 - Introduced in: v3.3.0
+
+##### enable_compaction_flat_json
+
+- Default: True
+- Type: Boolean
+- Unit:
+- Is mutable: Yes
+- Description: Whether to enable compaction for Flat JSON data.
+- Introduced in: v3.3.3
+
+##### enable_lazy_dynamic_flat_json
+
+- Default: True
+- Type: Boolean
+- Unit:
+- Is mutable: Yes
+- Description: Whether to enable Lazy Dyamic Flat JSON when a query misses Flat JSON schema in read process. When this item is set to `true`, StarRocks will postpone the Flat JSON operation to calculation process instead of read process.
+- Introduced in: v3.3.3
+
+##### jit_lru_cache_size
+
+- Default: 0
+- Type: Int
+- Unit: GB
+- Is mutable: Yes
+- Description: The LRU cache size for JIT compilation. It represents the actual size of the cache if it is set to greater than 0. If it is set to less than or equal to 0, the system will adaptively set the cache using the formula `jit_lru_cache_size = min(mem_limit*0.01, 1GB)` (while `mem_limit` of the node must be greater or equal to 16 GB).
+- Introduced in: -
 
 ### Shared-data
 
@@ -3258,7 +3309,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: An extra agent service port for CN (BE in v3.0) in a shared-data cluster.
+- Description: An extra agent service port for BE and CN.
 - Introduced in: -
 
 <!--
@@ -3294,6 +3345,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Introduced in: -
 -->
 
+<!--
 ##### starlet_cache_evict_interval
 
 - Default: 60
@@ -3302,7 +3354,9 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: The interval at which the system performs cache eviction in a shared-data cluster with file data cache enabled.
 - Introduced in: v3.0
+-->
 
+<!--
 ##### starlet_cache_evict_low_water
 
 - Default: 0.1
@@ -3311,7 +3365,9 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: The low water at which cache eviction is triggered. In a shared-data cluster with file data cache enabled, if the percentage of available disk space is lower than this value, cache eviction will be triggered.
 - Introduced in: v3.0
+-->
 
+<!--
 ##### starlet_cache_evict_high_water
 
 - Default: 0.2
@@ -3320,6 +3376,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: The high water at which cache eviction is stopped. In a shared-data cluster with file data cache enabled, if the percentage of available disk space is higher than this value, cache eviction will be stopped.
 - Introduced in: v3.0
+-->
 
 <!--
 ##### starlet_cache_dir_allocate_policy
@@ -3371,7 +3428,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable block data cache in a shared-data cluster. `true` indicates enabling this feature and `false` indicates disabling it. The default value is set from `false` to `true` from v3.2.3 onwards.
+- Description: Whether to enable Data Cache in a shared-data cluster. `true` indicates enabling this feature and `false` indicates disabling it. The default value is set from `false` to `true` from v3.2.3 onwards.
 - Introduced in: v3.1
 
 <!--
@@ -3391,7 +3448,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: The percentage of disk capacity that block data cache can use at most in a shared-data cluster.
+- Description: The percentage of disk capacity that Data Cache can use at most in a shared-data cluster.
 - Introduced in: v3.1
 
 <!--
@@ -3525,6 +3582,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description:
 - Introduced in: -
 -->
+
+##### starlet_fslib_s3client_request_timeout_ms
+
+- Default: -1
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: No
+- Description: An alias of `object_storage_request_timeout_ms`. Refer to [object_storage_request_timeout_ms](#object_storage_request_timeout_ms) for details.
+- Introduced in: v3.3.9
 
 ##### lake_compaction_stream_buffer_size_bytes
 
@@ -3680,11 +3746,11 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### lake_pk_compaction_max_input_rowsets
 
-- Default: 1000
+- Default: 500
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. Since v3.2.4 and v3.1.10, the default value of this parameter is changed from `5` to `1000`. After the Sized-tiered Compaction policy is enabled for Primary Key tables (by setting `enable_pk_size_tiered_compaction_strategy` to `true`), StarRocks does not need to limit the number of rowsets for each compaction to reduce write amplification. Therefore, the default value of this parameter is increased.
+- Description: The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. The default value of this parameter is changed from `5` to `1000` since v3.2.4 and v3.1.10, and to `500` since v3.3.1 and v3.2.9. After the Sized-tiered Compaction policy is enabled for Primary Key tables (by setting `enable_pk_size_tiered_compaction_strategy` to `true`), StarRocks does not need to limit the number of rowsets for each compaction to reduce write amplification. Therefore, the default value of this parameter is increased.
 - Introduced in: v3.1.8, v3.2.3
 
 <!--
@@ -3720,16 +3786,14 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Introduced in: -
 -->
 
-<!--
 ##### loop_count_wait_fragments_finish
 
-- Default: 0
+- Default: 2
 - Type: Int
-- Unit:
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
+- Unit: -
+- Is mutable: Yes
+- Description: The number of loops to be waited when the BE/CN process exits. Each loop is a fixed interval of 10 seconds. You can set it to `0` to disable the loop wait. From v3.4 onwards, this item is changed to mutable and its default value is changed from `0` to `2`.
+- Introduced in: v2.5
 
 ### Data Lake
 
@@ -3872,11 +3936,11 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### datacache_enable
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: Whether to enable Data Cache. `true` indicates Data Cache is enabled, and `false` indicates Data Cache is disabled.
+- Description: Whether to enable Data Cache. `true` indicates Data Cache is enabled, and `false` indicates Data Cache is disabled. The default value is changed to `true` from v3.3.
 - Introduced in: -
 
 ##### datacache_mem_size
@@ -3894,26 +3958,127 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: The maximum amount of data that can be cached on a single disk. You can set it as a percentage (for example, `80%`) or a physical limit (for example, `2T`, `500G`). For example, if you configure two disk paths for the `datacache_disk_path` parameter and set the value of the `datacache_disk_size` parameter as `21474836480` (20 GB), a maximum of 40 GB data can be cached on these two disks. The default value is `0`, which indicates that only memory is used to cache data.
+- Description: The maximum amount of data that can be cached on a single disk. You can set it as a percentage (for example, `80%`) or a physical limit (for example, `2T`, `500G`). For example, if you use two disks and set the value of the `datacache_disk_size` parameter as `21474836480` (20 GB), a maximum of 40 GB data can be cached on these two disks. The default value is `0`, which indicates that only memory is used to cache data.
 - Introduced in: -
 
-##### datacache_disk_path
+##### datacache_auto_adjust_enable
 
-- Default: `${STARROCKS_HOME}/datacache/`
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable Automatic Scaling for Data Cache disk capacity. When it is enabled, the system dynamically adjusts the cache capacity based on the current disk usage rate.
+- Introduced in: v3.3.0
+
+##### datacache_disk_high_level
+
+- Default: 90
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The upper limit of disk usage (in percentage) that triggers the automatic scaling up of the cache capacity. When the disk usage exceeds this value, the system automatically evicts cache data from the Data Cache. From v3.4.0 onwards, the default value is changed from `80` to `90`.
+- Introduced in: v3.3.0
+
+##### datacache_disk_safe_level
+
+- Default: 80
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The safe level of disk usage (in percentage) for Data Cache. When Data Cache performs automatic scaling, the system adjusts the cache capacity with the goal of maintaining disk usage as close to this value as possible. From v3.4.0 onwards, the default value is changed from `70` to `80`.
+- Introduced in: v3.3.0
+
+##### datacache_disk_low_level
+
+- Default: 60
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The lower limit of disk usage (in percentage) that triggers the automatic scaling down of the cache capacity. When the disk usage remains below this value for the period specified in `datacache_disk_idle_seconds_for_expansion`, and the space allocated for Data Cache is fully utilized, the system will automatically expand the cache capacity by increasing the upper limit.
+- Introduced in: v3.3.0
+
+##### datacache_disk_adjust_interval_seconds
+
+- Default: 10
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The interval of Data Cache automatic capacity scaling. At regular intervals, the system checks the cache disk usage, and triggers Automatic Scaling when necessary.
+- Introduced in: v3.3.0
+
+##### datacache_disk_idle_seconds_for_expansion
+
+- Default: 7200
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The minimum wait time for Data Cache automatic expansion. Automatic scaling up is triggered only if the disk usage remains below `datacache_disk_low_level` for longer than this duration.
+- Introduced in: v3.3.0
+
+##### datacache_min_disk_quota_for_adjustment
+
+- Default: 107374182400
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The minimum effective capacity for Data Cache Automatic Scaling. If the system tries to adjust the cache capacity to less than this value, the cache capacity will be directly set to `0` to prevent suboptimal performance caused by frequent cache fills and evictions due to insufficient cache capacity.
+- Introduced in: v3.3.0
+
+##### datacache_block_buffer_enable
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to enable Block Buffer to optimize Data Cache efficiency. When Block Buffer is enabled, the system reads the Block data from the Data Cache and caches it in a temporary buffer, thus reducing the extra overhead caused by frequent cache reads.
+- Introduced in: v3.2.0
+
+##### datacache_tiered_cache_enable
+
+- Default: false 
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to enable tiered cache mode for Data Cache. When tiered cache mode is enabled, Data Cache is configured with two layers of caching, memory and disk. When disk data becomes hot data, it is automatically loaded into the memory cache, and when the data in the memory cache becomes cold, it is automatically flushed to disk. When tiered cache mode is not enabled, the memory and disk configured for Data Cache form two separate cache spaces and cache different types of data, with no data flow between them.
+- Introduced in: v3.2.5
+
+##### datacache_eviction_policy
+
+- Default: slru
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: The paths of disks. We recommend that the number of paths you configure for this parameter is the same as the number of disks on your BE machine. Multiple paths need to be separated with semicolons (;).
-- Introduced in: -
+- Description: The eviction policy of Data Cache. Valid values: `lru` (least recently used) and `slru` (Segmented LRU).
+- Introduced in: v3.4.0
 
-##### datacache_meta_path
+##### datacache_inline_item_count_limit
 
-- Default: `${STARROCKS_HOME}/datacache/`
-- Type: String
+- Default: 130172
+- Type: Int
 - Unit: -
 - Is mutable: No
-- Description: The storage path of block metadata. You can customize the storage path. We recommend that you store the metadata under the `$STARROCKS_HOME` path.
-- Introduced in: -
+- Description: The maximum number of inline cache items in Data Cache. For some particularly small cache blocks, Data Cache stores them in `inline` mode, which caches the block data and metadata together in memory.
+- Introduced in: v3.4.0
+
+<!--
+##### datacache_unified_instance_enable
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to use a unified Data Cache instance for queries against external catalogs and cloud-native tables (in shared-data clusters).
+- Introduced in: v3.4.0
+-->
+
+##### query_max_memory_limit_percent
+
+- Default: 90
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The maximum memory that the Query Pool can use. It is expressed as a percentage of the Process memory limit.
+- Introduced in: v3.1.0
 
 <!--
 ##### datacache_block_size
@@ -4334,39 +4499,6 @@ When this value is set to less than `0`, the system uses the product of its abso
 -->
 
 <!--
-##### default_mv_resource_group_memory_limit
-
-- Default: 0.8
-- Type: Double
-- Unit:
-- Is mutable: No
-- Description: The maximum memory percentage that can be used by the materialized view in a resource group.
-- Introduced in: v3.1
--->
-
-<!--
-##### default_mv_resource_group_cpu_limit
-
-- Default: 1
-- Type: Int
-- Unit:
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### primary_key_limit_size
-
-- Default: 128
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
 ##### primary_key_batch_get_index_memory_limit
 
 - Default: 104857600
@@ -4413,7 +4545,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 <!--
 ##### get_txn_status_internal_sec
 
-- Default: 30
+- Default: 10
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
@@ -4517,61 +4649,6 @@ When this value is set to less than `0`, the system uses the product of its abso
 -->
 
 <!--
-##### enable_json_flat
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### json_flat_null_factor
-
-- Default: 0.3
-- Type: Double
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### json_flat_sparsity_factor
-
-- Default: 0.9
-- Type: Double
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### json_flat_internal_column_min_limit
-
-- Default: 5
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### json_flat_column_max
-
-- Default: 20
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
 ##### pk_dump_interval_seconds
 
 - Default: 3600
@@ -4604,17 +4681,6 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Introduced in: -
 -->
 
-<!--
-##### jit_lru_cache_size
-
-- Default: 0
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
 ### Other
 
 ##### user_function_dir
@@ -4625,6 +4691,42 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: No
 - Description: The directory used to store User-defined Functions (UDFs).
 - Introduced in: -
+
+##### default_mv_resource_group_memory_limit
+
+- Default: 0.8
+- Type: Double
+- Unit:
+- Is mutable: Yes
+- Description: The maximum memory proportion (per BE node) that can be used by the materialized view refresh tasks in the resource group `default_mv_wg`. The default value indicates 80% of the memory.
+- Introduced in: v3.1
+
+##### default_mv_resource_group_cpu_limit
+
+- Default: 1
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of CPU cores (per BE node) that can be used by the materialized view refresh tasks in the resource group `default_mv_wg`.
+- Introduced in: v3.1
+
+##### default_mv_resource_group_concurrency_limit
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum concurrency (per BE node) of the materialized view refresh tasks in the resource group `default_mv_wg`. The default value `0` indicates no limits.
+- Introduced in: v3.1
+
+##### default_mv_resource_group_spill_mem_limit_threshold
+
+- Default: 0.8
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: The memory usage threshold before a materialized view refresh task in the resource group `default_mv_wg` triggers intermediate result spilling. The default value indicates 80% of the memory.
+- Introduced in: v3.1
 
 <!--
 ##### pull_load_task_dir
@@ -4684,10 +4786,10 @@ When this value is set to less than `0`, the system uses the product of its abso
 <!--
 ##### tablet_writer_open_rpc_timeout_sec
 
-- Default: 60
+- Default: 300
 - Type: Int
 - Unit: Seconds
-- Is mutable: No
+- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->

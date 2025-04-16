@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # element_at
 
-## Description
+
 
 Returns the element at the specified position (index) from a given array. If any parameter is NULL or if the position does not exist, the result is NULL.
 

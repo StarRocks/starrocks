@@ -35,7 +35,6 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.HashMultimap;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
@@ -44,12 +43,12 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.EsTable;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
 import com.starrocks.connector.elasticsearch.EsShardRouting;
 import com.starrocks.connector.elasticsearch.QueryBuilders;
 import com.starrocks.connector.elasticsearch.QueryConverter;
-import com.starrocks.lake.StarOSAgent;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -64,7 +63,6 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -92,15 +90,10 @@ public class EsScanNode extends ScanNode {
     }
 
     @Override
-    public void init(Analyzer analyzer) throws UserException {
+    public void init(Analyzer analyzer) throws StarRocksException {
         super.init(analyzer);
 
         assignNodes();
-    }
-
-    @Override
-    public int getNumInstances() {
-        return shardScanRanges.size();
     }
 
     @Override
@@ -113,7 +106,7 @@ public class EsScanNode extends ScanNode {
     }
 
     @Override
-    public void finalizeStats(Analyzer analyzer) throws UserException {
+    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
     }
 
     /**
@@ -172,7 +165,7 @@ public class EsScanNode extends ScanNode {
         msg.es_scan_node = esScanNode;
     }
 
-    public void assignNodes() throws UserException {
+    public void assignNodes() throws StarRocksException {
         nodeMap = HashMultimap.create();
         nodeList = Lists.newArrayList();
 
@@ -180,7 +173,11 @@ public class EsScanNode extends ScanNode {
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         if (RunMode.isSharedDataMode()) {
             WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-            List<Long> computeNodeIds = warehouseManager.getAllComputeNodeIds(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+            if (ConnectContext.get() != null) {
+                warehouseName = ConnectContext.get().getCurrentWarehouseName();
+            }
+            List<Long> computeNodeIds = warehouseManager.getAllComputeNodeIds(warehouseName);
             nodes = computeNodeIds.stream()
                     .map(id -> systemInfoService.getBackendOrComputeNode(id)).collect(Collectors.toList());
         } else {
@@ -193,7 +190,7 @@ public class EsScanNode extends ScanNode {
             }
         }
         if (nodeMap.isEmpty()) {
-            throw new UserException("No Alive backends or compute nodes");
+            throw new StarRocksException("No Alive backends or compute nodes");
         }
     }
 

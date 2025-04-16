@@ -25,11 +25,13 @@ import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class PartitionsSystemTableSystemTable {
+    private static final String NAME = "partitions";
+
     public static SystemTable create(String catalogName) {
         return new SystemTable(
                 catalogName,
                 SystemId.PARTITIONS_ID,
-                "partitions",
+                NAME,
                 Table.TableType.SCHEMA,
                 builder()
                         .column("TABLE_CATALOG", ScalarType.createVarchar(FN_REFLEN))
@@ -56,6 +58,7 @@ public class PartitionsSystemTableSystemTable {
                         .column("PARTITION_COMMENT", ScalarType.createVarchar(2048))
                         .column("NODEGROUP", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("TABLESPACE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("SUBPARTITION_ORDINAL_POSITION", ScalarType.createType(PrimitiveType.BIGINT))
                         .build(), TSchemaTableType.SCH_PARTITIONS);
     }
 }

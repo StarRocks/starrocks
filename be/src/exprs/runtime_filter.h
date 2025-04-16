@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <numeric>
+#include <sstream>
+
 #include "column/chunk.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
@@ -28,68 +31,39 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Types_types.h"
 #include "types/logical_type.h"
+#include "util/hash_util.hpp"
 
 namespace starrocks {
 // 0x1. initial global runtime filter impl
 // 0x2. change simd-block-filter hash function.
 // 0x3. Fix serialize problem
-inline const constexpr uint8_t RF_VERSION = 0x2;
+// 0x4. Support multiple different filters.
+inline const constexpr uint8_t RF_VERSION = 0x2; // deprecated
+// Serialize format: RF_VERSION (1B) | RuntimeFilter(LogicalType | other content)
 inline const constexpr uint8_t RF_VERSION_V2 = 0x3;
-static_assert(sizeof(RF_VERSION_V2) == sizeof(RF_VERSION));
-inline const constexpr int32_t RF_VERSION_SZ = sizeof(RF_VERSION_V2);
-
-// compatible code from 2.5 to 3.0
-// TODO: remove it
-class RuntimeFilterSerializeType {
-public:
-    enum PrimitiveType {
-        INVALID_TYPE = 0,
-        TYPE_NULL,     /* 1 */
-        TYPE_BOOLEAN,  /* 2 */
-        TYPE_TINYINT,  /* 3 */
-        TYPE_SMALLINT, /* 4 */
-        TYPE_INT,      /* 5 */
-        TYPE_BIGINT,   /* 6 */
-        TYPE_LARGEINT, /* 7 */
-        TYPE_FLOAT,    /* 8 */
-        TYPE_DOUBLE,   /* 9 */
-        TYPE_VARCHAR,  /* 10 */
-        TYPE_DATE,     /* 11 */
-        TYPE_DATETIME, /* 12 */
-        TYPE_BINARY,
-        /* 13 */      // Not implemented
-        TYPE_DECIMAL, /* 14 */
-        TYPE_CHAR,    /* 15 */
-
-        TYPE_STRUCT,    /* 16 */
-        TYPE_ARRAY,     /* 17 */
-        TYPE_MAP,       /* 18 */
-        TYPE_HLL,       /* 19 */
-        TYPE_DECIMALV2, /* 20 */
-
-        TYPE_TIME,       /* 21 */
-        TYPE_OBJECT,     /* 22 */
-        TYPE_PERCENTILE, /* 23 */
-        TYPE_DECIMAL32,  /* 24 */
-        TYPE_DECIMAL64,  /* 25 */
-        TYPE_DECIMAL128, /* 26 */
-
-        TYPE_JSON,      /* 27 */
-        TYPE_FUNCTION,  /* 28 */
-        TYPE_VARBINARY, /* 28 */
-    };
-
-    static_assert(sizeof(PrimitiveType) == sizeof(int32_t));
-    static_assert(sizeof(PrimitiveType) == sizeof(LogicalType));
-    static_assert(sizeof(TPrimitiveType::type) == sizeof(LogicalType));
-
-    static PrimitiveType to_serialize_type(LogicalType type);
-
-    static LogicalType from_serialize_type(PrimitiveType type);
-};
+// Serialize format: RF_VERSION (1B) | RuntimeFilterType (1B) | RuntimeFilter(LogicalType | other content)
+inline const constexpr uint8_t RF_VERSION_V3 = 0x4;
+enum class RuntimeFilterSerializeType : uint8_t { NONE = 0, EMPTY_FILTER = 1, BLOOM_FILTER = 2, BITSET_FILTER = 3 };
+static_assert(sizeof(RF_VERSION_V3) == sizeof(RF_VERSION));
+static_assert(sizeof(RF_VERSION_V3) == sizeof(RF_VERSION_V2));
+inline const constexpr int32_t RF_VERSION_SZ = sizeof(RF_VERSION_V3);
 
 static constexpr uint32_t SALT[8] = {0x47b6137b, 0x44974d91, 0x8824ad5b, 0xa2b7289d,
                                      0x705495c7, 0x2df1424b, 0x9efc4947, 0x5c6bfb31};
+
+inline std::string to_string(RuntimeFilterSerializeType type) {
+    switch (type) {
+    case RuntimeFilterSerializeType::EMPTY_FILTER:
+        return "EmptyFilter";
+    case RuntimeFilterSerializeType::BLOOM_FILTER:
+        return "BloomFilter";
+    case RuntimeFilterSerializeType::BITSET_FILTER:
+        return "BitsetFilter";
+    case RuntimeFilterSerializeType::NONE:
+    default:
+        return "None";
+    }
+}
 
 // Modify from https://github.com/FastFilter/fastfilter_cpp/blob/master/src/bloom/simd-block.h
 // This is avx2 simd implementation for paper <<Cache-, Hash- and Space-Efficient Bloom Filters>>
@@ -117,6 +91,15 @@ public:
         const __m256i mask = make_mask(hash >> _log_num_buckets);
         __m256i* const bucket = &reinterpret_cast<__m256i*>(_directory)[bucket_idx];
         _mm256_store_si256(bucket, _mm256_or_si256(*bucket, mask));
+#elif defined(__ARM_NEON)
+        uint32x4_t masks[2];
+        make_mask(hash >> _log_num_buckets, masks);
+        uint32x4_t directory_1 = vld1q_u32(&_directory[bucket_idx][0]);
+        uint32x4_t directory_2 = vld1q_u32(&_directory[bucket_idx][4]);
+        directory_1 = vorrq_u32(directory_1, masks[0]);
+        directory_2 = vorrq_u32(directory_2, masks[1]);
+        vst1q_u32(&_directory[bucket_idx][0], directory_1);
+        vst1q_u32(&_directory[bucket_idx][4], directory_2);
 #else
         uint32_t masks[BITS_SET_PER_BLOCK];
         make_mask(hash >> _log_num_buckets, masks);
@@ -131,6 +114,7 @@ public:
             DCHECK(false) << "unexpected test_hash on cleared bf";
             return true;
         }
+
         const uint32_t bucket_idx = hash & _directory_mask;
 #ifdef __AVX2__
         const __m256i mask = make_mask(hash >> _log_num_buckets);
@@ -182,6 +166,10 @@ public:
     // we can use can_use() to check if this bloom filter can be used
     bool can_use() const { return _directory != nullptr; }
 
+    size_t get_alloc_size() const {
+        return _log_num_buckets == 0 ? 0 : (1ull << (_log_num_buckets + LOG_BUCKET_BYTE_SIZE));
+    }
+
 private:
     // The number of bits to set in a tiny Bloom filter block
 
@@ -224,10 +212,6 @@ private:
     // log2(number of bytes in a bucket):
     static constexpr int LOG_BUCKET_BYTE_SIZE = 5;
 
-    size_t get_alloc_size() const {
-        return _log_num_buckets == 0 ? 0 : (1ull << (_log_num_buckets + LOG_BUCKET_BYTE_SIZE));
-    }
-
     // Common:
     // log_num_buckets_ is the log (base 2) of the number of buckets in the directory:
     int _log_num_buckets = 0;
@@ -236,247 +220,341 @@ private:
     Bucket* _directory = nullptr;
 };
 
-// If size is very small(< 1000), SmallHashSet is faster than SimdBlockFilter
-// This fast bloom filter is inspired by parallel-hashmap row_hash_set
-class SmallHashSet {
-public:
-    using ctrl_t = int8_t;
-
-    ~SmallHashSet() { free(_ctrl); }
-
-    size_t grow_to_lower_bound_capacity(size_t growth) {
-        return growth + static_cast<size_t>((static_cast<int64_t>(growth) - 1) / 7);
-    }
-
-    size_t normalize_capacity(size_t n) { return n ? ~size_t{} >> __builtin_clzll(n) : 1; }
-
-    static constexpr ctrl_t KEMPTY = -128;
-    void init(size_t size) {
-        _capacity = normalize_capacity(grow_to_lower_bound_capacity(size * 2));
-        posix_memalign(reinterpret_cast<void**>(&_ctrl), 16, _capacity + 17);
-        memset(_ctrl, -128, _capacity + 17);
-    }
-
-    void insert_hash(size_t hash) {
-        size_t h1_hash = hash >> 7;
-        size_t offset_ = h1_hash & _capacity;
-        ctrl_t h2_hash = hash & 0x7F;
-        while ((_ctrl[offset_] != KEMPTY) & (_ctrl[offset_] != h2_hash)) {
-            offset_++;
-        }
-        _ctrl[offset_] = h2_hash;
-    }
-
-    bool test_hash(size_t hash) {
-        size_t h1_hash = hash >> 7;
-        size_t offset_ = h1_hash & _capacity;
-        char h2_hash = hash & 0x7F;
-#ifdef __SSE2__
-        __m128i ctrl = _mm_loadu_si128(reinterpret_cast<__m128i*>(_ctrl + offset_));
-        auto match = _mm_set1_epi8(h2_hash);
-        return _mm_movemask_epi8(_mm_cmpeq_epi8(match, ctrl));
-#else
-        for (size_t i = 0; i < 16; ++i) {
-            if (_ctrl[offset_] == h2_hash) {
-                return true;
-            }
-        }
-        return false;
-#endif
-    }
-
-private:
-    ctrl_t* _ctrl = nullptr;
-    size_t _capacity = 0;
-};
-
 // The runtime filter generated by join right small table
-class JoinRuntimeFilter;
-using JoinRuntimeFilterPtr = std::shared_ptr<const JoinRuntimeFilter>;
-using MutableJoinRuntimeFilterPtr = std::shared_ptr<JoinRuntimeFilter>;
-class JoinRuntimeFilter {
-public:
-    virtual ~JoinRuntimeFilter() = default;
+class RuntimeFilter;
+class RuntimeMembershipFilter;
+using RuntimeFilterPtr = std::shared_ptr<const RuntimeFilter>;
+using MutableRuntimeFilterPtr = std::shared_ptr<RuntimeFilter>;
 
-    virtual void init(size_t hash_table_size) = 0;
+class RuntimeFilter {
+public:
+    virtual ~RuntimeFilter() = default;
 
     class RunningContext {
     public:
         Filter selection;
         Filter merged_selection;
         bool use_merged_selection;
-        std::vector<uint32_t> hash_values;
         bool compatibility = true;
+        std::vector<uint32_t> hash_values;
     };
 
-    virtual void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<Column*>& columns,
-                                         RunningContext* ctx) const = 0;
-    virtual void evaluate(Column* input_column, RunningContext* ctx) const = 0;
+    virtual RuntimeFilterSerializeType type() const { return RuntimeFilterSerializeType::NONE; }
 
-    size_t size() const { return _size; }
+    /// - Multiple partition mode: `num_hash_partitions` returns positive value.
+    /// - Single partition mode: `num_hash_partitions` returns 0.
+    virtual size_t num_hash_partitions() const { return 0; }
+
+    /// `compute_partition_index` is only used for the multiple partition mode.
+    virtual void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
+                                         RunningContext* ctx) const {}
+    virtual void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
+                                         uint16_t* sel, uint16_t sel_size, std::vector<uint32_t>& hash_values) const {}
+    virtual void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
+                                         uint8_t* selection, uint16_t from, uint16_t to,
+                                         std::vector<uint32_t>& hash_values) const {}
+
+    /// Evaluate in the vectorized way.
+    virtual void evaluate(const Column* input_column, RunningContext* ctx) const = 0;
+    /// Evaluate in the vectorized way.
+    /// Arguments:
+    ///     - hash_values: only used for the multiple partition mode.
+    ///     - selection: selection[i] represents the i-th row in the `input_column` is selected or filtered-out.
+    ///     - from: the start index in the input_column (included).
+    ///     - to: the end index in the input_column (excluded).
+    virtual void evaluate(const Column* input_column, const std::vector<uint32_t>& hash_values, uint8_t* selection,
+                          uint16_t from, uint16_t to) const = 0;
+    /// Evaluate in the branch-less way.
+    /// Arguments:
+    ///     - hash_values: only used for the multiple partition mode.
+    ///     - sel: sel[i] the index of the i-th row in the `input_column`.
+    ///     - sel_size: the number of rows in the input_column.
+    ///     - dst_sel: will write the selected index after evaluation.
+    /// Return:
+    ///    the number of selected rows after evaluation.
+    virtual uint16_t evaluate(const Column* input_column, const std::vector<uint32_t>& hash_values, uint16_t* sel,
+                              uint16_t sel_size, uint16_t* dst_sel) const = 0;
+
     bool always_true() const { return _always_true; }
-    size_t num_hash_partitions() const { return _hash_partition_bf.size(); }
 
     bool has_null() const { return _has_null; }
 
     virtual std::string debug_string() const = 0;
-
-    void set_join_mode(int8_t join_mode) { _join_mode = join_mode; }
-
-    void clear_bf();
-
-    bool can_use_bf() const {
-        if (_hash_partition_bf.empty()) {
-            return _bf.can_use();
-        }
-        return _hash_partition_bf[0].can_use();
-    }
 
     // RuntimeFilter version
     // if the RuntimeFilter is updated, the version will be updated as well,
     // (usually used for TopN Filter)
     size_t rf_version() const { return _rf_version; }
 
-    virtual size_t max_serialized_size() const;
-    virtual size_t serialize(int serialize_version, uint8_t* data) const;
-    virtual size_t deserialize(int serialize_version, const uint8_t* data);
-
-    virtual void intersect(const JoinRuntimeFilter* rf) = 0;
-
-    virtual void merge(const JoinRuntimeFilter* rf) {
-        _has_null |= rf->_has_null;
-        _bf.merge(rf->_bf);
+    virtual size_t max_serialized_size() const {
+        DCHECK(false) << "unreachable path";
+        return 0;
+    }
+    virtual size_t serialize(int serialize_version, uint8_t* data) const {
+        DCHECK(false) << "unreachable path";
+        return 0;
+    }
+    virtual size_t deserialize(int serialize_version, const uint8_t* data) {
+        DCHECK(false) << "unreachable path";
+        return 0;
     }
 
-    virtual void concat(JoinRuntimeFilter* rf) {
-        _has_null |= rf->_has_null;
-        if (rf->_hash_partition_bf.empty()) {
-            _hash_partition_bf.emplace_back(std::move(rf->_bf));
-        } else {
-            for (auto&& bf : rf->_hash_partition_bf) {
-                _hash_partition_bf.emplace_back(std::move(bf));
-            }
-        }
-        _join_mode = rf->_join_mode;
-        _size += rf->_size;
-    }
-    virtual bool check_equal(const JoinRuntimeFilter& rf) const;
-    virtual JoinRuntimeFilter* create_empty(ObjectPool* pool) = 0;
-    void set_global() { this->_global = true; }
+    /// Used in TopN filter to intersect with other runtime filters.
+    virtual void intersect(const RuntimeFilter* rf) = 0;
+
+    virtual void merge(const RuntimeFilter* rf) { _has_null |= rf->_has_null; }
+
+    virtual void concat(RuntimeFilter* rf) { _has_null |= rf->_has_null; }
+
+    virtual RuntimeFilter* create_empty(ObjectPool* pool) = 0;
 
     // only used in local colocate filter
     bool is_group_colocate_filter() const { return !_group_colocate_filters.empty(); }
-    std::vector<JoinRuntimeFilter*>& group_colocate_filter() { return _group_colocate_filters; }
-    const std::vector<JoinRuntimeFilter*>& group_colocate_filter() const { return _group_colocate_filters; }
+    std::vector<RuntimeFilter*>& group_colocate_filter() { return _group_colocate_filters; }
+    const std::vector<RuntimeFilter*>& group_colocate_filter() const { return _group_colocate_filters; }
+
+    virtual const RuntimeFilter* get_min_max_filter() const {
+        DCHECK(false) << "unreachable path";
+        return nullptr;
+    }
+    virtual RuntimeMembershipFilter* get_membership_filter() {
+        DCHECK(false) << "unreachable path";
+        return nullptr;
+    }
+    const RuntimeMembershipFilter* get_membership_filter() const {
+        return const_cast<RuntimeFilter*>(this)->get_membership_filter();
+    }
+
+    // TODO(lzh): rename to memory_usage
+    virtual size_t bf_alloc_size() const { return 0; }
+
+    // TODO(lzh): rename to can_use
+    virtual bool can_use_bf() const { return true; }
+
+    virtual void clear_bf() {}
 
 protected:
     void _update_version() { _rf_version++; }
 
     bool _has_null = false;
-    bool _global = false;
-    size_t _size = 0;
-    int8_t _join_mode = 0;
-    SimdBlockFilter _bf;
-    std::vector<SimdBlockFilter> _hash_partition_bf;
     bool _always_true = false;
     size_t _rf_version = 0;
     // local colocate filters is local filter we don't have to serialize them
-    std::vector<JoinRuntimeFilter*> _group_colocate_filters;
+    std::vector<RuntimeFilter*> _group_colocate_filters;
 };
 
-template <typename ModuloFunc>
+template <typename F>
+concept HashValueForEachFunc = requires(F f, size_t index, uint32_t& hash_value) {
+    { f(index, hash_value) }
+    ->std::same_as<void>;
+};
+
+struct FullScanIterator {
+    typedef void (Column::*HashFuncType)(uint32_t*, uint32_t, uint32_t) const;
+    static constexpr HashFuncType FNV_HASH = &Column::fnv_hash;
+    static constexpr HashFuncType CRC32_HASH = &Column::crc32_hash;
+
+    FullScanIterator(std::vector<uint32_t>& hash_values, size_t num_rows)
+            : hash_values(hash_values), num_rows(num_rows) {}
+
+    template <HashValueForEachFunc ForEachFuncType>
+    void for_each(ForEachFuncType func) {
+        for (size_t i = 0; i < num_rows; i++) {
+            func(i, hash_values[i]);
+        }
+    }
+
+    void compute_hash(const std::vector<const Column*>& columns, HashFuncType hash_func) {
+        for (const Column* input_column : columns) {
+            (input_column->*hash_func)(hash_values.data(), 0, num_rows);
+        }
+    }
+
+    std::vector<uint32_t>& hash_values;
+    size_t num_rows;
+};
+
+struct SelectionIterator {
+    typedef void (Column::*HashFuncType)(uint32_t*, uint8_t*, uint16_t, uint16_t) const;
+    static constexpr HashFuncType FNV_HASH = &Column::fnv_hash_with_selection;
+    static constexpr HashFuncType CRC32_HASH = &Column::crc32_hash_with_selection;
+
+    SelectionIterator(std::vector<uint32_t>& hash_values, uint8_t* selection, uint16_t from, uint16_t to)
+            : hash_values(hash_values), selection(selection), from(from), to(to) {}
+
+    template <HashValueForEachFunc ForEachFuncType>
+    void for_each(ForEachFuncType func) {
+        for (size_t i = from; i < to; i++) {
+            if (selection[i]) {
+                func(i, hash_values[i]);
+            }
+        }
+    }
+
+    void compute_hash(const std::vector<const Column*>& columns, HashFuncType hash_func) {
+        for (const Column* input_column : columns) {
+            (input_column->*hash_func)(hash_values.data(), selection, from, to);
+        }
+    }
+
+    std::vector<uint32_t>& hash_values;
+    uint8_t* selection;
+    uint16_t from;
+    uint16_t to;
+};
+
+struct SelectedIndexIterator {
+    typedef void (Column::*HashFuncType)(uint32_t*, uint16_t*, uint16_t) const;
+    static constexpr HashFuncType FNV_HASH = &Column::fnv_hash_selective;
+    static constexpr HashFuncType CRC32_HASH = &Column::crc32_hash_selective;
+
+    SelectedIndexIterator(std::vector<uint32_t>& hash_values, uint16_t* sel, uint16_t sel_size)
+            : hash_values(hash_values), sel(sel), sel_size(sel_size) {}
+
+    template <HashValueForEachFunc ForEachFuncType>
+    void for_each(ForEachFuncType func) {
+        for (uint16_t i = 0; i < sel_size; i++) {
+            func(sel[i], hash_values[sel[i]]);
+        }
+    }
+
+    void compute_hash(const std::vector<const Column*>& columns, HashFuncType hash_func) {
+        for (const Column* input_column : columns) {
+            (input_column->*hash_func)(hash_values.data(), sel, sel_size);
+        }
+    }
+
+    std::vector<uint32_t>& hash_values;
+    uint16_t* sel;
+    uint16_t sel_size;
+};
+
+template <typename ModuloFunc, typename IteratorType = FullScanIterator>
 struct WithModuloArg {
     template <TRuntimeFilterLayoutMode::type M>
     struct HashValueCompute {
-        void operator()(const RuntimeFilterLayout& layout, const std::vector<Column*>& columns, size_t num_rows,
-                        size_t real_num_partitions, std::vector<uint32_t>& hash_values) const {
+        void operator()(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
+                        size_t real_num_partitions, IteratorType iterator) const {
             if constexpr (layout_is_singleton<M>) {
-                hash_values.assign(num_rows, 0);
+                iterator.for_each([&](size_t i, uint32_t& hash_value) { hash_value = 0; });
                 return;
             }
-
-            typedef void (Column::*HashFuncType)(uint32_t*, uint32_t, uint32_t) const;
-            auto compute_hash = [&columns, &num_rows, &hash_values](HashFuncType hash_func) {
-                for (Column* input_column : columns) {
-                    (input_column->*hash_func)(hash_values.data(), 0, num_rows);
-                }
-            };
-
             if constexpr (layout_is_shuffle<M>) {
-                hash_values.assign(num_rows, HashUtil::FNV_SEED);
-                compute_hash(&Column::fnv_hash);
-                [[maybe_unused]] const auto num_instances = layout.num_instances();
-                [[maybe_unused]] const auto num_drivers_per_instance = layout.num_drivers_per_instance();
-                [[maybe_unused]] const auto num_partitions = num_instances * num_drivers_per_instance;
-                for (auto i = 0; i < num_rows; ++i) {
-                    auto& hash_value = hash_values[i];
-                    if constexpr (layout_is_pipeline_shuffle<M>) {
-                        hash_value = ModuloFunc()(HashUtil::xorshift32(hash_value), num_drivers_per_instance);
-                    } else if constexpr (layout_is_global_shuffle_1l<M>) {
-                        hash_value = ModuloFunc()(hash_value, real_num_partitions);
-                    } else if constexpr (layout_is_global_shuffle_2l<M>) {
-                        auto instance_id = ModuloFunc()(hash_value, num_instances);
-                        auto driver_id = ModuloFunc()(HashUtil::xorshift32(hash_value), num_drivers_per_instance);
-                        hash_value = instance_id * num_drivers_per_instance + driver_id;
-                    }
-                }
+                process_shuffle(layout, columns, real_num_partitions, iterator);
             } else if (layout_is_bucket<M>) {
-                hash_values.assign(num_rows, 0);
-                compute_hash(&Column::crc32_hash);
-                [[maybe_unused]] const auto& bucketseq_to_instance = layout.bucketseq_to_instance();
-                [[maybe_unused]] const auto& bucketseq_to_driverseq = layout.bucketseq_to_driverseq();
-                [[maybe_unused]] const auto& bucketseq_to_partition = layout.bucketseq_to_partition();
-                [[maybe_unused]] const auto num_drivers_per_instance = layout.num_drivers_per_instance();
-                for (auto i = 0; i < num_rows; ++i) {
-                    auto& hash_value = hash_values[i];
-                    if constexpr (layout_is_pipeline_bucket<M>) {
-                        hash_value = bucketseq_to_driverseq[ModuloFunc()(hash_value, bucketseq_to_driverseq.size())];
-                    } else if constexpr (layout_is_pipeline_bucket_lx<M>) {
-                        hash_value = ModuloFunc()(HashUtil::xorshift32(hash_value), num_drivers_per_instance);
-                    } else if constexpr (layout_is_global_bucket_1l<M>) {
-                        hash_value = bucketseq_to_instance[ModuloFunc()(hash_value, bucketseq_to_instance.size())];
-                    } else if constexpr (layout_is_global_bucket_2l<M>) {
-                        hash_value = bucketseq_to_partition[ModuloFunc()(hash_value, bucketseq_to_partition.size())];
-                    } else if constexpr (layout_is_global_bucket_2l_lx<M>) {
-                        const auto bucketseq = ModuloFunc()(hash_value, bucketseq_to_instance.size());
-                        const auto instance = bucketseq_to_instance[bucketseq];
-                        const auto driverseq = ModuloFunc()(HashUtil::xorshift32(hash_value), num_drivers_per_instance);
-                        hash_value = (instance == BUCKET_ABSENT) ? BUCKET_ABSENT
-                                                                 : instance * num_drivers_per_instance + driverseq;
-                    }
-                }
+                process_bucket(layout, columns, real_num_partitions, iterator);
             }
+        }
+
+        void process_shuffle(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
+                             size_t real_num_partitions, IteratorType& iterator) const {
+            [[maybe_unused]] const auto num_instances = layout.num_instances();
+            [[maybe_unused]] const auto num_drivers_per_instance = layout.num_drivers_per_instance();
+            [[maybe_unused]] const auto num_partitions = num_instances * num_drivers_per_instance;
+            iterator.for_each([&](size_t i, uint32_t& hash_value) { hash_value = HashUtil::FNV_SEED; });
+            iterator.compute_hash(columns, IteratorType::FNV_HASH);
+            iterator.for_each([&](size_t i, uint32_t& hash_value) {
+                if constexpr (layout_is_pipeline_shuffle<M>) {
+                    hash_value = ModuloFunc()(HashUtil::xorshift32(hash_value), num_drivers_per_instance);
+                } else if constexpr (layout_is_global_shuffle_1l<M>) {
+                    hash_value = ModuloFunc()(hash_value, real_num_partitions);
+                } else if constexpr (layout_is_global_shuffle_2l<M>) {
+                    auto instance_id = ModuloFunc()(hash_value, num_instances);
+                    auto driver_id = ModuloFunc()(HashUtil::xorshift32(hash_value), num_drivers_per_instance);
+                    hash_value = instance_id * num_drivers_per_instance + driver_id;
+                }
+            });
+        }
+
+        void process_bucket(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
+                            size_t real_num_partitions, IteratorType& iterator) const {
+            [[maybe_unused]] const auto& bucketseq_to_instance = layout.bucketseq_to_instance();
+            [[maybe_unused]] const auto& bucketseq_to_driverseq = layout.bucketseq_to_driverseq();
+            [[maybe_unused]] const auto& bucketseq_to_partition = layout.bucketseq_to_partition();
+            [[maybe_unused]] const auto num_drivers_per_instance = layout.num_drivers_per_instance();
+            iterator.for_each([&](size_t i, uint32_t& hash_value) { hash_value = 0; });
+            iterator.compute_hash(columns, IteratorType::CRC32_HASH);
+            iterator.for_each([&](size_t i, uint32_t& hash_value) {
+                if constexpr (layout_is_pipeline_bucket<M>) {
+                    hash_value = bucketseq_to_driverseq[ModuloFunc()(hash_value, bucketseq_to_driverseq.size())];
+                } else if constexpr (layout_is_pipeline_bucket_lx<M>) {
+                    hash_value = ModuloFunc()(HashUtil::xorshift32(hash_value), num_drivers_per_instance);
+                } else if constexpr (layout_is_global_bucket_1l<M>) {
+                    hash_value = bucketseq_to_instance[ModuloFunc()(hash_value, bucketseq_to_instance.size())];
+                } else if constexpr (layout_is_global_bucket_2l<M>) {
+                    hash_value = bucketseq_to_partition[ModuloFunc()(hash_value, bucketseq_to_partition.size())];
+                } else if constexpr (layout_is_global_bucket_2l_lx<M>) {
+                    const auto bucketseq = ModuloFunc()(hash_value, bucketseq_to_instance.size());
+                    const auto instance = bucketseq_to_instance[bucketseq];
+                    const auto driverseq = ModuloFunc()(HashUtil::xorshift32(hash_value), num_drivers_per_instance);
+                    hash_value = (instance == BUCKET_ABSENT) ? BUCKET_ABSENT
+                                                             : instance * num_drivers_per_instance + driverseq;
+                }
+            });
         }
     };
 };
 
-// The join runtime filter implement by bloom filter
 template <LogicalType Type>
-class RuntimeBloomFilter final : public JoinRuntimeFilter {
+class MinMaxRuntimeFilter final : public RuntimeFilter {
 public:
     using CppType = RunTimeCppType<Type>;
     using ColumnType = RunTimeColumnType<Type>;
     using ContainerType = RunTimeProxyContainerType<Type>;
-    using SelfType = RuntimeBloomFilter<Type>;
 
-    RuntimeBloomFilter() { _init_min_max(); }
-    ~RuntimeBloomFilter() override = default;
+    MinMaxRuntimeFilter() { _init_min_max(); }
+    MinMaxRuntimeFilter(const MinMaxRuntimeFilter& rhs)
+            : RuntimeFilter(rhs),
+              _min(rhs._min),
+              _max(rhs._max),
+              _slice_min(rhs._slice_min),
+              _slice_max(rhs._slice_max),
+              _has_min_max(rhs._has_min_max),
+              _left_close_interval(rhs._left_close_interval),
+              _right_close_interval(rhs._right_close_interval) {}
+    ~MinMaxRuntimeFilter() override = default;
 
-    RuntimeBloomFilter* create_empty(ObjectPool* pool) override {
-        auto* p = pool->add(new RuntimeBloomFilter());
+    const RuntimeFilter* get_min_max_filter() const override { return this; }
+
+    RuntimeFilter* create_empty(ObjectPool* pool) override {
+        auto* p = pool->add(new MinMaxRuntimeFilter());
         return p;
-    };
+    }
+
+    static MinMaxRuntimeFilter* create_with_empty_range_without_null(ObjectPool* pool) {
+        auto* rf = pool->add(new MinMaxRuntimeFilter());
+        rf->_always_true = true;
+        return rf;
+    }
+
+    static MinMaxRuntimeFilter* create_with_only_null_range(ObjectPool* pool) {
+        auto* rf = pool->add(new MinMaxRuntimeFilter());
+        rf->insert_null();
+        rf->_always_true = true;
+        return rf;
+    }
+
+    static MinMaxRuntimeFilter* create_with_full_range_without_null(ObjectPool* pool) {
+        auto* rf = pool->add(new MinMaxRuntimeFilter());
+        rf->_init_full_range();
+        rf->_always_true = true;
+        return rf;
+    }
 
     // create a min/max LT/GT RuntimeFilter with val
     template <bool is_min>
-    static RuntimeBloomFilter* create_with_range(ObjectPool* pool, CppType val, bool is_close_interval) {
-        auto* p = pool->add(new RuntimeBloomFilter());
+    static MinMaxRuntimeFilter* create_with_range(ObjectPool* pool, CppType val, bool is_close_interval) {
+        auto* p = pool->add(new MinMaxRuntimeFilter());
         p->_init_full_range();
-        p->init(1);
 
         if constexpr (IsSlice<CppType>) {
-            p->_slice_min = val.to_string();
-            val = Slice(p->_slice_min.data(), val.get_size());
+            if constexpr (is_min) {
+                p->_slice_min = val.to_string();
+                val = Slice(p->_slice_min.data(), p->_slice_min.size());
+            } else {
+                p->_slice_max = val.to_string();
+                val = Slice(p->_slice_max.data(), p->_slice_max.size());
+            }
         }
 
         if constexpr (is_min) {
@@ -492,111 +570,333 @@ public:
     }
 
     template <bool is_min>
-    void update_min_max(CppType val) {
-        // now slice have not support update min/max
-        if constexpr (IsSlice<CppType>) {
-            return;
+    static MinMaxRuntimeFilter* create_with_range(ObjectPool* pool, CppType val, bool is_close_internal,
+                                                  bool need_null) {
+        auto* rf = create_with_range<is_min>(pool, val, is_close_internal);
+        if (need_null) {
+            rf->insert_null();
         }
-
-        if constexpr (is_min) {
-            if (_min < val) {
-                _min = val;
-                _update_version();
-            }
-        } else {
-            if (_max > val) {
-                _max = val;
-                _update_version();
-            }
-        }
+        return rf;
     }
 
-    void init(size_t hash_table_size) override {
-        _size = hash_table_size;
-        _bf.init(_size);
-    }
+    void set_left_close_interval(bool close_interval) { _left_close_interval = close_interval; }
+    void set_right_close_interval(bool close_interval) { _right_close_interval = close_interval; }
+    bool left_close_interval() const { return _left_close_interval; }
+    bool right_close_interval() const { return _right_close_interval; }
 
-    size_t compute_hash(CppType value) const {
+    bool is_empty_range() const { return _min > _max; }
+
+    bool is_full_range() const {
         if constexpr (IsSlice<CppType>) {
-            return SliceHash()(value);
+            return _min == Slice::min_value() && _max == Slice::max_value();
+        } else if constexpr (std::is_integral_v<CppType> || std::is_floating_point_v<CppType>) {
+            return _min == std::numeric_limits<CppType>::lowest() && _max == std::numeric_limits<CppType>::max();
+        } else if constexpr (IsDate<CppType>) {
+            return _min == DateValue::MIN_DATE_VALUE && _max == DateValue::MAX_DATE_VALUE;
+        } else if constexpr (IsTimestamp<CppType>) {
+            return _min = TimestampValue::MIN_TIMESTAMP_VALUE && _max == TimestampValue::MAX_TIMESTAMP_VALUE;
+        } else if constexpr (IsDecimal<CppType>) {
+            return _min == DecimalV2Value::get_min_decimal() && _max == DecimalV2Value::get_max_decimal();
+        } else if constexpr (Type != TYPE_JSON) {
+            return _min == RunTimeTypeLimits<Type>::min_value() && _max == RunTimeTypeLimits<Type>::max_value();
         } else {
-            return phmap_mix<sizeof(size_t)>()(std::hash<CppType>()(value));
+            return false;
         }
     }
 
     void insert(const CppType& value) {
-        if (LIKELY(_bf.can_use())) {
-            size_t hash = compute_hash(value);
-            _bf.insert_hash(hash);
-        }
-
         _min = std::min(value, _min);
         _max = std::max(value, _max);
     }
 
     void insert_null() { _has_null = true; }
 
-    CppType min_value() const { return _min; }
-
-    CppType max_value() const { return _max; }
-
-    bool left_close_interval() const { return _left_close_interval; }
-    bool right_close_interval() const { return _right_close_interval; }
-
-    void evaluate(Column* input_column, RunningContext* ctx) const override {
-        if (!_hash_partition_bf.empty()) {
-            return _hash_partition_bf[0].can_use() ? _t_evaluate<true, true>(input_column, ctx)
-                                                   : _t_evaluate<true, false>(input_column, ctx);
-        } else {
-            return _bf.can_use() ? _t_evaluate<false, true>(input_column, ctx)
-                                 : _t_evaluate<false, false>(input_column, ctx);
-        }
-    }
-
     // this->max = std::max(other->max, this->max)
-    void merge(const JoinRuntimeFilter* rf) override {
-        JoinRuntimeFilter::merge(rf);
-        _merge_min_max(down_cast<const RuntimeBloomFilter*>(rf));
-    }
+    void merge(const RuntimeFilter* rf) override { _merge_min_max(down_cast<const MinMaxRuntimeFilter*>(rf)); }
 
     // this->min = std::max(other->min, this->min)
     // this->max = std::min(other->max, this->max)
-    void intersect(const JoinRuntimeFilter* rf) override {
-        auto other = down_cast<const RuntimeBloomFilter*>(rf);
-
+    void intersect(const RuntimeFilter* rf) override {
+        auto other = down_cast<const MinMaxRuntimeFilter*>(rf);
         update_min_max<true>(other->_min);
         update_min_max<false>(other->_max);
     }
 
-    void concat(JoinRuntimeFilter* rf) override {
-        JoinRuntimeFilter::concat(rf);
-        _merge_min_max(down_cast<const RuntimeBloomFilter*>(rf));
+    void concat(RuntimeFilter* rf) override { _merge_min_max(down_cast<const MinMaxRuntimeFilter*>(rf)); }
+
+    template <bool is_min>
+    void update_min_max(CppType val) {
+        // now slice have not support update min/max
+        if constexpr (IsSlice<CppType>) {
+            std::lock_guard<std::mutex> lk(_slice_mutex);
+            if constexpr (is_min) {
+                if (_min < val) {
+                    _slice_min = val.to_string();
+                    _min.data = _slice_min.data();
+                    _min.size = _slice_min.size();
+                    _update_version();
+                }
+            } else {
+                if (_max > val) {
+                    _slice_max = val.to_string();
+                    _max.data = _slice_max.data();
+                    _max.size = _slice_max.size();
+                    _update_version();
+                }
+            }
+        } else {
+            if constexpr (is_min) {
+                if (_min < val) {
+                    _min = val;
+                    _update_version();
+                }
+            } else {
+                if (_max > val) {
+                    _max = val;
+                    _update_version();
+                }
+            }
+        }
+    }
+
+    void update_to_all_null() {
+        DCHECK(_has_null);
+
+        if (is_empty_range()) {
+            return;
+        }
+        _init_min_max();
+        _update_version();
+    }
+
+    void update_to_empty_and_not_null() {
+        if (!is_empty_range() || _has_null) {
+            _init_min_max();
+            _has_null = false;
+            _update_version();
+        }
+    }
+
+    template <bool evaluate_null>
+    void t_evaluate(const Column* input_column, RunningContext* ctx) const {
+        size_t size = input_column->size();
+        Filter& selection_filter = ctx->use_merged_selection ? ctx->merged_selection : ctx->selection;
+        selection_filter.resize(size);
+        uint8_t* selection = selection_filter.data();
+        if (input_column->is_constant()) {
+            const auto* const_column = down_cast<const ConstColumn*>(input_column);
+            if (const_column->only_null()) {
+                if constexpr (evaluate_null) {
+                    selection[0] = _has_null;
+                }
+            } else {
+                const auto& input_data = GetContainer<Type>::get_data(const_column->data_column());
+                evaluate_min_max(input_data, selection, 1);
+            }
+            uint8_t sel = selection[0];
+            memset(selection, sel, size);
+        } else if (input_column->is_nullable()) {
+            const auto* nullable_column = down_cast<const NullableColumn*>(input_column);
+            const auto& input_data = GetContainer<Type>::get_data(nullable_column->data_column());
+            evaluate_min_max(input_data, selection, size);
+            if (nullable_column->has_null() && evaluate_null) {
+                const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
+                for (int i = 0; i < size; i++) {
+                    if (null_data[i]) {
+                        selection[i] = _has_null;
+                    }
+                }
+            }
+        } else {
+            const auto& input_data = GetContainer<Type>::get_data(input_column);
+            evaluate_min_max(input_data, selection, size);
+        }
+    }
+
+    uint16_t t_evaluate(const Column* column, uint16_t* sel, uint16_t sel_size, uint16_t* dst_sel) const {
+        DCHECK(_has_min_max);
+        CHECK(dst_sel != nullptr) << "dst_sel must be set";
+        CHECK(!column->is_constant()) << "not support constant column";
+        uint16_t new_size = 0;
+        if (column->is_nullable()) {
+            const auto* nullable_column = down_cast<const NullableColumn*>(column);
+            const auto& data = GetContainer<Type>::get_data(nullable_column->data_column());
+            if (nullable_column->has_null()) {
+                const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
+                for (int i = 0; i < sel_size; i++) {
+                    uint16_t idx = sel[i];
+                    dst_sel[new_size] = idx;
+                    if (null_data[idx]) {
+                        new_size += _has_null;
+                    } else {
+                        new_size += evaluate_min_max(data[idx]);
+                    }
+                }
+            } else {
+                new_size = evaluate_min_max(data, sel, sel_size, dst_sel);
+            }
+        } else {
+            const auto& data = GetContainer<Type>::get_data(column);
+            new_size = evaluate_min_max(data, sel, sel_size, dst_sel);
+        }
+        return new_size;
+    }
+
+    void t_evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
+        DCHECK(_has_min_max);
+        CHECK(!column->is_constant()) << "not support constant column";
+
+        if (column->is_nullable()) {
+            const auto* nullable_column = down_cast<const NullableColumn*>(column);
+            const auto& data = GetContainer<Type>::get_data(nullable_column->data_column());
+            evaluate_min_max(data, selection, from, to);
+            if (nullable_column->has_null()) {
+                const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
+                for (int i = from; i < to; i++) {
+                    if (null_data[i]) {
+                        selection[i] = _has_null;
+                    }
+                }
+            }
+        } else {
+            const auto& data = GetContainer<Type>::get_data(column);
+            evaluate_min_max(data, selection, from, to);
+        }
+    }
+
+    void evaluate_min_max(const ContainerType& values, uint8_t* selection, size_t size) const {
+        DCHECK(_has_min_max);
+        if constexpr (!IsSlice<CppType>) {
+            const auto* data = values.data();
+            if (_left_close_interval) {
+                if (_right_close_interval) {
+                    for (size_t i = 0; i < size; i++) {
+                        selection[i] = (data[i] >= _min && data[i] <= _max);
+                    }
+                } else {
+                    for (size_t i = 0; i < size; i++) {
+                        selection[i] = (data[i] >= _min && data[i] < _max);
+                    }
+                }
+            } else {
+                if (_right_close_interval) {
+                    for (size_t i = 0; i < size; i++) {
+                        selection[i] = (data[i] > _min && data[i] <= _max);
+                    }
+                } else {
+                    for (size_t i = 0; i < size; i++) {
+                        selection[i] = (data[i] > _min && data[i] < _max);
+                    }
+                }
+            }
+        } else {
+            memset(selection, 0x1, size);
+        }
+    }
+
+    ALWAYS_INLINE bool evaluate_min_max(const CppType& value) const {
+        if constexpr (!IsSlice<CppType>) {
+            bool left = _left_close_interval ? value >= _min : value > _min;
+            bool right = _right_close_interval ? value <= _max : value < _max;
+            return left && right;
+        }
+        return true;
+    }
+
+    uint16_t evaluate_min_max(const ContainerType& values, uint16_t* sel, uint16_t sel_size, uint16_t* dst_sel) const {
+        if constexpr (!IsSlice<CppType>) {
+            const auto* data = values.data();
+            uint16_t new_size = 0;
+            for (int i = 0; i < sel_size; i++) {
+                uint16_t idx = sel[i];
+                dst_sel[new_size] = idx;
+                new_size += evaluate_min_max(data[idx]);
+            }
+            return new_size;
+        } else {
+            if (sel != dst_sel) {
+                memcpy(dst_sel, sel, sel_size * sizeof(uint16_t));
+            }
+            return sel_size;
+        }
+    }
+
+    void evaluate_min_max(const ContainerType& values, uint8_t* selection, uint16_t from, uint16_t to) const {
+        if constexpr (!IsSlice<CppType>) {
+            const auto* data = values.data();
+            for (uint16_t i = from; i < to; i++) {
+                if (selection[i]) {
+                    selection[i] = evaluate_min_max(data[i]);
+                }
+            }
+        }
+    }
+
+    CppType min_value(ObjectPool* pool) const {
+        if constexpr (IsSlice<CppType>) {
+            std::lock_guard<std::mutex> lk(_slice_mutex);
+            auto* str = pool->template add<std::string>(new std::string(_min.get_data(), _min.get_size()));
+            return Slice(*str);
+        } else {
+            return _min;
+        }
+    }
+
+    CppType max_value(ObjectPool* pool) const {
+        if constexpr (IsSlice<CppType>) {
+            std::lock_guard<std::mutex> lk(_slice_mutex);
+            auto* str = pool->template add<std::string>(new std::string(_max.get_data(), _max.get_size()));
+            return Slice(*str);
+        } else {
+            return _max;
+        }
+    }
+
+    const CppType& min() const { return _min; }
+
+    const CppType& max() const { return _max; }
+
+    // filter zonemap by evaluating
+    // [min_value, max_value] overlapped with [min, max]
+    bool filter_zonemap_with_min_max(const CppType* min_value, const CppType* max_value) const {
+        if (min_value == nullptr || max_value == nullptr) return false;
+        if (_left_close_interval) {
+            if (*max_value < _min) return true;
+        } else {
+            if (*max_value <= _min) return true;
+        }
+        if (_right_close_interval) {
+            if (*min_value > _max) return true;
+        } else {
+            if (*min_value >= _max) return true;
+        }
+        return false;
     }
 
     std::string debug_string() const override {
-        LogicalType ltype = Type;
         std::stringstream ss;
-        ss << "RuntimeBF(type = " << ltype << ", bfsize = " << _size << ", has_null = " << _has_null;
+        ss << "RuntimeMinMax(";
+        ss << "type = " << Type << " ";
+        ss << "has_null = " << _has_null << " ";
         if constexpr (std::is_integral_v<CppType> || std::is_floating_point_v<CppType>) {
             if constexpr (!std::is_same_v<CppType, __int128>) {
-                ss << ", _min = " << _min << ", _max = " << _max;
+                ss << "_min = " << _min << ", _max = " << _max;
             } else {
-                ss << ", _min/_max = int128";
+                ss << "_min/_max = int128";
             }
         } else if constexpr (IsSlice<CppType>) {
-            ss << ", _min/_max = slice";
+            ss << "_min/_max = slice";
         } else if constexpr (IsDate<CppType> || IsTimestamp<CppType> || IsDecimal<CppType>) {
-            ss << ", _min = " << _min.to_string() << ", _max = " << _max.to_string();
+            ss << "_min = " << _min.to_string() << ", _max = " << _max.to_string();
         }
+        ss << " left_close_interval = " << _left_close_interval << ", right_close_interval = " << _right_close_interval
+           << " ";
         ss << ")";
         return ss.str();
     }
 
-    size_t max_serialized_size() const override {
-        size_t size = sizeof(Type) + JoinRuntimeFilter::max_serialized_size();
-        // _has_min_max. for backward compatibility.
-        size += 1;
-
+    size_t min_max_serialized_size() const {
+        size_t size = 0;
         if constexpr (!IsSlice<CppType>) {
             size += sizeof(_min) + sizeof(_max);
         } else {
@@ -604,141 +904,79 @@ public:
             size += sizeof(_min.size) + _min.size;
             size += sizeof(_max.size) + _max.size;
         }
-
         return size;
     }
 
-    size_t serialize(int serialize_version, uint8_t* data) const override {
-        size_t offset = 0;
-        if (serialize_version == RF_VERSION) {
-            auto ltype = RuntimeFilterSerializeType::to_serialize_type(Type);
-            memcpy(data + offset, &ltype, sizeof(ltype));
-            offset += sizeof(ltype);
-        } else {
-            auto ltype = to_thrift(Type);
-            memcpy(data + offset, &ltype, sizeof(ltype));
-            offset += sizeof(ltype);
-        }
-
-        offset += JoinRuntimeFilter::serialize(serialize_version, data + offset);
-        memcpy(data + offset, &_has_min_max, sizeof(_has_min_max));
-        offset += sizeof(_has_min_max);
-
+    size_t serialize_minmax(uint8_t* dst) const {
+        uint8_t* begin = dst;
+        memcpy(dst, &_has_min_max, sizeof(_has_min_max));
+        dst += sizeof(_has_min_max);
         if constexpr (!IsSlice<CppType>) {
-            memcpy(data + offset, &_min, sizeof(_min));
-            offset += sizeof(_min);
-            memcpy(data + offset, &_max, sizeof(_max));
-            offset += sizeof(_max);
+            memcpy(dst, &_min, sizeof(_min));
+            dst += sizeof(_min);
+            memcpy(dst, &_max, sizeof(_max));
+            dst += sizeof(_max);
         } else {
-            memcpy(data + offset, &_min.size, sizeof(_min.size));
-            offset += sizeof(_min.size);
-            memcpy(data + offset, &_max.size, sizeof(_max.size));
-            offset += sizeof(_max.size);
+            memcpy(dst, &_min.size, sizeof(_min.size));
+            dst += sizeof(_min.size);
+            memcpy(dst, &_max.size, sizeof(_max.size));
+            dst += sizeof(_max.size);
 
             if (_min.size != 0) {
-                memcpy(data + offset, _min.data, _min.size);
-                offset += _min.size;
+                memcpy(dst, _min.data, _min.size);
+                dst += _min.size;
             }
 
             if (_max.size != 0) {
-                memcpy(data + offset, _max.data, _max.size);
-                offset += _max.size;
+                memcpy(dst, _max.data, _max.size);
+                dst += _max.size;
             }
         }
-        return offset;
+        return dst - begin;
     }
 
-    size_t deserialize(int serialize_version, const uint8_t* data) override {
-        size_t offset = 0;
-        if (serialize_version == RF_VERSION) {
-            RuntimeFilterSerializeType::PrimitiveType ltype = RuntimeFilterSerializeType::to_serialize_type(Type);
-            memcpy(&ltype, data + offset, sizeof(ltype));
-            offset += sizeof(ltype);
-        } else {
-            auto ltype = to_thrift(Type);
-            memcpy(&ltype, data + offset, sizeof(ltype));
-            offset += sizeof(ltype);
-        }
-
-        offset += JoinRuntimeFilter::deserialize(serialize_version, data + offset);
-
-        bool has_min_max = false;
-        memcpy(&has_min_max, data + offset, sizeof(has_min_max));
-        offset += sizeof(has_min_max);
-
-        if (has_min_max) {
-            if constexpr (!IsSlice<CppType>) {
-                memcpy(&_min, data + offset, sizeof(_min));
-                offset += sizeof(_min);
-                memcpy(&_max, data + offset, sizeof(_max));
-                offset += sizeof(_max);
-            } else {
-                _min.data = nullptr;
-                _max.data = nullptr;
-                memcpy(&_min.size, data + offset, sizeof(_min.size));
-                offset += sizeof(_min.size);
-                memcpy(&_max.size, data + offset, sizeof(_max.size));
-                offset += sizeof(_max.size);
-
-                if (_min.size != 0) {
-                    _slice_min.resize(_min.size);
-                    memcpy(_slice_min.data(), data + offset, _min.size);
-                    offset += _min.size;
-                    _min.data = _slice_min.data();
-                }
-
-                if (_max.size != 0) {
-                    _slice_max.resize(_max.size);
-                    memcpy(_slice_max.data(), data + offset, _max.size);
-                    offset += _max.size;
-                    _max.data = _slice_max.data();
-                }
-            }
-        }
-
-        return offset;
-    }
-
-    bool check_equal(const JoinRuntimeFilter& base_rf) const override {
-        if (!JoinRuntimeFilter::check_equal(base_rf)) return false;
-        const auto& rf = static_cast<const RuntimeBloomFilter<Type>&>(base_rf);
+    size_t deserialize_minmax(const uint8_t* dst) {
+        const uint8_t* begin = dst;
         if constexpr (!IsSlice<CppType>) {
-            bool eq = (memcmp(&_min, &rf._min, sizeof(_min)) == 0) && (memcmp(&_max, &rf._max, sizeof(_max)) == 0);
-            if (!eq) return false;
+            memcpy(&_min, dst, sizeof(_min));
+            dst += sizeof(_min);
+            memcpy(&_max, dst, sizeof(_max));
+            dst += sizeof(_max);
         } else {
-            bool eq = (_min == rf._min) && (_max == rf._max);
-            if (!eq) return false;
+            _min.data = nullptr;
+            _max.data = nullptr;
+            memcpy(&_min.size, dst, sizeof(_min.size));
+            dst += sizeof(_min.size);
+            memcpy(&_max.size, dst, sizeof(_max.size));
+            dst += sizeof(_max.size);
+
+            if (_min.size != 0) {
+                _slice_min.resize(_min.size);
+                memcpy(_slice_min.data(), dst, _min.size);
+                dst += _min.size;
+                _min.data = _slice_min.data();
+            }
+
+            if (_max.size != 0) {
+                _slice_max.resize(_max.size);
+                memcpy(_slice_max.data(), dst, _max.size);
+                dst += _max.size;
+                _max.data = _slice_max.data();
+            }
         }
-        return true;
+        return dst - begin;
     }
 
-    // filter zonemap by evaluating
-    // [min_value, max_value] overlapped with [min, max]
-    bool filter_zonemap_with_min_max(const CppType* min_value, const CppType* max_value) const {
-        if (min_value == nullptr || max_value == nullptr) return false;
-        if (*max_value < _min) return true;
-        if (*min_value > _max) return true;
-        return false;
+    void evaluate(const Column* input_column, RunningContext* ctx) const override {
+        t_evaluate<true>(input_column, ctx);
     }
-
-    void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<Column*>& columns,
-                                 RunningContext* ctx) const override {
-        if (columns.empty() || _join_mode == TRuntimeFilterBuildJoinMode::NONE) return;
-        size_t num_rows = columns[0]->size();
-
-        // initialize hash_values.
-        // reuse ctx's hash_values object.
-        std::vector<uint32_t>& _hash_values = ctx->hash_values;
-        // compute hash_values
-        auto use_reduce = !ctx->compatibility && (_join_mode == TRuntimeFilterBuildJoinMode::PARTITIONED ||
-                                                  _join_mode == TRuntimeFilterBuildJoinMode::SHUFFLE_HASH_BUCKET);
-        if (use_reduce) {
-            dispatch_layout<WithModuloArg<ReduceOp>::HashValueCompute>(_global, layout, columns, num_rows,
-                                                                       _hash_partition_bf.size(), _hash_values);
-        } else {
-            dispatch_layout<WithModuloArg<ModuloOp>::HashValueCompute>(_global, layout, columns, num_rows,
-                                                                       _hash_partition_bf.size(), _hash_values);
-        }
+    uint16_t evaluate(const Column* input_column, const std::vector<uint32_t>& hash_values, uint16_t* sel,
+                      uint16_t sel_size, uint16_t* dst_sel) const override {
+        return t_evaluate(input_column, sel, sel_size, dst_sel);
+    }
+    void evaluate(const Column* input_column, const std::vector<uint32_t>& hash_values, uint8_t* selection,
+                  uint16_t from, uint16_t to) const override {
+        t_evaluate(input_column, selection, from, to);
     }
 
 private:
@@ -769,7 +1007,6 @@ private:
             _max = RunTimeTypeLimits<Type>::max_value();
         }
     }
-
     void _init_full_range() {
         if constexpr (IsSlice<CppType>) {
             _max = Slice::max_value();
@@ -798,23 +1035,13 @@ private:
         }
     }
 
-    void _evaluate_min_max(const ContainerType& values, uint8_t* selection, size_t size) const {
-        if constexpr (!IsSlice<CppType>) {
-            const auto* data = values.data();
-            for (size_t i = 0; i < size; i++) {
-                selection[i] = (data[i] >= _min && data[i] <= _max);
-            }
-        } else {
-            memset(selection, 0x1, size);
-        }
-    }
-
-    void _merge_min_max(const RuntimeBloomFilter* bf) {
-        if (bf->_has_min_max) {
-            _min = std::min(_min, bf->_min);
-            _max = std::max(_max, bf->_max);
+    void _merge_min_max(const MinMaxRuntimeFilter* rf) {
+        if (rf->_has_min_max) {
+            _min = std::min(_min, rf->_min);
+            _max = std::max(_max, rf->_max);
 
             if constexpr (IsSlice<CppType>) {
+                std::lock_guard<std::mutex> lk(_slice_mutex);
                 // maybe we are refering to another runtime filter instance
                 // for security we have to copy that back to our instance.
                 if (_min.size != 0 && _min.data != _slice_min.data()) {
@@ -831,6 +1058,252 @@ private:
         }
     }
 
+private:
+    CppType _min;
+    CppType _max;
+    std::string _slice_min;
+    std::string _slice_max;
+    mutable std::mutex _slice_mutex;
+    bool _has_min_max = true;
+    bool _left_close_interval = true;
+    bool _right_close_interval = true;
+};
+
+/// `RuntimeMembershipFilter` and `MinMaxRuntimeFilter` together form ComposedRuntimeFilter.
+/// `ComposedRuntimeFilter::evaluate` first uses `MinMaxRuntimeFilter::evaluate` then `RuntimeMembershipFilter::evaluate`.
+/// Therefore, `RuntimeMembershipFilter::evaluate` needs to check the existing value of `selection_filter`.
+class RuntimeMembershipFilter : public RuntimeFilter {
+public:
+    ~RuntimeMembershipFilter() override = default;
+
+    virtual void init(size_t num_elements) { _size = num_elements; }
+    virtual LogicalType logical_type() const = 0;
+
+    size_t size() const { return _size; }
+
+    RuntimeMembershipFilter* get_membership_filter() override { return this; }
+
+    void concat(RuntimeFilter* rf) override {
+        RuntimeFilter::concat(rf);
+
+        const auto* other = down_cast<RuntimeMembershipFilter*>(rf);
+        _join_mode = other->_join_mode;
+        _size += other->_size;
+    }
+
+    void set_global() { _global = true; }
+    bool is_global() const { return _global; }
+    void set_join_mode(int8_t join_mode) { _join_mode = join_mode; }
+    int8_t join_mode() const { return _join_mode; }
+
+    void insert_null() { _has_null = true; }
+
+protected:
+    bool _global = false;
+    int8_t _join_mode = 0;
+    size_t _size = 0; // The number of elements in the filter.
+};
+
+/// The join runtime filter implement by bloom filter.
+template <LogicalType Type>
+class TRuntimeBloomFilter final : public RuntimeMembershipFilter {
+public:
+    using CppType = RunTimeCppType<Type>;
+    using ColumnType = RunTimeColumnType<Type>;
+    using ContainerType = RunTimeProxyContainerType<Type>;
+
+    TRuntimeBloomFilter() = default;
+    explicit TRuntimeBloomFilter(const RuntimeMembershipFilter& base) : RuntimeMembershipFilter(base) {}
+    ~TRuntimeBloomFilter() override = default;
+
+    RuntimeFilterSerializeType type() const override { return RuntimeFilterSerializeType::BLOOM_FILTER; }
+
+    void init(size_t num_elements) override {
+        RuntimeMembershipFilter::init(num_elements);
+        _bf.init(_size);
+    }
+    LogicalType logical_type() const override { return Type; }
+
+    void clear_bf() override;
+    bool can_use_bf() const override {
+        if (_hash_partition_bf.empty()) {
+            return _bf.can_use();
+        }
+        return _hash_partition_bf[0].can_use();
+    }
+    size_t bf_alloc_size() const override {
+        if (_hash_partition_bf.empty()) {
+            return _bf.get_alloc_size();
+        }
+        return std::accumulate(
+                _hash_partition_bf.begin(), _hash_partition_bf.end(), 0ull,
+                [](size_t total, const SimdBlockFilter& bf) -> size_t { return total + bf.get_alloc_size(); });
+    }
+
+    size_t num_hash_partitions() const override { return _hash_partition_bf.size(); }
+
+    void merge(const RuntimeFilter* rf) override {
+        RuntimeMembershipFilter::merge(rf);
+
+        auto* other = down_cast<const TRuntimeBloomFilter*>(rf);
+        _bf.merge(other->_bf);
+    }
+
+    void concat(RuntimeFilter* rf) override {
+        RuntimeMembershipFilter::concat(rf);
+
+        auto* other = down_cast<TRuntimeBloomFilter*>(rf);
+        if (other->_hash_partition_bf.empty()) {
+            _hash_partition_bf.emplace_back(std::move(other->_bf));
+        } else {
+            for (auto&& bf : other->_hash_partition_bf) {
+                _hash_partition_bf.emplace_back(std::move(bf));
+            }
+        }
+    }
+
+    size_t max_serialized_size() const override;
+    size_t serialize(int serialize_version, uint8_t* data) const override;
+    size_t deserialize(int serialize_version, const uint8_t* data) override;
+
+    TRuntimeBloomFilter* create_empty(ObjectPool* pool) override {
+        auto* p = pool->add(new TRuntimeBloomFilter());
+        return p;
+    }
+
+    size_t compute_hash(CppType value) const {
+        if constexpr (IsSlice<CppType>) {
+            return SliceHash()(value);
+        } else {
+            return phmap_mix<sizeof(size_t)>()(std::hash<CppType>()(value));
+        }
+    }
+
+    void insert(const CppType& value) {
+        if (LIKELY(_bf.can_use())) {
+            size_t hash = compute_hash(value);
+            _bf.insert_hash(hash);
+        }
+    }
+
+    void insert_into_hash_partitions(const CppType& value) {
+        DCHECK(!_hash_partition_bf.empty());
+        size_t hash = compute_hash(value);
+        for (auto& bf : _hash_partition_bf) {
+            if (LIKELY(bf.can_use())) {
+                bf.insert_hash(hash);
+            }
+        }
+    }
+
+    void evaluate(const Column* input_column, RunningContext* ctx) const override {
+        if (!_hash_partition_bf.empty()) {
+            return _hash_partition_bf[0].can_use() ? _t_evaluate<true, true>(input_column, ctx)
+                                                   : _t_evaluate<true, false>(input_column, ctx);
+        } else {
+            return _bf.can_use() ? _t_evaluate<false, true>(input_column, ctx)
+                                 : _t_evaluate<false, false>(input_column, ctx);
+        }
+    }
+
+    uint16_t evaluate(const Column* input_column, const std::vector<uint32_t>& hash_values, uint16_t* sel,
+                      uint16_t sel_size, uint16_t* dst_sel) const override {
+        if (!_hash_partition_bf.empty()) {
+            return _hash_partition_bf[0].can_use()
+                           ? _t_evaluate<true, true>(input_column, hash_values, sel, sel_size, dst_sel)
+                           : _t_evaluate<true, false>(input_column, hash_values, sel, sel_size, dst_sel);
+        } else {
+            return _bf.can_use() ? _t_evaluate<false, true>(input_column, hash_values, sel, sel_size, dst_sel)
+                                 : _t_evaluate<false, false>(input_column, hash_values, sel, sel_size, dst_sel);
+        }
+    }
+
+    void evaluate(const Column* input_column, const std::vector<uint32_t>& hash_values, uint8_t* selection,
+                  uint16_t from, uint16_t to) const override {
+        if (!_hash_partition_bf.empty()) {
+            return _hash_partition_bf[0].can_use()
+                           ? _t_evaluate<true, true>(input_column, hash_values, selection, from, to)
+                           : _t_evaluate<true, false>(input_column, hash_values, selection, from, to);
+        } else {
+            return _bf.can_use() ? _t_evaluate<false, true>(input_column, hash_values, selection, from, to)
+                                 : _t_evaluate<false, false>(input_column, hash_values, selection, from, to);
+        }
+    }
+
+    void intersect(const RuntimeFilter* rf) override { DCHECK(false) << "unsupported"; }
+
+    std::string debug_string() const override {
+        LogicalType ltype = Type;
+        std::stringstream ss;
+        ss << "RuntimeBF(type = " << ltype << ", size = " << _size << ", has_null = " << _has_null
+           << ", can_use_bf = " << can_use_bf();
+        ss << ")";
+        return ss.str();
+    }
+
+    void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
+                                 RunningContext* ctx) const override {
+        if (columns.empty() || _join_mode == TRuntimeFilterBuildJoinMode::NONE) return;
+        size_t num_rows = columns[0]->size();
+
+        // initialize hash_values.
+        // reuse ctx's hash_values object.
+        std::vector<uint32_t>& _hash_values = ctx->hash_values;
+        _hash_values.resize(num_rows);
+        // compute hash_values
+        auto use_reduce = !ctx->compatibility && (_join_mode == TRuntimeFilterBuildJoinMode::PARTITIONED ||
+                                                  _join_mode == TRuntimeFilterBuildJoinMode::SHUFFLE_HASH_BUCKET);
+        if (use_reduce) {
+            dispatch_layout<WithModuloArg<ReduceOp, FullScanIterator>::HashValueCompute>(
+                    _global, layout, columns, _hash_partition_bf.size(), FullScanIterator(_hash_values, num_rows));
+        } else {
+            dispatch_layout<WithModuloArg<ModuloOp, FullScanIterator>::HashValueCompute>(
+                    _global, layout, columns, _hash_partition_bf.size(), FullScanIterator(_hash_values, num_rows));
+        }
+    }
+    void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
+                                 uint16_t* sel, uint16_t sel_size, std::vector<uint32_t>& hash_values) const override {
+        if (columns.empty() || _join_mode == TRuntimeFilterBuildJoinMode::NONE) return;
+
+        size_t num_rows = columns[0]->size();
+        DCHECK_EQ(hash_values.size(), num_rows);
+
+        auto use_reduce = (_join_mode == TRuntimeFilterBuildJoinMode::PARTITIONED ||
+                           _join_mode == TRuntimeFilterBuildJoinMode::SHUFFLE_HASH_BUCKET);
+        if (use_reduce) {
+            dispatch_layout<WithModuloArg<ReduceOp, SelectedIndexIterator>::HashValueCompute>(
+                    _global, layout, columns, _hash_partition_bf.size(),
+                    SelectedIndexIterator(hash_values, sel, sel_size));
+        } else {
+            dispatch_layout<WithModuloArg<ModuloOp, SelectedIndexIterator>::HashValueCompute>(
+                    _global, layout, columns, _hash_partition_bf.size(),
+                    SelectedIndexIterator(hash_values, sel, sel_size));
+        }
+    }
+
+    void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
+                                 uint8_t* selection, uint16_t from, uint16_t to,
+                                 std::vector<uint32_t>& hash_values) const override {
+        if (columns.empty() || _join_mode == TRuntimeFilterBuildJoinMode::NONE) return;
+        size_t num_rows = columns[0]->size();
+        DCHECK_EQ(hash_values.size(), num_rows);
+        auto use_reduce = (_join_mode == TRuntimeFilterBuildJoinMode::PARTITIONED ||
+                           _join_mode == TRuntimeFilterBuildJoinMode::SHUFFLE_HASH_BUCKET);
+        if (use_reduce) {
+            dispatch_layout<WithModuloArg<ReduceOp, SelectionIterator>::HashValueCompute>(
+                    _global, layout, columns, _hash_partition_bf.size(),
+                    SelectionIterator(hash_values, selection, from, to));
+
+        } else {
+            dispatch_layout<WithModuloArg<ModuloOp, SelectionIterator>::HashValueCompute>(
+                    _global, layout, columns, _hash_partition_bf.size(),
+                    SelectionIterator(hash_values, selection, from, to));
+        }
+    }
+
+    bool test_data(CppType value) const { return _test_data(value); }
+
+private:
     bool _test_data(CppType value) const {
         DCHECK(_bf.can_use());
         size_t hash = compute_hash(value);
@@ -861,77 +1334,545 @@ private:
         }
     }
 
+    template <bool hash_partition>
+    bool _rf_test_data(const CppType& data, const uint32_t hash_value) const {
+        if constexpr (hash_partition) {
+            return _test_data_with_hash(data, hash_value);
+        } else {
+            return _test_data(data);
+        }
+    }
+
     // `multi_partition` parameters means if this runtime filter has multiple `simd-block-filter` underneath.
     // for local runtime filter, it only has once `simd-block-filter`, and `multi_partition` is false.
     // and for global runtime filter, since it concates multiple runtime filters from partitions
     // so it has multiple `simd-block-filter` and `multi_partition` is true.
     // For more information, you can refers to doc `shuffle-aware runtime filter`.
     template <bool multi_partition = false, bool can_use_bf = true>
-    void _t_evaluate(Column* input_column, RunningContext* ctx) const {
+    void _t_evaluate(const Column* input_column, RunningContext* ctx) const {
         size_t size = input_column->size();
-        Filter& _selection_filter = ctx->use_merged_selection ? ctx->merged_selection : ctx->selection;
-        _selection_filter.resize(size);
-        uint8_t* _selection = _selection_filter.data();
+        Filter& selection_filter = ctx->use_merged_selection ? ctx->merged_selection : ctx->selection;
+        selection_filter.resize(size);
+        uint8_t* selection = selection_filter.data();
 
         // reuse ctx's hash_values object.
-        HashValues& _hash_values = ctx->hash_values;
+        HashValues& hash_values = ctx->hash_values;
         if constexpr (multi_partition) {
-            DCHECK_LE(size, _hash_values.size());
+            DCHECK_LE(size, hash_values.size());
         }
         if (input_column->is_constant()) {
             const auto* const_column = down_cast<const ConstColumn*>(input_column);
             if (const_column->only_null()) {
-                _selection[0] = _has_null;
+                selection[0] = _has_null;
             } else {
-                const auto& input_data = GetContainer<Type>().get_data(const_column->data_column());
-                _evaluate_min_max(input_data, _selection, 1);
+                const auto& input_data = GetContainer<Type>::get_data(const_column->data_column());
                 if constexpr (can_use_bf) {
-                    _rf_test_data<multi_partition>(_selection, input_data, _hash_values, 0);
+                    _rf_test_data<multi_partition>(selection, input_data, hash_values, 0);
                 }
             }
-            uint8_t sel = _selection[0];
-            memset(_selection, sel, size);
+            uint8_t sel = selection[0];
+            memset(selection, sel, size);
         } else if (input_column->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(input_column);
-            const auto& input_data = GetContainer<Type>().get_data(nullable_column->data_column());
-            _evaluate_min_max(input_data, _selection, size);
+            const auto& input_data = GetContainer<Type>::get_data(nullable_column->data_column());
             if (nullable_column->has_null()) {
                 const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
                 for (int i = 0; i < size; i++) {
                     if (null_data[i]) {
-                        _selection[i] = _has_null;
+                        selection[i] = _has_null;
                     } else {
                         if constexpr (can_use_bf) {
-                            _rf_test_data<multi_partition>(_selection, input_data, _hash_values, i);
+                            _rf_test_data<multi_partition>(selection, input_data, hash_values, i);
                         }
                     }
                 }
             } else {
                 if constexpr (can_use_bf) {
                     for (int i = 0; i < size; ++i) {
-                        _rf_test_data<multi_partition>(_selection, input_data, _hash_values, i);
+                        _rf_test_data<multi_partition>(selection, input_data, hash_values, i);
                     }
                 }
             }
         } else {
-            const auto& input_data = GetContainer<Type>().get_data(input_column);
-            _evaluate_min_max(input_data, _selection, size);
+            const auto& input_data = GetContainer<Type>::get_data(input_column);
             if constexpr (can_use_bf) {
                 for (int i = 0; i < size; ++i) {
-                    _rf_test_data<multi_partition>(_selection, input_data, _hash_values, i);
+                    _rf_test_data<multi_partition>(selection, input_data, hash_values, i);
+                }
+            }
+        }
+    }
+
+    template <bool multi_partition = false, bool can_use_bf = true>
+    uint16_t _t_evaluate(const Column* column, const std::vector<uint32_t>& hash_values, uint16_t* sel,
+                         uint16_t sel_size, uint16_t* dst_sel) const {
+        if constexpr (multi_partition) {
+            CHECK_EQ(column->size(), hash_values.size())
+                    << "hash values size not equal to sel_size, " << column->size() << ", " << hash_values.size();
+        }
+        CHECK(dst_sel != nullptr) << "dst_sel must be set";
+        CHECK(!column->is_constant()) << "not support constant column";
+        uint16_t new_size = 0;
+        if (column->is_nullable()) {
+            const auto* nullable_column = down_cast<const NullableColumn*>(column);
+            const auto& data = GetContainer<Type>::get_data(nullable_column->data_column());
+            if (nullable_column->has_null()) {
+                const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
+                for (int i = 0; i < sel_size; i++) {
+                    uint16_t idx = sel[i];
+                    dst_sel[new_size] = idx;
+                    if (null_data[idx]) {
+                        new_size += _has_null;
+                    } else {
+                        if constexpr (can_use_bf) {
+                            new_size +=
+                                    _rf_test_data<multi_partition>(data[idx], multi_partition ? hash_values[idx] : 0);
+                        } else {
+                            new_size++;
+                        }
+                    }
+                }
+            } else {
+                if constexpr (can_use_bf) {
+                    for (int i = 0; i < sel_size; ++i) {
+                        uint16_t idx = sel[i];
+                        dst_sel[new_size] = idx;
+                        new_size += _rf_test_data<multi_partition>(data[idx], multi_partition ? hash_values[idx] : 0);
+                    }
+                } else {
+                    if (sel != dst_sel) {
+                        memcpy(dst_sel, sel, sel_size * sizeof(uint16_t));
+                    }
+                    new_size = sel_size;
+                }
+            }
+        } else {
+            const auto& data = GetContainer<Type>::get_data(column);
+            if constexpr (can_use_bf) {
+                for (int i = 0; i < sel_size; ++i) {
+                    uint16_t idx = sel[i];
+                    dst_sel[new_size] = idx;
+                    new_size += _rf_test_data<multi_partition>(data[idx], multi_partition ? hash_values[idx] : 0);
+                }
+            } else {
+                if (sel != dst_sel) {
+                    memcpy(dst_sel, sel, sel_size * sizeof(uint16_t));
+                }
+                new_size = sel_size;
+            }
+        }
+        return new_size;
+    }
+
+    template <bool multi_partition = false, bool can_use_bf = true>
+    void _t_evaluate(const Column* column, const std::vector<uint32_t>& hash_values, uint8_t* selection, uint16_t from,
+                     uint16_t to) const {
+        if constexpr (multi_partition) {
+            CHECK_EQ(column->size(), hash_values.size())
+                    << "hash values size not equal to column size, " << column->size() << ", " << hash_values.size();
+        }
+        CHECK(!column->is_constant()) << "not support constant column";
+        if (column->is_nullable()) {
+            const auto* nullable_column = down_cast<const NullableColumn*>(column);
+            const auto& data = GetContainer<Type>::get_data(nullable_column->data_column());
+            if (nullable_column->has_null()) {
+                const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
+                for (uint16_t i = from; i < to; i++) {
+                    if (null_data[i]) {
+                        selection[i] = _has_null;
+                    } else if (selection[i]) {
+                        if constexpr (can_use_bf) {
+                            selection[i] =
+                                    _rf_test_data<multi_partition>(data[i], multi_partition ? hash_values[i] : 0);
+                        }
+                    }
+                }
+            } else {
+                if constexpr (can_use_bf) {
+                    for (uint16_t i = from; i < to; i++) {
+                        if (selection[i]) {
+                            selection[i] =
+                                    _rf_test_data<multi_partition>(data[i], multi_partition ? hash_values[i] : 0);
+                        }
+                    }
+                }
+            }
+        } else {
+            const auto& data = GetContainer<Type>::get_data(column);
+            if constexpr (can_use_bf) {
+                for (uint16_t i = from; i < to; i++) {
+                    if (selection[i]) {
+                        selection[i] = _rf_test_data<multi_partition>(data[i], multi_partition ? hash_values[i] : 0);
+                    }
                 }
             }
         }
     }
 
 private:
-    CppType _min;
-    CppType _max;
-    std::string _slice_min;
-    std::string _slice_max;
-    bool _has_min_max = true;
-    bool _left_close_interval = true;
-    bool _right_close_interval = true;
+    SimdBlockFilter _bf;
+    std::vector<SimdBlockFilter> _hash_partition_bf;
 };
+
+template <LogicalType LT>
+class RuntimeEmptyFilter final : public RuntimeMembershipFilter {
+public:
+    using CppType = RunTimeCppType<LT>;
+    using ColumnType = RunTimeColumnType<LT>;
+    using ContainerType = RunTimeProxyContainerType<LT>;
+
+    RuntimeEmptyFilter() = default;
+    explicit RuntimeEmptyFilter(const RuntimeMembershipFilter& base) : RuntimeMembershipFilter(base) {}
+    ~RuntimeEmptyFilter() override = default;
+
+    RuntimeFilterSerializeType type() const override { return RuntimeFilterSerializeType::EMPTY_FILTER; }
+
+    void init(size_t num_elements) override { RuntimeMembershipFilter::init(num_elements); }
+    LogicalType logical_type() const override { return LT; }
+
+    bool can_use_bf() const override { return false; }
+
+    /// `ComposedRuntimeFilter::evaluate` first uses `MinMaxRuntimeFilter::evaluate` then `RuntimeEmptyFilter::evaluate`.
+    /// `MinMaxRuntimeFilter::evaluate` has already considered min, max, and has_null and set proper initial value to `selection_filter`.
+    /// Therefore, `evaluate` here need do nothing.
+    void evaluate(const Column* input_column, RunningContext* ctx) const override {}
+    void evaluate(const Column* input_column, const std::vector<uint32_t>& hash_values, uint8_t* selection,
+                  uint16_t from, uint16_t to) const override {}
+    uint16_t evaluate(const Column* input_column, const std::vector<uint32_t>& hash_values, uint16_t* sel,
+                      uint16_t sel_size, uint16_t* dst_sel) const override {
+        return sel_size;
+    }
+
+    std::string debug_string() const override;
+
+    size_t max_serialized_size() const override;
+    size_t serialize(int serialize_version, uint8_t* data) const override;
+    size_t deserialize(int serialize_version, const uint8_t* data) override;
+
+    void intersect(const RuntimeFilter* rf) override {
+        DCHECK(false) << "RuntimeEmptyFilter does not support intersect";
+    }
+
+    void insert_into_hash_partitions(const CppType& value) {
+        DCHECK(false) << "RuntimeEmptyFilter does not support insert_skew_values";
+    }
+
+    RuntimeFilter* create_empty(ObjectPool* pool) override { return pool->add(new RuntimeEmptyFilter()); }
+
+    void insert(const CppType& value) {}
+};
+
+template <LogicalType LT>
+concept BitsetSupportedLogicalType = (lt_is_boolean<LT> || lt_is_date<LT> || lt_is_integer<LT> ||
+                                      lt_is_decimal<LT>)&&sizeof(RunTimeCppType<LT>) <= sizeof(int64_t);
+
+template <LogicalType LT>
+class Bitset {
+public:
+    using CppType = RunTimeCppType<LT>;
+
+    static_assert(BitsetSupportedLogicalType<LT>, "Bitset filter only support boolean, date, integer and decimal type");
+
+    void set_min_max(CppType min_value, CppType max_value) {
+        _min_value = min_value;
+        _max_value = max_value;
+    }
+    void init();
+
+    void insert(const CppType& value);
+
+    template <bool CheckRange>
+    ALWAYS_INLINE bool contains(const CppType& value, uint8_t selected) const {
+        bool matched = selected != 0;
+        if constexpr (CheckRange) {
+            matched &= (_min_value <= value) & (value <= _max_value);
+        }
+        // matched_mask = matched ? 0xFFFF'FFFF : 0x0000'0000
+        const uint64_t matched_mask = ~(static_cast<uint64_t>(matched) - 1);
+
+        const uint64_t bucket = _value_interval(value) & matched_mask;
+        const uint64_t group = bucket / 8;
+        const uint64_t index_in_group = bucket % 8;
+        matched &= (_bitset[group] & (1 << index_in_group)) != 0;
+
+        return matched;
+    }
+
+    template <bool CheckRange>
+    void contains_batch(uint8_t* __restrict selection, const CppType* __restrict values, size_t from, size_t to) const;
+    template <bool CheckRange, bool NullIsTrue>
+    void contains_batch(uint8_t* __restrict selection, const CppType* __restrict values,
+                        const uint8_t* __restrict is_nulls, size_t from, size_t to) const;
+
+    /// Whether the bitset contains at least one value in the range [min_value, max_value]
+    bool contains_range(const CppType& min_value, const CppType& max_value) const;
+
+    CppType min_value() const { return _min_value; }
+    CppType max_value() const { return _max_value; }
+    size_t value_interval() const { return _value_interval(_max_value); }
+    size_t size() const { return _bitset.size(); }
+    const uint8_t* data() const { return _bitset.data(); }
+    uint8_t* data() { return _bitset.data(); }
+
+    static auto to_numeric(const CppType& value) {
+        if constexpr (std::is_same_v<CppType, DateValue>) {
+            return static_cast<DateValue::type>(value);
+        } else {
+            return value;
+        }
+    }
+
+private:
+    size_t _value_interval(const CppType& value) const {
+        return static_cast<size_t>(to_numeric(value)) - to_numeric(_min_value);
+    }
+
+    CppType _min_value;
+    CppType _max_value;
+    std::vector<uint8_t> _bitset;
+};
+
+/// RuntimeBitsetFilter only support BROADCAST join.
+template <LogicalType LT>
+class RuntimeBitsetFilter final : public RuntimeMembershipFilter {
+public:
+    using CppType = RunTimeCppType<LT>;
+    using ColumnType = RunTimeColumnType<LT>;
+    using ContainerType = RunTimeProxyContainerType<LT>;
+
+    RuntimeBitsetFilter() = default;
+    explicit RuntimeBitsetFilter(const RuntimeMembershipFilter& base) : RuntimeMembershipFilter(base) {}
+    ~RuntimeBitsetFilter() override = default;
+
+    RuntimeFilterSerializeType type() const override { return RuntimeFilterSerializeType::BITSET_FILTER; }
+
+    void init(size_t num_elements) override;
+    LogicalType logical_type() const override { return LT; }
+
+    bool can_use_bf() const override { return true; }
+    size_t bf_alloc_size() const override {
+        return sizeof(_bitset.min_value()) + sizeof(_bitset.max_value()) + sizeof(_bitset.size()) + _bitset.size();
+    }
+
+    void evaluate(const Column* input_column, RunningContext* ctx) const override;
+    void evaluate(const Column* input_column, const std::vector<uint32_t>& hash_values, uint8_t* selection,
+                  uint16_t from, uint16_t to) const override;
+    uint16_t evaluate(const Column* input_column, const std::vector<uint32_t>& hash_values, uint16_t* sel,
+                      uint16_t sel_size, uint16_t* dst_sel) const override;
+
+    std::string debug_string() const override;
+
+    size_t max_serialized_size() const override;
+    size_t serialize(int serialize_version, uint8_t* data) const override;
+    size_t deserialize(int serialize_version, const uint8_t* data) override;
+
+    void intersect(const RuntimeFilter* rf) override {
+        DCHECK(false) << "RuntimeBitsetFilter does not support intersect";
+    }
+
+    void insert_into_hash_partitions(const CppType& value) {
+        DCHECK(false) << "RuntimeEmptyFilter does not support insert_skew_values";
+    }
+
+    /// RuntimeBitsetFilter only support for broadcast join, so `merge` and `concat` are not supported.
+    void merge(const RuntimeFilter* rf) override { DCHECK(false) << "RuntimeBitsetFilter does not support merge"; }
+    void concat(RuntimeFilter* rf) override { DCHECK(false) << "RuntimeBitsetFilter does not support concat"; }
+
+    RuntimeFilter* create_empty(ObjectPool* pool) override { return pool->add(new RuntimeBitsetFilter()); }
+
+    void set_min_max(CppType min_value, CppType max_value) { _bitset.set_min_max(min_value, max_value); }
+
+    void insert(const CppType& value) { _bitset.insert(value); }
+
+    static auto to_numeric(const CppType& value) { return Bitset<LT>::to_numeric(value); }
+
+    const Bitset<LT>& bitset() const { return _bitset; }
+
+private:
+    template <bool null_is_true>
+    void _evaluate_vectorized(const Column* __restrict input_column, uint8_t* __restrict selection, size_t from,
+                              size_t to) const;
+    template <bool null_is_true>
+    uint16_t _evaluate_branchless(const Column* __restrict input_column, const std::vector<uint32_t>& hash_values,
+                                  uint16_t* __restrict sel, uint16_t sel_size, uint16_t* dst_sel) const;
+
+    bool _test_data(const CppType& value, uint8_t selected) const {
+        return _bitset.template contains<false /*CheckRange*/>(value, selected);
+    }
+
+    Bitset<LT> _bitset;
+};
+
+template <typename T>
+concept DerivedFromMembershipFilter = std::is_base_of_v<RuntimeMembershipFilter, T>;
+
+template <LogicalType Type, DerivedFromMembershipFilter MembershipFilter>
+class ComposedRuntimeFilter final : public RuntimeFilter {
+public:
+    using CppType = RunTimeCppType<Type>;
+    using ColumnType = RunTimeColumnType<Type>;
+    using ContainerType = RunTimeProxyContainerType<Type>;
+
+    ComposedRuntimeFilter() = default;
+    ComposedRuntimeFilter(const MinMaxRuntimeFilter<Type>& min_max_filter,
+                          const RuntimeMembershipFilter& membership_filter)
+            : _membership_filter(membership_filter), _min_max_filter(min_max_filter) {}
+    ~ComposedRuntimeFilter() override = default;
+
+    RuntimeFilterSerializeType type() const override { return membership_filter().type(); }
+
+    size_t num_hash_partitions() const override { return _membership_filter.num_hash_partitions(); }
+
+    const RuntimeFilter* get_min_max_filter() const override { return &_min_max_filter; }
+    MembershipFilter* get_membership_filter() override { return &_membership_filter; }
+
+    ComposedRuntimeFilter* create_empty(ObjectPool* pool) override {
+        auto* p = pool->add(new ComposedRuntimeFilter());
+        return p;
+    }
+
+    void insert(const CppType& value) {
+        membership_filter().insert(value);
+        min_max_filter().insert(value);
+    }
+
+    void insert_skew_values(const CppType& value) {
+        _membership_filter.insert_into_hash_partitions(value);
+        min_max_filter().insert(value);
+    }
+
+    void insert_null() {
+        _has_null = true;
+        _membership_filter.insert_null();
+        _min_max_filter.insert_null();
+    }
+
+    MinMaxRuntimeFilter<Type>& min_max_filter() { return _min_max_filter; }
+    const MinMaxRuntimeFilter<Type>& min_max_filter() const { return _min_max_filter; }
+
+    MembershipFilter& membership_filter() { return _membership_filter; }
+    const MembershipFilter& membership_filter() const { return _membership_filter; }
+
+    void evaluate(const Column* input_column, RunningContext* ctx) const override {
+        constexpr bool check_null_in_min_max_filter = std::is_same_v<MembershipFilter, RuntimeEmptyFilter<Type>>;
+        _min_max_filter.template t_evaluate<check_null_in_min_max_filter>(input_column, ctx);
+        membership_filter().evaluate(input_column, ctx);
+    }
+
+    uint16_t evaluate(const Column* input_column, const std::vector<uint32_t>& hash_values, uint16_t* sel,
+                      uint16_t sel_size, uint16_t* dst_sel) const override {
+        uint16_t new_size = _min_max_filter.t_evaluate(input_column, sel, sel_size, dst_sel);
+        new_size = membership_filter().evaluate(input_column, hash_values, dst_sel, new_size, dst_sel);
+        return new_size;
+    }
+
+    void evaluate(const Column* input_column, const std::vector<uint32_t>& hash_values, uint8_t* selection,
+                  uint16_t from, uint16_t to) const override {
+        _min_max_filter.t_evaluate(input_column, selection, from, to);
+        membership_filter().evaluate(input_column, hash_values, selection, from, to);
+    }
+
+    void merge(const RuntimeFilter* rf) override {
+        RuntimeFilter::merge(rf);
+        auto* other = down_cast<const ComposedRuntimeFilter*>(rf);
+        membership_filter().merge(&other->membership_filter());
+        min_max_filter().merge(&other->min_max_filter());
+    }
+
+    void intersect(const RuntimeFilter* rf) override { DCHECK(false) << "unsupported"; }
+
+    void concat(RuntimeFilter* rf) override {
+        RuntimeFilter::concat(rf);
+        auto* other = down_cast<ComposedRuntimeFilter*>(rf);
+        membership_filter().concat(&other->membership_filter());
+        min_max_filter().merge(&other->min_max_filter());
+    }
+
+    std::string debug_string() const override {
+        std::stringstream ss;
+        ss << membership_filter().debug_string();
+        ss << min_max_filter().debug_string();
+        return ss.str();
+    }
+
+    size_t max_serialized_size() const override {
+        size_t size = 0;
+        // 1. logical type
+        size += sizeof(TPrimitiveType::type);
+        // 2. membership filter
+        size += membership_filter().max_serialized_size();
+        // 3. min-max filter
+        size += 1; // _has_min_max. for backward compatibility. serialized in min-max filter.
+        size += min_max_filter().min_max_serialized_size();
+        return size;
+    }
+
+    size_t serialize(int serialize_version, uint8_t* data) const override {
+        DCHECK(serialize_version != RF_VERSION);
+        size_t offset = 0;
+        // 1. logical type
+        auto ltype = to_thrift(Type);
+        memcpy(data + offset, &ltype, sizeof(ltype));
+        offset += sizeof(ltype);
+        // 2. membership filter
+        offset += _membership_filter.serialize(serialize_version, data + offset);
+        // 3. min-max filter
+        offset += _min_max_filter.serialize_minmax(data + offset);
+        return offset;
+    }
+
+    size_t deserialize(int serialize_version, const uint8_t* data) override {
+        DCHECK(serialize_version != RF_VERSION);
+        size_t offset = 0;
+        // 1. logical type
+        auto ltype = to_thrift(Type);
+        memcpy(&ltype, data + offset, sizeof(ltype));
+        offset += sizeof(ltype);
+
+        // 2. membership filter
+        offset += _membership_filter.deserialize(serialize_version, data + offset);
+
+        // 3. min-max filter
+        bool has_min_max = false;
+        memcpy(&has_min_max, data + offset, sizeof(has_min_max));
+        offset += sizeof(has_min_max);
+
+        if (has_min_max) {
+            offset += min_max_filter().deserialize_minmax(data + offset);
+        }
+
+        _has_null = _membership_filter.has_null();
+        if (_has_null) {
+            _min_max_filter.insert_null();
+        }
+
+        return offset;
+    }
+
+    void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
+                                 RunningContext* ctx) const override {
+        membership_filter().compute_partition_index(layout, columns, ctx);
+    }
+    void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
+                                 uint16_t* sel, uint16_t sel_size, std::vector<uint32_t>& hash_values) const override {
+        membership_filter().compute_partition_index(layout, columns, sel, sel_size, hash_values);
+    }
+    void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
+                                 uint8_t* selection, uint16_t from, uint16_t to,
+                                 std::vector<uint32_t>& hash_values) const override {
+        membership_filter().compute_partition_index(layout, columns, selection, from, to, hash_values);
+    }
+
+private:
+    MembershipFilter _membership_filter;
+    MinMaxRuntimeFilter<Type> _min_max_filter;
+};
+
+template <LogicalType Type>
+using ComposedRuntimeBloomFilter = ComposedRuntimeFilter<Type, TRuntimeBloomFilter<Type>>;
+template <LogicalType Type>
+using ComposedRuntimeEmptyFilter = ComposedRuntimeFilter<Type, RuntimeEmptyFilter<Type>>;
+template <LogicalType Type>
+using ComposedRuntimeBitsetFilter = ComposedRuntimeFilter<Type, RuntimeBitsetFilter<Type>>;
 
 } // namespace starrocks

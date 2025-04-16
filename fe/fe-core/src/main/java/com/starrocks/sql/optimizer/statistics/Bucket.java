@@ -15,6 +15,8 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+import java.util.Optional;
+
 public class Bucket {
     private final double lower;
     private final double upper;
@@ -42,5 +44,28 @@ public class Bucket {
 
     public Long getUpperRepeats() {
         return upperRepeats;
+    }
+
+    public boolean isInBucket(double value) {
+        return lower <= value && value <= upper;
+    }
+
+    public Optional<Long> getRowCountInBucket(double value, Long previousBucketCount, double distinctValuesCount,
+                                              boolean useFixedPointEstimation) {
+        if (lower <= value && value < upper) {
+            long rowCount = count - previousBucketCount - upperRepeats;
+
+            if (useFixedPointEstimation) {
+                rowCount = (long) Math.ceil(Math.max(1, rowCount / Math.max(1, (upper - lower))));
+            } else {
+                rowCount = (long) Math.ceil(Math.max(1, rowCount / Math.max(1, distinctValuesCount)));
+            }
+
+            return Optional.of(rowCount);
+        } else if (upper == value) {
+            return Optional.of(upperRepeats);
+        }
+
+        return Optional.empty();
     }
 }

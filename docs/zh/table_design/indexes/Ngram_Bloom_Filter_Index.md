@@ -1,8 +1,9 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+sidebar_position: 40
 ---
 
-# N-Gram bloom filter 索引
+# [Preview] N-Gram bloom filter 索引
 
 N-Gram bloom filter 索引是一种特殊的 [Bloom filter 索引](./Bloomfilter_index.md)，通常用于加速 LIKE 查询或 `ngram_search` 和 `ngram_search_case_insensitive` 函数的运算速度。
 
@@ -45,16 +46,16 @@ N-Gram bloom filter 索引相关参数：
 | ------------------ | -------- | ------------------------------------------------------------ |
 | `index_name`       | 是       | 索引的名称。索引名称必须在表内唯一。                         |
 | `column_name`      | 是       | 创建索引的列名。只能指定一个列名。在上面的示例中，索引的列名为 `k2`。 |
-| `gram_num`         | 是       | 索引列的字符串进行分词后的子串长度。在上面的示例中，`gram_num` 是 `4`。 |
+| `gram_num`         | 否       | 索引列的字符串进行分词后的子串长度。默认值为2。 |
 | `bloom_filter_fpp` | 否       | Bloom filter 的错误概率，范围为 0.0001 到 0.05。默认值为 0.05。较小的值提供更好的过滤效果，但会增加更大的存储开销。 |
-| `case_sensitive`   | 否       | 此索引是否区分大小写。默认值为 `case_sensitive`。            |
+| `case_sensitive`   | 否       | 此索引是否区分大小写。默认值为 `true`。            |
 | `COMMENT`          | 否       | 索引的注释。                                                 |
 
-其他建表相关的参数解释，参见 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。
+其他建表相关的参数解释，参见 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)。
 
 ### 查看 N-Gram bloom filter 索引
 
-您可以使用 [SHOW CREATE TABLE](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_TABLE.md) 或 [SHOW INDEX](../../sql-reference/sql-statements/data-manipulation/SHOW_INDEX.md) 来查看表的所有索引。由于索引创建是异步的，因此只有在成功创建索引后才能看到相应的索引。
+您可以使用 [SHOW CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/SHOW_CREATE_TABLE.md) 或 [SHOW INDEX](../../sql-reference/sql-statements/table_bucket_part_index/SHOW_INDEX.md) 来查看表的所有索引。由于索引创建是异步的，因此只有在成功创建索引后才能看到相应的索引。
 
 ```SQL
 SHOW CREATE TABLE table1;
@@ -63,7 +64,7 @@ SHOW INDEX FROM table1;
 
 ### 修改 N-Gram bloom filter 索引
 
-您可以使用 [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER_TABLE.md) 语句添加和删除 N-Gram bloom filter 索引。
+您可以使用 [ALTER TABLE](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md) 语句添加和删除 N-Gram bloom filter 索引。
 
 - 执行如下语句，在表 `table1` 中为列 `k1` 添加一个新的 N-Gram bloom filter 索引，索引名称为 `new_index_name`。
 
@@ -81,7 +82,7 @@ SHOW INDEX FROM table1;
 
 :::note
 
-修改索引是一个异步操作。您可以执行 [SHOW ALTER TABLE](../../sql-reference/sql-statements/data-manipulation/SHOW_ALTER.md) 来查看此操作的进度。一次只能对表运行一个修改索引任务。
+修改索引是一个异步操作。您可以执行 [SHOW ALTER TABLE](../../sql-reference/sql-statements/table_bucket_part_index/SHOW_ALTER.md) 来查看此操作的进度。一次只能对表运行一个修改索引任务。
 
 :::
 

@@ -34,7 +34,7 @@ void convert_datum_rows_to_chunk(const std::vector<DatumRow>& rows, Chunk* chunk
 
 } // namespace
 
-[[nodiscard]] Status DatumRowIterator::do_get_next(Chunk* chunk) {
+Status DatumRowIterator::do_get_next(Chunk* chunk) {
     if (!_is_eos) {
         convert_datum_rows_to_chunk(_rows, chunk);
         _is_eos = true;
@@ -43,15 +43,15 @@ void convert_datum_rows_to_chunk(const std::vector<DatumRow>& rows, Chunk* chunk
     return Status::EndOfFile("end of empty iterator");
 }
 
-[[nodiscard]] Status MemStateTable::prepare(RuntimeState* state) {
+Status MemStateTable::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-[[nodiscard]] Status MemStateTable::open(RuntimeState* state) {
+Status MemStateTable::open(RuntimeState* state) {
     return Status::OK();
 }
 
-[[nodiscard]] Status MemStateTable::commit(RuntimeState* state) {
+Status MemStateTable::commit(RuntimeState* state) {
     return Status::OK();
 }
 
@@ -65,30 +65,30 @@ bool MemStateTable::_equal_keys(const DatumKeyRow& m_k, const DatumKeyRow& keys)
     return true;
 }
 
-[[nodiscard]] Status MemStateTable::seek(const Columns& keys, StateTableResult& values) const {
+Status MemStateTable::seek(const Columns& keys, StateTableResult& values) const {
     auto num_rows = keys[0]->size();
     auto& found = values.found;
     auto& result_chunk = values.result_chunk;
-    found.resize(num_rows, 0);
+    found.resize(num_rows, false);
     result_chunk = ChunkHelper::new_chunk(_v_schema, num_rows);
     for (size_t i = 0; i < num_rows; i++) {
         auto key_row = _convert_columns_to_key(keys, i);
         if (auto iter = _kv_mapping.find(key_row); iter != _kv_mapping.end()) {
-            found[i] = 1;
+            found[i] = true;
             RETURN_IF_ERROR(_append_datum_row_to_chunk(iter->second, result_chunk));
         }
     }
     return Status::OK();
 }
 
-[[nodiscard]] Status MemStateTable::_append_null_to_chunk(ChunkPtr& result_chunk) const {
+Status MemStateTable::_append_null_to_chunk(ChunkPtr& result_chunk) const {
     for (auto& column : result_chunk->columns()) {
         column->append_nulls(1);
     }
     return Status::OK();
 }
 
-[[nodiscard]] Status MemStateTable::_append_datum_row_to_chunk(const DatumRow& v_row, ChunkPtr& result_chunk) const {
+Status MemStateTable::_append_datum_row_to_chunk(const DatumRow& v_row, ChunkPtr& result_chunk) const {
     DCHECK_EQ(v_row.size(), result_chunk->num_columns());
     auto& columns = result_chunk->columns();
     for (size_t i = 0; i < result_chunk->num_columns(); i++) {
@@ -97,15 +97,14 @@ bool MemStateTable::_equal_keys(const DatumKeyRow& m_k, const DatumKeyRow& keys)
     return Status::OK();
 }
 
-[[nodiscard]] Status MemStateTable::seek(const Columns& keys, const std::vector<uint8_t>& selection,
-                                         StateTableResult& values) const {
+Status MemStateTable::seek(const Columns& keys, const Filter& selection, StateTableResult& values) const {
     DCHECK_LT(0, keys.size());
     auto num_rows = keys[0]->size();
     DCHECK_EQ(selection.size(), num_rows);
 
     auto& found = values.found;
     auto& result_chunk = values.result_chunk;
-    found.resize(num_rows, 0);
+    found.resize(num_rows, false);
     result_chunk = ChunkHelper::new_chunk(_v_schema, num_rows);
     VLOG_ROW << "selection size:" << selection.size() << ", num_rows:" << num_rows
              << ", num_columns:" << result_chunk->num_columns();
@@ -114,7 +113,7 @@ bool MemStateTable::_equal_keys(const DatumKeyRow& m_k, const DatumKeyRow& keys)
             auto key_row = _convert_columns_to_key(keys, i);
             if (auto iter = _kv_mapping.find(key_row); iter != _kv_mapping.end()) {
                 VLOG_ROW << "append key with selection";
-                found[i] = 1;
+                found[i] = true;
                 RETURN_IF_ERROR(_append_datum_row_to_chunk(iter->second, result_chunk));
             } else {
                 VLOG_ROW << "append null without selection";
@@ -126,8 +125,8 @@ bool MemStateTable::_equal_keys(const DatumKeyRow& m_k, const DatumKeyRow& keys)
     return Status::OK();
 }
 
-[[nodiscard]] Status MemStateTable::seek(const Columns& keys, const std::vector<std::string>& projection_columns,
-                                         StateTableResult& values) const {
+Status MemStateTable::seek(const Columns& keys, const std::vector<std::string>& projection_columns,
+                           StateTableResult& values) const {
     return Status::NotSupported("Seek with projection columns is not supported yet.");
 }
 
@@ -204,7 +203,7 @@ DatumKeyRow MemStateTable::_convert_columns_to_key(const Columns& cols, size_t i
     return key_row;
 }
 
-[[nodiscard]] Status MemStateTable::write(RuntimeState* state, const StreamChunkPtr& chunk) {
+Status MemStateTable::write(RuntimeState* state, const StreamChunkPtr& chunk) {
     DCHECK(chunk);
     auto chunk_size = chunk->num_rows();
     if (StreamChunkConverter::has_ops_column(chunk)) {
@@ -231,7 +230,7 @@ DatumKeyRow MemStateTable::_convert_columns_to_key(const Columns& cols, size_t i
     return Status::OK();
 }
 
-[[nodiscard]] Status MemStateTable::reset_epoch(RuntimeState* state) {
+Status MemStateTable::reset_epoch(RuntimeState* state) {
     return Status::OK();
 }
 

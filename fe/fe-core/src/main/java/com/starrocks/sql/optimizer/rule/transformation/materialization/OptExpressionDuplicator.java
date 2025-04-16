@@ -12,19 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UnionFind;
+import com.starrocks.connector.TableVersionRange;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -37,6 +41,7 @@ import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -58,9 +63,11 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import org.apache.iceberg.Snapshot;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 // used in SPJG mv union rewrite
@@ -73,18 +80,15 @@ public class OptExpressionDuplicator {
     // old ColumnRefOperator -> new ColumnRefOperator
     private final Map<ColumnRefOperator, ColumnRefOperator> columnMapping;
     private final ReplaceColumnRefRewriter rewriter;
-    private final Table partitionByTable;
-    private final Column partitionColumn;
     private final boolean partialPartitionRewrite;
     private final OptimizerContext optimizerContext;
+    private final Map<Table, List<Column>> mvRefBaseTableColumns;
 
     public OptExpressionDuplicator(MaterializationContext materializationContext) {
         this.columnRefFactory = materializationContext.getQueryRefFactory();
         this.columnMapping = Maps.newHashMap();
         this.rewriter = new ReplaceColumnRefRewriter(columnMapping);
-        Pair<Table, Column> partitionInfo = materializationContext.getMv().getDirectTableAndPartitionColumn();
-        this.partitionByTable = partitionInfo == null ? null : partitionInfo.first;
-        this.partitionColumn = partitionInfo == null ? null : partitionInfo.second;
+        this.mvRefBaseTableColumns = materializationContext.getMv().getRefBaseTablePartitionColumns();
         this.partialPartitionRewrite = !materializationContext.getMvUpdateInfo().getMvToRefreshPartitionNames().isEmpty();
         this.optimizerContext = materializationContext.getOptimizerContext();
     }
@@ -93,14 +97,39 @@ public class OptExpressionDuplicator {
         this.columnRefFactory = columnRefFactory;
         this.columnMapping = Maps.newHashMap();
         this.rewriter = new ReplaceColumnRefRewriter(columnMapping);
-        this.partitionByTable = null;
-        this.partitionColumn = null;
+        this.mvRefBaseTableColumns = null;
         this.partialPartitionRewrite = false;
         this.optimizerContext = optimizerContext;
     }
 
     public OptExpression duplicate(OptExpression source) {
-        OptExpressionDuplicatorVisitor visitor = new OptExpressionDuplicatorVisitor(optimizerContext, columnMapping, rewriter);
+        return duplicate(source, columnRefFactory, false, false);
+    }
+
+    public OptExpression duplicate(OptExpression source,
+                                   boolean isResetSelectedPartitions) {
+        return duplicate(source, columnRefFactory, isResetSelectedPartitions, false);
+    }
+
+    public OptExpression duplicate(OptExpression source, ColumnRefFactory prevColumnRefFactory) {
+        return duplicate(source, prevColumnRefFactory, false, false);
+    }
+
+    /**
+     * Duplicate the OptExpression tree.
+     *
+     * @param source:                    source OptExpression
+     * @param prevColumnRefFactory:      column ref factory where source OptExpression is from
+     * @param isResetSelectedPartitions: whether to reset selected partitions
+     * @param isRefreshExternalTable:    whether to refresh external table
+     * @return
+     */
+    public OptExpression duplicate(OptExpression source,
+                                   ColumnRefFactory prevColumnRefFactory,
+                                   boolean isResetSelectedPartitions,
+                                   boolean isRefreshExternalTable) {
+        OptExpressionDuplicatorVisitor visitor = new OptExpressionDuplicatorVisitor(optimizerContext, columnMapping, rewriter,
+                prevColumnRefFactory, isResetSelectedPartitions, isRefreshExternalTable);
         return source.getOp().accept(visitor, source, null);
     }
 
@@ -128,13 +157,22 @@ public class OptExpressionDuplicator {
         private final Map<Integer, Integer> cteIdMapping = Maps.newHashMap();
         private final Map<ColumnRefOperator, ColumnRefOperator> columnMapping;
         private final ReplaceColumnRefRewriter rewriter;
+        private final boolean isResetSelectedPartitions;
+        private final boolean isRefreshExternalTable;
+        private final ColumnRefFactory prevColumnRefFactory;
 
         OptExpressionDuplicatorVisitor(OptimizerContext optimizerContext,
                                        Map<ColumnRefOperator, ColumnRefOperator> columnMapping,
-                                       ReplaceColumnRefRewriter rewriter) {
+                                       ReplaceColumnRefRewriter rewriter,
+                                       ColumnRefFactory prevColumnRefFactory,
+                                       boolean isResetSelectedPartitions,
+                                       boolean isRefreshExternalTable) {
             this.optimizerContext = optimizerContext;
             this.columnMapping = columnMapping;
             this.rewriter = rewriter;
+            this.prevColumnRefFactory = prevColumnRefFactory;
+            this.isResetSelectedPartitions = isResetSelectedPartitions;
+            this.isRefreshExternalTable = isRefreshExternalTable;
         }
 
         private List<OptExpression> processChildren(OptExpression optExpression) {
@@ -188,25 +226,44 @@ public class OptExpressionDuplicator {
                 LogicalOlapScanOperator.Builder olapScanBuilder = (LogicalOlapScanOperator.Builder) scanBuilder;
                 if (olapScan.getDistributionSpec() instanceof HashDistributionSpec) {
                     HashDistributionSpec newHashDistributionSpec =
-                            processHashDistributionSpec((HashDistributionSpec) olapScan.getDistributionSpec(),
-                            columnRefFactory, columnMapping);
+                            processHashDistributionSpec((HashDistributionSpec) olapScan.getDistributionSpec());
                     olapScanBuilder.setDistributionSpec(newHashDistributionSpec);
                 }
-                List<ScalarOperator> prunedPartitionPredicates = olapScan.getPrunedPartitionPredicates();
-                if (prunedPartitionPredicates != null && !prunedPartitionPredicates.isEmpty()) {
-                    List<ScalarOperator> newPrunedPartitionPredicates = Lists.newArrayList();
-                    for (ScalarOperator predicate : prunedPartitionPredicates) {
-                        ScalarOperator newPredicate = rewriter.rewrite(predicate);
-                        newPrunedPartitionPredicates.add(newPredicate);
+
+                if (isResetSelectedPartitions) {
+                    olapScanBuilder.setSelectedPartitionId(null)
+                            .setPrunedPartitionPredicates(Lists.newArrayList())
+                            .setSelectedTabletId(Lists.newArrayList());
+                } else {
+                    List<ScalarOperator> prunedPartitionPredicates = olapScan.getPrunedPartitionPredicates();
+                    if (prunedPartitionPredicates != null && !prunedPartitionPredicates.isEmpty()) {
+                        List<ScalarOperator> newPrunedPartitionPredicates = Lists.newArrayList();
+                        for (ScalarOperator predicate : prunedPartitionPredicates) {
+                            ScalarOperator newPredicate = rewriter.rewrite(predicate);
+                            newPrunedPartitionPredicates.add(newPredicate);
+                        }
+                        olapScanBuilder.setPrunedPartitionPredicates(newPrunedPartitionPredicates);
                     }
-                    olapScanBuilder.setPrunedPartitionPredicates(newPrunedPartitionPredicates);
                 }
             } else {
-                try {
-                    ScanOperatorPredicates scanOperatorPredicates = scanOperator.getScanOperatorPredicates();
-                    scanOperatorPredicates.duplicate(rewriter);
-                } catch (AnalysisException e) {
-                    // ignore exception
+                if (isRefreshExternalTable && scanOperator.getOpType() == OperatorType.LOGICAL_ICEBERG_SCAN) {
+                    // refresh iceberg table's metadata
+                    Table refBaseTable = scanOperator.getTable();
+                    IcebergTable cachedIcebergTable = (IcebergTable) refBaseTable;
+                    String catalogName = cachedIcebergTable.getCatalogName();
+                    String dbName = cachedIcebergTable.getCatalogDBName();
+                    TableName tableName = new TableName(catalogName, dbName, cachedIcebergTable.getName());
+                    Table currentTable =
+                            GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new ConnectContext(), tableName)
+                                    .orElse(null);
+                    if (currentTable == null) {
+                        return null;
+                    }
+                    scanBuilder.setTable(currentTable);
+                    TableVersionRange versionRange = TableVersionRange.withEnd(
+                            Optional.ofNullable(((IcebergTable) currentTable).getNativeTable().currentSnapshot())
+                                    .map(Snapshot::snapshotId));
+                    scanBuilder.setTableVersionRange(versionRange);
                 }
             }
 
@@ -214,22 +271,44 @@ public class OptExpressionDuplicator {
 
             if (partialPartitionRewrite
                     && optExpression.getOp() instanceof LogicalOlapScanOperator
-                    && partitionByTable != null) {
+                    && mvRefBaseTableColumns != null) {
                 // maybe partition column is not in the output columns, should add it
 
                 LogicalOlapScanOperator olapScan = (LogicalOlapScanOperator) optExpression.getOp();
                 OlapTable table = (OlapTable) olapScan.getTable();
-                if (table.getId() == partitionByTable.getId()) {
-                    if (!columnRefOperatorColumnMap.containsValue(partitionColumn)) {
-                        ColumnRefOperator partitionColumnRef = newColumnMetaToColRefMap.get(partitionColumn);
-                        columnRefColumnMapBuilder.put(partitionColumnRef, partitionColumn);
+                if (mvRefBaseTableColumns.containsKey(table)) {
+                    List<Column> partitionColumns = mvRefBaseTableColumns.get(table);
+                    for (Column partitionColumn : partitionColumns) {
+                        if (!columnRefOperatorColumnMap.containsValue(partitionColumn) &&
+                                newColumnMetaToColRefMap.containsKey(partitionColumn)) {
+                            ColumnRefOperator partitionColumnRef = newColumnMetaToColRefMap.get(partitionColumn);
+                            columnRefColumnMapBuilder.put(partitionColumnRef, partitionColumn);
+                        }
                     }
                 }
             }
             ImmutableMap<ColumnRefOperator, Column> newColumnRefColumnMap = columnRefColumnMapBuilder.build();
             scanBuilder.setColRefToColumnMetaMap(newColumnRefColumnMap);
 
-            return OptExpression.create(opBuilder.build());
+            // process external table scan operator's predicates
+            LogicalScanOperator newScanOperator = (LogicalScanOperator) opBuilder.build();
+            if (!(scanOperator instanceof LogicalOlapScanOperator)) {
+                processExternalTableScanOperator(newScanOperator);
+            }
+            return OptExpression.create(newScanOperator);
+        }
+
+        private void processExternalTableScanOperator(LogicalScanOperator newScanOperator) {
+            try {
+                ScanOperatorPredicates scanOperatorPredicates = newScanOperator.getScanOperatorPredicates();
+                if (isResetSelectedPartitions) {
+                    scanOperatorPredicates.clear();
+                } else {
+                    scanOperatorPredicates.duplicate(rewriter);
+                }
+            } catch (AnalysisException e) {
+                // ignore exception
+            }
         }
 
         @Override
@@ -312,6 +391,7 @@ public class OptExpressionDuplicator {
                 LogicalFilterOperator.Builder filterBuilder = (LogicalFilterOperator.Builder) opBuilder;
                 filterBuilder.setPredicate(newPredicate);
             }
+            processCommon(opBuilder);
             return OptExpression.create(opBuilder.build(), inputs);
         }
 
@@ -598,49 +678,48 @@ public class OptExpressionDuplicator {
 
         // rewrite shuffle columns and joinEquivalentColumns in HashDistributionSpec
         // because the columns ids have changed
-        private HashDistributionSpec processHashDistributionSpec(
-                HashDistributionSpec originSpec,
-                ColumnRefFactory columnRefFactory,
-                Map<ColumnRefOperator, ColumnRefOperator> columnMapping) {
-
+        private HashDistributionSpec processHashDistributionSpec(HashDistributionSpec originSpec) {
             // HashDistributionDesc
-            List<DistributionCol> newColumns = Lists.newArrayList();
-            for (DistributionCol column : originSpec.getShuffleColumns()) {
-                ColumnRefOperator oldRefOperator = columnRefFactory.getColumnRef(column.getColId());
-                ColumnRefOperator newRefOperator = columnMapping.get(oldRefOperator);
+            final List<DistributionCol> newColumns = Lists.newArrayList();
+            for (DistributionCol distributionCol : originSpec.getShuffleColumns()) {
+                final ColumnRefOperator newRefOperator = getNewDistributionColRef(distributionCol);
                 Preconditions.checkNotNull(newRefOperator);
-                newColumns.add(new DistributionCol(newRefOperator.getId(), column.isNullStrict()));
+                newColumns.add(new DistributionCol(newRefOperator.getId(), distributionCol.isNullStrict()));
             }
             Preconditions.checkState(newColumns.size() == originSpec.getShuffleColumns().size());
-            HashDistributionDesc hashDistributionDesc =
+            final HashDistributionDesc hashDistributionDesc =
                     new HashDistributionDesc(newColumns, originSpec.getHashDistributionDesc().getSourceType());
 
-            EquivalentDescriptor equivDesc = originSpec.getEquivDesc();
-
-            EquivalentDescriptor newEquivDesc = new EquivalentDescriptor(equivDesc.getTableId(), equivDesc.getPartitionIds());
+            final EquivalentDescriptor equivDesc = originSpec.getEquivDesc();
+            final EquivalentDescriptor newEquivDesc = new EquivalentDescriptor(equivDesc.getTableId(),
+                    equivDesc.getPartitionIds());
             updateDistributionUnionFind(newEquivDesc.getNullRelaxUnionFind(), equivDesc.getNullStrictUnionFind());
             updateDistributionUnionFind(newEquivDesc.getNullStrictUnionFind(), equivDesc.getNullRelaxUnionFind());
-
             return new HashDistributionSpec(hashDistributionDesc, newEquivDesc);
         }
 
         private void updateDistributionUnionFind(UnionFind<DistributionCol> newUnionFind,
-                                                UnionFind<DistributionCol> oldUnionFind) {
-
+                                                 UnionFind<DistributionCol> oldUnionFind) {
             for (Set<DistributionCol> distributionColSet : oldUnionFind.getAllGroups()) {
                 DistributionCol first = null;
                 for (DistributionCol next : distributionColSet) {
                     if (first == null) {
                         first = next;
                     }
-                    ColumnRefOperator firstCol = columnRefFactory.getColumnRef(first.getColId());
-                    ColumnRefOperator newFirstCol = columnMapping.get(firstCol).cast();
-
-                    ColumnRefOperator nextCol = columnRefFactory.getColumnRef(next.getColId());
-                    ColumnRefOperator newNextCol = columnMapping.get(nextCol).cast();
+                    final ColumnRefOperator newFirstCol = getNewDistributionColRef(first);
+                    final ColumnRefOperator newNextCol = getNewDistributionColRef(next);
                     newUnionFind.union(first.updateColId(newFirstCol.getId()), next.updateColId(newNextCol.getId()));
                 }
             }
+        }
+
+        private ColumnRefOperator getNewDistributionColRef(DistributionCol col) {
+            int colId = col.getColId();
+            final ColumnRefOperator oldRefOperator = prevColumnRefFactory.getColumnRef(colId);
+            Preconditions.checkArgument(oldRefOperator != null);
+            // use column mapping to find the new ColumnRefOperator
+            ColumnRefOperator newRefOperator = columnMapping.get(oldRefOperator);
+            return newRefOperator;
         }
 
         private void processCommon(Operator.Builder opBuilder) {

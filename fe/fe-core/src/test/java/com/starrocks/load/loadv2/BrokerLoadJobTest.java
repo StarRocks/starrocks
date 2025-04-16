@@ -45,7 +45,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.BrokerFileGroupAggInfo;
@@ -55,6 +55,7 @@ import com.starrocks.load.EtlStatus;
 import com.starrocks.load.FailMsg;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.DataDescription;
@@ -108,21 +109,17 @@ public class BrokerLoadJobTest {
                 loadStmt.getLabel();
                 minTimes = 0;
                 result = labelName;
+
                 labelName.getDbName();
                 minTimes = 0;
                 result = databaseName;
-                globalStateMgr.getDb(databaseName);
-                minTimes = 0;
-                result = database;
+
                 loadStmt.getDataDescriptions();
                 minTimes = 0;
                 result = dataDescriptionList;
                 dataDescription.getTableName();
                 minTimes = 0;
                 result = tableName;
-                database.getTable(tableName);
-                minTimes = 0;
-                result = null;
             }
         };
 
@@ -162,7 +159,7 @@ public class BrokerLoadJobTest {
                 labelName.getLabelName();
                 minTimes = 0;
                 result = label;
-                globalStateMgr.getDb(databaseName);
+                globalStateMgr.getLocalMetastore().getDb(databaseName);
                 minTimes = 0;
                 result = database;
                 loadStmt.getDataDescriptions();
@@ -171,7 +168,7 @@ public class BrokerLoadJobTest {
                 dataDescription.getTableName();
                 minTimes = 0;
                 result = tableName;
-                database.getTable(tableName);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), tableName);
                 minTimes = 0;
                 result = olapTable;
                 dataDescription.getPartitionNames();
@@ -231,7 +228,7 @@ public class BrokerLoadJobTest {
                 labelName.getLabelName();
                 minTimes = 0;
                 result = label;
-                globalStateMgr.getDb(databaseName);
+                globalStateMgr.getLocalMetastore().getDb(databaseName);
                 minTimes = 0;
                 result = database;
                 loadStmt.getDataDescriptions();
@@ -240,7 +237,7 @@ public class BrokerLoadJobTest {
                 dataDescription.getTableName();
                 minTimes = 0;
                 result = tableName;
-                database.getTable(tableName);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), tableName);
                 minTimes = 0;
                 result = olapTable;
                 dataDescription.getPartitionNames();
@@ -296,10 +293,10 @@ public class BrokerLoadJobTest {
                 fileGroupAggInfo.getAllTableIds();
                 minTimes = 0;
                 result = Sets.newHashSet(1L);
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = database;
-                database.getTable(1L);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), 1L);
                 minTimes = 0;
                 result = table;
                 table.getName();
@@ -342,7 +339,8 @@ public class BrokerLoadJobTest {
                                          @Injectable boolean txnOperated,
                                          @Injectable String txnStatusChangeReason,
                                          @Mocked LeaderTaskExecutor leaderTaskExecutor,
-                                         @Mocked GlobalTransactionMgr globalTransactionMgr) throws LoadException, UserException {
+                                         @Mocked GlobalTransactionMgr globalTransactionMgr) throws LoadException,
+            StarRocksException {
         new Expectations() {
             {
                 globalTransactionMgr.beginTransaction(anyLong, Lists.newArrayList(), anyString, (TUniqueId) any,
@@ -390,9 +388,17 @@ public class BrokerLoadJobTest {
         brokerLoadJob2.unprotectedExecuteJob();
         txnOperated = true;
         txnStatusChangeReason = "broker load job timeout";
+        ConnectContext context = new ConnectContext();
+        context.setStartTime();
+        brokerLoadJob2.setConnectContext(context);
+        long createTimestamp = context.getStartTime() - 1;
+        brokerLoadJob2.createTimestamp = createTimestamp;
+        brokerLoadJob2.timeoutSecond = 0;
         brokerLoadJob2.afterAborted(txnState, txnOperated, txnStatusChangeReason);
         idToTasks = Deencapsulation.getField(brokerLoadJob2, "idToTasks");
         Assert.assertEquals(1, idToTasks.size());
+        Assert.assertTrue(brokerLoadJob2.createTimestamp > createTimestamp);
+        Assert.assertEquals(brokerLoadJob2.createTimestamp, context.getStartTime());
 
         // test when txnOperated is false
         BrokerLoadJob brokerLoadJob3 = new BrokerLoadJob();
@@ -414,6 +420,33 @@ public class BrokerLoadJobTest {
         brokerLoadJob4.afterAborted(txnState, txnOperated, txnStatusChangeReason);
         idToTasks = Deencapsulation.getField(brokerLoadJob4, "idToTasks");
         Assert.assertEquals(1, idToTasks.size());
+
+        // test that timeout happens in loading task before the job timeout
+        BrokerLoadJob brokerLoadJob5 = new BrokerLoadJob();
+        new Expectations() {
+            {
+                brokerLoadJob5.isTimeout();
+                result = false;
+            }
+        };
+        brokerLoadJob5.retryTime = 1;
+        brokerLoadJob5.unprotectedExecuteJob();
+        txnOperated = true;
+        txnStatusChangeReason = LoadErrorUtils.BACKEND_BRPC_TIMEOUT.keywords;
+        brokerLoadJob5.afterAborted(txnState, txnOperated, txnStatusChangeReason);
+        idToTasks = Deencapsulation.getField(brokerLoadJob5, "idToTasks");
+        Assert.assertEquals(1, idToTasks.size());
+
+        // test parse error, should not retry
+        BrokerLoadJob brokerLoadJob6 = new BrokerLoadJob();
+        brokerLoadJob6.retryTime = 1;
+        brokerLoadJob6.unprotectedExecuteJob();
+        txnOperated = true;
+        txnStatusChangeReason = "parse error, task failed";
+        brokerLoadJob6.afterAborted(txnState, txnOperated, txnStatusChangeReason);
+        Assert.assertEquals(JobState.CANCELLED, brokerLoadJob6.getState());
+        idToTasks = Deencapsulation.getField(brokerLoadJob6, "idToTasks");
+        Assert.assertEquals(0, idToTasks.size());
     }
 
     @Test
@@ -432,6 +465,55 @@ public class BrokerLoadJobTest {
 
         Map<Long, LoadTask> idToTasks = Deencapsulation.getField(brokerLoadJob, "idToTasks");
         Assert.assertEquals(0, idToTasks.size());
+    }
+
+    @Test
+    public void testTaskFailedUserCancelType(@Injectable long taskId, @Injectable FailMsg failMsg) {
+        GlobalStateMgr.getCurrentState().setEditLog(new EditLog(new ArrayBlockingQueue<>(100)));
+        new MockUp<EditLog>() {
+            @Mock
+            public void logEndLoadJob(LoadJobFinalOperation loadJobFinalOperation) {
+
+            }
+        };
+
+        BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
+        failMsg = new FailMsg(FailMsg.CancelType.USER_CANCEL, "Failed to allocate resource to query: pending timeout");
+        brokerLoadJob.onTaskFailed(taskId, failMsg);
+
+        Map<Long, LoadTask> idToTasks = Deencapsulation.getField(brokerLoadJob, "idToTasks");
+        Assert.assertEquals(0, idToTasks.size());
+    }
+
+    @Test
+    public void testTaskAbortTransactionOnTimeoutFailure(@Mocked GlobalTransactionMgr globalTransactionMgr,
+            @Injectable long taskId, @Injectable FailMsg failMsg) throws StarRocksException {
+        new Expectations() {
+            {
+                globalTransactionMgr.abortTransaction(anyLong, anyLong, anyString);
+                times = 1;
+            }
+        };
+
+        BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
+        failMsg = new FailMsg(FailMsg.CancelType.UNKNOWN, "[E1008]Reached timeout=7200000ms @127.0.0.1:8060");
+        brokerLoadJob.onTaskFailed(taskId, failMsg);
+
+        new Expectations() {
+            {
+                globalTransactionMgr.abortTransaction(anyLong, anyLong, anyString);
+                times = 1;
+                result = new StarRocksException("Artificial exception");
+            }
+        };
+
+        try {
+            BrokerLoadJob brokerLoadJob1 = new BrokerLoadJob();
+            failMsg = new FailMsg(FailMsg.CancelType.UNKNOWN, "[E1008]Reached timeout=7200000ms @127.0.0.1:8060");
+            brokerLoadJob1.onTaskFailed(taskId, failMsg);
+        } catch (Exception e) {
+            Assert.fail("should not throw exception");
+        }
     }
 
     @Test
@@ -567,7 +649,7 @@ public class BrokerLoadJobTest {
                 attachment1.getTaskId();
                 minTimes = 0;
                 result = 1L;
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = database;
             }
@@ -702,7 +784,7 @@ public class BrokerLoadJobTest {
                                        @Injectable LoadTask loadTask1,
                                        @Mocked GlobalStateMgr globalStateMgr,
                                        @Injectable Database database,
-                                       @Mocked GlobalTransactionMgr transactionMgr) throws UserException {
+                                       @Mocked GlobalTransactionMgr transactionMgr) throws StarRocksException {
         BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
         Deencapsulation.setField(brokerLoadJob, "state", JobState.LOADING);
         Map<Long, LoadTask> idToTasks = Maps.newHashMap();
@@ -719,7 +801,7 @@ public class BrokerLoadJobTest {
                 attachment1.getTaskId();
                 minTimes = 0;
                 result = 1L;
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = database;
                 globalStateMgr.getCurrentState().getGlobalTransactionMgr();

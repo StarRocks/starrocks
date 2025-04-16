@@ -268,8 +268,8 @@ values ('1', 'https://starrocks.com/doc?k1=10&k2=3&k1=100'),
 -- !result
 select url_extract_host(url) from test_url_extract_host;
 -- result:
-starrocks.快速.com
 starrocks.com
+starrocks.快速.com
 -- !result
 -- name: test_url_encode
 select url_encode('https://docs.starrocks.io/en-us/latest/quick_start/Deploy');
@@ -463,7 +463,7 @@ PROPERTIES (
     "replication_num" = "1",
     "bucket_size" = "4294967296",
     "storage_volume" = "builtin_storage_volume",
-    "enable_persistent_index" = "false",
+    "enable_persistent_index" = "true",
     "compression" = "LZ4"
 );
 -- result:
@@ -494,5 +494,110 @@ select ngram_search(rowkey, "e6249ba1-5b54-46bf-bfaf-89d69094b757",4) as a from 
 -- !result
 select ngram_search("000073a7-274f-46bf-bfaf-678868cc26cd",rowkey,4) from string_table;
 -- result:
-E: (1064, "ngram function's second parameter must be const")
+E: (1064, "Getting analyzing error from line 1, column 7 to line 1, column 67. Detail message: ngram_search function 's second parameter and third parameter must be constant.")
+-- !result
+select ngram_search("chi","chi",0);
+-- result:
+[REGEX].*ngram search's third parameter must be a positive number.*
+-- !result
+select ngram_search("chi","chi",-1);
+-- result:
+[REGEX].*ngram search's third parameter must be a positive number.*
+-- !result
+select ngram_search(date('2020-06-23'), "2020", 4);
+-- result:
+E: (1064, "Getting analyzing error from line 1, column 7 to line 1, column 49. Detail message: ngram_search function 's first parameter and second parameter must be string type.")
+-- !result
+select sum(result) from ( select ngram_search("normal_string", "normal_string", 5) as result from (   select generate_series    from TABLE(generate_series(0, 4097 - 1)) ) as t1) as t2;
+-- result:
+4097.0
+-- !result
+-- name: test_ngram_search_with_low_cardinality
+CREATE TABLE __row_util_1 (
+  k1 bigint null
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 48
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into __row_util_1 select generate_series from TABLE(generate_series(0, 5000));
+-- result:
+-- !result
+CREATE TABLE left_table (
+    id int,
+    nation string,
+    exsit_hot_value int
+)
+ENGINE=olap
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) buckets 32
+PROPERTIES (
+    "replication_num" = "1" 
+);
+-- result:
+-- !result
+insert into left_table 
+select
+    cast(rand() * 100000000 as int),
+    CASE 
+        WHEN RAND() > 0.8 THEN 'china'
+        WHEN RAND() > 0.6 THEN 'usa'
+        WHEN RAND() > 0.4 THEN 'russian'
+        WHEN RAND() > 0.2 THEN 'canada'
+        ELSE 'japan'
+    END,
+   case when RAND() > 0.99 THEN k1
+       ELSE k1 % 5 
+   END
+from __row_util_1;
+-- result:
+-- !result
+select sum(c0) > 500 from (select ngram_search(nation, 'china', 4) as c0 from left_table)t0;
+-- result:
+1
+-- !result
+-- name: test_lower_upper_utf8
+create table t (
+  id int,
+  name string
+) duplicate key(id)
+distributed by random buckets 3
+properties("replication_num" = "1");
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
+set lower_upper_support_utf8 = true;
+-- result:
+-- !result
+insert into t values(1, 'теКст'), (2, 'ТЕкСТ'), (3, 'теКст hello'), (4, 'ТЕкСТ world'),
+(5, 'München'), (6, 'München Tum'), (7, 'hello WOrld'), (8, ''),
+(9, 'абвгдеёжзийклмнопрстуфхцчшщъыьэюя'), (10, 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ'),
+(11, 'abcdefghijklmnopqrstuvwxyzäöüß'), (12, 'ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜẞ'),
+(13, 'abcçdefgğhıijklmnoöprsştuüvyz'), (14, 'ABCÇDEFGĞHIİJKLMNOÖPRSŞTUÜVYZ'),
+(15, 'ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ'), (16, 'ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ');
+-- result:
+-- !result
+select id, name, lower(name), upper(name) from t order by id;
+-- result:
+1	теКст	текст	ТЕКСТ
+2	ТЕкСТ	текст	ТЕКСТ
+3	теКст hello	текст hello	ТЕКСТ HELLO
+4	ТЕкСТ world	текст world	ТЕКСТ WORLD
+5	München	münchen	MÜNCHEN
+6	München Tum	münchen tum	MÜNCHEN TUM
+7	hello WOrld	hello world	HELLO WORLD
+8			
+9	абвгдеёжзийклмнопрстуфхцчшщъыьэюя	абвгдеёжзийклмнопрстуфхцчшщъыьэюя	АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ
+10	АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ	абвгдеёжзийклмнопрстуфхцчшщъыьэюя	АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ
+11	abcdefghijklmnopqrstuvwxyzäöüß	abcdefghijklmnopqrstuvwxyzäöüß	ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜSS
+12	ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜẞ	abcdefghijklmnopqrstuvwxyzäöüß	ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜẞ
+13	abcçdefgğhıijklmnoöprsştuüvyz	abcçdefgğhıijklmnoöprsştuüvyz	ABCÇDEFGĞHIIJKLMNOÖPRSŞTUÜVYZ
+14	ABCÇDEFGĞHIİJKLMNOÖPRSŞTUÜVYZ	abcçdefgğhii̇jklmnoöprsştuüvyz	ABCÇDEFGĞHIİJKLMNOÖPRSŞTUÜVYZ
+15	ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ	ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ	ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ
+16	ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ	ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ	ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ
 -- !result

@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # bitor
 
-## 功能
+
 
 返回两个数值在按位进行 OR 运算后的结果。
 

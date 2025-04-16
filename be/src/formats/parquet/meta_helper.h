@@ -15,14 +15,11 @@
 #pragma once
 
 #include <glog/logging.h>
-#include <stddef.h>
-#include <stdint.h>
 
 #include <ostream>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
-#include <utility>
 #include <vector>
 
 #include "exec/hdfs_scanner.h"
@@ -47,97 +44,66 @@ namespace starrocks::parquet {
 
 class MetaHelper {
 public:
+    MetaHelper(FileMetaData* file_metadata, bool case_sensitive)
+            : _file_metadata(file_metadata), _case_sensitive(case_sensitive) {}
     virtual ~MetaHelper() = default;
-    virtual void set_existed_column_names(std::unordered_set<std::string>* names) const = 0;
-
-    virtual void build_column_name_2_pos_in_meta(std::unordered_map<std::string, size_t>& column_name_2_pos_in_meta,
-                                                 const tparquet::RowGroup& row_group,
-                                                 const std::vector<SlotDescriptor*>& slots) const = 0;
 
     virtual void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
-                                      std::vector<GroupReaderParam::Column>& read_cols) const = 0;
-
-    virtual const ParquetField* get_parquet_field(const std::string& col_name) const = 0;
-
-    const tparquet::ColumnMetaData* get_column_meta(
-            const std::unordered_map<std::string, size_t>& column_name_2_pos_in_meta,
-            const tparquet::RowGroup& row_group, const std::string& col_name) const {
-        auto it = column_name_2_pos_in_meta.find(col_name);
-        if (it == column_name_2_pos_in_meta.end()) {
-            return nullptr;
-        }
-
-        if (it->second >= row_group.columns.size()) {
-            DCHECK(false) << "Impossible here";
-            return nullptr;
-        }
-
-        /**
-        * Metadata for each column chunk in row group must have the same order as the SchemaElement list in FileMetaData.
-        **/
-        return &row_group.columns[it->second].meta_data;
-    }
+                                      std::vector<GroupReaderParam::Column>& read_cols,
+                                      std::unordered_set<std::string>& existed_column_names) const = 0;
 
 protected:
     GroupReaderParam::Column _build_column(int32_t idx_in_parquet, const tparquet::Type::type& type_in_parquet,
                                            SlotDescriptor* slot_desc, bool decode_needed,
-                                           const TIcebergSchemaField* t_iceberg_schema_field = nullptr) const {
+                                           const TIcebergSchemaField* t_lake_schema_field = nullptr) const {
         GroupReaderParam::Column column{};
         column.idx_in_parquet = idx_in_parquet;
         column.type_in_parquet = type_in_parquet;
         column.slot_desc = slot_desc;
-        column.t_iceberg_schema_field = t_iceberg_schema_field;
+        column.t_lake_schema_field = t_lake_schema_field;
         column.decode_needed = decode_needed;
         return column;
     }
 
+    FileMetaData* _file_metadata = nullptr;
     bool _case_sensitive = false;
-    FileMetaData* _file_metadata;
 };
 
 class ParquetMetaHelper : public MetaHelper {
 public:
-    ParquetMetaHelper(FileMetaData* file_metadata, bool case_sensitive) {
-        _file_metadata = file_metadata;
-        _case_sensitive = case_sensitive;
-    }
+    ParquetMetaHelper(FileMetaData* file_metadata, bool case_sensitive) : MetaHelper(file_metadata, case_sensitive) {}
     ~ParquetMetaHelper() override = default;
 
-    void set_existed_column_names(std::unordered_set<std::string>* names) const override;
-    void build_column_name_2_pos_in_meta(std::unordered_map<std::string, size_t>& column_name_2_pos_in_meta,
-                                         const tparquet::RowGroup& row_group,
-                                         const std::vector<SlotDescriptor*>& slots) const override;
     void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
-                              std::vector<GroupReaderParam::Column>& read_cols) const override;
+                              std::vector<GroupReaderParam::Column>& read_cols,
+                              std::unordered_set<std::string>& existed_column_names) const override;
 
-    const ParquetField* get_parquet_field(const std::string& col_name) const override;
+private:
+    bool _is_valid_type(const ParquetField* parquet_field, const TypeDescriptor* type_descriptor) const;
 };
 
-class IcebergMetaHelper : public MetaHelper {
+class LakeMetaHelper : public MetaHelper {
 public:
-    IcebergMetaHelper(FileMetaData* file_metadata, bool case_sensitive, const TIcebergSchema* t_iceberg_schema) {
-        _file_metadata = file_metadata;
-        _case_sensitive = case_sensitive;
-        _t_iceberg_schema = t_iceberg_schema;
-        DCHECK(_t_iceberg_schema != nullptr);
+    LakeMetaHelper(FileMetaData* file_metadata, bool case_sensitive, const TIcebergSchema* t_lake_schema)
+            : MetaHelper(file_metadata, case_sensitive) {
+        _lake_schema = t_lake_schema;
+        DCHECK(_lake_schema != nullptr);
         _init_field_mapping();
     }
 
-    ~IcebergMetaHelper() override = default;
+    ~LakeMetaHelper() override = default;
 
-    void set_existed_column_names(std::unordered_set<std::string>* names) const override;
-    void build_column_name_2_pos_in_meta(std::unordered_map<std::string, size_t>& column_name_2_pos_in_meta,
-                                         const tparquet::RowGroup& row_group,
-                                         const std::vector<SlotDescriptor*>& slots) const override;
     void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
-                              std::vector<GroupReaderParam::Column>& read_cols) const override;
-    const ParquetField* get_parquet_field(const std::string& col_name) const override;
+                              std::vector<GroupReaderParam::Column>& read_cols,
+                              std::unordered_set<std::string>& existed_column_names) const override;
 
 private:
     void _init_field_mapping();
-    const TIcebergSchema* _t_iceberg_schema = nullptr;
+    bool _is_valid_type(const ParquetField* parquet_field, const TIcebergSchemaField* field_schema,
+                        const TypeDescriptor* type_descriptor) const;
+    const TIcebergSchema* _lake_schema = nullptr;
     // field name has already been formatted
-    std::unordered_map<std::string, const TIcebergSchemaField*> _field_name_2_iceberg_field;
+    std::unordered_map<std::string, const TIcebergSchemaField*> _field_name_2_lake_field;
 };
 
 } // namespace starrocks::parquet

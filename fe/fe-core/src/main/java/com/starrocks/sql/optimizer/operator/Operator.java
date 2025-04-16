@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.operator;
 
+import com.google.api.client.util.Sets;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -22,20 +23,26 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.property.DomainProperty;
 
+import java.util.BitSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 public abstract class Operator {
     public static final long DEFAULT_LIMIT = -1;
     public static final long DEFAULT_OFFSET = 0;
+    public static final int ABSENT_OPERATOR_ID = -1;
 
     protected final OperatorType opType;
     protected long limit = DEFAULT_LIMIT;
     protected ScalarOperator predicate = null;
+    // common sub operators in predicate
+    protected Map<ColumnRefOperator, ScalarOperator> predicateCommonOperators = null;
 
     private static long saltGenerator = 0;
     /**
@@ -55,19 +62,10 @@ public abstract class Operator {
     // or self reference of groups
     protected long salt = 0;
 
-    protected int opRuleMask = 0;
-    // Like LogicalJoinOperator#transformMask, add a mask to avoid one operator's dead-loop in one transform rule.
-    // eg: MV's UNION-ALL RULE:
-    //                 UNION                         UNION
-    //               /        \                    /       \
-    //  OP -->   EXTRA-OP    MV-SCAN  -->     UNION    MV-SCAN     ---> ....
-    //                                       /      \
-    //                                  EXTRA-OP    MV-SCAN
-    // Operator's rule mask: operator that has been union rewrite and no needs to rewrite again.
-    public static final int OP_UNION_ALL_BIT = 1 << 0;
-    // Operator's rule mask: operator that has been push down rewrite and no needs to rewrite again.
-    public static final int OP_PUSH_DOWN_BIT = 1 << 1;
-    public static final int OP_TRANSPARENT_MV_BIT = 1 << 2;
+    // mark which rule(bit) has been applied to the operator.
+    protected BitSet opRuleBits = new BitSet();
+    // mark which mv has been applied to the operator
+    protected Set<Long> opAppliedMVs = Sets.newHashSet();
 
     // an operator logically equivalent to 'this' operator
     // used by view based mv rewrite
@@ -75,6 +73,14 @@ public abstract class Operator {
     protected Operator equivalentOp;
 
     protected DomainProperty domainProperty;
+
+    // `planNodeId` is set only after the `FragmentBuilder` decomposes the physical plan into fragments.
+    // It is the ID of the ExecNode after decompossion.
+    protected int planNodeId = -1;
+
+    // `operatorId` is set only after the `FragmentBuilder` decomposes the physical plan into fragments.
+    // It is the ID of the physical operator, which is generated in postorder traversal from zero.
+    protected int operatorId = ABSENT_OPERATOR_ID;
 
     public Operator(OperatorType opType) {
         this.opType = opType;
@@ -126,6 +132,14 @@ public abstract class Operator {
         this.predicate = predicate;
     }
 
+    public Map<ColumnRefOperator, ScalarOperator> getPredicateCommonOperators() {
+        return predicateCommonOperators;
+    }
+
+    public void setPredicateCommonOperators(Map<ColumnRefOperator, ScalarOperator> predicateCommonOperators) {
+        this.predicateCommonOperators = predicateCommonOperators;
+    }
+
     public Projection getProjection() {
         return projection;
     }
@@ -156,16 +170,24 @@ public abstract class Operator {
         return salt;
     }
 
-    public int getOpRuleMask() {
-        return opRuleMask;
+    public void setOpRuleBit(int bit) {
+        this.opRuleBits.set(bit);
     }
 
-    public void setOpRuleMask(int bit) {
-        this.opRuleMask |= bit;
+    public void resetOpRuleBit(int bit) {
+        this.opRuleBits.clear(bit);
     }
 
-    public boolean isOpRuleMaskSet(int bit) {
-        return (opRuleMask & bit) != 0;
+    public boolean isOpRuleBitSet(int bit) {
+        return opRuleBits.get(bit);
+    }
+
+    public void setOpAppliedMV(long mvId) {
+        this.opAppliedMVs.add(mvId);
+    }
+
+    public boolean isOpAppliedMV(long mvId) {
+        return opAppliedMVs.contains(mvId);
     }
 
     public Operator getEquivalentOp() {
@@ -189,6 +211,10 @@ public abstract class Operator {
         return rowOutputInfo;
     }
 
+    public void clearRowOutputInfo() {
+        rowOutputInfo = null;
+    }
+
     public DomainProperty getDomainProperty(List<OptExpression> inputs) {
         if (domainProperty == null) {
             domainProperty = deriveDomainProperty(inputs);
@@ -199,6 +225,22 @@ public abstract class Operator {
         }
 
         return domainProperty;
+    }
+
+    public int getPlanNodeId() {
+        return planNodeId;
+    }
+
+    public void setPlanNodeId(int planNodeId) {
+        this.planNodeId = planNodeId;
+    }
+
+    public int getOperatorId() {
+        return operatorId;
+    }
+
+    public void setOperatorId(int operatorId) {
+        this.operatorId = operatorId;
     }
 
     protected RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
@@ -260,8 +302,9 @@ public abstract class Operator {
             builder.predicate = operator.predicate;
             builder.projection = operator.projection;
             builder.salt = operator.salt;
-            builder.opRuleMask = operator.opRuleMask;
             builder.equivalentOp = operator.equivalentOp;
+            builder.opRuleBits.or(operator.opRuleBits);
+            builder.opAppliedMVs.addAll(operator.opAppliedMVs);
             return (B) this;
         }
 
@@ -307,8 +350,8 @@ public abstract class Operator {
             return (B) this;
         }
 
-        public B setOpBitSet(int opRuleMask) {
-            builder.opRuleMask = opRuleMask;
+        public B setOpBitSet(BitSet opRuleMask) {
+            builder.opRuleBits = opRuleMask;
             return (B) this;
         }
     }

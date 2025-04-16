@@ -19,11 +19,9 @@
 #include <memory>
 #include <string>
 #include <string_view>
-#include <utility>
 
 #include "common/compiler_util.h"
 #include "common/status.h"
-#include "common/statusor.h"
 #include "formats/parquet/encoding.h"
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
@@ -43,7 +41,12 @@ ColumnChunkReader::ColumnChunkReader(level_t max_def_level, level_t max_rep_leve
           _chunk_metadata(column_chunk),
           _opts(opts),
           _def_level_decoder(&opts.stats->level_decode_ns),
-          _rep_level_decoder(&opts.stats->level_decode_ns) {}
+          _rep_level_decoder(&opts.stats->level_decode_ns) {
+    if (_chunk_metadata->meta_data.__isset.statistics && _chunk_metadata->meta_data.statistics.__isset.null_count &&
+        _chunk_metadata->meta_data.statistics.null_count == 0) {
+        _current_row_group_no_null = true;
+    }
+}
 
 ColumnChunkReader::~ColumnChunkReader() = default;
 
@@ -62,7 +65,7 @@ Status ColumnChunkReader::init(int chunk_size) {
     // seek to the first page
     RETURN_IF_ERROR(_page_reader->seek_to_offset(start_offset));
 
-    auto compress_type = convert_compression_codec(metadata().codec);
+    auto compress_type = ParquetUtils::convert_compression_codec(metadata().codec);
     RETURN_IF_ERROR(get_block_compression_codec(compress_type, &_compress_codec));
 
     _chunk_size = chunk_size;
@@ -115,18 +118,35 @@ Status ColumnChunkReader::_parse_page_header() {
     size_t now = _page_reader->get_offset();
     _opts.stats->request_bytes_read += (now - off);
     _opts.stats->request_bytes_read_uncompressed += (now - off);
+    _page_parse_state = PAGE_HEADER_PARSED;
 
     // The page num values will be used for late materialization before parsing page data,
     // so we set _num_values when parsing header.
-    if (_page_reader->current_header()->type == tparquet::PageType::DATA_PAGE) {
-        const auto& header = *_page_reader->current_header();
-        _num_values = header.data_page_header.num_values;
+    auto& page_type = _page_reader->current_header()->type;
+    // TODO: support DATA_PAGE_V2, now common writer use DATA_PAGE as default
+    if (UNLIKELY(page_type != tparquet::PageType::DICTIONARY_PAGE && page_type != tparquet::PageType::DATA_PAGE &&
+                 page_type != tparquet::PageType::DATA_PAGE_V2)) {
+        return Status::NotSupported(strings::Substitute("Not supported page type: $0", page_type));
+    }
+    if (page_type == tparquet::PageType::DATA_PAGE) {
+        const auto& page_header = _page_reader->current_header()->data_page_header;
+        _num_values = page_header.num_values;
         _opts.stats->has_page_statistics |=
-                (header.data_page_header.__isset.statistics && (header.data_page_header.statistics.__isset.min_value ||
-                                                                header.data_page_header.statistics.__isset.min));
+                (page_header.__isset.statistics &&
+                 (page_header.statistics.__isset.min_value || page_header.statistics.__isset.min));
+        _current_page_no_null = (page_header.__isset.statistics && page_header.statistics.__isset.null_count &&
+                                 page_header.statistics.null_count == 0)
+                                        ? true
+                                        : false;
+    } else if (page_type == tparquet::PageType::DATA_PAGE_V2) {
+        const auto& page_header = _page_reader->current_header()->data_page_header_v2;
+        _num_values = page_header.num_values;
+        _opts.stats->has_page_statistics |=
+                (page_header.__isset.statistics &&
+                 (page_header.statistics.__isset.min_value || page_header.statistics.__isset.min));
+        _current_page_no_null = (page_header.num_nulls == 0) ? true : false;
     }
 
-    _page_parse_state = PAGE_HEADER_PARSED;
     return Status::OK();
 }
 
@@ -134,7 +154,8 @@ Status ColumnChunkReader::_parse_page_data() {
     SCOPED_RAW_TIMER(&_opts.stats->page_read_ns);
     switch (_page_reader->current_header()->type) {
     case tparquet::PageType::DATA_PAGE:
-        RETURN_IF_ERROR(_parse_data_page());
+    case tparquet::PageType::DATA_PAGE_V2:
+        RETURN_IF_ERROR(_parse_data_page(_page_reader->current_header()->type));
         break;
     case tparquet::PageType::DICTIONARY_PAGE:
         RETURN_IF_ERROR(_parse_dict_page());
@@ -148,7 +169,7 @@ Status ColumnChunkReader::_parse_page_data() {
 }
 
 Status ColumnChunkReader::_read_and_decompress_page_data(uint32_t compressed_size, uint32_t uncompressed_size,
-                                                         bool is_compressed) {
+                                                         bool is_compressed, uint32_t bytes_level_size) {
     RETURN_IF_ERROR(CurrentThread::mem_tracker()->check_mem_limit("read and decompress page"));
     is_compressed = is_compressed && (_compress_codec != nullptr);
 
@@ -176,14 +197,23 @@ Status ColumnChunkReader::_read_and_decompress_page_data(uint32_t compressed_siz
     if (is_compressed) {
         _uncompressed_buf.reserve(uncompressed_size);
         _data = Slice(_uncompressed_buf.data(), uncompressed_size);
+        if (bytes_level_size > 0) {
+            memcpy(_data.data, read_data.data, bytes_level_size);
+            read_data.remove_prefix(bytes_level_size);
+            _data.remove_prefix(bytes_level_size);
+        }
         RETURN_IF_ERROR(_compress_codec->decompress(read_data, &_data));
+        if (bytes_level_size > 0) {
+            // reconstruct this uncompressed buffer.
+            _data = Slice(_uncompressed_buf.data(), uncompressed_size);
+        }
     } else {
         _data = read_data;
     }
     return Status::OK();
 }
 
-Status ColumnChunkReader::_parse_data_page() {
+Status ColumnChunkReader::_parse_data_page(tparquet::PageType::type page_type) {
     if (_page_parse_state == PAGE_DATA_PARSED) {
         return Status::OK();
     }
@@ -192,22 +222,48 @@ Status ColumnChunkReader::_parse_data_page() {
     }
 
     const auto& header = *_page_reader->current_header();
-
+    tparquet::Encoding::type encoding = tparquet::Encoding::PLAIN;
     uint32_t compressed_size = header.compressed_page_size;
     uint32_t uncompressed_size = header.uncompressed_page_size;
-    RETURN_IF_ERROR(_read_and_decompress_page_data(compressed_size, uncompressed_size, true));
+    bool is_compressed = true;
+    uint32_t bytes_level_size = 0;
 
-    // parse levels
-    if (_max_rep_level > 0) {
-        RETURN_IF_ERROR(_rep_level_decoder.parse(header.data_page_header.repetition_level_encoding, _max_rep_level,
-                                                 header.data_page_header.num_values, &_data));
+    if (page_type == tparquet::PageType::DATA_PAGE_V2) {
+        const auto& page_header = header.data_page_header_v2;
+        if (page_header.__isset.is_compressed) {
+            is_compressed = page_header.is_compressed;
+        }
+        bytes_level_size = page_header.repetition_levels_byte_length + page_header.definition_levels_byte_length;
     }
-    if (_max_def_level > 0) {
-        RETURN_IF_ERROR(_def_level_decoder.parse(header.data_page_header.definition_level_encoding, _max_def_level,
-                                                 header.data_page_header.num_values, &_data));
+    RETURN_IF_ERROR(
+            _read_and_decompress_page_data(compressed_size, uncompressed_size, is_compressed, bytes_level_size));
+
+    if (page_type == tparquet::PageType::DATA_PAGE) {
+        const auto& page_header = header.data_page_header;
+        encoding = page_header.encoding;
+        // parse levels
+        if (_max_rep_level > 0) {
+            RETURN_IF_ERROR(_rep_level_decoder.parse(page_header.repetition_level_encoding, _max_rep_level,
+                                                     page_header.num_values, &_data));
+        }
+        if (_max_def_level > 0) {
+            RETURN_IF_ERROR(_def_level_decoder.parse(page_header.definition_level_encoding, _max_def_level,
+                                                     page_header.num_values, &_data));
+        }
+    } else if (page_type == tparquet::PageType::DATA_PAGE_V2) {
+        const auto& page_header = header.data_page_header_v2;
+        encoding = page_header.encoding;
+        // parse levels
+        if (_max_rep_level > 0) {
+            RETURN_IF_ERROR(_rep_level_decoder.parse_v2(page_header.repetition_levels_byte_length, _max_rep_level,
+                                                        page_header.num_values, &_data));
+        }
+        if (_max_def_level > 0) {
+            RETURN_IF_ERROR(_def_level_decoder.parse_v2(page_header.definition_levels_byte_length, _max_def_level,
+                                                        page_header.num_values, &_data));
+        }
     }
 
-    auto encoding = header.data_page_header.encoding;
     // change the deprecated encoding to RLE_DICTIONARY
     if (encoding == tparquet::Encoding::PLAIN_DICTIONARY) {
         encoding = tparquet::Encoding::RLE_DICTIONARY;

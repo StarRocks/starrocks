@@ -34,24 +34,15 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.thrift.TStorageType;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.util.ArrayList;
-import java.util.List;
 
 public class TableTest {
     private FakeGlobalStateMgr fakeGlobalStateMgr;
@@ -68,60 +59,58 @@ public class TableTest {
     }
 
     @Test
-    public void testSerialization() throws Exception {
-        // 1. Write objects to file
-        File file = new File("./tableFamilyGroup");
-        file.createNewFile();
-        DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
+    public void testGetMysqlType_Version5() {
+        GlobalVariable.version = "5.7.0";
+        Assert.assertEquals("BASE TABLE", new Table(TableType.OLAP).getMysqlType());
+        Assert.assertEquals("BASE TABLE", new Table(TableType.OLAP_EXTERNAL).getMysqlType());
+        Assert.assertEquals("BASE TABLE", new Table(TableType.CLOUD_NATIVE).getMysqlType());
 
-        List<Column> columns = new ArrayList<Column>();
-        Column column2 = new Column("column2",
-                ScalarType.createType(PrimitiveType.TINYINT), false, AggregateType.MIN, "", "");
-        columns.add(column2);
-        columns.add(new Column("column3",
-                ScalarType.createType(PrimitiveType.SMALLINT), false, AggregateType.SUM, "", ""));
-        columns.add(new Column("column4",
-                ScalarType.createType(PrimitiveType.INT), false, AggregateType.REPLACE, "", ""));
-        columns.add(new Column("column5",
-                ScalarType.createType(PrimitiveType.BIGINT), false, AggregateType.REPLACE, "", ""));
-        columns.add(new Column("column6",
-                ScalarType.createType(PrimitiveType.FLOAT), false, AggregateType.REPLACE, "", ""));
-        columns.add(new Column("column7",
-                ScalarType.createType(PrimitiveType.DOUBLE), false, AggregateType.REPLACE, "", ""));
-        columns.add(new Column("column8", ScalarType.createCharType(10), true, null, "", ""));
-        columns.add(new Column("column9", ScalarType.createVarchar(10), true, null, "", ""));
-        columns.add(new Column("column10", ScalarType.createType(PrimitiveType.DATE), true, null, "", ""));
-        columns.add(new Column("column11", ScalarType.createType(PrimitiveType.DATETIME), true, null, "", ""));
+        Assert.assertEquals("BASE TABLE", new Table(TableType.MYSQL).getMysqlType());
+        Assert.assertEquals("BASE TABLE", new Table(TableType.BROKER).getMysqlType());
+        Assert.assertEquals("BASE TABLE", new Table(TableType.ELASTICSEARCH).getMysqlType());
+        Assert.assertEquals("BASE TABLE", new Table(TableType.HIVE).getMysqlType());
+        Assert.assertEquals("BASE TABLE", new Table(TableType.ICEBERG).getMysqlType());
+        Assert.assertEquals("BASE TABLE", new Table(TableType.HUDI).getMysqlType());
+        Assert.assertEquals("BASE TABLE", new Table(TableType.JDBC).getMysqlType());
+        Assert.assertEquals("BASE TABLE", new Table(TableType.DELTALAKE).getMysqlType());
+        Assert.assertEquals("BASE TABLE", new Table(TableType.FILE).getMysqlType());
 
-        OlapTable table1 = new OlapTable(1000L, "group1", columns, KeysType.AGG_KEYS,
-                new SinglePartitionInfo(), new RandomDistributionInfo(10));
-        short shortKeyColumnCount = 1;
-        table1.setIndexMeta(1000, "group1", columns, 1, 1, shortKeyColumnCount, TStorageType.COLUMN, KeysType.AGG_KEYS);
-        List<Column> column = Lists.newArrayList();
-        column.add(column2);
+        Assert.assertEquals("VIEW", new Table(TableType.INLINE_VIEW).getMysqlType());
+        Assert.assertEquals("VIEW", new Table(TableType.VIEW).getMysqlType());
+        Assert.assertEquals("VIEW", new Table(TableType.MATERIALIZED_VIEW).getMysqlType());
+        Assert.assertEquals("VIEW", new Table(TableType.CLOUD_NATIVE_MATERIALIZED_VIEW).getMysqlType());
 
-        table1.setIndexMeta(2, "test", column, 1, 1, shortKeyColumnCount, TStorageType.COLUMN,
-                KeysType.AGG_KEYS);
-        Deencapsulation.setField(table1, "baseIndexId", 1000);
-        table1.write(dos);
-        dos.flush();
-        dos.close();
-
-        // 2. Read objects from file
-        DataInputStream dis = new DataInputStream(new FileInputStream(file));
-
-        Table rFamily1 = Table.read(dis);
-        Assert.assertTrue(table1.equals(rFamily1));
-        Assert.assertEquals(table1.getCreateTime(), rFamily1.getCreateTime());
-        Assert.assertEquals(table1.getIndexMetaByIndexId(2).getKeysType(), KeysType.AGG_KEYS);
-
-        // 3. delete files
-        dis.close();
-        file.delete();
+        Assert.assertEquals("SYSTEM VIEW", new Table(TableType.SCHEMA).getMysqlType());
     }
 
     @Test
-    public void testGetMysqlType() {
+    public void testGetMysqlType_Version8() {
+        GlobalVariable.version = "8.0.33";
+        Assert.assertEquals("TABLE", new Table(TableType.OLAP).getMysqlType());
+        Assert.assertEquals("TABLE", new Table(TableType.OLAP_EXTERNAL).getMysqlType());
+        Assert.assertEquals("TABLE", new Table(TableType.CLOUD_NATIVE).getMysqlType());
+
+        Assert.assertEquals("TABLE", new Table(TableType.MYSQL).getMysqlType());
+        Assert.assertEquals("TABLE", new Table(TableType.BROKER).getMysqlType());
+        Assert.assertEquals("TABLE", new Table(TableType.ELASTICSEARCH).getMysqlType());
+        Assert.assertEquals("TABLE", new Table(TableType.HIVE).getMysqlType());
+        Assert.assertEquals("TABLE", new Table(TableType.ICEBERG).getMysqlType());
+        Assert.assertEquals("TABLE", new Table(TableType.HUDI).getMysqlType());
+        Assert.assertEquals("TABLE", new Table(TableType.JDBC).getMysqlType());
+        Assert.assertEquals("TABLE", new Table(TableType.DELTALAKE).getMysqlType());
+        Assert.assertEquals("TABLE", new Table(TableType.FILE).getMysqlType());
+
+        Assert.assertEquals("VIEW", new Table(TableType.INLINE_VIEW).getMysqlType());
+        Assert.assertEquals("VIEW", new Table(TableType.VIEW).getMysqlType());
+        Assert.assertEquals("VIEW", new Table(TableType.MATERIALIZED_VIEW).getMysqlType());
+        Assert.assertEquals("VIEW", new Table(TableType.CLOUD_NATIVE_MATERIALIZED_VIEW).getMysqlType());
+
+        Assert.assertEquals("SYSTEM VIEW", new Table(TableType.SCHEMA).getMysqlType());
+    }
+
+    @Test
+    public void testGetMysqlType_InvalidVersion() {
+        GlobalVariable.version = "invalid.version";
         Assert.assertEquals("BASE TABLE", new Table(TableType.OLAP).getMysqlType());
         Assert.assertEquals("BASE TABLE", new Table(TableType.OLAP_EXTERNAL).getMysqlType());
         Assert.assertEquals("BASE TABLE", new Table(TableType.CLOUD_NATIVE).getMysqlType());

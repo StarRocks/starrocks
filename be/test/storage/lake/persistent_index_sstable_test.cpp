@@ -212,11 +212,9 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
     // 1. build sstable
     const std::string filename = "test_persistent_index_sstable_1.sst";
     ASSIGN_OR_ABORT(auto file, fs::new_writable_file(lake::join_path(kTestDir, filename)));
-    phmap::btree_map<std::string, std::list<IndexValueWithVer>, std::less<>> map;
+    phmap::btree_map<std::string, IndexValueWithVer, std::less<>> map;
     for (int i = 0; i < N; i++) {
-        std::list<IndexValueWithVer> index_value_vers;
-        index_value_vers.emplace_front(100, i);
-        map.insert({fmt::format("test_key_{:016X}", i), index_value_vers});
+        map.emplace(fmt::format("test_key_{:016X}", i), std::make_pair(100, IndexValue(i)));
     }
     uint64_t filesize = 0;
     ASSERT_OK(PersistentIndexSstable::build_sstable(map, file.get(), &filesize));
@@ -229,6 +227,8 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
     sstable_pb.set_filename(filename);
     sstable_pb.set_filesize(filesize);
     ASSERT_OK(sst->init(std::move(read_file), sstable_pb, cache_ptr.get()));
+    // check memory usage
+    ASSERT_TRUE(sst->memory_usage() > 0);
 
     {
         // 3. multi get with version (all keys included)
@@ -433,6 +433,39 @@ TEST_F(PersistentIndexSstableTest, test_index_value_protobuf) {
         ASSERT_EQ(value.version(), i);
         IndexValue val = build_index_value(value);
         ASSERT_TRUE(val == IndexValue(((uint64_t)(i * 10 + i) << 32) | (i * 20 + i)));
+    }
+}
+
+TEST_F(PersistentIndexSstableTest, test_ioerror_inject) {
+    const int N = 10000;
+    sstable::Options options;
+    const std::string filename = "test_ioerror_inject.sst";
+    ASSIGN_OR_ABORT(auto file, fs::new_writable_file(lake::join_path(kTestDir, filename)));
+    sstable::TableBuilder builder(options, file.get());
+    for (int i = 0; i < N; i++) {
+        std::string str = fmt::format("test_key_{:016X}", i);
+        IndexValue val(i);
+        builder.Add(Slice(str), Slice(val.v, 8));
+    }
+    SyncPoint::GetInstance()->SetCallBack("table_builder_footer_error",
+                                          [&](void* arg) { *(Status*)arg = Status::IOError("ut_test"); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    auto st = builder.Finish();
+    SyncPoint::GetInstance()->ClearCallBack("table_builder_footer_error");
+    SyncPoint::GetInstance()->DisableProcessing();
+    uint64_t filesz = builder.FileSize();
+    if (st.ok()) {
+        // scan & check
+        sstable::Table* sstable = nullptr;
+        ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(kTestDir, filename)));
+        CHECK_OK(sstable::Table::Open(options, read_file.get(), filesz, &sstable));
+        sstable::ReadOptions read_options;
+        sstable::Iterator* iter = sstable->NewIterator(read_options);
+        for (iter->SeekToFirst(); iter->Valid() && iter->status().ok(); iter->Next()) {
+        }
+        ASSERT_TRUE(iter->status().ok());
+        delete iter;
+        delete sstable;
     }
 }
 

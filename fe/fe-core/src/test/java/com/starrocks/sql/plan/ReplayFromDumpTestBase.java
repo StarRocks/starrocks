@@ -24,9 +24,9 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.VariableMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
-import com.starrocks.system.BackendCoreStat;
+import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -70,7 +70,7 @@ public class ReplayFromDumpTestBase {
         FeConstants.showScanNodeLocalShuffleColumnsInExplain = false;
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.showJoinLocalShuffleInExplain = false;
-
+        FeConstants.setLengthForVarchar = false;
         new MockUp<EditLog>() {
             @Mock
             protected void logEdit(short op, Writable writable) {
@@ -81,7 +81,7 @@ public class ReplayFromDumpTestBase {
 
     @Before
     public void before() throws Exception {
-        BackendCoreStat.reset();
+        BackendResourceStat.getInstance().reset();
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
         connectContext.setQueryId(UUIDUtil.genUUID());
         connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
@@ -127,7 +127,7 @@ public class ReplayFromDumpTestBase {
     }
 
     public SessionVariable getTestSessionVariable() {
-        SessionVariable sessionVariable = VariableMgr.newSessionVariable();
+        SessionVariable sessionVariable = GlobalStateMgr.getCurrentState().getVariableMgr().newSessionVariable();
         sessionVariable.setMaxTransformReorderJoins(8);
         sessionVariable.setEnableGlobalRuntimeFilter(true);
         sessionVariable.setEnableMultiColumnsOnGlobbalRuntimeFilter(true);

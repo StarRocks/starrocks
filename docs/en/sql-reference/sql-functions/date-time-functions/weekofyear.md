@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # weekofyear
 
-## Description
+
 
 Returns the week number for a given date within a year.
 

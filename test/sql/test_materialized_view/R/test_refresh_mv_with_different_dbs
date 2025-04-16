@@ -47,7 +47,7 @@ analyze full table db2.t1;
 -- result:
 db2.t1	analyze	status	OK
 -- !result
-function: wait_async_materialized_view_finish("mv1")
+function: wait_async_materialized_view_finish("db_${uuid0}", "mv1")
 -- result:
 None
 -- !result

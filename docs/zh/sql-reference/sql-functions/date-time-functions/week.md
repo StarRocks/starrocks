@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # week
 
-## 功能
+
 
 计算指定日期属于一年中的第几周。该函数与 MySQL 中的 WEEK 函数语义相同。该函数从 2.3 版本开始支持。
 

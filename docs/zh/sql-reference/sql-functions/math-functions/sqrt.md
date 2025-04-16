@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # sqrt, dsqrt
 
-## 功能
+
 
 返回参数 `x` 的平方根。dsqrt() 和 sqrt() 功能相同。
 

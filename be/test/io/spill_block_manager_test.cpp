@@ -88,8 +88,8 @@ public:
         auto fs = FileSystem::Default();
         ASSERT_OK(fs->create_dir_recursive(local_path));
         ASSERT_OK(fs->create_dir_recursive(remote_path));
-        auto local_dir = create_spill_dir(local_path, 100);
-        auto remote_dir = create_spill_dir(remote_path, INT64_MAX);
+        local_dir = create_spill_dir(local_path, 100);
+        remote_dir = create_spill_dir(remote_path, INT64_MAX);
         local_dir_mgr = create_spill_dir_manager({local_dir});
         remote_dir_mgr = create_spill_dir_manager({remote_dir});
     }
@@ -100,11 +100,14 @@ protected:
     TUniqueId dummy_query_id;
     std::string local_path;
     std::string remote_path;
+    spill::DirPtr local_dir;
+    spill::DirPtr remote_dir;
     std::unique_ptr<spill::DirManager> local_dir_mgr;
     std::unique_ptr<spill::DirManager> remote_dir_mgr;
     RuntimeState dummy_state;
     RuntimeProfile dummy_profile{"dummy"};
 };
+
 TEST_F(SpillBlockManagerTest, dir_choose_strategy) {
     using DirInfo = std::pair<std::string, size_t>;
     std::vector<DirInfo> dir_info_list = {{"dir1", 100}, {"dir2", 120}};
@@ -175,6 +178,7 @@ TEST_F(SpillBlockManagerTest, log_block_allocation_test) {
         auto res = log_block_mgr->acquire_block(opts);
         ASSERT_TRUE(res.ok());
         auto block = res.value();
+        ASSERT_TRUE(block->try_acquire_sizes(10));
         std::string expected = fmt::format("LogBlock[container={}/{}/{}-{}]", local_path, print_id(dummy_query_id),
                                            print_id(dummy_query_id), "node1-1-0");
         ASSERT_EQ(block->debug_string(), expected);
@@ -228,6 +232,7 @@ TEST_F(SpillBlockManagerTest, file_block_allocation_test) {
         auto res = file_block_mgr->acquire_block(opts);
         ASSERT_TRUE(res.ok());
         auto block = res.value();
+        ASSERT_TRUE(block->try_acquire_sizes(10));
         std::string expected = fmt::format("FileBlock[container={}/{}/{}-{}]", local_path, print_id(dummy_query_id),
                                            print_id(dummy_query_id), "node1-1-0");
         ASSERT_EQ(block->debug_string(), expected);
@@ -323,4 +328,56 @@ TEST_F(SpillBlockManagerTest, hybird_block_allocation_test) {
         ASSERT_EQ(block->debug_string(), expected);
     }
 }
+
+TEST_F(SpillBlockManagerTest, dir_allocate_test) {
+    auto log_block_mgr = std::make_shared<spill::LogBlockManager>(dummy_query_id, local_dir_mgr.get());
+    ASSERT_OK(log_block_mgr->open());
+    {
+        // 1. allocate the first block but not release it
+        spill::AcquireBlockOptions opts{.query_id = dummy_query_id,
+                                        .fragment_instance_id = dummy_query_id,
+                                        .plan_node_id = 1,
+                                        .name = "node1",
+                                        .block_size = 10};
+        auto res = log_block_mgr->acquire_block(opts);
+        ASSERT_TRUE(res.ok());
+    }
+    ASSERT_EQ(local_dir_mgr->_dirs[0]->get_current_size(), 0);
+}
+
+TEST_F(SpillBlockManagerTest, block_capacity_test) {
+    {
+        auto log_block_mgr = std::make_shared<spill::LogBlockManager>(dummy_query_id, local_dir_mgr.get());
+        ASSERT_OK(log_block_mgr->open());
+        char vals[4096];
+        // 1. allocate the first block but not release it
+        spill::AcquireBlockOptions opts{.query_id = dummy_query_id,
+                                        .fragment_instance_id = dummy_query_id,
+                                        .plan_node_id = 1,
+                                        .name = "node1",
+                                        .block_size = 10};
+        opts.affinity_group = log_block_mgr->acquire_affinity_group();
+        auto res = log_block_mgr->acquire_block(opts);
+        ASSERT_TRUE(res.ok());
+        ASSERT_EQ(local_dir->get_current_size(), 10);
+        ASSERT_OK(res.value()->append(std::vector<Slice>{Slice(vals, 5)}));
+        ASSERT_EQ(local_dir->get_current_size(), 10);
+        ASSERT_OK(res.value()->append(std::vector<Slice>{Slice(vals, 5)}));
+        ASSERT_EQ(local_dir->get_current_size(), 10);
+        ASSERT_OK(res.value()->append(std::vector<Slice>{Slice(vals, 5)}));
+        ASSERT_EQ(local_dir->get_current_size(), 15);
+        ASSERT_OK(log_block_mgr->release_block(res.value()));
+
+        res = log_block_mgr->acquire_block(opts);
+        ASSERT_TRUE(res.ok());
+        ASSERT_EQ(local_dir->get_current_size(), 25);
+        ASSERT_OK(log_block_mgr->release_block(res.value()));
+
+        res = log_block_mgr->acquire_block(opts);
+        ASSERT_TRUE(res.ok());
+        ASSERT_EQ(local_dir->get_current_size(), 25);
+    }
+    ASSERT_EQ(local_dir->get_current_size(), 0);
+}
+
 } // namespace starrocks::vectorized

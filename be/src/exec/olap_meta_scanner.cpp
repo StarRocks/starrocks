@@ -44,6 +44,9 @@ Status OlapMetaScanner::_init_meta_reader_params() {
     _reader_params.runtime_state = _runtime_state;
     _reader_params.chunk_size = _runtime_state->chunk_size();
     _reader_params.id_to_names = &_parent->_meta_scan_node.id_to_names;
+    _reader_params.low_card_threshold = _parent->_meta_scan_node.__isset.low_cardinality_threshold
+                                                ? _parent->_meta_scan_node.low_cardinality_threshold
+                                                : DICT_DECODE_MAX_SIZE;
     if (_parent->_meta_scan_node.__isset.columns && !_parent->_meta_scan_node.columns.empty() &&
         _parent->_meta_scan_node.columns[0].col_unique_id > 0) {
         _reader_params.tablet_schema = TabletSchema::copy(*_tablet->tablet_schema(), _parent->_meta_scan_node.columns);

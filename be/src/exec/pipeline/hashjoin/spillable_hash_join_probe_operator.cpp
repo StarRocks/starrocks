@@ -22,8 +22,8 @@
 
 #include "common/config.h"
 #include "exec/hash_joiner.h"
-#include "exec/join_hash_map.h"
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
+#include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/spill/executor.h"
 #include "exec/spill/partition.h"
@@ -46,6 +46,8 @@ Status SpillableHashJoinProbeOperator::prepare(RuntimeState* state) {
             "SpillBuildPartitionPeakMemoryUsage", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
     metrics.prober_peak_memory_usage = _unique_metrics->AddHighWaterMarkCounter(
             "SpillProberPeakMemoryUsage", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+    metrics.peak_processing_partition_count = _unique_metrics->AddHighWaterMarkCounter(
+            "SpillPeakProcessingPartitionCount", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
     RETURN_IF_ERROR(_probe_spiller->prepare(state));
     auto wg = state->fragment_ctx()->workgroup();
     return Status::OK();
@@ -253,8 +255,9 @@ Status SpillableHashJoinProbeOperator::_load_partition_build_side(workgroup::Yie
     TRY_CATCH_ALLOC_SCOPE_START()
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
     auto builder = _builders[idx];
+    auto prober = _probers[idx];
     bool finish = false;
-    int64_t hash_table_mem_usage = builder->hash_table_mem_usage();
+    int64_t hash_table_mem_usage = builder->ht_mem_usage();
     enum SpillLoadPartitionStage { BEGIN = 0, FINISH = 1 };
     ctx.total_yield_point_cnt = FINISH;
     auto wg = ctx.wg;
@@ -272,10 +275,11 @@ Status SpillableHashJoinProbeOperator::_load_partition_build_side(workgroup::Yie
             if (chunk_st.ok() && chunk_st.value() != nullptr && !chunk_st.value()->is_empty()) {
                 int64_t old_mem_usage = hash_table_mem_usage;
                 RETURN_IF_ERROR(builder->append_chunk(std::move(chunk_st.value())));
-                hash_table_mem_usage = builder->hash_table_mem_usage();
+                hash_table_mem_usage = builder->ht_mem_usage();
                 COUNTER_ADD(metrics.build_partition_peak_memory_usage, hash_table_mem_usage - old_mem_usage);
             } else if (chunk_st.status().is_end_of_file()) {
                 RETURN_IF_ERROR(builder->build(state));
+                prober->attach(builder, _join_prober->probe_metrics());
                 finish = true;
             } else if (!chunk_st.ok()) {
                 return chunk_st.status();
@@ -312,11 +316,13 @@ Status SpillableHashJoinProbeOperator::_load_all_partition_build_side(RuntimeSta
                 if (yield_ctx.need_yield) {
                     defer.cancel();
                 }
+            } else {
+                yield_ctx.set_finished();
             }
         };
         auto yield_func = [&](workgroup::ScanTask&& task) { spill::IOTaskExecutor::force_submit(std::move(task)); };
-        auto io_task = workgroup::ScanTask(_join_builder->spiller()->options().wg.get(), std::move(task),
-                                           std::move(yield_func));
+        auto io_task =
+                workgroup::ScanTask(_join_builder->spiller()->options().wg, std::move(task), std::move(yield_func));
         RETURN_IF_ERROR(spill::IOTaskExecutor::submit(std::move(io_task)));
     }
     return Status::OK();
@@ -414,7 +420,7 @@ StatusOr<ChunkPtr> SpillableHashJoinProbeOperator::pull_chunk(RuntimeState* stat
     // probe chunk
     for (size_t i = 0; i < _probers.size(); ++i) {
         if (!_probers[i]->probe_chunk_empty()) {
-            ASSIGN_OR_RETURN(auto res, _probers[i]->probe_chunk(state, &_builders[i]->hash_table()));
+            ASSIGN_OR_RETURN(auto res, _probers[i]->probe_chunk(state));
             return res;
         }
     }
@@ -426,8 +432,7 @@ StatusOr<ChunkPtr> SpillableHashJoinProbeOperator::pull_chunk(RuntimeState* stat
             for (size_t i = 0; i < _probers.size(); ++i) {
                 if (!_probe_post_eofs[i] && _probe_read_eofs[i]) {
                     bool has_remain = false;
-                    ASSIGN_OR_RETURN(auto res,
-                                     _probers[i]->probe_remain(state, &_builders[i]->hash_table(), &has_remain));
+                    ASSIGN_OR_RETURN(auto res, _probers[i]->probe_remain(state, &has_remain));
                     _probe_post_eofs[i] = !has_remain;
                     if (res && !res->is_empty()) {
                         return res;
@@ -453,9 +458,14 @@ StatusOr<ChunkPtr> SpillableHashJoinProbeOperator::pull_chunk(RuntimeState* stat
         _has_probe_remain = false;
         _builders.clear();
         COUNTER_SET(metrics.build_partition_peak_memory_usage, 0);
+        COUNTER_SET(metrics.peak_processing_partition_count, 0);
     }
 
     return nullptr;
+}
+
+bool SpillableHashJoinProbeOperator::spilled() const {
+    return _join_builder->spiller()->spilled();
 }
 
 void SpillableHashJoinProbeOperator::_acquire_next_partitions() {
@@ -471,18 +481,25 @@ void SpillableHashJoinProbeOperator::_acquire_next_partitions() {
     }
 
     size_t bytes_usage = 0;
+    size_t avaliable_bytes =
+            std::min<size_t>(_mem_resource_manager.operator_avaliable_memory_bytes(),
+                             static_cast<size_t>(_spill_hash_join_probe_op_max_bytes / _degree_of_parallelism));
     // process the partition in memory firstly
     if (_processing_partitions.empty()) {
         for (auto partition : _build_partitions) {
             if (partition->in_mem && !_processed_partitions.count(partition->partition_id)) {
-                _processing_partitions.emplace_back(partition);
-                bytes_usage += partition->bytes;
-                _pid_to_process_id.emplace(partition->partition_id, _processing_partitions.size() - 1);
+                if ((partition->mem_size + bytes_usage < avaliable_bytes || _processing_partitions.empty()) &&
+                    std::find(_processing_partitions.begin(), _processing_partitions.end(), partition) ==
+                            _processing_partitions.end()) {
+                    _processing_partitions.emplace_back(partition);
+                    bytes_usage += partition->mem_size;
+                    _pid_to_process_id.emplace(partition->partition_id, _processing_partitions.size() - 1);
+                    COUNTER_ADD(metrics.peak_processing_partition_count, 1);
+                }
             }
         }
     }
 
-    size_t avaliable_bytes = _mem_resource_manager.operator_avaliable_memory_bytes();
     // process the partition could be hold in memory
     if (_processing_partitions.empty()) {
         for (const auto* partition : _build_partitions) {
@@ -493,6 +510,7 @@ void SpillableHashJoinProbeOperator::_acquire_next_partitions() {
                     _processing_partitions.emplace_back(partition);
                     bytes_usage += partition->bytes;
                     _pid_to_process_id.emplace(partition->partition_id, _processing_partitions.size() - 1);
+                    COUNTER_ADD(metrics.peak_processing_partition_count, 1);
                 }
             }
         }
@@ -533,6 +551,9 @@ Status SpillableHashJoinProbeOperatorFactory::prepare(RuntimeState* state) {
     _spill_options->plan_node_id = _plan_node_id;
     _spill_options->encode_level = state->spill_encode_level();
     _spill_options->wg = state->fragment_ctx()->workgroup();
+    _spill_options->enable_buffer_read = state->enable_spill_buffer_read();
+    _spill_options->max_read_buffer_bytes = state->max_spill_read_buffer_bytes_per_driver();
+    _spill_options->spill_hash_join_probe_op_max_bytes = state->spill_hash_join_probe_op_max_bytes();
 
     return Status::OK();
 }
@@ -546,6 +567,8 @@ OperatorPtr SpillableHashJoinProbeOperatorFactory::create(int32_t degree_of_para
             _hash_joiner_factory->get_builder(degree_of_parallelism, driver_sequence));
 
     prober->set_probe_spiller(spiller);
+    prober->set_degree_of_parallelism(degree_of_parallelism);
+    prober->set_spill_hash_join_probe_op_max_bytes(_spill_options->spill_hash_join_probe_op_max_bytes);
 
     return prober;
 }

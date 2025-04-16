@@ -33,16 +33,33 @@ namespace starrocks {
 class SegmentReplicateTask final : public Runnable {
 public:
     SegmentReplicateTask(ReplicateToken* replicate_token, std::unique_ptr<SegmentPB> segment, bool eos)
-            : _replicate_token(replicate_token), _segment(std::move(segment)), _eos(eos) {}
+            : _replicate_token(replicate_token),
+              _segment(std::move(segment)),
+              _eos(eos),
+              _create_time_ns(MonotonicNanos()) {}
 
     ~SegmentReplicateTask() override = default;
 
-    void run() override { _replicate_token->_sync_segment(std::move(_segment), _eos); }
+    void run() override {
+        auto& stat = _replicate_token->_stat;
+        stat.num_pending_tasks.fetch_add(-1, std::memory_order_relaxed);
+        stat.pending_time_ns.fetch_add(MonotonicNanos() - _create_time_ns, std::memory_order_relaxed);
+        stat.num_running_tasks.fetch_add(1, std::memory_order_relaxed);
+        int64_t duration_ns = 0;
+        {
+            SCOPED_RAW_TIMER(&duration_ns);
+            _replicate_token->_sync_segment(std::move(_segment), _eos);
+        }
+        stat.num_running_tasks.fetch_add(-1, std::memory_order_relaxed);
+        stat.num_finished_tasks.fetch_add(1, std::memory_order_relaxed);
+        stat.execute_time_ns.fetch_add(duration_ns, std::memory_order_relaxed);
+    }
 
 private:
     ReplicateToken* _replicate_token;
     std::unique_ptr<SegmentPB> _segment;
     bool _eos;
+    int64_t _create_time_ns;
 };
 
 ReplicateChannel::ReplicateChannel(const DeltaWriterOptions* opt, std::string host, int32_t port, int64_t node_id)
@@ -78,7 +95,8 @@ Status ReplicateChannel::_init() {
         LOG(WARNING) << msg;
         return Status::InternalError(msg);
     }
-    _mem_tracker = GlobalEnv::GetInstance()->load_mem_tracker();
+    _mem_tracker = std::make_unique<MemTracker>(-1, "replicate: " + UniqueId(_opt->load_id).to_string(),
+                                                GlobalEnv::GetInstance()->load_mem_tracker());
     if (!_mem_tracker) {
         auto msg = fmt::format("Failed to get load mem tracker for {} failed.", debug_string().c_str());
         LOG(WARNING) << msg;
@@ -87,33 +105,12 @@ Status ReplicateChannel::_init() {
     return Status::OK();
 }
 
-Status ReplicateChannel::sync_segment(SegmentPB* segment, butil::IOBuf& data, bool eos,
-                                      std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
-                                      std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos) {
-    RETURN_IF_ERROR(_st);
-
-    // 1. init sync channel
-    _st = _init();
-    RETURN_IF_ERROR(_st);
-
-    // 2. send segment sync request
-    _send_request(segment, data, eos);
-
-    // 3. wait result
-    RETURN_IF_ERROR(_wait_response(replicate_tablet_infos, failed_tablet_infos));
-
-    VLOG(1) << "Sync tablet " << _opt->tablet_id << " segment id " << (segment == nullptr ? -1 : segment->segment_id())
-            << " eos " << eos << " to [" << _host << ":" << _port << "] res " << _closure->result.DebugString();
-
-    return _st;
-}
-
 Status ReplicateChannel::async_segment(SegmentPB* segment, butil::IOBuf& data, bool eos,
                                        std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
                                        std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos) {
     RETURN_IF_ERROR(_st);
 
-    VLOG(1) << "Async tablet " << _opt->tablet_id << " segment id " << (segment == nullptr ? -1 : segment->segment_id())
+    VLOG(2) << "Async tablet " << _opt->tablet_id << " segment id " << (segment == nullptr ? -1 : segment->segment_id())
             << " eos " << eos << " to [" << _host << ":" << _port;
 
     // 1. init sync channel
@@ -127,11 +124,11 @@ Status ReplicateChannel::async_segment(SegmentPB* segment, butil::IOBuf& data, b
     _send_request(segment, data, eos);
 
     // 4. wait if eos=true
-    if (eos || _mem_tracker->limit_exceeded()) {
+    if (eos || _mem_tracker->any_limit_exceeded()) {
         RETURN_IF_ERROR(_wait_response(replicate_tablet_infos, failed_tablet_infos));
     }
 
-    VLOG(1) << "Asynced tablet " << _opt->tablet_id << " segment id "
+    VLOG(2) << "Asynced tablet " << _opt->tablet_id << " segment id "
             << (segment == nullptr ? -1 : segment->segment_id()) << " eos " << eos << " to [" << _host << ":" << _port
             << "] res " << _closure->result.DebugString();
 
@@ -145,19 +142,25 @@ void ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, boo
     request.set_eos(eos);
     request.set_txn_id(_opt->txn_id);
     request.set_index_id(_opt->index_id);
+    request.set_sink_id(_opt->sink_id);
+
+    VLOG(2) << "Send segment to " << debug_string()
+            << " segment_id=" << (segment == nullptr ? -1 : segment->segment_id()) << " eos=" << eos
+            << " txn_id=" << _opt->txn_id << " index_id=" << _opt->index_id << " sink_id=" << _opt->sink_id;
 
     _closure->ref();
     _closure->reset();
     _closure->cntl.set_timeout_ms(_opt->timeout_ms);
-    _closure->cntl.ignore_eovercrowded();
+    SET_IGNORE_OVERCROWDED(_closure->cntl, load);
 
     if (segment != nullptr) {
         request.set_allocated_segment(segment);
         _closure->cntl.request_attachment().append(data);
     }
     _closure->request_size = _closure->cntl.request_attachment().size();
+
     // brpc send buffer is also considered as part of the memory used by load
-    _mem_tracker->consume(_closure->request_size);
+    _mem_tracker->consume_without_root(_closure->request_size);
 
     _stub->tablet_writer_add_segment(&_closure->cntl, &request, &_closure->result, _closure);
 
@@ -170,7 +173,7 @@ void ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, boo
 Status ReplicateChannel::_wait_response(std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
                                         std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos) {
     if (_closure->join()) {
-        _mem_tracker->release(_closure->request_size);
+        _mem_tracker->release_without_root(_closure->request_size);
         if (_closure->cntl.Failed()) {
             _st = Status::InternalError(_closure->cntl.ErrorText());
             LOG(WARNING) << "Failed to send rpc to " << debug_string() << " err=" << _st;
@@ -229,7 +232,11 @@ Status ReplicateToken::submit(std::unique_ptr<SegmentPB> segment, bool eos) {
         return Status::InternalError(fmt::format("{} segment=null eos=false", debug_string()));
     }
     auto task = std::make_shared<SegmentReplicateTask>(this, std::move(segment), eos);
-    return _replicate_token->submit(std::move(task));
+    Status st = _replicate_token->submit(std::move(task));
+    if (st.ok()) {
+        _stat.num_pending_tasks.fetch_add(1, std::memory_order_relaxed);
+    }
+    return st;
 }
 
 void ReplicateToken::cancel(const Status& st) {
@@ -307,6 +314,43 @@ void ReplicateToken::_sync_segment(std::unique_ptr<SegmentPB> segment, bool eos)
                 LOG(WARNING) << "Failed to read delete file " << segment->DebugString() << " by " << debug_string()
                              << " err " << st;
                 return set_status(st);
+            }
+        }
+        if (!segment->seg_indexes().empty()) {
+            auto mutable_indexes = segment->mutable_seg_indexes();
+            size_t total_index_data_size = 0;
+            for (int i = 0; i < mutable_indexes->size(); i++) {
+                auto& index = mutable_indexes->at(i);
+                if (index.index_type() == VECTOR) {
+                    auto index_path = mutable_indexes->at(i).index_path();
+                    auto res = _fs->new_random_access_file(index_path);
+
+                    if (!res.ok()) {
+                        LOG(WARNING) << "Failed to open index file " << index_path << " by " << debug_string()
+                                     << " err " << res.status();
+                        return set_status(res.status());
+                    }
+
+                    auto file_size_res = _fs->get_file_size(index_path);
+                    if (!file_size_res.ok()) {
+                        LOG(WARNING) << "Failed to get index file size " << index_path << " err " << res.status();
+                        return set_status(res.status());
+                    }
+                    auto file_size = file_size_res.value();
+                    mutable_indexes->at(i).set_index_file_size(file_size);
+                    total_index_data_size += file_size;
+
+                    auto rfile = std::move(res.value());
+                    auto buf = new uint8[file_size];
+                    data.append_user_data(buf, file_size, [](void* buf) { delete[](uint8*) buf; });
+                    auto st = rfile->read_fully(buf, file_size);
+                    if (!st.ok()) {
+                        LOG(WARNING) << "Failed to read index file " << segment->DebugString() << " by "
+                                     << debug_string() << " err " << st;
+                        return set_status(st);
+                    }
+                }
+                segment->set_seg_index_data_size(total_index_data_size);
             }
         }
     }

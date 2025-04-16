@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # sinh
 
-## Description
+
 
 Computes the hyperbolic sine of the argument.
 

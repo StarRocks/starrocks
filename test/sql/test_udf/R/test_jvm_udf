@@ -1,0 +1,174 @@
+-- name: test_jvm_udf
+set enable_group_execution = true;
+-- result:
+-- !result
+CREATE AGGREGATE FUNCTION sumbigint(bigint)
+RETURNS bigint
+symbol = "Sumbigint"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc%2FSumbigint.jar";
+-- result:
+-- !result
+CREATE TABLE FUNCTION udtfstring(string)
+RETURNS string
+symbol = "UDTFstring"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc%2FUDTFstring.jar";
+-- result:
+-- !result
+CREATE TABLE FUNCTION udtfstring_wrong_match(string)
+RETURNS int
+symbol = "UDTFstring"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc%2FUDTFstring.jar";
+-- result:
+-- !result
+CREATE TABLE FUNCTION udtfint(int)
+RETURNS int
+symbol = "UDTFint"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc%2FUDTFint.jar";
+-- result:
+-- !result
+CREATE TABLE FUNCTION udtfbigint(bigint)
+RETURNS bigint
+symbol = "UDTFbigint"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc%2FUDTFbigint.jar";
+-- result:
+-- !result
+CREATE TABLE FUNCTION udtffloat(float)
+RETURNS float
+symbol = "UDTFfloat"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc%2FUDTFfloat.jar";
+-- result:
+-- !result
+CREATE TABLE FUNCTION udtfdouble(double)
+RETURNS double
+symbol = "UDTFdouble"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc%2FUDTFdouble.jar";
+-- result:
+-- !result
+CREATE FUNCTION exception_test(string)
+RETURNS string
+PROPERTIES
+(
+"symbol" = "ExceptionUDF2", 
+"type" = "StarrocksJar", 
+"file" = "${udf_url}/starrocks-jdbc/ExceptionUDF2.jar"
+);
+-- result:
+-- !result
+CREATE FUNCTION shared_exception_test(string)
+RETURNS string
+PROPERTIES
+(
+"symbol" = "ExceptionUDF2", 
+"isolation"="shared",
+"type" = "StarrocksJar", 
+"file" = "${udf_url}/starrocks-jdbc/ExceptionUDF2.jar"
+);
+-- result:
+-- !result
+CREATE TABLE `t0` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  40960));
+-- result:
+-- !result
+select count(udtfstring) from t0, udtfstring(c1);
+-- result:
+81920
+-- !result
+select count(udtfstring_wrong_match) from t0, udtfstring_wrong_match(c1);
+-- result:
+[REGEX].*Type not matched, expect class java.lang.Integer, but got class java.lang.String.*
+-- !result
+select count(udtfint) from t0, udtfint(c1);
+-- result:
+81920
+-- !result
+select count(udtfbigint) from t0, udtfbigint(c1);
+-- result:
+81920
+-- !result
+select count(udtffloat) from t0, udtffloat(c1);
+-- result:
+81920
+-- !result
+select count(udtfdouble) from t0, udtfdouble(c1);
+-- result:
+81920
+-- !result
+select * from TABLE(udtfstring(""));
+-- result:
+-- !result
+select * from TABLE(udtfstring("▁▂▃▄▅▆▇█"));
+-- result:
+▁▂▃▄▅▆▇█
+▁▂▃▄▅▆▇█
+-- !result
+select * from TABLE(udtfstring("中文测试"));
+-- result:
+中文测试
+中文测试
+-- !result
+select * from TABLE(udtfstring("∀∂∈ℝ∧∪≡∞ ↑↗↨↻⇣ ┐┼╔╘░►☺♀ ﬁ�⑀₂ἠḂӥẄɐː⍎אԱა"));
+-- result:
+∀∂∈ℝ∧∪≡∞ ↑↗↨↻⇣ ┐┼╔╘░►☺♀ ﬁ�⑀₂ἠḂӥẄɐː⍎אԱა
+∀∂∈ℝ∧∪≡∞ ↑↗↨↻⇣ ┐┼╔╘░►☺♀ ﬁ�⑀₂ἠḂӥẄɐː⍎אԱა
+-- !result
+select * from TABLE(udtfstring("2H₂ + O₂ ⇌ 2H₂O"));
+-- result:
+2H₂ + O₂ ⇌ 2H₂O
+2H₂ + O₂ ⇌ 2H₂O
+-- !result
+select * from TABLE(udtfstring("ᚻᛖ ᚳᚹᚫᚦ ᚦᚫᛏ ᚻᛖ ᛒᚢᛞᛖ ᚩᚾ ᚦᚫᛗ ᛚᚪᚾᛞᛖ ᚾᚩᚱᚦᚹᛖᚪᚱᛞᚢᛗ ᚹᛁᚦ ᚦᚪ ᚹᛖᛥᚫ"));
+-- result:
+ᚻᛖ ᚳᚹᚫᚦ ᚦᚫᛏ ᚻᛖ ᛒᚢᛞᛖ ᚩᚾ ᚦᚫᛗ ᛚᚪᚾᛞᛖ ᚾᚩᚱᚦᚹᛖᚪᚱᛞᚢᛗ ᚹᛁᚦ ᚦᚪ ᚹᛖᛥᚫ
+ᚻᛖ ᚳᚹᚫᚦ ᚦᚫᛏ ᚻᛖ ᛒᚢᛞᛖ ᚩᚾ ᚦᚫᛗ ᛚᚪᚾᛞᛖ ᚾᚩᚱᚦᚹᛖᚪᚱᛞᚢᛗ ᚹᛁᚦ ᚦᚪ ᚹᛖᛥᚫ
+-- !result
+set streaming_preaggregation_mode="force_streaming";
+-- result:
+-- !result
+select sum(delta), count(*), count(delta) from (select (sum(c3) - sumbigint(c3)) as delta from t0 group by c0,c1 limit 10) tb;
+-- result:
+0	10	10
+-- !result
+set streaming_preaggregation_mode="auto";
+-- result:
+-- !result
+set enable_spill=true;
+-- result:
+-- !result
+set spill_mode="force";
+-- result:
+-- !result
+select sum(delta), count(*), count(delta) from (select (sum(c3) - sumbigint(c3)) as delta from t0 group by c0,c1) tb;
+-- result:
+0	40960	40960
+-- !result
+select count(*) from t0 where exception_test(c1) is null;
+-- result:
+[REGEX].*java.lang.NullPointerException.*
+-- !result
+select count(*) from t0 where shared_exception_test(c1) is null;
+-- result:
+[REGEX].*java.lang.NullPointerException.*
+-- !result
+select count(*) from t0 where shared_exception_test(c1) is null;
+-- result:
+[REGEX].*java.lang.NullPointerException.*
+-- !result

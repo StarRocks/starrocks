@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # cbrt
 
-## 功能
+
 
 计算参数的立方根。
 

@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # percentile_approx_raw
 
-## Description
+
 
 Returns the value that corresponds to a specified percentile from `x`.
 

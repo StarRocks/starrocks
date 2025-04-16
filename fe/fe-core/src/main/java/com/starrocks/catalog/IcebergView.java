@@ -14,8 +14,8 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Strings;
 import com.starrocks.sql.ast.TableRelation;
-import org.apache.parquet.Strings;
 
 import java.util.List;
 
@@ -23,6 +23,7 @@ public class IcebergView extends ConnectorView {
     private final String defaultCatalogName;
     private final String defaultDbName;
     private final String location;
+    public static final String STARROCKS_DIALECT = "starrocks";
 
     public IcebergView(long id, String catalogName, String dbName, String name, List<Column> schema,
                        String definition, String defaultCatalogName, String defaultDbName, String location) {
@@ -33,10 +34,11 @@ public class IcebergView extends ConnectorView {
     }
 
     @Override
-    protected void formatRelations(List<TableRelation> tableRelations) {
+    protected void formatRelations(List<TableRelation> tableRelations, List<String> cteRelationNames) {
         for (TableRelation tableRelation : tableRelations) {
+            // iceberg view query statement with external catalog which created by starrocks must have catalog name
             if (Strings.isNullOrEmpty(tableRelation.getName().getCatalog())) {
-                tableRelation.getName().setCatalog(defaultCatalogName);
+                tableRelation.getName().setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
             }
 
             if (Strings.isNullOrEmpty(tableRelation.getName().getDb())) {

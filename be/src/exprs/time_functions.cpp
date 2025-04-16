@@ -22,7 +22,7 @@
 #include "column/column_viewer.h"
 #include "exprs/binary_function.h"
 #include "exprs/unary_function.h"
-#include "gen_cpp/InternalService_constants.h"
+#include "gen_cpp/InternalService_types.h"
 #include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
 #include "types/date_value.h"
@@ -91,7 +91,7 @@ ColumnPtr date_valid(const ColumnPtr& v1) {
             null_result[i] = nulls[i] | (!values[i].is_valid_non_strict());
         }
 
-        return NullableColumn::create(v->data_column(), null_column);
+        return NullableColumn::create(v->data_column(), std::move(null_column));
     } else {
         auto null_column = NullColumn::create();
         null_column->resize(v1->size());
@@ -103,7 +103,7 @@ ColumnPtr date_valid(const ColumnPtr& v1) {
             nulls[i] = (!values[i].is_valid_non_strict());
         }
 
-        return NullableColumn::create(v1, null_column);
+        return NullableColumn::create(v1, std::move(null_column));
     }
 }
 
@@ -571,17 +571,6 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(year_week_with_modeImpl, t, m) {
     date_value.to_date(&year, &month, &day);
     uint to_year = 0;
     int week = TimeFunctions::compute_week(year, month, day, TimeFunctions::week_mode(m | 2), &to_year);
-
-    if (week == 53 && day >= 29 && !(m & 4)) {
-        int monday_first = m & WEEK_MONDAY_FIRST;
-        int daynr_of_last_day = TimeFunctions::compute_daynr(year, 12, 31);
-        int weekday_of_last_day = TimeFunctions::compute_weekday(daynr_of_last_day, !monday_first);
-
-        if (weekday_of_last_day - monday_first < 2) {
-            ++to_year;
-            week = 1;
-        }
-    }
     return to_year * 100 + week;
 }
 DEFINE_TIME_BINARY_FN(year_week_with_mode, TYPE_DATETIME, TYPE_INT, TYPE_INT);
@@ -1478,7 +1467,7 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now_64(FunctionContext* context, 
     int64_t value = context->state()->timestamp_ms() / 1000;
     auto result = Int64Column::create();
     result->append(value);
-    return ConstColumn::create(result, 1);
+    return ConstColumn::create(std::move(result), 1);
 }
 
 StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now_32(FunctionContext* context, const Columns& columns) {
@@ -1486,7 +1475,7 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now_32(FunctionContext* context, 
     int64_t value = context->state()->timestamp_ms() / 1000;
     auto result = Int32Column::create();
     result->append(value);
-    return ConstColumn::create(result, 1);
+    return ConstColumn::create(std::move(result), 1);
 }
 
 /*
@@ -2129,7 +2118,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(yyyy_MM_dd_Impl, v) {
 }
 
 std::string format_for_yyyyMMddHHmmssImpl(const TimestampValue& date_value) {
-    return date_value.to_string();
+    return date_value.to_string(true);
 }
 
 DEFINE_STRING_UNARY_FN_WITH_IMPL(yyyyMMddHHmmssImpl, v) {
@@ -3231,6 +3220,95 @@ Status TimeFunctions::last_day_close(FunctionContext* context, FunctionContext::
         delete ctx;
     }
     return Status::OK();
+}
+
+// Format a time value according to a format string
+StatusOr<ColumnPtr> TimeFunctions::time_format(FunctionContext* context, const starrocks::Columns& columns) {
+    if (columns.size() != 2) {
+        return Status::InvalidArgument("FORMAT_TIME requires exactly 2 arguments");
+    }
+
+    const auto& time_column = columns[0];
+    const auto& format_column = columns[1];
+
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    auto time_viewer = ColumnViewer<TYPE_TIME>(time_column);
+    auto format_viewer = ColumnViewer<TYPE_VARCHAR>(format_column);
+
+    const size_t size = time_column->size();
+    auto builder = ColumnBuilder<TYPE_VARCHAR>(size);
+
+    for (size_t i = 0; i < size; ++i) {
+        if (time_viewer.is_null(i) || format_viewer.is_null(i)) {
+            builder.append_null();
+            continue;
+        }
+
+        TimestampValue time_val;
+        time_val.set_timestamp(time_viewer.value(i));
+        std::string_view format_str = format_viewer.value(i);
+
+        // Convert TimeValue to hours, minutes, seconds
+        int year;
+        int month;
+        int day;
+        int hours;
+        int minutes;
+        int seconds;
+        int microseconds;
+        time_val.to_timestamp(&year, &month, &day, &hours, &minutes, &seconds, &microseconds);
+
+        std::stringstream result;
+        bool in_format = false;
+
+        for (size_t j = 0; j < format_str.size(); ++j) {
+            char c = format_str[j];
+            if (c == '%') {
+                in_format = true;
+                continue;
+            }
+
+            if (!in_format) {
+                result << c;
+                continue;
+            }
+
+            in_format = false;
+            switch (c) {
+            case 'H': // Hour (00-23)
+                result << std::setfill('0') << std::setw(2) << hours;
+                break;
+            case 'h': // Hour (01-12)
+                result << std::setfill('0') << std::setw(2) << (((hours % 12) == 0) ? 12 : (hours % 12));
+                break;
+            case 'i': // Minutes (00-59)
+                result << std::setfill('0') << std::setw(2) << minutes;
+                break;
+            case 'S': // Seconds (00-59)
+            case 's': // Seconds (00-59)
+                result << std::setfill('0') << std::setw(2) << seconds;
+                break;
+            case 'f': // Microseconds (000000-999999)
+                result << std::setfill('0') << std::setw(6) << microseconds;
+                break;
+            case 'p': // AM or PM
+                result << (hours < 12 ? "AM" : "PM");
+                break;
+            default:
+                result << '%' << c;
+                break;
+            }
+        }
+
+        if (in_format) {
+            result << '%'; // Handle trailing %
+        }
+
+        builder.append(result.str());
+    }
+
+    return builder.build(ColumnHelper::is_all_const(columns));
 }
 
 } // namespace starrocks

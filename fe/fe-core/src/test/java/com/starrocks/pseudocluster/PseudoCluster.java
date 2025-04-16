@@ -31,16 +31,16 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.PBackendService;
+import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.HeartbeatService;
@@ -204,7 +204,7 @@ public class PseudoCluster {
         }
 
         @Override
-        public long createShardGroup(long dbId, long tableId, long partitionId) throws DdlException {
+        public long createShardGroup(long dbId, long tableId, long partitionId, long indexId) throws DdlException {
             return partitionId;
         }
 
@@ -245,12 +245,7 @@ public class PseudoCluster {
         }
 
         @Override
-        public long getPrimaryComputeNodeIdByShard(long shardId) throws UserException {
-            return workers.isEmpty() ? -1 : workers.get((int) (shardId % workers.size())).backendId;
-        }
-
-        @Override
-        public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws UserException {
+        public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws StarRocksException {
             return workers.isEmpty() ? -1 : workers.get((int) (shardId % workers.size())).backendId;
         }
     }
@@ -284,14 +279,14 @@ public class PseudoCluster {
     }
 
     public List<Long> listTablets(String dbName, String tableName) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             return null;
         }
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
-            Table table = db.getTable(tableName);
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
             if (table == null) {
                 return null;
             }
@@ -307,7 +302,7 @@ public class PseudoCluster {
             }
             return ret;
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
     }
 
@@ -330,7 +325,7 @@ public class PseudoCluster {
                     System.out.println("retry execute " + sql);
                     continue;
                 }
-                LOG.error(e);
+                LOG.error(e.getMessage(), e);
                 throw e;
             }
         }
@@ -417,8 +412,8 @@ public class PseudoCluster {
         dataSource.setMaxIdle(40);
         cluster.dataSource = dataSource;
 
-        ClientPool.beHeartbeatPool = cluster.heartBeatPool;
-        ClientPool.backendPool = cluster.backendThriftPool;
+        ThriftConnectionPool.beHeartbeatPool = cluster.heartBeatPool;
+        ThriftConnectionPool.backendPool = cluster.backendThriftPool;
         BrpcProxy.setInstance(cluster.brpcProxy);
 
         GlobalStateMgr.getCurrentState().setStarOSAgent(new PseudoStarOSAgent());

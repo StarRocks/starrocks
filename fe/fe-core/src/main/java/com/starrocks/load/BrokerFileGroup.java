@@ -34,6 +34,7 @@
 
 package com.starrocks.load;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -58,6 +59,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.PartitionNames;
@@ -129,7 +131,7 @@ public class BrokerFileGroup implements Writable {
         this.csvFormat = new CsvFormat((byte) 0, (byte) 0, 0, false);
     }
 
-    public BrokerFileGroup(TableFunctionTable table) throws AnalysisException {
+    public BrokerFileGroup(TableFunctionTable table, Set<String> scanColumns) throws AnalysisException {
         this.tableId = table.getId();
         this.isNegative = false;
 
@@ -143,7 +145,7 @@ public class BrokerFileGroup implements Writable {
                 table.getCsvSkipHeader(), table.getCsvTrimSpace());
         this.fileFieldNames = new ArrayList<>();
 
-        this.columnExprList = table.getColumnExprList();
+        this.columnExprList = table.getColumnExprList(scanColumns);
         this.columnsFromPath = table.getColumnsFromPath();
     }
 
@@ -167,7 +169,8 @@ public class BrokerFileGroup implements Writable {
     // This will parse the input DataDescription to list for BrokerFileInfo
     public void parse(Database db, DataDescription dataDescription) throws DdlException {
         // tableId
-        Table table = db.getTable(dataDescription.getTableName());
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), dataDescription.getTableName());
         if (table == null) {
             throw new DdlException("Unknown table " + dataDescription.getTableName()
                     + " in database " + db.getOriginName());
@@ -236,7 +239,7 @@ public class BrokerFileGroup implements Writable {
         if (dataDescription.isLoadFromTable()) {
             String srcTableName = dataDescription.getSrcTableName();
             // src table should be hive table
-            Table srcTable = db.getTable(srcTableName);
+            Table srcTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), srcTableName);
             if (srcTable == null) {
                 throw new DdlException("Unknown table " + srcTableName + " in database " + db.getOriginName());
             }
@@ -361,6 +364,11 @@ public class BrokerFileGroup implements Writable {
 
     public boolean isTrimspace() {
         return csvFormat.isTrimspace();
+    }
+
+    @VisibleForTesting
+    void setFilePaths(List<String> filePaths) {
+        this.filePaths = filePaths;
     }
 
     @Override

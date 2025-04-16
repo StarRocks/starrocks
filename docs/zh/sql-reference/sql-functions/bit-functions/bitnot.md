@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # bitnot
 
-## 功能
+
 
 返回参数 `x` 进行取反运算后的结果。
 

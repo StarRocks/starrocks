@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # to_tera_date
 
-## Description
+
 
 Parses a date or time string according to the specified format and converts the string to a DATE value.
 

@@ -15,6 +15,7 @@
 #pragma once
 
 #include "common/object_pool.h"
+#include "exprs/agg_state_function.h"
 #include "exprs/builtin_functions.h"
 #include "exprs/expr.h"
 
@@ -35,29 +36,37 @@ public:
     bool support_ngram_bloom_filter(ExprContext* context) const override;
     bool ngram_bloom_filter(ExprContext* context, const BloomFilter* bf,
                             const NgramBloomFilterReaderOptions& reader_options) const override;
+    static bool split_normal_string_to_ngram(const Slice& needle, FunctionContext* fn_ctx,
+                                             const NgramBloomFilterReaderOptions& reader_options,
+                                             std::vector<std::string>& ngram_set, const std::string& func_name);
+
+    static bool split_like_string_to_ngram(const Slice& needle, const NgramBloomFilterReaderOptions& reader_options,
+                                           std::vector<std::string>& ngram_set);
 
 protected:
-    [[nodiscard]] Status prepare(RuntimeState* state, ExprContext* context) override;
+    Status prepare(RuntimeState* state, ExprContext* context) override;
 
-    [[nodiscard]] Status open(RuntimeState* state, ExprContext* context,
-                              FunctionContext::FunctionStateScope scope) override;
+    Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
 
     void close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
 
     bool is_constant() const override;
 
-    [[nodiscard]] StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 
 private:
-    bool split_normal_string_to_ngram(FunctionContext* fn_ctx, const NgramBloomFilterReaderOptions& reader_options,
-                                      NgramBloomFilterState* ngram_state, const std::string& func_name) const;
-
-    bool split_like_string_to_ngram(FunctionContext* fn_ctx, const NgramBloomFilterReaderOptions& reader_options,
-                                    std::vector<Slice>& ngram_set) const;
+    const FunctionDescriptor* _get_function_by_fid(const TFunction& fn);
+    const FunctionDescriptor* _get_function(const TFunction& fn, const std::vector<TypeDescriptor>& arg_types,
+                                            const TypeDescriptor& result_type, std::vector<bool> arg_nullables);
 
     const FunctionDescriptor* _fn_desc{nullptr};
 
     bool _is_returning_random_value = false;
+
+    // only set when it's a agg state combinator function to track its lifecycle be with the expr
+    std::shared_ptr<AggStateFunction> _agg_state_func = nullptr;
+    // only set when it's a agg state combinator function to track its lifecycle be with the expr
+    std::shared_ptr<FunctionDescriptor> _agg_func_desc = nullptr;
 };
 
 } // namespace starrocks

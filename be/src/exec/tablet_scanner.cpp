@@ -17,7 +17,6 @@
 #include <memory>
 #include <utility>
 
-#include "column/column_pool.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exec/olap_scan_node.h"
@@ -118,8 +117,6 @@ void TabletScanner::close(RuntimeState* state) {
     _reader.reset();
     _predicate_free_pool.clear();
     Expr::close(_conjunct_ctxs, state);
-    // Reduce the memory usage if the the average string size is greater than 512.
-    release_large_columns<BinaryColumn>(state->chunk_size() * 512);
     _is_closed = true;
 }
 
@@ -147,7 +144,7 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
     // to avoid the unnecessary SerDe and improve query performance
     _params.need_agg_finalize = _need_agg_finalize;
     _params.use_page_cache = _runtime_state->use_page_cache();
-    auto parser = _pool.add(new PredicateParser(_tablet_schema));
+    auto parser = _pool.add(new OlapPredicateParser(_tablet_schema));
 
     ASSIGN_OR_RETURN(auto pred_tree, _parent->_conjuncts_manager->get_predicate_tree(parser, _predicate_free_pool));
 
@@ -397,7 +394,7 @@ void TabletScanner::update_counter() {
         COUNTER_UPDATE(c2, _reader->stats().rows_del_filtered);
     }
     if (_reader->stats().flat_json_hits.size() > 0) {
-        auto path_profile = _parent->_scan_profile->create_child("AccessPathHits");
+        auto path_profile = _parent->_scan_profile->create_child("FlatJsonHits");
 
         for (auto& [k, v] : _reader->stats().flat_json_hits) {
             RuntimeProfile::Counter* path_counter = ADD_COUNTER(path_profile, k, TUnit::UNIT);
@@ -405,11 +402,34 @@ void TabletScanner::update_counter() {
         }
     }
     if (_reader->stats().dynamic_json_hits.size() > 0) {
-        auto path_profile = _parent->_scan_profile->create_child("AccessPathUnhits");
+        auto path_profile = _parent->_scan_profile->create_child("FlatJsonUnhits");
         for (auto& [k, v] : _reader->stats().dynamic_json_hits) {
             RuntimeProfile::Counter* path_counter = ADD_COUNTER(path_profile, k, TUnit::UNIT);
             COUNTER_SET(path_counter, v);
         }
+    }
+    if (_reader->stats().merge_json_hits.size() > 0) {
+        auto path_profile = _parent->_scan_profile->create_child("MergeJsonUnhits");
+        for (auto& [k, v] : _reader->stats().merge_json_hits) {
+            RuntimeProfile::Counter* path_counter = ADD_COUNTER(path_profile, k, TUnit::UNIT);
+            COUNTER_SET(path_counter, v);
+        }
+    }
+    if (_reader->stats().json_init_ns > 0) {
+        RuntimeProfile::Counter* c = ADD_TIMER(_parent->_scan_profile, "FlatJsonInit");
+        COUNTER_UPDATE(c, _reader->stats().json_init_ns);
+    }
+    if (_reader->stats().json_cast_ns > 0) {
+        RuntimeProfile::Counter* c = ADD_TIMER(_parent->_scan_profile, "FlatJsonCast");
+        COUNTER_UPDATE(c, _reader->stats().json_cast_ns);
+    }
+    if (_reader->stats().json_merge_ns > 0) {
+        RuntimeProfile::Counter* c = ADD_TIMER(_parent->_scan_profile, "FlatJsonMerge");
+        COUNTER_UPDATE(c, _reader->stats().json_merge_ns);
+    }
+    if (_reader->stats().json_flatten_ns > 0) {
+        RuntimeProfile::Counter* c = ADD_TIMER(_parent->_scan_profile, "FlatJsonFlatten");
+        COUNTER_UPDATE(c, _reader->stats().json_flatten_ns);
     }
     _has_update_counter = true;
 }

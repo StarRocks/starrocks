@@ -38,7 +38,7 @@ public:
         long row_count = state->get_columns()[0]->size();
         state->set_processed_rows(row_count);
 
-        std::vector<ColumnPtr> unnested_array_list;
+        Columns unnested_array_list;
         for (auto& col_idx : state->get_columns()) {
             Column* column = col_idx.get();
 
@@ -106,7 +106,7 @@ public:
             result.emplace_back(col_idx);
         }
 
-        return std::make_pair(result, copy_count_column);
+        return std::make_pair(std::move(result), std::move(copy_count_column));
     }
 
     class UnnestState : public TableFunctionState {
@@ -116,7 +116,7 @@ public:
          */
     };
 
-    [[nodiscard]] Status init(const TFunction& fn, TableFunctionState** state) const override {
+    Status init(const TFunction& fn, TableFunctionState** state) const override {
         *state = new UnnestState();
         const auto& table_fn = fn.table_fn;
         if (table_fn.__isset.is_left_join) {
@@ -125,13 +125,11 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status prepare(TableFunctionState* state) const override { return Status::OK(); }
+    Status prepare(TableFunctionState* state) const override { return Status::OK(); }
 
-    [[nodiscard]] Status open(RuntimeState* runtime_state, TableFunctionState* state) const override {
-        return Status::OK();
-    };
+    Status open(RuntimeState* runtime_state, TableFunctionState* state) const override { return Status::OK(); };
 
-    [[nodiscard]] Status close(RuntimeState* runtime_state, TableFunctionState* state) const override {
+    Status close(RuntimeState* runtime_state, TableFunctionState* state) const override {
         delete state;
         return Status::OK();
     }

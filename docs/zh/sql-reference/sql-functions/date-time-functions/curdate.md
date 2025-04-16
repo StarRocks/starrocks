@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # curdate,current_date
 
-## 功能
+
 
 获取当前的日期，以 DATE 类型返回。
 

@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # get_json_string,get_json_object
 
-## Description
+
 
 Analyzes and gets strings from the specified path (`json_path`) in a JSON string. If the format of `json_string` or `json_path` is wrong or if no matching value is found, this function will return NULL.
 

@@ -34,7 +34,7 @@ class HorizontalGeneralTabletWriter : public TabletWriter {
 public:
     explicit HorizontalGeneralTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
                                            std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
-                                           ThreadPool* flush_pool = nullptr);
+                                           bool is_compaction, ThreadPool* flush_pool = nullptr);
 
     ~HorizontalGeneralTabletWriter() override;
 
@@ -84,7 +84,8 @@ class VerticalGeneralTabletWriter : public TabletWriter {
 public:
     explicit VerticalGeneralTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
                                          std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
-                                         uint32_t max_rows_per_segment, ThreadPool* flush_pool = nullptr);
+                                         uint32_t max_rows_per_segment, bool is_compaction,
+                                         ThreadPool* flush_pool = nullptr);
 
     ~VerticalGeneralTabletWriter() override;
 

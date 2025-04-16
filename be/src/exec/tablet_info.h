@@ -16,10 +16,12 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
 #include "column/column.h"
+#include "column/column_helper.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "gen_cpp/Descriptors_types.h"
@@ -48,6 +50,8 @@ struct OlapTableIndexSchema {
     int32_t schema_hash;
     OlapTableColumnParam* column_param;
     ExprContext* where_clause = nullptr;
+    std::map<std::string, std::string> column_to_expr_value;
+    bool is_shadow = false;
 
     void to_protobuf(POlapTableIndexSchema* pindex) const;
 };
@@ -78,6 +82,7 @@ public:
         return _proto_schema;
     }
 
+    int64_t shadow_index_size() const { return _shadow_indexes; }
     std::string debug_string() const;
 
 private:
@@ -89,6 +94,8 @@ private:
     mutable POlapTableSchemaParam* _proto_schema = nullptr;
     std::vector<OlapTableIndexSchema*> _indexes;
     mutable ObjectPool _obj_pool;
+
+    int64_t _shadow_indexes = 0;
 };
 
 using OlapTableIndexTablets = TOlapTableIndexTablets;
@@ -193,13 +200,40 @@ struct PartionKeyComparator {
         DCHECK_EQ(lhs->columns->size(), rhs->columns->size());
 
         for (size_t i = 0; i < lhs->columns->size(); ++i) {
-            int cmp = (*lhs->columns)[i]->compare_at(lhs->index, rhs->index, *(*rhs->columns)[i], -1);
+            int cmp = _compare_at((*lhs->columns)[i], (*rhs->columns)[i], lhs->index, rhs->index);
             if (cmp != 0) {
                 return cmp < 0;
             }
         }
         // equal, return false
         return false;
+    }
+
+private:
+    /**
+     * @brief Compare left column and right column at l_idx and r_idx which column can be nullable.
+     * @param lc  left column
+     * @param rc  right column
+     * @param l_idx  left column index
+     * @param r_idx  right column index
+     * @return 0 if equal or left & right both null, -1 if left < right or left is null, 1 if left > right or right is null
+     */
+    int _compare_at(const ColumnPtr& lc, const ColumnPtr& rc, uint32_t l_idx, uint32_t r_idx) const {
+        bool is_l_null = lc->is_null(l_idx);
+        bool is_r_null = rc->is_null(r_idx);
+        if (!is_l_null && !is_r_null) {
+            const Column* ldc = ColumnHelper::get_data_column(lc.get());
+            const Column* rdc = ColumnHelper::get_data_column(rc.get());
+            return ldc->compare_at(l_idx, r_idx, *rdc, -1);
+        } else {
+            if (is_l_null && is_r_null) {
+                return 0;
+            } else if (is_l_null) {
+                return -1;
+            } else {
+                return 1;
+            }
+        }
     }
 };
 
@@ -239,6 +273,40 @@ public:
     const TOlapTablePartitionParam& param() const { return _t_param; }
 
 private:
+    /**
+     * @brief  find tablets with range partition table
+     * @param chunk  input chunk
+     * @param partition_columns input partition columns 
+     * @param partitions  output partitions
+     * @param indexes  output partition indexes
+     * @param selection  chunk's selection
+     * @param invalid_row_indexs output invalid row indexs
+     * @param partition_not_exist_row_values  output partition not exist row values
+     * @return Status 
+     */
+    Status _find_tablets_with_range_partition(Chunk* chunk, Columns partition_columns,
+                                              std::vector<OlapTablePartition*>* partitions,
+                                              std::vector<uint32_t>* indexes, std::vector<uint8_t>* selection,
+                                              std::vector<int>* invalid_row_indexs,
+                                              std::vector<std::vector<std::string>>* partition_not_exist_row_values);
+
+    /**
+     * @brief  find tablets with list partition table
+     * @param chunk  input chunk
+     * @param partition_columns input partition columns 
+     * @param partitions  output partitions
+     * @param indexes  output partition indexes
+     * @param selection  chunk's selection
+     * @param invalid_row_indexs output invalid row indexs
+     * @param partition_not_exist_row_values  output partition not exist row values
+     * @return Status 
+     */
+    Status _find_tablets_with_list_partition(Chunk* chunk, Columns partition_columns,
+                                             std::vector<OlapTablePartition*>* partitions,
+                                             std::vector<uint32_t>* indexes, std::vector<uint8_t>* selection,
+                                             std::vector<int>* invalid_row_indexs,
+                                             std::vector<std::vector<std::string>>* partition_not_exist_row_values);
+
     Status _create_partition_keys(const std::vector<TExprNode>& t_exprs, ChunkRow* part_key);
 
     void _compute_hashes(Chunk* chunk, std::vector<uint32_t>* indexes);

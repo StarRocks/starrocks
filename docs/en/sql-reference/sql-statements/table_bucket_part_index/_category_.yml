@@ -1,0 +1,6 @@
+position: 80 # float position is supported
+label: 'Table, bucket, partition, and index'
+collapsible: true
+collapsed: true
+link:
+  type: generated-index

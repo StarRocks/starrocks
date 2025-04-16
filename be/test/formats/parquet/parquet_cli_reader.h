@@ -35,7 +35,13 @@ public:
         _scanner_ctx->stats = _scan_stats.get();
         _scanner_ctx->lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
     }
-    ~ParquetCLIReader() = default;
+    ~ParquetCLIReader() {
+        _file_reader = nullptr;
+        _file = nullptr;
+        _scanner_ctx = nullptr;
+        _scan_stats = nullptr;
+        _chunk = nullptr;
+    }
 
     Status init() {
         if (_file == nullptr) {
@@ -46,17 +52,15 @@ public:
 
         // create temporary reader to load schema.
         FileMetaData* file_metadata = nullptr;
+        HdfsScannerContext ctx;
+        HdfsScanStats stats;
+        ctx.stats = &stats;
+        ctx.scan_range = scan_range;
+        ctx.lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
         std::shared_ptr<FileReader> reader =
-                std::make_shared<FileReader>(4096, _file.get(), std::filesystem::file_size(_filepath), 0);
-        {
-            HdfsScannerContext ctx;
-            HdfsScanStats stats;
-            ctx.stats = &stats;
-            ctx.scan_range = scan_range;
-            ctx.lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
-            RETURN_IF_ERROR(reader->init(&ctx));
-            file_metadata = reader->get_file_metadata();
-        }
+                std::make_shared<FileReader>(4096, _file.get(), std::filesystem::file_size(_filepath));
+        RETURN_IF_ERROR(reader->init(&ctx));
+        file_metadata = reader->get_file_metadata();
 
         std::vector<SlotDesc> slot_descs;
         std::vector<TypeDescriptor> column_types;
@@ -73,11 +77,12 @@ public:
         }
         slot_descs.emplace_back();
 
-        _scanner_ctx->tuple_desc = _create_tuple_descriptor(nullptr, &_pool, slot_descs);
-        _make_column_info_vector(_scanner_ctx->tuple_desc, &_scanner_ctx->materialized_columns);
+        TupleDescriptor* tuple_desc = _create_tuple_descriptor(nullptr, &_pool, slot_descs);
+        _scanner_ctx->slot_descs = tuple_desc->slots();
+        _make_column_info_vector(tuple_desc, &_scanner_ctx->materialized_columns);
         _scanner_ctx->scan_range = scan_range;
 
-        _file_reader = std::make_shared<FileReader>(4096, _file.get(), std::filesystem::file_size(_filepath), 0);
+        _file_reader = std::make_shared<FileReader>(4096, _file.get(), std::filesystem::file_size(_filepath));
         RETURN_IF_ERROR(_file_reader->init(_scanner_ctx.get()));
 
         return Status::OK();
@@ -112,20 +117,20 @@ private:
 
     StatusOr<TypeDescriptor> _build_type(const ParquetField& field) {
         TypeDescriptor type;
-        if (field.type.type == TYPE_STRUCT) {
+        if (field.type == ColumnType::STRUCT) {
             type.type = TYPE_STRUCT;
             for (const auto& i : field.children) {
                 ASSIGN_OR_RETURN(auto child_type, _build_type(i));
                 type.children.emplace_back(child_type);
                 type.field_names.emplace_back(i.name);
             }
-        } else if (field.type.type == TYPE_MAP) {
+        } else if (field.type == ColumnType::MAP) {
             type.type = TYPE_MAP;
             for (const auto& i : field.children) {
                 ASSIGN_OR_RETURN(auto child_type, _build_type(i));
                 type.children.emplace_back(child_type);
             }
-        } else if (field.type.type == TYPE_ARRAY) {
+        } else if (field.type == ColumnType::ARRAY) {
             type.type = TYPE_ARRAY;
             ASSIGN_OR_RETURN(auto child_type, _build_type(field.children[0]));
             type.children.emplace_back(child_type);
@@ -245,11 +250,10 @@ private:
     }
 
     const std::string _filepath;
-    const std::unique_ptr<RandomAccessFile> _file;
-    const std::shared_ptr<HdfsScannerContext> _scanner_ctx;
-    const std::shared_ptr<HdfsScanStats> _scan_stats;
-
     std::shared_ptr<FileReader> _file_reader;
+    std::unique_ptr<RandomAccessFile> _file;
+    std::shared_ptr<HdfsScannerContext> _scanner_ctx;
+    std::shared_ptr<HdfsScanStats> _scan_stats;
     std::shared_ptr<Chunk> _chunk;
     ObjectPool _pool;
 };

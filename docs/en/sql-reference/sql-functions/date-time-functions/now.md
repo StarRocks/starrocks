@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # now, current_timestamp, localtime, localtimestamp
 
-## Description
+
 
 Returns the current date and time.
 

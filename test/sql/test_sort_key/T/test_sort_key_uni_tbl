@@ -103,6 +103,38 @@ drop table uni_test;
 drop database sort_key_test_uni;
 
 
+-- name: test_sort_key_uni_tbl_duplicate_row
+create database test_sort_key_uni_tbl_duplicate_row;
+use test_sort_key_uni_tbl_duplicate_row;
+
+CREATE TABLE `uni_test` (
+  `k1` bigint(20) NULL COMMENT "",
+  `k2` bigint(20) NULL COMMENT "",
+  `k3` bigint(20) NULL COMMENT "",
+  `k4` bigint(20) NULL COMMENT "",
+  `k5` bigint(20) NULL COMMENT "",
+  `v1` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+UNIQUE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into uni_test values (1,2,3,3,2,1), (1,2,3,4,1,2);
+insert into uni_test values (1,2,3,3,2,1), (1,2,3,4,1,2);
+select * from uni_test;
+
+alter table uni_test order by (k5,k4,k3,k2,k1);
+function: wait_alter_table_finish()
+show create table uni_test;
+select * from uni_test;
+function: manual_compact("test_sort_key_uni_tbl_duplicate_row", "uni_test")
+select * from uni_test;
+
+
+
 -- name: test_sort_key_uni_tbl_with_rollup;
 
 create database sort_key_uni_tbl_with_rollup;

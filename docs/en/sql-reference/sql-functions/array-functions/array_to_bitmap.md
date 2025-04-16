@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # array_to_bitmap
 
-## Description
+
 
 Converts an array into BITMAP values. This function is supported from v2.3.
 

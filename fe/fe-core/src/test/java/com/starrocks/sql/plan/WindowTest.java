@@ -267,7 +267,7 @@ public class WindowTest extends PlanTestBase {
                 .analysisError("The num_buckets parameter of NTILE must be a constant positive integer");
 
         sql = "select v1, v2, NTILE(9223372036854775808) over (partition by v1 order by v2) as j1 from t0";
-        starRocksAssert.query(sql).analysisError("Number out of range");
+        starRocksAssert.query(sql).analysisError("The num_buckets parameter of NTILE must be a constant positive integer");
 
         sql = "select v1, v2, NTILE((select v1 from t0)) over (partition by v1 order by v2) as j1 from t0";
         starRocksAssert.query(sql)
@@ -666,6 +666,218 @@ public class WindowTest extends PlanTestBase {
                     "  1:EXCHANGE");
         }
         FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testRankingWindowPreAggWithPartitionPredicatePushDown() throws Exception {
+        FeConstants.runningUnitTest = true;
+        // row_number
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (partition by v3 order by v2) as rk, " +
+                    " sum(v3) over (partition by v3) as _sum, avg(v3) over (partition by v3) as _avg, " +
+                    "count(v3) over (partition by v3) as _count" +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where rk <= 4;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "1:PARTITION-TOP-N\n" +
+                    "  |  partition by: 3: v3 \n" +
+                    "  |  partition limit: 4\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  pre agg functions: [, sum(3: v3), ], [, avg(3: v3), ], [, count(3: v3), ]\n" +
+                    "  |  offset: 0");
+        }
+        // rank
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        rank() over (partition by v3 order by v2) as rk, " +
+                    " sum(v3) over (partition by v3) as _sum, avg(v3) over (partition by v3) as _avg, " +
+                    "count(v3) over (partition by v3) as _count" +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where rk <= 4;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                    "  |  type: RANK\n" +
+                    "  |  partition by: 3: v3 \n" +
+                    "  |  partition limit: 4\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  pre agg functions: [, sum(3: v3), ], [, avg(3: v3), ], [, count(3: v3), ]\n" +
+                    "  |  offset: 0");
+        }
+        // Support multi partition by.
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (partition by v2, v3 order by v1) as rk, " +
+                    " sum(v3) over (partition by v2, v3) as _sum, avg(v3) over (partition by v2,v3) as _avg, " +
+                    "count(v3) over (partition by v2, v3) as _count" +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where rk <= 4;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                    "  |  partition by: 2: v2 , 3: v3 \n" +
+                    "  |  partition limit: 4\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC, <slot 1> 1: v1 ASC\n" +
+                    "  |  pre agg functions: [, sum(3: v3), ], [, avg(3: v3), ], [, count(3: v3), ]\n" +
+                    "  |  offset: 0");
+        }
+        /* if window operators like below , cannot be optimized, because node3 share same sort group with node4
+             5:ANALYTIC
+            |  functions: [, row_number(), ]
+            |  partition by: 2: v2, 3: v3
+            |  order by: 1: v1 ASC
+            |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+            |
+            4:ANALYTIC
+            |  functions: [, sum(3: v3), ], [, avg(3: v3), ], [, count(3: v3), ]
+            |  partition by: 2: v2, 3: v3
+            |
+            3:ANALYTIC
+            |  functions: [, lead(3: v3, 1, 0), ]
+            |  partition by: 2: v2
+            |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING
+        */
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (partition by v2, v3 order by v1) as rk, " +
+                    " sum(v3) over (partition by v2, v3) as _sum, avg(v3) over (partition by v2, v3) as _avg, " +
+                    "count(v3) over (partition by v2, v3) as _count," +
+                    "lead(v3,1,0) over (partition by v2, v3)" +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where rk <= 4;";
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, "PARTITION-TOP-N");
+        }
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testRankingWindowPreAggWithPartitionLimitPushDown() throws Exception {
+        FeConstants.runningUnitTest = true;
+        // row_number
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (partition by v3 order by v2) as rk, " +
+                    " sum(v3) over (partition by v3) as _sum, avg(v3) over (partition by v3) as _avg, " +
+                    "count(v3) over (partition by v3) as _count" +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by rk limit 4;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "1:PARTITION-TOP-N\n" +
+                    "  |  partition by: 3: v3 \n" +
+                    "  |  partition limit: 4\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  pre agg functions: [, sum(3: v3), ], [, avg(3: v3), ], [, count(3: v3), ]\n" +
+                    "  |  offset: 0");
+        }
+        // rank
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        rank() over (partition by v3 order by v2) as rk, " +
+                    " sum(v3) over (partition by v3) as _sum, avg(v3) over (partition by v3) as _avg, " +
+                    "count(v3) over (partition by v3) as _count" +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by rk limit 4;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                    "  |  type: RANK\n" +
+                    "  |  partition by: 3: v3 \n" +
+                    "  |  partition limit: 4\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  pre agg functions: [, sum(3: v3), ], [, avg(3: v3), ], [, count(3: v3), ]\n" +
+                    "  |  offset: 0");
+        }
+        // Support multi partition by.
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (partition by v2, v3 order by v1) as rk, " +
+                    " sum(v3) over (partition by v2, v3) as _sum, avg(v3) over (partition by v2,v3) as _avg, " +
+                    "count(v3) over (partition by v2, v3) as _count" +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by rk limit 4;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                    "  |  partition by: 2: v2 , 3: v3 \n" +
+                    "  |  partition limit: 4\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC, <slot 1> 1: v1 ASC\n" +
+                    "  |  pre agg functions: [, sum(3: v3), ], [, avg(3: v3), ], [, count(3: v3), ]\n" +
+                    "  |  offset: 0");
+        }
+        /* if window operators like below , cannot be optimized, because node3 share same sort group with node4
+             5:ANALYTIC
+            |  functions: [, row_number(), ]
+            |  partition by: 2: v2, 3: v3
+            |  order by: 1: v1 ASC
+            |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+            |
+            4:ANALYTIC
+            |  functions: [, sum(3: v3), ], [, avg(3: v3), ], [, count(3: v3), ]
+            |  partition by: 2: v2, 3: v3
+            |
+            3:ANALYTIC
+            |  functions: [, lead(3: v3, 1, 0), ]
+            |  partition by: 2: v2
+            |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING
+        */
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (partition by v2, v3 order by v1) as rk, " +
+                    " sum(v3) over (partition by v2, v3) as _sum, avg(v3) over (partition by v2, v3) as _avg, " +
+                    "count(v3) over (partition by v2, v3) as _count," +
+                    "lead(v3,1,0) over (partition by v2, v3)" +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by rk limit 4;";
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, "PARTITION-TOP-N");
+        }
+        FeConstants.runningUnitTest = false;
+    }
+
+    // TODO:support this case later
+    @Test
+    public void testRankingWindowWithoutPartitionCanNotPushDown() throws Exception {
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (order by v2) as rk, " +
+                    " sum(v3) over (order by v2 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) as _sum, " +
+                    "avg(v3) over (order by v2 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) as _avg, " +
+                    "count(v3) over (order by v2 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) as _count" +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where rk <=4";
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, "PARTITION-TOP-N");
+        }
+
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (order by v2) as rk, " +
+                    " sum(v3) over (order by v2 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) as _sum, " +
+                    "avg(v3) over (order by v2 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) as _avg, " +
+                    "count(v3) over (order by v2 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) as _count" +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by rk limit 4;";
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, "PARTITION-TOP-N");
+        }
     }
 
     @Test
@@ -1357,13 +1569,77 @@ public class WindowTest extends PlanTestBase {
                 "  |  cardinality: 1");
 
         plan = getDescTbl(sql);
-        assertContains(plan, "TSlotDescriptor(id:11, parent:2, " +
+        assertContains(plan, "TSlotDescriptor(id:11, parent:3, " +
                 "slotType:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:BIGINT))]), " +
                 "columnPos:-1, byteOffset:-1, nullIndicatorByte:-1, nullIndicatorBit:-1, " +
                 "colName:, slotIdx:-1, isMaterialized:true, isOutputColumn:false, isNullable:false)");
-        assertContains(plan, "TSlotDescriptor(id:11, parent:4, " +
+        assertContains(plan, "TSlotDescriptor(id:11, parent:5, " +
                 "slotType:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:BIGINT))]), " +
                 "columnPos:-1, byteOffset:-1, nullIndicatorByte:-1, nullIndicatorBit:-1, " +
                 "colName:, slotIdx:-1, isMaterialized:true, isOutputColumn:false, isNullable:false)");
+    }
+
+    @Test
+    public void testPruneSubfieldAfterWindow() throws Exception {
+        String sql = "select array_length(v3) from (select v3, row_number() over (order by v2) row_num from tarray) t " +
+                "where row_num = 1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  4:ANALYTIC\n" +
+                "  |  functions: [, row_number(), ]\n" +
+                "  |  order by: 2: v2 ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  \n" +
+                "  3:MERGING-EXCHANGE");
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 2> : 2: v2\n" +
+                "  |  <slot 6> : array_length(3: v3)");
+    }
+
+    @Test
+    public void testOrderByConstant() throws Exception {
+        String sql = "with cc as (select *, 1 as a from t0) select v1, row_number() over (order by a) from cc";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "4:ANALYTIC\n" +
+                "  |  functions: [, row_number(), ]\n" +
+                "  |  order by: 9: a ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+    }
+
+    @Test
+    public void testFirstLastValueReverse() throws Exception {
+        String sql =
+                "select v1,v2,v3, first_value(v3) over (partition by v1 order by v2" +
+                        " rows between current row and unbounded following) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "2:ANALYTIC\n" +
+                "  |  functions: [, last_value(3: v3), ]\n" +
+                "  |  partition by: 1: v1\n" +
+                "  |  order by: 2: v2 DESC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  \n" +
+                "  1:SORT\n" +
+                "  |  order by: <slot 1> 1: v1 ASC, <slot 2> 2: v2 DESC");
+
+        sql =
+                "select v1,v2,v3, last_value(v3) over (partition by v1 order by v2" +
+                        " rows between current row and unbounded following) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "2:ANALYTIC\n" +
+                "  |  functions: [, first_value(3: v3), ]\n" +
+                "  |  partition by: 1: v1\n" +
+                "  |  order by: 2: v2 DESC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  \n" +
+                "  1:SORT\n" +
+                "  |  order by: <slot 1> 1: v1 ASC, <slot 2> 2: v2 DESC");
+    }
+
+    @Test
+    public void testFirstValueIgnoreNulls() throws Exception {
+        String sql =
+                "select v1,v2,v3, first_value(v3 ignore nulls) over (partition by v1 order by v2" +
+                        " rows between unbounded PRECEDING and unbounded following) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "window: ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING");
     }
 }

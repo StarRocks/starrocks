@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # upper
 
-## Description
+
 
 Converts a string to upper-case.
 

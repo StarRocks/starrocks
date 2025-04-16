@@ -247,7 +247,14 @@ if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.3.3" ]; then
 fi
 if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.4.0" ]; then
     patch -p1 < $TP_PATCH_DIR/glog-0.4.0-for-starrocks2.patch
-    patch -p1 < $TP_PATCH_DIR/glog-0.4.0-remove-unwind-dependency.patch 
+    patch -p1 < $TP_PATCH_DIR/glog-0.4.0-remove-unwind-dependency.patch
+    patch -p1 < $TP_PATCH_DIR/glog-0.4.0-add-handler-after-output-log.patch
+    touch $PATCHED_MARK
+fi
+if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.7.1" ]; then
+    patch -p1 < $TP_PATCH_DIR/glog-0.7.1.patch
+    patch -p1 < $TP_PATCH_DIR/glog-0.7.1-add-handler-after-output-log.patch
+    patch -p1 < $TP_PATCH_DIR/glog-0.7.1-lwp.patch
     touch $PATCHED_MARK
 fi
 cd -
@@ -289,6 +296,15 @@ fi
 cd -
 echo "Finished patching $LZ4_SOURCE"
 
+cd $TP_SOURCE_DIR/$ROCKSDB_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $ROCKSDB_SOURCE == "rocksdb-6.22.1" ]; then
+    patch -p1 < $TP_PATCH_DIR/rocksdb-6.22.1-metadata-header.patch
+    patch -p1 < $TP_PATCH_DIR/rocksdb-6.22.1-gcc14.patch
+    touch $PATCHED_MARK
+fi
+cd -
+echo "Finished patching $ROCKSDB_SOURCE"
+
 # brpc patch to disable shared library
 cd $TP_SOURCE_DIR/$BRPC_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-0.9.5" ]; then
@@ -305,6 +321,10 @@ if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-1.3.0" ]; then
     patch -p1 < $TP_PATCH_DIR/brpc-1.3.0-2479.patch
     touch $PATCHED_MARK
 fi
+if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-1.9.0" ]; then
+    patch < $TP_PATCH_DIR/brpc-1.9.0.patch
+    touch $PATCHED_MARK
+fi
 cd -
 echo "Finished patching $BRPC_SOURCE"
 
@@ -314,6 +334,7 @@ if [ ! -f $PATCHED_MARK ]; then
     patch -p1 < $TP_PATCH_DIR/s2geometry-0.9.0.patch
     # replace uint64 with uint64_t to make compiler happy
     patch -p0 < $TP_PATCH_DIR/s2geometry-0.9.0-uint64.patch
+    patch -p1 < $TP_PATCH_DIR/s2geometry-0.9.0-cxx17.patch
     touch $PATCHED_MARK
 fi
 cd -
@@ -388,24 +409,34 @@ if [ ! -f $PATCHED_MARK ] && [ $MARIADB_SOURCE = "mariadb-connector-c-3.2.5" ]; 
     patch -p0 < $TP_PATCH_DIR/mariadb-connector-c-3.2.5-for-starrocks-static-link.patch
     touch $PATCHED_MARK
     echo "Finished patching $MARIADB_SOURCE"
-else
-    echo "$MARIADB_SOURCE not patched"
+fi
+if [ ! -f $PATCHED_MARK ] && [ $MARIADB_SOURCE = "mariadb-connector-c-3.1.14" ]; then
+    patch -p1 < $TP_PATCH_DIR/mariadb-connector-c-3.1.14-gcc14.patch
+    touch $PATCHED_MARK
+    echo "Finished patching $MARIADB_SOURCE"
 fi
 
+# patch aws-sdk-cpp
 cd $TP_SOURCE_DIR/$AWS_SDK_CPP_SOURCE
 if [ $AWS_SDK_CPP_SOURCE = "aws-sdk-cpp-1.11.267" ]; then
     if [ ! -f prefetch_crt_dep_ok ]; then
         bash ./prefetch_crt_dependency.sh
         touch prefetch_crt_dep_ok
     fi
+    if [ ! -f $PATCHED_MARK ]; then
+        patch -p1  < $TP_PATCH_DIR/aws-cpp-sdk-1.11.267-disable-chunked-upload.patch
+        touch $PATCHED_MARK
+    fi
 fi
-
+cd -
+echo "Finished patching $AWS_SDK_CPP_SOURCE"
 
 # patch jemalloc_hook
 cd $TP_SOURCE_DIR/$JEMALLOC_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $JEMALLOC_SOURCE = "jemalloc-5.3.0" ]; then
     patch -p0 < $TP_PATCH_DIR/jemalloc_hook.patch
     patch -p0 < $TP_PATCH_DIR/jemalloc_nallocx.patch
+    patch -p0 < $TP_PATCH_DIR/jemalloc_nodump.patch
     touch $PATCHED_MARK
 fi
 cd -
@@ -438,11 +469,16 @@ fi
 cd -
 echo "Finished patching $VPACK_SOURCE"
 
-# patch avro-c
-cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c
-if [ ! -f $PATCHED_MARK ] && [ $AVRO_SOURCE = "avro-release-1.10.2" ]; then
-    patch -p0 < $TP_PATCH_DIR/avro-1.10.2.c.patch
-    cp $TP_PATCH_DIR/avro-1.10.2.c.findjansson.patch $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c/Findjansson.cmake
+# patch avro-c and avro-cpp
+cd $TP_SOURCE_DIR/$AVRO_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $AVRO_SOURCE = "avro-release-1.12.0" ]; then
+    # c patches
+    cd $TP_SOURCE_DIR/$AVRO_SOURCE
+    patch -p1 < $TP_PATCH_DIR/avro-1.12.0.c.patch
+    cp $TP_PATCH_DIR/avro-1.12.0.c.findjansson.patch ./lang/c/Findjansson.cmake
+
+    # c++ patches
+    patch -p1 < $TP_PATCH_DIR/avro-1.12.0.cpp.patch
     touch $PATCHED_MARK
 fi
 cd -
@@ -461,9 +497,18 @@ cd -
 cd $TP_SOURCE_DIR/$SASL_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $SASL_SOURCE = "cyrus-sasl-2.1.28" ]; then
     patch -p1 < $TP_PATCH_DIR/sasl2-add-k5support-link.patch
+    patch -p1 < $TP_PATCH_DIR/sasl2-gcc14.patch
     touch $PATCHED_MARK
 fi
 echo "Finished patching $SASL_SOURCE"
+cd -
+
+cd $TP_SOURCE_DIR/$RAPIDJSON_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $RAPIDJSON_SOURCE = "rapidjson-1.1.0" ]; then
+    patch -p1 < $TP_PATCH_DIR/rapidjson-gcc14.patch
+    touch $PATCHED_MARK
+fi
+echo "Finished patching $RAPIDJSON_SOURCE"
 cd -
 
 # patch arrow
@@ -475,6 +520,11 @@ if [[ -d $TP_SOURCE_DIR/$ARROW_SOURCE ]] ; then
         # fix exception handling
         patch -p1 < $TP_PATCH_DIR/arrow-5.0.0-fix-exception-handling.patch
         patch -p1 < $TP_PATCH_DIR/arrow-5.0.0-parquet-map-key.patch
+        touch $PATCHED_MARK
+    fi
+    if [ ! -f $PATCHED_MARK ] && [ $ARROW_SOURCE = "arrow-apache-arrow-16.1.0" ] ; then
+        patch -p1 < $TP_PATCH_DIR/arrow-16.1.0-parquet-map-key.patch
+        patch -p1 < $TP_PATCH_DIR/arrow-16.1.0-use-zstd-1.5.0.patch
         touch $PATCHED_MARK
     fi
     cd -
@@ -501,4 +551,51 @@ if [[ -d $TP_SOURCE_DIR/$BITSHUFFLE_SOURCE ]] ; then
     fi
     cd -
     echo "Finished patching $BITSHUFFLE_SOURCE"
+fi
+
+# patch flatbuffers
+if [[ -d $TP_SOURCE_DIR/$FLATBUFFERS_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$FLATBUFFERS_SOURCE
+    if [ ! -f "$PATCHED_MARK" ] && [[ $FLATBUFFERS_SOURCE == "flatbuffers-1.10.0" ]] ; then
+        patch -p1 < "$TP_PATCH_DIR/flat-buffers-1.10.0-no-stringop-overread.patch"
+        touch "$PATCHED_MARK"
+    fi
+    cd -
+    echo "Finished patching $FLATBUFFERS_SOURCE"
+fi
+
+#patch clucene
+if [[ -d $TP_SOURCE_DIR/$CLUCENE_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$CLUCENE_SOURCE
+    if [ ! -f "$PATCHED_MARK" ] ; then
+        patch -p1 < "$TP_PATCH_DIR/clucene-gcc14.patch"
+        touch "$PATCHED_MARK"
+    fi
+    cd -
+    echo "Finished patching $CLUCENE_SOURCE"
+fi
+
+#patch poco
+if [[ -d $TP_SOURCE_DIR/$POCO_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$POCO_SOURCE
+    if [ ! -f "$PATCHED_MARK" ] && [[ $POCO_SOURCE == "poco-1.12.5-release" ]] ; then
+        patch -p1 < "$TP_PATCH_DIR/poco-1.12.5-ca.patch"
+        patch -p1 < "$TP_PATCH_DIR/poco-1.12.5-zero-copy.patch"
+        patch -p1 < "$TP_PATCH_DIR/poco-1.12.5-keep-alive.patch"
+        touch "$PATCHED_MARK"
+    fi
+    cd -
+    echo "Finished patching $POCO_SOURCE"
+fi
+
+# patch breakpad
+
+if [[ -d $TP_SOURCE_DIR/$BREAK_PAD_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$BREAK_PAD_SOURCE
+    if [ ! -f "$PATCHED_MARK" ] && [[ $BREAK_PAD_SOURCE == "breakpad-2022.07.12" ]] ; then
+        patch -p1 < "$TP_PATCH_DIR/breakpad-2022.07.12.patch"
+        touch "$PATCHED_MARK"
+    fi
+    cd -
+    echo "Finished patching $BREAK_PAD_SOURCE"
 fi

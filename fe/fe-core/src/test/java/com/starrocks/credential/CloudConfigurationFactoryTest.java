@@ -15,7 +15,7 @@
 package com.starrocks.credential;
 
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
-import com.starrocks.credential.aws.AWSCloudCredential;
+import com.starrocks.credential.aws.AwsCloudCredential;
 import com.starrocks.thrift.TCloudConfiguration;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -30,13 +30,14 @@ import java.util.Map;
 public class CloudConfigurationFactoryTest {
 
     @Test
-    public void testBuildCloudConfigurationForTabular() {
+    public void testBuildCloudConfigurationForVendedCredentials() {
         Map<String, String> map = new HashMap<>();
         map.put(S3FileIOProperties.ACCESS_KEY_ID, "ak");
         map.put(S3FileIOProperties.SECRET_ACCESS_KEY, "sk");
         map.put(S3FileIOProperties.SESSION_TOKEN, "token");
+        map.put(S3FileIOProperties.PATH_STYLE_ACCESS, "true");
         map.put(AwsClientProperties.CLIENT_REGION, "region");
-        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForTabular(map);
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(map);
         Assert.assertNotNull(cloudConfiguration);
         Assert.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
         Assert.assertEquals(
@@ -44,7 +45,22 @@ public class CloudConfigurationFactoryTest {
                         "cred=AWSCloudCredential{useAWSSDKDefaultBehavior=false, " +
                         "useInstanceProfile=false, accessKey='ak', secretKey='sk', " +
                         "sessionToken='token', iamRoleArn='', stsRegion='', stsEndpoint='', externalId='', " +
-                        "region='region', endpoint=''}, enablePathStyleAccess=false, enableSSL=true}",
+                        "region='region', endpoint=''}, enablePathStyleAccess=true, enableSSL=true}",
+                cloudConfiguration.toConfString());
+
+        map.remove(AwsClientProperties.CLIENT_REGION);
+        map.remove(S3FileIOProperties.PATH_STYLE_ACCESS);
+        map.put(S3FileIOProperties.ENDPOINT, "endpoint");
+        map.put(CloudConfigurationConstants.AWS_S3_REGION, "us-west-2");
+        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(map);
+        Assert.assertNotNull(cloudConfiguration);
+        Assert.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
+        Assert.assertEquals(
+                "AWSCloudConfiguration{resources='', jars='', hdpuser='', " +
+                        "cred=AWSCloudCredential{useAWSSDKDefaultBehavior=false, " +
+                        "useInstanceProfile=false, accessKey='ak', secretKey='sk', " +
+                        "sessionToken='token', iamRoleArn='', stsRegion='', stsEndpoint='', externalId='', " +
+                        "region='us-west-2', endpoint='endpoint'}, enablePathStyleAccess=false, enableSSL=true}",
                 cloudConfiguration.toConfString());
     }
 
@@ -61,8 +77,8 @@ public class CloudConfigurationFactoryTest {
         Assert.assertEquals(cc.getCloudType(), CloudType.AWS);
         TCloudConfiguration tc = new TCloudConfiguration();
         cc.toThrift(tc);
-        Assert.assertEquals(tc.getCloud_properties_v2().get(CloudConfigurationConstants.AWS_S3_ENABLE_SSL), "true");
-        Assert.assertEquals(tc.getCloud_properties_v2().get(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS),
+        Assert.assertEquals(tc.getCloud_properties().get(CloudConfigurationConstants.AWS_S3_ENABLE_SSL), "true");
+        Assert.assertEquals(tc.getCloud_properties().get(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS),
                 "false");
         Configuration conf = new Configuration();
         cc.applyToConfiguration(conf);
@@ -88,7 +104,7 @@ public class CloudConfigurationFactoryTest {
         Assert.assertEquals(cc.getCloudType(), CloudType.ALIYUN);
         TCloudConfiguration tc = new TCloudConfiguration();
         cc.toThrift(tc);
-        Assert.assertEquals(tc.getCloud_properties_v2().get(CloudConfigurationConstants.AWS_S3_ENABLE_SSL), "true");
+        Assert.assertEquals(tc.getCloud_properties().get(CloudConfigurationConstants.AWS_S3_ENABLE_SSL), "true");
         Configuration conf = new Configuration();
         cc.applyToConfiguration(conf);
         cc.toFileStoreInfo();
@@ -171,6 +187,49 @@ public class CloudConfigurationFactoryTest {
     }
 
     @Test
+    public void testAzureADLS2ManagedIdentity() {
+        Map<String, String> map = new HashMap<>() {
+            {
+                put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT, "endpoint");
+                put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET, "client-secret");
+                put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ID, "client-id");
+            }
+        };
+
+        CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
+        Assert.assertEquals(cc.getCloudType(), CloudType.AZURE);
+        Configuration conf = new Configuration();
+        cc.applyToConfiguration(conf);
+        Assert.assertEquals("OAuth", conf.get("fs.azure.account.auth.type"));
+        Assert.assertEquals("org.apache.hadoop.fs.azurebfs.oauth2.ClientCredsTokenProvider",
+                conf.get("fs.azure.account.oauth.provider.type"));
+        Assert.assertEquals("client-secret", conf.get("fs.azure.account.oauth2.client.secret"));
+        Assert.assertEquals("client-id", conf.get("fs.azure.account.oauth2.client.id"));
+        Assert.assertEquals("endpoint", conf.get("fs.azure.account.oauth2.client.endpoint"));
+    }
+
+    @Test
+    public void testAzureADLS2Oauth2() {
+        Map<String, String> map = new HashMap<>() {
+            {
+                put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY, "true");
+                put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ID, "client-id");
+                put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TENANT_ID, "tenant-id");
+            }
+        };
+
+        CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
+        Assert.assertEquals(cc.getCloudType(), CloudType.AZURE);
+        Configuration conf = new Configuration();
+        cc.applyToConfiguration(conf);
+        Assert.assertEquals("OAuth", conf.get("fs.azure.account.auth.type"));
+        Assert.assertEquals("org.apache.hadoop.fs.azurebfs.oauth2.MsiTokenProvider",
+                conf.get("fs.azure.account.oauth.provider.type"));
+        Assert.assertEquals("tenant-id", conf.get("fs.azure.account.oauth2.msi.tenant"));
+        Assert.assertEquals("client-id", conf.get("fs.azure.account.oauth2.client.id"));
+    }
+
+    @Test
     public void testGCPCloudConfiguration() {
         Map<String, String> map = new HashMap<String, String>() {
             {
@@ -237,7 +296,7 @@ public class CloudConfigurationFactoryTest {
         Assert.assertEquals(cc.getCloudType(), CloudType.TENCENT);
         TCloudConfiguration tc = new TCloudConfiguration();
         cc.toThrift(tc);
-        Assert.assertEquals(tc.getCloud_properties_v2().get(CloudConfigurationConstants.AWS_S3_ENABLE_SSL), "true");
+        Assert.assertEquals(tc.getCloud_properties().get(CloudConfigurationConstants.AWS_S3_ENABLE_SSL), "true");
         Configuration conf = new Configuration();
         cc.applyToConfiguration(conf);
         cc.toFileStoreInfo();
@@ -263,7 +322,7 @@ public class CloudConfigurationFactoryTest {
     public void testGlueCredential() {
         HiveConf conf = new HiveConf();
         conf.set(CloudConfigurationConstants.AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
-        AWSCloudCredential cred = CloudConfigurationFactory.buildGlueCloudCredential(conf);
+        AwsCloudCredential cred = CloudConfigurationFactory.buildGlueCloudCredential(conf);
         Assert.assertNotNull(cred);
         Assert.assertEquals("AWSCloudCredential{useAWSSDKDefaultBehavior=true, useInstanceProfile=false, " +
                         "accessKey='', secretKey='', sessionToken='', iamRoleArn='', stsRegion='', " +

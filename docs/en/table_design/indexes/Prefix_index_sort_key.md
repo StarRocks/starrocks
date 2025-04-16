@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+sidebar_position: 10
 ---
 
 # Prefix indexes

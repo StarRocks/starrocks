@@ -176,6 +176,8 @@ Status UserFunctionCache::_load_entry_from_lib(const std::string& dir, const std
 int UserFunctionCache::get_function_type(const std::string& url) {
     if (boost::algorithm::ends_with(url, JAVA_UDF_SUFFIX)) {
         return UDF_TYPE_JAVA;
+    } else if (boost::algorithm::ends_with(url, PY_UDF_SUFFIX)) {
+        return UDF_TYPE_PYTHON;
     }
     return UDF_TYPE_UNKNOWN;
 }
@@ -210,9 +212,9 @@ Status UserFunctionCache::_get_cache_entry(int64_t fid, const std::string& url, 
     if (type == UDF_TYPE_JAVA) {
         suffix = JAVA_UDF_SUFFIX;
     }
-    if (type != UDF_TYPE_JAVA) {
-        return Status::NotSupported(
-                fmt::format("unsupport udf type: {}, url: {}. url suffix must be '{}'", type, url, JAVA_UDF_SUFFIX));
+    if (type != UDF_TYPE_JAVA && type != UDF_TYPE_PYTHON) {
+        return Status::NotSupported(fmt::format("unsupport udf type: {}, url: {}. url suffix must be '{}' or '{}'",
+                                                type, url, JAVA_UDF_SUFFIX, PY_UDF_SUFFIX));
     }
 
     UserFunctionCacheEntryPtr entry;
@@ -260,7 +262,9 @@ Status UserFunctionCache::_load_cache_entry(const std::string& url, UserFunction
         RETURN_IF_ERROR(_download_lib(url, entry));
     }
 
-    RETURN_IF_ERROR(_load_cache_entry_internal(url, entry, loader));
+    if (!entry->is_loaded.load()) {
+        RETURN_IF_ERROR(_load_cache_entry_internal(url, entry, loader));
+    }
     return Status::OK();
 }
 
@@ -283,12 +287,12 @@ Status UserFunctionCache::_download_lib(const std::string& url, UserFunctionCach
 template <class Loader>
 Status UserFunctionCache::_load_cache_entry_internal(const std::string& url, UserFunctionCacheEntryPtr& entry,
                                                      Loader&& loader) {
-    if (entry->function_type == UDF_TYPE_JAVA) {
+    if (entry->function_type == UDF_TYPE_JAVA || entry->function_type == UDF_TYPE_PYTHON) {
         // nothing to do
         ASSIGN_OR_RETURN(entry->cache_handle, loader(entry->lib_file));
     } else {
-        return Status::NotSupported(fmt::format("unsupport udf type: {}, url: {}. url suffix must be '{}'",
-                                                entry->function_type, url, JAVA_UDF_SUFFIX));
+        return Status::NotSupported(fmt::format("unsupport udf type: {}, url: {}. url suffix must be '{}' or '{}'",
+                                                entry->function_type, url, JAVA_UDF_SUFFIX, PY_UDF_SUFFIX));
     }
     entry->is_loaded.store(true);
     return Status::OK();

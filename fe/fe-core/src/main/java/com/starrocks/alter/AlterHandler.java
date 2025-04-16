@@ -39,11 +39,10 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.common.util.concurrent.FairReentrantLock;
 import com.starrocks.persist.RemoveAlterJobV2OperationLog;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
@@ -54,6 +53,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -73,7 +73,7 @@ public abstract class AlterHandler extends FrontendDaemon {
      * and this requires atomic operations. So the lock must be held to do this operations.
      * Operations like Get or Put do not need lock.
      */
-    protected ReentrantLock lock = new FairReentrantLock();
+    protected ReentrantLock lock = new ReentrantLock();
 
     protected ThreadPoolExecutor executor;
 
@@ -127,7 +127,8 @@ public abstract class AlterHandler extends FrontendDaemon {
         Iterator<Map.Entry<Long, AlterJobV2>> iterator = alterJobsV2.entrySet().iterator();
         while (iterator.hasNext()) {
             AlterJobV2 alterJobV2 = iterator.next().getValue();
-            if (alterJobV2.isExpire()) {
+            if (alterJobV2.isExpire() && GlobalStateMgr.getCurrentState()
+                    .getClusterSnapshotMgr().isDeletionSafeToExecute(alterJobV2.getFinishedTimeMs())) {
                 iterator.remove();
                 RemoveAlterJobV2OperationLog log =
                         new RemoveAlterJobV2OperationLog(alterJobV2.getJobId(), alterJobV2.getType());
@@ -183,7 +184,7 @@ public abstract class AlterHandler extends FrontendDaemon {
      * entry function. handle alter ops
      */
     public abstract ShowResultSet process(List<AlterClause> alterClauses, Database db, OlapTable olapTable)
-            throws UserException;
+            throws StarRocksException;
 
     /*
      * cancel alter ops
@@ -204,5 +205,15 @@ public abstract class AlterHandler extends FrontendDaemon {
         } else {
             existingJob.replay(alterJob);
         }
+    }
+
+    public Map<Long, Long> getRunningAlterJobCount() {
+        Map<Long, Long> result = new HashMap<>();
+        for (AlterJobV2 alterJobV2 : alterJobsV2.values()) {
+            if (!alterJobV2.isDone()) {
+                result.compute(alterJobV2.getWarehouseId(), (key, value) -> value == null ? 1L : value + 1);
+            }
+        }
+        return result;
     }
 }

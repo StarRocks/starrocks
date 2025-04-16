@@ -14,11 +14,13 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
@@ -43,8 +45,11 @@ public class CreateTableAnalyzerTest {
         connectContext = UtFrameUtils.createDefaultCtx();
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test_create_table_db");
+    }
 
-
+    @AfterClass
+    public static void afterClass() throws Exception {
+        Config.max_column_number_per_table = 10000;
     }
 
     @Test
@@ -66,6 +71,49 @@ public class CreateTableAnalyzerTest {
 
         expectedEx.expect(SemanticException.class);
         expectedEx.expectMessage("doesn't exist");
+        CreateTableStmt createTableStmt = (CreateTableStmt) com.starrocks.sql.parser.SqlParser
+                .parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+        CreateTableAnalyzer.analyze(createTableStmt, connectContext);
+    }
+
+    @Test
+    public void testAnalyzeMaxBucket() throws Exception {
+        Config.max_column_number_per_table = 10000;
+
+        String sql = "CREATE TABLE test_create_table_db.starrocks_test_table\n" +
+                "(\n" +
+                "    `tag_id` bigint not null,\n" +
+                "    `tag_name` string\n" +
+                ") DUPLICATE KEY(`tag_id`)\n" +
+                "PARTITION BY (`tag_id`)\n" +
+                "DISTRIBUTED BY HASH(`tag_id`) BUCKETS 1025\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n";
+
+        expectedEx.expect(SemanticException.class);
+        expectedEx.expectMessage("max_bucket_number_per_partition");
+        CreateTableStmt createTableStmt = (CreateTableStmt) com.starrocks.sql.parser.SqlParser
+                .parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+        CreateTableAnalyzer.analyze(createTableStmt, connectContext);
+    }
+
+    @Test
+    public void testMaxColumn() throws Exception {
+        Config.max_column_number_per_table = 1;
+
+        String sql = "CREATE TABLE test_create_table_db.starrocks_test_table\n" +
+                "(\n" +
+                "    `tag_id` bigint not null,\n" +
+                "    `tag_name` string\n" +
+                ") DUPLICATE KEY(`tag_id`)\n" +
+                "PARTITION BY (`tag_id`)\n" +
+                "DISTRIBUTED BY HASH(`tag_id`)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n";
+        expectedEx.expect(SemanticException.class);
+        expectedEx.expectMessage("max_column_number_per_table");
         CreateTableStmt createTableStmt = (CreateTableStmt) com.starrocks.sql.parser.SqlParser
                 .parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
         CreateTableAnalyzer.analyze(createTableStmt, connectContext);

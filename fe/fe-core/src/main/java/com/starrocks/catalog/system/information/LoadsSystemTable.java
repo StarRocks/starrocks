@@ -24,34 +24,39 @@ import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class LoadsSystemTable {
+    public static final String NAME = "loads";
+
     public static SystemTable create() {
         return new SystemTable(SystemId.LOADS_ID,
-                "loads",
+                NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("JOB_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("ID", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("LABEL", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("DATABASE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("PROFILE_ID", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("DB_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("TABLE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("USER", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("WAREHOUSE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("STATE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("PROGRESS", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("PRIORITY", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("SCAN_ROWS", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("SCAN_BYTES", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("FILTERED_ROWS", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("UNSELECTED_ROWS", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("SINK_ROWS", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("ETL_INFO", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("TASK_INFO", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("RUNTIME_DETAILS", ScalarType.createJsonType())
                         .column("CREATE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("ETL_START_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("ETL_FINISH_TIME", ScalarType.createType(PrimitiveType.DATETIME))
                         .column("LOAD_START_TIME", ScalarType.createType(PrimitiveType.DATETIME))
+                        .column("LOAD_COMMIT_TIME", ScalarType.createType(PrimitiveType.DATETIME))
                         .column("LOAD_FINISH_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("JOB_DETAILS", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("PROPERTIES", ScalarType.createJsonType())
                         .column("ERROR_MSG", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("TRACKING_URL", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("TRACKING_SQL", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("REJECTED_RECORD_PATH", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("JOB_ID", ScalarType.createType(PrimitiveType.BIGINT))
                         .build(), TSchemaTableType.SCH_LOADS);
     }
 }

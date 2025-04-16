@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # date_trunc
 
-## Description
+
 
 Truncates a time value based on the specified date part, such as year, day, hour, or minute.
 

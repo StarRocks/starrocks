@@ -1,9 +1,9 @@
 ---
-displayed_sidebar: "English"
-
+displayed_sidebar: docs
+sidebar_position: 40
 ---
 
-# N-gram bloom filter index
+# [Preview] N-gram bloom filter index
 
 The N-gram bloom filter index is a special [Bloom filter index](./Bloomfilter_index.md) which is typically used to accelerate the LIKE queries and the calculation speed of the `ngram_search` and `ngram_search_case_insensitive` functions.
 
@@ -47,12 +47,12 @@ N-gram bloom filter index-related parameters:
 | ---------------- | ------------ | ------------------------------------------------------------ |
 | `index_name`       | Yes          | The name of the index. Index names must be unique within a table. |
 | `column_name`      | Yes          | The name of the column for which the index is created. Only a single column name can be specified. In the example above, it is `k2`. |
-| `gram_num`         | Yes          | The length of a substring after the string in the indexed column is tokenized. In the example above, `gram_num` is `4`. |
+| `gram_num`         | NO          | The length of a substring after the string in the indexed column is tokenized.The default value is 2. |
 | `bloom_filter_fpp` | No           | The false positive possibility of the Bloom filter, ranging from 0.0001 to 0.05. The default value is 0.05. A smaller value provides better filtering but incurs greater storage overhead. |
-| `case_sensitive`   |  No          | Whether this index is case-sensitive or not. Default value is `case_sensitive`. |
+| `case_sensitive`   |  No          | Whether this index is case-sensitive or not. Default value is `true`. |
 | `COMMENT`          | No           | Index comment. |
 
-For explanations of other parameters related to table creation, see [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md).
+For explanations of other parameters related to table creation, see [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md).
 
 ### View N-gram bloom filter index 
 
@@ -65,7 +65,7 @@ SHOW INDEX FROM table1;
 
 ### Modify N-gram bloom filter index
 
-You can add and delete the N-gram bloom filter index by using the [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER_TABLE.md) statement.
+You can add and delete the N-gram bloom filter index by using the [ALTER TABLE](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md) statement.
 
 - Execute the following statement to add a new N-gram bloom filter index `new_index_name` for the column `k1` to the table `table1`.
 
@@ -83,7 +83,7 @@ You can add and delete the N-gram bloom filter index by using the [ALTER TABLE](
 
 :::note
 
-Altering an index is an asynchronous operation. You can view the progress of this operation by executing [SHOW ALTER TABLE](../../sql-reference/sql-statements/data-manipulation/SHOW_ALTER.md). You can run only one task to alter the index in a table each time.
+Altering an index is an asynchronous operation. You can view the progress of this operation by executing [SHOW ALTER TABLE](../../sql-reference/sql-statements/table_bucket_part_index/SHOW_ALTER.md). You can run only one task to alter the index in a table each time.
 
 :::
 

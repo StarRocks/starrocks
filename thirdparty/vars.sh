@@ -63,7 +63,7 @@ export TP_JAR_DIR=$TP_INSTALL_DIR/lib/jar
 # Definitions for architecture-related thirdparty
 MACHINE_TYPE=$(uname -m)
 # handle mac m1 platform, change arm64 to aarch64
-if [[ "${MACHINE_TYPE}" == "arm64" ]]; then 
+if [[ "${MACHINE_TYPE}" == "arm64" ]]; then
     MACHINE_TYPE="aarch64"
 fi
 
@@ -97,10 +97,10 @@ OPENSSL_SOURCE=openssl-OpenSSL_1_1_1m
 OPENSSL_MD5SUM="710c2368d28f1a25ab92e25b5b9b11ec"
 
 # thrift
-THRIFT_DOWNLOAD="http://archive.apache.org/dist/thrift/0.13.0/thrift-0.13.0.tar.gz"
-THRIFT_NAME=thrift-0.13.0.tar.gz
-THRIFT_SOURCE=thrift-0.13.0
-THRIFT_MD5SUM="38a27d391a2b03214b444cb13d5664f1"
+THRIFT_DOWNLOAD="http://archive.apache.org/dist/thrift/0.20.0/thrift-0.20.0.tar.gz"
+THRIFT_NAME=thrift-0.20.0.tar.gz
+THRIFT_SOURCE=thrift-0.20.0
+THRIFT_MD5SUM="aadebde599e1f5235acd3c730721b873"
 
 # protobuf
 PROTOBUF_DOWNLOAD="https://github.com/google/protobuf/archive/v3.14.0.tar.gz"
@@ -115,10 +115,10 @@ GFLAGS_SOURCE=gflags-2.2.2
 GFLAGS_MD5SUM="1a865b93bacfa963201af3f75b7bd64c"
 
 # glog
-GLOG_DOWNLOAD="https://github.com/google/glog/archive/v0.4.0.tar.gz"
-GLOG_NAME=glog-0.4.0.tar.gz
-GLOG_SOURCE=glog-0.4.0
-GLOG_MD5SUM="0daea8785e6df922d7887755c3d100d0"
+GLOG_DOWNLOAD="https://github.com/google/glog/archive/v0.7.1.tar.gz"
+GLOG_NAME=glog-0.7.1.tar.gz
+GLOG_SOURCE=glog-0.7.1
+GLOG_MD5SUM="128e2995cc33d794ff24f785a3060346"
 
 # gtest
 GTEST_DOWNLOAD="https://github.com/google/googletest/archive/release-1.10.0.tar.gz"
@@ -145,10 +145,10 @@ ZLIB_SOURCE=zlib-1.2.11
 ZLIB_MD5SUM="0095d2d2d1f3442ce1318336637b695f"
 
 # lz4
-LZ4_DOWNLOAD="https://github.com/lz4/lz4/archive/v1.9.3.tar.gz"
-LZ4_NAME=lz4-1.9.3.tar.gz
-LZ4_SOURCE=lz4-1.9.3
-LZ4_MD5SUM="3a1ab1684e14fc1afc66228ce61b2db3"
+LZ4_DOWNLOAD="https://github.com/lz4/lz4/archive/v1.9.4.tar.gz"
+LZ4_NAME=lz4-1.9.4.tar.gz
+LZ4_SOURCE=lz4-1.9.4
+LZ4_MD5SUM="e9286adb64040071c5e23498bf753261"
 
 # bzip
 BZIP_DOWNLOAD="https://fossies.org/linux/misc/bzip2-1.0.8.tar.gz"
@@ -163,10 +163,10 @@ RAPIDJSON_SOURCE=rapidjson-1.1.0
 RAPIDJSON_MD5SUM="badd12c511e081fec6c89c43a7027bce"
 
 # simdjson
-SIMDJSON_DOWNLOAD="https://github.com/simdjson/simdjson/archive/refs/tags/v2.2.0.tar.gz"
-SIMDJSON_NAME=simdjson-v2.2.0.tar.gz
-SIMDJSON_SOURCE=simdjson-2.2.0
-SIMDJSON_MD5SUM="9bd0ced53281484d8842a9429065943d"
+SIMDJSON_DOWNLOAD="https://github.com/simdjson/simdjson/archive/refs/tags/v3.9.4.tar.gz"
+SIMDJSON_NAME=simdjson-v3.9.4.tar.gz
+SIMDJSON_SOURCE=simdjson-3.9.4
+SIMDJSON_MD5SUM="bdc1dfcb2a89dc0c09e8370808a946f5"
 
 # curl
 CURL_DOWNLOAD="https://curl.se/download/curl-8.4.0.tar.gz"
@@ -193,10 +193,10 @@ LEVELDB_SOURCE=leveldb-1.20
 LEVELDB_MD5SUM="298b5bddf12c675d6345784261302252"
 
 # brpc
-BRPC_DOWNLOAD="https://github.com/apache/brpc/archive/refs/tags/1.3.0.tar.gz"
-BRPC_NAME=brpc-1.3.0.tar.gz
-BRPC_SOURCE=brpc-1.3.0
-BRPC_MD5SUM="9470f1a77ec153e82cd8a25dc2148e47"
+BRPC_DOWNLOAD="https://github.com/apache/brpc/archive/refs/tags/1.9.0.tar.gz"
+BRPC_NAME=brpc-1.9.0.tar.gz
+BRPC_SOURCE=brpc-1.9.0
+BRPC_MD5SUM="a2b626d96a5b017f2a6701ffa594530c"
 
 # rocksdb
 ROCKSDB_DOWNLOAD="https://github.com/facebook/rocksdb/archive/refs/tags/v6.22.1.zip"
@@ -247,10 +247,10 @@ FLATBUFFERS_SOURCE=flatbuffers-1.10.0
 FLATBUFFERS_MD5SUM="f7d19a3f021d93422b0bc287d7148cd2"
 
 # arrow
-ARROW_DOWNLOAD="https://github.com/apache/arrow/archive/apache-arrow-5.0.0.tar.gz"
-ARROW_NAME="arrow-apache-arrow-5.0.0.tar.gz"
-ARROW_SOURCE="arrow-apache-arrow-5.0.0"
-ARROW_MD5SUM="9caf5dbd36ef4972c3a591bcfeaf59c8"
+ARROW_DOWNLOAD="https://github.com/apache/arrow/archive/refs/tags/apache-arrow-16.1.0.tar.gz"
+ARROW_NAME="arrow-apache-arrow-16.1.0.tar.gz"
+ARROW_SOURCE="arrow-apache-arrow-16.1.0"
+ARROW_MD5SUM="d9d019aaef586bd1a7493416d78954b9"
 
 # S2
 S2_DOWNLOAD="https://github.com/google/s2geometry/archive/v0.9.0.tar.gz"
@@ -265,10 +265,10 @@ BITSHUFFLE_SOURCE=bitshuffle-0.5.1
 BITSHUFFLE_MD5SUM="b3bf6a9838927f7eb62214981c138e2f"
 
 # CROARINGBITMAP
-CROARINGBITMAP_DOWNLOAD="https://github.com/RoaringBitmap/CRoaring/archive/refs/tags/v1.1.3.tar.gz"
-CROARINGBITMAP_NAME=CRoaring-1.1.3.tar.gz
-CROARINGBITMAP_SOURCE=CRoaring-1.1.3
-CROARINGBITMAP_MD5SUM="605924d21c14c760e66466799215868f"
+CROARINGBITMAP_DOWNLOAD="https://github.com/RoaringBitmap/CRoaring/archive/refs/tags/v4.2.1.tar.gz"
+CROARINGBITMAP_NAME=CRoaring-4.2.1.tar.gz
+CROARINGBITMAP_SOURCE=CRoaring-4.2.1
+CROARINGBITMAP_MD5SUM="00667266a60709978368cf867fb3a3aa"
 
 # jemalloc
 JEMALLOC_DOWNLOAD="https://github.com/jemalloc/jemalloc/releases/download/5.3.0/jemalloc-5.3.0.tar.bz2"
@@ -325,6 +325,12 @@ AWS_SDK_CPP_NAME="aws-sdk-cpp-1.11.267.tar.gz"
 AWS_SDK_CPP_SOURCE="aws-sdk-cpp-1.11.267"
 AWS_SDK_CPP_MD5SUM="fdf43e7262f9d08968eb34f9ad18b8e7"
 
+# poco
+POCO_DOWNLOAD="https://github.com/pocoproject/poco/archive/refs/tags/poco-1.12.5-release.tar.gz"
+POCO_NAME="poco-1.12.5-release.tar.gz"
+POCO_SOURCE="poco-1.12.5-release"
+POCO_MD5SUM="282e54a68911f516b15d07136c78592b"
+
 # velocypack: A fast and compact format for serialization and storage
 VPACK_DOWNLOAD="https://github.com/arangodb/velocypack/archive/refs/tags/XYZ1.0.tar.gz"
 VPACK_NAME="velocypack-XYZ1.0.tar.gz"
@@ -362,10 +368,10 @@ JANSSON_SOURCE="jansson-2.14"
 JANSSON_MD5SUM="6cbfc54c2ab3b4d7284e188e185c2b0b"
 
 # avro
-AVRO_DOWNLOAD="https://github.com/apache/avro/archive/refs/tags/release-1.10.2.tar.gz"
-AVRO_NAME="avro-release-1.10.2.tar.gz"
-AVRO_SOURCE="avro-release-1.10.2"
-AVRO_MD5SUM="55b9c200976366fd62f1201231f3a5eb"
+AVRO_DOWNLOAD="https://github.com/apache/avro/archive/refs/tags/release-1.12.0.tar.gz"
+AVRO_NAME="avro-release-1.12.0.tar.gz"
+AVRO_SOURCE="avro-release-1.12.0"
+AVRO_MD5SUM="0657ab3ab89d264ccccbca317dbfa54b"
 
 # serdes
 SERDES_DOWNLOAD="https://github.com/confluentinc/libserdes/archive/refs/tags/v7.3.1.tar.gz"
@@ -404,10 +410,10 @@ LLVM_SOURCE="llvm-project-16.0.6.src"
 LLVM_MD5SUM="dc13938a604f70379d3b38d09031de98"
 
 #clucene
-CLUCENE_DOWNLOAD="https://github.com/StarRocks/clucene/archive/refs/tags/starrocks-2023.11.28.tar.gz"
-CLUCENE_NAME="starrocks-clucene-2023.11.28.tar.gz"
-CLUCENE_SOURCE="starrocks-clucene-2023.11.28"
-CLUCENE_MD5SUM="d71f8156bbcbe78e5064ec5616072a5a"
+CLUCENE_DOWNLOAD="https://github.com/StarRocks/clucene/archive/refs/tags/starrocks-2024.06.03.tar.gz"
+CLUCENE_NAME="starrocks-clucene-2024.06.03.tar.gz"
+CLUCENE_SOURCE="starrocks-clucene-2024.06.03"
+CLUCENE_MD5SUM="c218eb0fbbfe7f295e81ab1c8a9317cb"
 
 
 #absl
@@ -428,9 +434,33 @@ GRPC_NAME="grpc-1.43.0.tar.gz"
 GRPC_SOURCE="grpc-1.43.0"
 GRPC_MD5SUM="92559743e7b5d3f67486c4c0de2f5cbe"
 
+# simdutf
+SIMDUTF_DOWNLOAD="https://github.com/simdutf/simdutf/archive/refs/tags/v5.2.8.tar.gz"
+SIMDUTF_NAME="simdutf-5.2.8.tar.gz"
+SIMDUTF_SOURCE="simdutf-5.2.8"
+SIMDUTF_MD5SUM="731c78ab5a10c6073942dc93d5c4b04c"
+
+# tenann
+TENANN_DOWNLOAD="https://github.com/StarRocks/tenann/releases/download/v0.4.2-RELEASE/tenann-v0.4.2-RELEASE.tar.gz"
+TENANN_NAME="tenann-v0.4.2-RELEASE.tar.gz"
+TENANN_SOURCE="tenann-v0.4.2-RELEASE"
+TENANN_MD5SUM="40a00643d953982845901ae60766aad4"
+
+# icu
+ICU_DOWNLOAD="https://github.com/unicode-org/icu/releases/download/release-76-1/icu4c-76_1-src.zip"
+ICU_NAME="icu4c-76_1-src.zip"
+ICU_SOURCE="icu"
+ICU_MD5SUM="f5f5c827d94af8445766c7023aca7f6b"
+
+# xsimd
+XSIMD_DOWNLOAD="https://github.com/xtensor-stack/xsimd/archive/refs/tags/13.2.0.tar.gz"
+XSIMD_NAME="xsimd-13.2.0.tar.gz"
+XSIMD_SOURCE="xsimd-13.2.0"
+XSIMD_MD5SUM="f451a1c57d2a4fdc0ba663be438dced4"
+
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="CLUCENE LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
             RE2 BOOST LEVELDB BRPC ROCKSDB KRB5 SASL LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
             JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOP JDK RAGEL HYPERSCAN MARIADB JINDOSDK AWS_SDK_CPP VPACK OPENTELEMETRY \
             BENCHMARK FAST_FLOAT STARCACHE STREAMVBYTE JANSSON AVRO SERDES GCS_CONNECTOR LZO2 DATASKETCHES \
-            ASYNC_PROFILER FIU LIBDEFLATE LLVM ABSL CARES GRPC"
+            ASYNC_PROFILER FIU LIBDEFLATE LLVM ABSL CARES GRPC SIMDUTF TENANN POCO ICU XSIMD"

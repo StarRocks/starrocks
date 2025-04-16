@@ -243,7 +243,7 @@ public class ListPartitionDescTest {
         listMultiPartitionDesc.analyze(this.findColumnDefList(), this.findSupportedProperties(null));
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = SemanticException.class)
     public void testReplicaNum() throws AnalysisException {
         Map<String, String> supportedProperties = new HashMap<>();
         supportedProperties.put("replication_num", "0");

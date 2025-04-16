@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # from_days
 
-## Description
+
 
 Returns a date from 0000-01-01.
 

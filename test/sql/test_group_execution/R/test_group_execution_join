@@ -16,7 +16,7 @@ PROPERTIES (
 "replication_num" = "1",
 "in_memory" = "false",
 "storage_format" = "DEFAULT",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -36,7 +36,7 @@ PROPERTIES (
 "replication_num" = "1",
 "in_memory" = "false",
 "storage_format" = "DEFAULT",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -235,10 +235,28 @@ with agged_table as ( select distinct c0, c1 from t0) select /*+SET_VAR(cbo_cte_
 -- result:
 40960	838881280	838881280	838881280.0	838881280.0
 -- !result
+with agged_table as ( select distinct c0, c1 from t0) select /*+SET_VAR(cbo_cte_reuse_rate=-1) */  count(*) ,sum(l.c0), sum(r.c0), sum(l.c1), sum(r.c1) from agged_table l right join [bucket] agged_table r on l.c0 = r.c0 and l.c1 = r.c1;
+-- result:
+40961	838881280	838881280	838881280.0	838881280.0
+-- !result
+with agged_table as ( select distinct c0, c1 from t0) select /*+SET_VAR(cbo_cte_reuse_rate=-1) */  count(*) ,sum(l.c0), sum(r.c0), sum(l.c1), sum(r.c1) from agged_table l left join [bucket] agged_table r on l.c0 = r.c0 and l.c1 = r.c1;
+-- result:
+40961	838881280	838881280	838881280.0	838881280.0
+-- !result
 with flat_table as ( select c0, c1 from t0) select /*+SET_VAR(cbo_cte_reuse_rate=-1) */ l.c0, l.c1, count(*) from flat_table l join [bucket] flat_table r on l.c0 = r.c0 and l.c1 = r.c1 group by 1,2 order by 1,2 limit 10000,2;
 -- result:
 10001	10001	1
 10002	10002	1
+-- !result
+with flat_table as ( select c0, c1 from t0) select /*+SET_VAR(cbo_cte_reuse_rate=-1) */ l.c0, l.c1, count(*) from flat_table l right join [bucket] flat_table r on l.c0 = r.c0 and l.c1 = r.c1 group by 1,2 order by 1,2 limit 10000,2;
+-- result:
+10000	10000	1
+10001	10001	1
+-- !result
+with flat_table as ( select c0, c1 from t0) select /*+SET_VAR(cbo_cte_reuse_rate=-1) */ l.c0, l.c1, count(*) from flat_table l left join [bucket] flat_table r on l.c0 = r.c0 and l.c1 = r.c1 group by 1,2 order by 1,2 limit 10000,2;
+-- result:
+10000	10000	1
+10001	10001	1
 -- !result
 with agged_table as ( select distinct c0, c1,c3 from t0) select /*+SET_VAR(cbo_cte_reuse_rate=-1) */  count(*) ,sum(l.c0), sum(r.c0), sum(l.c1), sum(r.c1) from agged_table l join [bucket] agged_table r on l.c0 = r.c0 and l.c1 = r.c1 where r.c3 < 100;
 -- result:
@@ -248,7 +266,15 @@ select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l j
 -- result:
 40960	20480.5	40960	40960	40960
 -- !result
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l right join [bucket] t1 r on l.c0 = r.c0 and l.c1 = r.c1;
+-- result:
+40960	20480.5	40960	40960	40960
+-- !result
 select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1), count(s.c0) from t0 l join [bucket] t1 r on l.c0 = r.c0 and l.c1 = r.c1 join [bucket] small_table s on l.c0 = s.c0 and l.c1 = s.c1;
+-- result:
+100	50.5	100	100	100	100
+-- !result
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1), count(s.c0) from t0 l left join [bucket] t1 r on l.c0 = r.c0 and l.c1 = r.c1 join [bucket] small_table s on l.c0 = s.c0 and l.c1 = s.c1;
 -- result:
 100	50.5	100	100	100	100
 -- !result
@@ -257,6 +283,10 @@ select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1), count(s.c0
 100	50.5	100	100	100	100
 -- !result
 with agged_table as ( select distinct c0, c1 from t0) select /*+SET_VAR(cbo_cte_reuse_rate=-1) */ count(l.c0), count(l.c1) from t0 l join [colocate] (select l.c0, r.c1 from agged_table l join [bucket] t0 r on l.c0=r.c0 and l.c1 = r.c1) r on l.c0=r.c0 and l.c1 = r.c1;
+-- result:
+40960	40960
+-- !result
+with agged_table as ( select distinct c0, c1 from t0) select /*+SET_VAR(cbo_cte_reuse_rate=-1) */ count(l.c0), count(l.c1) from t0 l join [colocate] (select l.c0, r.c1 from agged_table l right join [bucket] t0 r on l.c0=r.c0 and l.c1 = r.c1) r on l.c0=r.c0 and l.c1 = r.c1;
 -- result:
 40960	40960
 -- !result
@@ -344,7 +374,7 @@ select c0,c1 = (select c1 from t1 where c0 = 10) from (select l.c0, r.c1 from t0
 -- !result
 select c0,c1 = (select c1 from t1 where c0 != 10) from (select l.c0, r.c1 from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1) tb order by 1, 2 limit 10000, 1;
 -- result:
-E: (1064, 'Expected LE 1 to be returned by expression ')
+[REGEX].*Expected LE 1 to be returned by expression.*
 -- !result
 select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where l.c0=1 and l.c1=1;
 -- result:

@@ -1,8 +1,123 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # StarRocks version 3.1
+
+## 3.1.17
+
+发布日期：2025 年 01 月 03 日
+
+### 问题修复
+
+修复了如下问题：
+
+- 跨集群数据迁移工具在迁移数据时，由于未考虑目标集群分区删除的情况，在同步数据并做 Commit 时导致 Follower FE Crash。[#54061](https://github.com/StarRocks/starrocks/pull/54061)
+- 使用跨集群数据迁移工具同步有过 DELETE 操作的表时，目标集群的 BE 可能会 Crash。[#54081](https://github.com/StarRocks/starrocks/pull/54081)
+- BDBJE 的 Handshake 存在 Bug，导致 Leader FE 和 Follower FE 链接重连的时候会被 Leader FE 拒绝，从而导致 Follwer FE 节点退出。[#50412](https://github.com/StarRocks/starrocks/pull/50412)
+- FE 中内存统计有重复统计的情况，会导致消耗大量内存。[#53055](https://github.com/StarRocks/starrocks/pull/53055)
+- 异步物化视图刷新时的任务状态在多个 FE 之间不一致，导致查询时的状态不准确。[#54236](https://github.com/StarRocks/starrocks/pull/54236)
+
+## 3.1.16
+
+发布日期：2024 年 12 月 16 日
+
+### 功能优化
+
+- 优化了表相关统计信息。[#50316](https://github.com/StarRocks/starrocks/pull/50316)
+
+### 问题修复
+
+修复了如下问题：
+
+- 由于系统对磁盘写满时的错误码判断不够细化，导致 BE 认为磁盘有错误而误删数据。[#51411](https://github.com/StarRocks/starrocks/pull/51411)
+- 通过 HTTP 1.0 提交的 Stream Load 失败。[#53010](https://github.com/StarRocks/starrocks/pull/53010) [#53008](https://github.com/StarRocks/starrocks/pull/53008)
+- Routine Load 因事务过期而导致任务取消（当前仅有数据库或表不存在任务才会被取消，事务过期时任务会被暂停）。[#50334](https://github.com/StarRocks/starrocks/pull/50334)
+- 使用 EXPORT 命令通过  Broker 方式导出数据到 `file://` 时，系统会报文件 RENAME 错误进而导致导出失败。[#52544](https://github.com/StarRocks/starrocks/pull/52544)
+- Equal-join 中，如果 JOIN 的条件是基于一个低基数列的表达式，系统会错误地下推一个 Runtime Filter 谓词，导致 BE Crash。[#50690](https://github.com/StarRocks/starrocks/pull/50690)
+
+## 3.1.15
+
+发布日期：2024 年 9 月 4 日
+
+### 问题修复
+
+修复了如下问题：
+
+- 在通过异步物化视图改写查询时，部分表 `count(*)` 返回的结果为 NULL。[#49288](https://github.com/StarRocks/starrocks/pull/49288)
+- `partition_linve_nubmer` 不生效。[#49213](https://github.com/StarRocks/starrocks/pull/49213)
+- FE 汇报 Tablet 异常：BE 磁盘下线，Tablet 无法迁移。[#47833](https://github.com/StarRocks/starrocks/pull/47833)
+
+## 3.1.14
+
+发布日期：2024 年 7 月 29 日
+
+### 功能优化
+
+- Stream Load 支持将 `\t` 和 `\n` 分别作为行列分割符，无需转成对应的十六进制 ASCII 码。[#47302](https://github.com/StarRocks/starrocks/pull/47302)
+
+### 问题修复
+
+修复了如下问题：
+
+- 主键表频繁 INSERT UPDATE，可能会导致数据库写入和查询卡顿。 [#47838](https://github.com/StarRocks/starrocks/pull/47838)
+- 主键表写盘失败时，持久化索引可能会因为无法捕捉错误导致数据丢失，并报错 “Insert found duplicate key”。[#48045](https://github.com/StarRocks/starrocks/pull/48045)
+- 物化视图在刷新时，可能会报告权限不够。 [#47561](https://github.com/StarRocks/starrocks/pull/47561)
+- 物化视图刷新时报错 “For input string”。 [#46131](https://github.com/StarRocks/starrocks/pull/46131)
+- 物化视图刷新时持锁时间太长，导致死锁检测脚本重启了 Leader FE。[#48256](https://github.com/StarRocks/starrocks/pull/48256)
+- 视图带有 IN 的查询可能结果不准确。 [#47484](https://github.com/StarRocks/starrocks/pull/47484)
+- Global Runtime Filter 导致查询结果跳变。[#48496](https://github.com/StarRocks/starrocks/pull/48496)
+- MySQL 协议 `COM_CHANGE_USER` 不支持 `conn_attr`。[#47796](https://github.com/StarRocks/starrocks/pull/47796)
+
+### 行为变更
+
+- 非分区表为自动设置分桶数量时，系统自动设置的分桶数最小值修改为 `16`（原来的规则是 `2 * BE 数量`，也即最小会创建 2 个 Tablet）。如果是小数据且想要更小的分桶数，需要手动设置。[#47005](https://github.com/StarRocks/starrocks/pull/47005)
+
+
+
+## 3.1.13
+
+发布日期：2024 年 6 月 26 日
+
+### 功能优化
+
+- Broker 进程支持访问腾讯云 COS 融合桶，从而可以通过 Broker Load 从 COS 融合桶导入数据，以及通过 SELECT INTO OUTFILE 导出数据到 COS 融合桶。[#46597](https://github.com/StarRocks/starrocks/pull/46597)
+- 通过 SHOW CREATE TABLE 能够查看 Hive Catalog 中 Hive 外表的 Comment。[#37686](https://github.com/StarRocks/starrocks/pull/37686)
+- 优化 WHERE 子句中的 Conjunct 的评估时间，包括同一个 Column 有多个 LIKE 语句或 CASE WHEN 表达式。[#46914](https://github.com/StarRocks/starrocks/pull/46914)
+
+### 问题修复
+
+修复了如下问题：
+
+- 存算分离集群中使用 DELETE 语句时因为要删除的分区比较多而导致失败。[#46229](https://github.com/StarRocks/starrocks/pull/46229)
+
+## 3.1.12
+
+发布日期：2024 年 5 月 30 日
+
+### 新增特性
+
+- 支持从 StarRocks 读取 ARRAY、MAP 和 STRUCT 等复杂类型的数据，并以 Arrow 格式可提供给 Flink connector 读取使用。[#43514](https://github.com/StarRocks/starrocks/pull/43514) [#347](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/347)
+
+### 功能优化
+
+- 在 BE 通过 RPC 与 FE 通信失败时，FE 只会统一返回报错信息 `call frontend service failed reason=xxx`，导致具体出错原因不明。优化后报错信息中会提示具体的出错原因，例如超时或服务器繁忙。 [#44153](https://github.com/StarRocks/starrocks/pull/44153)
+- 优化导入中报错信息，例如错误数据行超限、列数不对应、无效列名、所有分区中没有数据。
+
+### 安全
+
+- 升级 Kafka client 依赖包为 v3.4.0，以修复 [CVE-2023-25194](https://github.com/advisories/GHSA-26f8-x7cc-wqpc) 安全问题。[#45382](https://github.com/StarRocks/starrocks/pull/45382)
+
+### 问题修复
+
+修复了如下问题：
+
+- 如果一个物化视图定义中包含多个相同的表的 self join，且根据该表进行分区增量刷新，会因分区选择错误而导致结果错误。[#45936](https://github.com/StarRocks/starrocks/pull/45936)
+- 存算分离模式下在物化视图中创建 Bitmap 索引，会导致 FE crash。[#45665](https://github.com/StarRocks/starrocks/pull/45665)
+- 通过 ODBC 连接 FE follower 并执行 CREATE TABLE 时因空指针问题导致 BE crash。[#45043](https://github.com/StarRocks/starrocks/pull/45043)
+- 如果有较多异步任务，查询 information_schema.task_runs 会频繁失败。[#45520](https://github.com/StarRocks/starrocks/pull/45520)
+- SQL 语句中包含多个 COUNT DISTINCT 且包含 LIMIT，则 LIMIT 处理出现问题，导致每次执行语句返回数据不一致。[#44749](https://github.com/StarRocks/starrocks/pull/44749)
+- 查询明细表和聚合表的语句中包含 ORDER BY LIMIT 子句时，查询结果错误。[#45037](https://github.com/StarRocks/starrocks/pull/45037)
 
 ## 3.1.11
 

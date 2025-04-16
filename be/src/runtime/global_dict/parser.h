@@ -39,7 +39,7 @@ struct DictOptimizeContext {
     SlotId slot_id;
     // if input was not nullable but output was nullable this flag will set true
     bool result_nullable = false;
-    // size: DICT_DECODE_MAX_SIZE + 1
+    // size: dict codes.size() + 1
     std::vector<int16_t> code_convert_map;
     Filter filter;
     // for no-string column convert map
@@ -55,16 +55,15 @@ public:
         _mutable_dict_maps = dict_maps;
     }
 
-    [[nodiscard]] Status init_dict_exprs(const std::map<int, TExpr>& exprs);
+    Status init_dict_exprs(const std::map<int, TExpr>& exprs);
 
-    [[nodiscard]] Status rewrite_expr(ExprContext* ctx, Expr* expr, SlotId slot_id);
+    Status rewrite_expr(ExprContext* ctx, Expr* expr, SlotId slot_id);
 
-    [[nodiscard]] Status rewrite_conjuncts(std::vector<ExprContext*>* conjuncts_ctxs);
+    Status rewrite_conjuncts(std::vector<ExprContext*>* conjuncts_ctxs);
 
-    [[nodiscard]] Status eval_expression(ExprContext* conjunct, DictOptimizeContext* dict_opt_ctx,
-                                         int32_t targetSlotId);
+    Status eval_expression(ExprContext* conjunct, DictOptimizeContext* dict_opt_ctx, int32_t targetSlotId);
 
-    [[nodiscard]] Status eval_dict_expr(SlotId id);
+    Status eval_dict_expr(SlotId id);
 
     void close() noexcept;
 
@@ -85,9 +84,8 @@ private:
     void _check_could_apply_dict_optimize(Expr* expr, DictOptimizeContext* dict_opt_ctx);
 
     // use code mapping rewrite expr
-    [[nodiscard]] Status _rewrite_expr_ctxs(std::vector<ExprContext*>* expr_ctxs, const std::vector<SlotId>& slot_ids);
-    [[nodiscard]] Status _eval_and_rewrite(ExprContext* ctx, Expr* expr, DictOptimizeContext* dict_opt_ctx,
-                                           int32_t targetSlotId);
+    Status _rewrite_expr_ctxs(std::vector<ExprContext*>* expr_ctxs, const std::vector<SlotId>& slot_ids);
+    Status _eval_and_rewrite(ExprContext* ctx, Expr* expr, DictOptimizeContext* dict_opt_ctx, int32_t targetSlotId);
 
     RuntimeState* _runtime_state = nullptr;
     GlobalDictMaps* _mutable_dict_maps = nullptr;

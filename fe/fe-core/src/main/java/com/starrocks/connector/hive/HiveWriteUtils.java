@@ -47,6 +47,12 @@ public class HiveWriteUtils {
         }
     }
 
+    public static void checkExternalLocationProperties(Map<String, String> properties) throws DdlException {
+        if (!properties.containsKey(EXTERNAL_LOCATION_PROPERTY)) {
+            throw new DdlException("Can't create external Hive table without external_location property.");
+        }
+    }
+
     public static boolean pathExists(Path path, Configuration conf) {
         try {
             FileSystem fileSystem = FileSystem.get(path.toUri(), conf);
@@ -104,8 +110,11 @@ public class HiveWriteUtils {
     }
 
     public static boolean fileCreatedByQuery(String fileName, String queryId) {
-        Preconditions.checkState(fileName.length() > queryId.length() && queryId.length() > 8,
-                "file name or query id is invalid");
+        Preconditions.checkState(queryId.length() > 8, "file name or query id is invalid");
+        if (fileName.length() <= queryId.length()) {
+            // file is created by other engine like hive
+            return false;
+        }
         String checkQueryId = queryId.substring(0, queryId.length() - 8);
         return fileName.startsWith(checkQueryId) || fileName.endsWith(checkQueryId);
     }

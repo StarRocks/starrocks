@@ -1,0 +1,55 @@
+-- name: test_logical_split_empty_after_delete
+
+set enable_tablet_internal_parallel = true;
+set tablet_internal_parallel_mode = 'force_split';
+
+CREATE TABLE t1 (
+  k1 bigint NULL,
+  c_int_1_seq bigint SUM NULL
+) ENGINE=OLAP
+AGGREGATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "colocate_with" = "tablet_internal_group2"
+);
+
+
+CREATE TABLE t2 (
+  k1 bigint NULL,
+  c_int_1_seq bigint SUM NULL
+) ENGINE=OLAP
+AGGREGATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "colocate_with" = "tablet_internal_group2"
+);
+
+insert into t1 select 1, 1;
+
+-- Execute insert, delete, and query multiple times.
+
+insert into t2 select 1, 1;
+delete from t2 where k1 = 1;
+select t2.c_int_1_seq from t2 join [colocate] (select sleep(2) as x from t1)t on t2.k1 = t.x;
+
+insert into t2 select 1, 1;
+delete from t2 where k1 = 1;
+select t2.c_int_1_seq from t2 join [colocate] (select sleep(2) as x from t1)t on t2.k1 = t.x;
+
+insert into t2 select 1, 1;
+delete from t2 where k1 = 1;
+select t2.c_int_1_seq from t2 join [colocate] (select sleep(2) as x from t1)t on t2.k1 = t.x;
+
+insert into t2 select 1, 1;
+delete from t2 where k1 = 1;
+select t2.c_int_1_seq from t2 join [colocate] (select sleep(2) as x from t1)t on t2.k1 = t.x;
+
+insert into t2 select 1, 1;
+delete from t2 where k1 = 1;
+select t2.c_int_1_seq from t2 join [colocate] (select sleep(2) as x from t1)t on t2.k1 = t.x;
+
+-- Execute insert and query.
+insert into t2 select 1, 1;
+select t2.c_int_1_seq from t2 join [colocate] (select sleep(2) as x from t1)t on t2.k1 = t.x;

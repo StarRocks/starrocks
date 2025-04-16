@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.RuntimeProfile;
@@ -63,13 +64,13 @@ public class FeExecuteCoordinator extends Coordinator {
 
     private final ExecPlan execPlan;
 
-
     public FeExecuteCoordinator(ConnectContext context, ExecPlan execPlan) {
         this.connectContext = context;
         this.execPlan = execPlan;
     }
+
     @Override
-    public void startScheduling(boolean needDeploy) throws Exception {
+    public void startScheduling(ScheduleOption option) throws StarRocksException {
 
     }
 
@@ -128,6 +129,11 @@ public class FeExecuteCoordinator extends Coordinator {
     @Override
     public boolean isThriftServerHighLoad() {
         return false;
+    }
+
+    @Override
+    public TLoadJobType getLoadJobType() {
+        return null;
     }
 
     @Override
@@ -301,6 +307,19 @@ public class FeExecuteCoordinator extends Coordinator {
             return "";
         }
         return connectContext.getSessionVariable().getWarehouseName();
+    }
+
+    public long getCurrentWarehouseId() {
+        return connectContext.getCurrentWarehouseId();
+    }
+
+    @Override
+    public String getResourceGroupName() {
+        return "";
+    }
+
+    public boolean isShortCircuit() {
+        return false;
     }
 
     private List<ByteBuffer> covertToMySQLRowBuffer() {

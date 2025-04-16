@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # map_apply
 
-## 功能
+
 
 返回 Map 中所有 Key 或 Value 进行 [Lambda](../Lambda_expression.md) 函数运算后的 Map 值。
 

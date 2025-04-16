@@ -19,8 +19,9 @@ import com.starrocks.connector.metastore.MetastoreTable;
 import org.apache.hadoop.conf.Configuration;
 
 public class HMSBackedDeltaMetastore extends DeltaLakeMetastore {
-    public HMSBackedDeltaMetastore(String catalogName, IHiveMetastore metastore, Configuration hdfsConfiguration) {
-        super(catalogName, metastore, hdfsConfiguration);
+    public HMSBackedDeltaMetastore(String catalogName, IHiveMetastore metastore, Configuration hdfsConfiguration,
+                                   DeltaLakeCatalogProperties deltaLakeCatalogProperties) {
+        super(catalogName, metastore, hdfsConfiguration, deltaLakeCatalogProperties);
     }
 
     @Override

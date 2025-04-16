@@ -25,8 +25,10 @@ namespace pipeline {
 class SelectOperator final : public Operator {
 public:
     SelectOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-                   const std::vector<ExprContext*>& conjunct_ctxs)
-            : Operator(factory, id, "select", plan_node_id, false, driver_sequence), _conjunct_ctxs(conjunct_ctxs) {}
+                   const std::vector<ExprContext*>& conjunct_ctxs, const std::map<SlotId, ExprContext*>& common_exprs)
+            : Operator(factory, id, "select", plan_node_id, false, driver_sequence),
+              _conjunct_ctxs(conjunct_ctxs),
+              _common_exprs(common_exprs) {}
 
     ~SelectOperator() override = default;
     Status prepare(RuntimeState* state) override;
@@ -53,19 +55,24 @@ private:
     ChunkPtr _pre_output_chunk = nullptr;
 
     const std::vector<ExprContext*>& _conjunct_ctxs;
+    const std::map<SlotId, ExprContext*>& _common_exprs;
 
     bool _is_finished = false;
 };
 
 class SelectOperatorFactory final : public OperatorFactory {
 public:
-    SelectOperatorFactory(int32_t id, int32_t plan_node_id, std::vector<ExprContext*>&& conjunct_ctxs)
-            : OperatorFactory(id, "select", plan_node_id), _conjunct_ctxs(std::move(conjunct_ctxs)) {}
+    SelectOperatorFactory(int32_t id, int32_t plan_node_id, std::vector<ExprContext*>&& conjunct_ctxs,
+                          std::map<SlotId, ExprContext*>&& common_exprs)
+            : OperatorFactory(id, "select", plan_node_id),
+              _conjunct_ctxs(std::move(conjunct_ctxs)),
+              _common_exprs(std::move(common_exprs)) {}
 
     ~SelectOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<SelectOperator>(this, _id, _plan_node_id, driver_sequence, _conjunct_ctxs);
+        return std::make_shared<SelectOperator>(this, _id, _plan_node_id, driver_sequence, _conjunct_ctxs,
+                                                _common_exprs);
     }
 
     Status prepare(RuntimeState* state) override;
@@ -73,6 +80,7 @@ public:
 
 private:
     std::vector<ExprContext*> _conjunct_ctxs;
+    std::map<SlotId, ExprContext*> _common_exprs;
 };
 
 } // namespace pipeline

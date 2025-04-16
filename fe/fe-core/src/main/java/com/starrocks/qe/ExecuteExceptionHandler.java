@@ -15,13 +15,18 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableSet;
+import com.starrocks.analysis.SlotId;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.InternalErrorCode;
+import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.exception.GlobalDictNotMatchException;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
+import com.starrocks.connector.statistics.ConnectorTableColumnKey;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.rpc.RpcException;
@@ -30,6 +35,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.statistics.IRelaxDictManager;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TExplainLevel;
 import org.apache.logging.log4j.LogManager;
@@ -37,6 +43,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 public class ExecuteExceptionHandler {
@@ -50,8 +57,10 @@ public class ExecuteExceptionHandler {
             handleRemoteFileNotFound((RemoteFileNotFoundException) e, context);
         } else if (e instanceof RpcException) {
             handleRpcException((RpcException) e, context);
-        } else if (e instanceof UserException) {
-            handleUserException((UserException) e, context);
+        } else if (e instanceof StarRocksException) {
+            handleUserException((StarRocksException) e, context);
+        } else if (e instanceof GlobalDictNotMatchException) {
+            handleGlobalDictNotMatchException((GlobalDictNotMatchException) e, context);
         } else {
             throw e;
         }
@@ -75,7 +84,7 @@ public class ExecuteExceptionHandler {
                     ConnectorMetadata metadata = GlobalStateMgr.getCurrentState().getMetadataMgr()
                             .getOptionalMetadata(hiveTable.getCatalogName()).get();
                     // refresh catalog level metadata cache
-                    metadata.refreshTable(hiveTable.getDbName(), hiveTable, new ArrayList<>(), true);
+                    metadata.refreshTable(hiveTable.getCatalogDBName(), hiveTable, new ArrayList<>(), true);
                     // clear query level metadata cache
                     metadata.clear();
                 }
@@ -87,7 +96,37 @@ public class ExecuteExceptionHandler {
         Tracers.record(Tracers.Module.EXTERNAL, "HMS.RETRY", String.valueOf(context.retryTime + 1));
     }
 
-    private static void handleRpcException(RpcException e, RetryContext context) {
+    private static void tryTriggerRefreshDictAsync(GlobalDictNotMatchException e, RetryContext context) {
+        Pair<Optional<Integer>, Optional<String>> err = e.extract();
+        if (err.first.isEmpty()) {
+            return;
+        }
+        SlotId slotId = new SlotId(err.first.get());
+        for (ScanNode scanNode : context.execPlan.getScanNodes()) {
+            if (scanNode.getDesc().getSlots().stream().anyMatch(x -> x.getId().equals(slotId))) {
+                String columnName = scanNode.getDesc().getSlot(slotId.asInt()).getColumn().getName();
+                String tableUUID = scanNode.getDesc().getTable().getUUID();
+                IRelaxDictManager.getInstance().invalidTemporarily(tableUUID, columnName);
+                GlobalStateMgr.getCurrentState().getConnectorTableTriggerAnalyzeMgr().
+                        addDictUpdateTask(new ConnectorTableColumnKey(tableUUID, columnName), err.second);
+                return;
+            }
+        }
+    }
+
+    private static void handleGlobalDictNotMatchException(GlobalDictNotMatchException e, RetryContext context)
+            throws Exception {
+        // trigger async collect dict
+        tryTriggerRefreshDictAsync(e, context);
+
+        // rerun without low cardinality optimization
+        ConnectContext connectContext = context.connectContext;
+        connectContext.getSessionVariable().setUseLowCardinalityOptimizeOnLake(false);
+        rebuildExecPlan(e, context);
+        connectContext.getSessionVariable().setUseLowCardinalityOptimizeOnLake(true);
+    }
+
+    private static void handleRpcException(RpcException e, RetryContext context) throws Exception {
         // When enable_collect_query_detail_info is set to true, the plan will be recorded in the query detail,
         // and hence there is no need to log it here.
         ConnectContext connectContext = context.connectContext;
@@ -100,33 +139,42 @@ public class ExecuteExceptionHandler {
                     context.execPlan == null ? "" : context.execPlan.getExplainString(TExplainLevel.COSTS),
                     e);
         }
+        // rebuild the exec plan in case the node is not available any more.
+        rebuildExecPlan(e, context);
     }
 
-    private static void handleUserException(UserException e, RetryContext context) throws Exception {
+    private static void rebuildExecPlan(Exception e, RetryContext context) throws Exception {
+        try {
+            context.execPlan = StatementPlanner.plan(context.parsedStmt, context.connectContext);
+        } catch (Exception e1) {
+            // encounter exception when re-plan, just log the new error but throw the original cause.
+            if (LOG.isDebugEnabled()) {
+                ConnectContext connectContext = context.connectContext;
+                LOG.debug("encounter exception when retry, [QueryId={}] [SQL={}], ",
+                        DebugUtil.printId(connectContext.getExecutionId()),
+                        context.parsedStmt.getOrigStmt() == null ? "" :
+                                context.parsedStmt.getOrigStmt().originStmt,
+                        e1);
+            }
+            throw e;
+        }
+    }
+
+    private static void handleUserException(StarRocksException e, RetryContext context) throws Exception {
         String msg = e.getMessage();
         if (context.parsedStmt instanceof QueryStatement) {
             for (String errMsg : SCHEMA_NOT_MATCH_ERROR) {
                 if (msg.contains(errMsg)) {
-                    try {
-                        ExecPlan execPlan = StatementPlanner.plan(context.parsedStmt, context.connectContext);
-                        context.execPlan = execPlan;
-                        return;
-                    } catch (Exception e1) {
-                        // encounter exception when re-plan, just log the new error but throw the original cause.
-                        if (LOG.isDebugEnabled()) {
-                            ConnectContext connectContext = context.connectContext;
-                            LOG.debug("encounter exception when retry, [QueryId={}] [SQL={}], ",
-                                    DebugUtil.printId(connectContext.getExecutionId()),
-                                    context.parsedStmt.getOrigStmt() == null ? "" :
-                                            context.parsedStmt.getOrigStmt().originStmt,
-                                    e1);
-                        }
-                        throw e;
-                    }
+                    rebuildExecPlan(e, context);
+                    return;
                 }
             }
+            // if it is cancelled due to backend not alive, rebuild the plan and retry again
+            if (e.getErrorCode().equals(InternalErrorCode.CANCEL_NODE_NOT_ALIVE_ERR)) {
+                rebuildExecPlan(e, context);
+                return;
+            }
         }
-
         throw e;
     }
 

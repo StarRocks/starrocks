@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 unlisted: true
 ---
 
@@ -90,7 +90,7 @@ An asynchronous Broker Load process handles making the connection to S3, pulling
 
 ***Note: Processes that involve multiple components or steps may be easier to understand with a diagram. This example includes a diagram that helps describe the steps that happen when a user chooses the Broker Load option.***
 
-![Workflow of Broker Load](../assets/broker_load_how-to-work_en.png)
+![Workflow of Broker Load](../_assets/broker_load_how-to-work_en.png)
 
 1. The user creates a load job.
 2. The frontend (FE) creates a query plan and distributes the plan to the backend nodes (BE).
@@ -397,4 +397,4 @@ INSERT INTO user_behavior_declared
 - This document only covered IAM user-based authentication. For other options please see [authenticate to AWS resources](../integrations/authenticate_to_aws_resources.md).
 - The [AWS CLI Command Reference](https://awscli.amazonaws.com/v2/documentation/api/latest/reference/s3/index.html) covers the S3 URI in detail.
 - Learn more about [table design](../table_design/StarRocks_table_design.md).
-- Broker Load provides many more configuration and use options than those in the above examples, the details are in [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)
+- Broker Load provides many more configuration and use options than those in the above examples, the details are in [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)

@@ -1,12 +1,12 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # array_contains_seq
 
-## Description
 
-Checks whether all the elements of `arr2` appear in `arr1` in the same exact order, that is, whether `arr2` is a subset of `arr1` and the elements in `arr2` observe the same exact order as elements in `arr1`. If yes, this function will return 1.
+
+Checks whether all the elements of array2 appear in array1 in the same exact order. Therefore, the function will return 1, if and only if `array1 = prefix + array2 + suffix`.
 
 For example:
 
@@ -18,7 +18,7 @@ This function is supported from v3.3 onwards.
 ## Syntax
 
 ~~~Haskell
-BOOLEAN array_contains_all(arr1, arr2)
+BOOLEAN array_contains_seq(arr1, arr2)
 ~~~
 
 ## Parameters

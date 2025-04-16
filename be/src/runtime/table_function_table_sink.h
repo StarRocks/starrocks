@@ -14,14 +14,7 @@
 
 #pragma once
 
-#include "common/logging.h"
-#include "connector/file_chunk_sink.h"
-#include "connector/hive_chunk_sink.h"
 #include "exec/data_sink.h"
-#include "exec/hdfs_scanner_text.h"
-#include "exec/pipeline/sink/connector_sink_operator.h"
-#include "formats/column_evaluator.h"
-#include "formats/csv/csv_file_writer.h"
 
 namespace starrocks {
 

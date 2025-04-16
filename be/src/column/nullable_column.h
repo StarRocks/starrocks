@@ -22,32 +22,32 @@ namespace starrocks {
 
 using NullData = FixedLengthColumn<uint8_t>::Container;
 using NullColumn = FixedLengthColumn<uint8_t>;
-using NullColumnPtr = FixedLengthColumn<uint8_t>::Ptr;
+using NullColumnPtr = NullColumn::Ptr;
 using NullColumns = std::vector<NullColumnPtr>;
 
 using NullValueType = NullColumn::ValueType;
 static constexpr NullValueType DATUM_NULL = NullValueType(1);
 static constexpr NullValueType DATUM_NOT_NULL = NullValueType(0);
 
-class NullableColumn : public ColumnFactory<Column, NullableColumn> {
-    friend class ColumnFactory<Column, NullableColumn>;
+class NullableColumn : public CowFactory<ColumnFactory<Column, NullableColumn>, NullableColumn> {
+    friend class CowFactory<ColumnFactory<Column, NullableColumn>, NullableColumn>;
 
 public:
+    using ValueType = void;
+
     inline static ColumnPtr wrap_if_necessary(ColumnPtr column) {
         if (column->is_nullable()) {
             return column;
         }
         auto null = NullColumn::create(column->size(), 0);
-        return NullableColumn::create(std::move(column), std::move(null));
+        return NullableColumn::create(column->as_mutable_ptr(), null->as_mutable_ptr());
     }
     NullableColumn() = default;
 
     NullableColumn(MutableColumnPtr&& data_column, MutableColumnPtr&& null_column);
-    NullableColumn(ColumnPtr data_column, NullColumnPtr null_column);
-
     NullableColumn(const NullableColumn& rhs)
-            : _data_column(rhs._data_column->clone_shared()),
-              _null_column(std::static_pointer_cast<NullColumn>(rhs._null_column->clone_shared())),
+            : _data_column(rhs._data_column->clone()),
+              _null_column(NullColumn::static_pointer_cast(rhs._null_column->clone())),
               _has_null(rhs._has_null) {}
 
     NullableColumn(NullableColumn&& rhs) noexcept
@@ -67,6 +67,16 @@ public:
         return *this;
     }
 
+    using Base = CowFactory<ColumnFactory<Column, NullableColumn>, NullableColumn>;
+    static Ptr create(const ColumnPtr& data_column, const ColumnPtr& null_column) {
+        return NullableColumn::create(data_column->as_mutable_ptr(), null_column->as_mutable_ptr());
+    }
+
+    template <typename... Args, typename = std::enable_if_t<IsMutableColumns<Args...>::value>>
+    static MutablePtr create(Args&&... args) {
+        return Base::create(std::forward<Args>(args)...);
+    }
+
     ~NullableColumn() override = default;
 
     bool has_null() const override { return _has_null; }
@@ -82,6 +92,8 @@ public:
 
     bool is_nullable() const override { return true; }
     bool is_json() const override { return _data_column->is_json(); }
+    bool is_array() const override { return _data_column->is_array(); }
+    bool is_array_view() const override { return _data_column->is_array_view(); }
 
     bool is_null(size_t index) const override {
         DCHECK_EQ(_null_column->size(), _data_column->size());
@@ -148,11 +160,11 @@ public:
 
     bool has_large_column() const override { return _data_column->has_large_column(); }
 
-    bool append_strings(const Buffer<Slice>& strs) override;
+    bool append_strings(const Slice* data, size_t size) override;
 
-    bool append_strings_overflow(const Buffer<Slice>& strs, size_t max_length) override;
+    bool append_strings_overflow(const Slice* data, size_t size, size_t max_length) override;
 
-    bool append_continuous_strings(const Buffer<Slice>& strs) override;
+    bool append_continuous_strings(const Slice* data, size_t size) override;
 
     bool append_continuous_fixed_length_strings(const char* data, size_t size, int fixed_length) override;
 
@@ -175,30 +187,30 @@ public:
         return sizeof(bool) + _data_column->max_one_element_serialize_size();
     }
 
-    uint32_t serialize(size_t idx, uint8_t* pos) override;
+    uint32_t serialize(size_t idx, uint8_t* pos) const override;
 
-    uint32_t serialize_default(uint8_t* pos) override;
+    uint32_t serialize_default(uint8_t* pos) const override;
 
     void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                         uint32_t max_one_row_size) override;
+                         uint32_t max_one_row_size) const override;
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
     void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override;
 
     uint32_t serialize_size(size_t idx) const override {
-        if (_null_column->get_data()[idx]) {
+        if (immutable_null_column_data()[idx]) {
             return sizeof(uint8_t);
         }
         return sizeof(uint8_t) + _data_column->serialize_size(idx);
     }
 
     MutableColumnPtr clone_empty() const override {
-        return create_mutable(_data_column->clone_empty(), _null_column->clone_empty());
+        return create(_data_column->clone_empty(), _null_column->clone_empty());
     }
 
     size_t serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval, size_t start,
-                                       size_t count) override;
+                                       size_t count) const override;
 
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
 
@@ -207,8 +219,11 @@ public:
     int equals(size_t left, const Column& rhs, size_t right, bool safe_eq = true) const override;
 
     void fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
-
+    void fnv_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const override;
+    void fnv_hash_selective(uint32_t* hash, uint16_t* sel, uint16_t sel_size) const override;
     void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
+    void crc32_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const override;
+    void crc32_hash_selective(uint32_t* hash, uint16_t* sel, uint16_t sel_size) const override;
 
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
@@ -216,27 +231,35 @@ public:
 
     std::string get_name() const override { return "nullable-" + _data_column->get_name(); }
 
+    const ColumnPtr& data_column() const { return _data_column; }
+    ColumnPtr& data_column() { return _data_column; }
+    MutableColumnPtr data_column_mutable_ptr() { return _data_column->as_mutable_ptr(); }
+
+    const NullColumnPtr& null_column() const { return _null_column; }
+    NullColumnPtr& null_column() { return _null_column; }
+    NullColumn::MutablePtr null_column_mutable_ptr() {
+        return NullColumn::static_pointer_cast(_null_column->as_mutable_ptr());
+    }
+
+    const Column& data_column_ref() const { return *_data_column; }
+    Column& data_column_ref() { return *_data_column; }
+    NullColumn& null_column_ref() { return *_null_column; }
+    const NullColumn& null_column_ref() const { return *_null_column; }
+
     NullData& null_column_data() { return _null_column->get_data(); }
+    const NullData& null_column_data() const { return _null_column->get_data(); }
     const NullData& immutable_null_column_data() const { return _null_column->get_data(); }
 
     Column* mutable_data_column() { return _data_column.get(); }
-
-    NullColumn* mutable_null_column() { return _null_column.get(); }
-
-    const Column& data_column_ref() const { return *_data_column; }
-
-    const ColumnPtr& data_column() const { return _data_column; }
-
-    ColumnPtr& data_column() { return _data_column; }
-
-    const NullColumn& null_column_ref() const { return *_null_column; }
-    const NullColumnPtr& null_column() const { return _null_column; }
+    // TODO(COW): remove const_cast
+    NullColumn* mutable_null_column() const { return const_cast<NullColumn*>(_null_column.get()); }
+    const NullColumn* immutable_null_column() const { return _null_column.get(); }
 
     size_t null_count() const;
     size_t null_count(size_t offset, size_t count) const;
 
     Datum get(size_t n) const override {
-        if (_has_null && _null_column->get_data()[n]) {
+        if (_has_null && (immutable_null_column_data()[n])) {
             return {};
         } else {
             return _data_column->get(n);
@@ -248,7 +271,7 @@ public:
         _has_null = true;
         return true;
     }
-    ColumnPtr replicate(const std::vector<uint32_t>& offsets) override;
+    StatusOr<ColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
 
     size_t memory_usage() const override {
         return _data_column->memory_usage() + _null_column->memory_usage() + sizeof(bool);
@@ -273,9 +296,15 @@ public:
 
     void swap_by_data_column(ColumnPtr& src) {
         reset_column();
-        _data_column.swap(src);
+        _data_column = std::move(src);
         null_column_data().insert(null_column_data().end(), _data_column->size(), 0);
         update_has_null();
+    }
+
+    void swap_null_column(Column& rhs) {
+        auto& r = down_cast<NullableColumn&>(rhs);
+        _null_column->swap_column(*r._null_column);
+        std::swap(_has_null, r._has_null);
     }
 
     void reset_column() override {
@@ -288,7 +317,7 @@ public:
     std::string debug_item(size_t idx) const override {
         DCHECK_EQ(_null_column->size(), _data_column->size());
         std::stringstream ss;
-        if (_null_column->get_data()[idx]) {
+        if (immutable_null_column_data()[idx]) {
             ss << "NULL";
         } else {
             ss << _data_column->debug_item(idx);
@@ -311,11 +340,19 @@ public:
         return ss.str();
     }
 
-    bool capacity_limit_reached(std::string* msg = nullptr) const override {
-        return _data_column->capacity_limit_reached(msg) || _null_column->capacity_limit_reached(msg);
+    Status capacity_limit_reached() const override {
+        RETURN_IF_ERROR(_data_column->capacity_limit_reached());
+        return _null_column->capacity_limit_reached();
     }
 
     void check_or_die() const override;
+
+    void mutate_each_subcolumn() override {
+        // data
+        _data_column = (std::move(*_data_column)).mutate();
+        // _null_column
+        _null_column = NullColumn::static_pointer_cast((std::move(*_null_column)).mutate());
+    }
 
 protected:
     ColumnPtr _data_column;

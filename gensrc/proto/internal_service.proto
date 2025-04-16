@@ -131,6 +131,10 @@ message PTransmitRuntimeFilterParams {
     // When merge node starts to broadcast this rf(millseconds since unix epoch).
     optional int64 broadcast_timestamp = 10;
     optional bool is_pipeline = 11;
+    // 12,13,14 only used for skew join optimization
+    optional bool is_skew_broadcast_join = 12;
+    optional PTypeDesc columnType = 13;
+    optional int32 skew_shuffle_filter_id = 14;
 };
 
 message PTransmitRuntimeFilterResult {
@@ -194,6 +198,10 @@ message PTabletWriterOpenRequest {
     optional int64 immutable_tablet_size = 33 [default = 0];
     optional PLoadChannelProfileConfig load_channel_profile_config = 34;
     optional LakeTabletParams lake_tablet_params = 35;
+
+    // for multi olap table sink
+    optional int64 sink_id = 36 [default = 0];
+    optional bytes encryption_meta = 37;
 };
 
 message PTabletWriterOpenResult {
@@ -241,6 +249,8 @@ message PTabletWriterAddChunkRequest {
     // wait all sender close before rpc returning
     // this is used for automatic partition creation
     optional bool wait_all_sender_close = 11 [default = false];
+    // for multi olap table sink
+    optional int64 sink_id = 12 [default = 0];
 };
 
 message PTabletWriterAddChunksRequest {
@@ -277,6 +287,7 @@ message PTabletWriterAddSegmentRequest {
     optional bool eos = 5;
     optional int64 num_segments = 6;
     optional SegmentPB segment = 7;
+    optional int64 sink_id = 8 [default = 0];
 };
 
 message PTabletWriterAddSegmentResult {
@@ -295,9 +306,30 @@ message PTabletWriterCancelRequest {
     optional int64 tablet_id = 5;
     repeated int64 tablet_ids = 6;
     optional string reason = 7;
+    optional int64 sink_id = 8 [default = 0];
 };
 
 message PTabletWriterCancelResult {
+};
+
+message PLoadDiagnoseRequest {
+    optional PUniqueId id = 1;
+    optional int64 txn_id = 2;
+    // whether to use profile as the diagnose method.
+    // If true, will return the profile in the response
+    optional bool profile = 3;
+    // whether to use stack trace as the diagnose method.
+    optional bool stack_trace = 4;
+};
+
+message PLoadDiagnoseResult {
+    // The result of the profile
+    optional StatusPB profile_status = 1;
+    optional bytes profile_data = 2;
+    // The result of stack trace. stack trace will be performed asynchronously
+    // and stored on the target BE. The Status::OK only indicates the target
+    // receives the request and will execute it.
+    optional StatusPB stack_trace_status = 3;
 };
 
 message PExecPlanFragmentRequest {
@@ -379,6 +411,7 @@ enum PPlanFragmentCancelReason {
     USER_CANCEL = 2;
     INTERNAL_ERROR = 3;
     TIMEOUT = 4;
+    QUERY_FINISHED = 5;
 };
 
 message PCancelPlanFragmentRequest {
@@ -402,6 +435,17 @@ message PFetchDataResult {
     optional int64 packet_seq = 2;
     optional bool eos = 3;
     optional PQueryStatistics query_statistics = 4;
+};
+
+message PFetchDataCacheRequest {
+    optional int64 request_id = 1;
+    required bytes cache_key = 2;
+    optional int64 offset = 3;
+    optional int64 size = 4;
+};
+
+message PFetchDataCacheResponse {
+    required StatusPB status = 1;
 };
 
 message PTriggerProfileReportRequest {
@@ -630,14 +674,44 @@ message PProcessDictionaryCacheResult {
     optional int64 dictionary_memory_usage = 2;
 };
 
-// NOTE(zc): If you want to add new method here,
-// you must add same method to 'doris_internal_service.proto'.
+message PFetchArrowSchemaRequest {
+    optional PUniqueId finst_id = 1;
+};
+
+message PFetchArrowSchemaResult {
+    optional StatusPB status = 1;
+    optional bytes schema = 2;
+};
+
+// Data will be sent as the attachment of the request
+message PStreamLoadRequest {
+    optional string db = 1;
+    optional string table = 2;
+    optional string user = 3;
+    optional string passwd = 4;
+    repeated PStringPair parameters = 5;
+}
+
+message PStreamLoadResponse {
+    optional string json_result = 1;
+}
+
+message PUpdateTransactionStateRequest {
+    repeated TransactionStatePB states = 1;
+}
+
+// The update result for each transaction state
+message PUpdateTransactionStateResponse {
+    repeated StatusPB results = 1;
+}
+
 service PInternalService {
     rpc transmit_data(PTransmitDataParams) returns (PTransmitDataResult);
     rpc exec_plan_fragment(PExecPlanFragmentRequest) returns (PExecPlanFragmentResult);
     rpc exec_batch_plan_fragments(PExecBatchPlanFragmentsRequest) returns (PExecBatchPlanFragmentsResult);
     rpc cancel_plan_fragment(PCancelPlanFragmentRequest) returns (PCancelPlanFragmentResult);
     rpc fetch_data(PFetchDataRequest) returns (PFetchDataResult);
+    rpc fetch_datacache(PFetchDataCacheRequest) returns (PFetchDataCacheResponse);
     rpc tablet_writer_open(PTabletWriterOpenRequest) returns (PTabletWriterOpenResult);
     rpc tablet_writer_add_batch(PTabletWriterAddBatchRequest) returns (PTabletWriterAddBatchResult);
     rpc tablet_writer_cancel(PTabletWriterCancelRequest) returns (PTabletWriterCancelResult);
@@ -655,6 +729,7 @@ service PInternalService {
     rpc tablet_writer_add_chunk_via_http(PHttpRequest) returns (starrocks.PTabletWriterAddBatchResult);
     rpc tablet_writer_add_chunks_via_http(PHttpRequest) returns (starrocks.PTabletWriterAddBatchResult);
     rpc tablet_writer_add_segment(starrocks.PTabletWriterAddSegmentRequest) returns (starrocks.PTabletWriterAddSegmentResult);
+    rpc load_diagnose(PLoadDiagnoseRequest) returns (PLoadDiagnoseResult);
     rpc transmit_runtime_filter(PTransmitRuntimeFilterParams) returns (PTransmitRuntimeFilterResult);
 
     rpc submit_mv_maintenance_task(PMVMaintenanceTaskRequest) returns (PMVMaintenanceTaskResult);
@@ -673,4 +748,10 @@ service PInternalService {
     rpc exec_short_circuit(PExecShortCircuitRequest) returns (PExecShortCircuitResult);
 
     rpc process_dictionary_cache(starrocks.PProcessDictionaryCacheRequest) returns (starrocks.PProcessDictionaryCacheResult);
+
+    rpc fetch_arrow_schema(PFetchArrowSchemaRequest) returns (PFetchArrowSchemaResult);
+
+    rpc stream_load(PStreamLoadRequest) returns (PStreamLoadResponse);
+
+    rpc update_transaction_state(PUpdateTransactionStateRequest) returns (PUpdateTransactionStateResponse);
 };

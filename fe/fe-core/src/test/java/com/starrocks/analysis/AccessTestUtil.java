@@ -38,12 +38,14 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Type;
@@ -73,10 +75,12 @@ public class AccessTestUtil {
         EditLog editLog = new EditLog(journalQueue);
         globalStateMgr.setEditLog(editLog);
 
+        FakeEditLog fakeEditLog = new FakeEditLog();
+
         Database db = new Database(50000L, "testCluster:testDb");
         MaterializedIndex baseIndex = new MaterializedIndex(30001, IndexState.NORMAL);
         RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
-        Partition partition = new Partition(20000L, "testTbl", baseIndex, distributionInfo);
+        Partition partition = new Partition(20000L, 20001L,"testTbl", baseIndex, distributionInfo);
         List<Column> baseSchema = new LinkedList<Column>();
         Column column = new Column("k1", Type.INT);
         baseSchema.add(column);
@@ -103,16 +107,25 @@ public class AccessTestUtil {
             }
         };
 
-        Partition partition = Deencapsulation.newInstance(Partition.class);
-        new Expectations(partition) {
+        PhysicalPartition physicalPartition = Deencapsulation.newInstance(PhysicalPartition.class);
+        new Expectations(physicalPartition) {
             {
-                partition.getBaseIndex();
+                physicalPartition.getBaseIndex();
                 minTimes = 0;
                 result = index;
 
-                partition.getIndex(30000L);
+                physicalPartition.getIndex(30000L);
                 minTimes = 0;
                 result = index;
+            }
+        };
+
+        Partition partition = Deencapsulation.newInstance(Partition.class);
+        new Expectations(partition) {
+            {
+                partition.getDefaultPhysicalPartition();
+                minTimes = 0;
+                result = physicalPartition;
             }
         };
 
@@ -166,25 +179,28 @@ public class AccessTestUtil {
 
         Database db = mockDb("testDb");
 
+        /*
         new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getDb("testDb");
+                globalStateMgr.getLocalMetastore().getDb("testDb");
                 minTimes = 0;
                 result = db;
 
-                globalStateMgr.getDb("emptyDb");
+                globalStateMgr.getLocalMetastore().getDb("emptyDb");
                 minTimes = 0;
                 result = null;
 
-                globalStateMgr.getDb(anyString);
+                globalStateMgr.getLocalMetastore().getDb(anyString);
                 minTimes = 0;
                 result = new Database();
 
-                globalStateMgr.getDb("emptyCluster");
+                globalStateMgr.getLocalMetastore().getDb("emptyCluster");
                 minTimes = 0;
                 result = null;
             }
         };
+
+         */
         return globalStateMgr;
     }
 
@@ -231,16 +247,25 @@ public class AccessTestUtil {
             }
         };
 
-        Partition partition = Deencapsulation.newInstance(Partition.class);
-        new Expectations(partition) {
+        PhysicalPartition physicalPartition = Deencapsulation.newInstance(PhysicalPartition.class);
+        new Expectations(physicalPartition) {
             {
-                partition.getBaseIndex();
+                physicalPartition.getBaseIndex();
                 minTimes = 0;
                 result = index;
 
-                partition.getIndex(30000L);
+                physicalPartition.getIndex(30000L);
                 minTimes = 0;
                 result = index;
+            }
+        };
+
+        Partition partition = Deencapsulation.newInstance(Partition.class);
+        new Expectations(partition) {
+            {
+                partition.getDefaultPhysicalPartition();
+                minTimes = 0;
+                result = physicalPartition;
             }
         };
 

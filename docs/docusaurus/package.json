@@ -19,14 +19,28 @@
     "@algolia/client-search": "^4.20.0",
     "@docsearch/react": "3",
     "@docusaurus/core": "^3.1.1",
+    "@docusaurus/plugin-client-redirects": "^3.1.1",
     "@docusaurus/preset-classic": "^3.1.1",
     "@docusaurus/theme-search-algolia": "^3.1.1",
     "@mdx-js/react": "^3.0.0",
+    "axios": "^1.7.8",
     "clsx": "^2.0.0",
     "fs-extra": "^11.1.1",
     "prism-react-renderer": "^2.1.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
+  },
+  "overrides": {
+    "react-router": {
+      "path-to-regexp": "1.9.0"
+    },
+    "express": {
+      "path-to-regexp": "0.1.10"
+    },
+    "serve-handler": {
+      "path-to-regexp": "3.3.0"
+    },
+    "webpack-dev-middleware" : "5.3.4"
   },
   "devDependencies": {
     "@docusaurus/module-type-aliases": "^3.1.1",

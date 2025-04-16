@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # catalog
 
-## 功能
+
 
 查询当前会话所在的 Catalog。可以是 Internal Catalog 或 External Catalog。有关 Catalog 的详细信息，参见 [](../../../data_source/catalog/catalog_overview.md)。
 
@@ -55,4 +55,4 @@ select catalog();
 
 ## 相关 SQL
 
-[SET CATALOG](../../sql-statements/data-definition/SET_CATALOG.md)：切换到指定 Catalog。
+[SET CATALOG](../../sql-statements/Catalog/SET_CATALOG.md)：切换到指定 Catalog。

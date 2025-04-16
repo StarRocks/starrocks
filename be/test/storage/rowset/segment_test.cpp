@@ -42,6 +42,7 @@
 #include "column/datum_tuple.h"
 #include "common/logging.h"
 #include "fs/fs_memory.h"
+#include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
@@ -246,7 +247,11 @@ TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
 
     // Test new_column_iterator
     {
-        auto r = segment->new_column_iterator(5 /* nonexist column id*/, nullptr);
+        TabletColumn column;
+        column.set_unique_id(5);
+        column.set_type(LogicalType::TYPE_BIGINT);
+        column.set_is_nullable(false);
+        auto r = segment->new_column_iterator(column, nullptr);
         ASSERT_FALSE(r.ok());
         ASSERT_TRUE(r.status().is_not_found()) << r.status();
     }
@@ -268,6 +273,14 @@ TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
         column.set_default_value("10");
         r = segment->new_column_iterator_or_default(column, nullptr);
         ASSERT_TRUE(r.ok()) << r.status();
+    }
+    // test new_dcg_segment
+    {
+        auto ep = KeyCache::instance().create_plain_random_encryption_meta_pair().value();
+        DeltaColumnGroup dcg;
+        dcg.init(1, {{1}}, {"abc0.cols"}, {ep.encryption_meta});
+        auto r = segment->new_dcg_segment(dcg, 0, nullptr);
+        ASSERT_FALSE(r.ok());
     }
 }
 

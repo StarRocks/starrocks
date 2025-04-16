@@ -26,11 +26,12 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaLoadTrackingLogsScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
-        {"JOB_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"LABEL", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DATABASE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TRACKING_LOG", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"TYPE", TYPE_VARCHAR, sizeof(StringValue), true}};
+        {"ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"JOB_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"LABEL", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DATABASE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TRACKING_LOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true}};
 
 SchemaLoadTrackingLogsScanner::SchemaLoadTrackingLogsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)),
@@ -71,29 +72,34 @@ Status SchemaLoadTrackingLogsScanner::fill_chunk(ChunkPtr* chunk) {
         }
         auto& info = _result.trackingLoads[_cur_idx];
         for (const auto& [slot_id, index] : slot_id_to_index_map) {
-            if (slot_id < 1 || slot_id > 5) {
+            if (slot_id < 1 || slot_id > 6) {
                 return Status::InternalError(strings::Substitute("invalid slot id: $0", slot_id));
             }
             ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
             switch (slot_id) {
             case 1: {
-                // job id
+                // id
                 fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.job_id);
                 break;
             }
             case 2: {
+                // job id
+                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.job_id);
+                break;
+            }
+            case 3: {
                 // label
                 Slice label = Slice(info.label);
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&label);
                 break;
             }
-            case 3: {
+            case 4: {
                 // database
                 Slice db = Slice(info.db);
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&db);
                 break;
             }
-            case 4: {
+            case 5: {
                 // tracking message
                 if (info.__isset.urls) {
                     for (const auto& url : info.urls) {
@@ -112,7 +118,7 @@ Status SchemaLoadTrackingLogsScanner::fill_chunk(ChunkPtr* chunk) {
                 }
                 break;
             }
-            case 5: {
+            case 6: {
                 // type
                 Slice load_type = Slice(info.load_type);
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&load_type);

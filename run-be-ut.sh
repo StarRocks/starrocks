@@ -32,7 +32,8 @@ usage() {
   echo "
 Usage: $0 <options>
   Optional options:
-     --test  [TEST_NAME]            run specific test
+     --test TEST_NAME               run specific test
+     --gtest_filter GTEST_FILTER    run test cases with gtest filters
      --dry-run                      dry-run unit tests
      --clean                        clean old unit tests before run
      --with-gcov                    enable to build with gcov
@@ -43,6 +44,8 @@ Usage: $0 <options>
      --enable-shared-data           enable to build with shared-data feature support
      --without-starcache            build without starcache library
      --use-staros                   DEPRECATED. an alias of --enable-shared-data option
+     --without-debug-symbol-split   split debug symbol out of the test binary to accelerate the speed
+                                    of loading binary into memory and start execution.
      -j                             build parallel
 
   Eg.
@@ -51,6 +54,7 @@ Usage: $0 <options>
     $0 --dry-run                    dry-run unit tests
     $0 --clean                      clean old unit tests before run
     $0 --help                       display usage
+    $0 --gtest_filter CompactionUtilsTest*:TabletUpdatesTest*   run the two test suites: CompactionUtilsTest and TabletUpdatesTest
   "
   exit 1
 }
@@ -88,6 +92,7 @@ OPTS=$(getopt \
   -l 'enable-shared-data' \
   -l 'without-starcache' \
   -l 'with-brpc-keepalive' \
+  -l 'without-debug-symbol-split' \
   -o 'j:' \
   -l 'help' \
   -l 'run' \
@@ -111,13 +116,15 @@ USE_STAROS=OFF
 WITH_GCOV=OFF
 WITH_STARCACHE=ON
 WITH_BRPC_KEEPALIVE=OFF
+WITH_DEBUG_SYMBOL_SPLIT=ON
+BUILD_JAVA_EXT=ON
 while true; do
     case "$1" in
         --clean) CLEAN=1 ; shift ;;
         --dry-run) DRY_RUN=1 ; shift ;;
         --run) shift ;; # Option only for compatibility
-        --test) TEST_NAME=$2 ; shift 2;;
-        --gtest_filter) TEST_NAME=$2 ; shift 2;; # Option only for compatibility
+        --test) TEST_NAME=${2}* ; shift 2;;
+        --gtest_filter) TEST_NAME=$2 ; shift 2;;
         --module) TEST_MODULE=$2; shift 2;;
         --help) HELP=1 ; shift ;;
         --with-aws) WITH_AWS=ON; shift ;;
@@ -126,6 +133,8 @@ while true; do
         --with-brpc-keepalive) WITH_BRPC_KEEPALIVE=ON; shift ;;
         --excluding-test-suit) EXCLUDING_TEST_SUIT=$2; shift 2;;
         --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
+        --without-debug-symbol-split) WITH_DEBUG_SYMBOL_SPLIT=OFF; shift ;;
+        --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
         -j) PARALLEL=$2; shift 2 ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
@@ -141,6 +150,9 @@ CMAKE_BUILD_TYPE=${BUILD_TYPE:-ASAN}
 CMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
 if [[ -z ${USE_SSE4_2} ]]; then
     USE_SSE4_2=ON
+fi
+if [[ -z ${USE_BMI_2} ]]; then
+    USE_BMI_2=ON
 fi
 if [[ -z ${USE_AVX2} ]]; then
     USE_AVX2=ON
@@ -172,27 +184,56 @@ if [ "${USE_STAROS}" == "ON"  ]; then
   export STARLET_INSTALL_DIR
 fi
 
+# Build Java Extensions
+if [ ${BUILD_JAVA_EXT} = "ON" ]; then
+    echo "Build Java Extensions"
+    cd ${STARROCKS_HOME}/java-extensions
+    if [ ${CLEAN} -eq 1 ]; then
+        ${MVN_CMD} clean
+    fi
+    ${MVN_CMD} $addon_mvn_opts package -DskipTests -T ${PARALLEL}
+    cd ${STARROCKS_HOME}
+else
+    echo "Skip Building Java Extensions"
+fi
+
+cd ${CMAKE_BUILD_DIR}
 ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}\
             -DSTARROCKS_HOME=${STARROCKS_HOME} \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
-            -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 \
+            -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 -DUSE_BMI_2=$USE_BMI_2\
             -DUSE_STAROS=${USE_STAROS} \
             -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
             -DWITH_GCOV=${WITH_GCOV} \
             -DWITH_STARCACHE=${WITH_STARCACHE} \
             -DWITH_BRPC_KEEPALIVE=${WITH_BRPC_KEEPALIVE} \
+            -DSTARROCKS_JIT_ENABLE=ON \
+            -DWITH_RELATIVE_SRC_PATH=OFF \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../
 
 ${BUILD_SYSTEM} -j${PARALLEL}
+
+cd ${STARROCKS_HOME}
+export STARROCKS_TEST_BINARY_DIR=${CMAKE_BUILD_DIR}/test
+TEST_BIN=starrocks_test
+if [ "x$WITH_DEBUG_SYMBOL_SPLIT" = "xON" ] && test -f ${STARROCKS_TEST_BINARY_DIR}/$TEST_BIN ; then
+    pushd ${STARROCKS_TEST_BINARY_DIR} >/dev/null 2>&1
+    TEST_BIN_SYMBOL=starrocks_test.debuginfo
+    echo -n "[INFO] Split $TEST_BIN debug symbol to $TEST_BIN_SYMBOL ..."
+    objcopy --only-keep-debug $TEST_BIN $TEST_BIN_SYMBOL
+    strip --strip-debug $TEST_BIN
+    objcopy --add-gnu-debuglink=$TEST_BIN_SYMBOL $TEST_BIN
+    # continue the echo output from the previous `echo -n`
+    echo " split done."
+    popd >/dev/null 2>&1
+fi
 
 echo "*********************************"
 echo "  Starting to Run BE Unit Tests  "
 echo "*********************************"
 
-cd ${STARROCKS_HOME}
-export STARROCKS_TEST_BINARY_DIR=${CMAKE_BUILD_DIR}
 export TERM=xterm
 export UDF_RUNTIME_DIR=${STARROCKS_HOME}/lib/udf-runtime
 export LOG_DIR=${STARROCKS_HOME}/log
@@ -204,6 +245,8 @@ done
 mkdir -p $LOG_DIR
 mkdir -p ${UDF_RUNTIME_DIR}
 rm -f ${UDF_RUNTIME_DIR}/*
+
+export LD_LIBRARY_PATH=${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared/:$LD_LIBRARY_PATH
 
 # ====================== configure JAVA/JVM ====================
 # NOTE: JAVA_HOME must be configed if using hdfs scan, like hive external table
@@ -229,6 +272,10 @@ else
 fi
 
 export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
+if [[ -n "$STARROCKS_GCC_HOME" ]] ; then
+    # add gcc lib64 into LD_LIBRARY_PATH because of dynamic link libstdc++ and libgcc
+    export LD_LIBRARY_PATH=$STARROCKS_GCC_HOME/lib64:$LD_LIBRARY_PATH
+fi
 
 THIRDPARTY_HADOOP_HOME=${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop
 if [[ -d ${THIRDPARTY_HADOOP_HOME} ]] ; then
@@ -244,10 +291,11 @@ fi
 # HADOOP_CLASSPATH defined in $STARROCKS_HOME/conf/hadoop_env.sh
 # put $STARROCKS_HOME/conf ahead of $HADOOP_CLASSPATH so that custom config can replace the config in $HADOOP_CLASSPATH
 export CLASSPATH=$STARROCKS_HOME/conf:$HADOOP_CLASSPATH:$CLASSPATH
+export CLASSPATH=${STARROCKS_HOME}/java-extensions/udf-extensions/target/*:$CLASSPATH
+export CLASSPATH=${STARROCKS_HOME}/java-extensions/java-utils/target/*:$CLASSPATH
 
 # ===========================================================
 
-export STARROCKS_TEST_BINARY_DIR=${STARROCKS_TEST_BINARY_DIR}/test
 export ASAN_OPTIONS="abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1:detect_stack_use_after_return=1"
 
 if [ $WITH_AWS = "OFF" ]; then
@@ -299,3 +347,4 @@ do
         fi
     fi
 done
+

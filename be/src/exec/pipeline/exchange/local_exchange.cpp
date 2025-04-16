@@ -15,10 +15,13 @@
 #include "exec/pipeline/exchange/local_exchange.h"
 
 #include <memory>
+#include <unordered_map>
 
 #include "column/chunk.h"
+#include "connector/utils.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exprs/expr_context.h"
+#include "gutil/hash/hash.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
@@ -266,12 +269,7 @@ KeyPartitionExchanger::KeyPartitionExchanger(const std::shared_ptr<ChunkBufferMe
                                              std::vector<ExprContext*> partition_expr_ctxs, const size_t num_sinks)
         : LocalExchanger(strings::Substitute("KeyPartition"), memory_manager, source),
           _source(source),
-          _partition_expr_ctxs(std::move(partition_expr_ctxs)) {
-    _channel_partitions_columns.reserve(num_sinks);
-    for (int i = 0; i < num_sinks; ++i) {
-        _channel_partitions_columns.emplace_back(_partition_expr_ctxs.size());
-    }
-}
+          _partition_expr_ctxs(std::move(partition_expr_ctxs)) {}
 
 Status KeyPartitionExchanger::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(LocalExchanger::prepare(state));
@@ -293,40 +291,33 @@ Status KeyPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_d
         return Status::OK();
     }
 
-    auto& partitions_columns = _channel_partitions_columns[sink_driver_sequence];
-    for (size_t i = 0; i < partitions_columns.size(); ++i) {
-        ASSIGN_OR_RETURN(partitions_columns[i], _partition_expr_ctxs[i]->evaluate(chunk.get()))
-        DCHECK(partitions_columns[i] != nullptr);
+    Columns partition_columns;
+    for (size_t i = 0; i < _partition_expr_ctxs.size(); i++) {
+        ASSIGN_OR_RETURN(auto partition_column, _partition_expr_ctxs[i]->evaluate(chunk.get()));
+        partition_columns.push_back(std::move(partition_column));
     }
 
-    Partition2RowIndexes partition_row_indexes;
-    auto partition_columns_ptr = std::make_shared<Columns>(partitions_columns);
-    for (int i = 0; i < num_rows; ++i) {
-        auto partition_key = std::make_shared<PartitionKey>(partition_columns_ptr, i);
-        auto partition_row_index = partition_row_indexes.find(partition_key);
-        if (partition_row_index == partition_row_indexes.end()) {
-            partition_row_indexes.emplace(std::move(partition_key), std::make_shared<std::vector<uint32_t>>(1, i));
-        } else {
-            partition_row_index->second->emplace_back(i);
+    std::unordered_map<std::vector<std::string>, std::vector<uint32_t>> key2indices;
+    for (int i = 0; i < num_rows; i++) {
+        std::vector<std::string> partition_key;
+        for (int j = 0; j < partition_columns.size(); j++) {
+            auto type = _partition_expr_ctxs[j]->root()->type();
+            ASSIGN_OR_RETURN(auto partition_value, connector::HiveUtils::column_value(type, partition_columns[j], i));
+            partition_key.push_back(std::move(partition_value));
         }
+        key2indices[partition_key].push_back(i);
     }
 
-    std::vector<uint32_t> hash_values(chunk->num_rows());
-    for (auto& [_, indexes] : partition_row_indexes) {
-        hash_values[(*indexes)[0]] = HashUtil::FNV_SEED;
-        for (const ColumnPtr& column : partitions_columns) {
-            column->fnv_hash(&hash_values[0], (*indexes)[0], (*indexes)[0] + 1);
-        }
+    std::vector<uint32_t> hash_values(chunk->num_rows(), HashUtil::FNV_SEED);
+    for (auto& column : partition_columns) {
+        column->fnv_hash(hash_values.data(), 0, num_rows);
+    }
 
-        uint32_t shuffle_channel_id = hash_values[(*indexes)[0]] % source_op_cnt;
-
-        size_t memory_usage = 0;
-        for (unsigned int row_index : *indexes) {
-            memory_usage += chunk->bytes_usage(row_index, 1);
-        }
-
-        RETURN_IF_ERROR(_source->get_sources()[shuffle_channel_id]->add_chunk(
-                chunk, std::move(indexes), 0, indexes->size(), partitions_columns, _partition_expr_ctxs, memory_usage));
+    for (auto& [key, indices] : key2indices) {
+        uint32_t shuffle_channel_id = hash_values[indices[0]] % source_op_cnt;
+        auto partial_chunk = chunk->clone_empty_with_slot();
+        partial_chunk->append_selective(*chunk, indices.data(), 0, indices.size());
+        RETURN_IF_ERROR(_source->get_sources()[shuffle_channel_id]->add_chunk(key, std::move(partial_chunk)));
     }
 
     return Status::OK();
@@ -346,6 +337,13 @@ Status PassthroughExchanger::accept(const ChunkPtr& chunk, const int32_t sink_dr
     } else {
         _source->get_sources()[(_next_accept_source++) % sources_num]->add_chunk(chunk);
     }
+
+    return Status::OK();
+}
+
+Status DirectThroughExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driver_sequence) {
+    size_t sources_num = _source->get_sources().size();
+    _source->get_sources()[(sink_driver_sequence) % sources_num]->add_chunk(chunk);
 
     return Status::OK();
 }

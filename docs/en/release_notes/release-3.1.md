@@ -1,8 +1,123 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # StarRocks version 3.1
+
+## 3.1.17
+
+Release Date: January 3, 2025
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Cross-cluster Data Migration Tool caused the Follower FE to crash during data synchronization and commit, due to not accounting for the deletion of partitions in the target cluster. [#54061](https://github.com/StarRocks/starrocks/pull/54061)
+- BE in the target cluster might crash when synchronizing tables with DELETE operations using Cross-cluster Data Migration Tool. [#54081](https://github.com/StarRocks/starrocks/pull/54081)
+- A bug in the BDBJE handshake mechanism where Leader FE would reject reconnection attempts from Follower FE when connection is being re-established, causing Follower FE nodes to exit. [#50412](https://github.com/StarRocks/starrocks/pull/50412)
+- Duplicate memory statistics in FE leads to excessive memory usage. [#53055](https://github.com/StarRocks/starrocks/pull/53055)
+- The statuses of asynchronous materialized view refresh tasks are inconsistent across multiple FE nodes, which lead to inaccurate states of the materialized view during queries. [#54236](https://github.com/StarRocks/starrocks/pull/54236)
+
+## 3.1.16
+
+Release date: December 16, 2024
+
+### Improvements
+
+- Optimized table-related statistics. [#50316](https://github.com/StarRocks/starrocks/pull/50316)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Insufficient granularity in error code handling for disk full scenarios caused the BE to mistakenly identify disk errors and delete data. [#51411](https://github.com/StarRocks/starrocks/pull/51411)
+- Stream Load failures when submitted using HTTP 1.0. [#53010](https://github.com/StarRocks/starrocks/pull/53010) [#53008](https://github.com/StarRocks/starrocks/pull/53008)
+- Routine Load tasks were canceled due to expired transactions (now tasks are canceled only if the database or table no longer exists and paused when transactions expired). [#50334](https://github.com/StarRocks/starrocks/pull/50334)
+- Unloading data using `EXPORT` with Broker to `file://` resulted in a file rename error, causing the export to fail. [#52544](https://github.com/StarRocks/starrocks/pull/52544)
+- If the join condition in an equal-join is an expression based on a low-cardinality column, the system may incorrectly push down a Runtime Filter predicate, leading to a BE crash. [#50690](https://github.com/StarRocks/starrocks/pull/50690)
+
+## 3.1.15
+
+Release date: September 4, 2024
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- During query rewrite with asynchronous materialized views, `count(*)` on certain tables returns NULL. [#49288](https://github.com/StarRocks/starrocks/pull/49288)
+- `partition_linve_nubmer` does not take effect. [#49213](https://github.com/StarRocks/starrocks/pull/49213)
+- FE throws a tablet exception: BE disk offline, and cannot migrate tablets. [#47833](https://github.com/StarRocks/starrocks/pull/47833)
+
+## 3.1.14
+
+Release date: July 29, 2024
+
+### Improvements
+
+- Stream Load now supports using `\t` and `\n` as row and column delimiters. Users do not need to convert them to their hexadecimal ASCII codes. [#47302](https://github.com/StarRocks/starrocks/pull/47302)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Frequent INSERT and UPDATE operations on Primary Key tables may cause write and query delays in the database. [#47838](https://github.com/StarRocks/starrocks/pull/47838)
+- When a Primary Key table encounters data persistence failures, the persistent index may fail to capture the error, leading to data loss and reporting the error "Insert found duplicate key". [#48045](https://github.com/StarRocks/starrocks/pull/48045)
+- Materialized views may report insufficient permissions when refreshed. [#47561](https://github.com/StarRocks/starrocks/pull/47561)
+- Materialized view reports the error "For input string" when refreshed. [#46131](https://github.com/StarRocks/starrocks/pull/46131)
+- During materialized view refresh, the lock is held excessively long, causing the Leader FE to be restarted by the deadlock detection script. [#48256](https://github.com/StarRocks/starrocks/pull/48256)
+- Queries against views with the IN clause in its definition may return inaccurate results. [#47484](https://github.com/StarRocks/starrocks/pull/47484)
+- Global Runtime Filter causes incorrect results. [#48496](https://github.com/StarRocks/starrocks/pull/48496)
+- MySQL protocol `COM_CHANGE_USER` does not support `conn_attr`. [#47796](https://github.com/StarRocks/starrocks/pull/47796)
+
+### Behavior Changes
+
+- When users create a non-partitioned table without specifying the bucket number, the minimum bucket number the system sets for the table is `16` (instead of `2` based on the formula `2*BE or CN count`). If users want to set a smaller bucket number when creating a small table, they must set it explicitly. [#47005](https://github.com/StarRocks/starrocks/pull/47005)
+
+
+
+## 3.1.13
+
+Release date: June 26, 2024
+
+### Improvements
+
+- The Broker process supports access to Tencent Cloud COS Posix buckets. Users can load data from COS Posix buckets using Broker Load or unload data to COS Posix buckets using the SELECT INTO OUTFILE statement. [#46597](https://github.com/StarRocks/starrocks/pull/46597)
+- Supports viewing comments of Hive tables in Hive Catalogs using SHOW CREATE TABLE. [#37686](https://github.com/StarRocks/starrocks/pull/37686)
+- Optimized the evaluation time of Conjunct in WHERE clauses, such as multiple LIKE clauses on the same column or CASE WHEN expressions. [#46914](https://github.com/StarRocks/starrocks/pull/46914)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- DELETE statements fail in shared-data clusters if there are excessive number of partitions to be deleted. [#46229](https://github.com/StarRocks/starrocks/pull/46229)
+
+## 3.1.12
+
+Release date: May 30, 2024
+
+### New Features
+
+- Flink connector supports reading complex data types ARRAY, MAP, and STRUCT from StarRocks. [#42932](https://github.com/StarRocks/starrocks/pull/42932) [#347](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/347)
+
+### Improvements
+
+- Previously, when BE failed to communicate with FE via RPC, FE would return a generic error message: `call frontend service failed reason=xxx`, making it unclear what the specific issue was. The error messages are now optimized to include specific reasons, such as timeout or server busy. [#44153](https://github.com/StarRocks/starrocks/pull/44153)
+- Improved error messages to indicate specific issues during data loading, such as the number of error data rows exceeding limits, mismatched column numbers, invalid column names, and no data in any partition.
+
+### Security
+
+- Upgraded Kafka client dependency to v3.4.0 to fix the CVE-2023-25194 security issue. [#45382](https://github.com/StarRocks/starrocks/pull/45382)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- If a materialized view definition includes multiple self-joins of the same table and incremental refreshes by partitions based on that table, incorrect results would occur due to wrong partition selection. [#45936](https://github.com/StarRocks/starrocks/pull/45936)
+- FEs crash when a Bitmap index is created in a materialized view in shared-data clusters. [#45665](https://github.com/StarRocks/starrocks/pull/45665)
+- BEs crash due to null pointer issues when FE follower is connected via ODBC and CREATE TABLE is executed. [#45043](https://github.com/StarRocks/starrocks/pull/45043)
+- Querying `information_schema.task_runs` fails frequently when many asynchronous tasks exist. [#45520](https://github.com/StarRocks/starrocks/pull/45520)
+- When a SQL statement contains multiple COUNT DISTINCT and includes LIMIT, LIMIT is wrongly processed, resulting in inconsistent data returned each time the statement is executed. [#44749](https://github.com/StarRocks/starrocks/pull/44749)
+- Queries with ORDER BY LIMIT clauses on Duplicate Key tables and Aggregate tables produce incorrect results. [#45037](https://github.com/StarRocks/starrocks/pull/45037)
 
 ## 3.1.11
 

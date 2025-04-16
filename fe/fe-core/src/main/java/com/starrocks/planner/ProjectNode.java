@@ -24,7 +24,7 @@ import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TNormalProjectNode;
@@ -71,15 +71,10 @@ public class ProjectNode extends PlanNode {
     }
 
     @Override
-    public void init(Analyzer analyzer) throws UserException {
+    public void init(Analyzer analyzer) throws StarRocksException {
         Preconditions.checkState(conjuncts.isEmpty());
         computeStats(analyzer);
         createDefaultSmap(analyzer);
-    }
-
-    @Override
-    public int getNumInstances() {
-        return children.get(0).getNumInstances();
     }
 
     @Override
@@ -182,8 +177,11 @@ public class ProjectNode extends PlanNode {
             return false;
         }
 
+        Optional<List<Expr>> optProbeExprCandidates = candidatesOfSlotExpr(probeExpr, couldBound(description, descTbl));
+        optProbeExprCandidates.ifPresent(exprs -> exprs.removeIf(probeExprCandidate -> probeExprCandidate.containsDictMappingExpr()));
+
         return pushdownRuntimeFilterForChildOrAccept(context, probeExpr,
-                candidatesOfSlotExpr(probeExpr, couldBound(description, descTbl)),
+                optProbeExprCandidates,
                 partitionByExprs, candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr()), 0, true);
     }
 

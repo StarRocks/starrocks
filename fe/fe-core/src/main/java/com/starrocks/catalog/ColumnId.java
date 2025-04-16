@@ -14,27 +14,31 @@
 
 package com.starrocks.catalog;
 
+
+import com.starrocks.common.util.ParseUtil;
+
 import java.util.Comparator;
 import java.util.Objects;
 
 public class ColumnId {
+
     private final String id;
 
-    public ColumnId(String id) {
+    private ColumnId(String id) {
         this.id = id;
-    }
-
-    public String getId() {
-        return id;
     }
 
     public static ColumnId create(String id) {
         return new ColumnId(id);
     }
 
+    public String getId() {
+        return id;
+    }
+
     @Override
     public int hashCode() {
-        return Objects.hash(id);
+        return Objects.hash(getId());
     }
 
     @Override
@@ -48,23 +52,33 @@ public class ColumnId {
         }
 
         ColumnId columnId = (ColumnId) o;
-        return Objects.equals(id, columnId.id);
+        return Objects.equals(getId(), columnId.getId());
     }
 
-    public boolean equalsIgnoreCase(ColumnId anotherId) {
-        if (this == anotherId) {
+    public boolean equalsIgnoreCase(ColumnId anotherColumnId) {
+        if (this == anotherColumnId) {
             return true;
         }
 
-        if (anotherId == null) {
+        if (anotherColumnId == null) {
             return false;
         }
 
-        return id != null ? id.equalsIgnoreCase(anotherId.id) : anotherId.id == null;
+        String myId = getId();
+        String anotherId = anotherColumnId.getId();
+
+        return myId != null ? myId.equalsIgnoreCase(anotherId) : anotherId == null;
     }
 
     @Override
     public String toString() {
+        return getId();
+    }
+
+    public String toSql(boolean isBackQuoted) {
+        if (isBackQuoted) {
+            return ParseUtil.backquote(id);
+        }
         return id;
     }
 
@@ -73,7 +87,7 @@ public class ColumnId {
 
     private static class CaseInsensitiveComparator implements Comparator<ColumnId> {
         public int compare(ColumnId n1, ColumnId n2) {
-            return String.CASE_INSENSITIVE_ORDER.compare(n1.id, n2.id);
+            return String.CASE_INSENSITIVE_ORDER.compare(n1.getId(), n2.getId());
         }
     }
 }

@@ -36,6 +36,8 @@ under the License.
 
     <properties>
         <starrocks.home>${basedir}/../../</starrocks.home>
+        <!-- There is no unit tests for this project, ignore the error if no case found -->
+        <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
     </properties>
 
     <build>
@@ -49,7 +51,7 @@ under the License.
                     <dependency>
                         <groupId>com.puppycrawl.tools</groupId>
                         <artifactId>checkstyle</artifactId>
-                        <version>8.40</version>
+                        <version>${puppycrawl.version}</version>
                     </dependency>
                 </dependencies>
                 <configuration>
@@ -69,6 +71,21 @@ under the License.
                         </goals>
                     </execution>
                 </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <failIfNoSpecifiedTests>${failIfNoSpecifiedTests}</failIfNoSpecifiedTests>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+                <configuration>
+                    <release>8</release>
+                </configuration>
             </plugin>
         </plugins>
     </build>

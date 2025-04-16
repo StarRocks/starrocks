@@ -23,9 +23,9 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.persist.TaskSchedule;
+import com.starrocks.sql.ast.UserIdentity;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Map;
 
@@ -74,7 +74,11 @@ public class Task implements Writable {
 
     // set default to ROOT is for compatibility
     @SerializedName("createUser")
+    @Deprecated
     private String createUser = AuthenticationMgr.ROOT_USER;
+
+    @SerializedName("createUserIdentity")
+    private UserIdentity userIdentity;
 
     public Task() {}
 
@@ -196,6 +200,14 @@ public class Task implements Writable {
         this.createUser = createUser;
     }
 
+    public UserIdentity getUserIdentity() {
+        return userIdentity;
+    }
+
+    public void setUserIdentity(UserIdentity userIdentity) {
+        this.userIdentity = userIdentity;
+    }
+
     public String getPostRun() {
         return postRun;
     }
@@ -207,12 +219,6 @@ public class Task implements Writable {
     public static Task read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, Task.class);
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
     }
 
     @Override

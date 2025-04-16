@@ -41,8 +41,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.IntSupplier;
 import java.util.stream.Collectors;
+
+import static com.starrocks.qe.WorkerProviderHelper.getNextWorker;
 
 /**
  * DefaultWorkerProvider handles ComputeNode/Backend selection in SHARED_NOTHING mode.
@@ -50,6 +51,7 @@ import java.util.stream.Collectors;
  */
 public class DefaultWorkerProvider implements WorkerProvider {
     private static final Logger LOG = LogManager.getLogger(DefaultWorkerProvider.class);
+
     private static final AtomicInteger NEXT_COMPUTE_NODE_INDEX = new AtomicInteger(0);
     private static final AtomicInteger NEXT_BACKEND_INDEX = new AtomicInteger(0);
 
@@ -88,6 +90,8 @@ public class DefaultWorkerProvider implements WorkerProvider {
 
     private final boolean preferComputeNode;
 
+    private final long warehouseId;
+
     public static class Factory implements WorkerProvider.Factory {
         @Override
         public DefaultWorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
@@ -114,7 +118,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
 
             return new DefaultWorkerProvider(idToBackend, idToComputeNode,
                     filterAvailableWorkers(idToBackend), filterAvailableWorkers(idToComputeNode),
-                    preferComputeNode);
+                    preferComputeNode, warehouseId);
         }
     }
 
@@ -123,7 +127,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
                                  ImmutableMap<Long, ComputeNode> id2ComputeNode,
                                  ImmutableMap<Long, ComputeNode> availableID2Backend,
                                  ImmutableMap<Long, ComputeNode> availableID2ComputeNode,
-                                 boolean preferComputeNode) {
+                                 boolean preferComputeNode, long warehouseId) {
         this.id2Backend = id2Backend;
         this.id2ComputeNode = id2ComputeNode;
 
@@ -139,6 +143,25 @@ public class DefaultWorkerProvider implements WorkerProvider {
             this.usedComputeNode = hasComputeNode && preferComputeNode;
         }
         this.preferComputeNode = preferComputeNode;
+        this.warehouseId = warehouseId;
+    }
+
+    @VisibleForTesting
+    public DefaultWorkerProvider(
+            ImmutableMap<Long, ComputeNode> id2ComputeNode,
+            ImmutableMap<Long, ComputeNode> availableID2ComputeNode) {
+        this.id2Backend = ImmutableMap.of();
+        this.id2ComputeNode = id2ComputeNode;
+
+        this.availableID2Backend = ImmutableMap.of();
+        this.availableID2ComputeNode = availableID2ComputeNode;
+
+        this.selectedWorkerIds = Sets.newConcurrentHashSet();
+
+        this.hasComputeNode = true;
+        this.preferComputeNode = true;
+        this.usedComputeNode = true;
+        this.warehouseId = 0;
     }
 
     @Override
@@ -257,7 +280,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
 
     @Override
     public String toString() {
-        return toString(usedComputeNode);
+        return toString(usedComputeNode, true);
     }
 
     @VisibleForTesting
@@ -276,29 +299,52 @@ public class DefaultWorkerProvider implements WorkerProvider {
         return -1;
     }
 
-    private String toString(boolean chooseComputeNode) {
-        return chooseComputeNode ? computeNodesToString() : backendsToString();
+    @Override
+    public long getWarehouseId() {
+        return warehouseId;
+    }
+
+    private String toString(boolean chooseComputeNode, boolean allowNormalNodes) {
+        return chooseComputeNode ? computeNodesToString(allowNormalNodes) :
+                backendsToString(allowNormalNodes);
     }
 
     private void reportWorkerNotFoundException(boolean chooseComputeNode) throws NonRecoverableException {
         throw new NonRecoverableException(
-                FeConstants.getNodeNotFoundError(chooseComputeNode) + toString(chooseComputeNode));
+                FeConstants.getNodeNotFoundError(chooseComputeNode) + toString(chooseComputeNode, false));
     }
 
-    private String computeNodesToString() {
+    private String computeNodesToString(boolean allowNormalNodes) {
         StringBuilder out = new StringBuilder("compute node: ");
-        id2ComputeNode.forEach((backendID, backend) -> out.append(
-                String.format("[%s alive: %b inBlacklist: %b] ", backend.getHost(),
-                        backend.isAlive(), SimpleScheduler.isInBlocklist(backendID))));
+
+        id2ComputeNode.forEach((backendID, backend) -> {
+            if (shouldIncludeNode(backend, backendID, allowNormalNodes)) {
+                out.append(
+                        String.format("[%s alive: %b inBlacklist: %b] ", backend.getHost(),
+                                backend.isAlive(), SimpleScheduler.isInBlocklist(backendID)));
+            }
+        });
         return out.toString();
     }
 
-    private String backendsToString() {
+    private String backendsToString(boolean allowNormalNodes) {
         StringBuilder out = new StringBuilder("backend: ");
-        id2Backend.forEach((backendID, backend) -> out.append(
-                String.format("[%s alive: %b inBlacklist: %b] ", backend.getHost(),
-                        backend.isAlive(), SimpleScheduler.isInBlocklist(backendID))));
+        id2Backend.forEach((backendID, backend) -> {
+            if (shouldIncludeNode(backend, backendID, allowNormalNodes)) {
+                out.append(
+                        formatNodeInfo(backend.getHost(), backend.isAlive(), SimpleScheduler.isInBlocklist(backendID)));
+            }
+        });
         return out.toString();
+    }
+
+    private boolean shouldIncludeNode(ComputeNode node, Long nodeId, boolean allowNormalNodes) {
+        return allowNormalNodes || !node.isAlive() || SimpleScheduler.isInBlocklist(nodeId);
+    }
+
+    private String formatNodeInfo(String host, boolean isAlive, boolean isInBlacklist) {
+        return String.format("[%s alive: %b inBlacklist: %b] ",
+                host, isAlive, isInBlacklist);
     }
 
     @VisibleForTesting
@@ -366,17 +412,13 @@ public class DefaultWorkerProvider implements WorkerProvider {
         return ImmutableMap.copyOf(computeNodes);
     }
 
-    private static <C extends ComputeNode> C getNextWorker(ImmutableMap<Long, C> workers,
-                                                           IntSupplier getNextWorkerNodeIndex) {
-        if (workers.isEmpty()) {
-            return null;
-        }
-        int index = getNextWorkerNodeIndex.getAsInt() % workers.size();
-        return workers.values().asList().get(index);
+    public static boolean isWorkerAvailable(ComputeNode worker) {
+        return worker.isAlive() && !SimpleScheduler.isInBlocklist(worker.getId());
     }
 
-    private static boolean isWorkerAvailable(ComputeNode worker) {
-        return worker.isAlive() && !SimpleScheduler.isInBlocklist(worker.getId());
+    @VisibleForTesting
+    static AtomicInteger getNextComputeNodeIndexer() {
+        return NEXT_COMPUTE_NODE_INDEX;
     }
 
     private static <C extends ComputeNode> ImmutableMap<Long, C> filterAvailableWorkers(ImmutableMap<Long, C> workers) {

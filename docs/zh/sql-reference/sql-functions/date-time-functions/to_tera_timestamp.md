@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # to_tera_timestamp
 
-## 功能
+
 
 根据指定的格式解析输入的时间日期字符串，并转换为 DATETIME 类型的值。
 

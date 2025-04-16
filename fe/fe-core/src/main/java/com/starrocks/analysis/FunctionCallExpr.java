@@ -312,25 +312,7 @@ public class FunctionCallExpr extends Expr {
     }
 
     public boolean isDistinct() {
-        Preconditions.checkState(isAggregateFunction());
         return fnParams.isDistinct();
-    }
-
-    public boolean isCountStar() {
-        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.COUNT)) {
-            if (fnParams.isStar()) {
-                return true;
-            } else if (fnParams.exprs() == null || fnParams.exprs().isEmpty()) {
-                return true;
-            } else {
-                for (Expr expr : fnParams.exprs()) {
-                    if (expr.isConstant()) {
-                        return true;
-                    }
-                }
-            }
-        }
-        return false;
     }
 
     @Override
@@ -339,9 +321,7 @@ public class FunctionCallExpr extends Expr {
         // except in test cases that do it explicitly.
         if (isAggregate() || isAnalyticFnCall) {
             msg.node_type = TExprNodeType.AGG_EXPR;
-            if (!isAnalyticFnCall) {
-                msg.setAgg_expr(new TAggregateExpr(isMergeAggFn));
-            }
+            msg.setAgg_expr(new TAggregateExpr(isMergeAggFn));
         } else {
             msg.node_type = TExprNodeType.FUNCTION_CALL;
         }
@@ -463,8 +443,8 @@ public class FunctionCallExpr extends Expr {
     }
 
     @Override
-    public boolean equals(Object obj) {
-        if (!super.equals(obj)) {
+    public boolean equalsWithoutChild(Object obj) {
+        if (!super.equalsWithoutChild(obj)) {
             return false;
         }
         FunctionCallExpr o = (FunctionCallExpr) obj;

@@ -40,6 +40,7 @@ import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.IsNullPredicate;
+import com.starrocks.analysis.LargeStringLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
@@ -53,8 +54,12 @@ import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VariableExpr;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PEntryObject;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ConnectorView;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.FileTable;
@@ -80,13 +85,10 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.credential.CredentialUtil;
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PEntryObject;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
+import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CTERelation;
@@ -98,6 +100,8 @@ import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.DefaultValueExpr;
+import com.starrocks.sql.ast.DeleteStmt;
+import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ExceptRelation;
@@ -106,6 +110,7 @@ import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
@@ -133,22 +138,30 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
+import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.sql.ast.pipe.CreatePipeStmt;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.storagevolume.StorageVolume;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang.NotImplementedException;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.StringJoiner;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.FunctionSet.IGNORE_NULL_WINDOW_FUNCTION;
+import static com.starrocks.catalog.Table.TableType.JDBC;
 import static java.util.stream.Collectors.toList;
 
 /**
@@ -164,7 +177,7 @@ public class AstToStringBuilder {
     }
 
     public static String getAliasName(ParseNode expr, boolean addFunctionDbName, boolean withBackquote) {
-        return new AST2StringBuilderVisitor(addFunctionDbName, withBackquote).visit(expr);
+        return new AST2StringBuilderVisitor(addFunctionDbName, withBackquote, true).visit(expr);
     }
 
     public static class AST2StringBuilderVisitor implements AstVisitor<String, Void> {
@@ -177,54 +190,74 @@ public class AstToStringBuilder {
         // when you just want to get the real expr name set it false
         protected boolean withBackquote;
 
+        protected boolean hideCredential;
+
         public AST2StringBuilderVisitor() {
-            this(true, true);
+            this(true, true, true);
         }
 
-        public AST2StringBuilderVisitor(boolean addFunctionDbName, boolean withBackquote) {
+        public AST2StringBuilderVisitor(boolean hideCredential) {
+            this(true, true, hideCredential);
+        }
+
+        public AST2StringBuilderVisitor(boolean addFunctionDbName, boolean withBackquote, boolean hideCredential) {
             this.addFunctionDbName = addFunctionDbName;
             this.withBackquote = withBackquote;
+            this.hideCredential = hideCredential;
         }
 
         // ------------------------------------------- Privilege Statement -------------------------------------------------
 
         @Override
-        public String visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt statement, Void context) {
+        public String visitCreateUserStatement(CreateUserStmt stmt, Void context) {
             StringBuilder sb = new StringBuilder();
-            if (statement instanceof CreateUserStmt) {
-                sb.append("CREATE");
-            } else {
-                sb.append("ALTER");
+            sb.append("CREATE USER ").append(stmt.getUserIdentity());
+            sb.append(buildAuthOptionSql(stmt.getAuthOption()));
+
+            if (!stmt.getDefaultRoles().isEmpty()) {
+                sb.append(" DEFAULT ROLE ");
+                sb.append(Joiner.on(",").join(
+                        stmt.getDefaultRoles().stream().map(r -> "'" + r + "'").collect(toList())));
             }
 
-            sb.append(" USER ").append(statement.getUserIdentity());
-            if (!Strings.isNullOrEmpty(statement.getOriginalPassword())) {
-                if (statement.isPasswordPlain()) {
+            return sb.toString();
+        }
+
+        @Override
+        public String visitAlterUserStatement(AlterUserStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("ALTER USER ").append(stmt.getUserIdentity());
+            sb.append(buildAuthOptionSql(stmt.getAuthOption()));
+
+            return sb.toString();
+        }
+
+        public StringBuilder buildAuthOptionSql(UserAuthOption authOption) {
+            StringBuilder sb = new StringBuilder();
+            if (authOption == null) {
+                return sb;
+            }
+
+            if (!Strings.isNullOrEmpty(authOption.getPassword())) {
+                if (authOption.isPasswordPlain()) {
                     sb.append(" IDENTIFIED BY '").append("*XXX").append("'");
                 } else {
-                    sb.append(" IDENTIFIED BY PASSWORD '").append(statement.getOriginalPassword()).append("'");
+                    sb.append(" IDENTIFIED BY PASSWORD '").append(authOption.getPassword()).append("'");
                 }
             }
 
-            if (!Strings.isNullOrEmpty(statement.getAuthPluginName())) {
-                sb.append(" IDENTIFIED WITH ").append(statement.getAuthPluginName());
-                if (!Strings.isNullOrEmpty(statement.getAuthStringUnResolved())) {
-                    if (statement.isPasswordPlain()) {
+            if (!Strings.isNullOrEmpty(authOption.getAuthPlugin())) {
+                sb.append(" IDENTIFIED WITH ").append(authOption.getAuthPlugin());
+                if (!Strings.isNullOrEmpty(authOption.getAuthString())) {
+                    if (authOption.isPasswordPlain()) {
                         sb.append(" BY '");
                     } else {
                         sb.append(" AS '");
                     }
-                    sb.append(statement.getAuthStringUnResolved()).append("'");
+                    sb.append(authOption.getAuthString()).append("'");
                 }
             }
-
-            if (!statement.getDefaultRoles().isEmpty()) {
-                sb.append(" DEFAULT ROLE ");
-                sb.append(Joiner.on(",").join(
-                        statement.getDefaultRoles().stream().map(r -> "'" + r + "'").collect(toList())));
-            }
-
-            return sb.toString();
+            return sb;
         }
 
         @Override
@@ -252,8 +285,8 @@ public class AstToStringBuilder {
                     sb.append(stmt.getObjectType().name()).append(" ");
 
                     List<String> objectString = new ArrayList<>();
-                    for (PEntryObject tablePEntryObject : stmt.getObjectList()) {
-                        objectString.add(tablePEntryObject.toString());
+                    for (PEntryObject pEntryObject : stmt.getObjectList()) {
+                        objectString.add(pEntryObject.toString());
                     }
                     sb.append(Joiner.on(", ").join(objectString));
                 }
@@ -368,7 +401,7 @@ public class AstToStringBuilder {
             sb.append("CREATE EXTERNAL RESOURCE ").append(stmt.getResourceName());
 
             sb.append(" PROPERTIES (");
-            sb.append(new PrintableMap<String, String>(stmt.getProperties(), "=", true, false, true));
+            sb.append(new PrintableMap<>(stmt.getProperties(), "=", true, false, hideCredential));
             sb.append(")");
             return sb.toString();
         }
@@ -417,14 +450,15 @@ public class AstToStringBuilder {
             }
 
             if (!stmt.getJobProperties().isEmpty()) {
-                PrintableMap<String, String> map = new PrintableMap<>(stmt.getJobProperties(), "=", true, false);
+                PrintableMap<String, String> map = new PrintableMap<>(stmt.getJobProperties(), "=", true, false, hideCredential);
                 sb.append("PROPERTIES ( ").append(map).append(" )");
             }
 
             sb.append(" FROM ").append(stmt.getTypeName()).append(" ");
 
             if (!stmt.getDataSourceProperties().isEmpty()) {
-                PrintableMap<String, String> map = new PrintableMap<>(stmt.getDataSourceProperties(), "=", true, false, true);
+                PrintableMap<String, String> map =
+                        new PrintableMap<>(stmt.getDataSourceProperties(), "=", true, false, hideCredential);
                 sb.append("( ").append(map).append(" )");
             }
 
@@ -456,7 +490,7 @@ public class AstToStringBuilder {
 
             if (stmt.getProperties() != null && !stmt.getProperties().isEmpty()) {
                 sb.append(" PROPERTIES (");
-                sb.append(new PrintableMap<>(stmt.getProperties(), "=", true, false));
+                sb.append(new PrintableMap<>(stmt.getProperties(), "=", true, false, hideCredential));
                 sb.append(")");
             }
             return sb.toString();
@@ -486,7 +520,7 @@ public class AstToStringBuilder {
             sb.append("\"" + stmt.getPath() + "\" ");
             if (stmt.getProperties() != null && !stmt.getProperties().isEmpty()) {
                 sb.append("PROPERTIES (");
-                sb.append(new PrintableMap<String, String>(stmt.getProperties(), "=", true, false));
+                sb.append(new PrintableMap<>(stmt.getProperties(), "=", true, false, hideCredential));
                 sb.append(")");
             }
             sb.append("WITH BROKER ");
@@ -495,7 +529,7 @@ public class AstToStringBuilder {
                     sb.append(stmt.getBrokerDesc().getName());
                 }
                 sb.append("' (");
-                sb.append(new PrintableMap<String, String>(stmt.getBrokerDesc().getProperties(), "=", true, false, true));
+                sb.append(new PrintableMap<>(stmt.getBrokerDesc().getProperties(), "=", true, false, hideCredential));
                 sb.append(")");
             }
             return sb.toString();
@@ -603,7 +637,7 @@ public class AstToStringBuilder {
         }
 
         @Override
-        public String visitSubquery(SubqueryRelation node, Void context) {
+        public String visitSubqueryRelation(SubqueryRelation node, Void context) {
             StringBuilder sqlBuilder = new StringBuilder("(" + visit(node.getQueryStatement()) + ")");
 
             if (node.getAlias() != null) {
@@ -756,7 +790,8 @@ public class AstToStringBuilder {
             sqlBuilder.append(node.getFunctionName());
             sqlBuilder.append("(");
 
-            List<String> childSql = node.getChildExpressions().stream().map(this::visit).collect(toList());
+            List<String> childSql = Optional.ofNullable(node.getChildExpressions())
+                    .orElse(Collections.emptyList()).stream().map(this::visit).collect(toList());
             sqlBuilder.append(Joiner.on(",").join(childSql));
 
             sqlBuilder.append(")");
@@ -781,7 +816,8 @@ public class AstToStringBuilder {
             TableFunctionRelation tableFunction = (TableFunctionRelation) node.getRight();
             sqlBuilder.append(tableFunction.getFunctionName());
             sqlBuilder.append("(");
-            sqlBuilder.append(tableFunction.getChildExpressions().stream().map(this::visit).collect(Collectors.joining(",")));
+            sqlBuilder.append(Optional.ofNullable(tableFunction.getChildExpressions())
+                    .orElse(Collections.emptyList()).stream().map(this::visit).collect(Collectors.joining(",")));
             sqlBuilder.append(")");
             sqlBuilder.append(")"); // TABLE(
 
@@ -797,23 +833,18 @@ public class AstToStringBuilder {
             return sqlBuilder.toString();
         }
 
-        @Override
-        public String visitFileTableFunction(FileTableFunctionRelation node, Void context) {
+        private String outputFileTable(Map<String, String> properties) {
             StringBuilder sb = new StringBuilder();
             sb.append(FileTableFunctionRelation.IDENTIFIER);
             sb.append("(");
-            boolean first = true;
-            for (Map.Entry<String, String> entry : node.getProperties().entrySet()) {
-                if (!first) {
-                    sb.append(",");
-                }
-                first = false;
-                sb.append("'").append(entry.getKey()).append("'");
-                sb.append("=");
-                sb.append("'").append((entry.getValue())).append("'");
-            }
+            sb.append(new PrintableMap<String, String>(properties, "=", true, false, hideCredential));
             sb.append(")");
             return sb.toString();
+        }
+
+        @Override
+        public String visitFileTableFunction(FileTableFunctionRelation node, Void context) {
+            return outputFileTable(node.getProperties());
         }
 
         @Override
@@ -832,7 +863,7 @@ public class AstToStringBuilder {
                     sb.append(" AS ").append(aggregation.getAlias());
                 }
             }
-            sb.append("\n");
+            sb.append(" ");
 
             sb.append("FOR ");
             if (node.getPivotColumns().size() == 1) {
@@ -870,7 +901,7 @@ public class AstToStringBuilder {
                     sb.append(" AS ").append(pivotValue.getAlias());
                 }
             }
-            sb.append(")\n)");
+            sb.append("))");
 
             return sb.toString();
         }
@@ -919,6 +950,103 @@ public class AstToStringBuilder {
             return sb.toString();
         }
 
+        @Override
+        public String visitInsertStatement(InsertStmt insert, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("INSERT ");
+
+            // add hint
+            if (insert.getHintNodes() != null) {
+                sb.append(extractHintStr(insert.getHintNodes()));
+            }
+
+            if (insert.isOverwrite()) {
+                sb.append("OVERWRITE ");
+            } else {
+                sb.append("INTO ");
+            }
+
+            // target
+            if (insert.useTableFunctionAsTargetTable()) {
+                sb.append(visitFileTableFunction(
+                        new FileTableFunctionRelation(insert.getTableFunctionProperties(), NodePosition.ZERO),
+                        context));
+            } else if (insert.useBlackHoleTableAsTargetTable()) {
+                sb.append("blackhole()");
+            } else {
+                sb.append(insert.getTableName().toSql());
+            }
+            sb.append(" ");
+
+            // target partition
+            if (insert.getTargetPartitionNames() != null &&
+                    org.apache.commons.collections4.CollectionUtils.isNotEmpty(
+                            insert.getTargetPartitionNames().getPartitionNames())) {
+                List<String> names = insert.getTargetPartitionNames().getPartitionNames();
+                sb.append("PARTITION (").append(Joiner.on(",").join(names)).append(") ");
+            }
+
+            // label
+            visitInsertLabel(insert.getLabel(), sb);
+
+            // target column
+            if (org.apache.commons.collections4.CollectionUtils.isNotEmpty(insert.getTargetColumnNames())) {
+                String columns = insert.getTargetColumnNames().stream()
+                        .map(x -> '`' + x + '`')
+                        .collect(Collectors.joining(","));
+                sb.append("(").append(columns).append(") ");
+            }
+
+            // source
+            if (insert.getQueryStatement() != null) {
+                sb.append(visit(insert.getQueryStatement()));
+            }
+            return sb.toString();
+        }
+
+        protected void visitInsertLabel(String label, StringBuilder sb) {
+            if (StringUtils.isNotEmpty(label)) {
+                sb.append("WITH LABEL `").append(label).append("` ");
+            }
+        }
+
+        @Override
+        public String visitCreatePipeStatement(CreatePipeStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("CREATE ");
+            if (stmt.isReplace()) {
+                sb.append("OR REPLACE ");
+            }
+            sb.append("PIPE ");
+            if (stmt.isIfNotExists()) {
+                sb.append("IF NOT EXISTS ");
+            }
+            sb.append(stmt.getPipeName()).append(" ");
+
+            Map<String, String> properties = stmt.getProperties();
+            if (properties != null && !properties.isEmpty()) {
+                sb.append("PROPERTIES(").append(new PrintableMap<>(properties, "=", true, false, hideCredential))
+                        .append(") ");
+            }
+
+            sb.append("AS ").append(visitInsertStatement(stmt.getInsertStmt(), context));
+            return sb.toString();
+        }
+
+        @Override
+        public String visitDeleteStatement(DeleteStmt delete, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("DELETE FROM ");
+            sb.append(delete.getTableName().toSql());
+
+            if (delete.getWherePredicate() != null) {
+                sb.append(" WHERE ");
+                sb.append(visit(delete.getWherePredicate()));
+            }
+            return sb.toString();
+        }
+
+        @Override
         public String visitArrayExpr(ArrayExpr node, Void context) {
             StringBuilder sb = new StringBuilder();
             sb.append('[');
@@ -927,6 +1055,7 @@ public class AstToStringBuilder {
             return sb.toString();
         }
 
+        @Override
         public String visitMapExpr(MapExpr node, Void context) {
             StringBuilder sb = new StringBuilder();
             sb.append("map{");
@@ -990,7 +1119,11 @@ public class AstToStringBuilder {
             if (isImplicit) {
                 return visit(node.getChild(0));
             }
-            return "CAST(" + printWithParentheses(node.getChild(0)) + " AS " + node.getTargetTypeDef().toString() + ")";
+            if (node.getTargetTypeDef() == null) {
+                return "CAST(" + printWithParentheses(node.getChild(0)) + " AS " + node.getType().toString() + ")";
+            } else {
+                return "CAST(" + printWithParentheses(node.getChild(0)) + " AS " + node.getTargetTypeDef().toString() + ")";
+            }
         }
 
         public String visitCompoundPredicate(CompoundPredicate node, Void context) {
@@ -1162,6 +1295,8 @@ public class AstToStringBuilder {
                 } else {
                     return visitExpression(node, context);
                 }
+            } else if (node instanceof LargeStringLiteral) {
+                return ((LargeStringLiteral) node).toFullSqlImpl();
             } else {
                 return visitExpression(node, context);
             }
@@ -1171,13 +1306,15 @@ public class AstToStringBuilder {
         public String visitSlot(SlotRef node, Void context) {
             if (node.getTblNameWithoutAnalyzed() != null) {
                 return node.getTblNameWithoutAnalyzed().toString() + "." + node.getColumnName();
+            } else if (node.getLabel() != null) {
+                return node.getLabel();
             } else {
                 return node.getColumnName();
             }
         }
 
         @Override
-        public String visitSubquery(Subquery node, Void context) {
+        public String visitSubqueryExpr(Subquery node, Void context) {
             return "(" + visit(node.getQueryStatement()) + ")";
         }
 
@@ -1246,6 +1383,18 @@ public class AstToStringBuilder {
                 strBuilder.append(timeUnitIdent);
             }
             return strBuilder.toString();
+        }
+
+        @Override
+        public String visitDescTableStmt(DescribeStmt stmt, Void context) {
+            if (stmt.isTableFunctionTable()) {
+                StringBuilder sb = new StringBuilder();
+                sb.append("DESC ");
+                sb.append(outputFileTable(stmt.getTableFunctionProperties()));
+                return sb.toString();
+            } else {
+                return stmt.getOrigStmt().originStmt;
+            }
         }
 
         // ----------------- AST ---------------
@@ -1351,14 +1500,14 @@ public class AstToStringBuilder {
 
         @Override
         public String visitDictionaryGetExpr(DictionaryGetExpr node, Void context) {
-            return "DICTIONARY_GET";
+            return node.toSql();
         }
 
         private String visitAstList(List<? extends ParseNode> contexts) {
             return Joiner.on(", ").join(contexts.stream().map(this::visit).collect(toList()));
         }
 
-        private String printWithParentheses(ParseNode node) {
+        protected String printWithParentheses(ParseNode node) {
             if (node instanceof SlotRef || node instanceof LiteralExpr) {
                 return visit(node);
             } else {
@@ -1394,7 +1543,7 @@ public class AstToStringBuilder {
             StorageVolume.addMaskForCredential(properties);
             if (!stmt.getProperties().isEmpty()) {
                 sb.append(" PROPERTIES (")
-                        .append(new PrintableMap<>(properties, "=", true, false)).append(")");
+                        .append(new PrintableMap<>(properties, "=", true, false, hideCredential)).append(")");
             }
             return sb.toString();
         }
@@ -1410,7 +1559,7 @@ public class AstToStringBuilder {
             StorageVolume.addMaskForCredential(properties);
             if (!properties.isEmpty()) {
                 sb.append(" SET (").
-                        append(new PrintableMap<>(properties, "=", true, false))
+                        append(new PrintableMap<>(properties, "=", true, false, hideCredential))
                         .append(")");
             }
             return sb.toString();
@@ -1424,7 +1573,9 @@ public class AstToStringBuilder {
             if (stmt.getComment() != null) {
                 sb.append("COMMENT \"").append(stmt.getComment()).append("\" ");
             }
-            sb.append("PROPERTIES(").append(new PrintableMap<>(stmt.getProperties(), " = ", true, false, true)).append(")");
+            sb.append("PROPERTIES(");
+            sb.append(new PrintableMap<>(stmt.getProperties(), " = ", true, false, hideCredential));
+            sb.append(")");
             return sb.toString();
         }
 
@@ -1436,6 +1587,7 @@ public class AstToStringBuilder {
             }
             return hintBuilder.toString();
         }
+
     }
 
     public static void getDdlStmt(Table table, List<String> createTableStmt, List<String> addPartitionStmt,
@@ -1475,7 +1627,13 @@ public class AstToStringBuilder {
             sb.append(")");
             addTableComment(sb, view);
 
-            sb.append(" AS ").append(view.getInlineViewDef()).append(";");
+            if (view.isSecurity()) {
+                sb.append(" SECURITY INVOKER");
+            } else {
+                sb.append(" SECURITY NONE");
+            }
+
+            sb.append(" AS ").append(view.getInlineViewDefWithoutCredential()).append(";");
             createTableStmt.add(sb.toString());
             return;
         }
@@ -1507,12 +1665,12 @@ public class AstToStringBuilder {
             if (table.isOlapOrCloudNativeTable() || table.getType() == Table.TableType.OLAP_EXTERNAL) {
                 OlapTable olapTable = (OlapTable) table;
                 if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
-                    sb.append("  ").append(column.toSqlWithoutAggregateTypeName());
+                    sb.append("  ").append(column.toSqlWithoutAggregateTypeName(table.getIdToColumn()));
                 } else {
-                    sb.append("  ").append(column.toSql());
+                    sb.append("  ").append(column.toSql(table.getIdToColumn()));
                 }
             } else {
-                sb.append("  ").append(column.toSql());
+                sb.append("  ").append(column.toSql(table.getIdToColumn()));
             }
         }
         if (table.isOlapOrCloudNativeTable() || table.getType() == Table.TableType.OLAP_EXTERNAL) {
@@ -1520,7 +1678,7 @@ public class AstToStringBuilder {
             if (CollectionUtils.isNotEmpty(olapTable.getIndexes())) {
                 for (Index index : olapTable.getIndexes()) {
                     sb.append(",\n");
-                    sb.append("  ").append(index.toSql());
+                    sb.append("  ").append(index.toSql(table));
                 }
             }
         }
@@ -1554,7 +1712,7 @@ public class AstToStringBuilder {
 
             // distribution
             DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
-            sb.append("\n").append(distributionInfo.toSql());
+            sb.append("\n").append(distributionInfo.toSql(table.getIdToColumn()));
 
             // order by
             MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
@@ -1581,8 +1739,8 @@ public class AstToStringBuilder {
             sb.append("\"port\" = \"").append(mysqlTable.getPort()).append("\",\n");
             sb.append("\"user\" = \"").append(mysqlTable.getUserName()).append("\",\n");
             sb.append("\"password\" = \"").append(hidePassword ? "" : mysqlTable.getPasswd()).append("\",\n");
-            sb.append("\"database\" = \"").append(mysqlTable.getMysqlDatabaseName()).append("\",\n");
-            sb.append("\"table\" = \"").append(mysqlTable.getMysqlTableName()).append("\"\n");
+            sb.append("\"database\" = \"").append(mysqlTable.getCatalogDBName()).append("\",\n");
+            sb.append("\"table\" = \"").append(mysqlTable.getCatalogTableName()).append("\"\n");
             sb.append(")");
         } else if (table.getType() == Table.TableType.BROKER) {
             BrokerTable brokerTable = (BrokerTable) table;
@@ -1612,7 +1770,7 @@ public class AstToStringBuilder {
                 sb.append("PARTITION BY RANGE(");
                 idx = 0;
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-                for (Column column : rangePartitionInfo.getPartitionColumns()) {
+                for (Column column : rangePartitionInfo.getPartitionColumns(table.getIdToColumn())) {
                     if (idx != 0) {
                         sb.append(", ");
                     }
@@ -1642,8 +1800,8 @@ public class AstToStringBuilder {
 
             // properties
             sb.append("\nPROPERTIES (\n");
-            sb.append("\"database\" = \"").append(hiveTable.getDbName()).append("\",\n");
-            sb.append("\"table\" = \"").append(hiveTable.getTableName()).append("\",\n");
+            sb.append("\"database\" = \"").append(hiveTable.getCatalogDBName()).append("\",\n");
+            sb.append("\"table\" = \"").append(hiveTable.getCatalogTableName()).append("\",\n");
             sb.append("\"resource\" = \"").append(hiveTable.getResourceName()).append("\"");
             if (!hiveTable.getProperties().isEmpty()) {
                 sb.append(",\n");
@@ -1665,8 +1823,8 @@ public class AstToStringBuilder {
 
             // properties
             sb.append("\nPROPERTIES (\n");
-            sb.append("\"database\" = \"").append(hudiTable.getDbName()).append("\",\n");
-            sb.append("\"table\" = \"").append(hudiTable.getTableName()).append("\",\n");
+            sb.append("\"database\" = \"").append(hudiTable.getCatalogDBName()).append("\",\n");
+            sb.append("\"table\" = \"").append(hudiTable.getCatalogTableName()).append("\",\n");
             sb.append("\"resource\" = \"").append(hudiTable.getResourceName()).append("\"");
             sb.append("\n)");
         } else if (table.getType() == Table.TableType.ICEBERG) {
@@ -1675,8 +1833,8 @@ public class AstToStringBuilder {
 
             // properties
             sb.append("\nPROPERTIES (\n");
-            sb.append("\"database\" = \"").append(icebergTable.getRemoteDbName()).append("\",\n");
-            sb.append("\"table\" = \"").append(icebergTable.getRemoteTableName()).append("\",\n");
+            sb.append("\"database\" = \"").append(icebergTable.getCatalogDBName()).append("\",\n");
+            sb.append("\"table\" = \"").append(icebergTable.getCatalogTableName()).append("\",\n");
             sb.append("\"resource\" = \"").append(icebergTable.getResourceName()).append("\"");
             sb.append("\n)");
         } else if (table.getType() == Table.TableType.JDBC) {
@@ -1686,7 +1844,7 @@ public class AstToStringBuilder {
             // properties
             sb.append("\nPROPERTIES (\n");
             sb.append("\"resource\" = \"").append(jdbcTable.getResourceName()).append("\",\n");
-            sb.append("\"table\" = \"").append(jdbcTable.getJdbcTable()).append("\"");
+            sb.append("\"table\" = \"").append(jdbcTable.getCatalogTableName()).append("\"");
             sb.append("\n)");
         }
         sb.append(";");
@@ -1712,7 +1870,7 @@ public class AstToStringBuilder {
                 sb.append(entry.getValue().lowerEndpoint().toSql());
                 sb.append(", ").append(entry.getValue().upperEndpoint().toSql()).append(")");
                 sb.append("(\"version_info\" = \"");
-                sb.append(partition.getVisibleVersion()).append("\"");
+                sb.append(partition.getDefaultPhysicalPartition().getVisibleVersion()).append("\"");
                 sb.append(");");
                 addPartitionStmt.add(sb.toString());
             }
@@ -1743,6 +1901,103 @@ public class AstToStringBuilder {
                 createRollupStmt.add(sb.toString());
             }
         }
+    }
+
+    public static String getExternalCatalogTableDdlStmt(Table table) {
+        // create table catalogName.dbName.tableName (
+        StringBuilder createTableSql = new StringBuilder();
+        String tableName = table.getName();
+        if (table.isHiveTable() && ((HiveTable) table).getHiveTableType() == HiveTable.HiveTableType.EXTERNAL_TABLE) {
+            createTableSql.append("CREATE EXTERNAL TABLE ");
+        } else {
+            createTableSql.append("CREATE TABLE ");
+        }
+        createTableSql.append("`").append(tableName).append("`")
+                .append(" (\n");
+
+        // Columns
+        List<String> columns = table.getFullSchema().stream().map(AstToStringBuilder::toMysqlDDL).
+                collect(Collectors.toList());
+        createTableSql.append(String.join(",\n", columns))
+                .append("\n)");
+
+        // Partition column names
+        List<String> partitionNames;
+        if (table.getType() != JDBC && !table.isUnPartitioned()) {
+            createTableSql.append("\nPARTITION BY (");
+
+            if (!table.isIcebergTable()) {
+                partitionNames = table.getPartitionColumnNames();
+            } else {
+                partitionNames = ((IcebergTable) table).getPartitionColumnNamesWithTransform();
+            }
+
+            createTableSql.append(String.join(", ", partitionNames)).append(")");
+        }
+
+        // Comment
+        if (!Strings.isNullOrEmpty(table.getComment())) {
+            createTableSql.append("\nCOMMENT (\"").append(table.getComment()).append("\")");
+        }
+
+        // Properties
+        Map<String, String> properties = new HashMap<>();
+        try {
+            properties = new HashMap<>(table.getProperties());
+        } catch (NotImplementedException e) {
+        }
+
+        // Location
+        String location = null;
+        try {
+            location = table.getTableLocation();
+            // Paimon table has a `path` property instead of location
+            if (!Strings.isNullOrEmpty(location) && !table.isPaimonTable()) {
+                properties.put("location", location);
+            }
+        } catch (NotImplementedException e) {
+        }
+
+        if (!properties.isEmpty()) {
+            createTableSql.append("\nPROPERTIES (");
+            for (Map.Entry<String, String> kv : properties.entrySet()) {
+                createTableSql.append("\"" + kv.getKey() + "\" = \"").append(kv.getValue()).append("\",");
+            }
+            if (createTableSql.charAt(createTableSql.length() - 1) == ',') {
+                createTableSql.deleteCharAt(createTableSql.length() - 1);
+            }
+            createTableSql.append(")");
+        }
+        createTableSql.append(";");
+
+        return createTableSql.toString();
+    }
+
+    public static String getExternalCatalogViewDdlStmt(ConnectorView view) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("CREATE VIEW `").append(view.getName()).append("` (");
+        List<String> colDef = Lists.newArrayList();
+        for (Column column : view.getBaseSchema()) {
+            colDef.add("`" + column.getName() + "`");
+        }
+        sb.append(Joiner.on(", ").join(colDef));
+        sb.append(")");
+
+        sb.append(" AS ").append(view.getInlineViewDef()).append(";");
+        return sb.toString();
+    }
+
+    private static String toMysqlDDL(Column column) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("  `").append(column.getName()).append("` ");
+        sb.append(column.getType().toSql());
+        sb.append(" DEFAULT NULL");
+
+        if (!Strings.isNullOrEmpty(column.getComment())) {
+            sb.append(" COMMENT \"").append(column.getDisplayComment()).append("\"");
+        }
+
+        return sb.toString();
     }
 
     private static void addTableComment(StringBuilder sb, Table table) {

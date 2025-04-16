@@ -1,3 +1,4 @@
+
 [fragment statistics]
 PLAN FRAGMENT 0(F05)
 Output Exprs:29: sum
@@ -30,10 +31,10 @@ OutPut Exchange Id: 08
 |  output columns:
 |  6 <-> [6: L_EXTENDEDPRICE, DOUBLE, false]
 |  7 <-> [7: L_DISCOUNT, DOUBLE, false]
-|  cardinality: 21702
+|  cardinality: 12056
 |  column statistics:
-|  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 21702.324135626324] ESTIMATE
-|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] MCV: [[0.05:54639500][0.07:54619200][0.02:54617300][0.01:54583400][0.10:54581500]] ESTIMATE
+|  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 12055.91925242476] ESTIMATE
+|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 |
 5:HASH JOIN
 |  join op: INNER JOIN (PARTITIONED)
@@ -42,17 +43,17 @@ OutPut Exchange Id: 08
 |  build runtime filters:
 |  - filter_id = 0, build_expr = (18: P_PARTKEY), remote = true
 |  output columns: 6, 7
-|  cardinality: 21702
+|  cardinality: 12056
 |  column statistics:
-|  * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 21702.324135626324] ESTIMATE
-|  * L_QUANTITY-->[NaN, NaN, 0.0, 8.0, 50.0] MCV: [[9.00:12050300][15.00:12032400][8.00:12015300][7.00:12011400][12.00:11991300]] ESTIMATE
-|  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 21702.324135626324] ESTIMATE
-|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] MCV: [[0.05:54639500][0.07:54619200][0.02:54617300][0.01:54583400][0.10:54581500]] ESTIMATE
-|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 21702.324135626324] ESTIMATE
-|  * P_BRAND-->[-Infinity, Infinity, 0.0, 10.0, 3.0] ESTIMATE
-|  * P_SIZE-->[NaN, NaN, 0.0, 4.0, 50.0] MCV: [[3:412300][5:406200][2:406000][1:402000][4:400600]] ESTIMATE
+|  * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 12055.91925242476] ESTIMATE
+|  * L_QUANTITY-->[5.0, 35.0, 0.0, 8.0, 50.0] ESTIMATE
+|  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 12055.91925242476] ESTIMATE
+|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 12055.91925242476] ESTIMATE
+|  * P_BRAND-->[-Infinity, Infinity, 0.0, 10.0, 25.0] ESTIMATE
+|  * P_SIZE-->[-Infinity, 15.0, 0.0, 4.0, 50.0] ESTIMATE
 |  * P_CONTAINER-->[-Infinity, Infinity, 0.0, 10.0, 12.0] ESTIMATE
-|  * expr-->[810.9, 104949.5, 0.0, 8.0, 21702.324135626324] ESTIMATE
+|  * expr-->[810.9, 104949.5, 0.0, 8.0, 12055.91925242476] ESTIMATE
 |
 |----4:EXCHANGE
 |       distribution type: SHUFFLE
@@ -75,7 +76,6 @@ table: part, rollup: part
 preAggregation: on
 Predicates: 21: P_BRAND IN ('Brand#45', 'Brand#11', 'Brand#21'), [23: P_SIZE, INT, false] <= 15, 24: P_CONTAINER IN ('SM CASE', 'SM BOX', 'SM PACK', 'SM PKG', 'MED BAG', 'MED BOX', 'MED PKG', 'MED PACK', 'LG CASE', 'LG BOX', 'LG PACK', 'LG PKG'), [23: P_SIZE, INT, false] >= 1
 partitionsRatio=1/1, tabletsRatio=10/10
-tabletList=10263,10265,10267,10269,10271,10273,10275,10277,10279,10281
 actualRows=0, avgRowSize=32.0
 cardinality: 6051300
 column statistics:
@@ -108,7 +108,6 @@ table: lineitem, rollup: lineitem
 preAggregation: on
 Predicates: [5: L_QUANTITY, DOUBLE, false] >= 5.0, [5: L_QUANTITY, DOUBLE, false] <= 35.0, 15: L_SHIPMODE IN ('AIR', 'AIR REG'), [14: L_SHIPINSTRUCT, CHAR, false] = 'DELIVER IN PERSON'
 partitionsRatio=1/1, tabletsRatio=20/20
-tabletList=10286,10288,10290,10292,10294,10296,10298,10300,10302,10304 ...
 actualRows=0, avgRowSize=67.0
 cardinality: 26568218
 probe runtime filters:
@@ -118,6 +117,6 @@ column statistics:
 * L_QUANTITY-->[NaN, NaN, 0.0, 8.0, 50.0] MCV: [[35.00:12075300][25.00:12063500][32.00:12063000][23.00:12059300][16.00:12051800]] ESTIMATE
 * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] MCV: [[0.05:54639500][0.07:54619200][0.02:54617300][0.01:54583400][0.10:54581500]] ESTIMATE
-* L_SHIPINSTRUCT-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+* L_SHIPINSTRUCT-->[-Infinity, Infinity, 0.0, 25.0, 4.0] MCV: [[NONE:150086200][COLLECT COD:150054700][DELIVER IN PERSON:150004800][TAKE BACK RETURN:149975800]] ESTIMATE
 * L_SHIPMODE-->[-Infinity, Infinity, 0.0, 10.0, 2.0] ESTIMATE
 [end]

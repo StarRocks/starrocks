@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # array_intersect
 
-## Description
+
 
 Returns an array of the elements in the intersection of one or more arrays.
 

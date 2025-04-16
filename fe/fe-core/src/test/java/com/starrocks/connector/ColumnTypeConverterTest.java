@@ -135,6 +135,10 @@ public class ColumnTypeConverterTest {
         itemType = ScalarType.createUnifiedDecimalType(4, 2);
         Assert.assertEquals(new ArrayType(new ArrayType(itemType)),
                 fromHiveTypeToArrayType("array<Array<decimal(4, 2)>>"));
+
+        itemType = ScalarType.createType(PrimitiveType.VARBINARY);
+        Assert.assertEquals(new ArrayType(itemType),
+                fromHiveTypeToArrayType("array<BINARY>"));
     }
 
     @Test

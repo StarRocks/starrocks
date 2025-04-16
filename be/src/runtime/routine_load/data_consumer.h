@@ -149,7 +149,10 @@ public:
     ~KafkaDataConsumer() override {
         VLOG(3) << "deconstruct consumer";
         if (_k_consumer) {
-            _k_consumer->close();
+            // consumer may be already closed when get partition meta failed
+            if (!_k_consumer->closed()) {
+                _k_consumer->close();
+            }
             delete _k_consumer;
             _k_consumer = nullptr;
         }
@@ -181,6 +184,7 @@ public:
 private:
     std::string _brokers;
     std::string _topic;
+    std::string _group_id;
     std::unordered_map<std::string, std::string> _custom_properties;
 
     size_t _non_eof_partition_count = 0;

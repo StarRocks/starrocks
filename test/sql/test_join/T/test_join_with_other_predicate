@@ -1,0 +1,47 @@
+-- name: test_join_with_other_predicate
+
+CREATE TABLE `t0` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+CREATE TABLE `t1` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 48
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  40960));
+insert into t0 values (null,null,null,null);
+insert into t1 SELECT * FROM t0;
+
+
+select count(*) from t0 join t1 on t0.c0=t1.c0 where t0.c1 like t1.c1;
+select count(*) from t0 join t1 on t0.c0=t1.c0 where t0.c1 like concat(t1.c1, '%');
+select count(*) from t0 join t1 on t0.c0=t1.c0 where t0.c1 like concat('%', t1.c1, '%');
+select count(*) from t0 join t1 on t0.c0=t1.c0 where t0.c1 like concat('%', t1.c1);

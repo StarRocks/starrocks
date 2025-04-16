@@ -14,8 +14,7 @@
 
 #pragma once
 
-#include "exec/hash_joiner.h"
-#include "exec/pipeline/hashjoin/hash_joiner_factory.h"
+#include "exec/pipeline/hashjoin/hash_joiner_fwd.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/operator_with_dependency.h"
 #include "exec/pipeline/pipeline_fwd.h"
@@ -51,6 +50,7 @@ public:
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
     Status reset_state(starrocks::RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
+    void update_exec_stats(RuntimeState* state) override;
 
 protected:
     /// Reference the read-only hash table from builder in the first pull_chunk.
@@ -69,6 +69,8 @@ public:
     HashJoinProbeOperatorFactory(int32_t id, int32_t plan_node_id, HashJoinerFactoryPtr hash_joiner);
 
     ~HashJoinProbeOperatorFactory() override = default;
+
+    bool support_event_scheduler() const override { return true; }
 
     Status prepare(RuntimeState* state) override;
 

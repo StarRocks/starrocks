@@ -16,6 +16,7 @@ package com.starrocks.scheduler;
 
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -23,6 +24,9 @@ public class TaskBuilderTest {
 
     @Test
     public void testTaskBuilderForMv() {
+        // mock the warehouse of MaterializedView for creating task
+        UtFrameUtils.mockInitWarehouseEnv();
+
         MaterializedView mv = new MaterializedView();
         mv.setName("aa.bb.cc");
         mv.setViewDefineSql("select * from table1");

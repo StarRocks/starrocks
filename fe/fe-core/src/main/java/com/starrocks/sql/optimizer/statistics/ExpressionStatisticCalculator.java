@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.spm.SPMFunctions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -51,6 +52,10 @@ public class ExpressionStatisticCalculator {
     }
 
     public static ColumnStatistic calculate(ScalarOperator operator, Statistics input, double rowCount) {
+        if (Double.isNaN(rowCount)) {
+            LOG.debug("found a NaN row count when calculating column statistic for expr: {}", operator);
+            return ColumnStatistic.unknown();
+        }
         return operator.accept(new ExpressionStatisticVisitor(input, rowCount), null);
     }
 
@@ -187,7 +192,9 @@ public class ExpressionStatisticCalculator {
                 return deriveBasicColStats(call);
             }
 
-            if (call.getChildren().size() == 0) {
+            if (SPMFunctions.isSPMFunctions(call)) {
+                return SPMFunctions.getSPMFunctionStatistics(call, childrenColumnStatistics).get(0);
+            } else if (call.getChildren().isEmpty()) {
                 return nullaryExpressionCalculate(call);
             } else if (call.getChildren().size() == 1) {
                 return unaryExpressionCalculate(call, childrenColumnStatistics.get(0));
@@ -609,6 +616,12 @@ public class ExpressionStatisticCalculator {
                     averageRowSize = Math.max(1, left.getAverageRowSize() - right.getAverageRowSize());
                     distinctValues = left.getDistinctValuesCount() * averageRowSize / left.getAverageRowSize();
                     break;
+                case FunctionSet.LIKE:
+                case FunctionSet.ILIKE:
+                    minValue = 0;
+                    maxValue = 1;
+                    distinctValues = 2;
+                    break;
                 default:
                     return ColumnStatistic.unknown();
             }
@@ -630,7 +643,11 @@ public class ExpressionStatisticCalculator {
                 case FunctionSet.IF:
                     distinctValues = childColumnStatisticList.get(1).getDistinctValuesCount() +
                             childColumnStatisticList.get(2).getDistinctValuesCount();
-                    return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0,
+                    double minValue = Math.min(childColumnStatisticList.get(1).getMinValue(),
+                            childColumnStatisticList.get(2).getMinValue());
+                    double maxValue = Math.max(childColumnStatisticList.get(1).getMaxValue(),
+                            childColumnStatisticList.get(2).getMaxValue());
+                    return new ColumnStatistic(minValue, maxValue, 0,
                             callOperator.getType().getTypeSize(), distinctValues);
                 // use child column statistics for now
                 case FunctionSet.SUBSTRING:
@@ -639,8 +656,8 @@ public class ExpressionStatisticCalculator {
                     distinctValues = Math.min(rowCount,
                             childColumnStatisticList.stream().mapToDouble(ColumnStatistic::getDistinctValuesCount).sum());
                     averageRowSize = childColumnStatisticList.stream().mapToDouble(ColumnStatistic::getAverageRowSize).sum();
-                    nullsFraction = 1 - childColumnStatisticList.stream().mapToDouble(ColumnStatistic::getAverageRowSize)
-                            .reduce(1, (a, b) -> (1 - a) * (1 - b));
+                    nullsFraction = 1 - childColumnStatisticList.stream().mapToDouble(ColumnStatistic::getNullsFraction)
+                            .reduce(1.0, (accumulator, nullFraction) -> accumulator * (1 - nullFraction));
                     return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY,
                             nullsFraction, averageRowSize, distinctValues);
                 default:

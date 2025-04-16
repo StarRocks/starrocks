@@ -17,6 +17,7 @@ package com.starrocks.connector.kudu;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -29,6 +30,7 @@ import org.apache.kudu.client.KuduPredicate;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 
@@ -39,11 +41,17 @@ public class KuduPredicateConverterTest {
     private static final Schema SCHEMA = new Schema(Arrays.asList(
             genColumnSchema("f0", org.apache.kudu.Type.INT32),
             genColumnSchema("f1", org.apache.kudu.Type.STRING),
-            genColumnSchema("f2", org.apache.kudu.Type.INT32)
+            genColumnSchema("f2", org.apache.kudu.Type.INT32),
+            genColumnSchema("f3", org.apache.kudu.Type.DATE),
+            genColumnSchema("f4", org.apache.kudu.Type.UNIXTIME_MICROS)
     ));
 
     private static final ColumnRefOperator F0 = new ColumnRefOperator(0, Type.INT, "f0", true, false);
     private static final ColumnRefOperator F1 = new ColumnRefOperator(0, Type.VARCHAR, "f1", true, false);
+    private static final ColumnRefOperator F3 = new ColumnRefOperator(0, Type.DATE, "f3", true, false);
+    private static final ColumnRefOperator F4 = new ColumnRefOperator(0, Type.DATETIME, "f4", true, false);
+    private static final CastOperator F0_CAST = new CastOperator(
+            Type.VARCHAR, new ColumnRefOperator(0, Type.INT, "f0", true, false));
 
     private static final KuduPredicateConverter CONVERTER = new KuduPredicateConverter(SCHEMA);
 
@@ -66,6 +74,30 @@ public class KuduPredicateConverterTest {
         ScalarOperator op = new BinaryPredicateOperator(BinaryType.EQ, F0, value);
         List<KuduPredicate> result = CONVERTER.convert(op);
         Assert.assertEquals(result.get(0).toString(), "`f0` = 5");
+    }
+
+    @Test
+    public void testEqCast() {
+        ConstantOperator value = ConstantOperator.createVarchar("5");
+        ScalarOperator op = new BinaryPredicateOperator(BinaryType.EQ, F0_CAST, value);
+        List<KuduPredicate> result = CONVERTER.convert(op);
+        Assert.assertEquals(result.get(0).toString(), "`f0` = 5");
+    }
+
+    @Test
+    public void testEqDate() {
+        ConstantOperator value = ConstantOperator.createDate(LocalDateTime.of(2024, 1, 1, 0, 0));
+        ScalarOperator op = new BinaryPredicateOperator(BinaryType.EQ, F3, value);
+        List<KuduPredicate> result = CONVERTER.convert(op);
+        Assert.assertEquals(result.get(0).toString(), "`f3` = 2024-01-01");
+    }
+
+    @Test
+    public void testEqDateTime() {
+        ConstantOperator value = ConstantOperator.createDatetime(LocalDateTime.of(2024, 1, 1, 0, 0));
+        ScalarOperator op = new BinaryPredicateOperator(BinaryType.EQ, F4, value);
+        List<KuduPredicate> result = CONVERTER.convert(op);
+        Assert.assertEquals(result.get(0).toString(), "`f4` = 2024-01-01T00:00:00.000000Z");
     }
 
     @Test

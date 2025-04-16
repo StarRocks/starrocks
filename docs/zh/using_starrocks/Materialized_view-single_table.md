@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+sidebar_position: 20
 ---
 
 # 同步物化视图
@@ -10,11 +11,11 @@ displayed_sidebar: "Chinese"
 
 StarRocks 中的同步物化视图仅能基于 [Default Catalog](../data_source/catalog/default_catalog.md) 中的单个基表创建，是一种特殊的查询加速索引。
 
-自 2.4 版本起，StarRocks 支持**异步物化视图**，可以基于多个基表创建，且支持更丰富的聚合函数。详细信息，请参阅 [异步物化视图](../using_starrocks/Materialized_view.md)。
+自 2.4 版本起，StarRocks 支持**异步物化视图**，可以基于多个基表创建，且支持更丰富的聚合函数。详细信息，请参阅 [异步物化视图](async_mv/Materialized_view.md)。
 
 :::note
 - 同步物化视图自 v3.1.8 起支持 WHERE 子句。
-- 目前， StarRocks 存算分离集群暂不支持同步物化视图。
+- 自 v3.4.0 起，StarRocks 存算分离集群支持同步物化视图。
 :::
 
 下表从支持的特性角度比较了 StarRocks 2.5、2.4 中的异步物化视图以及同步物化视图（Rollup）：
@@ -141,7 +142,7 @@ GROUP BY store_id;
 
 ## 创建同步物化视图
 
-您可以通过 [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW.md) 语句为特定查询语句创建物化视图。
+您可以通过 [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md) 语句为特定查询语句创建物化视图。
 
 以下示例根据上述查询语句，为表 `sales_records` 创建一个”以售卖门店为分组，对每一个售卖门店里的所有交易额求和”的同步物化视图。
 
@@ -161,10 +162,11 @@ GROUP BY store_id;
 > - 使用 ALTER TABLE DROP COLUMN 删除基表中特定列时，需要保证该基表所有同步物化视图中都不包含被删除列，否则无法进行删除操作。如需删除该列，则需要将所有包含该列的同步物化视图删除，然后删除该列。
 > - 为一张表创建过多的同步物化视图会影响导入的效率。导入数据时，同步物化视图和基表数据将同步更新，如果一张基表包含 `n` 个同步物化视图，向基表导入数据时，其导入效率大约等同于导入 `n` 张表，数据导入的速度会变慢。
 > - 当前不支持同时创建多个同步物化视图。仅当当前创建任务完成时，方可执行下一个创建任务。
+> - 仅支持在default_catalog中创建物化视图。你可以选择创建物化视图通过default_catalog.database.mv或者通过`set catalog <default_catalog>`切换到default_catalog。
 
 ## 查看同步物化视图构建状态
 
-创建同步物化视图是一个异步的操作。CREATE MATERIALIZED VIEW 命令执行成功即代表创建同步物化视图的任务提交成功。您可以通过 [SHOW ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW.md) 命令查看当前数据库中同步物化视图的构建状态。
+创建同步物化视图是一个异步的操作。CREATE MATERIALIZED VIEW 命令执行成功即代表创建同步物化视图的任务提交成功。您可以通过 [SHOW ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/SHOW_ALTER_MATERIALIZED_VIEW.md) 命令查看当前数据库中同步物化视图的构建状态。
 
 ```Plain
 MySQL > SHOW ALTER MATERIALIZED VIEW\G
@@ -318,7 +320,7 @@ CANCEL ALTER TABLE ROLLUP FROM sales_records (12090);
 
 ### 删除已创建的同步物化视图
 
-可以通过 [DROP MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/DROP_MATERIALIZED_VIEW.md) 命令删除已创建的同步物化视图。
+可以通过 [DROP MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/DROP_MATERIALIZED_VIEW.md) 命令删除已创建的同步物化视图。
 
 ```SQL
 DROP MATERIALIZED VIEW store_amt;

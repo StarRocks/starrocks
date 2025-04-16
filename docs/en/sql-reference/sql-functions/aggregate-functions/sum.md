@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # sum
 
-## Description
+
 
 Returns the sum of non-null values for `expr`. You can use the DISTINCT keyword to compute the sum of distinct non-null values.
 

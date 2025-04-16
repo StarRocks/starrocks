@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # multi_distinct_count
 
-## Description
+
 
 Returns the total number of rows of the `expr`, equivalent to count(distinct expr).
 

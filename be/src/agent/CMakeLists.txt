@@ -12,10 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-if (CLANG_TIDY_PATH)
-    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
-endif()
-
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/agent")
 
 # where to put generated binaries

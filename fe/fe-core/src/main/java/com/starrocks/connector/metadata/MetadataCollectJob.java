@@ -15,8 +15,8 @@
 package com.starrocks.connector.metadata;
 
 import com.google.common.collect.Sets;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.Coordinator;
@@ -40,9 +40,6 @@ public abstract class MetadataCollectJob {
         DEFAULT_VELOCITY_ENGINE = new VelocityEngine();
         // close velocity log
         DEFAULT_VELOCITY_ENGINE.setProperty(VelocityEngine.RUNTIME_LOG_REFERENCE_LOG_INVALID, false);
-        DEFAULT_VELOCITY_ENGINE.setProperty(VelocityEngine.RUNTIME_LOG_LOGSYSTEM_CLASS,
-                "org.apache.velocity.runtime.log.Log4JLogChute");
-        DEFAULT_VELOCITY_ENGINE.setProperty("runtime.log.logsystem.log4j.logger", "velocity");
     }
 
     private final String catalogName;
@@ -111,7 +108,7 @@ public abstract class MetadataCollectJob {
     }
 
     protected ConnectContext buildConnectContext(SessionVariable originSessionVariable) {
-        ConnectContext context = new ConnectContext();
+        ConnectContext context = ConnectContext.buildInner();
         context.getSessionVariable().setEnableProfile(originSessionVariable.isEnableMetadataProfile());
         context.getSessionVariable().setParallelExecInstanceNum(1);
         context.getSessionVariable().setQueryTimeoutS(originSessionVariable.getMetadataCollectQueryTimeoutS());
@@ -127,6 +124,7 @@ public abstract class MetadataCollectJob {
         context.setQueryId(UUIDUtil.genUUID());
         context.setExecutionId(UUIDUtil.toTUniqueId(context.getQueryId()));
         context.setStartTime();
+        context.setCurrentWarehouse(originSessionVariable.getWarehouseName());
 
         return context;
     }

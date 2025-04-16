@@ -1,0 +1,60 @@
+-- name: test_resource_group_metrics_dead_lock
+
+CREATE RESOURCE GROUP rgd1_${uuid0} 
+    TO ( user='user_${uuid0}' ) 
+    WITH ( 'exclusive_cpu_cores' = '2', 'mem_limit' = '0.99' );
+
+CONCURRENCY {
+
+-- thread name 1:
+ALTER RESOURCE GROUP rgd1_${uuid0} WITH ( 'exclusive_cpu_cores' = '3' );
+ALTER RESOURCE GROUP rgd1_${uuid0} WITH ( 'exclusive_cpu_cores' = '2' );
+ALTER RESOURCE GROUP rgd1_${uuid0} WITH ( 'exclusive_cpu_cores' = '3' );
+ALTER RESOURCE GROUP rgd1_${uuid0} WITH ( 'exclusive_cpu_cores' = '2' );
+ALTER RESOURCE GROUP rgd1_${uuid0} WITH ( 'exclusive_cpu_cores' = '3' );
+ALTER RESOURCE GROUP rgd1_${uuid0} WITH ( 'exclusive_cpu_cores' = '2' );
+ALTER RESOURCE GROUP rgd1_${uuid0} WITH ( 'exclusive_cpu_cores' = '3' );
+ALTER RESOURCE GROUP rgd1_${uuid0} WITH ( 'exclusive_cpu_cores' = '2' );
+ALTER RESOURCE GROUP rgd1_${uuid0} WITH ( 'exclusive_cpu_cores' = '3' );
+ALTER RESOURCE GROUP rgd1_${uuid0} WITH ( 'exclusive_cpu_cores' = '2' );
+DROP RESOURCE GROUP rgd1_${uuid0};
+
+-- thread name 2:
+[UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
+[UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
+[UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
+[UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
+[UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
+[UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
+[UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
+[UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
+[UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
+[UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
+[UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
+[UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
+[UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
+[UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
+[UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
+[UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
+[UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
+[UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
+[UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
+[UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
+[UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
+[UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
+[UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
+[UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
+[UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
+[UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
+[UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
+[UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
+[UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
+[UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
+[UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
+[UC]shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "select count(1) > 0 from information_schema.be_metrics;"
+
+
+} END CONCURRENCY
+
+select count(1) > 0 from information_schema.be_metrics;
+

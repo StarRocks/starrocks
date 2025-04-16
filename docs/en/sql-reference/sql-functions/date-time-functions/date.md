@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # date
 
-## Description
+
 
 Extracts the date part of a date or datetime expression.
 

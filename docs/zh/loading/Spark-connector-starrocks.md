@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 使用 Spark connector 导入数据（推荐）
@@ -108,10 +108,12 @@ connector jar包的命名格式如下
 | starrocks.write.max.retries                    | 否       | 3             | 自 1.1.1 版本起支持。如果一批数据导入失败，Spark connector 导入该批数据的重试次数上线。<br/> **注意：**由于 Stream Load 事务接口不支持重试。如果此参数为正数，则 Spark connector 始终使用 Stream Load 接口，并忽略 `starrocks.write.enable.transaction-stream-load` 的值。|
 | starrocks.write.retry.interval.ms              | 否       | 10000         | 自 1.1.1 版本起支持。如果一批数据导入失败，Spark connector 尝试再次导入该批数据的时间间隔。|
 | starrocks.columns                              | 否      | 无 | 支持向 StarRocks 表中写入部分列，通过该参数指定列名，多个列名之间使用逗号 (,) 分隔，例如"c0,c1,c2"。                                                                                                                                                       |
-| starrocks.write.properties.*                   | 否      | 无 | 指定 Stream Load 的参数，用于控制导入行为，例如使用 `starrocks.write.properties.format` 指定导入数据的格式为 CSV 或者 JSON。更多参数和说明，请参见 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。 |
+| starrocks.write.properties.*                   | 否      | 无 | 指定 Stream Load 的参数，用于控制导入行为，例如使用 `starrocks.write.properties.format` 指定导入数据的格式为 CSV 或者 JSON。更多参数和说明，请参见 [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。 |
 | starrocks.write.properties.format              | 否      | CSV | 指定导入数据的格式，取值为 CSV 和 JSON。connector 会将每批数据转换成相应的格式发送给 StarRocks。                                                                                                                                             |
 | starrocks.write.properties.row_delimiter       | 否      | \n | 使用CSV格式导入时，用于指定行分隔符。                                                                                                                                                                                                  |
 | starrocks.write.properties.column_separator    | 否      | \t | 使用CSV格式导入时，用于指定列分隔符。                                                                                                                                                                                                  |
+| starrocks.write.properties.partial_update      | 否      | `FALSE` | 是否使用部分列更新。取值包括 `TRUE` 和 `FALSE`。默认值：`FALSE`。                                                                                                                                                                                             |
+| starrocks.write.properties.partial_update_mode | 否      | `row` | 指定部分更新的模式，取值包括 `row` 和 `column`。<ul><li>`row`（默认值），指定使用行模式执行部分更新，比较适用于较多列且小批量的实时更新场景。</li><li>`column`，指定使用列模式执行部分更新，比较适用于少数列并且大量行的批处理更新场景。在该场景，开启列模式，更新速度更快。例如，在一个包含 100 列的表中，每次更新 10 列（占比 10%）并更新所有行，则开启列模式，更新性能将提高 10 倍。</li></ul> |
 | starrocks.write.num.partitions                 | 否      | 无 | Spark用于并行写入的分区数，数据量小时可以通过减少分区数降低导入并发和频率，默认分区数由Spark决定。使用该功能可能会引入 Spark Shuffle cost。                                                                                                                                  |
 | starrocks.write.partition.columns              | 否      | 无 | 用于Spark分区的列，只有指定 starrocks.write.num.partitions 后才有效，如果不指定则使用所有写入的列进行分区                                                                                                                                               |
 | starrocks.timezone | 否 | JVM 默认时区|自 1.1.1 版本起支持。StarRocks 的时区。用于将 Spark 的 `TimestampType` 类型的值转换为 StarRocks 的 `DATETIME` 类型的值。默认为 `ZoneId#systemDefault()` 返回的 JVM 时区。格式可以是时区名称，例如 Asia/Shanghai，或时区偏移，例如 +08:00。|
@@ -534,7 +536,7 @@ DISTRIBUTED BY HASH(`id`);
 
 ### 导入至 BITMAP 列
 
-`BITMAP` 常用于加速精确去重计数，例如计算独立访客数（UV），更多信息，请参见[使用 Bitmap 实现精确去重](../using_starrocks/Using_bitmap.md)。
+`BITMAP` 常用于加速精确去重计数，例如计算独立访客数（UV），更多信息，请参见[使用 Bitmap 实现精确去重](../using_starrocks/distinct_values/Using_bitmap.md)。
 
 本示例以计算独立访客数（UV）为例，展示如何导入数据至 StarRocks 表 `BITMAP` 列中。**自版本 1.1.1 起支持导入至 `BITMAP` 列**。
 
@@ -599,11 +601,11 @@ DISTRIBUTED BY HASH(`id`);
 
 > **注意**
 >
-> 如果 Spark 中该列的数据类型为 TINYINT、SMALLINT、INTEGER 或者 BIGINT 类型，则 Spark connector 使用 [`to_bitmap`](../sql-reference/sql-functions/bitmap-functions/to_bitmap.md) 函数将该列的数据转换为 StarRocks 中的 BITMAP 类型。如果 Spark 中该列为其它数据类型，则 Spark connector 使用 [`bitmap_hash`](../sql-reference/sql-functions/bitmap-functions/bitmap_hash.md) 函数进行转换。
+> 如果 Spark 中该列的数据类型为 TINYINT、SMALLINT、INTEGER 或者 BIGINT 类型，则 Spark connector 使用 [`to_bitmap`](../sql-reference/sql-functions/bitmap-functions/to_bitmap.md) 函数将该列的数据转换为 StarRocks 中的 BITMAP 类型。如果 Spark 中该列为其它数据类型，则 Spark connector 使用 [`bitmap_hash`](../sql-reference/sql-functions/bitmap-functions/bitmap_hash.md) 或 [`bitmap_hash64`](../sql-reference/sql-functions/bitmap-functions/bitmap_hash64.md) 函数进行转换。
 
 ### 导入至 HLL 列
 
-`HLL` 可用于近似去重计数，更多信息，请参见[使用 HLL 实现近似去重](../using_starrocks/Using_HLL.md)。
+`HLL` 可用于近似去重计数，更多信息，请参见[使用 HLL 实现近似去重](../using_starrocks/distinct_values/Using_HLL.md)。
 
 本示例以计算独立访客数（UV）为例，展示如何导入数据至 StarRocks 表 `HLL` 列中。**自版本 1.1.1 起支持导入至 `HLL` 列**。
 

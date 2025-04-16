@@ -23,6 +23,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.sql.Blob;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -59,9 +60,9 @@ public class JDBCScanner {
     }
 
     public void open() throws Exception {
-        String key = scanContext.getUser() + "/" + scanContext.getJdbcURL();
+        String cacheKey = computeCacheKey(scanContext.getUser(), scanContext.getPassword(), scanContext.getJdbcURL());
         URL driverURL = new File(driverLocation).toURI().toURL();
-        DataSourceCache.DataSourceCacheItem cacheItem = DataSourceCache.getInstance().getSource(key, () -> {
+        DataSourceCache.DataSourceCacheItem cacheItem = DataSourceCache.getInstance().getSource(cacheKey, () -> {
             ClassLoader classLoader = URLClassLoader.newInstance(new URL[] {driverURL});
             Thread.currentThread().setContextClassLoader(classLoader);
             HikariConfig config = new HikariConfig();
@@ -72,6 +73,7 @@ public class JDBCScanner {
             config.setMaximumPoolSize(scanContext.getConnectionPoolSize());
             config.setMinimumIdle(scanContext.getMinimumIdleConnections());
             config.setIdleTimeout(scanContext.getConnectionIdleTimeoutMs());
+            config.setConnectionTimeout(scanContext.getConnectionTimeoutMs());
             HikariDataSource hikariDataSource = new HikariDataSource(config);
             // hikari doesn't support user-provided class loader, we should save them ourselves to ensure that
             // the classes of result data are loaded by the same class loader, otherwise we may encounter
@@ -96,8 +98,13 @@ public class JDBCScanner {
         resultColumnClassNames = new ArrayList<>(resultSetMetaData.getColumnCount());
         resultChunk = new ArrayList<>(resultSetMetaData.getColumnCount());
         for (int i = 1; i <= resultSetMetaData.getColumnCount(); i++) {
-            resultColumnClassNames.add(resultSetMetaData.getColumnClassName(i));
-            Class<?> clazz = classLoader.loadClass(resultSetMetaData.getColumnClassName(i));
+            String className = resultSetMetaData.getColumnClassName(i);
+            resultColumnClassNames.add(className);
+            if (className.equals("byte[]") || className.equals("[B")) {
+                resultChunk.add((Object[]) Array.newInstance(byte[].class, scanContext.getStatementFetchSize()));
+                continue;
+            }
+            Class<?> clazz = classLoader.loadClass(className);
             if (isGeneralJDBCClassType(clazz)) {
                 resultChunk.add((Object[]) Array.newInstance(clazz, scanContext.getStatementFetchSize()));
             } else if (null != mapEngineSpecificClassType(clazz)) {
@@ -107,6 +114,10 @@ public class JDBCScanner {
                 resultChunk.add((Object[]) Array.newInstance(String.class, scanContext.getStatementFetchSize()));
             }
         }
+    }
+
+    private static String computeCacheKey(String username, String password, String jdbcUrl) {
+        return username + "/" + password + "/" + jdbcUrl;
     }
 
     private static final Set<Class<?>> GENERAL_JDBC_CLASS_SET = new HashSet<>(
@@ -123,6 +134,7 @@ public class JDBCScanner {
             put("com.clickhouse.data.value.UnsignedShort", Integer.class);
             put("com.clickhouse.data.value.UnsignedInteger", Long.class);
             put("com.clickhouse.data.value.UnsignedLong", BigInteger.class);
+            put("oracle.jdbc.OracleBlob", Blob.class);
         }};
 
     private Class mapEngineSpecificClassType(Class<?> clazz) {
@@ -165,6 +177,10 @@ public class JDBCScanner {
                     dataColumn[resultNumRows] = ((Number) resultObject).floatValue();
                 } else if (dataColumn instanceof Double[]) {
                     dataColumn[resultNumRows] = ((Number) resultObject).doubleValue();
+                } else if (resultObject instanceof byte[]) {
+                    dataColumn[resultNumRows] = resultObject;
+                } else if (resultObject instanceof Blob) {
+                    dataColumn[resultNumRows] = resultObject;
                 } else if (dataColumn instanceof String[] && resultObject instanceof String) {
                     // if both sides are String, assign value directly to avoid additional calls to getString
                     dataColumn[resultNumRows] = resultObject;

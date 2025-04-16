@@ -48,8 +48,16 @@ public:
             : _tablet(std::move(tablet)), _mgr(mgr) {}
 
     void run() override {
+        DeferOp defer([&]() {
+            // Must call `unmark_running()` after run() end.
+            _mgr->unmark_running(_tablet->tablet_id(), _tablet->data_dir());
+        });
+        std::shared_lock migration_rlock(_tablet->get_migration_lock(), std::try_to_lock);
+        if (!migration_rlock.owns_lock() || Tablet::check_migrate(_tablet)) {
+            // Skip pk index major compaction when this tablet is migrating.
+            return;
+        }
         WARN_IF_ERROR(_tablet->updates()->pk_index_major_compaction(), "Failed to run PkIndexMajorCompactionTask");
-        _mgr->unmark_running(_tablet->tablet_id(), _tablet->data_dir());
     }
 
 private:
@@ -63,7 +71,7 @@ void PersistentIndexCompactionManager::schedule(const std::function<std::vector<
         auto& tablet_score = *it;
         auto tablet_id = tablet_score.first;
         auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
-        if (is_running(tablet_id)) {
+        if (is_running(tablet_id) || tablet == nullptr) {
             // remove this tablet because it is already running
             it = _ready_tablets_queue.erase(it);
             continue;

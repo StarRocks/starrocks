@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # bitand
 
-## 功能
+
 
 返回两个数值在按位进行 AND 运算后的结果。
 

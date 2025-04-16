@@ -45,6 +45,7 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/binlog_manager.h"
 #include "storage/delete_handler.h"
+#include "storage/flat_json_config.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/rowset/rowset.h"
@@ -92,10 +93,10 @@ class TabletUpdates;
 // The concurrency control is handled in Tablet Class, not in this class.
 class TabletMeta {
 public:
-    [[nodiscard]] static Status create(const TCreateTabletReq& request, const TabletUid& tablet_uid, uint64_t shard_id,
-                                       uint32_t next_unique_id,
-                                       const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
-                                       TabletMetaSharedPtr* tablet_meta);
+    static Status create(const TCreateTabletReq& request, const TabletUid& tablet_uid, uint64_t shard_id,
+                         uint32_t next_unique_id,
+                         const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
+                         TabletMetaSharedPtr* tablet_meta);
 
     static TabletMetaSharedPtr create();
 
@@ -109,25 +110,27 @@ public:
                const TTabletSchema& tablet_schema, uint32_t next_unique_id, bool enable_persistent_index,
                const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id, const TabletUid& tablet_uid,
                TTabletType::type tabletType, TCompressionType::type compression_type,
-               int32_t primary_index_cache_expire_sec, TStorageType::type storage_type);
+               int32_t primary_index_cache_expire_sec, TStorageType::type storage_type, int compression_level);
 
     virtual ~TabletMeta();
 
     // Function create_from_file is used to be compatible with previous tablet_meta.
     // Previous tablet_meta is a physical file in tablet dir, which is not stored in rocksdb.
-    [[nodiscard]] Status create_from_file(const std::string& file_path);
-    [[nodiscard]] Status create_from_memory(std::string_view data);
-    [[nodiscard]] Status save(const std::string& file_path);
-    [[nodiscard]] static Status save(const std::string& file_path, const TabletMetaPB& tablet_meta_pb);
-    [[nodiscard]] static Status reset_tablet_uid(const std::string& file_path);
+    Status create_from_file(const std::string& file_path);
+    // Note that create_from_memory will not use tablet schema map to share the tablet schemas with same schema id,
+    // it's the difference from create_from_file
+    Status create_from_memory(std::string_view data);
+    Status save(const std::string& file_path);
+    static Status save(const std::string& file_path, const TabletMetaPB& tablet_meta_pb);
+    static Status reset_tablet_uid(const std::string& file_path);
     static std::string construct_header_file_path(const std::string& schema_hash_path, int64_t tablet_id);
-    [[nodiscard]] Status save_meta(DataDir* data_dir);
+    Status save_meta(DataDir* data_dir, bool skip_tablet_schema = false);
 
-    [[nodiscard]] Status serialize(std::string* meta_binary);
-    [[nodiscard]] Status deserialize(std::string_view data);
-    void init_from_pb(TabletMetaPB* ptablet_meta_pb);
+    Status serialize(std::string* meta_binary);
+    Status deserialize(std::string_view data);
+    void init_from_pb(TabletMetaPB* ptablet_meta_pb, bool use_tablet_schema_map = true);
 
-    void to_meta_pb(TabletMetaPB* tablet_meta_pb);
+    void to_meta_pb(TabletMetaPB* tablet_meta_pb, bool skip_tablet_schema = false);
     void to_json(std::string* json_string, json2pb::Pb2JsonOptions& options);
 
     TabletTypePB tablet_type() const { return _tablet_type; }
@@ -162,7 +165,8 @@ public:
     const TabletSchema& tablet_schema() const;
 
     void set_tablet_schema(const TabletSchemaCSPtr& tablet_schema) { _schema = tablet_schema; }
-    void save_tablet_schema(const TabletSchemaCSPtr& tablet_schema, DataDir* data_dir);
+    void save_tablet_schema(const TabletSchemaCSPtr& tablet_schema, std::vector<RowsetSharedPtr>& committed_rs,
+                            DataDir* data_dir, bool is_primary_key);
 
     TabletSchemaCSPtr& tablet_schema_ptr() { return _schema; }
     const TabletSchemaCSPtr& tablet_schema_ptr() const { return _schema; }
@@ -215,9 +219,15 @@ public:
 
     std::shared_ptr<BinlogConfig> get_binlog_config() { return _binlog_config; }
 
+    std::shared_ptr<FlatJsonConfig> get_flat_json_config() { return _flat_json_config; }
+
     void set_binlog_config(const BinlogConfig& new_config) {
         _binlog_config = std::make_shared<BinlogConfig>();
         _binlog_config->update(new_config);
+    }
+
+    void set_flat_json_config(const FlatJsonConfig& new_config) {
+        _flat_json_config = std::make_shared<FlatJsonConfig>(new_config);
     }
 
     BinlogLsn get_binlog_min_lsn() { return _binlog_min_lsn; }
@@ -234,10 +244,13 @@ public:
 
     const TabletSchemaCSPtr& source_schema() const { return _source_schema; }
 
+    // for test
+    void TEST_set_table_id(int64_t table_id);
+
 private:
     int64_t _mem_usage() const { return sizeof(TabletMeta); }
 
-    Status _save_meta(DataDir* data_dir);
+    Status _save_meta(DataDir* data_dir, bool skip_tablet_schema = false);
 
     // _del_pred_array is ignored to compare.
     friend bool operator==(const TabletMeta& a, const TabletMeta& b);
@@ -279,6 +292,7 @@ private:
     TabletUpdates* _updates = nullptr;
 
     std::shared_ptr<BinlogConfig> _binlog_config;
+    std::shared_ptr<FlatJsonConfig> _flat_json_config;
 
     // The minimum lsn of binlog that is valid. It will be updated when deleting expired
     // or overcapacity binlog in Tablet#delete_expired_inc_rowsets, and used to skip those
@@ -307,6 +321,10 @@ inline TabletUid TabletMeta::tablet_uid() const {
 
 inline int64_t TabletMeta::table_id() const {
     return _table_id;
+}
+
+inline void TabletMeta::TEST_set_table_id(int64_t table_id) {
+    _table_id = table_id;
 }
 
 inline int64_t TabletMeta::partition_id() const {
@@ -356,7 +374,7 @@ inline size_t TabletMeta::num_rows() const {
 inline size_t TabletMeta::tablet_footprint() const {
     size_t total_size = 0;
     for (auto& rs : _rs_metas) {
-        total_size += rs->data_disk_size();
+        total_size += rs->data_disk_size() + rs->index_disk_size();
     }
     return total_size;
 }

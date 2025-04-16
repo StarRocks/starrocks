@@ -46,8 +46,8 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/del_vector.h"
-#include "storage/inverted/clucene/clucene_plugin.h"
-#include "storage/inverted/index_descriptor.hpp"
+#include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/clucene/clucene_plugin.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_id_generator.h"
@@ -810,6 +810,15 @@ Status SnapshotManager::assign_new_rowset_id(SnapshotMeta* snapshot_meta, const 
                                         strings::Substitute("Fail to link index inverted file from $0 to $1",
                                                             src_absolute_path, dst_absolute_path));
                             }
+                        }
+                    } else if (index.index_type() == VECTOR) {
+                        std::string dst_index_link_path = IndexDescriptor::vector_index_file_path(
+                                clone_dir, new_rowset_id.to_string(), segment_n, index.index_id());
+                        std::string src_index_file_path = IndexDescriptor::vector_index_file_path(
+                                clone_dir, old_rowset_id.to_string(), segment_n, index.index_id());
+                        if (link(src_index_file_path.c_str(), dst_index_link_path.c_str()) != 0) {
+                            PLOG(WARNING) << "Fail to link " << src_index_file_path << " to " << dst_index_link_path;
+                            return Status::RuntimeError("Fail to link index data file");
                         }
                     }
                 }

@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 从 MySQL 实时同步
@@ -21,7 +21,7 @@ StarRocks 支持多种方式将 MySQL 的数据实时同步至 StarRocks，支�
 
 :::
 
-![flink](../assets/4.9.2.png)
+![flink](../_assets/4.9.2.png)
 
 将 MySQL 的数据通过 Flink 同步至 StarRocks 分成同步库表结构、同步数据两个阶段进行。首先 StarRocks Migration Tool (数据迁移工具，以下简称 SMT) 将 MySQL 的库表结构转化成 StarRocks 的建库和建表语句。然后 Flink 集群运行 Flink job，同步 MySQL 全量及增量数据至 StarRocks。具体同步流程如下：
 
@@ -37,7 +37,7 @@ StarRocks 支持多种方式将 MySQL 的数据实时同步至 StarRocks，支�
 
 2. **同步数据**
 
-   Flink SQL 客户端执行导入数据的 SQL 语句（`INSERT INTO SELECT`语句），向 Flink 集群提交一个或者多个长时间运行的 Flink job。Flink集群运行 Flink job ，[Flink cdc connector](https://ververica.github.io/flink-cdc-connectors/master/content/快速上手/build-real-time-data-lake-tutorial-zh.html) 先读取数据库的历史全量数据，然后无缝切换到增量读取，并且发给 flink-connector-starrocks，最后  flink-connector-starrocks  攒微批数据同步至 StarRocks。
+   Flink SQL 客户端执行导入数据的 SQL 语句（`INSERT INTO SELECT`语句），向 Flink 集群提交一个或者多个长时间运行的 Flink job。Flink集群运行 Flink job ，Flink cdc connector 先读取数据库的历史全量数据，然后无缝切换到增量读取，并且发给 flink-connector-starrocks，最后  flink-connector-starrocks  攒微批数据同步至 StarRocks。
 
    :::info
 
@@ -94,7 +94,7 @@ StarRocks 支持多种方式将 MySQL 的数据实时同步至 StarRocks，支�
       Starting taskexecutor daemon on host.
       ```
 
-2. **下载 [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases)**。本示例的数据源为 MySQL，因此下载 flink-sql-connector-**mysql**-cdc-x.x.x.jar。并且版本需支持对应的 Flink 版本，两者版本支持度，请参见 [Supported Flink Versions](https://ververica.github.io/flink-cdc-connectors/release-2.2/content/about.html#supported-flink-versions)。由于本文使用 Flink  1.14.5，因此可以使用 flink-sql-connector-mysql-cdc-2.2.0.jar。
+2. **下载 [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases)**。本示例的数据源为 MySQL，因此下载 flink-sql-connector-**mysql**-cdc-x.x.x.jar。并且版本需支持对应的 Flink 版本。由于本文使用 Flink  1.14.5，因此可以使用 flink-sql-connector-mysql-cdc-2.2.0.jar。
 
       ```Bash
       wget https://repo1.maven.org/maven2/com/ververica/flink-sql-connector-mysql-cdc/2.2.0/flink-sql-connector-mysql-cdc-2.2.0.jar
@@ -292,7 +292,7 @@ StarRocks 支持多种方式将 MySQL 的数据实时同步至 StarRocks，支�
 
    > **注意**
    >
-   > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/Data_distribution.md#设置分桶数量)。
+   > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/data_distribution/Data_distribution.md#设置分桶数量)。
 
 ## 同步数据
 
@@ -399,7 +399,7 @@ StarRocks 支持多种方式将 MySQL 的数据实时同步至 StarRocks，支�
 
 2. 可以通过 [Flink WebUI](https://nightlies.apache.org/flink/flink-docs-master/docs/try-flink/flink-operations-playground/#flink-webui) 或者在 Flink 命令行执行命令`bin/flink list -running`，查看 Flink 集群中正在运行的 Flink job，以及 Flink job ID。
       1. Flink WebUI 界面
-         ![task 拓扑](../assets/4.9.3.png)
+         ![task 拓扑](../_assets/4.9.3.png)
 
       2. 在 Flink 命令行执行命令`bin/flink list -running`
 

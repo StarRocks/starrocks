@@ -45,8 +45,8 @@ static std::string string_2_asc(const std::string& input) {
     return oss.str();
 }
 
-static std::string make_column_count_not_matched_error_message(int expected_count, int actual_count,
-                                                               CSVParseOptions& parse_options) {
+static std::string make_column_count_not_matched_error_message_for_load(int expected_count, int actual_count,
+                                                                        CSVParseOptions& parse_options) {
     std::stringstream error_msg;
     error_msg << "Target column count: " << expected_count
               << " doesn't match source value column count: " << actual_count << ". "
@@ -55,11 +55,26 @@ static std::string make_column_count_not_matched_error_message(int expected_coun
     return error_msg.str();
 }
 
+static std::string make_column_count_not_matched_error_message_for_query(int expected_count, int actual_count,
+                                                                         CSVParseOptions& parse_options,
+                                                                         const std::string& row,
+                                                                         const std::string& filename) {
+    std::stringstream error_msg;
+    error_msg << "Schema column count: " << expected_count
+              << " doesn't match source value column count: " << actual_count << ". "
+              << "Column separator: " << string_2_asc(parse_options.column_delimiter) << ", "
+              << "Row delimiter: " << string_2_asc(parse_options.row_delimiter) << ", "
+              << "Row: '" << row << "', File: " << filename << ". "
+              << "Consider setting 'fill_mismatch_column_with' = 'null' property";
+    return error_msg.str();
+}
+
 static std::string make_value_type_not_matched_error_message(int field_pos, const Slice& field,
                                                              const SlotDescriptor* slot) {
     std::stringstream error_msg;
     error_msg << "The field (name = " << slot->col_name() << ", pos = " << field_pos << ") is out of range. "
-              << "Type: " << slot->type().debug_string() << ", Value: " << field.to_string();
+              << "Type: " << slot->type().debug_string() << ", Value length: " << field.get_size()
+              << ", Value: " << field.to_string();
     return error_msg.str();
 }
 
@@ -259,7 +274,18 @@ Status CSVScanner::_init_reader() {
         if (_parse_options.skip_header) {
             for (int64_t i = 0; i < _parse_options.skip_header; i++) {
                 CSVReader::Record dummy;
-                RETURN_IF_ERROR(_curr_reader->next_record(&dummy));
+                auto st = _curr_reader->next_record(&dummy);
+                if (!st.ok()) {
+                    if (st.is_end_of_file()) {
+                        auto err_msg = fmt::format(
+                                "The parameter 'skip_header' is set to {}, but there are only {} rows in the csv file",
+                                _parse_options.skip_header, i);
+
+                        return Status::EndOfFile(err_msg);
+                    } else {
+                        return st;
+                    }
+                }
             }
         }
         return Status::OK();
@@ -293,6 +319,7 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
                 // if timeout happens at the beginning of reading src_chunk, we return the error state
                 // else we will _materialize the lines read before timeout
                 if (src_chunk->num_rows() == 0) {
+                    _reusable_empty_chunk.swap(src_chunk);
                     return status;
                 }
             } else {
@@ -340,21 +367,36 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
 
         const char* data = _curr_reader->buffBasePtr() + row.parsed_start;
         CSVReader::Record record(data, row.parsed_end - row.parsed_start);
-        if (row.columns.size() != _num_fields_in_csv && !_scan_range.params.flexible_column_mapping) {
+        if (((_file_scan_type == TFileScanType::LOAD && row.columns.size() != _num_fields_in_csv) ||
+             (_file_scan_type == TFileScanType::FILES_INSERT && row.columns.size() < _num_fields_in_csv)) &&
+            !_scan_range.params.flexible_column_mapping) {
+            // broker load / stream load will filter rows when file column count is inconsistent with column list.
+            //
+            // insert from files() will filter rows when file column count is less than files() schema.
+            // file column count more than schema is normal, extra columns will be ignored.
             if (status.is_end_of_file()) {
                 break;
             }
+            std::string error_msg = make_column_count_not_matched_error_message_for_load(
+                    _num_fields_in_csv, row.columns.size(), _parse_options);
             if (_counter->num_rows_filtered++ < REPORT_ERROR_MAX_NUMBER) {
-                std::string error_msg = make_column_count_not_matched_error_message(_num_fields_in_csv,
-                                                                                    row.columns.size(), _parse_options);
                 _report_error(record, error_msg);
             }
             if (_state->enable_log_rejected_record()) {
-                std::string error_msg = make_column_count_not_matched_error_message(_num_fields_in_csv,
-                                                                                    row.columns.size(), _parse_options);
                 _report_rejected_record(record, error_msg);
             }
             continue;
+        } else if (_file_scan_type == TFileScanType::FILES_QUERY && row.columns.size() < _num_fields_in_csv &&
+                   !_scan_range.params.flexible_column_mapping) {
+            // query files() will return error when file column count is less than files() schema.
+            // file column count more than schema is normal, extra columns will be ignored.
+            if (status.is_end_of_file()) {
+                break;
+            }
+            std::string error_msg = make_column_count_not_matched_error_message_for_query(
+                    _num_fields_in_csv, row.columns.size(), _parse_options, record.to_string(),
+                    _curr_reader->filename());
+            return Status::DataQualityError(error_msg);
         }
         if (!validate_utf8(record.data, record.size)) {
             if (_counter->num_rows_filtered++ < REPORT_ERROR_MAX_NUMBER) {
@@ -369,7 +411,6 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
 
         SCOPED_RAW_TIMER(&_counter->fill_ns);
         bool has_error = false;
-        bool error_reported = false;
         for (int j = 0, k = 0; j < _num_fields_in_csv; j++) {
             auto slot = _src_slot_descriptors[j];
             if (slot == nullptr) {
@@ -378,24 +419,8 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
 
             if (j >= row.columns.size()) {
                 // table columns are more than file fields
-
                 // append null.
                 _column_raw_ptrs[k]->append_default(1);
-
-                // report error.
-                if (_strict_mode && !error_reported) {
-                    if (_counter->num_rows_filtered++ < REPORT_ERROR_MAX_NUMBER) {
-                        std::string error_msg = make_column_count_not_matched_error_message(
-                                _num_fields_in_csv, row.columns.size(), _parse_options);
-                        _report_error(record, error_msg);
-                    }
-                    if (_state->enable_log_rejected_record()) {
-                        std::string error_msg = make_column_count_not_matched_error_message(
-                                _num_fields_in_csv, row.columns.size(), _parse_options);
-                        _report_rejected_record(record, error_msg);
-                    }
-                    error_reported = true;
-                }
                 k++;
                 continue;
             }
@@ -462,18 +487,29 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
         fields.clear();
         _curr_reader->split_record(record, &fields);
 
-        if (fields.size() != _num_fields_in_csv && !_scan_range.params.flexible_column_mapping) {
+        if (((_file_scan_type == TFileScanType::LOAD && fields.size() != _num_fields_in_csv) ||
+             (_file_scan_type == TFileScanType::FILES_INSERT && fields.size() < _num_fields_in_csv)) &&
+            !_scan_range.params.flexible_column_mapping) {
+            // broker load / stream load will filter rows when file column count is inconsistent with column list.
+            //
+            // insert from files() will filter rows when file column count is less than files() schema.
+            // file column count more than schema is normal, extra columns will be ignored.
+            std::string error_msg = make_column_count_not_matched_error_message_for_load(_num_fields_in_csv,
+                                                                                         fields.size(), _parse_options);
             if (_counter->num_rows_filtered++ < REPORT_ERROR_MAX_NUMBER) {
-                std::string error_msg =
-                        make_column_count_not_matched_error_message(_num_fields_in_csv, fields.size(), _parse_options);
                 _report_error(record, error_msg);
             }
             if (_state->enable_log_rejected_record()) {
-                std::string error_msg =
-                        make_column_count_not_matched_error_message(_num_fields_in_csv, fields.size(), _parse_options);
                 _report_rejected_record(record, error_msg);
             }
             continue;
+        } else if (_file_scan_type == TFileScanType::FILES_QUERY && fields.size() < _num_fields_in_csv &&
+                   !_scan_range.params.flexible_column_mapping) {
+            // query files() will return error when file column count is less than files() schema.
+            // file column count more than schema is normal, extra columns will be ignored.
+            std::string error_msg = make_column_count_not_matched_error_message_for_query(
+                    _num_fields_in_csv, fields.size(), _parse_options, record.to_string(), _curr_reader->filename());
+            return Status::DataQualityError(error_msg);
         }
         if (!validate_utf8(record.data, record.size)) {
             if (_counter->num_rows_filtered++ < REPORT_ERROR_MAX_NUMBER) {
@@ -487,7 +523,6 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
 
         SCOPED_RAW_TIMER(&_counter->fill_ns);
         bool has_error = false;
-        bool error_reported = false;
         for (int j = 0, k = 0; j < _num_fields_in_csv; j++) {
             auto slot = _src_slot_descriptors[j];
             if (slot == nullptr) {
@@ -496,24 +531,8 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
 
             if (j >= fields.size()) {
                 // table columns are more than file fields
-
                 // append null.
                 _column_raw_ptrs[k]->append_default(1);
-
-                // report error.
-                if (_strict_mode && !error_reported) {
-                    if (_counter->num_rows_filtered++ < REPORT_ERROR_MAX_NUMBER) {
-                        std::string error_msg = make_column_count_not_matched_error_message(
-                                _num_fields_in_csv, fields.size(), _parse_options);
-                        _report_error(record, error_msg);
-                    }
-                    if (_state->enable_log_rejected_record()) {
-                        std::string error_msg = make_column_count_not_matched_error_message(
-                                _num_fields_in_csv, fields.size(), _parse_options);
-                        _report_rejected_record(record, error_msg);
-                    }
-                    error_reported = true;
-                }
                 k++;
                 continue;
             }
@@ -542,6 +561,11 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
 }
 
 ChunkPtr CSVScanner::_create_chunk(const std::vector<SlotDescriptor*>& slots) {
+    if (_reusable_empty_chunk) {
+        DCHECK(_reusable_empty_chunk->is_empty());
+        return std::move(_reusable_empty_chunk);
+    }
+
     SCOPED_RAW_TIMER(&_counter->init_chunk_ns);
 
     auto chunk = std::make_shared<Chunk>();
@@ -619,7 +643,7 @@ Status CSVScanner::_get_schema(std::vector<SlotDescriptor>* merged_schema) {
         _curr_reader->split_record(record, &fields);
         for (size_t i = 0; i < fields.size(); i++) {
             // column name: $1, $2, $3...
-            schema.emplace_back(SlotDescriptor(i, fmt::format("${}", i + 1), get_type_desc(fields[i])));
+            schema.emplace_back(i, fmt::format("${}", i + 1), get_type_desc(fields[i]));
         }
         schemas.emplace_back(schema);
         i++;
@@ -656,7 +680,7 @@ Status CSVScanner::_get_schema_v2(std::vector<SlotDescriptor>* merged_schema) {
             const Slice field(basePtr + column.start_pos, column.length);
 
             // column name: $1, $2, $3...
-            schema.emplace_back(SlotDescriptor(i, fmt::format("${}", i + 1), get_type_desc(field)));
+            schema.emplace_back(i, fmt::format("${}", i + 1), get_type_desc(field));
         }
         schemas.emplace_back(schema);
         i++;

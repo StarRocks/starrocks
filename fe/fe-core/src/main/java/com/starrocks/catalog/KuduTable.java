@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
 import com.google.common.collect.Sets;
@@ -27,21 +26,23 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
-
 
 public class KuduTable extends Table {
     private static final Logger LOG = LogManager.getLogger(KuduTable.class);
     public static final Set<String> KUDU_INPUT_FORMATS = Sets.newHashSet(
             "org.apache.hadoop.hive.kudu.KuduInputFormat", "org.apache.kudu.mapreduce.KuduTableInputFormat");
     public static final String PARTITION_NULL_VALUE = "null";
+    public static final String PARAMETER_KEY_KUDU_TABLE_NAME = "kudu.table_name";
     private String masterAddresses;
     private String catalogName;
     private String databaseName;
     private String tableName;
+    private Optional<String> kuduTableName;
     private List<String> partColNames;
     private Map<String, String> properties;
 
@@ -49,36 +50,45 @@ public class KuduTable extends Table {
         super(TableType.KUDU);
     }
 
-    public KuduTable(String masterAddresses, String catalogName, String dbName, String tblName, List<Column> schema,
-                     List<String> partColNames) {
+    public KuduTable(String masterAddresses, String catalogName, String dbName, String tblName, String kuduTableName,
+                     List<Column> schema, List<String> partColNames) {
         super(CONNECTOR_ID_GENERATOR.getNextId().asInt(), tblName, TableType.KUDU, schema);
         this.masterAddresses = masterAddresses;
         this.catalogName = catalogName;
         this.databaseName = dbName;
         this.tableName = tblName;
+        this.kuduTableName = Optional.ofNullable(kuduTableName);
         this.partColNames = partColNames;
     }
 
     public static KuduTable fromMetastoreTable(org.apache.hadoop.hive.metastore.api.Table table, String catalogName,
                                                List<Column> fullSchema, List<String> partColNames) {
+        String kuduTableName = table.getParameters().get(PARAMETER_KEY_KUDU_TABLE_NAME);
         return new KuduTable(StringUtils.EMPTY, catalogName, table.getDbName(), table.getTableName(),
-                fullSchema, partColNames);
+                kuduTableName, fullSchema, partColNames);
     }
 
     public String getMasterAddresses() {
         return masterAddresses;
     }
+
     @Override
     public String getCatalogName() {
         return catalogName;
     }
 
-    public String getDbName() {
+    @Override
+    public String getCatalogDBName() {
         return databaseName;
     }
 
-    public String getTableName() {
+    @Override
+    public String getCatalogTableName() {
         return tableName;
+    }
+
+    public Optional<String> getKuduTableName() {
+        return kuduTableName;
     }
 
     @Override

@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # How to feedback and contribute
@@ -43,7 +43,7 @@ displayed_sidebar: "Chinese"
 1. StarRocks文档仓库使用 markdown 格式，贡献文档前，请熟悉基本的 markdown 语法。
 2. 语言：请至少选择中英文一种语言，欢迎提供中英双语版本。
 3. 导航栏：如果文档为新增文档，则需要在 `docs/docusaurus` 下的 `sidebars.json` 文件中为新增文档添加中文和英文索引。如果您不熟悉此操作，提交 PR 后，文档团队也会自行添加索引。
-4. 图片：图片需要先放入文件 assets 中，文档中引用图片时请输入图片的相对路径，比如 `![test image](../../assets/test.png)` 。
+4. 图片：图片需要先放入文件 assets 中，文档中引用图片时请输入图片的相对路径，比如 `![test image](../../_assets/test.png)` 。
 5. 引用：如果引用官网文档，推荐使用文档相对路径，比如 `[test md](./data_source/catalog/hive_catalog.md)(../zh/data_source/catalog/hive_catalog.md)`。如果引用外部文档，则引用格式为 `[引用文档名称](引用文档链接)`。
 6. 代码块：代码块必须标明语言类型，比如：`sql`，`json`。
 

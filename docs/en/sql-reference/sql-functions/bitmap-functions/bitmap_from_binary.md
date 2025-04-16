@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # bitmap_from_binary
 
-## Description
+
 
 Converts a binary string with a specific format to a bitmap.
 

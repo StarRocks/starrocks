@@ -23,7 +23,7 @@ template <typename HashSet>
 Status IntersectHashSet<HashSet>::init(RuntimeState* state) {
     _hash_set = std::make_unique<HashSet>();
     _mem_pool = std::make_unique<MemPool>();
-    _buffer = _mem_pool->allocate(_max_one_row_size * state->chunk_size());
+    _buffer = _mem_pool->allocate(_max_one_row_size * state->chunk_size() + SLICE_MEMEQUAL_OVERFLOW_PADDING);
     RETURN_IF_UNLIKELY_NULL(_buffer, Status::MemoryAllocFailed("alloc mem for intersect hash set failed"));
     return Status::OK();
 }
@@ -38,7 +38,7 @@ void IntersectHashSet<HashSet>::build_set(RuntimeState* state, const ChunkPtr& c
     if (UNLIKELY(cur_max_one_row_size > _max_one_row_size)) {
         _max_one_row_size = cur_max_one_row_size;
         _mem_pool->clear();
-        _buffer = _mem_pool->allocate(_max_one_row_size * state->chunk_size());
+        _buffer = _mem_pool->allocate(_max_one_row_size * state->chunk_size() + SLICE_MEMEQUAL_OVERFLOW_PADDING);
     }
 
     _serialize_columns(chunkPtr, exprs, chunk_size);
@@ -47,7 +47,7 @@ void IntersectHashSet<HashSet>::build_set(RuntimeState* state, const ChunkPtr& c
         IntersectSliceFlag key(_buffer + i * _max_one_row_size, _slice_sizes[i]);
         _hash_set->lazy_emplace(key, [&](const auto& ctor) {
             // we must persist the slice before insert
-            uint8_t* pos = pool->allocate(key.slice.size);
+            uint8_t* pos = pool->allocate_with_reserve(key.slice.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
             memcpy(pos, key.slice.data, key.slice.size);
             ctor(pos, key.slice.size);
         });
@@ -63,7 +63,7 @@ Status IntersectHashSet<HashSet>::refine_intersect_row(RuntimeState* state, cons
     if (UNLIKELY(cur_max_one_row_size > _max_one_row_size)) {
         _max_one_row_size = cur_max_one_row_size;
         _mem_pool->clear();
-        _buffer = _mem_pool->allocate(_max_one_row_size * state->chunk_size());
+        _buffer = _mem_pool->allocate(_max_one_row_size * state->chunk_size() + SLICE_MEMEQUAL_OVERFLOW_PADDING);
         if (UNLIKELY(_buffer == nullptr)) {
             return Status::InternalError("Mem usage has exceed the limit of BE");
         }
@@ -83,8 +83,8 @@ Status IntersectHashSet<HashSet>::refine_intersect_row(RuntimeState* state, cons
 }
 
 template <typename HashSet>
-void IntersectHashSet<HashSet>::deserialize_to_columns(KeyVector& keys, const Columns& key_columns, size_t chunk_size) {
-    for (const auto& key_column : key_columns) {
+void IntersectHashSet<HashSet>::deserialize_to_columns(KeyVector& keys, Columns& key_columns, size_t chunk_size) {
+    for (auto& key_column : key_columns) {
         // Because the serialized key is always nullable,
         // drop the null byte of the key if the dest column is non-nullable.
         if (!key_column->is_nullable()) {

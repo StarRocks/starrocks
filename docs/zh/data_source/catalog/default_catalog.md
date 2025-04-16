@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # Default catalog
@@ -13,7 +13,7 @@ StarRocks 2.3 及以上版本提供了 Internal Catalog（内部数据目录）�
 1. 连接 StarRocks。
    - 如从 MySQL 客户端连接到 StarRocks。连接后，默认进入到 `default_catalog`。
    - 如使用 JDBC 连接到 StarRocks，连接时即可通过 `default_catalog.db_name` 的方式指定要连接的数据库。
-2. （可选）通过 [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) 查看数据库：
+2. （可选）通过 [SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) 查看数据库：
 
    ```SQL
    SHOW DATABASES;
@@ -25,25 +25,25 @@ StarRocks 2.3 及以上版本提供了 Internal Catalog（内部数据目录）�
    SHOW DATABASES FROM default_catalog;
    ```
 
-3. （可选）通过 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) 切换当前会话生效的 Catalog：
+3. （可选）通过 [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) 切换当前会话生效的 Catalog：
 
    ```SQL
    SET CATALOG <catalog_name>;
    ```
 
-   再通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 指定当前会话生效的数据库：
+   再通过 [USE](../../sql-reference/sql-statements/Database/USE.md) 指定当前会话生效的数据库：
 
    ```SQL
    USE <db_name>;
    ```
 
-   或者，也可以通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 直接将会话切换到目标 Catalog 下的指定数据库：
+   或者，也可以通过 [USE](../../sql-reference/sql-statements/Database/USE.md) 直接将会话切换到目标 Catalog 下的指定数据库：
 
    ```SQL
    USE <catalog_name>.<db_name>;
    ```
 
-4. 通过 [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) 查询内部数据：
+4. 通过 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 查询内部数据：
 
    ```SQL
    SELECT * FROM <table_name>;

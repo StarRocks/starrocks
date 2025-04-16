@@ -198,8 +198,6 @@ public class PseudoFrontend {
 
                 GlobalStateMgr.getCurrentState().initialize(args);
                 GlobalStateMgr.getCurrentState().setStatisticStorage(new EmptyStatisticStorage());
-                StateChangeExecutor.getInstance().setMetaContext(
-                        GlobalStateMgr.getCurrentState().getMetaContext());
                 StateChangeExecutor.getInstance().registerStateChangeExecution(
                         GlobalStateMgr.getCurrentState().getStateChangeExecution());
                 StateChangeExecutor.getInstance().start();
@@ -208,8 +206,7 @@ public class PseudoFrontend {
 
                 GlobalStateMgr.getCurrentState().waitForReady();
 
-                QeService qeService = new QeService(Config.query_port, Config.mysql_service_nio_enabled,
-                        ExecuteEnv.getInstance().getScheduler());
+                QeService qeService = new QeService(Config.query_port, ExecuteEnv.getInstance().getScheduler());
                 qeService.start();
 
                 ThreadPoolManager.registerAllThreadPoolMetric();

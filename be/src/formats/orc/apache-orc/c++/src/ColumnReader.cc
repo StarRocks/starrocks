@@ -141,7 +141,9 @@ void ColumnReader::seekToRowGroup(PositionProviderMap* positions) {
    */
 void expandBytesToLongs(int64_t* buffer, uint64_t numValues) {
     for (size_t i = numValues - 1; i < numValues; --i) {
-        buffer[i] = reinterpret_cast<char*>(buffer)[i];
+        // compiler treat char as unsigned on aarch64, negative tinyint will be wrong,
+        // so use 'int8_t' not 'char' to cast
+        buffer[i] = reinterpret_cast<int8_t*>(buffer)[i];
     }
 }
 
@@ -1198,7 +1200,7 @@ void StructColumnReader::lazyLoadSeekToRowGroup(PositionProviderMap* positions) 
 
 void StructColumnReader::lazyLoadSkip(uint64_t numValues) {
     if (isAllFieldsLazy()) {
-        ColumnReader::skip(numValues);
+        numValues = ColumnReader::skip(numValues);
     }
     for (auto& ptr : lazyLoadChildren) {
         ptr->lazyLoadSkip(numValues);

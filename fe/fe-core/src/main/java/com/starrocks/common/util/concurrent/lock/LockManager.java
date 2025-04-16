@@ -51,13 +51,12 @@ public class LockManager {
      * @param locker   The Locker to lock this on behalf of.
      * @param lockType Then lock type requested
      * @param timeout  milliseconds to time out after if lock couldn't be obtained. 0 means block indefinitely.
-     * @throws LockTimeoutException when the transaction time limit was exceeded.
-     * @throws DeadlockException    when deadlock was detected
+     * @throws LockTimeoutException    when the transaction time limit was exceeded.
+     * @throws DeadlockException       when deadlock was detected
+     * @throws LockInterruptException  when catch InterruptedException
+     * @throws NotSupportLockException when lock request not support, such as request (S or X) lock in (IS or IX) scope
      */
-
-    public void lock(long rid, Locker locker, LockType lockType, long timeout)
-            throws LockInterruptException, LockTimeoutException, DeadlockException {
-
+    public void lock(long rid, Locker locker, LockType lockType, long timeout) throws LockException {
         final long startTime = System.currentTimeMillis();
         locker.setLockRequestTimeMs(startTime);
 
@@ -121,10 +120,13 @@ public class LockManager {
              * and it will be processed directly according to the lock timeout.*/
             boolean lockTimeOut = (timeout != 0) && timeRemain(timeout, startTime) <= 0;
             if (lockTimeOut) {
-                removeFromWaiterList(rid, locker, lockType);
-
-                /* Failure to acquire lock within the timeout ms*/
-                throw new LockTimeoutException("");
+                if (removeFromWaiterList(rid, locker, lockType)) {
+                    /* Failure to acquire lock within the timeout ms*/
+                    throw new LockTimeoutException("");
+                } else {
+                    /* Locker has become the owner */
+                    return;
+                }
             }
 
             /*
@@ -166,10 +168,13 @@ public class LockManager {
 
                     boolean lockTimeOut = (timeout != 0) && timeRemain(timeout, startTime) <= 0;
                     if (lockTimeOut) {
-                        removeFromWaiterList(rid, locker, lockType);
-
-                        /* Failure to acquire lock within the timeout ms*/
-                        throw new LockTimeoutException("");
+                        if (removeFromWaiterList(rid, locker, lockType)) {
+                            /* Failure to acquire lock within the timeout ms*/
+                            throw new LockTimeoutException("");
+                        } else {
+                            /* Locker has become the owner */
+                            break;
+                        }
                     }
 
                     /*
@@ -221,11 +226,15 @@ public class LockManager {
         while (true) {
             boolean lockTimeOut = (timeout != 0) && timeRemain(timeout, startTime) < 0;
             if (lockTimeOut && dc != null) {
-                removeFromWaiterList(rid, currentLocker, lockType);
-                /* Failure to acquire lock within the timeout ms */
-                DeadlockException exception = DeadlockException.makeDeadlockException(dc, currentLocker, false);
-                LOG.warn(exception.getMessage());
-                throw exception;
+                if (removeFromWaiterList(rid, currentLocker, lockType)) {
+                    /* Failure to acquire lock within the timeout ms */
+                    DeadlockException exception = DeadlockException.makeDeadlockException(dc, currentLocker, false);
+                    LOG.warn(exception.getMessage(), exception);
+                    throw exception;
+                } else {
+                    /* Locker has become the owner */
+                    return true;
+                }
             }
 
             /*
@@ -262,7 +271,7 @@ public class LockManager {
         }
     }
 
-    public void release(long rid, Locker locker, LockType lockType) {
+    public void release(long rid, Locker locker, LockType lockType) throws LockException {
         Set<Locker> newOwners;
 
         int lockTableIdx = getLockTableIndex(rid);
@@ -296,7 +305,7 @@ public class LockManager {
         }
     }
 
-    public boolean isOwnerInternal(long rid, Locker locker, LockType lockType, int lockTableIndex) {
+    private boolean isOwnerInternal(long rid, Locker locker, LockType lockType, int lockTableIndex) {
         final Map<Long, Lock> lockTable = lockTables[lockTableIndex];
         final Lock lock = lockTable.get(rid);
         return lock != null && lock.isOwner(locker, lockType);
@@ -319,12 +328,22 @@ public class LockManager {
         return useLock.cloneOwners();
     }
 
-    private void removeFromWaiterList(long rid, Locker locker, LockType lockType) {
+    /**
+     * removeFromWaiterList will determine whether the locker has become the owner.
+     * Because there may be a lock-free window period between judging
+     * isOwner and removeFromWaiterList separately, so second judgment is required here.
+     */
+    private boolean removeFromWaiterList(long rid, Locker locker, LockType lockType) {
         int lockTableIndex = getLockTableIndex(rid);
         synchronized (lockTableMutexes[lockTableIndex]) {
+            if (isOwnerInternal(rid, locker, lockType, lockTableIndex)) {
+                return false;
+            }
+
             Map<Long, Lock> lockTable = lockTables[lockTableIndex];
             Lock lock = lockTable.get(rid);
             lock.removeWaiter(locker, lockType);
+            return true;
         }
     }
 
@@ -370,12 +389,16 @@ public class LockManager {
             Locker locker = owner.getLocker();
 
             JsonObject readerInfo = new JsonObject();
-            readerInfo.addProperty("id", owner.getLocker().getThreadID());
+            readerInfo.addProperty("id", owner.getLocker().getThreadId());
             readerInfo.addProperty("name", owner.getLocker().getThreadName());
+            readerInfo.addProperty("type", owner.getLockType().toString());
             readerInfo.addProperty("heldFor", nowMs - owner.getLockAcquireTimeMs());
+            if (locker.getQueryId() != null) {
+                readerInfo.addProperty("queryId", locker.getQueryId().toString());
+            }
             readerInfo.addProperty("waitTime", owner.getLockAcquireTimeMs() - locker.getLockRequestTimeMs());
             readerInfo.add("stack", LogUtil.getStackTraceToJsonArray(
-                    locker.getLockerThread(), 0, DEFAULT_STACK_RESERVE_LEVELS));
+                    locker.getLockerThread(), 0, Short.MAX_VALUE));
             ownerArray.add(readerInfo);
         }
         ownerInfo.add("owners", ownerArray);
@@ -386,11 +409,13 @@ public class LockManager {
             Locker locker = waiter.getLocker();
 
             JsonObject readerInfo = new JsonObject();
-            readerInfo.addProperty("id", locker.getThreadID());
-            readerInfo.addProperty("name", locker.getThreadName());
-            readerInfo.addProperty("heldFor", "");
+            readerInfo.addProperty("id", waiter.getLocker().getThreadId());
+            readerInfo.addProperty("name", waiter.getLocker().getThreadName());
+            readerInfo.addProperty("type", waiter.getLockType().toString());
             readerInfo.addProperty("waitTime", nowMs - locker.getLockRequestTimeMs());
-            readerInfo.addProperty("locker", locker.getLockerStackTrace());
+            if (locker.getQueryId() != null) {
+                readerInfo.addProperty("queryId", locker.getQueryId().toString());
+            }
             waiterArray.add(readerInfo);
         }
         ownerInfo.add("waiter", waiterArray);
@@ -404,16 +429,23 @@ public class LockManager {
             if (Config.lock_manager_enable_resolve_deadlock) {
                 Locker victim = deadLockChecker.chooseTargetedLocker();
                 if (victim != locker) {
+                    if (isOwner(rid, locker, lockType)) {
+                        return null;
+                    }
                     return victim;
                 } else {
-                    removeFromWaiterList(rid, locker, lockType);
-                    DeadlockException exception =
-                            DeadlockException.makeDeadlockException(deadLockChecker, victim, true);
-                    LOG.warn(exception.getMessage());
-                    throw exception;
+                    if (removeFromWaiterList(rid, locker, lockType)) {
+                        DeadlockException exception =
+                                DeadlockException.makeDeadlockException(deadLockChecker, victim, true);
+                        LOG.warn(exception.getMessage(), exception);
+                        throw exception;
+                    } else {
+                        /* Locker has become the owner */
+                        return null;
+                    }
                 }
             } else {
-                String msg = "Deadlock was detected. \n" + deadLockChecker;
+                String msg = "LockManager detects dead lock.\n" + deadLockChecker;
                 LOG.warn(msg);
                 return null;
             }
@@ -455,26 +487,27 @@ public class LockManager {
             return hasCycleInternal(rootLocker, rid, rootLockType, null);
         }
 
-        private boolean hasCycleInternal(Locker checkedLocker, Long rid, LockType requestLockType, LockType ownLockType) {
-            Lock ridLock;
+        private boolean hasCycleInternal(Locker checkedLocker, Long requestLockRid, LockType requestLockType,
+                                         LockType ownLockType) {
+            Lock requestLock;
             Set<LockHolder> ownersForCheckedLock;
 
-            final int lockTableIndex = getLockTableIndex(rid);
+            final int lockTableIndex = getLockTableIndex(requestLockRid);
             synchronized (lockTableMutexes[lockTableIndex]) {
-                if (isOwnerInternal(rid, checkedLocker, requestLockType, lockTableIndex)) {
+                if (isOwnerInternal(requestLockRid, checkedLocker, requestLockType, lockTableIndex)) {
                     return false;
                 }
 
                 final Map<Long, Lock> lockTable = lockTables[lockTableIndex];
-                ridLock = lockTable.get(rid);
-                ownersForCheckedLock = cloneOwnersInternal(rid, lockTableIndex);
+                requestLock = lockTable.get(requestLockRid);
+                ownersForCheckedLock = cloneOwnersInternal(requestLockRid, lockTableIndex);
             }
 
             if (ownersForCheckedLock == null) {
                 return false;
             }
 
-            CycleNode node = new CycleNode(checkedLocker, rid, ridLock, requestLockType, ownLockType);
+            CycleNode node = new CycleNode(checkedLocker, requestLockRid, requestLock, requestLockType, ownLockType);
             cycle.add(node);
 
             for (final LockHolder lockHolder : ownersForCheckedLock) {
@@ -483,23 +516,31 @@ public class LockManager {
                 final Long lockHolderWaitingForRid = locker.getWaitingForRid();
                 final LockType lockHolderWaitingForType = locker.getWaitingForType();
 
+                /*
+                 * Because the lock of LockManager is reentrant, it is possible that the owner list of
+                 * the wait lock contains itself, but this situation should not be judged as a deadlock,
+                 * so it is necessary to skip the loop that directly points to itself.
+                 *
+                 * For example, if locker1 and locker2 both hold the S lock of the same resource,
+                 * any locker that request for X lock will wait, but this is not a deadlock state.
+                 */
                 if (locker != checkedLocker) {
                     if (locker.equals(rootLocker)) {
                         cycle.get(0).ownLockType = lockHolderOwnLockType;
                         return true;
                     }
-                }
 
-                for (int i = 0; i < cycle.size(); ++i) {
-                    if (cycle.get(i).getLocker().equals(locker)) {
-                        cycle.subList(0, i).clear();
-                        return true;
+                    for (int i = 0; i < cycle.size(); ++i) {
+                        if (cycle.get(i).getLocker().equals(locker)) {
+                            cycle.subList(0, i).clear();
+                            return true;
+                        }
                     }
-                }
 
-                if (lockHolderWaitingForRid != null) {
-                    if (hasCycleInternal(locker, lockHolderWaitingForRid, lockHolderWaitingForType, lockHolderOwnLockType)) {
-                        return true;
+                    if (lockHolderWaitingForRid != null) {
+                        if (hasCycleInternal(locker, lockHolderWaitingForRid, lockHolderWaitingForType, lockHolderOwnLockType)) {
+                            return true;
+                        }
                     }
                 }
             }
@@ -524,13 +565,15 @@ public class LockManager {
                 final LockType ownType = cycleNode.getOwnLockType();
 
                 sb.append("Locker: \"");
-                sb.append(locker).append("\" --- owns lock: ");
-                sb.append(System.identityHashCode(ownLock)).append("(RID: ").append(lockRID);
-                sb.append(", ownedType: ").append(ownType).append("), ");
-
-                sb.append("waits for lock: ");
-                sb.append(System.identityHashCode(lock)).append("(RID: ").append(rid);
-                sb.append(", requestType: ").append(requestType).append(")");
+                sb.append(locker).append("\" --- owns lock(");
+                sb.append("HashCode: ").append(System.identityHashCode(ownLock)).append(", ");
+                sb.append("Rid: ").append(lockRID).append(", ");
+                sb.append("LockType: ").append(ownType).append(")");
+                sb.append(", ");
+                sb.append("waits for lock(");
+                sb.append("HashCode: ").append(System.identityHashCode(lock)).append(", ");
+                sb.append("Rid: ").append(rid).append(", ");
+                sb.append("LockType: ").append(requestType).append(")");
                 sb.append("\n");
 
                 ownLock = lock;
@@ -583,8 +626,8 @@ public class LockManager {
         @Override
         public int compare(DeadLockChecker.CycleNode nc1, DeadLockChecker.CycleNode nc2) {
 
-            return (int) (nc1.getLocker().getThreadID() -
-                    nc2.getLocker().getThreadID());
+            return (int) (nc1.getLocker().getThreadId() -
+                    nc2.getLocker().getThreadId());
         }
     }
 }

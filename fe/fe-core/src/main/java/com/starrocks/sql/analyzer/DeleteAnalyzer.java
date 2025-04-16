@@ -31,16 +31,20 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.load.Load;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -54,6 +58,7 @@ import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
+import java.util.Map;
 
 public class DeleteAnalyzer {
     private static final Logger LOG = LogManager.getLogger(DeleteAnalyzer.class);
@@ -181,11 +186,24 @@ public class DeleteAnalyzer {
         deleteStatement.setDeleteConditions(deleteConditions);
     }
 
+    private static void analyzeProperties(DeleteStmt deleteStmt, ConnectContext session) {
+        Map<String, String> properties = deleteStmt.getProperties();
+        properties.put(LoadStmt.MAX_FILTER_RATIO_PROPERTY,
+                String.valueOf(session.getSessionVariable().getInsertMaxFilterRatio()));
+        properties.put(LoadStmt.STRICT_MODE, String.valueOf(session.getSessionVariable().getEnableInsertStrict()));
+        properties.put(LoadStmt.TIMEOUT_PROPERTY, String.valueOf(session.getSessionVariable().getInsertTimeoutS()));
+    }
+
     public static void analyze(DeleteStmt deleteStatement, ConnectContext session) {
+        analyzeProperties(deleteStatement, session);
+
         TableName tableName = deleteStatement.getTableName();
-        MetaUtils.normalizationTableName(session, tableName);
         MetaUtils.checkNotSupportCatalog(tableName.getCatalog(), "DELETE");
-        MetaUtils.getDatabase(session, tableName);
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getDb(session, tableName.getCatalog(), tableName.getDb());
+        if (db == null) {
+            throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
+        }
         Table table = MetaUtils.getSessionAwareTable(session, null, tableName);
 
         if (table instanceof MaterializedView) {
@@ -211,10 +229,10 @@ public class DeleteAnalyzer {
         SelectList selectList = new SelectList();
         for (Column col : table.getBaseSchema()) {
             SelectListItem item;
-            if (col.isKey()) {
+            if (col.isKey() || col.isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
                 item = new SelectListItem(new SlotRef(tableName, col.getName()), col.getName());
             } else {
-                break;
+                continue;
             }
             selectList.addItem(item);
         }

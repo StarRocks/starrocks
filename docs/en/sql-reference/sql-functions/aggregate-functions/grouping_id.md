@@ -1,11 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 
 # grouping_id
 
-## Description
+
 
 grouping_id is used to distinguish the grouping statistics results of the same grouping standard.
 

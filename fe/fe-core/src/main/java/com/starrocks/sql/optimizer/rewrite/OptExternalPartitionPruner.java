@@ -24,8 +24,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
-import com.starrocks.catalog.HiveMetaStoreTable;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
@@ -34,10 +32,12 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.connector.RemoteFileDesc;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
 import com.starrocks.connector.elasticsearch.EsTablePartitions;
+import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.planner.PartitionPruner;
 import com.starrocks.planner.RangePartitionPruner;
@@ -86,14 +86,15 @@ public class OptExternalPartitionPruner {
     }
 
     public static LogicalScanOperator prunePartitionsImpl(OptimizerContext context,
-            LogicalScanOperator logicalScanOperator) {
+                                                          LogicalScanOperator logicalScanOperator) {
         if (logicalScanOperator instanceof LogicalEsScanOperator) {
             LogicalEsScanOperator operator = (LogicalEsScanOperator) logicalScanOperator;
             EsTablePartitions esTablePartitions = operator.getEsTablePartitions();
 
             Collection<Long> partitionIds = null;
             try {
-                partitionIds = partitionPrune(esTablePartitions.getPartitionInfo(), operator.getColumnFilters());
+                partitionIds = partitionPrune(operator.getTable(),
+                        esTablePartitions.getPartitionInfo(), operator.getColumnFilters());
             } catch (AnalysisException e) {
                 LOG.warn("Es Table partition prune failed. ", e);
             }
@@ -222,7 +223,8 @@ public class OptExternalPartitionPruner {
         return true;
     }
 
-    // Note: The isConstant() method cannot be used here. If the child of CallOperator is constant, isConstant() will return true, but partition pruning cannot be performed.
+    // Note: The isConstant() method cannot be used here. If the child of CallOperator is constant, isConstant() will return
+    // true, but partition pruning cannot be performed.
     private static boolean isConstantOrColumnRef(ScalarOperator scalarOperator) {
         return (scalarOperator instanceof ConstantOperator) || scalarOperator.isColumnRef();
     }
@@ -241,7 +243,8 @@ public class OptExternalPartitionPruner {
 
     // get equivalence predicate which column ref is partition column
     public static List<Optional<ScalarOperator>> getEffectivePartitionPredicate(LogicalScanOperator operator,
-            List<Column> partitionColumns, ScalarOperator predicate) {
+                                                                                List<Column> partitionColumns,
+                                                                                ScalarOperator predicate) {
         if (partitionColumns.isEmpty()) {
             return Lists.newArrayList();
         }
@@ -279,15 +282,15 @@ public class OptExternalPartitionPruner {
     }
 
     private static void initPartitionInfo(LogicalScanOperator operator, OptimizerContext context,
-            Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
-            Map<ColumnRefOperator, Set<Long>> columnToNullPartitions) throws AnalysisException {
+                                          Map<ColumnRefOperator,
+                                                  ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
+                                          Map<ColumnRefOperator, Set<Long>> columnToNullPartitions) throws AnalysisException {
         Table table = operator.getTable();
         // RemoteScanPartitionPruneRule may be run multiple times, such like after MaterializedViewRewriter rewrite，
         // the predicates of scan operator may changed, it need to re-compute the ScanOperatorPredicates.
         operator.getScanOperatorPredicates().clear();
-        if (table instanceof HiveMetaStoreTable) {
-            HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
-            List<Column> partitionColumns = hmsTable.getPartitionColumns();
+        if (table.isHMSTable()) {
+            List<Column> partitionColumns = table.getPartitionColumns();
             List<ColumnRefOperator> partitionColumnRefOperators = new ArrayList<>();
             for (Column column : partitionColumns) {
                 ColumnRefOperator partitionColumnRefOperator = operator.getColumnReference(column);
@@ -298,18 +301,21 @@ public class OptExternalPartitionPruner {
 
             if (context.getDumpInfo() != null) {
                 context.getDumpInfo()
-                        .getHMSTable(hmsTable.getResourceName(), hmsTable.getDbName(), hmsTable.getTableName())
+                        .getHMSTable(table.getResourceName(), table.getCatalogDBName(), table.getCatalogTableName())
                         .setPartitionNames(new ArrayList<>());
             }
 
             List<Pair<PartitionKey, Long>> partitionKeys = Lists.newArrayList();
-            if (!hmsTable.isUnPartitioned()) {
+            if (!table.isUnPartitioned()) {
                 if (!context.getSessionVariable().isAllowHiveWithoutPartitionFilter()
                         && !checkPartitionPredicates(operator, partitionColumns)) {
                     LOG.warn("Partition pruning is invalid. queryId: {}", DebugUtil.printId(context.getQueryId()));
                     throw new AnalysisException("Partition pruning is invalid, please check: "
                             + "1. The partition predicate must be included. "
-                            + "2. The left and right children of the partition predicate cannot be function parameters.");
+                            + "2. The left and right children of the partition predicate cannot be function parameters. "
+                            + "Table: " + table.getCatalogName() + "." + table.getCatalogDBName()
+                            + "." + table.getCatalogTableName() + " " + "Partition columns: "
+                            + partitionColumns.stream().map(Column::getName).collect(Collectors.joining(", ")));
                 }
 
                 // get partition names
@@ -320,19 +326,19 @@ public class OptExternalPartitionPruner {
                 if (effectivePartitionPredicate.stream().anyMatch(Optional::isPresent)) {
                     List<Optional<String>> partitionValues = getPartitionValue(effectivePartitionPredicate);
                     partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                            .listPartitionNamesByValue(hmsTable.getCatalogName(), hmsTable.getDbName(),
-                                    hmsTable.getTableName(), partitionValues);
+                            .listPartitionNamesByValue(table.getCatalogName(), table.getCatalogDBName(),
+                                    table.getCatalogTableName(), partitionValues);
                 } else {
                     partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                            .listPartitionNames(hmsTable.getCatalogName(), hmsTable.getDbName(),
-                                    hmsTable.getTableName());
+                            .listPartitionNames(table.getCatalogName(), table.getCatalogDBName(),
+                                    table.getCatalogTableName(), ConnectorMetadatRequestContext.DEFAULT);
                 }
 
                 List<PartitionKey> keys = new ArrayList<>();
                 List<Long> ids = new ArrayList<>();
                 for (String partName : partitionNames) {
                     List<String> values = toPartitionValues(partName);
-                    PartitionKey partitionKey = createPartitionKey(values, partitionColumns, table.getType());
+                    PartitionKey partitionKey = createPartitionKey(values, partitionColumns, table);
                     keys.add(partitionKey);
                     ids.add(context.getNextUniquePartitionId());
                 }
@@ -381,7 +387,8 @@ public class OptExternalPartitionPruner {
     }
 
     private static void classifyConjuncts(LogicalScanOperator operator,
-            Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap)
+                                          Map<ColumnRefOperator,
+                                                  ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap)
             throws AnalysisException {
         for (ScalarOperator scalarOperator : Utils.extractConjuncts(operator.getPredicate())) {
             List<ColumnRefOperator> columnRefOperatorList = Utils.extractColumnRef(scalarOperator);
@@ -394,11 +401,12 @@ public class OptExternalPartitionPruner {
     }
 
     private static void computePartitionInfo(LogicalScanOperator operator, OptimizerContext context,
-            Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
-            Map<ColumnRefOperator, Set<Long>> columnToNullPartitions) throws AnalysisException {
+                                             Map<ColumnRefOperator,
+                                                     ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
+                                             Map<ColumnRefOperator, Set<Long>> columnToNullPartitions) throws AnalysisException {
         Table table = operator.getTable();
         ScanOperatorPredicates scanOperatorPredicates = operator.getScanOperatorPredicates();
-        if (table instanceof HiveMetaStoreTable) {
+        if (table.isHMSTable()) {
             ListPartitionPruner partitionPruner =
                     new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions,
                             scanOperatorPredicates.getPartitionConjuncts(), null);
@@ -417,41 +425,19 @@ public class OptExternalPartitionPruner {
 
             scanOperatorPredicates.setSelectedPartitionIds(selectedPartitionIds);
             scanOperatorPredicates.getNoEvalPartitionConjuncts().addAll(partitionPruner.getNoEvalConjuncts());
-        } else if (table instanceof IcebergTable) {
-            IcebergTable icebergTable = (IcebergTable) table;
-            if (!icebergTable.getSnapshot().isPresent()) {
-                // TODO: for iceberg table, it cannot decide whether it's pruned or not when `selectedPartitionIds`
-                //  is empty. It's expensive to set all partitions here.
-                return;
-            }
-
-            // Use mutable map instead of immutable map so can be re-partition-prune, see ScanOperatorPredicates#clear().
-            Map<Long, PartitionKey> partitionKeyMap = Maps.newHashMap();
-            if (table.isUnPartitioned()) {
-                partitionKeyMap.put(0L, new PartitionKey());
-            } else {
-                String catalogName = icebergTable.getCatalogName();
-                List<PartitionKey> partitionKeys = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                        .getPrunedPartitions(catalogName, icebergTable, operator.getPredicate(), operator.getLimit());
-                for (PartitionKey partitionKey : partitionKeys) {
-                    partitionKeyMap.put(context.getNextUniquePartitionId(), partitionKey);
-                }
-            }
-
-            scanOperatorPredicates.getIdToPartitionKey().putAll(partitionKeyMap);
-            scanOperatorPredicates.setSelectedPartitionIds(partitionKeyMap.keySet());
         } else if (table instanceof PaimonTable) {
             PaimonTable paimonTable = (PaimonTable) table;
             List<String> fieldNames = operator.getColRefToColumnMetaMap().keySet().stream()
                     .map(ColumnRefOperator::getName)
                     .collect(Collectors.toList());
-            List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
-                    paimonTable.getCatalogName(), table, null, -1, operator.getPredicate(), fieldNames, -1);
+            GetRemoteFilesParams params =
+                    GetRemoteFilesParams.newBuilder().setPredicate(operator.getPredicate()).setFieldNames(fieldNames).build();
+            List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(table, params);
             if (fileInfos.isEmpty()) {
                 return;
             }
 
-            RemoteFileDesc remoteFileDesc = fileInfos.get(0).getFiles().get(0);
+            PaimonRemoteFileDesc remoteFileDesc = (PaimonRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
             if (remoteFileDesc == null) {
                 return;
             }
@@ -475,8 +461,8 @@ public class OptExternalPartitionPruner {
      * @return
      * @throws AnalysisException
      */
-    private static Collection<Long> partitionPrune(PartitionInfo partitionInfo,
-            Map<String, PartitionColumnFilter> columnFilters) throws AnalysisException {
+    private static Collection<Long> partitionPrune(Table table, PartitionInfo partitionInfo,
+                                                   Map<String, PartitionColumnFilter> columnFilters) throws AnalysisException {
         if (partitionInfo == null) {
             return null;
         }
@@ -486,8 +472,10 @@ public class OptExternalPartitionPruner {
             case EXPR_RANGE: {
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
                 Map<Long, Range<PartitionKey>> keyRangeById = rangePartitionInfo.getIdToRange(false);
-                partitionPruner =
-                        new RangePartitionPruner(keyRangeById, rangePartitionInfo.getPartitionColumns(), columnFilters);
+                partitionPruner = new RangePartitionPruner(
+                        keyRangeById,
+                        rangePartitionInfo.getPartitionColumns(table.getIdToColumn()),
+                        columnFilters);
                 return partitionPruner.prune();
             }
             default: {
@@ -577,7 +565,8 @@ public class OptExternalPartitionPruner {
     }
 
     private static BinaryPredicateOperator buildMinMaxConjunct(BinaryType type, ScalarOperator left,
-            ScalarOperator right, LogicalScanOperator operator) throws AnalysisException {
+                                                               ScalarOperator right, LogicalScanOperator operator)
+            throws AnalysisException {
         ScanOperatorPredicates scanOperatorPredicates = operator.getScanOperatorPredicates();
         ColumnRefOperator columnRefOperator = (ColumnRefOperator) left;
         scanOperatorPredicates.getMinMaxColumnRefMap().putIfAbsent(columnRefOperator,

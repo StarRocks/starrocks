@@ -19,33 +19,19 @@ import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
-import org.junit.After;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.time.Instant;
-
-public class MvTransparentRewriteWithHiveTableTest extends MvRewriteTestBase {
+public class MvTransparentRewriteWithHiveTableTest extends MVTestBase {
     private static MockedHiveMetadata mockedHiveMetadata;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
         mockedHiveMetadata =
                 (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
                         getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
-    }
-
-    @Before
-    public void before() {
-        startCaseTime = Instant.now().getEpochSecond();
-    }
-
-    @After
-    public void after() throws Exception {
-        PlanTestBase.cleanupEphemeralMVs(starRocksAssert, startCaseTime);
     }
 
     private void withPartialScanMv(StarRocksAssert.ExceptionRunnable runner) {
@@ -217,13 +203,16 @@ public class MvTransparentRewriteWithHiveTableTest extends MvRewriteTestBase {
 
             {
                 String[] sqls = {
-                        "SELECT * FROM mv0 WHERE l_shipdate >= '1998-01-01' and l_suppkey > 100;",
                         "SELECT * FROM mv0 WHERE l_shipdate != '1998-01-01' and l_suppkey > 100;",
+                        "SELECT * FROM mv0 WHERE l_shipdate >= '1998-01-01' and l_suppkey > 100;",
                         "SELECT * FROM mv0 WHERE l_shipdate <= '1998-01-05' and l_suppkey > 100;",
                 };
                 for (String query : sqls) {
+                    System.out.println(query);
                     String plan = getFragmentPlan(query);
-                    PlanTestBase.assertContains(plan, ":UNION", ": mv0", ": lineitem_par");
+                    // transparent plan will contain union, but it can be pruned
+                    PlanTestBase.assertNotContains(plan, "UNION");
+                    PlanTestBase.assertContains(plan, ": mv0");
                 }
             }
         });

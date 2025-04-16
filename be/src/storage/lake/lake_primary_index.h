@@ -68,11 +68,21 @@ public:
 
     Status commit(const TabletMetadataPtr& metadata, MetaFileBuilder* builder);
 
-    Status major_compact(const TabletMetadata& metadata, TxnLogPB* txn_log);
-
     double get_local_pk_index_write_amp_score();
 
     void set_local_pk_index_write_amp_score(double score);
+
+    // This function is used for handling delete operation in cloud native PK table.
+    // It is different from another pk index implementation (such as in-memory index or local persistent index),
+    // because it need `rowset_id` to setup the rebuild point.
+    //
+    // |metadata| Used to decide the index type.
+    //
+    // |key_col| contains the *encoded* primary keys to be deleted from this index.
+    // The position of deleted keys will be appended into |new_deletes|.
+    //
+    // |rowset_id| The rowset that keys belong to. Used for setup rebuild point (cloud native index only).
+    Status erase(const TabletMetadataPtr& metadata, const Column& pks, DeletesMap* deletes, uint32_t rowset_id);
 
 private:
     Status _do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,

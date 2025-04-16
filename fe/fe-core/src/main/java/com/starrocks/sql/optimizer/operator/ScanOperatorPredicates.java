@@ -46,6 +46,8 @@ public class ScanOperatorPredicates {
     private List<ScalarOperator> minMaxConjuncts = new ArrayList<>();
     // Map of columnRefOperator to column which column in minMaxConjuncts
     private Map<ColumnRefOperator, Column> minMaxColumnRefMap = Maps.newHashMap();
+    // flag to indicate whether if has pruned partition
+    private boolean hasPrunedPartition = false;
 
     public Map<Long, PartitionKey> getIdToPartitionKey() {
         return idToPartitionKey;
@@ -64,6 +66,7 @@ public class ScanOperatorPredicates {
     }
 
     public void setSelectedPartitionIds(Collection<Long> selectedPartitionIds) {
+        this.hasPrunedPartition = true;
         this.selectedPartitionIds = selectedPartitionIds;
     }
 
@@ -96,6 +99,10 @@ public class ScanOperatorPredicates {
         return minMaxColumnRefMap;
     }
 
+    public boolean hasPrunedPartition() {
+        return hasPrunedPartition;
+    }
+
     public void clear() {
         idToPartitionKey.clear();
         selectedPartitionIds.clear();
@@ -116,6 +123,7 @@ public class ScanOperatorPredicates {
         other.nonPartitionConjuncts.addAll(this.nonPartitionConjuncts);
         other.minMaxConjuncts.addAll(this.minMaxConjuncts);
         other.minMaxColumnRefMap.putAll(this.minMaxColumnRefMap);
+        other.hasPrunedPartition = this.hasPrunedPartition;
 
         return other;
     }

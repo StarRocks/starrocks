@@ -40,8 +40,11 @@
 #include <atomic>
 #include <ctime>
 #include <fstream>
+#include <sstream>
 
 #include "agent/master_info.h"
+#include "agent/task_worker_pool.h"
+#include "common/process_exit.h"
 #include "common/status.h"
 #include "gen_cpp/HeartbeatService.h"
 #include "runtime/heartbeat_flags.h"
@@ -58,8 +61,6 @@ using std::vector;
 using apache::thrift::transport::TProcessor;
 
 namespace starrocks {
-extern std::atomic<bool> k_starrocks_exit;
-extern std::atomic<bool> k_starrocks_exit_quick;
 
 static int64_t reboot_time = 0;
 
@@ -74,36 +75,39 @@ void HeartbeatServer::init_cluster_id_or_die() {
 
 void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMasterInfo& master_info) {
     //print heartbeat in every minute
-    LOG_EVERY_N(INFO, 12) << "get heartbeat from FE."
-                          << "host:" << master_info.network_address.hostname
+    LOG_EVERY_N(INFO, 12) << "get heartbeat from FE. host:" << master_info.network_address.hostname
                           << ", port:" << master_info.network_address.port << ", cluster id:" << master_info.cluster_id
+                          << ", node type:"
+                          << (master_info.__isset.node_type ? std::to_string(master_info.node_type) : "N/A")
                           << ", run_mode:" << master_info.run_mode << ", counter:" << google::COUNTER;
 
-    // do heartbeat
-    StatusOr<CmpResult> res = compare_master_info(master_info);
+    if (master_info.encrypted != config::enable_transparent_data_encryption) {
+        LOG(FATAL) << "inconsistent encryption config, FE encrypted:" << master_info.encrypted
+                   << " BE/CN:" << config::enable_transparent_data_encryption;
+    }
+
+    StatusOr<CmpResult> res;
+    // reject master's heartbeat when exit
+    if (process_exit_in_progress()) {
+        res = Status::Shutdown("BE is shutting down");
+    } else {
+        res = compare_master_info(master_info);
+    }
     res.status().to_thrift(&heartbeat_result.status);
     if (!res.ok()) {
         MasterInfoPtr ptr;
         if (get_master_info(&ptr)) {
-            LOG(WARNING) << "Fail to handle heartbeat: " << res.status() << " cached master info: " << *ptr
-                         << " received master info: " << master_info;
+            LOG(WARNING) << "Fail to handle heartbeat: " << res.status()
+                         << " cached master info: " << print_master_info(*ptr)
+                         << " received master info: " << print_master_info(master_info);
         } else {
             LOG(WARNING) << "Fail to handle heartbeat: " << res.status();
         }
     } else if (*res == kNeedUpdate) {
-        LOG(INFO) << "Updating master info: " << master_info;
+        LOG(INFO) << "Updating master info: " << print_master_info(master_info);
         bool r = update_master_info(master_info);
         LOG_IF(WARNING, !r) << "Fail to update master info, maybe the master info has been updated by another thread "
                                "with a larger epoch";
-    } else if (*res == kNeedUpdateAndReport) {
-        LOG(INFO) << "Updating master info: " << master_info;
-        bool r = update_master_info(master_info);
-        LOG_IF(WARNING, !r) << "Fail to update master info, maybe the master info has been updated by another thread "
-                               "with a larger epoch";
-        if (r) {
-            LOG(INFO) << "Master FE is changed or restarted. report tablet and disk info immediately";
-            _olap_engine->trigger_report();
-        }
     } else {
         DCHECK_EQ(kUnchanged, *res);
         // nothing to do
@@ -117,12 +121,19 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
         _olap_engine->decommission_disks(master_info.decommissioned_disks);
     }
 
+    if (master_info.__isset.stop_regular_tablet_report) {
+        ReportOlapTableTaskWorkerPool::set_regular_report_stopped(master_info.stop_regular_tablet_report);
+    } else {
+        ReportOlapTableTaskWorkerPool::set_regular_report_stopped(false);
+    }
+
     static auto num_hardware_cores = static_cast<int32_t>(CpuInfo::num_cores());
     if (res.ok()) {
         heartbeat_result.backend_info.__set_be_port(config::be_port);
         heartbeat_result.backend_info.__set_http_port(config::be_http_port);
         heartbeat_result.backend_info.__set_be_rpc_port(-1);
         heartbeat_result.backend_info.__set_brpc_port(config::brpc_port);
+        heartbeat_result.backend_info.__set_arrow_flight_port(config::arrow_flight_port);
 #ifdef USE_STAROS
         heartbeat_result.backend_info.__set_starlet_port(config::starlet_port);
         if (StorageEngine::instance()->get_store_num() != 0) {
@@ -133,6 +144,7 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
 #endif
         heartbeat_result.backend_info.__set_version(get_short_version());
         heartbeat_result.backend_info.__set_num_hardware_cores(num_hardware_cores);
+        heartbeat_result.backend_info.__set_mem_limit_bytes(GlobalEnv::GetInstance()->process_mem_tracker()->limit());
         if (reboot_time == 0) {
             std::time_t currTime = std::time(nullptr);
             reboot_time = static_cast<int64_t>(currTime);
@@ -141,14 +153,21 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
     }
 }
 
+std::string HeartbeatServer::print_master_info(const TMasterInfo& master_info) const {
+    std::ostringstream out;
+    if (!master_info.__isset.token) {
+        master_info.printTo(out);
+    } else {
+        TMasterInfo master_info_copy(master_info);
+        master_info_copy.__set_token("<hidden>");
+        master_info_copy.printTo(out);
+    }
+    return out.str();
+}
+
 StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const TMasterInfo& master_info) {
     static const char* LOCALHOST = "127.0.0.1";
     static const char* LOCALHOST_IPV6 = "::1";
-
-    // reject master's heartbeat when exit
-    if (k_starrocks_exit.load(std::memory_order_relaxed) || k_starrocks_exit_quick.load(std::memory_order_relaxed)) {
-        return Status::InternalError("BE is shutting down");
-    }
 
     MasterInfoPtr curr_master_info;
     if (!get_master_info(&curr_master_info)) {
@@ -170,6 +189,18 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
     if ((master_info.network_address.hostname == LOCALHOST)) {
         if (!(master_info.backend_ip == LOCALHOST || master_info.backend_ip == LOCALHOST_IPV6)) {
             return Status::InternalError("FE heartbeat with localhost ip but BE is not deployed on the same machine");
+        }
+    }
+
+    if (master_info.__isset.node_type) {
+        if (master_info.node_type == TNodeType::Backend && BackendOptions::is_cn()) {
+            LOG_EVERY_N(ERROR, 12) << "FE heartbeat with BE node type,but the node is CN,node type mismatch!";
+            return Status::InternalError("expect to be BE but actually CN,Unmatched node type!");
+        }
+
+        if (master_info.node_type == TNodeType::Compute && !BackendOptions::is_cn()) {
+            LOG_EVERY_N(ERROR, 12) << "FE heartbeat with CN node type,but the node is BE,node type mismatch!";
+            return Status::InternalError("expect to be CN but actually BE,Unmatched node type!");
         }
     }
 
@@ -223,7 +254,7 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
 
             for (auto& host : hosts) {
                 if (host.get_host_address() == ip) {
-                    BackendOptions::set_localhost(master_info.backend_ip);
+                    BackendOptions::set_localhost(master_info.backend_ip, ip);
                     set_new_localhost = true;
                     break;
                 }
@@ -233,7 +264,8 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
                 return Status::InternalError("Unmatched backend ip");
             }
 
-            LOG(INFO) << "update localhost done, the new localhost is " << BackendOptions::get_localhost();
+            LOG(INFO) << "update localhost done, the new localhost is " << BackendOptions::get_localhost()
+                      << ", new local_ip is " << BackendOptions::get_local_ip();
         }
     }
 
@@ -251,9 +283,6 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
         heartbeat_flags->update(master_info.heartbeat_flags);
     }
 
-    if (curr_master_info->network_address != master_info.network_address) {
-        return kNeedUpdateAndReport;
-    }
     if (*curr_master_info != master_info) {
         return kNeedUpdate;
     }

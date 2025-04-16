@@ -30,7 +30,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.load.pipe.FilePipeSource;
 import com.starrocks.load.pipe.Pipe;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.VariableMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -93,7 +93,7 @@ public class PipeAnalyzer {
             if (propertyName.toUpperCase().startsWith(TASK_VARIABLES_PREFIX)) {
                 // Task execution variable
                 String taskVariableName = StringUtils.removeStartIgnoreCase(propertyName, TASK_VARIABLES_PREFIX);
-                if (!VariableMgr.containsVariable(taskVariableName)) {
+                if (!GlobalStateMgr.getCurrentState().getVariableMgr().containsVariable(taskVariableName)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_PROPERTY, propertyName);
                 }
                 continue;
@@ -140,7 +140,7 @@ public class PipeAnalyzer {
                     break;
                 }
                 case PROPERTY_AUTO_INGEST: {
-                    VariableMgr.parseBooleanVariable(valueStr);
+                    ParseUtil.parseBooleanValue(valueStr, PROPERTY_AUTO_INGEST);
                     break;
                 }
                 case PropertyAnalyzer.PROPERTIES_WAREHOUSE: {
@@ -155,7 +155,8 @@ public class PipeAnalyzer {
     }
 
     public static void analyzeWarehouseProperty(String warehouseName) {
-        ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, warehouseName);
+        // If the warehouse does not exist, will report a runtime exception
+        GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
     }
 
     public static void analyze(CreatePipeStmt stmt, ConnectContext context) {
@@ -166,7 +167,7 @@ public class PipeAnalyzer {
         stmt.setTargetTable(insertStmt.getTableName());
         String insertSql = stmt.getOrigStmt().originStmt.substring(stmt.getInsertSqlStartIndex());
         stmt.setInsertSql(insertSql);
-        InsertAnalyzer.analyze(insertStmt, context);
+        Analyzer.analyze(insertStmt, context);
 
         analyzePipeName(stmt.getPipeName(), insertStmt.getTableName().getDb());
 

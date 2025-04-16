@@ -49,50 +49,54 @@ public:
     explicit ScalarColumnIterator(ColumnReader* reader);
     ~ScalarColumnIterator() override;
 
-    [[nodiscard]] Status init(const ColumnIteratorOptions& opts) override;
+    Status init(const ColumnIteratorOptions& opts) override;
 
-    [[nodiscard]] Status seek_to_first() override;
+    Status seek_to_first() override;
 
-    [[nodiscard]] Status seek_to_ordinal(ordinal_t ord) override;
+    Status seek_to_ordinal(ordinal_t ord) override;
 
-    [[nodiscard]] Status seek_to_ordinal_and_calc_element_ordinal(ordinal_t ord) override;
+    Status seek_to_ordinal_and_calc_element_ordinal(ordinal_t ord) override;
 
-    [[nodiscard]] Status next_batch(size_t* n, Column* dst) override;
+    Status next_batch(size_t* n, Column* dst) override;
 
-    [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override;
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
 
     ordinal_t get_current_ordinal() const override { return _current_ordinal; }
 
     ordinal_t num_rows() const override { return _reader->num_rows(); }
 
-    [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicate,
-                                                    const ColumnPredicate* del_predicate, SparseRange<>* range,
-                                                    CompoundNodeType pred_relationn) override;
+    bool has_zone_map() const override { return _reader->has_zone_map(); }
+
+    Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicate,
+                                      const ColumnPredicate* del_predicate, SparseRange<>* range,
+                                      CompoundNodeType pred_relationn) override;
 
     bool has_original_bloom_filter_index() const override;
     bool has_ngram_bloom_filter_index() const override;
-    [[nodiscard]] Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                                        SparseRange<>* range) override;
+    Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                          SparseRange<>* range) override;
 
     bool all_page_dict_encoded() const override { return _all_dict_encoded; }
 
-    [[nodiscard]] Status fetch_all_dict_words(std::vector<Slice>* words) const override;
+    Status fetch_all_dict_words(std::vector<Slice>* words) const override;
 
     int dict_lookup(const Slice& word) override;
 
-    [[nodiscard]] Status next_dict_codes(size_t* n, Column* dst) override;
+    Status next_dict_codes(size_t* n, Column* dst) override;
 
-    [[nodiscard]] Status next_dict_codes(const SparseRange<>& range, Column* dst) override;
+    Status next_dict_codes(const SparseRange<>& range, Column* dst) override;
 
-    [[nodiscard]] Status decode_dict_codes(const int32_t* codes, size_t size, Column* words) override;
+    Status decode_dict_codes(const int32_t* codes, size_t size, Column* words) override;
 
-    [[nodiscard]] Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
+    Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
-    [[nodiscard]] Status fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
+    Status fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
     ParsedPage* get_current_page() { return _page.get(); }
 
     ColumnReader* get_column_reader() override { return _reader; }
+
+    Status null_count(size_t* count) override;
 
     bool is_nullable();
 
@@ -101,6 +105,9 @@ public:
     // only work when all_page_dict_encoded was true.
     // used to acquire load local dict
     int dict_size() override;
+
+    StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec(const SparseRange<>& range,
+                                                                        Column* dst) override;
 
 private:
     static Status _seek_to_pos_in_page(ParsedPage* page, ordinal_t offset_in_page);

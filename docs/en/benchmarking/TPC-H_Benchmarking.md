@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # TPC-H Benchmark
@@ -10,7 +10,7 @@ TPC-H is a decision support benchmark developed by the Transaction Processing Pe
 
 A comparative test was conducted on the TPC-H 100G scale dataset, with a total of 22 queries. The results are as follows:
 
-![TPCH 100G results](../assets/tpch.png)
+![TPCH 100G results](../_assets/tpch.png)
 
 StarRocks tested two methods using local storage and Hive table queries. StarRocks Hive table and Trino query the same data. The data is stored in ORC format and compressed in zlib format.
 
@@ -20,7 +20,7 @@ The latency for StarRocks to query data from its native storage is 21s, that for
 
 ### 2.1 Hardware environment
 
-| Machine | 3 Cloud hosts |
+| Machine | 4 Cloud hosts |
 | -------- | ----------------------------------------------------- |
 | CPU | 16core Intel(R) Xeon(R) Platinum 8269CY CPU @ 2.50GHz |
 | Memory | 64 GB |
@@ -28,6 +28,8 @@ The latency for StarRocks to query data from its native storage is 21s, that for
 | Disk | ESSD cloud disk |
 
 ### 2.2 Software environment
+
+StarRocks and Trino are deployed on machines with the same configuration. StarRocks has 1 FE and 3 BEs deployed. Trino has 1 Coordinator and 3 Workers deployed.
 
 - Kernel version: Linux 3.10.0-1127.13.1.el7.x86_64
 
@@ -54,6 +56,7 @@ The latency for StarRocks to query data from its native storage is 21s, that for
 
 :::note
 The unit of query results is ms. Lower is better.
+All queries are warmed up 1 time and then executed 3 times to take the average value as the result.
 :::
 
 | Query | StarRocks-native-3.0 | StarRocks-3.0-Hive external | Trino-419 |
@@ -190,7 +193,7 @@ select
 from
   part,
   supplier,
-  partsup,
+  partsupp,
   nation,
   region
 where
@@ -205,7 +208,7 @@ where
     select
       min(ps_supplycost)
     from
-      partsup,
+      partsupp,
       supplier,
       nation,
       region
@@ -278,7 +281,7 @@ select
 from
   customer,
   orders,
-  line item,
+  lineitem,
   supplier,
   nation,
   region
@@ -323,7 +326,7 @@ from
       l_extendedprice * (1 - l_discount) as volume
     from
       supplier,
-      line item,
+      lineitem,
       orders,
       customer,
       nation n1,
@@ -365,7 +368,7 @@ from
     from
       part,
       supplier,
-      line item,
+      lineitem,
       orders,
       customer,
       nation n1,
@@ -402,8 +405,8 @@ from
     from
       part,
       supplier,
-      line item,
-      partsup,
+      lineitem,
+      partsupp,
       orders,
       nation
     where
@@ -435,7 +438,7 @@ select
     from
       customer,
       orders,
-      line item,
+      lineitem,
       nation
     where
       c_custkey = o_custkey
@@ -461,7 +464,7 @@ select
   ps_partkey,
   sum(ps_supplycost * ps_availqty) as value
 from
-  partsup,
+  partsupp,
   supplier,
   nation
 where
@@ -474,7 +477,7 @@ group by
       select
         sum(ps_supplycost * ps_availqty) * 0.000001
       from
-        partsup,
+        partsupp,
         supplier,
         nation
       where
@@ -542,7 +545,7 @@ select
     else 0
   end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue
 from
-  line item,
+  lineitem,
   part
 where
   l_partkey = p_partkey
@@ -577,7 +580,7 @@ select
   p_size,
   count(distinct ps_suppkey) as supplier_cnt
 from
-  partsup,
+  partsupp,
   part
 where
   p_partkey = ps_partkey
@@ -606,7 +609,7 @@ order by
 select
   sum(l_extendedprice) / 7.0 as avg_yearly
 from
-  line item,
+  lineitem,
   part
 where
   p_partkey = l_partkey
@@ -660,7 +663,7 @@ limit 100;
 select
   sum(l_extendedprice* (1 - l_discount)) as revenue
 from
-  line item,
+  lineitem,
   part
 where
   (
@@ -770,7 +773,7 @@ where
 group by
         s_name
 order by
-        numwaitdesc,
+        numwait DESC,
         s_name
 limit 100;
 
@@ -924,7 +927,7 @@ PROPERTIES (
 
 #Create table partsupp
 drop table if exists partsupp;
-CREATE TABLE partsup (
+CREATE TABLE partsupp (
     ps_partkey int NOT NULL,
     ps_suppkey int NOT NULL,
     ps_availqty int NOT NULL,

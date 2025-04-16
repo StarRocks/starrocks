@@ -40,6 +40,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.gson.stream.JsonReader;
 import com.staros.starlet.StarletAgentFactory;
 import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.SetVarHint;
@@ -47,27 +48,30 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserVariableHint;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvRefreshArbiter;
+import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -78,18 +82,24 @@ import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.lake.StarOSAgent;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.EditLogDeserializer;
+import com.starrocks.persist.ImageFormatVersion;
+import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.OperationType;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.planner.PlanFragment;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
-import com.starrocks.qe.VariableMgr;
+import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
@@ -98,6 +108,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -106,16 +117,21 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
-import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
-import com.starrocks.sql.optimizer.OptimizerConfig;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
+import com.starrocks.sql.optimizer.OptimizerOptions;
+import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.dump.MockDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
@@ -126,14 +142,13 @@ import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
-import com.starrocks.system.BackendCoreStat;
+import com.starrocks.system.BackendResourceStat;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TUniqueId;
 import mockit.Mock;
 import mockit.MockUp;
-import org.apache.commons.codec.binary.Hex;
 import org.junit.Assert;
 
 import java.io.ByteArrayInputStream;
@@ -141,12 +156,11 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.RandomAccessFile;
 import java.net.ServerSocket;
 import java.nio.channels.FileLock;
 import java.nio.file.Files;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
@@ -169,26 +183,26 @@ public class UtFrameUtils {
     private static final AtomicBoolean CREATED_MIN_CLUSTER = new AtomicBoolean(false);
 
     public static final String CREATE_STATISTICS_TABLE_STMT = "CREATE TABLE `table_statistic_v1` (\n" +
-            "  `table_id` bigint(20) NOT NULL COMMENT \"\",\n" +
-            "  `column_name` varchar(65530) NOT NULL COMMENT \"\",\n" +
-            "  `db_id` bigint(20) NOT NULL COMMENT \"\",\n" +
-            "  `table_name` varchar(65530) NOT NULL COMMENT \"\",\n" +
-            "  `db_name` varchar(65530) NOT NULL COMMENT \"\",\n" +
-            "  `row_count` bigint(20) NOT NULL COMMENT \"\",\n" +
-            "  `data_size` bigint(20) NOT NULL COMMENT \"\",\n" +
-            "  `distinct_count` bigint(20) NOT NULL COMMENT \"\",\n" +
-            "  `null_count` bigint(20) NOT NULL COMMENT \"\",\n" +
-            "  `max` varchar(65530) NOT NULL COMMENT \"\",\n" +
-            "  `min` varchar(65530) NOT NULL COMMENT \"\",\n" +
-            "  `update_time` datetime NOT NULL COMMENT \"\"\n" +
-            ") ENGINE=OLAP\n" +
-            "UNIQUE KEY(`table_id`, `column_name`, `db_id`)\n" +
-            "COMMENT \"OLAP\"\n" +
-            "DISTRIBUTED BY HASH(`table_id`, `column_name`, `db_id`) BUCKETS 10\n" +
-            "PROPERTIES (\n" +
-            "\"replication_num\" = \"1\",\n" +
-            "\"in_memory\" = \"false\"\n" +
-            ");";
+                "  `table_id` bigint(20) NOT NULL COMMENT \"\",\n" +
+                "  `column_name` varchar(65530) NOT NULL COMMENT \"\",\n" +
+                "  `db_id` bigint(20) NOT NULL COMMENT \"\",\n" +
+                "  `table_name` varchar(65530) NOT NULL COMMENT \"\",\n" +
+                "  `db_name` varchar(65530) NOT NULL COMMENT \"\",\n" +
+                "  `row_count` bigint(20) NOT NULL COMMENT \"\",\n" +
+                "  `data_size` bigint(20) NOT NULL COMMENT \"\",\n" +
+                "  `distinct_count` bigint(20) NOT NULL COMMENT \"\",\n" +
+                "  `null_count` bigint(20) NOT NULL COMMENT \"\",\n" +
+                "  `max` varchar(65530) NOT NULL COMMENT \"\",\n" +
+                "  `min` varchar(65530) NOT NULL COMMENT \"\",\n" +
+                "  `update_time` datetime NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "UNIQUE KEY(`table_id`, `column_name`, `db_id`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`table_id`, `column_name`, `db_id`) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");";
 
     // Help to create a mocked ConnectContext.
     public static ConnectContext createDefaultCtx() {
@@ -205,11 +219,11 @@ public class UtFrameUtils {
 
     // Parse an origin stmt . Return a StatementBase instance.
     public static StatementBase parseStmtWithNewParser(String originStmt, ConnectContext ctx)
-            throws Exception {
+                throws Exception {
         StatementBase statementBase;
         try {
             statementBase =
-                    com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable().getSqlMode()).get(0);
+                        com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable().getSqlMode()).get(0);
             com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, ctx);
         } catch (ParsingException | SemanticException e) {
             System.err.println("parse failed: " + e.getMessage());
@@ -224,11 +238,11 @@ public class UtFrameUtils {
     }
 
     public static StatementBase parseStmtWithNewParserNotIncludeAnalyzer(String originStmt, ConnectContext ctx)
-            throws Exception {
+                throws Exception {
         StatementBase statementBase;
         try {
             statementBase =
-                    com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable().getSqlMode()).get(0);
+                        com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable().getSqlMode()).get(0);
         } catch (ParsingException e) {
             if (e.getMessage() == null) {
                 throw e;
@@ -272,11 +286,20 @@ public class UtFrameUtils {
             feConfMap.put("aws_s3_access_key", "dummy_access_key");
             feConfMap.put("aws_s3_secret_key", "dummy_secret_key");
             // turn on mock starletAgent inside StarOS
-            StarletAgentFactory.forTest = true;
+            StarletAgentFactory.AGENT_TYPE = StarletAgentFactory.AgentType.MOCK_STARLET_AGENT;
         }
         feConfMap.put("tablet_create_timeout_second", "10");
         frontend.init(starRocksHome + "/" + runningDir, feConfMap);
         frontend.start(startBDB, runMode, new String[0]);
+    }
+
+    public static void mockInitWarehouseEnv() {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return new MockedWarehouseManager();
+            }
+        };
     }
 
     public static synchronized void createMinStarRocksCluster(boolean startBDB, RunMode runMode) {
@@ -285,8 +308,8 @@ public class UtFrameUtils {
             return;
         }
         try {
-            ClientPool.beHeartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
-            ClientPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
+            ThriftConnectionPool.beHeartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
+            ThriftConnectionPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
 
             startFEServer("fe/mocked/test/" + UUID.randomUUID().toString() + "/", startBDB, runMode);
 
@@ -295,9 +318,10 @@ public class UtFrameUtils {
             // sleep to wait first heartbeat
             int retry = 0;
             while (GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(10001).getBePort() == -1 &&
-                    retry++ < 600) {
+                        retry++ < 600) {
                 Thread.sleep(100);
             }
+            FeConstants.enableUnitStatistics = true;
             CREATED_MIN_CLUSTER.set(true);
         } catch (Exception e) {
             e.printStackTrace();
@@ -305,7 +329,11 @@ public class UtFrameUtils {
     }
 
     public static void createMinStarRocksCluster() {
-        createMinStarRocksCluster(false, RunMode.SHARED_NOTHING);
+        if (RunMode.isSharedDataMode()) {
+            createMinStarRocksCluster(RunMode.SHARED_DATA);
+        } else {
+            createMinStarRocksCluster(RunMode.SHARED_NOTHING);
+        }
     }
 
     // create a min starrocks cluster with the given runMode
@@ -355,7 +383,7 @@ public class UtFrameUtils {
             int starletPort = backend.getStarletPort();
             String workerAddress = backend.getHost() + ":" + starletPort;
             GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(be.getId(), workerAddress,
-                    StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                        StarOSAgent.DEFAULT_WORKER_GROUP_ID);
         }
         return be;
     }
@@ -373,7 +401,7 @@ public class UtFrameUtils {
             int starletPort = backend.getStarletPort();
             String workerAddress = backend.getHost() + ":" + starletPort;
             GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(cn.getId(), workerAddress,
-                    StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                        StarOSAgent.DEFAULT_WORKER_GROUP_ID);
         }
         return cn;
     }
@@ -445,7 +473,7 @@ public class UtFrameUtils {
         }
 
         Assert.assertEquals("Some fragments do not belong to the fragment tree",
-                plan.getFragments().size(), visitedFragments.size());
+                    plan.getFragments().size(), visitedFragments.size());
     }
 
     /*
@@ -453,11 +481,11 @@ public class UtFrameUtils {
      */
     public static Pair<CreateMaterializedViewStatement, ExecPlan> planMVMaintenance(ConnectContext connectContext,
                                                                                     String sql)
-            throws DdlException, CloneNotSupportedException {
+                throws DdlException, CloneNotSupportedException {
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
 
         List<StatementBase> statements =
-                com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode());
+                    com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode());
         connectContext.getDumpInfo().setOriginStmt(sql);
         SessionVariable oldSessionVariable = connectContext.getSessionVariable();
         StatementBase statementBase = statements.get(0);
@@ -522,8 +550,24 @@ public class UtFrameUtils {
         }
     }
 
+    public static String getFragmentPlan(ConnectContext connectContext, String sql, String traceModule) {
+        try {
+            Pair<String, Pair<ExecPlan, String>> result =
+                        UtFrameUtils.getFragmentPlanWithTrace(connectContext, sql, traceModule);
+            Pair<ExecPlan, String> execPlanWithQuery = result.second;
+            String traceLog = execPlanWithQuery.second;
+            if (!Strings.isNullOrEmpty(traceLog)) {
+                System.out.println(traceLog);
+            }
+            return execPlanWithQuery.first.getExplainString(TExplainLevel.NORMAL);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+            return null;
+        }
+    }
+
     public static Pair<String, Pair<ExecPlan, String>> getFragmentPlanWithTrace(
-            ConnectContext connectContext, String sql, String module) throws Exception {
+                ConnectContext connectContext, String sql, String module) throws Exception {
         if (Strings.isNullOrEmpty(module)) {
             Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
             Pair<ExecPlan, String> planAndTrace = Pair.create(planPair.second, "");
@@ -532,52 +576,51 @@ public class UtFrameUtils {
             Tracers.register(connectContext);
             Tracers.init(connectContext, Tracers.Mode.LOGS, module);
             try {
-
                 Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
                 String pr = Tracers.printLogs();
                 Pair<ExecPlan, String> planAndTrace = Pair.create(planPair.second, pr);
                 return Pair.create(planPair.first, planAndTrace);
             } catch (Exception e) {
+                throw e;
+            } finally {
                 String pr = Tracers.printLogs();
                 if (!Strings.isNullOrEmpty(pr)) {
                     System.out.println(pr);
                 }
-                throw e;
-            } finally {
                 Tracers.close();
             }
         }
     }
 
     public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
-            throws Exception {
+                throws Exception {
         return buildPlan(connectContext, originStmt,
-                (context, statementBase, execPlan) -> new Pair<>(printPhysicalPlan(execPlan.getPhysicalPlan()),
-                        execPlan));
+                    (context, statementBase, execPlan) -> new Pair<>(printPhysicalPlan(execPlan.getPhysicalPlan()),
+                                execPlan));
     }
 
     public static DefaultCoordinator startScheduling(ConnectContext connectContext, String originStmt) throws Exception {
         return buildPlan(connectContext, originStmt,
-                (context, statementBase, execPlan) -> {
-                    DefaultCoordinator scheduler = createScheduler(context, statementBase, execPlan);
+                    (context, statementBase, execPlan) -> {
+                        DefaultCoordinator scheduler = createScheduler(context, statementBase, execPlan);
 
-                    scheduler.startScheduling();
+                        scheduler.exec();
 
-                    return scheduler;
-                });
+                        return scheduler;
+                    });
     }
 
     public static Pair<String, DefaultCoordinator> getPlanAndStartScheduling(ConnectContext connectContext, String originStmt)
-            throws Exception {
+                throws Exception {
         return buildPlan(connectContext, originStmt,
-                (context, statementBase, execPlan) -> {
-                    DefaultCoordinator scheduler = createScheduler(context, statementBase, execPlan);
+                    (context, statementBase, execPlan) -> {
+                        DefaultCoordinator scheduler = createScheduler(context, statementBase, execPlan);
 
-                    scheduler.startSchedulingWithoutDeploy();
-                    String plan = scheduler.getSchedulerExplain();
+                        scheduler.execWithoutDeploy();
+                        String plan = scheduler.getSchedulerExplain();
 
-                    return Pair.create(plan, scheduler);
-                });
+                        return Pair.create(plan, scheduler);
+                    });
     }
 
     public static DefaultCoordinator getScheduler(ConnectContext connectContext, String originStmt) throws Exception {
@@ -590,14 +633,14 @@ public class UtFrameUtils {
         if (statementBase instanceof DmlStmt) {
             if (statementBase instanceof InsertStmt) {
                 scheduler = new DefaultCoordinator.Factory().createInsertScheduler(context,
-                        execPlan.getFragments(), execPlan.getScanNodes(),
-                        execPlan.getDescTbl().toThrift());
+                            execPlan.getFragments(), execPlan.getScanNodes(),
+                            execPlan.getDescTbl().toThrift());
             } else {
                 throw new RuntimeException("can only handle insert DML");
             }
         } else {
             scheduler = new DefaultCoordinator.Factory().createQueryScheduler(context,
-                    execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
+                        execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
         }
 
         return scheduler;
@@ -612,12 +655,12 @@ public class UtFrameUtils {
     }
 
     private static void testView(ConnectContext connectContext, String originStmt, StatementBase statementBase)
-            throws Exception {
+                throws Exception {
         if (!FeConstants.unitTestView) {
             return;
         }
         if (statementBase instanceof QueryStatement && !connectContext.getDatabase().isEmpty() &&
-                !statementBase.isExplain()) {
+                    !statementBase.isExplain()) {
             String viewName = "view" + INDEX.getAndIncrement();
             String createView = "create view " + viewName + " as " + originStmt;
             CreateViewStmt createTableStmt;
@@ -625,12 +668,12 @@ public class UtFrameUtils {
                 createTableStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createView, connectContext);
                 try {
                     StatementBase viewStatement =
-                            SqlParser.parse(createTableStmt.getInlineViewDef(),
-                                    connectContext.getSessionVariable().getSqlMode()).get(0);
+                                SqlParser.parse(createTableStmt.getInlineViewDef(),
+                                            connectContext.getSessionVariable().getSqlMode()).get(0);
                     com.starrocks.sql.analyzer.Analyzer.analyze(viewStatement, connectContext);
                 } catch (Exception e) {
                     System.out.println("invalid view def: " + createTableStmt.getInlineViewDef()
-                            + "\nError msg:" + e.getMessage());
+                                + "\nError msg:" + e.getMessage());
                     throw e;
                 }
             } catch (SemanticException | AnalysisException e) {
@@ -652,19 +695,10 @@ public class UtFrameUtils {
 
     public static String getStmtDigest(ConnectContext connectContext, String originStmt) throws Exception {
         StatementBase statementBase =
-                com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable())
-                        .get(0);
+                    com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable())
+                                .get(0);
         Preconditions.checkState(statementBase instanceof QueryStatement);
-        QueryStatement queryStmt = (QueryStatement) statementBase;
-        String digest = SqlDigestBuilder.build(queryStmt);
-        try {
-            MessageDigest md = MessageDigest.getInstance("MD5");
-            md.reset();
-            md.update(digest.getBytes());
-            return Hex.encodeHexString(md.digest());
-        } catch (NoSuchAlgorithmException e) {
-            return "";
-        }
+        return ConnectProcessor.computeStatementDigest(statementBase);
     }
 
     private static String initMockEnv(ConnectContext connectContext, QueryDumpInfo replayDumpInfo) throws Exception {
@@ -672,7 +706,7 @@ public class UtFrameUtils {
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         if (!starRocksAssert.databaseExist("_statistics_")) {
             starRocksAssert.withDatabaseWithoutAnalyze(StatsConstants.STATISTICS_DB_NAME)
-                    .useDatabase(StatsConstants.STATISTICS_DB_NAME);
+                        .useDatabase(StatsConstants.STATISTICS_DB_NAME);
             starRocksAssert.withTable(CREATE_STATISTICS_TABLE_STMT);
         }
         // prepare dump mock environment
@@ -688,11 +722,11 @@ public class UtFrameUtils {
         // mock replay external table info
         if (!replayDumpInfo.getHmsTableMap().isEmpty()) {
             ReplayMetadataMgr replayMetadataMgr = new ReplayMetadataMgr(
-                    GlobalStateMgr.getCurrentState().getLocalMetastore(),
-                    GlobalStateMgr.getCurrentState().getConnectorMgr(),
-                    GlobalStateMgr.getCurrentState().getResourceMgr(),
-                    replayDumpInfo.getHmsTableMap(),
-                    replayDumpInfo.getTableStatisticsMap());
+                        GlobalStateMgr.getCurrentState().getLocalMetastore(),
+                        GlobalStateMgr.getCurrentState().getConnectorMgr(),
+                        GlobalStateMgr.getCurrentState().getResourceMgr(),
+                        replayDumpInfo.getHmsTableMap(),
+                        replayDumpInfo.getTableStatisticsMap());
             GlobalStateMgr.getCurrentState().setMetadataMgr(replayMetadataMgr);
         }
 
@@ -713,7 +747,7 @@ public class UtFrameUtils {
         }
 
         Set<String> dbSet = replayDumpInfo.getCreateTableStmtMap().keySet().stream().map(key -> key.split("\\.")[0])
-                .collect(Collectors.toSet());
+                    .collect(Collectors.toSet());
         dbSet.forEach(db -> {
             if (starRocksAssert.databaseExist(db)) {
                 try {
@@ -751,7 +785,7 @@ public class UtFrameUtils {
             String dropView = String.format("drop view if exists `%s`.`%s`;", dbName, viewName);
             connectContext.executeSql(dropView);
             String createView = String.format("create view `%s`.`%s` as %s",
-                    dbName, viewName, replayDumpInfo.getCreateViewStmtMap().get(normalizedViewName));
+                        dbName, viewName, replayDumpInfo.getCreateViewStmtMap().get(normalizedViewName));
             starRocksAssert.withView(createView);
         }
         // create materialized views
@@ -773,15 +807,15 @@ public class UtFrameUtils {
 
         // mock be core stat
         for (Map.Entry<Long, Integer> entry : replayDumpInfo.getNumOfHardwareCoresPerBe().entrySet()) {
-            BackendCoreStat.setNumOfHardwareCoresOfBe(entry.getKey(), entry.getValue());
+            BackendResourceStat.getInstance().setNumHardwareCoresOfBe(entry.getKey(), entry.getValue());
         }
-        BackendCoreStat.setCachedAvgNumOfHardwareCores(replayDumpInfo.getCachedAvgNumOfHardwareCores());
+        BackendResourceStat.getInstance().setCachedAvgNumHardwareCores(replayDumpInfo.getCachedAvgNumOfHardwareCores());
 
         // mock table row count
         for (Map.Entry<String, Map<String, Long>> entry : replayDumpInfo.getPartitionRowCountMap().entrySet()) {
             String dbName = entry.getKey().split("\\.")[0];
-            OlapTable replayTable = (OlapTable) GlobalStateMgr.getCurrentState().getDb("" + dbName)
-                    .getTable(entry.getKey().split("\\.")[1]);
+            OlapTable replayTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("" + dbName)
+                        .getTable(entry.getKey().split("\\.")[1]);
 
             for (Map.Entry<String, Long> partitionEntry : entry.getValue().entrySet()) {
                 setPartitionStatistics(replayTable, partitionEntry.getKey(), partitionEntry.getValue());
@@ -789,14 +823,14 @@ public class UtFrameUtils {
         }
         // mock table column statistics
         for (Map.Entry<String, Map<String, ColumnStatistic>> entry : replayDumpInfo.getTableStatisticsMap()
-                .entrySet()) {
+                    .entrySet()) {
             String dbName = entry.getKey().split("\\.")[0];
-            Table replayTable = GlobalStateMgr.getCurrentState().getDb("" + dbName)
-                    .getTable(entry.getKey().split("\\.")[1]);
+            Table replayTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("" + dbName)
+                        .getTable(entry.getKey().split("\\.")[1]);
             for (Map.Entry<String, ColumnStatistic> columnStatisticEntry : entry.getValue().entrySet()) {
                 GlobalStateMgr.getCurrentState().getStatisticStorage()
-                        .addColumnStatistic(replayTable, columnStatisticEntry.getKey(),
-                                columnStatisticEntry.getValue());
+                            .addColumnStatistic(replayTable, columnStatisticEntry.getKey(),
+                                        columnStatisticEntry.getValue());
             }
         }
         return replaySql;
@@ -820,7 +854,7 @@ public class UtFrameUtils {
         LogicalPlan logicalPlan;
         try (Timer t = Tracers.watchScope("Transformer")) {
             logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
-                    .transform((statement).getQueryRelation());
+                        .transform((statement).getQueryRelation());
 
         }
         return logicalPlan;
@@ -829,21 +863,19 @@ public class UtFrameUtils {
     public static OptExpression getQueryOptExpression(ConnectContext connectContext,
                                                       ColumnRefFactory columnRefFactory,
                                                       LogicalPlan logicalPlan,
-                                                      OptimizerConfig optimizerConfig) {
+                                                      OptimizerOptions optimizerOptions) {
         OptExpression optimizedPlan;
         try (Timer t = Tracers.watchScope("Optimizer")) {
             Optimizer optimizer = null;
-            if (optimizerConfig != null) {
-                optimizer = new Optimizer(optimizerConfig);
-            } else {
-                optimizer = new Optimizer();
+            OptimizerContext context = OptimizerFactory.mockContext(connectContext, columnRefFactory);
+            if (optimizerOptions != null) {
+                context.setOptimizerOptions(optimizerOptions);
             }
+            optimizer = OptimizerFactory.create(context);
             optimizedPlan = optimizer.optimize(
-                    connectContext,
-                    logicalPlan.getRoot(),
-                    new PhysicalPropertySet(),
-                    new ColumnRefSet(logicalPlan.getOutputColumn()),
-                    columnRefFactory);
+                        logicalPlan.getRoot(),
+                        new PhysicalPropertySet(),
+                    new ColumnRefSet(logicalPlan.getOutputColumn()));
         }
         return optimizedPlan;
     }
@@ -855,7 +887,7 @@ public class UtFrameUtils {
     }
 
     private static Pair<String, ExecPlan> getQueryExecPlan(QueryStatement statement, ConnectContext connectContext)
-            throws Exception {
+                throws Exception {
         SessionVariable oldSessionVariable = connectContext.getSessionVariable();
         try {
             if (statement.isExistQueryScopeHint()) {
@@ -869,9 +901,9 @@ public class UtFrameUtils {
             ExecPlan execPlan;
             try (Timer t = Tracers.watchScope("Builder")) {
                 execPlan = PlanFragmentBuilder
-                        .createPhysicalPlan(optimizedPlan, connectContext,
-                                logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>(),
-                                TResultSinkType.MYSQL_PROTOCAL, true);
+                            .createPhysicalPlan(optimizedPlan, connectContext,
+                                        logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>(),
+                                        TResultSinkType.MYSQL_PROTOCAL, true);
             }
             return new Pair<>(LogicalPlanPrinter.print(optimizedPlan), execPlan);
         } finally {
@@ -917,6 +949,16 @@ public class UtFrameUtils {
         tearMockEnv();
     }
 
+    public static ExecPlan getPlanFragmentFromQueryDump(ConnectContext connectContext, QueryDumpInfo dumpInfo)
+                throws Exception {
+        String q = initMockEnv(connectContext, dumpInfo);
+        try {
+            return UtFrameUtils.getPlanAndFragment(connectContext, q).second;
+        } finally {
+            tearMockEnv();
+        }
+    }
+
     public static Pair<String, ExecPlan> getNewPlanAndFragmentFromDump(ConnectContext connectContext,
                                                                        QueryDumpInfo replayDumpInfo) throws Exception {
         String replaySql = initMockEnv(connectContext, replayDumpInfo);
@@ -926,7 +968,7 @@ public class UtFrameUtils {
             StatementBase statementBase;
             try (Timer st = Tracers.watchScope("Parse")) {
                 statementBase = com.starrocks.sql.parser.SqlParser.parse(replaySql,
-                        connectContext.getSessionVariable()).get(0);
+                            connectContext.getSessionVariable()).get(0);
                 if (statementBase instanceof QueryStatement) {
                     replaceTableCatalogName(statementBase);
                 }
@@ -959,7 +1001,7 @@ public class UtFrameUtils {
             if (tableRelation.getName().getCatalog() != null) {
                 String catalogName = tableRelation.getName().getCatalog();
                 tableRelation.getName().setCatalog(
-                        CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName(catalogName, "hive"));
+                            CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName(catalogName, "hive"));
             }
         }
     }
@@ -1000,7 +1042,7 @@ public class UtFrameUtils {
         }
         for (Database db : dbs.values()) {
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
         }
     }
 
@@ -1011,13 +1053,12 @@ public class UtFrameUtils {
         }
         for (Database db : dbs.values()) {
             Locker locker = new Locker();
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
     }
 
     public static void setUpForPersistTest() {
         PseudoJournalReplayer.setUp();
-        PseudoImage.setUpImageVersion();
     }
 
     public static void tearDownForPersisTest() {
@@ -1028,24 +1069,22 @@ public class UtFrameUtils {
      * pseudo image is used to test if image is wrote correctly.
      */
     public static class PseudoImage {
-        private static AtomicBoolean isSetup = new AtomicBoolean(false);
         private DataOutputBuffer buffer;
+        private ImageWriter imageWriter;
         private static final int OUTPUT_BUFFER_INIT_SIZE = 128;
 
-        public static void setUpImageVersion() {
-            MetaContext metaContext = new MetaContext();
-            metaContext.setStarRocksMetaVersion(StarRocksFEMetaVersion.VERSION_CURRENT);
-            metaContext.setThreadLocalInfo();
-            isSetup.set(true);
-        }
-
         public PseudoImage() throws IOException {
-            assert (isSetup.get());
             buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
+            imageWriter = new ImageWriter("", ImageFormatVersion.v2, 0);
+            imageWriter.setOutputStream(buffer);
         }
 
         public DataOutputStream getDataOutputStream() {
             return buffer;
+        }
+
+        public ImageWriter getImageWriter() {
+            return imageWriter;
         }
 
         /**
@@ -1053,6 +1092,17 @@ public class UtFrameUtils {
          */
         public DataInputStream getDataInputStream() throws IOException {
             return new DataInputStream(new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()));
+        }
+
+        public SRMetaBlockReader getMetaBlockReader() throws IOException {
+            JsonReader jsonReader = new JsonReader(new InputStreamReader(new ByteArrayInputStream(buffer.getData(),
+                        0, buffer.getLength())));
+            return new SRMetaBlockReaderV2(jsonReader);
+        }
+
+        public JsonReader getJsonReader() throws IOException {
+            return new JsonReader(new InputStreamReader(new ByteArrayInputStream(buffer.getData(),
+                        0, buffer.getLength())));
         }
     }
 
@@ -1062,10 +1112,10 @@ public class UtFrameUtils {
     public static class PseudoJournalReplayer {
         // master journal queue
         private static BlockingQueue<JournalTask> masterJournalQueue =
-                new ArrayBlockingQueue<>(Config.metadata_journal_queue_size);
+                    new ArrayBlockingQueue<>(Config.metadata_journal_queue_size);
         // follower journal queue
         private static BlockingQueue<JournalTask> followerJournalQueue =
-                new ArrayBlockingQueue<>(Config.metadata_journal_queue_size);
+                    new ArrayBlockingQueue<>(Config.metadata_journal_queue_size);
         // constantly move master journal to follower and mark succeed
         private static Thread fakeJournalWriter = null;
 
@@ -1109,14 +1159,14 @@ public class UtFrameUtils {
                 }
                 DataOutputBuffer buffer = followerJournalQueue.take().getBuffer();
                 DataInputStream dis =
-                        new DataInputStream(new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()));
+                            new DataInputStream(new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()));
                 try {
-                    JournalEntity je = new JournalEntity();
-                    je.readFields(dis);
-                    if (je.getOpCode() == expectCode) {
-                        return je.getData();
+                    short opCode = dis.readShort();
+                    JournalEntity je = new JournalEntity(opCode, EditLogDeserializer.deserialize(opCode, dis));
+                    if (je.opCode() == expectCode) {
+                        return je.data();
                     } else {
-                        System.err.println("ignore irrelevant journal id " + je.getOpCode());
+                        System.err.println("ignore irrelevant journal id " + je.opCode());
                     }
                 } finally {
                     dis.close();
@@ -1128,14 +1178,16 @@ public class UtFrameUtils {
             int count = followerJournalQueue.size();
             while (!followerJournalQueue.isEmpty()) {
                 DataOutputBuffer buffer = followerJournalQueue.take().getBuffer();
-                JournalEntity je = new JournalEntity();
+                JournalEntity je = new JournalEntity(OperationType.OP_INVALID, null);
                 try (DataInputStream dis = new DataInputStream(
-                        new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()))) {
-                    je.readFields(dis);
+                            new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()))) {
+
+                    short opCode = dis.readShort();
+                    je = new JournalEntity(opCode, EditLogDeserializer.deserialize(opCode, dis));
                     GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(), je);
                     // System.out.println("replayed journal type: " + je.getOpCode());
                 } catch (JournalInconsistentException e) {
-                    System.err.println("load journal failed, type: " + je.getOpCode() + " , error: " + e.getMessage());
+                    System.err.println("load journal failed, type: " + je.opCode() + " , error: " + e.getMessage());
                     e.printStackTrace();
                     Assert.fail();
                 }
@@ -1171,11 +1223,11 @@ public class UtFrameUtils {
 
     public static boolean matchPlanWithoutId(String expect, String actual) {
         String trimedExpect = expect.replaceAll("\\d+:\\s*", "")
-                .replaceAll("\\[\\d+,", "[")
-                .replaceAll("<slot \\d+>", "<slot>");
+                    .replaceAll("\\[\\d+,", "[")
+                    .replaceAll("<slot \\d+>", "<slot>");
         String trimedActual = actual.replaceAll("\\d+:\\s*", "")
-                .replaceAll("\\[\\d+,", "[")
-                .replaceAll("<slot \\d+>", "<slot>");
+                    .replaceAll("\\[\\d+,", "[")
+                    .replaceAll("<slot \\d+>", "<slot>");
         boolean ret = trimedActual.contains(trimedExpect);
         if (!ret) {
             System.out.println("trimedExpect:");
@@ -1187,8 +1239,8 @@ public class UtFrameUtils {
     }
 
     public static void setPartitionVersion(Partition partition, long version) {
-        partition.setVisibleVersion(version, System.currentTimeMillis());
-        MaterializedIndex baseIndex = partition.getBaseIndex();
+        partition.getDefaultPhysicalPartition().setVisibleVersion(version, System.currentTimeMillis());
+        MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
         List<Tablet> tablets = baseIndex.getTablets();
         for (Tablet tablet : tablets) {
             List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
@@ -1196,6 +1248,41 @@ public class UtFrameUtils {
                 replica.updateVersionInfo(version, -1, version);
             }
         }
+    }
+
+    public static void mockLogicalScanIsEmptyOutputRows(boolean expect) {
+        new MockUp<LogicalOlapScanOperator>() {
+            /**
+             * {@link LogicalOlapScanOperator#isEmptyOutputRows()}
+             */
+            @Mock
+            public boolean isEmptyOutputRows() {
+                return expect;
+            }
+        };
+    }
+
+    public static void mockTimelinessForAsyncMVTest(ConnectContext connectContext) {
+        new MockUp<MvRefreshArbiter>() {
+            /**
+             * {@link MvRefreshArbiter#getMVTimelinessUpdateInfo(MaterializedView, boolean)}
+             */
+            @Mock
+            public MvUpdateInfo getMVTimelinessUpdateInfo(MaterializedView mv,
+                                                          boolean isQueryRewrite) {
+                return MvUpdateInfo.noRefresh(mv);
+            }
+        };
+
+        new MockUp<UtFrameUtils>() {
+            /**
+             * {@link UtFrameUtils#isPrintPlanTableNames()}
+             */
+            @Mock
+            boolean isPrintPlanTableNames() {
+                return true;
+            }
+        };
     }
 
     public static void setDefaultConfigForAsyncMVTest(ConnectContext connectContext) {
@@ -1225,6 +1312,12 @@ public class UtFrameUtils {
         // task run will only refresh 1 partition and will produce wrong result.
         Config.default_mv_partition_refresh_number = -1;
 
+        // Enable mv refresh fail on filter data in test
+        Config.mv_refresh_fail_on_filter_data = true;
+
+        // Enable mv rewrite in mv refresh by default
+        Config.enable_mv_refresh_query_rewrite = true;
+
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.runningUnitTest = true;
 
@@ -1242,6 +1335,8 @@ public class UtFrameUtils {
 
             // Disable text based rewrite by default.
             connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(false);
+            // disable mv analyze stats in FE UTs
+            connectContext.getSessionVariable().setAnalyzeForMv("");
         }
 
         new MockUp<PlanTestBase>() {
@@ -1254,6 +1349,28 @@ public class UtFrameUtils {
             }
         };
 
+        mockDML();
+    }
+
+    public static void mockQueryExecute(Runnable runnable) {
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void execute() throws Exception {
+                runnable.run();
+            }
+        };
+    }
+
+    public static void mockEnableQueryContextCache() {
+        new MockUp<QueryMaterializationContext>() {
+            @Mock
+            public boolean isEnableQueryContextCache() {
+                return true;
+            }
+        };
+    }
+
+    public static void mockDML() {
         new MockUp<StmtExecutor>() {
             /**
              * {@link StmtExecutor#handleDMLStmt(ExecPlan, DmlStmt)}
@@ -1263,14 +1380,22 @@ public class UtFrameUtils {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
                     TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-                    OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
+                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                    OlapTable tbl = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getTable(testDb.getFullName(), tableName.getTbl()));
                     if (tbl != null) {
                         for (Long partitionId : insertStmt.getTargetPartitionIds()) {
                             Partition partition = tbl.getPartition(partitionId);
-                            setPartitionVersion(partition, partition.getVisibleVersion() + 1);
+                            setPartitionVersion(partition, partition.getDefaultPhysicalPartition().getVisibleVersion() + 1);
                         }
                     }
+                } else if (stmt instanceof DeleteStmt) {
+                    DeleteStmt delete = (DeleteStmt) stmt;
+                    TableName tableName = delete.getTableName();
+                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                    OlapTable tbl = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getTable(testDb.getFullName(), tableName.getTbl()));
+                    tbl.setHasDelete();
                 }
             }
         };
@@ -1285,8 +1410,8 @@ public class UtFrameUtils {
                     clonedSessionVariable = (SessionVariable) context.getSessionVariable().clone();
                 }
                 for (Map.Entry<String, String> entry : hint.getValue().entrySet()) {
-                    VariableMgr.setSystemVariable(clonedSessionVariable,
-                            new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true);
+                    GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(clonedSessionVariable,
+                                new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true);
                 }
             } else if (hint instanceof UserVariableHint) {
                 UserVariableHint userVariableHint = (UserVariableHint) hint;
@@ -1316,5 +1441,36 @@ public class UtFrameUtils {
                 iterator.remove();
             }
         }
+    }
+
+    /***
+     * Get the OptExpression of the query which is only optimized by rbo only.
+     */
+    public static OptExpression getQueryOptExpression(ConnectContext connectContext,
+                                                      String query) {
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+        QueryStatement statement = null;
+        try {
+            statement = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(query, connectContext);
+        } catch (Exception e) {
+            Assert.fail("Parse query failed:" + DebugUtil.getStackTrace(e));
+        }
+        LogicalPlan logicalPlan = UtFrameUtils.getQueryLogicalPlan(connectContext, columnRefFactory, statement);
+        OptimizerOptions optimizerOptions = new OptimizerOptions(OptimizerOptions.OptimizerStrategy.RULE_BASED);
+        OptExpression optExpression = UtFrameUtils.getQueryOptExpression(connectContext, columnRefFactory,
+                logicalPlan, optimizerOptions);
+        return optExpression;
+    }
+
+
+    /**
+     * Get the scan operators of the query which is only optimized by rbo only.
+     */
+    public static List<LogicalScanOperator> getQueryScanOperators(ConnectContext connectContext,
+                                                                  String query) {
+        OptExpression optExpression = getQueryOptExpression(connectContext, query);
+        Assert.assertNotNull(optExpression);
+        List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(optExpression);
+        return scanOperators;
     }
 }

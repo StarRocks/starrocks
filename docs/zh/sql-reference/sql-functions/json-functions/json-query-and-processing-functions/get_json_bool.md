@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # get_json_bool
 
-## 功能
+
 
 解析并获取 `json_str` 内指定 `json_path` 下的布尔内容。如果 `json_str` 或 `json_path` 格式不正确，或者无法找到匹配项，则返回 NULL。
 

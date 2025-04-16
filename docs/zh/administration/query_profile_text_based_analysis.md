@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 文本可视化 Query Profile
@@ -62,11 +62,11 @@ ANALYZE PROFILE FROM '<Query_ID>' [, <Node_ID> [, ...] ]
 
 示例一：查询 Query Profile，不指定节点 ID。
 
-![img](../assets/Profile/text_based_profile_without_node_id.jpeg)
+![img](../_assets/Profile/text_based_profile_without_node_id.jpeg)
 
 示例二：查询 Query Profile，并指定节点 ID 为 `0`。StarRocks 会返回 Node ID 为 `0` 的节点的所有详细指标，并且高亮显示使用占比较高的指标，便于定位问题。
 
-![img](../assets/Profile/text_based_profile_with_node_id.jpeg)
+![img](../_assets/Profile/text_based_profile_with_node_id.jpeg)
 
 此外，以上方法也支持 Runtime Query Profile 的展示分析。对于开启了 Query Profile 功能，且运行超过 10 秒仍未结束的查询，您可以通过该方法获取 Profile。
 
@@ -83,7 +83,7 @@ ANALYZE PROFILE FROM '<Query_ID>' [, <Node_ID> [, ...] ]
 
 示例：
 
-![img](../assets/Profile/text_based_runtime_profile.jpeg)
+![img](../_assets/Profile/text_based_runtime_profile.jpeg)
 
 
 ## 使用 EXPLAIN ANALYZE 语句模拟分析查询
@@ -100,16 +100,16 @@ EXPLAIN ANALYZE <sql_statement>
 
 示例一：模拟分析 SELECT 语句，查询返回结果会被丢弃。
 
-![img](../assets/Profile/text_based_explain_analyze_select.jpeg)
+![img](../_assets/Profile/text_based_explain_analyze_select.jpeg)
 
 
 示例二：模拟分析 INSERT INTO 语句。完成后，导入事务会被中止，数据不会被实际导入。
 
-![img](../assets/Profile/text_based_explain_analyze_insert.jpeg)
+![img](../_assets/Profile/text_based_explain_analyze_insert.jpeg)
 
 ## 限制
 
 - EXPLAIN ANALYZE INSERT INTO 语句仅支持内表。
 - 为了获得更好的视觉效果，输出文本中包含了 ANSI 字符，以提供颜色、高亮等功能。推荐使用 MyCLI 客户端。对于不兼容 ANSI 功能的客户端，比如 MySQL 客户端，可能会出现右侧边界未对齐的现象，但并不影响使用。例如：
 
-![img](../assets/Profile/text_based_profile_not_aligned.jpeg)
+![img](../_assets/Profile/text_based_profile_not_aligned.jpeg)

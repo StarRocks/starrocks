@@ -55,9 +55,13 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.analysis.VarBinaryLiteral;
+import com.starrocks.analysis.VariableExpr;
+import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.StructField;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.SqlModeHelper;
@@ -67,6 +71,7 @@ import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ExceptRelation;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.LambdaArgument;
@@ -88,6 +93,7 @@ import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UnitIdentifier;
 import com.starrocks.sql.ast.ValueList;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
 import io.trino.sql.tree.AliasedRelation;
 import io.trino.sql.tree.AllColumns;
@@ -95,6 +101,7 @@ import io.trino.sql.tree.ArithmeticBinaryExpression;
 import io.trino.sql.tree.ArithmeticUnaryExpression;
 import io.trino.sql.tree.ArrayConstructor;
 import io.trino.sql.tree.AstVisitor;
+import io.trino.sql.tree.AtTimeZone;
 import io.trino.sql.tree.BetweenPredicate;
 import io.trino.sql.tree.BinaryLiteral;
 import io.trino.sql.tree.BooleanLiteral;
@@ -130,6 +137,7 @@ import io.trino.sql.tree.Identifier;
 import io.trino.sql.tree.IfExpression;
 import io.trino.sql.tree.InListExpression;
 import io.trino.sql.tree.InPredicate;
+import io.trino.sql.tree.Insert;
 import io.trino.sql.tree.Intersect;
 import io.trino.sql.tree.IntervalLiteral;
 import io.trino.sql.tree.IsNotNullPredicate;
@@ -156,6 +164,7 @@ import io.trino.sql.tree.Query;
 import io.trino.sql.tree.QuerySpecification;
 import io.trino.sql.tree.Rollup;
 import io.trino.sql.tree.Row;
+import io.trino.sql.tree.RowDataType;
 import io.trino.sql.tree.SearchedCaseExpression;
 import io.trino.sql.tree.SetOperation;
 import io.trino.sql.tree.SimpleCaseExpression;
@@ -170,6 +179,7 @@ import io.trino.sql.tree.TableSubquery;
 import io.trino.sql.tree.TimestampLiteral;
 import io.trino.sql.tree.Trim;
 import io.trino.sql.tree.TryExpression;
+import io.trino.sql.tree.TypeParameter;
 import io.trino.sql.tree.Union;
 import io.trino.sql.tree.Unnest;
 import io.trino.sql.tree.Values;
@@ -181,13 +191,16 @@ import io.trino.sql.tree.WithQuery;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.CURRENT_ROW;
@@ -195,6 +208,8 @@ import static com.starrocks.analysis.AnalyticWindow.BoundaryType.FOLLOWING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.PRECEDING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.UNBOUNDED_FOLLOWING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING;
+import static com.starrocks.common.util.TimeUtils.parseDateTimeFromString;
+import static com.starrocks.common.util.TimeUtils.parseTimeZoneFromString;
 import static com.starrocks.connector.parser.trino.TrinoParserUtils.alignWithInputDatetimeType;
 import static com.starrocks.connector.trino.TrinoParserUnsupportedException.trinoParserUnsupportedException;
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
@@ -225,6 +240,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                     .put(ComparisonExpression.Operator.GREATER_THAN, BinaryType.GT)
                     .put(ComparisonExpression.Operator.GREATER_THAN_OR_EQUAL, BinaryType.GE)
                     .put(ComparisonExpression.Operator.NOT_EQUAL, BinaryType.NE)
+                    .put(ComparisonExpression.Operator.IS_DISTINCT_FROM, BinaryType.EQ_FOR_NULL)
                     .build();
 
     private static final ImmutableMap<ArithmeticBinaryExpression.Operator, ArithmeticExpr.Operator> BINARY_OPERATOR_MAP =
@@ -285,7 +301,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             } else if (type == ExplainType.Type.DISTRIBUTED) {
                 queryStatement.setIsExplain(true, StatementBase.ExplainLevel.VERBOSE);
             } else if (type == ExplainType.Type.IO) {
-                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.COST);
+                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.COSTS);
             } else {
                 queryStatement.setIsExplain(true, StatementBase.ExplainLevel.NORMAL);
             }
@@ -335,7 +351,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
         return new CTERelation(
                 RelationId.of(queryStatement.getQueryRelation()).hashCode(),
-                node.getName().getValue(),
+                node.getName().getValue().toLowerCase(),
                 getColumnNames(node.getColumnNames()),
                 queryStatement);
     }
@@ -725,7 +741,13 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         }  else if (FunctionSet.INFORMATION_FUNCTIONS.contains(node.getName().toString())) {
             callExpr = new InformationFunction(node.getName().toString().toUpperCase());
         } else {
-            callExpr = new FunctionCallExpr(node.getName().toString(), arguments);
+            List<OrderByElement> orderByElements = new ArrayList<>();
+            if (node.getOrderBy().isPresent()) {
+                orderByElements = visit(node.getOrderBy().get(), context, OrderByElement.class);
+                orderByElements.forEach(e -> arguments.add(e.getExpr()));
+            }
+            callExpr = new FunctionCallExpr(node.getName().toString(),
+                    new FunctionParams(node.isDistinct(),  arguments, orderByElements));
         }
         if (node.getWindow().isPresent()) {
             return visitWindow((FunctionCallExpr) callExpr, node.getWindow().get(), context);
@@ -974,13 +996,27 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     protected ParseNode visitTimestampLiteral(TimestampLiteral node, ParseTreeContext context) {
         try {
             String value = node.getValue();
-            if (value.length() <= 10) {
-                value += " 00:00:00";
+            String formattedValue = value.length() <= 10 ? value + " 00:00:00" : value;
+            ZoneId zoneId = parseTimeZoneFromString(formattedValue);
+            if (zoneId == null) {
+                return new DateLiteral(formattedValue, Type.DATETIME);
+            } else {
+                return new FunctionCallExpr("convert_tz", List.of(
+                        new DateLiteral(parseDateTimeFromString(formattedValue), Type.DATETIME),
+                        new VariableExpr("time_zone"),
+                        new com.starrocks.analysis.StringLiteral(zoneId.toString())
+                ));
             }
-            return new DateLiteral(value, Type.DATETIME);
         } catch (AnalysisException e) {
             throw unsupportedException(PARSER_ERROR_MSG.invalidDateFormat(node.getValue()));
         }
+    }
+
+    @Override
+    protected ParseNode visitAtTimeZone(AtTimeZone node, ParseTreeContext context) {
+        Expr dt = (Expr) visit(node.getValue(), context);
+        Expr tz = (Expr) visit(node.getTimeZone(), context);
+        return new FunctionCallExpr("convert_tz", List.of(dt, new VariableExpr("time_zone"), tz));
     }
 
     @Override
@@ -993,9 +1029,11 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitExtract(Extract node, ParseTreeContext context) {
-        String fieldString = node.getField().toString();
-        return new FunctionCallExpr(fieldString,
-                new FunctionParams(Lists.newArrayList((Expr) visit(node.getExpression(), context))));
+        String fieldString = node.getField().toString().toLowerCase();
+        Expr expr = Trino2SRFunctionCallTransformer.convert(fieldString,
+                Lists.newArrayList((Expr) visit(node.getExpression(), context)));
+        return Objects.requireNonNullElseGet(expr, () -> new FunctionCallExpr(fieldString,
+                new FunctionParams(Lists.newArrayList((Expr) visit(node.getExpression(), context)))));
     }
 
     @Override
@@ -1036,6 +1074,10 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         if (binaryOp == null) {
             throw unsupportedException(String.format("Trino parser on StarRocks does not support the comparison type %s",
                     node.getOperator()));
+        }
+        if (node.getOperator() == ComparisonExpression.Operator.IS_DISTINCT_FROM) {
+            return new CompoundPredicate(CompoundPredicate.Operator.NOT, new BinaryPredicate(binaryOp,
+                    (Expr) visit(node.getLeft(), context), (Expr) visit(node.getRight(), context)), null);
         }
         return new BinaryPredicate(binaryOp, (Expr) visit(node.getLeft(), context), (Expr) visit(node.getRight(),
                 context));
@@ -1218,6 +1260,17 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     }
 
     @Override
+    protected ParseNode visitInsert(Insert node, ParseTreeContext context) {
+        List<String> parts  = node.getTarget().getParts();
+        String tableName = parts.get(parts.size() - 1);
+        List<String> columnAliases = node.getColumns().isPresent() ? node.getColumns().get().stream().
+                map(Identifier::getValue).collect(Collectors.toList()) : null;
+        return new InsertStmt(qualifiedNameToTableName(convertQualifiedName(node.getTarget())), null,
+                tableName.concat(UUID.randomUUID().toString()), columnAliases,
+        (QueryStatement) visit(node.getQuery(), context), false, new HashMap<>(0), NodePosition.ZERO);
+    }
+
+    @Override
     protected ParseNode visitCreateTableAsSelect(CreateTableAsSelect node, ParseTreeContext context) {
         Map<String, String> properties = new HashMap<>();
         if (node.getProperties() != null) {
@@ -1256,6 +1309,17 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             } else {
                 return ScalarType.createType(PrimitiveType.DATETIME);
             }
+        } else if (dataType instanceof RowDataType) {
+            RowDataType rowDataType = (RowDataType) dataType;
+            ArrayList<StructField> fields = new ArrayList<>(rowDataType.getFields().size());
+            for (int i = 0; i < rowDataType.getFields().size(); i++) {
+                final int finalIdx = i;
+                RowDataType.Field trinoField = rowDataType.getFields().get(i);
+                String name = trinoField.getName().map(Identifier::getCanonicalValue).orElseGet(() -> "col_" + finalIdx);
+                StructField field = new StructField(name, getType(trinoField.getType()));
+                fields.add(field);
+            }
+            return new StructType(fields);
         } else {
             throw trinoParserUnsupportedException(String.format("Trino parser on StarRocks does not support the " +
                     "type %s now", dataType));
@@ -1292,6 +1356,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             throw new ParsingException("Unknown type: %s", typeName);
         } else if (typeName.equals("real")) {
             return ScalarType.createType(PrimitiveType.FLOAT);
+        } else if (typeName.equals("array")) {
+            TypeParameter typeParam = (TypeParameter) dataType.getArguments().get(0);
+            return new ArrayType(getType(typeParam.getValue()));
         } else {
             // this contains datetime/date/numeric type
             return ScalarType.createType(typeName);

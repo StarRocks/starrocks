@@ -1,4 +1,4 @@
--- name: test interleaving join
+-- name: test_interleaving_join
 CREATE TABLE `lineitem` (
   `l_orderkey` int(11) NOT NULL COMMENT "",
   `l_partkey` int(11) NOT NULL COMMENT "",
@@ -71,14 +71,14 @@ set interleaving_group_size =0;
 -- !result
 select count(*) as c from lineitem l1 where l1.l_orderkey not in ( select l3.l_orderkey from lineitem l3 where  l3.l_suppkey <> l1.l_suppkey );
 -- result:
-3
+2
 -- !result
 set interleaving_group_size =-10;
 -- result:
 -- !result
 select count(*) as c from lineitem l1 where l1.l_orderkey not in ( select l3.l_orderkey from lineitem l3 where  l3.l_suppkey <> l1.l_suppkey );
 -- result:
-3
+2
 -- !result
 set interleaving_group_size =0;
 -- result:
@@ -186,14 +186,14 @@ set interleaving_group_size =0;
 -- !result
 select count(*) as c from lineitem l1 where l1.l_orderkey not in ( select l3.l_orderkey from lineitem l3 where  l3.l_suppkey <> l1.l_suppkey );
 -- result:
-3
+2
 -- !result
 set interleaving_group_size =-10;
 -- result:
 -- !result
 select count(*) as c from lineitem l1 where l1.l_orderkey not in ( select l3.l_orderkey from lineitem l3 where  l3.l_suppkey <> l1.l_suppkey );
 -- result:
-3
+2
 -- !result
 set interleaving_group_size =0;
 -- result:
@@ -301,14 +301,14 @@ set interleaving_group_size =0;
 -- !result
 select count(*) as c from lineitem l1 where l1.l_orderkey not in ( select l3.l_orderkey from lineitem l3 where  l3.l_suppkey <> l1.l_suppkey );
 -- result:
-3
+2
 -- !result
 set interleaving_group_size =-10;
 -- result:
 -- !result
 select count(*) as c from lineitem l1 where l1.l_orderkey not in ( select l3.l_orderkey from lineitem l3 where  l3.l_suppkey <> l1.l_suppkey );
 -- result:
-3
+2
 -- !result
 set interleaving_group_size =0;
 -- result:
@@ -416,14 +416,14 @@ set interleaving_group_size =0;
 -- !result
 select count(*) as c from lineitem l1 where l1.l_orderkey not in ( select l3.l_orderkey from lineitem l3 where  l3.l_suppkey <> l1.l_suppkey );
 -- result:
-3
+2
 -- !result
 set interleaving_group_size =-10;
 -- result:
 -- !result
 select count(*) as c from lineitem l1 where l1.l_orderkey not in ( select l3.l_orderkey from lineitem l3 where  l3.l_suppkey <> l1.l_suppkey );
 -- result:
-3
+2
 -- !result
 set interleaving_group_size =0;
 -- result:

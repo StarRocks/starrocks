@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.mv;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSetMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -31,6 +32,7 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -45,13 +47,13 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.util.Box;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 
 import java.util.Iterator;
@@ -59,6 +61,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.sql.optimizer.rule.mv.MaterializedViewRewriter.isCaseWhenScalarOperator;
 
 /**
  * Select best materialized view for olap scan node
@@ -119,18 +123,90 @@ public class MaterializedViewRule extends Rule {
         }
     }
 
+    private static class Collector extends OptExpressionVisitor<Void, Void> {
+        private final Set<Box<OptExpression>> candidates = Sets.newHashSet();
+
+        public Set<Box<OptExpression>> getCandidates() {
+            return candidates;
+        }
+
+        // NOTE: LOGICAL_UNION is not supported since it needs to handle agg-push-down policy
+        // which is not supported totally by the current rewrite framework which means we can
+        // only rewrite union's child rather than rewrite union operator itself.
+        private static final Set<OperatorType> SUPPORTED_OPERATOR_TYPES = ImmutableSet.of(
+                OperatorType.LOGICAL_PROJECT,
+                OperatorType.LOGICAL_FILTER,
+                OperatorType.LOGICAL_JOIN,
+                OperatorType.LOGICAL_AGGR,
+                OperatorType.LOGICAL_REPEAT,
+                OperatorType.LOGICAL_TABLE_FUNCTION,
+                OperatorType.LOGICAL_OLAP_SCAN
+        );
+
+        private boolean isSupported(OptExpression input) {
+            if (!SUPPORTED_OPERATOR_TYPES.contains(input.getOp().getOpType())) {
+                return false;
+            }
+            return input.getInputs().stream().allMatch(child -> isSupported(child));
+        }
+
+        @Override
+        public Void visit(OptExpression optExpression, Void context) {
+            if (isSupported(optExpression)) {
+                candidates.add(Box.of(optExpression));
+                return null;
+            }
+            for (OptExpression child : optExpression.getInputs()) {
+                visit(child, context);
+            }
+            return null;
+        }
+    }
+
+    public class Rewriter extends OptExpressionVisitor<OptExpression, Void> {
+        private final OptimizerContext optimizerContext;
+        private final Set<Box<OptExpression>> candidates;
+        Rewriter(OptimizerContext optimizerContext, Set<Box<OptExpression>> candidates) {
+            this.optimizerContext = optimizerContext;
+            this.candidates = candidates;
+        }
+
+        @Override
+        public OptExpression visit(OptExpression optExpression, Void context) {
+            if (candidates.contains(Box.of(optExpression))) {
+                return doTransform(optExpression, optimizerContext);
+            }
+
+            for (int childIdx = 0; childIdx < optExpression.arity(); ++childIdx) {
+                optExpression.setChild(childIdx, visit(optExpression.inputAt(childIdx), context));
+            }
+            return OptExpression.create(optExpression.getOp(), optExpression.getInputs());
+        }
+    }
+
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
+        Collector collector = new Collector();
+        collector.visit(input, null);
+        Set<Box<OptExpression>> candidates = collector.getCandidates();
+        if (candidates.isEmpty()) {
+            return Lists.newArrayList(input);
+        }
+        Rewriter rewriter = new Rewriter(context, candidates);
+        return Lists.newArrayList(input.getOp().accept(rewriter, input, null));
+    }
+
+    private OptExpression doTransform(OptExpression input, OptimizerContext context) {
         this.factory = context.getColumnRefFactory();
         OptExpression optExpression = input;
         if (!isExistMVs(optExpression)) {
-            return Lists.newArrayList(optExpression);
+            return optExpression;
         }
 
         init(optExpression);
 
         if (queryScanOperators.stream().anyMatch(LogicalOlapScanOperator::hasTableHints)) {
-            return Lists.newArrayList(optExpression);
+            return optExpression;
         }
 
         for (LogicalOlapScanOperator scan : queryScanOperators) {
@@ -146,7 +222,6 @@ public class MaterializedViewRule extends Rule {
             if (bestIndex == scan.getSelectedIndexId()) {
                 continue;
             }
-
             BestIndexRewriter bestIndexRewriter = new BestIndexRewriter(scan);
             optExpression = bestIndexRewriter.rewrite(optExpression, bestIndex);
 
@@ -167,7 +242,7 @@ public class MaterializedViewRule extends Rule {
                 }
             }
         }
-        return Lists.newArrayList(optExpression);
+        return optExpression;
     }
 
     public static boolean isExistMVs(OptExpression root) {
@@ -503,7 +578,7 @@ public class MaterializedViewRule extends Rule {
         for (Long indexId : indexesMatchingBestPrefixIndex) {
             long rowCount = 0;
             for (Partition partition : olapTable.getPartitions()) {
-                rowCount += partition.getIndex(indexId).getRowCount();
+                rowCount += partition.getDefaultPhysicalPartition().getIndex(indexId).getRowCount();
             }
             if (rowCount < minRowCount) {
                 minRowCount = rowCount;
@@ -782,7 +857,7 @@ public class MaterializedViewRule extends Rule {
 
         return queryExprList.stream()
                 .allMatch(x -> canRewriteQueryAggFunc(x, mvColumnExprList, indexId,
-                    keyColumns, aggregateColumns, usedBaseColumnIds));
+                        keyColumns, aggregateColumns, usedBaseColumnIds));
     }
 
     private boolean canRewriteQueryAggFunc(CallOperator queryExpr,
@@ -821,6 +896,13 @@ public class MaterializedViewRule extends Rule {
         COLUMN_AGG_TYPE_MATCH_FN_NAME = builder.build();
     }
 
+    private static Set<String> COUNT_DISTINCT_FUNCTION_NAMES = Sets.newHashSet(
+            FunctionSet.BITMAP_AGG, FunctionSet.BITMAP_UNION, FunctionSet.HLL_UNION);
+
+    private boolean isCountDistinctCandidateFunc(CallOperator mvColumnFn) {
+        return mvColumnFn.isDistinct() || COUNT_DISTINCT_FUNCTION_NAMES.contains(mvColumnFn.getFnName());
+    }
+
     public boolean isMVMatchAggFunctions(Long indexId, CallOperator queryFn,
                                          CallOperator mvColumnFn, ColumnRefSet keyColumns,
                                          ColumnRefSet aggregateColumns, Set<Integer> usedBaseColumnIds) {
@@ -834,8 +916,12 @@ public class MaterializedViewRule extends Rule {
             return false;
         }
 
-        if (!queryFn.getFnName().equals(FunctionSet.COUNT) &&
-                queryFn.isDistinct() != mvColumnFn.isDistinct()) {
+        if (queryFn.getFnName().equals(FunctionSet.COUNT)) {
+            // needs to check queryFn and mvColumnFn's distinct
+            if (queryFn.isDistinct() != isCountDistinctCandidateFunc(mvColumnFn)) {
+                return false;
+            }
+        } else if (queryFn.isDistinct() != mvColumnFn.isDistinct()) {
             return false;
         }
         ScalarOperator queryFnChild0 = queryFn.getChild(0);
@@ -851,7 +937,7 @@ public class MaterializedViewRule extends Rule {
 
         if (!queryFnChild0.isColumnRef()) {
             IsNoCallChildrenValidator validator = new IsNoCallChildrenValidator(keyColumns, aggregateColumns);
-            if (!(isSupportScalarOperator(queryFnChild0) && queryFnChild0.accept(validator, null))) {
+            if (!(isCaseWhenScalarOperator(queryFnChild0) && queryFnChild0.accept(validator, null))) {
                 ColumnRefOperator mvColumnRef = factory.getColumnRef(mvColumnFnChild0.getUsedColumns().getFirstId());
                 Column mvColumn = factory.getColumn(mvColumnRef);
                 if (mvColumn.getDefineExpr() != null && mvColumn.getDefineExpr() instanceof FunctionCallExpr &&
@@ -873,7 +959,7 @@ public class MaterializedViewRule extends Rule {
             return true;
         }
 
-        if (isSupportScalarOperator(queryFnChild0)) {
+        if (isCaseWhenScalarOperator(queryFnChild0)) {
             int[] queryColumnIds = queryFnChild0.getUsedColumns().getColumnIds();
             Set<Integer> mvColumnIdSet = usedBaseColumnIds.stream()
                     .collect(Collectors.toSet());
@@ -922,14 +1008,5 @@ public class MaterializedViewRule extends Rule {
             this.mvColumnRef = mvColumnRef;
             this.mvColumn = mvColumn;
         }
-    }
-
-    private boolean isSupportScalarOperator(ScalarOperator operator) {
-        if (operator instanceof CaseWhenOperator) {
-            return true;
-        }
-
-        return operator instanceof CallOperator &&
-                FunctionSet.IF.equalsIgnoreCase(((CallOperator) operator).getFnName());
     }
 }

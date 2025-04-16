@@ -62,6 +62,7 @@ Status CompactionUtils::construct_output_rowset_writer(Tablet* tablet, uint32_t 
     context.tablet_schema_hash = tablet->schema_hash();
     context.rowset_path_prefix = tablet->schema_hash_path();
     context.tablet_schema = (tablet_schema == nullptr) ? tablet->tablet_schema() : tablet_schema;
+    context.flat_json_config = tablet->flat_json_config();
     context.rowset_state = VISIBLE;
     context.version = version;
     context.segments_overlap = NONOVERLAPPING;
@@ -69,6 +70,7 @@ Status CompactionUtils::construct_output_rowset_writer(Tablet* tablet, uint32_t 
     context.writer_type =
             (algorithm == VERTICAL_COMPACTION ? RowsetWriterType::kVertical : RowsetWriterType::kHorizontal);
     context.gtid = gtid;
+    context.is_compaction = true;
     Status st = RowsetFactory::create_rowset_writer(context, output_rowset_writer);
     if (!st.ok()) {
         std::stringstream ss;

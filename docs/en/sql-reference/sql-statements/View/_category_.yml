@@ -1,0 +1,6 @@
+position: 90 # float position is supported
+label: 'View'
+collapsible: true
+collapsed: true
+link:
+  type: generated-index

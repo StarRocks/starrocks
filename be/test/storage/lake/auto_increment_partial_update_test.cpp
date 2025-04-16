@@ -142,9 +142,9 @@ public:
             }
             auto c2 = Int64Column::create();
             c2->append_numbers(v2.data(), v2.size() * sizeof(int64_t));
-            return Chunk({c0, c1, c2}, _slot_cid_map);
+            return Chunk({std::move(c0), std::move(c1), std::move(c2)}, _slot_cid_map);
         } else {
-            return Chunk({c0, c1}, _slot_cid_map);
+            return Chunk({std::move(c0), std::move(c1)}, _slot_cid_map);
         }
     }
 
@@ -211,7 +211,7 @@ TEST_F(LakeAutoIncrementPartialUpdateTest, test_write) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() > 0);
         // Publish version
@@ -249,7 +249,7 @@ TEST_F(LakeAutoIncrementPartialUpdateTest, test_write) {
         // multi segment
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() > 0);
         // Publish version
@@ -290,7 +290,7 @@ TEST_F(LakeAutoIncrementPartialUpdateTest, test_write2) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -327,7 +327,7 @@ TEST_F(LakeAutoIncrementPartialUpdateTest, test_write2) {
         // multi segment
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -366,7 +366,7 @@ TEST_F(LakeAutoIncrementPartialUpdateTest, test_resolve_conflict) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -401,7 +401,7 @@ TEST_F(LakeAutoIncrementPartialUpdateTest, test_resolve_conflict) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
     }
     // publish in order

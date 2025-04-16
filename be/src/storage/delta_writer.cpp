@@ -16,6 +16,7 @@
 
 #include <utility>
 
+#include "common/tracer.h"
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
@@ -34,6 +35,8 @@
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
+
+#define ADD_COUNTER_RELAXED(counter, value) counter.fetch_add(value, std::memory_order_relaxed)
 
 StatusOr<std::unique_ptr<DeltaWriter>> DeltaWriter::open(const DeltaWriterOptions& opt, MemTracker* mem_tracker) {
     std::unique_ptr<DeltaWriter> writer(new DeltaWriter(opt, mem_tracker, StorageEngine::instance()));
@@ -308,6 +311,7 @@ Status DeltaWriter::_init() {
         writer_context.full_tablet_schema = _tablet_schema;
         writer_context.is_partial_update = true;
         writer_context.partial_update_mode = _opt.partial_update_mode;
+        writer_context.column_to_expr_value = _opt.column_to_expr_value;
         _tablet_schema = partial_update_schema;
     } else {
         if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && !_opt.merge_condition.empty()) {
@@ -343,6 +347,8 @@ Status DeltaWriter::_init() {
     writer_context.segments_overlap = OVERLAPPING;
     writer_context.global_dicts = _opt.global_dicts;
     writer_context.miss_auto_increment_column = _opt.miss_auto_increment_column;
+    writer_context.flat_json_config = _tablet->flat_json_config();
+
     Status st = RowsetFactory::create_rowset_writer(writer_context, &_rowset_writer);
     if (!st.ok()) {
         auto msg = strings::Substitute("Fail to create rowset writer. tablet_id: $0, error: $1", _opt.tablet_id,
@@ -365,6 +371,8 @@ Status DeltaWriter::_init() {
     VLOG(2) << "DeltaWriter [tablet_id=" << _opt.tablet_id << ", load_id=" << print_id(_opt.load_id)
             << ", replica_state=" << _replica_state_name(_replica_state) << "] open success.";
 
+    // no need after initialization.
+    _opt.ptable_schema_param = nullptr;
     return Status::OK();
 }
 
@@ -414,10 +422,22 @@ Status DeltaWriter::_check_partial_update_with_sort_key(const Chunk& chunk) {
 Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     RETURN_IF_ERROR(_check_partial_update_with_sort_key(chunk));
+    ADD_COUNTER_RELAXED(_stats.write_count, 1);
+    ADD_COUNTER_RELAXED(_stats.row_count, size);
+    int64_t start_time = MonotonicNanos();
+    DeferOp defer([&]() { ADD_COUNTER_RELAXED(_stats.write_time_ns, MonotonicNanos() - start_time); });
 
     // Delay the creation memtables until we write data.
     // Because for the tablet which doesn't have any written data, we will not use their memtables.
     if (_mem_table == nullptr) {
+        // When loading memory usage is larger than hard limit, we will reject new loading task.
+        if (!config::enable_new_load_on_memory_limit_exceeded &&
+            is_tracker_hit_hard_limit(GlobalEnv::GetInstance()->load_mem_tracker(),
+                                      config::load_process_max_memory_hard_limit_ratio)) {
+            return Status::MemoryLimitExceeded(
+                    "memory limit exceeded, please reduce load frequency or increase config "
+                    "`load_process_max_memory_hard_limit_ratio` or add more BE nodes");
+        }
         _reset_mem_table();
     }
     auto state = get_state();
@@ -454,6 +474,7 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
     } else if (full) {
         st = flush_memtable_async();
         _reset_mem_table();
+        ADD_COUNTER_RELAXED(_stats.memtable_full_count, 1);
     }
     if (!st.ok()) {
         _set_state(kAborted, st);
@@ -486,18 +507,27 @@ Status DeltaWriter::write_segment(const SegmentPB& segment_pb, butil::IOBuf& dat
         RETURN_IF_ERROR(_rowset_writer->flush_segment(segment_pb, data));
     }
     auto io_stat = scope.current_scoped_tls_io();
+    auto io_time_ns = io_stat.write_time_ns + io_stat.sync_time_ns;
+
+    ADD_COUNTER_RELAXED(_stats.add_segment_count, 1);
+    ADD_COUNTER_RELAXED(_stats.row_count, segment_pb.num_rows());
+    ADD_COUNTER_RELAXED(_stats.add_segment_data_size, segment_pb.data_size());
+    ADD_COUNTER_RELAXED(_stats.add_segment_time_ns, duration_ns);
+    ADD_COUNTER_RELAXED(_stats.add_segment_io_time_ns, io_time_ns);
+
     StarRocksMetrics::instance()->segment_flush_total.increment(1);
     StarRocksMetrics::instance()->segment_flush_duration_us.increment(duration_ns / 1000);
-    auto io_time_us = (io_stat.write_time_ns + io_stat.sync_time_ns) / 1000;
-    StarRocksMetrics::instance()->segment_flush_io_time_us.increment(io_time_us);
+    StarRocksMetrics::instance()->segment_flush_io_time_us.increment(io_time_ns / 1000);
     StarRocksMetrics::instance()->segment_flush_bytes_total.increment(segment_pb.data_size());
-    VLOG(1) << "Flush segment tablet " << _opt.tablet_id << " segment: " << segment_pb.DebugString()
-            << ", duration: " << duration_ns / 1000 << "us, io_time: " << io_time_us << "us";
+    VLOG(2) << "Flush segment tablet " << _opt.tablet_id << " segment: " << segment_pb.DebugString()
+            << ", duration: " << duration_ns / 1000 << "us, io_time: " << (io_time_ns / 1000) << "us";
     return Status::OK();
 }
 
 Status DeltaWriter::close() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    int64_t start_time = MonotonicNanos();
+    DeferOp defer([&]() { ADD_COUNTER_RELAXED(_stats.close_time_ns, MonotonicNanos() - start_time); });
     auto state = get_state();
     switch (state) {
     case kUninitialized:
@@ -522,6 +552,11 @@ Status DeltaWriter::close() {
     return Status::OK();
 }
 
+Status DeltaWriter::manual_flush() {
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    return flush_memtable_async(false);
+}
+
 Status DeltaWriter::flush_memtable_async(bool eos) {
     _last_write_ts = 0;
     _write_buffer_size = 0;
@@ -540,7 +575,8 @@ Status DeltaWriter::flush_memtable_async(bool eos) {
             if ((_mem_table != nullptr && _mem_table->get_result_chunk() != nullptr) || eos) {
                 auto replicate_token = _replicate_token.get();
                 return _flush_token->submit(
-                        std::move(_mem_table), eos, [replicate_token, this](std::unique_ptr<SegmentPB> seg, bool eos) {
+                        std::move(_mem_table), eos,
+                        [replicate_token, this](SegmentPBPtr seg, bool eos, int64_t flush_data_size) {
                             if (seg) {
                                 _tablet->add_in_writing_data_size(_opt.txn_id, seg->data_size());
                             }
@@ -548,7 +584,7 @@ Status DeltaWriter::flush_memtable_async(bool eos) {
                                 _tablet->data_size() + _tablet->in_writing_data_size() > _opt.immutable_tablet_size) {
                                 _is_immutable.store(true, std::memory_order_relaxed);
                             }
-                            VLOG(1) << "flush memtable, tablet=" << _tablet->tablet_id() << ", txn=" << _opt.txn_id
+                            VLOG(2) << "flush memtable, tablet=" << _tablet->tablet_id() << ", txn=" << _opt.txn_id
                                     << " _immutable_tablet_size=" << _opt.immutable_tablet_size
                                     << ", segment_size=" << (seg ? seg->data_size() : 0)
                                     << ", tablet_data_size=" << _tablet->data_size()
@@ -565,7 +601,7 @@ Status DeltaWriter::flush_memtable_async(bool eos) {
         } else {
             if (_mem_table != nullptr && _mem_table->get_result_chunk() != nullptr) {
                 return _flush_token->submit(
-                        std::move(_mem_table), eos, [this](std::unique_ptr<SegmentPB> seg, bool eos) {
+                        std::move(_mem_table), eos, [this](SegmentPBPtr seg, bool eos, int64_t flush_data_size) {
                             if (seg) {
                                 _tablet->add_in_writing_data_size(_opt.txn_id, seg->data_size());
                             }
@@ -573,7 +609,7 @@ Status DeltaWriter::flush_memtable_async(bool eos) {
                                 _tablet->data_size() + _tablet->in_writing_data_size() > _opt.immutable_tablet_size) {
                                 _is_immutable.store(true, std::memory_order_relaxed);
                             }
-                            VLOG(1) << "flush memtable, tablet=" << _tablet->tablet_id() << ", txn=" << _opt.txn_id
+                            VLOG(2) << "flush memtable, tablet=" << _tablet->tablet_id() << ", txn=" << _opt.txn_id
                                     << " _immutable_tablet_size=" << _opt.immutable_tablet_size
                                     << ", segment_size=" << (seg ? seg->data_size() : 0)
                                     << ", tablet_data_size=" << _tablet->data_size()
@@ -584,7 +620,7 @@ Status DeltaWriter::flush_memtable_async(bool eos) {
         }
     } else if (_replica_state == Peer) {
         if (_mem_table != nullptr && _mem_table->get_result_chunk() != nullptr) {
-            return _flush_token->submit(std::move(_mem_table), eos, [this](std::unique_ptr<SegmentPB> seg, bool eos) {
+            return _flush_token->submit(std::move(_mem_table), eos, [this](SegmentPBPtr seg, bool eos, int64_t f) {
                 if (seg) {
                     _tablet->add_in_writing_data_size(_opt.txn_id, seg->data_size());
                 }
@@ -592,7 +628,7 @@ Status DeltaWriter::flush_memtable_async(bool eos) {
                     _tablet->data_size() + _tablet->in_writing_data_size() > _opt.immutable_tablet_size) {
                     _is_immutable.store(true, std::memory_order_relaxed);
                 }
-                VLOG(1) << "flush memtable, tablet=" << _tablet->tablet_id() << ", txn=" << _opt.txn_id
+                VLOG(2) << "flush memtable, tablet=" << _tablet->tablet_id() << ", txn=" << _opt.txn_id
                         << " immutable_tablet_size=" << _opt.immutable_tablet_size
                         << ", segment_size=" << (seg ? seg->data_size() : 0)
                         << ", tablet_data_size=" << _tablet->data_size()
@@ -609,31 +645,37 @@ Status DeltaWriter::_flush_memtable() {
     MonotonicStopWatch watch;
     watch.start();
     Status st = _flush_token->wait();
-    StarRocksMetrics::instance()->delta_writer_wait_flush_duration_us.increment(watch.elapsed_time() / 1000);
+    auto elapsed_time = watch.elapsed_time();
+    ADD_COUNTER_RELAXED(_stats.memory_exceed_count, 1);
+    ADD_COUNTER_RELAXED(_stats.write_wait_flush_time_ns, elapsed_time);
+    StarRocksMetrics::instance()->delta_writer_wait_flush_task_total.increment(1);
+    StarRocksMetrics::instance()->delta_writer_wait_flush_duration_us.increment(elapsed_time / 1000);
     return st;
 }
 
-Status DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTableSchemaParam& ptable_schema_param,
+Status DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTableSchemaParam* ptable_schema_param,
                                                  const TabletSchemaCSPtr& ori_tablet_schema) {
     // new tablet schema if new table
     // find the right index id
     int i = 0;
-    for (; i < ptable_schema_param.indexes_size(); i++) {
-        if (ptable_schema_param.indexes(i).id() == index_id) break;
-    }
-    if (i < ptable_schema_param.indexes_size()) {
-        if (ptable_schema_param.indexes_size() > 0 && ptable_schema_param.indexes(i).has_column_param() &&
-            ptable_schema_param.indexes(i).column_param().columns_desc_size() != 0 &&
-            ptable_schema_param.indexes(i).column_param().columns_desc(0).unique_id() >= 0 &&
-            ptable_schema_param.version() != ori_tablet_schema->schema_version()) {
-            ASSIGN_OR_RETURN(
-                    _tablet_schema,
-                    TabletSchema::create(*ori_tablet_schema, ptable_schema_param.indexes(i).schema_id(),
-                                         ptable_schema_param.version(), ptable_schema_param.indexes(i).column_param()));
-            if (_tablet_schema->schema_version() > ori_tablet_schema->schema_version()) {
-                _tablet->update_max_version_schema(_tablet_schema);
+    if (ptable_schema_param != nullptr) {
+        for (; i < ptable_schema_param->indexes_size(); i++) {
+            if (ptable_schema_param->indexes(i).id() == index_id) break;
+        }
+        if (i < ptable_schema_param->indexes_size()) {
+            if (ptable_schema_param->indexes_size() > 0 && ptable_schema_param->indexes(i).has_column_param() &&
+                ptable_schema_param->indexes(i).column_param().columns_desc_size() != 0 &&
+                ptable_schema_param->indexes(i).column_param().columns_desc(0).unique_id() >= 0 &&
+                ptable_schema_param->version() != ori_tablet_schema->schema_version()) {
+                ASSIGN_OR_RETURN(_tablet_schema,
+                                 TabletSchema::create(*ori_tablet_schema, ptable_schema_param->indexes(i).schema_id(),
+                                                      ptable_schema_param->version(),
+                                                      ptable_schema_param->indexes(i).column_param()));
+                if (_tablet_schema->schema_version() > ori_tablet_schema->schema_version()) {
+                    _tablet->update_max_version_schema(_tablet_schema);
+                }
+                return Status::OK();
             }
-            return Status::OK();
         }
     }
     _tablet_schema = ori_tablet_schema;
@@ -703,15 +745,17 @@ Status DeltaWriter::commit() {
         _set_state(kAborted, res.status());
         return res.status();
     }
+    auto rowset_build_ts = watch.elapsed_time();
 
-    if (_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
+    if (_tablet->keys_type() == KeysType::PRIMARY_KEYS && !config::skip_pk_preload &&
+        !_storage_engine->update_manager()->mem_tracker()->limit_exceeded_by_ratio(config::memory_high_level)) {
         auto st = _storage_engine->update_manager()->on_rowset_finished(_tablet.get(), _cur_rowset.get());
         if (!st.ok()) {
             _set_state(kAborted, st);
             return st;
         }
     }
-    auto pk_finish_ts = watch.elapsed_time();
+    auto pk_preload_ts = watch.elapsed_time();
 
     if (_replicate_token != nullptr) {
         if (auto st = _replicate_token->wait(); UNLIKELY(!st.ok())) {
@@ -724,6 +768,7 @@ Status DeltaWriter::commit() {
 
     auto res = _storage_engine->txn_manager()->commit_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id,
                                                           _cur_rowset, false);
+    auto commit_txn_ts = watch.elapsed_time();
 
     if (!res.ok()) {
         _storage_engine->update_manager()->on_rowset_cancel(_tablet.get(), _cur_rowset.get());
@@ -739,12 +784,23 @@ Status DeltaWriter::commit() {
             _state = kCommitted;
         } else {
             return Status::InternalError(fmt::format("Delta writer has been aborted. tablet_id: {}, state: {}",
-                                                     _opt.tablet_id, _state_name(state)));
+                                                     _opt.tablet_id, _state_name(_state)));
         }
     }
-    VLOG(1) << "Closed delta writer. tablet_id: " << _tablet->tablet_id() << ", stats: " << _flush_token->get_stats();
+    VLOG(2) << "Closed delta writer. tablet_id: " << _tablet->tablet_id() << ", stats: " << _flush_token->get_stats();
+    ADD_COUNTER_RELAXED(_stats.commit_time_ns, watch.elapsed_time());
+    ADD_COUNTER_RELAXED(_stats.commit_wait_flush_time_ns, flush_ts);
+    ADD_COUNTER_RELAXED(_stats.commit_rowset_build_time_ns, rowset_build_ts - flush_ts);
+    ADD_COUNTER_RELAXED(_stats.commit_pk_preload_time_ns, pk_preload_ts - rowset_build_ts);
+    ADD_COUNTER_RELAXED(_stats.commit_wait_replica_time_ns, replica_ts - pk_preload_ts);
+    ADD_COUNTER_RELAXED(_stats.commit_txn_commit_time_ns, commit_txn_ts - replica_ts);
+    StarRocksMetrics::instance()->delta_writer_commit_task_total.increment(1);
+    StarRocksMetrics::instance()->delta_writer_wait_flush_task_total.increment(1);
     StarRocksMetrics::instance()->delta_writer_wait_flush_duration_us.increment(flush_ts / 1000);
-    StarRocksMetrics::instance()->delta_writer_wait_replica_duration_us.increment((replica_ts - pk_finish_ts) / 1000);
+    StarRocksMetrics::instance()->delta_writer_pk_preload_duration_us.increment((pk_preload_ts - rowset_build_ts) /
+                                                                                1000);
+    StarRocksMetrics::instance()->delta_writer_wait_replica_duration_us.increment((replica_ts - pk_preload_ts) / 1000);
+    StarRocksMetrics::instance()->delta_writer_txn_commit_duration_us.increment((commit_txn_ts - replica_ts) / 1000);
     return Status::OK();
 }
 
@@ -776,7 +832,7 @@ void DeltaWriter::abort(bool with_log) {
         _segment_flush_token->shutdown();
     }
 
-    VLOG(1) << "Aborted delta writer. tablet_id: " << _tablet->tablet_id() << " txn_id: " << _opt.txn_id
+    VLOG(2) << "Aborted delta writer. tablet_id: " << _tablet->tablet_id() << " txn_id: " << _opt.txn_id
             << " load_id: " << print_id(_opt.load_id) << " partition_id: " << partition_id();
 }
 
@@ -819,14 +875,14 @@ Status DeltaWriter::_fill_auto_increment_id(const Chunk& chunk) {
         pk_columns.push_back((uint32_t)i);
     }
     Schema pkey_schema = ChunkHelper::convert_schema(_tablet_schema, pk_columns);
-    std::unique_ptr<Column> pk_column;
+    MutableColumnPtr pk_column;
     if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
         CHECK(false) << "create column for primary key encoder failed";
     }
     auto col = pk_column->clone();
 
     PrimaryKeyEncoder::encode(pkey_schema, chunk, 0, chunk.num_rows(), col.get());
-    std::unique_ptr<Column> upserts = std::move(col);
+    MutableColumnPtr upserts = std::move(col);
 
     std::vector<uint64_t> rss_rowids;
     rss_rowids.resize(upserts->size());
@@ -834,7 +890,7 @@ Status DeltaWriter::_fill_auto_increment_id(const Chunk& chunk) {
     // 2. probe index
     RETURN_IF_ERROR(_tablet->updates()->get_rss_rowids_by_pk(_tablet.get(), *upserts, nullptr, &rss_rowids));
 
-    std::vector<uint8_t> filter;
+    Filter filter;
     uint32_t gen_num = 0;
     for (unsigned long v : rss_rowids) {
         uint32_t rssid = v >> 32;
@@ -848,14 +904,14 @@ Status DeltaWriter::_fill_auto_increment_id(const Chunk& chunk) {
 
     // 3. fill the non-existing rows
     std::vector<int64_t> ids(gen_num);
-    int64_t table_id = _tablet->tablet_meta()->table_id();
+    int64_t table_id = _tablet->belonged_table_id();
     RETURN_IF_ERROR(StorageEngine::instance()->get_next_increment_id_interval(table_id, gen_num, ids));
 
     for (int i = 0; i < _vectorized_schema.num_fields(); i++) {
         const TabletColumn& tablet_column = _tablet_schema->column(i);
         if (tablet_column.is_auto_increment()) {
             auto& column = chunk.get_column_by_index(i);
-            RETURN_IF_ERROR((std::dynamic_pointer_cast<Int64Column>(column))->fill_range(ids, filter));
+            RETURN_IF_ERROR((Int64Column::dynamic_pointer_cast(column))->fill_range(ids, filter));
             break;
         }
     }

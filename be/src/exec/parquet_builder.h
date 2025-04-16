@@ -44,8 +44,8 @@ class ParquetBuilder : public FileBuilder {
 public:
     ParquetBuilder(std::unique_ptr<WritableFile> writable_file, std::shared_ptr<::parquet::WriterProperties> properties,
                    std::shared_ptr<::parquet::schema::GroupNode> schema,
-                   const std::vector<ExprContext*>& output_expr_ctxs, int64_t row_group_max_size,
-                   int64_t max_file_size);
+                   const std::vector<ExprContext*>& output_expr_ctxs, int64_t row_group_max_size, int64_t max_file_size,
+                   RuntimeState* state);
 
     ~ParquetBuilder() override = default;
 

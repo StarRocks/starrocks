@@ -1776,4 +1776,23 @@ public class ViewPlanTest extends PlanTestBase {
         String sql = "select `select` from (select v1 from t0) `abc.bcd`(`select`);";
         testView(sql);
     }
+
+    @Test
+    public void testViewNotInvolveMv() throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setEnableViewBasedMvRewrite(true);
+        String createView = "create view v_l as select k1, k2 as k22, k3 as k33 from t7";
+        starRocksAssert.withView(createView);
+
+        createView = "create view v_r as select k1, k2 as k222, k3 as k333 from t8";
+        starRocksAssert.withView(createView);
+
+        String sql = "select l.k1 from v_l l left join v_r r1 on l.k22=r1.k222 left join" +
+                " v_r r2 on trim(l.k33)=r2.k333; ";
+        String sqlPlan = getFragmentPlan(sql);
+        Assert.assertTrue(sqlPlan.contains("OlapScanNode"));
+
+        starRocksAssert.dropView("v_l");
+        starRocksAssert.dropView("v_r");
+        starRocksAssert.getCtx().getSessionVariable().setEnableViewBasedMvRewrite(false);
+    }
 }

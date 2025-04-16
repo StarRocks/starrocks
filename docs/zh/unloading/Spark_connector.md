@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 使用 Spark Connector 读取数据
@@ -267,7 +267,7 @@ Spark Connector 中，将 DATE 和 DATETIME 数据类型映射为 STRING 数据�
 
 ### 网络设置
 
-确保 Spark 所在机器能够访问 StarRocks 集群中 FE 节点的 [`http_port`](../administration/management/FE_configuration.md#http_port)（默认 `8030`） 和 [`query_port`](../administration/management/FE_configuration.md#query_port) 端口（默认 `9030`），以及 BE 节点的 [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) 端口（默认 `8040`）。
+确保 Spark 所在机器能够访问 StarRocks 集群中 FE 节点的 [`http_port`](../administration/management/FE_configuration.md#http_port)（默认 `8030`） 和 [`query_port`](../administration/management/FE_configuration.md#query_port) 端口（默认 `9030`），以及 BE 节点的 [`be_port`](../administration/management/BE_configuration.md#be_port) 端口（默认 `9060`）。
 
 ### 数据样例
 
@@ -820,14 +820,11 @@ Spark Connector 中，将 DATE 和 DATETIME 数据类型映射为 STRING 数据�
    | k    | b    | dt                  | v    |
    +------+------+---------------------+------+
    |    1 |   11 | 2022-01-02 08:00:00 |  111 |
-   |    1 |   11 | 2022-01-02 08:00:00 |  111 |
    |    3 |   33 | 2022-01-02 08:00:00 |  333 |
    |    3 |   33 | 2022-01-02 08:00:00 |  333 |
    |    3 |   33 | 2022-01-02 08:00:00 |  333 |
-   |    2 |   22 | 2022-02-02 08:00:00 |  222 |
-   |    3 |   33 | 2022-03-02 08:00:00 |  333 |
    +------+------+---------------------+------+
-   7 rows in set (0.01 sec)
+   4 rows in set (0.01 sec)
    ```
 
 3. 在 Spark 可执行程序目录下，通过如下命令，根据数据库 `test` 中的表 `mytable` 创建一个名为 `df` 的 DataFrame，命令中使用 `starrocks.filter.query` 参数指定过滤条件为 `k=1`，以做前缀索引过滤：

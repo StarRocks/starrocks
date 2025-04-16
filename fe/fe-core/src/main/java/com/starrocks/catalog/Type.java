@@ -39,11 +39,12 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Lists;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlColType;
 import com.starrocks.proto.PScalarType;
 import com.starrocks.proto.PTypeDesc;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TColumnType;
 import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScalarType;
@@ -65,6 +66,32 @@ import java.util.stream.Collectors;
 public abstract class Type implements Cloneable {
     // used for nested type such as map and struct
     protected Boolean[] selectedFields;
+
+    // Why add AggStateDesc into Type class?
+    // 1. AggStateDesc is only used for combinator agg functions, and it's not persisted in Type but rather in Column.
+    // 2. Combinator agg functions cannot deduce input's original type, we need this to record the original type in aggStateDesc.
+    // eg:
+    //  CREATE TABLE test_agg_state_table (
+    //        k1  date,
+    //        v0 multi_distinct_sum(double),
+    //        v1 multi_distinct_sum(float),
+    //        v2 multi_distinct_sum(boolean),
+    //        v3 multi_distinct_sum(tinyint(4)),
+    //        v4 multi_distinct_sum(smallint(6)),
+    //        v5 multi_distinct_sum(int(11)),
+    //        v6 multi_distinct_sum(bigint(20)),
+    //        v7 multi_distinct_sum(largeint(40)),
+    //        v8 multi_distinct_sum(decimal(10, 2)),
+    //        v9 multi_distinct_sum(decimal(10, 2)),
+    //        v10 multi_distinct_sum(decimal(10, 2)))
+    //    DISTRIBUTED BY HASH(k1)
+    //    PROPERTIES (  "replication_num" = "1");
+    // In this case, all column types of v0...v10 are `varbinary`, only use `varbinary` type we cannot deduce the final agg type.
+    // eg: select multi_distinct_sum_merge(v0), multi_distinct_sum_merge(v5) from test_agg_state_table
+    // Even v0/v5's types are varbinary, but multi_distinct_sum_merge(v0) returns double,
+    // multi_distinct_sum_merge(v5) returns bigint.
+    // So we need to record the original column's agg state desc in type to be used in FunctionAnalyzer.
+    protected AggStateDesc aggStateDesc = null;
 
     public static final int CHARSET_BINARY = 63;
     public static final int CHARSET_UTF8 = 33;
@@ -573,7 +600,7 @@ public abstract class Type implements Cloneable {
     }
 
     protected abstract String toTypeString(int depth);
-    
+
     /**
      * Same as toSql() but adds newlines and spaces for better readability of nested types.
      */
@@ -806,13 +833,19 @@ public abstract class Type implements Cloneable {
         if (isArrayType()) {
             return ((ArrayType) this).getItemType().canDistinct();
         }
+        if (isStructType()) {
+            return ((StructType) this).getFields().stream().allMatch(sf -> sf.getType().canDistinct());
+        }
+        if (isMapType()) {
+            return ((MapType) this).getKeyType().canDistinct() && ((MapType) this).getValueType().canDistinct();
+        }
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
                 !isMapType();
     }
 
     public boolean canStatistic() {
         // TODO(mofei) support statistic by for JSON
-        return !isOnlyMetricType() && !isJsonType() && !isComplexType() && !isFunctionType()
+        return !isOnlyMetricType() && !isJsonType() && !isStructType() && !isFunctionType()
                 && !isBinaryType();
     }
 
@@ -1114,8 +1147,13 @@ public abstract class Type implements Cloneable {
             return true;
         } else if (from.isStringType() && to.isArrayType()) {
             return true;
-        } else if (from.isJsonType() && to.isArrayScalar()) {
-            // now we only support cast json to one dimensional array
+        } else if (from.isJsonType() && to.isArrayType()) {
+            ArrayType array = (ArrayType) to;
+            if (array.getItemType().isScalarType() || array.getItemType().isStructType()) {
+                return true;
+            }
+            return false;
+        } else if (from.isJsonType() && to.isStructType()) {
             return true;
         } else if (from.isBoolean() && to.isComplexType()) {
             // for mock nest type with NULL value, the cast must return NULL
@@ -1124,14 +1162,6 @@ public abstract class Type implements Cloneable {
         } else {
             return false;
         }
-    }
-
-    public boolean isArrayScalar() {
-        if (!isArrayType()) {
-            return false;
-        }
-        ArrayType array = (ArrayType) this;
-        return array.getItemType().isScalarType();
     }
 
     /**
@@ -1694,21 +1724,25 @@ public abstract class Type implements Cloneable {
     @Override
     public Type clone() {
         try {
-            return (Type) super.clone();
+            Type cloned = (Type) super.clone();
+            if (aggStateDesc != null) {
+                cloned.setAggStateDesc(aggStateDesc.clone());
+            }
+            return cloned;
         } catch (CloneNotSupportedException ex) {
             throw new Error("Something impossible just happened", ex);
         }
     }
 
     // getInnermostType() is only used for array
-    public static Type getInnermostType(Type type) throws AnalysisException {
+    public static Type getInnermostType(Type type) {
         if (type.isScalarType() || type.isStructType() || type.isMapType()) {
             return type;
         }
         if (type.isArrayType()) {
             return getInnermostType(((ArrayType) type).getItemType());
         }
-        throw new AnalysisException("Cannot get innermost type of '" + type + "'");
+        throw new SemanticException("Cannot get innermost type of '" + type + "'");
     }
 
     public String canonicalName() {
@@ -1723,5 +1757,22 @@ public abstract class Type implements Cloneable {
     // This is used for information_schema.COLUMNS COLUMN_TYPE
     public String toMysqlColumnTypeString() {
         return "unknown";
+    }
+
+    // This function is called by Column::getMaxUniqueId()
+    // If type is a scalar type, it does not have field Id because scalar type does not have sub fields
+    // If type is struct type, it will return the max field id(default value of field id is -1)
+    // If type is array type, it will return the max field id of item type
+    // if type is map type, it will return the max unique id between key type and value type
+    public int getMaxUniqueId() {
+        return -1;
+    }
+
+    public void setAggStateDesc(AggStateDesc aggStateDesc) {
+        this.aggStateDesc = aggStateDesc;
+    }
+
+    public AggStateDesc getAggStateDesc() {
+        return aggStateDesc;
     }
 }

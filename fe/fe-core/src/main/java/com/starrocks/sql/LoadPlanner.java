@@ -15,6 +15,7 @@
 package com.starrocks.sql;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
@@ -37,7 +38,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.EtlJobType;
@@ -74,6 +75,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -141,6 +143,12 @@ public class LoadPlanner {
     private Boolean missAutoIncrementColumn = Boolean.FALSE;
 
     private String mergeConditionStr;
+
+    // Only valid for stream load
+    private boolean enableBatchWrite = false;
+    private int batchWriteIntervalMs;
+    private ImmutableMap<String, String> batchWriteParameters;
+    private Set<Long> batchWriteBackendIds;
 
     public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, OlapTable destTable,
                        boolean strictMode, String timezone, long timeoutS,
@@ -239,6 +247,14 @@ public class LoadPlanner {
         return warehouseId;
     }
 
+    public void setBatchWrite(
+            int batchWriteIntervalMs, ImmutableMap<String, String> loadParameters, Set<Long> batchWriteBackendIds) {
+        this.enableBatchWrite = true;
+        this.batchWriteIntervalMs = batchWriteIntervalMs;
+        this.batchWriteParameters = loadParameters;
+        this.batchWriteBackendIds = new HashSet<>(batchWriteBackendIds);
+    }
+
     public void setPartialUpdateMode(TPartialUpdateMode mode) {
         this.partialUpdateMode = mode;
     }
@@ -251,7 +267,7 @@ public class LoadPlanner {
         this.jsonOptions = options;
     }
 
-    public void plan() throws UserException {
+    public void plan() throws StarRocksException {
         // 1. Generate tuple descriptor
         OlapTable olapDestTable = (OlapTable) destTable;
         List<Column> destColumns = Lists.newArrayList();
@@ -353,6 +369,14 @@ public class LoadPlanner {
             sinkFragment.setPipelineDop(1);
             sinkFragment.setParallelExecNum(parallelInstanceNum);
         }
+        // load from local file does not require too much concurrency to maximize disk performance.
+        // Too much concurrency can easily lead to performance degradation and long tail.
+        if (fileGroups != null && !fileGroups.isEmpty()
+                && fileGroups.get(0).getFilePaths() != null
+                && fileGroups.get(0).getFilePaths().get(0).toLowerCase().startsWith("file:")) {
+            sinkFragment.setPipelineDop(1);
+            sinkFragment.setParallelExecNum(1);
+        }
         fragments.add(sinkFragment);
 
         // 5. finalize
@@ -362,7 +386,7 @@ public class LoadPlanner {
         Collections.reverse(fragments);
     }
 
-    private void generateTupleDescriptor(List<Column> destColumns, boolean isPrimaryKey) throws UserException {
+    private void generateTupleDescriptor(List<Column> destColumns, boolean isPrimaryKey) throws StarRocksException {
         this.tupleDesc = descTable.createTupleDescriptor("DestTableTupleDescriptor");
         // Add column slotDesc for dest table
         for (Column col : destColumns) {
@@ -377,8 +401,8 @@ public class LoadPlanner {
 
             if (col.getType().isVarchar() && enableDictOptimize
                     && IDictManager.getInstance().hasGlobalDict(destTable.getId(),
-                    col.getName())) {
-                Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(destTable.getId(), col.getName());
+                    col.getColumnId())) {
+                Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(destTable.getId(), col.getColumnId());
                 dict.ifPresent(columnDict -> globalDicts.add(new Pair<>(slotDesc.getId().asInt(), columnDict)));
             }
         }
@@ -392,7 +416,7 @@ public class LoadPlanner {
         descTable.computeMemLayout();
     }
 
-    private ScanNode prepareScanNodes() throws UserException {
+    private ScanNode prepareScanNodes() throws StarRocksException {
         ScanNode scanNode = null;
         if (this.etlJobType == EtlJobType.BROKER) {
             FileScanNode fileScanNode = new FileScanNode(new PlanNodeId(planNodeGenerator.getNextId().asInt()),
@@ -409,6 +433,9 @@ public class LoadPlanner {
             StreamLoadScanNode streamScanNode = new StreamLoadScanNode(loadId, new PlanNodeId(0), tupleDesc,
                     destTable, streamLoadInfo, dbName, label, parallelInstanceNum, txnId, warehouseId);
             streamScanNode.setNeedAssignBE(true);
+            if (enableBatchWrite) {
+                streamScanNode.setBatchWrite(batchWriteIntervalMs, batchWriteParameters, batchWriteBackendIds);
+            }
             streamScanNode.setUseVectorizedLoad(true);
             streamScanNode.init(analyzer);
             streamScanNode.finalizeStats(analyzer);
@@ -440,7 +467,8 @@ public class LoadPlanner {
     }
 
     private void prepareSinkFragment(PlanFragment sinkFragment, List<Long> partitionIds,
-                                     boolean completeTabletSink, boolean forceReplicatedStorage) throws UserException {
+                                     boolean completeTabletSink, boolean forceReplicatedStorage) throws
+            StarRocksException {
         DataSink dataSink = null;
         if (destTable instanceof OlapTable) {
             // 4. Olap table sink
@@ -479,7 +507,7 @@ public class LoadPlanner {
         sinkFragment.setLoadGlobalDicts(globalDicts);
     }
 
-    public void completeTableSink(long txnId) throws AnalysisException, UserException {
+    public void completeTableSink(long txnId) throws AnalysisException, StarRocksException {
         if (destTable instanceof OlapTable) {
             OlapTableSink dataSink = (OlapTableSink) fragments.get(0).getSink();
             dataSink.init(loadId, txnId, dbId, timeoutS);

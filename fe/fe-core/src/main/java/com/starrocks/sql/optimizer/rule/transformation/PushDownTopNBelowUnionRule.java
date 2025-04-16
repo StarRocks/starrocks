@@ -14,8 +14,8 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import autovalue.shaded.com.google.common.common.base.Preconditions;
 import com.google.api.client.util.Sets;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.OptExpression;

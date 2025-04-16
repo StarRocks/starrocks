@@ -1282,7 +1282,7 @@ public:
 
     void convert(Datum* dst, const Datum& src) const override { *dst = src; }
 
-    ColumnPtr copy_convert(const Column& src) const override { return src.clone_shared(); }
+    ColumnPtr copy_convert(const Column& src) const override { return src.clone(); }
 
     ColumnPtr move_convert(Column* src) const override {
         auto ret = src->clone_empty();
@@ -1583,7 +1583,7 @@ public:
             } else if (src.is_nullable() && !dst->only_null()) {
                 dst = NullableColumn::create(dst, NullColumn::create());
                 auto* nullable_dst_column = down_cast<NullableColumn*>(dst.get());
-                auto* nullable_src_column = down_cast<const NullableColumn*>(&src);
+                auto* nullable_src_column = down_cast<NullableColumn*>(const_cast<Column*>(&src));
                 auto* dst_column = down_cast<DstColumnType*>(nullable_dst_column->data_column().get());
                 auto* src_column = down_cast<SrcColumnType*>(nullable_src_column->data_column().get());
                 auto& null_dst_column = nullable_dst_column->null_column();

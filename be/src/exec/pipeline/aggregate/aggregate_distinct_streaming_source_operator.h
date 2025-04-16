@@ -31,17 +31,18 @@ public:
 
     ~AggregateDistinctStreamingSourceOperator() override = default;
 
+    Status prepare(RuntimeState* state) override;
     bool has_output() const override;
     bool is_finished() const override;
 
-    [[nodiscard]] Status set_finished(RuntimeState* state) override;
+    Status set_finished(RuntimeState* state) override;
 
     void close(RuntimeState* state) override;
 
-    [[nodiscard]] StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
-    [[nodiscard]] Status _output_chunk_from_hash_set(ChunkPtr* chunk, RuntimeState* state);
+    Status _output_chunk_from_hash_set(ChunkPtr* chunk, RuntimeState* state);
 
     // It is used to perform aggregation algorithms shared by
     // AggregateDistinctStreamingSinkOperator. It is
@@ -59,6 +60,8 @@ public:
               _aggregator_factory(std::move(aggregator_factory)) {}
 
     ~AggregateDistinctStreamingSourceOperatorFactory() override = default;
+
+    bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<AggregateDistinctStreamingSourceOperator>(

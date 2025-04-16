@@ -39,9 +39,12 @@
 #include <unordered_map>
 
 #include "common/status.h"
+#include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/query_cache/cache_manager.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "runtime/base_load_path_mgr.h"
+#include "runtime/mem_tracker.h"
 #include "storage/options.h"
 #include "util/threadpool.h"
 // NOTE: Be careful about adding includes here. This file is included by many files.
@@ -61,7 +64,7 @@ class LoadPathMgr;
 class LoadStreamMgr;
 class StreamContextMgr;
 class TransactionMgr;
-class MemTracker;
+class BatchWriteMgr;
 class MetricRegistry;
 class StorageEngine;
 class ThreadPool;
@@ -78,6 +81,8 @@ class RuntimeFilterCache;
 class ProfileReportWorker;
 class QuerySpillManager;
 class BlockCache;
+class ObjectCache;
+class StoragePageCache;
 struct RfTracePoint;
 
 class BackendServiceClient;
@@ -86,11 +91,13 @@ class TFileBrokerServiceClient;
 template <class T>
 class ClientCache;
 class HeartbeatFlags;
+class DiagnoseDaemon;
 
 namespace pipeline {
 class DriverExecutor;
 class QueryContextManager;
 class DriverLimiter;
+class PipelineTimer;
 } // namespace pipeline
 
 namespace lake {
@@ -139,16 +146,24 @@ public:
     MemTracker* short_key_index_mem_tracker() { return _short_key_index_mem_tracker.get(); }
     MemTracker* compaction_mem_tracker() { return _compaction_mem_tracker.get(); }
     MemTracker* schema_change_mem_tracker() { return _schema_change_mem_tracker.get(); }
-    MemTracker* column_pool_mem_tracker() { return _column_pool_mem_tracker.get(); }
+    // The value of `page_cache_mem_tracker` is manually counted and is attached to the process_mem_tracker tree.
+    // It is not based on the `ThreadLocalMemTracker`.
+    // Therefore, when counting the memory, the `MemTracker::set` interface can be used,
+    // while the consume/release interfaces cannot be used.
+    // Otherwise, it will cause problems in the memory statistics of the process.
     MemTracker* page_cache_mem_tracker() { return _page_cache_mem_tracker.get(); }
     MemTracker* jit_cache_mem_tracker() { return _jit_cache_mem_tracker.get(); }
     MemTracker* update_mem_tracker() { return _update_mem_tracker.get(); }
     MemTracker* chunk_allocator_mem_tracker() { return _chunk_allocator_mem_tracker.get(); }
+    MemTracker* passthrough_mem_tracker() { return _passthrough_mem_tracker.get(); }
     MemTracker* clone_mem_tracker() { return _clone_mem_tracker.get(); }
     MemTracker* consistency_mem_tracker() { return _consistency_mem_tracker.get(); }
     MemTracker* replication_mem_tracker() { return _replication_mem_tracker.get(); }
     MemTracker* datacache_mem_tracker() { return _datacache_mem_tracker.get(); }
-    std::vector<std::shared_ptr<MemTracker>>& mem_trackers() { return _mem_trackers; }
+    MemTracker* poco_connection_pool_mem_tracker() { return _poco_connection_pool_mem_tracker.get(); }
+    MemTracker* jemalloc_metadata_traker() { return _jemalloc_metadata_tracker.get(); }
+    std::shared_ptr<MemTracker> get_mem_tracker_by_type(MemTrackerType type);
+    std::vector<std::shared_ptr<MemTracker>> mem_trackers() const;
 
     int64_t get_storage_page_cache_size();
     int64_t check_storage_page_cache_size(int64_t storage_cache_limit);
@@ -160,13 +175,13 @@ private:
     Status _init_mem_tracker();
     void _reset_tracker();
 
-    void _init_storage_page_cache();
-
-    template <class... Args>
-    std::shared_ptr<MemTracker> regist_tracker(Args&&... args);
+    std::shared_ptr<MemTracker> regist_tracker(MemTrackerType type, int64_t bytes_limit, MemTracker* parent);
 
     // root process memory tracker
     std::shared_ptr<MemTracker> _process_mem_tracker;
+
+    // Track usage of jemalloc
+    std::shared_ptr<MemTracker> _jemalloc_metadata_tracker;
 
     // Limit the memory used by the query. At present, it can use 90% of the be memory limit
     std::shared_ptr<MemTracker> _query_pool_mem_tracker;
@@ -199,9 +214,6 @@ private:
     // The memory used for schema change
     std::shared_ptr<MemTracker> _schema_change_mem_tracker;
 
-    // The memory used for column pool
-    std::shared_ptr<MemTracker> _column_pool_mem_tracker;
-
     // The memory used for page cache
     std::shared_ptr<MemTracker> _page_cache_mem_tracker;
 
@@ -212,6 +224,8 @@ private:
     std::shared_ptr<MemTracker> _update_mem_tracker;
 
     std::shared_ptr<MemTracker> _chunk_allocator_mem_tracker;
+    // record mem usage in passthrough
+    std::shared_ptr<MemTracker> _passthrough_mem_tracker;
 
     std::shared_ptr<MemTracker> _clone_mem_tracker;
 
@@ -222,7 +236,38 @@ private:
     // The memory used for datacache
     std::shared_ptr<MemTracker> _datacache_mem_tracker;
 
-    std::vector<std::shared_ptr<MemTracker>> _mem_trackers;
+    // The memory used for poco connection pool
+    std::shared_ptr<MemTracker> _poco_connection_pool_mem_tracker;
+
+    std::map<MemTrackerType, std::shared_ptr<MemTracker>> _mem_tracker_map;
+};
+
+class CacheEnv {
+public:
+    static CacheEnv* GetInstance();
+
+    Status init(const std::vector<StorePath>& store_paths);
+    void destroy();
+
+    void try_release_resource_before_core_dump();
+
+    BlockCache* block_cache() const { return _block_cache.get(); }
+    ObjectCache* external_table_meta_cache() const { return _starcache_based_object_cache.get(); }
+    StoragePageCache* page_cache() const { return _page_cache.get(); }
+
+private:
+    Status _init_datacache();
+    Status _init_starcache_based_object_cache();
+    Status _init_lru_base_object_cache();
+    Status _init_page_cache();
+
+    GlobalEnv* _global_env;
+    std::vector<StorePath> _store_paths;
+
+    std::shared_ptr<BlockCache> _block_cache;
+    std::shared_ptr<ObjectCache> _starcache_based_object_cache;
+    std::shared_ptr<ObjectCache> _lru_based_object_cache;
+    std::shared_ptr<StoragePageCache> _page_cache;
 };
 
 // Execution environment for queries/plan fragments.
@@ -240,17 +285,14 @@ public:
     /// Returns the first created exec env instance. In a normal starrocks, this is
     /// the only instance. In test setups with multiple ExecEnv's per process,
     /// we return the most recently created instance.
-    static ExecEnv* GetInstance() {
-        static ExecEnv s_exec_env;
-        return &s_exec_env;
-    }
+    static ExecEnv* GetInstance();
 
     // only used for test
-    ExecEnv() = default;
+    ExecEnv();
 
     // Empty destructor because the compiler-generated one requires full
     // declarations for classes in scoped_ptrs.
-    ~ExecEnv() = default;
+    ~ExecEnv();
 
     std::string token() const;
     ExternalScanContextMgr* external_scan_context_mgr() { return _external_scan_context_mgr; }
@@ -268,19 +310,23 @@ public:
 
     PriorityThreadPool* thread_pool() { return _thread_pool; }
     ThreadPool* streaming_load_thread_pool() { return _streaming_load_thread_pool; }
-    workgroup::ScanExecutor* scan_executor() { return _scan_executor; }
-    workgroup::ScanExecutor* connector_scan_executor() { return _connector_scan_executor; }
     ThreadPool* load_rowset_thread_pool() { return _load_rowset_thread_pool; }
-    ThreadPool* load_segment_thread_pool() { return _load_segment_thread_pool; };
+    ThreadPool* load_segment_thread_pool() { return _load_segment_thread_pool; }
+    ThreadPool* put_combined_txn_log_thread_pool() { return _put_combined_txn_log_thread_pool; }
+
+    pipeline::DriverExecutor* wg_driver_executor();
+    workgroup::ScanExecutor* scan_executor();
+    workgroup::ScanExecutor* connector_scan_executor();
+    workgroup::WorkGroupManager* workgroup_manager() { return _workgroup_manager.get(); }
 
     PriorityThreadPool* udf_call_pool() { return _udf_call_pool; }
     PriorityThreadPool* pipeline_prepare_pool() { return _pipeline_prepare_pool; }
     PriorityThreadPool* pipeline_sink_io_pool() { return _pipeline_sink_io_pool; }
     PriorityThreadPool* query_rpc_pool() { return _query_rpc_pool; }
+    PriorityThreadPool* datacache_rpc_pool() { return _datacache_rpc_pool; }
     ThreadPool* load_rpc_pool() { return _load_rpc_pool.get(); }
     ThreadPool* dictionary_cache_pool() { return _dictionary_cache_pool.get(); }
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
-    starrocks::pipeline::DriverExecutor* wg_driver_executor() { return _wg_driver_executor; }
     BaseLoadPathMgr* load_path_mgr() { return _load_path_mgr; }
     BfdParser* bfd_parser() const { return _bfd_parser; }
     BrokerMgr* broker_mgr() const { return _broker_mgr; }
@@ -290,6 +336,7 @@ public:
     SmallFileMgr* small_file_mgr() { return _small_file_mgr; }
     StreamContextMgr* stream_context_mgr() { return _stream_context_mgr; }
     TransactionMgr* transaction_mgr() { return _transaction_mgr; }
+    BatchWriteMgr* batch_write_mgr() { return _batch_write_mgr; }
 
     const std::vector<StorePath>& store_paths() const { return _store_paths; }
 
@@ -310,6 +357,7 @@ public:
     pipeline::QueryContextManager* query_context_mgr() { return _query_context_mgr; }
 
     pipeline::DriverLimiter* driver_limiter() { return _driver_limiter; }
+    pipeline::PipelineTimer* pipeline_timer() const { return _pipeline_timer; }
 
     int64_t max_executor_threads() const { return _max_executor_threads; }
 
@@ -319,7 +367,7 @@ public:
 
     lake::TabletManager* lake_tablet_manager() const { return _lake_tablet_manager; }
 
-    lake::LocationProvider* lake_location_provider() const { return _lake_location_provider; }
+    std::shared_ptr<lake::LocationProvider> lake_location_provider() const { return _lake_location_provider; }
 
     lake::UpdateManager* lake_update_manager() const { return _lake_update_manager; }
 
@@ -329,14 +377,17 @@ public:
 
     query_cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr; }
 
-    BlockCache* block_cache() const { return _block_cache; }
-
     spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
 
     ThreadPool* delete_file_thread_pool();
 
+    void try_release_resource_before_core_dump();
+
+    DiagnoseDaemon* diagnose_daemon() const { return _diagnose_daemon; }
+
 private:
     void _wait_for_fragments_finish();
+    size_t _get_running_fragments_count() const;
 
     std::vector<StorePath> _store_paths;
     // Leave protected so that subclasses can override
@@ -354,20 +405,20 @@ private:
 
     ThreadPool* _load_segment_thread_pool = nullptr;
     ThreadPool* _load_rowset_thread_pool = nullptr;
-
-    workgroup::ScanExecutor* _scan_executor = nullptr;
-    workgroup::ScanExecutor* _connector_scan_executor = nullptr;
+    ThreadPool* _put_combined_txn_log_thread_pool = nullptr;
 
     PriorityThreadPool* _udf_call_pool = nullptr;
     PriorityThreadPool* _pipeline_prepare_pool = nullptr;
     PriorityThreadPool* _pipeline_sink_io_pool = nullptr;
     PriorityThreadPool* _query_rpc_pool = nullptr;
+    PriorityThreadPool* _datacache_rpc_pool = nullptr;
     std::unique_ptr<ThreadPool> _load_rpc_pool;
     std::unique_ptr<ThreadPool> _dictionary_cache_pool;
     FragmentMgr* _fragment_mgr = nullptr;
     pipeline::QueryContextManager* _query_context_mgr = nullptr;
-    pipeline::DriverExecutor* _wg_driver_executor = nullptr;
+    std::unique_ptr<workgroup::WorkGroupManager> _workgroup_manager;
     pipeline::DriverLimiter* _driver_limiter = nullptr;
+    pipeline::PipelineTimer* _pipeline_timer = nullptr;
     int64_t _max_executor_threads = 0; // Max thread number of executor
 
     BaseLoadPathMgr* _load_path_mgr = nullptr;
@@ -379,6 +430,7 @@ private:
     BrpcStubCache* _brpc_stub_cache = nullptr;
     StreamContextMgr* _stream_context_mgr = nullptr;
     TransactionMgr* _transaction_mgr = nullptr;
+    BatchWriteMgr* _batch_write_mgr = nullptr;
 
     [[maybe_unused]] StorageEngine* _storage_engine = nullptr;
 
@@ -395,14 +447,14 @@ private:
     ProfileReportWorker* _profile_report_worker = nullptr;
 
     lake::TabletManager* _lake_tablet_manager = nullptr;
-    lake::LocationProvider* _lake_location_provider = nullptr;
+    std::shared_ptr<lake::LocationProvider> _lake_location_provider;
     lake::UpdateManager* _lake_update_manager = nullptr;
     lake::ReplicationTxnManager* _lake_replication_txn_manager = nullptr;
 
     AgentServer* _agent_server = nullptr;
     query_cache::CacheManagerRawPtr _cache_mgr;
-    BlockCache* _block_cache = nullptr;
     std::shared_ptr<spill::DirManager> _spill_dir_mgr;
+    DiagnoseDaemon* _diagnose_daemon = nullptr;
 };
 
 template <>

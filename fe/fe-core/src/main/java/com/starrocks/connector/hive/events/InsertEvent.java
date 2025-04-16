@@ -18,11 +18,11 @@ package com.starrocks.connector.hive.events;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.connector.hive.CacheUpdateProcessor;
+import com.starrocks.connector.DatabaseTableName;
+import com.starrocks.connector.hive.HiveCacheUpdateProcessor;
 import com.starrocks.connector.hive.HiveCommonStats;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.hive.HivePartitionName;
-import com.starrocks.connector.hive.HiveTableName;
 import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
@@ -48,7 +48,7 @@ public class InsertEvent extends MetastoreTableEvent {
     // Represents the partition for this insert. Null if the table is unpartitioned.
     private final Partition insertPartition;
 
-    private InsertEvent(NotificationEvent event, CacheUpdateProcessor cacheProcessor, String catalogName) {
+    private InsertEvent(NotificationEvent event, HiveCacheUpdateProcessor cacheProcessor, String catalogName) {
         super(event, cacheProcessor, catalogName);
         Preconditions.checkArgument(INSERT.equals(getEventType()));
         InsertMessage insertMessage =
@@ -73,7 +73,7 @@ public class InsertEvent extends MetastoreTableEvent {
     }
 
     public static List<MetastoreEvent> getEvents(NotificationEvent event,
-                                                 CacheUpdateProcessor cacheProcessor, String catalogName) {
+                                                 HiveCacheUpdateProcessor cacheProcessor, String catalogName) {
         try {
             return Lists.newArrayList(new InsertEvent(event, cacheProcessor, catalogName));
         } catch (MetastoreNotificationException e) {
@@ -99,8 +99,8 @@ public class InsertEvent extends MetastoreTableEvent {
         if (isPartitionTbl()) {
             return cache.isPartitionPresent(getHivePartitionName());
         } else {
-            HiveTableName hiveTableName = HiveTableName.of(dbName, tblName);
-            return cache.isTablePresent(hiveTableName);
+            DatabaseTableName databaseTableName = DatabaseTableName.of(dbName, tblName);
+            return cache.isTablePresent(databaseTableName);
         }
     }
 

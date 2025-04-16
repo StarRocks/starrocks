@@ -73,7 +73,6 @@ import java.util.Arrays;
 //          this three steps are done in check_scramble()
 public class MysqlPassword {
     private static final Logger LOG = LogManager.getLogger(MysqlPassword.class);
-    // TODO(zhaochun): this is duplicated with handshake packet.
     public static final byte[] EMPTY_PASSWORD = new byte[0];
     public static final int SCRAMBLE_LENGTH = 20;
     public static final int SCRAMBLE_LENGTH_HEX_LENGTH = 2 * SCRAMBLE_LENGTH + 1;
@@ -81,12 +80,12 @@ public class MysqlPassword {
     private static final byte[] DIG_VEC_UPPER = {'0', '1', '2', '3', '4', '5', '6', '7',
             '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
 
-    public static byte[] createRandomString(int len) {
+    public static byte[] createRandomString() {
         SecureRandom random = new SecureRandom();
-        byte[] bytes = new byte[len];
+        byte[] bytes = new byte[SCRAMBLE_LENGTH];
         random.nextBytes(bytes);
         // NOTE: MySQL challenge string can't contain 0.
-        for (int i = 0; i < len; ++i) {
+        for (int i = 0; i < SCRAMBLE_LENGTH; ++i) {
             if ((bytes[i] >= 'a' && bytes[i] <= 'z') || (bytes[i] >= 'A' && bytes[i] <= 'Z')) {
                 // pass
             } else {
@@ -109,7 +108,7 @@ public class MysqlPassword {
     }
 
     // Check that scrambled message corresponds to the password; the function
-    // is used by server to check that recieved reply is authentic.
+    // is used by server to check that received reply is authentic.
     // This function does not check lengths of given strings: message must be
     // null-terminated, reply and hash_stage2 must be at least SHA1_HASH_SIZE
     // long (if not, something fishy is going on).
@@ -263,12 +262,12 @@ public class MysqlPassword {
         passwdString = passwdString.toUpperCase();
         passwd = passwdString.getBytes(StandardCharsets.UTF_8);
         if (passwd.length != SCRAMBLE_LENGTH_HEX_LENGTH || passwd[0] != PVERSION41_CHAR) {
-            ErrorReportException.report(ErrorCode.ERR_PASSWD_LENGTH, 41);
+            throw ErrorReportException.report(ErrorCode.ERR_PASSWD_LENGTH, 41);
         }
 
         for (int i = 1; i < passwd.length; ++i) {
             if (!((passwd[i] <= '9' && passwd[i] >= '0') || passwd[i] >= 'A' && passwd[i] <= 'F')) {
-                ErrorReportException.report(ErrorCode.ERR_PASSWD_LENGTH, 41);
+                throw ErrorReportException.report(ErrorCode.ERR_PASSWD_LENGTH, 41);
             }
         }
 

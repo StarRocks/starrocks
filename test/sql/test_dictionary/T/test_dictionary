@@ -8,7 +8,7 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -28,7 +28,7 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -69,7 +69,7 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -189,7 +189,7 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -240,7 +240,7 @@ DROP DICTIONARY test_dictionary_definition_7;
 
 DROP TABLE t_dictionary_definition;
 
--- name: test_dictionary_error
+-- name: test_dictionary_error @slow
 CREATE TABLE `t_dictionary_error` (
   `id1` BIGINT NOT NULL COMMENT "",
   `id2` BIGINT NOT NULL COMMENT "",
@@ -250,7 +250,7 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -384,7 +384,7 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -398,7 +398,7 @@ PRIMARY KEY(`id4`)
 DISTRIBUTED BY HASH(`id4`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -448,7 +448,7 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -461,7 +461,7 @@ PRIMARY KEY(`id3`)
 DISTRIBUTED BY HASH(`id3`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -487,7 +487,7 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -504,7 +504,7 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -524,7 +524,7 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -534,8 +534,185 @@ INSERT INTO t_dictionary_common_expression VALUES (1,2,3,4);
 CREATE DICTIONARY test_dictionary_common_expression USING t_dictionary_common_expression (id1 KEY, id2 VALUE, id3 VALUE, id4 VALUE);
 function: wait_refresh_dictionary_finish("test_dictionary_common_expression", "FINISHED")
 
-explain SELECT dictionary_get("test_dictionary_common_expression", id1)[1],dictionary_get("test_dictionary_common_expression", id1)[2],dictionary_get("test_dictionary_common_expression", id1)[3] FROM t_dictionary_common_expression;
+[UC]explain select dictionary_get("test_dictionary_common_expression", id1)[1],dictionary_get("test_dictionary_common_expression", id1)[2],dictionary_get("test_dictionary_common_expression", id1)[3] FROM t_dictionary_common_expression;
 SELECT dictionary_get("test_dictionary_common_expression", id1)[1],dictionary_get("test_dictionary_common_expression", id1)[2],dictionary_get("test_dictionary_common_expression", id1)[3] FROM t_dictionary_common_expression;
 
 DROP DICTIONARY test_dictionary_common_expression;
 DROP TABLE t_dictionary_common_expression;
+
+-- name: test_dictionary_multiple_row
+CREATE TABLE `t_dictionary_multiple_row` (
+  `id1` BIGINT NOT NULL COMMENT "",
+  `id2` BIGINT NOT NULL COMMENT "",
+  `id3` BIGINT NOT NULL COMMENT "",
+  `id4` BIGINT NOT NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+CREATE TABLE `t_dictionary_multiple_row_fact` (
+  `id1` BIGINT NOT NULL COMMENT "",
+  `id2` BIGINT NOT NULL COMMENT "",
+  `id3` BIGINT NOT NULL COMMENT "",
+  `id4` BIGINT NOT NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+insert into t_dictionary_multiple_row select generate_series, generate_series, generate_series, generate_series from Table(generate_series(1, 20001));
+
+[UC]DROP DICTIONARY test_dictionary_multiple_row_multi_value;
+CREATE DICTIONARY test_dictionary_multiple_row_multi_value USING t_dictionary_multiple_row (id1 KEY, id2 VALUE, id3 VALUE, id4 VALUE);
+function: wait_refresh_dictionary_finish("test_dictionary_multiple_row_multi_value", "FINISHED")
+
+[UC]DROP DICTIONARY test_dictionary_multiple_row_single_value;
+CREATE DICTIONARY test_dictionary_multiple_row_single_value USING t_dictionary_multiple_row (id1 KEY, id2 VALUE);
+function: wait_refresh_dictionary_finish("test_dictionary_multiple_row_single_value", "FINISHED")
+
+insert into t_dictionary_multiple_row_fact SELECT dictionary_get("test_dictionary_multiple_row_multi_value", id1)[1], dictionary_get("test_dictionary_multiple_row_multi_value", id1)[2], dictionary_get("test_dictionary_multiple_row_multi_value", id1)[3] FROM t_dictionary_multiple_row;
+insert into t_dictionary_multiple_row_fact SELECT dictionary_get("test_dictionary_multiple_row_single_value", id1)[1], 1, 1 FROM t_dictionary_multiple_row;
+
+DROP TABLE t_dictionary_multiple_row;
+DROP TABLE t_dictionary_multiple_row_fact;
+DROP DICTIONARY test_dictionary_multiple_row_multi_value;
+DROP DICTIONARY test_dictionary_multiple_row_single_value;
+
+-- name: test_dictionary_show_create_table_gen_col
+CREATE TABLE `t_dictionary_show_create_table_gen_col_1` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` BIGINT NOT NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+INSERT INTO t_dictionary_show_create_table_gen_col_1 VALUES (1,1);
+
+[UC]DROP DICTIONARY test_dictionary_show_create_table_gen_col;
+CREATE DICTIONARY test_dictionary_show_create_table_gen_col USING t_dictionary_show_create_table_gen_col_1 (k KEY, v VALUE);
+function: wait_refresh_dictionary_finish("test_dictionary_show_create_table_gen_col", "FINISHED")
+
+CREATE TABLE `t_dictionary_show_create_table_gen_col_2` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` BIGINT AS dictionary_get("test_dictionary_show_create_table_gen_col", k)[1] COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+INSERT INTO t_dictionary_show_create_table_gen_col_2 VALUES (1);
+SELECT * FROM t_dictionary_show_create_table_gen_col_2;
+
+SHOW CREATE TABLE t_dictionary_show_create_table_gen_col_2;
+
+DROP TABLE t_dictionary_show_create_table_gen_col_1;
+DROP TABLE t_dictionary_show_create_table_gen_col_2;
+DROP DICTIONARY test_dictionary_show_create_table_gen_col;
+
+-- name: test_dictionary_null_if_not_exist
+CREATE TABLE `t_dictionary_null_if_not_exist` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` BIGINT NOT NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+INSERT INTO t_dictionary_null_if_not_exist VALUES (1,1),(3,3),(5,5);
+
+[UC]DROP DICTIONARY test_dictionary_null_if_not_exist;
+CREATE DICTIONARY test_dictionary_null_if_not_exist USING t_dictionary_null_if_not_exist (k KEY, v VALUE);
+function: wait_refresh_dictionary_finish("test_dictionary_null_if_not_exist", "FINISHED")
+
+INSERT INTO t_dictionary_null_if_not_exist VALUES (2,2),(4,4);
+
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k) FROM t_dictionary_null_if_not_exist ORDER BY k;
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, false) FROM t_dictionary_null_if_not_exist ORDER BY k;
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, true) FROM t_dictionary_null_if_not_exist ORDER BY k;
+
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, tRuE) FROM t_dictionary_null_if_not_exist ORDER BY k;
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, FaLsE) FROM t_dictionary_null_if_not_exist ORDER BY k;
+
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, xxxx) FROM t_dictionary_null_if_not_exist ORDER BY k;
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, "true") FROM t_dictionary_null_if_not_exist ORDER BY k;
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, "false") FROM t_dictionary_null_if_not_exist ORDER BY k;
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, 1) FROM t_dictionary_null_if_not_exist ORDER BY k;
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, 0) FROM t_dictionary_null_if_not_exist ORDER BY k;
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, -1) FROM t_dictionary_null_if_not_exist ORDER BY k;
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, k) FROM t_dictionary_null_if_not_exist ORDER BY k;
+SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, k, k) FROM t_dictionary_null_if_not_exist ORDER BY k;
+
+CREATE TABLE `t_dictionary_null_if_not_exist_gen_column` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` BIGINT AS dictionary_get("test_dictionary_null_if_not_exist", k)[1]
+) ENGINE=OLAP
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+INSERT INTO t_dictionary_null_if_not_exist_gen_column VALUES (1),(2),(3),(4),(5);
+SELECT * FROM t_dictionary_null_if_not_exist_gen_column;
+SHOW CREATE TABLE t_dictionary_null_if_not_exist_gen_column;
+
+TRUNCATE TABLE t_dictionary_null_if_not_exist;
+INSERT into t_dictionary_null_if_not_exist select generate_series, generate_series from Table(generate_series(1, 1000));
+REFRESH DICTIONARY test_dictionary_null_if_not_exist;
+function: wait_refresh_dictionary_finish("test_dictionary_null_if_not_exist", "FINISHED")
+INSERT into t_dictionary_null_if_not_exist select generate_series, generate_series from Table(generate_series(1001, 2000));
+SELECT SUM(dictionary_get("test_dictionary_null_if_not_exist", k, true) IS NOT NULL) from t_dictionary_null_if_not_exist;
+[UC]DROP DICTIONARY test_dictionary_null_if_not_exist;
+DROP TABLE t_dictionary_null_if_not_exist;
+
+CREATE TABLE `t_dictionary_null_if_not_exist` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v1` BIGINT NOT NULL COMMENT "",
+  `v2` BIGINT NOT NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+INSERT into t_dictionary_null_if_not_exist select generate_series, generate_series, generate_series from Table(generate_series(1, 1000));
+CREATE DICTIONARY test_dictionary_null_if_not_exist USING t_dictionary_null_if_not_exist (k KEY, v1 VALUE, v2 VALUE);
+function: wait_refresh_dictionary_finish("test_dictionary_null_if_not_exist", "FINISHED")
+INSERT into t_dictionary_null_if_not_exist select generate_series, generate_series, generate_series from Table(generate_series(1001, 2000));
+SELECT SUM(dictionary_get("test_dictionary_null_if_not_exist", k, true) IS NOT NULL) from t_dictionary_null_if_not_exist;
+[UC]DROP DICTIONARY test_dictionary_null_if_not_exist;
+DROP TABLE t_dictionary_null_if_not_exist;

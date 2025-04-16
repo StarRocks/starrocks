@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # JSON 函数概述
@@ -27,7 +27,7 @@ JSON 查询和处理函数可以查询和处理 JSON 类型的数据。例如查
 | [get_json_double](../../sql-functions/json-functions/json-query-and-processing-functions/get_json_double.md)| 解析并获取 json_str 内 json_path 的浮点型内容。      | `SELECT get_json_double('{"k1":1.3, "k2":"2"}', "$.k1");`  |  `1.3` |
 | [get_json_int](../../sql-functions/json-functions/json-query-and-processing-functions/get_json_int.md)| 解析并获取 json_str 内 json_path 的整型内容。      | `SELECT get_json_int('{"k1":1, "k2":"2"}', "$.k1");` |  `1` |
 | [get_json_string](../../sql-functions/json-functions/json-query-and-processing-functions/get_json_string.md)| 解析并获取 json_str 内 json_path 指定的字符串。该函数别名为 get_json_object.      | `SELECT get_json_string('{"k1":"v1", "k2":"v2"}', "$.k1");`| `v1` |
-| [json_each](../../sql-functions/json-functions/json-query-and-processing-functions/json_each.md)   | 将最外层的 JSON 对象展开为键值对。      | `SELECT * FROM tj_test, LATERAL JSON_EACH(j);` | ![json_each](../../../assets/json_each.png) |
+| [json_each](../../sql-functions/json-functions/json-query-and-processing-functions/json_each.md)   | 将最外层的 JSON 对象展开为键值对。      | `SELECT * FROM tj_test, LATERAL JSON_EACH(j);` | ![json_each](../../../_assets/json_each.png) |
 | [json_exists](../../sql-functions/json-functions/json-query-and-processing-functions/json_exists.md)| 查询 JSON 对象中是否存在某个值。如果存在，则返回 1；如果不存在，则返回 0。 | `SELECT JSON_EXISTS('{"a": 1}', '$.a');`            | `1`                              |
 | [json_keys](../../sql-functions/json-functions/json-query-and-processing-functions/json_keys.md) | 返回 JSON 对象中所有最上层成员 (key) 组成的数组。                     | `SELECT JSON_KEYS('{"a": 1, "b": 2, "c": 3}');`          | `["a", "b", "c"]`                             |
 | [json_length](../../sql-functions/json-functions/json-query-and-processing-functions/json_length.md) | 返回 JSON 字符串的长度。    | `SELECT json_length('{"Name": "Alice"}');`    | `1`                       |

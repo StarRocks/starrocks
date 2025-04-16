@@ -41,7 +41,7 @@ public class KuduSplitScannerFactory implements ScannerFactory {
      * due to hadoop version (hadoop-2.x) conflicts with JNI launcher of libhdfs (hadoop-3.x).
      */
     @Override
-    public Class getScannerClass() throws ClassNotFoundException {
+    public Class getScannerClass(String scannerType) throws ClassNotFoundException {
         try {
             return classLoader.loadClass("com.starrocks.kudu.reader.KuduSplitScanner");
         } catch (ClassNotFoundException e) {

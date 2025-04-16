@@ -45,7 +45,7 @@
 #include "gen_cpp/segment.pb.h"
 #include "gutil/macros.h"
 #include "storage/delta_column_group.h"
-#include "storage/inverted/inverted_index_iterator.h"
+#include "storage/index/inverted/inverted_index_iterator.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_pointer.h"
 #include "storage/short_key_index.h"
@@ -90,11 +90,11 @@ public:
                                                    const LakeIOOptions& lake_io_opts = {},
                                                    lake::TabletManager* tablet_manager = nullptr);
 
-    [[nodiscard]] static StatusOr<size_t> parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer,
-                                                               size_t* footer_length_hint,
-                                                               const FooterPointerPB* partial_rowset_footer);
+    static StatusOr<size_t> parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer,
+                                                 size_t* footer_length_hint,
+                                                 const FooterPointerPB* partial_rowset_footer);
 
-    [[nodiscard]] static Status write_segment_footer(WritableFile* write_file, const SegmentFooterPB& footer);
+    static Status write_segment_footer(WritableFile* write_file, const SegmentFooterPB& footer);
 
     Segment(std::shared_ptr<FileSystem> fs, FileInfo segment_file_info, uint32_t segment_id,
             TabletSchemaCSPtr tablet_schema, lake::TabletManager* tablet_manager);
@@ -118,10 +118,10 @@ public:
     // the elements in a column of a segment. The iterator starts from the beginning
     // of the column.
     //
-    // @param id The unique identifier of the column.
+    // @param column The column that need to be read.
     // @param path A pointer to the access path of the column.
     // @return A new iterator object for the specified column, or NotFound if the segment does not have the column.
-    StatusOr<std::unique_ptr<ColumnIterator>> new_column_iterator(ColumnUID id, ColumnAccessPath* path);
+    StatusOr<std::unique_ptr<ColumnIterator>> new_column_iterator(const TabletColumn& column, ColumnAccessPath* path);
 
     // Creates a new iterator for a specific column in a segment.
     //
@@ -195,7 +195,7 @@ public:
 
     // Load and decode short key index.
     // May be called multiple times, subsequent calls will no op.
-    [[nodiscard]] Status load_index(const LakeIOOptions& lake_io_opts = {});
+    Status load_index(const LakeIOOptions& lake_io_opts = {});
     bool has_loaded_index() const;
 
     Status new_inverted_index_iterator(uint32_t cid, InvertedIndexIterator** iter, const SegmentReadOptions& opts);
@@ -209,7 +209,7 @@ public:
     lake::TabletManager* lake_tablet_manager() { return _tablet_manager; }
 
     // read short_key_index, for data check, just used in unit test now
-    [[nodiscard]] Status get_short_key_index(std::vector<std::string>* sk_index_values);
+    Status get_short_key_index(std::vector<std::string>* sk_index_values);
 
     // for cloud native tablet metadata cache.
     // after the segment is inserted into metadata cache, various indexes will be loaded later when used,
@@ -218,7 +218,12 @@ public:
 
     bool is_default_column(const TabletColumn& column) { return !_column_readers.contains(column.unique_id()); }
 
+    const FileEncryptionInfo* encryption_info() const { return _encryption_info.get(); };
+
     DISALLOW_COPY_AND_MOVE(Segment);
+
+    // for ut test
+    void set_num_rows(uint32_t num_rows) { _num_rows = num_rows; }
 
 private:
     friend struct SegmentZoneMapPruner;
@@ -295,6 +300,8 @@ private:
     PageHandle _sk_index_handle;
     // short key index decoder
     std::unique_ptr<ShortKeyIndexDecoder> _sk_index_decoder;
+
+    std::unique_ptr<FileEncryptionInfo> _encryption_info;
 
     // for cloud native tablet
     lake::TabletManager* _tablet_manager = nullptr;

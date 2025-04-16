@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 toc_max_heading_level: 5
 ---
 
@@ -7,7 +7,7 @@ toc_max_heading_level: 5
 
 A Hudi catalog is a kind of external catalog that enables you to query data from Apache Hudi without ingestion.
 
-Also, you can directly transform and load data from Hudi by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) based on Hudi catalogs. StarRocks supports Hudi catalogs from v2.4 onwards.
+Also, you can directly transform and load data from Hudi by using [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) based on Hudi catalogs. StarRocks supports Hudi catalogs from v2.4 onwards.
 
 To ensure successful SQL workloads on your Hudi cluster, your StarRocks cluster must be able to access the storage system and metastore of your Hudi cluster. StarRocks supports the following storage systems and metastores:
 
@@ -759,13 +759,13 @@ PROPERTIES
 
 ## View Hudi catalogs
 
-You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:
+You can use [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a Hudi catalog named `hudi_catalog_glue`:
+You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a Hudi catalog named `hudi_catalog_glue`:
 
 ```SQL
 SHOW CREATE CATALOG hudi_catalog_glue;
@@ -775,7 +775,7 @@ SHOW CREATE CATALOG hudi_catalog_glue;
 
 You can use one of the following methods to switch to a Hudi catalog and a database in it:
 
-- Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) to specify a Hudi catalog in the current session, and then use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to specify an active database:
+- Use [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) to specify a Hudi catalog in the current session, and then use [USE](../../sql-reference/sql-statements/Database/USE.md) to specify an active database:
 
   ```SQL
   -- Switch to a specified catalog in the current session:
@@ -784,7 +784,7 @@ You can use one of the following methods to switch to a Hudi catalog and a datab
   USE <db_name>
   ```
 
-- Directly use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to switch to a Hudi catalog and a database in it:
+- Directly use [USE](../../sql-reference/sql-statements/Database/USE.md) to switch to a Hudi catalog and a database in it:
 
   ```SQL
   USE <catalog_name>.<db_name>
@@ -792,7 +792,7 @@ You can use one of the following methods to switch to a Hudi catalog and a datab
 
 ## Drop a Hudi catalog
 
-You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) to drop an external catalog.
+You can use [DROP CATALOG](../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) to drop an external catalog.
 
 The following example drops a Hudi catalog named `hudi_catalog_glue`:
 
@@ -818,7 +818,7 @@ You can use one of the following syntaxes to view the schema of a Hudi table:
 
 ## Query a Hudi table
 
-1. Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) to view the databases in your Hudi cluster:
+1. Use [SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) to view the databases in your Hudi cluster:
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>
@@ -826,7 +826,7 @@ You can use one of the following syntaxes to view the schema of a Hudi table:
 
 2. [Switch to a Hudi Catalog and a database in it](#switch-to-a-hudi-catalog-and-a-database-in-it).
 
-3. Use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the destination table in the specified database:
+3. Use [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) to query the destination table in the specified database:
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10
@@ -844,83 +844,11 @@ INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM hudi_table
 
 ### Manual update
 
-By default, StarRocks caches the metadata of Hudi and automatically updates the metadata in asynchronous mode to deliver better performance. Additionally, after some schema changes or table updates are made on a Hudi table, you can also use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE.md) to manually update its metadata, thereby ensuring that StarRocks can obtain up-to-date metadata at its earliest opportunity and generate appropriate execution plans:
+By default, StarRocks caches the metadata of Hudi and automatically updates the metadata in asynchronous mode to deliver better performance. Additionally, after some schema changes or table updates are made on a Hudi table, you can also use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/table_bucket_part_index/REFRESH_EXTERNAL_TABLE.md) to manually update its metadata, thereby ensuring that StarRocks can obtain up-to-date metadata at its earliest opportunity and generate appropriate execution plans:
 
 ```SQL
 REFRESH EXTERNAL TABLE <table_name> [PARTITION ('partition_name', ...)]
 ```
-
-### Automatic incremental update
-
-Unlike the automatic asynchronous update policy, the automatic incremental update policy enables the FEs in your StarRocks cluster to read events, such as adding columns, removing partitions, and updating data, from your Hive metastore. StarRocks can automatically update the metadata cached in the FEs based on these events. This means you do not need to manually update the metadata of your Hudi tables.
-
-To enable automatic incremental update, follow these steps:
-
-#### Step 1: Configure event listener for your Hive metastore
-
-Both Hive metastore v2.x and v3.x support configuring an event listener. This step uses the event listener configuration used for Hive metastore v3.1.2 as an example. Add the following configuration items to the **$HiveMetastore/conf/hive-site.xml** file, and then restart your Hive metastore:
-
-```XML
-<property>
-    <name>hive.metastore.event.db.notification.api.auth</name>
-    <value>false</value>
-</property>
-<property>
-    <name>hive.metastore.notifications.add.thrift.objects</name>
-    <value>true</value>
-</property>
-<property>
-    <name>hive.metastore.alter.notifications.basic</name>
-    <value>false</value>
-</property>
-<property>
-    <name>hive.metastore.dml.events</name>
-    <value>true</value>
-</property>
-<property>
-    <name>hive.metastore.transactional.event.listeners</name>
-    <value>org.apache.hive.hcatalog.listener.DbNotificationListener</value>
-</property>
-<property>
-    <name>hive.metastore.event.db.listener.timetolive</name>
-    <value>172800s</value>
-</property>
-<property>
-    <name>hive.metastore.server.max.message.size</name>
-    <value>858993459</value>
-</property>
-```
-
-You can search for `event id` in the FE log file to check whether the event listener is successfully configured. If the configuration fails, `event id` values are `0`.
-
-#### Step 2: Enable automatic incremental update on StarRocks
-
-You can enable automatic incremental update for a single Hudi catalog or for all Hudi catalogs in your StarRocks cluster.
-
-- To enable automatic incremental update for a single Hudi catalog, set the `enable_hms_events_incremental_sync` parameter to `true` in `PROPERTIES` like below when you create the Hudi catalog:
-
-  ```SQL
-  CREATE EXTERNAL CATALOG <catalog_name>
-  [COMMENT <comment>]
-  PROPERTIES
-  (
-      "type" = "hudi",
-      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
-       ....
-      "enable_hms_events_incremental_sync" = "true"
-  );
-  ```
-
-- To enable automatic incremental update for all Hudi catalogs, add `"enable_hms_events_incremental_sync" = "true"` to the `$FE_HOME/conf/fe.conf` file of each FE, and then restart each FE to make the parameter setting take effect.
-
-You can also tune the following parameters in the `$FE_HOME/conf/fe.conf` file of each FE based on your business requirements, and then restart each FE to make the parameter settings take effect.
-
-| Parameter                         | Description                                                  |
-| --------------------------------- | ------------------------------------------------------------ |
-| hms_events_polling_interval_ms    | The time interval at which StarRocks reads events from your Hive metastore. Default value: `5000`. Unit: milliseconds. |
-| hms_events_batch_size_per_rpc     | The maximum number of events that StarRocks can read at a time. Default value: `500`. |
-| enable_hms_parallel_process_evens | Specifies whether StarRocks processes events in parallel as it reads the events. Valid values: `true` and `false`. Default value: `true`. The value `true` enables parallelism, and the value `false` disables parallelism. |
-| hms_process_events_parallel_num   | The maximum number of events that StarRocks can process in parallel. Default value: `4`. |
 
 ## Appendix: Understand metadata automatic asynchronous update
 
@@ -937,7 +865,7 @@ For example, there is a Hudi table named `table2`, which has four partitions: `p
 
 The following figure shows the time intervals on a timeline for easier understanding.
 
-![Timeline for updating and discarding cached metadata](../../assets/catalog_timeline.png)
+![Timeline for updating and discarding cached metadata](../../_assets/catalog_timeline.png)
 
 Then StarRocks updates or discards the metadata in compliance with the following rules:
 

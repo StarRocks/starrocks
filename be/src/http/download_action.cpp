@@ -50,8 +50,6 @@
 namespace starrocks {
 
 const std::string FILE_PARAMETER = "file";
-const std::string DB_PARAMETER = "db";
-const std::string LABEL_PARAMETER = "label";
 const std::string TOKEN_PARAMETER = "token";
 
 DownloadAction::DownloadAction(ExecEnv* exec_env, const std::vector<std::string>& allow_dirs)

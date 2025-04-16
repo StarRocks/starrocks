@@ -24,32 +24,43 @@ namespace starrocks {
 // Keep tracks with `information_schema.materialized_views` table's schema.
 SchemaScanner::ColumnDesc SchemaMaterializedViewsScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
-        {"MATERIALIZED_VIEW_ID", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_SCHEMA", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"REFRESH_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"IS_ACTIVE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"INACTIVE_REASON", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"PARTITION_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TASK_ID", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TASK_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"MATERIALIZED_VIEW_ID", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TABLE_SCHEMA", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"REFRESH_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"IS_ACTIVE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"INACTIVE_REASON", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"PARTITION_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TASK_ID", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TASK_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
 
-        {"LAST_REFRESH_START_TIME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"LAST_REFRESH_FINISHED_TIME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"LAST_REFRESH_DURATION", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"LAST_REFRESH_STATE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"LAST_REFRESH_FORCE_REFRESH", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"LAST_REFRESH_START_PARTITION", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"LAST_REFRESH_END_PARTITION", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"LAST_REFRESH_BASE_REFRESH_PARTITIONS", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"LAST_REFRESH_MV_REFRESH_PARTITIONS", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"LAST_REFRESH_START_TIME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
+         false},
+        {"LAST_REFRESH_FINISHED_TIME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
+         false},
+        {"LAST_REFRESH_DURATION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"LAST_REFRESH_STATE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"LAST_REFRESH_FORCE_REFRESH", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
+         false},
+        {"LAST_REFRESH_START_PARTITION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
+         false},
+        {"LAST_REFRESH_END_PARTITION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
+         false},
+        {"LAST_REFRESH_BASE_REFRESH_PARTITIONS", TypeDescriptor::create_varchar_type(sizeof(StringValue)),
+         sizeof(StringValue), false},
+        {"LAST_REFRESH_MV_REFRESH_PARTITIONS", TypeDescriptor::create_varchar_type(sizeof(StringValue)),
+         sizeof(StringValue), false},
 
-        {"LAST_REFRESH_ERROR_CODE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"LAST_REFRESH_ERROR_MESSAGE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_ROWS", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"MATERIALIZED_VIEW_DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"EXTRA_MESSAGE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"QUERY_REWRITE_STATUS", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"LAST_REFRESH_ERROR_CODE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
+         false},
+        {"LAST_REFRESH_ERROR_MESSAGE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
+         false},
+        {"TABLE_ROWS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"MATERIALIZED_VIEW_DEFINITION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
+         false},
+        {"EXTRA_MESSAGE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"QUERY_REWRITE_STATUS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"CREATOR", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
 };
 
 SchemaMaterializedViewsScanner::SchemaMaterializedViewsScanner()
@@ -108,7 +119,8 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
                            Slice(info.rows),
                            Slice(info.text),
                            Slice(info.extra_message),
-                           Slice(info.query_rewrite_status)};
+                           Slice(info.query_rewrite_status),
+                           Slice(info.creator)};
 
     for (const auto& [slot_id, index] : slot_id_map) {
         Column* column = (*chunk)->get_column_by_slot_id(slot_id).get();

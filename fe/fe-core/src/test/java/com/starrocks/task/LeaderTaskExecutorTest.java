@@ -70,6 +70,15 @@ public class LeaderTaskExecutorTest {
         }
     }
 
+    @Test
+    public void testPoolSize() {
+        int size = executor.getCorePoolSize();
+        executor.setPoolSize(size + 1);
+        Assert.assertEquals(size + 1, executor.getCorePoolSize());
+        executor.setPoolSize(size);
+        Assert.assertEquals(size, executor.getCorePoolSize());
+    }
+
     private class TestLeaderTask extends LeaderTask {
 
         public TestLeaderTask(long signature) {

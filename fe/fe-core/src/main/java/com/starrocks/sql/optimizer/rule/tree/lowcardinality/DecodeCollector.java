@@ -20,13 +20,18 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
+import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -34,8 +39,11 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -52,22 +60,29 @@ import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.statistics.CacheDictManager;
+import com.starrocks.sql.optimizer.statistics.CacheRelaxDictManager;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.sql.optimizer.statistics.IRelaxDictManager;
 import com.starrocks.thrift.TAccessPathType;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.TestOnly;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.starrocks.analysis.BinaryType.EQ_FOR_NULL;
+import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
+import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 
 /*
  * For compute all string columns that can benefit from low-cardinality optimization by bottom-up
@@ -88,7 +103,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                     FunctionSet.LTRIM, FunctionSet.REGEXP_EXTRACT, FunctionSet.REGEXP_REPLACE, FunctionSet.REPEAT,
                     FunctionSet.REPLACE, FunctionSet.REVERSE, FunctionSet.RIGHT, FunctionSet.RPAD, FunctionSet.RTRIM,
                     FunctionSet.SPLIT_PART, FunctionSet.SUBSTR, FunctionSet.SUBSTRING, FunctionSet.SUBSTRING_INDEX,
-                    FunctionSet.TRIM, FunctionSet.UPPER, FunctionSet.IF);
+                    FunctionSet.TRIM, FunctionSet.UPPER, FunctionSet.IF, FunctionSet.LENGTH, FunctionSet.CHAR_LENGTH);
 
     // array<string> support:
     //  array<string> -> array<string>: array function
@@ -101,6 +116,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             FunctionSet.CARDINALITY);
 
     private final SessionVariable sessionVariable;
+    private final boolean isQuery;
 
     // These fields are the same as the fields in the DecodeContext,
     // the difference: these fields store all string information, the
@@ -121,21 +137,115 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
     private final List<Integer> scanStringColumns = Lists.newArrayList();
 
+    // For these columns we need to disable the associated rewrites.
+    private ColumnRefSet disableRewriteStringColumns = new ColumnRefSet();
+
     // operators which are the children of Match operator
     private final ColumnRefSet matchChildren = new ColumnRefSet();
 
-    public DecodeCollector(SessionVariable session) {
+    private final ColumnRefSet scanColumnRefSet = new ColumnRefSet();
+
+    // check if there is a blocking node in plan
+    private boolean canBlockingOutput = false;
+
+    public DecodeCollector(SessionVariable session, boolean isQuery) {
         this.sessionVariable = session;
+        this.isQuery = isQuery;
     }
 
     public void collect(OptExpression root, DecodeContext context) {
+        canBlockingOutput = new CheckBlockingNode().check(root);
         collectImpl(root, null);
         initContext(context);
     }
 
+    public boolean isValidMatchChildren() {
+        if (matchChildren.isEmpty()) {
+            return true;
+        }
+
+        return scanColumnRefSet.containsAll(matchChildren);
+    }
+
+    private void fillDisableStringColumns() {
+        // build string dependency
+        // a = upper(b) b = upper(c)
+        // if disable b, disable a & c
+        // build dependencies
+        // a = upper(b) b = upper(c)
+        // a -> set(b, c)
+
+        Map<Integer, Set<Integer>> dependencyStringIds = Maps.newHashMap();
+        // build dependencies from project exprs
+        this.stringRefToDefineExprMap.forEach((k, v) -> {
+            for (ColumnRefOperator columnRef : v.getColumnRefs()) {
+                dependencyStringIds.computeIfAbsent(columnRef.getId(), x -> Sets.newHashSet());
+                final int cid = columnRef.getId();
+                if (!k.equals(cid)) {
+                    dependencyStringIds.get(cid).add(k);
+                }
+            }
+        });
+        // build dependencies from aggregate exprs
+        this.stringAggregateExpressions.forEach((k, v) -> {
+            for (CallOperator callOperator : v) {
+                for (ColumnRefOperator columnRef : callOperator.getColumnRefs()) {
+                    dependencyStringIds.computeIfAbsent(columnRef.getId(), x -> Sets.newHashSet());
+                    final int cid = columnRef.getId();
+                    if (!k.equals(cid)) {
+                        dependencyStringIds.get(cid).add(k);
+                    }
+                }
+            }
+        });
+        // build relation groups. The same closure is built into the same group
+        // eg:
+        // 1 -> (2, 3)
+        // 2 -> (3)
+        // 3 -> 3
+        // 4 -> 4
+        // will generate result:
+        // 1 -> (1,2,3)
+        // 2 -> (1,2,3)
+        // 3 -> (1,2,3)
+        // 4 -> (4)
+        Map<Integer, Set<Integer>> relations = Maps.newHashMap();
+        dependencyStringIds.forEach((k, v) -> {
+            relations.computeIfAbsent(k, x -> Sets.newHashSet());
+            final Set<Integer> relation = relations.get(k);
+            relation.addAll(v);
+            relation.add(k);
+            for (Integer dependency : v) {
+                relations.put(dependency, relation);
+            }
+        });
+
+        final Set<Set<Integer>> relationSets = new HashSet<>(relations.values());
+        // for each relation group if any element in group is disable then disable all group
+        for (Set<Integer> relationSet : relationSets) {
+            for (Integer cid : relationSet) {
+                if (disableRewriteStringColumns.contains(cid)) {
+                    unionAll(disableRewriteStringColumns, relationSet);
+                    break;
+                }
+            }
+        }
+    }
+
+    private void unionAll(ColumnRefSet columnRefSet, Set<Integer> cids) {
+        for (Integer cid : cids) {
+            columnRefSet.union(cid);
+        }
+    }
+
     private void initContext(DecodeContext context) {
+        fillDisableStringColumns();
+
         // choose the profitable string columns
         for (Integer cid : scanStringColumns) {
+            if (disableRewriteStringColumns.contains(cid)) {
+                continue;
+            }
             if (matchChildren.contains(cid)) {
                 continue;
             }
@@ -163,6 +273,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             if (context.allStringColumns.contains(cid)) {
                 continue;
             }
+            if (disableRewriteStringColumns.contains(cid)) {
+                continue;
+            }
             if (!checkDependOnExpr(cid, context.allStringColumns)) {
                 continue;
             }
@@ -186,6 +299,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
         // add string column's all aggregate expression(1st & 2nd stage)
         for (Integer aggregateId : stringAggregateExpressions.keySet()) {
+            if (disableRewriteStringColumns.contains(aggregateId)) {
+                continue;
+            }
             List<CallOperator> aggregateExprs = stringAggregateExpressions.get(aggregateId);
             for (CallOperator agg : aggregateExprs) {
                 if (agg.getColumnRefs().stream().map(ColumnRefOperator::getId)
@@ -281,6 +397,15 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     }
 
     @Override
+    public DecodeInfo visitPhysicalFilter(OptExpression optExpression, DecodeInfo context) {
+        if (optExpression.getInputs().get(0).getOp() instanceof PhysicalOlapScanOperator) {
+            // PhysicalFilter->PhysicalOlapScan is a special pattern, the Filter's predicate is extracted from OlapScan,
+            // we should keep the DecodeInfo from it's input.
+            return context.createOutputInfo();
+        }
+        return context.createDecodeInfo();
+    }
+    @Override
     public DecodeInfo visitPhysicalJoin(OptExpression optExpression, DecodeInfo context) {
         if (context.outputStringColumns.isEmpty()) {
             return DecodeInfo.EMPTY;
@@ -294,15 +419,15 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         if (!result.inputStringColumns.containsAny(onColumns)) {
             return result;
         }
+        onColumns.getStream().forEach(c -> disableRewriteStringColumns.union(c));
         result.outputStringColumns.clear();
         result.inputStringColumns.getStream().forEach(c -> {
-            if (onColumns.contains(c)) {
-                result.decodeStringColumns.union(c);
-            } else {
+            if (!onColumns.contains(c)) {
                 result.outputStringColumns.union(c);
             }
         });
-        result.inputStringColumns.except(result.decodeStringColumns);
+        result.decodeStringColumns.except(disableRewriteStringColumns);
+        result.inputStringColumns.except(disableRewriteStringColumns);
         return result;
     }
 
@@ -371,6 +496,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         return info;
     }
 
+
     @Override
     public DecodeInfo visitPhysicalTableFunction(OptExpression optExpression, DecodeInfo context) {
         if (context.outputStringColumns.isEmpty()) {
@@ -415,21 +541,15 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         if (context.outputStringColumns.isEmpty()) {
             return DecodeInfo.EMPTY;
         }
-        DecodeInfo result = context.createOutputInfo();
-        // 1. join on-predicate don't support low-cardinality optimization, must decode before shuffle
-        // 2. if parent don't need dict column, `parent` will null, it's unlikely, but to check is better
-        if (context.parent != null && context.parent.getOp() instanceof PhysicalJoinOperator) {
-            return visitPhysicalJoin(context.parent, context);
-        }
-        return result;
+        return context.createOutputInfo();
     }
 
     @Override
     public DecodeInfo visitPhysicalOlapScan(OptExpression optExpression, DecodeInfo context) {
         PhysicalOlapScanOperator scan = optExpression.getOp().cast();
         OlapTable table = (OlapTable) scan.getTable();
-        long version = table.getPartitions().stream().map(Partition::getVisibleVersionTime).max(Long::compareTo)
-                .orElse(0L);
+        long version = table.getPartitions().stream().map(p -> p.getDefaultPhysicalPartition().getVisibleVersionTime())
+                .max(Long::compareTo).orElse(0L);
 
         if ((table.getKeysType().equals(KeysType.PRIMARY_KEYS))) {
             return DecodeInfo.EMPTY;
@@ -437,16 +557,15 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         if (table.hasForbiddenGlobalDict()) {
             return DecodeInfo.EMPTY;
         }
+        if (table.inputHasTempPartition(scan.getSelectedPartitionId())) {
+            return DecodeInfo.EMPTY;
+        }
 
         // check dict column
         DecodeInfo info = new DecodeInfo();
         for (ColumnRefOperator column : scan.getColRefToColumnMetaMap().keySet()) {
             // Condition 1:
-            if (!supportLowCardinality(column.getType())) {
-                continue;
-            }
-
-            if (!sessionVariable.isEnableArrayLowCardinalityOptimize() && column.getType().isArrayType()) {
+            if (!supportAndEnabledLowCardinality(column.getType())) {
                 continue;
             }
 
@@ -457,31 +576,30 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             ColumnStatistic columnStatistic = GlobalStateMgr.getCurrentState().getStatisticStorage()
                     .getColumnStatistic(table, column.getName());
             // Condition 2: the varchar column is low cardinality string column
-            if (!column.getType().isArrayType() && !FeConstants.USE_MOCK_DICT_MANAGER && (columnStatistic.isUnknown() ||
-                    columnStatistic.getDistinctValuesCount() > CacheDictManager.LOW_CARDINALITY_THRESHOLD)) {
+
+            boolean alwaysCollectDict = sessionVariable.isAlwaysCollectDict();
+            if (!alwaysCollectDict && !column.getType().isArrayType() && !FeConstants.USE_MOCK_DICT_MANAGER &&
+                    (columnStatistic.isUnknown() ||
+                            columnStatistic.getDistinctValuesCount() > CacheDictManager.LOW_CARDINALITY_THRESHOLD)) {
                 LOG.debug("{} isn't low cardinality string column", column.getName());
                 continue;
             }
 
             // Condition 3: the varchar column has collected global dict
-            if (!IDictManager.getInstance().hasGlobalDict(table.getId(), column.getName(), version)) {
+            Column columnObj = table.getColumn(column.getName());
+            if (!IDictManager.getInstance().hasGlobalDict(table.getId(), columnObj.getColumnId(), version)) {
                 LOG.debug("{} doesn't have global dict", column.getName());
                 continue;
             }
 
-            Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(table.getId(), column.getName());
+            Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(table.getId(), columnObj.getColumnId());
             // cache reaches capacity limit, randomly eliminate some keys
             // then we will get an empty dictionary.
             if (dict.isEmpty()) {
                 continue;
             }
 
-            info.outputStringColumns.union(column);
-            info.inputStringColumns.union(column);
-            stringRefToDefineExprMap.put(column.getId(), column);
-            scanStringColumns.add(column.getId());
-            expressionStringRefCounter.put(column.getId(), 0);
-            globalDicts.put(column.getId(), dict.get());
+            markedAsGlobalDictOpt(info, column, dict.get());
         }
 
         if (info.outputStringColumns.isEmpty()) {
@@ -489,6 +607,138 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         }
 
         return info;
+    }
+
+    private boolean banArrayColumnWithPredicate(PhysicalScanOperator scan, ColumnRefOperator column) {
+        return column.getType().isArrayType() &&
+                scan.getPredicate() != null && scan.getPredicate().getColumnRefs().contains(column);
+    }
+
+    private Pair<Boolean, Optional<ColumnDict>> checkConnectorGlobalDict(PhysicalScanOperator scan, Table table,
+                                                                         ColumnRefOperator column) {
+        // Condition 1:
+        if (!supportAndEnabledLowCardinality(column.getType())) {
+            return new Pair<>(false, Optional.empty());
+        }
+
+        // Condition 1.1:
+        if (banArrayColumnWithPredicate(scan, column)) {
+            return new Pair<>(false, Optional.empty());
+        }
+
+        // Condition 2: the varchar column is low cardinality string column
+        ColumnStatistic columnStatistic = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                .getConnectorTableStatistics(table, List.of(column.getName())).get(0).getColumnStatistic();
+
+        if (!columnStatistic.isUnknown() &&
+                columnStatistic.getDistinctValuesCount() > CacheDictManager.LOW_CARDINALITY_THRESHOLD) {
+            LOG.debug("{} isn't low cardinality string column", column.getName());
+            return new Pair<>(false, Optional.empty());
+        }
+
+        boolean alwaysCollectDict = sessionVariable.isAlwaysCollectDictOnLake();
+        if (!alwaysCollectDict && !FeConstants.USE_MOCK_DICT_MANAGER && columnStatistic.isUnknown()) {
+            LOG.debug("{} isn't low cardinality string column", column.getName());
+            return new Pair<>(false, Optional.empty());
+        }
+
+        // Condition 3: the varchar column has collected global dict
+        if (!IRelaxDictManager.getInstance().hasGlobalDict(table.getUUID(), column.getName())) {
+            LOG.debug("{} doesn't have global dict", column.getName());
+            return new Pair<>(false, Optional.empty());
+        }
+
+        Optional<ColumnDict> dict = IRelaxDictManager.getInstance().getGlobalDict(table.getUUID(),
+                column.getName());
+        // cache reaches capacity limit, randomly eliminate some keys
+        // then we will get an empty dictionary.
+        if (dict.isEmpty() || dict.get().getVersion() > CacheRelaxDictManager.PERIOD_VERSION_THRESHOLD) {
+            return new Pair<>(false, Optional.empty());
+        }
+        return new Pair<>(true, dict);
+    }
+
+    @Override
+    public DecodeInfo visitPhysicalHiveScan(OptExpression optExpression, DecodeInfo context) {
+        if (!canBlockingOutput || !sessionVariable.isUseLowCardinalityOptimizeOnLake() || !isQuery) {
+            return DecodeInfo.EMPTY;
+        }
+        PhysicalHiveScanOperator scan = optExpression.getOp().cast();
+        HiveTable table = (HiveTable) scan.getTable();
+
+        // only support parquet
+        if (table.getStorageFormat() == null || !table.getStorageFormat().equals(HiveStorageFormat.PARQUET)) {
+            return DecodeInfo.EMPTY;
+        }
+
+        // check dict column
+        DecodeInfo info = new DecodeInfo();
+        for (ColumnRefOperator column : scan.getColRefToColumnMetaMap().keySet()) {
+            // don't collect partition columns
+            if (table.getPartitionColumnNames().contains(column.getName())) {
+                continue;
+            }
+
+            Pair<Boolean, Optional<ColumnDict>> res = checkConnectorGlobalDict(scan, table, column);
+            if (!res.first) {
+                continue;
+            }
+
+            markedAsGlobalDictOpt(info, column, res.second.get());
+        }
+
+        if (info.outputStringColumns.isEmpty()) {
+            return DecodeInfo.EMPTY;
+        }
+
+        return info;
+    }
+
+    @Override
+    public DecodeInfo visitPhysicalIcebergScan(OptExpression optExpression, DecodeInfo context) {
+        if (!canBlockingOutput || !sessionVariable.isUseLowCardinalityOptimizeOnLake() || !isQuery) {
+            return DecodeInfo.EMPTY;
+        }
+
+        PhysicalIcebergScanOperator scan = optExpression.getOp().cast();
+        IcebergTable table = (IcebergTable) scan.getTable();
+
+        // only support parquet
+        if (!table.getNativeTable().properties().getOrDefault(DEFAULT_FILE_FORMAT, DEFAULT_FILE_FORMAT_DEFAULT).
+                equalsIgnoreCase("parquet")) {
+            return DecodeInfo.EMPTY;
+        }
+
+        // check dict column
+        DecodeInfo info = new DecodeInfo();
+        for (ColumnRefOperator column : scan.getColRefToColumnMetaMap().keySet()) {
+            if (table.getPartitionColumnNames().contains(column.getName())) {
+                continue;
+            }
+
+            Pair<Boolean, Optional<ColumnDict>> res = checkConnectorGlobalDict(scan, table, column);
+            if (!res.first) {
+                continue;
+            }
+
+            markedAsGlobalDictOpt(info, column, res.second.get());
+        }
+
+        if (info.outputStringColumns.isEmpty()) {
+            return DecodeInfo.EMPTY;
+        }
+
+        return info;
+    }
+
+    private void markedAsGlobalDictOpt(DecodeInfo info, ColumnRefOperator column, ColumnDict dict) {
+        info.outputStringColumns.union(column);
+        info.inputStringColumns.union(column);
+        stringRefToDefineExprMap.put(column.getId(), column);
+        scanStringColumns.add(column.getId());
+        expressionStringRefCounter.put(column.getId(), 0);
+        globalDicts.put(column.getId(), dict);
+        scanColumnRefSet.union(column.getId());
     }
 
     // complex type may be support prune subfield, doesn't read data
@@ -556,6 +806,8 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                     stringRefToDefineExprMap.put(key.getId(), value);
                     expressionStringRefCounter.putIfAbsent(key.getId(), 0);
                     info.outputStringColumns.union(key.getId());
+                } else {
+                    info.usedStringColumns.union(c);
                 }
             });
             matchChildren.union(dictExpressionCollector.matchChildren);
@@ -564,6 +816,21 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
     private static boolean supportLowCardinality(Type type) {
         return type.isVarchar() || (type.isArrayType() && ((ArrayType) type).getItemType().isVarchar());
+    }
+
+    private boolean supportAndEnabledLowCardinality(Type type) {
+        if (!supportLowCardinality(type)) {
+            return false;
+        } else if (type.isArrayType()) {
+            return sessionVariable.isEnableArrayLowCardinalityOptimize();
+        } else {
+            return true;
+        }
+    }
+
+    @TestOnly
+    public boolean canBlockingOutput() {
+        return canBlockingOutput;
     }
 
     // Check if an expression can be optimized using a dictionary
@@ -623,10 +890,11 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             }
 
             long variableExpr = collectors.stream().filter(VARIABLES::equals).count();
-            long dictCount = collectors.stream().filter(s -> !s.isConstant()).distinct().count();
+            List<ScalarOperator> dictColumns = collectors.stream().filter(s -> !s.isConstant()).distinct()
+                    .collect(Collectors.toList());
             // only one scalar operator, and it's a dict column
-            if (dictCount == 1 && variableExpr == 0) {
-                return collectors.stream().filter(s -> !s.isConstant()).findFirst().get();
+            if (dictColumns.size() == 1 && variableExpr == 0) {
+                return dictColumns.get(0);
             }
 
             for (int i = 0; i < collectors.size(); i++) {
@@ -721,6 +989,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
         @Override
         public ScalarOperator visitCastOperator(CastOperator operator, Void context) {
+            if (operator.getType().isArrayType()) {
+                return forbidden(visitChildren(operator, context), operator);
+            }
             return merge(visitChildren(operator, context), operator);
         }
 
@@ -753,6 +1024,35 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         public ScalarOperator visitMatchExprOperator(MatchExprOperator operator, Void context) {
             matchChildren.union((ColumnRefOperator) operator.getChildren().get(0));
             return merge(visitChildren(operator, context), operator);
+        }
+    }
+
+    public static class CheckBlockingNode extends OptExpressionVisitor<Boolean, Void> {
+        private boolean visitChild(OptExpression optExpression, Void context) {
+            if (optExpression.getInputs().size() != 1) {
+                return false;
+            }
+            OptExpression child = optExpression.getInputs().get(0);
+            return child.getOp().accept(this, child, context);
+        }
+
+        @Override
+        public Boolean visit(OptExpression optExpression, Void context) {
+            return visitChild(optExpression, context);
+        }
+
+        @Override
+        public Boolean visitPhysicalTopN(OptExpression optExpression, Void context) {
+            return true;
+        }
+
+        @Override
+        public Boolean visitPhysicalHashAggregate(OptExpression optExpression, Void context) {
+            return true;
+        }
+
+        public boolean check(OptExpression optExpression) {
+            return optExpression.getOp().accept(this, optExpression, null);
         }
     }
 }

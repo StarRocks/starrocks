@@ -22,7 +22,7 @@
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks::stream_load {
+namespace starrocks {
 
 TabletSinkSender::TabletSinkSender(PUniqueId load_id, int64_t txn_id, IndexIdToTabletBEMap index_id_to_tablet_be_map,
                                    OlapTablePartitionParam* partition_params, std::vector<IndexChannel*> channels,
@@ -370,6 +370,10 @@ bool TabletSinkSender::get_immutable_partition_ids(std::set<int64_t>* partition_
 }
 
 Status TabletSinkSender::_write_combined_txn_log() {
+    if (config::enable_put_combinded_txn_log_parallel) {
+        return write_combined_txn_log_parallel(_txn_log_map);
+    }
+
     for (const auto& [partition_id, logs] : _txn_log_map) {
         (void)partition_id;
         RETURN_IF_ERROR(write_combined_txn_log(logs));
@@ -377,4 +381,4 @@ Status TabletSinkSender::_write_combined_txn_log() {
     return Status::OK();
 }
 
-} // namespace starrocks::stream_load
+} // namespace starrocks

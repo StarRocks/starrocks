@@ -46,7 +46,7 @@ const std::unordered_map<orc::TypeKind, LogicalType> g_orc_starrocks_logical_typ
         {orc::LONG, starrocks::TYPE_BIGINT},
         {orc::FLOAT, starrocks::TYPE_FLOAT},
         {orc::DOUBLE, starrocks::TYPE_DOUBLE},
-        {orc::DECIMAL, starrocks::TYPE_DECIMALV2},
+        {orc::DECIMAL, starrocks::TYPE_DECIMAL128},
         {orc::DATE, starrocks::TYPE_DATE},
         {orc::TIMESTAMP, starrocks::TYPE_DATETIME},
         {orc::STRING, starrocks::TYPE_VARCHAR},

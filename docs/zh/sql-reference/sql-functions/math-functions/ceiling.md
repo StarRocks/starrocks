@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # ceiling
 
-## 功能
+
 
 返回大于或等于 `x` 的最小整数。
 

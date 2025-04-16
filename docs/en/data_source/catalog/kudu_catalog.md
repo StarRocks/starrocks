@@ -1,14 +1,14 @@
 ---
-displayed_sidebar: "English" 
+displayed_sidebar: docs
 ---
 
-# Kudu catalog
+# [Experimental] Kudu catalog
 
 StarRocks supports Kudu catalogs from v3.3 onwards.
 
 A Kudu catalog is a kind of external catalog that enables you to query data from Apache Kudu without ingestion.
 
-Also, you can directly transform and load data from Kudu by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) based on Kudu catalogs.
+Also, you can directly transform and load data from Kudu by using [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) based on Kudu catalogs.
 
 To ensure successful SQL workloads on your Kudu cluster, your StarRocks cluster needs to integrate with the following important components:
 
@@ -74,7 +74,7 @@ The following table describes the parameter you need to configure in `CatalogPar
 |---------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | kudu.catalog.type   | Yes      | The type of metastore that you use for your Kudu cluster. Set this parameter to `kudu` or `hive`.                                                                                                                                                                                                                                                                                                                       |
 | kudu.master                   | No       | Specifies the Kudu Master address, which defaults to `localhost:7051`.                                                                                                                                                                                                                                                                                                                                         |
-| kudu.metastore.uris | No       | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`. If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
+| hive.metastore.uris | No       | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`. If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
 | kudu.schema-emulation.enabled | No       | option to enable or disable the `schema` emulation. By default, it is turned off (false), which means that all tables belong to the `default` `schema`.                                                                                                                                                                                                                                                                 |
 | kudu.schema-emulation.prefix | No       | The prefix for `schema` emulation should only be set when `kudu.schema-emulation.enabled` = `true`. The default prefix used is empty string: ` `.                                                                                                                                                                                                                                                                       |
 
@@ -92,7 +92,7 @@ The following table describes the parameter you need to configure in `CatalogPar
   (
       "type" = "kudu",
       "kudu.master" = "localhost:7051",
-      "kudu.metastore.type" = "kudu",
+      "kudu.catalog.type" = "kudu",
       "kudu.schema-emulation.enabled" = "true",
       "kudu.schema-emulation.prefix" = "impala::"
   );
@@ -106,20 +106,22 @@ The following table describes the parameter you need to configure in `CatalogPar
   (
       "type" = "kudu",
       "kudu.master" = "localhost:7051",
-      "kudu.metastore.type" = "hive",
-      "kudu.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "kudu.catalog.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "kudu.schema-emulation.enabled" = "true",
+      "kudu.schema-emulation.prefix" = "impala::"
   );
   ```
 
 ## View Kudu catalogs
 
-You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:
+You can use [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a Kudu catalog named `kudu_catalog`:
+You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a Kudu catalog named `kudu_catalog`:
 
 ```SQL
 SHOW CREATE CATALOG kudu_catalog;
@@ -127,7 +129,7 @@ SHOW CREATE CATALOG kudu_catalog;
 
 ## Drop a Kudu catalog
 
-You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) to drop an external catalog.
+You can use [DROP CATALOG](../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) to drop an external catalog.
 
 The following example drops a Kudu catalog named `kudu_catalog`:
 
@@ -153,31 +155,31 @@ You can use one of the following syntaxes to view the schema of a Kudu table:
 
 ## Query a Kudu table
 
-1. Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) to view the databases in your Kudu cluster:
+1. Use [SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) to view the databases in your Kudu cluster:
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>;
    ```
 
-2. Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) to switch to the destination catalog in the current session:
+2. Use [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) to switch to the destination catalog in the current session:
 
    ```SQL
    SET CATALOG <catalog_name>;
    ```
 
-   Then, use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to specify the active database in the current session:
+   Then, use [USE](../../sql-reference/sql-statements/Database/USE.md) to specify the active database in the current session:
 
    ```SQL
    USE <db_name>;
    ```
 
-   Or, you can use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to directly specify the active database in the destination catalog:
+   Or, you can use [USE](../../sql-reference/sql-statements/Database/USE.md) to directly specify the active database in the destination catalog:
 
    ```SQL
    USE <catalog_name>.<db_name>;
    ```
 
-3. Use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the destination table in the specified database:
+3. Use [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) to query the destination table in the specified database:
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10;

@@ -118,6 +118,10 @@ public class Status {
         return this.errorCode == TStatusCode.GLOBAL_DICT_ERROR;
     }
 
+    public boolean isGlobalDictNotMatch() {
+        return this.errorCode == TStatusCode.GLOBAL_DICT_NOT_MATCH;
+    }
+
     public void setErrorMsg(String errorMsg) {
         this.errorMsg = errorMsg;
     }
@@ -128,8 +132,10 @@ public class Status {
     }
 
     public void setInternalErrorStatus(String msg) {
-        this.errorCode = TStatusCode.INTERNAL_ERROR;
-        this.errorMsg = msg;
+        if (this.errorCode != TStatusCode.GLOBAL_DICT_ERROR) {
+            this.errorCode = TStatusCode.INTERNAL_ERROR;
+            this.errorMsg = msg;
+        }
     }
 
     public void setPstatus(StatusPB status) {
@@ -141,6 +147,11 @@ public class Status {
 
     public void setRpcStatus(String msg) {
         this.errorCode = TStatusCode.THRIFT_RPC_ERROR;
+        this.errorMsg = msg;
+    }
+
+    public void setTimeOutStatus(String msg) {
+        this.errorCode = TStatusCode.TIMEOUT;
         this.errorMsg = msg;
     }
 

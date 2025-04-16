@@ -100,7 +100,7 @@ protected:
     void check_empty_hash_map(TJoinOp::type join_type, int num_probe_rows, int32_t expect_num_rows,
                               int32_t expect_num_colums);
 
-    void sort_results_from_coroutine(std::vector<uint32_t>& pid, std::vector<uint32_t>& bid, int size) {
+    void sort_results_from_coroutine(Buffer<uint32_t>& pid, Buffer<uint32_t>& bid, int size) {
         std::vector<std::pair<int, int>> zipped;
         for (auto i = 0; i < size; i++) {
             zipped.push_back(std::make_pair(pid[i], bid[i]));
@@ -229,7 +229,6 @@ HashTableParam JoinHashMapTest::create_table_param_int(TJoinOp::type join_type, 
 
     HashTableParam param;
     param.with_other_conjunct = false;
-    param.mor_reader_mode = false;
     param.join_type = join_type;
     param.search_ht_timer = ADD_TIMER(_runtime_profile, "SearchHashTableTime");
     param.output_build_column_timer = ADD_TIMER(_runtime_profile, "OutputBuildColumnTime");
@@ -323,16 +322,16 @@ ColumnPtr JoinHashMapTest::create_column(LogicalType LT, uint32_t start, uint32_
 }
 
 ColumnPtr JoinHashMapTest::create_nullable_column(LogicalType LT) {
-    auto null_column = FixedLengthColumn<uint8_t>::create();
-
     if (LT == LogicalType::TYPE_INT) {
         auto data_column = FixedLengthColumn<int32_t>::create();
-        return NullableColumn::create(data_column, null_column);
+        auto null_column = FixedLengthColumn<uint8_t>::create();
+        return NullableColumn::create(std::move(data_column), std::move(null_column));
     }
 
     if (LT == LogicalType::TYPE_VARCHAR) {
         auto data_column = BinaryColumn::create();
-        return NullableColumn::create(data_column, null_column);
+        auto null_column = FixedLengthColumn<uint8_t>::create();
+        return NullableColumn::create(std::move(data_column), std::move(null_column));
     }
 
     return nullptr;
@@ -340,10 +339,9 @@ ColumnPtr JoinHashMapTest::create_nullable_column(LogicalType LT) {
 
 ColumnPtr JoinHashMapTest::create_nullable_column(LogicalType LT, const Buffer<uint8_t>& nulls, uint32_t start,
                                                   uint32_t count) {
-    auto null_column = FixedLengthColumn<uint8_t>::create();
-
     if (LT == LogicalType::TYPE_INT) {
         auto data_column = FixedLengthColumn<int32_t>::create();
+        auto null_column = FixedLengthColumn<uint8_t>::create();
         for (auto i = 0; i < count; i++) {
             null_column->append_datum(Datum(static_cast<uint8_t>(nulls[i])));
             if (nulls[i] == 0) {
@@ -352,11 +350,12 @@ ColumnPtr JoinHashMapTest::create_nullable_column(LogicalType LT, const Buffer<u
                 data_column->append_default();
             }
         }
-        return NullableColumn::create(data_column, null_column);
+        return NullableColumn::create(std::move(data_column), std::move(null_column));
     }
 
     if (LT == LogicalType::TYPE_VARCHAR) {
         auto data_column = BinaryColumn::create();
+        auto null_column = FixedLengthColumn<uint8_t>::create();
         for (auto i = 0; i < count; i++) {
             null_column->append_datum(Datum(static_cast<uint8_t>(nulls[i])));
             if (nulls[i] == 0) {
@@ -365,7 +364,7 @@ ColumnPtr JoinHashMapTest::create_nullable_column(LogicalType LT, const Buffer<u
                 data_column->append_default();
             }
         }
-        return NullableColumn::create(data_column, null_column);
+        return NullableColumn::create(std::move(data_column), std::move(null_column));
     }
 
     return nullptr;
@@ -373,7 +372,7 @@ ColumnPtr JoinHashMapTest::create_nullable_column(LogicalType LT, const Buffer<u
 
 ColumnPtr JoinHashMapTest::create_int32_column(uint32_t row_count, uint32_t start_value) {
     const auto& int_type_desc = TypeDescriptor(LogicalType::TYPE_INT);
-    ColumnPtr column = ColumnHelper::create_column(int_type_desc, false);
+    MutableColumnPtr column = ColumnHelper::create_column(int_type_desc, false);
     for (int32_t i = 0; i < row_count; i++) {
         column->append_datum(Datum(static_cast<int32_t>(start_value) + i));
     }
@@ -382,7 +381,7 @@ ColumnPtr JoinHashMapTest::create_int32_column(uint32_t row_count, uint32_t star
 
 ColumnPtr JoinHashMapTest::create_binary_column(uint32_t row_count, uint32_t start_value) {
     const auto& varchar_type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-    ColumnPtr column = ColumnHelper::create_column(varchar_type_desc, false);
+    MutableColumnPtr column = ColumnHelper::create_column(varchar_type_desc, false);
     auto* binary_column = ColumnHelper::as_raw_column<BinaryColumn>(column);
     for (int32_t i = 0; i < row_count; i++) {
         std::string str = std::to_string(start_value + i);
@@ -685,8 +684,8 @@ void JoinHashMapTest::check_probe_index_column(const Column& column, const std::
 
 ColumnPtr JoinHashMapTest::create_int32_nullable_column(uint32_t row_count, uint32_t start_value) {
     const auto& int_type_desc = TypeDescriptor(LogicalType::TYPE_INT);
-    ColumnPtr data_column = ColumnHelper::create_column(int_type_desc, false);
-    NullColumnPtr null_column = NullColumn::create();
+    MutableColumnPtr data_column = ColumnHelper::create_column(int_type_desc, false);
+    NullColumn::MutablePtr null_column = NullColumn::create();
     for (int32_t i = 0; i < row_count; i++) {
         if ((start_value + i) % 2 == 0) {
             data_column->append_datum(static_cast<int32_t>(start_value + i));
@@ -696,7 +695,7 @@ ColumnPtr JoinHashMapTest::create_int32_nullable_column(uint32_t row_count, uint
             null_column->append(1);
         }
     }
-    return NullableColumn::create(data_column, null_column);
+    return NullableColumn::create(std::move(data_column), std::move(null_column));
 }
 
 void JoinHashMapTest::check_binary_column(const ColumnPtr& column, uint32_t row_count, uint32_t start_value) {
@@ -913,28 +912,110 @@ std::shared_ptr<RuntimeState> JoinHashMapTest::create_runtime_state() {
 
 // NOLINTNEXTLINE
 TEST_F(JoinHashMapTest, JoinKeyHash) {
-    auto v1 = JoinKeyHash<int64_t>()(1);
-    auto v2 = JoinKeyHash<int32_t>()(1);
-    auto v3 = JoinKeyHash<Slice>()(Slice{"abcd", 4});
+    const uint32_t num_buckets = 1 << 16;
+    const uint32_t log_num_buckets = 16;
 
-    ASSERT_EQ(v1, 2592448939l);
-    ASSERT_EQ(v2, 98743132903886l);
-    ASSERT_EQ(v3, 2777932099l);
+    auto get_hash_statistics = [&](const std::vector<uint32_t>& count_per_bucket) {
+        uint32_t min_count = *std::ranges::min_element(count_per_bucket);
+        uint32_t max_count = *std::ranges::max_element(count_per_bucket);
+
+        return std::make_tuple(min_count, max_count);
+    };
+
+    {
+        std::vector<uint32_t> count_per_bucket(num_buckets);
+        for (int32_t i = 0; i < num_buckets * 3 * 5; i += 3) {
+            auto bucket = JoinKeyHash<int32_t>()(i, num_buckets, log_num_buckets);
+            count_per_bucket[bucket]++;
+        }
+        auto [min_count, max_count] = get_hash_statistics(count_per_bucket);
+        // crc32: 0, 11
+        ASSERT_EQ(0, min_count);
+        ASSERT_EQ(11, max_count);
+    }
+
+    {
+        std::vector<uint32_t> count_per_bucket(num_buckets);
+        for (int32_t i = 0; i < num_buckets * 7 * 5; i += 7) {
+            auto bucket = JoinKeyHash<int32_t>()(i, num_buckets, log_num_buckets);
+            count_per_bucket[bucket]++;
+        }
+        auto [min_count, max_count] = get_hash_statistics(count_per_bucket);
+        // crc32: 0, 14
+        ASSERT_EQ(0, min_count);
+        ASSERT_EQ(14, max_count);
+    }
+
+    {
+        std::vector<uint32_t> count_per_bucket(num_buckets);
+        for (int32_t i = 0; i < num_buckets * 5; i++) {
+            auto bucket = JoinKeyHash<int32_t>()(i, num_buckets, log_num_buckets);
+            count_per_bucket[bucket]++;
+        }
+        auto [min_count, max_count] = get_hash_statistics(count_per_bucket);
+        // crc32: 4, 6
+        ASSERT_EQ(4, min_count);
+        ASSERT_EQ(6, max_count);
+    }
+
+    {
+        std::vector<uint32_t> count_per_bucket(num_buckets);
+        for (int32_t i = 0; i < num_buckets * 3 * 5; i += 3) {
+            auto bucket = JoinKeyHash<int64_t>()(i, num_buckets, log_num_buckets);
+            count_per_bucket[bucket]++;
+        }
+        auto [min_count, max_count] = get_hash_statistics(count_per_bucket);
+        // crc32: 0, 12
+        ASSERT_EQ(3, min_count);
+        ASSERT_EQ(7, max_count);
+    }
+
+    {
+        std::vector<uint32_t> count_per_bucket(num_buckets);
+        for (int32_t i = 0; i < num_buckets * 7 * 5; i += 7) {
+            auto bucket = JoinKeyHash<int64_t>()(i, num_buckets, log_num_buckets);
+            count_per_bucket[bucket]++;
+        }
+        auto [min_count, max_count] = get_hash_statistics(count_per_bucket);
+        // crc32: 0, 15
+        ASSERT_EQ(4, min_count);
+        ASSERT_EQ(7, max_count);
+    }
+
+    {
+        std::vector<uint32_t> count_per_bucket(num_buckets);
+        for (int32_t i = 0; i < num_buckets * 5; i++) {
+            auto bucket = JoinKeyHash<int64_t>()(i, num_buckets, log_num_buckets);
+            count_per_bucket[bucket]++;
+        }
+        auto [min_count, max_count] = get_hash_statistics(count_per_bucket);
+        // crc32: 5, 5
+        ASSERT_EQ(4, min_count);
+        ASSERT_EQ(6, max_count);
+    }
+
+    auto v3 = JoinKeyHash<Slice>()(Slice{"abcd", 4}, num_buckets, log_num_buckets);
+    ASSERT_EQ(v3, 2777932099l % num_buckets);
 }
 
 // NOLINTNEXTLINE
 TEST_F(JoinHashMapTest, CalcBucketNum) {
-    uint32_t bucket_num = JoinHashMapHelper::calc_bucket_num(1, 4);
+    const uint32_t num_buckets = 1 << 2;
+    const uint32_t log_num_buckets = 2;
+    uint32_t bucket_num = JoinHashMapHelper::calc_bucket_num(1, num_buckets, log_num_buckets);
     ASSERT_EQ(2, bucket_num);
 }
 
 // NOLINTNEXTLINE
 TEST_F(JoinHashMapTest, CalcBucketNums) {
+    const uint32_t num_buckets = 1 << 2;
+    const uint32_t log_num_buckets = 2;
+
     Buffer<int32_t> data{1, 2, 3, 4};
     Buffer<uint32_t> buckets{0, 0, 0, 0};
-    Buffer<uint32_t> check_buckets{2, 2, 3, 1};
+    Buffer<uint32_t> check_buckets{2, 0, 3, 1};
 
-    JoinHashMapHelper::calc_bucket_nums<int32_t>(data, 4, &buckets, 0, 4);
+    JoinHashMapHelper::calc_bucket_nums<int32_t>(data, num_buckets, log_num_buckets, &buckets, 0, 4);
     for (size_t i = 0; i < buckets.size(); i++) {
         ASSERT_EQ(buckets[i], check_buckets[i]);
     }
@@ -1052,7 +1133,7 @@ TEST_F(JoinHashMapTest, JoinBuildProbeFunc) {
     build_column->append(*JoinHashMapTest::create_int32_column(10, 0), 0, 10);
     auto probe_column = JoinHashMapTest::create_int32_column(10, 0);
     table_items.first.resize(16, 0);
-    table_items.key_columns.emplace_back(build_column);
+    table_items.key_columns.emplace_back(std::move(build_column));
     table_items.bucket_size = 16;
     table_items.row_count = 10;
     table_items.next.resize(11);
@@ -1092,7 +1173,7 @@ TEST_F(JoinHashMapTest, JoinBuildProbeFuncNullable) {
     build_column->append(*JoinHashMapTest::create_int32_nullable_column(10, 0), 0, 10);
     auto probe_column = JoinHashMapTest::create_int32_nullable_column(10, 0);
     table_items.first.resize(16, 0);
-    table_items.key_columns.emplace_back(build_column);
+    table_items.key_columns.emplace_back(std::move(build_column));
     table_items.bucket_size = 16;
     table_items.row_count = 10;
     table_items.next.resize(11);
@@ -1146,14 +1227,14 @@ TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFunc) {
     auto build_chunk = std::make_shared<Chunk>();
     auto build_column = Int8Column::create();
     down_cast<Int8Column*>(build_column.get())->append({-5, -3, -1, 0, 1, 3, 5});
-    build_chunk->append_column(build_column, 1);
+    build_chunk->append_column(std::move(build_column), 1);
 
     // probe chunk
     auto probe_chunk = std::make_shared<Chunk>();
     auto probe_column = Int8Column::create();
     down_cast<Int8Column*>(probe_column.get())->append({-8, -5, 0, 1, 2, 3, 4, 5});
-    probe_chunk->append_column(probe_column, 0);
-    Columns probe_key_columns = {probe_column};
+    probe_chunk->append_column(probe_column->clone(), 0);
+    Columns probe_key_columns = {probe_column->clone()};
 
     // result chunk
     ChunkPtr result_chunk = std::make_shared<Chunk>();
@@ -1196,8 +1277,8 @@ TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFuncNullable) {
     auto build_null_column = NullColumn::create();
     build_data_column->append({-5, 0, 0, 0, 1, 3, 5});
     build_null_column->append({0, 1, 0, 1, 0, 0, 0});
-    auto build_column = NullableColumn::create(build_data_column, build_null_column);
-    build_chunk->append_column(build_column, 1);
+    auto build_column = NullableColumn::create(std::move(build_data_column), std::move(build_null_column));
+    build_chunk->append_column(std::move(build_column), 1);
 
     // probe chunk
     auto probe_chunk = std::make_shared<Chunk>();
@@ -1205,7 +1286,7 @@ TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFuncNullable) {
     auto probe_null_column = NullColumn::create();
     probe_data_column->append({-5, 0, 0, 0, 3, 0, 5, 0});
     probe_null_column->append({0, 1, 0, 1, 0, 1, 0, 1});
-    auto probe_column = NullableColumn::create(probe_data_column, probe_null_column);
+    ColumnPtr probe_column = NullableColumn::create(std::move(probe_data_column), std::move(probe_null_column));
     probe_chunk->append_column(probe_column, 0);
     Columns probe_key_columns = {probe_column};
 
@@ -1252,8 +1333,8 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildProbeFunc) {
     auto probe_column2 = JoinHashMapTest::create_int32_column(10, 100);
 
     table_items.first.resize(16, 0);
-    table_items.key_columns.emplace_back(build_column1);
-    table_items.key_columns.emplace_back(build_column2);
+    table_items.key_columns.emplace_back(std::move(build_column1));
+    table_items.key_columns.emplace_back(std::move(build_column2));
     table_items.bucket_size = 16;
     table_items.row_count = 10;
     table_items.next.resize(11);
@@ -1302,8 +1383,8 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildProbeFuncNullable) {
     auto probe_column2 = JoinHashMapTest::create_int32_nullable_column(10, 100);
 
     table_items.first.resize(16, 0);
-    table_items.key_columns.emplace_back(build_column1);
-    table_items.key_columns.emplace_back(build_column2);
+    table_items.key_columns.emplace_back(std::move(build_column1));
+    table_items.key_columns.emplace_back(std::move(build_column2));
     table_items.bucket_size = 16;
     table_items.row_count = 10;
     table_items.next.resize(11);
@@ -1356,8 +1437,8 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFunc) {
     auto probe_column2 = JoinHashMapTest::create_int32_column(10, 100);
 
     table_items.first.resize(16, 0);
-    table_items.key_columns.emplace_back(build_column1);
-    table_items.key_columns.emplace_back(build_column2);
+    table_items.key_columns.emplace_back(std::move(build_column1));
+    table_items.key_columns.emplace_back(std::move(build_column2));
     table_items.bucket_size = 16;
     table_items.row_count = 10;
     table_items.next.resize(11);
@@ -1410,8 +1491,8 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFuncNullable) {
     auto probe_column2 = JoinHashMapTest::create_int32_nullable_column(10, 100);
 
     table_items.first.resize(16, 0);
-    table_items.key_columns.emplace_back(build_column1);
-    table_items.key_columns.emplace_back(build_column2);
+    table_items.key_columns.emplace_back(std::move(build_column1));
+    table_items.key_columns.emplace_back(std::move(build_column2));
     table_items.bucket_size = 16;
     table_items.row_count = 10;
     table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
@@ -1590,6 +1671,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtFirstOneToMany) {
     JoinHashTableItems table_items;
     HashTableProbeState probe_state;
 
+    table_items.row_count = 8193;
     table_items.next.resize(8193);
     table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
 
@@ -1605,6 +1687,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtFirstOneToMany) {
         table_items.next[1 + i] = 0;
         table_items.next[4096 + 1 + i] = 1 + i;
     }
+    table_items.used_buckets = 4097;
 
     for (size_t i = 0; i < 3000; i++) {
         probe_data[i] = i;
@@ -2096,14 +2179,14 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildFuncForNotNullableColumn) {
     auto column_1 = create_column(TYPE_INT);
     column_1->append_default();
     column_1->append(*create_column(TYPE_INT, 0, build_row_count));
-    table_items.key_columns.emplace_back(column_1);
+    table_items.key_columns.emplace_back(std::move(column_1));
     table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
 
     // Add int column
     auto column_2 = create_column(TYPE_INT);
     column_2->append_default();
     column_2->append(*create_column(TYPE_INT, 0, build_row_count), 0, build_row_count);
-    table_items.key_columns.emplace_back(column_2);
+    table_items.key_columns.emplace_back(std::move(column_2));
     table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
 
     // Construct Hash Table
@@ -2130,7 +2213,7 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildFuncForNullableColumn) {
     auto column_1 = create_nullable_column(TYPE_INT);
     column_1->append_datum(0);
     column_1->append(*create_nullable_column(TYPE_INT, nulls_1, 0, build_row_count));
-    table_items.key_columns.emplace_back(column_1);
+    table_items.key_columns.emplace_back(std::move(column_1));
     table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
 
     // Add int column
@@ -2138,7 +2221,7 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildFuncForNullableColumn) {
     auto column_2 = create_nullable_column(TYPE_INT);
     column_2->append_datum(0);
     column_2->append(*create_nullable_column(TYPE_INT, nulls_2, 0, build_row_count), 0, build_row_count);
-    table_items.key_columns.emplace_back(column_2);
+    table_items.key_columns.emplace_back(std::move(column_2));
     table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
 
     // Construct Hash Table
@@ -2165,7 +2248,7 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildFuncForPartialNullableColumn) {
     auto column_1 = create_nullable_column(TYPE_INT);
     column_1->append_datum(0);
     column_1->append(*create_nullable_column(TYPE_INT, nulls_1, 0, build_row_count));
-    table_items.key_columns.emplace_back(column_1);
+    table_items.key_columns.emplace_back(std::move(column_1));
     table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
 
     // Add int column
@@ -2173,7 +2256,7 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildFuncForPartialNullableColumn) {
     auto column_2 = create_nullable_column(TYPE_INT);
     column_2->append_datum(0);
     column_2->append(*create_nullable_column(TYPE_INT, nulls_2, 0, build_row_count), 0, build_row_count);
-    table_items.key_columns.emplace_back(column_2);
+    table_items.key_columns.emplace_back(std::move(column_2));
     table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
 
     // Construct Hash Table
@@ -2200,14 +2283,14 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildFuncForNotNullableColumn) {
     auto column_1 = create_column(TYPE_INT);
     column_1->append_default();
     column_1->append(*create_column(TYPE_INT, 0, build_row_count));
-    table_items.key_columns.emplace_back(column_1);
+    table_items.key_columns.emplace_back(std::move(column_1));
     table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
 
     // Add binary column
     auto column_2 = create_column(TYPE_VARCHAR);
     column_2->append_default();
     column_2->append(*create_column(TYPE_VARCHAR, 0, build_row_count), 0, build_row_count);
-    table_items.key_columns.emplace_back(column_2);
+    table_items.key_columns.emplace_back(std::move(column_2));
     table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
 
     // Construct Hash Table
@@ -2234,7 +2317,7 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildFuncForNullableColumn) {
     auto column_1 = create_nullable_column(TYPE_INT);
     column_1->append_datum(0);
     column_1->append(*create_nullable_column(TYPE_INT, nulls_1, 0, build_row_count));
-    table_items.key_columns.emplace_back(column_1);
+    table_items.key_columns.emplace_back(std::move(column_1));
     table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
 
     // Add binary column
@@ -2242,7 +2325,7 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildFuncForNullableColumn) {
     auto column_2 = create_nullable_column(TYPE_VARCHAR);
     column_2->append_datum(Slice());
     column_2->append(*create_nullable_column(TYPE_VARCHAR, nulls_2, 0, build_row_count), 0, build_row_count);
-    table_items.key_columns.emplace_back(column_2);
+    table_items.key_columns.emplace_back(std::move(column_2));
     table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
 
     // Construct Hash Table
@@ -2269,7 +2352,7 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildFuncForPartialNullColumn) {
     auto column_1 = create_nullable_column(TYPE_INT);
     column_1->append_datum(0);
     column_1->append(*create_nullable_column(TYPE_INT, nulls_1, 0, build_row_count));
-    table_items.key_columns.emplace_back(column_1);
+    table_items.key_columns.emplace_back(std::move(column_1));
     table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
 
     // Add binary column
@@ -2277,7 +2360,7 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildFuncForPartialNullColumn) {
     auto column_2 = create_nullable_column(TYPE_VARCHAR);
     column_2->append_datum(Slice());
     column_2->append(*create_nullable_column(TYPE_VARCHAR, nulls_2, 0, build_row_count), 0, build_row_count);
-    table_items.key_columns.emplace_back(column_2);
+    table_items.key_columns.emplace_back(std::move(column_2));
     table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
 
     // Construct Hash Table
@@ -2316,7 +2399,6 @@ TEST_F(JoinHashMapTest, EmptyHashMapTestLazyFilter) {
     JoinHashTable ht;
 
     HashTableParam param;
-    param.mor_reader_mode = false;
     param.enable_late_materialization = true;
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
@@ -2372,7 +2454,6 @@ TEST_F(JoinHashMapTest, EmptyHashMapTestLazyOutputAll) {
     JoinHashTable ht;
 
     HashTableParam param;
-    param.mor_reader_mode = false;
     param.enable_late_materialization = true;
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
@@ -2678,7 +2759,7 @@ TEST_F(JoinHashMapTest, NullAwareAntiJoinTest) {
     auto build_col_nulls = create_bools(build_row_count + 1, 3);
     auto column_1 = create_nullable_column(TYPE_INT);
     column_1->append(*create_nullable_column(TYPE_INT, build_col_nulls, 0, build_row_count + 1));
-    table_items.key_columns.emplace_back(column_1);
+    table_items.key_columns.emplace_back(std::move(column_1));
     table_items.join_type = TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN;
     table_items.row_count = build_row_count;
 
@@ -2717,7 +2798,6 @@ TEST_F(JoinHashMapTest, TestOutputSlotsEmpty) {
     JoinHashTable ht;
 
     HashTableParam param;
-    param.mor_reader_mode = false;
     param.enable_late_materialization = false;
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
@@ -2745,7 +2825,6 @@ TEST_F(JoinHashMapTest, TestOutputSlotsNormal) {
     JoinHashTable ht;
 
     HashTableParam param;
-    param.mor_reader_mode = false;
     param.enable_late_materialization = false;
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
@@ -2776,7 +2855,6 @@ TEST_F(JoinHashMapTest, TestLazyOutputSlotsEmpty) {
     JoinHashTable ht;
 
     HashTableParam param;
-    param.mor_reader_mode = false;
     param.enable_late_materialization = true;
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
@@ -2804,7 +2882,6 @@ TEST_F(JoinHashMapTest, TestLazyPredicateSlotsEmpty) {
     JoinHashTable ht;
 
     HashTableParam param;
-    param.mor_reader_mode = false;
     param.enable_late_materialization = true;
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
@@ -2835,7 +2912,6 @@ TEST_F(JoinHashMapTest, TestLazyPredicateSlotsNormal) {
     JoinHashTable ht;
 
     HashTableParam param;
-    param.mor_reader_mode = false;
     param.enable_late_materialization = true;
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
@@ -2853,33 +2929,4 @@ TEST_F(JoinHashMapTest, TestLazyPredicateSlotsNormal) {
     check_lazy_build_output_slot_ids(*ht.table_items(), {4});
     check_not_output_slot_ids(*ht.table_items(), {0, 3});
 }
-
-// NOLINTNEXTLINE
-TEST_F(JoinHashMapTest, TestMorRead) {
-    TDescriptorTableBuilder row_desc_builder;
-    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 3);
-    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 3);
-
-    auto probe_row_desc = create_probe_desc(&row_desc_builder);
-    auto build_row_desc = create_build_desc(&row_desc_builder);
-
-    JoinHashTable ht;
-
-    HashTableParam param;
-    param.mor_reader_mode = true;
-    param.enable_late_materialization = false;
-    param.probe_row_desc = probe_row_desc.get();
-    param.build_row_desc = build_row_desc.get();
-    param.probe_output_slots = {1};
-    param.build_output_slots = {4};
-    param.predicate_slots = {2, 5};
-
-    ht.create(param);
-
-    ASSERT_EQ(ht.get_probe_column_count(), 6);
-    ASSERT_EQ(ht.get_build_column_count(), 3);
-    check_lazy_probe_output_slot_ids(*ht.table_items(), {});
-    check_lazy_build_output_slot_ids(*ht.table_items(), {});
-}
-
 } // namespace starrocks

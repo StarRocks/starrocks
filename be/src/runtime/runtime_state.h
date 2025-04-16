@@ -36,14 +36,16 @@
 
 #include <atomic>
 #include <fstream>
+#include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
 
-#include "block_cache/block_cache.h"
-#include "block_cache/datacache_utils.h"
+#include "cache/block_cache/block_cache.h"
+#include "cache/block_cache/datacache_utils.h"
 #include "cctz/time_zone.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
@@ -55,6 +57,7 @@
 #include "runtime/global_dict/types.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
+#include "util/debug_action.h"
 #include "util/logging.h"
 #include "util/phmap/phmap.h"
 #include "util/runtime_profile.h"
@@ -79,6 +82,9 @@ using BroadcastJoinRightOffsprings = std::unordered_set<int32_t>;
 namespace pipeline {
 class QueryContext;
 }
+
+#define EXTRACE_SPILL_PARAM(query_option, spill_option, var) \
+    spill_option.has_value() ? spill_option->var : query_option.var
 
 constexpr int64_t kRpcHttpMinSize = ((1L << 31) - (1L << 10));
 
@@ -126,14 +132,12 @@ public:
     void set_desc_tbl(DescriptorTbl* desc_tbl) { _desc_tbl = desc_tbl; }
     int chunk_size() const { return _query_options.batch_size; }
     void set_chunk_size(int chunk_size) { _query_options.batch_size = chunk_size; }
-    bool use_column_pool() const;
     bool abort_on_default_limit_exceeded() const { return _query_options.abort_on_default_limit_exceeded; }
     int64_t timestamp_ms() const { return _timestamp_us / 1000; }
     int64_t timestamp_us() const { return _timestamp_us; }
     const std::string& timezone() const { return _timezone; }
     const cctz::time_zone& timezone_obj() const { return _timezone_obj; }
     const std::string& user() const { return _user; }
-    const std::vector<std::string>& error_log() const { return _error_log; }
     const std::string& last_query_id() const { return _last_query_id; }
     const TUniqueId& query_id() const { return _query_id; }
     const TUniqueId& fragment_instance_id() const { return _fragment_instance_id; }
@@ -161,29 +165,10 @@ public:
     RuntimeProfile* load_channel_profile() { return _load_channel_profile.get(); }
     std::shared_ptr<RuntimeProfile> load_channel_profile_ptr() { return _load_channel_profile; }
 
-    [[nodiscard]] Status query_status() {
+    Status query_status() {
         std::lock_guard<std::mutex> l(_process_status_lock);
         return _process_status;
     };
-
-    // Appends error to the _error_log if there is space
-    bool log_error(std::string_view error);
-
-    // If !status.ok(), appends the error to the _error_log
-    void log_error(const Status& status);
-
-    // Returns true if the error log has not reached _max_errors.
-    bool log_has_space() {
-        std::lock_guard<std::mutex> l(_error_log_lock);
-        return _error_log.size() < _query_options.max_errors;
-    }
-
-    // Returns the error log lines as a string joined with '\n'.
-    std::string error_log();
-
-    // Append all _error_log[_unreported_error_idx+] to new_errors and set
-    // _unreported_error_idx to _errors_log.size()
-    void get_unreported_errors(std::vector<std::string>* new_errors);
 
     bool is_cancelled() const { return _is_cancelled.load(std::memory_order_acquire); }
     void set_is_cancelled(bool v) { _is_cancelled.store(v, std::memory_order_release); }
@@ -218,19 +203,17 @@ public:
     // This value and tracker are only used for error reporting.
     // If 'msg' is not empty, it will be appended to query_status_ in addition to the
     // generic "Memory limit exceeded" error.
-    [[nodiscard]] Status set_mem_limit_exceeded(MemTracker* tracker = nullptr, int64_t failed_allocation_size = 0,
-                                                std::string_view msg = {});
+    Status set_mem_limit_exceeded(MemTracker* tracker = nullptr, int64_t failed_allocation_size = 0,
+                                  std::string_view msg = {});
 
-    [[nodiscard]] Status set_mem_limit_exceeded(std::string_view msg) {
-        return set_mem_limit_exceeded(nullptr, 0, msg);
-    }
+    Status set_mem_limit_exceeded(std::string_view msg) { return set_mem_limit_exceeded(nullptr, 0, msg); }
 
     // Returns a non-OK status if query execution should stop (e.g., the query was cancelled
     // or a mem limit was exceeded). Exec nodes should check this periodically so execution
     // doesn't continue if the query terminates abnormally.
-    [[nodiscard]] Status check_query_state(const std::string& msg);
+    Status check_query_state(const std::string& msg);
 
-    [[nodiscard]] Status check_mem_limit(const std::string& msg);
+    Status check_mem_limit(const std::string& msg);
 
     std::vector<std::string>& output_files() { return _output_files; }
 
@@ -259,7 +242,7 @@ public:
 
     bool has_reached_max_error_msg_num(bool is_summary = false);
 
-    [[nodiscard]] Status create_rejected_record_file();
+    Status create_rejected_record_file();
 
     bool enable_log_rejected_record() {
         return _query_options.log_rejected_record_num == -1 ||
@@ -341,47 +324,74 @@ public:
 
     int num_per_fragment_instances() const { return _num_per_fragment_instances; }
 
-    TSpillMode::type spill_mode() const {
-        DCHECK(_query_options.__isset.spill_mode);
-        return _query_options.spill_mode;
+    TSpillMode::type spill_mode() const { return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_mode); }
+    int64_t spillable_operator_mask() const {
+        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spillable_operator_mask);
     }
 
     bool enable_spill() const { return _query_options.enable_spill; }
 
     bool enable_hash_join_spill() const {
-        return _query_options.spillable_operator_mask & (1LL << TSpillableOperatorType::HASH_JOIN);
+        return spillable_operator_mask() & (1LL << TSpillableOperatorType::HASH_JOIN);
     }
 
-    bool enable_agg_spill() const {
-        return _query_options.spillable_operator_mask & (1LL << TSpillableOperatorType::AGG);
-    }
+    bool enable_agg_spill() const { return spillable_operator_mask() & (1LL << TSpillableOperatorType::AGG); }
     bool enable_agg_distinct_spill() const {
-        return _query_options.spillable_operator_mask & (1LL << TSpillableOperatorType::AGG_DISTINCT);
+        return spillable_operator_mask() & (1LL << TSpillableOperatorType::AGG_DISTINCT);
     }
-    bool enable_sort_spill() const {
-        return _query_options.spillable_operator_mask & (1LL << TSpillableOperatorType::SORT);
+    bool enable_sort_spill() const { return spillable_operator_mask() & (1LL << TSpillableOperatorType::SORT); }
+    bool enable_nl_join_spill() const { return spillable_operator_mask() & (1LL << TSpillableOperatorType::NL_JOIN); }
+    bool enable_multi_cast_local_exchange_spill() const {
+        return spillable_operator_mask() & (1LL << TSpillableOperatorType::MULTI_CAST_LOCAL_EXCHANGE);
     }
-    bool enable_nl_join_spill() const {
-        return _query_options.spillable_operator_mask & (1LL << TSpillableOperatorType::NL_JOIN);
+
+    int32_t spill_mem_table_size() const {
+        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_mem_table_size);
     }
 
-    int32_t spill_mem_table_size() const { return _query_options.spill_mem_table_size; }
+    int32_t spill_mem_table_num() const {
+        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_mem_table_num);
+    }
 
-    int32_t spill_mem_table_num() const { return _query_options.spill_mem_table_num; }
+    bool enable_agg_spill_preaggregation() const {
+        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, enable_agg_spill_preaggregation);
+    }
 
-    bool enable_agg_spill_preaggregation() const { return _query_options.enable_agg_spill_preaggregation; }
+    double spill_mem_limit_threshold() const {
+        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_mem_limit_threshold);
+    }
 
-    double spill_mem_limit_threshold() const { return _query_options.spill_mem_limit_threshold; }
+    int64_t spill_operator_min_bytes() const {
+        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_operator_min_bytes);
+    }
 
-    int64_t spill_operator_min_bytes() const { return _query_options.spill_operator_min_bytes; }
-    int64_t spill_operator_max_bytes() const { return _query_options.spill_operator_max_bytes; }
-    int64_t spill_revocable_max_bytes() const { return _query_options.spill_revocable_max_bytes; }
+    int64_t spill_operator_max_bytes() const {
+        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_operator_max_bytes);
+    }
+
+    int64_t spill_revocable_max_bytes() const {
+        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_revocable_max_bytes);
+    }
     bool spill_enable_direct_io() const {
-        return _query_options.__isset.spill_enable_direct_io && _query_options.spill_enable_direct_io;
+        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_enable_direct_io);
     }
-    double spill_rand_ratio() const { return _query_options.spill_rand_ratio; }
+    double spill_rand_ratio() const { return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_rand_ratio); }
 
-    int32_t spill_encode_level() const { return _query_options.spill_encode_level; }
+    int32_t spill_encode_level() const {
+        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_encode_level);
+    }
+    bool spill_enable_compaction() const {
+        return _spill_options.has_value() ? _spill_options->spill_enable_compaction : false;
+    }
+    bool enable_spill_buffer_read() const {
+        return _spill_options.has_value() ? _spill_options->enable_spill_buffer_read : false;
+    }
+    int64_t max_spill_read_buffer_bytes_per_driver() const {
+        return _spill_options.has_value() ? _spill_options->max_spill_read_buffer_bytes_per_driver : INT64_MAX;
+    }
+    int64_t spill_hash_join_probe_op_max_bytes() const {
+        return _spill_options.has_value() ? _spill_options->spill_hash_join_probe_op_max_bytes : 1LL << 31;
+    }
 
     bool error_if_overflow() const {
         return _query_options.__isset.overflow_mode && _query_options.overflow_mode == TOverflowMode::REPORT_ERROR;
@@ -435,10 +445,10 @@ public:
     const phmap::flat_hash_map<uint32_t, int64_t>& load_dict_versions() { return _load_dict_versions; }
 
     using GlobalDictLists = std::vector<TGlobalDict>;
-    [[nodiscard]] Status init_query_global_dict(const GlobalDictLists& global_dict_list);
-    [[nodiscard]] Status init_load_global_dict(const GlobalDictLists& global_dict_list);
+    Status init_query_global_dict(const GlobalDictLists& global_dict_list);
+    Status init_load_global_dict(const GlobalDictLists& global_dict_list);
 
-    [[nodiscard]] Status init_query_global_dict_exprs(const std::map<int, TExpr>& exprs);
+    Status init_query_global_dict_exprs(const std::map<int, TExpr>& exprs);
 
     void set_func_version(int func_version) { this->_func_version = func_version; }
     int func_version() const { return this->_func_version; }
@@ -448,7 +458,7 @@ public:
 
     std::shared_ptr<QueryStatisticsRecvr> query_recv();
 
-    [[nodiscard]] Status reset_epoch();
+    Status reset_epoch();
 
     int64_t get_rpc_http_min_size() {
         return _query_options.__isset.rpc_http_min_size ? _query_options.rpc_http_min_size : kRpcHttpMinSize;
@@ -485,11 +495,11 @@ public:
 
     std::string_view get_sql_dialect() const { return _query_options.sql_dialect; }
 
-    void set_shuffle_hash_bucket_rf_ids(std::unordered_set<int32_t>&& filter_ids) {
-        this->_shuffle_hash_bucket_rf_ids = std::move(filter_ids);
+    void set_non_broadcast_rf_ids(std::unordered_set<int32_t>&& filter_ids) {
+        this->_non_broadcast_rf_ids = std::move(filter_ids);
     }
 
-    const std::unordered_set<int32_t>& shuffle_hash_bucket_rf_ids() const { return this->_shuffle_hash_bucket_rf_ids; }
+    const std::unordered_set<int32_t>& non_broadcast_rf_ids() const { return this->_non_broadcast_rf_ids; }
 
     void set_broadcast_join_right_offsprings(BroadcastJoinRightOffsprings&& broadcast_join_right_offsprings) {
         this->_broadcast_join_right_offsprings = std::move(broadcast_join_right_offsprings);
@@ -499,15 +509,34 @@ public:
         return this->_broadcast_join_right_offsprings;
     }
 
+    bool enable_event_scheduler() const { return _enable_event_scheduler; }
+    void set_enable_event_scheduler(bool enable) { _enable_event_scheduler = enable; }
+
+    bool enable_join_runtime_filter_pushdown() const {
+        return _query_options.__isset.enable_join_runtime_filter_pushdown &&
+               _query_options.enable_join_runtime_filter_pushdown;
+    }
+
+    bool enable_join_runtime_bitset_filter() const {
+        return _query_options.__isset.enable_join_runtime_bitset_filter &&
+               _query_options.enable_join_runtime_bitset_filter;
+    }
+
+    bool lower_upper_support_utf8() const {
+        return _query_options.__isset.lower_upper_support_utf8 && _query_options.lower_upper_support_utf8;
+    }
+
+    DebugActionMgr& debug_action_mgr() { return _debug_action_mgr; }
+
 private:
     // Set per-query state.
     void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                const TQueryGlobals& query_globals, ExecEnv* exec_env);
 
-    [[nodiscard]] Status create_error_log_file();
+    Status create_error_log_file();
 
-    [[nodiscard]] Status _build_global_dict(const GlobalDictLists& global_dict_list, GlobalDictMaps* result,
-                                            phmap::flat_hash_map<uint32_t, int64_t>* version);
+    Status _build_global_dict(const GlobalDictLists& global_dict_list, GlobalDictMaps* result,
+                              phmap::flat_hash_map<uint32_t, int64_t>* version);
 
     // put runtime state before _obj_pool, so that it will be deconstructed after
     // _obj_pool. Because some object in _obj_pool will use profile when deconstructing.
@@ -521,9 +550,6 @@ private:
 
     // Lock protecting _error_log and _unreported_error_idx
     std::mutex _error_log_lock;
-
-    // Logs error messages.
-    std::vector<std::string> _error_log;
 
     std::mutex _rejected_record_lock;
     std::string _rejected_record_file_path;
@@ -639,62 +665,21 @@ private:
 
     bool _enable_pipeline_engine = false;
 
-    std::unordered_set<int32_t> _shuffle_hash_bucket_rf_ids;
+    std::unordered_set<int32_t> _non_broadcast_rf_ids;
     BroadcastJoinRightOffsprings _broadcast_join_right_offsprings;
-};
 
-#define LIMIT_EXCEEDED(tracker, state, msg)                                                                         \
-    do {                                                                                                            \
-        stringstream str;                                                                                           \
-        str << "Memory of " << tracker->label() << " exceed limit. " << msg << " ";                                 \
-        str << "Backend: " << BackendOptions::get_localhost() << ", ";                                              \
-        if (state != nullptr) {                                                                                     \
-            str << "fragment: " << print_id(state->fragment_instance_id()) << " ";                                  \
-        }                                                                                                           \
-        str << "Used: " << tracker->consumption() << ", Limit: " << tracker->limit() << ". ";                       \
-        switch (tracker->type()) {                                                                                  \
-        case MemTracker::NO_SET:                                                                                    \
-            break;                                                                                                  \
-        case MemTracker::QUERY:                                                                                     \
-            str << "Mem usage has exceed the limit of single query, You can change the limit by "                   \
-                   "set session variable query_mem_limit.";                                                         \
-            break;                                                                                                  \
-        case MemTracker::PROCESS:                                                                                   \
-            str << "Mem usage has exceed the limit of BE";                                                          \
-            break;                                                                                                  \
-        case MemTracker::QUERY_POOL:                                                                                \
-            str << "Mem usage has exceed the limit of query pool";                                                  \
-            break;                                                                                                  \
-        case MemTracker::LOAD:                                                                                      \
-            str << "Mem usage has exceed the limit of load";                                                        \
-            break;                                                                                                  \
-        case MemTracker::SCHEMA_CHANGE_TASK:                                                                        \
-            str << "You can change the limit by modify BE config [memory_limitation_per_thread_for_schema_change]"; \
-            break;                                                                                                  \
-        case MemTracker::RESOURCE_GROUP:                                                                            \
-            /* TODO: make default_wg configuable. */                                                                \
-            if (tracker->label() == "default_wg") {                                                                 \
-                str << "Mem usage has exceed the limit of query pool";                                              \
-            } else {                                                                                                \
-                str << "Mem usage has exceed the limit of the resource group [" << tracker->label() << "]. "        \
-                    << "You can change the limit by modifying [mem_limit] of this group";                           \
-            }                                                                                                       \
-            break;                                                                                                  \
-        case MemTracker::RESOURCE_GROUP_BIG_QUERY:                                                                  \
-            str << "Mem usage has exceed the big query limit of the resource group [" << tracker->label() << "]. "  \
-                << "You can change the limit by modifying [big_query_mem_limit] of this group";                     \
-            break;                                                                                                  \
-        default:                                                                                                    \
-            break;                                                                                                  \
-        }                                                                                                           \
-        return Status::MemoryLimitExceeded(str.str());                                                              \
-    } while (false)
+    std::optional<TSpillOptions> _spill_options;
+
+    DebugActionMgr _debug_action_mgr;
+
+    bool _enable_event_scheduler = false;
+};
 
 #define RETURN_IF_LIMIT_EXCEEDED(state, msg)                                                \
     do {                                                                                    \
         MemTracker* tracker = state->instance_mem_tracker()->find_limit_exceeded_tracker(); \
         if (tracker != nullptr) {                                                           \
-            LIMIT_EXCEEDED(tracker, state, msg);                                            \
+            return Status::MemoryLimitExceeded(tracker->err_msg(msg, state));               \
         }                                                                                   \
     } while (false)
 

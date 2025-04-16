@@ -16,15 +16,22 @@ package com.starrocks.alter;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.ForeignKeyConstraint;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvId;
+import com.starrocks.catalog.MvPlanContext;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
-import com.starrocks.catalog.UniqueConstraint;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.UniqueConstraint;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DynamicPartitionUtil;
@@ -36,13 +43,13 @@ import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
@@ -56,7 +63,10 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
+import com.starrocks.sql.optimizer.MvPlanContextBuilder;
+import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.lang3.StringUtils;
@@ -64,7 +74,11 @@ import org.threeten.extra.PeriodDuration;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.stream.Collectors;
 
+import static com.starrocks.alter.AlterJobMgr.MANUAL_INACTIVE_MV_REASON;
 import static com.starrocks.catalog.TableProperty.INVALID;
 
 public class AlterMVJobExecutor extends AlterJobExecutor {
@@ -73,7 +87,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         String newMvName = clause.getNewTableName();
         String oldMvName = table.getName();
 
-        if (db.getTable(newMvName) != null) {
+        if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), newMvName) != null) {
             throw new SemanticException("Materialized view [" + newMvName + "] is already used");
         }
         table.setName(newMvName);
@@ -101,7 +115,22 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         }
         Pair<String, PeriodDuration> ttlDuration = null;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
-            ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties);
+            ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties, true);
+        }
+        String ttlRetentionCondition = null;
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(materializedView.getDbId());
+            TableName mvTableName = new TableName(db.getFullName(), materializedView.getName());
+            Map<Expr, Expr> mvPartitionByExprToAdjustMap =
+                    MaterializedViewAnalyzer.getMVPartitionByExprToAdjustMap(mvTableName, materializedView);
+            ttlRetentionCondition = PropertyAnalyzer.analyzePartitionRetentionCondition(db,
+                    materializedView, properties, true, mvPartitionByExprToAdjustMap);
+        }
+        String timeDriftConstraintSpec = null;
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT)) {
+            String spec = properties.get(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT);
+            PropertyAnalyzer.analyzeTimeDriftConstraint(spec, materializedView, properties);
+            timeDriftConstraintSpec = spec;
         }
         int partitionRefreshNumber = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {
@@ -118,7 +147,13 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         }
         List<TableName> excludedTriggerTables = Lists.newArrayList();
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
-            excludedTriggerTables = PropertyAnalyzer.analyzeExcludedTriggerTables(properties, materializedView);
+            excludedTriggerTables = PropertyAnalyzer.analyzeExcludedTables(properties,
+                    PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES, materializedView);
+        }
+        List<TableName> excludedRefreshBaseTables = Lists.newArrayList();
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES)) {
+            excludedRefreshBaseTables = PropertyAnalyzer.analyzeExcludedTables(properties,
+                    PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES, materializedView);
         }
         int maxMVRewriteStaleness = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
@@ -134,6 +169,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             foreignKeyConstraints = PropertyAnalyzer.analyzeForeignKeyConstraint(properties, db, materializedView);
             properties.remove(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT);
         }
+
         TableProperty.QueryRewriteConsistencyMode oldExternalQueryRewriteConsistencyMode =
                 materializedView.getTableProperty().getForceExternalTableQueryRewrite();
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
@@ -188,12 +224,12 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 if (!entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
                     throw new SemanticException("Modify failed because unknown properties: " + properties +
                             ", please add `session.` prefix if you want add session variables for mv(" +
-                            "eg, \"session.query_timeout\"=\"30000000\").");
+                            "eg, \"session.insert_timeout\"=\"30000000\").");
                 }
                 String varKey = entry.getKey().substring(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
                 SystemVariable variable = new SystemVariable(varKey, new StringLiteral(entry.getValue()));
                 try {
-                    VariableMgr.checkSystemVariableExist(variable);
+                    GlobalStateMgr.getCurrentState().getVariableMgr().checkSystemVariableExist(variable);
                 } catch (DdlException e) {
                     throw new SemanticException(e.getMessage());
                 }
@@ -207,13 +243,33 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         Map<String, String> curProp = materializedView.getTableProperty().getProperties();
         if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL) && ttlDuration != null &&
                 !materializedView.getTableProperty().getPartitionTTL().equals(ttlDuration.second)) {
+            if (!materializedView.getPartitionInfo().isRangePartition()) {
+                throw new SemanticException("partition_ttl is only supported for range partitioned materialized view");
+            }
             curProp.put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL, ttlDuration.first);
             materializedView.getTableProperty().setPartitionTTL(ttlDuration.second);
             isChanged = true;
         } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER) &&
                 materializedView.getTableProperty().getPartitionTTLNumber() != partitionTTL) {
+            if (!materializedView.getPartitionInfo().isRangePartition()) {
+                throw new SemanticException("partition_ttl_number is only supported for range partitioned materialized view");
+            }
             curProp.put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER, String.valueOf(partitionTTL));
             materializedView.getTableProperty().setPartitionTTLNumber(partitionTTL);
+            isChanged = true;
+        } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION) &&
+                ttlRetentionCondition != null &&
+                !ttlRetentionCondition.equalsIgnoreCase(materializedView.getTableProperty().getPartitionRetentionCondition())) {
+            curProp.put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, ttlRetentionCondition);
+            materializedView.getTableProperty().setPartitionRetentionCondition(ttlRetentionCondition);
+            // re-analyze mv retention condition
+            materializedView.analyzeMVRetentionCondition(context);
+            isChanged = true;
+        } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT) &&
+                timeDriftConstraintSpec != null && !timeDriftConstraintSpec.equalsIgnoreCase(
+                materializedView.getTableProperty().getTimeDriftConstraintSpec())) {
+            curProp.put(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT, timeDriftConstraintSpec);
+            materializedView.getTableProperty().setTimeDriftConstraintSpec(timeDriftConstraintSpec);
             isChanged = true;
         } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER) &&
                 materializedView.getTableProperty().getPartitionRefreshNumber() != partitionRefreshNumber) {
@@ -240,6 +296,12 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             curProp.put(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES,
                     propClone.get(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES));
             materializedView.getTableProperty().setExcludedTriggerTables(excludedTriggerTables);
+            isChanged = true;
+        }
+        if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES)) {
+            curProp.put(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES,
+                    propClone.get(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES));
+            materializedView.getTableProperty().setExcludedRefreshTables(excludedRefreshBaseTables);
             isChanged = true;
         }
         if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
@@ -282,7 +344,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             materializedView.getTableProperty().setMvQueryRewriteSwitch(queryRewriteSwitch);
             if (!materializedView.isEnableRewrite()) {
                 // invalidate caches for mv rewrite when disable mv rewrite.
-                CachingMvPlanContextBuilder.getInstance().invalidateFromCache(materializedView, false);
+                CachingMvPlanContextBuilder.getInstance().updateMvPlanContextCache(materializedView, false);
             } else {
                 CachingMvPlanContextBuilder.getInstance().putAstIfAbsent(materializedView);
             }
@@ -330,7 +392,8 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 TaskBuilder.updateTaskInfo(task, refreshSchemeDesc, materializedView);
                 taskManager.createTask(task, false);
             } else {
-                Task changedTask = TaskBuilder.rebuildMvTask(materializedView, dbName, currentTask.getProperties());
+                Task changedTask = TaskBuilder.rebuildMvTask(materializedView, dbName, currentTask.getProperties(),
+                        currentTask);
                 TaskBuilder.updateTaskInfo(changedTask, refreshSchemeDesc, materializedView);
                 taskManager.alterTask(currentTask, changedTask, false);
                 task = currentTask;
@@ -348,7 +411,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             }
             try {
                 // check
-                Table mv = db.getTable(materializedView.getId());
+                Table mv = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), materializedView.getId());
                 if (mv == null) {
                     throw new DmlException(
                             "update meta failed. materialized view:" + materializedView.getName() + " not exist");
@@ -379,7 +442,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 final ChangeMaterializedViewRefreshSchemeLog log = new ChangeMaterializedViewRefreshSchemeLog(materializedView);
                 GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(log);
             } finally {
-                locker.unLockDatabase(db, LockType.WRITE);
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
             }
             LOG.info("change materialized view refresh type {} to {}, id: {}", oldRefreshType,
                     newRefreshType, materializedView.getId());
@@ -403,11 +466,11 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 }
 
                 GlobalStateMgr.getCurrentState().getAlterJobMgr().
-                        alterMaterializedViewStatus(materializedView, status, false);
+                        alterMaterializedViewStatus(materializedView, status, "", false);
                 // for manual refresh type, do not refresh
                 if (materializedView.getRefreshScheme().getType() != MaterializedView.RefreshType.MANUAL) {
                     GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .refreshMaterializedView(dbName, materializedView.getName(), true, null,
+                            .refreshMaterializedView(dbName, materializedView.getName(), false, null,
                                     Constants.TaskRunPriority.NORMAL.value(), true, false);
                 }
             } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
@@ -418,12 +481,12 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                                 "user use alter materialized view set status to inactive",
                         materializedView.getName(), materializedView.getId());
                 GlobalStateMgr.getCurrentState().getAlterJobMgr().
-                        alterMaterializedViewStatus(materializedView, status, false);
+                        alterMaterializedViewStatus(materializedView, status, MANUAL_INACTIVE_MV_REASON, false);
             } else {
                 throw new AlterJobException("Unsupported modification materialized view status:" + status);
             }
             AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(materializedView.getDbId(),
-                    materializedView.getId(), status);
+                    materializedView.getId(), status, MANUAL_INACTIVE_MV_REASON);
             GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
             return null;
         } catch (DdlException | MetaNotFoundException e) {
@@ -437,6 +500,138 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         if (currentTask != null) {
             currentTask.setDefinition(materializedView.getTaskDefinition());
             currentTask.setPostRun(TaskBuilder.getAnalyzeMVStmt(materializedView.getName()));
+        }
+    }
+
+    /**
+     * Inactive the materialized view and its related materialized views.
+     *
+     * NOTE:
+     * 1. This method will clear all visible version map of the MV since for all schema changes, the MV should be
+     * refreshed.
+     * 2. User's inactive-mv command should not call this which will reserve the visible version map.
+     */
+    private static void doInactiveMaterializedView(MaterializedView mv, String reason) {
+        // Only check this in leader and not replay to avoid duplicate inactive
+        if (mv == null || !GlobalStateMgr.getCurrentState().isLeader()) {
+            return;
+        }
+        LOG.warn("Inactive MV {}/{} because {}", mv.getName(), mv.getId(), reason);
+        // inactive mv by reason
+        if (mv.isActive()) {
+            // log edit log
+            String status = AlterMaterializedViewStatusClause.INACTIVE;
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().
+                    alterMaterializedViewStatus(mv, status, reason, false);
+            AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(mv.getDbId(),
+                    mv.getId(), status, MANUAL_INACTIVE_MV_REASON);
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
+        } else {
+            mv.setInactiveAndReason(reason);
+        }
+        // clear version map to make sure the MV will be refreshed
+        mv.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
+        // recursive inactive
+        inactiveRelatedMaterializedView(mv,
+                MaterializedViewExceptions.inactiveReasonForBaseTableActive(mv.getName()), false);
+    }
+
+    /**
+     * Inactive related materialized views because of base table/view is changed or dropped in the leader background.
+     */
+    public static void inactiveRelatedMaterializedView(Table olapTable, String reason, boolean isReplay) {
+        if (!Config.enable_mv_automatic_inactive_by_base_table_changes) {
+            LOG.warn("Skip to inactive related materialized views because of automatic inactive is disabled, " +
+                    "table:{}, reason:{}", olapTable.getName(), reason);
+            return;
+        }
+        // Only check this in leader and not replay to avoid duplicate inactive
+        if (!GlobalStateMgr.getCurrentState().isLeader() || isReplay) {
+            LOG.warn("Skip to inactive related materialized views because of base table/view {} is " +
+                            "changed or dropped in the leader backgroud, isLeader: {}, isReplay, reason:{}",
+                    olapTable.getName(), GlobalStateMgr.getCurrentState().isLeader(), isReplay, reason);
+            return;
+        }
+        for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
+            if (db == null) {
+                LOG.warn("Table {} inactive MaterializedView, viewId {} ,db {} not found",
+                        olapTable.getName(), mvId.getId(), mvId.getDbId());
+                continue;
+            }
+            MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
+            if (mv == null) {
+                LOG.info("Ignore materialized view {} does not exists", mvId);
+                continue;
+            }
+            doInactiveMaterializedView(mv, reason);
+        }
+    }
+
+    /**
+     * Inactive related mvs after modified columns have been done. Only inactive mvs after
+     * modified columns have done because the modified process may be failed and in this situation
+     * should not inactive mvs then.
+     */
+    public static void inactiveRelatedMaterializedViews(Database db,
+                                                        OlapTable olapTable,
+                                                        Set<String> modifiedColumns) {
+        if (modifiedColumns == null || modifiedColumns.isEmpty()) {
+            return;
+        }
+        if (!Config.enable_mv_automatic_inactive_by_base_table_changes) {
+            LOG.warn("Skip to inactive related materialized views because of automatic inactive is disabled, " +
+                    "table:{}, modifiedColumns:{}", olapTable.getName(), modifiedColumns);
+            return;
+        }
+        // Only check this in leader and not replay to avoid duplicate inactive
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
+            return;
+        }
+        // inactive related asynchronous mvs
+        for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getId(), mvId.getId());
+            if (mv == null) {
+                LOG.warn("Ignore materialized view {} does not exists", mvId);
+                continue;
+
+            }
+            // TODO: support more types for base table's schema change.
+            String reason = MaterializedViewExceptions.inactiveReasonForColumnChanged(modifiedColumns);
+            try {
+                List<MvPlanContext> mvPlanContexts = MvPlanContextBuilder.getPlanContext(mv, true);
+                for (MvPlanContext mvPlanContext : mvPlanContexts) {
+                    if (mvPlanContext != null) {
+                        OptExpression mvPlan = mvPlanContext.getLogicalPlan();
+                        Set<ColumnRefOperator> usedColRefs = MvUtils.collectScanColumn(mvPlan, scan -> {
+                            if (scan == null) {
+                                return false;
+                            }
+                            Table table = scan.getTable();
+                            return table.getId() == olapTable.getId();
+                        });
+                        Set<String> usedColNames = usedColRefs.stream()
+                                .map(x -> x.getName())
+                                .collect(Collectors.toCollection(() -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER)));
+                        if (modifiedColumns.stream().anyMatch(usedColNames::contains)) {
+                            doInactiveMaterializedView(mv, reason);
+                        }
+                    }
+                }
+            } catch (SemanticException e) {
+                LOG.warn("Get related materialized view {} failed:", mv.getName(), e);
+                LOG.warn("Setting the materialized view {}({}) to invalid because " +
+                                "the columns  of the table {} was modified.", mv.getName(), mv.getId(),
+                        olapTable.getName());
+                doInactiveMaterializedView(mv, reason);
+            } catch (Exception e) {
+                LOG.warn("Get related materialized view {} failed:", mv.getName(), e);
+                // basic check: may lose some situations
+                if (mv.getColumns().stream().anyMatch(x -> modifiedColumns.contains(x.getName()))) {
+                    doInactiveMaterializedView(mv, reason);
+                }
+            }
         }
     }
 }

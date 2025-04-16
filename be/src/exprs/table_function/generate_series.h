@@ -35,18 +35,16 @@ class GenerateSeries final : public TableFunction {
 public:
     ~GenerateSeries() override = default;
 
-    [[nodiscard]] Status init(const TFunction& fn, TableFunctionState** state) const override {
+    Status init(const TFunction& fn, TableFunctionState** state) const override {
         *state = new MyState();
         return Status::OK();
     }
 
-    [[nodiscard]] Status prepare(TableFunctionState* /*state*/) const override { return Status::OK(); }
+    Status prepare(TableFunctionState* /*state*/) const override { return Status::OK(); }
 
-    [[nodiscard]] Status open(RuntimeState* /*runtime_state*/, TableFunctionState* /*state*/) const override {
-        return Status::OK();
-    }
+    Status open(RuntimeState* /*runtime_state*/, TableFunctionState* /*state*/) const override { return Status::OK(); }
 
-    [[nodiscard]] Status close(RuntimeState* /*runtime_state*/, TableFunctionState* state) const override {
+    Status close(RuntimeState* /*runtime_state*/, TableFunctionState* state) const override {
         delete state;
         return Status::OK();
     }
@@ -128,7 +126,7 @@ public:
             }
         } // while
         offsets->append(res->size());
-        return std::make_pair(Columns{res}, offsets);
+        return std::make_pair(Columns{std::move(res)}, std::move(offsets));
     }
 
 private:

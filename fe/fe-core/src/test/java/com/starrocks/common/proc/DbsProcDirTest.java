@@ -38,6 +38,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -83,27 +84,27 @@ public class DbsProcDirTest {
     public void testLookupNormal() throws AnalysisException {
         new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getDb("db1");
+                globalStateMgr.getLocalMetastore().getDb("db1");
                 minTimes = 0;
                 result = db1;
 
-                globalStateMgr.getDb("db2");
+                globalStateMgr.getLocalMetastore().getDb("db2");
                 minTimes = 0;
                 result = db2;
 
-                globalStateMgr.getDb("db3");
+                globalStateMgr.getLocalMetastore().getDb("db3");
                 minTimes = 0;
                 result = null;
 
-                globalStateMgr.getDb(db1.getId());
+                globalStateMgr.getLocalMetastore().getDb(db1.getId());
                 minTimes = 0;
                 result = db1;
 
-                globalStateMgr.getDb(db2.getId());
+                globalStateMgr.getLocalMetastore().getDb(db2.getId());
                 minTimes = 0;
                 result = db2;
 
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = null;
             }
@@ -160,31 +161,31 @@ public class DbsProcDirTest {
     public void testFetchResultNormal() throws AnalysisException {
         new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getLocalMetastore().listDbNames();
+                globalStateMgr.getLocalMetastore().listDbNames((ConnectContext) any);
                 minTimes = 0;
                 result = Lists.newArrayList("db1", "db2");
 
-                globalStateMgr.getDb("db1");
+                globalStateMgr.getLocalMetastore().getDb("db1");
                 minTimes = 0;
                 result = db1;
 
-                globalStateMgr.getDb("db2");
+                globalStateMgr.getLocalMetastore().getDb("db2");
                 minTimes = 0;
                 result = db2;
 
-                globalStateMgr.getDb("db3");
+                globalStateMgr.getLocalMetastore().getDb("db3");
                 minTimes = 0;
                 result = null;
 
-                globalStateMgr.getDb(db1.getId());
+                globalStateMgr.getLocalMetastore().getDb(db1.getId());
                 minTimes = 0;
                 result = db1;
 
-                globalStateMgr.getDb(db2.getId());
+                globalStateMgr.getLocalMetastore().getDb(db2.getId());
                 minTimes = 0;
                 result = db2;
 
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = null;
             }
@@ -213,7 +214,7 @@ public class DbsProcDirTest {
     public void testFetchResultInvalid() throws AnalysisException {
         new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getLocalMetastore().listDbNames();
+                globalStateMgr.getLocalMetastore().listDbNames(new ConnectContext());
                 minTimes = 0;
                 result = null;
             }

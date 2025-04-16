@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # second
 
-## 功能
+
 
 获得日期中的秒的信息，返回值范围 0~59。
 

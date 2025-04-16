@@ -17,6 +17,7 @@
 
 package com.starrocks.common;
 
+import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.InternalServiceVersion;
 import com.starrocks.thrift.TAgentPublishRequest;
@@ -31,6 +32,8 @@ import com.starrocks.thrift.TExportStatusResult;
 import com.starrocks.thrift.TExportTaskRequest;
 import com.starrocks.thrift.TFetchDataParams;
 import com.starrocks.thrift.TFetchDataResult;
+import com.starrocks.thrift.TGetTabletsInfoRequest;
+import com.starrocks.thrift.TGetTabletsInfoResult;
 import com.starrocks.thrift.TMiniLoadEtlStatusRequest;
 import com.starrocks.thrift.TMiniLoadEtlStatusResult;
 import com.starrocks.thrift.TMiniLoadEtlTaskRequest;
@@ -65,7 +68,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class GenericPoolTest {
-    static GenericPool<BackendService.Client> backendService;
+    static ThriftConnectionPool<BackendService.Client> backendService;
     static ThriftServer service;
     static String ip = "127.0.0.1";
     static int port;
@@ -91,7 +94,7 @@ public class GenericPoolTest {
             config.setMaxTotal(3); // (default -1)
             config.setMaxWaitMillis(500);
             // new ClientPool
-            backendService = new GenericPool("BackendService", config, 0);
+            backendService = new ThriftConnectionPool("BackendService", config, 0);
             // new ThriftService
             TProcessor tprocessor = new BackendService.Processor<BackendService.Iface>(
                     new InternalProcessor());
@@ -195,6 +198,11 @@ public class GenericPoolTest {
         @Override
         public TTabletStatResult get_tablet_stat() throws TException {
             // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public TGetTabletsInfoResult get_tablets_info(TGetTabletsInfoRequest request) throws TException {
             return null;
         }
 

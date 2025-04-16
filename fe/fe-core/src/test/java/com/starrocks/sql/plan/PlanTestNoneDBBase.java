@@ -90,9 +90,11 @@ public class PlanTestNoneDBBase {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
         connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
         connectContext.getSessionVariable().setCboEqBaseType(SessionVariableConstants.VARCHAR);
+        connectContext.getSessionVariable().setUseCorrelatedPredicateEstimate(false);
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.showJoinLocalShuffleInExplain = false;
         FeConstants.showFragmentCost = false;
+        FeConstants.setLengthForVarchar = false;
     }
 
     @Before
@@ -112,6 +114,16 @@ public class PlanTestNoneDBBase {
             for (String s : pattern) {
                 Assert.assertTrue(text, text.contains(s));
             }
+        }
+    }
+
+    public static void assertContainsAny(String text, String... pattern) {
+        boolean contains = false;
+        for (String s : pattern) {
+            contains |= text.contains(s);
+        }
+        if (!contains) {
+            Assert.fail(text);
         }
     }
 
@@ -137,6 +149,22 @@ public class PlanTestNoneDBBase {
                     .collect(Collectors.joining(" AND "));
             sb.append(sorted);
             sb.append("])");
+            return sb.toString();
+        } else if (predicate.contains("PREDICATES: ") && predicate.contains(" IN ")) {
+            // normalize in predicate values' order
+            String[] splitArray = predicate.split(" IN ");
+            if (splitArray.length != 2) {
+                return predicate;
+            }
+            String first = splitArray[0];
+            String second = splitArray[1];
+            String predicates = second.substring(1, second.length() - 1);
+            String sorted = Arrays.stream(predicates.split(", ")).sorted().collect(Collectors.joining(","));
+            StringBuilder sb = new StringBuilder();
+            sb.append(first);
+            sb.append(" IN (");
+            sb.append(sorted);
+            sb.append(")");
             return sb.toString();
         } else {
             return predicate;
@@ -229,14 +257,14 @@ public class PlanTestNoneDBBase {
 
     public static void setTableStatistics(OlapTable table, long rowCount) {
         for (Partition partition : table.getAllPartitions()) {
-            partition.getBaseIndex().setRowCount(rowCount);
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(rowCount);
         }
     }
 
     public static void setPartitionStatistics(OlapTable table, String partitionName, long rowCount) {
         for (Partition partition : table.getAllPartitions()) {
             if (partition.getName().equals(partitionName)) {
-                partition.getBaseIndex().setRowCount(rowCount);
+                partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(rowCount);
             }
         }
     }
@@ -527,6 +555,7 @@ public class PlanTestNoneDBBase {
                 Assert.assertEquals(exceptString.toString(), ex.getMessage());
                 return true;
             }
+            ex.printStackTrace();
             Assert.fail("Planning failed, message: " + ex.getMessage() + ", sql: " + sql);
         }
 
@@ -790,7 +819,7 @@ public class PlanTestNoneDBBase {
 
     public Table getTable(String t) {
         GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
-        return globalStateMgr.getDb("test").getTable(t);
+        return globalStateMgr.getLocalMetastore().getDb("test").getTable(t);
     }
 
     public OlapTable getOlapTable(String t) {
@@ -864,7 +893,7 @@ public class PlanTestNoneDBBase {
         String sql = getFileContent(fileName);
         List<StatementBase> statements = SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode());
         for (StatementBase stmt : statements) {
-            StmtExecutor stmtExecutor = new StmtExecutor(connectContext, stmt);
+            StmtExecutor stmtExecutor = StmtExecutor.newInternalExecutor(connectContext, stmt);
             stmtExecutor.execute();
             Assert.assertEquals("", connectContext.getState().getErrorMessage());
         }

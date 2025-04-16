@@ -20,6 +20,7 @@ import com.starrocks.common.util.RuntimeProfile;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
@@ -85,7 +86,7 @@ class TracerImpl extends Tracer {
         tracerCost.stop();
     }
 
-    public void count(String name, int count) {
+    public void count(String name, long count) {
         tracerCost.start();
         varTracer.count(timePoint(), name, count);
         tracerCost.stop();
@@ -243,4 +244,8 @@ class TracerImpl extends Tracer {
         buildReasons(parent);
     }
 
+    @Override
+    public Optional<Timer> getSpecifiedTimer(String name) {
+        return watcher.getTimer(name);
+    }
 }

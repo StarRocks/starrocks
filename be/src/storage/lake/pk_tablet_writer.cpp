@@ -18,6 +18,7 @@
 
 #include "column/chunk.h"
 #include "fs/fs_util.h"
+#include "fs/key_cache.h"
 #include "runtime/exec_env.h"
 #include "serde/column_array_serde.h"
 #include "storage/lake/filenames.h"
@@ -31,7 +32,7 @@ namespace starrocks::lake {
 HorizontalPkTabletWriter::HorizontalPkTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
                                                    std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
                                                    ThreadPool* flush_pool, bool is_compaction)
-        : HorizontalGeneralTabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, flush_pool),
+        : HorizontalGeneralTabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, is_compaction, flush_pool),
           _rowset_txn_meta(std::make_unique<RowsetTxnMetaPB>()) {
     if (is_compaction) {
         auto rows_mapper_filename = lake_rows_mapper_filename(tablet_id, txn_id);
@@ -54,7 +55,19 @@ Status HorizontalPkTabletWriter::write(const Chunk& data, const std::vector<uint
 
 Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes) {
     auto name = gen_del_filename(_txn_id);
-    ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet_mgr->del_location(_tablet_id, name)));
+    WritableFileOptions wopts;
+    std::string encryption_meta;
+    if (config::enable_transparent_data_encryption) {
+        ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+        wopts.encryption_info = pair.info;
+        encryption_meta.swap(pair.encryption_meta);
+    }
+    std::unique_ptr<WritableFile> of;
+    if (_location_provider && _fs) {
+        ASSIGN_OR_RETURN(of, _fs->new_writable_file(_location_provider->del_location(_tablet_id, name)));
+    } else {
+        ASSIGN_OR_RETURN(of, fs::new_writable_file(wopts, _tablet_mgr->del_location(_tablet_id, name)));
+    }
     size_t sz = serde::ColumnArraySerde::max_serialized_size(deletes);
     std::vector<uint8_t> content(sz);
     if (serde::ColumnArraySerde::serialize(deletes, content.data()) == nullptr) {
@@ -62,7 +75,7 @@ Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes) {
     }
     RETURN_IF_ERROR(of->append(Slice(content.data(), content.size())));
     RETURN_IF_ERROR(of->close());
-    _files.emplace_back(FileInfo{std::move(name), content.size()});
+    _files.emplace_back(FileInfo{std::move(name), content.size(), encryption_meta});
     return Status::OK();
 }
 
@@ -78,12 +91,13 @@ Status HorizontalPkTabletWriter::flush_segment_writer(SegmentPB* segment) {
         partial_rowset_footer->set_size(segment_size - footer_position);
         const std::string& segment_path = _seg_writer->segment_path();
         std::string segment_name = std::string(basename(segment_path));
-        _files.emplace_back(FileInfo{segment_name, segment_size});
+        _files.emplace_back(FileInfo{segment_name, segment_size, _seg_writer->encryption_meta()});
         _data_size += segment_size;
         if (segment) {
             segment->set_data_size(segment_size);
             segment->set_index_size(index_size);
             segment->set_path(segment_path);
+            segment->set_encryption_meta(_seg_writer->encryption_meta());
         }
         _seg_writer.reset();
     }
@@ -102,7 +116,7 @@ VerticalPkTabletWriter::VerticalPkTabletWriter(TabletManager* tablet_mgr, int64_
                                                uint32_t max_rows_per_segment, ThreadPool* flush_pool,
                                                bool is_compaction)
         : VerticalGeneralTabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, max_rows_per_segment,
-                                      flush_pool) {
+                                      is_compaction, flush_pool) {
     if (is_compaction) {
         auto rows_mapper_filename = lake_rows_mapper_filename(tablet_id, txn_id);
         if (rows_mapper_filename.ok()) {

@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # unnest
 
-## Description
+
 
 UNNEST is a table function that takes an array and converts elements in that array into multiple rows of a table. The conversion is also known as "flattening".
 

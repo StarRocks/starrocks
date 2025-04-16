@@ -17,21 +17,21 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.DefaultAuthorizationProvider;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PrivilegeEntry;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.sys.GrantsTo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.DefaultAuthorizationProvider;
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PrivilegeEntry;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.analyzer.AuthorizationAnalyzer;
 import com.starrocks.sql.analyzer.CreateFunctionAnalyzer;
-import com.starrocks.sql.analyzer.PrivilegeStmtAnalyzer;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
@@ -84,8 +84,7 @@ public class InfoSchemaDbTest {
                 "create materialized view db.mv distributed by hash(k4) buckets 10 REFRESH ASYNC as select * from db.tbl");
 
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(new AuthenticationMgr());
-        GlobalStateMgr.getCurrentState().setAuthorizationMgr(new AuthorizationMgr(GlobalStateMgr.getCurrentState(),
-                new DefaultAuthorizationProvider()));
+        GlobalStateMgr.getCurrentState().setAuthorizationMgr(new AuthorizationMgr(new DefaultAuthorizationProvider()));
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user test_user", ctx);
         globalStateMgr.getAuthenticationMgr().createUser(createUserStmt);
@@ -107,7 +106,7 @@ public class InfoSchemaDbTest {
         Assert.assertFalse(db.registerTableUnlocked(null));
         db.dropTable("authors");
         db.write(null);
-        Assert.assertNull(db.getTable("authors"));
+        Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "authors"));
     }
 
     @Test
@@ -278,7 +277,7 @@ public class InfoSchemaDbTest {
 
     @Test
     public void testShowFunctionsWithPriv() throws Exception {
-        new MockUp<PrivilegeStmtAnalyzer>() {
+        new MockUp<AuthorizationAnalyzer>() {
             @Mock
             public void analyze(ConnectContext context) throws AnalysisException {
             }
@@ -349,11 +348,11 @@ public class InfoSchemaDbTest {
         MetadataMgr metadataMgr = ctx.getGlobalStateMgr().getMetadataMgr();
         new Expectations(metadataMgr) {
             {
-                metadataMgr.getDb((String) any, (String) any);
+                metadataMgr.getDb((ConnectContext) any, (String) any, (String) any);
                 result = new com.starrocks.catalog.Database(0, "db");
                 minTimes = 0;
 
-                metadataMgr.getTable((String) any, (String) any, (String) any);
+                metadataMgr.getTable((ConnectContext) any, (String) any, (String) any, (String) any);
                 result = HiveTable.builder().setHiveTableName("tbl")
                         .setFullSchema(Lists.newArrayList(new Column("v1", Type.INT))).build();
                 minTimes = 0;

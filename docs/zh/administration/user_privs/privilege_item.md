@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+sidebar_position: 20
 ---
 
 # 权限项
@@ -65,7 +66,7 @@ displayed_sidebar: "Chinese"
 | CATALOG <br />（内部目录，默认名称为 default_catalog） | USAGE           | 使用 internal catalog。                    |
 |                                                  | CREATE DATABASE | 在 internal catalog 里创建数据库。         |
 |                                                  | ALL             | 拥有对 internal catalog 的上述所有权限。   |
-| CATALOG （外部目录）                             | USAGE           | 使用 external catalog，查看里面的表。      |
+| CATALOG （外部目录）                             | USAGE           | 使用 external catalog。      |
 |                                                  | DROP            | 删除 external catalog。                    |
 |                                                  | ALL             | 拥有对该 external catalog 的上述所有权限。 |
 

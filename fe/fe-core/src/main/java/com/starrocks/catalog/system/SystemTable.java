@@ -14,15 +14,36 @@
 
 package com.starrocks.catalog.system;
 
+import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
+import com.starrocks.catalog.system.information.BeConfigsSystemTable;
+import com.starrocks.catalog.system.information.BeTabletsSystemTable;
+import com.starrocks.catalog.system.information.FeTabletSchedulesSystemTable;
+import com.starrocks.catalog.system.information.LoadTrackingLogsSystemTable;
+import com.starrocks.catalog.system.information.LoadsSystemTable;
+import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
+import com.starrocks.catalog.system.information.PartitionsMetaSystemTable;
+import com.starrocks.catalog.system.information.PipesSystemTable;
+import com.starrocks.catalog.system.information.RoutineLoadJobsSystemTable;
+import com.starrocks.catalog.system.information.StreamLoadsSystemTable;
+import com.starrocks.catalog.system.information.TablesConfigSystemTable;
+import com.starrocks.catalog.system.information.TaskRunsSystemTable;
+import com.starrocks.catalog.system.information.TasksSystemTable;
+import com.starrocks.catalog.system.information.TemporaryTablesTable;
+import com.starrocks.catalog.system.information.ViewsSystemTable;
+import com.starrocks.catalog.system.information.WarehouseMetricsSystemTable;
+import com.starrocks.catalog.system.information.WarehouseQueriesSystemTable;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.thrift.TSchemaTable;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import org.apache.commons.lang3.NotImplementedException;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -39,11 +60,33 @@ public class SystemTable extends Table {
     public static final int NAME_CHAR_LEN = 2048;
     public static final int MAX_FIELD_VARCHAR_LENGTH = 65535;
 
+    // some metadata may be inaccurate in the follower fe, because they may be not persisted in leader fe,
+    // such as routine load job state changed from NEED_SCHEDULE to RUNNING.
+    private static final ImmutableSortedSet<String> QUERY_FROM_LEADER_TABLES =
+            ImmutableSortedSet.orderedBy(String.CASE_INSENSITIVE_ORDER)
+                    .add(FeTabletSchedulesSystemTable.NAME)
+                    .add(LoadTrackingLogsSystemTable.NAME)
+                    .add(LoadsSystemTable.NAME)
+                    .add(MaterializedViewsSystemTable.NAME)
+                    .add(PartitionsMetaSystemTable.NAME)
+                    .add(PipesSystemTable.NAME)
+                    .add(RoutineLoadJobsSystemTable.NAME)
+                    .add(StreamLoadsSystemTable.NAME)
+                    .add(TablesConfigSystemTable.NAME)
+                    .add(TaskRunsSystemTable.NAME)
+                    .add(TasksSystemTable.NAME)
+                    .add(TemporaryTablesTable.NAME)
+                    .add(ViewsSystemTable.NAME)
+                    .add(WarehouseMetricsSystemTable.NAME)
+                    .add(WarehouseQueriesSystemTable.NAME)
+                    .build();
+
     private final TSchemaTableType schemaTableType;
 
     private final String catalogName;
 
-    public SystemTable(long id, String name, TableType type, List<Column> baseSchema, TSchemaTableType schemaTableType) {
+    public SystemTable(long id, String name, TableType type, List<Column> baseSchema,
+                       TSchemaTableType schemaTableType) {
         this(DEFAULT_INTERNAL_CATALOG_NAME, id, name, type, baseSchema, schemaTableType);
     }
 
@@ -65,12 +108,12 @@ public class SystemTable extends Table {
 
     public boolean requireOperatePrivilege() {
         return (SystemTable.isBeSchemaTable(getName()) || SystemTable.isFeSchemaTable(getName())) &&
-                !getName().equals("be_tablets") && !getName().equals("fe_tablet_schedules");
+                !getName().equals(BeTabletsSystemTable.NAME) && !getName().equals(FeTabletSchedulesSystemTable.NAME);
     }
 
     @Override
     public boolean supportsUpdate() {
-        return name.equals("be_configs");
+        return name.equals(BeConfigsSystemTable.NAME);
     }
 
     @Override
@@ -98,11 +141,16 @@ public class SystemTable extends Table {
             columns = Lists.newArrayList();
         }
 
-        public Builder column(String name, ScalarType type) {
+        public Builder column(String name, Type type) {
             return column(name, type, true);
         }
 
-        public Builder column(String name, ScalarType type, boolean nullable) {
+        public Builder column(String name, Type type, String comment) {
+            columns.add(new Column(name, type, false, null, true, null, comment));
+            return this;
+        }
+
+        public Builder column(String name, Type type, boolean nullable) {
             columns.add(new Column(name, type, false, null, nullable, null, ""));
             return this;
         }
@@ -124,5 +172,32 @@ public class SystemTable extends Table {
     @Override
     public boolean isSupported() {
         return true;
+    }
+
+    /**
+     * Whether this system table supports evaluation in FE
+     *
+     * @return true if it's supported
+     */
+    public boolean supportFeEvaluation() {
+        return false;
+    }
+
+    /**
+     * Evaluate the system table query with specified predicate
+     *
+     * @param predicate can only be conjuncts
+     * @return All columns and rows according to the schema of this table
+     */
+    public List<List<ScalarOperator>> evaluate(ScalarOperator predicate) {
+        throw new NotImplementedException("not supported");
+    }
+
+    public static boolean needQueryFromLeader(String tableName) {
+        return QUERY_FROM_LEADER_TABLES.contains(tableName);
+    }
+
+    public static ScalarType createNameType() {
+        return ScalarType.createVarchar(NAME_CHAR_LEN);
     }
 }

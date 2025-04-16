@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 sidebar_position: 2
 description: "存算分离"
 keywords: ['cunsuan']
@@ -7,10 +7,10 @@ keywords: ['cunsuan']
 
 # 存算分离
 
-import DDL from '../assets/quick-start/_DDL.mdx'
-import Clients from '../assets/quick-start/_clientsCompose.mdx'
-import SQL from '../assets/quick-start/_SQL.mdx'
-import Curl from '../assets/quick-start/_curl.mdx'
+import DDL from '../_assets/quick-start/_DDL.mdx'
+import Clients from '../_assets/quick-start/_clientsCompose.mdx'
+import SQL from '../_assets/quick-start/_SQL.mdx'
+import Curl from '../_assets/quick-start/_curl.mdx'
 
 
 在 StarRocks 存算分离架构中，数据存储在成本更低且更可靠的远程存储系统中，例如 Amazon S3、Google Cloud Storage、Azure Blob Storage 以及其他支持 S3 协议的存储，如 MinIO。热数据会被缓存到本地，在查询命中缓存的前提下，存算分离集群的查询性能与存算一体集群相当。同时，在存算分离架构下，计算节点（CN）可以在几秒内根据需要实现扩缩容。因此，StarRocks 的存算分离架构不仅降低了存储成本，保证了资源隔离性能，还提供了计算资源的弹性和可扩展性。
@@ -120,7 +120,7 @@ minio          25 seconds ago   Up 24 seconds             0.0.0.0:9000-9001->900
 
 MinIO 将生成一对密钥，点击 **Create** 生成并下载密钥。
 
-![点击 Create](../assets/quick-start/MinIO-create.png)
+![点击 Create](../_assets/quick-start/MinIO-create.png)
 
 :::note
 系统不会自动保存密钥，所以请确认保存密钥后再离开页面。
@@ -346,7 +346,7 @@ curl --location-trusted -u root             \
 :::tip
 在导入数据时，`starrocks/shared/` 下的文件夹名称是动态生成的。您会在 `shared` 下面看到一个路径，然后在该路径下看到另外两个路径。在每个路径内，您都能看到 `data`、`metadata` 和 `schema` 路径。
 
-![MinIO Web UI](../assets/quick-start/MinIO-data.png)
+![MinIO Web UI](../_assets/quick-start/MinIO-data.png)
 :::
 
 ---
@@ -408,7 +408,6 @@ http_port = 8030
 rpc_port = 9020
 query_port = 9030
 edit_log_port = 9010
-mysql_service_nio_enabled = true
 
 # highlight-start
 run_mode=shared_data
@@ -467,7 +466,6 @@ MinIO 端点，包括端口号。
 ## 更多信息
 
 - [StarRocks 表设计](../table_design/StarRocks_table_design.md)
-- [物化视图](../cover_pages/mv_use_cases.mdx)
-- [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)
+- [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)
 - [纽约市交通事故数据](https://data.cityofnewyork.us/Public-Safety/Motor-Vehicle-Collisions-Crashes/h9gi-nx95) 数据集由纽约市提供，受到以下[使用条款](https://www.nyc.gov/home/terms-of-use.page)和[隐私政策](https://www.nyc.gov/home/privacy-policy.page)的约束。
 - [气象数据](https://www.ncdc.noaa.gov/cdo-web/datatools/lcd)(LCD)由 NOAA 提供，附带[免责声明](https://www.noaa.gov/disclaimer)和[隐私政策](https://www.noaa.gov/protecting-your-privacy)。

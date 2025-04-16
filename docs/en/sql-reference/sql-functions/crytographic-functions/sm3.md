@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # sm3
 
-## Description
+
 
 Uses the SM3 digest algorithm to encrypt a string into a 256-bit hexadecimal string. Every 32 bits are separated by a space.
 

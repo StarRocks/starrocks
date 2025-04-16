@@ -18,16 +18,16 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSerializer;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.sql.analyzer.SemanticException;
 
 import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
@@ -64,6 +64,7 @@ public class DateUtils {
     public static final DateTimeFormatter DATE_TIME_MS_FORMATTER_UNIX = unixDatetimeFormatter("%Y-%m-%d %H:%i:%s.%f");
     public static final DateTimeFormatter SECOND_FORMATTER_UNIX = unixDatetimeFormatter("%Y%m%d%H%i%s");
     public static final DateTimeFormatter MINUTE_FORMATTER_UNIX = unixDatetimeFormatter("%Y%m%d%H%i");
+    public static final DateTimeFormatter DATE_TIME_S_FORMATTER_UNIX = unixDatetimeFormatter("%Y%m%d%H%i%s");
     public static final DateTimeFormatter HOUR_FORMATTER_UNIX = unixDatetimeFormatter("%Y%m%d%H");
     public static final DateTimeFormatter YEAR_FORMATTER_UNIX = unixDatetimeFormatter("%Y");
     public static final DateTimeFormatter MONTH_FORMATTER_UNIX = unixDatetimeFormatter("%Y%m");
@@ -117,8 +118,8 @@ public class DateUtils {
         return dateTime.format(DATE_TIME_FORMATTER_UNIX);
     }
 
-    public static LocalDateTime fromEpochMillis(long epochMilli) {
-        return LocalDateTime.ofInstant(Instant.ofEpochMilli(epochMilli), ZoneOffset.UTC);
+    public static LocalDateTime fromEpochMillis(long epochMilli, ZoneId zoneId) {
+        return LocalDateTime.ofInstant(Instant.ofEpochMilli(epochMilli), zoneId);
     }
 
     public static LocalDateTime parseUnixDateTime(String str) {
@@ -129,7 +130,11 @@ public class DateUtils {
         if (str == null || str.length() < 5) {
             throw new IllegalArgumentException("Invalid datetime string: " + str);
         }
-        if (str.contains(":")) {
+        if (str.endsWith("Z") || str.endsWith("]")) {
+            return parseIsoZonedDateTimeString(str);
+        } else if (str.contains("+")) {
+            return parseOffsetDateTimeString(str);
+        } else if (str.contains(":")) {
             // datetime
             int isTwoDigit = str.split("-")[0].length() == 2 ? 1 : 0;
             int withSec = str.split(":").length > 2 ? 1 : 0;
@@ -147,6 +152,8 @@ public class DateUtils {
             } else if (str.length() == 8) {
                 // 20200202
                 formatter = STRICT_DATE_NO_SPLIT_FORMATTER;
+            } else if (str.length() == 14) {
+                formatter = DATE_TIME_S_FORMATTER_UNIX;
             } else {
                 formatter = STRICT_DATE_FORMATTER;
             }
@@ -154,7 +161,19 @@ public class DateUtils {
         }
     }
 
-    public static DateTimeFormatter probeFormat(String dateTimeStr) throws AnalysisException {
+    private static LocalDateTime parseIsoZonedDateTimeString(String datetime) {
+        ZonedDateTime zonedDateTime = ZonedDateTime.parse(datetime, DateTimeFormatter.ISO_ZONED_DATE_TIME);
+        ZonedDateTime localDateTimeWithZone = zonedDateTime.withZoneSameInstant(ZoneId.systemDefault());
+        return localDateTimeWithZone.toLocalDateTime();
+    }
+
+    private static LocalDateTime parseOffsetDateTimeString(String datetime) {
+        OffsetDateTime offsetDateTime = OffsetDateTime.parse(datetime, DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+        ZonedDateTime localDateTimeWithZone = offsetDateTime.atZoneSameInstant(ZoneId.systemDefault());
+        return localDateTimeWithZone.toLocalDateTime();
+    }
+
+    public static DateTimeFormatter probeFormat(String dateTimeStr) {
         if (dateTimeStr.length() == 8) {
             return DATEKEY_FORMATTER;
         } else if (dateTimeStr.length() == 10) {
@@ -163,8 +182,10 @@ public class DateUtils {
             return DATE_TIME_FORMATTER_UNIX;
         } else if (dateTimeStr.length() == 26) {
             return DATE_TIME_MS_FORMATTER_UNIX;
+        } else if (dateTimeStr.length() == 14) {
+            return DATE_TIME_S_FORMATTER_UNIX;
         } else {
-            throw new AnalysisException("can not probe datetime format:" + dateTimeStr);
+            throw new SemanticException("can not probe datetime format:" + dateTimeStr);
         }
     }
 
@@ -206,7 +227,7 @@ public class DateUtils {
         }
     }
 
-    public static LocalDateTime parseDatTimeString(String datetime) throws AnalysisException {
+    public static LocalDateTime parseDatTimeString(String datetime) {
         DateTimeFormatter dateTimeFormatter = probeFormat(datetime);
         return parseStringWithDefaultHSM(datetime, dateTimeFormatter);
     }

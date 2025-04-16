@@ -76,6 +76,7 @@ void RowsetColumnUpdateState::_release_upserts(uint32_t start_idx, uint32_t end_
 
 Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, MemTracker* update_mem_tracker, uint32_t start_idx,
                                               uint32_t* end_idx) {
+    CHECK_MEM_LIMIT("RowsetColumnUpdateState::_load_upserts");
     RowsetReleaseGuard guard(rowset->shared_from_this());
     if (_upserts.size() == 0) {
         _upserts.resize(rowset->num_update_files());
@@ -98,14 +99,15 @@ Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, MemTracker* update
         pk_columns.push_back((uint32_t)i);
     }
     Schema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
-    std::unique_ptr<Column> pk_column;
+    MutableColumnPtr pk_column;
     if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
         std::string err_msg = fmt::format("create column for primary key encoder failed, tablet_id: {}", _tablet_id);
         DCHECK(false) << err_msg;
         return Status::InternalError(err_msg);
     }
 
-    std::shared_ptr<Chunk> chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, DEFAULT_CHUNK_SIZE);
+    std::shared_ptr<Chunk> chunk_shared_ptr;
+    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, DEFAULT_CHUNK_SIZE));
 
     // alloc first BatchPKsPtr
     auto header_ptr = std::make_shared<BatchPKs>();
@@ -122,7 +124,7 @@ Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, MemTracker* update
             }
         });
         if (itr != nullptr) {
-            col->reserve(DEFAULT_CHUNK_SIZE);
+            TRY_CATCH_BAD_ALLOC(col->reserve(DEFAULT_CHUNK_SIZE));
             while (true) {
                 chunk->reset();
                 auto st = itr->get_next(chunk);
@@ -131,12 +133,13 @@ Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, MemTracker* update
                 } else if (!st.ok()) {
                     return st;
                 } else {
-                    PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get());
+                    TRY_CATCH_BAD_ALLOC(
+                            PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get()));
                 }
             }
         }
         // merge pk column into BatchPKs
-        header_ptr->upserts->append(*col);
+        TRY_CATCH_BAD_ALLOC(header_ptr->upserts->append(*col));
         // all idx share same ptr with start idx
         _upserts[idx] = header_ptr;
         *end_idx = idx + 1;
@@ -147,13 +150,13 @@ Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, MemTracker* update
         }
     }
     // push end offset
-    header_ptr->offsets.push_back(header_ptr->upserts->size());
+    TRY_CATCH_BAD_ALLOC(header_ptr->offsets.push_back(header_ptr->upserts->size()));
     header_ptr->end_idx = *end_idx;
     DCHECK(header_ptr->offsets.size() == header_ptr->end_idx - header_ptr->start_idx + 1);
     // This is a little bit trick. If pk column is a binary column, we will call function `raw_data()` in the following
     // And the function `raw_data()` will build slice of pk column which will increase the memory usage of pk column
     // So we try build slice in advance in here to make sure the correctness of memory statistics
-    header_ptr->upserts->raw_data();
+    TRY_CATCH_BAD_ALLOC(header_ptr->upserts->raw_data());
     _memory_usage += header_ptr->upserts->memory_usage();
 
     return Status::OK();
@@ -174,6 +177,7 @@ Status RowsetColumnUpdateState::_do_load(Tablet* tablet, Rowset* rowset, MemTrac
 
 Status RowsetColumnUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset* rowset, uint32_t start_idx,
                                                                uint32_t end_idx, bool need_lock) {
+    CHECK_MEM_LIMIT("RowsetColumnUpdateState::_prepare_partial_update_states");
     if (_partial_update_states.size() == 0) {
         _partial_update_states.resize(rowset->num_update_files());
     } else {
@@ -187,8 +191,13 @@ Status RowsetColumnUpdateState::_prepare_partial_update_states(Tablet* tablet, R
         return Status::OK();
     }
 
+    const auto& txn_meta = rowset->rowset_meta()->get_meta_pb_without_schema().txn_meta();
+    for (auto& entry : txn_meta.column_to_expr_value()) {
+        _column_to_expr_value.insert({entry.first, entry.second});
+    }
+
     EditVersion read_version;
-    _upserts[start_idx]->src_rss_rowids.resize(_upserts[start_idx]->upserts_size());
+    TRY_CATCH_BAD_ALLOC(_upserts[start_idx]->src_rss_rowids.resize(_upserts[start_idx]->upserts_size()));
     int64_t t_start = MonotonicMillis();
     if (need_lock) {
         RETURN_IF_ERROR(tablet->updates()->get_rss_rowids_by_pk(tablet, *(_upserts[start_idx]->upserts), &read_version,
@@ -203,12 +212,12 @@ Status RowsetColumnUpdateState::_prepare_partial_update_states(Tablet* tablet, R
         _upserts[idx]->split_src_rss_rowids(idx, _partial_update_states[idx].src_rss_rowids);
         // build `rss_rowid_to_update_rowid`
         _partial_update_states[idx].read_version = read_version;
-        _partial_update_states[idx].build_rss_rowid_to_update_rowid();
+        TRY_CATCH_BAD_ALLOC(_partial_update_states[idx].build_rss_rowid_to_update_rowid());
         _partial_update_states[idx].inited = true;
     }
     int64_t t_end = MonotonicMillis();
 
-    LOG(INFO) << strings::Substitute(
+    VLOG(1) << strings::Substitute(
             "prepare ColumnPartialUpdateState tablet:$0 segment:[$1, $2) "
             "time:$3ms(src_rss:$4)",
             _tablet_id, start_idx, end_idx, t_end - t_start, t_read_rss - t_start);
@@ -218,16 +227,19 @@ Status RowsetColumnUpdateState::_prepare_partial_update_states(Tablet* tablet, R
 Status RowsetColumnUpdateState::_resolve_conflict(Tablet* tablet, uint32_t rowset_id, uint32_t start_idx,
                                                   uint32_t end_idx, EditVersion latest_applied_version,
                                                   const PrimaryIndex& index) {
+    CHECK_MEM_LIMIT("RowsetColumnUpdateState::_resolve_conflict");
     int64_t t_start = MonotonicMillis();
     // rebuild src_rss_rowids;
-    _upserts[start_idx]->src_rss_rowids.resize(_upserts[start_idx]->upserts_size(), 0);
+    TRY_CATCH_BAD_ALLOC(_upserts[start_idx]->src_rss_rowids.resize(_upserts[start_idx]->upserts_size(), 0));
     RETURN_IF_ERROR(index.get(*(_upserts[start_idx]->upserts), &(_upserts[start_idx]->src_rss_rowids)));
     int64_t t_read_index = MonotonicMillis();
     for (uint32_t idx = start_idx; idx < end_idx; idx++) {
-        _partial_update_states[idx].src_rss_rowids.clear();
-        _upserts[idx]->split_src_rss_rowids(idx, _partial_update_states[idx].src_rss_rowids);
-        // rebuild rss_rowid_to_update_rowid
-        _partial_update_states[idx].build_rss_rowid_to_update_rowid();
+        TRY_CATCH_BAD_ALLOC({
+            _partial_update_states[idx].src_rss_rowids.clear();
+            _upserts[idx]->split_src_rss_rowids(idx, _partial_update_states[idx].src_rss_rowids);
+            // rebuild rss_rowid_to_update_rowid
+            _partial_update_states[idx].build_rss_rowid_to_update_rowid();
+        });
     }
     int64_t t_end = MonotonicMillis();
     LOG(INFO) << strings::Substitute(
@@ -293,10 +305,23 @@ Status RowsetColumnUpdateState::_finalize_partial_update_state(Tablet* tablet, R
     return Status::OK();
 }
 
-static StatusOr<ChunkPtr> read_from_source_segment(Rowset* rowset, const Schema& schema, Tablet* tablet,
-                                                   OlapReaderStatistics* stats, int64_t version,
-                                                   RowsetSegmentId rowset_seg_id, const std::string& path) {
+int64_t RowsetColumnUpdateState::calc_upt_memory_usage_per_row(Rowset* rowset) {
+    // `num_rows_upt` could be zero after upgrade from old version,
+    // then we will return zero and no limit.
+    if ((rowset->num_rows_upt()) <= 0) return 0;
+    return rowset->total_update_row_size() / rowset->num_rows_upt();
+}
+
+// Read chunk from source segment file and call `update_func` to update it.
+// `update_func` accept ChunkUniquePtr and [start_rowid, end_rowid) range of this chunk.
+static Status read_from_source_segment_and_update(
+        Rowset* rowset, const Schema& schema, Tablet* tablet, OlapReaderStatistics* stats, int64_t version,
+        RowsetSegmentId rowset_seg_id, const std::string& path,
+        const std::function<Status(StreamChunkContainer, bool, int64_t)>& update_func) {
+    CHECK_MEM_LIMIT("RowsetColumnUpdateState::read_from_source_segment");
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(rowset->rowset_path()));
+    // We need to estimate each update rows size before it has been actually updated.
+    const int64_t upt_memory_usage_per_row = RowsetColumnUpdateState::calc_upt_memory_usage_per_row(rowset);
     auto segment = Segment::open(fs, FileInfo{path}, rowset_seg_id.segment_id, rowset->schema());
     if (!segment.ok()) {
         LOG(WARNING) << "Fail to open " << path << ": " << segment.status();
@@ -314,9 +339,13 @@ static StatusOr<ChunkPtr> read_from_source_segment(Rowset* rowset, const Schema&
     seg_options.version = version;
     // not use delvec loader
     seg_options.dcg_loader = std::make_shared<LocalDeltaColumnGroupLoader>(tablet->data_dir()->get_meta());
+    seg_options.chunk_size = config::vector_chunk_size;
     ASSIGN_OR_RETURN(auto seg_iter, (*segment)->new_iterator(schema, seg_options));
-    auto source_chunk_ptr = ChunkHelper::new_chunk(schema, (*segment)->num_rows());
-    auto tmp_chunk_ptr = ChunkHelper::new_chunk(schema, 1024);
+    ChunkUniquePtr source_chunk_ptr;
+    ChunkUniquePtr tmp_chunk_ptr;
+    TRY_CATCH_BAD_ALLOC(source_chunk_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size));
+    TRY_CATCH_BAD_ALLOC(tmp_chunk_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size));
+    uint32_t start_rowid = 0;
     while (true) {
         tmp_chunk_ptr->reset();
         auto st = seg_iter->get_next(tmp_chunk_ptr.get());
@@ -326,9 +355,33 @@ static StatusOr<ChunkPtr> read_from_source_segment(Rowset* rowset, const Schema&
             return st;
         } else {
             source_chunk_ptr->append(*tmp_chunk_ptr);
+            // Avoid too many memory usage and Column overflow, we will limit source chunk's size.
+            if (source_chunk_ptr->num_rows() >= INT32_MAX ||
+                (int64_t)source_chunk_ptr->num_rows() * upt_memory_usage_per_row >
+                        config::partial_update_memory_limit_per_worker) {
+                // Because we will handle columns group by group (define by config::vertical_compaction_max_columns_per_group),
+                // so use `upt_memory_usage_per_row` to estimate source chunk future memory cost will be overvalued.
+                // But it's better to be overvalued than undervalued.
+                StreamChunkContainer container = {
+                        .chunk_ptr = source_chunk_ptr.get(),
+                        .start_rowid = start_rowid,
+                        .end_rowid = start_rowid + static_cast<uint32_t>(source_chunk_ptr->num_rows())};
+                RETURN_IF_ERROR(update_func(container, true /*print log*/, upt_memory_usage_per_row));
+                start_rowid += static_cast<uint32_t>(source_chunk_ptr->num_rows());
+                source_chunk_ptr->reset();
+            }
         }
     }
-    return source_chunk_ptr;
+    if (!source_chunk_ptr->is_empty()) {
+        StreamChunkContainer container = {
+                .chunk_ptr = source_chunk_ptr.get(),
+                .start_rowid = start_rowid,
+                .end_rowid = start_rowid + static_cast<uint32_t>(source_chunk_ptr->num_rows())};
+        RETURN_IF_ERROR(update_func(container, false /*print log*/, upt_memory_usage_per_row));
+        start_rowid += static_cast<uint32_t>(source_chunk_ptr->num_rows());
+        source_chunk_ptr->reset();
+    }
+    return Status::OK();
 }
 
 // this function build delta writer for delta column group's file.(end with `.col`)
@@ -372,7 +425,8 @@ static Status read_chunk_from_update_file(const ChunkIteratorPtr& iter, const Ch
 //  inorder_upt_rowids -> <2, 3, 4>, <5, 6>
 static void cut_rowids_in_order(const std::vector<RowidPairs>& rowid_pairs,
                                 std::vector<std::vector<uint32_t>>* inorder_source_rowids,
-                                std::vector<std::vector<uint32_t>>* inorder_upt_rowids) {
+                                std::vector<std::vector<uint32_t>>* inorder_upt_rowids,
+                                StreamChunkContainer container) {
     uint32_t last_source_rowid = 0;
     std::vector<uint32_t> current_source_rowids;
     std::vector<uint32_t> current_upt_rowids;
@@ -383,11 +437,16 @@ static void cut_rowids_in_order(const std::vector<RowidPairs>& rowid_pairs,
         inorder_upt_rowids->back().swap(current_upt_rowids);
     };
     for (const auto& each : rowid_pairs) {
+        if (!container.contains(each.first)) {
+            // skip in this round
+            continue;
+        }
         if (each.first < last_source_rowid) {
             // cut
             cut_rowids_fn();
         }
-        current_source_rowids.push_back(each.first);
+        // Align rowid
+        current_source_rowids.push_back(each.first - container.start_rowid);
         current_upt_rowids.push_back(each.second);
         last_source_rowid = each.first;
     }
@@ -400,12 +459,14 @@ static void cut_rowids_in_order(const std::vector<RowidPairs>& rowid_pairs,
 Status RowsetColumnUpdateState::_update_source_chunk_by_upt(const UptidToRowidPairs& upt_id_to_rowid_pairs,
                                                             const Schema& partial_schema, Rowset* rowset,
                                                             OlapReaderStatistics* stats, MemTracker* tracker,
-                                                            ChunkPtr* source_chunk) {
+                                                            StreamChunkContainer container) {
+    CHECK_MEM_LIMIT("RowsetColumnUpdateState::_update_source_chunk_by_upt");
     // handle upt files one by one
     for (const auto& each : upt_id_to_rowid_pairs) {
         const uint32_t upt_id = each.first;
         // 1. get chunk from upt file
-        ChunkUniquePtr upt_chunk = ChunkHelper::new_chunk(partial_schema, DEFAULT_CHUNK_SIZE);
+        ChunkUniquePtr upt_chunk;
+        TRY_CATCH_BAD_ALLOC(upt_chunk = ChunkHelper::new_chunk(partial_schema, DEFAULT_CHUNK_SIZE));
         ASSIGN_OR_RETURN(auto update_iterator, rowset->get_update_file_iterator(partial_schema, upt_id, stats));
         DeferOp iter_defer([&]() {
             if (update_iterator != nullptr) {
@@ -419,12 +480,13 @@ Status RowsetColumnUpdateState::_update_source_chunk_by_upt(const UptidToRowidPa
         // 2. update source chunk
         std::vector<std::vector<uint32_t>> inorder_source_rowids;
         std::vector<std::vector<uint32_t>> inorder_upt_rowids;
-        cut_rowids_in_order(each.second, &inorder_source_rowids, &inorder_upt_rowids);
+        cut_rowids_in_order(each.second, &inorder_source_rowids, &inorder_upt_rowids, container);
         DCHECK(inorder_source_rowids.size() == inorder_upt_rowids.size());
         for (int i = 0; i < inorder_source_rowids.size(); i++) {
             auto tmp_chunk = ChunkHelper::new_chunk(partial_schema, inorder_upt_rowids[i].size());
-            tmp_chunk->append_selective(*upt_chunk, inorder_upt_rowids[i].data(), 0, inorder_upt_rowids[i].size());
-            RETURN_IF_EXCEPTION((*source_chunk)->update_rows(*tmp_chunk, inorder_source_rowids[i].data()));
+            TRY_CATCH_BAD_ALLOC(tmp_chunk->append_selective(*upt_chunk, inorder_upt_rowids[i].data(), 0,
+                                                            inorder_upt_rowids[i].size()));
+            RETURN_IF_EXCEPTION(container.chunk_ptr->update_rows(*tmp_chunk, inorder_source_rowids[i].data()));
         }
     }
     return Status::OK();
@@ -462,21 +524,28 @@ static std::pair<std::vector<uint32_t>, std::vector<uint32_t>> get_read_update_c
 
 Status RowsetColumnUpdateState::_fill_default_columns(const TabletSchemaCSPtr& tablet_schema,
                                                       const std::vector<uint32_t>& column_ids, const int64_t row_cnt,
-                                                      vector<std::shared_ptr<Column>>* columns) {
+                                                      vector<ColumnPtr>* columns) {
     for (auto i = 0; i < column_ids.size(); ++i) {
         const TabletColumn& tablet_column = tablet_schema->column(column_ids[i]);
-        if (tablet_column.has_default_value()) {
+
+        bool has_default_value = tablet_column.has_default_value();
+        std::string default_value = has_default_value ? tablet_column.default_value() : "";
+        auto iter = _column_to_expr_value.find(std::string(tablet_column.name()));
+        if (iter != _column_to_expr_value.end()) {
+            has_default_value = true;
+            default_value = iter->second;
+        }
+        if (has_default_value) {
             const TypeInfoPtr& type_info = get_type_info(tablet_column);
             std::unique_ptr<DefaultValueColumnIterator> default_value_iter =
-                    std::make_unique<DefaultValueColumnIterator>(
-                            tablet_column.has_default_value(), tablet_column.default_value(),
-                            tablet_column.is_nullable(), type_info, tablet_column.length(), row_cnt);
+                    std::make_unique<DefaultValueColumnIterator>(true, default_value, tablet_column.is_nullable(),
+                                                                 type_info, tablet_column.length(), row_cnt);
             ColumnIteratorOptions iter_opts;
             RETURN_IF_ERROR(default_value_iter->init(iter_opts));
             RETURN_IF_ERROR(
                     default_value_iter->fetch_values_by_rowid(nullptr, row_cnt, (*columns)[column_ids[i]].get()));
         } else {
-            (*columns)[column_ids[i]]->append_default(row_cnt);
+            TRY_CATCH_BAD_ALLOC((*columns)[column_ids[i]]->append_default(row_cnt));
         }
     }
     return Status::OK();
@@ -500,7 +569,7 @@ Status RowsetColumnUpdateState::_update_primary_index(const TabletSchemaCSPtr& t
     RETURN_IF_ERROR(index.prepare(edit_version, insert_row_cnt));
     for (const auto& each_chunk : segid_to_chunk) {
         new_deletes[rowset_id + each_chunk.first] = {};
-        std::unique_ptr<Column> pk_column;
+        MutableColumnPtr pk_column;
         RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
         PrimaryKeyEncoder::encode(pkey_schema, *each_chunk.second, 0, each_chunk.second->num_rows(), pk_column.get());
         RETURN_IF_ERROR(index.upsert(rowset_id + each_chunk.first, 0, *pk_column, &new_deletes));
@@ -608,6 +677,7 @@ static std::vector<T> append_fixed_batch(const std::vector<T>& base_array, size_
 Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_t rowset_id,
                                          PersistentIndexMetaPB& index_meta, MemTracker* tracker,
                                          vector<std::pair<uint32_t, DelVectorPtr>>& delvecs, PrimaryIndex& index) {
+    CHECK_MEM_LIMIT("RowsetColumnUpdateState::finalize");
     if (_finalize_finished) return Status::OK();
     std::stringstream cost_str;
     MonotonicStopWatch watch;
@@ -660,19 +730,18 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
     // rss_id -> update file id -> <rowid, update rowid>
     std::map<uint32_t, UptidToRowidPairs> rss_upt_id_to_rowid_pairs;
     for (int upt_id = 0; upt_id < _partial_update_states.size(); upt_id++) {
-        for (const auto& each : _partial_update_states[upt_id].rss_rowid_to_update_rowid) {
-            auto rssid = (uint32_t)(each.first >> 32);
-            auto rowid = (uint32_t)(each.first & ROWID_MASK);
-            rss_upt_id_to_rowid_pairs[rssid][upt_id].emplace_back(rowid, each.second);
+        for (const auto& each_rss : _partial_update_states[upt_id].rss_rowid_to_update_rowid) {
+            for (const auto& each : each_rss.second) {
+                rss_upt_id_to_rowid_pairs[each_rss.first][upt_id].emplace_back(each.first, each.second);
+            }
+            update_rows += each_rss.second.size();
         }
         insert_rows += _partial_update_states[upt_id].insert_rowids.size();
-        update_rows += _partial_update_states[upt_id].rss_rowid_to_update_rowid.size();
     }
     cost_str << " [generate delta column group writer] " << watch.elapsed_time();
     watch.reset();
     OlapReaderStatistics stats;
-    int64_t total_seek_source_segment_time = 0;
-    int64_t total_read_column_from_update_time = 0;
+    int64_t total_do_update_time = 0;
     int64_t total_finalize_dcg_time = 0;
     int64_t handle_cnt = 0;
     // must record unique column id in delta column group
@@ -696,32 +765,40 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
             // 3.2 build partial schema
             auto partial_tschema = TabletSchema::create(tschema, selective_update_column_uids);
             Schema partial_schema = ChunkHelper::convert_schema(tschema, selective_update_column_ids);
+            ASSIGN_OR_RETURN(auto delta_column_group_writer, build_writer_fn(each.first, partial_tschema, idx));
             // 3.3 read from source segment
             ASSIGN_OR_RETURN(auto rowsetid_segid, _find_rowset_seg_id(each.first));
             const std::string seg_path = Rowset::segment_file_path(
                     rowset->rowset_path(), rowsetid_segid.unique_rowset_id, rowsetid_segid.segment_id);
-            ASSIGN_OR_RETURN(auto source_chunk_ptr,
-                             read_from_source_segment(rowset, partial_schema, tablet, &stats,
-                                                      latest_applied_version.major_number(), rowsetid_segid, seg_path));
-            const size_t source_chunk_size = source_chunk_ptr->memory_usage();
-            tracker->consume(source_chunk_size);
-            DeferOp tracker_defer([&]() { tracker->release(source_chunk_size); });
-            // 3.2 read from update segment
+            RETURN_IF_ERROR(read_from_source_segment_and_update(
+                    rowset, partial_schema, tablet, &stats, latest_applied_version.major_number(), rowsetid_segid,
+                    seg_path, [&](StreamChunkContainer container, bool print_log, int64_t upt_memory_usage_per_row) {
+                        if (print_log) {
+                            LOG(INFO) << "RowsetColumnUpdateState read from source segment: tablet id:"
+                                      << tablet->tablet_id() << " [byte usage: " << container.chunk_ptr->bytes_usage()
+                                      << " row cnt: " << container.chunk_ptr->num_rows() << "] row range : ["
+                                      << container.start_rowid << ", " << container.end_rowid
+                                      << ") upt_memory_usage_per_row : " << upt_memory_usage_per_row
+                                      << " update column cnt : " << update_column_ids.size();
+                        }
+                        const size_t source_chunk_size = container.chunk_ptr->memory_usage();
+                        tracker->consume(source_chunk_size);
+                        DeferOp tracker_defer([&]() { tracker->release(source_chunk_size); });
+                        // 3.4 read from update segment and do update
+                        RETURN_IF_ERROR(_update_source_chunk_by_upt(each.second, partial_schema, rowset, &stats,
+                                                                    tracker, container));
+                        padding_char_columns(partial_schema, partial_tschema, container.chunk_ptr);
+                        RETURN_IF_ERROR(delta_column_group_writer->append_chunk(*container.chunk_ptr));
+                        return Status::OK();
+                    }));
             int64_t t2 = MonotonicMillis();
-            RETURN_IF_ERROR(_update_source_chunk_by_upt(each.second, partial_schema, rowset, &stats, tracker,
-                                                        &source_chunk_ptr));
-            int64_t t3 = MonotonicMillis();
             uint64_t segment_file_size = 0;
             uint64_t index_size = 0;
             uint64_t footer_position = 0;
-            padding_char_columns(partial_schema, partial_tschema, source_chunk_ptr.get());
-            ASSIGN_OR_RETURN(auto delta_column_group_writer, build_writer_fn(each.first, partial_tschema, idx));
-            RETURN_IF_ERROR(delta_column_group_writer->append_chunk(*source_chunk_ptr));
             RETURN_IF_ERROR(delta_column_group_writer->finalize(&segment_file_size, &index_size, &footer_position));
-            int64_t t4 = MonotonicMillis();
-            total_seek_source_segment_time += t2 - t1;
-            total_read_column_from_update_time += t3 - t2;
-            total_finalize_dcg_time += t4 - t3;
+            int64_t t3 = MonotonicMillis();
+            total_do_update_time += t2 - t1;
+            total_finalize_dcg_time += t3 - t2;
             // 3.6 prepare column id list and dcg file list
             dcg_column_ids[each.first].push_back(selective_unique_update_column_ids);
             dcg_column_files[each.first].push_back(file_name(delta_column_group_writer->segment_path()));
@@ -745,16 +822,20 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
         cost_str << " [insert missing rows] " << watch.elapsed_time();
         watch.reset();
     }
-    cost_str << strings::Substitute(
-            " seek_source_segment(ms):$0 read_column_from_update(ms):$1 avg_finalize_dcg_time(ms):$2 ",
-            total_seek_source_segment_time, total_read_column_from_update_time, total_finalize_dcg_time);
+    cost_str << strings::Substitute(" total_do_update_time(ms):$0 total_finalize_dcg_time(ms):$1 ",
+                                    total_do_update_time, total_finalize_dcg_time);
     cost_str << strings::Substitute(
             "rss_cnt:$0 update_cnt:$1 column_cnt:$2 update_rows:$3 handle_cnt:$4 insert_rows:$5",
             rss_upt_id_to_rowid_pairs.size(), _partial_update_states.size(), update_column_ids.size(), update_rows,
             handle_cnt, insert_rows);
 
-    LOG(INFO) << "RowsetColumnUpdateState tablet_id: " << tablet->tablet_id() << ", txn_id: " << rowset->txn_id()
-              << ", finalize cost:" << cost_str.str();
+    if (total_do_update_time > config::apply_version_slow_log_sec * 1000) {
+        LOG(INFO) << "RowsetColumnUpdateState tablet_id: " << tablet->tablet_id() << ", txn_id: " << rowset->txn_id()
+                  << ", finalize cost:" << cost_str.str();
+    } else {
+        LOG(INFO) << "RowsetColumnUpdateState tablet_id: " << tablet->tablet_id() << ", txn_id: " << rowset->txn_id()
+                  << ", cost_time: " << total_do_update_time;
+    }
     _finalize_finished = true;
     return Status::OK();
 }

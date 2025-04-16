@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # any_match
 
-## Description
+
 
 Returns whether any elements of an array match the given predicate.
 

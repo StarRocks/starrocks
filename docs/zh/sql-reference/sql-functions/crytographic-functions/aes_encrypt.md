@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # aes_encrypt
 
-## 功能
+
 
 使用 AES_128_ECB 算法对字符串 `str` 进行加密并返回一个二进制字符串。
 

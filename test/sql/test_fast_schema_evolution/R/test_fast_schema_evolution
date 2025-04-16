@@ -298,7 +298,7 @@ DISTRIBUTED BY HASH(`id_int`) BUCKETS 1
 PROPERTIES (
     "replication_num" = "1",
     "storage_format" = "DEFAULT",
-    "enable_persistent_index" = "false",
+    "enable_persistent_index" = "true",
     "fast_schema_evolution" = "true"
 );
 -- result:
@@ -337,7 +337,7 @@ function: manual_compact("meta_scan", "reproducex4")
 -- result:
 None
 -- !result
-select dict_merge(v2) from reproducex4 [_META_];
+select dict_merge(v2, 255) from reproducex4 [_META_];
 -- result:
 {"2":{"lst":["str",2,"LTEwMDA","OQ"]},"3":{"lst":["i32",2,1,2]}}
 -- !result
@@ -362,7 +362,7 @@ DISTRIBUTED BY HASH(`id_int`) BUCKETS 1
 PROPERTIES (
     "replication_num" = "1",
     "storage_format" = "DEFAULT",
-    "enable_persistent_index" = "false",
+    "enable_persistent_index" = "true",
     "fast_schema_evolution" = "false"
 );
 -- result:
@@ -389,6 +389,7 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`id_int`) BUCKETS 1 
 PROPERTIES (
 "compression" = "LZ4",
+"fast_schema_evolution" = "false",
 "replicated_storage" = "true",
 "replication_num" = "1"
 );
@@ -400,7 +401,7 @@ function: manual_compact("meta_scan", "reproducex4")
 -- result:
 None
 -- !result
-select dict_merge(v2) from reproducex4 [_META_];
+select dict_merge(v2, 255) from reproducex4 [_META_];
 -- result:
 {"2":{"lst":["str",2,"LTEwMDA","OQ"]},"3":{"lst":["i32",2,1,2]}}
 -- !result
@@ -498,14 +499,35 @@ function: wait_alter_table_finish()
 -- result:
 None
 -- !result
-select * from tab1;
+alter table tab1 add column date1 datetime default current_timestamp;
 -- result:
-100	k2_100	100	100	100	v4_100	v5_100	None
-200	k2_200	200	200	200	v4_200	v5_200	None
-300	k2_300	300	300	300	v4_300	v5_300	None
-400	k2_400	400	400	400	v4_400	v5_400	None
-500	k2_500	500	500	500	v4_500	v5_500	None
-600	k2_600	600	600	600	v4_600	v5_600	None
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+show create table tab1;
+-- result:
+tab1	CREATE TABLE `tab1` (
+  `k1` int(11) NOT NULL COMMENT "",
+  `k2` varchar(50) NOT NULL COMMENT "",
+  `v1` int(11) NULL COMMENT "",
+  `v2` int(11) NULL COMMENT "",
+  `v3` int(11) NULL COMMENT "",
+  `v4` varchar(50) NULL COMMENT "",
+  `v5` varchar(50) NULL COMMENT "",
+  `c1` largeint(40) NULL COMMENT "",
+  `date1` datetime NULL DEFAULT CURRENT_TIMESTAMP COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k1`, `k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1 
+PROPERTIES (
+"compression" = "LZ4",
+"enable_persistent_index" = "true",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
 -- !result
 drop table tab1;
 -- result:

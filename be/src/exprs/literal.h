@@ -30,6 +30,7 @@ public:
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 
+#ifdef STARROCKS_JIT_ENABLE
     bool is_compilable(RuntimeState* state) const override;
 
     JitScore compute_jit_score(RuntimeState* state) const override;
@@ -37,8 +38,11 @@ public:
     std::string jit_func_name_impl(RuntimeState* state) const override;
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override;
-
+#endif
+    bool is_literal() const override { return true; }
     std::string debug_string() const override;
+
+    const ColumnPtr value() const { return _value; }
 
 private:
     // @IMPORTANT: BinaryColumnPtr's build_slice will cause multi-thread(OLAP_SCANNER) crash

@@ -94,8 +94,10 @@ Status JniScanner::_init_jni_table_scanner(JNIEnv* env, RuntimeState* runtime_st
     jclass scanner_factory_class = env->FindClass(_jni_scanner_factory_class.c_str());
     jmethodID scanner_factory_constructor = env->GetMethodID(scanner_factory_class, "<init>", "()V");
     jobject scanner_factory_obj = env->NewObject(scanner_factory_class, scanner_factory_constructor);
-    jmethodID get_scanner_method = env->GetMethodID(scanner_factory_class, "getScannerClass", "()Ljava/lang/Class;");
-    _jni_scanner_cls = (jclass)env->CallObjectMethod(scanner_factory_obj, get_scanner_method);
+    jmethodID get_scanner_method =
+            env->GetMethodID(scanner_factory_class, "getScannerClass", "(Ljava/lang/String;)Ljava/lang/Class;");
+    jstring scanner_type = env->NewStringUTF(_scanner_type().c_str());
+    _jni_scanner_cls = (jclass)env->CallObjectMethod(scanner_factory_obj, get_scanner_method, scanner_type);
     RETURN_IF_ERROR(_check_jni_exception(env, "Failed to init the scanner class."));
     env->DeleteLocalRef(scanner_factory_class);
     env->DeleteLocalRef(scanner_factory_obj);
@@ -418,21 +420,12 @@ static std::string build_fs_options_properties(const FSOptions& options) {
     static constexpr char PROP_SEPARATOR = 0x2;
     std::string data;
 
-    if (cloud_configuration != nullptr) {
-        if (cloud_configuration->__isset.cloud_properties) {
-            for (const auto& cloud_property : cloud_configuration->cloud_properties) {
-                data += cloud_property.key;
-                data += KV_SEPARATOR;
-                data += cloud_property.value;
-                data += PROP_SEPARATOR;
-            }
-        } else {
-            for (const auto& [key, value] : cloud_configuration->cloud_properties_v2) {
-                data += key;
-                data += KV_SEPARATOR;
-                data += value;
-                data += PROP_SEPARATOR;
-            }
+    if (cloud_configuration != nullptr && cloud_configuration->__isset.cloud_properties) {
+        for (const auto& [key, value] : cloud_configuration->cloud_properties) {
+            data += key;
+            data += KV_SEPARATOR;
+            data += value;
+            data += PROP_SEPARATOR;
         }
     }
 
@@ -448,7 +441,8 @@ Status JniScanner::update_jni_scanner_params() {
         std::unordered_set<std::string> names;
         for (const auto& column : _scanner_ctx.materialized_columns) {
             if (column.name() == "___count___") continue;
-            names.insert(column.name());
+            auto col_name = column.formatted_name(_scanner_ctx.case_sensitive);
+            names.insert(col_name);
         }
         RETURN_IF_ERROR(_scanner_ctx.update_materialized_columns(names));
     }
@@ -638,18 +632,19 @@ std::unique_ptr<JniScanner> create_odps_jni_scanner(const JniScanner::CreateOpti
 // ---------------iceberg metadata jni scanner------------------
 std::unique_ptr<JniScanner> create_iceberg_metadata_jni_scanner(const JniScanner::CreateOptions& options) {
     const auto& scan_range = *(options.scan_range);
-    ;
 
     const auto* hdfs_table = dynamic_cast<const IcebergMetadataTableDescriptor*>(options.hive_table);
     std::map<std::string, std::string> jni_scanner_params;
 
-    jni_scanner_params["required_fields"] = hdfs_table->get_hive_column_names();
+    jni_scanner_params["metadata_column_names"] = hdfs_table->get_hive_column_names();
     jni_scanner_params["metadata_column_types"] = hdfs_table->get_hive_column_types();
-    jni_scanner_params["serialized_predicate"] = options.scan_node->serialized_predicate;
+    jni_scanner_params["time_zone"] = hdfs_table->get_time_zone();
 
-    jni_scanner_params["serialized_table"] = options.scan_node->serialized_table;
     jni_scanner_params["split_info"] = scan_range.serialized_split;
+    jni_scanner_params["serialized_predicate"] = options.scan_node->serialized_predicate;
+    jni_scanner_params["serialized_table"] = options.scan_node->serialized_table;
     jni_scanner_params["load_column_stats"] = options.scan_node->load_column_stats ? "true" : "false";
+    jni_scanner_params["scanner_type"] = options.scan_node->metadata_table_type;
 
     const std::string scanner_factory_class = "com/starrocks/connector/iceberg/IcebergMetadataScannerFactory";
     return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);

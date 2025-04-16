@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # nullif
 
-## 功能
+
 
 若参数 `expr1` 与 `expr2` 相等，则返回 NULL，否则返回 `expr1` 的值。
 

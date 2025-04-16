@@ -1,0 +1,20 @@
+-- name: test_percentile_approx 
+CREATE TABLE t1 (
+    c1 int,
+    c2 double
+    )
+DUPLICATE KEY(c1)
+DISTRIBUTED BY HASH(c1)
+BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+insert into t1 select generate_series, generate_series from table(generate_series(1, 50000, 3));
+set pipeline_dop=1;
+
+select percentile_approx(c2, 0.5) from t1;
+select percentile_approx(c2, 0.9) from t1;
+select percentile_approx(c2, 0.9, 2048) from t1;
+select percentile_approx(c2, 0.9, 5000) from t1;
+select percentile_approx(c2, 0.9, 10000) from t1;
+
+with tt as (select @v1 as v1, c1, c2 from t1) select /*+ set_user_variable(@v1 = 0.5) */ percentile_approx(c2, v1) from tt;
+with tt as (select @v1 as v1, @v2 as v2, c1, c2 from t1) select /*+ set_user_variable(@v1= 0.5, @v2 = 4096) */ percentile_approx(c2, v1, v2 + 1) from tt;

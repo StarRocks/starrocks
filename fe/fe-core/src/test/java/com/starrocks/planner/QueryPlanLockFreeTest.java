@@ -21,6 +21,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -60,28 +61,56 @@ public class QueryPlanLockFreeTest {
                 "PROPERTIES (\n" +
                 " \"replication_num\" = \"1\"\n" +
                 ");");
+
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `t1` (\n" +
+                "  `k1` int(11) NULL,\n" +
+                "  `k2` int(11) NULL,\n" +
+                "  `k3` int(11) NULL,\n" +
+                "  `v1` int SUM NULL,\n" +
+                "  `v2` bigint SUM NULL,\n" +
+                "  `v3` largeint SUM NULL,\n" +
+                "  `v4` double SUM NULL,\n" +
+                "  `v5` decimal(10, 3) SUM NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "AGGREGATE KEY(`k1`, `k2`, `k3`)\n" +
+                "DISTRIBUTED BY HASH(`k2`) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                " \"replication_num\" = \"1\"\n" +
+                ");");
     }
 
     @Test
     public void testPlanStrategy() throws Exception {
         String sql = "select * from t0";
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getTable("default_catalog", DB_NAME, "t0");
-        table.lastVersionUpdateStartTime.set(2);
-        table.lastVersionUpdateEndTime.set(1);
-        try {
-            UtFrameUtils.getPlanAndFragment(connectContext, sql);
-        } catch (Exception e) {
-            Assert.assertTrue(e.getMessage(),
-                    e.getMessage().contains("The tablet write operation update metadata take a long time"));
-        }
+                .getTable(new ConnectContext(), "default_catalog", DB_NAME, "t0");
+        table.lastSchemaUpdateTime.set(System.nanoTime() + 10000000000L);
+        Assert.assertThrows("schema of [t0] had been updated frequently during the plan generation",
+                StarRocksPlannerException.class, () -> UtFrameUtils.getPlanAndFragment(connectContext, sql));
+
         connectContext.getSessionVariable().setCboUseDBLock(true);
         Pair<String, ExecPlan> plan = UtFrameUtils.getPlanAndFragment(connectContext, sql);
         Assert.assertTrue(plan.first, plan.first.contains("SCAN"));
         connectContext.getSessionVariable().setCboUseDBLock(false);
+
+        // follower node
         GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.FOLLOWER);
-        plan = UtFrameUtils.getPlanAndFragment(connectContext, sql);
-        Assert.assertTrue(plan.first, plan.first.contains("SCAN"));
+        Assert.assertThrows("schema of [t0] had been updated frequently during the plan generation",
+                StarRocksPlannerException.class, () -> UtFrameUtils.getPlanAndFragment(connectContext, sql));
+    }
+
+    @Test
+    public void testCopiedTable() throws Exception {
+        String sql = "select t1.* from t1 t1 join t1 t2 on t1.k1 = t2.k2";
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(new ConnectContext(), "default_catalog", DB_NAME, "t1");
+        Pair<String, ExecPlan> plan = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+        OlapScanNode node1 = (OlapScanNode) plan.second.getScanNodes().get(0);
+        OlapScanNode node2 = (OlapScanNode) plan.second.getScanNodes().get(1);
+        Assert.assertTrue("original table should different from copied table in plan", table != node1.getOlapTable());
+        Assert.assertTrue("original table should different from copied table in plan", table != node2.getOlapTable());
+
+        Assert.assertTrue("copied tables should share the same object", node2.getOlapTable() == node1.getOlapTable());
     }
 
 }

@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # approx_top_k
 
-## Description
+
 
 Returns the top `k` most frequently occurring item values in an `expr` along with their approximate counts.
 

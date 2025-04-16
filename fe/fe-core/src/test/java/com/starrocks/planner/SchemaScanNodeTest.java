@@ -20,15 +20,14 @@ import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.apache.hadoop.util.Lists;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -80,12 +79,7 @@ public class SchemaScanNodeTest {
             }
         };
 
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public List<Long> getAllComputeNodeIds(long warehouseId) {
-                return Lists.newArrayList(1L);
-            }
-        };
+        UtFrameUtils.mockInitWarehouseEnv();
 
         new MockUp<SystemInfoService>() {
             @Mock

@@ -1,0 +1,7 @@
+position: 30 # float position is supported
+label: 'Date and Time'
+collapsible: true
+collapsed: true
+link:
+  type: doc
+  id: date-types

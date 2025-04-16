@@ -40,6 +40,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
@@ -77,6 +78,8 @@ public class BackendsProcDirTest {
 
     @Mocked
     private NodeMgr nodeMgr;
+
+    private final VariableMgr variableMgr = new VariableMgr();
 
     public BackendsProcDirTest() {
     }
@@ -149,6 +152,10 @@ public class BackendsProcDirTest {
                 globalStateMgr.getStarOSAgent();
                 minTimes = 0;
                 result = starOsAgent;
+
+                globalStateMgr.getVariableMgr();
+                minTimes = 0;
+                result = variableMgr;
             }
         };
 

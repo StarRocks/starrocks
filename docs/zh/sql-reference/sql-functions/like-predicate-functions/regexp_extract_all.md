@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # regexp_extract_all
 
-## 功能
+
 
 从 `str` 中提取与正则表达式 `pattern` 相匹配的子字符串并返回一个字符串数组。字符串必须匹配 `pos` 指定的正则分组。
 

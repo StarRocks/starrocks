@@ -9,7 +9,7 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -24,7 +24,7 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -176,7 +176,7 @@ DISTRIBUTED BY HASH(`k`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
 "in_memory" = "false",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -189,3 +189,22 @@ select dict_mapping("t_dictmapping_null_if_not_found", 2, true);
 
 drop table t_dictmapping_null_if_not_found;
 drop database test_dictmapping_null_if_not_found;
+
+-- name: test_dictmapping_multiple_open_crash
+CREATE TABLE `t_dictmapping_multiple_open_crash` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` BIGINT AUTO_INCREMENT
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+INSERT INTO t_dictmapping_multiple_open_crash VALUES (1, DEFAULT);
+select dict_mapping("t_dictmapping_multiple_open_crash", k) from t where dict_mapping("t_dictmapping_multiple_open_crash", k) != 0;
+DROP TABLE t_dictmapping_multiple_open_crash;

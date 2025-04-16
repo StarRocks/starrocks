@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # bit_shift_right_logical
 
-## Description
+
 
 Shifts the binary representation of a numeric expression to the right by a specified number of bits.
 

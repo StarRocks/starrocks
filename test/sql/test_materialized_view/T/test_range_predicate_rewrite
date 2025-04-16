@@ -1,4 +1,6 @@
 -- name: test_range_predicate_rewrite
+create database db_${uuid0};
+use db_${uuid0};
 CREATE TABLE `t0` (
   `date_col` date NOT NULL COMMENT "",
   `id` int(11) NOT NULL COMMENT "",
@@ -79,9 +81,7 @@ REFRESH MANUAL
 PROPERTIES (
 "replication_num" = "1"
 ) as select t0.id, t0.date_col, t0.float_col_1, t0.float_col_2, t0.varchar_col, t0.tinyint_col, t1.varchar_col_1, t1.varchar_col_2, t1.int_col_1, t1.tinyint_col_1 from t0 join t1 on t0.tinyint_col = t1.tinyint_col_1;
-
-refresh materialized view flat_mv;
-function: wait_async_materialized_view_finish("flat_mv")
+refresh materialized view flat_mv with sync mode;
 
 create MATERIALIZED VIEW join_filter_mv
 DISTRIBUTED BY RANDOM
@@ -89,9 +89,7 @@ REFRESH MANUAL
 PROPERTIES (
 "replication_num" = "1"
 ) as select id, date_col, float_col_1, int_col_1, tinyint_col, tinyint_col_1 from flat_mv where id in (1, 2, 3, 4, 5, 6, 6, 7, 9, 10);
-
-refresh materialized view join_filter_mv;
-function: wait_async_materialized_view_finish("join_filter_mv")
+refresh materialized view join_filter_mv with sync mode;
 
 create MATERIALIZED VIEW date_mv
 DISTRIBUTED BY RANDOM
@@ -99,9 +97,7 @@ REFRESH MANUAL
 PROPERTIES (
 "replication_num" = "1"
 )   as select tinyint_col, date_col , sum(float_col_1 * int_col_1) as sum_value from join_filter_mv group by tinyint_col, date_col;
-
-refresh materialized view date_mv;
-function: wait_async_materialized_view_finish("date_mv")
+refresh materialized view date_mv with sync mode;
 
 create MATERIALIZED VIEW month_mv
 DISTRIBUTED BY RANDOM
@@ -109,9 +105,7 @@ REFRESH MANUAL
 PROPERTIES (
 "replication_num" = "1"
 )  as select tinyint_col, date_trunc('month', date_col) as date_col, sum(sum_value) as sum_value from date_mv group by tinyint_col, date_trunc('month', date_col);
-
-refresh materialized view month_mv;
-function: wait_async_materialized_view_finish("month_mv")
+refresh materialized view month_mv with sync mode;
 
 create MATERIALIZED VIEW year_mv
 DISTRIBUTED BY RANDOM
@@ -119,27 +113,19 @@ REFRESH MANUAL
 PROPERTIES (
 "replication_num" = "1"
 )   as select  tinyint_col, date_trunc('year', date_col) as date_col, sum(sum_value) as sum_value from date_mv group by tinyint_col, date_trunc('year', date_col);
+refresh materialized view year_mv with sync mode;
 
-refresh materialized view year_mv;
-function: wait_async_materialized_view_finish("year_mv")
+set materialized_view_rewrite_mode="force";
+[UC]analyze table date_mv with sync mode;
+[UC]analyze table month_mv with sync mode;
+[UC]analyze table year_mv with sync mode;
 
 select /*+ set_Var(enable_fine_grained_range_predicate = true, enable_force_rule_based_mv_rewrite = true, nested_mv_rewrite_max_level = 10) */
 sum(t0.float_col_1 * t1.int_col_1), t0.tinyint_col from  t0 join t1 on t0.tinyint_col = t1.tinyint_col_1 where t0.id in (1, 2, 3, 4, 5, 6, 6, 7, 9, 10)
-and date_col > '2024-02-11' and date_col < '2028-05-14' group by tinyint_col;
+and date_col > '2024-02-11' and date_col < '2028-05-14' group by tinyint_col order by 1;
 
 select sum(t0.float_col_1 * t1.int_col_1), t0.tinyint_col from  t0 join t1 on t0.tinyint_col = t1.tinyint_col_1 where t0.id in (1, 2, 3, 4, 5, 6, 6, 7, 9, 10)
-and date_col > '2024-02-11' and date_col < '2028-05-14' group by tinyint_col;
+and date_col > '2024-02-11' and date_col < '2028-05-14' group by tinyint_col order by 1;
 
-sql=explain select /*+ set_Var(enable_fine_grained_range_predicate = true, enable_force_rule_based_mv_rewrite = true, nested_mv_rewrite_max_level = 10) */
-sum(t0.float_col_1 * t1.int_col_1), t0.tinyint_col from  t0 join t1 on t0.tinyint_col = t1.tinyint_col_1 where t0.id in (1, 2, 3, 4, 5, 6, 6, 7, 9, 10)
-and date_col > '2024-02-11' and date_col < '2028-05-14' group by tinyint_col;
-
-function: check_hit_materialized_view_plan("""${sql}""", "date_mv")
-
-function: check_hit_materialized_view_plan("""${sql}""", "month_mv")
-
-function: check_hit_materialized_view_plan("""${sql}""", "year_mv")
-
-
-
+function: check_hit_materialized_view("select /*+ set_Var(enable_fine_grained_range_predicate = true, enable_force_rule_based_mv_rewrite = true, nested_mv_rewrite_max_level = 10) */ sum(t0.float_col_1 * t1.int_col_1), t0.tinyint_col from  t0 join t1 on t0.tinyint_col = t1.tinyint_col_1 where t0.id in (1, 2, 3, 4, 5, 6, 6, 7, 9, 10) and date_col > '2024-02-11' and date_col < '2028-05-14' group by tinyint_col;", "date_mv", "month_mv", "year_mv")
 

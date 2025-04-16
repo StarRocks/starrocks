@@ -42,18 +42,6 @@ class UpdateManager;
 struct AutoIncrementPartialUpdateState;
 using IndexEntry = DynamicCache<uint64_t, LakePrimaryIndex>::Entry;
 
-class LakeDelvecLoader : public DelvecLoader {
-public:
-    LakeDelvecLoader(UpdateManager* update_mgr, const MetaFileBuilder* pk_builder, bool fill_cache)
-            : _update_mgr(update_mgr), _pk_builder(pk_builder), _fill_cache(fill_cache) {}
-    Status load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec);
-
-private:
-    UpdateManager* _update_mgr = nullptr;
-    const MetaFileBuilder* _pk_builder = nullptr;
-    bool _fill_cache = false;
-};
-
 class PersistentIndexBlockCache {
 public:
     explicit PersistentIndexBlockCache(MemTracker* mem_tracker, int64_t cache_limit);
@@ -79,15 +67,18 @@ public:
                            const std::map<int, FileInfo>& replace_segments);
 
     const std::unordered_map<uint32_t, FileInfo>& rssid_to_file() const { return _rssid_to_file_info; }
+    const std::unordered_map<uint32_t, uint32_t>& rssid_to_rowid() const { return _rssid_to_rowid; }
 
 private:
     // From rowset segment id to segment file
     std::unordered_map<uint32_t, FileInfo> _rssid_to_file_info;
+    // From rowset segment id to rowset id
+    std::unordered_map<uint32_t, uint32_t> _rssid_to_rowid;
 };
 
 class UpdateManager {
 public:
-    UpdateManager(LocationProvider* location_provider, MemTracker* mem_tracker);
+    UpdateManager(std::shared_ptr<LocationProvider> location_provider, MemTracker* mem_tracker);
     ~UpdateManager();
     void set_tablet_mgr(TabletManager* tablet_mgr) { _tablet_mgr = tablet_mgr; }
     void set_cache_expire_ms(int64_t expire_ms) { _cache_expire_ms = expire_ms; }
@@ -95,20 +86,26 @@ public:
     int64_t get_cache_expire_ms() const { return _cache_expire_ms; }
 
     // publish primary key tablet, update primary index and delvec, then update meta file
-    Status publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, int64_t txn_id, const TabletMetadata& metadata,
-                                      Tablet* tablet, IndexEntry* index_entry, MetaFileBuilder* builder,
-                                      int64_t base_version);
+    Status publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
+                                      const TabletMetadataPtr& metadata, Tablet* tablet, IndexEntry* index_entry,
+                                      MetaFileBuilder* builder, int64_t base_version);
+
+    Status publish_column_mode_partial_update(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
+                                              const TabletMetadataPtr& metadata, Tablet* tablet,
+                                              MetaFileBuilder* builder, int64_t base_version);
 
     // get rowids from primary index by each upserts
-    Status get_rowids_from_pkindex(int64_t tablet_id, int64_t base_version, const std::vector<ColumnUniquePtr>& upserts,
+    Status get_rowids_from_pkindex(int64_t tablet_id, int64_t base_version,
+                                   const std::vector<MutableColumnPtr>& upserts,
                                    std::vector<std::vector<uint64_t>*>* rss_rowids, bool need_lock);
-    Status get_rowids_from_pkindex(int64_t tablet_id, int64_t base_version, const ColumnUniquePtr& upsert,
+    Status get_rowids_from_pkindex(int64_t tablet_id, int64_t base_version, const MutableColumnPtr& upsert,
                                    std::vector<uint64_t>* rss_rowids, bool need_lock);
 
     // get column data by rssid and rowids
     Status get_column_values(const RowsetUpdateStateParams& params, std::vector<uint32_t>& column_ids,
                              bool with_default, std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
-                             vector<std::unique_ptr<Column>>* columns,
+                             vector<MutableColumnPtr>* columns,
+                             const std::map<string, string>* column_to_expr_value = nullptr,
                              AutoIncrementPartialUpdateState* auto_increment_state = nullptr);
     // get delvec by version
     Status get_del_vec(const TabletSegmentId& tsid, int64_t version, const MetaFileBuilder* builder, bool fill_cache,
@@ -169,6 +166,8 @@ public:
 
     MemTracker* index_mem_tracker() const { return _index_cache_mem_tracker.get(); }
 
+    MemTracker* mem_tracker() const { return _update_mem_tracker; }
+
     // get or create primary index, and prepare primary index state
     StatusOr<IndexEntry*> prepare_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
                                                 int64_t base_version, int64_t new_version,
@@ -180,6 +179,10 @@ public:
     void remove_primary_index_cache(IndexEntry* index_entry);
 
     void unload_and_remove_primary_index(int64_t tablet_id);
+
+    StatusOr<IndexEntry*> rebuild_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
+                                                int64_t base_version, int64_t new_version,
+                                                std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& lock);
 
     DynamicCache<uint64_t, LakePrimaryIndex>& index_cache() { return _index_cache; }
 
@@ -195,20 +198,22 @@ public:
 
     void set_enable_persistent_index(int64_t tablet_id, bool enable_persistent_index);
 
-    Status execute_index_major_compaction(int64_t tablet_id, const TabletMetadata& metadata, TxnLogPB* txn_log);
+    Status execute_index_major_compaction(const TabletMetadata& metadata, TxnLogPB* txn_log);
 
     PersistentIndexBlockCache* block_cache() { return _block_cache.get(); }
 
     Status pk_index_major_compaction(int64_t tablet_id, DataDir* data_dir);
 
+    bool TEST_primary_index_refcnt(int64_t tablet_id, uint32_t expected_cnt);
+
 private:
     // print memory tracker state
     void _print_memory_stats();
-    Status _do_update(uint32_t rowset_id, int32_t upsert_idx, const ColumnUniquePtr& upsert, PrimaryIndex& index,
-                      DeletesMap* new_deletes);
+    Status _do_update(uint32_t rowset_id, int32_t upsert_idx, const SegmentPKEncodeResultPtr& upsert,
+                      PrimaryIndex& index, DeletesMap* new_deletes);
 
     Status _do_update_with_condition(const RowsetUpdateStateParams& params, uint32_t rowset_id, int32_t upsert_idx,
-                                     int32_t condition_column, const ColumnUniquePtr& upsert, PrimaryIndex& index,
+                                     int32_t condition_column, const MutableColumnPtr& upsert, PrimaryIndex& index,
                                      DeletesMap* new_deletes);
 
     int32_t _get_condition_column(const TxnLogPB_OpWrite& op_write, const TabletSchema& tablet_schema);
@@ -241,7 +246,7 @@ private:
     // compaction cache
     DynamicCache<string, CompactionState> _compaction_cache;
     std::atomic<int64_t> _last_clear_expired_cache_millis = 0;
-    LocationProvider* _location_provider = nullptr;
+    std::shared_ptr<LocationProvider> _location_provider;
     TabletManager* _tablet_mgr = nullptr;
 
     // memory checkers

@@ -36,6 +36,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.EliminateNegationsRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
+import com.starrocks.sql.spm.SPMFunctions;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.text.StrTokenizer;
 
@@ -187,6 +188,24 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
                 }
             }
         }
+
+        // If the operator has constant WHEN TRUE, the following WHEN/ELSE is meaningless
+        // E.g. CASE WHEN random() > 1 THEN 1 WHEN TRUE THEN 2 ELSE 10 END
+        // ---> CASE WHEN random() > 1 THEN 1 ELSE 2 END
+        for (int i = 0; i < operator.getWhenClauseSize(); ++i) {
+            if (operator.getWhenClause(i).isConstantTrue()) {
+                for (int j = i; j < operator.getWhenClauseSize(); j++) {
+                    removeArgumentsSet.add(2 * j + whenStart);
+                    removeArgumentsSet.add(2 * j + whenStart + 1);
+                }
+                if (operator.hasElse()) {
+                    operator.removeElseClause();
+                }
+                operator.addElseClause(operator.getThenClause(i));
+                break;
+            }
+        }
+
         operator.removeArguments(removeArgumentsSet);
 
         // 4. if when isn't constant, return direct
@@ -315,6 +334,10 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         }
 
         if (predicate.getChild(1) instanceof SubqueryOperator) {
+            return predicate;
+        }
+
+        if (SPMFunctions.isSPMFunctions(predicate.getChild(1))) {
             return predicate;
         }
 

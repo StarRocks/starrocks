@@ -32,8 +32,8 @@ public class StatisticExecutorTest extends PlanTestBase {
     @Test
     public void testEmpty() throws Exception {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        OlapTable olapTable = (OlapTable) db.getTable("t0");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
 
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(db.getId(), olapTable.getId(), null,
                 StatsConstants.AnalyzeType.FULL,
@@ -48,7 +48,7 @@ public class StatisticExecutorTest extends PlanTestBase {
     @Test
     public void testDroppedDB() throws Exception {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
 
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(db.getId(), 1000, null,
                 StatsConstants.AnalyzeType.FULL,

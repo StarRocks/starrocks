@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # days_diff
 
-## 功能
+
 
 计算开始时间和结束时间相差几天 （`expr1` - `expr2`），结果精确到天。此函数与 [datediff](./datediff.md) 的区别是：
 

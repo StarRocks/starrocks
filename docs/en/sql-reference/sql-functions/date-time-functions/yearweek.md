@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # yearweek
 
-## Description
+
 
 Returns year and week number for a given date. This function works in the same way as the yearweek() function in MySQL.
 

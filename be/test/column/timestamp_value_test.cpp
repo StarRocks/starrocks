@@ -111,7 +111,15 @@ TEST(TimestampValueTest, calculate) {
 
 TEST(TimestampValueTest, cast) {
     auto v = TimestampValue::create(2004, 2, 29, 23, 30, 30);
-    ASSERT_EQ("2004-02-29", ((DateValue)v).to_string());
+    DateValue date = (DateValue)v;
+    ASSERT_EQ("2004-02-29", date.to_string());
+    ASSERT_EQ(1078012800000, date.to_unixtime());
+}
+
+TEST(TimestampValueTest, unixTime) {
+    auto v = TimestampValue::create(2004, 2, 29, 23, 30, 30);
+    ASSERT_EQ(1078097430000, v.to_unixtime());
+    ASSERT_EQ(1078097430000, v.to_unixtime(cctz::utc_time_zone()));
 }
 
 } // namespace starrocks

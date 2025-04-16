@@ -26,13 +26,16 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HivePartitionStats;
 import com.starrocks.connector.hive.IHiveMetastore;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -44,6 +47,7 @@ import org.apache.kudu.client.KuduClient;
 import org.apache.kudu.client.KuduException;
 import org.apache.kudu.client.KuduPredicate;
 import org.apache.kudu.client.KuduScanToken;
+import org.apache.kudu.client.RpcRemoteException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -88,7 +92,7 @@ public class KuduMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listDbNames() {
+    public List<String> listDbNames(ConnectContext context) {
         if (metastore.isPresent()) {
             return metastore.get().getAllDatabaseNames().stream()
                     .filter(schemaName -> !HIVE_SYSTEM_SCHEMA.contains((schemaName)))
@@ -137,7 +141,7 @@ public class KuduMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listTableNames(String dbName) {
+    public List<String> listTableNames(ConnectContext context, String dbName) {
         if (metastore.isPresent()) {
             List<String> allTableNames = metastore.get().getAllTableNames(dbName);
             return allTableNames.stream().filter(tableName -> {
@@ -167,7 +171,7 @@ public class KuduMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Database getDb(String dbName) {
+    public Database getDb(ConnectContext context, String dbName) {
         if (metastore.isPresent()) {
             return metastore.get().getDb(dbName);
         }
@@ -195,7 +199,7 @@ public class KuduMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Table getTable(String dbName, String tblName) {
+    public Table getTable(ConnectContext context, String dbName, String tblName) {
         if (metastore.isPresent()) {
             return metastore.get().getTable(dbName, tblName);
         }
@@ -231,7 +235,8 @@ public class KuduMetadata implements ConnectorMetadata {
                                 partColNames.add(fieldName);
                             }
                         }
-                        return new KuduTable(masterAddresses, this.catalogName, dbName, tblName, columns, partColNames);
+                        return new KuduTable(masterAddresses, this.catalogName, dbName, tblName, fullTableName,
+                                columns, partColNames);
                     });
         } catch (KuduException e) {
             throw new StarRocksConnectorException("Failed to get table %s.", fullTableName, e);
@@ -244,17 +249,19 @@ public class KuduMetadata implements ConnectorMetadata {
     }
 
     private String getKuduFullTableName(String dbName, String tblName) {
-        return schemaEmulationEnabled ?
-                (schemaEmulationPrefix + dbName + DATABASE_TABLE_JOINER + tblName) : tblName;
+        return schemaEmulationEnabled ? (schemaEmulationPrefix + dbName + DATABASE_TABLE_JOINER + tblName) : tblName;
+    }
+
+    private String getKuduFullTableName(KuduTable table) {
+        return table.getKuduTableName().orElse(
+                getKuduFullTableName(table.getCatalogDBName(), table.getCatalogTableName()));
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
-                                                   long snapshotId, ScalarOperator predicate,
-                                                   List<String> fieldNames, long limit) {
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         KuduTable kuduTable = (KuduTable) table;
-        String kuduTableName = getKuduFullTableName(kuduTable.getDbName(), kuduTable.getTableName());
+        String kuduTableName = getKuduFullTableName(kuduTable);
         org.apache.kudu.client.KuduTable nativeTable;
         try {
             nativeTable = kuduClient.openTable(kuduTableName);
@@ -262,14 +269,14 @@ public class KuduMetadata implements ConnectorMetadata {
             throw new RuntimeException(e);
         }
         KuduScanToken.KuduScanTokenBuilder builder = kuduClient.newScanTokenBuilder(nativeTable);
-        builder.setProjectedColumnNames(fieldNames);
-        if (limit > 0) {
-            builder.limit(limit);
+        builder.setProjectedColumnNames(params.getFieldNames());
+        if (params.getLimit() > 0) {
+            builder.limit(params.getLimit());
         }
-        addConstraintPredicates(nativeTable, builder, predicate);
+        addConstraintPredicates(nativeTable, builder, params.getPredicate());
         List<KuduScanToken> tokens = builder.build();
         List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(
-                RemoteFileDesc.createKuduRemoteFileDesc(tokens));
+                KuduRemoteFileDesc.createKuduRemoteFileDesc(tokens));
         remoteFileInfo.setFiles(remoteFileDescs);
         return Lists.newArrayList(remoteFileInfo);
     }
@@ -300,7 +307,8 @@ public class KuduMetadata implements ConnectorMetadata {
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate,
-                                         long limit) {
+                                         long limit,
+                                         TableVersionRange versionRange) {
         Statistics.Builder builder = Statistics.builder();
         for (ColumnRefOperator columnRefOperator : columns.keySet()) {
             builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
@@ -310,18 +318,28 @@ public class KuduMetadata implements ConnectorMetadata {
         long rowCount;
         if (metastore.isPresent()) {
             HivePartitionStats tableStatistics =
-                    metastore.get().getTableStatistics(kuduTable.getDbName(), kuduTable.getTableName());
+                    metastore.get().getTableStatistics(kuduTable.getCatalogDBName(), kuduTable.getCatalogTableName());
             rowCount = tableStatistics.getCommonStats().getRowNums();
-
         } else {
             try {
-                String kuduTableName = getKuduFullTableName(kuduTable.getDbName(), kuduTable.getTableName());
+                String kuduTableName = getKuduFullTableName(kuduTable);
                 rowCount = kuduClient.openTable(kuduTableName).getTableStatistics().getLiveRowCount();
+            } catch (RpcRemoteException e) {
+                if (isGetTableStatisticsUnsupported(e)) {
+                    LOG.warn("GetTableStatistics method not supported. Fallback to return default row count 1.");
+                    rowCount = 1;
+                } else {
+                    throw new RuntimeException("RPC error while getting table statistics", e);
+                }
             } catch (KuduException e) {
-                throw new RuntimeException(e);
+                throw new RuntimeException("Error while accessing Kudu table", e);
             }
         }
         builder.setOutputRowCount(rowCount);
         return builder.build();
+    }
+
+    private static boolean isGetTableStatisticsUnsupported(RpcRemoteException e) {
+        return e.getMessage().contains("invalid method name: GetTableStatistics");
     }
 }

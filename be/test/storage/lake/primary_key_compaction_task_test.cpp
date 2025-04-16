@@ -96,7 +96,7 @@ protected:
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
-        return Chunk({c0, c1}, _schema);
+        return Chunk({std::move(c0), std::move(c1)}, _schema);
     }
 
     Chunk generate_data2(int64_t chunk_size, int interval, int shift) {
@@ -115,7 +115,7 @@ protected:
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
-        return Chunk({c0, c1}, _schema);
+        return Chunk({std::move(c0), std::move(c1)}, _schema);
     }
 
     int64_t read(int64_t version) {
@@ -170,6 +170,7 @@ protected:
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
     int64_t _partition_id;
+    RuntimeProfile _dummy_runtime_profile{"dummy"};
 };
 
 // each time overwrite last rows
@@ -192,10 +193,11 @@ TEST_P(LakePrimaryKeyCompactionTest, test1) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -264,10 +266,11 @@ TEST_P(LakePrimaryKeyCompactionTest, test2) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -327,6 +330,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test3) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         if (i == 1) {
@@ -334,7 +338,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test3) {
         } else {
             ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
         }
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -388,10 +392,11 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -399,7 +404,8 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy) {
     }
     ASSERT_EQ(kChunkSize * 3, read(version));
     ASSIGN_OR_ABORT(auto tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
-    ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), tablet_metadata));
+    ASSIGN_OR_ABORT(auto compaction_policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), tablet_metadata, false /* force_base_compaction */));
     config::lake_pk_compaction_max_input_rowsets = 1000;
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
     EXPECT_EQ(3, input_rowsets.size());
@@ -438,10 +444,11 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy2) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes_list[i].data(), indexes_list[i].size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -456,10 +463,11 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy2) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[0], indexes_list[0].data(), indexes_list[0].size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -469,7 +477,8 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy2) {
 
     config::lake_pk_compaction_max_input_rowsets = 4;
     ASSIGN_OR_ABORT(auto tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
-    ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), tablet_metadata));
+    ASSIGN_OR_ABORT(auto compaction_policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), tablet_metadata, false /* force_base_compaction */));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
     EXPECT_EQ(4, input_rowsets.size());
 
@@ -509,6 +518,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy3) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         for (int seg_cnt = 0; seg_cnt <= i; seg_cnt++) {
@@ -516,7 +526,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy3) {
                                           indexes_list[chunk_index].size()));
             chunk_index++;
         }
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -531,10 +541,11 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy3) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[0], indexes_list[0].data(), indexes_list[0].size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -545,20 +556,21 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy3) {
 
     config::lake_pk_compaction_max_input_rowsets = 4;
     ASSIGN_OR_ABORT(auto tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
-    ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), tablet_metadata));
+    ASSIGN_OR_ABORT(auto compaction_policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), tablet_metadata, false /* force_base_compaction */));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
     EXPECT_EQ(4, input_rowsets.size());
     EXPECT_EQ(1, input_rowsets[0]->num_segments());
     EXPECT_EQ(1, input_rowsets[1]->num_segments());
-    EXPECT_EQ(2, input_rowsets[2]->num_segments());
-    EXPECT_EQ(3, input_rowsets[3]->num_segments());
+    EXPECT_EQ(1, input_rowsets[2]->num_segments());
+    EXPECT_EQ(1, input_rowsets[3]->num_segments());
 
     // check the rowset order, pick rowset#1 first, because it is empty.
     // Next order is rowset#7#2#4, by their segment count.
     EXPECT_EQ(input_rowsets[0]->id(), 1);
-    EXPECT_EQ(input_rowsets[1]->id(), 7);
+    EXPECT_EQ(input_rowsets[1]->id(), 4);
     EXPECT_EQ(input_rowsets[2]->id(), 2);
-    EXPECT_EQ(input_rowsets[3]->id(), 4);
+    EXPECT_EQ(input_rowsets[3]->id(), 3);
     config::lake_pk_compaction_max_input_rowsets = 1000;
 }
 
@@ -584,10 +596,11 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy_min_input) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -595,7 +608,8 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy_min_input) {
     }
     ASSERT_EQ(kChunkSize * 4, read(version));
     ASSIGN_OR_ABORT(auto tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
-    ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), tablet_metadata));
+    ASSIGN_OR_ABORT(auto compaction_policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), tablet_metadata, false /* force_base_compaction */));
     config::lake_pk_compaction_min_input_segments = 1;
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
     EXPECT_EQ(4, input_rowsets.size());
@@ -654,10 +668,11 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_score_by_policy) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -666,7 +681,8 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_score_by_policy) {
     ASSERT_EQ(kChunkSize * 3, read(version));
     ASSIGN_OR_ABORT(auto tablet_meta, _tablet_mgr->get_tablet_metadata(tablet_id, version));
 
-    ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), tablet_meta));
+    ASSIGN_OR_ABORT(auto compaction_policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), tablet_meta, false /* force_base_compaction */));
     config::lake_pk_compaction_max_input_rowsets = 1000;
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
     EXPECT_EQ(3, input_rowsets.size());
@@ -708,10 +724,11 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_sorted) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[chunk_write_without_order[i]], indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -785,10 +802,11 @@ TEST_P(LakePrimaryKeyCompactionTest, test_remove_compaction_state) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -830,10 +848,11 @@ TEST_P(LakePrimaryKeyCompactionTest, test_remove_compaction_state) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -867,10 +886,11 @@ TEST_P(LakePrimaryKeyCompactionTest, test_abort_txn) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -937,10 +957,11 @@ TEST_P(LakePrimaryKeyCompactionTest, test_multi_output_seg) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -1001,10 +1022,11 @@ TEST_P(LakePrimaryKeyCompactionTest, test_pk_recover_rowset_order_after_compact)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -1197,10 +1219,11 @@ TEST_P(LakePrimaryKeyCompactionTest, test_rows_mapper) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -1270,10 +1293,11 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_data_load_conc) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -1293,10 +1317,11 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_data_load_conc) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[0], indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
     }
 
@@ -1358,10 +1383,11 @@ TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -1385,7 +1411,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction) {
     version++;
     ASSERT_EQ(kChunkSize * N, read(version));
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
-    EXPECT_EQ(N - 1, new_tablet_metadata->orphan_files_size());
+    EXPECT_EQ(N, new_tablet_metadata->orphan_files_size());
 
     config::l0_max_mem_usage = l0_max_mem_usage;
 }
@@ -1418,10 +1444,11 @@ TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction_thread_safe) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -1453,10 +1480,11 @@ TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction_thread_safe) {
                                                        .set_partition_id(_partition_id)
                                                        .set_mem_tracker(_mem_tracker.get())
                                                        .set_schema_id(_tablet_schema->id())
+                                                       .set_profile(&_dummy_runtime_profile)
                                                        .build());
             ASSERT_OK(delta_writer->open());
             ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
-            ASSERT_OK(delta_writer->finish());
+            ASSERT_OK(delta_writer->finish_with_txnlog());
             delta_writer->close();
             // Publish version
             ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());

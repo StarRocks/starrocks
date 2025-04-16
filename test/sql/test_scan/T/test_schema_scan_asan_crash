@@ -1,0 +1,9 @@
+-- name: test_schema_scan_asan_crash
+
+set enable_shared_scan = true;
+set pipeline_dop = 8;
+
+-- BE crashes in ASAN mode.
+[UC] select count(*) from information_schema.loads;
+
+select 1;

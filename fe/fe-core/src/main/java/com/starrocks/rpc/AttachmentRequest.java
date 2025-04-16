@@ -20,15 +20,11 @@ package com.starrocks.rpc;
 import com.baidu.bjf.remoting.protobuf.annotation.Ignore;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.thrift.TBase;
 import org.apache.thrift.TDeserializer;
 import org.apache.thrift.TException;
 import org.apache.thrift.TFieldIdEnum;
 import org.apache.thrift.TSerializer;
-import org.apache.thrift.protocol.TBinaryProtocol;
-import org.apache.thrift.protocol.TCompactProtocol;
-import org.apache.thrift.protocol.TJSONProtocol;
 import org.apache.thrift.transport.TTransportException;
 
 // used to compatible with our older thrift protocol
@@ -39,16 +35,7 @@ public class AttachmentRequest {
     protected byte[] serializedResult;
 
     public static TSerializer getSerializer(String protocol) throws TTransportException {
-        TSerializer serializer;
-        if (StringUtils.equalsIgnoreCase(protocol, "compact")) {
-            serializer = new TSerializer(TCompactProtocol::new);
-        } else if (StringUtils.equalsIgnoreCase(protocol, "json")) {
-            serializer = new TSerializer(TJSONProtocol::new);
-        } else {
-            // default bianry
-            serializer = new TSerializer(TBinaryProtocol::new);
-        }
-        return serializer;
+        return ConfigurableSerDesFactory.getTSerializer(protocol);
     }
 
     public <T extends TBase<T, F>, F extends TFieldIdEnum> void setRequest(TBase<T, F> request, String protocol)
@@ -61,7 +48,7 @@ public class AttachmentRequest {
 
     public <T extends TBase<T, F>, F extends TFieldIdEnum> void setRequest(TBase<T, F> request)
             throws TException {
-        TSerializer serializer = new TSerializer(TBinaryProtocol::new);
+        TSerializer serializer = ConfigurableSerDesFactory.getTSerializer();
 
         serializedRequest = serializer.serialize(request);
     }
@@ -83,12 +70,12 @@ public class AttachmentRequest {
     }
 
     public <T extends TBase<T, F>, F extends TFieldIdEnum> void getResult(TBase<T, F> result) throws TException {
-        TDeserializer deserializer = new TDeserializer();
+        TDeserializer deserializer = ConfigurableSerDesFactory.getTDeserializer();
         deserializer.deserialize(result, serializedResult);
     }
 
     public <T extends TBase<T, F>, F extends TFieldIdEnum> void getRequest(TBase<T, F> request) throws TException {
-        TDeserializer deserializer = new TDeserializer();
+        TDeserializer deserializer = ConfigurableSerDesFactory.getTDeserializer();
         deserializer.deserialize(request, serializedRequest);
     }
 }

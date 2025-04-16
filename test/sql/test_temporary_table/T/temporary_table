@@ -196,3 +196,41 @@ create temporary table `t` (
     `c3` int
 ) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
 create analyze table t;
+
+-- name: test_dynamic_temp_table_config @sequential
+create table `t` (
+    `c1` int,
+    `c2` int,
+    `c3` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+admin set frontend config("enable_experimental_temporary_table"="false");
+create temporary table `tbl1` (
+    `c1` int,
+    `c2` int,
+    `c3` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+create temporary table `tbl2` like `t`;
+create temporary table `tbl3` as select * from `t`;
+admin set frontend config("enable_experimental_temporary_table"="true");
+create temporary table `tbl1` (
+    `c1` int,
+    `c2` int,
+    `c3` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+create temporary table `tbl2` like `t`;
+create temporary table `tbl3` as select * from `t`;
+
+-- name: test_drop_table
+create table `t` (
+    `c1` int,
+    `c2` int,
+    `c3` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+create temporary table `t1` like `t`;
+show temporary tables;
+drop table `t1`;
+show temporary tables;
+create temporary table `t1` like `t`;
+show temporary tables;
+drop temporary table `t1`;
+show temporary tables;

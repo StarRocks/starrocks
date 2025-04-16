@@ -105,6 +105,8 @@ message RowsetTxnMetaPB {
     optional PartialUpdateMode partial_update_mode = 6;
     // auto increment column unique id
     optional int32 auto_increment_partial_update_column_uid = 7;
+    // the value of the column express
+    map<string, string> column_to_expr_value = 8;
 }
 
 message RowsetMetaPB {
@@ -175,6 +177,11 @@ message RowsetMetaPB {
     optional uint32 max_compact_input_rowset_id = 61;
     // global transaction id
     optional int64 gtid = 62;
+    // total number of upt file's rows.
+    optional int64 num_rows_upt = 63;
+    repeated bytes segment_encryption_metas = 64;
+    repeated bytes delfile_encryption_metas = 65;
+    repeated bytes updatefile_encryption_metas = 66;
 }
 
 enum DataFileType {
@@ -267,6 +274,13 @@ message BinlogConfigPB {
     optional int64 binlog_max_size = 4;
 }
 
+message FlatJsonConfigPB {
+    optional bool flat_json_enable = 1;
+    optional double flat_json_null_factor = 2;
+    optional double flat_json_sparsity_factor = 3;
+    optional int64 flat_json_max_column_max = 4;
+}
+
 message TabletMetaPB {
     optional int64 table_id = 1;               // ?
     optional int64 partition_id = 2;           // ?
@@ -298,6 +312,7 @@ message TabletMetaPB {
     optional int32 primary_index_cache_expire_sec = 61 [default = 0];
     // If the tablet is replicated from another cluster, the source_schema saved the schema in the cluster
     optional TabletSchemaPB source_schema = 70;
+    optional FlatJsonConfigPB flat_json_config = 80;
 }
 
 message OLAPIndexHeaderMessage {

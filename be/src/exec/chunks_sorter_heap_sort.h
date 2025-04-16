@@ -235,10 +235,10 @@ public:
               _limit(limit) {}
     ~ChunksSorterHeapSort() override = default;
 
-    [[nodiscard]] Status update(RuntimeState* state, const ChunkPtr& chunk) override;
-    [[nodiscard]] Status do_done(RuntimeState* state) override;
-    [[nodiscard]] Status get_next(ChunkPtr* chunk, bool* eos) override;
-    std::vector<JoinRuntimeFilter*>* runtime_filters(ObjectPool* pool) override;
+    Status update(RuntimeState* state, const ChunkPtr& chunk) override;
+    Status do_done(RuntimeState* state) override;
+    Status get_next(ChunkPtr* chunk, bool* eos) override;
+    std::vector<RuntimeFilter*>* runtime_filters(ObjectPool* pool) override;
     int64_t mem_usage() const override {
         if (_sort_heap == nullptr || _sort_heap->empty()) {
             return 0;
@@ -261,7 +261,7 @@ private:
     template <LogicalType TYPE>
     void _do_filter_data_for_type(detail::ChunkHolder* chunk_holder, Filter* filter, int row_sz);
 
-    std::vector<JoinRuntimeFilter*> _runtime_filter;
+    std::vector<RuntimeFilter*> _runtime_filter;
 
     using CursorContainer = std::vector<detail::ChunkRowCursor>;
     using CommonCursorSortHeap =
@@ -272,8 +272,7 @@ private:
 
     const size_t _offset;
     const size_t _limit;
-
-    // std::vector<detail::ChunkRowCursor> _sorted_values;
+    size_t _next_output_row = 0;
 
     RuntimeProfile::Counter* _sort_filter_rows = nullptr;
     RuntimeProfile::Counter* _sort_filter_costs = nullptr;

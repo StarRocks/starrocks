@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # date_sub,subdate
 
-## Description
+
 
 Subtracts the specified time interval from a date.
 

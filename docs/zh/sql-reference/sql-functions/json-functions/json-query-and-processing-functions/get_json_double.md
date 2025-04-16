@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # get_json_double
 
-## 功能
+
 
 解析并获取 `json_str` 内 `json_path` 的浮点型内容。如果 `json_str` 格式不对或 `json_path` 格式不对，或者无法找到匹配项，则返回 NULL。
 

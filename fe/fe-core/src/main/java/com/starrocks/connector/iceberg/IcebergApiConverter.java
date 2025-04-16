@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
@@ -25,8 +26,11 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
+import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TIcebergColumnStats;
 import com.starrocks.thrift.TIcebergDataFile;
 import com.starrocks.thrift.TIcebergSchema;
@@ -35,12 +39,14 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.Metrics;
+import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SnapshotSummary;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableProperties;
+import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.ManifestEvaluator;
 import org.apache.iceberg.expressions.Projections;
@@ -59,10 +65,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 import static com.starrocks.connector.ColumnTypeConverter.fromIcebergType;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
@@ -70,11 +81,15 @@ import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_C
 import static com.starrocks.connector.iceberg.IcebergMetadata.COMPRESSION_CODEC;
 import static com.starrocks.connector.iceberg.IcebergMetadata.FILE_FORMAT;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.toResourceName;
+import static java.lang.String.format;
+import static org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap.copyOf;
 import static org.apache.iceberg.view.ViewProperties.COMMENT;
 
 public class IcebergApiConverter {
     private static final Logger LOG = LogManager.getLogger(IcebergApiConverter.class);
     public static final String PARTITION_NULL_VALUE = "null";
+    private static final Pattern ICEBERG_BUCKET_PATTERN = Pattern.compile("bucket\\[(\\d+)]");
+    private static final Pattern ICEBERG_TRUNCATE_PATTERN = Pattern.compile("truncate\\[(\\d+)]");
     private static final int FAKE_FIELD_ID = -1;
 
     public static IcebergTable toIcebergTable(Table nativeTbl, String catalogName, String remoteDbName,
@@ -84,12 +99,14 @@ public class IcebergApiConverter {
                 .setSrTableName(remoteTableName)
                 .setCatalogName(catalogName)
                 .setResourceName(toResourceName(catalogName, "iceberg"))
-                .setRemoteDbName(remoteDbName)
-                .setRemoteTableName(remoteTableName)
+                .setCatalogDBName(remoteDbName)
+                .setCatalogTableName(remoteTableName)
                 .setComment(nativeTbl.properties().getOrDefault("common", ""))
                 .setNativeTable(nativeTbl)
                 .setFullSchema(toFullSchemas(nativeTbl.schema()))
-                .setIcebergProperties(toIcebergProps(nativeCatalogType));
+                .setIcebergProperties(toIcebergProps(
+                        nativeTbl.properties() != null ? Optional.of(copyOf(nativeTbl.properties())) : Optional.empty(),
+                        nativeCatalogType));
 
         return tableBuilder.build();
     }
@@ -210,10 +227,15 @@ public class IcebergApiConverter {
         return fullSchema;
     }
 
-    public static Map<String, String> toIcebergProps(String nativeCatalogType) {
-        Map<String, String> options = new HashMap<>();
-        options.put(ICEBERG_CATALOG_TYPE, nativeCatalogType);
-        return options;
+    public static Map<String, String> toIcebergProps(Optional<Map<String, String>> properties, String nativeCatalogType) {
+        AtomicReference<Map<String, String>> options = new AtomicReference<>();
+        properties.ifPresentOrElse(value -> {
+            options.set(new HashMap<>(value));
+        },
+                () -> options.set(new HashMap<>()));
+
+        options.get().put(ICEBERG_CATALOG_TYPE, nativeCatalogType);
+        return options.get();
     }
 
     public static RemoteFileInputFormat getHdfsFileFormat(FileFormat format) {
@@ -357,5 +379,84 @@ public class IcebergApiConverter {
                 columns, sqlView.sql(), defaultCatalogName, defaultDbName, location);
         view.setComment(comment);
         return view;
+    }
+
+    public static List<String> toPartitionFields(PartitionSpec spec) {
+        return spec.fields().stream()
+                .map(field -> toPartitionField(spec, field))
+                .collect(toImmutableList());
+    }
+
+    private static String toPartitionField(PartitionSpec spec, PartitionField field) {
+        String name = spec.schema().findColumnName(field.sourceId());
+        String transform = field.transform().toString();
+
+        switch (transform) {
+            case "identity":
+                return name;
+            case "year":
+            case "month":
+            case "day":
+            case "hour":
+            case "void":
+                return format("%s(%s)", transform, name);
+        }
+
+        Matcher matcher = ICEBERG_BUCKET_PATTERN.matcher(transform);
+        if (matcher.matches()) {
+            return format("bucket(%s, %s)", name, matcher.group(1));
+        }
+
+        matcher = ICEBERG_TRUNCATE_PATTERN.matcher(transform);
+        if (matcher.matches()) {
+            return format("truncate(%s, %s)", name, matcher.group(1));
+        }
+
+        throw new StarRocksConnectorException("Unsupported partition transform: " + field);
+    }
+
+    public static List<StructField> getPartitionColumns(List<PartitionField> fields, Schema schema) {
+        if (fields.isEmpty()) {
+            return Lists.newArrayList();
+        }
+
+        List<StructField> partitionColumns = Lists.newArrayList();
+        for (PartitionField field : fields) {
+            Type srType;
+            org.apache.iceberg.types.Type icebergType = field.transform().getResultType(schema.findType(field.sourceId()));
+            try {
+                srType = fromIcebergType(icebergType);
+            } catch (InternalError | Exception e) {
+                LOG.error("Failed to convert iceberg type {}", icebergType, e);
+                throw new StarRocksConnectorException("Failed to convert iceberg type %s", icebergType);
+            }
+            StructField column = new StructField(field.name(), srType);
+            partitionColumns.add(column);
+        }
+        return partitionColumns;
+    }
+
+    public static Namespace convertDbNameToNamespace(String dbName) {
+        return Namespace.of(dbName.split("\\."));
+    }
+
+    public static Map<String, String> buildViewProperties(ConnectorViewDefinition definition, String catalogName) {
+        ConnectContext connectContext = ConnectContext.get();
+        if (connectContext == null) {
+            throw new StarRocksConnectorException("not found connect context when building iceberg view properties");
+        }
+
+        String queryId = connectContext.getQueryId().toString();
+
+        Map<String, String> properties = com.google.common.collect.ImmutableMap.of(
+                "queryId", queryId,
+                "starrocksCatalog", catalogName,
+                "starrocksVersion", GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFeVersion());
+
+        if (!Strings.isNullOrEmpty(definition.getComment())) {
+            properties.put(IcebergMetadata.COMMENT, definition.getComment());
+        }
+
+        return properties;
     }
 }

@@ -34,7 +34,6 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.thrift.TStorageMedium;
 
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -42,7 +41,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class TabletMeta {
     private final long dbId;
     private final long tableId;
-    private final long partitionId;
     private final long physicalPartitionId;
     private final long indexId;
 
@@ -58,13 +56,12 @@ public class TabletMeta {
      */
     private Long toBeCleanedTimeMs = null;
 
-    private final ReentrantReadWriteLock lock = new FairReentrantReadWriteLock();
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
-    public TabletMeta(long dbId, long tableId, long partitionId, long physicalPartitionId, long indexId, int schemaHash,
+    public TabletMeta(long dbId, long tableId, long physicalPartitionId, long indexId, int schemaHash,
                       TStorageMedium storageMedium, boolean isLakeTablet) {
         this.dbId = dbId;
         this.tableId = tableId;
-        this.partitionId = partitionId;
         this.physicalPartitionId = physicalPartitionId;
         this.indexId = indexId;
 
@@ -76,15 +73,9 @@ public class TabletMeta {
         this.isLakeTablet = isLakeTablet;
     }
 
-    // for single physical partition, the physicalPartitionId is same as partitionId
-    public TabletMeta(long dbId, long tableId, long partitionId, long indexId, int schemaHash,
-                      TStorageMedium storageMedium, boolean isLakeTablet) {
-        this(dbId, tableId, partitionId, partitionId, indexId, schemaHash, storageMedium, isLakeTablet);
-    }
-
-    public TabletMeta(long dbId, long tableId, long partitionId, long indexId, int schemaHash,
+    public TabletMeta(long dbId, long tableId, long physicalPartitionId, long indexId, int schemaHash,
                       TStorageMedium storageMedium) {
-        this(dbId, tableId, partitionId, indexId, schemaHash, storageMedium, false);
+        this(dbId, tableId, physicalPartitionId, indexId, schemaHash, storageMedium, false);
     }
 
     public long getDbId() {
@@ -93,10 +84,6 @@ public class TabletMeta {
 
     public long getTableId() {
         return tableId;
-    }
-
-    public long getPartitionId() {
-        return partitionId;
     }
 
     public long getPhysicalPartitionId() {
@@ -165,7 +152,6 @@ public class TabletMeta {
             StringBuilder sb = new StringBuilder();
             sb.append("dbId=").append(dbId);
             sb.append(" tableId=").append(tableId);
-            sb.append(" partitionId=").append(partitionId);
             sb.append(" physicalPartitionId=").append(physicalPartitionId);
             sb.append(" indexId=").append(indexId);
             sb.append(" oldSchemaHash=").append(oldSchemaHash);

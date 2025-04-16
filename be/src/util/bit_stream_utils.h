@@ -76,6 +76,17 @@ public:
     // For more details on vlq: en.wikipedia.org/wiki/Variable-length_quantity
     void PutVlqInt(uint32_t v);
 
+    // Writes an int zigzag encoded.
+    void PutZigZagVlqInt(int32_t v);
+
+    // Write a Vlq encoded int64 to the buffer.  Returns false if there was not enough room.
+    // The value is written byte aligned.
+    // For more details on vlq: en.wikipedia.org/wiki/Variable-length_quantity
+    void PutVlqInt(uint64_t v);
+
+    // Writes an int64 zigzag encoded.
+    void PutZigZagVlqInt(int64_t v);
+
     // Get the index to the next aligned byte and advance the underlying buffer by num_bytes.
     size_t GetByteIndexAndAdvance(int num_bytes) {
         uint8_t* ptr = GetNextBytePtr(num_bytes);
@@ -118,6 +129,9 @@ public:
     template <typename T>
     bool GetValue(int num_bits, T* v);
 
+    template <typename T>
+    bool GetBatch(int num_bits, T* v, int num_values);
+
     // Reads a 'num_bytes'-sized value from the buffer and stores it in 'v'. T needs to be a
     // little-endian native type and big enough to store 'num_bytes'. The value is assumed
     // to be byte-aligned so the stream will be advanced to the start of the next byte
@@ -129,6 +143,17 @@ public:
     // beginning of a byte. Return false if there were not enough bytes in the buffer.
     bool GetVlqInt(uint32_t* v);
 
+    // Reads a zigzag encoded int `into` v.
+    bool GetZigZagVlqInt(int32_t* v);
+
+    // Reads a vlq encoded int64 from the stream.  The encoded int must start at
+    // the beginning of a byte. Return false if there were not enough bytes in
+    // the buffer.
+    bool GetVlqInt(uint64_t* v);
+
+    // Reads a zigzag encoded int64 `into` v.
+    bool GetZigZagVlqInt(int64_t* v);
+
     // Returns the number of bytes left in the stream, not including the current byte (i.e.,
     // there may be an additional fraction of a byte).
     int bytes_left() const { return max_bytes_ - (byte_offset_ + BitUtil::Ceil(bit_offset_, 8)); }
@@ -137,15 +162,21 @@ public:
     int position() const { return byte_offset_ * 8 + bit_offset_; }
 
     // Rewind the stream by 'num_bits' bits
-    void Rewind(int num_bits);
+    bool Rewind(int num_bits);
+
+    // Advance the stream by 'num_bits' bits
+    bool Advance(int num_bits);
 
     // Seek to a specific bit in the buffer
-    void SeekToBit(uint stream_position);
+    bool SeekToBit(uint stream_position);
 
     // Maximum byte length of a vlq encoded int
     static const int MAX_VLQ_BYTE_LEN = 5;
+    static const int MAX_VLQ_BYTE_LEN_INT64 = 10;
 
     bool is_initialized() const { return buffer_ != nullptr; }
+
+    void reset(const uint8_t* buffer, int buffer_len);
 
 private:
     // Used by SeekToBit() and GetValue() to fetch the
@@ -177,6 +208,8 @@ public:
     // Returns false if there are not enough bytes left.
     template <typename T>
     bool get_bytes(int num_bytes, T* v);
+
+    bool skip_bytes(int num_bytes);
 
     // Gets up to 'num_values' bit-packed values, starting from the current byte in the
     // buffer and advance the read position. 'bit_width' must be <= 64.

@@ -1,16 +1,16 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 keywords: ['Stream Load']
 ---
 
 # 从本地文件系统导入
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
 StarRocks 提供两种导入方式帮助您从本地文件系统导入数据：
 
-- 使用 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md) 进行同步导入。
-- 使用 [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 进行异步导入。
+- 使用 [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) 进行同步导入。
+- 使用 [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) 进行异步导入。
 
 两种导入方式各有优势：
 
@@ -56,7 +56,7 @@ Stream Load 是一种基于 HTTP PUT 的同步导入方式。提交导入作业�
 
 下图展示了 Stream Load 的主要流程：
 
-![Stream Load 原理图](../assets/4.2-1-zh.png)
+![Stream Load 原理图](../_assets/4.2-1-zh.png)
 
 ### 使用限制
 
@@ -64,7 +64,7 @@ Stream Load 当前不支持导入某一列为 JSON 的 CSV 文件的数据。
 
 ### 操作示例
 
-本文以 curl 工具为例，介绍如何使用 Stream Load 从本地文件系统导入 CSV 或 JSON 格式的数据。有关创建导入作业的详细语法和参数说明，请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。
+本文以 curl 工具为例，介绍如何使用 Stream Load 从本地文件系统导入 CSV 或 JSON 格式的数据。有关创建导入作业的详细语法和参数说明，请参见 [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。
 
 注意在 StarRocks 中，部分文字是 SQL 语言的保留关键字，不能直接用于 SQL 语句。如果想在 SQL 语句中使用这些保留关键字，必须用反引号 (`) 包裹起来。参见[关键字](../sql-reference/sql-statements/keywords.md)。
 
@@ -106,7 +106,7 @@ DISTRIBUTED BY HASH(`id`);
 
 :::note
 
-自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/Data_distribution.md#设置分桶数量)。
+自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/data_distribution/Data_distribution.md#设置分桶数量)。
 
 :::
 
@@ -126,7 +126,7 @@ curl --location-trusted -u <username>:<password> -H "label:123" \
 :::note
 
 - 如果账号没有设置密码，这里只需要传入 `<username>:`。
-- 您可以通过 [SHOW FRONTENDS](../sql-reference/sql-statements/Administration/SHOW_FRONTENDS.md) 命令查看 FE 节点的 IP 地址和 HTTP 端口号。
+- 您可以通过 [SHOW FRONTENDS](../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_FRONTENDS.md) 命令查看 FE 节点的 IP 地址和 HTTP 端口号。
 
 :::
 
@@ -151,7 +151,7 @@ SELECT * FROM table1;
 
 #### 导入 JSON 格式的数据
 
-从 3.2.7 版本起，STREAM LOAD 支持在传输过程中对 JSON 数据进行压缩，减少网络带宽开销。用户可以通过 `compression` 或 `Content-Encoding` 参数指定不同的压缩方式，支持 GZIP、BZIP2、LZ4_FRAME、ZSTD 压缩算法。语法参见[STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。
+从 3.2.7 版本起，STREAM LOAD 支持在传输过程中对 JSON 数据进行压缩，减少网络带宽开销。用户可以通过 `compression` 或 `Content-Encoding` 参数指定不同的压缩方式，支持 GZIP、BZIP2、LZ4_FRAME、ZSTD 压缩算法。语法参见[STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。
 
 ##### 数据样例
 
@@ -185,7 +185,7 @@ DISTRIBUTED BY HASH(`id`);
 
 :::note
 
-自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/Data_distribution.md#设置分桶数量)。
+自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/data_distribution/Data_distribution.md#设置分桶数量)。
 
 :::
 
@@ -205,13 +205,13 @@ curl -v --location-trusted -u <username>:<password> -H "strict_mode: true" \
 :::note
 
 - 如果账号没有设置密码，这里只需要传入 `<username>:`。
-- 您可以通过 [SHOW FRONTENDS](../sql-reference/sql-statements/Administration/SHOW_FRONTENDS.md) 命令查看 FE 节点的 IP 地址和 HTTP 端口号。
+- 您可以通过 [SHOW FRONTENDS](../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_FRONTENDS.md) 命令查看 FE 节点的 IP 地址和 HTTP 端口号。
 
 :::
 
 `example2.json` 文件中包含 `name` 和 `code` 两个键，跟 `table2` 表中的列之间的对应关系如下图所示。
 
-![JSON 映射图](../assets/4.2-2.png)
+![JSON 映射图](../_assets/4.2-2.png)
 
 上图所示的对应关系描述如下：
 
@@ -225,7 +225,7 @@ curl -v --location-trusted -u <username>:<password> -H "strict_mode: true" \
 
 :::
 
-有关导入 JSON 数据时 `jsonpaths`、`columns` 和 StarRocks 表中的字段之间的对应关系，请参见 STREAM LOAD 文档中“[列映射](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#列映射)”章节。
+有关导入 JSON 数据时 `jsonpaths`、`columns` 和 StarRocks 表中的字段之间的对应关系，请参见 STREAM LOAD 文档中“[列映射](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#列映射)”章节。
 
 导入完成后，您可以查询 `table2` 表，验证数据导入是否成功，如下所示：
 
@@ -239,9 +239,77 @@ SELECT * FROM table2;
 4 rows in set (0.01 sec)
 ```
 
+#### 合并 Stream Load 请求
+
+从 v3.4.0 开始，系统支持合并多个 Stream Load 请求。
+
+Merge Commit（合并提交）是针对 Stream Load 的优化设计，适用于高并发、小批量（从 KB 到数十 MB）的实时导入场景。在先前版本中，每个 Stream Load 请求都会生成一个事务和一个数据版本，这在高并发导入场景下会导致以下问题：
+
+- 过多的数据版本会影响查询性能，而限制版本数量可能会引发 `too many versions` 错误。
+- 通过 Compaction 合并数据版本会增加资源消耗。
+- 会生成大量小文件，增加 IOPS 和 I/O 延迟。存算分离模式下，还会提高云存储成本。
+- Leader FE 节点作为事务管理者可能成为单点瓶颈。
+
+Merge Commit 将一个时间窗口内的多个并发的 Stream Load 请求合并为一个事务，从而缓解这些问题。这种方式减少了高并发请求生成的事务和版本数量，从而提升导入性能。
+
+Merge Commit 支持同步模式和异步模式两种方式，每种方式各有优缺点，可以根据实际需求进行选择。
+
+- **同步模式**
+
+  服务器在合并的事务提交完成后才返回，确保导入成功且数据可见。
+
+- **异步模式**
+
+  服务器在接收到数据后立即返回，但不保证导入成功。
+
+| **模式**     | **优点**                                               | **缺点**                                            |
+| ------------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| 同步模式  | <ul><li>确保请求返回时数据已持久化且可见。</li><li>保证同一客户端的多个顺序发送的请求按序执行。</li></ul> | 单个客户端的每个请求会被阻塞，直至服务器合并窗口结束。如果窗口过大，可能会降低单个客户端的数据处理能力。 |
+| 异步模式 | 客户端可以在不等待服务器关闭合并窗口的情况下发送后续导入请求，提高导入吞吐量。 | <ul><li>返回时不保证数据已持久化或可见。客户端需要在稍后验证事务状态。</li><li>不保证同一客户端的多个顺序发送的请求按序执行。</li></ul> |
+
+##### 提交导入作业
+
+- 使用以下命令发起一个启用了 Merge Commit 功能的 Stream Load 作业，模式为同步模式，合并窗口设置为 `5000` 毫秒，并行度设置为 `2`：
+
+  ```Bash
+  curl --location-trusted -u <username>:<password> \
+      -H "Expect:100-continue" \
+      -H "column_separator:," \
+      -H "columns: id, name, score" \
+      -H "enable_merge_commit:true" \
+      -H "merge_commit_interval_ms:5000" \
+      -H "merge_commit_parallel:2" \
+      -T example1.csv -XPUT \
+      http://<fe_host>:<fe_http_port>/api/mydatabase/table1/_stream_load
+  ```
+
+- 使用以下命令发起一个启用了 Merge Commit 功能的 Stream Load 作业，模式为异步模式，合并窗口设置为 `60000` 毫秒，并行度设置为 `2`：
+
+  ```Bash
+  curl --location-trusted -u <username>:<password> \
+      -H "Expect:100-continue" \
+      -H "column_separator:," \
+      -H "columns: id, name, score" \
+      -H "enable_merge_commit:true" \
+      -H "merge_commit_async:true" \
+      -H "merge_commit_interval_ms:60000" \
+      -H "merge_commit_parallel:2" \
+      -T example1.csv -XPUT \
+      http://<fe_host>:<fe_http_port>/api/mydatabase/table1/_stream_load
+  ```
+
+:::note
+
+- Merge Commit 仅支持单库单表的**同构**导入请求合并。“同构”是指的 Stream Load 的参数完全一致，包括：公共参数、JSON 格式参数、CSV 格式参数、`opt_properties` 以及 Merge Commit 参数。
+- 导入 CSV 格式的数据时，需要确保每行数据结尾都有行分隔符，不支持 `skip_header`。
+- 服务器会自动生成事务标签，手动指定标签会被忽略。
+- Merge Commit 会将多个导入请求合并到一个事务中。如果某个请求存在数据质量问题，则事务中的所有请求都会失败。
+
+:::
+
 #### 查看 Stream Load 导入进度
 
-导入作业结束后，StarRocks 会以 JSON 格式返回本次导入作业的结果信息，具体请参见 STREAM LOAD 文档中“[返回值](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#返回值)”章节。
+导入作业结束后，StarRocks 会以 JSON 格式返回本次导入作业的结果信息，具体请参见 STREAM LOAD 文档中“[返回值](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#返回值)”章节。
 
 Stream Load 不支持通过 SHOW LOAD 语句查看导入作业执行情况。
 
@@ -282,7 +350,7 @@ Stream Load 不支持手动取消导入作业。如果导入作业发生超时�
 
   :::
 
-  Stream Load 还提供 `timeout` 参数来设置当前导入作业的超时时间。具体请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。
+  Stream Load 还提供 `timeout` 参数来设置当前导入作业的超时时间。具体请参见 [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。
 
 ### 使用说明
 
@@ -381,13 +449,13 @@ PROPERTIES
 - `BROKER`：Broker 的名称。
 - `PROPERTIES`：用于指定超时时间等可选的作业属性。
 
-有关详细的语法和参数说明，参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
+有关详细的语法和参数说明，参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)。
 
 #### 查看 Broker Load 导入进度
 
-在 v3.0 及以前版本，您需要通过 [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) 语句或者 curl 命令来查看导入作业的进度。
+在 v3.0 及以前版本，您需要通过 [SHOW LOAD](../sql-reference/sql-statements/loading_unloading/SHOW_LOAD.md) 语句或者 curl 命令来查看导入作业的进度。
 
-在 v3.1 及以后版本，您可以通过 [`information_schema.loads`](../reference/information_schema/loads.md) 视图来查看 Broker Load 作业的进度：
+在 v3.1 及以后版本，您可以通过 [`information_schema.loads`](../sql-reference/information_schema/loads.md) 视图来查看 Broker Load 作业的进度：
 
 ```SQL
 SELECT * FROM information_schema.loads;
@@ -420,7 +488,7 @@ SELECT * FROM mytable;
 
 #### 取消 Broker Load 作业
 
-当导入作业状态不为 **CANCELLED** 或 **FINISHED** 时，可以通过 [CANCEL LOAD](../sql-reference/sql-statements/data-manipulation/CANCEL_LOAD.md) 语句来取消该导入作业。
+当导入作业状态不为 **CANCELLED** 或 **FINISHED** 时，可以通过 [CANCEL LOAD](../sql-reference/sql-statements/loading_unloading/CANCEL_LOAD.md) 语句来取消该导入作业。
 
 例如，可以通过以下语句，撤销 `mydatabase` 数据库中标签为 `label_local` 的导入作业：
 
@@ -464,6 +532,6 @@ WHERE LABEL = "label_local";
    - `BROKER`：无需指定。
    - `PROPERTIES`：用于指定超时时间等可选的作业属性。
 
-   有关详细的语法和参数说明，参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
+   有关详细的语法和参数说明，参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)。
 
 提交导入作业后，您可以查看导入进度、或者取消导入作业。具体操作参见本文“[查看 Broker Load 导入进度](#查看-broker-load-导入进度)”和“[取消 Broker Load 作业](#取消-broker-load-作业)中的介绍。

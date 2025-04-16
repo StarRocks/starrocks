@@ -117,6 +117,22 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_hash(FunctionContext* context, const
     return builder.build(ColumnHelper::is_all_const(columns));
 }
 
+StatusOr<ColumnPtr> BitmapFunctions::bitmap_hash64(FunctionContext* context, const starrocks::Columns& columns) {
+    ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
+    size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_OBJECT> builder(size);
+    for (int row = 0; row < size; ++row) {
+        BitmapValue bitmap;
+        if (!viewer.is_null(row)) {
+            auto slice = viewer.value(row);
+            uint64_t hash_value = HashUtil::xx_hash3_64(slice.data, slice.size, HashUtil::XXHASH3_64_SEED);
+            bitmap.add(hash_value);
+        }
+        builder.append(&bitmap);
+    }
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
 StatusOr<ColumnPtr> BitmapFunctions::bitmap_count(FunctionContext* context, const starrocks::Columns& columns) {
     ColumnViewer<TYPE_OBJECT> viewer(columns[0]);
 
@@ -336,10 +352,10 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_array(FunctionContext* context, c
     ColumnViewer<TYPE_OBJECT> lhs(columns[0]);
 
     size_t size = columns[0]->size();
-    UInt32Column::Ptr array_offsets = UInt32Column::create();
+    UInt32Column::MutablePtr array_offsets = UInt32Column::create();
     array_offsets->reserve(size + 1);
 
-    Int64Column::Ptr array_bigint_column = Int64Column::create();
+    Int64Column::MutablePtr array_bigint_column = Int64Column::create();
     size_t data_size = 0;
 
     if (columns[0]->has_null()) {
@@ -383,14 +399,16 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_array(FunctionContext* context, c
 
     //Array Column
     if (!columns[0]->has_null()) {
-        return ArrayColumn::create(NullableColumn::create(array_bigint_column, NullColumn::create(offset, 0)),
-                                   array_offsets);
+        return ArrayColumn::create(
+                NullableColumn::create(std::move(array_bigint_column), NullColumn::create(offset, 0)),
+                std::move(array_offsets));
     } else if (columns[0]->only_null()) {
         return ColumnHelper::create_const_null_column(size);
     } else {
         return NullableColumn::create(
-                ArrayColumn::create(NullableColumn::create(array_bigint_column, NullColumn::create(offset, 0)),
-                                    array_offsets),
+                ArrayColumn::create(
+                        NullableColumn::create(std::move(array_bigint_column), NullColumn::create(offset, 0)),
+                        std::move(array_offsets)),
                 NullColumn::create(*ColumnHelper::as_raw_column<NullableColumn>(columns[0])->null_column()));
     }
 }
@@ -398,26 +416,28 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_array(FunctionContext* context, c
 StatusOr<ColumnPtr> BitmapFunctions::array_to_bitmap(FunctionContext* context, const starrocks::Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     const constexpr LogicalType TYPE = TYPE_BIGINT;
-    size_t size = columns[0]->size();
+    size_t size = columns[0]->is_constant() ? 1 : columns[0]->size();
     ColumnBuilder<TYPE_OBJECT> builder(size);
 
-    Column* data_column = ColumnHelper::get_data_column(columns[0].get());
-    NullData::pointer null_data = columns[0]->is_nullable()
-                                          ? down_cast<NullableColumn*>(columns[0].get())->null_column_data().data()
-                                          : nullptr;
-    auto* array_column = down_cast<ArrayColumn*>(data_column);
+    const Column* data_column = ColumnHelper::get_data_column(columns[0].get());
+    const auto null_data = columns[0]->is_nullable()
+                                   ? down_cast<const NullableColumn*>(columns[0].get())->null_column_data().data()
+                                   : nullptr;
+    const auto* array_column = down_cast<const ArrayColumn*>(data_column);
 
-    RunTimeColumnType<TYPE>::Container& element_container =
+    auto element_container =
             array_column->elements_column()->is_nullable()
-                    ? down_cast<RunTimeColumnType<TYPE>*>(
-                              down_cast<NullableColumn*>(array_column->elements_column().get())->data_column().get())
+                    ? down_cast<const RunTimeColumnType<TYPE>*>(
+                              down_cast<const NullableColumn*>(array_column->elements_column().get())
+                                      ->data_column()
+                                      .get())
                               ->get_data()
-                    : down_cast<RunTimeColumnType<TYPE>*>(array_column->elements_column().get())->get_data();
+                    : down_cast<const RunTimeColumnType<TYPE>*>(array_column->elements_column().get())->get_data();
     const auto& offsets = array_column->offsets_column()->get_data();
 
-    NullColumn::Container::pointer element_null_data =
+    auto element_null_data =
             array_column->elements_column()->is_nullable()
-                    ? down_cast<NullableColumn*>(array_column->elements_column().get())->null_column_data().data()
+                    ? down_cast<const NullableColumn*>(array_column->elements_column().get())->null_column_data().data()
                     : nullptr;
 
     for (int row = 0; row < size; ++row) {
@@ -440,7 +460,8 @@ StatusOr<ColumnPtr> BitmapFunctions::array_to_bitmap(FunctionContext* context, c
         // append bitmap
         builder.append(std::move(bitmap));
     }
-    return builder.build(ColumnHelper::is_all_const(columns));
+    ColumnPtr result = builder.build(false);
+    return columns[0]->is_constant() ? ConstColumn::create(std::move(result), columns[0]->size()) : std::move(result);
 }
 
 StatusOr<ColumnPtr> BitmapFunctions::bitmap_max(FunctionContext* context, const starrocks::Columns& columns) {
@@ -700,13 +721,8 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_binary(FunctionContext* context, 
     }
 
     ColumnPtr col = builder.build(ColumnHelper::is_all_const(columns));
-    std::string err_msg;
-    if (col->capacity_limit_reached(&err_msg)) {
-        return Status::InternalError(
-                strings::Substitute("Size of binary column generated by bitmap_to_binary reaches limit: $0", err_msg));
-    } else {
-        return col;
-    }
+    RETURN_IF_ERROR(col->capacity_limit_reached());
+    return col;
 }
 
 StatusOr<ColumnPtr> BitmapFunctions::bitmap_from_binary(FunctionContext* context, const Columns& columns) {

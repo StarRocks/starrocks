@@ -1,0 +1,23 @@
+-- name: test_lake_sync_mv @cloud
+CREATE TABLE tbl1 (
+    k1 date,
+    k2 int,
+    v1 int sum
+) PARTITION BY RANGE(k1) (
+    PARTITION p1 values [('2020-01-01'),('2020-02-01')),
+    PARTITION p2 values [('2020-02-01'),('2020-03-01')))
+    DISTRIBUTED BY HASH(k2) BUCKETS 3
+    PROPERTIES('replication_num' = '1');
+
+INSERT INTO tbl1
+VALUES
+    ("2020-01-12",4,100),
+    ("2020-01-11",5,100),
+    ("2020-01-11",4,100);
+
+CREATE MATERIALIZED VIEW sync_mv AS SELECT k1, SUM(v1) FROM tbl1 GROUP BY k1;
+function: wait_materialized_view_finish()
+
+INSERT INTO tbl1 VALUES("2020-01-11",6,100);
+
+SELECT mv_sum_v1 FROM sync_mv [_SYNC_MV_] ORDER BY k1;

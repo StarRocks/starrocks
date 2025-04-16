@@ -172,6 +172,30 @@ TEST(DateValueTest, normalTimestamp) {
     }
 }
 
+TEST(DateValueTest, getOffsetByTimezone) {
+    {
+        auto timestampInDST = timestamp::from_datetime(1986, 8, 25, 0, 0, 0, 0);
+        auto timezone = "Asia/Shanghai";
+        cctz::time_zone ctz;
+        TimezoneUtils::find_cctz_time_zone(timezone, ctz);
+
+        auto offset = timestamp::get_timezone_offset_by_timestamp(timestampInDST, ctz);
+
+        ASSERT_EQ(32400, offset);
+    }
+
+    {
+        auto timestampOutOfDST = timestamp::from_datetime(2004, 8, 25, 0, 0, 0, 0);
+        auto timezone = "Asia/Shanghai";
+        cctz::time_zone ctz;
+        TimezoneUtils::find_cctz_time_zone(timezone, ctz);
+
+        auto offset = timestamp::get_timezone_offset_by_timestamp(timestampOutOfDST, ctz);
+
+        ASSERT_EQ(28800, offset);
+    }
+}
+
 TEST(DateValueTest, calculate) {
     DateValue dv;
     {

@@ -19,6 +19,8 @@ import com.staros.proto.FileStoreInfo;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudCredential;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.s3a.Constants;
+import org.apache.hadoop.fs.s3a.S3AFileSystem;
 
 import java.util.Map;
 
@@ -51,11 +53,10 @@ public class AliyunCloudCredential implements CloudCredential {
 
     @Override
     public void applyToConfiguration(Configuration configuration) {
-        configuration.set("fs.oss.impl", "com.aliyun.jindodata.oss.JindoOssFileSystem");
-        configuration.set("fs.AbstractFileSystem.oss.impl", "com.aliyun.jindodata.oss.OSS");
-        configuration.set("fs.oss.accessKeyId", accessKey);
-        configuration.set("fs.oss.accessKeySecret", secretKey);
-        configuration.set("fs.oss.endpoint", endpoint);
+        configuration.set("fs.oss.impl", S3AFileSystem.class.getName());
+        configuration.set(Constants.ACCESS_KEY, accessKey);
+        configuration.set(Constants.SECRET_KEY, secretKey);
+        configuration.set(Constants.ENDPOINT, endpoint);
     }
 
     @Override

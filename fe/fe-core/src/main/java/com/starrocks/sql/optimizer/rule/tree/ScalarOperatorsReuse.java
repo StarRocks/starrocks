@@ -21,6 +21,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.common.Config;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -39,6 +40,7 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
@@ -68,7 +70,7 @@ public class ScalarOperatorsReuse {
                                                         ColumnRefFactory factory) {
         Map<Integer, Map<ScalarOperator, ColumnRefOperator>>
                 commonSubOperatorsByDepth = collectCommonSubScalarOperators(null, operators,
-                factory, false);
+                factory);
 
         Map<ScalarOperator, ColumnRefOperator> commonSubOperators =
                 commonSubOperatorsByDepth.values().stream()
@@ -96,10 +98,11 @@ public class ScalarOperatorsReuse {
     public static Map<Integer, Map<ScalarOperator, ColumnRefOperator>> collectCommonSubScalarOperators(
             Projection projection,
             List<ScalarOperator> scalarOperators,
-            ColumnRefFactory columnRefFactory, boolean reuseLambdaDependentExpr) {
+            ColumnRefFactory columnRefFactory) {
         // 1. Recursively collect common sub operators for the input operators
-        CommonSubScalarOperatorCollector operatorCollector = new CommonSubScalarOperatorCollector(reuseLambdaDependentExpr);
-        scalarOperators.forEach(operator -> operator.accept(operatorCollector, null));
+        CommonSubScalarOperatorCollector operatorCollector = new CommonSubScalarOperatorCollector();
+        scalarOperators.forEach(operator -> operator.accept(operatorCollector,
+                new CommonSubScalarOperatorCollectorContext(false)));
         if (projection != null) {
             projection.setNeedReuseLambdaDependentExpr(operatorCollector.hasLambdaFunction());
         }
@@ -163,11 +166,11 @@ public class ScalarOperatorsReuse {
 
         @Override
         public ScalarOperator visitCall(CallOperator call, Void context) {
-            ScalarOperator operator = new CallOperator(call.getFnName(),
+            CallOperator operator = new CallOperator(call.getFnName(),
                     call.getType(),
                     call.getChildren().stream().map(argument -> argument.accept(this, null)).collect(toImmutableList()),
                     call.getFunction(),
-                    call.isDistinct());
+                    call.isDistinct(), call.isRemovedDistinct());
             return tryRewrite(operator);
         }
 
@@ -176,6 +179,14 @@ public class ScalarOperatorsReuse {
             ScalarOperator newOperator = new LambdaFunctionOperator(operator.getRefColumns(),
                     operator.getLambdaExpr().accept(this, null), operator.getType()
             );
+            return tryRewrite(newOperator);
+        }
+
+        @Override
+        public ScalarOperator visitMap(MapOperator operator, Void context) {
+            ScalarOperator newOperator = new MapOperator(operator.getType(),
+                    operator.getChildren().stream().map(argument -> argument.accept(this, null)).
+                            collect(Collectors.toList()));
             return tryRewrite(newOperator);
         }
 
@@ -260,7 +271,7 @@ public class ScalarOperatorsReuse {
                     predicate.getChildren().stream().map(
                         argument -> argument.accept(this, null)).collect(Collectors.toList()),
                             predicate.getType(), predicate.getDictionaryId(),
-                                predicate.getDictionaryTxnId(), predicate.getKeySize());
+                                predicate.getDictionaryTxnId(), predicate.getKeySize(), predicate.getNullIfNotExist());
             return tryRewrite(operator);
         }
 
@@ -275,8 +286,29 @@ public class ScalarOperatorsReuse {
             return tryRewrite(clone);
         }
     }
+    private static class CommonSubScalarOperatorCollectorContext {
+        public boolean isPartOfLambdaExpr = false;
+        // used to record the lambda arguments during visiting operator.
 
-    private static class CommonSubScalarOperatorCollector extends ScalarOperatorVisitor<Integer, Void> {
+        // take map_apply((k,v)->(k, array_sum(array_map(arg -> arg * v, array_column), map_column))) as an example,
+        // when visiting `array_sum(array_map(arg -> arg * v, array_column))`,
+        // currentLambdaArguments will contain k and v,
+        // outerLambdaArguments will be empty since there are no higher-order lambda functions nested outside.
+        // when visiting `arg * v`,
+        // currentLambdaArguments will contain arg,
+        // outerLambdaArguments will contain k and v since there is a map_apply's lambda expr outside.
+
+        // this information will help us determine whether an operator can be reused.
+        public Set<ColumnRefOperator> currentLambdaArguments = Sets.newHashSet();
+        public Set<ColumnRefOperator> outerLambdaArguments = Sets.newHashSet();
+
+        public CommonSubScalarOperatorCollectorContext(boolean isPartOfLambdaExpr) {
+            this.isPartOfLambdaExpr = isPartOfLambdaExpr;
+        }
+    }
+
+    private static class CommonSubScalarOperatorCollector extends
+            ScalarOperatorVisitor<Integer, CommonSubScalarOperatorCollectorContext> {
         // The key is operator tree depth, the value is operator set with same tree depth.
         // For operator list [a + b, a + b + c, a + d]
         // The operatorsByDepth is
@@ -286,44 +318,62 @@ public class ScalarOperatorsReuse {
         private final Map<Integer, Set<ScalarOperator>> operatorsByDepth = new HashMap<>();
         private final Map<Integer, Set<ScalarOperator>> commonOperatorsByDepth = new HashMap<>();
 
-        // isLambdaDependent means whether an expression is dependent on outer lambda arguments,
-        // it works when not reuse lambda-dependent sub expressions. For example, select array_length(a), array_sum(a)
-        // from (select array_map(x->2*x+1+2*x, array) as a from t)A; when reuseLambdaDependentExpr is
-        // false, the 2*x is lambda dependent, but array_map(x->2*x+1+2*x, array) isn't,
-        // so 2*x can't be reused, array_map(x->2*x+1+2*x, array) can be reused.
-        // 2*x can be reused within the array_map when reuseLambdaDependentExpr is true.
-        private boolean isLambdaDependent;
-
-        private final boolean reuseLambdaDependentExpr;
-
         public boolean hasLambdaFunction() {
             return hasLambdaFunction;
         }
 
         // enable some special logic codes only for lambda functions.
         private boolean hasLambdaFunction;
-        private Set<ColumnRefOperator> lambdaArguments = Sets.newHashSet();
 
-        private CommonSubScalarOperatorCollector(boolean reuseLambdaDependentExpr) {
-            this.reuseLambdaDependentExpr = reuseLambdaDependentExpr;
-            this.isLambdaDependent = false;
-            this.hasLambdaFunction = reuseLambdaDependentExpr;
+        private CommonSubScalarOperatorCollector() {
         }
 
 
-        private int collectCommonOperatorsByDepth(int depth, ScalarOperator operator) {
+        private int collectCommonOperatorsByDepth(int depth, ScalarOperator operator,
+                                                  CommonSubScalarOperatorCollectorContext context) {
             Set<ScalarOperator> operators = getOperatorsByDepth(depth, operatorsByDepth);
-            isLambdaDependent = false;
-            lambdaArguments.clear();
-            if (!isLambdaDependent(operator) && operators.contains(operator)) {
-                Set<ScalarOperator> commonOperators = getOperatorsByDepth(depth, commonOperatorsByDepth);
-                commonOperators.add(operator);
-            }
-            // lambda-dependent expressions should not be put into operators.
-            if (!isLambdaDependent) {
-                operators.add(operator);
+
+            boolean isDependentOnOuterLambda = isDependentOnOuterLambdaArguments(operator, context);
+            if (!isDependentOnOuterLambda) {
+                boolean isDependentOnCurrentLambdaArguments = isDependentOnCurrentLambdaArguments(operator, context);
+                // if this operator has appeared before,
+                // ot it is within a lambda function but does not depend on current lambda function's arguments,
+                // we treat it as a common operator.
+                if (operators.contains(operator) || (context.isPartOfLambdaExpr && !isDependentOnCurrentLambdaArguments)) {
+                    Set<ScalarOperator> commonOperators = getOperatorsByDepth(depth, commonOperatorsByDepth);
+                    commonOperators.add(operator);
+                }
+                if (!isDependentOnCurrentLambdaArguments) {
+                    operators.add(operator);
+                }
             }
             return depth;
+        }
+
+        private boolean isDependentOnCurrentLambdaArguments(ScalarOperator operator,
+                                                            CommonSubScalarOperatorCollectorContext context) {
+            if (operator.getOpType().equals(OperatorType.LAMBDA_ARGUMENT)) {
+                return context.currentLambdaArguments.contains(operator);
+            }
+            for (ScalarOperator child : operator.getChildren()) {
+                if (isDependentOnCurrentLambdaArguments(child, context)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private boolean isDependentOnOuterLambdaArguments(ScalarOperator operator,
+                                                          CommonSubScalarOperatorCollectorContext context) {
+            if (operator.getOpType().equals(OperatorType.LAMBDA_ARGUMENT)) {
+                return context.outerLambdaArguments.contains(operator);
+            }
+            for (ScalarOperator child : operator.getChildren()) {
+                if (isDependentOnOuterLambdaArguments(child, context)) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         private static Set<ScalarOperator> getOperatorsByDepth(int depth,
@@ -333,79 +383,67 @@ public class ScalarOperatorsReuse {
         }
 
         @Override
-        public Integer visit(ScalarOperator scalarOperator, Void context) {
-            if (scalarOperator.isConstant() || scalarOperator.getChildren().isEmpty()) {
+        public Integer visit(ScalarOperator scalarOperator, CommonSubScalarOperatorCollectorContext context) {
+            // To avoid stack overflow if the operator tree is too deep(eg: contains too many `or` functions), set a limit
+            // to the depth of the operator tree.
+            if (scalarOperator.getDepth() > Config.max_scalar_operator_optimize_depth ||
+                    scalarOperator.isConstant() || scalarOperator.getChildren().isEmpty()) {
                 return 0;
             }
 
+            if (scalarOperator instanceof LambdaFunctionOperator) {
+                context.currentLambdaArguments.addAll(((LambdaFunctionOperator) scalarOperator).getRefColumns());
+            }
+
             return collectCommonOperatorsByDepth(scalarOperator.getChildren().stream().map(argument ->
-                    argument.accept(this, context)).reduce(Math::max).map(m -> m + 1).orElse(1), scalarOperator);
+                            argument.accept(this, context)).reduce(Math::max).map(m -> m + 1).orElse(1),
+                    scalarOperator, context);
         }
 
         @Override
-        public Integer visitLambdaFunctionOperator(LambdaFunctionOperator scalarOperator, Void context) {
+        public Integer visitLambdaFunctionOperator(LambdaFunctionOperator scalarOperator,
+                                                   CommonSubScalarOperatorCollectorContext context) {
             // a lambda function like  x->x+1 can't be reused anymore, so directly visit its lambda expression.
             hasLambdaFunction = true;
-            return visit(scalarOperator.getLambdaExpr(), context);
+            CommonSubScalarOperatorCollectorContext newContext = new CommonSubScalarOperatorCollectorContext(true);
+            newContext.outerLambdaArguments.addAll(context.outerLambdaArguments);
+            newContext.outerLambdaArguments.addAll(context.currentLambdaArguments);
+            newContext.currentLambdaArguments.addAll(scalarOperator.getRefColumns());
+            return visit(scalarOperator.getLambdaExpr(), newContext);
         }
 
         @Override
-        public Integer visitCall(CallOperator scalarOperator, Void context) {
+        public Integer visitCall(CallOperator scalarOperator, CommonSubScalarOperatorCollectorContext context) {
             CallOperator callOperator = scalarOperator.cast();
             if (FunctionSet.nonDeterministicFunctions.contains(callOperator.getFnName())) {
                 // try to reuse non deterministic function
                 // for example:
                 // select (rnd + 1) as rnd1, (rnd + 2) as rnd2 from (select rand() as rnd) sub
-                return collectCommonOperatorsByDepth(1, scalarOperator);
+                return collectCommonOperatorsByDepth(1, scalarOperator, context);
             } else if (scalarOperator.isConstant() || scalarOperator.getChildren().isEmpty()) {
                 // to keep the same logic as origin
                 return 0;
             } else {
                 return collectCommonOperatorsByDepth(scalarOperator.getChildren().stream().map(argument ->
-                        argument.accept(this, context)).reduce(Math::max).map(m -> m + 1).orElse(1), scalarOperator);
+                        argument.accept(this, context)).reduce(Math::max).map(m -> m + 1).orElse(1),
+                        scalarOperator, context);
             }
         }
 
         @Override
-        public Integer visitDictMappingOperator(DictMappingOperator scalarOperator, Void context) {
-            return collectCommonOperatorsByDepth(1, scalarOperator);
-        }
-
-
-        // a lambda-dependent expressions also can't be reused if reuseLambdaDependentExpr is false.
-        // For example, array_map(x->2x+1+2x,array),2x is lambda-dependent, so it can't be reused if
-        // reuseLambdaDependentExpr is false, but array_map(x->2x+1+2x,array) can be reused if needed.
-        private boolean isLambdaDependent(ScalarOperator scalarOperator) {
-
-            if (hasLambdaFunction && !reuseLambdaDependentExpr) {
-                if (scalarOperator instanceof LambdaFunctionOperator) {
-                    LambdaFunctionOperator lambdaOp = (LambdaFunctionOperator) scalarOperator;
-                    lambdaArguments.addAll(lambdaOp.getRefColumns());
-                }
-
-                if (scalarOperator.getOpType().equals(OperatorType.LAMBDA_ARGUMENT)) {
-                    isLambdaDependent = !lambdaArguments.contains(scalarOperator);
-                    return isLambdaDependent;
-                }
-            }
-
-            for (ScalarOperator child : scalarOperator.getChildren()) {
-                if (isLambdaDependent(child)) {
-                    return true;
-                }
-            }
-            return false;
+        public Integer visitDictMappingOperator(DictMappingOperator scalarOperator,
+                                                CommonSubScalarOperatorCollectorContext context) {
+            return collectCommonOperatorsByDepth(1, scalarOperator, context);
         }
     }
 
 
-    public static Projection rewriteProjectionOrLambdaExpr(Projection projection, ColumnRefFactory columnRefFactory,
-                                                           boolean reuseLambdaDependentExpr) {
+    public static Projection rewriteProjectionOrLambdaExpr(Projection projection, ColumnRefFactory columnRefFactory) {
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = projection.getColumnRefMap();
         List<ScalarOperator> scalarOperators = Lists.newArrayList(columnRefMap.values());
         Map<Integer, Map<ScalarOperator, ColumnRefOperator>> commonSubOperatorsByDepth = ScalarOperatorsReuse
                 .collectCommonSubScalarOperators(projection, scalarOperators,
-                        columnRefFactory, reuseLambdaDependentExpr);
+                        columnRefFactory);
 
         Map<ScalarOperator, ColumnRefOperator> commonSubOperators =
                 commonSubOperatorsByDepth.values().stream()
@@ -492,7 +530,7 @@ public class ScalarOperatorsReuse {
                     operator.isNullable(), false);
             columnRefMap.put(keyCol, operator.getLambdaExpr());
             Projection fakeProjection =
-                    rewriteProjectionOrLambdaExpr(new Projection(columnRefMap), columnRefFactory, true);
+                    rewriteProjectionOrLambdaExpr(new Projection(columnRefMap), columnRefFactory);
             columnRefMap = fakeProjection.getCommonSubOperatorMap();
             if (!columnRefMap.isEmpty()) {
                 operator.addColumnToExpr(columnRefMap);

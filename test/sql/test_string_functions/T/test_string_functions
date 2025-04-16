@@ -171,7 +171,7 @@ PROPERTIES (
     "replication_num" = "1",
     "bucket_size" = "4294967296",
     "storage_volume" = "builtin_storage_volume",
-    "enable_persistent_index" = "false",
+    "enable_persistent_index" = "true",
     "compression" = "LZ4"
 );
 insert into string_table values
@@ -187,3 +187,72 @@ select ngram_search(rowkey, "e6249ba1-5b54-46bf-bfaf-89d69094b757",4) as a from 
 -- case4: only support (column,const) and (const,const)
 select ngram_search("000073a7-274f-46bf-bfaf-678868cc26cd",rowkey,4) from string_table;
 
+-- case5: gram_num is 0
+select ngram_search("chi","chi",0);
+select ngram_search("chi","chi",-1);
+
+-- only support string,string
+select ngram_search(date('2020-06-23'), "2020", 4);
+
+-- const value with two chunk
+select sum(result) from ( select ngram_search("normal_string", "normal_string", 5) as result from (   select generate_series    from TABLE(generate_series(0, 4097 - 1)) ) as t1) as t2;
+
+
+-- name: test_ngram_search_with_low_cardinality
+CREATE TABLE __row_util_1 (
+  k1 bigint null
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 48
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+insert into __row_util_1 select generate_series from TABLE(generate_series(0, 5000));
+
+
+-- id随机，nation低基数，exsit_hot_value中1%随机，99%的低基（只有5种取值）
+CREATE TABLE left_table (
+    id int,
+    nation string,
+    exsit_hot_value int
+)
+ENGINE=olap
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) buckets 32
+PROPERTIES (
+    "replication_num" = "1" 
+);
+
+insert into left_table 
+select
+    cast(rand() * 100000000 as int),
+    CASE 
+        WHEN RAND() > 0.8 THEN 'china'
+        WHEN RAND() > 0.6 THEN 'usa'
+        WHEN RAND() > 0.4 THEN 'russian'
+        WHEN RAND() > 0.2 THEN 'canada'
+        ELSE 'japan'
+    END,
+   case when RAND() > 0.99 THEN k1
+       ELSE k1 % 5 
+   END
+from __row_util_1;
+select sum(c0) > 500 from (select ngram_search(nation, 'china', 4) as c0 from left_table)t0;
+
+-- name: test_lower_upper_utf8
+create table t (
+  id int,
+  name string
+) duplicate key(id)
+distributed by random buckets 3
+properties("replication_num" = "1");
+set cbo_enable_low_cardinality_optimize = false;
+set lower_upper_support_utf8 = true;
+insert into t values(1, 'теКст'), (2, 'ТЕкСТ'), (3, 'теКст hello'), (4, 'ТЕкСТ world'),
+(5, 'München'), (6, 'München Tum'), (7, 'hello WOrld'), (8, ''),
+(9, 'абвгдеёжзийклмнопрстуфхцчшщъыьэюя'), (10, 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ'),
+(11, 'abcdefghijklmnopqrstuvwxyzäöüß'), (12, 'ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜẞ'),
+(13, 'abcçdefgğhıijklmnoöprsştuüvyz'), (14, 'ABCÇDEFGĞHIİJKLMNOÖPRSŞTUÜVYZ'),
+(15, 'ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ'), (16, 'ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ');
+select id, name, lower(name), upper(name) from t order by id;

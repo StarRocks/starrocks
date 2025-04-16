@@ -12,49 +12,51 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.authentication;
 
+import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.StarRocksFE;
-import com.starrocks.common.Config;
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.authorization.UserPrivilegeCollectionV2;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.mysql.privilege.AuthPlugin;
+import com.starrocks.persist.EditLog;
+import com.starrocks.persist.GroupProviderLog;
+import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.OperationType;
+import com.starrocks.persist.metablock.MapEntryConsumer;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.UserPrivilegeCollectionV2;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
+import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutputStream;
-import java.io.File;
 import java.io.IOException;
-import java.net.URL;
-import java.net.URLClassLoader;
-import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class AuthenticationMgr {
     private static final Logger LOG = LogManager.getLogger(AuthenticationMgr.class);
-    private static final String DEFAULT_PLUGIN = PlainPasswordAuthenticationProvider.PLUGIN_NAME;
     public static final String ROOT_USER = "root";
     public static final long DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER = 100;
 
@@ -62,6 +64,40 @@ public class AuthenticationMgr {
     // user identity -> all the authentication information
     // will be manually serialized one by one
     protected Map<UserIdentity, UserAuthenticationInfo> userToAuthenticationInfo;
+
+    // For legacy reason, user property are set by username instead of full user identity.
+    @SerializedName(value = "m")
+    private Map<String, UserProperty> userNameToProperty = new HashMap<>();
+
+    @SerializedName("gp")
+    protected Map<String, GroupProvider> nameToGroupProviderMap = new ConcurrentHashMap<>();
+
+    @SerializedName("sim")
+    protected Map<String, SecurityIntegration> nameToSecurityIntegrationMap = new ConcurrentHashMap<>();
+
+    // resolve hostname to ip
+    private Map<String, Set<String>> hostnameToIpSet = new HashMap<>();
+    private final ReentrantReadWriteLock hostnameToIpLock = new ReentrantReadWriteLock();
+
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+
+    // set by load() to distinguish brand-new environment with upgraded environment
+    private boolean isLoaded = false;
+
+    public AuthenticationMgr() {
+        // default user
+        userToAuthenticationInfo = new UserAuthInfoTreeMap();
+        UserAuthenticationInfo info = new UserAuthenticationInfo();
+        try {
+            info.setOrigUserHost(ROOT_USER, UserAuthenticationInfo.ANY_HOST);
+        } catch (AuthenticationException e) {
+            throw new RuntimeException("should not happened!", e);
+        }
+        info.setAuthPlugin(AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.toString());
+        info.setPassword(MysqlPassword.EMPTY_PASSWORD);
+        userToAuthenticationInfo.put(UserIdentity.ROOT, info);
+        userNameToProperty.put(UserIdentity.ROOT.getUser(), new UserProperty());
+    }
 
     private static class UserAuthInfoTreeMap extends TreeMap<UserIdentity, UserAuthenticationInfo> {
         public UserAuthInfoTreeMap() {
@@ -101,42 +137,6 @@ public class AuthenticationMgr {
         }
     }
 
-    // For legacy reason, user property are set by username instead of full user identity.
-    @SerializedName(value = "m")
-    private Map<String, UserProperty> userNameToProperty = new HashMap<>();
-
-    // resolve hostname to ip
-    private Map<String, Set<String>> hostnameToIpSet = new HashMap<>();
-    private final ReentrantReadWriteLock hostnameToIpLock = new FairReentrantReadWriteLock();
-
-    private final ReentrantReadWriteLock lock = new FairReentrantReadWriteLock();
-
-    // set by load() to distinguish brand-new environment with upgraded environment
-    private boolean isLoaded = false;
-
-    public AuthenticationMgr() {
-        // default plugin
-        AuthenticationProviderFactory.installPlugin(
-                PlainPasswordAuthenticationProvider.PLUGIN_NAME, new PlainPasswordAuthenticationProvider());
-        AuthenticationProviderFactory.installPlugin(
-                LDAPAuthProviderForNative.PLUGIN_NAME, new LDAPAuthProviderForNative());
-        AuthenticationProviderFactory.installPlugin(
-                KerberosAuthenticationProvider.PLUGIN_NAME, new KerberosAuthenticationProvider());
-
-        // default user
-        userToAuthenticationInfo = new UserAuthInfoTreeMap();
-        UserAuthenticationInfo info = new UserAuthenticationInfo();
-        try {
-            info.setOrigUserHost(ROOT_USER, UserAuthenticationInfo.ANY_HOST);
-        } catch (AuthenticationException e) {
-            throw new RuntimeException("should not happened!", e);
-        }
-        info.setAuthPlugin(PlainPasswordAuthenticationProvider.PLUGIN_NAME);
-        info.setPassword(MysqlPassword.EMPTY_PASSWORD);
-        userToAuthenticationInfo.put(UserIdentity.ROOT, info);
-        userNameToProperty.put(UserIdentity.ROOT.getUser(), new UserProperty());
-    }
-
     private void readLock() {
         lock.readLock().lock();
     }
@@ -163,21 +163,6 @@ public class AuthenticationMgr {
     }
 
     /**
-     * Get max connection number of the user, if the user is ephemeral, i.e. the user is saved in SR,
-     * but some external system, like LDAP, return default max connection number
-     * @param currUserIdentity user identity of current connection
-     * @return max connection number of the user
-     */
-    public long getMaxConn(UserIdentity currUserIdentity) {
-        if (currUserIdentity.isEphemeral()) {
-            return DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER;
-        } else {
-            String userName = currUserIdentity.getUser();
-            return getMaxConn(userName);
-        }
-    }
-
-    /**
      * Get max connection number based on plain username, the user should be an internal user,
      * if the user doesn't exist in SR, it will throw an exception.
      * @param userName plain username saved in SR
@@ -186,14 +171,10 @@ public class AuthenticationMgr {
     public long getMaxConn(String userName) {
         UserProperty userProperty = userNameToProperty.get(userName);
         if (userProperty == null) {
-            throw new SemanticException("Unknown user: " + userName);
+            return DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER;
         } else {
             return userNameToProperty.get(userName).getMaxConn();
         }
-    }
-
-    public String getDefaultPlugin() {
-        return DEFAULT_PLUGIN;
     }
 
     private boolean match(String remoteUser, String remoteHost, boolean isDomain, UserAuthenticationInfo info) {
@@ -230,46 +211,6 @@ public class AuthenticationMgr {
         }
     }
 
-    private UserIdentity checkPasswordForNative(
-            String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString) {
-        Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
-                getBestMatchedUserIdentity(remoteUser, remoteHost);
-        if (matchedUserIdentity == null) {
-            LOG.debug("cannot find user {}@{}", remoteUser, remoteHost);
-        } else {
-            try {
-                AuthenticationProvider provider =
-                        AuthenticationProviderFactory.create(matchedUserIdentity.getValue().getAuthPlugin());
-                provider.authenticate(remoteUser, remoteHost, remotePasswd, randomString,
-                        matchedUserIdentity.getValue());
-                return matchedUserIdentity.getKey();
-            } catch (AuthenticationException e) {
-                LOG.debug("failed to authenticate for native, user: {}@{}, error: {}",
-                        remoteUser, remoteHost, e.getMessage());
-            }
-        }
-
-        return null;
-    }
-
-    public UserIdentity checkPassword(String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString) {
-        return checkPasswordForNative(remoteUser, remoteHost, remotePasswd, randomString);
-    }
-
-    public UserIdentity checkPlainPassword(String remoteUser, String remoteHost, String remotePasswd) {
-        return checkPassword(remoteUser, remoteHost,
-                remotePasswd.getBytes(StandardCharsets.UTF_8), null);
-    }
-
-    public void checkPasswordReuse(UserIdentity user, String plainPassword) throws DdlException {
-        if (Config.enable_password_reuse) {
-            return;
-        }
-        if (checkPlainPassword(user.getUser(), user.getHost(), plainPassword) != null) {
-            throw new DdlException("password should not be the same as the previous one!");
-        }
-    }
-
     public void createUser(CreateUserStmt stmt) throws DdlException {
         UserIdentity userIdentity = stmt.getUserIdentity();
         UserAuthenticationInfo info = stmt.getAuthenticationInfo();
@@ -282,13 +223,25 @@ public class AuthenticationMgr {
                         + " : user " + stmt.getUserIdentity() + " already exists");
                 return;
             }
-            userToAuthenticationInfo.put(userIdentity, info);
 
             UserProperty userProperty = null;
-            if (!userNameToProperty.containsKey(userIdentity.getUser())) {
+            String userName = userIdentity.getUser();
+            if (userNameToProperty.containsKey(userName)) {
+                userProperty = userNameToProperty.get(userName);
+            } else {
                 userProperty = new UserProperty();
-                userNameToProperty.put(userIdentity.getUser(), userProperty);
             }
+
+            if (stmt.getProperties() != null) {
+                // If we create the user with properties, we need to call userProperty.update to check and update userProperty.
+                // If there are failures, update method will throw an exception
+                userProperty.update(userIdentity, UserProperty.changeToPairList(stmt.getProperties()));
+            }
+
+            // If all checks are passed, we can add the user to the userToAuthenticationInfo and userNameToProperty
+            userToAuthenticationInfo.put(userIdentity, info);
+            userNameToProperty.put(userName, userProperty);
+
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
             AuthorizationMgr authorizationManager = globalStateMgr.getAuthorizationMgr();
             // init user privilege
@@ -307,8 +260,10 @@ public class AuthenticationMgr {
         }
     }
 
-    public void alterUser(UserIdentity userIdentity, UserAuthenticationInfo userAuthenticationInfo)
-            throws DdlException {
+    // This method is used to update user information, including authentication information and user properties
+    // Note: if properties is null, we should keep the original properties
+    public void alterUser(UserIdentity userIdentity, UserAuthenticationInfo userAuthenticationInfo,
+                          Map<String, String> properties) throws DdlException {
         writeLock();
         try {
             if (!userToAuthenticationInfo.containsKey(userIdentity)) {
@@ -319,7 +274,11 @@ public class AuthenticationMgr {
             }
 
             updateUserNoLock(userIdentity, userAuthenticationInfo, true);
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterUser(userIdentity, userAuthenticationInfo);
+            if (properties != null && properties.size() > 0) {
+                UserProperty userProperty = userNameToProperty.get(userIdentity.getUser());
+                userProperty.update(userIdentity, UserProperty.changeToPairList(properties));
+            }
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterUser(userIdentity, userAuthenticationInfo, properties);
         } catch (AuthenticationException e) {
             throw new DdlException("failed to alter user " + userIdentity, e);
         } finally {
@@ -327,18 +286,23 @@ public class AuthenticationMgr {
         }
     }
 
-    private void updateUserPropertyNoLock(String user, List<Pair<String, String>> properties) throws DdlException {
+    private void updateUserPropertyNoLock(String user, List<Pair<String, String>> properties, boolean isReplay)
+            throws DdlException {
         UserProperty userProperty = userNameToProperty.getOrDefault(user, null);
         if (userProperty == null) {
             throw new DdlException("user '" + user + "' doesn't exist");
         }
-        userProperty.update(properties);
+        if (isReplay) {
+            userProperty.updateForReplayJournal(properties);
+        } else {
+            userProperty.update(user, properties);
+        }
     }
 
     public void updateUserProperty(String user, List<Pair<String, String>> properties) throws DdlException {
         try {
             writeLock();
-            updateUserPropertyNoLock(user, properties);
+            updateUserPropertyNoLock(user, properties, false);
             UserPropertyInfo propertyInfo = new UserPropertyInfo(user, properties);
             GlobalStateMgr.getCurrentState().getEditLog().logUpdateUserPropertyV2(propertyInfo);
             LOG.info("finished to update user '{}' with properties: {}", user, properties);
@@ -350,16 +314,20 @@ public class AuthenticationMgr {
     public void replayUpdateUserProperty(UserPropertyInfo info) throws DdlException {
         try {
             writeLock();
-            updateUserPropertyNoLock(info.getUser(), info.getProperties());
+            updateUserPropertyNoLock(info.getUser(), info.getProperties(), true);
         } finally {
             writeUnlock();
         }
     }
 
-    public void replayAlterUser(UserIdentity userIdentity, UserAuthenticationInfo info) throws AuthenticationException {
+    public void replayAlterUser(UserIdentity userIdentity, UserAuthenticationInfo info,
+                                Map<String, String> properties) throws AuthenticationException {
         writeLock();
         try {
             updateUserNoLock(userIdentity, info, true);
+            // updateForReplayJournal will catch all exceptions when replaying user properties
+            UserProperty userProperty = userNameToProperty.get(userIdentity.getUser());
+            userProperty.updateForReplayJournal(UserProperty.changeToPairList(properties));
         } finally {
             writeUnlock();
         }
@@ -429,8 +397,7 @@ public class AuthenticationMgr {
         }
     }
 
-    private void updateUserNoLock(
-            UserIdentity userIdentity, UserAuthenticationInfo info, boolean shouldExists)
+    private void updateUserNoLock(UserIdentity userIdentity, UserAuthenticationInfo info, boolean shouldExists)
             throws AuthenticationException {
         if (userToAuthenticationInfo.containsKey(userIdentity)) {
             if (!shouldExists) {
@@ -496,63 +463,15 @@ public class AuthenticationMgr {
         return userToAuthenticationInfo;
     }
 
-    private Class<?> authClazz = null;
-    public static final String KRB5_AUTH_CLASS_NAME = "com.starrocks.plugins.auth.KerberosAuthentication";
-    public static final String KRB5_AUTH_JAR_PATH = StarRocksFE.STARROCKS_HOME_DIR + "/lib/starrocks-kerberos.jar";
-
-    public boolean isSupportKerberosAuth() {
-        if (!Config.enable_authentication_kerberos) {
-            LOG.error("enable_authentication_kerberos need to be set to true");
-            return false;
-        }
-
-        if (Config.authentication_kerberos_service_principal.isEmpty()) {
-            LOG.error("authentication_kerberos_service_principal must be set in config");
-            return false;
-        }
-
-        if (Config.authentication_kerberos_service_key_tab.isEmpty()) {
-            LOG.error("authentication_kerberos_service_key_tab must be set in config");
-            return false;
-        }
-
-        if (authClazz == null) {
-            try {
-                File jarFile = new File(KRB5_AUTH_JAR_PATH);
-                if (!jarFile.exists()) {
-                    LOG.error("Can not found jar file at {}", KRB5_AUTH_JAR_PATH);
-                    return false;
-                } else {
-                    ClassLoader loader = URLClassLoader.newInstance(
-                            new URL[] {
-                                    jarFile.toURL()
-                            },
-                            getClass().getClassLoader()
-                    );
-                    authClazz = Class.forName(AuthenticationMgr.KRB5_AUTH_CLASS_NAME, true, loader);
-                }
-            } catch (Exception e) {
-                LOG.error("Failed to load {}", AuthenticationMgr.KRB5_AUTH_CLASS_NAME, e);
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    public Class<?> getAuthClazz() {
-        return authClazz;
-    }
-
-    public void saveV2(DataOutputStream dos) throws IOException {
+    public void saveV2(ImageWriter imageWriter) throws IOException {
         try {
             // 1 json for myself,1 json for number of users, 2 json for each user(kv)
             final int cnt = 1 + 1 + userToAuthenticationInfo.size() * 2;
-            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.AUTHENTICATION_MGR, cnt);
+            SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.AUTHENTICATION_MGR, cnt);
             // 1 json for myself
             writer.writeJson(this);
             // 1 json for num user
-            writer.writeJson(userToAuthenticationInfo.size());
+            writer.writeInt(userToAuthenticationInfo.size());
             for (Map.Entry<UserIdentity, UserAuthenticationInfo> entry : userToAuthenticationInfo.entrySet()) {
                 // 2 json for each user(kv)
                 writer.writeJson(entry.getKey());
@@ -568,29 +487,178 @@ public class AuthenticationMgr {
     }
 
     public void loadV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        AuthenticationMgr ret = null;
-        try {
-            // 1 json for myself
-            ret = reader.readJson(AuthenticationMgr.class);
-            ret.userToAuthenticationInfo = new UserAuthInfoTreeMap();
-            // 1 json for num user
-            int numUser = reader.readJson(int.class);
-            LOG.info("loading {} users", numUser);
-            for (int i = 0; i != numUser; ++i) {
-                // 2 json for each user(kv)
-                UserIdentity userIdentity = reader.readJson(UserIdentity.class);
-                UserAuthenticationInfo userAuthenticationInfo = reader.readJson(UserAuthenticationInfo.class);
-                userAuthenticationInfo.analyze();
-                ret.userToAuthenticationInfo.put(userIdentity, userAuthenticationInfo);
-            }
-        } catch (AuthenticationException e) {
-            throw new RuntimeException(e);
-        }
+        // 1 json for myself
+        AuthenticationMgr ret = reader.readJson(AuthenticationMgr.class);
+        ret.userToAuthenticationInfo = new UserAuthInfoTreeMap();
+
+        LOG.info("loading users");
+        reader.readMap(UserIdentity.class, UserAuthenticationInfo.class,
+                (MapEntryConsumer<UserIdentity, UserAuthenticationInfo>) (userIdentity, userAuthenticationInfo) -> {
+                    try {
+                        userAuthenticationInfo.analyze();
+                    } catch (AuthenticationException e) {
+                        throw new IOException(e);
+                    }
+
+                    ret.userToAuthenticationInfo.put(userIdentity, userAuthenticationInfo);
+                });
+
         LOG.info("loaded {} users", ret.userToAuthenticationInfo.size());
 
         // mark data is loaded
         this.isLoaded = true;
         this.userNameToProperty = ret.userNameToProperty;
         this.userToAuthenticationInfo = ret.userToAuthenticationInfo;
+
+        this.nameToSecurityIntegrationMap = ret.nameToSecurityIntegrationMap;
+        this.nameToGroupProviderMap = ret.nameToGroupProviderMap;
+
+        for (Map.Entry<String, GroupProvider> entry : nameToGroupProviderMap.entrySet()) {
+            try {
+                entry.getValue().init();
+            } catch (Exception e) {
+                LOG.error("failed to init group provider", e);
+            }
+        }
+    }
+
+    public UserProperty getUserProperty(String userName) {
+        UserProperty userProperty = userNameToProperty.get(userName);
+        if (userProperty == null) {
+            throw new SemanticException("Unknown user: " + userName);
+        }
+        return userProperty;
+    }
+
+    public UserIdentity getUserIdentityByName(String userName) {
+        Map<UserIdentity, UserAuthenticationInfo> userToAuthInfo = getUserToAuthenticationInfo();
+        Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity = userToAuthInfo.entrySet().stream()
+                .filter(entry -> (entry.getKey().getUser().equals(userName)))
+                .findFirst().orElse(null);
+        if (matchedUserIdentity == null) {
+            throw new SemanticException("Unknown user: " + userName);
+        }
+
+        return matchedUserIdentity.getKey();
+    }
+
+    //=========================================== Security Integration ==================================================
+
+    public void createSecurityIntegration(String name,
+                                          Map<String, String> propertyMap,
+                                          boolean isReplay) throws DdlException {
+        SecurityIntegration securityIntegration;
+        securityIntegration = SecurityIntegrationFactory.createSecurityIntegration(name, propertyMap);
+        // atomic op
+        SecurityIntegration result = nameToSecurityIntegrationMap.putIfAbsent(name, securityIntegration);
+        if (result != null) {
+            throw new DdlException("security integration '" + name + "' already exists");
+        }
+        if (!isReplay) {
+            EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+            editLog.logCreateSecurityIntegration(name, propertyMap);
+            LOG.info("finished to create security integration '{}'", securityIntegration.toString());
+        }
+    }
+
+    public void alterSecurityIntegration(String name, Map<String, String> alterProps,
+                                         boolean isReplay) throws DdlException {
+        SecurityIntegration securityIntegration = nameToSecurityIntegrationMap.get(name);
+        if (securityIntegration == null) {
+            throw new DdlException("security integration '" + name + "' not found");
+        } else {
+            // COW
+            Map<String, String> newProps = Maps.newHashMap(securityIntegration.getPropertyMap());
+            // update props
+            newProps.putAll(alterProps);
+            SecurityIntegration newSecurityIntegration;
+            newSecurityIntegration = SecurityIntegrationFactory.createSecurityIntegration(name, newProps);
+            // update map
+            nameToSecurityIntegrationMap.put(name, newSecurityIntegration);
+            if (!isReplay) {
+                EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+                editLog.logAlterSecurityIntegration(name, alterProps);
+                LOG.info("finished to alter security integration '{}' with updated properties {}",
+                        name, alterProps);
+            }
+        }
+    }
+
+    public void dropSecurityIntegration(String name, boolean isReplay) throws DdlException {
+        if (!nameToSecurityIntegrationMap.containsKey(name)) {
+            throw new DdlException("security integration '" + name + "' not found");
+        }
+
+        SecurityIntegration result = nameToSecurityIntegrationMap.remove(name);
+        if (!isReplay && result != null) {
+            EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+            editLog.logDropSecurityIntegration(name);
+            LOG.info("finished to drop security integration '{}'", name);
+        }
+    }
+
+    public SecurityIntegration getSecurityIntegration(String name) {
+        return nameToSecurityIntegrationMap.get(name);
+    }
+
+    public Set<SecurityIntegration> getAllSecurityIntegrations() {
+        return new HashSet<>(nameToSecurityIntegrationMap.values());
+    }
+
+    public void replayCreateSecurityIntegration(String name, Map<String, String> propertyMap)
+            throws DdlException {
+        createSecurityIntegration(name, propertyMap, true);
+    }
+
+    public void replayAlterSecurityIntegration(String name, Map<String, String> alterProps)
+            throws DdlException {
+        alterSecurityIntegration(name, alterProps, true);
+    }
+
+    public void replayDropSecurityIntegration(String name)
+            throws DdlException {
+        dropSecurityIntegration(name, true);
+    }
+
+    // ---------------------------------------- Group Provider Statement --------------------------------------
+
+    public void createGroupProviderStatement(CreateGroupProviderStmt stmt, ConnectContext context) throws DdlException {
+        GroupProvider groupProvider = GroupProviderFactory.createGroupProvider(stmt.getName(), stmt.getPropertyMap());
+        groupProvider.init();
+        this.nameToGroupProviderMap.put(stmt.getName(), groupProvider);
+
+        GlobalStateMgr.getCurrentState().getEditLog().logEdit(OperationType.OP_CREATE_GROUP_PROVIDER,
+                new GroupProviderLog(stmt.getName(), stmt.getPropertyMap()));
+    }
+
+    public void replayCreateGroupProvider(String name, Map<String, String> properties) {
+        GroupProvider groupProvider = GroupProviderFactory.createGroupProvider(name, properties);
+        try {
+            groupProvider.init();
+            this.nameToGroupProviderMap.put(name, groupProvider);
+        } catch (DdlException e) {
+            LOG.error("Failed to create group provider '{}'", name, e);
+        }
+    }
+
+    public void dropGroupProviderStatement(DropGroupProviderStmt stmt, ConnectContext context) {
+        GroupProvider groupProvider = this.nameToGroupProviderMap.remove(stmt.getName());
+        groupProvider.destory();
+
+        GlobalStateMgr.getCurrentState().getEditLog().logEdit(OperationType.OP_DROP_GROUP_PROVIDER,
+                new GroupProviderLog(stmt.getName(), null));
+    }
+
+    public void replayDropGroupProvider(String name) {
+        GroupProvider groupProvider = this.nameToGroupProviderMap.remove(name);
+        groupProvider.destory();
+    }
+
+    public List<GroupProvider> getAllGroupProviders() {
+        return new ArrayList<>(nameToGroupProviderMap.values());
+    }
+
+    public GroupProvider getGroupProvider(String name) {
+        return nameToGroupProviderMap.get(name);
     }
 }

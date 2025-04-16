@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # yearweek
 
-## 功能
+
 
 返回给定日期对应的年份和周数。该函数和 MySQL yearweek() 函数原理相同。
 

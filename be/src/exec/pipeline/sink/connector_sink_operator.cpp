@@ -14,19 +14,27 @@
 
 #include "connector_sink_operator.h"
 
+#include <tuple>
 #include <utility>
 
+#include "connector/async_flush_stream_poller.h"
 #include "formats/utils.h"
 #include "glog/logging.h"
 
 namespace starrocks::pipeline {
 
-ConnectorSinkOperator::ConnectorSinkOperator(OperatorFactory* factory, const int32_t id, const int32_t plan_node_id,
-                                             const int32_t driver_sequence,
+ConnectorSinkOperator::ConnectorSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
+                                             int32_t driver_sequence,
                                              std::unique_ptr<connector::ConnectorChunkSink> connector_chunk_sink,
+                                             std::unique_ptr<connector::AsyncFlushStreamPoller> io_poller,
+                                             std::shared_ptr<connector::SinkMemoryManager> sink_mem_mgr,
+                                             connector::SinkOperatorMemoryManager* op_mem_mgr,
                                              FragmentContext* fragment_context)
-        : Operator(factory, id, "connector_sink_operator", plan_node_id, false, driver_sequence),
+        : Operator(factory, id, "connector_sink", plan_node_id, false, driver_sequence),
           _connector_chunk_sink(std::move(connector_chunk_sink)),
+          _io_poller(std::move(io_poller)),
+          _sink_mem_mgr(std::move(sink_mem_mgr)),
+          _op_mem_mgr(op_mem_mgr),
           _fragment_context(fragment_context) {}
 
 Status ConnectorSinkOperator::prepare(RuntimeState* state) {
@@ -39,10 +47,7 @@ Status ConnectorSinkOperator::prepare(RuntimeState* state) {
 
 void ConnectorSinkOperator::close(RuntimeState* state) {
     if (_is_cancelled) {
-        while (!_rollback_actions.empty()) {
-            _rollback_actions.front()();
-            _rollback_actions.pop();
-        }
+        _connector_chunk_sink->rollback();
     }
 #ifndef BE_TEST
     Operator::close(state);
@@ -54,19 +59,13 @@ bool ConnectorSinkOperator::need_input() const {
         return false;
     }
 
-    while (!_add_chunk_future_queue.empty()) {
-        // cannot accept chunk if any add_chunk_futures is not ready
-        if (!is_ready(_add_chunk_future_queue.front())) {
-            return false;
-        }
-        if (auto st = _add_chunk_future_queue.front().get(); !st.ok()) {
-            LOG(WARNING) << "cancel fragment: " << st;
-            _fragment_context->cancel(st);
-        }
-        _add_chunk_future_queue.pop();
+    auto [status, _] = _io_poller->poll();
+    if (!status.ok()) {
+        LOG(WARNING) << "cancel fragment: " << status;
+        _fragment_context->cancel(status);
     }
 
-    return true;
+    return _sink_mem_mgr->can_accept_more_input(_op_mem_mgr);
 }
 
 bool ConnectorSinkOperator::is_finished() const {
@@ -74,47 +73,18 @@ bool ConnectorSinkOperator::is_finished() const {
         return false;
     }
 
-    while (!_add_chunk_future_queue.empty()) {
-        // unfinished if any add_chunk_futures future is not ready
-        if (!is_ready(_add_chunk_future_queue.front())) {
-            return false;
-        }
-
-        if (auto st = _add_chunk_future_queue.front().get(); !st.ok()) {
-            LOG(WARNING) << "cancel fragment: " << st;
-            _fragment_context->cancel(st);
-        }
-        _add_chunk_future_queue.pop();
+    auto [status, finished] = _io_poller->poll();
+    if (!status.ok()) {
+        LOG(WARNING) << "cancel fragment: " << status;
+        _fragment_context->cancel(status);
     }
 
-    while (!_commit_file_future_queue.empty()) {
-        // unfinished if any commit_file_futures future is not ready
-        if (!is_ready(_commit_file_future_queue.front())) {
-            return false;
-        }
-
-        auto result = _commit_file_future_queue.front().get();
-        _commit_file_future_queue.pop();
-
-        if (auto st = result.io_status; st.ok()) {
-            // invoke callback if file commit succeed
-            _connector_chunk_sink->callback_on_success()(result);
-        } else {
-            LOG(WARNING) << "cancel fragment: " << st;
-            _fragment_context->cancel(st);
-        }
-        _rollback_actions.push(std::move(result.rollback_action));
-    }
-
-    DCHECK(_add_chunk_future_queue.empty());
-    DCHECK(_commit_file_future_queue.empty());
-    return true;
+    return finished;
 }
 
 Status ConnectorSinkOperator::set_finishing(RuntimeState* state) {
     _no_more_input = true;
-    auto future = _connector_chunk_sink->finish();
-    _enqueue_futures(std::move(future));
+    RETURN_IF_ERROR(_connector_chunk_sink->finish());
     return Status::OK();
 }
 
@@ -132,32 +102,31 @@ StatusOr<ChunkPtr> ConnectorSinkOperator::pull_chunk(RuntimeState* state) {
 }
 
 Status ConnectorSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
-    ASSIGN_OR_RETURN(auto future, _connector_chunk_sink->add(chunk));
-    _enqueue_futures(std::move(future));
+    RETURN_IF_ERROR(_connector_chunk_sink->add(chunk.get()));
     return Status::OK();
-}
-
-void ConnectorSinkOperator::_enqueue_futures(connector::ConnectorChunkSink::Futures futures) {
-    for (auto& f : futures.add_chunk_futures) {
-        _add_chunk_future_queue.push(std::move(f));
-    }
-    for (auto& f : futures.commit_file_futures) {
-        _commit_file_future_queue.push(std::move(f));
-    }
 }
 
 ConnectorSinkOperatorFactory::ConnectorSinkOperatorFactory(
         int32_t id, std::unique_ptr<connector::ConnectorChunkSinkProvider> data_sink_provider,
         std::shared_ptr<connector::ConnectorChunkSinkContext> sink_context, FragmentContext* fragment_context)
-        : OperatorFactory(id, "connector sink operator", Operator::s_pseudo_plan_node_id_for_final_sink),
+        : OperatorFactory(id, "connector_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
           _data_sink_provider(std::move(data_sink_provider)),
           _sink_context(std::move(sink_context)),
-          _fragment_context(fragment_context) {}
+          _fragment_context(fragment_context) {
+    MemTracker* query_pool_tracker = GlobalEnv::GetInstance()->query_pool_mem_tracker();
+    MemTracker* query_tracker = _fragment_context->runtime_state()->query_mem_tracker_ptr().get();
+    _sink_mem_mgr = std::make_shared<connector::SinkMemoryManager>(query_pool_tracker, query_tracker);
+}
 
 OperatorPtr ConnectorSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     auto chunk_sink = _data_sink_provider->create_chunk_sink(_sink_context, driver_sequence).value();
+    auto io_poller = std::make_unique<connector::AsyncFlushStreamPoller>();
+    chunk_sink->set_io_poller(io_poller.get());
+    auto op_mem_mgr = _sink_mem_mgr->create_child_manager();
+    chunk_sink->set_operator_mem_mgr(op_mem_mgr);
     return std::make_shared<ConnectorSinkOperator>(this, _id, Operator::s_pseudo_plan_node_id_for_final_sink,
-                                                   driver_sequence, std::move(chunk_sink), _fragment_context);
+                                                   driver_sequence, std::move(chunk_sink), std::move(io_poller),
+                                                   _sink_mem_mgr, op_mem_mgr, _fragment_context);
 }
 
 } // namespace starrocks::pipeline

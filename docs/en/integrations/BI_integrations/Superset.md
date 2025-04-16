@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Apache Superset
@@ -22,9 +22,9 @@ Make sure that you have finished the following installations:
 
 Create a database in Apache Superset:
 
-![Apache Superset - 1](../../assets/BI_superset_1.png)
+![Apache Superset - 1](../../_assets/BI_superset_1.png)
 
-![Apache Superset - 2](../../assets/BI_superset_2.png)
+![Apache Superset - 2](../../_assets/BI_superset_2.png)
 
  Take note of the following points:
 

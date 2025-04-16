@@ -22,21 +22,20 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaViewsScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
-        {"TABLE_CATALOG", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"TABLE_SCHEMA", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"VIEW_DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"CHECK_OPTION", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"IS_UPDATABLE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DEFINER", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"SECURITY_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"CHARACTER_SET_CLIENT", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"COLLATION_CONNECTION", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"TABLE_CATALOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"TABLE_SCHEMA", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"VIEW_DEFINITION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"CHECK_OPTION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"IS_UPDATABLE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DEFINER", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"SECURITY_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"CHARACTER_SET_CLIENT", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"COLLATION_CONNECTION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
 };
 
 SchemaViewsScanner::SchemaViewsScanner()
-        : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)),
-          _timeout_ms(config::thrift_rpc_timeout_ms) {}
+        : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
 
 SchemaViewsScanner::~SchemaViewsScanner() = default;
 

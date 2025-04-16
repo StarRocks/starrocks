@@ -16,8 +16,9 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.PrivilegeException;
+import com.starrocks.authentication.UserProperty;
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ExecuteAsExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -91,6 +92,17 @@ public class ExecuteAsStmtTest {
                 auth.doesUserExist((UserIdentity) any);
                 minTimes = 0;
                 result = true;
+
+                auth.getUserProperty(anyString);
+                minTimes = 0;
+                result = new UserProperty();
+            }
+        };
+
+        new Expectations(ctx) {
+            {
+                ctx.updateByUserProperty((UserProperty) any);
+                minTimes = 0;
             }
         };
 

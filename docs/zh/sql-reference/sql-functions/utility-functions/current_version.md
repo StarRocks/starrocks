@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # current_version
 
-## 功能
+
 
 获取当前 StarRocks 的版本，当前为了兼容不同的客户端，提供两种语法。
 

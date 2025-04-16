@@ -18,7 +18,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.server.WarehouseManager;
 import mockit.Mock;
@@ -39,7 +39,7 @@ public class KafkaProgressTest {
             public Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
                                                        ImmutableMap<String, String> properties,
                                                        List<Integer> partitions,
-                                                       long warehouseId) throws UserException {
+                                                       long warehouseId) throws StarRocksException {
                 Map<Integer, Long> result = Maps.newHashMap();
                 result.put(0, 100L);
                 return result;
@@ -49,7 +49,7 @@ public class KafkaProgressTest {
             public Map<Integer, Long> getBeginningOffsets(String brokerList, String topic,
                                                           ImmutableMap<String, String> properties,
                                                           List<Integer> partitions,
-                                                          long warehouseId) throws UserException {
+                                                          long warehouseId) throws StarRocksException {
                 Map<Integer, Long> result = Maps.newHashMap();
                 result.put(1, 1L);
                 return result;

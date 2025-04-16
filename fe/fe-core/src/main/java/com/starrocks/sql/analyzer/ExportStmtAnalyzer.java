@@ -68,7 +68,7 @@ public class ExportStmtAnalyzer {
             GlobalStateMgr mgr = context.getGlobalStateMgr();
             TableName tableName = statement.getTableRef().getName();
             // make sure catalog, db, table
-            MetaUtils.normalizationTableName(context, tableName);
+            tableName.normalization(context);
             Table table = MetaUtils.getSessionAwareTable(context, null, tableName);
             if (table.getType() == Table.TableType.OLAP &&
                     (((OlapTable) table).getState() == OlapTable.OlapTableState.RESTORE ||

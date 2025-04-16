@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Releases of Kubernetes Operator for StarRocks
@@ -201,7 +201,7 @@ Fixed the following issue:
     3. Execute the `helm upgrade` command to apply the adjusted **values.yaml** file to the StarRocks helm chart kube-starrocks.
 
        ```Bash
-       helm upgrade <release-name> starrocks-community/kube-starrocks -f values-v1.8.0.yaml
+       helm upgrade <release-name> starrocks/kube-starrocks -f values-v1.8.0.yaml
        ```
 
   - Two subcharts, [operator](https://github.com/StarRocks/starrocks-kubernetes-operator/tree/main/helm-charts/charts/kube-starrocks/charts/operator) and [starrocks](https://github.com/StarRocks/starrocks-kubernetes-operator/tree/main/helm-charts/charts/kube-starrocks/charts/starrocks), are added into the kube-starrocks helm chart. You can choose to install StarRocks operator or StarRocks cluster respectively by specifying the corresponding subchart. This way, you can manage StarRocks clusters more flexibly, such as deploying one StarRocks operator and multiple StarRocks clusters.

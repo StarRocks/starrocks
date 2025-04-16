@@ -16,7 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.LabelName;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
@@ -57,8 +57,8 @@ public class AlterRoutineLoadAnalyzer {
             statement.setRoutineLoadDesc(CreateRoutineLoadStmt.buildLoadDesc(statement.getLoadPropertyList()));
             statement.checkJobProperties();
             statement.checkDataSourceProperties();
-        } catch (UserException e) {
-            LOG.error(e);
+        } catch (StarRocksException e) {
+            LOG.error(e.getMessage(), e);
             throw new SemanticException(e.getMessage());
         }
     }

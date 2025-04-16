@@ -265,7 +265,7 @@ public enum PrimitiveType {
             case PERCENTILE:
                 return PERCENTILE;
             case DECIMAL32:
-                return DECIMALV2;
+                return DECIMAL32;
             case DECIMAL64:
                 return DECIMAL64;
             case DECIMAL128:
@@ -381,6 +381,10 @@ public enum PrimitiveType {
 
     public int getSlotSize() {
         return slotSize;
+    }
+
+    public String getDescription() {
+        return description;
     }
 
     public int getTypeSize() {

@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 通用监控指标
@@ -512,6 +512,24 @@ displayed_sidebar: "Chinese"
 - 单位：Byte
 - 类型：平均值
 - 描述：已用磁盘容量。
+
+### encryption_keys_created
+
+- 单位：个
+- 类型：累计值
+- 描述：加密文件时创建密钥的次数
+
+### encryption_keys_unwrapped
+
+- 单位：个
+- 类型：累计值
+- 描述：解密文件时解码密钥的次数
+
+### encryption_keys_in_cache
+
+- 单位：个
+- 类型：瞬时值
+- 描述：当前密钥缓存中密钥的个数
 
 ### starrocks_fe_query_resource_group
 
@@ -1627,6 +1645,7 @@ displayed_sidebar: "Chinese"
   starrocks_fe_routine_load_jobs{state="PAUSED"} 0
   starrocks_fe_routine_load_jobs{state="STOPPED"} 0
   starrocks_fe_routine_load_jobs{state="CANCELLED"} 1
+  starrocks_fe_routine_load_jobs{state="UNSTABLE"} 0
   ```
 
 ### starrocks_fe_routine_load_paused

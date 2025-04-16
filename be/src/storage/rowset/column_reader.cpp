@@ -36,8 +36,10 @@
 
 #include <fmt/format.h>
 
+#include <algorithm>
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "column/column.h"
 #include "column/column_access_path.h"
@@ -45,18 +47,22 @@
 #include "column/datum_convert.h"
 #include "common/compiler_util.h"
 #include "common/logging.h"
+#include "common/status.h"
+#include "common/statusor.h"
+#include "gen_cpp/segment.pb.h"
 #include "runtime/types.h"
 #include "storage/column_predicate.h"
-#include "storage/inverted/index_descriptor.hpp"
-#include "storage/inverted/inverted_plugin_factory.h"
+#include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/inverted_plugin_factory.h"
 #include "storage/rowset/array_column_iterator.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitmap_index_reader.h"
-#include "storage/rowset/bloom_filter.h"
 #include "storage/rowset/bloom_filter_index_reader.h"
+#include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/json_column_iterator.h"
 #include "storage/rowset/map_column_iterator.h"
+#include "storage/rowset/options.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_io.h"
 #include "storage/rowset/page_pointer.h"
@@ -66,14 +72,16 @@
 #include "storage/rowset/zone_map_index.h"
 #include "storage/types.h"
 #include "types/logical_type.h"
+#include "util/bloom_filter.h"
 #include "util/compression/block_compression.h"
 #include "util/rle_encoding.h"
 
 namespace starrocks {
 
-StatusOr<std::unique_ptr<ColumnReader>> ColumnReader::create(ColumnMetaPB* meta, Segment* segment) {
+StatusOr<std::unique_ptr<ColumnReader>> ColumnReader::create(ColumnMetaPB* meta, Segment* segment,
+                                                             const TabletColumn* column) {
     auto r = std::make_unique<ColumnReader>(private_type(0), segment);
-    RETURN_IF_ERROR(r->_init(meta));
+    RETURN_IF_ERROR(r->_init(meta, column));
     return std::move(r);
 }
 
@@ -110,11 +118,15 @@ ColumnReader::~ColumnReader() {
     MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
 }
 
-Status ColumnReader::_init(ColumnMetaPB* meta) {
+Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
     _column_type = static_cast<LogicalType>(meta->type());
     _dict_page_pointer = PagePointer(meta->dict_page());
     _total_mem_footprint = meta->total_mem_footprint();
-    _name = meta->has_name() ? meta->name() : "None";
+    if (column == nullptr) {
+        _name = meta->has_name() ? meta->name() : "None";
+    } else {
+        _name = meta->has_name() ? meta->name() : column->name();
+    }
     _column_unique_id = meta->unique_id();
 
     if (meta->is_nullable()) _flags |= kIsNullableMask;
@@ -125,6 +137,16 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
         // TODO(mofei) store format_version in ColumnReader
         const JsonMetaPB& json_meta = meta->json_meta();
         CHECK_EQ(kJsonMetaDefaultFormatVersion, json_meta.format_version()) << "Only format_version=1 is supported";
+        _is_flat_json = json_meta.is_flat();
+        _has_remain = json_meta.has_remain();
+
+        if (json_meta.has_remain_filter()) {
+            DCHECK(_has_remain);
+            DCHECK(!json_meta.remain_filter().empty());
+            RETURN_IF_ERROR(BloomFilter::create(BLOCK_BLOOM_FILTER, &_remain_filter));
+            RETURN_IF_ERROR(_remain_filter->init(json_meta.remain_filter().data(), json_meta.remain_filter().size(),
+                                                 HASH_MURMUR3_X64_64));
+        }
     }
     if (is_scalar_field_type(delegate_type(_column_type))) {
         RETURN_IF_ERROR(EncodingInfo::get(delegate_type(_column_type), meta->encoding(), &_encoding_info));
@@ -189,7 +211,8 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
         if (_column_type == LogicalType::TYPE_JSON) {
             _sub_readers = std::make_unique<SubReaderList>();
             for (int i = 0; i < meta->children_columns_size(); ++i) {
-                auto res = ColumnReader::create(meta->mutable_children_columns(i), _segment);
+                auto sub_column = (column != nullptr) ? column->subcolumn_ptr(i) : nullptr;
+                auto res = ColumnReader::create(meta->mutable_children_columns(i), _segment, sub_column);
                 RETURN_IF_ERROR(res);
                 _sub_readers->emplace_back(std::move(res).value());
             }
@@ -204,18 +227,19 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
             }
             _sub_readers->reserve(3);
 
+            auto sub_column = (column != nullptr) ? column->subcolumn_ptr(0) : nullptr;
             // elements
-            auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment);
+            auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment, sub_column);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
 
             // null flags
-            res = ColumnReader::create(meta->mutable_children_columns(1), _segment);
+            res = ColumnReader::create(meta->mutable_children_columns(1), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
 
             // offsets
-            res = ColumnReader::create(meta->mutable_children_columns(2), _segment);
+            res = ColumnReader::create(meta->mutable_children_columns(2), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
         } else {
@@ -224,13 +248,14 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
             }
             _sub_readers->reserve(2);
 
+            auto sub_column = (column != nullptr) ? column->subcolumn_ptr(0) : nullptr;
             // elements
-            auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment);
+            auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment, sub_column);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
 
             // offsets
-            res = ColumnReader::create(meta->mutable_children_columns(1), _segment);
+            res = ColumnReader::create(meta->mutable_children_columns(1), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
         }
@@ -244,22 +269,22 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
             _sub_readers->reserve(4);
 
             // keys
-            auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment);
+            auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
 
             // values
-            res = ColumnReader::create(meta->mutable_children_columns(1), _segment);
+            res = ColumnReader::create(meta->mutable_children_columns(1), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
 
             // null flags
-            res = ColumnReader::create(meta->mutable_children_columns(2), _segment);
+            res = ColumnReader::create(meta->mutable_children_columns(2), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
 
             // offsets
-            res = ColumnReader::create(meta->mutable_children_columns(3), _segment);
+            res = ColumnReader::create(meta->mutable_children_columns(3), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
         } else {
@@ -269,17 +294,17 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
             _sub_readers->reserve(3);
 
             // keys
-            auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment);
+            auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
 
             // values
-            res = ColumnReader::create(meta->mutable_children_columns(1), _segment);
+            res = ColumnReader::create(meta->mutable_children_columns(1), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
 
             // offsets
-            res = ColumnReader::create(meta->mutable_children_columns(2), _segment);
+            res = ColumnReader::create(meta->mutable_children_columns(2), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
         }
@@ -287,9 +312,24 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
     } else if (_column_type == LogicalType::TYPE_STRUCT) {
         _sub_readers = std::make_unique<SubReaderList>();
         for (int i = 0; i < meta->children_columns_size(); ++i) {
-            auto res = ColumnReader::create(meta->mutable_children_columns(i), _segment);
+            auto sub_column = (column != nullptr) ? column->subcolumn_ptr(i) : nullptr;
+            if (sub_column != nullptr) {
+                // the type of unique_id in meta is uint32_t and the default value is -1(4294967295), but the type of
+                // unique id in tablet column is int32_t. so cast to int32 to compare
+                int32_t uid_in_meta = static_cast<int32_t>(meta->mutable_children_columns(i)->unique_id());
+                int32_t uid_in_col = sub_column->unique_id();
+                if (uid_in_meta != uid_in_col) {
+                    std::string msg =
+                            strings::Substitute("sub_column($0) unique id in meta($1) is not equal to schema($2)",
+                                                sub_column->name(), uid_in_meta, uid_in_col);
+                    LOG(ERROR) << msg;
+                    return Status::InternalError(msg);
+                }
+            }
+            auto res = ColumnReader::create(meta->mutable_children_columns(i), _segment, sub_column);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
+            _update_sub_reader_pos(sub_column, i);
         }
         return Status::OK();
     } else {
@@ -520,6 +560,11 @@ Status ColumnReader::seek_by_page_index(int page_index, OrdinalPageIndexIterator
     return Status::OK();
 }
 
+std::pair<ordinal_t, ordinal_t> ColumnReader::get_page_range(size_t page_index) {
+    DCHECK(_ordinal_index);
+    return std::make_pair(_ordinal_index->get_first_ordinal(page_index), _ordinal_index->get_last_ordinal(page_index));
+}
+
 Status ColumnReader::zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                      const ColumnPredicate* del_predicate,
                                      std::unordered_set<uint32_t>* del_partial_filtered_pages,
@@ -538,6 +583,24 @@ Status ColumnReader::zone_map_filter(const std::vector<const ColumnPredicate*>& 
 
     RETURN_IF_ERROR(_calculate_row_ranges(page_indexes, row_ranges));
     return Status::OK();
+}
+
+StatusOr<std::vector<ZoneMapDetail>> ColumnReader::get_raw_zone_map(const IndexReadOptions& opts) {
+    RETURN_IF_ERROR(_load_zonemap_index(opts));
+    DCHECK(_zonemap_index);
+    DCHECK(_zonemap_index->loaded());
+
+    LogicalType type = _encoding_info->type();
+    int32_t num_pages = _zonemap_index->num_pages();
+    std::vector<ZoneMapDetail> result(num_pages);
+
+    for (auto& zm : _zonemap_index->page_zone_maps()) {
+        ZoneMapDetail detail;
+        RETURN_IF_ERROR(_parse_zone_map(type, zm, &detail));
+        result.emplace_back(detail);
+    }
+
+    return result;
 }
 
 template <CompoundNodeType PredRelation>
@@ -597,54 +660,62 @@ bool ColumnReader::segment_zone_map_filter(const std::vector<const ColumnPredica
     return std::all_of(predicates.begin(), predicates.end(), filter);
 }
 
-StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAccessPath* path) {
+void ColumnReader::_update_sub_reader_pos(const TabletColumn* column, int pos) {
+    if (column == nullptr) {
+        return;
+    }
+    auto name = column->name();
+    int id = column->unique_id();
+    _sub_reader_pos[{std::string(name), id}] = pos;
+}
+
+StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_create_merge_struct_iter(ColumnAccessPath* path,
+                                                                                  const TabletColumn* column) {
+    DCHECK(_column_type == LogicalType::TYPE_STRUCT);
+    DCHECK(column != nullptr);
+    auto num_fields = column->subcolumn_count();
+
+    std::unique_ptr<ColumnIterator> null_iter;
+    if (is_nullable()) {
+        ASSIGN_OR_RETURN(null_iter, (*_sub_readers)[_sub_readers->size() - 1]->new_iterator());
+    }
+
+    std::vector<ColumnAccessPath*> child_paths(num_fields, nullptr);
+    if (path != nullptr && !path->children().empty()) {
+        for (const auto& child : path->children()) {
+            child_paths[child->index()] = child.get();
+        }
+    }
+
+    std::vector<std::unique_ptr<ColumnIterator>> field_iters;
+    for (int i = 0; i < num_fields; ++i) {
+        auto sub_column = column->subcolumn_ptr(i);
+        auto iter = _sub_reader_pos.find({std::string(sub_column->name()), sub_column->unique_id()});
+        if (iter != _sub_reader_pos.end()) {
+            ASSIGN_OR_RETURN(auto iter, (*_sub_readers)[iter->second]->new_iterator(child_paths[i], sub_column));
+            field_iters.emplace_back(std::move(iter));
+        } else {
+            if (!sub_column->has_default_value() && !sub_column->is_nullable()) {
+                return Status::InternalError(
+                        fmt::format("invalid nonexistent column({}) without default value.", sub_column->name()));
+            } else {
+                const TypeInfoPtr& type_info = get_type_info(*sub_column);
+                auto default_value_iter = std::make_unique<DefaultValueColumnIterator>(
+                        sub_column->has_default_value(), sub_column->default_value(), sub_column->is_nullable(),
+                        type_info, sub_column->length(), num_rows());
+                ColumnIteratorOptions iter_opts;
+                RETURN_IF_ERROR(default_value_iter->init(iter_opts));
+                field_iters.emplace_back(std::move(default_value_iter));
+            }
+        }
+    }
+    return create_struct_iter(this, std::move(null_iter), std::move(field_iters), path);
+}
+
+StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAccessPath* path,
+                                                                     const TabletColumn* column) {
     if (_column_type == LogicalType::TYPE_JSON) {
-        auto json_iter = std::make_unique<ScalarColumnIterator>(this);
-        if (path == nullptr || path->children().empty()) {
-            return json_iter;
-        }
-
-        std::vector<std::unique_ptr<ColumnIterator>> flat_iters;
-        // short name path, e.g. 'a'
-        std::vector<std::string> flat_paths;
-        std::vector<LogicalType> target_types;
-        std::vector<LogicalType> source_types;
-        {
-            for (auto& p : path->children()) {
-                if (UNLIKELY(!p->children().empty())) {
-                    // @todo: support later
-                    return Status::InvalidArgument("doesn't support multi-layer json access path: " +
-                                                   p->absolute_path());
-                }
-                flat_paths.emplace_back(p->path());
-                target_types.emplace_back(p->value_type().type);
-            }
-        }
-
-        int start = is_nullable() ? 1 : 0;
-        for (auto& p : flat_paths) {
-            for (size_t i = start; i < _sub_readers->size(); i++) {
-                const auto& rd = (*_sub_readers)[i];
-                if (rd->name() == p) {
-                    ASSIGN_OR_RETURN(auto iter, rd->new_iterator());
-                    flat_iters.emplace_back(std::move(iter));
-                    source_types.emplace_back(rd->column_type());
-                    break;
-                }
-            }
-        }
-
-        if (flat_iters.size() != flat_paths.size()) {
-            // we must dynamic flat json, because we don't know other segment wasn't the paths
-            return create_json_dynamic_flat_iterator(std::move(json_iter), flat_paths, target_types, path);
-        }
-
-        std::unique_ptr<ColumnIterator> null_iterator;
-        if (is_nullable()) {
-            ASSIGN_OR_RETURN(null_iterator, (*_sub_readers)[0]->new_iterator());
-        }
-        return create_json_flat_iterator(this, std::move(null_iterator), std::move(flat_iters), flat_paths,
-                                         target_types, source_types, path);
+        return _new_json_iterator(path, column);
     } else if (is_scalar_field_type(delegate_type(_column_type))) {
         return std::make_unique<ScalarColumnIterator>(this);
     } else if (_column_type == LogicalType::TYPE_ARRAY) {
@@ -663,7 +734,8 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
             }
         }
 
-        ASSIGN_OR_RETURN(auto element_iterator, (*_sub_readers)[col++]->new_iterator(value_path));
+        auto sub_column = (column != nullptr) ? column->subcolumn_ptr(0) : nullptr;
+        ASSIGN_OR_RETURN(auto element_iterator, (*_sub_readers)[col++]->new_iterator(value_path, sub_column));
 
         std::unique_ptr<ColumnIterator> null_iterator;
         if (is_nullable()) {
@@ -691,7 +763,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
 
         // key must scalar type now
         ASSIGN_OR_RETURN(auto keys, (*_sub_readers)[col++]->new_iterator());
-        ASSIGN_OR_RETURN(auto values, (*_sub_readers)[col++]->new_iterator(value_path));
+        ASSIGN_OR_RETURN(auto values, (*_sub_readers)[col++]->new_iterator(value_path, nullptr));
         std::unique_ptr<ColumnIterator> nulls;
         if (is_nullable()) {
             ASSIGN_OR_RETURN(nulls, (*_sub_readers)[col++]->new_iterator());
@@ -700,6 +772,9 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
         return std::make_unique<MapColumnIterator>(this, std::move(nulls), std::move(offsets), std::move(keys),
                                                    std::move(values), path);
     } else if (_column_type == LogicalType::TYPE_STRUCT) {
+        if (column != nullptr) {
+            return _create_merge_struct_iter(path, column);
+        }
         auto num_fields = _sub_readers->size();
 
         std::unique_ptr<ColumnIterator> null_iter;
@@ -724,6 +799,150 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
     } else {
         return Status::NotSupported("unsupported type to create iterator: " + std::to_string(_column_type));
     }
+}
+
+StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_new_json_iterator(ColumnAccessPath* path,
+                                                                           const TabletColumn* column) {
+    DCHECK(_column_type == LogicalType::TYPE_JSON);
+    auto json_iter = std::make_unique<ScalarColumnIterator>(this);
+    // access sub columns
+    std::vector<ColumnAccessPath*> target_leafs;
+    std::vector<std::string> target_paths;
+    std::vector<LogicalType> target_types;
+    if (path != nullptr && !path->children().empty()) {
+        auto field_name = path->absolute_path();
+        path->get_all_leafs(&target_leafs);
+        for (auto& p : target_leafs) {
+            // use absolute path, not relative path
+            // root path is field name, we remove it
+            target_paths.emplace_back(p->absolute_path().substr(field_name.size() + 1));
+            target_types.emplace_back(p->value_type().type);
+        }
+    }
+
+    if (!_is_flat_json) {
+        if (path == nullptr || path->children().empty()) {
+            return json_iter;
+        }
+        // dynamic flattern
+        // we must dynamic flat json, because we don't know other segment wasn't the paths
+        return create_json_dynamic_flat_iterator(std::move(json_iter), target_paths, target_types,
+                                                 path->is_from_compaction());
+    }
+
+    std::vector<std::string> source_paths;
+    std::vector<LogicalType> source_types;
+    std::unique_ptr<ColumnIterator> null_iter;
+    std::vector<std::unique_ptr<ColumnIterator>> all_iters;
+    size_t start = is_nullable() ? 1 : 0;
+    size_t end = _has_remain ? _sub_readers->size() - 1 : _sub_readers->size();
+    if (is_nullable()) {
+        ASSIGN_OR_RETURN(null_iter, (*_sub_readers)[0]->new_iterator());
+    }
+
+    if (path == nullptr || path->children().empty() || path->is_from_compaction()) {
+        DCHECK(_is_flat_json);
+        for (size_t i = start; i < end; i++) {
+            const auto& rd = (*_sub_readers)[i];
+            std::string name = rd->name();
+            ASSIGN_OR_RETURN(auto iter, rd->new_iterator());
+            source_paths.emplace_back(name);
+            source_types.emplace_back(rd->column_type());
+            all_iters.emplace_back(std::move(iter));
+        }
+
+        if (_has_remain) {
+            const auto& rd = (*_sub_readers)[end];
+            ASSIGN_OR_RETURN(auto iter, rd->new_iterator());
+            all_iters.emplace_back(std::move(iter));
+        }
+
+        if (path == nullptr || path->children().empty()) {
+            // access whole json
+            return create_json_merge_iterator(this, std::move(null_iter), std::move(all_iters), source_paths,
+                                              source_types);
+        } else {
+            DCHECK(path->is_from_compaction());
+            return create_json_flat_iterator(this, std::move(null_iter), std::move(all_iters), target_paths,
+                                             target_types, source_paths, source_types, true);
+        }
+    }
+
+    bool need_remain = false;
+    std::set<std::string> check_paths;
+    for (size_t k = 0; k < target_paths.size(); k++) {
+        auto& target = target_paths[k];
+        size_t i = start;
+        for (; i < end; i++) {
+            const auto& rd = (*_sub_readers)[i];
+            std::string name = rd->name();
+            if (check_paths.contains(name)) {
+                continue;
+            }
+            // target: b.b2.b3
+            // source: b.b2
+            if (target == name || target.starts_with(name + ".")) {
+                ASSIGN_OR_RETURN(auto iter, rd->new_iterator());
+                source_paths.emplace_back(name);
+                source_types.emplace_back(rd->column_type());
+                all_iters.emplace_back(std::move(iter));
+                check_paths.emplace(name);
+                break;
+            } else if (name.starts_with(target + ".")) {
+                // target: b.b2
+                // source: b.b2.b3
+                if (target_types[k] != TYPE_JSON && !is_string_type(target_types[k])) {
+                    // don't need column and remain
+                    break;
+                }
+
+                if (_remain_filter != nullptr &&
+                    !_remain_filter->test_bytes(target_leafs[i]->path().data(), target_leafs[i]->path().size())) {
+                    need_remain = false;
+                } else {
+                    need_remain = true;
+                }
+
+                ASSIGN_OR_RETURN(auto iter, rd->new_iterator());
+                source_paths.emplace_back(name);
+                source_types.emplace_back(rd->column_type());
+                all_iters.emplace_back(std::move(iter));
+                check_paths.emplace(name);
+            }
+        }
+        need_remain |= (i == end);
+    }
+
+    if (_has_remain && need_remain) {
+        const auto& rd = (*_sub_readers)[end];
+        ASSIGN_OR_RETURN(auto iter, rd->new_iterator());
+        all_iters.emplace_back(std::move(iter));
+    }
+
+    if (all_iters.empty()) {
+        DCHECK(!_sub_readers->empty());
+        DCHECK(source_paths.empty());
+        // has none remain and can't hit any column, we read any one
+        // why not return null directly, segemnt iterater need ordinal index...
+        // it's canbe optimized
+        size_t index = start;
+        LogicalType type = (*_sub_readers)[start]->column_type();
+        for (size_t i = start + 1; i < end; i++) {
+            const auto& rd = (*_sub_readers)[i];
+            if (type < rd->column_type()) {
+                index = i;
+                type = rd->column_type();
+            }
+        }
+        const auto& rd = (*_sub_readers)[index];
+        ASSIGN_OR_RETURN(auto iter, rd->new_iterator());
+        all_iters.emplace_back(std::move(iter));
+        source_paths.emplace_back(rd->name());
+        source_types.emplace_back(rd->column_type());
+    }
+
+    return create_json_flat_iterator(this, std::move(null_iter), std::move(all_iters), target_paths, target_types,
+                                     source_paths, source_types);
 }
 
 size_t ColumnReader::mem_usage() const {

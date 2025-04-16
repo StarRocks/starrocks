@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 toc_max_heading_level: 4
 ---
 
@@ -11,7 +11,7 @@ This topic describes some system limits and configurations that you need to cons
 
 StarRocks provides parameters for you to limit the memory usage for each load job, thereby reducing memory consumption, especially in high concurrency scenarios. However, do not specify an excessively low memory usage limit. If the memory usage limit is excessively low, data may be frequently flushed from memory to disk because the memory usage for load jobs reaches the specified limit. We recommend that you specify a proper memory usage limit based on your business scenario.
 
-The parameters that are used to limit memory usage vary for each loading method. For more information, see [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md), [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md), [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md), [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md), and [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md). Note that a load job usually runs on multiple BEs or CNs. Therefore, the parameters limit the memory usage of each load job on each involved BE or CN rather than the total memory usage of the load job on all involved BEs or CNs.
+The parameters that are used to limit memory usage vary for each loading method. For more information, see [Stream Load](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md), [Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md), [Routine Load](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md), [Spark Load](../../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md), and [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md). Note that a load job usually runs on multiple BEs or CNs. Therefore, the parameters limit the memory usage of each load job on each involved BE or CN rather than the total memory usage of the load job on all involved BEs or CNs.
 
 StarRocks also provides parameters for you to limit the total memory usage of all load jobs that run on each individual BE or CN. For more information, see the "[System configurations](#system-configurations)" section below.
 
@@ -71,7 +71,7 @@ You can configure the following parameters in the configuration file **be.conf**
 
 ### System variable configurations
 
-You can configure the following [system variable](../../reference/System_variable.md):
+You can configure the following [system variable](../../sql-reference/System_variable.md):
 
 - `query_timeout`
 

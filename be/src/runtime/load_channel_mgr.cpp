@@ -34,19 +34,60 @@
 
 #include "runtime/load_channel_mgr.h"
 
+#include <brpc/controller.h>
+#include <butil/endpoint.h>
+
 #include <memory>
 
 #include "common/closure_guard.h"
+#include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_channel.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/tablets_channel.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/utils.h"
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
 #include "util/thread.h"
 
 namespace starrocks {
+
+class ChannelOpenTask final : public Runnable {
+public:
+    ChannelOpenTask(LoadChannelMgr* load_channel_mgr, LoadChannelOpenContext open_context)
+            : _load_channel_mgr(load_channel_mgr), _open_context(std::move(open_context)) {}
+
+    ~ChannelOpenTask() override {
+        if (!_is_done) {
+            cancel(Status::ServiceUnavailable("Thread pool was shut down"));
+        }
+    }
+
+    void run() override {
+        if (_try_mark_done()) {
+            _load_channel_mgr->_open(_open_context);
+        }
+    }
+
+    void cancel(const Status& status) {
+        if (_try_mark_done()) {
+            ClosureGuard closure_guard(_open_context.done);
+            status.to_protobuf(_open_context.response->mutable_status());
+        }
+    }
+
+private:
+    bool _try_mark_done() {
+        bool old = false;
+        return _is_done.compare_exchange_strong(old, true);
+    }
+
+    LoadChannelMgr* _load_channel_mgr;
+    LoadChannelOpenContext _open_context;
+    std::atomic<bool> _is_done{false};
+};
 
 // Calculate the memory limit for a single load job.
 static int64_t calc_job_max_load_memory(int64_t mem_limit_in_req, int64_t total_mem_limit) {
@@ -82,6 +123,7 @@ LoadChannelMgr::~LoadChannelMgr() {
 }
 
 void LoadChannelMgr::close() {
+    _async_rpc_pool->shutdown();
     std::lock_guard l(_lock);
     for (auto iter = _load_channels.begin(); iter != _load_channels.end();) {
         iter->second->cancel();
@@ -93,12 +135,52 @@ void LoadChannelMgr::close() {
 Status LoadChannelMgr::init(MemTracker* mem_tracker) {
     _mem_tracker = mem_tracker;
     RETURN_IF_ERROR(_start_bg_worker());
+    int num_threads = config::load_channel_rpc_thread_pool_num;
+    if (num_threads <= 0) {
+        num_threads = CpuInfo::num_cores();
+    }
+    RETURN_IF_ERROR(ThreadPoolBuilder("load_channel")
+                            .set_min_threads(std::min(5, num_threads))
+                            .set_max_threads(num_threads)
+                            .set_max_queue_size(config::load_channel_rpc_thread_pool_queue_size)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(60000))
+                            .build(&_async_rpc_pool));
+    REGISTER_THREAD_POOL_METRICS(load_channel, _async_rpc_pool.get());
     return Status::OK();
 }
 
 void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& request,
                           PTabletWriterOpenResult* response, google::protobuf::Closure* done) {
-    ClosureGuard done_guard(done);
+    LoadChannelOpenContext open_context;
+    open_context.cntl = cntl;
+    open_context.request = &request;
+    open_context.response = response;
+    open_context.done = done;
+    open_context.receive_rpc_time_ns = MonotonicNanos();
+    if (!config::enable_load_channel_rpc_async) {
+        _open(open_context);
+        return;
+    }
+    auto task = std::make_shared<ChannelOpenTask>(this, std::move(open_context));
+    Status status = _async_rpc_pool->submit(task);
+    if (!status.ok()) {
+        task->cancel(status);
+    }
+}
+
+void LoadChannelMgr::_open(LoadChannelOpenContext open_context) {
+    ClosureGuard done_guard(open_context.done);
+    const PTabletWriterOpenRequest& request = *open_context.request;
+    PTabletWriterOpenResult* response = open_context.response;
+    if (!request.encryption_meta().empty()) {
+        Status st = KeyCache::instance().refresh_keys(request.encryption_meta());
+        if (!st.ok()) {
+            response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
+            response->mutable_status()->add_error_msgs(fmt::format(
+                    "refresh keys using encryption_meta in PTabletWriterOpenRequest failed {}", st.detailed_message()));
+            return;
+        }
+    }
     UniqueId load_id(request.id());
     int64_t txn_id = request.txn_id();
     std::shared_ptr<LoadChannel> channel;
@@ -107,7 +189,9 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
         auto it = _load_channels.find(load_id);
         if (it != _load_channels.end()) {
             channel = it->second;
-        } else if (!_mem_tracker->limit_exceeded() || config::enable_new_load_on_memory_limit_exceeded) {
+        } else if (!is_tracker_hit_hard_limit(_mem_tracker, config::load_process_max_memory_hard_limit_ratio) ||
+                   config::enable_new_load_on_memory_limit_exceeded) {
+            // When loading memory usage is larger than hard limit, we will reject new loading task.
             int64_t mem_limit_in_req = request.has_load_mem_limit() ? request.load_mem_limit() : -1;
             int64_t job_max_memory = calc_job_max_load_memory(mem_limit_in_req, _mem_tracker->limit());
 
@@ -125,12 +209,12 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
             response->mutable_status()->set_status_code(TStatusCode::MEM_LIMIT_EXCEEDED);
             response->mutable_status()->add_error_msgs(
                     "memory limit exceeded, please reduce load frequency or increase config "
-                    "`load_process_max_memory_limit_percent` or `load_process_max_memory_limit_bytes` "
-                    "or add more BE nodes");
+                    "`load_process_max_memory_hard_limit_ratio` or add more BE nodes");
             return;
         }
     }
-    channel->open(cntl, request, response, done_guard.release());
+    done_guard.release();
+    channel->open(open_context);
 }
 
 void LoadChannelMgr::add_chunk(const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
@@ -178,7 +262,8 @@ void LoadChannelMgr::cancel(brpc::Controller* cntl, const PTabletWriterCancelReq
     if (request.has_tablet_id()) {
         auto channel = _find_load_channel(load_id);
         if (channel != nullptr) {
-            channel->abort(request.index_id(), {request.tablet_id()}, request.reason());
+            channel->abort(TabletsChannelKey(request.id(), request.sink_id(), request.index_id()),
+                           {request.tablet_id()}, request.reason());
         }
     } else if (request.tablet_ids_size() > 0) {
         auto channel = _find_load_channel(load_id);
@@ -187,13 +272,36 @@ void LoadChannelMgr::cancel(brpc::Controller* cntl, const PTabletWriterCancelReq
             for (auto& tablet_id : request.tablet_ids()) {
                 tablet_ids.emplace_back(tablet_id);
             }
-            channel->abort(request.index_id(), tablet_ids, request.reason());
+            channel->abort(TabletsChannelKey(request.id(), request.sink_id(), request.index_id()), tablet_ids,
+                           request.reason());
         }
     } else {
         if (auto channel = remove_load_channel(load_id); channel != nullptr) {
             channel->cancel();
             channel->abort();
         }
+    }
+}
+
+void LoadChannelMgr::load_diagnose(brpc::Controller* cntl, const PLoadDiagnoseRequest* request,
+                                   PLoadDiagnoseResult* response, google::protobuf::Closure* done) {
+    ClosureGuard done_guard(done);
+    UniqueId load_id(request->id());
+    auto channel = _find_load_channel(load_id);
+    if (channel == nullptr) {
+        if (request->has_profile() && request->profile()) {
+            response->mutable_profile_status()->set_status_code(TStatusCode::NOT_FOUND);
+            response->mutable_profile_status()->add_error_msgs("can't find the load channel");
+        }
+        if (request->has_stack_trace() && request->stack_trace()) {
+            response->mutable_stack_trace_status()->set_status_code(TStatusCode::NOT_FOUND);
+            response->mutable_stack_trace_status()->add_error_msgs("can't find the load channel");
+        }
+    } else {
+        std::string remote_ip = butil::ip2str(cntl->remote_side().ip).c_str();
+        VLOG(2) << "receive load diagnose, load_id: " << load_id << ", txn_id: " << request->txn_id()
+                << ", remote: " << remote_ip;
+        channel->diagnose(remote_ip, request, response);
     }
 }
 

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
@@ -20,13 +19,15 @@ import com.starrocks.sql.parser.NodePosition;
 import java.util.List;
 
 public class AddComputeNodeClause extends ComputeNodeClause {
+    private final String warehouse;
 
-    public AddComputeNodeClause(List<String> hostPorts) {
-        this(hostPorts, NodePosition.ZERO);
+    public AddComputeNodeClause(List<String> hostPorts, String warehouse, NodePosition pos) {
+        super(hostPorts, pos);
+        this.warehouse = warehouse;
     }
 
-    public AddComputeNodeClause(List<String> hostPorts, NodePosition pos) {
-        super(hostPorts, pos);
+    public String getWarehouse() {
+        return warehouse;
     }
 
     @Override

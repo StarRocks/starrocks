@@ -14,19 +14,13 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.ExceptionChecker;
-import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.hive.HiveMetadata;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.MetadataMgr;
-import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import mockit.Expectations;
-import mockit.Mock;
-import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -55,7 +49,7 @@ public class AnalyzeDropTableTest {
         MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
         new Expectations(metadata) {
             {
-                metadata.getDb(anyString, anyString);
+                metadata.getDb((ConnectContext) any, anyString, anyString);
                 result = null;
                 minTimes = 0;
             }
@@ -64,11 +58,11 @@ public class AnalyzeDropTableTest {
 
         new Expectations(metadata) {
             {
-                metadata.getDb(anyString, anyString);
+                metadata.getDb((ConnectContext) any, anyString, anyString);
                 result = new Database();
                 minTimes = 0;
 
-                metadata.getTable(anyString, anyString, anyString);
+                metadata.getTable((ConnectContext) any, anyString, anyString, anyString);
                 result = null;
                 minTimes = 0;
             }
@@ -77,7 +71,7 @@ public class AnalyzeDropTableTest {
 
         new Expectations(metadata) {
             {
-                metadata.getTable(anyString, anyString, anyString);
+                metadata.getTable((ConnectContext) any, anyString, anyString, anyString);
                 result = new Table(Table.TableType.ICEBERG);
                 minTimes = 0;
             }
@@ -89,23 +83,22 @@ public class AnalyzeDropTableTest {
     public void testDropHiveNonManagedTable(@Mocked HiveTable hiveTable) {
         MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
 
-        new Expectations(hiveTable) {
+        new Expectations(metadata, hiveTable) {
             {
+                metadata.getDb((ConnectContext) any, anyString, anyString);
+                result = new Database();
+                minTimes = 0;
+
+                metadata.getTable((ConnectContext) any, anyString, anyString, anyString);
+                result = hiveTable;
+                minTimes = 0;
+
                 hiveTable.getHiveTableType();
                 result = HiveTable.HiveTableType.EXTERNAL_TABLE;
+                minTimes = 0;
             }
         };
 
-        new MockUp<HiveMetadata>() {
-            @Mock
-            public Table getTable(String dbName, String tblName) {
-                return hiveTable;
-            }
-        };
-
-        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
-                "Only support to drop hive managed table",
-                () -> metadata.dropTable(
-                        new DropTableStmt(false, new TableName("hive_catalog", "hive_db", "hive_table"), true)));
+        analyzeSuccess("DROP TABLE hive_catalog.hive_db.hive_table");
     }
 }

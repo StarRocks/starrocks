@@ -297,4 +297,12 @@ void SharedBufferedInputStream::_update_estimated_mem_usage() {
     _estimated_mem_usage = std::max(mem_usage, _estimated_mem_usage);
 }
 
+int64_t SharedBufferedInputStream::current_range_ref_sum() const {
+    int64_t ref = 0;
+    for (const auto& [_, sb] : _map) {
+        ref += sb->ref_count;
+    }
+    return ref;
+}
+
 } // namespace starrocks::io

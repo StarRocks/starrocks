@@ -27,13 +27,9 @@ import java.util.List;
 
 public class AlterTableClauseVisitorTest extends DDLTestBase {
 
-
     @Before
     public void beforeClass() throws Exception {
-
         super.setUp();
-
-
     }
 
     @Test
@@ -45,19 +41,11 @@ public class AlterTableClauseVisitorTest extends DDLTestBase {
         List<String> list = new ArrayList<>();
         list.add("id");
 
-        OptimizeClause optimizeClause = new OptimizeClause(null, null, hashDistributionDesc, list, null, nodePosition);
-
-        AlterTableClauseVisitor visitor = new AlterTableClauseVisitor();
-
+        OptimizeClause optimizeClause = new OptimizeClause(null, null, hashDistributionDesc, list, null, null, nodePosition);
         OlapTable table = new OlapTable();
-
-        visitor.setTable(table);
-
+        AlterTableClauseAnalyzer visitor = new AlterTableClauseAnalyzer(table);
 
         Assert.assertThrows("Getting analyzing error. Detail message: Unknown column 'id' does not exist.",
                 SemanticException.class, () -> visitor.visitOptimizeClause(optimizeClause, null));
-
-
     }
-
 }

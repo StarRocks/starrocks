@@ -1,0 +1,67 @@
+-- name: test_join_feedback
+CREATE TABLE `c1_skew` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` char(50) NULL COMMENT "",
+  `c2` int(11) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 5
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into c1_skew select generate_series, 'a', generate_series, generate_series from TABLE(generate_series(1, 10000));
+-- result:
+-- !result
+insert into c1_skew select generate_series, 'b', generate_series, generate_series from TABLE(generate_series(10001, 20000));
+-- result:
+-- !result
+insert into c1_skew select generate_series, 'c', generate_series, generate_series from TABLE(generate_series(20001, 30000));
+-- result:
+-- !result
+insert into c1_skew select generate_series, 'd', generate_series, generate_series from TABLE(generate_series(30001, 40000));
+-- result:
+-- !result
+insert into c1_skew select generate_series, 'e', generate_series, generate_series from TABLE(generate_series(40001, 50000));
+-- result:
+-- !result
+insert into c1_skew values(50001, 'f', 50001, 50001);
+-- result:
+-- !result
+analyze full table c1_skew with sync mode;
+-- result:
+[REGEX].*c1_skew	analyze	status	OK
+-- !result
+set enable_global_runtime_filter = false;
+-- result:
+-- !result
+function: assert_explain_not_contains("select count(*) from (select * from c1_skew t1 join (select * from c1_skew where c1 = 'f') t2 on t1.c2 = t2.c2) t", "RightChildEstimationErrorTuningGuide")
+-- result:
+None
+-- !result
+alter plan advisor add select count(*) from (select * from c1_skew t1 join (select * from c1_skew where c1 = 'f') t2 on t1.c2 = t2.c2) t;
+-- result:
+[REGEX]Add query into plan advisor in FE.*
+-- !result
+function: assert_explain_contains("select count(*) from (select * from c1_skew t1 join (select * from c1_skew where c1 = 'f') t2 on t1.c2 = t2.c2) t", "RightChildEstimationErrorTuningGuide")
+-- result:
+None
+-- !result
+function: assert_trace_values_contains("select count(*) from (select * from c1_skew t1 join (select * from c1_skew where c1 = 'f') t2 on t1.c2 = t2.c2) t", "RightChildEstimationErrorTuningGuide")
+-- result:
+None
+-- !result
+function: assert_trace_values_contains("select count(*) from (select * from c1_skew t1 join (select * from c1_skew where c1 = 'f') t2 on t1.c2 = t2.c2) t", "CandidateTuningGuides")
+-- result:
+None
+-- !result
+truncate plan advisor;
+-- result:
+[REGEX]Clear all plan advisor in FE.*
+-- !result

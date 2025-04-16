@@ -28,18 +28,21 @@ public class DataCacheSelectStatement extends DdlStmt {
 
     private final Map<String, String> properties;
 
-    // Set after DataCacheAnalyzer analyze properties
+    // =================================================================================
+    // Below properties will set after DataCacheAnalyzer analyze properties
     private boolean isVerbose = false;
     // real catalog of cache select table
     private String catalog = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
-    // TODO Support priority, ttl later
+    private long ttlSeconds = 0;
+    private int priority = 0;
+    // =================================================================================
 
     public DataCacheSelectStatement(InsertStmt insertStmt, Map<String, String> properties, NodePosition pos) {
         super(pos);
         this.insertStmt = insertStmt;
         this.properties = properties;
         Preconditions.checkNotNull(properties, "properties can't be null");
-        insertStmt.setOrigStmt(new OriginStatement("CACHE SELECT " + AstToSQLBuilder.toSQL(insertStmt.getQueryStatement())));
+        insertStmt.setOrigStmt(new OriginStatement("CACHE " + AstToSQLBuilder.toSQL(insertStmt.getQueryStatement())));
     }
 
     public InsertStmt getInsertStmt() {
@@ -64,6 +67,22 @@ public class DataCacheSelectStatement extends DdlStmt {
 
     public String getCatalog() {
         return this.catalog;
+    }
+
+    public void setPriority(int priority) {
+        this.priority = priority;
+    }
+
+    public int getPriority() {
+        return priority;
+    }
+
+    public void setTTLSeconds(long ttlSeconds) {
+        this.ttlSeconds = ttlSeconds;
+    }
+
+    public long getTTLSeconds() {
+        return ttlSeconds;
     }
 
     @Override

@@ -25,30 +25,30 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaColumnsScanner::_s_col_columns[] = {
         //   name,       type,          size,                     is_null
-        {"TABLE_CATALOG", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"TABLE_SCHEMA", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"COLUMN_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"ORDINAL_POSITION", TYPE_BIGINT, sizeof(int64_t), false},
-        {"COLUMN_DEFAULT", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"IS_NULLABLE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DATA_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"CHARACTER_MAXIMUM_LENGTH", TYPE_BIGINT, sizeof(int64_t), true},
-        {"CHARACTER_OCTET_LENGTH", TYPE_BIGINT, sizeof(int64_t), true},
-        {"NUMERIC_PRECISION", TYPE_BIGINT, sizeof(int64_t), true},
-        {"NUMERIC_SCALE", TYPE_BIGINT, sizeof(int64_t), true},
-        {"DATETIME_PRECISION", TYPE_BIGINT, sizeof(int64_t), true},
-        {"CHARACTER_SET_NAME", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"COLLATION_NAME", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"COLUMN_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"COLUMN_KEY", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"EXTRA", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"PRIVILEGES", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"COLUMN_COMMENT", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"COLUMN_SIZE", TYPE_BIGINT, sizeof(int64_t), true},
-        {"DECIMAL_DIGITS", TYPE_BIGINT, sizeof(int64_t), true},
-        {"GENERATION_EXPRESSION", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"SRS_ID", TYPE_BIGINT, sizeof(int64_t), true},
+        {"TABLE_CATALOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"TABLE_SCHEMA", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"COLUMN_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"ORDINAL_POSITION", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"COLUMN_DEFAULT", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"IS_NULLABLE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DATA_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"CHARACTER_MAXIMUM_LENGTH", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"CHARACTER_OCTET_LENGTH", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"NUMERIC_PRECISION", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"NUMERIC_SCALE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"DATETIME_PRECISION", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"CHARACTER_SET_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"COLLATION_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"COLUMN_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"COLUMN_KEY", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"EXTRA", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"PRIVILEGES", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"COLUMN_COMMENT", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"COLUMN_SIZE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"DECIMAL_DIGITS", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"GENERATION_EXPRESSION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"SRS_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
 };
 
 SchemaColumnsScanner::SchemaColumnsScanner()
@@ -492,7 +492,14 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
             // GENERATION_EXPRESSION
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(23);
-                fill_data_column_with_null(column.get());
+                if (_desc_result.columns[_column_index].columnDesc.__isset.generatedColumnExprStr &&
+                    _desc_result.columns[_column_index].columnDesc.generatedColumnExprStr.size() != 0) {
+                    std::string* str = &_desc_result.columns[_column_index].columnDesc.generatedColumnExprStr;
+                    Slice value(str->c_str(), str->length());
+                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                } else {
+                    fill_data_column_with_null(column.get());
+                }
             }
             break;
         }

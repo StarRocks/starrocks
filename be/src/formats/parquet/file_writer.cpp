@@ -31,6 +31,7 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "formats/parquet/utils.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "util/defer_op.h"
@@ -104,6 +105,47 @@ arrow::Status ParquetOutputStream::Close() {
         return arrow::Status::IOError(st.to_string());
     }
     _is_closed = true;
+    return arrow::Status::OK();
+}
+
+AsyncParquetOutputStream::AsyncParquetOutputStream(io::AsyncFlushOutputStream* stream) : _stream(stream) {
+    set_mode(arrow::io::FileMode::WRITE);
+}
+
+arrow::Status AsyncParquetOutputStream::Write(const std::shared_ptr<arrow::Buffer>& data) {
+    arrow::Status st = Write(data->data(), data->size());
+    if (!st.ok()) {
+        LOG(WARNING) << "Failed to write data to output stream, err msg: " << st.message();
+    }
+    return st;
+}
+
+arrow::Status AsyncParquetOutputStream::Write(const void* data, int64_t nbytes) {
+    if (_is_closed) {
+        return arrow::Status::IOError("The output stream is closed but there are still inputs");
+    }
+
+    auto status = _stream->write(static_cast<const uint8_t*>(data), nbytes);
+    if (!status.ok()) {
+        return arrow::Status::IOError(status.message());
+    }
+    return arrow::Status::OK();
+}
+
+arrow::Result<int64_t> AsyncParquetOutputStream::Tell() const {
+    return _stream->tell();
+}
+
+arrow::Status AsyncParquetOutputStream::Close() {
+    if (_is_closed) {
+        return arrow::Status::OK();
+    }
+    _is_closed = true;
+    Status st = _stream->close();
+    if (!st.ok()) {
+        LOG(WARNING) << "close parquet output stream failed: " << st;
+        return arrow::Status::IOError(st.to_string());
+    }
     return arrow::Status::OK();
 }
 
@@ -195,7 +237,7 @@ arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> ParquetBuildHelper:
 StatusOr<std::shared_ptr<::parquet::WriterProperties>> ParquetBuildHelper::make_properties(
         const ParquetBuilderOptions& options) {
     ::parquet::WriterProperties::Builder builder;
-    builder.version(::parquet::ParquetVersion::PARQUET_2_0);
+    builder.version(::parquet::ParquetVersion::PARQUET_2_6);
     options.use_dict ? builder.enable_dictionary() : builder.disable_dictionary();
     ASSIGN_OR_RETURN(auto compression_codec,
                      parquet::ParquetBuildHelper::convert_compression_type(options.compression_type));
@@ -255,10 +297,9 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
                                                       ::parquet::Type::INT32, -1, file_column_id.field_id);
     }
     case TYPE_DATETIME: {
-        // TODO(letian-jiang): set isAdjustedToUTC to true, and normalize datetime values
         return ::parquet::schema::PrimitiveNode::Make(
                 name, rep_type,
-                ::parquet::LogicalType::Timestamp(false, ::parquet::LogicalType::TimeUnit::unit::MILLIS),
+                ::parquet::LogicalType::Timestamp(false, ::parquet::LogicalType::TimeUnit::unit::MICROS),
                 ::parquet::Type::INT64, -1, file_column_id.field_id);
     }
     case TYPE_DECIMAL32: {
@@ -275,7 +316,8 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
     case TYPE_DECIMAL128: {
         return ::parquet::schema::PrimitiveNode::Make(
                 name, rep_type, ::parquet::LogicalType::Decimal(type_desc.precision, type_desc.scale),
-                ::parquet::Type::FIXED_LEN_BYTE_ARRAY, 16, file_column_id.field_id);
+                ::parquet::Type::FIXED_LEN_BYTE_ARRAY,
+                ParquetUtils::decimal_precision_to_byte_count(type_desc.precision), file_column_id.field_id);
     }
     case TYPE_STRUCT: {
         DCHECK(type_desc.children.size() == type_desc.field_names.size());
@@ -314,6 +356,10 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
                 name, rep_type, ::parquet::LogicalType::Time(false, ::parquet::LogicalType::TimeUnit::MICROS),
                 ::parquet::Type::INT64, -1, file_column_id.field_id);
     }
+    case TYPE_JSON: {
+        return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::JSON(),
+                                                      ::parquet::Type::BYTE_ARRAY, -1, file_column_id.field_id);
+    }
     default: {
         return arrow::Status::TypeError(fmt::format("Doesn't support to write {} type data", type_desc.debug_string()));
     }
@@ -323,8 +369,9 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
 FileWriterBase::FileWriterBase(std::unique_ptr<WritableFile> writable_file,
                                std::shared_ptr<::parquet::WriterProperties> properties,
                                std::shared_ptr<::parquet::schema::GroupNode> schema,
-                               const std::vector<ExprContext*>& output_expr_ctxs, int64_t max_file_size)
-        : _properties(std::move(properties)), _schema(std::move(schema)), _max_file_size(max_file_size) {
+                               const std::vector<ExprContext*>& output_expr_ctxs, int64_t max_file_size,
+                               RuntimeState* state)
+        : _properties(std::move(properties)), _schema(std::move(schema)), _max_file_size(max_file_size), _state(state) {
     _outstream = std::make_shared<ParquetOutputStream>(std::move(writable_file));
     _type_descs.reserve(output_expr_ctxs.size());
     for (auto expr : output_expr_ctxs) {
@@ -339,8 +386,11 @@ FileWriterBase::FileWriterBase(std::unique_ptr<WritableFile> writable_file,
 FileWriterBase::FileWriterBase(std::unique_ptr<WritableFile> writable_file,
                                std::shared_ptr<::parquet::WriterProperties> properties,
                                std::shared_ptr<::parquet::schema::GroupNode> schema,
-                               std::vector<TypeDescriptor> type_descs)
-        : _properties(std::move(properties)), _schema(std::move(schema)), _type_descs(std::move(type_descs)) {
+                               std::vector<TypeDescriptor> type_descs, RuntimeState* state)
+        : _properties(std::move(properties)),
+          _schema(std::move(schema)),
+          _type_descs(std::move(type_descs)),
+          _state(state) {
     _outstream = std::make_shared<ParquetOutputStream>(std::move(writable_file));
     _eval_func = [](Chunk* chunk, size_t col_idx) { return chunk->get_column_by_index(col_idx); };
 }
@@ -357,7 +407,7 @@ void FileWriterBase::_generate_chunk_writer() {
     DCHECK(_writer != nullptr);
     if (_chunk_writer == nullptr) {
         auto rg_writer = _writer->AppendBufferedRowGroup();
-        _chunk_writer = std::make_unique<ChunkWriter>(rg_writer, _type_descs, _schema, _eval_func);
+        _chunk_writer = std::make_unique<ChunkWriter>(rg_writer, _type_descs, _schema, _eval_func, _state->timezone());
     }
 }
 
@@ -452,7 +502,7 @@ AsyncFileWriter::AsyncFileWriter(std::unique_ptr<WritableFile> writable_file, st
                                  const std::vector<ExprContext*>& output_expr_ctxs, PriorityThreadPool* executor_pool,
                                  RuntimeProfile* parent_profile, int64_t max_file_size, RuntimeState* state)
         : FileWriterBase(std::move(writable_file), std::move(properties), std::move(schema), output_expr_ctxs,
-                         max_file_size),
+                         max_file_size, state),
           _file_location(std::move(file_location)),
           _partition_location(std::move(partition_location)),
           _executor_pool(executor_pool),

@@ -59,7 +59,7 @@ class TUniqueId;
 class PlanFragmentExecutor;
 class ThreadPool;
 
-class JoinRuntimeFilter;
+class RuntimeFilter;
 std::string to_load_error_http_path(const std::string& file_name);
 
 // This class used to manage all the fragment execute in this instance
@@ -72,30 +72,30 @@ public:
     ~FragmentMgr() override;
 
     // execute one plan fragment
-    [[nodiscard]] Status exec_plan_fragment(const TExecPlanFragmentParams& params);
+    Status exec_plan_fragment(const TExecPlanFragmentParams& params);
 
-    [[nodiscard]] Status exec_plan_fragment(const TExecPlanFragmentParams& params, const FinishCallback& cb);
+    Status exec_plan_fragment(const TExecPlanFragmentParams& params, const FinishCallback& cb);
 
     // TODO(zc): report this is over
-    [[nodiscard]] Status exec_plan_fragment(const TExecPlanFragmentParams& params, const StartSuccCallback& start_cb,
-                                            const FinishCallback& cb);
+    Status exec_plan_fragment(const TExecPlanFragmentParams& params, const StartSuccCallback& start_cb,
+                              const FinishCallback& cb);
 
     void close();
 
-    [[nodiscard]] Status cancel(const TUniqueId& fragment_id) {
+    Status cancel(const TUniqueId& fragment_id) {
         return cancel(fragment_id, PPlanFragmentCancelReason::INTERNAL_ERROR);
     }
 
-    [[nodiscard]] Status cancel(const TUniqueId& fragment_id, const PPlanFragmentCancelReason& reason);
+    Status cancel(const TUniqueId& fragment_id, const PPlanFragmentCancelReason& reason);
 
     void receive_runtime_filter(const PTransmitRuntimeFilterParams& params,
-                                const std::shared_ptr<const JoinRuntimeFilter>& shared_rf);
+                                const std::shared_ptr<const RuntimeFilter>& shared_rf);
 
     void cancel_worker();
 
     void debug(std::stringstream& ss) override;
 
-    [[nodiscard]] Status trigger_profile_report(const PTriggerProfileReportRequest* request);
+    Status trigger_profile_report(const PTriggerProfileReportRequest* request);
 
     void report_fragments(const std::vector<TUniqueId>& non_pipeline_need_report_fragment_ids);
 
@@ -107,10 +107,8 @@ public:
     // input: TScanOpenParams fragment_instance_id
     // output: selected_columns, query_id parsed from params
     // execute external query, all query info are packed in TScanOpenParams
-    [[nodiscard]] Status exec_external_plan_fragment(const TScanOpenParams& params,
-                                                     const TUniqueId& fragment_instance_id,
-                                                     std::vector<TScanColumnDesc>* selected_columns,
-                                                     TUniqueId* query_id);
+    Status exec_external_plan_fragment(const TScanOpenParams& params, const TUniqueId& fragment_instance_id,
+                                       std::vector<TScanColumnDesc>* selected_columns, TUniqueId* query_id);
     size_t running_fragment_count() const {
         std::lock_guard<std::mutex> lock(_lock);
         return _fragment_map.size();

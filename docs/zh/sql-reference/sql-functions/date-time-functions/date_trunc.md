@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # date_trunc
 
-## 功能
+
 
 根据指定的精度级别 `fmt`，将一个日期时间截断。
 

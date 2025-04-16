@@ -1,0 +1,31 @@
+-- name: testHiveScanRanges
+
+set enable_connector_incremental_scan_ranges = true;
+set connector_incremental_scan_ranges_size = 1;
+
+create external catalog hive_sql_test_${uuid0} PROPERTIES ("type"="hive",
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+
+select * from hive_sql_test_${uuid0}.hive_oss_db.hive_oss_par_parquet_snappy order by col_int, col_date;
+
+select * from hive_sql_test_${uuid0}.hive_oss_db.string_par_with_null_orc order by id;
+
+select * from hive_sql_test_${uuid0}.hive_oss_db.string_par_with_null_parquet order by id;
+
+create table t00 as select * from hive_sql_test_${uuid0}.hive_oss_db.hive_oss_par_parquet_snappy order by col_int, col_date;
+
+select * from t00 order by col_int, col_date;
+
+create table t01 as select * from hive_sql_test_${uuid0}.hive_oss_db.string_par_with_null_orc order by id;
+
+select * from t01 order by id;
+
+create table t02 as select * from hive_sql_test_${uuid0}.hive_oss_db.string_par_with_null_parquet order by id;
+
+select * from t02 order by id;
+
+drop catalog hive_sql_test_${uuid0}

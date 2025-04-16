@@ -19,12 +19,17 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "gen_cpp/Types_types.h"
+#include "io/input_stream.h"
+#include "util/runtime_profile.h"
 #include "util/slice.h"
 
 namespace starrocks::spill {
 
-class BlockReader;
+using BlockAffinityGroup = uint64_t;
+static const BlockAffinityGroup kDefaultBlockAffinityGroup = UINT64_MAX;
 
+class BlockReader;
+class BlockReaderOptions;
 // Block represents a continuous storage space and is the smallest storage unit of flush and restore in spill task.
 // Block only supports append writing and sequential reading, and neither writing nor reading of Block is guaranteed to be thread-safe.
 class Block {
@@ -37,30 +42,51 @@ public:
     // flush block to somewhere
     virtual Status flush() = 0;
 
-    virtual std::shared_ptr<BlockReader> get_reader() = 0;
+    virtual StatusOr<std::unique_ptr<io::InputStreamWrapper>> get_readable() const = 0;
+
+    virtual std::shared_ptr<BlockReader> get_reader(const BlockReaderOptions& options) = 0;
 
     virtual std::string debug_string() const = 0;
 
+    virtual bool try_acquire_sizes(size_t size) = 0;
+
     size_t size() const { return _size; }
+    size_t num_rows() const { return _num_rows; }
     bool is_remote() const { return _is_remote; }
     void set_is_remote(bool is_remote) { _is_remote = is_remote; }
 
-    virtual bool preallocate(size_t write_size) = 0;
+    void inc_num_rows(size_t num_rows) { _num_rows += num_rows; }
+
+    void set_affinity_group(BlockAffinityGroup affinity_group) { _affinity_group = affinity_group; }
+    BlockAffinityGroup affinity_group() const { return _affinity_group; }
 
 protected:
+    size_t _num_rows{};
     size_t _size{};
     bool _is_remote = false;
+    BlockAffinityGroup _affinity_group = kDefaultBlockAffinityGroup;
 };
 
 using BlockPtr = std::shared_ptr<Block>;
 
+struct BlockReaderOptions {
+    bool enable_buffer_read = false;
+    size_t max_buffer_bytes = std::numeric_limits<size_t>::max();
+
+    RuntimeProfile::Counter* read_io_timer = nullptr;
+    RuntimeProfile::Counter* read_io_count = nullptr;
+    RuntimeProfile::Counter* read_io_bytes = nullptr;
+};
+
 class BlockReader {
 public:
-    BlockReader(const Block* block) : _block(block) {}
+    BlockReader(const Block* block, const BlockReaderOptions& options)
+            : _block(block), _length(block->size()), _options(options) {}
+
     virtual ~BlockReader() = default;
     // read exacly the specified length of data from Block,
     // if the Block has reached the end, should return EndOfFile status
-    virtual Status read_fully(void* data, int64_t count) = 0;
+    virtual Status read_fully(void* data, int64_t count);
 
     virtual std::string debug_string() = 0;
 
@@ -68,6 +94,14 @@ public:
 
 protected:
     const Block* _block = nullptr;
+    std::unique_ptr<io::InputStreamWrapper> _readable;
+    size_t _length = 0;
+    size_t _offset = 0;
+
+    // used for buffer read
+    std::unique_ptr<uint8_t[]> _buffer;
+    Slice _slice;
+    BlockReaderOptions _options;
 };
 
 struct AcquireBlockOptions {
@@ -76,7 +110,10 @@ struct AcquireBlockOptions {
     int32_t plan_node_id;
     std::string name;
     bool direct_io = false;
+    // The block will occupy the entire container, making it easier to remove the block.
+    bool exclusive = false;
     size_t block_size = 0;
+    BlockAffinityGroup affinity_group = kDefaultBlockAffinityGroup;
 };
 
 // BlockManager is used to manage the life cycle of the Block.
@@ -88,9 +125,16 @@ public:
     virtual ~BlockManager() = default;
     virtual Status open() = 0;
     virtual void close() = 0;
+
     // acquire a block from BlockManager, return error if BlockManager can't allocate one.
     virtual StatusOr<BlockPtr> acquire_block(const AcquireBlockOptions& opts) = 0;
     // return Block to BlockManager
-    virtual Status release_block(const BlockPtr& block) = 0;
+    virtual Status release_block(BlockPtr block) = 0;
+
+    BlockAffinityGroup acquire_affinity_group() { return _next_affinity_group++; }
+    virtual Status release_affinity_group(const BlockAffinityGroup affinity_group) { return Status::OK(); }
+
+protected:
+    std::atomic<BlockAffinityGroup> _next_affinity_group = 0;
 };
 } // namespace starrocks::spill

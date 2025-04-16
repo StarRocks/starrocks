@@ -28,6 +28,13 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class MultiItemListPartitionDesc extends SinglePartitionDesc {
+    // partition values,
+    // eg:
+    //  partition col is (a), multi values is [[1], [2]]
+    //  partition col is (a, b), values is [(1, 2), (3, 4), (5, 6)]
+    // Assert.assertTrue(multiValues[0].size() == partitionCols.size())
+    // Assert.assertTrue(multiValues[1].size() == partitionCols.size())
+    // Assert.assertTrue(multiValues[..].size() == partitionCols.size())
     private final List<List<String>> multiValues;
     private List<ColumnDef> columnDefList;
 
@@ -63,16 +70,10 @@ public class MultiItemListPartitionDesc extends SinglePartitionDesc {
     }
 
     public void analyze(List<ColumnDef> columnDefList, Map<String, String> tableProperties) throws AnalysisException {
-        if (isAnalyzed) {
-            return;
-        }
-
         FeNameFormat.checkPartitionName(getPartitionName());
         analyzeValues(columnDefList.size());
         analyzeProperties(tableProperties, null);
         this.columnDefList = columnDefList;
-
-        isAnalyzed = true;
     }
 
     private void analyzeValues(int partitionColSize) throws AnalysisException {

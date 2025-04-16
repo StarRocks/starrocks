@@ -37,21 +37,21 @@ package com.starrocks.catalog;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.persist.DropResourceOperationLog;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -63,7 +63,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.HashMap;
@@ -96,7 +95,7 @@ public class ResourceMgr implements Writable {
     @SerializedName(value = "nameToResource")
     private HashMap<String, Resource> nameToResource = new HashMap<>();
     private final ResourceProcNode procNode = new ResourceProcNode();
-    private final ReentrantReadWriteLock rwLock = new FairReentrantReadWriteLock();
+    private final ReentrantReadWriteLock rwLock = new ReentrantReadWriteLock();
 
     public ResourceMgr() {
     }
@@ -312,11 +311,7 @@ public class ResourceMgr implements Writable {
         return procNode;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
 
     public static ResourceMgr read(DataInput in) throws IOException {
         String json = Text.readString(in);
@@ -339,8 +334,7 @@ public class ResourceMgr implements Writable {
                 }
 
                 try {
-                    Authorizer.checkAnyActionOnResource(ConnectContext.get().getCurrentUserIdentity(),
-                            ConnectContext.get().getCurrentRoleIds(), resource.getName());
+                    Authorizer.checkAnyActionOnResource(ConnectContext.get(), resource.getName());
                 } catch (AccessDeniedException e) {
                     continue;
                 }
@@ -355,8 +349,8 @@ public class ResourceMgr implements Writable {
         return checksum;
     }
 
-    public void saveResourcesV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.RESOURCE_MGR, 1);
+    public void saveResourcesV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.RESOURCE_MGR, 1);
         writer.writeJson(this);
         writer.close();
     }

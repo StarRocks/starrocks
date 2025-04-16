@@ -15,6 +15,8 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.analysis.BinaryType;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -26,11 +28,16 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.spm.SPMFunctions;
 import org.apache.commons.math3.util.Precision;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+
+import static com.starrocks.sql.optimizer.statistics.HistogramStatisticsUtils.estimateInPredicateWithHistogram;
+import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateUtils.computeCompoundStatsWithMultiColumnOptimize;
 
 public class PredicateStatisticsCalculator {
     public static Statistics statisticsCalculate(ScalarOperator predicate, Statistics statistics) {
@@ -95,6 +102,25 @@ public class PredicateStatisticsCalculator {
         }
 
         @Override
+        public Statistics visitVariableReference(ColumnRefOperator variable, Void context) {
+            if (!checkNeedEvalEstimate(variable)) {
+                return statistics;
+            }
+
+            if (!variable.getType().isBoolean()) {
+                return visit(variable, context);
+            }
+
+            try {
+                BinaryPredicateOperator binaryPredicateOperator = new BinaryPredicateOperator(
+                        BinaryType.EQ, variable, ConstantOperator.createBoolean(true));
+                return visitBinaryPredicate(binaryPredicateOperator, context);
+            } catch (Exception e) {
+                return visit(variable, context);
+            }
+        }
+
+        @Override
         public Statistics visitInPredicate(InPredicateOperator predicate, Void context) {
             if (!checkNeedEvalEstimate(predicate)) {
                 return statistics;
@@ -102,13 +128,36 @@ public class PredicateStatisticsCalculator {
             double selectivity;
 
             ScalarOperator firstChild = getChildForCastOperator(predicate.getChild(0));
-            List<ScalarOperator> otherChildrenList =
-                    predicate.getChildren().stream().skip(1).map(this::getChildForCastOperator).distinct()
-                            .collect(Collectors.toList());
             // 1. compute the inPredicate children column statistics
             ColumnStatistic inColumnStatistic = getExpressionStatistic(firstChild);
+
+            List<ScalarOperator> children = predicate.getChildren();
+            List<ScalarOperator> otherChildrenList = predicate.getChildren().stream().skip(1).toList();
+            if (children.size() == 2 && SPMFunctions.isSPMFunctions(children.get(1))) {
+                otherChildrenList = children.get(1).getChildren().stream().skip(1).collect(Collectors.toList());
+                if (otherChildrenList.isEmpty()) {
+                    return statistics;
+                }
+            }
+            otherChildrenList = otherChildrenList.stream().map(this::getChildForCastOperator).distinct().collect(
+                    Collectors.toList());
+            boolean allConstants = otherChildrenList.stream().allMatch(op -> op instanceof ConstantOperator);
+
+            if (!predicate.isSubquery() && firstChild.isColumnRef() && !inColumnStatistic.isUnknown() &&
+                    inColumnStatistic.getHistogram() != null && allConstants) {
+                return estimateInPredicateWithHistogram(
+                        (ColumnRefOperator) firstChild,
+                        inColumnStatistic,
+                        otherChildrenList.stream()
+                                .map(op -> (ConstantOperator) op)
+                                .collect(Collectors.toList()),
+                        predicate.isNotIn(),
+                        statistics
+                );
+            }
+
             List<ColumnStatistic> otherChildrenColumnStatisticList =
-                    otherChildrenList.stream().distinct().map(this::getExpressionStatistic).collect(Collectors.toList());
+                    otherChildrenList.stream().distinct().map(this::getExpressionStatistic).toList();
 
             // using ndv to estimate string col inPredicate
             if (!predicate.isNotIn() && firstChild.getType().getPrimitiveType().isCharFamily()
@@ -301,6 +350,13 @@ public class PredicateStatisticsCalculator {
             }
 
             if (predicate.isAnd()) {
+                Pair<Map<ColumnRefOperator, ConstantOperator>, List<ScalarOperator>> extracted =
+                        Utils.separateEqualityPredicates(predicate);
+
+                if (extracted.first.size() > 1) {
+                    return computeCompoundStatsWithMultiColumnOptimize(predicate, statistics);
+                }
+
                 Statistics leftStatistics = predicate.getChild(0).accept(this, null);
                 Statistics andStatistics =
                         predicate.getChild(1).accept(new BaseCalculatingVisitor(leftStatistics), null);
@@ -382,6 +438,13 @@ public class PredicateStatisticsCalculator {
             }
 
             if (predicate.isAnd()) {
+                Pair<Map<ColumnRefOperator, ConstantOperator>, List<ScalarOperator>> extracted =
+                        Utils.separateEqualityPredicates(predicate);
+
+                if (extracted.first.size() > 1) {
+                    return computeCompoundStatsWithMultiColumnOptimize(predicate, statistics);
+                }
+
                 Statistics leftStatistics = predicate.getChild(0).accept(this, null);
                 Statistics andStatistics = predicate.getChild(1)
                         .accept(new LargeOrCalculatingVisitor(leftStatistics), null);
@@ -432,5 +495,6 @@ public class PredicateStatisticsCalculator {
             });
             return builder.build();
         }
+
     }
 }

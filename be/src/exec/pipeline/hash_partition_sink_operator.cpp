@@ -19,7 +19,7 @@ namespace starrocks::pipeline {
 Status HashPartitionSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     _partition_num = ADD_COUNTER(_unique_metrics, "PartitionNumber", TUnit::UNIT);
-    return _hash_partition_ctx->prepare(state);
+    return _hash_partition_ctx->prepare(state, _unique_metrics.get());
 }
 
 StatusOr<ChunkPtr> HashPartitionSinkOperator::pull_chunk(RuntimeState* state) {

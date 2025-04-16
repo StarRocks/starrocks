@@ -14,19 +14,22 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.catalog.Database;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.TpchSQL;
+import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.utframe.StarRocksAssert;
-import org.apache.commons.collections.CollectionUtils;
-import org.apache.commons.collections4.ListUtils;
-import org.apache.commons.lang3.StringUtils;
+import com.starrocks.thrift.TScanRangeParams;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class PlanTestBase extends PlanTestNoneDBBase {
 
@@ -59,6 +62,17 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`v4`, `v5`, v6)\n" +
                 "DISTRIBUTED BY HASH(`v4`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `part_t1` (\n" +
+                "  `v4` bigint NULL COMMENT \"\",\n" +
+                "  `v5` bigint NULL COMMENT \"\",\n" +
+                "  `v6` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PARTITION BY list(v4) ( partition p1 values in ('1'), partition p2 values in ('2')) \n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\"\n" +
@@ -120,6 +134,26 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`v1`, `v2`, v3)\n" +
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `t7` (\n" +
+                "  `k1` string NULL COMMENT \"\",\n" +
+                "  `k2` string NULL COMMENT \"\",\n" +
+                "  `k3` string NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `t8` (\n" +
+                "  `k1` string NULL COMMENT \"\",\n" +
+                "  `k2` string NULL COMMENT \"\",\n" +
+                "  `k3` string NULL\n" +
+                ") ENGINE=OLAP\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\"\n" +
@@ -948,28 +982,36 @@ public class PlanTestBase extends PlanTestNoneDBBase {
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
         connectContext.getSessionVariable().setEnableShortCircuit(true);
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
     }
 
     @AfterClass
     public static void afterClass() {
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
     }
 
-    public static void cleanupEphemeralMVs(StarRocksAssert starRocksAssert, long startTime) throws Exception {
-        String currentDb = starRocksAssert.getCtx().getDatabase();
-        if (StringUtils.isNotEmpty(currentDb)) {
-            Database testDb = GlobalStateMgr.getCurrentState().getDb(currentDb);
-            for (MaterializedView mv : ListUtils.emptyIfNull(testDb.getMaterializedViews())) {
-                if (startTime > 0 && mv.getCreateTime() > startTime) {
-                    starRocksAssert.dropMaterializedView(mv.getName());
-                    LOG.warn("cleanup mv after test case: {}", mv.getName());
-                }
-            }
-            if (CollectionUtils.isNotEmpty(testDb.getMaterializedViews())) {
-                LOG.warn("database [{}] still contains {} materialized views",
-                        testDb.getFullName(), testDb.getMaterializedViews().size());
+    // NOTE: for JUnit 5
+    @BeforeAll
+    public static void beforeAll() throws Exception {
+        beforeClass();
+    }
+
+    // NOTE: for JUnit 5
+    @AfterAll
+    public static void afterAll() throws Exception {
+        afterClass();
+    }
+
+    public static List<TScanRangeParams> collectAllScanRangeParams(DefaultCoordinator coordinator) {
+        List<TScanRangeParams> scanRangeParams = new ArrayList<>();
+        for (FragmentInstance instance : coordinator.getExecutionDAG().getInstances()) {
+            for (List<TScanRangeParams> x : instance.getNode2ScanRanges().values()) {
+                scanRangeParams.addAll(x);
             }
         }
+        // remove empty scan range introduced in incremental scan ranges feature.
+        return scanRangeParams.stream().filter(x -> !(x.isSetEmpty() && x.isEmpty())).collect(Collectors.toList());
     }
 }

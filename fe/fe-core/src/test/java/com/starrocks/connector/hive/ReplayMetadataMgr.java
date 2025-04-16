@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 import com.google.common.collect.ImmutableList;
@@ -20,16 +19,19 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveResource;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.ResourceMgr;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
@@ -139,28 +141,35 @@ public class ReplayMetadataMgr extends MetadataMgr {
     }
 
     @Override
-    public List<String> listPartitionNames(String catalogName, String dbName, String tableName) {
+    public List<String> listPartitionNames(String catalogName, String dbName, String tableName,
+                                           ConnectorMetadatRequestContext requestContext) {
         return replayTableMap.get(catalogName).get(dbName).get(tableName).partitionNames;
     }
 
     @Override
-    public Database getDb(String catalogName, String dbName) {
+    public Database getDb(ConnectContext context, String catalogName, String dbName) {
         if (CatalogMgr.isInternalCatalog(catalogName)) {
-            return super.getDb(catalogName, dbName);
+            return super.getDb(context, catalogName, dbName);
         }
         return new Database(idGen++, dbName);
     }
 
     @Override
-    public Table getTable(String catalogName, String dbName, String tblName) {
+    public Table getTable(ConnectContext context, String catalogName, String dbName, String tblName) {
         if (CatalogMgr.isInternalCatalog(catalogName)) {
-            return super.getTable(catalogName, dbName, tblName);
+            return super.getTable(context, catalogName, dbName, tblName);
         }
 
         if (!CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName)) {
             catalogName = CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName(catalogName, "hive");
         }
-        return replayTableMap.get(catalogName).get(dbName).get(tblName).table;
+
+        HiveTableInfo tableInfo = replayTableMap.get(catalogName).get(dbName).get(tblName);
+        if (tableInfo != null) {
+            return tableInfo.table;
+        }
+        // probably it's a hive view but being created in default catalog.
+        return super.getTable(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName, tblName);
     }
 
     @Override
@@ -172,9 +181,9 @@ public class ReplayMetadataMgr extends MetadataMgr {
                                          ScalarOperator predicate) {
         Statistics.Builder resStatistics = Statistics.builder();
         Map<ColumnRefOperator, ColumnStatistic> res = new HashMap<>();
-        String dbName = ((HiveMetaStoreTable) table).getDbName();
-        String tblName = ((HiveMetaStoreTable) table).getTableName();
-        Statistics statistics =  replayTableMap.get(catalogName).get(dbName).get(tblName).statistics;
+        String dbName = (table).getCatalogDBName();
+        String tblName = (table).getCatalogTableName();
+        Statistics statistics = replayTableMap.get(catalogName).get(dbName).get(tblName).statistics;
         Map<ColumnRefOperator, ColumnStatistic> columnStatisticMap = statistics.getColumnStatistics();
         for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : columnStatisticMap.entrySet()) {
             for (ColumnRefOperator columnRefOperator : columns.keySet()) {
@@ -189,7 +198,7 @@ public class ReplayMetadataMgr extends MetadataMgr {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys) {
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
         return Lists.newArrayList(MOCKED_FILES);
     }
 

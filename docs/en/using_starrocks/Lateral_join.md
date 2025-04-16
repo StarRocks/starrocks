@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+sidebar_position: 50
 keywords: ['explode']
 ---
 
@@ -38,7 +39,7 @@ The second syntax here is a shortened version of the first one, where the Latera
 > If you want to perform unnest on multiple columns, you must specify an alias for each column, for example, `select v1, t1.unnest as v2, t2.unnest as v3 from lateral_test, unnest(v2) t1, unnest(v3) t2;`.
 
 StarRocks supports type conversion among BITMAP, STRING, ARRAY, and Column.
-![Some type conversions in Lateral Join](../assets/lateral_join_type_conversion.png)
+![Some type conversions in Lateral Join](../_assets/lateral_join_type_conversion.png)
 
 ## Usage examples
 

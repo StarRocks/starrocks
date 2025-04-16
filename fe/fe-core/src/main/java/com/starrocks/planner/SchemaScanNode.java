@@ -40,7 +40,7 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -58,7 +58,6 @@ import com.starrocks.thrift.TUserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -167,7 +166,7 @@ public class SchemaScanNode extends ScanNode {
     }
 
     @Override
-    public void finalizeStats(Analyzer analyzer) throws UserException {
+    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
     }
 
     @Override
@@ -373,11 +372,6 @@ public class SchemaScanNode extends ScanNode {
     }
 
     @Override
-    public int getNumInstances() {
-        return beScanRanges == null ? 1 : beScanRanges.size();
-    }
-
-    @Override
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
     }
@@ -388,5 +382,10 @@ public class SchemaScanNode extends ScanNode {
 
     public void setCatalogName(String catalogName) {
         this.catalogName = catalogName;
+    }
+
+    @Override
+    public boolean isRunningAsConnectorOperator() {
+        return false;
     }
 }

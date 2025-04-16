@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # time_to_sec
 
-## Description
+
 
 Converts a time value into the number of seconds. The formula used for the conversion is as follows:
 
