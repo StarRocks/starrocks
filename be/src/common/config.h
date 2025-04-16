@@ -802,6 +802,8 @@ CONF_mBool(enable_bitmap_union_disk_format_with_set, "false");
 
 // pipeline poller timeout guard
 CONF_mInt64(pipeline_poller_timeout_guard_ms, "-1");
+// whether to enable large column detection in the pipeline execution framework.
+CONF_mBool(pipeline_enable_large_column_checker, "false");
 
 // The number of scan threads pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_thread_num, "0");

@@ -38,10 +38,12 @@
 #include "runtime/runtime_state.h"
 #include "util/debug/query_trace.h"
 #include "util/defer_op.h"
+#include "util/failpoint/fail_point.h"
 #include "util/runtime_profile.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks::pipeline {
+DEFINE_FAIL_POINT(operator_return_large_column);
 
 PipelineDriver::~PipelineDriver() noexcept {
     if (_workgroup != nullptr) {
@@ -339,6 +341,18 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                                                 "after {}-th operator {} in {}",
                                                 runtime_state->chunk_size(), row_num, i, curr_op->get_name(),
                                                 to_readable_string()));
+                        }
+
+                        bool capacity_exceed = false;
+                        FAIL_POINT_TRIGGER_EXECUTE(operator_return_large_column, { capacity_exceed = true; });
+
+                        if (UNLIKELY(config::pipeline_enable_large_column_checker)) {
+                            if (capacity_exceed || maybe_chunk.value()->has_capacity_limit_reached()) {
+                                return Status::CapacityLimitExceed(
+                                        fmt::format("Large column detected at "
+                                                    "after {}-th operator {} in {}",
+                                                    i, curr_op->get_name(), to_readable_string()));
+                            }
                         }
 
                         maybe_chunk.value()->check_or_die();
