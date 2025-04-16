@@ -822,6 +822,11 @@ TEST_F(ParquetEncodingTest, ByteStreamSplitInt32Debug) {
         for (int i = 0; i < 12; i++) {
             ASSERT_EQ(encoded[i], expected[i]);
         }
+        uint8_t decoded[12];
+        ByteStreamSplitUtil::ByteStreamSplitDecode(encoded, 4, 3, 3, decoded);
+        for (int i = 0; i < 12; i++) {
+            ASSERT_EQ(decoded[i], *((uint8_t*)(values.data()) + i));
+        }
     }
 
     const EncodingInfo* encoding = nullptr;
