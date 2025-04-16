@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <gtest/gtest.h>
-
-#undef __AVX2__
 #include "util/byte_stream_split.h"
+
+#include <gtest/gtest.h>
 
 namespace starrocks {
 
@@ -50,7 +49,7 @@ TEST(ByteStreamSplitTest, ByteStreamSplitFLBA) {
         }
     };
 
-    std::vector<int> byte_widths = {2, 4, 5, 8, 15, 16, 31, 32, 63, 64, 127, 128};
+    std::vector<int> byte_widths = {1, 2, 4, 5, 8, 15, 16, 31, 32, 63, 64, 127, 128};
     std::vector<int> num_values = {3, 4, 5, 10, 31, 127, 255};
     for (int byte_width : byte_widths) {
         for (int num_value : num_values) {
