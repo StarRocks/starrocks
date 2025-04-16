@@ -987,7 +987,6 @@ Status Aggregator::output_chunk_by_streaming_with_selection(Chunk* input_chunk, 
             // indicating that the Filter has been executed in GroupByColumn
             // e.g.: select c1, count(distinct c1) from t1 group by c1;
 
-<<<<<<< HEAD
             // At present, the type of problem cannot be completely solved,
             // and a new solution needs to be designed to solve it completely
             if (agg_input_column != nullptr && agg_input_column->size() == chunk_size) {
@@ -996,11 +995,7 @@ Status Aggregator::output_chunk_by_streaming_with_selection(Chunk* input_chunk, 
         }
     }
 
-    RETURN_IF_ERROR(output_chunk_by_streaming(input_chunk, chunk));
-=======
-    RETURN_IF_ERROR(
-            output_chunk_by_streaming(input_chunk, chunk, num_input_rows, true, force_use_intermediate_as_output));
->>>>>>> 7d380692c1 ([BugFix] fix crash caused by spill preagg strategy (#58022))
+    RETURN_IF_ERROR(output_chunk_by_streaming(input_chunk, chunk, force_use_intermediate_as_output));
     return Status::OK();
 }
 
