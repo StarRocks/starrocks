@@ -73,5 +73,10 @@ public class AstToSQLBuilderTest {
         StatementBase stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
         Assert.assertEquals("SELECT * EXCLUDE ( \"name\",\"email\" ) \nFROM `test_exclude`",
                 AstToSQLBuilder.toSQL(stmt));
+        
+        sql = "SELECT test_exclude.* EXCLUDE (name) FROM test_exclude";
+        stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+        Assert.assertEquals("SELECT test_exclude.* EXCLUDE ( \"name\" ) \nFROM `test_exclude`",
+                AstToSQLBuilder.toSQL(stmt));
     }
 }
