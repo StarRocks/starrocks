@@ -86,7 +86,16 @@ public class AlterJobV2Test {
                 .withTable("CREATE TABLE test.properties_change_test(k1 int, v1 int) " +
                         "primary key(k1) distributed by hash(k1) properties('replication_num' = '1');")
                 .withTable("CREATE TABLE modify_column_test(k1 int, k2 int, k3 int) ENGINE = OLAP " +
-                        "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) properties('replication_num' = '1');");
+                        "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) properties('replication_num' = '1');")
+                .withTable("CREATE TABLE partition_str2date(\n" +
+                        "        id varchar(100),\n" +
+                        "        k1 varchar(100),\n" +
+                        "        k2 decimal,\n" +
+                        "        k3 int\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(str2date(id, '%Y-%m-%d'))(\n" +
+                        "START (\"2021-01-01\") END (\"2021-01-10\") EVERY (INTERVAL 1 DAY)\n" +
+                        ");");
     }
 
     @AfterClass
@@ -179,6 +188,20 @@ public class AlterJobV2Test {
         showResultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
         System.out.println(showResultSet.getMetaData());
         System.out.println(showResultSet.getResultRows());
+    }
+
+    @Test
+    public void testModifyRelatedColumnWithStr2DatePartitionTable() {
+        try {
+            // modify column which define in mv
+            String alterStmtStr = "alter table test.partition_str2date modify column k1 varchar(1024)";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
+            waitForSchemaChangeAlterJobFinish();
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
     }
 
     @Test

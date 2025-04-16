@@ -115,6 +115,7 @@ import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -123,6 +124,8 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.statistic.StatsConstants;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -139,12 +142,14 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
 
 public class AnalyzerUtils {
+    private static final Logger LOG = LogManager.getLogger(AnalyzerUtils.class);
 
     // The partition format supported by date_trunc
     public static final Set<String> DATE_TRUNC_SUPPORTED_PARTITION_FORMAT =
@@ -1364,6 +1369,9 @@ public class AnalyzerUtils {
                     ImmutableMap.of("replication_num", String.valueOf(replicationNum));
             String partitionPrefix = "p";
 
+            // table partitions for check
+            TreeMap<String, PListCell> tablePartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+            tablePartitions.putAll(olapTable.getListPartitionItems());
             List<String> partitionColNames = Lists.newArrayList();
             List<PartitionDesc> partitionDescs = Lists.newArrayList();
             for (List<String> partitionValue : partitionValues) {
@@ -1378,11 +1386,24 @@ public class AnalyzerUtils {
                             + "_" + Integer.toHexString(partitionName.hashCode());
                 }
                 if (!partitionColNames.contains(partitionName)) {
+                    List<List<String>> partitionItems = Collections.singletonList(partitionValue);
+                    PListCell cell = new PListCell(partitionItems);
+                    // If the partition name already exists and their partition values are different, change the partition name.
+                    if (tablePartitions.containsKey(partitionName) && !tablePartitions.get(partitionName).equals(cell)) {
+                        partitionName = calculateUniquePartitionName(partitionName, tablePartitions);
+                        if (tablePartitions.containsKey(partitionName)) {
+                            throw new AnalysisException(String.format("partition name %s already exists in table " +
+                                    "%s.", partitionName, olapTable.getName()));
+                        }
+                    }
                     MultiItemListPartitionDesc multiItemListPartitionDesc = new MultiItemListPartitionDesc(true,
-                            partitionName, Collections.singletonList(partitionValue), partitionProperties);
+                            partitionName, partitionItems, partitionProperties);
                     multiItemListPartitionDesc.setSystem(true);
                     partitionDescs.add(multiItemListPartitionDesc);
                     partitionColNames.add(partitionName);
+
+                    // update table partition
+                    tablePartitions.put(partitionName, cell);
                 }
             }
             ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
@@ -1392,6 +1413,24 @@ public class AnalyzerUtils {
         } else {
             throw new AnalysisException("automatic partition only support partition by value.");
         }
+    }
+
+    /**
+     * Calculate the unique partition name for list partition.
+     */
+    private static String calculateUniquePartitionName(String partitionName,
+                                                       Map<String, PListCell> tablePartitions) {
+        // ensure partition name is unique with case-insensitive
+        int diff = partitionName.hashCode();
+        String newPartitionName = partitionName + "_" + Integer.toHexString(diff);
+        if (tablePartitions.containsKey(newPartitionName)) {
+            int i = 0;
+            do {
+                diff += 1;
+                newPartitionName = partitionName + "_" + Integer.toHexString(diff);
+            } while (i++ < 100 && tablePartitions.containsKey(newPartitionName));
+        }
+        return newPartitionName;
     }
 
     @VisibleForTesting

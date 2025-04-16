@@ -49,8 +49,12 @@ Status ArrayMapExpr::prepare(RuntimeState* state, ExprContext* context) {
 
     auto lambda_expr = down_cast<LambdaFunction*>(_children[0]);
     LambdaFunction::ExtractContext extract_ctx;
-    // assign slot ids to outer common exprs starting with max_used_slot_id + 1
     extract_ctx.next_slot_id = context->root()->max_used_slot_id() + 1;
+    std::vector<SlotId> tmp_slots;
+    lambda_expr->get_slot_ids(&tmp_slots);
+    for (const auto id : tmp_slots) {
+        _initial_required_slots.insert(id);
+    }
 
     RETURN_IF_ERROR(lambda_expr->extract_outer_common_exprs(state, context, &extract_ctx));
     _outer_common_exprs.swap(extract_ctx.outer_common_exprs);
@@ -58,6 +62,15 @@ Status ArrayMapExpr::prepare(RuntimeState* state, ExprContext* context) {
         RETURN_IF_ERROR(expr->prepare(state, context));
     }
     RETURN_IF_ERROR(lambda_expr->prepare(state, context));
+    {
+        // remove lambda arguments and common sub exprs from _initial_required_slots
+        for (auto id : extract_ctx.all_lambda_arguments) {
+            _initial_required_slots.erase(id);
+        }
+        for (auto id : extract_ctx.all_common_sub_expr_ids) {
+            _initial_required_slots.erase(id);
+        }
+    }
 
     return Status::OK();
 }
@@ -83,9 +96,10 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
     // create a new chunk to evaluate the lambda expression
     auto cur_chunk = std::make_shared<Chunk>();
     auto tmp_chunk = std::make_shared<Chunk>();
+
     {
-        // see more details: https://github.com/StarRocks/starrocks/pull/52692
-        for (const auto& [slot_id, _] : chunk->get_slot_id_to_index_map()) {
+        // We put the slots needed for lambda function evaluation into a separate chunk to avoid conflicts between outer_common_expr and other slots.
+        for (const auto& slot_id : _initial_required_slots) {
             tmp_chunk->append_column(chunk->get_column_by_slot_id(slot_id), slot_id);
         }
     }
@@ -95,7 +109,6 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
         ASSIGN_OR_RETURN(auto col, context->evaluate(expr, tmp_chunk.get()));
         tmp_chunk->append_column(col, slot_id);
     }
-
     auto lambda_func = dynamic_cast<LambdaFunction*>(_children[0]);
     std::vector<SlotId> capture_slot_ids;
     lambda_func->get_captured_slot_ids(&capture_slot_ids);
@@ -173,9 +186,15 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
                 auto view_column = ArrayViewColumn::from_array_column(captured_column);
                 ASSIGN_OR_RETURN(auto replicated_view_column, view_column->replicate(aligned_offsets->get_data()));
                 cur_chunk->append_column(replicated_view_column, slot_id);
+                if (view_column->capacity_limit_reached()) {
+                    return Status::InternalError("Capacity limit reached for captured column in array_map");
+                }
             } else {
                 ASSIGN_OR_RETURN(auto replicated_column, captured_column->replicate(aligned_offsets->get_data()));
                 cur_chunk->append_column(replicated_column, slot_id);
+                if (replicated_column->capacity_limit_reached()) {
+                    return Status::InternalError("Capacity limit reached for captured column in array_map");
+                }
             }
         }
     }
@@ -193,6 +212,10 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
         tmp_col->check_or_die();
         ASSIGN_OR_RETURN(column, tmp_col->replicate(aligned_offsets->get_data()));
         column = ColumnHelper::align_return_type(column, type().children[0], column->size(), true);
+
+        if (column->capacity_limit_reached()) {
+            return Status::InternalError("array map's temp column exceed the limit");
+        }
     } else {
         // if all input arguments are constant and lambda expr doesn't rely on other capture columns,
         // we can evaluate it based on const column
@@ -226,6 +249,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
             }
         }
     }
+
     DCHECK(column != nullptr);
     column = ColumnHelper::cast_to_nullable_column(column);
 

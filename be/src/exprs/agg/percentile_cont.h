@@ -472,7 +472,10 @@ class PercentileDiscAggregateFunction final : public PercentileContDiscAggregate
         const double& rate = this->data(state).rate;
 
         ResultColumnType* column = down_cast<ResultColumnType*>(to);
-        DCHECK(!new_vector.empty());
+        if (new_vector.empty()) {
+            column->append_default();
+            return;
+        }
         if (new_vector.size() == 1 || rate == 1) {
             column->append(new_vector.back());
             return;

@@ -29,6 +29,8 @@
 
 namespace starrocks::pipeline {
 
+DEFINE_FAIL_POINT(operator_return_failed_status);
+
 GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_ptr<ThreadPool> thread_pool,
                                            bool enable_resource_group, const CpuUtil::CpuIds& cpuids)
         : Base("pip_exec_" + name),
@@ -168,6 +170,12 @@ void GlobalDriverExecutor::_worker_thread() {
                 status = driver->workgroup()->check_big_query(*query_ctx);
             }
 
+            FAIL_POINT_TRIGGER_EXECUTE(operator_return_failed_status, {
+                if (status.ok()) {
+                    status = Status::InternalError("injected failed status");
+                }
+            });
+
             if (!status.ok()) {
                 auto o_id = get_backend_id();
                 int64_t be_id = o_id.has_value() ? o_id.value() : -1;
@@ -177,6 +185,7 @@ void GlobalDriverExecutor::_worker_thread() {
                              << ", status=" << status;
                 driver->runtime_profile()->add_info_string("ErrorMsg", std::string(status.message()));
                 query_ctx->cancel(status);
+                runtime_state->set_is_cancelled(true);
                 driver->cancel_operators(runtime_state);
                 if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);

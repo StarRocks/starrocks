@@ -192,6 +192,8 @@ private:
 
         int64_t get_consumed_bytes() const { return _total_consumed_bytes; }
 
+        void set_try_consume_mem_size(int64_t mem_size) { _try_consume_mem_size = mem_size; }
+
     private:
         int64_t _consume_from_reserved(int64_t size) {
             if (_reserved_bytes > size) {
@@ -335,6 +337,8 @@ public:
     int64_t try_consume_mem_size() { return _mem_cache_manager.try_consume_mem_size(); }
 
     int64_t get_consumed_bytes() const { return _mem_cache_manager.get_consumed_bytes(); }
+    // for ut
+    void set_try_consume_mem_size(int64_t mem_size) { _mem_cache_manager.set_try_consume_mem_size(mem_size); }
 
 private:
     MemCacheManager _mem_cache_manager;

@@ -85,6 +85,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class QueryQueueManagerTest extends SchedulerTestBase {
     private static final List<Frontend> FRONTENDS = ImmutableList.of(
@@ -1701,4 +1702,23 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         fe.handleHbResponse(hbResponse, false);
     }
 
+    @Test
+    public void testTimeoutCheck() throws Exception {
+        GlobalVariable.setQueryQueuePendingTimeoutSecond(1);
+        Thread.sleep(2000L);
+
+        {
+            GlobalVariable.setEnableQueryQueueSelect(true);
+            DefaultCoordinator coordinator = getSchedulerWithQueryId("select count(1) from lineitem");
+            assertThatThrownBy(() -> manager.maybeWait(connectContext, coordinator))
+                    .isInstanceOf(UserException.class)
+                    .hasMessageContaining("Failed to allocate resource to query: pending timeout");
+        }
+
+        {
+            GlobalVariable.setEnableQueryQueueSelect(false);
+            DefaultCoordinator coordinator = getSchedulerWithQueryId("select count(1) from lineitem");
+            manager.maybeWait(connectContext, coordinator);
+        }
+    }
 }

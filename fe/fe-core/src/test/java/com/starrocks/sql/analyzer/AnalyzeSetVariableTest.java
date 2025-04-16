@@ -245,6 +245,12 @@ public class AnalyzeSetVariableTest {
                 mgr.chooseResourceGroupByID(anyLong);
                 result = null;
             }
+
+            {
+                mgr.createBuiltinResourceGroupsIfNotExist();
+                result = null;
+                minTimes = 0;
+            }
         };
 
         String sql;

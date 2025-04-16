@@ -40,6 +40,7 @@ public class RecycleLakeListPartitionInfo extends RecycleListPartitionInfo {
             Warehouse warehouse = manager.getBackgroundWarehouse();
             if (LakeTableHelper.removePartitionDirectory(partition, warehouse.getId())) {
                 GlobalStateMgr.getCurrentState().getLocalMetastore().onErasePartition(partition);
+                LakeTableHelper.deleteShardGroupMeta(partition);
                 return true;
             } else {
                 return false;
