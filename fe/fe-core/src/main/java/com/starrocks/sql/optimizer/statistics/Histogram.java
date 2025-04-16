@@ -73,6 +73,27 @@ public class Histogram {
         return getRowCountInBucket(valueOpt.get(), totalDistinctCount, constantOperator.getType().isFixedPointType());
     }
 
+    public int getBucketIndex(double value) {
+        int left = 0;
+        int right = buckets.size() - 1;
+        while (left <= right) {
+            int mid = (left + right) / 2;
+            Bucket bucket = buckets.get(mid);
+
+            if (bucket.isInBucket(value)) {
+                return mid;
+            }
+
+            if (value < bucket.getLower()) {
+                right = mid - 1;
+            } else {
+                left = mid + 1;
+            }
+        }
+
+        return -1;
+    }
+
     public Optional<Long> getRowCountInBucket(double value, double distinctValuesCount, boolean useFixedPointEstimation) {
         int left = 0;
         int right = buckets.size() - 1;

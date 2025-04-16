@@ -46,6 +46,10 @@ public class Bucket {
         return upperRepeats;
     }
 
+    public boolean isInBucket(double value) {
+        return lower <= value && value <= upper;
+    }
+
     public Optional<Long> getRowCountInBucket(double value, Long previousBucketCount, double distinctValuesCount,
                                               boolean useFixedPointEstimation) {
         if (lower <= value && value < upper) {
