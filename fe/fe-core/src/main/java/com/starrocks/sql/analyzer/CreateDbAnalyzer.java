@@ -18,7 +18,10 @@ import com.google.common.base.Strings;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.connector.ConnectorType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
@@ -28,9 +31,6 @@ import java.util.Map;
 
 public class CreateDbAnalyzer {
     public static void analyze(CreateDbStmt statement, ConnectContext context) {
-        String dbName = statement.getFullDbName();
-        FeNameFormat.checkDbName(dbName);
-
         String catalogName = statement.getCatalogName();
         if (Strings.isNullOrEmpty(catalogName)) {
             catalogName = context.getCurrentCatalog();
@@ -38,6 +38,14 @@ public class CreateDbAnalyzer {
         }
 
         MetaUtils.checkCatalogExistAndReport(catalogName);
+        String dbName = statement.getFullDbName();
+        if (!CatalogMgr.isInternalCatalog(catalogName) &&
+                ConnectorType.from(GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogType(catalogName)) ==
+                        ConnectorType.ICEBERG) {
+            FeNameFormat.checkNamespace(dbName);
+        } else {
+            FeNameFormat.checkDbName(dbName);
+        }
 
         Map<String, String> properties = statement.getProperties();
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {

@@ -108,6 +108,13 @@ public class FeNameFormatTest {
     }
 
     @Test
+    public void testCheckNamespace() {
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkNamespace("abc"));
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkNamespace("ns1.ns2"));
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkNamespace("ns1.ns2.ns3"));
+    }
+
+    @Test
     public void testCheckColNameInSharedNothing() {
         Assertions.assertDoesNotThrow(() -> FeNameFormat.checkColumnName("abc.abc"));
         Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkColumnName("!abc"));

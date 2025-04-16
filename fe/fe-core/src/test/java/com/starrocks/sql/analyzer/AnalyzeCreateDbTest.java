@@ -45,6 +45,9 @@ public class AnalyzeCreateDbTest {
         analyzeSuccess("CREATE Database `iceberg_catalog`.`iceberg_db`" +
                 " properties(\"location\" = \"hdfs://namenode:9000/user/warehouse/hive/iceberg_db.db\")");
 
+        analyzeSuccess("CREATE Database `iceberg_catalog`.`ns1`");
+        analyzeSuccess("CREATE Database `iceberg_catalog`.`ns1`.`ns2`");
+
         try {
             String stmt = "CREATE Database `not_exist_catalog`.`iceberg_db` properties(\"location\" = \"hdfs://namenode:9000/user/warehouse/hive/iceberg_db.db\")";
             UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);

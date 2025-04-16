@@ -22,7 +22,9 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergView;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
@@ -39,6 +41,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.exceptions.RESTException;
 import org.apache.iceberg.rest.RESTCatalog;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.view.BaseView;
@@ -86,11 +89,11 @@ public class IcebergRESTCatalogTest {
     }
 
     @Test
-    public void testListAllDatabases(@Mocked RESTCatalog restCatalog) {
+    public void testListAllDatabasesWithException(@Mocked RESTCatalog restCatalog) {
         new Expectations() {
             {
                 restCatalog.listNamespaces();
-                result = ImmutableList.of(Namespace.of("db1"), Namespace.of("db2"));
+                result = new RESTException("mocked");
                 times = 1;
             }
         };
@@ -98,8 +101,49 @@ public class IcebergRESTCatalogTest {
         Map<String, String> icebergProperties = new HashMap<>();
         IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(
                 "rest_native_catalog", new Configuration(), icebergProperties);
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class, "Failed to list namespaces",
+                icebergRESTCatalog::listAllDatabases);
+
+        new Expectations() {
+            {
+                restCatalog.listNamespaces(Namespace.empty());
+                result = new RESTException("mocked");
+                times = 1;
+            }
+        };
+
+        icebergProperties = ImmutableMap.of(
+                "iceberg.catalog.rest.nested-namespace-enabled", "true");
+        icebergRESTCatalog = new IcebergRESTCatalog(
+                "rest_native_catalog", new Configuration(), icebergProperties);
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class, "Failed to list namespaces",
+                icebergRESTCatalog::listAllDatabases);
+    }
+
+    @Test
+    public void testListAllDatabases(@Mocked RESTCatalog restCatalog) {
+        new Expectations() {
+            {
+                restCatalog.listNamespaces(Namespace.empty());
+                result = ImmutableList.of(Namespace.of("db1"));
+                times = 1;
+
+                restCatalog.listNamespaces(Namespace.of("db1"));
+                result = ImmutableList.of(Namespace.of("db1", "ns1"));
+                times = 1;
+
+                restCatalog.listNamespaces(Namespace.of("db1", "ns1"));
+                result = ImmutableList.of(Namespace.of("db1", "ns1", "ns2"));
+                times = 1;
+            }
+        };
+
+        Map<String, String> icebergProperties = ImmutableMap.of(
+                "iceberg.catalog.rest.nested-namespace-enabled", "true");
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(
+                "rest_native_catalog", new Configuration(), icebergProperties);
         List<String> dbs = icebergRESTCatalog.listAllDatabases();
-        Assert.assertEquals(Arrays.asList("db1", "db2"), dbs);
+        Assert.assertEquals(Arrays.asList("db1", "db1.ns1", "db1.ns1.ns2"), dbs);
     }
 
     @Test
