@@ -34,12 +34,15 @@ public class FeNameFormat {
     private static final String LABEL_REGEX = "^[-\\w]{1,128}$";
 
     public static final char[] SPECIAL_CHARACTERS_IN_DB_NAME = new char[] {'-', '~', '!', '@', '#', '$',
+            '%', '^', '&', '<', '>', '=', '+'};
+    public static final char[] SPECIAL_CHARACTERS_IN_ICEBERG_NAMESPACE = new char[] {'-', '~', '!', '@', '#', '$',
             '%', '^', '&', '<', '>', '=', '+', '.'};
     public static final String COMMON_NAME_REGEX = "^[a-zA-Z]\\w{0,63}$|^_[a-zA-Z0-9]\\w{0,62}$";
 
     // The length of db name is 256
     public static String DB_NAME_REGEX = "";
     public static final String TABLE_NAME_REGEX = "^[^\0]{1,1024}$";
+    public static String ICEBERG_NAMESPACE_REGEX = "";
 
     // Now we can not accept all characters because current design of delete save delete cond contains column name,
     // so it can not distinguish whether it is an operator or a column name
@@ -69,6 +72,12 @@ public class FeNameFormat {
         DB_NAME_REGEX = "^[a-zA-Z][\\w" + Pattern.quote(allowedSpecialCharacters) + "]{0,255}$|" +
                 "^_[a-zA-Z0-9][\\w" + Pattern.quote(allowedSpecialCharacters) + "]{0,254}$";
 
+        allowedSpecialCharacters = "";
+        for (Character c : SPECIAL_CHARACTERS_IN_ICEBERG_NAMESPACE) {
+            allowedSpecialCharacters += c;
+        }
+        ICEBERG_NAMESPACE_REGEX = "^[a-zA-Z][\\w" + Pattern.quote(allowedSpecialCharacters) + "]{0,255}$|" +
+                "^_[a-zA-Z0-9][\\w" + Pattern.quote(allowedSpecialCharacters) + "]{0,254}$";
     }
 
     // The length of db name is 256.
@@ -78,6 +87,16 @@ public class FeNameFormat {
         }
 
         if (!dbName.matches(DB_NAME_REGEX)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_DB_NAME, dbName);
+        }
+    }
+
+    public static void checkNamespace(String dbName) {
+        if (Strings.isNullOrEmpty(dbName)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_DB_NAME, dbName);
+        }
+
+        if (!dbName.matches(ICEBERG_NAMESPACE_REGEX)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_DB_NAME, dbName);
         }
     }

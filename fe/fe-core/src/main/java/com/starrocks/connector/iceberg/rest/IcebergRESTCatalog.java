@@ -131,26 +131,22 @@ public class IcebergRESTCatalog implements IcebergCatalog {
 
     @Override
     public List<String> listAllDatabases() {
-        if (nestedNamespaceEnabled) {
-            return listNamespaces(Namespace.empty());
-        } else {
-            try {
+        try {
+            if (nestedNamespaceEnabled) {
+                return listNamespaces(Namespace.empty());
+            } else {
                 return delegate.listNamespaces().stream().map(ns -> ns.level(0))
-                    .collect(Collectors.toList());
-            } catch (RESTException e) {
-                throw new StarRocksConnectorException("Failed to list namespaces", e);
+                            .collect(Collectors.toList());
             }
+        } catch (RESTException e) {
+            throw new StarRocksConnectorException("Failed to list namespaces", e);
         }
     }
 
     private List<String> listNamespaces(Namespace parent) {
-        try {
-            return delegate.listNamespaces(parent).stream().
-                    flatMap(child -> Stream.concat(Stream.of(child.toString()), listNamespaces(child).stream()))
-                    .collect(toImmutableList());
-        } catch (RESTException e) {
-            throw new StarRocksConnectorException("Failed to list namespaces", e);
-        }
+        return delegate.listNamespaces(parent).stream().
+                flatMap(child -> Stream.concat(Stream.of(child.toString()), listNamespaces(child).stream()))
+                .collect(toImmutableList());
     }
 
     @Override

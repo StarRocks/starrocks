@@ -102,8 +102,16 @@ public class FeNameFormatTest {
 
 
         Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkDbName("!abc"));
+        Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkDbName("ab.c"));
         Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkDbName("ab c"));
         Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkDbName("ab\0c"));
+    }
+
+    @Test
+    public void testCheckNamespace() {
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkNamespace("abc"));
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkNamespace("ns1.ns2"));
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkNamespace("ns1.ns2.ns3"));
     }
 
     @Test
