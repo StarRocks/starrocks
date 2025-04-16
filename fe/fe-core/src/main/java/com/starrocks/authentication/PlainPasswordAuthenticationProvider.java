@@ -86,7 +86,7 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
         info.setAuthPlugin(PLUGIN_NAME);
         info.setPassword(passwordScrambled);
         info.setOrigUserHost(userIdentity.getUser(), userIdentity.getHost());
-        info.setTextForAuthPlugin(userAuthOption == null ? null : userAuthOption.getAuthString());
+        info.setTextForAuthPlugin(null);
         return info;
     }
 
