@@ -347,6 +347,14 @@ mysql> select * from smith_polaris.`ns1.ns2.tpch_namespace`.tbl;
 
 </TabItem>
 
+<TabItem value="S3 Tables" label="S3 Tables">
+
+#### S3 Tables
+
+For detailed instructions, see [Create Iceberg REST Catalog for AWS S3 tables](./iceberg_rest_s3.md).
+
+</TabItem>
+
 <TabItem value="JDBC" label="JDBC">
 
 ##### JDBC

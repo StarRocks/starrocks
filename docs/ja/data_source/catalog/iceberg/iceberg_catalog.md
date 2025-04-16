@@ -345,6 +345,14 @@ mysql> select * from smith_polaris.`ns1.ns2.tpch_namespace`.tbl;
 
 </TabItem>
 
+<TabItem value="S3 Tables" label="S3 Tables">
+
+#### S3 Tables
+
+詳細な手順については、[AWS S3テーブル用のIceberg REST Catalog](./iceberg_rest_s3.md) を作成するを参照してください。
+
+</TabItem>
+
 <TabItem value="JDBC" label="JDBC">
 
 ##### JDBC
