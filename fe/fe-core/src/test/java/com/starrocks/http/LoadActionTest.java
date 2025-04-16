@@ -247,10 +247,10 @@ public class LoadActionTest extends StarRocksHttpTestCase {
             }
         };
 
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            SystemInfoService getCurrentSystemInfo() {
-                return service;
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                result = service;
             }
         };
 
