@@ -239,7 +239,8 @@ mysql> select * from smith_polaris.`ns1.ns2.tpch_namespace`.tbl;
 ```
 
 #### S3 Tables
-请参考这篇 [文档](iceberg_s3table.md) 进行设置
+
+详细信息，参考 [为 AWS S3 表创建 Iceberg REST Catalog](iceberg_s3table.md)。
 
 
 ##### JDBC
