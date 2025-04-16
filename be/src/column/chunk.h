@@ -286,6 +286,8 @@ public:
         return Status::OK();
     }
 
+    bool has_capacity_limit_reached() const { return !capacity_limit_reached().ok(); }
+
     query_cache::owner_info& owner_info() { return _owner_info; }
     const ChunkExtraDataPtr& get_extra_data() const { return _extra_data; }
     ChunkExtraDataPtr& get_extra_data() { return _extra_data; }
