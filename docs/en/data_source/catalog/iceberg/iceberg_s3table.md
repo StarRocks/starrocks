@@ -2,28 +2,38 @@
 displayed_sidebar: docs
 ---
 
-# StarRocks + Amazon S3 Tables
-This article explains how StarRocks accesses Amazon S3 tables through the AWS Glue Iceberg REST endpoint.
+# Create Iceberg REST Catalog for AWS S3
 
-The AWS Glue Iceberg REST endpoint implements the [Iceberg REST Catalog Open API specification](https://github.com/apache/iceberg/blob/main/open-api/rest-catalog-open-api.yaml), which provides a standardized interface for interacting with Iceberg tables. To access S3 tables using this endpoint, you need to configure permissions by combining IAM policies and AWS Lake Formation authorization. The following sections will guide you through setting up access permissions, including defining required policies, establishing Lake Formation permissions at database and table levels, and using StarRocks to create an Iceberg REST catalog for accessing S3 tables.
+This article explains how to create Iceberg REST Catalog in StarRocks for access to data in AWS S3 through the AWS Glue Iceberg REST endpoint.
 
-## Create Table Bucket
-1. Log in to the [Amazon S3 Console](https://console.aws.amazon.com/s3) and select "Table buckets" from the navigation panel.
-2. Click **Create table bucket** to create a table bucket.
-3. After creating the table bucket, select it and click **Create table with Athena**.
-4. Create a namespace.
-5. After creating the namespace, click **Create table with Athena** to create a table.
+The AWS Glue Iceberg REST endpoint implements the [Iceberg REST Catalog Open API specification](https://github.com/apache/iceberg/blob/main/open-api/rest-catalog-open-api.yaml), which provides a standardized interface for interacting with Iceberg tables. To access tables in S3 using this endpoint, you need to configure credentials by combining IAM policies and AWS Lake Formation authorization. The following sections will guide you through the acess permission setup, including defining required policies, establishing Lake Formation permissions at database and table levels, and using StarRocks to create an Iceberg REST catalog for accessing S3 tables.
+
+## (Optional) Create a table bucket
+
+You can skip this step if you already have a table bucket for Iceberg tables.
+
+1. Sign in to the [Amazon S3 Console](https://console.aws.amazon.com/s3) as a user with administrator privileges.
+2. In the upper-right corner of the page, select your AWS region.
+3. In the left-side navigation pane, choose **Table buckets** from the navigation panel.
+4. Click **Create table bucket** to create a table bucket.
+5. After creating the table bucket, select it and click **Create table with Athena**.
+6. Create a namespace.
+7. After creating the namespace, click **Create table with Athena** again to create a table.
 
 > **NOTE**
 > 
 > You can create a Database and Table using Athena, and then query them using StarRocks. Alternatively, you can just create a Table bucket, and then use StarRocks to create the Database and Table.
 
 ## Create IAM Policy
+
 To access tables via the AWS Glue endpoint, create an IAM Policy with permissions for AWS Glue and Lake Formation operations:
-1. Open the IAM Console: https://console.aws.amazon.com/iam/
-2. Select **Policies** from the left navigation bar.
-3. Choose **Create a policy**, select **JSON** in the policy editor.
-4. Add the following policy granting access to AWS Glue and Lake Formation actions:
+
+1. Sign in to the [Amazon IAM Console](https://console.aws.amazon.com/iam) as a user with administrator privileges.
+2. In the upper-right corner of the page, select your AWS region.
+3. In the left-side navigation pane, choose **Policies** from the navigation panel.
+4. Choose **Create a policy**, select **JSON** in the policy editor.
+5. Add the following policy to grant access to AWS Glue and Lake Formation actions.
+
 ```json
 {
     "Version": "2012-10-17",
@@ -58,34 +68,39 @@ To access tables via the AWS Glue endpoint, create an IAM Policy with permission
     ]
 }
 ```
+
 After creating the IAM policy, attach it to the target IAM user:
 
-1. Select **Users** from the left navigation bar.
-2. Choose the user requiring S3 table access.
+1. Choose **Users** from the navigation panel.
+2. Select the user requiring S3 table access.
 3. Click **Add permissions** and select **Attach policies directly**.
 4. Attach the newly created policy.
 
 ## Manage Permissions via Lake Formation
+
 To access S3 tables, StarRocks requires Lake Formation to first set up permissions that allow third-party query engines to access S3 tables.
 
-1. Open the [Lake Formation Console](https://console.aws.amazon.com/lakeformation).
-2. Navigate to **Application integration settings**.
-3. Enable **Allow external engines to access data in Amazon S3 locations with full table access.**
+1. Sign in to the [Lake Formation Console](https://console.aws.amazon.com/lakeformation) as a user with administrator privileges.
+2. In the upper-right corner of the page, select your AWS region.
+3. In the left-side navigation pane, choose **Application integration settings** from the navigation panel.
+4. Choose **Allow external engines to access data in Amazon S3 locations with full table access.**
 
 Next, grant the above IAM User access permissions in Lake Formation.
-1. In [Lake Formation Console](https://console.aws.amazon.com/lakeformation), go to **Data permissions** > **Grant**.
-2. Under Principals, select **IAM users and roles** and choose the authorized IAM user.
-3. Under LF-Tags or catalog resources, select **Named Data Catalog resources**.
-4. Choose the previously created table bucket in the catalogs.
-5. Select **Super** under catalog permissions.
+
+1. In the left-side navigation pane of the [Lake Formation Console](https://console.aws.amazon.com/lakeformation), choose **Data permissions** from the navigation panel.
+2. Click **Grant**.
+3. In the **Principals** section, choose **IAM users and roles**, and select the authorized IAM user from the **IAM users and roles** drop-down list.
+4. In the **LF-Tags or catalog resources** section, choose **Named Data Catalog resources**, and select your table bucket you created in the **Catalogs** drop-down list.
+5. In the **Catalog permissions** section, choose **Super** for **Catalog permissions**.
 6. Click **Grant**.
 
 > **NOTE**
 >
-> Super permissions are granted here for testing convenience. Users should assign appropriate permissions based on actual requirements.
+> Here, Super permissions are granted for testing convenience. You need to assign appropriate permissions based on actual requirements in a production environment.
 
-Create Iceberg REST Catalog
-Use StarRocks to create an Iceberg REST catalog:
+## Create Iceberg REST Catalog
+
+Create an Iceberg REST catalog in StarRocks:
 
 ```SQL
 CREATE EXTERNAL CATALOG starrocks_lakehouse_s3tables PROPERTIES(
@@ -101,8 +116,13 @@ CREATE EXTERNAL CATALOG starrocks_lakehouse_s3tables PROPERTIES(
 );
 ```
 
-Create Database/Table and Query
+You can then create databases and tables run queries in it.
+
+Example:
+
 ```SQL
+-- Swotch to the catalog
+StarRocks> SET CATALOG starrocks_lakehouse_s3tables;
 -- Create database
 StarRocks> CREATE DATABASE s3table_db;
 Query OK, 0 rows affected
