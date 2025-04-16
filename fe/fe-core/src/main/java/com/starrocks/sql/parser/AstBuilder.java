@@ -405,6 +405,7 @@ import com.starrocks.sql.ast.ShowIndexStmt;
 import com.starrocks.sql.ast.ShowLoadStmt;
 import com.starrocks.sql.ast.ShowLoadWarningsStmt;
 import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
+import com.starrocks.sql.ast.ShowMultiColumnStatsMetaStmt;
 import com.starrocks.sql.ast.ShowOpenTableStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowPluginsStmt;
@@ -2814,7 +2815,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitDropStatsStatement(StarRocksParser.DropStatsStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName tableName = qualifiedNameToTableName(qualifiedName);
-        return new DropStatsStmt(tableName, context.MULTI_COLUMNS() != null, createPos(context));
+        return new DropStatsStmt(tableName, context.MULTIPLE() != null, createPos(context));
     }
 
     @Override
@@ -2906,7 +2907,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             limitElement = (LimitElement) visit(context.limitElement());
         }
 
-        return new ShowBasicStatsMetaStmt(predicate, orderByElements, limitElement, createPos(context));
+        if (context.MULTIPLE() != null) {
+            return new ShowMultiColumnStatsMetaStmt(predicate, orderByElements, limitElement, createPos(context));
+        } else {
+            return new ShowBasicStatsMetaStmt(predicate, orderByElements, limitElement, createPos(context));
+        }
     }
 
     @Override
@@ -7465,7 +7470,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitSpecialDateTimeExpression(StarRocksParser.SpecialDateTimeExpressionContext context) {
-        return new FunctionCallExpr(context.name.getText().toUpperCase(), Lists.newArrayList());
+        List<Expr> expr = Lists.newArrayList();
+        if (context.INTEGER_VALUE() != null) {
+            expr.add(new IntLiteral(Long.parseLong(context.INTEGER_VALUE().getText()), Type.INT));
+        }
+        return new FunctionCallExpr(context.name.getText().toUpperCase(), new FunctionParams(false, expr));
     }
 
     @Override

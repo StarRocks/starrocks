@@ -46,8 +46,13 @@
         <nimbusds.version>9.37.2</nimbusds.version>
         <commons-io.version>2.14.0</commons-io.version>
         <gcs.connector.version>hadoop3-2.2.26</gcs.connector.version>
+        <slf4j.version>1.7.36</slf4j.version>
+        <arrow.version>17.0.0</arrow.version>
+        <jackson.version>2.12.7.2</jackson.version>
         <guava.version>32.0.1-jre</guava.version>
-        <jetty.version>10.0.24</jetty.version>
+        <!-- hadoop-azure requires no more than jetty10+ -->
+        <!-- https://stackoverflow.com/questions/66713254/spark-wasb-and-jetty-11 -->
+        <jetty.version>9.4.57.v20241219</jetty.version>
         <parquet.version>1.15.1</parquet.version>
         <airlift.version>0.27</airlift.version>
         <avro.version>1.11.4</avro.version>
@@ -271,6 +276,14 @@
             </dependency>
             <!-- hive -->
 
+            <!--slf4j-->
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-api</artifactId>
+                <version>${slf4j.version}</version>
+            </dependency>
+            <!--slf4j-->
+
             <!--log4j 2-->
             <dependency>
                 <groupId>org.apache.logging.log4j</groupId>
@@ -292,7 +305,33 @@
                 <scope>test</scope>
             </dependency>
             <!-- junit -->
+            <!-- jackson -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+            <!-- jackson -->
 
+            <!-- apache arrow -->
+            <dependency>
+                <groupId>org.apache.arrow</groupId>
+                <artifactId>arrow-vector</artifactId>
+                <version>${arrow.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.arrow</groupId>
+                <artifactId>arrow-memory-netty</artifactId>
+                <version>${arrow.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.arrow</groupId>
+                <artifactId>arrow-compression</artifactId>
+                <version>${arrow.version}</version>
+            </dependency>
+            <!-- apache arrow -->
             <dependency>
                 <groupId>com.google.guava</groupId>
                 <artifactId>guava</artifactId>

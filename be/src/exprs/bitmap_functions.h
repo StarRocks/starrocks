@@ -36,6 +36,13 @@ public:
     DEFINE_VECTORIZED_FN(bitmap_hash);
 
     /**
+     * @param:
+     * @paramType columns: [TYPE_VARCHAR]
+     * @return TYPE_OBJECT
+     */
+    DEFINE_VECTORIZED_FN(bitmap_hash64);
+
+    /**
      * @param: 
      * @paramType columns: [TYPE_OBJECT]
      * @return TYPE_BIGINT

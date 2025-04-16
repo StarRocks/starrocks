@@ -36,11 +36,13 @@ package com.starrocks.task;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.binlog.BinlogConfig;
+import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.thrift.TBinlogConfig;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TCreateTabletReq;
+import com.starrocks.thrift.TFlatJsonConfig;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
@@ -66,6 +68,7 @@ public class CreateReplicaTask extends AgentTask {
     private TPersistentIndexType persistentIndexType;
 
     private BinlogConfig binlogConfig;
+    private FlatJsonConfig flatJsonConfig;
 
     private final TTabletType tabletType;
 
@@ -101,6 +104,7 @@ public class CreateReplicaTask extends AgentTask {
         this.compressionLevel = builder.getCompressionLevel();
         this.tabletSchema = builder.getTabletSchema();
         this.binlogConfig = builder.getBinlogConfig();
+        this.flatJsonConfig = builder.getFlatJsonConfig();
         this.createSchemaFile = builder.isCreateSchemaFile();
         this.enableTabletCreationOptimization = builder.isEnableTabletCreationOptimization();
         this.baseTabletId = builder.getBaseTabletId();
@@ -171,6 +175,10 @@ public class CreateReplicaTask extends AgentTask {
             TBinlogConfig tBinlogConfig = binlogConfig.toTBinlogConfig();
             createTabletReq.setBinlog_config(tBinlogConfig);
         }
+        if (flatJsonConfig != null) {
+            TFlatJsonConfig tFlatJsonConfig = flatJsonConfig.toTFlatJsonConfig();
+            createTabletReq.setFlat_json_config(tFlatJsonConfig);
+        }
         if (inRestoreMode) {
             createTabletReq.setIn_restore_mode(true);
         }
@@ -206,6 +214,7 @@ public class CreateReplicaTask extends AgentTask {
         private boolean enablePersistentIndex;
         private TPersistentIndexType persistentIndexType;
         private BinlogConfig binlogConfig;
+        private FlatJsonConfig flatJsonConfig;
         private TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;
         private MarkedCountDownLatch<Long, Long> latch;
         private boolean inRestoreMode = false;
@@ -326,6 +335,15 @@ public class CreateReplicaTask extends AgentTask {
 
         public Builder setPersistentIndexType(TPersistentIndexType persistentIndexType) {
             this.persistentIndexType = persistentIndexType;
+            return this;
+        }
+
+        public FlatJsonConfig getFlatJsonConfig() {
+            return flatJsonConfig;
+        }
+
+        public Builder setFlatJsonConfig(FlatJsonConfig flatJsonConfig) {
+            this.flatJsonConfig = flatJsonConfig;
             return this;
         }
 

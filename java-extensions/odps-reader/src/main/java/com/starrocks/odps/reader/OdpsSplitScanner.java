@@ -90,18 +90,16 @@ public class OdpsSplitScanner extends ConnectorScanner {
         }
         this.endpoint = params.get("endpoint");
         String serializedScan = params.get("read_session");
-        try {
-            this.scan = (TableBatchReadSession) deserialize(serializedScan);
-        } catch (Exception e) {
-            throw new RuntimeException("deserialize read session error", e);
-        }
+        this.classLoader = this.getClass().getClassLoader();
+        this.scan = (TableBatchReadSession) deserialize(serializedScan);
         Account account = new AliyunAccount(params.get("access_id"), params.get("access_key"));
         Odps odps = new Odps(account);
         odps.setEndpoint(endpoint);
         TableSchema schema = odps.tables().get(projectName, tableName).getSchema();
         Map<String, Column> nameColumnMap = schema.getColumns().stream()
                 .collect(Collectors.toMap(Column::getName, o -> o));
-        nameColumnMap.putAll(schema.getPartitionColumns().stream().collect(Collectors.toMap(Column::getName, o -> o)));
+        nameColumnMap.putAll(
+                schema.getPartitionColumns().stream().collect(Collectors.toMap(Column::getName, o -> o)));
         requireColumns = new Column[requiredFields.length];
         requiredTypes = new ColumnType[requiredFields.length];
         nameIndexMap = new HashMap<>();
@@ -119,7 +117,7 @@ public class OdpsSplitScanner extends ConnectorScanner {
             builder.withQuotaName(params.get("quota_name"));
         }
         settings = builder.build();
-        this.classLoader = this.getClass().getClassLoader();
+
         this.timezone = params.get("time_zone");
     }
 
@@ -133,9 +131,9 @@ public class OdpsSplitScanner extends ConnectorScanner {
             initOffHeapTableWriter(requiredTypes, requiredFields, fetchSize);
         } catch (Exception e) {
             close();
-            String msg = "Failed to open the odps reader.";
-            LOG.error(msg, e);
-            throw new IOException(msg, e);
+            String msg = "Failed to open the odps reader: ";
+            LOG.error("{}{}", msg, e.getMessage(), e);
+            throw new IOException(msg + e.getMessage(), e);
         }
     }
 
@@ -146,9 +144,9 @@ public class OdpsSplitScanner extends ConnectorScanner {
                 reader.close();
             }
         } catch (Exception e) {
-            String msg = "Failed to close the odps reader.";
-            LOG.error(msg, e);
-            throw new IOException(msg, e);
+            String msg = "Failed to close the odps reader: ";
+            LOG.error("{}{}", msg, e.getMessage(), e);
+            throw new IOException(msg + e.getMessage(), e);
         }
     }
 
@@ -182,7 +180,8 @@ public class OdpsSplitScanner extends ConnectorScanner {
                         if (data == null) {
                             appendData(fieldIndex, null);
                         } else {
-                            appendData(fieldIndex, new OdpsColumnValue(data, requireColumns[fieldIndex].getTypeInfo(), timezone));
+                            appendData(fieldIndex,
+                                    new OdpsColumnValue(data, requireColumns[fieldIndex].getTypeInfo(), timezone));
                         }
                     }
                 }
@@ -191,9 +190,9 @@ public class OdpsSplitScanner extends ConnectorScanner {
             return 0;
         } catch (Exception e) {
             close();
-            String msg = "Failed to get the next off-heap table chunk of odps.";
-            LOG.error(msg, e);
-            throw new IOException(msg, e);
+            String msg = "Failed to get the next off-heap table chunk of odps: ";
+            LOG.error("{}{}", msg, e.getMessage(), e);
+            throw new IOException(msg + e.getMessage(), e);
         }
     }
 
@@ -217,10 +216,14 @@ public class OdpsSplitScanner extends ConnectorScanner {
         return sb.toString();
     }
 
-    private static Object deserialize(String serializedString) throws IOException, ClassNotFoundException {
-        byte[] serializedBytes = Base64.getDecoder().decode(serializedString);
-        ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(serializedBytes);
-        ObjectInputStream objectInputStream = new ObjectInputStream(byteArrayInputStream);
-        return objectInputStream.readObject();
+    private Object deserialize(String serializedString) {
+        try {
+            byte[] serializedBytes = Base64.getDecoder().decode(serializedString);
+            ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(serializedBytes);
+            ObjectInputStream objectInputStream = new ObjectInputStream(byteArrayInputStream);
+            return objectInputStream.readObject();
+        } catch (Exception e) {
+            throw new RuntimeException("deserialize error", e);
+        }
     }
 }
