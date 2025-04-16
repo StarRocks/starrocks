@@ -311,7 +311,7 @@ public class PrivilegeCheckerTest {
         authenticationManager.createUser(createUserStmt);
         testUser = createUserStmt.getUserIdentity();
 
-        createUserSql = "CREATE USER 'test2' IDENTIFIED BY ''";
+        createUserSql = "CREATE USER 'test2' identified with mysql_native_password by '12345'";
         createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, starRocksAssert.getCtx());
         authenticationManager.createUser(createUserStmt);
 
@@ -3039,8 +3039,7 @@ public class PrivilegeCheckerTest {
     }
 
     @Test
-    public void testShowAuthentication()
-            throws com.starrocks.common.AnalysisException, DdlException, PrivilegeException {
+    public void testShowAuthentication() throws PrivilegeException {
         ctxToTestUser();
         ShowAuthenticationStmt stmt = new ShowAuthenticationStmt(testUser, false);
         ShowResultSet resultSet = ShowExecutor.execute(stmt, starRocksAssert.getCtx());
@@ -3056,8 +3055,8 @@ public class PrivilegeCheckerTest {
         stmt = new ShowAuthenticationStmt(null, true);
         resultSet = ShowExecutor.execute(stmt, starRocksAssert.getCtx());
         Assert.assertEquals("[['root'@'%', No, MYSQL_NATIVE_PASSWORD, null], " +
-                        "['test2'@'%', No, " +
-                        "MYSQL_NATIVE_PASSWORD, null], ['test'@'%', No, MYSQL_NATIVE_PASSWORD, null]]",
+                        "['test2'@'%', Yes, MYSQL_NATIVE_PASSWORD, null], " +
+                        "['test'@'%', No, MYSQL_NATIVE_PASSWORD, null]]",
                 resultSet.getResultRows().toString());
 
         stmt = new ShowAuthenticationStmt(UserIdentity.ROOT, false);
