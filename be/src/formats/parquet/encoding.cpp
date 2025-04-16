@@ -98,6 +98,18 @@ struct TypeEncodingTraits<type, tparquet::Encoding::DELTA_BYTE_ARRAY> {
     }
 };
 
+template <tparquet::Type::type type>
+struct TypeEncodingTraits<type, tparquet::Encoding::BYTE_STREAM_SPLIT> {
+    static Status create_decoder(std::unique_ptr<Decoder>* decoder) {
+        decoder->reset(new ByteStreamSplitDecoder<type>());
+        return Status::OK();
+    }
+    static Status create_encoder(std::unique_ptr<Encoder>* encoder) {
+        encoder->reset(new ByteStreamSplitEncoder<type>());
+        return Status::OK();
+    }
+};
+
 template <>
 struct TypeEncodingTraits<tparquet::Type::FIXED_LEN_BYTE_ARRAY, tparquet::Encoding::PLAIN> {
     static Status create_decoder(std::unique_ptr<Decoder>* decoder) {
@@ -179,6 +191,7 @@ EncodingInfoResolver::EncodingInfoResolver() {
     _add_map<tparquet::Type::FIXED_LEN_BYTE_ARRAY, tparquet::Encoding::PLAIN>();
     _add_map<tparquet::Type::FIXED_LEN_BYTE_ARRAY, tparquet::Encoding::RLE_DICTIONARY>();
     _add_map<tparquet::Type::FIXED_LEN_BYTE_ARRAY, tparquet::Encoding::DELTA_BYTE_ARRAY>();
+    _add_map<tparquet::Type::FIXED_LEN_BYTE_ARRAY, tparquet::Encoding::BYTE_STREAM_SPLIT>();
 }
 
 EncodingInfoResolver::~EncodingInfoResolver() {
