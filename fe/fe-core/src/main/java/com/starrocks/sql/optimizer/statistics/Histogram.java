@@ -72,6 +72,31 @@ public class Histogram {
 
         double value = valueOpt.get();
 
+<<<<<<< HEAD
+=======
+    public int getBucketIndex(double value) {
+        int left = 0;
+        int right = buckets.size() - 1;
+        while (left <= right) {
+            int mid = (left + right) / 2;
+            Bucket bucket = buckets.get(mid);
+
+            if (bucket.isInBucket(value)) {
+                return mid;
+            }
+
+            if (value < bucket.getLower()) {
+                right = mid - 1;
+            } else {
+                left = mid + 1;
+            }
+        }
+
+        return -1;
+    }
+
+    public Optional<Long> getRowCountInBucket(double value, double distinctValuesCount, boolean useFixedPointEstimation) {
+>>>>>>> 59303750f6 ([Enhancement]  Remove duplicates during join selectivity estimation with histograms (#58047))
         int left = 0;
         int right = buckets.size() - 1;
         while (left <= right) {

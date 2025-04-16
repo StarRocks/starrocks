@@ -28,6 +28,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import static java.lang.Double.NEGATIVE_INFINITY;
 import static java.lang.Double.NaN;
@@ -350,6 +351,243 @@ public class BinaryPredicateStatisticCalculator {
         return builder.build();
     }
 
+<<<<<<< HEAD
+=======
+    public static Optional<Histogram> updateHistWithJoin(ColumnStatistic leftColumnStatistic, Type leftColumnType,
+                                                         ColumnStatistic rightColumnStatistic, Type rightColumnType) {
+        if (leftColumnStatistic.getHistogram() == null || rightColumnStatistic.getHistogram() == null) {
+            return Optional.empty();
+        }
+
+        Histogram leftHistogram = leftColumnStatistic.getHistogram();
+        Histogram rightHistogram = rightColumnStatistic.getHistogram();
+        double leftColumnDistinctCount = min(leftHistogram.getTotalRows(), leftColumnStatistic.getDistinctValuesCount());
+        double rightColumnDistinctCount = min(rightHistogram.getTotalRows(), rightColumnStatistic.getDistinctValuesCount());
+        Map<String, Long> estimatedMcv = estimateMcvToMcv(leftHistogram.getMCV(), rightHistogram.getMCV());
+        List<Map<Double, Long>> mcvMatchesPerBucketRight = estimateMcvToBucket(leftHistogram.getMCV(), estimatedMcv,
+                rightHistogram, rightColumnDistinctCount, leftColumnType);
+        List<Map<Double, Long>> mcvMatchesPerBucketLeft = estimateMcvToBucket(rightHistogram.getMCV(), estimatedMcv,
+                leftHistogram, leftColumnDistinctCount, rightColumnType);
+        List<Bucket> estimatedBuckets =
+                estimateBucketToBucket(leftHistogram, mcvMatchesPerBucketLeft, leftColumnDistinctCount, leftColumnType,
+                        rightHistogram, mcvMatchesPerBucketRight, rightColumnDistinctCount, rightColumnType);
+
+        if (estimatedMcv.isEmpty() && estimatedBuckets.isEmpty()) {
+            return Optional.empty();
+        }
+
+        return Optional.of(new Histogram(estimatedBuckets, estimatedMcv));
+    }
+
+    private static Map<String, Long> estimateMcvToMcv(Map<String, Long> leftMcv, Map<String, Long> rightMcv) {
+        Map<String, Long> mcvIntersection = new HashMap<>();
+        leftMcv.forEach((value, leftFreq) -> {
+            if (rightMcv.containsKey(value)) {
+                mcvIntersection.put(value, leftFreq * rightMcv.get(value));
+            }
+        });
+        return mcvIntersection;
+    }
+
+    private static List<Map<Double, Long>> estimateMcvToBucket(Map<String, Long> leftMcv, Map<String, Long> estimatedMcv,
+                                            Histogram rightHistogram, double distinctValuesCount, Type dataType) {
+        if (rightHistogram.getBuckets() == null) {
+            return null;
+        }
+
+        List<Bucket> rightBuckets = rightHistogram.getBuckets();
+        List<Map<Double, Long>> mcvMatchesPerBucket = java.util.stream.IntStream.range(0, rightBuckets.size())
+                .mapToObj(i -> new HashMap<Double, Long>())
+                .collect(Collectors.toList());
+        for (Map.Entry<String, Long> entry : leftMcv.entrySet()) {
+            if (estimatedMcv.containsKey(entry.getKey())) {
+                continue;
+            }
+
+            Optional<Double> value = StatisticUtils.convertStatisticsToDouble(dataType, entry.getKey());
+            if (value.isEmpty()) {
+                continue;
+            }
+
+            Long leftFreq = entry.getValue();
+            int bucketIndex = rightHistogram.getBucketIndex(value.get());
+            if (bucketIndex > -1 && bucketIndex < rightBuckets.size()) {
+                Bucket bucket = rightBuckets.get(bucketIndex);
+
+                long previousBucketRowCount = bucketIndex == 0 ? 0 : rightBuckets.get(bucketIndex - 1).getCount();
+                Optional<Long> rowCountInBucketOpt = bucket.getRowCountInBucket(value.get(), previousBucketRowCount,
+                        distinctValuesCount, dataType.isFixedPointType());
+                rowCountInBucketOpt.ifPresent(rowCountInBucket -> {
+                    estimatedMcv.put(entry.getKey(), leftFreq * rowCountInBucket);
+                    // collect mvc matches in each bucket to subtract them from later computation of bucket intersection.
+                    mcvMatchesPerBucket.get(bucketIndex).put(value.get(), rowCountInBucket);
+                });
+            }
+        }
+
+        return mcvMatchesPerBucket;
+    }
+
+    private static List<Bucket> estimateBucketToBucket(Histogram leftHistogram, List<Map<Double, Long>> mcvMatchesPerBucketLeft,
+                                                       double leftColumnDistinctValue, Type dataTypeLeft,
+                                                       Histogram rightHistogram, List<Map<Double, Long>> mcvMatchesPerBucketRight,
+                                                       double rightColumnDistinctValue, Type dataTypeRight) {
+        if (leftHistogram == null || rightHistogram == null) {
+            return null;
+        }
+
+        List<Bucket> leftBuckets = leftHistogram.getBuckets();
+        List<Bucket> rightBuckets = rightHistogram.getBuckets();
+        if (leftBuckets == null || leftBuckets.isEmpty() || rightBuckets == null || rightBuckets.isEmpty()) {
+            return null;
+        }
+
+        // Assume the distinct values are uniformly distributed.
+        long leftBucketDistinctRowCount = (long) (leftColumnDistinctValue / leftBuckets.size());
+        long rightBucketDistinctRowCount = (long) (rightColumnDistinctValue / rightBuckets.size());
+
+        List<Bucket> mergedBuckets = new ArrayList<>();
+
+        long rowCount = 0;
+        Long prevLeftBucketRowCount = 0L;
+        Long prevRightBucketRowCount = 0L;
+        int leftBucketIndex = 0;
+        int rightBucketIndex = 0;
+        while (leftBucketIndex < leftBuckets.size() && rightBucketIndex < rightBuckets.size()) {
+            Bucket leftBucket = leftBuckets.get(leftBucketIndex);
+            Bucket rightBucket = rightBuckets.get(rightBucketIndex);
+
+            Optional<StatisticRangeValues> bucketIntersectionRangeOpt = computeBucketIntersection(leftBucket, rightBucket);
+            if (bucketIntersectionRangeOpt.isPresent()) {
+                StatisticRangeValues bucketIntersectionRange = bucketIntersectionRangeOpt.get();
+                long leftBucketRowCount = leftBucket.getCount() - prevLeftBucketRowCount;
+                long rightBucketRowCount = rightBucket.getCount() - prevRightBucketRowCount;
+                if (dataTypeLeft.isFixedPointType()) {
+                    leftBucketDistinctRowCount = (long) (leftBucket.getUpper() - leftBucket.getLower() + 1);
+                }
+                if (dataTypeRight.isFixedPointType()) {
+                    rightBucketDistinctRowCount = (long) (rightBucket.getUpper() - rightBucket.getLower() + 1);
+                }
+
+                // merge the upper repeats.
+                long upperRepeats;
+                if (bucketIntersectionRange.getHigh() == leftBucket.getUpper()) {
+                    upperRepeats = computeBucketIntersectionUpperRepeats(leftBucket,
+                            mcvMatchesPerBucketLeft.get(leftBucketIndex), rightBucket, prevRightBucketRowCount,
+                            rightBucketDistinctRowCount, dataTypeRight);
+                } else {
+                    upperRepeats = computeBucketIntersectionUpperRepeats(rightBucket,
+                            mcvMatchesPerBucketRight.get(rightBucketIndex), leftBucket, prevLeftBucketRowCount,
+                            leftBucketDistinctRowCount, dataTypeLeft);
+                }
+
+                // merge the row count.
+                long rowCountInBucket = upperRepeats;
+                if (bucketIntersectionRange.getLow() < bucketIntersectionRange.getHigh()) {
+                    double leftBucketIntersectionRowCount = computeBucketIntersectionRowCount(leftBucket,
+                            leftBucketRowCount, bucketIntersectionRange, mcvMatchesPerBucketLeft.get(leftBucketIndex));
+                    double rightBucketIntersectionRowCount = computeBucketIntersectionRowCount(rightBucket,
+                            rightBucketRowCount, bucketIntersectionRange, mcvMatchesPerBucketRight.get(rightBucketIndex));
+                    double bucketIntersectionDistinctCount = computeBucketIntersectionDistinctRowCount(leftBucket,
+                            leftBucketDistinctRowCount, rightBucket, rightBucketDistinctRowCount, bucketIntersectionRange,
+                            mcvMatchesPerBucketLeft.get(leftBucketIndex), mcvMatchesPerBucketRight.get(rightBucketIndex));
+
+                    if (bucketIntersectionDistinctCount > 0) {
+                        // compute the number of matches in the buckets intersection assuming uniform distribution.
+                        rowCountInBucket = max(rowCountInBucket, (long) (
+                                leftBucketIntersectionRowCount * rightBucketIntersectionRowCount /
+                                        bucketIntersectionDistinctCount));
+                    }
+                }
+
+                if (rowCountInBucket > 0) {
+                    rowCount += rowCountInBucket;
+                    mergedBuckets.add(
+                            new Bucket(bucketIntersectionRange.getLow(), bucketIntersectionRange.getHigh(), rowCount,
+                                    upperRepeats));
+                }
+            }
+
+            if (leftBucket.getUpper() <= rightBucket.getUpper()) {
+                ++leftBucketIndex;
+                prevLeftBucketRowCount = leftBucket.getCount();
+            }
+            if (rightBucket.getUpper() <= leftBucket.getUpper()) {
+                ++rightBucketIndex;
+                prevRightBucketRowCount = rightBucket.getCount();
+            }
+        }
+
+        return mergedBuckets;
+    }
+
+    private static long computeBucketIntersectionUpperRepeats(Bucket lowerBucket, Map<Double, Long> mcvMatchesPerBucketLower,
+                                                              Bucket higherBucket, long prevHigherBucketRowCount,
+                                                              long higherBucketDistinctRowCount, Type dataType) {
+        // deduplicate upper values that matched against mcv.
+        if (mcvMatchesPerBucketLower.containsKey(lowerBucket.getUpper())) {
+            return 0;
+        }
+
+        Optional<Long> countInRightBucket = higherBucket.getRowCountInBucket(lowerBucket.getUpper(),
+                prevHigherBucketRowCount, higherBucketDistinctRowCount, dataType.isFixedPointType());
+        return countInRightBucket.map(aLong -> lowerBucket.getUpperRepeats() * aLong).orElse(0L);
+    }
+
+    private static double computeBucketIntersectionRowCount(Bucket bucket, long bucketRowCount,
+                                                                        StatisticRangeValues bucketIntersectionRange,
+                                                                        Map<Double, Long> mcvMatchesPerBucket) {
+        double intersectionFraction = computeBucketIntersectionFraction(bucket, bucketIntersectionRange);
+        double intersectionRowCount = bucketRowCount * intersectionFraction;
+        // deduplicate values that matched against mcv.
+        for (Map.Entry<Double, Long> entry : mcvMatchesPerBucket.entrySet()) {
+            if (bucketIntersectionRange.contains(entry.getKey())) {
+                intersectionRowCount -= entry.getValue();
+            }
+        }
+
+        return intersectionRowCount <= 0 ? 0.0 : intersectionRowCount;
+    }
+
+    private static double computeBucketIntersectionDistinctRowCount(Bucket leftBucket, long leftBucketDistinctRowCount,
+                                                                    Bucket rightBucket, long rightBucketDistinctRowCount,
+                                                                    StatisticRangeValues bucketIntersectionRange,
+                                                                    Map<Double, Long> mcvMatchesPerBucketLeft,
+                                                                    Map<Double, Long> mcvMatchesPerBucketRight) {
+        double intersectionFractionLeft = computeBucketIntersectionFraction(leftBucket, bucketIntersectionRange);
+        double intersectionFractionRight = computeBucketIntersectionFraction(rightBucket, bucketIntersectionRange);
+        double intersectionDistinctRowCount = max(leftBucketDistinctRowCount * intersectionFractionLeft,
+                rightBucketDistinctRowCount * intersectionFractionRight);
+
+        // deduplicate values that matched against mcv.
+        for (Map.Entry<Double, Long> entry : mcvMatchesPerBucketLeft.entrySet()) {
+            if (bucketIntersectionRange.contains(entry.getKey())) {
+                intersectionDistinctRowCount--;
+            }
+        }
+        for (Map.Entry<Double, Long> entry : mcvMatchesPerBucketRight.entrySet()) {
+            if (bucketIntersectionRange.contains(entry.getKey())) {
+                intersectionDistinctRowCount--;
+            }
+        }
+
+        return intersectionDistinctRowCount <= 0 ? 0.0 : intersectionDistinctRowCount;
+    }
+
+    private static Optional<StatisticRangeValues> computeBucketIntersection(Bucket leftBucket, Bucket rightBucket) {
+        if (leftBucket.getUpper() < rightBucket.getLower() || rightBucket.getUpper() < leftBucket.getLower()) {
+            return Optional.empty();
+        }
+
+        return Optional.of(new StatisticRangeValues(max(leftBucket.getLower(), rightBucket.getLower()),
+                min(leftBucket.getUpper(), rightBucket.getUpper()), 0.0));
+    }
+
+    private static double computeBucketIntersectionFraction(Bucket bucket, StatisticRangeValues intersectionRange) {
+        return (intersectionRange.getHigh() - intersectionRange.getLow()) / (bucket.getUpper() - bucket.getLower());
+    }
+
+>>>>>>> 59303750f6 ([Enhancement]  Remove duplicates during join selectivity estimation with histograms (#58047))
     public static Statistics estimateColumnNotEqualToColumn(
             ColumnStatistic leftColumn,
             ColumnStatistic rightColumn,
