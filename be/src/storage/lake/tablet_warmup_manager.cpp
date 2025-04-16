@@ -52,12 +52,10 @@ static constexpr int64_t INVALID_PARTITION_ID = -1;
 TabletWarmupManager::WarmupContext::~WarmupContext() {
     if (_future.wait_for(std::chrono::nanoseconds(1)) == std::future_status::timeout) {
         _promise.set_value(Status::Aborted("aborted!"));
-        LOG_EVERY_N(INFO, 100) << "warmup failed for tablet: " << _tablet_id << ", error: aborted"
-                               << ", counter: " << google::COUNTER;
     }
     auto st = _future.get();
     if (!st.ok()) {
-        VLOG(3) << "warmup failed for tablet: " << _tablet_id << ", error:" << st;
+        LOG_EVERY_N(INFO, 100) << "warmup failed for tablet: " << _tablet_id << ", error:" << st;
     }
 }
 
@@ -279,7 +277,8 @@ void TabletWarmupManager::batch_get_partitions_meta_from_frontend(const std::vec
     for (auto id : tablet_ids) {
         auto iter = id_meta_index.find(id);
         if (iter == id_meta_index.end()) {
-            abort_warmup(id, Status::NotFound("tablet id not found from frontend"));
+            // if meta is not found in FE, consider warmup succeed
+            done_warmup(id, staros::WarmupLevel::WARMUP_NOTHING, true /* report */);
             continue;
         }
         auto version = response.partition_metas.at(iter->second).visible_version;
@@ -301,7 +300,7 @@ void TabletWarmupManager::abort_warmup(int64_t tablet_id, Status status) {
         g_lake_warmup_tablet_processing_count << -1;
     }
     g_lake_warmup_tablet_fail_count << 1;
-    VLOG(3) << "Fail to warm up tablet: " << tablet_id << ", status: " << status;
+    // unlike `done_warmup`, fail log is printed in `WarmupContext::~WarmupContext`
 }
 
 void TabletWarmupManager::done_warmup(int64_t tablet_id, staros::WarmupLevel level, bool report) {
@@ -328,14 +327,14 @@ void TabletWarmupManager::done_warmup(int64_t tablet_id, staros::WarmupLevel lev
 }
 
 void TabletWarmupManager::do_warmup_tablet(int64_t tablet_id, int64_t version) {
-    if (version <= 1) {
+    staros::WarmupLevel warmup_level = staros_worker_warmup_level();
+    if (warmup_level == staros::WarmupLevel::WARMUP_NOT_SET || warmup_level == staros::WarmupLevel::WARMUP_NOTHING) {
         done_warmup(tablet_id, staros::WarmupLevel::WARMUP_NOTHING, false /* report */);
         return;
     }
 
-    staros::WarmupLevel warmup_level = staros_worker_warmup_level();
-    if (warmup_level == staros::WarmupLevel::WARMUP_NOT_SET || warmup_level == staros::WarmupLevel::WARMUP_NOTHING) {
-        done_warmup(tablet_id, staros::WarmupLevel::WARMUP_NOTHING, false /* report */);
+    if (version <= 1) {
+        done_warmup(tablet_id, warmup_level, true /* report */);
         return;
     }
 

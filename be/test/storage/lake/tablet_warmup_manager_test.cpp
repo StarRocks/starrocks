@@ -317,8 +317,7 @@ TEST_F(TabletWarmupManagerTest, test_batch_get_partitions_meta_from_frontend) {
     EXPECT_TRUE(st.ok()) << st;
     auto future = _warmup_mgr->warmup_tablet2(tablet_id);
     auto ret = future.get();
-    EXPECT_TRUE(ret.is_not_found()) << ret;
-    EXPECT_EQ("tablet id not found from frontend", ret.message());
+    EXPECT_TRUE(ret.ok()) << ret;
 
     SyncPoint::GetInstance()->ClearCallBack("TabletWarmupManager::batch_get_partitions_meta.frontendrpc");
     SyncPoint::GetInstance()->DisableProcessing();
