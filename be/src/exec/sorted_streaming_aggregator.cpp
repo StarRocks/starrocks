@@ -24,7 +24,7 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
-#include "exprs/agg/aggregate_state_allocator.h"
+#include "exec/aggregate/agg_hash_map.h"
 #include "exprs/expr_context.h"
 #include "glog/logging.h"
 #include "runtime/mem_pool.h"
@@ -420,7 +420,6 @@ Status SortedStreamingAggregator::_compute_group_by(size_t chunk_size) {
 }
 
 Status SortedStreamingAggregator::_update_states(size_t chunk_size, bool is_update) {
-    SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
     // TODO: split the states
     // allocate state stage
     {
@@ -472,7 +471,6 @@ Status SortedStreamingAggregator::_update_states(size_t chunk_size, bool is_upda
 
 Status SortedStreamingAggregator::_get_agg_result_columns(size_t chunk_size, const std::vector<uint8_t>& selector,
                                                           Columns& agg_result_columns) {
-    SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
     TRY_CATCH_ALLOC_SCOPE_START()
     auto use_intermediate = _use_intermediate_as_output();
     SCOPED_TIMER(_agg_stat->get_results_timer);
@@ -501,7 +499,6 @@ Status SortedStreamingAggregator::_get_agg_result_columns(size_t chunk_size, con
 
 void SortedStreamingAggregator::_close_group_by(size_t chunk_size, const std::vector<uint8_t>& selector) {
     // close stage
-    SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
     SCOPED_TIMER(_agg_stat->state_destroy_timer);
     if (_cmp_vector[0] != 0 && _last_state) {
         _destroy_state(_last_state);
@@ -534,7 +531,6 @@ StatusOr<ChunkPtr> SortedStreamingAggregator::pull_eos_chunk() {
     if (_last_state == nullptr && _last_columns.empty()) {
         return nullptr;
     }
-    SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
     bool use_intermediate = _use_intermediate_as_output();
     auto agg_result_columns = _create_agg_result_columns(1, use_intermediate);
     auto group_by_columns = _last_columns;
