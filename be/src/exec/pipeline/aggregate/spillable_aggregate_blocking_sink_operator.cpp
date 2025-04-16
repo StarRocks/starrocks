@@ -194,7 +194,7 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
         // use force streaming mode and spill all data
         SCOPED_TIMER(_aggregator->streaming_timer());
         ChunkPtr res = std::make_shared<Chunk>();
-        RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(chunk.get(), &res));
+        RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(chunk.get(), &res, true));
         _add_streaming_chunk(res);
         return _spill_all_data(state, true);
     } else if (build_hash_table) {
@@ -218,7 +218,7 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
         if (hit_count == 0) {
             // put all data into buffer
             ChunkPtr tmp = std::make_shared<Chunk>();
-            RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(chunk.get(), &tmp));
+            RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(chunk.get(), &tmp, true));
             _add_streaming_chunk(std::move(tmp));
         } else if (hit_count == _aggregator->streaming_selection().size()) {
             // very high reduction
@@ -233,7 +233,7 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
             {
                 SCOPED_TIMER(_aggregator->streaming_timer());
                 ChunkPtr res = std::make_shared<Chunk>();
-                RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming_with_selection(chunk.get(), &res));
+                RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming_with_selection(chunk.get(), &res, true));
                 _add_streaming_chunk(std::move(res));
             }
         }
