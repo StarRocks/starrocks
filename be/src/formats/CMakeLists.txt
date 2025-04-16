@@ -41,6 +41,14 @@ add_library(Formats STATIC
         avro/nullable_column.cpp
         avro/numeric_column.cpp
         avro/binary_column.cpp
+        avro/cpp/avro_reader.cpp
+        avro/cpp/avro_schema_builder.cpp
+        avro/cpp/binary_column.cpp
+        avro/cpp/complex_column.cpp
+        avro/cpp/date_column.cpp
+        avro/cpp/nullable_column.cpp
+        avro/cpp/numeric_column.cpp
+        avro/cpp/utils.cpp
         orc/orc_chunk_reader.cpp
         orc/orc_file_writer.cpp
         orc/orc_input_stream.cpp
