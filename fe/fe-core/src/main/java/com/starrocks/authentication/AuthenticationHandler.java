@@ -47,35 +47,26 @@ public class AuthenticationHandler {
         List<String> authenticatedGroupList = null;
 
         if (Config.enable_auth_check) {
-            String[] authChain = Config.authentication_chain;
+            Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
+                    authenticationMgr.getBestMatchedUserIdentity(user, remoteHost);
+            if (matchedUserIdentity == null) {
+                LOG.debug("cannot find user {}@{}", user, remoteHost);
+            } else {
+                AuthenticationProvider provider = AuthenticationProviderFactory.create(
+                        matchedUserIdentity.getValue().getAuthPlugin(),
+                        matchedUserIdentity.getValue().getAuthString());
+                Preconditions.checkState(provider != null);
+                authenticatedUser = provider.authenticate(context, user, remoteHost, authResponse);
+                groupProviderName = List.of(Config.group_provider);
+            }
 
-            for (String authMechanism : authChain) {
-                if (authenticatedUser != null) {
-                    break;
-                }
-
-                if (authMechanism.equals(ConfigBase.AUTHENTICATION_CHAIN_MECHANISM_NATIVE)) {
-                    Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
-                            authenticationMgr.getBestMatchedUserIdentity(user, remoteHost);
-
-                    if (matchedUserIdentity == null) {
-                        LOG.debug("cannot find user {}@{}", user, remoteHost);
-                    } else {
-                        try {
-                            AuthenticationProvider provider = AuthenticationProviderFactory.create(
-                                    matchedUserIdentity.getValue().getAuthPlugin(),
-                                    matchedUserIdentity.getValue().getAuthString());
-                            Preconditions.checkState(provider != null);
-                            provider.authenticate(context, user, remoteHost, authResponse, matchedUserIdentity.getValue());
-                            authenticatedUser = matchedUserIdentity.getKey();
-
-                            groupProviderName = List.of(Config.group_provider);
-                        } catch (AuthenticationException e) {
-                            LOG.debug("failed to authenticate for native, user: {}@{}, error: {}",
-                                    user, remoteHost, e.getMessage());
-                        }
+            if (authenticatedUser == null) {
+                String[] authChain = Config.authentication_chain;
+                for (String authMechanism : authChain) {
+                    if (authenticatedUser != null) {
+                        break;
                     }
-                } else {
+
                     SecurityIntegration securityIntegration = authenticationMgr.getSecurityIntegration(authMechanism);
                     if (securityIntegration == null) {
                         continue;
@@ -83,8 +74,7 @@ public class AuthenticationHandler {
 
                     try {
                         AuthenticationProvider provider = securityIntegration.getAuthenticationProvider();
-                        UserAuthenticationInfo userAuthenticationInfo = new UserAuthenticationInfo();
-                        provider.authenticate(context, user, remoteHost, authResponse, userAuthenticationInfo);
+                        authenticatedUser = provider.authenticate(context, user, remoteHost, authResponse);
                         // the ephemeral user is identified as 'username'@'auth_mechanism'
                         authenticatedUser = UserIdentity.createEphemeralUserIdent(user, securityIntegration.getName());
 

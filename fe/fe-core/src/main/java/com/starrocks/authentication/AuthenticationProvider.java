@@ -30,12 +30,11 @@ public interface AuthenticationProvider {
     /**
      * login authentication
      */
-    void authenticate(
+    UserIdentity authenticate(
             ConnectContext context,
             String user,
             String host,
-            byte[] password,
-            UserAuthenticationInfo authenticationInfo) throws AuthenticationException;
+            byte[] password) throws AuthenticationException;
 
     /**
      * Some special Authentication Methods need to pass more information, and authMoreDataPacket is a unified interface.

@@ -59,10 +59,11 @@ public class LDAPAuthProviderForNative implements AuthenticationProvider {
     }
 
     @Override
-    public void authenticate(ConnectContext context, String user, String host, byte[] remotePassword,
-                             UserAuthenticationInfo authenticationInfo) throws AuthenticationException {
-        String userForAuthPlugin = authenticationInfo.getAuthString();
+    public UserIdentity authenticate(ConnectContext context, String user, String host, UserAuthOption authOption) throws AuthenticationException {
+        //String userForAuthPlugin = authenticationInfo.getAuthString();
+        String userForAuthPlugin = authOption.getAuthString();
         //clear password terminate string
+        byte[] remotePassword = authOption.getPassword().getBytes(StandardCharsets.UTF_8);
         byte[] clearPassword = remotePassword;
         if (remotePassword[remotePassword.length - 1] == 0) {
             clearPassword = Arrays.copyOf(remotePassword, remotePassword.length - 1);

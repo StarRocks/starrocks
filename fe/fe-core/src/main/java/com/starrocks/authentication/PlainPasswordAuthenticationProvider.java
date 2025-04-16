@@ -99,12 +99,20 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
     }
 
     @Override
-    public void authenticate(
+    public UserIdentity authenticate(
             ConnectContext context,
             String user,
             String host,
-            byte[] remotePassword,
-            UserAuthenticationInfo authenticationInfo) throws AuthenticationException {
+            byte[] remotePassword) throws AuthenticationException {
+        AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
+                authenticationMgr.getBestMatchedUserIdentity(user, host);
+        if (matchedUserIdentity == null) {
+            return null;
+        }
+
+        UserAuthenticationInfo authenticationInfo = matchedUserIdentity.getValue();
+
         byte[] randomString = context.getAuthDataSalt();
         // The password sent by mysql client has already been scrambled(encrypted) using random string,
         // so we don't need to scramble it again.
@@ -127,6 +135,8 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
                 throw new AuthenticationException("password mismatch!");
             }
         }
+
+        return matchedUserIdentity.getKey();
     }
 
     /**
