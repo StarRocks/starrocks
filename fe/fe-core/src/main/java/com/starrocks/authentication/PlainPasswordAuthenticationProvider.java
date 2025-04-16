@@ -97,7 +97,7 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
         info.setAuthPlugin(AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.name());
         info.setPassword(passwordScrambled);
         info.setOrigUserHost(userIdentity.getUser(), userIdentity.getHost());
-        info.setAuthString(userAuthOption == null ? null : userAuthOption.getAuthString());
+        info.setAuthString(null);
         return info;
     }
 
