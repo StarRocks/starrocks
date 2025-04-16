@@ -367,10 +367,7 @@ public class OdpsMetadata implements ConnectorMetadata {
             return Lists.newArrayList(remoteFileInfo);
         } catch (Exception e) {
             LOG.error("getRemoteFileInfos error", e);
-<<<<<<< HEAD
-=======
             throw new StarRocksConnectorException("Encounter error when try to split the maxcompute table: " + e.getMessage(), e);
->>>>>>> 85f9f386e1 ([BugFix] Fix dependency conflict issue in MaxCompute Catalog (#57377))
         }
     }
 
