@@ -163,10 +163,6 @@ message(STATUS ${Boost_LIBRARIES})
 set(GPERFTOOLS_HOME "${THIRDPARTY_DIR}/gperftools")
 set(JEMALLOC_HOME "${THIRDPARTY_DIR}/jemalloc")
 
-if (${JEMALLOC_DEBUG})
-    set(JEMALLOC_HOME "${THIRDPARTY_DIR}/jemalloc-debug")
-endif()
-
 # Set all libraries
 
 add_library(clucene-core STATIC IMPORTED)
@@ -272,8 +268,13 @@ set_target_properties(openssl PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib
 add_library(leveldb STATIC IMPORTED GLOBAL)
 set_target_properties(leveldb PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libleveldb.a)
 
-add_library(jemalloc STATIC IMPORTED)
-set_target_properties(jemalloc PROPERTIES IMPORTED_LOCATION ${JEMALLOC_HOME}/lib/libjemalloc_pic.a)
+if ("${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG" OR "${CMAKE_BUILD_TYPE}" STREQUAL "RELEASE")
+    add_library(jemalloc SHARED IMPORTED)
+    set_target_properties(jemalloc PROPERTIES IMPORTED_LOCATION ${JEMALLOC_HOME}/lib-shared/libjemalloc.so)
+else()
+    add_library(jemalloc STATIC IMPORTED)
+    set_target_properties(jemalloc PROPERTIES IMPORTED_LOCATION ${JEMALLOC_HOME}/lib-static/libjemalloc.a)
+endif()
 
 add_library(brotlicommon STATIC IMPORTED)
 set_target_properties(brotlicommon PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libbrotlicommon.a)
