@@ -39,6 +39,7 @@
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include <vector>
 
 #if defined(__ARM_NEON) || defined(__SSE4_2__)
 #include <xsimd/xsimd.hpp>
@@ -498,7 +499,7 @@ void ByteStreamSplitEncodeScalar(const uint8_t* raw_values, int width, const int
 
 inline void ByteStreamSplitEncodeScalarDynamic(const uint8_t* raw_values, int width, const int64_t num_values,
                                                uint8_t* out) {
-    std::array<uint8_t*, 16> dest_streams;
+    std::vector<uint8_t*> dest_streams(width);
     for (int stream = 0; stream < width; ++stream) {
         dest_streams[stream] = &out[stream * num_values];
     }
@@ -517,7 +518,7 @@ void ByteStreamSplitDecodeScalar(const uint8_t* data, int width, int64_t num_val
 
 inline void ByteStreamSplitDecodeScalarDynamic(const uint8_t* data, int width, int64_t num_values, int64_t stride,
                                                uint8_t* out) {
-    std::array<const uint8_t*, 16> src_streams;
+    std::vector<const uint8_t*> src_streams(width);
     for (int stream = 0; stream < width; ++stream) {
         src_streams[stream] = &data[stream * stride];
     }

@@ -1056,6 +1056,12 @@ TEST_F(ParquetEncodingTest, ByteStreamSplitFLBA) {
     f(5, 31);
     f(5, 127);
     f(5, 255);
+
+    f(31, 3);
+    f(31, 10);
+    f(31, 31);
+    f(31, 127);
+    f(31, 255);
 }
 
 } // namespace starrocks::parquet
