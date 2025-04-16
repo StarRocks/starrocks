@@ -208,7 +208,7 @@ public class SystemInfoServiceTest {
 
         service.addBackend(be);
         be.setStarletPort(1001);
-        service.dropBackend("newHost", 1000, WarehouseManager.DEFAULT_WAREHOUSE_NAME, false);
+        service.dropBackend("newHost", 1000, WarehouseManager.DEFAULT_WAREHOUSE_NAME, "", false);
         Backend beIP = service.getBackendWithHeartbeatPort("newHost", 1000);
         Assert.assertTrue(beIP == null);
 

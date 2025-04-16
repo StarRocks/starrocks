@@ -42,7 +42,6 @@ public class DropCnGroupStmt extends CnGroupStmtBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        // TODO:
-        return null;
+        return visitor.visitDropCNGroupStatement(this, context);
     }
 }

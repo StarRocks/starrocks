@@ -35,7 +35,6 @@ public class EnableDisableCnGroupStmt extends CnGroupStmtBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        // TODO:
-        return null;
+        return visitor.visitEnableDisableCNGroupStatement(this, context);
     }
 }
