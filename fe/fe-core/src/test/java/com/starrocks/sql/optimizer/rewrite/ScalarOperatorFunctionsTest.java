@@ -1368,6 +1368,14 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
+    public void fromUnixTime3() throws AnalysisException {
+        ConstantOperator date =
+                ScalarOperatorFunctions.fromUnixTime(O_BI_10, ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s"),
+                        ConstantOperator.createVarchar("UTC"));
+        assertTrue(date.toString().matches("1970-01-01 0.*:00:10"));
+    }
+
+    @Test
     public void testNonDeterministicFuncComp() {
         // In logical phash, the new operator cloned from the original one should equal with the original one.
         CallOperator random = new CallOperator(FunctionSet.RANDOM, Type.DOUBLE, Lists.newArrayList());
