@@ -1103,6 +1103,7 @@ Status ChunkPredicateBuilder<E, Type>::_get_column_predicates(PredicateParser* p
         for (const auto& filter : filters) {
             std::unique_ptr<ColumnPredicate> p(parser->parse_thrift_cond(filter));
             RETURN_IF(!p, Status::RuntimeError("invalid filter"));
+            p->set_index_filter_only(filter.is_index_filter_only);
             col_preds_owner.emplace_back(std::move(p));
         }
         return Status::OK();
