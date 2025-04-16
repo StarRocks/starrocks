@@ -539,7 +539,7 @@ Status JavaDataTypeConverter::convert_to_boxed_array(FunctionContext* ctx, const
             arg = helper.create_array(num_rows);
         } else if (columns[i]->is_constant()) {
             auto& data_column = down_cast<const ConstColumn*>(columns[i])->data_column();
-            data_column->as_mutable_ptr()->resize(1);
+            data_column->resize(1);
             ASSIGN_OR_RETURN(jvalue jval, cast_to_jvalue(*ctx->get_arg_type(i), true, data_column.get(), 0));
             arg = helper.create_object_array(jval.l, num_rows);
             env->DeleteLocalRef(jval.l);
