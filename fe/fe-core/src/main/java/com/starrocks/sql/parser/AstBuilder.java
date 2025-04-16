@@ -4178,17 +4178,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitSetPassword(StarRocksParser.SetPasswordContext context) {
         NodePosition pos = createPos(context);
-        String passwordText;
         StringLiteral stringLiteral = (StringLiteral) visit(context.string());
+
+        boolean isPlainPassword;
         if (context.PASSWORD().size() > 1) {
-            passwordText = new String(MysqlPassword.makeScrambledPassword(stringLiteral.getStringValue()));
+            isPlainPassword = true;
         } else {
-            passwordText = stringLiteral.getStringValue();
+            isPlainPassword = false;
         }
+        UserAuthOption authOption = new UserAuthOption(null, stringLiteral.getStringValue(), isPlainPassword, pos);
+
         if (context.user() != null) {
-            return new SetPassVar((UserIdentity) visit(context.user()), passwordText, pos);
+            return new SetPassVar((UserIdentity) visit(context.user()), authOption, pos);
         } else {
-            return new SetPassVar(null, passwordText, pos);
+            return new SetPassVar(null, authOption, pos);
         }
     }
 
@@ -6475,17 +6478,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitAuthWithoutPlugin(StarRocksParser.AuthWithoutPluginContext context) {
         String password = ((StringLiteral) visit(context.string())).getStringValue();
         boolean isPasswordPlain = context.PASSWORD() == null;
-        return new UserAuthOption(password, null, null, isPasswordPlain, createPos(context));
+        return new UserAuthOption(null, password, isPasswordPlain, createPos(context));
     }
 
     @Override
     public ParseNode visitAuthWithPlugin(StarRocksParser.AuthWithPluginContext context) {
         Identifier authPlugin = (Identifier) visit(context.identifierOrString());
-        String authString =
-                context.string() == null ? null : ((StringLiteral) visit(context.string())).getStringValue();
+        String authString = context.string() == null ?
+                null : ((StringLiteral) visit(context.string())).getStringValue();
         boolean isPasswordPlain = context.AS() == null;
-        return new UserAuthOption(null, authPlugin.getValue().toUpperCase(), authString,
-                isPasswordPlain, createPos(context));
+
+        return new UserAuthOption(authPlugin.getValue().toUpperCase(), authString, isPasswordPlain, createPos(context));
     }
 
     @Override

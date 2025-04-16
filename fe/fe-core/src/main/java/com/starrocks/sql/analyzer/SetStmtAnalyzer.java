@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Enums;
 import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
@@ -24,6 +25,9 @@ import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.authentication.AuthenticationException;
+import com.starrocks.authentication.AuthenticationProvider;
+import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.IndexParams;
 import com.starrocks.catalog.PrimitiveType;
@@ -37,7 +41,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.PlanMode;
 import com.starrocks.datacache.DataCachePopulateMode;
 import com.starrocks.monitor.unit.TimeValue;
-import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
@@ -54,6 +58,7 @@ import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetUserPropertyVar;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValuesRelation;
@@ -341,7 +346,8 @@ public class SetStmtAnalyzer {
             if (!Strings.isNullOrEmpty(annParams)) {
                 Map<String, String> annParamMap = null;
                 try {
-                    java.lang.reflect.Type type = new com.google.gson.reflect.TypeToken<Map<String, String>>() {}.getType();
+                    java.lang.reflect.Type type = new com.google.gson.reflect.TypeToken<Map<String, String>>() {
+                    }.getType();
                     annParamMap = GsonUtils.GSON.fromJson(annParams, type);
                 } catch (Exception e) {
                     throw new SemanticException(String.format("Unsupported ann_params: %s, " +
@@ -446,7 +452,28 @@ public class SetStmtAnalyzer {
         }
         userIdentity.analyze();
         var.setUserIdent(userIdentity);
-        var.setPasswdBytes(MysqlPassword.checkPassword(var.getPasswdParam()));
+
+        UserAuthenticationInfo userAuthenticationInfo =
+                GlobalStateMgr.getCurrentState().getAuthenticationMgr().getUserAuthenticationInfoByUserIdentity(userIdentity);
+
+        if (null == userAuthenticationInfo) {
+            throw new SemanticException("authentication info for user " + userIdentity + " not found");
+        }
+
+        if (!userAuthenticationInfo.getAuthPlugin().equals(AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.name())) {
+            throw new SemanticException("only allow set password for native user, current user: " +
+                    userIdentity + ", AuthPlugin: " + userAuthenticationInfo.getAuthPlugin());
+        }
+
+        UserAuthOption authOption = var.getAuthOption();
+        AuthenticationProvider provider = AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.getProvider(authOption.getAuthString());
+        try {
+            Preconditions.checkNotNull(provider);
+            UserAuthenticationInfo analyzedAuthInfo = provider.analyzeAuthOption(userIdentity, authOption);
+            var.setUserAuthenticationInfo(analyzedAuthInfo);
+        } catch (AuthenticationException e) {
+            throw new SemanticException(e.getMessage());
+        }
     }
 
     private static boolean checkUserVariableType(Type type) {
