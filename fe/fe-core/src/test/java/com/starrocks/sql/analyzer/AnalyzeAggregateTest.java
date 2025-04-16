@@ -292,6 +292,10 @@ public class AnalyzeAggregateTest {
         analyzeSuccess("select percentile_approx(1,5) from tall group by tb");
         analyzeSuccess("select percentile_approx(1,0.5,1047) from tall group by tb");
         analyzeSuccess("select percentile_disc(tj,0.5) from tall group by tb");
+        analyzeSuccess("select percentile_cont(tj,0.5) from tall group by tb");
+        analyzeSuccess("select percentile_cont(tj, cast(0.5 as double)) from tall group by tb");
+        analyzeSuccess("select percentile_cont(1, 0.4);");
+        analyzeSuccess("select percentile_cont(1, cast(0.4 as double));");
     }
 
     @Test
