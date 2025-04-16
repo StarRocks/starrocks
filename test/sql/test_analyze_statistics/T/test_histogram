@@ -119,11 +119,11 @@ function: assert_explain_costs_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 
 
 set cbo_enable_histogram_join_estimation = true;
 
-function: assert_explain_costs_contains('SELECT COUNT(*) FROM t1 JOIN t2 USING (k1)', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 1371887')
-function: assert_explain_costs_contains('SELECT COUNT(*) FROM t1 JOIN t2 USING (k1) WHERE t1.k1 BETWEEN "2020-01-21" AND "2020-01-30" ', 'cardinality: 176', 'cardinality: 2765', 'cardinality: 9141')
+function: assert_explain_costs_contains('SELECT COUNT(*) FROM t1 JOIN t2 USING (k1)', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 3645821')
+function: assert_explain_costs_contains('SELECT COUNT(*) FROM t1 JOIN t2 USING (k1) WHERE t1.k1 BETWEEN "2020-01-21" AND "2020-01-30" ', 'cardinality: 176', 'cardinality: 2765', 'cardinality: 10239')
 
-function: assert_explain_costs_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k1 = n3.k1', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 90000', 'cardinality: 1371887', 'cardinality: 158442101')
-function: assert_explain_costs_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k3 = n3.k3', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 90000', 'cardinality: 1371887', 'cardinality: 369219306')
+function: assert_explain_costs_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k1 = n3.k1', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 90000', 'cardinality: 3645821', 'cardinality: 805345144')
+function: assert_explain_costs_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k3 = n3.k3', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 90000', 'cardinality: 3645821', 'cardinality: 1156602757')
 
 -- more mcvs lead to better estimations.
 [UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '400');
@@ -149,8 +149,8 @@ function: assert_explain_costs_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 
 -- SELECT buckets,mcv FROM _statistics_.histogram_statistics WHERE table_name = 'analyze_test_${uuid0}.t2' and column_name = 'k1';
 -- SELECT buckets,mcv FROM _statistics_.histogram_statistics WHERE table_name = 'analyze_test_${uuid0}.t3' and column_name = 'k1';
 
-function: assert_explain_costs_contains('SELECT COUNT(*) FROM t1 JOIN t2 USING (k1)', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 3759365')
-function: assert_explain_costs_contains('SELECT COUNT(*) FROM t1 JOIN t2 USING (k1) WHERE t1.k1 BETWEEN "2020-01-21" AND "2020-01-30" ', 'cardinality: 209', 'cardinality: 2765', 'cardinality: 22917')
+function: assert_explain_costs_contains('SELECT COUNT(*) FROM t1 JOIN t2 USING (k1)', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 4562636')
+function: assert_explain_costs_contains('SELECT COUNT(*) FROM t1 JOIN t2 USING (k1) WHERE t1.k1 BETWEEN "2020-01-21" AND "2020-01-30" ', 'cardinality: 209', 'cardinality: 2765', 'cardinality: 24300')
 
-function: assert_explain_costs_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k1 = n3.k1', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 90000', 'cardinality: 3759365', 'cardinality: 831855052')
-function: assert_explain_costs_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k3 = n3.k3', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 90000', 'cardinality: 3759365', 'cardinality: 1123044723')
+function: assert_explain_costs_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k1 = n3.k1', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 90000', 'cardinality: 4562636', 'cardinality: 1199835328')
+function: assert_explain_costs_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k3 = n3.k3', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 90000', 'cardinality: 4562636', 'cardinality: 1446330752')
