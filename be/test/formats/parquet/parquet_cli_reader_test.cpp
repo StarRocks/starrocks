@@ -137,7 +137,7 @@ TEST_F(ParquetCLIReaderTest, ReadArrowFuzzingParquetFiles) {
         if (ignore_dcheck_paths.find(path) != ignore_dcheck_paths.end()) {
             continue;
         }
-        std::cout << "Testing file: " << path << std::endl;
+        LOG(INFO) << "Testing file: " << path;
         ParquetCLIReader reader{path};
         auto st = reader.init();
         if (st.ok()) {

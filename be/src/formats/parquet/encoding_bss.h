@@ -21,6 +21,7 @@
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
 #include "formats/parquet/types.h"
+#include "util/bit_util.h"
 #include "util/byte_stream_split.h"
 #include "util/faststring.h"
 #include "util/slice.h"
@@ -190,7 +191,9 @@ private:
     Status Decode(T* buffer, int max_values) {
         max_values = std::min(max_values, num_valid_values_);
         if constexpr (IS_FLBA) {
-            decode_buffer_.reserve(max_values * byte_width_);
+            int64_t decode_buffer_size = max_values * byte_width_;
+            // note(yanz): don't use reveser here because in ASAN mode this region will marked as poisoned.
+            decode_buffer_.resize(decode_buffer_size);
             ByteStreamSplitUtil::ByteStreamSplitDecode(data_, byte_width_, max_values, stride_, decode_buffer_.data());
             if (buffer != nullptr) {
                 Slice* slices = reinterpret_cast<Slice*>(buffer);
