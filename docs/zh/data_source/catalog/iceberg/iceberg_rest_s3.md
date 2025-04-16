@@ -1,8 +1,8 @@
-# Create Iceberg REST Catalog for AWS S3
+# 为 AWS S3 表创建 Iceberg REST Catalog
 
-本文介绍如何在 StarRocks 中创建 Iceberg REST Catalog，以通过 AWS Glue Iceberg REST 端点访问 AWS S3 中的数据。
+本文介绍如何在 StarRocks 中创建 Iceberg REST Catalog，以通过 AWS Glue Iceberg REST 端点访问 AWS S3 表中的数据。
 
-AWS Glue Iceberg REST 端点实现了 [Iceberg REST Catalog Open API 规范](https://github.com/apache/iceberg/blob/main/open-api/rest-catalog-open-api.yaml)，提供了一个标准化接口用于与 Iceberg 表进行交互。要使用此端点访问 S3 中的表，您需要通过结合 IAM 策略和 AWS Lake Formation 授权来配置凭证。以下部分将指导您完成访问权限设置，包括定义所需的策略、在数据库和表级别建立 Lake Formation 权限，以及使用 StarRocks 创建一个 Iceberg REST catalog 以访问 S3 表。
+AWS Glue Iceberg REST 端点实现了 [Iceberg REST Catalog Open API 规范](https://github.com/apache/iceberg/blob/main/open-api/rest-catalog-open-api.yaml)，提供了一个标准化接口用于与 Iceberg 表进行交互。要使用此端点访问 S3 表，您需要通过结合 IAM 策略和 AWS Lake Formation 授权来配置凭证。以下部分将指导您完成访问权限设置，包括定义所需的策略、在数据库和表级别建立 Lake Formation 权限，以及使用 StarRocks 创建一个 Iceberg REST catalog 以访问 S3 表。
 
 ## （可选）创建一个表存储桶
 
@@ -18,11 +18,11 @@ AWS Glue Iceberg REST 端点实现了 [Iceberg REST Catalog Open API 规范](htt
 
 > **注意**
 > 
-> 您可以使用 Athena 创建数据库和表，然后使用 StarRocks 查询它们。或者，您也可以只创建一个表存储桶，然后使用 StarRocks 创建数据库和表。
+> 您可以使用 Athena 创建数据库和表，然后使用 StarRocks 查询。或者，您也可以仅创建表存储桶，然后使用 StarRocks 创建数据库和表。
 
 ## 创建 IAM 策略
 
-要通过 AWS Glue 端点访问表，请创建一个具有 AWS Glue 和 Lake Formation 操作权限的 IAM 策略：
+要通过 AWS Glue 端点访问 S3 表，请创建一个具有 AWS Glue 和 Lake Formation 操作权限的 IAM 策略：
 
 1. 以具有管理员权限的用户身份登录 [Amazon IAM 控制台](https://console.aws.amazon.com/iam)。
 2. 在页面的右上角，选择您的 AWS 区域。
