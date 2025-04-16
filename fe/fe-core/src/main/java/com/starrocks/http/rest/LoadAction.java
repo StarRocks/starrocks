@@ -35,12 +35,6 @@
 package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
-<<<<<<< HEAD
-=======
-import com.starrocks.authorization.AccessDeniedException;
-import com.starrocks.authorization.PrivilegeType;
-import com.starrocks.common.Config;
->>>>>>> 21ba560494 ([Enhancement] Use query blacklist for stream load BE/CN selection (#57919))
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -56,7 +50,6 @@ import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.warehouse.Warehouse;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpUtil;
@@ -70,11 +63,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-<<<<<<< HEAD
-=======
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
->>>>>>> 21ba560494 ([Enhancement] Use query blacklist for stream load BE/CN selection (#57919))
 
 public class LoadAction extends RestBaseAction {
     private static final Logger LOG = LogManager.getLogger(LoadAction.class);
@@ -89,11 +78,12 @@ public class LoadAction extends RestBaseAction {
                 new LoadAction(controller));
     }
 
-    public static List<Long> selectNodes(String warehouseName) throws DdlException {
+    public static List<Long> selectNodes() throws DdlException {
         // Choose a backend sequentially, or choose a cn in shared_data mode
         List<Long> nodeIds = new ArrayList<>();
         if (RunMode.isSharedDataMode()) {
-            List<Long> computeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseName);
+            List<Long> computeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                    .getDefaultWarehouse().getAnyAvailableCluster().getComputeNodeIds();
             for (long nodeId : computeIds) {
                 ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
                 if (node != null && node.isAvailable()) {
@@ -105,12 +95,10 @@ public class LoadAction extends RestBaseAction {
             nodeIds = systemInfoService.getAvailableBackends().stream().map(be -> be.getId()).collect(Collectors.toList());
         }
 
-        if (Config.enable_block_list_for_stream_load) {
-            List<Long> filterNodeIds = nodeIds.stream()
-                                              .filter(id -> !SimpleScheduler.isInBlocklist(id)).collect(Collectors.toList());
-            if (filterNodeIds != null && !filterNodeIds.isEmpty()) {
-                nodeIds = filterNodeIds;
-            }
+        List<Long> filterNodeIds = nodeIds.stream()
+                .filter(id -> !SimpleScheduler.isInBlacklist(id)).collect(Collectors.toList());
+        if (filterNodeIds != null && !filterNodeIds.isEmpty()) {
+            nodeIds = filterNodeIds;
         }
 
         if (CollectionUtils.isEmpty(nodeIds)) {
@@ -180,29 +168,7 @@ public class LoadAction extends RestBaseAction {
         Authorizer.checkTableAction(ConnectContext.get().getCurrentUserIdentity(), ConnectContext.get().getCurrentRoleIds(),
                 dbName, tableName, PrivilegeType.INSERT);
 
-<<<<<<< HEAD
-        // Choose a backend sequentially, or choose a cn in shared_data mode
-        List<Long> nodeIds = new ArrayList<>();
-        if (RunMode.isSharedDataMode()) {
-            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
-            for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
-                ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
-                if (node != null && node.isAvailable()) {
-                    nodeIds.add(nodeId);
-                }
-            }
-            Collections.shuffle(nodeIds);
-        } else {
-            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-            nodeIds = systemInfoService.getNodeSelector().seqChooseBackendIds(1, true, false, null);
-        }
-        
-        if (CollectionUtils.isEmpty(nodeIds)) {
-            throw new DdlException("No backend alive.");
-        }
-=======
-        List<Long> nodeIds = LoadAction.selectNodes(warehouseName);
->>>>>>> 21ba560494 ([Enhancement] Use query blacklist for stream load BE/CN selection (#57919))
+        List<Long> nodeIds = LoadAction.selectNodes();
 
         // TODO: need to refactor after be split into cn + dn
         ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeIds.get(0));

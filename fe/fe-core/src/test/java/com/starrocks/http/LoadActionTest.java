@@ -15,23 +15,10 @@
 package com.starrocks.http;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-<<<<<<< HEAD
-import com.google.common.collect.Multimap;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
-import com.starrocks.system.Backend;
-import com.starrocks.system.NodeSelector;
-=======
-import com.starrocks.load.batchwrite.BatchWriteMgr;
-import com.starrocks.load.batchwrite.RequestCoordinatorBackendResult;
-import com.starrocks.load.batchwrite.TableId;
-import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
-import com.starrocks.system.ComputeNode;
->>>>>>> 21ba560494 ([Enhancement] Use query blacklist for stream load BE/CN selection (#57919))
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.Cluster;
 import com.starrocks.warehouse.LocalWarehouse;
@@ -336,7 +323,7 @@ public class LoadActionTest extends StarRocksHttpTestCase {
                 }
             };
 
-            SimpleScheduler.addToBlocklist(1L);
+            SimpleScheduler.addToBlacklist(1L);
             int loop = 10;
             while (loop > 0) {
                 try (Response response = noRedirectClient.newCall(request).execute()) {
@@ -346,9 +333,9 @@ public class LoadActionTest extends StarRocksHttpTestCase {
                 }
                 loop = loop - 1;
             }
-            SimpleScheduler.removeFromBlocklist(1L);
+            SimpleScheduler.removeFromBlacklist(1L);
 
-            SimpleScheduler.addToBlocklist(2L);
+            SimpleScheduler.addToBlacklist(2L);
             loop = 10;
             while (loop > 0) {
                 try (Response response = noRedirectClient.newCall(request).execute()) {
@@ -358,9 +345,9 @@ public class LoadActionTest extends StarRocksHttpTestCase {
                 }
                 loop = loop - 1;
             }
-            SimpleScheduler.removeFromBlocklist(2L);
+            SimpleScheduler.removeFromBlacklist(2L);
 
-            SimpleScheduler.addToBlocklist(3L);
+            SimpleScheduler.addToBlacklist(3L);
             loop = 10;
             while (loop > 0) {
                 try (Response response = noRedirectClient.newCall(request).execute()) {
@@ -370,11 +357,11 @@ public class LoadActionTest extends StarRocksHttpTestCase {
                 }
                 loop = loop - 1;
             }
-            SimpleScheduler.removeFromBlocklist(3L);
+            SimpleScheduler.removeFromBlacklist(3L);
 
-            SimpleScheduler.addToBlocklist(1L);
-            SimpleScheduler.addToBlocklist(2L);
-            SimpleScheduler.addToBlocklist(3L);
+            SimpleScheduler.addToBlacklist(1L);
+            SimpleScheduler.addToBlacklist(2L);
+            SimpleScheduler.addToBlacklist(3L);
             loop = 10;
             while (loop > 0) {
                 try (Response response = noRedirectClient.newCall(request).execute()) {
@@ -386,9 +373,9 @@ public class LoadActionTest extends StarRocksHttpTestCase {
                 }
                 loop = loop - 1;
             }
-            SimpleScheduler.removeFromBlocklist(1L);
-            SimpleScheduler.removeFromBlocklist(2L);
-            SimpleScheduler.removeFromBlocklist(3L);
+            SimpleScheduler.removeFromBlacklist(1L);
+            SimpleScheduler.removeFromBlacklist(2L);
+            SimpleScheduler.removeFromBlacklist(3L);
         }
     }
 }
