@@ -16,12 +16,6 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-<<<<<<< HEAD
-import com.starrocks.analysis.DecimalLiteral;
-=======
-import com.google.common.collect.Sets;
-import com.google.re2j.Pattern;
->>>>>>> 3d31ee3d82 ([BugFix] Fix percentile_cont with constant rate parameter bug (#58038))
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
