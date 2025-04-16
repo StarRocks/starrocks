@@ -852,7 +852,8 @@ Status Aggregator::evaluate_groupby_exprs(Chunk* chunk) {
     return _evaluate_group_by_exprs(chunk);
 }
 
-Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk) {
+Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk,
+                                             bool force_use_intermediate_as_output) {
     // The input chunk is already intermediate-typed, so there is no need to convert it again.
     // Only when the input chunk is input-typed, we should convert it into intermediate-typed chunk.
     // is_passthrough is on indicate that the chunk is input-typed.
@@ -877,7 +878,6 @@ Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk
     // build aggregate function values
     if (!_agg_fn_ctxs.empty()) {
         DCHECK(!_group_by_columns.empty());
-
         RETURN_IF_ERROR(evaluate_agg_fn_exprs(input_chunk));
         const auto num_rows = _group_by_columns[0]->size();
         Columns agg_result_column = _create_agg_result_columns(num_rows, true);
@@ -886,6 +886,11 @@ Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk
             auto slot_id = slots[id]->id();
             if (_is_merge_funcs[i] || use_intermediate_as_input) {
                 DCHECK(i < _agg_input_columns.size() && _agg_input_columns[i].size() >= 1);
+                if (force_use_intermediate_as_output) {
+                    if (agg_result_column[i]->is_nullable()) {
+                        _agg_input_columns[i][0] = ColumnHelper::cast_to_nullable_column(_agg_input_columns[i][0]);
+                    }
+                }
                 result_chunk->append_column(std::move(_agg_input_columns[i][0]), slot_id);
             } else {
                 _agg_functions[i]->convert_to_serialize_format(_agg_fn_ctxs[i], _agg_input_columns[i],
@@ -951,7 +956,8 @@ Status Aggregator::convert_to_spill_format(Chunk* input_chunk, ChunkPtr* chunk) 
     return Status::OK();
 }
 
-Status Aggregator::output_chunk_by_streaming_with_selection(Chunk* input_chunk, ChunkPtr* chunk) {
+Status Aggregator::output_chunk_by_streaming_with_selection(Chunk* input_chunk, ChunkPtr* chunk,
+                                                            bool force_use_intermediate_as_output) {
     // Streaming aggregate at least has one group by column
     size_t chunk_size = _group_by_columns[0]->size();
     for (auto& _group_by_column : _group_by_columns) {
@@ -981,7 +987,7 @@ Status Aggregator::output_chunk_by_streaming_with_selection(Chunk* input_chunk, 
         }
     }
 
-    RETURN_IF_ERROR(output_chunk_by_streaming(input_chunk, chunk));
+    RETURN_IF_ERROR(output_chunk_by_streaming(input_chunk, chunk, force_use_intermediate_as_output));
     return Status::OK();
 }
 
