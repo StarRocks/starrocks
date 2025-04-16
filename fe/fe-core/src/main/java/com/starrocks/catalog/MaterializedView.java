@@ -840,6 +840,16 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     public void onDrop(Database db, boolean force, boolean replay) {
         super.onDrop(db, force, replay);
 
+        // NOTE: since super#onDrop will drop all partitions, we need to ensure to doDropImpl without exception,
+        // otherwise it may cause inconsistent state with multi FEs.
+        try {
+            onDropImpl(db, replay);
+        } catch (Exception e) {
+            LOG.warn("failed to drop materialized view {}", this.name, e);
+        }
+    }
+
+    private void onDropImpl(Database db, boolean replay) {
         // 1. Remove from plan cache
         MvId mvId = new MvId(db.getId(), getId());
         CachingMvPlanContextBuilder.getInstance().updateMvPlanContextCache(this, false);
