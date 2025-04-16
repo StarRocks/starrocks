@@ -705,6 +705,30 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
+            @ConstantFunction(name = "from_unixtime", argTypes = {INT, VARCHAR, VARCHAR},
+                              returnType = VARCHAR, isMonotonic = true),
+            @ConstantFunction(name = "from_unixtime", argTypes = {BIGINT, VARCHAR, VARCHAR},
+                              returnType = VARCHAR, isMonotonic = true)
+    })
+    public static ConstantOperator fromUnixTime(ConstantOperator unixTime, ConstantOperator fmtLiteral, ConstantOperator timezone)
+            throws AnalysisException {
+        long value = 0;
+        if (unixTime.getType().isInt()) {
+            value = unixTime.getInt();
+        } else {
+            value = unixTime.getBigint();
+        }
+        if (value < 0 || value > TimeUtils.MAX_UNIX_TIMESTAMP) {
+            throw new AnalysisException(
+                    "unixtime should larger than zero and less than " + TimeUtils.MAX_UNIX_TIMESTAMP);
+        }
+        ConstantOperator dl = ConstantOperator.createDatetime(
+                LocalDateTime.ofInstant(Instant.ofEpochSecond(value),
+                TimeUtils.getOrSystemTimeZone(timezone.getVarchar()).toZoneId()));
+        return dateFormat(dl, fmtLiteral);
+    }
+
+    @ConstantFunction.List(list = {
             @ConstantFunction(name = "curtime", argTypes = {}, returnType = TIME),
             @ConstantFunction(name = "current_time", argTypes = {}, returnType = TIME)
     })
@@ -729,7 +753,10 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetimeOrNull(startTime);
     }
 
-    @ConstantFunction(name = "now", argTypes = {INT}, returnType = DATETIME)
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "now", argTypes = {INT}, returnType = DATETIME),
+            @ConstantFunction(name = "current_timestamp", argTypes = {INT}, returnType = DATETIME)
+    })
     public static ConstantOperator now(ConstantOperator fsp) throws AnalysisException {
         int fspVal = fsp.getInt();
         if (fspVal == 0) {

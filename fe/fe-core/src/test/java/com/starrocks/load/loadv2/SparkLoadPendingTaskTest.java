@@ -37,11 +37,13 @@ package com.starrocks.load.loadv2;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BrokerDesc;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
@@ -410,6 +412,38 @@ public class SparkLoadPendingTaskTest {
         etlPartitions = etlPartitionInfo.partitions;
         Assert.assertEquals(1, etlPartitions.size());
         Assert.assertEquals(61, etlPartitions.get(0).physicalPartitionId);
+    }
+
+    private void internalTestBitmapMapping(SparkLoadPendingTask task, FunctionCallExpr expr, boolean expectLoadException) {
+        try {
+            task.checkBitmapMapping("col1", expr, true);
+            if (expectLoadException) {
+                Assert.fail();
+            }
+        } catch (Exception e) {
+            boolean isLoadException = e instanceof LoadException;
+            if (isLoadException ^ expectLoadException) {
+                Assert.fail();
+            }
+        }
+    }
+
+    @Test
+    public void testBitmapMapping(@Injectable SparkLoadJob sparkLoadJob,
+                                  @Injectable SparkResource resource,
+                                  @Injectable BrokerDesc brokerDesc,
+                                  @Mocked GlobalStateMgr globalStateMgr) {
+        SparkLoadPendingTask task = new SparkLoadPendingTask(sparkLoadJob, Maps.newHashMap(), resource, brokerDesc);
+
+        {
+            FunctionCallExpr expr = new FunctionCallExpr(FunctionSet.BITMAP_COUNT, Lists.newArrayList());
+            internalTestBitmapMapping(task, expr, true);
+        }
+
+        {
+            FunctionCallExpr expr = new FunctionCallExpr(FunctionSet.BITMAP_HASH64, Lists.newArrayList());
+            internalTestBitmapMapping(task, expr, false);
+        }
     }
 
 }
