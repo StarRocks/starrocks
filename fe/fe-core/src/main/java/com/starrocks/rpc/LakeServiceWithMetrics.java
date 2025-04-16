@@ -43,6 +43,8 @@ import com.starrocks.proto.UnlockTabletMetadataRequest;
 import com.starrocks.proto.UnlockTabletMetadataResponse;
 import com.starrocks.proto.UploadSnapshotsRequest;
 import com.starrocks.proto.UploadSnapshotsResponse;
+import com.starrocks.proto.VacuumFullRequest;
+import com.starrocks.proto.VacuumFullResponse;
 import com.starrocks.proto.VacuumRequest;
 import com.starrocks.proto.VacuumResponse;
 
@@ -154,5 +156,11 @@ public class LakeServiceWithMetrics implements LakeService {
     public Future<VacuumResponse> vacuum(VacuumRequest request) {
         increaseMetrics();
         return lakeService.vacuum(request);
+    }
+
+    @Override
+    public Future<VacuumFullResponse> vacuumFull(VacuumFullRequest request) {
+        increaseMetrics();
+        return lakeService.vacuumFull(request);
     }
 }

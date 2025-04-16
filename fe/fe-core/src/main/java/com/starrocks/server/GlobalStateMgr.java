@@ -143,6 +143,7 @@ import com.starrocks.lake.compaction.CompactionControlScheduler;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
+import com.starrocks.lake.vacuum.FullVacuumDaemon;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.leader.ReportHandler;
 import com.starrocks.leader.TabletCollector;
@@ -478,6 +479,7 @@ public class GlobalStateMgr {
     private final StorageVolumeMgr storageVolumeMgr;
 
     private AutovacuumDaemon autovacuumDaemon;
+    private FullVacuumDaemon fullVacuumDaemon;
 
     private final PipeManager pipeManager;
     private final PipeListener pipeListener;
@@ -765,6 +767,7 @@ public class GlobalStateMgr {
         if (RunMode.isSharedDataMode()) {
             this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
             this.autovacuumDaemon = new AutovacuumDaemon();
+            this.fullVacuumDaemon = new FullVacuumDaemon();
         } else {
             this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
         }
@@ -1432,6 +1435,7 @@ public class GlobalStateMgr {
 
             starMgrMetaSyncer.start();
             autovacuumDaemon.start();
+            fullVacuumDaemon.start();
         }
 
         if (Config.enable_safe_mode) {

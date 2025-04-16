@@ -16,12 +16,17 @@ package com.starrocks.lake;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
+import com.starrocks.lake.vacuum.FullVacuumDaemon;
 import com.starrocks.proto.StatusPB;
+import com.starrocks.proto.VacuumFullRequest;
+import com.starrocks.proto.VacuumFullResponse;
 import com.starrocks.proto.VacuumRequest;
 import com.starrocks.proto.VacuumResponse;
 import com.starrocks.qe.ConnectContext;
@@ -42,8 +47,12 @@ import org.mockito.MockedStatic;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.Future;
+import java.util.stream.Collectors;
 
+import static com.starrocks.lake.vacuum.FullVacuumDaemon.computeMinActiveTxnId;
+import static org.mockito.ArgumentMatchers.refEq;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.anyString;
@@ -88,14 +97,14 @@ public class VacuumTest {
 
         warehouseManager = mock(WarehouseManager.class);
         computeNode = mock(ComputeNode.class);
-        
+
 
         when(warehouseManager.getBackgroundWarehouse()).thenReturn(mock(Warehouse.class));
         when(warehouseManager.getComputeNodeAssignedToTablet(anyString(), any(LakeTablet.class))).thenReturn(computeNode);
 
         when(computeNode.getHost()).thenReturn("localhost");
         when(computeNode.getBrpcPort()).thenReturn(8080);
-        
+
     }
 
     @AfterClass
@@ -130,7 +139,7 @@ public class VacuumTest {
             mockBrpcProxyStatic.when(() -> BrpcProxy.getLakeService(anyString(), anyInt())).thenReturn(lakeService);
             autovacuumDaemon.testVacuumPartitionImpl(db, olapTable, partition);
         }
-        
+
         Assert.assertEquals(5L, partition.getLastSuccVacuumVersion());
 
         mockResponse.vacuumedVersion = 7L;
@@ -139,6 +148,44 @@ public class VacuumTest {
             autovacuumDaemon.testVacuumPartitionImpl(db, olapTable, partition);
         }
         Assert.assertEquals(7L, partition.getLastSuccVacuumVersion());
+    }
+
+    @Test
+    public void testFullVacuum() throws Exception {
+        partition = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
+        partition.setVisibleVersion(10L, System.currentTimeMillis());
+        partition.setMinRetainVersion(10L);
+        partition.setLastSuccVacuumVersion(4L);
+
+        FullVacuumDaemon fullVacuumDaemon = new FullVacuumDaemon();
+
+        VacuumFullResponse mockResponse = new VacuumFullResponse();
+        mockResponse.status = new StatusPB();
+        mockResponse.status.statusCode = 0;
+        mockResponse.vacuumedFiles = 10L;
+        mockResponse.vacuumedFileSize = 1024L;
+
+        Future<VacuumFullResponse> mockFuture = mock(Future.class);
+        when(mockFuture.get()).thenReturn(mockResponse);
+
+        VacuumFullRequest expectedReq = new VacuumFullRequest();
+        expectedReq.setPartitionId(partition.getId());
+        expectedReq.setTabletIds(partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).stream()
+                .map(MaterializedIndex::getTablets).flatMap(List::stream).map(Tablet::getId).collect(Collectors.toList()));
+        expectedReq.setMinCheckVersion(1L);
+        expectedReq.setMaxCheckVersion(partition.getVisibleVersion());
+        expectedReq.setMinActiveTxnId(computeMinActiveTxnId(db, olapTable));
+        long startTs;
+        lakeService = mock(LakeService.class);
+        when(lakeService.vacuumFull(refEq(expectedReq))).thenReturn(mockFuture);
+        try (MockedStatic<BrpcProxy> mockBrpcProxyStatic = mockStatic(BrpcProxy.class)) {
+            mockBrpcProxyStatic.when(() -> BrpcProxy.getLakeService(anyString(), anyInt())).thenReturn(lakeService);
+            startTs = System.currentTimeMillis();
+            fullVacuumDaemon.testVacuumPartitionImpl(db, olapTable, partition);
+        }
+
+        Assert.assertTrue(String.format("Last full vacuum time is %d but it should be geq to %d",
+                partition.getLastFullVacuumTime(), startTs), partition.getLastFullVacuumTime() >= startTs);
     }
 
     @Test
@@ -168,7 +215,7 @@ public class VacuumTest {
             mockBrpcProxyStatic.when(() -> BrpcProxy.getLakeService(anyString(), anyInt())).thenReturn(lakeService);
             autovacuumDaemon.testVacuumPartitionImpl(db, olapTable, partition);
         }
-        
+
         Assert.assertEquals(4L, partition.getLastSuccVacuumVersion());
     }
 

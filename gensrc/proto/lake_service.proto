@@ -283,12 +283,16 @@ message VacuumResponse {
     repeated TabletInfoPB tablet_infos = 5;
 }
 
+// 1. Before the orphaned data file cleanup starts, VacuumFull will delete metadata files which satisfy the following:
+// (tablet_id not in request.tablet_ids OR version < min_check_version)
+// 2. Then, orphaned data files will be determined. We use min_active_txn_id to filter out new data files, then we open
+// any remaining metadata files with version <= max_check_version and note that the data files referenced are not orphans.
 message VacuumFullRequest {
     optional int64 partition_id = 5; // The id of the partition to vacuum
     repeated int64 tablet_ids = 1; // The ids of the tablets, ignore other tablets
-    optional int64 min_check_version = 2; // Ignore version < min_check_version, default 1 (set by FE)
-    optional int64 max_check_version = 3; // Ignore version >= max_check_version, default visible version
-    optional int64 min_active_txn_id = 4; // Delete txn log files with txn IDs less than min_active_txn_id
+    optional int64 min_check_version = 2; // Delete metadata files with version < min_check_version, default 1 (set by FE)
+    optional int64 max_check_version = 3; // Ignore metadata files with version >= max_check_version, default visible version
+    optional int64 min_active_txn_id = 4;
 }
 
 message VacuumFullResponse {
