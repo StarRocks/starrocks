@@ -19,6 +19,7 @@ import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.Cluster;
 import com.starrocks.warehouse.LocalWarehouse;
@@ -256,7 +257,7 @@ public class LoadActionTest extends StarRocksHttpTestCase {
         LocalWarehouse warehouse = new LocalWarehouse(DEFAULT_WAREHOUSE_ID, DEFAULT_WAREHOUSE_NAME);
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+                GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
                 result = warehouse;
             }
         };
@@ -289,16 +290,12 @@ public class LoadActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void testBlackListForStreamLoad() throws Exception {
-        Map<String, String> map = new HashMap<>();
-        Request request = buildRequest(map);
         List<ComputeNode> computeNodes = new ArrayList<>();
-        List<String> redirectLocations = new ArrayList<>();
         for (int i = 1; i <= 3; i++) {
             String host = "192.0.0." + i;
             int httpPort = 8040;
             computeNodes.add(new ComputeNode(i, host, 9050));
             computeNodes.get(i - 1).setHttpPort(httpPort);
-            redirectLocations.add(getLoadUrl(host, httpPort));
         }
 
         {
@@ -323,59 +320,81 @@ public class LoadActionTest extends StarRocksHttpTestCase {
                 }
             };
 
-            SimpleScheduler.addToBlacklist(1L);
-            int loop = 10;
-            while (loop > 0) {
-                try (Response response = noRedirectClient.newCall(request).execute()) {
-                    assertEquals(307, response.code());
-                    String location = response.header("Location");
-                    assertTrue(location.contains("192.0.0.2") || location.contains("192.0.0.3"));
+            RequestConfig requestConfig = RequestConfig.custom()
+                    .setConnectionRequestTimeout(3000)
+                    .build();
+            try (CloseableHttpClient client = HttpClients
+                        .custom()
+                        .setRedirectStrategy(new DefaultRedirectStrategy() {
+                            @Override
+                            protected boolean isRedirectable(String method) {
+                                return false;
+                            }
+                        })
+                        .setDefaultRequestConfig(requestConfig)
+                        .build()) {
+                SimpleScheduler.addToBlacklist(1L);
+                int loop = 10;
+                while (loop > 0) {
+                    HttpPut put = buildPutRequest(2, true);
+                    try (CloseableHttpResponse response = client.execute(put)) {
+                        Assert.assertEquals(HttpResponseStatus.TEMPORARY_REDIRECT.code(),
+                                response.getStatusLine().getStatusCode());
+                        String location = response.getFirstHeader(HttpHeaderNames.LOCATION.toString()).getValue();
+                        assertTrue(location.contains("192.0.0.2") || location.contains("192.0.0.3"));
+                    }
+                    loop = loop - 1;
                 }
-                loop = loop - 1;
-            }
-            SimpleScheduler.removeFromBlacklist(1L);
+                SimpleScheduler.removeFromBlacklist(1L);
 
-            SimpleScheduler.addToBlacklist(2L);
-            loop = 10;
-            while (loop > 0) {
-                try (Response response = noRedirectClient.newCall(request).execute()) {
-                    assertEquals(307, response.code());
-                    String location = response.header("Location");
-                    assertTrue(location.contains("192.0.0.1") || location.contains("192.0.0.3"));
+                SimpleScheduler.addToBlacklist(2L);
+                loop = 10;
+                while (loop > 0) {
+                    HttpPut put = buildPutRequest(2, true);
+                    try (CloseableHttpResponse response = client.execute(put)) {
+                        Assert.assertEquals(HttpResponseStatus.TEMPORARY_REDIRECT.code(),
+                                response.getStatusLine().getStatusCode());
+                        String location = response.getFirstHeader(HttpHeaderNames.LOCATION.toString()).getValue();
+                        assertTrue(location.contains("192.0.0.1") || location.contains("192.0.0.3"));
+                    }
+                    loop = loop - 1;
                 }
-                loop = loop - 1;
-            }
-            SimpleScheduler.removeFromBlacklist(2L);
+                SimpleScheduler.removeFromBlacklist(2L);
 
-            SimpleScheduler.addToBlacklist(3L);
-            loop = 10;
-            while (loop > 0) {
-                try (Response response = noRedirectClient.newCall(request).execute()) {
-                    assertEquals(307, response.code());
-                    String location = response.header("Location");
-                    assertTrue(location.contains("192.0.0.1") || location.contains("192.0.0.2"));
+                SimpleScheduler.addToBlacklist(3L);
+                loop = 10;
+                while (loop > 0) {
+                    HttpPut put = buildPutRequest(2, true);
+                    try (CloseableHttpResponse response = client.execute(put)) {
+                        Assert.assertEquals(HttpResponseStatus.TEMPORARY_REDIRECT.code(),
+                                response.getStatusLine().getStatusCode());
+                        String location = response.getFirstHeader(HttpHeaderNames.LOCATION.toString()).getValue();
+                        assertTrue(location.contains("192.0.0.1") || location.contains("192.0.0.2"));
+                    }
+                    loop = loop - 1;
                 }
-                loop = loop - 1;
-            }
-            SimpleScheduler.removeFromBlacklist(3L);
+                SimpleScheduler.removeFromBlacklist(3L);
 
-            SimpleScheduler.addToBlacklist(1L);
-            SimpleScheduler.addToBlacklist(2L);
-            SimpleScheduler.addToBlacklist(3L);
-            loop = 10;
-            while (loop > 0) {
-                try (Response response = noRedirectClient.newCall(request).execute()) {
-                    assertEquals(307, response.code());
-                    String location = response.header("Location");
-                    assertTrue(location.contains("192.0.0.1") ||
-                               location.contains("192.0.0.2") ||
-                               location.contains("192.0.0.3"));
+                SimpleScheduler.addToBlacklist(1L);
+                SimpleScheduler.addToBlacklist(2L);
+                SimpleScheduler.addToBlacklist(3L);
+                loop = 10;
+                while (loop > 0) {
+                    HttpPut put = buildPutRequest(2, true);
+                    try (CloseableHttpResponse response = client.execute(put)) {
+                        Assert.assertEquals(HttpResponseStatus.TEMPORARY_REDIRECT.code(),
+                                response.getStatusLine().getStatusCode());
+                        String location = response.getFirstHeader(HttpHeaderNames.LOCATION.toString()).getValue();
+                        assertTrue(location.contains("192.0.0.1") ||
+                                location.contains("192.0.0.2") ||
+                                location.contains("192.0.0.3"));
+                    }
+                    loop = loop - 1;
                 }
-                loop = loop - 1;
+                SimpleScheduler.removeFromBlacklist(1L);
+                SimpleScheduler.removeFromBlacklist(2L);
+                SimpleScheduler.removeFromBlacklist(3L);
             }
-            SimpleScheduler.removeFromBlacklist(1L);
-            SimpleScheduler.removeFromBlacklist(2L);
-            SimpleScheduler.removeFromBlacklist(3L);
         }
     }
 }

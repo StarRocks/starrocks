@@ -21,7 +21,6 @@ import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.warehouse.Cluster;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -80,21 +79,8 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
                 return nodes;
             }
         };
-
-        new MockUp<TransactionLoadAction>() {
-
-            @Mock
-            public void redirectTo(BaseRequest request,
-                                   BaseResponse response,
-                                   TNetworkAddress addr) throws DdlException {
-                TransactionResult result = new TransactionResult();
-                result.setOKMsg("mock redirect to BE");
-                response.setContentType(JSON.toString());
-                response.appendContent(result.toJson());
-                writeResponse(request, response);
-            }
-
-        };
+    
+        GlobalStateMgr.getCurrentState().getWarehouseMgr().initDefaultWarehouse();
     }
 
     @After
