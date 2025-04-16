@@ -36,7 +36,6 @@ Status LoadSpillOutputDataStream::append(RuntimeState* state, const std::vector<
     // preallocate block
     RETURN_IF_ERROR(_preallocate(total_size));
     // append data
-    _append_bytes += total_size;
     auto st = _block->append(data);
     if (st.is_capacity_limit_exceeded()) {
         // No space left on device
@@ -44,7 +43,9 @@ Status LoadSpillOutputDataStream::append(RuntimeState* state, const std::vector<
         RETURN_IF_ERROR(_switch_to_remote_block(total_size));
         st = _block->append(data);
     }
-    _append_bytes += total_size;
+    if (st.ok()) {
+        _append_bytes += total_size;
+    }
     return st;
 }
 
