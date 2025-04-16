@@ -7168,7 +7168,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitSpecialDateTimeExpression(StarRocksParser.SpecialDateTimeExpressionContext context) {
-        return new FunctionCallExpr(context.name.getText().toUpperCase(), Lists.newArrayList());
+        List<Expr> expr = Lists.newArrayList();
+        if (context.INTEGER_VALUE() != null) {
+            expr.add(new IntLiteral(Long.parseLong(context.INTEGER_VALUE().getText()), Type.INT));
+        }
+        return new FunctionCallExpr(context.name.getText().toUpperCase(), new FunctionParams(false, expr));
     }
 
     @Override
