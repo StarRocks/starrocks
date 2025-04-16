@@ -69,10 +69,6 @@ public class StatisticRangeValues {
         return this.high - this.low;
     }
 
-    public boolean contains(double value) {
-        return value >= low && value <= high;
-    }
-
     // Calculate the proportion of coverage between column statistic range
     public double overlapPercentWith(@NotNull StatisticRangeValues other) {
         if (this.isEmpty() || other.isEmpty()) {
