@@ -67,16 +67,12 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
-import com.starrocks.warehouse.Warehouse;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
-import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -239,7 +235,7 @@ public class TransactionLoadAction extends RestBaseAction {
             Preconditions.checkState(txnOperationHandler instanceof TransactionWithoutChannelHandler,
                     "Handler %s should not be redirected, label: %s, operation: %s",
                     txnOperationHandler.getClass().getName(), label, txnOperation);
-            Long nodeId = getNodeId((TransactionWithoutChannelHandler) txnOperationHandler);
+            Long nodeId = getNodeId(txnOperation, label, txnOperationParams.getWarehouseName());
             ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
             if (node == null) {
                 throw new StarRocksException("Backend or compute node " + nodeId + " is not alive");
@@ -293,41 +289,13 @@ public class TransactionLoadAction extends RestBaseAction {
                 ? new BypassWriteTransactionHandler(params) : new TransactionWithoutChannelHandler(params);
     }
 
-    private Long getNodeId(TransactionWithoutChannelHandler handler) throws StarRocksException {
-        TransactionOperation txnOperation = handler.getTxnOperationParams().getTxnOperation();
-        String label = handler.getTxnOperationParams().getLabel();
+    private Long getNodeId(TransactionOperation txnOperation, String label, String warehouseName) throws StarRocksException {
         Long nodeId;
         // save label->be hashmap when begin transaction, so that subsequent operator can send to same BE
         if (TXN_BEGIN.equals(txnOperation)) {
-            List<Long> nodeIds = new ArrayList<>();
-            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                Optional<Warehouse> warehouseOptional = handler.getWarehouse();
-                Preconditions.checkState(warehouseOptional.isPresent(),
-                        "The warehouse should not be null under SHARED_DATA mode, label: %s, op: %s",
-                        label, txnOperation);
-                Warehouse warehouse = warehouseOptional.get();
-
-                List<Long> allNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                        .getAllComputeNodeIds(warehouse.getId());
-                for (long id : allNodeIds) {
-                    ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr()
-                            .getClusterInfo().getBackendOrComputeNode(id);
-                    if (node != null && node.isAvailable()) {
-                        nodeIds.add(id);
-                    }
-                }
-                if (CollectionUtils.isEmpty(nodeIds)) {
-                    throw new StarRocksException("No backend or compute node alive.");
-                }
-                Collections.shuffle(nodeIds);
-            } else {
-                nodeIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
-                        .getNodeSelector().seqChooseBackendIds(1, true, false, null);
-                if (CollectionUtils.isEmpty(nodeIds)) {
-                    throw new StarRocksException("No backend alive.");
-                }
-            }
-            nodeId = nodeIds.get(0);
+            List<Long> nodeIds = LoadAction.selectNodes(warehouseName);
+            Long chosenNodeId = nodeIds.get(0);
+            nodeId = chosenNodeId;
             // txnNodeMap is LRU cache, it atomic remove unused entry
             accessTxnNodeMapWithWriteLock(txnNodeMap -> txnNodeMap.put(label, nodeId));
         } else {
