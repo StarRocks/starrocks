@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include <exception>
 #include <filesystem>
 
 #include "common/status.h"
