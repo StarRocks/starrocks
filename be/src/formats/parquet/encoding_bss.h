@@ -31,15 +31,17 @@ template <tparquet::Type::type PT>
 class ByteStreamSplitEncoder : public Encoder {
 public:
     using T = typename PhysicalTypeTraits<PT>::CppType;
+    static constexpr bool IS_FLBA = (PT == tparquet::Type::FIXED_LEN_BYTE_ARRAY);
+
     ByteStreamSplitEncoder() {
-        if (!is_flba()) {
+        if constexpr (!IS_FLBA) {
             byte_width_ = sizeof(T);
         }
     }
     ~ByteStreamSplitEncoder() override = default;
 
     void set_type_length(int byte_width) override {
-        if (is_flba()) {
+        if constexpr (IS_FLBA) {
             byte_width_ = byte_width;
         }
     }
@@ -52,7 +54,11 @@ public:
 
     Slice build() override {
         FlushValues();
-        return Slice(sink_.data(), sink_.size());
+        if (byte_width_ <= 1) {
+            return Slice(sink_.data(), sink_.size());
+        } else {
+            return Slice(shuffle_buffer_.data(), shuffle_buffer_.size());
+        }
     }
 
 private:
@@ -60,11 +66,10 @@ private:
     faststring sink_;
     // Required because type_length_ is only filled in for FLBA
     int byte_width_ = 0;
-    int64_t num_values_in_buffer_;
+    int64_t num_values_in_buffer_ = 0;
     faststring shuffle_buffer_;
 
 private:
-    bool constexpr is_flba() const { return PT == tparquet::Type::FIXED_LEN_BYTE_ARRAY; }
     void FlushValues() {
         if (sink_sealed_) {
             return;
@@ -73,7 +78,7 @@ private:
         if (byte_width_ <= 1) {
             return;
         }
-        shuffle_buffer_.reserve(sink_.size());
+        shuffle_buffer_.resize(sink_.size());
         uint8_t* shuffle_buffer_raw = shuffle_buffer_.data();
         const uint8_t* raw_values = sink_.data();
         ByteStreamSplitUtil::ByteStreamSplitEncode(raw_values, byte_width_, num_values_in_buffer_, shuffle_buffer_raw);
@@ -83,17 +88,16 @@ private:
         if (num_values == 0) {
             return;
         }
-        if constexpr (!is_flba()) {
-            sink_.append(reinterpret_cast<const uint8_t*>(buffer), num_values * static_cast<int64_t>(sizeof(T)));
+        if constexpr (!IS_FLBA) {
+            sink_.append(buffer, num_values * static_cast<int64_t>(sizeof(T)));
         } else {
-            Slice* slices = reinterpret_cast<Slice*>(buffer);
             for (int i = 0; i < num_values; ++i) {
-                const Slice& slice = slices[i];
+                const Slice& slice = buffer[i];
                 DCHECK_EQ(byte_width_, slice.size);
                 sink_.append(slice.data, slice.size);
             }
         }
-        this->num_values_in_buffer_ += num_values;
+        num_values_in_buffer_ += num_values;
     }
 };
 
@@ -101,15 +105,17 @@ template <tparquet::Type::type PT>
 class ByteStreamSplitDecoder : public Decoder {
 public:
     using T = typename PhysicalTypeTraits<PT>::CppType;
+    static constexpr bool IS_FLBA = (PT == tparquet::Type::FIXED_LEN_BYTE_ARRAY);
+
     ByteStreamSplitDecoder() {
-        if (!is_flba()) {
+        if constexpr (!IS_FLBA) {
             byte_width_ = sizeof(T);
         }
     }
     ~ByteStreamSplitDecoder() override = default;
 
     void set_type_length(int byte_width) override {
-        if (is_flba()) {
+        if constexpr (IS_FLBA) {
             byte_width_ = byte_width;
         }
     }
@@ -118,11 +124,10 @@ public:
         len_ = data.size;
         data_ = (uint8_t*)data.data;
         if ((len_ % byte_width_) != 0) {
-            return Status::Corruption(
-                    fmt::format("ByteStreamSplit data size {} not aligned with type {} and byte_width: {}", len_,
-                                std::string(PT), byte_width_));
+            return Status::Corruption(fmt::format(
+                    "ByteStreamSplit data size {} not aligned with type {} and byte_width: {}", len_, PT, byte_width_));
         }
-        num_valid_values_ = stride_ = len_ / byte_width_;
+        num_valid_values_ = stride_ = (len_ / byte_width_);
         return Status::OK();
     }
 
@@ -130,7 +135,7 @@ public:
         if (count > num_valid_values_) {
             return Status::InvalidArgument("not enough values to read");
         }
-        if constexpr (is_flba()) {
+        if constexpr (IS_FLBA) {
             // decoded result is in decode_buffer_ if we pass nullptr.
             RETURN_IF_ERROR(Decode(nullptr, count));
             if (dst->is_nullable()) {
@@ -143,7 +148,7 @@ public:
             size_t cur_size = dst->size();
             dst->resize_uninitialized(count + cur_size);
             T* data = reinterpret_cast<T*>(dst->mutable_raw_data()) + cur_size;
-            RETURN_IF_ERROR(GetInternal(data, count));
+            RETURN_IF_ERROR(Decode(data, count));
         }
         return Status::OK();
     }
@@ -161,7 +166,7 @@ public:
         if (values_to_skip > num_valid_values_) {
             return Status::InvalidArgument("not enough values to skip");
         }
-        if constexpr (is_flba()) {
+        if constexpr (IS_FLBA) {
             RETURN_IF_ERROR(Decode(nullptr, values_to_skip));
         } else {
             skip_buffer_.reserve(values_to_skip);
@@ -182,11 +187,9 @@ private:
     size_t len_ = 0;
 
 private:
-    bool constexpr is_flba() const { return PT == tparquet::Type::FIXED_LEN_BYTE_ARRAY; }
-
     Status Decode(T* buffer, int max_values) {
         max_values = std::min(max_values, num_valid_values_);
-        if constexpr (is_flba()) {
+        if constexpr (IS_FLBA) {
             decode_buffer_.reserve(max_values * byte_width_);
             ByteStreamSplitUtil::ByteStreamSplitDecode(data_, byte_width_, max_values, stride_, decode_buffer_.data());
             if (buffer != nullptr) {
@@ -197,11 +200,10 @@ private:
                 }
             }
         } else {
-            ByteStreamSplitUtil::ByteStreamSplitDecode(data_, byte_width_, max_values, stride_, buffer);
+            ByteStreamSplitUtil::ByteStreamSplitDecode(data_, byte_width_, max_values, stride_, (uint8_t*)buffer);
         }
         data_ += max_values;
         num_valid_values_ -= max_values;
-        len_ -= max_values * byte_width_;
         return Status::OK();
     }
 };

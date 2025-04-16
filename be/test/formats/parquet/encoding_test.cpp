@@ -24,6 +24,7 @@
 #include "column/nullable_column.h"
 #include "common/config.h"
 #include "formats/parquet/types.h"
+#include "util/byte_stream_split.h"
 
 namespace starrocks::parquet {
 class ParquetEncodingTest : public testing::Test {
@@ -734,6 +735,10 @@ TEST_F(ParquetEncodingTest, DeltaByteArrayNonFixedSizeString) {
         st = decoder->next_batch(values.size(), (uint8_t*)(&check[0]));
         ASSERT_TRUE(st.ok()) << st.to_string();
 
+        for (int i = 0; i < check.size(); i++) {
+            ASSERT_EQ(check[i], values[i]);
+        }
+
         // enhanced verification.
         DecoderChecker<Slice, false>::check(values, encoded_data, decoder.get());
     }
@@ -773,6 +778,194 @@ TEST_F(ParquetEncodingTest, DeltaByteArrayFixedSizeString) {
         ASSERT_TRUE(st.ok()) << st.to_string();
         st = decoder->next_batch(values.size(), (uint8_t*)(&check[0]));
         ASSERT_TRUE(st.ok()) << st.to_string();
+
+        for (int i = 0; i < check.size(); i++) {
+            ASSERT_EQ(check[i], values[i]);
+        }
+
+        // enhanced verification.
+        DecoderChecker<Slice, false>::check(values, encoded_data, decoder.get());
+    }
+}
+
+TEST_F(ParquetEncodingTest, ByteStreamSplitInt32ADebug) {
+    using T = int32_t;
+    // examples from https://parquet.apache.org/docs/file-format/data-pages/encodings/#byte-stream-split-byte_stream_split--9
+    std::vector<T> values = {
+            (int)0xDDCCBBAA,
+            (int)0x33221100,
+            (int)0xD6C5B4A3,
+    };
+    uint8_t expected[12] = {0xAA, 0x00, 0xA3, 0xBB, 0x11, 0xB4, 0xCC, 0x22, 0xC5, 0xDD, 0x33, 0xD6};
+
+    {
+        uint8_t encoded[12];
+        ByteStreamSplitUtil::ByteStreamSplitEncode((uint8_t*)(&values[0]), 4, 3, encoded);
+        for (int i = 0; i < 12; i++) {
+            ASSERT_EQ(encoded[i], expected[i]);
+        }
+    }
+
+    const EncodingInfo* encoding = nullptr;
+    EncodingInfo::get(tparquet::Type::INT32, tparquet::Encoding::BYTE_STREAM_SPLIT, &encoding);
+    ASSERT_TRUE(encoding != nullptr);
+
+    {
+        std::unique_ptr<Decoder> decoder;
+        auto st = encoding->create_decoder(&decoder);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        std::unique_ptr<Encoder> encoder;
+        st = encoding->create_encoder(&encoder);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        st = encoder->append((uint8_t*)(&values[0]), values.size());
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        // simple verification.
+        Slice encoded_data = encoder->build();
+        ASSERT_EQ(encoded_data.size, 12);
+
+        for (int i = 0; i < 12; i++) {
+            ASSERT_EQ((uint8_t)encoded_data.data[i], expected[i]);
+        }
+
+        std::vector<T> check(values.size());
+        st = decoder->set_data(encoded_data);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        st = decoder->next_batch(values.size(), (uint8_t*)(&check[0]));
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        for (int i = 0; i < check.size(); i++) {
+            ASSERT_EQ(check[i], values[i]);
+        }
+    }
+}
+
+TEST_F(ParquetEncodingTest, ByteStreamSplitNonFLBA) {
+    auto fn = []<tparquet::Type::type PT>(int rep, int n, int seed) {
+        std::cout << "running ByteStreamSplitInteger test for type: " << PT << ", rep: " << rep << ", n: " << n
+                  << ", seed: " << seed << std::endl;
+        using T = typename PhysicalTypeTraits<PT>::CppType;
+        std::vector<T> values;
+        std::mt19937 gen(seed);
+        for (int rep = 0; rep < 10; rep++) {
+            values.push_back(std::numeric_limits<T>::max());
+            values.push_back(std::numeric_limits<T>::min());
+            values.push_back(std::numeric_limits<T>::lowest());
+            if constexpr (PT == tparquet::Type::INT32 || PT == tparquet::Type::INT64) {
+                for (int i = 0; i < n; i++) {
+                    std::uniform_int_distribution<T> dist(std::numeric_limits<T>::min(), std::numeric_limits<T>::max());
+                    values.push_back(dist(gen));
+                }
+            } else {
+                std::uniform_real_distribution<T> dist(std::numeric_limits<T>::lowest(), std::numeric_limits<T>::max());
+                for (int i = 0; i < n; i++) {
+                    values.push_back(dist(gen));
+                }
+            }
+            values.push_back(std::numeric_limits<T>::lowest());
+            values.push_back(std::numeric_limits<T>::max());
+            values.push_back(std::numeric_limits<T>::min());
+        }
+
+        const EncodingInfo* encoding = nullptr;
+        EncodingInfo::get(PT, tparquet::Encoding::BYTE_STREAM_SPLIT, &encoding);
+        ASSERT_TRUE(encoding != nullptr);
+
+        {
+            std::unique_ptr<Decoder> decoder;
+            auto st = encoding->create_decoder(&decoder);
+            ASSERT_TRUE(st.ok()) << st.to_string();
+
+            std::unique_ptr<Encoder> encoder;
+            st = encoding->create_encoder(&encoder);
+            ASSERT_TRUE(st.ok()) << st.to_string();
+
+            st = encoder->append((uint8_t*)(&values[0]), values.size());
+            ASSERT_TRUE(st.ok()) << st.to_string();
+
+            // simple verification.
+            Slice encoded_data = encoder->build();
+            std::vector<T> check(values.size());
+            st = decoder->set_data(encoded_data);
+            ASSERT_TRUE(st.ok()) << st.to_string();
+            st = decoder->next_batch(values.size(), (uint8_t*)(&check[0]));
+            ASSERT_TRUE(st.ok()) << st.to_string();
+
+            for (int i = 0; i < check.size(); i++) {
+                ASSERT_EQ(check[i], values[i]);
+            }
+
+            // enhanced verification.
+            DecoderChecker<T, false>::check(values, encoded_data, decoder.get());
+        }
+    };
+
+    fn.operator()<tparquet::Type::INT32>(10, 8, 0);
+    fn.operator()<tparquet::Type::INT32>(10, 31, 0);
+    fn.operator()<tparquet::Type::INT32>(10, 127, 0);
+    fn.operator()<tparquet::Type::INT32>(10, 255, 0);
+
+    fn.operator()<tparquet::Type::INT64>(10, 8, 0);
+    fn.operator()<tparquet::Type::INT64>(10, 31, 0);
+    fn.operator()<tparquet::Type::INT64>(10, 127, 0);
+    fn.operator()<tparquet::Type::INT64>(10, 255, 0);
+
+    fn.operator()<tparquet::Type::FLOAT>(10, 8, 0);
+    fn.operator()<tparquet::Type::FLOAT>(10, 31, 0);
+    fn.operator()<tparquet::Type::FLOAT>(10, 127, 0);
+    fn.operator()<tparquet::Type::FLOAT>(10, 255, 0);
+
+    fn.operator()<tparquet::Type::DOUBLE>(10, 8, 0);
+    fn.operator()<tparquet::Type::DOUBLE>(10, 31, 0);
+    fn.operator()<tparquet::Type::DOUBLE>(10, 127, 0);
+    fn.operator()<tparquet::Type::DOUBLE>(10, 255, 0);
+}
+
+TEST_F(ParquetEncodingTest, ByteStreamSplitFLBA) {
+    const int byte_width = 5;
+    std::vector<std::string> strings;
+    for (int i = 0; i < 1000; i++) {
+        strings.push_back(fmt::format("{:05}", i));
+    }
+
+    std::vector<Slice> values;
+    for (const auto& s : strings) {
+        values.emplace_back(s);
+    }
+
+    const EncodingInfo* encoding = nullptr;
+    EncodingInfo::get(tparquet::Type::FIXED_LEN_BYTE_ARRAY, tparquet::Encoding::BYTE_STREAM_SPLIT, &encoding);
+    ASSERT_TRUE(encoding != nullptr);
+
+    {
+        std::unique_ptr<Decoder> decoder;
+        auto st = encoding->create_decoder(&decoder);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        decoder->set_type_length(byte_width);
+
+        std::unique_ptr<Encoder> encoder;
+        st = encoding->create_encoder(&encoder);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        encoder->set_type_length(byte_width);
+
+        st = encoder->append((uint8_t*)(&values[0]), values.size());
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        // simple verification.
+        Slice encoded_data = encoder->build();
+        std::vector<Slice> check(values.size());
+        st = decoder->set_data(encoded_data);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        st = decoder->next_batch(values.size(), (uint8_t*)(&check[0]));
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        for (int i = 0; i < check.size(); i++) {
+            ASSERT_EQ(check[i], values[i]);
+        }
 
         // enhanced verification.
         DecoderChecker<Slice, false>::check(values, encoded_data, decoder.get());
