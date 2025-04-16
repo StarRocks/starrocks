@@ -59,6 +59,7 @@ public class SelectStmtWithMultiLikeTest {
         starRocksAssert.withDatabase("test").useDatabase("test");
         starRocksAssert.withTable(createTblStmtStr);
         FeConstants.enablePruneEmptyOutputScan = false;
+        FeConstants.setLengthForVarchar = false;
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
