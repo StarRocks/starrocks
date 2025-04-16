@@ -390,7 +390,7 @@ private:
 
     Status GetInternal(T* buffer, int max_values) {
         BitReader* decoder_ = &_bit_reader;
-        max_values = static_cast<int>(std::min<int64_t>(max_values, total_values_remaining_));
+        max_values = std::min<int>(max_values, total_values_remaining_);
         if (max_values == 0) {
             return Status::OK();
         }
@@ -463,6 +463,7 @@ private:
 class DeltaLengthByteArrayEncoder final : public Encoder {
 public:
     DeltaLengthByteArrayEncoder() = default;
+    ~DeltaLengthByteArrayEncoder() override = default;
 
     Slice build() override {
         FlushValues();
@@ -490,12 +491,15 @@ private:
 
         constexpr int kBatchSize = 256;
         std::array<int32_t, kBatchSize> lengths;
-        uint32_t total_increment_size = 0;
+        int32_t total_increment_size = 0;
         for (int idx = 0; idx < num_values; idx += kBatchSize) {
             const int batch_size = std::min(kBatchSize, num_values - idx);
             for (int j = 0; j < batch_size; ++j) {
                 const int32_t len = src[idx + j].size;
                 total_increment_size += len;
+                if (PREDICT_FALSE(total_increment_size < 0)) {
+                    return Status::Corruption("total increment size overflow in DELTA_LENGTH_BYTE_ARRAY");
+                }
                 lengths[j] = len;
             }
             RETURN_IF_ERROR(length_encoder_.append((const uint8_t*)lengths.data(), batch_size));
@@ -503,7 +507,7 @@ private:
         if (string_buffer_.length() + total_increment_size > std::numeric_limits<int32_t>::max()) {
             return Status::Corruption("excess expansion in DELTA_LENGTH_BYTE_ARRAY");
         }
-        string_buffer_.reserve(total_increment_size);
+        string_buffer_.reserve(string_buffer_.length() + total_increment_size);
         for (int idx = 0; idx < num_values; idx++) {
             string_buffer_.append(src[idx].data, src[idx].size);
         }
@@ -611,10 +615,16 @@ private:
                 return Status::Corruption("negative string delta length");
             }
             data_size += len;
+            if (PREDICT_FALSE(data_size < 0)) {
+                return Status::Corruption("data size overflow in DELTA_LENGTH_BYTE_ARRAY");
+            }
         }
         length_idx_ += max_values;
         num_valid_values_ -= max_values;
         bytes_offset_ += data_size;
+        if (PREDICT_FALSE(bytes_offset_ > len_)) {
+            return Status::Corruption("bytes offset exceeds data size in DELTA_LENGTH_BYTE_ARRAY");
+        }
         return Status::OK();
     }
 
@@ -635,6 +645,9 @@ private:
             }
             buffer[i].size = len;
             data_size += len;
+            if (PREDICT_FALSE(data_size < 0)) {
+                return Status::Corruption("data size overflow in DELTA_LENGTH_BYTE_ARRAY");
+            }
         }
         length_idx_ += max_values;
         const uint8_t* data_ptr = data_ + bytes_offset_;
@@ -642,8 +655,277 @@ private:
             buffer[i].data = (char*)data_ptr;
             data_ptr += buffer[i].size;
         }
-        bytes_offset_ += data_size;
         num_valid_values_ -= max_values;
+        bytes_offset_ += data_size;
+        if (PREDICT_FALSE(bytes_offset_ > len_)) {
+            return Status::Corruption("bytes offset exceeds data size in DELTA_LENGTH_BYTE_ARRAY");
+        }
+        return Status::OK();
+    }
+};
+
+// ----------------------------------------------------------------------
+// DELTA_BYTE_ARRAY encoder
+/// Delta Byte Array encoding also known as incremental encoding or front compression:
+/// for each element in a sequence of strings, store the prefix length of the previous
+/// entry plus the suffix.
+///
+/// This is stored as a sequence of delta-encoded prefix lengths (DELTA_BINARY_PACKED),
+/// followed by the suffixes encoded as delta length byte arrays
+/// (DELTA_LENGTH_BYTE_ARRAY).
+
+class DeltaByteArrayEncoder : public Encoder {
+public:
+    DeltaByteArrayEncoder() = default;
+    ~DeltaByteArrayEncoder() override = default;
+
+    Slice build() override {
+        FlushValues();
+        return Slice(sink_.data(), sink_.size());
+    }
+
+    Status append(const uint8_t* vals, size_t count) override {
+        sink_sealed_ = false;
+        RETURN_IF_ERROR(Put(reinterpret_cast<const Slice*>(vals), count));
+        return Status::OK();
+    }
+
+private:
+    DeltaBinaryPackedEncoder<int32_t> prefix_length_encoder_;
+    DeltaLengthByteArrayEncoder suffix_encoder_;
+    std::string last_value_ = "";
+
+    bool sink_sealed_ = false;
+    faststring sink_;
+
+private:
+    Status Put(const Slice* src, int num_values) {
+        if (num_values == 0) {
+            return Status::OK();
+        }
+
+        std::string_view last_value_view = last_value_;
+        constexpr int kBatchSize = 256;
+        std::array<int32_t, kBatchSize> prefix_lengths;
+        std::array<Slice, kBatchSize> suffixes;
+
+        for (int i = 0; i < num_values; i += kBatchSize) {
+            const int batch_size = std::min(kBatchSize, num_values - i);
+
+            for (int j = 0; j < batch_size; ++j) {
+                const int idx = i + j;
+                const auto view = src[idx];
+                const auto len = static_cast<const uint32_t>(view.size);
+
+                uint32_t common_prefix_length = 0;
+                const uint32_t maximum_common_prefix_length =
+                        std::min(len, static_cast<uint32_t>(last_value_view.length()));
+                while (common_prefix_length < maximum_common_prefix_length) {
+                    if (last_value_view[common_prefix_length] != view[common_prefix_length]) {
+                        break;
+                    }
+                    common_prefix_length++;
+                }
+
+                last_value_view = view;
+                prefix_lengths[j] = common_prefix_length;
+                const uint32_t suffix_length = len - common_prefix_length;
+                const uint8_t* suffix_ptr = (const uint8_t*)src[idx].data + common_prefix_length;
+
+                // Convert to ByteArray, so it can be passed to the suffix_encoder_.
+                const Slice suffix = {reinterpret_cast<const char*>(suffix_ptr), suffix_length};
+                suffixes[j] = suffix;
+            }
+
+            RETURN_IF_ERROR(suffix_encoder_.append(reinterpret_cast<const uint8_t*>(suffixes.data()), batch_size));
+            RETURN_IF_ERROR(
+                    prefix_length_encoder_.append(reinterpret_cast<const uint8_t*>(prefix_lengths.data()), batch_size));
+        }
+        last_value_ = last_value_view;
+        return Status::OK();
+    }
+
+    void FlushValues() {
+        if (sink_sealed_) {
+            return;
+        }
+        Slice prefix_length_data = prefix_length_encoder_.build();
+        // todo(yanz): could optimize to avoid an extra memcpy
+        Slice suffix_data = suffix_encoder_.build();
+        sink_.clear();
+        sink_.reserve(prefix_length_data.size + suffix_data.size);
+        sink_.append(prefix_length_data.data, prefix_length_data.size);
+        sink_.append(suffix_data.data, suffix_data.size);
+        sink_sealed_ = true;
+    }
+};
+
+// ----------------------------------------------------------------------
+// DELTA_BYTE_ARRAY decoder
+
+class DeltaByteArrayDecoder : public Decoder {
+public:
+    DeltaByteArrayDecoder() = default;
+    ~DeltaByteArrayDecoder() override = default;
+
+private:
+    DeltaBinaryPackedDecoder<int32_t> prefix_len_decoder_;
+    DeltaLengthByteArrayDecoder suffix_decoder_;
+    std::string last_value_;
+    // string buffer for last value in previous page
+    std::string last_value_in_previous_page_;
+    int num_valid_values_{0};
+    uint32_t prefix_len_offset_{0};
+    faststring buffered_prefix_length_;
+    // buffer for decoded strings, which gurantees the lifetime of the decoded strings
+    // until the next call of Decode.
+    faststring buffered_data_;
+    std::vector<Slice> slice_buffer_;
+
+public:
+    Status set_data(const Slice& data) override {
+        RETURN_IF_ERROR(prefix_len_decoder_.set_data(data));
+        // get the number of encoded prefix lengths
+        int num_prefix = prefix_len_decoder_.total_values_count();
+        // call prefix_len_decoder_.Decode to decode all the prefix lengths.
+        // all the prefix lengths are buffered in buffered_prefix_length_.
+        buffered_prefix_length_.resize(num_prefix * sizeof(int32_t));
+        RETURN_IF_ERROR(prefix_len_decoder_.next_batch(num_prefix, buffered_prefix_length_.data()));
+        prefix_len_offset_ = 0;
+        num_valid_values_ = num_prefix;
+
+        int bytes_left = prefix_len_decoder_.bytes_left();
+        // If len < bytes_left, prefix_len_decoder.Decode will throw exception.
+        DCHECK_GE(data.size, bytes_left);
+        int suffix_begins = data.size - bytes_left;
+        // at this time, the decoder_ will be at the start of the encoded suffix data.
+        RETURN_IF_ERROR(suffix_decoder_.set_data(Slice(data.data + suffix_begins, bytes_left)));
+
+        // TODO: read corrupted files written with bug(PARQUET-246). last_value_ should be set
+        // to last_value_in_previous_page_ when decoding a new page(except the first page)
+        last_value_.clear();
+        return Status::OK();
+    }
+
+    Status skip(size_t values_to_skip) override {
+        if (values_to_skip > num_valid_values_) {
+            return Status::InvalidArgument("not enough values to skip");
+        }
+        slice_buffer_.reserve(values_to_skip);
+        RETURN_IF_ERROR(GetInternal(slice_buffer_.data(), static_cast<int>(values_to_skip)));
+        return Status::OK();
+    }
+
+    Status next_batch(size_t count, ColumnContentType content_type, Column* dst, const FilterData* filter) override {
+        if (count > num_valid_values_) {
+            return Status::InvalidArgument("not enough values to read");
+        }
+        slice_buffer_.reserve(count);
+        RETURN_IF_ERROR(GetInternal(slice_buffer_.data(), static_cast<int>(count)));
+
+        if (dst->is_nullable()) {
+            down_cast<NullableColumn*>(dst)->mutable_null_column()->append_default(count);
+        }
+        auto* binary_column = ColumnHelper::get_binary_column(dst);
+        binary_column->append_strings(slice_buffer_.data(), count);
+        return Status::OK();
+    }
+
+    Status next_batch(size_t count, uint8_t* dst) override {
+        if (count > num_valid_values_) {
+            return Status::InvalidArgument("not enough values to read");
+        }
+        Slice* data = reinterpret_cast<Slice*>(dst);
+        RETURN_IF_ERROR(GetInternal(data, count));
+        return Status::OK();
+    }
+
+protected:
+    template <bool is_first_run>
+    static Status BuildBufferInternal(const int32_t* prefix_len_ptr, int i, Slice* buffer, std::string_view* prefix,
+                                      uint8_t** data_ptr) {
+        if (PREDICT_FALSE(static_cast<size_t>(prefix_len_ptr[i]) > prefix->length())) {
+            return Status::Corruption("prefix length too large in DELTA_BYTE_ARRAY");
+        }
+        // For now, `buffer` points to string suffixes, and the suffix decoder
+        // ensures that the suffix data has sufficient lifetime.
+        if (prefix_len_ptr[i] == 0) {
+            // prefix is empty: buffer[i] already points to the suffix.
+            *prefix = std::string_view{buffer[i]};
+            return Status::OK();
+        }
+
+        DCHECK_EQ(is_first_run, i == 0);
+        if constexpr (!is_first_run) {
+            if (buffer[i].size == 0) {
+                // suffix is empty: buffer[i] can simply point to the prefix.
+                // This is not possible for the first run since the prefix
+                // would point to the mutable `last_value_`.
+                *prefix = prefix->substr(0, prefix_len_ptr[i]);
+                buffer[i] = Slice(prefix->data(), prefix->size());
+                return Status::OK();
+            }
+        }
+        // Both prefix and suffix are non-empty, so we need to decode the string
+        // into `data_ptr`.
+        // 1. Copy the prefix
+        memcpy(*data_ptr, prefix->data(), prefix_len_ptr[i]);
+        // 2. Copy the suffix.
+        memcpy(*data_ptr + prefix_len_ptr[i], buffer[i].data, buffer[i].size);
+        // 3. Point buffer[i] to the decoded string.
+        buffer[i].data = (char*)*data_ptr;
+        buffer[i].size += prefix_len_ptr[i];
+        *data_ptr += buffer[i].size;
+        *prefix = std::string_view{buffer[i]};
+        return Status::OK();
+    }
+
+    Status GetInternal(Slice* buffer, int max_values) {
+        // Decode up to `max_values` strings into an internal buffer
+        // and reference them into `buffer`.
+        max_values = std::min(max_values, num_valid_values_);
+        if (max_values == 0) {
+            return Status::OK();
+        }
+
+        RETURN_IF_ERROR(suffix_decoder_.next_batch(max_values, reinterpret_cast<uint8_t*>(buffer)));
+        int32_t data_size = 0;
+        const int32_t* prefix_len_ptr = (const int32_t*)buffered_prefix_length_.data() + prefix_len_offset_;
+        for (int i = 0; i < max_values; ++i) {
+            if (prefix_len_ptr[i] == 0) {
+                // We don't need to copy the suffix if the prefix length is 0.
+                continue;
+            }
+            if (PREDICT_FALSE(prefix_len_ptr[i] < 0)) {
+                return Status::Corruption("negative prefix length in DELTA_BYTE_ARRAY");
+            }
+            if (buffer[i].size == 0 && i != 0) {
+                // We don't need to copy the prefix if the suffix length is 0
+                // and this is not the first run (that is, the prefix doesn't point
+                // to the mutable `last_value_`).
+                continue;
+            }
+            data_size += prefix_len_ptr[i] + buffer[i].size;
+            if (PREDICT_FALSE(data_size < 0)) {
+                return Status::Corruption("data size overflow in DELTA_BYTE_ARRAY");
+            }
+        }
+        if (data_size > std::numeric_limits<int32_t>::max()) {
+            return Status::Corruption("excess expansion in DELTA_BYTE_ARRAY");
+        }
+        buffered_data_.resize(data_size);
+        std::string_view prefix{last_value_};
+        uint8_t* data_ptr = buffered_data_.data();
+        if (max_values > 0) {
+            RETURN_IF_ERROR(BuildBufferInternal</*is_first_run=*/true>(prefix_len_ptr, 0, buffer, &prefix, &data_ptr));
+        }
+        for (int i = 1; i < max_values; ++i) {
+            RETURN_IF_ERROR(BuildBufferInternal</*is_first_run=*/false>(prefix_len_ptr, i, buffer, &prefix, &data_ptr));
+        }
+        DCHECK_EQ(data_ptr - buffered_data_.data(), data_size);
+        prefix_len_offset_ += max_values;
+        num_valid_values_ -= max_values;
+        last_value_ = std::string{prefix};
         return Status::OK();
     }
 };
