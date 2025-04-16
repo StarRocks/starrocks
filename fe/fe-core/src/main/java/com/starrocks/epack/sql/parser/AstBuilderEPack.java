@@ -600,15 +600,19 @@ public class AstBuilderEPack extends AstBuilder {
     public ParseNode visitShowNodesStatement(StarRocksParser.ShowNodesStatementContext context) {
         String pattern = null;
         String warehouseName = null;
+        String cnGroupName = "";
         if (context.WAREHOUSE() != null) {
             warehouseName = ((Identifier) visit(context.identifier())).getValue();
+            if (context.cngroupName != null) {
+                cnGroupName = ((Identifier) visit(context.identifierOrString())).getValue();
+            }
         } else if (context.WAREHOUSES() != null) {
             if (context.pattern != null) {
                 StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
                 pattern = stringLiteral.getValue();
             }
         }
-        return new ShowNodesStmt(warehouseName, pattern, createPos(context));
+        return new ShowNodesStmt(warehouseName, cnGroupName, pattern, createPos(context));
     }
 
     // ---------------------------------------- Failover Group Statement ---------------------------------------------------

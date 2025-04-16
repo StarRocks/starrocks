@@ -289,7 +289,7 @@ public class SystemInfoServiceTest {
     public void addComputeNodeTest() throws AnalysisException {
         clearAllBackend();
         AddComputeNodeClause stmt = new AddComputeNodeClause(Lists.newArrayList("192.168.0.1:1234"),
-                WarehouseManager.DEFAULT_WAREHOUSE_NAME, NodePosition.ZERO);
+                WarehouseManager.DEFAULT_WAREHOUSE_NAME, "", NodePosition.ZERO);
 
         com.starrocks.sql.analyzer.Analyzer analyzer = new com.starrocks.sql.analyzer.Analyzer(
                 com.starrocks.sql.analyzer.Analyzer.AnalyzerVisitor.getInstance());
@@ -413,7 +413,7 @@ public class SystemInfoServiceTest {
     public void testSeqChooseComputeNodes() {
         clearAllBackend();
         AddComputeNodeClause stmt = new AddComputeNodeClause(Lists.newArrayList("192.168.0.1:1234"),
-                WarehouseManager.DEFAULT_WAREHOUSE_NAME, NodePosition.ZERO);
+                WarehouseManager.DEFAULT_WAREHOUSE_NAME, "", NodePosition.ZERO);
 
         com.starrocks.sql.analyzer.Analyzer analyzer = new com.starrocks.sql.analyzer.Analyzer(
                 com.starrocks.sql.analyzer.Analyzer.AnalyzerVisitor.getInstance());

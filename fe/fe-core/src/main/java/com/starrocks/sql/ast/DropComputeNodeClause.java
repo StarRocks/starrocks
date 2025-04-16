@@ -20,18 +20,24 @@ import java.util.List;
 
 public class DropComputeNodeClause extends ComputeNodeClause {
     public String warehouse;
+    public String cngroupName;
 
     public DropComputeNodeClause(List<String> hostPorts, String warehouse) {
-        this(hostPorts, warehouse, NodePosition.ZERO);
+        this(hostPorts, warehouse, "", NodePosition.ZERO);
     }
 
-    public DropComputeNodeClause(List<String> hostPorts, String warehouse, NodePosition pos) {
+    public DropComputeNodeClause(List<String> hostPorts, String warehouse, String cnGroupName, NodePosition pos) {
         super(hostPorts, pos);
         this.warehouse = warehouse;
+        this.cngroupName = cnGroupName;
     }
 
     public String getWarehouse() {
         return warehouse;
+    }
+
+    public String getCNGroupName() {
+        return cngroupName;
     }
 
     @Override
