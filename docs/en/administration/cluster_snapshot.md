@@ -1,9 +1,11 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Cluster Snapshot"
-pageBoost: 100
 keywords: ['backup','restore','shared data']
 ---
+<head>
+  <meta pageBoost="100" />
+</head>
 
 # Automated Cluster Snapshot
 
