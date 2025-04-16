@@ -1,12 +1,8 @@
----
-displayed_sidebar: docs
----
-
 # Create Iceberg REST Catalog for AWS S3
 
 This article explains how to create Iceberg REST Catalog in StarRocks for access to data in AWS S3 through the AWS Glue Iceberg REST endpoint.
 
-The AWS Glue Iceberg REST endpoint implements the [Iceberg REST Catalog Open API specification](https://github.com/apache/iceberg/blob/main/open-api/rest-catalog-open-api.yaml), which provides a standardized interface for interacting with Iceberg tables. To access tables in S3 using this endpoint, you need to configure credentials by combining IAM policies and AWS Lake Formation authorization. The following sections will guide you through the acess permission setup, including defining required policies, establishing Lake Formation permissions at database and table levels, and using StarRocks to create an Iceberg REST catalog for accessing S3 tables.
+The AWS Glue Iceberg REST endpoint implements the [Iceberg REST Catalog Open API specification](https://github.com/apache/iceberg/blob/main/open-api/rest-catalog-open-api.yaml), which provides a standardized interface for interacting with Iceberg tables. To access tables in S3 using this endpoint, you need to configure credentials by combining IAM policies and AWS Lake Formation authorization. The following sections will guide you through the access permission setup, including defining required policies, establishing Lake Formation permissions at database and table levels, and using StarRocks to create an Iceberg REST catalog for accessing S3 tables.
 
 ## (Optional) Create a table bucket
 
@@ -23,7 +19,6 @@ You can skip this step if you already have a table bucket for Iceberg tables.
 > **NOTE**
 > 
 > You can create a Database and Table using Athena, and then query them using StarRocks. Alternatively, you can just create a Table bucket, and then use StarRocks to create the Database and Table.
-
 ## Create IAM Policy
 
 To access tables via the AWS Glue endpoint, create an IAM Policy with permissions for AWS Glue and Lake Formation operations:
@@ -97,7 +92,6 @@ Next, grant the above IAM User access permissions in Lake Formation.
 > **NOTE**
 >
 > Here, Super permissions are granted for testing convenience. You need to assign appropriate permissions based on actual requirements in a production environment.
-
 ## Create Iceberg REST Catalog
 
 Create an Iceberg REST catalog in StarRocks:
@@ -121,7 +115,7 @@ You can then create databases and tables run queries in it.
 Example:
 
 ```SQL
--- Swotch to the catalog
+-- Switch to the catalog
 StarRocks> SET CATALOG starrocks_lakehouse_s3tables;
 -- Create database
 StarRocks> CREATE DATABASE s3table_db;
