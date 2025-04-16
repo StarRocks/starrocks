@@ -36,7 +36,7 @@ TEST_F(JavaNativeMethodTest, get_addrs_int) {
         env->GetLongArrayRegion(arr, 0, 4, results);
         const NullableColumn* nullable_column = down_cast<const NullableColumn*>(column.get());
         const Column* data_column = down_cast<const NullableColumn*>(column.get())->data_column().get();
-        ASSERT_EQ(results[0], (jlong)nullable_column->null_column_data().data());
+        ASSERT_EQ(results[0], (jlong)nullable_column->immutable_null_column_data().data());
         ASSERT_EQ(results[1], (jlong)data_column->raw_data());
         env->DeleteLocalRef(arr);
     }
@@ -51,7 +51,7 @@ TEST_F(JavaNativeMethodTest, get_addrs_int) {
         const NullableColumn* nullable_column = down_cast<const NullableColumn*>(column.get());
         const Column* data_column = down_cast<const NullableColumn*>(column.get())->data_column().get();
         const auto* binary_column = down_cast<const BinaryColumn*>(data_column);
-        ASSERT_EQ(results[0], (jlong)nullable_column->null_column_data().data());
+        ASSERT_EQ(results[0], (jlong)nullable_column->immutable_null_column_data().data());
         ASSERT_EQ(results[1], (jlong)binary_column->get_offset().data());
         ASSERT_EQ(results[2], (jlong)binary_column->get_bytes().data());
         env->DeleteLocalRef(arr);
@@ -69,7 +69,7 @@ TEST_F(JavaNativeMethodTest, get_addrs_int) {
         const NullableColumn* nullable_column = down_cast<const NullableColumn*>(column.get());
         const Column* data_column = down_cast<const NullableColumn*>(column.get())->data_column().get();
         const auto* array_column = down_cast<const ArrayColumn*>(data_column);
-        ASSERT_EQ(results[0], (jlong)nullable_column->null_column_data().data());
+        ASSERT_EQ(results[0], (jlong)nullable_column->immutable_null_column_data().data());
         ASSERT_EQ(results[1], (jlong)array_column->offsets().get_data().data());
         ASSERT_EQ(results[2], (jlong)array_column->elements_column().get());
         env->DeleteLocalRef(arr);
@@ -85,9 +85,9 @@ TEST_F(JavaNativeMethodTest, get_addrs_int) {
         jlong results[5];
         env->GetLongArrayRegion(arr, 0, 4, results);
         const NullableColumn* nullable_column = down_cast<const NullableColumn*>(column.get());
-        const Column* data_column = nullable_column->data_column();
+        const Column* data_column = nullable_column->data_column().get();
         auto* map_column = down_cast<const MapColumn*>(data_column);
-        ASSERT_EQ(results[0], (jlong)nullable_column->null_column_data().data());
+        ASSERT_EQ(results[0], (jlong)nullable_column->immutable_null_column_data().data());
         ASSERT_EQ(results[1], (jlong)map_column->offsets().get_data().data());
         ASSERT_EQ(results[2], (jlong)map_column->keys_column().get());
         ASSERT_EQ(results[3], (jlong)map_column->values_column().get());
