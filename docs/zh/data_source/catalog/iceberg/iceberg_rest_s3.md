@@ -1,3 +1,7 @@
+---
+displayed_sidebar: docs
+---
+
 # 为 AWS S3 表创建 Iceberg REST Catalog
 
 本文介绍如何在 StarRocks 中创建 Iceberg REST Catalog，以通过 AWS Glue Iceberg REST 端点访问 AWS S3 表中的数据。
