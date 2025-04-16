@@ -1,0 +1,28 @@
+-- name: test_gen_larege_column @sequential
+
+CREATE TABLE `t0` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+update information_schema.be_configs set value = 'true' where name ='pipeline_enable_large_column_checker';
+set pipeline_dop=1;
+insert into t0 SELECT generate_series, generate_series FROM TABLE(generate_series(1,  8192));
+-- too slow
+-- select array_length(array_agg([space(1000000)])) from t0;
+admin enable failpoint 'operator_return_large_column';
+[UC] select count(*) from t0;
+admin disable failpoint 'operator_return_large_column';
+
+
