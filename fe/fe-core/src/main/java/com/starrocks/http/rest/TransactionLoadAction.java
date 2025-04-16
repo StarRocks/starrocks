@@ -185,105 +185,7 @@ public class TransactionLoadAction extends RestBaseAction {
         }
     }
 
-<<<<<<< HEAD
     public void executeTransaction(BaseRequest request, BaseResponse response, String op) throws UserException {
-=======
-    protected void executeTransaction(BaseRequest request, BaseResponse response) throws StarRocksException {
-        TransactionOperationParams txnOperationParams = toTxnOperationParams(request);
-        TransactionOperation txnOperation = txnOperationParams.getTxnOperation();
-        String label = txnOperationParams.getLabel();
-
-        TransactionOperationHandler txnOperationHandler = getTxnOperationHandler(txnOperationParams);
-        ResultWrapper result = txnOperationHandler.handle(request, response);
-        if (null != result.getResult()) {
-            sendResult(request, response, result.getResult());
-            return;
-        }
-
-        // redirect transaction op to BE
-        TNetworkAddress redirectAddress = result.getRedirectAddress();
-        if (null == redirectAddress) {
-            Long nodeId = getNodeId(txnOperation, label, txnOperationParams.getWarehouseName());
-            ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(nodeId);
-            if (node == null) {
-                node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNode(nodeId);
-                if (node == null) {
-                    throw new StarRocksException("Node " + nodeId + " is not alive");
-                }
-            }
-
-            redirectAddress = new TNetworkAddress(node.getHost(), node.getHttpPort());
-        }
-
-        LOG.info("Redirect transaction action to destination={}, db: {}, table: {}, op: {}, label: {}",
-                redirectAddress, txnOperationParams.getDbName(), txnOperationParams.getTableName(), txnOperation, label);
-        redirectTo(request, response, redirectAddress);
-    }
-
-    private TransactionOperationHandler getTxnOperationHandler(TransactionOperationParams params) throws
-            StarRocksException {
-        if (params.getChannel().notNull()) {
-            return new TransactionWithChannelHandler(params);
-        }
-
-        TransactionOperation txnOperation = params.getTxnOperation();
-        LoadJobSourceType sourceType = params.getSourceType();
-        if ((TXN_BEGIN.equals(txnOperation) || TXN_LOAD.equals(txnOperation)) && null == sourceType) {
-            return new TransactionWithoutChannelHandler(params);
-        }
-
-        String label = params.getLabel();
-        if (accessTxnNodeMapWithReadLock(txnNodeMap -> txnNodeMap.containsKey(label))) {
-            /*
-             * The Bypass Write scenario will not redirect the request to BE definitely,
-             * so if txnNodeMap contains the label, this must not be a Bypass Write scenario.
-             */
-            return new TransactionWithoutChannelHandler(params);
-        }
-
-        if (null == sourceType) {
-            String dbName = params.getDbName();
-            Database db = Optional.ofNullable(GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName))
-                    .orElseThrow(() -> new StarRocksException(String.format("Database[%s] does not exist.", dbName)));
-
-            TransactionState txnState = GlobalStateMgr.getCurrentState()
-                    .getGlobalTransactionMgr().getLabelTransactionState(db.getId(), label);
-            if (null == txnState) {
-                throw new StarRocksException(String.format("No transaction found by label %s", label));
-            }
-            sourceType = txnState.getSourceType();
-        }
-
-        return LoadJobSourceType.BYPASS_WRITE.equals(sourceType)
-                ? new BypassWriteTransactionHandler(params) : new TransactionWithoutChannelHandler(params);
-    }
-
-    private Long getNodeId(TransactionOperation txnOperation, String label, String warehouseName) throws StarRocksException {
-        Long nodeId;
-        // save label->be hashmap when begin transaction, so that subsequent operator can send to same BE
-        if (TXN_BEGIN.equals(txnOperation)) {
-            List<Long> nodeIds = LoadAction.selectNodes(warehouseName);
-            Long chosenNodeId = nodeIds.get(0);
-            nodeId = chosenNodeId;
-            // txnNodeMap is LRU cache, it atomic remove unused entry
-            accessTxnNodeMapWithWriteLock(txnNodeMap -> txnNodeMap.put(label, chosenNodeId));
-        } else {
-            nodeId = accessTxnNodeMapWithReadLock(txnNodeMap -> txnNodeMap.get(label));
-        }
-
-        if (nodeId == null) {
-            throw new StarRocksException(String.format(
-                    "Transaction with op[%s] and label[%s] has no node.", txnOperation.getValue(), label));
-        }
-
-        return nodeId;
-    }
-
-    /**
-     * Resolve and validate request, and wrap params it as {@link TransactionOperationParams} object.
-     */
-    private static TransactionOperationParams toTxnOperationParams(BaseRequest request) throws StarRocksException {
->>>>>>> 21ba560494 ([Enhancement] Use query blacklist for stream load BE/CN selection (#57919))
         String dbName = request.getRequest().headers().get(DB_KEY);
         String tableName = request.getRequest().headers().get(TABLE_KEY);
         String label = request.getRequest().headers().get(LABEL_KEY);
@@ -369,8 +271,8 @@ public class TransactionLoadAction extends RestBaseAction {
             synchronized (this) {
                 // 2.1 save label->be hashmap when begin transaction, so that subsequent operator can send to same BE
                 if (op.equalsIgnoreCase(TXN_BEGIN)) {
-                    nodeID = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
-                               .getNodeSelector().seqChooseBackendOrComputeId();
+                    List<Long> nodeIds = LoadAction.selectNodes();
+                    nodeID = nodeIds.get(0);
                     // txnNodeMap is LRU cache, it atomic remove unused entry
                     txnNodeMap.put(label, nodeID);
                 } else {
