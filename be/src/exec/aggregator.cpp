@@ -860,18 +860,8 @@ Status Aggregator::evaluate_groupby_exprs(Chunk* chunk) {
     return _evaluate_group_by_exprs(chunk);
 }
 
-<<<<<<< HEAD
-Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk) {
-=======
 Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk,
                                              bool force_use_intermediate_as_output) {
-    return output_chunk_by_streaming(input_chunk, chunk, input_chunk->num_rows(), false,
-                                     force_use_intermediate_as_output);
-}
-
-Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk, size_t num_input_rows,
-                                             bool use_selection, bool force_use_intermediate_as_output) {
->>>>>>> 7d380692c1 ([BugFix] fix crash caused by spill preagg strategy (#58022))
     // The input chunk is already intermediate-typed, so there is no need to convert it again.
     // Only when the input chunk is input-typed, we should convert it into intermediate-typed chunk.
     // is_passthrough is on indicate that the chunk is input-typed.
