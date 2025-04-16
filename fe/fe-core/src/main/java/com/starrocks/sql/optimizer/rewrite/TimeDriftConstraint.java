@@ -25,6 +25,7 @@ import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -190,6 +191,10 @@ public class TimeDriftConstraint {
             return predicate;
         }
         OlapTable olapTable = (OlapTable) table;
+        TableProperty tableProperty = olapTable.getTableProperty();
+        if (tableProperty == null) {
+            return predicate;
+        }
         String spec = olapTable.getTableProperty().getTimeDriftConstraintSpec();
         if (spec == null || spec.isEmpty()) {
             return predicate;
