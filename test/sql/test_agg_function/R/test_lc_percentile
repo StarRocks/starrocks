@@ -1,4 +1,4 @@
--- name: test_percentile_cont
+-- name: test_lc_percentile
 CREATE TABLE `test_pc` (
   `date` date NULL COMMENT "",
   `datetime` datetime NULL COMMENT "",
@@ -12,7 +12,7 @@ DUPLICATE KEY(`date`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 4
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -36,115 +36,114 @@ insert into test_pc values ("2022-01-01","2022-01-01 00:00:01",11.5,1,"Tom","Eng
 insert into test_pc values (NULL,NULL,NULL,NULL,"Tom","English",NULL);
 -- result:
 -- !result
-select percentile_cont(score, 0) from test_pc;
+select percentile_disc_lc(score, 0) from test_pc;
 -- result:
-90.0
+90
 -- !result
-select percentile_cont(score, 0.25) from test_pc;
+select percentile_disc_lc(score, 0.25) from test_pc;
 -- result:
-91.0
+91
 -- !result
-select percentile_cont(score, 0.5) from test_pc;
+select percentile_disc_lc(score, 0.5) from test_pc;
 -- result:
-92.0
+92
 -- !result
-select percentile_cont(score, 0.75) from test_pc;
+select percentile_disc_lc(score, 0.75) from test_pc;
 -- result:
-93.0
+93
 -- !result
-select percentile_cont(score, 1) from test_pc;
+select percentile_disc_lc(score, 1) from test_pc;
 -- result:
-94.0
+94
 -- !result
-select percentile_cont(date, 0) from test_pc;
+select percentile_disc_lc(date, 0) from test_pc;
 -- result:
 2018-01-01
 -- !result
-select percentile_cont(date, 0.25) from test_pc;
+select percentile_disc_lc(date, 0.25) from test_pc;
 -- result:
 2019-01-01
 -- !result
-select percentile_cont(date, 0.5) from test_pc;
+select percentile_disc_lc(date, 0.5) from test_pc;
 -- result:
 2020-01-01
 -- !result
-select percentile_cont(date, 0.75) from test_pc;
+select percentile_disc_lc(date, 0.75) from test_pc;
 -- result:
 2021-01-01
 -- !result
-select percentile_cont(date, 1) from test_pc;
+select percentile_disc_lc(date, 1) from test_pc;
 -- result:
 2022-01-01
 -- !result
-select percentile_cont(datetime, 0) from test_pc;
+select percentile_disc_lc(datetime, 0) from test_pc;
 -- result:
 2018-01-01 00:00:01
 -- !result
-select percentile_cont(datetime, 0.25) from test_pc;
+select percentile_disc_lc(datetime, 0.25) from test_pc;
 -- result:
 2019-01-01 00:00:01
 -- !result
-select percentile_cont(datetime, 0.5) from test_pc;
+select percentile_disc_lc(datetime, 0.5) from test_pc;
 -- result:
 2020-01-01 00:00:01
 -- !result
-select percentile_cont(datetime, 0.75) from test_pc;
+select percentile_disc_lc(datetime, 0.75) from test_pc;
 -- result:
 2021-01-01 00:00:01
 -- !result
-select percentile_cont(datetime, 1) from test_pc;
+select percentile_disc_lc(datetime, 1) from test_pc;
 -- result:
 2022-01-01 00:00:01
 -- !result
-select percentile_cont(db, 0) from test_pc;
+select percentile_disc_lc(db, 0) from test_pc;
 -- result:
 11.1
 -- !result
-select percentile_cont(db, 0.25) from test_pc;
+select percentile_disc_lc(db, 0.25) from test_pc;
 -- result:
 11.2
 -- !result
-select percentile_cont(db, 0.5) from test_pc;
+select percentile_disc_lc(db, 0.5) from test_pc;
 -- result:
 11.3
 -- !result
-select percentile_cont(db, 0.75) from test_pc;
+select percentile_disc_lc(db, 0.75) from test_pc;
 -- result:
 11.4
 -- !result
-select percentile_cont(db, 1) from test_pc;
+select percentile_disc_lc(db, 1) from test_pc;
 -- result:
 11.5
 -- !result
-select percentile_cont(db, 2) from test_pc;
+set new_planner_agg_stage=2;
 -- result:
-[REGEX].*percentile_cont second parameter'value should be between 0 and 1.*
 -- !result
-select percentile_cont(db, -1) from test_pc;
+set streaming_preaggregation_mode="force_streaming";
 -- result:
-[REGEX].*percentile_cont second parameter'value should be between 0 and 1.*
 -- !result
-select percentile_cont(db, cast(1.0 as double)) from test_pc;
+select `date`, percentile_disc_lc(score, 0) from test_pc group by `date` order by 1,2;
 -- result:
-11.5
+None	None
+2018-01-01	90
+2019-01-01	91
+2020-01-01	92
+2021-01-01	93
+2022-01-01	94
 -- !result
-select percentile_cont(db, cast(0.5 as double)) from test_pc;
+set streaming_preaggregation_mode="force_preaggregation";
 -- result:
-11.3
 -- !result
-select percentile_cont(db, cast(1.5 as double)) from test_pc;
+select `date`, percentile_disc_lc(score, 0) from test_pc group by `date` order by 1,2;
 -- result:
-[REGEX].*Percentile rate must be between 0 and 1.*
+None	None
+2018-01-01	90
+2019-01-01	91
+2020-01-01	92
+2021-01-01	93
+2022-01-01	94
 -- !result
-select percentile_cont(1, cast(1.0 as double));
+select percentile_disc_lc(score, 1.1) from test_pc;
 -- result:
-1.0
--- !result
-select percentile_cont(1, cast(0.5 as double));
--- result:
-1.0
--- !result
-select percentile_cont(1, cast(1.5 as double));
--- result:
-[REGEX].*Percentile rate must be between 0 and 1.*
+[REGEX].*percentile_disc_lc second parameter'value should be between 0 and 1.*
 -- !result
