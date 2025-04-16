@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # percentile_approx_weight
 
-
-
 Returns the approximation of the pth percentile with weight, it's a weighted version of `PERCENTILE_APPROX` which allows to specific a weight(a constant value or numeric column) for each input value.
 
 This function uses fixed size memory, so less memory can be used for columns with high cardinality, and can be used to calculate statistics such as tp99.
