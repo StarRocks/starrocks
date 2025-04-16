@@ -947,8 +947,8 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                     "  |  output exprs:\n" +
                                     "  |      [7, VARCHAR(10), false]\n" +
                                     "  |  child exprs:\n" +
-                                    "  |      [11: dt, VARCHAR, false]\n" +
-                                    "  |      [15: dt, VARCHAR, false]");
+                                    "  |      [11: dt, VARCHAR(10), false]\n" +
+                                    "  |      [15: dt, VARCHAR(10), false]");
                         }
                     });
         });
@@ -1009,8 +1009,8 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                             PlanTestBase.assertContains(plan, "  |  output exprs:\n" +
                                     "  |      [6, VARCHAR(64), false] | [8, SMALLINT, true]\n" +
                                     "  |  child exprs:\n" +
-                                    "  |      [9: province, VARCHAR, false] | [11: min(age), SMALLINT, true]\n" +
-                                    "  |      [14: province, VARCHAR, false] | [16: min, SMALLINT, true]");
+                                    "  |      [9: province, VARCHAR(64), false] | [11: min(age), SMALLINT, true]\n" +
+                                    "  |      [14: province, VARCHAR(64), false] | [16: min, SMALLINT, true]");
                         }
                     });
         });
@@ -1048,7 +1048,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                             PlanTestBase.assertContains(plan, "  4:AGGREGATE (update finalize)\n" +
                                     "  |  aggregate: sum[([12: v1, INT, true]); args: INT; result: BIGINT; " +
                                     "args nullable: true; result nullable: true]\n" +
-                                    "  |  group by: [10: k1, INT, true], [11: k2, VARCHAR, true]");
+                                    "  |  group by: [10: k1, INT, true], [11: k2, VARCHAR(65533), true]");
                         }
 
                         {
