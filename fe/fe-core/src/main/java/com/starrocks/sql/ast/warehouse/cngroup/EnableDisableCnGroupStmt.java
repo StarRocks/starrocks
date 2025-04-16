@@ -12,32 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.ast;
+package com.starrocks.sql.ast.warehouse.cngroup;
 
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.List;
+public class EnableDisableCnGroupStmt extends CnGroupStmtBase {
+    private final boolean isEnable;
 
-public class AddComputeNodeClause extends ComputeNodeClause {
-    private final String warehouse;
-    private final String cngroupName;
-
-    public AddComputeNodeClause(List<String> hostPorts, String warehouse, String cngroupName, NodePosition pos) {
-        super(hostPorts, pos);
-        this.warehouse = warehouse;
-        this.cngroupName = cngroupName;
+    public EnableDisableCnGroupStmt(String warehouseName, String cnGroupName, boolean isEnable) {
+        this(warehouseName, cnGroupName, isEnable, NodePosition.ZERO);
     }
 
-    public String getWarehouse() {
-        return warehouse;
+    public EnableDisableCnGroupStmt(String warehouseName, String cnGroupName, boolean isEnable, NodePosition pos) {
+        super(warehouseName, cnGroupName, pos);
+        this.isEnable = isEnable;
     }
 
-    public String getCNGroupName() {
-        return cngroupName;
+    public boolean isSetEnable() {
+        return isEnable;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAddComputeNodeClause(this, context);
+        // TODO:
+        return null;
     }
 }

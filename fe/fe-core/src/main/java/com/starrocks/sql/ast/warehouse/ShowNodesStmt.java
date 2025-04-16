@@ -25,7 +25,7 @@ public class ShowNodesStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
                     .addColumn(new Column("WarehouseName", ScalarType.createVarchar(256)))
-                    .addColumn(new Column("ClusterId", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("CNGroupId", ScalarType.createVarchar(20)))
                     .addColumn(new Column("WorkerGroupId", ScalarType.createVarchar(20)))
                     .addColumn(new Column("NodeId", ScalarType.createVarchar(20)))
                     .addColumn(new Column("WorkerId", ScalarType.createVarchar(20)))
@@ -48,11 +48,13 @@ public class ShowNodesStmt extends ShowStmt {
 
     private final String pattern;
     private final String warehouseName;
+    private final String cnGroupName;
 
-    public ShowNodesStmt(String warehouseName, String pattern, NodePosition pos) {
+    public ShowNodesStmt(String warehouseName, String cnGroupName, String pattern, NodePosition pos) {
         super(pos);
         this.warehouseName = warehouseName;
         this.pattern = pattern;
+        this.cnGroupName = cnGroupName;
     }
 
     public String getPattern() {
@@ -61,6 +63,10 @@ public class ShowNodesStmt extends ShowStmt {
 
     public String getWarehouseName() {
         return warehouseName;
+    }
+
+    public String getCnGroupName() {
+        return cnGroupName;
     }
 
     @Override
