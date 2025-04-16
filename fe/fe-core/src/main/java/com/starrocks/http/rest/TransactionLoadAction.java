@@ -279,11 +279,7 @@ public class TransactionLoadAction extends RestBaseAction {
                 ? new BypassWriteTransactionHandler(params) : new TransactionWithoutChannelHandler(params);
     }
 
-<<<<<<< HEAD
-    private Long getNodeId(TransactionOperation txnOperation, String label) throws UserException {
-=======
-    private Long getNodeId(TransactionOperation txnOperation, String label, String warehouseName) throws StarRocksException {
->>>>>>> 21ba560494 ([Enhancement] Use query blacklist for stream load BE/CN selection (#57919))
+    private Long getNodeId(TransactionOperation txnOperation, String label, String warehouseName) throws UserException {
         Long nodeId;
         // save label->be hashmap when begin transaction, so that subsequent operator can send to same BE
         if (TXN_BEGIN.equals(txnOperation)) {
