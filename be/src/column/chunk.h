@@ -287,6 +287,8 @@ public:
         return false;
     }
 
+    bool has_capacity_limit_reached() const { return !capacity_limit_reached().ok(); }
+
     query_cache::owner_info& owner_info() { return _owner_info; }
     const ChunkExtraDataPtr& get_extra_data() const { return _extra_data; }
     void set_extra_data(ChunkExtraDataPtr data) { this->_extra_data = std::move(data); }
