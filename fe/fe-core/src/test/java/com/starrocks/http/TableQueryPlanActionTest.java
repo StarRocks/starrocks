@@ -182,4 +182,27 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
             Assert.assertEquals("{\"partitions\":{},\"opaqued_query_plan\":\"\",\"status\":200}", respStr);
         }
     }
+
+    @Test
+    public void testQueryPlanActionWithInvalidWarehouse() throws Exception {
+        super.setUpWithCatalog();
+        RequestBody body =
+                RequestBody.create(JSON, "{ \"sql\" :  \" select k1 from " + DB_NAME + "." + TABLE_NAME + " \" }");
+        Request request = new Request.Builder()
+                .post(body)
+                .addHeader("Authorization", rootAuth)
+                .addHeader("warehouse", "invalid_warehouse")
+                .url(URI + PATH_URI)
+                .build();
+        try (Response response = networkClient.newCall(request).execute()) {
+            String respStr = Objects.requireNonNull(response.body()).string();
+            JSONObject jsonObject = new JSONObject(respStr);
+            System.out.println(respStr);
+            Assert.assertEquals(500, jsonObject.getInt("status"));
+            String exception = jsonObject.getString("exception");
+            Assert.assertNotNull(exception);
+            Assert.assertTrue(
+                    exception.startsWith("Invalid SQL:  select k1 from testDb.testTbl "));
+        }
+    }
 }
