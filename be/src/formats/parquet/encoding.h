@@ -48,6 +48,9 @@ public:
     virtual Status encode_dict(Encoder* dict_encoder, size_t* num_dicts) {
         return Status::NotSupported("encode_dict is not supported");
     }
+
+    // used to set fixed length for FLBA
+    virtual void set_type_length(int32_t type_length) {}
 };
 
 class Decoder {

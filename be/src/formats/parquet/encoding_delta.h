@@ -278,13 +278,8 @@ public:
         if (values_to_skip > total_values_remaining_) {
             return Status::InvalidArgument("not enough values to skip");
         }
-        constexpr int kMaxSkipBufferSize = 128;
-        _skip_buffer.resize(kMaxSkipBufferSize);
-        while (values_to_skip > 0) {
-            size_t to_read = std::min<size_t>(values_to_skip, kMaxSkipBufferSize);
-            RETURN_IF_ERROR(GetInternal(_skip_buffer.data(), to_read));
-            values_to_skip -= to_read;
-        }
+        _skip_buffer.resize(values_to_skip);
+        RETURN_IF_ERROR(GetInternal(_skip_buffer.data(), values_to_skip));
         return Status::OK();
     }
 
