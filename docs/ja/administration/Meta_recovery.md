@@ -44,7 +44,7 @@ UNKNOWN Operation Type xxx
    ALTER SYSTEM CREATE IMAGE;
    ```
 
-6. 新しいイメージファイルがすべての FE ノードのディレクトリ **meta/image** に転送された後、すべての FE 設定ファイルから設定 `ignore_unknown_log_id = true` を削除し、FE ノードを再起動します。
+6. 新しいイメージファイルがすべての FE ノードのディレクトリ **meta/image** に転送された後、すべての FE 設定ファイルから設定 `metadata_ignore_unknown_operation_type= true` を削除し、FE ノードを再起動します。
 
 ### メタデータの破損
 

@@ -44,7 +44,7 @@ You can follow these steps to recover the metadata and start FE:
    ALTER SYSTEM CREATE IMAGE;
    ```
 
-6. After the new image file is transmitted to the directory **meta/image** of all FE nodes, you can remove the configuration `ignore_unknown_log_id = true` from all FE configuration files and restart the FE nodes.
+6. After the new image file is transmitted to the directory **meta/image** of all FE nodes, you can remove the configuration `metadata_ignore_unknown_operation_type= true` from all FE configuration files and restart the FE nodes.
 
 ### Metadata damage
 
