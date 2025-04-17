@@ -37,8 +37,6 @@
 #include <gtest/gtest.h>
 
 #include <boost/utility.hpp>
-#include <cstdio>
-#include <iostream>
 
 namespace starrocks {
 
