@@ -742,7 +742,7 @@ static StatusOr<std::list<std::string>> list_meta_files(FileSystem* fs, const st
                                                                    return true;
                                                                })),
                               "Failed to list " + metadata_root_location);
-    LOG(INFO) << "Found " << meta_files.size() << " meta files";
+    LOG(INFO) << "Found " << meta_files.size() << " meta files at " << metadata_root_location;
     return meta_files;
 }
 
@@ -775,7 +775,7 @@ static StatusOr<std::map<std::string, DirEntry>> list_data_files(FileSystem* fs,
                                                   return true;
                                               })),
             "Failed to list " + segment_root_location);
-    LOG(INFO) << "Listed all data files, total files: " << total_files << ", total bytes: " << total_bytes
+    LOG(INFO) << segment_root_location << ": Listed all data files, total files: " << total_files << ", total bytes: " << total_bytes
               << ", candidate files: " << data_files.size();
     return data_files;
 }
@@ -1002,13 +1002,13 @@ Status datafile_gc(std::string_view root_location, std::string_view audit_file_p
 }
 
 static Status vacuum_unspecified_tablet_metadata(
-    TabletManager* tablet_mgr, const std::string& partition_directory, int64_t partition_id, const std::set<int64_t>& tablet_ids,
+    TabletManager* tablet_mgr, const std::string& root_loc, int64_t partition_id, const std::set<int64_t>& tablet_ids,
     int64_t* vacuumed_files) {
     DCHECK(tablet_mgr != nullptr);
     DCHECK(vacuumed_files != nullptr);
 
-    const auto metadata_root_location = join_path(partition_directory, kMetadataDirectoryName);
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(partition_directory));
+    const auto metadata_root_location = join_path(root_loc, kMetadataDirectoryName);
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_loc));
     ASSIGN_OR_RETURN(auto meta_files, list_meta_files(fs.get(), metadata_root_location));
     auto metafile_delete_cb = [=](const std::vector<std::string>& files) {
         erase_tablet_metadata_from_metacache(tablet_mgr, files);
@@ -1017,7 +1017,9 @@ static Status vacuum_unspecified_tablet_metadata(
     for (const auto& name : meta_files) {
         auto [tablet_id, version] = parse_tablet_metadata_filename(name);
         if (!tablet_ids.contains(tablet_id)) {
-            RETURN_IF_ERROR(metafile_deleter.delete_file(join_path(metadata_root_location, name)));
+            const string path = join_path(metadata_root_location, name);
+            LOG(INFO) << "Try delete for full vacuum: " << path;
+            RETURN_IF_ERROR(metafile_deleter.delete_file(path));
         }
     }
 
@@ -1031,12 +1033,12 @@ static Status vacuum_unspecified_tablet_metadata(
 // Returns the number of files vacuumed and their total size
 static StatusOr<std::pair<int64_t, int64_t>> vacuum_orphaned_datafiles(
     TabletManager* tablet_mgr,
-    std::string_view partition_directory,
+    std::string_view root_loc,
     int64_t max_check_version,
     int64_t min_active_txn_id) {
-    const auto metadata_root_location = join_path(partition_directory, kMetadataDirectoryName);
-    const auto segment_root_location = join_path(partition_directory, kSegmentDirectoryName);
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(partition_directory));
+    const auto metadata_root_location = join_path(root_loc, kMetadataDirectoryName);
+    const auto segment_root_location = join_path(root_loc, kSegmentDirectoryName);
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_loc));
 
     LOG(INFO) << "Listing files at " << segment_root_location << " to look for orphaned files";
     ASSIGN_OR_RETURN(auto data_files_to_vacuum, list_data_files(fs.get(), segment_root_location, /*expired_seconds=*/0));
@@ -1046,14 +1048,14 @@ static StatusOr<std::pair<int64_t, int64_t>> vacuum_orphaned_datafiles(
         return std::pair(0, 0);
     }
 
-    LOG(INFO) << "Starting to filter out files created by txn >= " << min_active_txn_id;
+    LOG(INFO) << segment_root_location << ": " << "Starting to filter out files at created by txn >= " << min_active_txn_id;
     const auto original_size = data_files_to_vacuum.size();
     std::erase_if(data_files_to_vacuum, [&](const auto& elem) {
         const auto& name = elem.first;
         const auto txn_id = extract_txn_id_prefix(name).value_or(0);
         return txn_id >= min_active_txn_id;
     });
-    LOG(INFO) << "Removed " << original_size - data_files_to_vacuum.size() << " data files from consideration as orphans based on txn id";
+    LOG(INFO) << segment_root_location << ": " << "Removed " << original_size - data_files_to_vacuum.size() << " data files from consideration as orphans based on txn id";
 
     ASSIGN_OR_RETURN(auto meta_files, list_meta_files(fs.get(), metadata_root_location));
 
@@ -1071,7 +1073,7 @@ static StatusOr<std::pair<int64_t, int64_t>> vacuum_orphaned_datafiles(
         }
     };
 
-    LOG(INFO) << "Start to filter with metadatas, count: " << meta_files.size();
+    LOG(INFO) << segment_root_location << ": " << "Start to filter with metadatas, count: " << meta_files.size();
 
     int64_t progress = 0;
     for (const auto& name : meta_files) {
@@ -1094,11 +1096,11 @@ static StatusOr<std::pair<int64_t, int64_t>> vacuum_orphaned_datafiles(
         for (const auto& rowset : metadata->rowsets()) {
             check_rowset(rowset);
         }
-        check_sst_meta(metadata->sstable_meta());\
+        check_sst_meta(metadata->sstable_meta());
         LOG(INFO) << "Filtered with meta file: " << name << " (" << progress << '/' << meta_files.size() << ')';
     }
 
-    LOG(INFO) << "Found " << data_files_to_vacuum.size() << " orphaned files to delete";
+    LOG(INFO) << segment_root_location << ": " << "Found " << data_files_to_vacuum.size() << " orphaned files to delete";
 
     int64_t bytes_to_delete = 0;
     std::vector<std::string> files_to_delete;
@@ -1107,7 +1109,7 @@ static StatusOr<std::pair<int64_t, int64_t>> vacuum_orphaned_datafiles(
         bytes_to_delete += dir_entry.size.value_or(0);
         files_to_delete.push_back(join_path(segment_root_location, name));
     }
-    LOG(INFO) << "Start to delete orphan data files: " << data_files_to_vacuum.size()
+    LOG(INFO) << segment_root_location << ": " << "Start to delete orphan data files: " << data_files_to_vacuum.size()
               << ", total size: " << bytes_to_delete;
 
     RETURN_IF_ERROR(do_delete_files(fs.get(), files_to_delete));
@@ -1143,18 +1145,13 @@ Status vacuum_full_impl(TabletManager* tablet_mgr, const VacuumFullRequest& requ
     auto tablet_infos = std::vector<TabletInfoPB>();
     tablet_infos.reserve(request.tablet_ids_size());
     std::set<int64_t> tablet_ids_set;
-    std::set<std::string> root_locations;
     for (const auto& tablet_id : request.tablet_ids()) {
         auto& tablet_info = tablet_infos.emplace_back();
         tablet_info.set_tablet_id(tablet_id);
         tablet_info.set_min_version(0);
         tablet_ids_set.insert(tablet_id);
-        root_locations.insert(tablet_mgr->tablet_root_location(tablet_id));
     }
-    if (UNLIKELY(root_locations.size() != 1)) {
-        return Status::InvalidArgument("tablet_ids are not in the same partition");
-    }
-    const std::string partition_directory = *(root_locations.begin());
+    const std::string root_loc = tablet_mgr->tablet_root_location(request.tablet_ids().at(0));
     const auto min_check_version = request.min_check_version();
     const auto max_check_version = request.max_check_version();
     const auto min_active_txn_id = request.min_active_txn_id();
@@ -1169,17 +1166,17 @@ Status vacuum_full_impl(TabletManager* tablet_mgr, const VacuumFullRequest& requ
     // (tablet_id not in request.tablet_ids OR version < min_check_version)
 
     // 1a. Delete all metadata files associated with the given partition which are not in the list of tablet_ids
-    RETURN_IF_ERROR(vacuum_unspecified_tablet_metadata(tablet_mgr, partition_directory, partition_id, tablet_ids_set, &vacuumed_files));
+    RETURN_IF_ERROR(vacuum_unspecified_tablet_metadata(tablet_mgr, root_loc, partition_id, tablet_ids_set, &vacuumed_files));
 
     // 1b. Delete all metadata files associated with the given partition which have version < min_check_version
     int64_t unused_tablet_version;
-    RETURN_IF_ERROR(vacuum_tablet_metadata(tablet_mgr, partition_directory, tablet_infos, min_check_version, /*grace_timestamp=*/0,
+    RETURN_IF_ERROR(vacuum_tablet_metadata(tablet_mgr, root_loc, tablet_infos, min_check_version, /*grace_timestamp=*/0,
                                            &vacuumed_files, &vacuumed_file_size, &unused_tablet_version));
-    RETURN_IF_ERROR(vacuum_txn_log(partition_directory, min_active_txn_id, &vacuumed_files, &vacuumed_file_size));
+    RETURN_IF_ERROR(vacuum_txn_log(root_loc, min_active_txn_id, &vacuumed_files, &vacuumed_file_size));
 
     // 2. Determine and delete orphaned data files. We use min_active_txn_id to filter out new data files, then we open
     // any remaining metadata files with version <= max_check_version and note that the data files referenced are not orphans.
-    ASSIGN_OR_RETURN(auto count_and_size, vacuum_orphaned_datafiles(tablet_mgr, partition_directory, max_check_version, min_active_txn_id));
+    ASSIGN_OR_RETURN(auto count_and_size, vacuum_orphaned_datafiles(tablet_mgr, root_loc, max_check_version, min_active_txn_id));
     vacuumed_files += count_and_size.first;
     vacuumed_file_size += count_and_size.second;
 

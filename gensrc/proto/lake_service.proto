@@ -288,10 +288,15 @@ message VacuumResponse {
 // 2. Then, orphaned data files will be determined. We use min_active_txn_id to filter out new data files, then we open
 // any remaining metadata files with version <= max_check_version and note that the data files referenced are not orphans.
 message VacuumFullRequest {
-    optional int64 partition_id = 5; // The id of the partition to vacuum
-    repeated int64 tablet_ids = 1; // The ids of the tablets, ignore other tablets
-    optional int64 min_check_version = 2; // Delete metadata files with version < min_check_version, default 1 (set by FE)
-    optional int64 max_check_version = 3; // Ignore metadata files with version >= max_check_version, default visible version
+    // The id of the partition to vacuum
+    optional int64 partition_id = 5; 
+    // The ids of the tablets to consider, delete metadata for other tablets
+    repeated int64 tablet_ids = 1; 
+     // Delete metadata files with version < min_check_version, default 1 (set by FE)
+    optional int64 min_check_version = 2;
+    // Ignore metadata files with version >= max_check_version, default visible version
+    optional int64 max_check_version = 3;
+    // Don't delete files with txn_id >= min_active_txn_id
     optional int64 min_active_txn_id = 4;
 }
 
