@@ -335,6 +335,11 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
             public List<Long> getAllComputeNodeIds(long warehouseId) {
                 return Lists.newArrayList(1234L);
             }
+
+            @Mock
+            public List<Long> getAllComputeNodeIds(String warehouseName) {
+                return Lists.newArrayList(1234L);
+            }
         };
 
         try (Response response = networkClient.newCall(request).execute()) {

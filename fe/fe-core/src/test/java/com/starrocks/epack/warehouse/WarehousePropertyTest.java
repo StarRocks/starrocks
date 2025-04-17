@@ -32,7 +32,7 @@ public class WarehousePropertyTest {
     @Test
     public void testWarehousePropertySerializeToJson() {
         WarehouseProperty property = new WarehouseProperty(2, WarehouseProperty.ReplicationType.SYNC,
-                WarehouseProperty.WarmupLevelType.INDEX);
+                WarehouseProperty.WarmupLevelType.INDEX, false);
         String jsonString = property.toString();
         JSONObject js = new JSONObject(jsonString);
         Assert.assertEquals(2, js.getInt(WarehouseProperty.PROPERTY_COMPUTE_REPLICA));
@@ -122,5 +122,38 @@ public class WarehousePropertyTest {
         Assert.assertNotEquals(property1, property2);
         property2.setWarmupLevel(WarehouseProperty.WarmupLevelType.INDEX);
         Assert.assertEquals(property1, property2);
+    }
+
+    @Test
+    public void testWarehouseQueryQueueProperties() {
+        WarehouseProperty property = new WarehouseProperty(2, WarehouseProperty.ReplicationType.SYNC,
+                WarehouseProperty.WarmupLevelType.INDEX, false);
+        Assert.assertFalse(property.isEnableQueryQueue());
+        // update query queue properties
+        property.setEnableQueryQueue(true);
+        property.setEnableQueryQueueLoad(true);
+        property.setEnableQueryQueueStatistic(true);
+        property.setQueryQueueMaxQueuedQueries(10);
+        property.setQueryQueuePendingTimeoutSecond(100);
+        Assert.assertTrue(property.isEnableQueryQueue());
+        Assert.assertEquals(10, property.getQueryQueueMaxQueuedQueries());
+        Assert.assertEquals(100, property.getQueryQueuePendingTimeoutSecond());
+
+        String jsonString = property.toString();
+        JSONObject js = new JSONObject(jsonString);
+        Assert.assertEquals(2, js.getInt(WarehouseProperty.PROPERTY_COMPUTE_REPLICA));
+        Assert.assertEquals("SYNC", js.getString(WarehouseProperty.PROPERTY_REPLICATION_TYPE));
+        Assert.assertEquals("INDEX", js.getString(WarehouseProperty.PROPERTY_WARMUP_LEVEL));
+        Assert.assertTrue(js.getBoolean(WarehouseProperty.PROPERTY_ENABLE_QUERY_QUEUE));
+        Assert.assertTrue(js.getBoolean(WarehouseProperty.PROPERTY_ENABLE_QUERY_QUEUE_LOAD));
+        Assert.assertTrue(js.getBoolean(WarehouseProperty.PROPERTY_ENABLE_QUERY_QUEUE_STATISTIC));
+        Assert.assertEquals(10, js.getInt(WarehouseProperty.PROPERTY_QUERY_QUEUE_MAX_QUEUED_QUERIES));
+        Assert.assertEquals(100, js.getInt(WarehouseProperty.PROPERTY_QUERY_QUEUE_PENDING_TIMEOUT_SECOND));
+
+        WarehouseProperty property2 = new WarehouseProperty(property);
+        Assert.assertEquals(property, property2);
+        Assert.assertTrue(property2.isEnableQueryQueue());
+        Assert.assertEquals(10, property2.getQueryQueueMaxQueuedQueries());
+        Assert.assertEquals(100, property2.getQueryQueuePendingTimeoutSecond());
     }
 }

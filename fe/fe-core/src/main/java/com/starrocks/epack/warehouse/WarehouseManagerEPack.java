@@ -23,6 +23,7 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -63,6 +64,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
                         "An internal warehouse init after FE is ready");
                 nameToWh.put(wh.getName(), wh);
                 idToWh.put(wh.getId(), wh);
+                onCreateWarehouse(wh);
             }
         }
     }
@@ -204,6 +206,42 @@ public class WarehouseManagerEPack extends WarehouseManager {
                 warehouseProperty.setWarmupLevel(WarehouseProperty.warmupLevelTypeFromString(warmupLevel));
                 properties.remove(WarehouseProperty.PROPERTY_WARMUP_LEVEL);
 
+                // enable_query_queue
+                if (properties.containsKey(WarehouseProperty.PROPERTY_ENABLE_QUERY_QUEUE)) {
+                    boolean enableQueryQueue = properties.get(WarehouseProperty.PROPERTY_ENABLE_QUERY_QUEUE)
+                            .equalsIgnoreCase("true");
+                    warehouseProperty.setEnableQueryQueue(enableQueryQueue);
+                    properties.remove(WarehouseProperty.PROPERTY_ENABLE_QUERY_QUEUE);
+                }
+                // enable_query_queue_load
+                if (properties.containsKey(WarehouseProperty.PROPERTY_ENABLE_QUERY_QUEUE_LOAD)) {
+                    boolean enableQueryQueueLoad = properties.get(WarehouseProperty.PROPERTY_ENABLE_QUERY_QUEUE_LOAD)
+                            .equalsIgnoreCase("true");
+                    warehouseProperty.setEnableQueryQueueLoad(enableQueryQueueLoad);
+                    properties.remove(WarehouseProperty.PROPERTY_ENABLE_QUERY_QUEUE_LOAD);
+                }
+                // enable_query_queue_statistic
+                if (properties.containsKey(WarehouseProperty.PROPERTY_ENABLE_QUERY_QUEUE_STATISTIC)) {
+                    boolean enableQueryQueueStatistic = properties.get(WarehouseProperty.PROPERTY_ENABLE_QUERY_QUEUE_STATISTIC)
+                            .equalsIgnoreCase("true");
+                    warehouseProperty.setEnableQueryQueueStatistic(enableQueryQueueStatistic);
+                    properties.remove(WarehouseProperty.PROPERTY_ENABLE_QUERY_QUEUE_STATISTIC);
+                }
+                // query_queue_max_queued_queries
+                if (properties.containsKey(WarehouseProperty.PROPERTY_QUERY_QUEUE_MAX_QUEUED_QUERIES)) {
+                    int queryQueueMaxQueuedQueries =
+                            Integer.parseInt(properties.get(WarehouseProperty.PROPERTY_QUERY_QUEUE_MAX_QUEUED_QUERIES));
+                    warehouseProperty.setQueryQueueMaxQueuedQueries(queryQueueMaxQueuedQueries);
+                    properties.remove(WarehouseProperty.PROPERTY_QUERY_QUEUE_MAX_QUEUED_QUERIES);
+                }
+                // query_queue_max_queued_queries
+                if (properties.containsKey(WarehouseProperty.PROPERTY_QUERY_QUEUE_PENDING_TIMEOUT_SECOND)) {
+                    int queryQueuePendingTimeoutSecond =
+                            Integer.parseInt(properties.get(WarehouseProperty.PROPERTY_QUERY_QUEUE_PENDING_TIMEOUT_SECOND));
+                    warehouseProperty.setQueryQueuePendingTimeoutSecond(queryQueuePendingTimeoutSecond);
+                    properties.remove(WarehouseProperty.PROPERTY_QUERY_QUEUE_PENDING_TIMEOUT_SECOND);
+                }
+
                 if (!properties.isEmpty()) {
                     throw new DdlException(String.format("Unknown warehouse properties: {%s}",
                             String.join(", ", properties.keySet())));
@@ -229,6 +267,8 @@ public class WarehouseManagerEPack extends WarehouseManager {
 
             nameToWh.put(wh.getName(), wh);
             idToWh.put(wh.getId(), wh);
+
+            onCreateWarehouse(wh);
             EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
             editLog.logEdit(OperationType.OP_CREATE_WAREHOUSE, wh);
             LOG.info("createWarehouse whName = {}, id = {}, comment = {}", warehouseName, id, comment);
@@ -242,6 +282,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
             Preconditions.checkState(!nameToWh.containsKey(whName), "Warehouse '%s' already exists", whName);
             nameToWh.put(whName, warehouse);
             idToWh.put(warehouse.getId(), warehouse);
+            onCreateWarehouse(warehouse);
         }
     }
 
@@ -266,9 +307,11 @@ public class WarehouseManagerEPack extends WarehouseManager {
                         "lake_compaction_warehouse or lake_background_warehouse first", warehouseName),
                         ErrorCode.ERR_UNKNOWN_ERROR);
             }
+            onDropWarehouse(warehouse);
 
             nameToWh.remove(warehouseName);
             idToWh.remove(warehouse.getId());
+
             warehouse.dropSelf();
             EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
             editLog.logEdit(OperationType.OP_DROP_WAREHOUSE, new DropWarehouseLog(warehouseName));
@@ -280,9 +323,46 @@ public class WarehouseManagerEPack extends WarehouseManager {
         try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
             String warehouseName = log.getWarehouseName();
             if (nameToWh.containsKey(warehouseName)) {
-                Warehouse warehouse = nameToWh.remove(warehouseName);
+                Warehouse warehouse = nameToWh.get(warehouseName);
+                onDropWarehouse(warehouse);
+
+                nameToWh.remove(warehouseName);
                 idToWh.remove(warehouse.getId());
             }
+        }
+    }
+
+    private void onCreateWarehouse(Warehouse wh) {
+        if (wh == null) {
+            return;
+        }
+        // register warehouse to slot manager
+        try {
+            BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
+            if (slotManager == null || !(slotManager instanceof WarehouseSlotManager)) {
+                return;
+            }
+            WarehouseSlotManager warehouseSlotManager = (WarehouseSlotManager) slotManager;
+            warehouseSlotManager.registerWarehouse(wh.getId());
+        } catch (Exception e) {
+            LOG.warn("register warehouse {} to slot manager failed", wh.getName(), e);
+        }
+    }
+
+    private void onDropWarehouse(Warehouse wh) {
+        if (wh == null) {
+            return;
+        }
+        // unregister warehouse to slot manager
+        try {
+            BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
+            if (slotManager == null || !(slotManager instanceof WarehouseSlotManager)) {
+                return;
+            }
+            WarehouseSlotManager warehouseSlotManager = (WarehouseSlotManager) slotManager;
+            warehouseSlotManager.unregisterWarehouse(wh.getId());
+        } catch (Exception e) {
+            LOG.warn("unregister warehouse {} to slot manager failed", wh.getName(), e);
         }
     }
 
@@ -301,6 +381,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
             if (warehouse.getState() == LocalWarehouse.WarehouseState.SUSPENDED) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_WAREHOUSE_SUSPENDED, String.format("name: %s", warehouseName));
             }
+
             warehouse.suspendSelf();
             EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
             editLog.logEdit(OperationType.OP_ALTER_WAREHOUSE, warehouse);
@@ -312,6 +393,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
         try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
             nameToWh.put(warehouse.getName(), warehouse);
             idToWh.put(warehouse.getId(), warehouse);
+            onCreateWarehouse(warehouse);
         }
     }
 
@@ -379,6 +461,47 @@ public class WarehouseManagerEPack extends WarehouseManager {
                 warehouseProperty.setWarmupLevel(WarehouseProperty.warmupLevelTypeFromString(warmupLevel));
                 properties.remove(WarehouseProperty.PROPERTY_WARMUP_LEVEL);
             }
+            // handle update of 'enable_query_queue'
+            if (properties.get(WarehouseProperty.PROPERTY_ENABLE_QUERY_QUEUE) != null) {
+                boolean enableQueryQueue =
+                        properties.get(WarehouseProperty.PROPERTY_ENABLE_QUERY_QUEUE).equalsIgnoreCase("true");
+                warehouseProperty.setEnableQueryQueue(enableQueryQueue);
+                properties.remove(WarehouseProperty.PROPERTY_ENABLE_QUERY_QUEUE);
+            }
+            // handle update of 'enable_query_queue_load'
+            if (properties.get(WarehouseProperty.PROPERTY_ENABLE_QUERY_QUEUE_LOAD) != null) {
+                boolean enableQueryQueueLoad =
+                        properties.get(WarehouseProperty.PROPERTY_ENABLE_QUERY_QUEUE_LOAD).equalsIgnoreCase("true");
+                warehouseProperty.setEnableQueryQueueLoad(enableQueryQueueLoad);
+                properties.remove(WarehouseProperty.PROPERTY_ENABLE_QUERY_QUEUE_LOAD);
+            }
+            // handle update of 'enable_query_queue'
+            if (properties.get(WarehouseProperty.PROPERTY_ENABLE_QUERY_QUEUE_STATISTIC) != null) {
+                boolean enableQueryQueueStatistic =
+                        properties.get(WarehouseProperty.PROPERTY_ENABLE_QUERY_QUEUE_STATISTIC).equalsIgnoreCase("true");
+                warehouseProperty.setEnableQueryQueueStatistic(enableQueryQueueStatistic);
+                properties.remove(WarehouseProperty.PROPERTY_ENABLE_QUERY_QUEUE_STATISTIC);
+            }
+            // query_queue_max_queued_queries
+            if (properties.get(WarehouseProperty.PROPERTY_QUERY_QUEUE_MAX_QUEUED_QUERIES) != null) {
+                int queryQueueMaxQueuedQueries =
+                        Integer.parseInt(properties.get(WarehouseProperty.PROPERTY_QUERY_QUEUE_MAX_QUEUED_QUERIES));
+                if (queryQueueMaxQueuedQueries <= 0) {
+                    throw new DdlException("warehouse query queue max queued queries can not be <= 0");
+                }
+                warehouseProperty.setQueryQueueMaxQueuedQueries(queryQueueMaxQueuedQueries);
+                properties.remove(WarehouseProperty.PROPERTY_QUERY_QUEUE_MAX_QUEUED_QUERIES);
+            }
+            // query_queue_pending_timeout_second
+            if (properties.get(WarehouseProperty.PROPERTY_QUERY_QUEUE_PENDING_TIMEOUT_SECOND) != null) {
+                int queryQueuePendingTimeoutSecond =
+                        Integer.parseInt(properties.get(WarehouseProperty.PROPERTY_QUERY_QUEUE_PENDING_TIMEOUT_SECOND));
+                if (queryQueuePendingTimeoutSecond <= 0) {
+                    throw new DdlException("warehouse query queue pending timeout second can not be <= 0");
+                }
+                warehouseProperty.setQueryQueuePendingTimeoutSecond(queryQueuePendingTimeoutSecond);
+                properties.remove(WarehouseProperty.PROPERTY_QUERY_QUEUE_PENDING_TIMEOUT_SECOND);
+            }
 
             if (!properties.isEmpty()) {
                 throw new DdlException(
@@ -422,6 +545,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
         reader.readCollection(Warehouse.class, warehouse -> {
             this.nameToWh.put(warehouse.getName(), warehouse);
             this.idToWh.put(warehouse.getId(), warehouse);
+            onCreateWarehouse(warehouse);
         });
     }
 

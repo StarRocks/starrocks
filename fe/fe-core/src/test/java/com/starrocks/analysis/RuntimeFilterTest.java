@@ -81,6 +81,7 @@ public class RuntimeFilterTest {
         starRocksAssert.withDatabase("db1").useDatabase("db1");
         starRocksAssert.withTable(createTblStmtStr);
         FeConstants.runningUnitTest = true;
+        starRocksAssert.getCtx().getSessionVariable().setOptimizerExecuteTimeout(30000);
     }
 
     @Test

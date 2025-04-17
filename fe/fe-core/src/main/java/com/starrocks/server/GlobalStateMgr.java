@@ -141,6 +141,7 @@ import com.starrocks.epack.sql.analyzer.AuthorizerStmtVisitorEPack;
 import com.starrocks.epack.sql.parser.AstBuilderEPack;
 import com.starrocks.epack.system.PortConnectivityCheckerEPack;
 import com.starrocks.epack.warehouse.WarehouseManagerEPack;
+import com.starrocks.epack.warehouse.WarehouseSlotManager;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
@@ -815,7 +816,7 @@ public class GlobalStateMgr {
         if (RunMode.isSharedDataMode()) {
             this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
             this.autovacuumDaemon = new AutovacuumDaemon();
-            this.slotManager = new SlotManager(resourceUsageMonitor);
+            this.slotManager = new WarehouseSlotManager(resourceUsageMonitor);
         } else {
             this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
             this.slotManager = new SlotManager(resourceUsageMonitor);

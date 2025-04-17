@@ -18,6 +18,7 @@ import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.staros.proto.WarmupLevel;
 import com.starrocks.common.DdlException;
+import com.starrocks.qe.GlobalVariable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -28,6 +29,13 @@ public class WarehouseProperty {
     public static final String PROPERTY_REPLICATION_TYPE = "replication_type";
     public static final String PROPERTY_WARMUP_LEVEL = "warmup_level";
     public static final int DEFAULT_REPLICA_NUMBER = 1;
+
+    // query queue
+    public static final String PROPERTY_ENABLE_QUERY_QUEUE = "enable_query_queue";
+    public static final String PROPERTY_ENABLE_QUERY_QUEUE_LOAD = "enable_query_queue_load";
+    public static final String PROPERTY_ENABLE_QUERY_QUEUE_STATISTIC = "enable_query_queue_statistic";
+    public static final String PROPERTY_QUERY_QUEUE_MAX_QUEUED_QUERIES = "query_queue_max_queued_queries";
+    public static final String PROPERTY_QUERY_QUEUE_PENDING_TIMEOUT_SECOND = "query_queue_pending_timeout_second";
 
     public enum ReplicationType {
         NONE,
@@ -51,10 +59,24 @@ public class WarehouseProperty {
     @SerializedName(value = "warmup_level")
     private WarmupLevelType warmupLevel;
 
+    @SerializedName(value = "enable_query_queue")
+    private boolean enableQueryQueue;
+    @SerializedName(value = "enable_query_queue_load")
+    private boolean enableQueryQueueLoad;
+    @SerializedName(value = "enable_query_queue_statistic")
+    private boolean enableQueryQueueStatistic;
+    @SerializedName(value = "query_queue_max_queued_queries")
+    private int queryQueueMaxQueuedQueries = GlobalVariable.getQueryQueueMaxQueuedQueries();
+    @SerializedName(value = "query_queue_pending_timeout_second")
+    private int queryQueuePendingTimeoutSecond = GlobalVariable.getQueryQueuePendingTimeoutSecond();
+
     public WarehouseProperty() {
         this.computeReplica = DEFAULT_REPLICA_NUMBER;
         this.replicationType = ReplicationType.NONE;
         this.warmupLevel = WarmupLevelType.NONE;
+        this.enableQueryQueue = false;
+        this.enableQueryQueueLoad = false;
+        this.enableQueryQueueStatistic = false;
     }
 
     // deep copy
@@ -62,12 +84,18 @@ public class WarehouseProperty {
         this.computeReplica = that.computeReplica;
         this.replicationType = that.replicationType;
         this.warmupLevel = that.warmupLevel;
+        this.enableQueryQueue = that.enableQueryQueue;
+        this.enableQueryQueueLoad = that.enableQueryQueueLoad;
+        this.enableQueryQueueStatistic = that.enableQueryQueueStatistic;
+        this.queryQueueMaxQueuedQueries = that.queryQueueMaxQueuedQueries;
+        this.queryQueuePendingTimeoutSecond = that.queryQueuePendingTimeoutSecond;
     }
 
-    public WarehouseProperty(int computeReplica, ReplicationType repType, WarmupLevelType warmupLevel) {
+    public WarehouseProperty(int computeReplica, ReplicationType repType, WarmupLevelType warmupLevel, boolean enableQueryQueue) {
         this.computeReplica = computeReplica;
         this.replicationType = repType;
         this.warmupLevel = warmupLevel;
+        this.enableQueryQueue = enableQueryQueue;
     }
 
     public void setComputeReplica(int computeReplica) {
@@ -94,6 +122,46 @@ public class WarehouseProperty {
         return warmupLevel;
     }
 
+    public boolean isEnableQueryQueue() {
+        return enableQueryQueue;
+    }
+
+    public void setEnableQueryQueue(boolean enableQueryQueue) {
+        this.enableQueryQueue = enableQueryQueue;
+    }
+
+    public boolean isEnableQueryQueueLoad() {
+        return enableQueryQueueLoad;
+    }
+
+    public void setEnableQueryQueueLoad(boolean enableQueryQueueLoad) {
+        this.enableQueryQueueLoad = enableQueryQueueLoad;
+    }
+
+    public boolean isEnableQueryQueueStatistic() {
+        return enableQueryQueueStatistic;
+    }
+
+    public void setEnableQueryQueueStatistic(boolean enableQueryQueueStatistic) {
+        this.enableQueryQueueStatistic = enableQueryQueueStatistic;
+    }
+
+    public int getQueryQueueMaxQueuedQueries() {
+        return queryQueueMaxQueuedQueries;
+    }
+
+    public void setQueryQueueMaxQueuedQueries(int queryQueueMaxQueuedQueries) {
+        this.queryQueueMaxQueuedQueries = queryQueueMaxQueuedQueries;
+    }
+
+    public int getQueryQueuePendingTimeoutSecond() {
+        return queryQueuePendingTimeoutSecond;
+    }
+
+    public void setQueryQueuePendingTimeoutSecond(int queryQueuePendingTimeoutSecond) {
+        this.queryQueuePendingTimeoutSecond = queryQueuePendingTimeoutSecond;
+    }
+
     public String toString() {
         return new Gson().toJson(this);
     }
@@ -108,7 +176,11 @@ public class WarehouseProperty {
         }
         WarehouseProperty prop = (WarehouseProperty) obj;
         return this.computeReplica == prop.computeReplica && this.warmupLevel == prop.warmupLevel &&
-                this.replicationType == prop.replicationType;
+                this.replicationType == prop.replicationType && this.enableQueryQueue == prop.enableQueryQueue
+                && this.enableQueryQueueLoad == prop.enableQueryQueueLoad
+                && this.enableQueryQueueStatistic == prop.enableQueryQueueStatistic
+                && this.queryQueueMaxQueuedQueries == prop.queryQueueMaxQueuedQueries
+                && this.queryQueuePendingTimeoutSecond == prop.queryQueuePendingTimeoutSecond;
     }
 
     public static ReplicationType replicationTypeFromString(String strType) throws DdlException {

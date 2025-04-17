@@ -136,7 +136,7 @@ public class WarehouseManagerEPackTest {
             Assert.assertTrue(warehouse instanceof LocalWarehouse);
             WarehouseProperty property = ((LocalWarehouse) warehouse).getProperty();
             WarehouseProperty expected = new WarehouseProperty(2, WarehouseProperty.ReplicationType.ASYNC,
-                    WarehouseProperty.WarmupLevelType.ALL);
+                    WarehouseProperty.WarmupLevelType.ALL, false);
             Assert.assertEquals(expected, property);
         }
         { // Unknown/Unsupported properties
