@@ -423,7 +423,7 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
                 .map(partitionName -> HivePartitionName.of(dbName, tblName, partitionName))
                 .collect(Collectors.toList());
 
-        Map<HivePartitionName, HivePartitionStats> statistics = loadPartitionsStatistics(hivePartitionNames);
+        Map<HivePartitionName, HivePartitionStats> statistics = partitionStatsCache.getAll(hivePartitionNames).join();
 
         return statistics.entrySet()
                 .stream()
