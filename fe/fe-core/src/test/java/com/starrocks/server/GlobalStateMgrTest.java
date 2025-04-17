@@ -275,7 +275,7 @@ public class GlobalStateMgrTest {
         NodeMgr nodeMgr = globalStateMgr.getNodeMgr();
         Assert.assertTrue(nodeMgr.isVersionAndRoleFilesNotExist());
         try {
-            globalStateMgr.initialize(new String[0]);
+            globalStateMgr.initialize(null);
         } catch (Exception e) {
             Assert.assertTrue(e instanceof UnsupportedOperationException);
             Assert.assertEquals(MyGlobalStateMgr.ERROR_MESSAGE, e.getMessage());
@@ -289,7 +289,7 @@ public class GlobalStateMgrTest {
         NodeMgr nodeMgr = globalStateMgr.getNodeMgr();
         Assert.assertTrue(nodeMgr.isVersionAndRoleFilesNotExist());
         try {
-            globalStateMgr.initialize(new String[0]);
+            globalStateMgr.initialize(null);
         } catch (Exception e) {
             Assert.fail("No exception is expected here.");
         }
@@ -306,7 +306,7 @@ public class GlobalStateMgrTest {
         GlobalStateMgr globalStateMgr = new MyGlobalStateMgr(true, nodeMgr);
         Assert.assertTrue(nodeMgr.isVersionAndRoleFilesNotExist());
         try {
-            globalStateMgr.initialize(new String[0]);
+            globalStateMgr.initialize(null);
         } catch (Exception e) {
             Assert.assertTrue(e instanceof UnsupportedOperationException);
             Assert.assertEquals(MyGlobalStateMgr.ERROR_MESSAGE, e.getMessage());

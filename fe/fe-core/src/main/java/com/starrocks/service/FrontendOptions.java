@@ -76,7 +76,7 @@ public class FrontendOptions {
     private static InetAddress localAddr = InetAddress.getLoopbackAddress();
     private static boolean useFqdn = false;
 
-    public static void init(String[] args) throws UnknownHostException {
+    public static void init(String hostTypeFromArgs) throws UnknownHostException {
         localAddr = null;
         if (!"0.0.0.0".equals(Config.frontend_address)) {
             if (!InetAddressValidator.getInstance().isValid(Config.frontend_address)) {
@@ -94,23 +94,14 @@ public class FrontendOptions {
         }
 
         HostType specifiedHostType = HostType.NOT_SPECIFIED;
-
-        for (int i = 0; i < args.length; i++) {
-            if (args[i].equalsIgnoreCase("-host_type")) {
-                if (i + 1 >= args.length) {
-                    System.out.println("-host_type need parameter FQDN or IP");
-                    System.exit(-1);
-                }
-                String inputHostType = args[i + 1];
-                try {
-                    inputHostType = inputHostType.toUpperCase();
-                    specifiedHostType = HostType.valueOf(inputHostType);
-                } catch (Exception e) {
-                    System.out.println("-host_type need parameter FQDN or IP");
-                    System.exit(-1);
-                }
-            }   
-        } 
+        if (!Strings.isNullOrEmpty(hostTypeFromArgs)) {
+            try {
+                specifiedHostType = HostType.valueOf(hostTypeFromArgs.toUpperCase());
+            } catch (Exception e) {
+                System.out.println("-host_type need parameter FQDN or IP");
+                System.exit(-1);
+            }
+        }
 
         if (specifiedHostType == HostType.FQDN) {
             initAddrUseFqdn(hosts);
