@@ -80,6 +80,41 @@ void extract_number(const vpack::Slice* json, NullableColumn* result) {
     }
 }
 
+void extract_bool(const vpack::Slice* json, NullableColumn* result) {
+    try {
+        if (json->isNone() || json->isNull()) {
+            result->append_nulls(1);
+        } else if (json->isBool()) {
+            result->null_column()->append(0);
+            auto res = json->getBool();
+            down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(res);
+        } else if (json->isString()) {
+            vpack::ValueLength len;
+            const char* str = json->getStringUnchecked(len);
+            StringParser::ParseResult parseResult;
+            auto r = StringParser::string_to_int<int32_t>(str, len, &parseResult);
+            if (parseResult != StringParser::PARSE_SUCCESS || std::isnan(r) || std::isinf(r)) {
+                bool b = StringParser::string_to_bool(str, len, &parseResult);
+                if (parseResult != StringParser::PARSE_SUCCESS) {
+                    result->append_nulls(1);
+                } else {
+                    down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(b);
+                }
+            } else {
+                down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(r != 0);
+            }
+        } else if (json->isNumber()) {
+            result->null_column()->append(0);
+            auto res = json->getNumber<double>();
+            down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(res != 0);
+        } else {
+            result->append_nulls(1);
+        }
+    } catch (const vpack::Exception& e) {
+        result->append_nulls(1);
+    }
+}
+
 void extract_string(const vpack::Slice* json, NullableColumn* result) {
     try {
         if (json->isNone() || json->isNull()) {
@@ -181,6 +216,7 @@ static const FlatJsonHashMap<LogicalType, JsonFlatExtractFunc> JSON_EXTRACT_FUNC
     {LogicalType::TYPE_BIGINT,          &extract_number<LogicalType::TYPE_BIGINT>},
     {LogicalType::TYPE_LARGEINT,        &extract_number<LogicalType::TYPE_LARGEINT>},
     {LogicalType::TYPE_DOUBLE,          &extract_number<LogicalType::TYPE_DOUBLE>},
+    {LogicalType::TYPE_BOOLEAN,         &extract_bool},
     {LogicalType::TYPE_VARCHAR,         &extract_string},
     {LogicalType::TYPE_CHAR,            &extract_string},
     {LogicalType::TYPE_JSON,            &extract_json},
