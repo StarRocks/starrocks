@@ -22,8 +22,10 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.AggregateType;
+import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
@@ -41,6 +43,7 @@ import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.DataDescription;
@@ -65,6 +68,8 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.After;
 import org.junit.Assert;
@@ -85,9 +90,6 @@ public class LoadPlannerTest {
     // config
     private int loadParallelInstanceNum;
 
-    // backends
-    private ImmutableMap<Long, Backend> idToBackend;
-
     private static ConnectContext ctx;
     private boolean strictMode = false;
     private String timezone = TimeUtils.DEFAULT_TIME_ZONE;
@@ -101,7 +103,12 @@ public class LoadPlannerTest {
     @Mocked
     Partition partition;
     @Mocked
+    NodeMgr nodeMgr;
+    @Mocked
     OlapTableSink sink;
+
+    @Mocked
+    SystemInfoService service;
 
     @Before
     public void setUp() throws IOException {
@@ -113,16 +120,42 @@ public class LoadPlannerTest {
         loadParallelInstanceNum = Config.load_parallel_instance_num;
         Config.eliminate_shuffle_load_by_replicated_storage = false;
 
-        // backends
-        Map<Long, Backend> idToBackendTmp = Maps.newHashMap();
-        Backend b1 = new Backend(0L, "host0", 9050);
-        b1.setAlive(true);
-        idToBackendTmp.put(0L, b1);
-        Backend b2 = new Backend(1L, "host1", 9050);
-        b2.setAlive(true);
-        idToBackendTmp.put(1L, b2);
-        idToBackend = ImmutableMap.copyOf(idToBackendTmp);
         ctx = UtFrameUtils.createDefaultCtx();
+
+        new MockUp<BrokerMgr>() {
+            @Mock
+            public FsBroker getBroker(String brokerName, String host) {
+                return new FsBroker("127.0.0.1", 12345);
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public NodeMgr getNodeMgr() {
+                return nodeMgr;
+            }
+        };
+
+        new MockUp<NodeMgr>() {
+            @Mock
+            public SystemInfoService getClusterInfo() {
+                return service;
+            }
+        };
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public ImmutableMap<Long, Backend> getIdToBackend() {
+                Map<Long, Backend> idToBackendTmp = Maps.newHashMap();
+                Backend b1 = new Backend(0L, "host0", 9050);
+                b1.setAlive(true);
+                idToBackendTmp.put(0L, b1);
+                Backend b2 = new Backend(1L, "host1", 9050);
+                b2.setAlive(true);
+                idToBackendTmp.put(1L, b2);
+                return ImmutableMap.copyOf(idToBackendTmp);
+            }
+        };
     }
 
     @After
@@ -132,7 +165,7 @@ public class LoadPlannerTest {
     }
 
     @Test
-    public void testParallelInstance(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
+    public void testParallelInstance(@Mocked GlobalStateMgr globalStateMgr,
                                      @Injectable Database db, @Injectable OlapTable table) throws StarRocksException {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -144,10 +177,6 @@ public class LoadPlannerTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-                result = systemInfoService;
-                systemInfoService.getIdToBackend();
-                result = idToBackend;
                 table.getBaseSchema();
                 result = columns;
                 table.getFullSchema();
@@ -224,7 +253,7 @@ public class LoadPlannerTest {
     }
 
     @Test
-    public void testVectorizedLoad(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
+    public void testVectorizedLoad(@Mocked GlobalStateMgr globalStateMgr,
                                    @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -239,10 +268,6 @@ public class LoadPlannerTest {
                 Type.INT, true);
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-                result = systemInfoService;
-                systemInfoService.getIdToBackend();
-                result = idToBackend;
                 table.getBaseSchema();
                 result = columns;
                 table.getFullSchema();
@@ -359,7 +384,6 @@ public class LoadPlannerTest {
 
     @Test
     public void testPartialUpdatePlan(@Mocked GlobalStateMgr globalStateMgr,
-                                      @Mocked SystemInfoService systemInfoService,
                                       @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -374,10 +398,6 @@ public class LoadPlannerTest {
                 Type.INT, true);
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-                result = systemInfoService;
-                systemInfoService.getIdToBackend();
-                result = idToBackend;
                 table.getKeysType();
                 minTimes = 0;
                 result = KeysType.PRIMARY_KEYS;
@@ -460,7 +480,6 @@ public class LoadPlannerTest {
 
     @Test
     public void testColumnWithRowPartialUpdate(@Mocked GlobalStateMgr globalStateMgr,
-                                               @Mocked SystemInfoService systemInfoService,
                                                @Injectable Database db, @Injectable OlapTable table) throws Exception {
         new Expectations() {
             {
@@ -519,7 +538,6 @@ public class LoadPlannerTest {
 
     @Test
     public void testLoadWithOpColumnDefault(@Mocked GlobalStateMgr globalStateMgr,
-                                            @Mocked SystemInfoService systemInfoService,
                                             @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -529,10 +547,6 @@ public class LoadPlannerTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-                result = systemInfoService;
-                systemInfoService.getIdToBackend();
-                result = idToBackend;
                 table.getKeysType();
                 result = KeysType.PRIMARY_KEYS;
                 table.getBaseSchema();
@@ -609,7 +623,6 @@ public class LoadPlannerTest {
 
     @Test
     public void testLoadWithOpColumnDelete(@Mocked GlobalStateMgr globalStateMgr,
-                                           @Mocked SystemInfoService systemInfoService,
                                            @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -619,10 +632,6 @@ public class LoadPlannerTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-                result = systemInfoService;
-                systemInfoService.getIdToBackend();
-                result = idToBackend;
                 table.getKeysType();
                 result = KeysType.PRIMARY_KEYS;
                 table.getBaseSchema();
@@ -701,7 +710,6 @@ public class LoadPlannerTest {
 
     @Test
     public void testLoadWithOpColumnExpr(@Mocked GlobalStateMgr globalStateMgr,
-                                         @Mocked SystemInfoService systemInfoService,
                                          @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -718,10 +726,6 @@ public class LoadPlannerTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-                result = systemInfoService;
-                systemInfoService.getIdToBackend();
-                result = idToBackend;
                 table.getKeysType();
                 result = KeysType.PRIMARY_KEYS;
                 table.getBaseSchema();
@@ -752,6 +756,7 @@ public class LoadPlannerTest {
                 table.getColumn(Load.LOAD_OP_COLUMN);
                 result = null;
                 globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
+                minTimes = 0;
                 returns(f1, f2, f3);
 
                 globalStateMgr.getSqlParser();
@@ -811,7 +816,6 @@ public class LoadPlannerTest {
 
     @Test
     public void testLoadWithOpAutoMapping(@Mocked GlobalStateMgr globalStateMgr,
-                                          @Mocked SystemInfoService systemInfoService,
                                           @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -831,10 +835,6 @@ public class LoadPlannerTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-                result = systemInfoService;
-                systemInfoService.getIdToBackend();
-                result = idToBackend;
                 table.getKeysType();
                 result = KeysType.PRIMARY_KEYS;
                 table.getBaseSchema();
@@ -908,7 +908,7 @@ public class LoadPlannerTest {
     }
 
     @Test
-    public void testShuffle(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
+    public void testShuffle(@Mocked GlobalStateMgr globalStateMgr,
                             @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -928,10 +928,6 @@ public class LoadPlannerTest {
                 Type.INT, true);
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-                result = systemInfoService;
-                systemInfoService.getIdToBackend();
-                result = idToBackend;
                 table.getKeysType();
                 result = KeysType.UNIQUE_KEYS;
                 table.getDefaultReplicationNum();
@@ -961,6 +957,7 @@ public class LoadPlannerTest {
                 table.getColumn("k33");
                 result = null;
                 globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
+                minTimes = 0;
                 returns(f1, f1, f2);
 
                 globalStateMgr.getSqlParser();
@@ -1022,7 +1019,7 @@ public class LoadPlannerTest {
     }
 
     @Test
-    public void testAggShuffle(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
+    public void testAggShuffle(@Mocked GlobalStateMgr globalStateMgr,
                                @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -1045,10 +1042,6 @@ public class LoadPlannerTest {
                 Type.INT, true);
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-                result = systemInfoService;
-                systemInfoService.getIdToBackend();
-                result = idToBackend;
                 table.getKeysType();
                 result = KeysType.AGG_KEYS;
                 table.getDefaultReplicationNum();
@@ -1080,6 +1073,7 @@ public class LoadPlannerTest {
                 table.getColumn("k33");
                 result = null;
                 globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
+                minTimes = 0;
                 returns(f1, f1, f2);
 
                 globalStateMgr.getSqlParser();
@@ -1167,7 +1161,7 @@ public class LoadPlannerTest {
     }
 
     @Test
-    public void testLoadLocalFile(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
+    public void testLoadLocalFile(@Mocked GlobalStateMgr globalStateMgr,
                                   @Injectable Database db, @Injectable OlapTable table) throws StarRocksException {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -1179,10 +1173,6 @@ public class LoadPlannerTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-                result = systemInfoService;
-                systemInfoService.getIdToBackend();
-                result = idToBackend;
                 table.getBaseSchema();
                 result = columns;
                 table.getFullSchema();
