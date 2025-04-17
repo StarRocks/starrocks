@@ -434,6 +434,7 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
         if (metastore instanceof CachingHiveMetastore) {
             return ((CachingHiveMetastore) metastore).getPresentPartitionsStatistics(partitions);
         } else {
+            // trigger async loading
             partitionStatsCache.getAll(partitions);
             return partitionStatsCache.synchronous().getAllPresent(partitions).entrySet().stream()
                     .collect(Collectors.toMap(entry -> entry.getKey().getPartitionNames().get(), Map.Entry::getValue));
@@ -694,9 +695,9 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
         partitionKeysCache.asMap().keySet().stream().filter(hivePartitionValue -> hivePartitionValue.getHiveTableName().
                 equals(databaseTableName)).forEach(partitionKeysCache::invalidate);
         List<HivePartitionName> presentPartitions = getPresentPartitionNames(partitionCache, dbName, tableName);
-        presentPartitions.forEach(p -> partitionCache.invalidate(p));
+        partitionCache.invalidateAll(presentPartitions);
         List<HivePartitionName> presentPartitionStats = getPresentPartitionNames(partitionStatsCache, dbName, tableName);
-        presentPartitionStats.forEach(p -> partitionStatsCache.synchronous().invalidate(p));
+        partitionStatsCache.synchronous().invalidateAll(presentPartitionStats);
     }
 
     public synchronized void invalidatePartition(HivePartitionName partitionName) {
