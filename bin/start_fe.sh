@@ -28,7 +28,6 @@ OPTS=$(getopt \
   -l 'cluster_snapshot' \
   -l 'debug' \
   -l 'logconsole' \
-  -l 'failpoint' \
   -- "$@")
 
 eval set -- "$OPTS"
@@ -38,7 +37,6 @@ HELPER=
 HOST_TYPE=
 CLUSTER_SNAPSHOT=
 ENABLE_DEBUGGER=0
-FAILPOINT=
 RUN_LOG_CONSOLE=${SYS_LOG_TO_CONSOLE:-0}
 # min jdk version required
 MIN_JDK_VERSION=17
@@ -183,7 +181,6 @@ fi
 if [ x"$HOST_TYPE" != x"" ]; then
     HOST_TYPE="--host_type $HOST_TYPE"
 fi
-
 
 LOG_FILE=$LOG_DIR/fe.out
 
