@@ -479,7 +479,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: ログファイルがこれらのログエントリのために作成される前に書き込むことができるメタデータログエントリの最大数。このパラメータはログファイルのサイズを制御するために使用されます。新しいログファイルは BDBJE データベースに書き込まれます。
 - 導入バージョン: -
 
-##### ignore_unknown_log_id
+##### metadata_ignore_unknown_operation_type
 
 - デフォルト: false
 - タイプ: Boolean
