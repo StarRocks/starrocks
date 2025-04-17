@@ -1180,7 +1180,7 @@ build_avro_cpp() {
     ${BUILD_SYSTEM} -j$PARALLEL
     # cp include and lib
     cp libavrocpp_s.a ${TP_INSTALL_DIR}/lib64/
-    cp -r ../include/avro ${TP_INSTALL_DIR}/avrocpp
+    cp -r ../include/avro ${TP_INSTALL_DIR}/include/avrocpp
 }
 
 # serders
