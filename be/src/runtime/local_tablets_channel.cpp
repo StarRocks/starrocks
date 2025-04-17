@@ -1087,7 +1087,7 @@ void LocalTabletsChannel::update_profile() {
         auto* merged_profile = RuntimeProfile::merge_isomorphic_profiles(&obj_pool, secondary_replica_profiles);
         RuntimeProfile* final_profile = _profile->create_child("SecondaryReplicas");
         auto* tablets_counter = ADD_COUNTER(final_profile, "TabletsNum", TUnit::UNIT);
-        COUNTER_SET(tablets_counter, static_cast<int64_t>(peer_or_primary_replica_profiles.size()));
+        COUNTER_SET(tablets_counter, static_cast<int64_t>(secondary_replica_profiles.size()));
         final_profile->copy_all_info_strings_from(merged_profile);
         final_profile->copy_all_counters_from(merged_profile);
     }

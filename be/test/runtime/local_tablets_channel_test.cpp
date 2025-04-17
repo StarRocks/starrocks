@@ -263,7 +263,7 @@ TEST_F(LocalTabletsChannelTest, diagnose_stack_trace) {
     ASSERT_EQ(1, num_diagnose);
 }
 
-TEST_F(LocalTabletsChannelTest, test_profile) {
+TEST_F(LocalTabletsChannelTest, test_primary_replica_profile) {
     ASSERT_OK(_tablets_channel->open(_open_primary_request, &_open_response, _schema_param, false));
 
     PTabletWriterAddChunkRequest add_chunk_request;
@@ -304,6 +304,19 @@ TEST_F(LocalTabletsChannelTest, test_profile) {
     auto* primary_replicas_profile = profile->get_child("PrimaryReplicas");
     ASSERT_NE(nullptr, primary_replicas_profile);
     ASSERT_EQ(1, primary_replicas_profile->get_counter("TabletsNum")->value());
+}
+
+TEST_F(LocalTabletsChannelTest, test_secondary_replica_profile) {
+    _open_secondary_request.set_timeout_ms(100);
+    ASSERT_OK(_tablets_channel->open(_open_secondary_request, &_open_response, _schema_param, false));
+    _tablets_channel->update_profile();
+    auto* profile = _root_profile->get_child(fmt::format("Index (id={})", _index_id));
+    ASSERT_NE(nullptr, profile);
+    ASSERT_EQ(1, profile->get_counter("OpenRpcCount")->value());
+    ASSERT_EQ(0, profile->get_counter("AddChunkRpcCount")->value());
+    auto* secondary_replicas_profile = profile->get_child("SecondaryReplicas");
+    ASSERT_NE(nullptr, secondary_replicas_profile);
+    ASSERT_EQ(1, secondary_replicas_profile->get_counter("TabletsNum")->value());
 }
 
 } // namespace starrocks
