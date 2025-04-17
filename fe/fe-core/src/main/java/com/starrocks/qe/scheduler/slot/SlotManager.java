@@ -14,11 +14,7 @@
 
 package com.starrocks.qe.scheduler.slot;
 
-<<<<<<< HEAD
-import com.starrocks.server.WarehouseManager;
-=======
 import com.starrocks.metric.MetricVisitor;
->>>>>>> b8e410005 ([Refactor] Refactor & add more warehouse metrics (#58026))
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import org.apache.commons.compress.utils.Lists;
@@ -38,7 +34,7 @@ public class SlotManager extends BaseSlotManager {
 
     public SlotManager(ResourceUsageMonitor resourceUsageMonitor) {
         super(resourceUsageMonitor);
-        this.slotTracker = new SlotTracker(resourceUsageMonitor, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        this.slotTracker = new SlotTracker(resourceUsageMonitor);
     }
 
     @Override
