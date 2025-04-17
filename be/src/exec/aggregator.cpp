@@ -1099,14 +1099,14 @@ Status Aggregator::output_chunk_by_streaming_with_selection(Chunk* input_chunk, 
 
 void Aggregator::try_convert_to_two_level_map() {
     auto current_size = _hash_map_variant.reserved_memory_usage(mem_pool());
-    if (current_size > two_level_memory_threshold) {
+    if (current_size > get_two_level_threahold()) {
         _hash_map_variant.convert_to_two_level(_state);
     }
 }
 
 void Aggregator::try_convert_to_two_level_set() {
     auto current_size = _hash_set_variant.reserved_memory_usage(mem_pool());
-    if (current_size > two_level_memory_threshold) {
+    if (current_size > get_two_level_threahold()) {
         _hash_set_variant.convert_to_two_level(_state);
     }
 }

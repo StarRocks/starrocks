@@ -152,6 +152,8 @@ struct AggHashMapWithOneNumberKeyWithNullable
 
     AggDataPtr get_null_key_data() { return null_key_data; }
 
+    void set_null_key_data(AggDataPtr data) { null_key_data = data; }
+
     template <typename Func, bool allocate_and_compute_state, bool compute_not_founds>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
                             Buffer<AggDataPtr>* agg_states, Filter* not_founds) {
@@ -370,6 +372,8 @@ struct AggHashMapWithOneStringKeyWithNullable
     AggHashMapWithOneStringKeyWithNullable(Args&&... args) : Base(std::forward<Args>(args)...) {}
 
     AggDataPtr get_null_key_data() { return null_key_data; }
+
+    void set_null_key_data(AggDataPtr data) { null_key_data = data; }
 
     template <typename Func, bool allocate_and_compute_state, bool compute_not_founds>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
@@ -605,6 +609,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
               _chunk_size(chunk_size) {}
 
     AggDataPtr get_null_key_data() { return nullptr; }
+    void set_null_key_data(AggDataPtr data) {}
 
     template <typename Func, bool allocate_and_compute_state, bool compute_not_founds>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
@@ -853,6 +858,7 @@ struct AggHashMapWithSerializedKeyFixedSize
     }
 
     AggDataPtr get_null_key_data() { return nullptr; }
+    void set_null_key_data(AggDataPtr data) {}
 
     template <typename Func, bool allocate_and_compute_state, bool compute_not_founds>
     ALWAYS_NOINLINE void compute_agg_prefetch(size_t chunk_size, const Columns& key_columns,

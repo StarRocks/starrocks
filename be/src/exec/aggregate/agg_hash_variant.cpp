@@ -20,7 +20,6 @@
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
-
 namespace detail {
 template <AggHashMapVariant::Type>
 struct AggHashMapVariantTypeTraits;
@@ -197,6 +196,10 @@ void AggHashMapVariant::init(RuntimeState* state, Type type, AggStatistics* agg_
                                                  typename decltype(dst->hash_map)::key_type>) {                       \
                         dst->hash_map.reserve(hash_map_with_key->hash_map.capacity());                                \
                         dst->hash_map.insert(hash_map_with_key->hash_map.begin(), hash_map_with_key->hash_map.end()); \
+                        auto null_data_ptr = hash_map_with_key->get_null_key_data();                                  \
+                        if (null_data_ptr != nullptr) {                                                               \
+                            dst->set_null_key_data(null_data_ptr);                                                    \
+                        }                                                                                             \
                     }                                                                                                 \
                 },                                                                                                    \
                 hash_map_with_key);                                                                                   \
@@ -279,6 +282,11 @@ void AggHashSetVariant::init(RuntimeState* state, Type type, AggStatistics* agg_
                                                  typename decltype(dst->hash_set)::key_type>) {                       \
                         dst->hash_set.reserve(hash_set_with_key->hash_set.capacity());                                \
                         dst->hash_set.insert(hash_set_with_key->hash_set.begin(), hash_set_with_key->hash_set.end()); \
+                        using SrcType = std::remove_reference_t<decltype(*hash_set_with_key)>;                        \
+                        using DstType = std::remove_reference_t<decltype(*dst)>;                                      \
+                        if constexpr (SrcType::has_single_null_key && DstType::has_single_null_key) {                 \
+                            dst->has_null_key = hash_set_with_key->has_null_key;                                      \
+                        }                                                                                             \
                     }                                                                                                 \
                 },                                                                                                    \
                 hash_set_with_key);                                                                                   \
