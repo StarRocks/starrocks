@@ -617,6 +617,16 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             }
         }
 
+        // If upgraded from an old version and do roll up,
+        // the schema saved in indexSchemaMap is the schema in the old version, whose uniqueId is -1,
+        // so here we initialize column uniqueId here.
+        int maxId = rollupSchema.size() > 1 ? rollupSchema.size() - 1: 0;
+        for (int i = 0; i < rollupSchema.size(); i++) {
+            Column col = rollupSchema.get(i);
+            Preconditions.checkState(col.getUniqueId() <= 0, col.getUniqueId());
+            col.setUniqueId(i);
+        }
+
         tbl.setIndexMeta(rollupIndexId, rollupIndexName, rollupSchema, rollupSchemaVersion /* initial schema version */,
                 rollupSchemaHash, rollupShortKeyColumnCount, TStorageType.COLUMN, rollupKeysType, origStmt);
         MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(rollupIndexId);

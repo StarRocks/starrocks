@@ -220,7 +220,9 @@ public class LakeMaterializedView extends MaterializedView {
     @Override
     public void gsonPostProcess() throws IOException {
         super.gsonPostProcess();
-        if (getMaxColUniqueId() <= 0) {
+        boolean needRestoreColumnUniqueId = indexIdToMeta.values().stream().findFirst().
+                get().getSchema().get(0).getUniqueId() == -1;
+        if (needRestoreColumnUniqueId) {
             setMaxColUniqueId(LakeTableHelper.restoreColumnUniqueId(this));
         }
     }

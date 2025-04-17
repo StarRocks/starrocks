@@ -242,6 +242,17 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 sortKeyColumnUniqueIds = sortKeyUniqueIds;
             }
 
+            // If upgraded from an old version and do schema change,
+            // the schema saved in indexSchemaMap is the schema in the old version, whose uniqueId is -1,
+            // so here we initialize column uniqueId here.
+            List<Column> columns = indexSchemaMap.get(shadowIdxId);
+            int maxId = columns.size() > 1 ? columns.size() - 1: 0;
+            for (int i = 0; i < columns.size(); i++) {
+                Column col = columns.get(i);
+                Preconditions.checkState(col.getUniqueId() <= 0, col.getUniqueId());
+                col.setUniqueId(i);
+            }
+
             table.setIndexMeta(shadowIdxId, indexIdToName.get(shadowIdxId), indexSchemaMap.get(shadowIdxId), 0, 0,
                     indexShortKeyMap.get(shadowIdxId), TStorageType.COLUMN,
                     table.getKeysTypeByIndexId(indexIdMap.get(shadowIdxId)), null, sortKeyColumnIndexes,
