@@ -3510,4 +3510,10 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long max_graceful_exit_time_second = 60;
+
+    /**
+     * Whether to enable block list to filter BE/CN for stream load
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_block_list_for_stream_load = true;
 }

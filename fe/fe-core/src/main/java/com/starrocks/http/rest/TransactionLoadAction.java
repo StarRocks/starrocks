@@ -73,6 +73,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.locks.ReadWriteLock;
@@ -224,7 +225,7 @@ public class TransactionLoadAction extends RestBaseAction {
         // redirect transaction op to BE
         TNetworkAddress redirectAddress = result.getRedirectAddress();
         if (null == redirectAddress) {
-            Long nodeId = getNodeId(txnOperation, label);
+            Long nodeId = getNodeId(txnOperation, label, txnOperationParams.getWarehouseName());
             ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(nodeId);
             if (node == null) {
                 node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNode(nodeId);
@@ -278,12 +279,12 @@ public class TransactionLoadAction extends RestBaseAction {
                 ? new BypassWriteTransactionHandler(params) : new TransactionWithoutChannelHandler(params);
     }
 
-    private Long getNodeId(TransactionOperation txnOperation, String label) throws UserException {
+    private Long getNodeId(TransactionOperation txnOperation, String label, String warehouseName) throws UserException {
         Long nodeId;
         // save label->be hashmap when begin transaction, so that subsequent operator can send to same BE
         if (TXN_BEGIN.equals(txnOperation)) {
-            Long chosenNodeId = GlobalStateMgr.getCurrentState().getNodeMgr()
-                    .getClusterInfo().getNodeSelector().seqChooseBackendOrComputeId();
+            List<Long> nodeIds = LoadAction.selectNodes(warehouseName);
+            Long chosenNodeId = nodeIds.get(0);
             nodeId = chosenNodeId;
             // txnNodeMap is LRU cache, it atomic remove unused entry
             accessTxnNodeMapWithWriteLock(txnNodeMap -> txnNodeMap.put(label, chosenNodeId));
