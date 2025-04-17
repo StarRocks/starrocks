@@ -523,6 +523,7 @@ public class StarRocksFE {
         }
 
         if (cmdLineOpts.isEnableFailPoint()) {
+            LOG.info("failpoint is enabled");
             FailPoint.enable();
         }
 
