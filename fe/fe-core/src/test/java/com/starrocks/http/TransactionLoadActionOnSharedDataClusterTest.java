@@ -21,6 +21,7 @@ import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.warehouse.Cluster;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import mockit.Mock;
@@ -38,6 +39,8 @@ import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpTestCase {
 
@@ -67,6 +70,17 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
                 return true;
             }
         };
+
+        new MockUp<Cluster>() {
+            @Mock
+            public List<Long> getComputeNodeIds() {
+                List<Long> nodes = new ArrayList<>();
+                nodes.add(1234L);
+                return nodes;
+            }
+        };
+    
+        GlobalStateMgr.getCurrentState().getWarehouseMgr().initDefaultWarehouse();
     }
 
     @After

@@ -58,6 +58,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_BEGIN_LATENCY_MS;
@@ -270,8 +271,8 @@ public class TransactionLoadAction extends RestBaseAction {
             synchronized (this) {
                 // 2.1 save label->be hashmap when begin transaction, so that subsequent operator can send to same BE
                 if (op.equalsIgnoreCase(TXN_BEGIN)) {
-                    nodeID = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
-                               .getNodeSelector().seqChooseBackendOrComputeId();
+                    List<Long> nodeIds = LoadAction.selectNodes();
+                    nodeID = nodeIds.get(0);
                     // txnNodeMap is LRU cache, it atomic remove unused entry
                     txnNodeMap.put(label, nodeID);
                 } else {
