@@ -22,7 +22,6 @@
 #include "storage/utils.h"
 #include "testutil/sync_point.h"
 #include "util/raw_container.h"
-#include "util/slice.h"
 
 namespace starrocks {
 

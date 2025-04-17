@@ -26,7 +26,6 @@ class Message;
 namespace starrocks {
 
 class FileSystem;
-class WritableFile;
 class Slice;
 
 class ProtobufFile {
@@ -44,7 +43,6 @@ public:
 private:
     std::string _path;
     std::shared_ptr<FileSystem> _fs;
-    std::unique_ptr<starrocks::WritableFile> _file = nullptr;
 };
 
 class ProtobufFileWithHeader {
