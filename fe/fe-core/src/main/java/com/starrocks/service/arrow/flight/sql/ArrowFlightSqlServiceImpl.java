@@ -459,18 +459,20 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
                 processorFinished.complete(null);
             });
 
+            processorFinished.get();
             // ------------------------------------------------------------------------------------
             // DML task will wait until the task is finished and return FE as endpoint.
             // ------------------------------------------------------------------------------------
             if (ctx.returnFromFE()) {
-                processorFinished.get();
                 if (ctx.getState().isError()) {
                     throw new RuntimeException(String.format("failed to process query [queryID=%s] [error=%s]",
                             DebugUtil.printId(ctx.getExecutionId()),
                             ctx.getState().getErrorMessage()));
                 }
                 String queryId = DebugUtil.printId(ctx.getExecutionId());
-                ctx.setEmptyResultIfNotExist(queryId);
+                if (ctx.getResult(queryId) == null) {
+                    ctx.setEmptyResultIfNotExist(queryId);
+                }
                 final ByteString handle = buildFETicket(ctx);
 
                 FlightSql.TicketStatementQuery ticketStatement =
@@ -502,7 +504,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             Schema schema = fetchArrowSchema(ctx, worker.getBrpcAddress(), pInstanceId, timeoutMs);
 
             // Build BE ticket.
-            final ByteString handle = buildBETicket(ctx, rootFragmentInstanceId);
+            final ByteString handle = buildBETicket(coordinator.getQueryId(), rootFragmentInstanceId);
             FlightSql.TicketStatementQuery ticketStatement =
                     FlightSql.TicketStatementQuery.newBuilder().setStatementHandle(handle).build();
             Location endpoint = Location.forGrpcInsecure(worker.getHost(), worker.getArrowFlightPort());
@@ -518,9 +520,9 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         return ByteString.copyFromUtf8(ctx.getToken() + ":" + DebugUtil.printId(ctx.getExecutionId()));
     }
 
-    private static ByteString buildBETicket(ArrowFlightSqlConnectContext ctx, TUniqueId rootFragmentInstanceId) {
+    private static ByteString buildBETicket(TUniqueId queryId, TUniqueId rootFragmentInstanceId) {
         // BETicket: <QueryId> : <FragmentInstanceId>
-        return ByteString.copyFromUtf8(DebugUtil.printId(ctx.getExecutionId()) + ":" + DebugUtil.printId(rootFragmentInstanceId));
+        return ByteString.copyFromUtf8(hexStringFromUniqueId(queryId) + ":" + hexStringFromUniqueId(rootFragmentInstanceId));
     }
 
     private <T extends Message> FlightInfo buildFlightInfoFromFE(T request, FlightDescriptor descriptor,
@@ -569,5 +571,14 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         StatementBase parsedStmt = stmts.get(0);
         parsedStmt.setOrigStmt(new OriginStatement(sql));
         return parsedStmt;
+    }
+
+    private static String hexStringFromUniqueId(final TUniqueId id) {
+        if (id == null) {
+            return "";
+        }
+        StringBuilder builder = new StringBuilder();
+        builder.append(Long.toHexString(id.hi)).append("-").append(Long.toHexString(id.lo));
+        return builder.toString();
     }
 }

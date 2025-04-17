@@ -196,12 +196,9 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
             List<String> row = resultData.get(i);
             for (int j = 0; j < row.size(); j++) {
                 String item = row.get(j);
-                System.out.printf("Row %d, Col %d = %s%n", i, j, item);
                 if (item == null || item.equals(FeConstants.NULL_STRING)) {
-                    System.out.printf("Row %d, Col %d is null%n", i, j);
                     dataFields.get(j).setNull(i);
                 } else {
-                    System.out.printf("Row %d, Col %d setSafe = %s%n", i, j, item);
                     ((VarCharVector) dataFields.get(j)).setSafe(i, item.getBytes());
                 }
             }

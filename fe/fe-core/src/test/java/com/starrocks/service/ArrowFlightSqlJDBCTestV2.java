@@ -18,7 +18,6 @@ package com.starrocks.service;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.sql.Statement;
 
 public class ArrowFlightSqlJDBCTestV2 {
@@ -41,22 +40,21 @@ public class ArrowFlightSqlJDBCTestV2 {
             try (Connection conn = DriverManager.getConnection(JDBC_URL, USER, PASSWORD);
                     Statement stmt = conn.createStatement()) {
 
-                // testUpdate(stmt, "DROP DATABASE IF EXISTS arrow_demo FORCE;");
-                // testQuery(stmt, "SHOW DATABASES;");
-                // testUpdate(stmt, "CREATE DATABASE arrow_demo;");
-                // testQuery(stmt, "SHOW DATABASES;");
-                testUpdate(stmt, "USE information_schema;");
-                testQuery(stmt, "SELECT * FROM tables;");
-                // testUpdate(stmt, "CREATE TABLE test (id INT, name STRING) ENGINE=OLAP PRIMARY KEY (id) " +
-                //         "DISTRIBUTED BY HASH(id) BUCKETS 1 " +
-                //         "PROPERTIES ('replication_num' = '1');");
-                // testUpdate(stmt, "INSERT INTO test VALUES (1, 'Alice'), (2, 'Bob');");
-                // testQuery(stmt, "SELECT * FROM test;");
-                // testUpdate(stmt, "UPDATE test SET name = 'Charlie' WHERE id = 1;");
-                // testQuery(stmt, "SELECT * FROM test;");
-                // testUpdate(stmt, "DELETE FROM test WHERE id = 2;");
-                // testQuery(stmt, "SELECT * FROM test;");
-                // testQuery(stmt, "SHOW CREATE TABLE test;");
+                testUpdate(stmt, "DROP DATABASE IF EXISTS arrow_demo FORCE;");
+                testQuery(stmt, "SHOW DATABASES;");
+                testUpdate(stmt, "CREATE DATABASE arrow_demo;");
+                testQuery(stmt, "SHOW DATABASES;");
+                testUpdate(stmt, "USE arrow_demo;");
+                testUpdate(stmt, "CREATE TABLE test (id INT, name STRING) ENGINE=OLAP PRIMARY KEY (id) " +
+                        "DISTRIBUTED BY HASH(id) BUCKETS 1 " +
+                        "PROPERTIES ('replication_num' = '1');");
+                testUpdate(stmt, "INSERT INTO test VALUES (1, 'Alice'), (2, 'Bob');");
+                testQuery(stmt, "SELECT * FROM test;");
+                testUpdate(stmt, "UPDATE test SET name = 'Charlie' WHERE id = 1;");
+                testQuery(stmt, "SELECT * FROM test;");
+                testUpdate(stmt, "DELETE FROM test WHERE id = 2;");
+                testQuery(stmt, "SELECT * FROM test;");
+                testQuery(stmt, "SHOW CREATE TABLE test;");
             }
         } catch (Exception e) {
             e.printStackTrace();
