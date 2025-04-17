@@ -98,7 +98,7 @@ public class FrontendOptions {
             try {
                 specifiedHostType = HostType.valueOf(hostTypeFromArgs.toUpperCase());
             } catch (Exception e) {
-                System.out.println("-host_type need parameter FQDN or IP");
+                System.out.println("--host_type need parameter FQDN or IP");
                 System.exit(-1);
             }
         }

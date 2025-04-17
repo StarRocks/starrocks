@@ -57,7 +57,7 @@ public class RestoreClusterSnapshotMgr {
 
     public static void init(String clusterSnapshotYamlFile, boolean startFromSnapshot) throws StarRocksException {
         if (startFromSnapshot) {
-            LOG.info("FE start to restore from a cluster snapshot (-cluster_snapshot)");
+            LOG.info("FE start to restore from a cluster snapshot (--cluster_snapshot)");
             instance = new RestoreClusterSnapshotMgr(clusterSnapshotYamlFile);
             return;
         }

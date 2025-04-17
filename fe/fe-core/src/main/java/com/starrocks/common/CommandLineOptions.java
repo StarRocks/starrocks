@@ -22,7 +22,6 @@ import com.starrocks.journal.bdbje.BDBToolOptions;
 public class CommandLineOptions {
 
     private boolean isVersion;
-    private boolean enableFailPoint;
     private BDBToolOptions bdbToolOpts = null;
     private String helpers;
     private String hostType;
@@ -30,10 +29,6 @@ public class CommandLineOptions {
 
     public void setVersion(boolean version) {
         isVersion = version;
-    }
-
-    public void setEnableFailPoint(boolean enableFailPoint) {
-        this.enableFailPoint = enableFailPoint;
     }
 
     public void setBdbToolOpts(BDBToolOptions bdbToolOpts) {
@@ -58,10 +53,6 @@ public class CommandLineOptions {
 
     public BDBToolOptions getBdbToolOpts() {
         return bdbToolOpts;
-    }
-
-    public boolean isEnableFailPoint() {
-        return enableFailPoint;
     }
 
     public String getHelpers() {
