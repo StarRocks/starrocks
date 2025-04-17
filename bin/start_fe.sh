@@ -50,7 +50,6 @@ while true; do
         --cluster_snapshot) CLUSTER_SNAPSHOT="--cluster_snapshot" ; shift ;;
         --debug) ENABLE_DEBUGGER=1 ; shift ;;
         --logconsole) RUN_LOG_CONSOLE=1 ; shift ;;
-        --failpoint) FAILPOINT="--failpoint" ; shift ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
     esac
@@ -146,22 +145,6 @@ if [ "${ENABLE_DATADOG_PROFILE}" == "true" ] && [ -f "${STARROCKS_HOME}/datadog/
     final_java_opt="-javaagent:${STARROCKS_HOME}/datadog/dd-java-agent.jar ${final_java_opt}"
 fi
 
-# add failpoint config file when enabled
-if [ x"$FAILPOINT" != x"" ]; then
-    failpoint_lib="${STARROCKS_HOME}/lib/byteman-4.0.24.jar"
-    failpoint_conf="${STARROCKS_HOME}/conf/failpoint.btm"
-    if [ ! -f ${failpoint_lib} ]; then
-        echo "failpoint lib does not exist: ${failpoint_lib}"
-        exit 1
-    fi
-    if [ ! -f ${failpoint_conf} ]; then
-        echo "failpoint config file does not exist: ${failpoint_conf}"
-        exit 1
-    fi
-
-    final_java_opt="${final_java_opt} -javaagent:${failpoint_lib}=script:${failpoint_conf}"
-fi
-
 if [ ! -d $LOG_DIR ]; then
     mkdir -p $LOG_DIR
 fi
@@ -222,7 +205,7 @@ echo "start time: $(date), server uptime: $(uptime)"
 
 # StarRocksFE java process will write its process id into $pidfile
 if [ ${RUN_DAEMON} -eq 1 ]; then
-    nohup $LIMIT $JAVA $final_java_opt com.starrocks.StarRocksFE ${HELPER} ${HOST_TYPE} ${CLUSTER_SNAPSHOT} ${FAILPOINT}"$@" </dev/null &
+    nohup $LIMIT $JAVA $final_java_opt com.starrocks.StarRocksFE ${HELPER} ${HOST_TYPE} ${CLUSTER_SNAPSHOT} "$@" </dev/null &
 else
-    exec $LIMIT $JAVA $final_java_opt com.starrocks.StarRocksFE ${HELPER} ${HOST_TYPE} ${CLUSTER_SNAPSHOT} ${FAILPOINT}"$@" </dev/null
+    exec $LIMIT $JAVA $final_java_opt com.starrocks.StarRocksFE ${HELPER} ${HOST_TYPE} ${CLUSTER_SNAPSHOT} "$@" </dev/null
 fi
