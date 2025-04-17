@@ -742,6 +742,28 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         if (!(root instanceof ExchangeNode)) {
             root.getChildren().forEach(child -> collectNodesImpl(child, nodes));
         }
+<<<<<<< HEAD
+=======
+        
+        if (root instanceof HashJoinNode) {
+            HashJoinNode hashJoinNode = (HashJoinNode) root;
+            if (hashJoinNode.isSkewBroadJoin()) {
+                HashJoinNode shuffleJoinNode = hashJoinNode.getSkewJoinFriend();
+                // TODO(fixme): ensure broadcast jion 's rf size is equal to shuffle join's rf size, if not clear the specific
+                //  broadcast's rf.
+                if (shuffleJoinNode.getBuildRuntimeFilters().size() != hashJoinNode.getBuildRuntimeFilters().size()) {
+                    shuffleJoinNode.clearBuildRuntimeFilters();
+                    hashJoinNode.clearBuildRuntimeFilters();
+                    return;
+                }
+                for (RuntimeFilterDescription description : hashJoinNode.getBuildRuntimeFilters()) {
+                    int filterId = shuffleJoinNode.getRfIdByEqJoinConjunctsIndex(description.getExprOrder());
+                    // skew join's boradcast join rf need to remember the filter id of corresponding skew shuffle join
+                    description.setSkew_shuffle_filter_id(filterId);
+                }
+            }
+        }
+>>>>>>> 227a69cba ([Enhancement] Enable multi columns in global runtime filter by default (#57269))
     }
 
     public void setRuntimeFilterMergeNodeAddresses(PlanNode root, TNetworkAddress host) {

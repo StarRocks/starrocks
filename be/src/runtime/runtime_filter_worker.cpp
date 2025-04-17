@@ -336,6 +336,67 @@ void RuntimeFilterMerger::merge_runtime_filter(PTransmitRuntimeFilterParams& par
     _send_total_runtime_filter(rf_version, filter_id);
 }
 
+<<<<<<< HEAD
+=======
+void RuntimeFilterMerger::store_skew_broadcast_join_runtime_filter(PTransmitRuntimeFilterParams& params) {
+    auto [query_ctx, mem_tracker] = get_mem_tracker(params.query_id(), params.is_pipeline());
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker.get());
+
+    DCHECK(params.is_partial());
+    // we use skew_shuffle_filter_id, so it will be merged with coressponding shuffle join's partition rf
+    int32_t filter_id = params.skew_shuffle_filter_id();
+    DCHECK(filter_id != -1);
+
+    std::vector<TRuntimeFilterProberParams>* target_nodes = nullptr;
+    // check if there is no consumer.
+    {
+        auto it = _targets.find(filter_id);
+        if (it == _targets.end()) return;
+        target_nodes = &(it->second);
+        if (target_nodes->size() == 0) return;
+    }
+
+    RuntimeFilterMergerStatus* status = nullptr;
+    {
+        auto it = _statuses.find(filter_id);
+        if (it == _statuses.end()) return;
+        status = &(it->second);
+        // 1. some instance of broadcast join already rf, we only need to store the first one.
+        // 2. if status is stop, we don't need to store rf.
+        // 3. if it's not skew join, skip it
+        if (status->skew_broadcast_rf_material != nullptr || status->stop || !status->is_skew_join) {
+            return;
+        }
+    }
+
+    int64_t now = UnixMillis();
+    if (status->recv_first_filter_ts == 0) {
+        status->recv_first_filter_ts = now;
+    }
+    status->recv_last_filter_ts = now;
+
+    // if shuffle join's rf already too big, just skip
+    if (!status->can_use_bf) return;
+
+    // store material of broadcast join rf
+    status->skew_broadcast_rf_material = nullptr;
+    int rf_version = RuntimeFilterHelper::deserialize_runtime_filter_for_skew_broadcast_join(
+            &(status->pool), &(status->skew_broadcast_rf_material),
+            reinterpret_cast<const uint8_t*>(params.data().data()), params.data().size(), params.columntype());
+
+    if (status->skew_broadcast_rf_material == nullptr) {
+        // something wrong with deserialization.
+        return;
+    }
+
+    // not ready. still have to wait more filters.
+    if (status->filters.size() < status->expect_number) return;
+
+    // this only happens when boradcast's rf is the last rf instance arrived
+    _send_total_runtime_filter(rf_version, filter_id);
+}
+
+>>>>>>> 227a69cba ([Enhancement] Enable multi columns in global runtime filter by default (#57269))
 struct BatchClosuresJoinAndClean {
 public:
     BatchClosuresJoinAndClean(RuntimeFilterRpcClosures& closures) : _closures(closures) {}
