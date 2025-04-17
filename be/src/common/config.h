@@ -1639,4 +1639,12 @@ CONF_mInt64(rf_sample_ratio, "32");
 CONF_mInt64(rf_branchless_ratio, "8");
 
 CONF_mInt32(big_query_sec, "1");
+<<<<<<< HEAD
+=======
+
+CONF_mInt64(split_exchanger_buffer_chunk_num, "1000");
+
+// when to split hashmap/hashset into two level hashmap/hashset, negative number means use default value
+CONF_mInt64(two_level_memory_threshold, "-1");
+>>>>>>> 9f4052a70a ([BugFix] fix two level hash map lose null value (#58101))
 } // namespace starrocks::config
