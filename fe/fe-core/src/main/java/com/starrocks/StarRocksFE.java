@@ -43,7 +43,6 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.Version;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.Util;
-import com.starrocks.failpoint.FailPoint;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.StateChangeExecutor;
 import com.starrocks.http.HttpServer;
@@ -373,8 +372,6 @@ public class StarRocksFE {
      *      Specify fe start to restore from a cluster snapshot
      * -ht --host_type
      *      Specify fe start use ip or fqdn
-     * -fp --failpoint
-     *      Enable fail point
      */
     private static CommandLineOptions parseArgs(String[] args) {
         CommandLineParser commandLineParser = new BasicParser();
@@ -392,7 +389,6 @@ public class StarRocksFE {
         options.addOption("m", "metaversion", true,
                 "Specify the meta version to decode log value, separated by ',', first is community meta" +
                         " version, second is StarRocks meta version");
-        options.addOption("fp", "failpoint", false, "enable fail point");
 
         CommandLine cmd = null;
         try {
@@ -492,10 +488,6 @@ public class StarRocksFE {
         if (cmd.hasOption("rs") || cmd.hasOption("cluster_snapshot")) {
             commandLineOptions.setStartFromSnapshot(true);
         }
-        // -fp --failpoint
-        if (cmd.hasOption("fp") || cmd.hasOption("failpoint")) {
-            commandLineOptions.setEnableFailPoint(true);
-        }
 
         return commandLineOptions;
     }
@@ -520,10 +512,6 @@ public class StarRocksFE {
             } else {
                 System.exit(-1);
             }
-        }
-
-        if (cmdLineOpts.isEnableFailPoint()) {
-            FailPoint.enable();
         }
 
         // go on
