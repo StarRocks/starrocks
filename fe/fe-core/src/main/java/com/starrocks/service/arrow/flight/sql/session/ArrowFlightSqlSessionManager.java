@@ -25,6 +25,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
@@ -45,7 +46,7 @@ public class ArrowFlightSqlSessionManager {
                 .maximumSize(Math.min(Config.arrow_token_cache_size, Config.qe_max_connection))
                 .expireAfterWrite(Config.arrow_token_cache_expire_second, TimeUnit.SECONDS)
                 .removalListener((RemovalNotification<String, ArrowFlightSqlTokenInfo> notification) -> {
-                    ConnectContext context =
+                    ArrowFlightSqlConnectContext context =
                             ExecuteEnv.getInstance().getScheduler().getArrowFlightSqlConnectContext(notification.getKey());
                     if (context != null) {
                         context.kill(true, "token is expired or evicted");
@@ -68,7 +69,7 @@ public class ArrowFlightSqlSessionManager {
         return tokenInfo.getToken();
     }
 
-    public ArrowFlightSqlTokenInfo validateToken(String token) throws IllegalArgumentException {
+    public void validateToken(String token) throws IllegalArgumentException {
         if (StringUtils.isEmpty(token)) {
             throw new IllegalArgumentException("bearer token is empty");
         }
@@ -80,7 +81,6 @@ public class ArrowFlightSqlSessionManager {
                             "[arrow_token_cache_expire_second] and [arrow_token_cache_size]", token));
         }
 
-        return tokenInfo;
     }
 
     public void closeSession(String token) {
@@ -93,7 +93,7 @@ public class ArrowFlightSqlSessionManager {
                 ExecuteEnv.getInstance().getScheduler().getArrowFlightSqlConnectContext(token);
         if (connectContext == null) {
             throw CallStatus.NOT_FOUND
-                    .withDescription("cannot find connect context of the token [" + token + "]")
+                    .withDescription("cannot find connect arrow context of the token [" + token + "]")
                     .toRuntimeException();
         }
         return connectContext;
@@ -117,7 +117,11 @@ public class ArrowFlightSqlSessionManager {
         ctx.setQualifiedUser(currentUser.getUser());
         ctx.setCurrentUserIdentity(currentUser);
         ctx.setCurrentRoleIds(currentUser);
-
+        // Assign connection ID
+        ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
+        ctx.setConnectionId(connectScheduler.getNextConnectionId());
+        ctx.resetConnectionStartTime();
+        // Mark as registered
         Pair<Boolean, String> isSuccessAndErrorMsg = ExecuteEnv.getInstance().getScheduler().registerConnection(ctx);
         if (!isSuccessAndErrorMsg.first) {
             String errorMsg = isSuccessAndErrorMsg.second;

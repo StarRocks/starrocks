@@ -19,12 +19,8 @@ package com.starrocks.common.util;
 
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
-import org.apache.arrow.vector.FieldVector;
 import org.apache.arrow.vector.VarCharVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
-import org.apache.arrow.vector.types.pojo.Field;
-
-import java.util.List;
 
 public class ArrowUtil {
 
@@ -36,14 +32,11 @@ public class ArrowUtil {
 
     public static VectorSchemaRoot createSingleSchemaRoot(String fieldName, String fieldValue) {
         VarCharVector varCharVector = new VarCharVector(fieldName, ALLOCATOR);
-        varCharVector.allocateNew();
 
+        varCharVector.allocateNew();
         varCharVector.setSafe(0, fieldValue.getBytes());
         varCharVector.setValueCount(1);
 
-        List<Field> schemaFields = List.of(varCharVector.getField());
-        List<FieldVector> dataFields = List.of(varCharVector);
-
-        return new VectorSchemaRoot(schemaFields, dataFields);
+        return VectorSchemaRoot.of(varCharVector);
     }
 }

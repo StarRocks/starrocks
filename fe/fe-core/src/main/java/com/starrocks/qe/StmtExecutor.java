@@ -518,7 +518,7 @@ public class StmtExecutor {
 
     // Execute one statement.
     // Exception:
-    //  IOException: talk with client failed.
+    // IOException: talk with client failed.
     public void execute() throws Exception {
         long beginTimeInNanoSecond = TimeUtils.getStartTime();
         context.setStmtId(STMT_ID_GENERATOR.incrementAndGet());
@@ -681,7 +681,7 @@ public class StmtExecutor {
                         handleQueryStmt(retryContext.getExecPlan());
                         break;
                     } catch (Exception e) {
-                        // TODO: For Arrow Flight SQL, FE doesn't known whether the client has already pull data from BE,
+                        // For Arrow Flight SQL, FE doesn't know whether the client has already pull data from BE,
                         // so FE cannot decide whether it is able to retry.
                         if (i == retryTime - 1 || context.isArrowFlightSQL()) {
                             throw e;
@@ -1408,7 +1408,6 @@ public class StmtExecutor {
             coord.join(context.getSessionVariable().getQueryTimeoutS());
         }
 
-        // TODO: support statistics for Arrow Flight SQL.
         processQueryStatisticsFromResult(batch, execPlan, isOutfileQuery);
     }
 

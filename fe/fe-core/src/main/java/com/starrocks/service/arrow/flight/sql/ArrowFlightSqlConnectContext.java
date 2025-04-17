@@ -38,6 +38,7 @@ import org.apache.arrow.vector.types.pojo.FieldType;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -61,13 +62,13 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
     // - When the result of a query is taken away, the result will be cleared.
     // - When the result is not taken away for 10 minutes, the result will be cleared.
     // - When a new query arrives, the previous result will be cleared.
-    private final Cache<String, VectorSchemaRoot> resultCache = CacheBuilder.newBuilder()
+    private final Cache<String, ArrowSchemaRootWrapper> resultCache = CacheBuilder.newBuilder()
             .maximumSize(128)
             .expireAfterAccess(10, TimeUnit.MINUTES)
-            .removalListener((RemovalNotification<String, VectorSchemaRoot> notification) -> {
-                VectorSchemaRoot root = notification.getValue();
-                if (root != null) {
-                    root.close();
+            .removalListener((RemovalNotification<String, ArrowSchemaRootWrapper> notification) -> {
+                ArrowSchemaRootWrapper wrapper = notification.getValue();
+                if (wrapper != null) {
+                    wrapper.close();
                 }
             })
             .build();
@@ -100,7 +101,7 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
     }
 
     public Coordinator waitForDeploymentFinished(long timeoutMs)
-            throws ExecutionException, InterruptedException, TimeoutException {
+            throws ExecutionException, InterruptedException, TimeoutException, CancellationException {
         return coordinatorFuture.get(timeoutMs, TimeUnit.MILLISECONDS);
     }
 
@@ -109,7 +110,8 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
     }
 
     public VectorSchemaRoot getResult(String queryId) {
-        return resultCache.getIfPresent(queryId);
+        ArrowSchemaRootWrapper wrapper = resultCache.getIfPresent(queryId);
+        return wrapper != null ? wrapper.getSchemaRoot() : null;
     }
 
     public String getQuery() {
@@ -137,8 +139,9 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
     }
 
     public void setEmptyResultIfNotExist(String queryId) {
-        if (resultCache.size() == 0) {
-            resultCache.put(queryId, ArrowUtil.createSingleSchemaRoot("StatusResult", "0"));
+        if (resultCache.getIfPresent(queryId) == null) {
+            VectorSchemaRoot schemaRoot = ArrowUtil.createSingleSchemaRoot("StatusResult", "0");
+            resultCache.put(queryId, new ArrowSchemaRootWrapper(schemaRoot));
         }
     }
 
@@ -148,11 +151,29 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
         if (executorRef != null) {
             executorRef.cancel(cancelledMessage);
         }
+
+        if (coordinatorFuture != null && coordinatorFuture.isDone()) {
+            try {
+                Coordinator coordinator = coordinatorFuture.getNow(null);
+                if (coordinator != null) {
+                    coordinator.cancel(cancelledMessage);
+                }
+            } catch (Exception e) {
+                // Do nothing.
+            }
+        }
+
         if (isKillConnection) {
             isKilled = true;
+            this.cleanup();
             ExecuteEnv.getInstance().getScheduler().unregisterConnection(this);
         }
+
         removeAllResults();
+
+        if (allocator != null) {
+            allocator.close();
+        }
     }
 
 
@@ -175,15 +196,20 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
             List<String> row = resultData.get(i);
             for (int j = 0; j < row.size(); j++) {
                 String item = row.get(j);
+                System.out.printf("Row %d, Col %d = %s%n", i, j, item);
                 if (item == null || item.equals(FeConstants.NULL_STRING)) {
+                    System.out.printf("Row %d, Col %d is null%n", i, j);
                     dataFields.get(j).setNull(i);
                 } else {
+                    System.out.printf("Row %d, Col %d setSafe = %s%n", i, j, item);
                     ((VarCharVector) dataFields.get(j)).setSafe(i, item.getBytes());
                 }
             }
         }
+        System.out.println("resultData = " + resultData);
 
-        resultCache.put(queryId, new VectorSchemaRoot(schemaFields, dataFields));
+
+        resultCache.put(queryId, new ArrowSchemaRootWrapper(new VectorSchemaRoot(schemaFields, dataFields)));
     }
 
     @Override

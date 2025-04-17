@@ -37,6 +37,8 @@ public class ArrowFlightSqlService {
 
     private final Location feEndpoint;
 
+    private final ArrowFlightSqlServiceImpl producer;
+
     protected volatile boolean running;
 
     public ArrowFlightSqlService(int port) {
@@ -45,6 +47,7 @@ public class ArrowFlightSqlService {
             this.location = null;
             this.flightServer = null;
             this.feEndpoint = null;
+            this.producer = null;
             return;
         }
 
@@ -57,7 +60,7 @@ public class ArrowFlightSqlService {
         ArrowFlightSqlAuthenticator authenticator = new ArrowFlightSqlAuthenticator(sessionManager);
 
         // Request handler: Processing client SQL requests.
-        ArrowFlightSqlServiceImpl producer = new ArrowFlightSqlServiceImpl(sessionManager, feEndpoint);
+        this.producer = new ArrowFlightSqlServiceImpl(sessionManager, feEndpoint);
 
         // Constructs the server object of the Arrow Flight SQL.
         this.flightServer = FlightServer.builder(allocator, location, producer)
@@ -104,6 +107,7 @@ public class ArrowFlightSqlService {
             LOG.info("[ARROW] Stopping Arrow Flight SQL server .");
             flightServer.shutdown();
             flightServer.awaitTermination(1, TimeUnit.SECONDS);
+            producer.close();
         } catch (InterruptedException e) {
             LOG.warn("[ARROW] Interrupted while stopping Arrow Flight SQL server", e);
             Thread.currentThread().interrupt();

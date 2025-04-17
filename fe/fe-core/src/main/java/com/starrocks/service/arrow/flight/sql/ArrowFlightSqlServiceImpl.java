@@ -91,7 +91,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     private final SqlInfoBuilder sqlInfoBuilder;
 
     private final ExecutorService executor = ThreadPoolManager
-            .newDaemonCacheThreadPool(Config.max_mysql_service_task_threads_num, "arrow-flight-pool", true);
+            .newDaemonCacheThreadPool(Config.arrow_max_service_task_threads_num, "arrow-flight-executor", true);
 
     public ArrowFlightSqlServiceImpl(final ArrowFlightSqlSessionManager sessionManager, final Location feEndpoint) {
         this.sessionManager = sessionManager;
@@ -108,17 +108,17 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
                 .withSqlQuotedIdentifierCase(FlightSql.SqlSupportedCaseSensitivity.SQL_CASE_SENSITIVITY_CASE_INSENSITIVE);
     }
 
-    @Override
-    public void close() throws Exception {
-        AutoCloseables.close(rootAllocator);
-    }
-
     /**
      * Since Arrow Flight SQL V17.0.0, the client will send a closeSession RPC to the server.
      * - JDBC: The connection URL includes `?catalog=xxx` and call Connection::close().
      * - ADBC: Connection::close().
      * - Native Java FlightSqlClient: FlightSqlClient::closeSession().
      */
+    @Override
+    public void close() throws Exception {
+        AutoCloseables.close(rootAllocator);
+    }
+
     @Override
     public void closeSession(CloseSessionRequest request, CallContext context, StreamListener<CloseSessionResult> listener) {
         ArrowFlightSqlConnectContext ctx = sessionManager.validateAndGetConnectContext(context.peerIdentity());
@@ -435,7 +435,6 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         VectorSchemaRoot vectorSchemaRoot = ctx.getResult(queryId);
         if (vectorSchemaRoot == null) {
             throw CallStatus.NOT_FOUND.withDescription("cannot find result of the query [" + queryId + "]").toRuntimeException();
-
         }
 
         listener.start(vectorSchemaRoot);
@@ -464,7 +463,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             // DML task will wait until the task is finished and return FE as endpoint.
             // ------------------------------------------------------------------------------------
             if (ctx.returnFromFE()) {
-                processorFinished.wait();
+                processorFinished.get();
                 if (ctx.getState().isError()) {
                     throw new RuntimeException(String.format("failed to process query [queryID=%s] [error=%s]",
                             DebugUtil.printId(ctx.getExecutionId()),
@@ -544,10 +543,9 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             Future<PFetchArrowSchemaResult> resFuture = BackendServiceClient.getInstance().fetchArrowSchema(brpcAddress, request);
             PFetchArrowSchemaResult res = resFuture.get(timeoutMs, TimeUnit.MILLISECONDS);
 
-            RootAllocator rootAllocator = new RootAllocator(Integer.MAX_VALUE);
-            try (ArrowStreamReader reader = new ArrowStreamReader(new ByteArrayInputStream(res.getSchema()), rootAllocator)) {
-                VectorSchemaRoot vectorSchemaRoot = reader.getVectorSchemaRoot();
-                return vectorSchemaRoot.getSchema();
+            try (RootAllocator rootAllocator = new RootAllocator(Integer.MAX_VALUE);
+                    ArrowStreamReader reader = new ArrowStreamReader(new ByteArrayInputStream(res.getSchema()), rootAllocator)) {
+                return reader.getVectorSchemaRoot().getSchema();
             }
         } catch (Exception e) {
             String errorMsg = String.format(
