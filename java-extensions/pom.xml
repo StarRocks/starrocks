@@ -133,6 +133,10 @@
                         <artifactId>zookeeper</artifactId>
                     </exclusion>
                     <exclusion>
+                        <groupId>org.slf4j</groupId>
+                        <artifactId>slf4j-reload4j</artifactId>
+                    </exclusion>
+                    <exclusion>
                         <groupId>org.apache.avro</groupId>
                         <artifactId>avro</artifactId>
                     </exclusion>
@@ -185,6 +189,10 @@
                         <groupId>com.google.protobuf</groupId>
                         <artifactId>protobuf-java</artifactId>
                     </exclusion>
+                    <exclusion>
+                        <groupId>org.slf4j</groupId>
+                        <artifactId>slf4j-reload4j</artifactId>
+                    </exclusion>
                 </exclusions>
             </dependency>
 
@@ -192,6 +200,12 @@
                 <groupId>org.apache.hadoop</groupId>
                 <artifactId>hadoop-kms</artifactId>
                 <version>${hadoop.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.slf4j</groupId>
+                        <artifactId>slf4j-reload4j</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <dependency>
@@ -204,18 +218,36 @@
                 <groupId>org.apache.hadoop</groupId>
                 <artifactId>hadoop-hdfs-httpfs</artifactId>
                 <version>${hadoop.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.slf4j</groupId>
+                        <artifactId>slf4j-reload4j</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <dependency>
                 <groupId>org.apache.hadoop</groupId>
                 <artifactId>hadoop-nfs</artifactId>
                 <version>${hadoop.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.slf4j</groupId>
+                        <artifactId>slf4j-reload4j</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <dependency>
                 <groupId>org.apache.hadoop</groupId>
                 <artifactId>hadoop-hdfs-nfs</artifactId>
                 <version>${hadoop.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.slf4j</groupId>
+                        <artifactId>slf4j-reload4j</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <dependency>
@@ -293,6 +325,11 @@
             <dependency>
                 <groupId>org.apache.logging.log4j</groupId>
                 <artifactId>log4j-core</artifactId>
+                <version>${log4j2.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.logging.log4j</groupId>
+                <artifactId>log4j-slf4j-impl</artifactId>
                 <version>${log4j2.version}</version>
             </dependency>
             <!--log4j 2-->
