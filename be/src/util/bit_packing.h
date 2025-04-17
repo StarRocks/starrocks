@@ -1,6 +1,7 @@
 #pragma once
 
-#include "util/bit_util.h"
+#include <cstdint>
+#include <utility>
 
 namespace starrocks {
 
