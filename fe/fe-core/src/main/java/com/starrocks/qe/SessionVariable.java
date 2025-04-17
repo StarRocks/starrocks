@@ -488,6 +488,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MULTI_COLUMNS_ON_GLOBAL_RUNTIME_FILTER =
             "enable_multicolumn_global_runtime_filter";
 
+    public static final String ENABLE_MULTI_COLUMNS_ON_GLOBAL_RUNTIME_FILTER_V2 =
+            "enable_multicolumn_global_runtime_filter_v2";
+
     // command, file
     public static final String TRACE_LOG_MODE = "trace_log_mode";
     public static final String JOIN_IMPLEMENTATION_MODE = "join_implementation_mode";
@@ -981,8 +984,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_ON_EXCHANGE_NODE)
     private boolean runtimeFilterOnExchangeNode = false;
 
-    @VariableMgr.VarAttr(name = ENABLE_MULTI_COLUMNS_ON_GLOBAL_RUNTIME_FILTER)
-    private boolean enableMultiColumnsOnGlobalRuntimeFilter = false;
+    @VariableMgr.VarAttr(name = ENABLE_MULTI_COLUMNS_ON_GLOBAL_RUNTIME_FILTER_V2, alias =
+            ENABLE_MULTI_COLUMNS_ON_GLOBAL_RUNTIME_FILTER, show = ENABLE_MULTI_COLUMNS_ON_GLOBAL_RUNTIME_FILTER)
+    private boolean enableMultiColumnsOnGlobalRuntimeFilter = true;
 
     @VariableMgr.VarAttr(name = ENABLE_TABLET_INTERNAL_PARALLEL_V2,
             alias = ENABLE_TABLET_INTERNAL_PARALLEL, show = ENABLE_TABLET_INTERNAL_PARALLEL)
