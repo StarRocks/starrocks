@@ -437,6 +437,8 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             throw CallStatus.NOT_FOUND.withDescription("cannot find result of the query [" + queryId + "]").toRuntimeException();
         }
 
+        listener.setOnCancelHandler(ctx::cancelQuery);
+
         listener.start(vectorSchemaRoot);
         listener.putNext();
         listener.completed();
@@ -448,15 +450,21 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         try {
             CompletableFuture<Void> processorFinished = new CompletableFuture<>();
             executor.submit(() -> {
-                StatementBase parsedStmt = parse(ctx.getQuery(), ctx.getSessionVariable());
-                ctx.setStatement(parsedStmt);
-                ctx.setThreadLocalInfo();
+                try {
+                    StatementBase parsedStmt = parse(ctx.getQuery(), ctx.getSessionVariable());
+                    ctx.setStatement(parsedStmt);
+                    ctx.setThreadLocalInfo();
 
-                ArrowFlightSqlConnectProcessor processor = new ArrowFlightSqlConnectProcessor(ctx);
-                processor.processOnce();
+                    ArrowFlightSqlConnectProcessor processor = new ArrowFlightSqlConnectProcessor(ctx);
+                    processor.processOnce();
 
-                ctx.setDeploymentFinished(null);
-                processorFinished.complete(null);
+                    ctx.setDeploymentFinished(null);
+                    processorFinished.complete(null);
+                } catch (Exception e) {
+                    processorFinished.completeExceptionally(e);
+                } catch (Throwable t) {
+                    processorFinished.completeExceptionally(t);
+                }
             });
 
             processorFinished.get();

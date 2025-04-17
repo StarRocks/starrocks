@@ -50,6 +50,8 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
 
     private final String token;
 
+    private StmtExecutor stmtExecutor;
+
     private StatementBase statement;
 
     private String query;
@@ -136,6 +138,16 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
 
     public void removeResult(String queryId) {
         resultCache.invalidate(queryId);
+    }
+
+    public void setStmtExecutor(StmtExecutor stmtExecutor) {
+        this.stmtExecutor = stmtExecutor;
+    }
+
+    public void cancelQuery() {
+        if (stmtExecutor != null) {
+            stmtExecutor.cancel("Arrow Flight SQL client disconnected");
+        }
     }
 
     public void setEmptyResultIfNotExist(String queryId) {
