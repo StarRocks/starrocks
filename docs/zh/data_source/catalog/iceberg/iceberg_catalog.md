@@ -238,6 +238,10 @@ mysql> select * from smith_polaris.`ns1.ns2.tpch_namespace`.tbl;
 3 rows in set (0.34 sec)
 ```
 
+#### S3 Tables
+
+详细信息，参考 [为 AWS S3 表创建 Iceberg REST Catalog](./iceberg_rest_s3.md)。
+
 #### StorageCredentialParams
 
 StarRocks 访问 Iceberg 集群文件存储的相关参数配置。
