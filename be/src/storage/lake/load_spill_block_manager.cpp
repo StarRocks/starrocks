@@ -110,7 +110,7 @@ Status LoadSpillBlockManager::init() {
 }
 
 // acquire Block from BlockManager
-StatusOr<spill::BlockPtr> LoadSpillBlockManager::acquire_block(size_t block_size) {
+StatusOr<spill::BlockPtr> LoadSpillBlockManager::acquire_block(size_t block_size, bool force_remote) {
     spill::AcquireBlockOptions opts;
     opts.query_id = _load_id; // load id as query id
     opts.fragment_instance_id =
@@ -118,6 +118,7 @@ StatusOr<spill::BlockPtr> LoadSpillBlockManager::acquire_block(size_t block_size
     opts.plan_node_id = 0;
     opts.name = "load_spill";
     opts.block_size = block_size;
+    opts.force_remote = force_remote;
     return _block_manager->acquire_block(opts);
 }
 
