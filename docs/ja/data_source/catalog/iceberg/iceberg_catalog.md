@@ -302,6 +302,12 @@ REST catalog 用の `MetastoreParams`:
 必須: いいえ
 説明: Iceberg catalog のウェアハウスの場所または識別子。例: `s3://my_bucket/warehouse_location` または `sandbox`。
 
+##### iceberg.catalog.rest.nested-namespace-enabled
+
+必須: いいえ
+
+説明: 入れ子になった Namespace の下にあるオブジェクトのクエリをサポートするかどうか。デフォルト： `false`。
+
 次の例は、メタストアとして Tabular を使用する Iceberg catalog `tabular` を作成します。
 
 ```SQL
