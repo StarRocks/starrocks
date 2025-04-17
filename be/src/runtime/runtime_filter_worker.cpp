@@ -460,10 +460,10 @@ void RuntimeFilterMerger::store_skew_broadcast_join_runtime_filter(PTransmitRunt
         auto it = _statuses.find(filter_id);
         if (it == _statuses.end()) return;
         status = &(it->second);
-        // some instance of broadcast join already rf, we only need to store the first one.
-        if (status->skew_broadcast_rf_material != nullptr) return;
-
-        if (status->stop) {
+        // 1. some instance of broadcast join already rf, we only need to store the first one.
+        // 2. if status is stop, we don't need to store rf.
+        // 3. if it's not skew join, skip it
+        if (status->skew_broadcast_rf_material != nullptr || status->stop || !status->is_skew_join) {
             return;
         }
     }

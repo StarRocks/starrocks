@@ -1,4 +1,4 @@
--- name: test_skew_join
+-- name: test_v2_skew_join
 
 CREATE TABLE t1 (
     c_key      INT NOT NULL,
