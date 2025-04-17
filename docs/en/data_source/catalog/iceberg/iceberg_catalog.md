@@ -302,6 +302,11 @@ Description: Whether to use credentials provided by REST backend for file system
 Required: No
 Description: The warehouse location or identifier of the Iceberg catalog. Example: `s3://my_bucket/warehouse_location` or `sandbox`.
 
+##### iceberg.catalog.rest.nested-namespace-enabled
+
+Required: No
+
+Support querying objects under nested namespace. Default: `false`.
 
 
 The following example creates an Iceberg catalog named `tabular` that uses Tabular as metastore:
