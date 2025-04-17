@@ -105,7 +105,32 @@ public class SubfieldPushDownThroughTableFunctionTest extends PlanTestNoneDBBase
                 "PROPERTIES (\n" +
                 "  \"replication_num\" = \"1\"\n" +
                 ");";
+
+        String createTableSql2 = " CREATE TABLE `t2` (\n" +
+                "  `id` bigint(20) NOT NULL COMMENT \"\",\n" +
+                "  `col0` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `col1` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `col2` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `col3` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `col4` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `col5` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `col6` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `col7` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `col8` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `col9` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `col10` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `col11` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `col12` int(11) NULL COMMENT \"\",\n" +
+                "  `col13` varchar(65533) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP \n" +
+                "PRIMARY KEY(`id`)\n" +
+                "COMMENT \"\"\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 3 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
         starRocksAssert.withTable(createTableSql1);
+        starRocksAssert.withTable(createTableSql2);
     }
 
     @Test
@@ -225,13 +250,56 @@ public class SubfieldPushDownThroughTableFunctionTest extends PlanTestNoneDBBase
         System.out.println(plan);
         assertCContains(plan, "  13:Project\n" +
                 "  |  <slot 9> : 9: col_project\n" +
-                "  |  <slot 21> : 9: col_project.col_title[true]\n" +
-                "  |  <slot 22> : 14: col_batches.col_batch_name[false]");
+                "  |  <slot 21> : 28: expr\n" +
+                "  |  <slot 22> : 29: expr");
 
         Map<Integer, Set<Integer>> expectOuterCols = Maps.newHashMap();
-        expectOuterCols.put(7, ImmutableSet.of(9));
-        expectOuterCols.put(9, ImmutableSet.of(9, 14));
-        expectOuterCols.put(12, ImmutableSet.of(9, 14));
+        expectOuterCols.put(7, ImmutableSet.of(9, 28));
+        expectOuterCols.put(9, ImmutableSet.of(9, 28, 29, 30));
+        expectOuterCols.put(12, ImmutableSet.of(9, 28, 29));
+        checkTableFunctionOuterCols(sql, expectOuterCols);
+    }
+
+    @Test
+    public void test4() throws Exception {
+        String sql = "select\n" +
+                "  col0\n" +
+                " ,col1\n" +
+                " ,col2\n" +
+                " ,col3\n" +
+                " ,col4\n" +
+                " ,col5\n" +
+                " ,col6\n" +
+                " ,col7\n" +
+                " ,col8\n" +
+                " ,col9\n" +
+                " ,col10\n" +
+                " ,split(col6,'-')[2] as end_col6\n" +
+                " ,t.unnest as day_week\n" +
+                " ,case when t.unnest=7 then 1\n" +
+                "       else t.unnest+1 end new_day_week\n" +
+                " from t2, UNNEST(split(col11,'-')) AS t\n" +
+                " where col12=1\n" +
+                " and coalesce(col13,'UPDATE')<>'DELETE;";
+
+        String plan = UtFrameUtils.getFragmentPlan(connectContext, sql);
+        assertCContains(plan, "  1:Project\n" +
+                "  |  <slot 2> : 2: col0\n" +
+                "  |  <slot 3> : 3: col1\n" +
+                "  |  <slot 4> : 4: col2\n" +
+                "  |  <slot 5> : 5: col3\n" +
+                "  |  <slot 6> : 6: col4\n" +
+                "  |  <slot 7> : 7: col5\n" +
+                "  |  <slot 8> : 8: col6\n" +
+                "  |  <slot 9> : 9: col7\n" +
+                "  |  <slot 10> : 10: col8\n" +
+                "  |  <slot 11> : 11: col9\n" +
+                "  |  <slot 12> : 12: col10\n" +
+                "  |  <slot 17> : split(13: col11, '-')\n" +
+                "  |  <slot 20> : split(8: col6, '-')[2]");
+
+        Map<Integer, Set<Integer>> expectOuterCols = Maps.newHashMap();
+        expectOuterCols.put(2, ImmutableSet.of(2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 20));
         checkTableFunctionOuterCols(sql, expectOuterCols);
     }
 
