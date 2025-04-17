@@ -48,6 +48,9 @@ private:
     // Freeze current block and append it to block container
     Status _freeze_current_block();
 
+    // Switch to remote block when local disk is full
+    Status _switch_to_remote_block(size_t block_size);
+
 private:
     LoadSpillBlockManager* _block_manager = nullptr;
     spill::BlockPtr _block;
