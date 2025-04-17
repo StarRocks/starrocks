@@ -306,7 +306,7 @@ Description: The warehouse location or identifier of the Iceberg catalog. Exampl
 
 Required: No
 
-Support querying objects under nested namespace. Default: `false`.
+Description: Whether to support querying objects under nested namespace. Default: `false`.
 
 
 The following example creates an Iceberg catalog named `tabular` that uses Tabular as metastore:
