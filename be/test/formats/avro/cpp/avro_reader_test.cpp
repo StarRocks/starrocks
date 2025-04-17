@@ -33,6 +33,38 @@ public:
         std::string starrocks_home = getenv("STARROCKS_HOME");
         _test_exec_dir = starrocks_home + "/be/test/formats/test_data/avro/cpp/";
         _counter = _obj_pool.add(new ScannerCounter());
+        _state = create_runtime_state();
+    }
+
+    ChunkPtr create_src_chunk(const std::vector<SlotDescriptor*>& slot_descs) {
+        auto chunk = std::make_shared<Chunk>();
+        for (auto* slot_desc : slot_descs) {
+            auto column = ColumnHelper::create_column(slot_desc->type(), true, false, 0, true);
+            chunk->append_column(std::move(column), slot_desc->id());
+        }
+        return chunk;
+    }
+
+    void materialize_src_chunk_adaptive_nullable_column(ChunkPtr& chunk) {
+        chunk->materialized_nullable();
+        for (int i = 0; i < chunk->num_columns(); i++) {
+            AdaptiveNullableColumn* adaptive_column =
+                    down_cast<AdaptiveNullableColumn*>(chunk->get_column_by_index(i).get());
+            chunk->update_column_by_index(NullableColumn::create(adaptive_column->materialized_raw_data_column(),
+                                                                 adaptive_column->materialized_raw_null_column()),
+                                          i);
+        }
+    }
+
+    std::vector<avrocpp::ColumnReaderUniquePtr> create_column_readers(const std::vector<SlotDescriptor*>& slot_descs,
+                                                                      const cctz::time_zone& timezone,
+                                                                      bool invalid_as_null) {
+        std::vector<avrocpp::ColumnReaderUniquePtr> column_readers;
+        for (auto* slot_desc : slot_descs) {
+            column_readers.emplace_back(avrocpp::ColumnReader::get_nullable_column_reader(
+                    slot_desc->col_name(), slot_desc->type(), timezone, invalid_as_null));
+        }
+        return column_readers;
     }
 
     AvroReaderUniquePtr create_avro_reader(const std::string& filename) {
@@ -40,13 +72,24 @@ public:
         CHECK_OK(file_or.status());
 
         auto avro_reader = std::make_unique<AvroReader>();
-        auto st = avro_reader->init(
-                std::make_unique<AvroBufferInputStream>(std::move(file_or.value()), 1048576, _counter));
-        CHECK_OK(st);
+        CHECK_OK(avro_reader->init(
+                std::make_unique<AvroBufferInputStream>(std::move(file_or.value()), 1048576, _counter), filename,
+                _state.get(), _counter, nullptr, nullptr, true));
         return avro_reader;
     }
 
 private:
+    std::shared_ptr<RuntimeState> create_runtime_state() {
+        TQueryOptions query_options;
+        TUniqueId fragment_id;
+        TQueryGlobals query_globals;
+        std::shared_ptr<RuntimeState> state =
+                std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, ExecEnv::GetInstance());
+        TUniqueId id;
+        state->init_mem_trackers(id);
+        return state;
+    }
+
     std::string _test_exec_dir;
     ObjectPool _obj_pool;
     ScannerCounter* _counter;
@@ -167,6 +210,152 @@ TEST_F(AvroReaderTest, test_get_schema_logical_types) {
     ASSERT_EQ("BIGINT", schema[9].type().debug_string());
     ASSERT_EQ("duration", schema[10].col_name());
     ASSERT_EQ("VARBINARY(12)", schema[10].type().debug_string());
+}
+
+TEST_F(AvroReaderTest, test_read_primitive_types) {
+    std::string filename = "primitive.avro";
+    std::vector<SlotDescriptor*> slot_descs;
+    std::vector<avrocpp::ColumnReaderUniquePtr> column_readers;
+    bool column_not_found_as_null = false;
+    int rows_to_read = 2;
+
+    // init reader for read
+    auto reader = create_avro_reader(filename);
+
+    std::vector<SlotDescriptor> tmp_slot_descs;
+    ASSERT_OK(reader->get_schema(&tmp_slot_descs));
+
+    for (auto& slot_desc : tmp_slot_descs) {
+        slot_descs.emplace_back(&slot_desc);
+    }
+
+    column_readers = create_column_readers(slot_descs, cctz::utc_time_zone(), false);
+    reader->TEST_init(&slot_descs, &column_readers, column_not_found_as_null);
+
+    // create chunk
+    auto chunk = create_src_chunk(slot_descs);
+
+    // read data
+    ASSERT_OK(reader->read_chunk(chunk, rows_to_read));
+    materialize_src_chunk_adaptive_nullable_column(chunk);
+    ASSERT_EQ(1, chunk->num_rows());
+    ASSERT_EQ("[NULL, 1, 123, 1234567890123, 3.14, 2.71828, 'abc', 'hello avro']", chunk->debug_row(0));
+
+    chunk = create_src_chunk(slot_descs);
+    auto st = reader->read_chunk(chunk, rows_to_read);
+    ASSERT_TRUE(st.is_end_of_file());
+}
+
+TEST_F(AvroReaderTest, test_read_complex_types) {
+    std::string filename = "complex.avro";
+    std::vector<SlotDescriptor*> slot_descs;
+    std::vector<avrocpp::ColumnReaderUniquePtr> column_readers;
+    bool column_not_found_as_null = false;
+    int rows_to_read = 2;
+
+    // init reader for read
+    auto reader = create_avro_reader(filename);
+
+    std::vector<SlotDescriptor> tmp_slot_descs;
+    ASSERT_OK(reader->get_schema(&tmp_slot_descs));
+
+    for (auto& slot_desc : tmp_slot_descs) {
+        slot_descs.emplace_back(&slot_desc);
+    }
+
+    column_readers = create_column_readers(slot_descs, cctz::utc_time_zone(), false);
+    reader->TEST_init(&slot_descs, &column_readers, column_not_found_as_null);
+
+    // create chunk
+    auto chunk = create_src_chunk(slot_descs);
+
+    // read data
+    ASSERT_OK(reader->read_chunk(chunk, rows_to_read));
+    materialize_src_chunk_adaptive_nullable_column(chunk);
+    ASSERT_EQ(1, chunk->num_rows());
+    ASSERT_EQ("[{id:1,name:'avro'}, 'HEARTS', ['one','two','three'], {'a':1,'b':2}, 100, 'abababababababab']",
+              chunk->debug_row(0));
+
+    chunk = create_src_chunk(slot_descs);
+    auto st = reader->read_chunk(chunk, rows_to_read);
+    ASSERT_TRUE(st.is_end_of_file());
+}
+
+TEST_F(AvroReaderTest, test_read_complex_nest_types) {
+    std::string filename = "complex_nest.avro";
+    std::vector<SlotDescriptor*> slot_descs;
+    std::vector<avrocpp::ColumnReaderUniquePtr> column_readers;
+    bool column_not_found_as_null = false;
+    int rows_to_read = 2;
+
+    // init reader for read
+    auto reader = create_avro_reader(filename);
+
+    std::vector<SlotDescriptor> tmp_slot_descs;
+    ASSERT_OK(reader->get_schema(&tmp_slot_descs));
+
+    for (auto& slot_desc : tmp_slot_descs) {
+        slot_descs.emplace_back(&slot_desc);
+    }
+
+    column_readers = create_column_readers(slot_descs, cctz::utc_time_zone(), false);
+    reader->TEST_init(&slot_descs, &column_readers, column_not_found_as_null);
+
+    // create chunk
+    auto chunk = create_src_chunk(slot_descs);
+
+    // read data
+    ASSERT_OK(reader->read_chunk(chunk, rows_to_read));
+    materialize_src_chunk_adaptive_nullable_column(chunk);
+    ASSERT_EQ(1, chunk->num_rows());
+    ASSERT_EQ(
+            "[{inner:{val:123}}, {list:[1,2,3]}, {dict:{'a':'x','b':'y'}}, [{value:'one'},{value:'two'}], "
+            "[[1,2],[3,4]], [{'a':1,'b':2},{'c':3}], {'r1':{id:10},'r2':{id:20}}, {'nums':[5,6,7]}, "
+            "{'outer':{'inner':'val'}}, {entries:[{flag:1},{flag:0}]}, {entries:[{'x':'1'},{'y':'2'}]}, "
+            "[{'one':{ok:1}},{'two':{ok:0}}], {'group':[{score:99.9},{score:88.8}]}]",
+            chunk->debug_row(0));
+
+    chunk = create_src_chunk(slot_descs);
+    auto st = reader->read_chunk(chunk, rows_to_read);
+    ASSERT_TRUE(st.is_end_of_file());
+}
+
+TEST_F(AvroReaderTest, test_read_logical_types) {
+    std::string filename = "logical.avro";
+    std::vector<SlotDescriptor*> slot_descs;
+    std::vector<avrocpp::ColumnReaderUniquePtr> column_readers;
+    bool column_not_found_as_null = false;
+    int rows_to_read = 2;
+
+    // init reader for read
+    auto reader = create_avro_reader(filename);
+
+    std::vector<SlotDescriptor> tmp_slot_descs;
+    ASSERT_OK(reader->get_schema(&tmp_slot_descs));
+
+    // add the last duration type column ut later
+    for (int i = 0; i < tmp_slot_descs.size() - 1; ++i) {
+        slot_descs.emplace_back(&tmp_slot_descs[i]);
+    }
+
+    column_readers = create_column_readers(slot_descs, cctz::utc_time_zone(), false);
+    reader->TEST_init(&slot_descs, &column_readers, column_not_found_as_null);
+
+    // create chunk
+    auto chunk = create_src_chunk(slot_descs);
+
+    // read data
+    ASSERT_OK(reader->read_chunk(chunk, rows_to_read));
+    materialize_src_chunk_adaptive_nullable_column(chunk);
+    ASSERT_EQ(1, chunk->num_rows());
+    ASSERT_EQ(
+            "[1234.56, 1234.56, '61ed1775-2ce2-4f88-8352-1da6847512d6', 2025-04-11, 55543806, 55543806481, "
+            "2025-04-11 07:25:43.806000, 2025-04-11 07:25:43.806481, 1744356343806, 1744356343806481]",
+            chunk->debug_row(0));
+
+    chunk = create_src_chunk(slot_descs);
+    auto st = reader->read_chunk(chunk, rows_to_read);
+    ASSERT_TRUE(st.is_end_of_file());
 }
 
 } // namespace starrocks
