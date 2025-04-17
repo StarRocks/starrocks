@@ -198,11 +198,11 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
             String respStr = Objects.requireNonNull(response.body()).string();
             JSONObject jsonObject = new JSONObject(respStr);
             System.out.println(respStr);
-            Assert.assertEquals(500, jsonObject.getInt("status"));
+            Assert.assertEquals(404, jsonObject.getInt("status"));
             String exception = jsonObject.getString("exception");
             Assert.assertNotNull(exception);
             Assert.assertTrue(
-                    exception.startsWith("Invalid SQL:  select k1 from testDb.testTbl "));
+                    exception.startsWith("Warehouse [invalid_warehouse] does not exist"));
         }
     }
 }
