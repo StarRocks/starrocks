@@ -41,6 +41,7 @@ import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.IcebergTable;
@@ -1163,6 +1164,16 @@ public class MaterializedViewAnalyzer {
                             "must be base table partition column");
                 }
                 partitionColumns.forEach(partitionColumn1 -> checkPartitionColumnType(partitionColumn1));
+                // disable from_unix_time/cast for creating materialized view
+                if (rangePartitionInfo instanceof ExpressionRangePartitionInfoV2) {
+                    ExpressionRangePartitionInfoV2 rangePartitionInfoV2 = (ExpressionRangePartitionInfoV2) rangePartitionInfo;
+                    if (rangePartitionInfoV2.getPartitionColumnIdExprs().size() != 1) {
+                        throw new SemanticException("Materialized view related base table partition columns " +
+                                "only supports single column");
+                    }
+                    Expr partitionColumnExpr = rangePartitionInfoV2.getPartitionColumnIdExprs().get(0).getExpr();
+                    checkBaseTableSupportedPartitionFunc(partitionColumnExpr, table);
+                }
             } else if (partitionInfo.isListPartition()) {
                 ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
                 Set<String> partitionColumns = listPartitionInfo.getPartitionColumns(table.getIdToColumn()).stream()
@@ -1176,6 +1187,30 @@ public class MaterializedViewAnalyzer {
             } else {
                 throw new SemanticException("Materialized view related base table partition type: " +
                         partitionInfo.getType().name() + " not supports");
+            }
+        }
+
+        /**
+         * Check if the partition function of base table is supported.
+         * @param partitionByExpr : base table's partition function
+         * @param table : base table
+         */
+        private void checkBaseTableSupportedPartitionFunc(Expr partitionByExpr,
+                                                          OlapTable table) {
+            if (partitionByExpr instanceof SlotRef) {
+                // do nothing
+            } else if (partitionByExpr instanceof FunctionCallExpr) {
+                FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionByExpr;
+                String functionName = functionCallExpr.getFnName().getFunction();
+                if (!PartitionFunctionChecker.FN_NAME_TO_PATTERN.containsKey(functionName)) {
+                    throw new SemanticException(String.format("Materialized view partition function derived from " +
+                            functionName + " of base table %s is not supported yet", table.getName()),
+                            functionCallExpr.getPos());
+                }
+            } else {
+                throw new SemanticException(String.format("Materialized view partition function derived from " +
+                        partitionByExpr.toSql() + " of base table %s is not supported yet", table.getName()),
+                        partitionByExpr.getPos());
             }
         }
 
