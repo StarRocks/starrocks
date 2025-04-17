@@ -16,118 +16,178 @@ package com.starrocks.authentication;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
-import com.starrocks.common.ConfigBase;
 import com.starrocks.common.ErrorCode;
+import com.starrocks.common.Pair;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class AuthenticationHandler {
     private static final Logger LOG = LogManager.getLogger(AuthenticationHandler.class);
 
-    public static UserIdentity authenticate(ConnectContext context, String user, String remoteHost,
-                                            byte[] authResponse) throws AuthenticationException {
-        String usePasswd = authResponse.length == 0 ? "NO" : "YES";
+    public static UserIdentity authenticate(ConnectContext context, String user, String remoteHost, byte[] authResponse)
+            throws AuthenticationException {
         if (user == null || user.isEmpty()) {
-            throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, "", usePasswd);
+            throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, "", authResponse.length == 0 ? "NO" : "YES");
         }
 
+        /*
+         * authentication in Native first, and then check Security Integration if it does not exist internally.
+         * If you check Security Integration first, it may cause internal users to wait too long.
+         * For example, a meaningless authentication of OAuth2 may cause a long wait.
+         */
+        AuthenticationResult authenticationResult;
+        authenticationResult = authenticateWithNative(context, user, remoteHost, authResponse);
+
+        // If the user does not exist in the native authentication method, authentication is performed in Security Integration
+        if (authenticationResult == null) {
+            authenticationResult = authenticateWithSecurityIntegration(context, user, remoteHost, authResponse);
+        }
+
+        if (authenticationResult == null) {
+            throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, user, authResponse.length == 0 ? "NO" : "YES");
+        }
+
+        setAuthenticationResultToContext(context, authenticationResult);
+        return authenticationResult.authenticatedUser;
+    }
+
+    private static AuthenticationResult authenticateWithNative(ConnectContext context, String user, String remoteHost,
+                                                               byte[] authResponse)
+            throws AuthenticationException {
         AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
 
-        UserIdentity authenticatedUser = null;
-        List<String> groupProviderName = null;
-        List<String> authenticatedGroupList = null;
-
-        if (Config.enable_auth_check) {
-            Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
-                    authenticationMgr.getBestMatchedUserIdentity(user, remoteHost);
-            if (matchedUserIdentity == null) {
+        Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
+                authenticationMgr.getBestMatchedUserIdentity(user, remoteHost);
+        if (matchedUserIdentity == null) {
+            if (Config.enable_auth_check) {
                 LOG.debug("cannot find user {}@{}", user, remoteHost);
+                return null;
             } else {
-                AuthenticationProvider provider = AuthenticationProviderFactory.create(
-                        matchedUserIdentity.getValue().getAuthPlugin(),
-                        matchedUserIdentity.getValue().getAuthString());
-                Preconditions.checkState(provider != null);
-                authenticatedUser = provider.authenticate(context, user, remoteHost, authResponse);
-                groupProviderName = List.of(Config.group_provider);
-            }
-
-            if (authenticatedUser == null) {
-                String[] authChain = Config.authentication_chain;
-                for (String authMechanism : authChain) {
-                    if (authenticatedUser != null) {
-                        break;
-                    }
-
-                    SecurityIntegration securityIntegration = authenticationMgr.getSecurityIntegration(authMechanism);
-                    if (securityIntegration == null) {
-                        continue;
-                    }
-
-                    try {
-                        AuthenticationProvider provider = securityIntegration.getAuthenticationProvider();
-                        authenticatedUser = provider.authenticate(context, user, remoteHost, authResponse);
-                        // the ephemeral user is identified as 'username'@'auth_mechanism'
-                        authenticatedUser = UserIdentity.createEphemeralUserIdent(user, securityIntegration.getName());
-
-                        groupProviderName = securityIntegration.getGroupProviderName();
-                        if (groupProviderName == null) {
-                            groupProviderName = List.of(Config.group_provider);
-                        }
-
-                        authenticatedGroupList = securityIntegration.getGroupAllowedLoginList();
-                    } catch (AuthenticationException e) {
-                        LOG.debug("failed to authenticate, user: {}@{}, security integration: {}, error: {}",
-                                user, remoteHost, securityIntegration, e.getMessage());
-                    }
-                }
+                LOG.info("enable_auth_check is false, but cannot find user '{}'@'{}'", user, remoteHost);
+                throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, user,
+                        authResponse.length == 0 ? "NO" : "YES");
             }
         } else {
-            Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
-                    authenticationMgr.getBestMatchedUserIdentity(user, remoteHost);
-            if (matchedUserIdentity == null) {
-                LOG.info("enable_auth_check is false, but cannot find user '{}'@'{}'", user, remoteHost);
-                throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, user, usePasswd);
+            AuthenticationProvider provider;
+            if (matchedUserIdentity.getValue().getAuthPlugin().equalsIgnoreCase(AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.name())) {
+                provider = AuthenticationProviderFactory.create(matchedUserIdentity.getValue().getAuthPlugin(),
+                        new String(matchedUserIdentity.getValue().getPassword(), StandardCharsets.UTF_8));
             } else {
-                authenticatedUser = matchedUserIdentity.getKey();
-                groupProviderName = List.of(Config.group_provider);
+                provider = AuthenticationProviderFactory.create(
+                        matchedUserIdentity.getValue().getAuthPlugin(), matchedUserIdentity.getValue().getAuthString());
             }
+
+            Preconditions.checkState(provider != null);
+
+            if (Config.enable_auth_check) {
+                //Throw an exception directly and feedback to the client
+                provider.authenticate(context, user, remoteHost, authResponse);
+            }
+
+            return new AuthenticationResult(matchedUserIdentity.getKey(), List.of(Config.group_provider), null);
+        }
+    }
+
+    private static AuthenticationResult authenticateWithSecurityIntegration(ConnectContext context,
+                                                                            String user,
+                                                                            String remoteHost,
+                                                                            byte[] authResponse) throws AuthenticationException {
+        List<Pair<String, AuthenticationException>> exceptions = Lists.newArrayList();
+        AuthenticationResult authenticationResult = null;
+        AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+
+        String[] authChain = Config.authentication_chain;
+        for (String authMechanism : authChain) {
+            if (authenticationResult != null) {
+                break;
+            }
+
+            SecurityIntegration securityIntegration = authenticationMgr.getSecurityIntegration(authMechanism);
+            if (securityIntegration == null) {
+                continue;
+            }
+
+            if (!Objects.requireNonNull(AuthPlugin.covertFromServerToClient(securityIntegration.getType()))
+                    .equalsIgnoreCase(context.getAuthPlugin())) {
+                continue;
+            }
+
+            AuthenticationProvider provider = securityIntegration.getAuthenticationProvider();
+            try {
+                provider.authenticate(context, user, remoteHost, authResponse);
+            } catch (AuthenticationException e) {
+                exceptions.add(new Pair<>(authMechanism, e));
+                continue;
+            }
+
+            authenticationResult = new AuthenticationResult(
+                    UserIdentity.createEphemeralUserIdent(user, remoteHost),
+                    securityIntegration.getGroupProviderName() == null ?
+                            List.of(Config.group_provider) : securityIntegration.getGroupProviderName(),
+                    securityIntegration.getGroupAllowedLoginList());
         }
 
-        if (authenticatedUser == null) {
-            throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, user, usePasswd);
+        if (authenticationResult == null && !exceptions.isEmpty()) {
+            throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL_IN_AUTH_CHAIN,
+                    Joiner.on(", ").join(exceptions.stream().map(e -> e.first + ": " + e.second.getMessage())
+                            .collect(Collectors.toList())));
         }
 
-        context.setCurrentUserIdentity(authenticatedUser);
-        if (!authenticatedUser.isEphemeral()) {
-            context.setCurrentRoleIds(authenticatedUser);
+        return authenticationResult;
+    }
 
-            UserProperty userProperty =
-                    GlobalStateMgr.getCurrentState().getAuthenticationMgr().getUserProperty(authenticatedUser.getUser());
+    private static void setAuthenticationResultToContext(ConnectContext context, AuthenticationResult authenticationResult)
+            throws AuthenticationException {
+        String user = authenticationResult.authenticatedUser.getUser();
+
+        context.setCurrentUserIdentity(authenticationResult.authenticatedUser);
+        if (!authenticationResult.authenticatedUser.isEphemeral()) {
+            context.setCurrentRoleIds(authenticationResult.authenticatedUser);
+
+            UserProperty userProperty = GlobalStateMgr.getCurrentState().getAuthenticationMgr()
+                    .getUserProperty(authenticationResult.authenticatedUser.getUser());
             context.updateByUserProperty(userProperty);
         }
         context.setQualifiedUser(user);
 
-        Set<String> groups = getGroups(authenticatedUser, groupProviderName);
+        Set<String> groups = getGroups(authenticationResult.authenticatedUser, authenticationResult.groupProviderName);
         context.setGroups(groups);
 
-        if (authenticatedGroupList != null && !authenticatedGroupList.isEmpty()) {
+        if (authenticationResult.authenticatedGroupList != null && !authenticationResult.authenticatedGroupList.isEmpty()) {
             Set<String> intersection = new HashSet<>(groups);
-            intersection.retainAll(authenticatedGroupList);
+            intersection.retainAll(authenticationResult.authenticatedGroupList);
             if (intersection.isEmpty()) {
                 throw new AuthenticationException(ErrorCode.ERR_GROUP_ACCESS_DENY, user, Joiner.on(",").join(groups));
             }
         }
+    }
 
-        return authenticatedUser;
+    private static class AuthenticationResult {
+        private UserIdentity authenticatedUser = null;
+        private List<String> groupProviderName = null;
+        private List<String> authenticatedGroupList = null;
+
+        public AuthenticationResult(UserIdentity authenticatedUser,
+                                    List<String> groupProviderName,
+                                    List<String> authenticatedGroupList) {
+            this.authenticatedUser = authenticatedUser;
+            this.groupProviderName = groupProviderName;
+            this.authenticatedGroupList = authenticatedGroupList;
+        }
     }
 
     public static Set<String> getGroups(UserIdentity userIdentity, List<String> groupProviderList) {

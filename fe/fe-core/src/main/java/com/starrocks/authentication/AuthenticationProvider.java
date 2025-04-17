@@ -15,26 +15,17 @@
 package com.starrocks.authentication;
 
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.UserAuthOption;
-import com.starrocks.sql.ast.UserIdentity;
 
 public interface AuthenticationProvider {
 
     /**
-     * valid authentication info, and initialize the UserAuthenticationInfo structure
-     * used when creating a user or modifying user's authentication information
-     */
-    UserAuthenticationInfo analyzeAuthOption(
-            UserIdentity userIdentity, UserAuthOption userAuthOption) throws AuthenticationException;
-
-    /**
      * login authentication
      */
-    UserIdentity authenticate(
+    void authenticate(
             ConnectContext context,
             String user,
             String host,
-            byte[] password) throws AuthenticationException;
+            byte[] authResponse) throws AuthenticationException;
 
     /**
      * Some special Authentication Methods need to pass more information, and authMoreDataPacket is a unified interface.

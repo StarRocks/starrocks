@@ -16,7 +16,6 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Enums;
 import com.google.common.base.Joiner;
-import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
@@ -25,8 +24,6 @@ import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
-import com.starrocks.authentication.AuthenticationException;
-import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.IndexParams;
@@ -58,7 +55,6 @@ import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetUserPropertyVar;
 import com.starrocks.sql.ast.SystemVariable;
-import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValuesRelation;
@@ -465,15 +461,7 @@ public class SetStmtAnalyzer {
                     userIdentity + ", AuthPlugin: " + userAuthenticationInfo.getAuthPlugin());
         }
 
-        UserAuthOption authOption = var.getAuthOption();
-        AuthenticationProvider provider = AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.getProvider(authOption.getAuthString());
-        try {
-            Preconditions.checkNotNull(provider);
-            UserAuthenticationInfo analyzedAuthInfo = provider.analyzeAuthOption(userIdentity, authOption);
-            var.setUserAuthenticationInfo(analyzedAuthInfo);
-        } catch (AuthenticationException e) {
-            throw new SemanticException(e.getMessage());
-        }
+        var.setUserAuthenticationInfo(UserAuthOptionAnalyzer.analyzeAuthOption(userIdentity, var.getAuthOption()));
     }
 
     private static boolean checkUserVariableType(Type type) {
