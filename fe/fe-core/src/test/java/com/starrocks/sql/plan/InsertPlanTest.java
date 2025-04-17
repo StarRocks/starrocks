@@ -50,6 +50,8 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 public class InsertPlanTest extends PlanTestBase {
@@ -1026,5 +1028,53 @@ public class InsertPlanTest extends PlanTestBase {
                 "     cardinality=1\n" +
                 "     avgRowSize=2.0\n";
         Assert.assertEquals(expected, actual);
+    }
+
+    public static boolean hasUnixTimestamp(String plan) {
+        Pattern pattern = Pattern.compile("<slot 3>\\s*:\\s*'\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\'");
+        Matcher matcher = pattern.matcher(plan);
+        return matcher.find();
+    }
+
+    public static boolean hasMicroseconds(String plan) {
+        Pattern pattern = Pattern.compile("<slot 2>\\s*:\\s*'\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{6}'");
+        Matcher matcher = pattern.matcher(plan);
+        return matcher.find();
+    }
+
+    @Test
+    public void testInsertCurrentTimestamp_DefaultValue() throws Exception {
+        String sql = "CREATE TABLE `test_create_default_current_timestamp` (\n" +
+                "    k1 int,\n" +
+                "    ts datetime NOT NULL DEFAULT CURRENT_TIMESTAMP\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"in_memory\" = \"false\"\n" +
+                ");";
+        starRocksAssert.withTable(sql);
+        String explainString = getInsertExecPlan("insert into test_create_default_current_timestamp(k1) values(1)");
+        Assert.assertTrue(hasUnixTimestamp(explainString));
+    }
+
+    @Test
+    public void testInsertCurrentTimestamp6_DefaultValue() throws Exception {
+        String sql = "CREATE TABLE `test_create_default_current_timestamp_6` (\n" +
+                "    k1 int,\n" +
+                "    ts datetime NOT NULL DEFAULT CURRENT_TIMESTAMP(6)\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"in_memory\" = \"false\"\n" +
+                ");";
+        starRocksAssert.withTable(sql);
+        String explainString = getInsertExecPlan("insert into test_create_default_current_timestamp_6(k1) values(1)");
+        Assert.assertTrue(hasMicroseconds(explainString));
     }
 }
