@@ -238,14 +238,6 @@ public class AstToStringBuilder {
                 return sb;
             }
 
-            if (!Strings.isNullOrEmpty(authOption.getPassword())) {
-                if (authOption.isPasswordPlain()) {
-                    sb.append(" IDENTIFIED BY '").append("*XXX").append("'");
-                } else {
-                    sb.append(" IDENTIFIED BY PASSWORD '").append(authOption.getPassword()).append("'");
-                }
-            }
-
             if (!Strings.isNullOrEmpty(authOption.getAuthPlugin())) {
                 sb.append(" IDENTIFIED WITH ").append(authOption.getAuthPlugin());
                 if (!Strings.isNullOrEmpty(authOption.getAuthString())) {
@@ -255,6 +247,14 @@ public class AstToStringBuilder {
                         sb.append(" AS '");
                     }
                     sb.append(authOption.getAuthString()).append("'");
+                }
+            } else {
+                if (!Strings.isNullOrEmpty(authOption.getAuthString())) {
+                    if (authOption.isPasswordPlain()) {
+                        sb.append(" IDENTIFIED BY '").append("*XXX").append("'");
+                    } else {
+                        sb.append(" IDENTIFIED BY PASSWORD '").append(authOption.getAuthString()).append("'");
+                    }
                 }
             }
             return sb;

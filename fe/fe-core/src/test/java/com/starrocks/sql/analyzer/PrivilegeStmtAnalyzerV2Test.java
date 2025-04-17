@@ -97,7 +97,7 @@ public class PrivilegeStmtAnalyzerV2Test {
         stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Assert.assertEquals("test", stmt.getUserIdentity().getUser());
         Assert.assertEquals("%", stmt.getUserIdentity().getHost());
-        Assert.assertEquals("abc", stmt.getAuthOption().getPassword());
+        Assert.assertEquals("abc", stmt.getAuthOption().getAuthString());
 
         sql = "create user 'aaa~bbb'";
         try {
@@ -251,7 +251,7 @@ public class PrivilegeStmtAnalyzerV2Test {
         AlterUserStmt alterUserStmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Assert.assertEquals("test_user", alterUserStmt.getUserIdentity().getUser());
         Assert.assertEquals("%", alterUserStmt.getUserIdentity().getHost());
-        Assert.assertEquals("abc", alterUserStmt.getAuthOption().getPassword());
+        Assert.assertEquals("abc", alterUserStmt.getAuthOption().getAuthString());
 
         sql = "alter user 'test'@'10.1.1.1' identified by 'abc'";
         try {

@@ -33,10 +33,12 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
      * <p>
      * The rules are hard-coded for temporary, will change to a plugin config later
      **/
-    protected void validatePassword(UserIdentity userIdentity, String password) throws AuthenticationException {
-        if (!Config.enable_validate_password) {
+    protected void validatePassword(UserIdentity userIdentity, UserAuthOption userAuthOption) throws AuthenticationException {
+        if (!Config.enable_validate_password || !userAuthOption.isPasswordPlain()) {
             return;
         }
+
+        String password = userAuthOption.getAuthString();
 
         //  1. The length of the password should be no less than 8.
         if (password.length() < 8) {
@@ -84,13 +86,8 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
             throws AuthenticationException {
         byte[] passwordScrambled = MysqlPassword.EMPTY_PASSWORD;
         if (userAuthOption != null) {
-            boolean isPasswordPlain = userAuthOption.isPasswordPlain();
-            String password = userAuthOption.getAuthPlugin() == null ?
-                    userAuthOption.getPassword() : userAuthOption.getAuthString();
-            if (isPasswordPlain) {
-                validatePassword(userIdentity, password);
-            }
-            passwordScrambled = scramblePassword(password, isPasswordPlain);
+            validatePassword(userIdentity, userAuthOption);
+            passwordScrambled = scramblePassword(userAuthOption.getAuthString(), userAuthOption.isPasswordPlain());
         }
 
         UserAuthenticationInfo info = new UserAuthenticationInfo();

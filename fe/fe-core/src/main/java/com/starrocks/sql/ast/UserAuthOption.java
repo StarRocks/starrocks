@@ -18,24 +18,18 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
 
 public class UserAuthOption implements ParseNode {
-    private final String password;
     private final String authPlugin;
     private final String authString;
     private final boolean passwordPlain;
 
     private final NodePosition pos;
 
-    public UserAuthOption(String password, String authPlugin, String authString, boolean passwordPlain,
+    public UserAuthOption(String authPlugin, String authString, boolean passwordPlain,
                           NodePosition pos) {
         this.pos = pos;
-        this.password = password;
         this.authPlugin = authPlugin;
         this.authString = authString;
         this.passwordPlain = passwordPlain;
-    }
-
-    public String getPassword() {
-        return password;
     }
 
     public String getAuthPlugin() {

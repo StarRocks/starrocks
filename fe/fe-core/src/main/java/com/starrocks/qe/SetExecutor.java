@@ -34,9 +34,7 @@
 
 package com.starrocks.qe;
 
-import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.DdlException;
-import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.SetListItem;
@@ -70,22 +68,10 @@ public class SetExecutor {
             }
 
             ctx.modifyUserVariableCopyInWrite(userVariable);
-        } else if (var instanceof SetPassVar) {
+        } else if (var instanceof SetPassVar setPassVar) {
             // Set password
-            SetPassVar setPassVar = (SetPassVar) var;
-            UserAuthenticationInfo userAuthenticationInfo = GlobalStateMgr.getCurrentState()
-                    .getAuthenticationMgr()
-                    .getUserAuthenticationInfoByUserIdentity(setPassVar.getUserIdent());
-            if (null == userAuthenticationInfo) {
-                throw new DdlException("authentication info for user " + setPassVar.getUserIdent() + " not found");
-            }
-            if (!userAuthenticationInfo.getAuthPlugin().equals(AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.name())) {
-                throw new DdlException("only allow set password for native user, current user: " +
-                        setPassVar.getUserIdent() + ", AuthPlugin: " + userAuthenticationInfo.getAuthPlugin());
-            }
-            userAuthenticationInfo.setPassword(setPassVar.getPassword());
             GlobalStateMgr.getCurrentState().getAuthenticationMgr()
-                    .alterUser(setPassVar.getUserIdent(), userAuthenticationInfo, null);
+                    .alterUser(setPassVar.getUserIdent(), setPassVar.getUserAuthenticationInfo(), null);
         }
     }
 
