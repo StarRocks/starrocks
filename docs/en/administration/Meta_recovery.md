@@ -726,4 +726,4 @@ You must remove the following configuration once the metadata recovery is comple
 
 - [bdbje_reset_election_group](./management/FE_configuration.md#bdbje_reset_election_group)
 - [metadata_enable_recovery_mode](./management/FE_configuration.md#metadata_enable_recovery_mode)
-- [ignore_unknown_log_id](./management/FE_configuration.md#ignore_unknown_log_id)
+- [metadata_ignore_unknown_operation_type](./management/FE_configuration.md#metadata_ignore_unknown_operation_type)
