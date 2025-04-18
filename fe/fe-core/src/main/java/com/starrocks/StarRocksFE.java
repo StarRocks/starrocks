@@ -373,7 +373,7 @@ public class StarRocksFE {
      * -ht --host_type
      *      Specify fe start use ip or fqdn
      */
-    private static CommandLineOptions parseArgs(String[] args) {
+    protected static CommandLineOptions parseArgs(String[] args) {
         CommandLineParser commandLineParser = new BasicParser();
         Options options = new Options();
         options.addOption("ht", "host_type", true, "Specify fe start use ip or fqdn");
