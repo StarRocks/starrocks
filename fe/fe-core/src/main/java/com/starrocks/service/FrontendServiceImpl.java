@@ -761,6 +761,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 ConnectContext context = new ConnectContext();
                 context.setCurrentUserIdentity(currentUser);
                 context.setCurrentRoleIds(currentUser);
+                if (item.getTable_database() == null || item.getTable_name() == null) {
+                    return true;
+                }
                 Authorizer.checkTableAction(context, item.getTable_database(), item.getTable_name(),
                         PrivilegeType.SELECT);
                 return false;
