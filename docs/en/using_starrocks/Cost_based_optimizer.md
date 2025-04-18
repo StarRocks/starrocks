@@ -80,7 +80,7 @@ update_time: 2023-12-01 15:17:10.274000
 
 ### Multi-column joint statistics
 
-Since v3.5.0, StarRocks supports multi-column joint statistics collection. Currently, when StarRocks performs cardinality estimation, the optimizer in most scenarios assumes that multiple columns are completely independent of each other, that is, there is no correlation among them. This causes incorrect cardinality estimation and the optimizer will generate an incorrect execution plan. Currently, only multi-column joint NDV is supported, and it is mainly used in the following scenarios for cardinality estimation.
+Since v3.5.0, StarRocks supports multi-column joint statistics collection. Currently, when StarRocks performs cardinality estimation, the optimizer in most scenarios assumes that multiple columns are completely independent of each other, that is, there is no correlation among them. However, if there is a correlation among columns, the current estimation method may lead to an incorrect result. This causes the optimizer to generate an incorrect execution plan. Currently, only multi-column joint NDV is supported, and it is mainly used in the following scenarios for cardinality estimation.
 
 - Evaluating multiple AND-joined equivalent predicates.
 - Evaluating Agg nodes.
