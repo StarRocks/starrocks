@@ -45,7 +45,7 @@ while true; do
         --daemon) RUN_DAEMON=1 ; shift ;;
         --helper) HELPER=$2 ; shift 2 ;;
         --host_type) HOST_TYPE=$2 ; shift 2 ;;
-        --cluster_snapshot) CLUSTER_SNAPSHOT="-cluster_snapshot" ; shift ;;
+        --cluster_snapshot) CLUSTER_SNAPSHOT="--cluster_snapshot" ; shift ;;
         --debug) ENABLE_DEBUGGER=1 ; shift ;;
         --logconsole) RUN_LOG_CONSOLE=1 ; shift ;;
         --) shift ;  break ;;
@@ -175,13 +175,11 @@ else
 fi
 
 if [ x"$HELPER" != x"" ]; then
-    # change it to '-helper' to be compatible with code in Frontend
-    HELPER="-helper $HELPER"
+    HELPER="--helper $HELPER"
 fi
 
 if [ x"$HOST_TYPE" != x"" ]; then
-    # change it to '-host_type' to be compatible with code in Frontend
-    HOST_TYPE="-host_type $HOST_TYPE"
+    HOST_TYPE="--host_type $HOST_TYPE"
 fi
 
 LOG_FILE=$LOG_DIR/fe.out
