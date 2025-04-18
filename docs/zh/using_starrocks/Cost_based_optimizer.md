@@ -158,7 +158,7 @@ StarRocks 提供灵活的信息采集方式，您可以根据业务场景选择�
 >
 > 1. 当更新分区数量小于 10个时：1 - (上次统计信息采集后的更新行数/总行数)
 > 2. 当更新分区数量大于等于 10 个时： 1 - MIN(上次统计信息采集后的更新行数/总行数, 上次统计信息采集后的更新的分区数/总分区数)
-> 3. 自 v3.5.0 起，为判断一个分区是否健康，StarRocks 不再通过统计信息采集时间与数据更新时间来进行对比，而是通过分区更新行数的比例。您可以通过 FE 配置项 `statistic_partition_health__v2_threshold` 进行配置。同时，您也可以关闭FE配置项  `statistic_partition_healthy_v2` 来回退到之前的健康度检查行为。
+> 3. 自 v3.5.0 起，为判断一个分区是否健康，StarRocks 不再通过统计信息采集时间与数据更新时间来进行对比，而是通过分区更新行数的比例。您可以通过 FE 配置项 `statistic_partition_health_v2_threshold` 进行配置。同时，您也可以关闭FE配置项  `statistic_partition_healthy_v2` 来回退到之前的健康度检查行为。
 
 同时，StarRocks 对于不同更新频率、不同大小的表，做了详细的配置策略。
 
@@ -194,7 +194,7 @@ StarRocks 提供灵活的信息采集方式，您可以根据业务场景选择�
 | enable_statistic_collect                    | BOOLEAN | TRUE         | 是否开启默认的自动采集任务和用户自定义自动采任务。该参数默认打开。                                   |
 | enable_auto_collect_statistics              | BOOLEAN | TRUE         | 是否开启默认的自动采集任务。该参数默认打开。                                   |
 | enable_collect_full_statistic               | BOOLEAN | TRUE         | 是否开启自动全量统计信息采集。该参数默认打开。                             |
-| statistic_collect_interval_sec              | LONG    | 300          | 自动定期任务中，检测数据更新的间隔，默认 10 分钟。单位：秒。                     |
+| statistic_collect_interval_sec              | LONG    | 600          | 自动定期任务中，检测数据更新的间隔，默认 10 分钟。单位：秒。                     |
 | statistic_auto_analyze_start_time           | STRING  | 00:00:00     | 用于配置自动全量采集的起始时间。取值范围：`00:00:00` ~ `23:59:59`。       |
 | statistic_auto_analyze_end_time             | STRING  | 23:59:59     | 用于配置自动全量采集的结束时间。取值范围：`00:00:00` ~ `23:59:59`。       |
 | statistic_auto_collect_small_table_size     | LONG    | 5368709120   | 自动全量采集任务的小表阈值，默认 5 GB，单位：Byte。                         |
