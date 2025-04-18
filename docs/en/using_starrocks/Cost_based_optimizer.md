@@ -292,15 +292,14 @@ ANALYZE SAMPLE TABLE tbl_name MULTIPLE COLUMNS (v1, v2);
 ANALYZE FULL TABLE tbl_name MULTIPLE COLUMNS (v1, v2);
 ```
 
-
 - Manual collection of Predicate Column
 
 ```sql
 -- Manual sampled collection of Predicate Column
-ANALYZE SAMPLE TABLE tbl_name MULTIPLE COLUMNS (v1, v2)
+ANALYZE SAMPLE TABLE tbl_name PREDICATE COLUMNS (v1, v2)
 
 -- Manual full collection of Predicate Column
-ANALYZE FULL TABLE tbl_name MULTIPLE COLUMNS (v1, v2)
+ANALYZE FULL TABLE tbl_name PREDICATE COLUMNS (v1, v2)
 ```
 
 #### Manually collect histograms
