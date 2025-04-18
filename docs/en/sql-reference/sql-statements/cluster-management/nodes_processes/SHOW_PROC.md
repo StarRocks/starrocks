@@ -22,7 +22,7 @@ SHOW PROC { '/backends' | '/compute_nodes' | '/dbs' | '/jobs'
           | '/resources' | '/load_error_hub' | '/transactions' 
           | '/monitor' | '/current_queries' | '/current_backend_instances' 
           | '/cluster_balance' | '/routine_loads' | '/colocation_group' 
-          | '/catalog' | '/replications'  | '/global_current_queries' }
+          | '/catalog' | '/replications'  | '/global_current_queries' | '/auth' }
 ```
 
 ## Parameters
@@ -49,6 +49,7 @@ SHOW PROC { '/backends' | '/compute_nodes' | '/dbs' | '/jobs'
 | '/catalog'                   | Shows the information of catalogs in the cluster.            |
 | '/replications'              | Shows the information of data replication tasks in the cluster. |
 | '/global_current_queries'    | Shows the information of running queries on all FE nodes in the cluster. |
+| '/auth'                      | Shows the username and corresponding privilege information in the cluster. |
 
 ## Examples
 
@@ -495,4 +496,47 @@ MySQL > show proc '/global_current_queries';
 | 2025-03-07 02:02:47 | 172.26.92.227 | 3603d566-fab5-11ef-8063-461f20abc3f0 | 12           | tpcds_2  | root | 100.886 MB | 4899036 rows | 114.491 MB  | 0.000 B       | 5.700 s | 0.713 s  | default_warehouse |               | rg1           |
 +---------------------+---------------+--------------------------------------+--------------+----------+------+------------+--------------+-------------+---------------+---------+----------+-------------------+---------------+---------------+
 
+```
+
+**Example 17: Shows authentication and authorization information for users in the cluster.**
+
+```sql
+mysql> SHOW PROC '/auth';
++----------------------+----------+-----------------------+-------------+-------------+--------------+---------------+----------------------------------------------------------------------------------+---------------+
+| UserIdentity         | Password | AuthPlugin            | Roles       | GlobalPrivs | CatalogPrivs | DatabasePrivs | TablePrivs                                                                       | ResourcePrivs |
++----------------------+----------+-----------------------+-------------+-------------+--------------+---------------+----------------------------------------------------------------------------------+---------------+
+| 'root'@'%'           | *        | MYSQL_NATIVE_PASSWORD | [root]      | []          | []           | []            | []                                                                               | []            |
+| 'test_auth_user'@'%' | *        | MYSQL_NATIVE_PASSWORD | [test_role] | []          | []           | []            | [ALL TABLES IN ALL DATABASES(SELECT), ALL TABLES IN DATABASE db1(INSERT,UPDATE)] | []            |
++----------------------+----------+-----------------------+-------------+-------------+--------------+---------------+----------------------------------------------------------------------------------+---------------+
+```
+
+| **Return**     | **Description**                                        |
+| -------------- | ------------------------------------------------------ |
+| UserIdentity   | User identifier ('username'@'host').                   |
+| Password       | Password shown as asterisk (*) for security reasons.   |
+| AuthPlugin     | Plugin used for user authentication.                   |
+| Roles          | List of roles granted to the user.                     |
+| GlobalPrivs    | List of global privileges.                             |
+| CatalogPrivs   | List of catalog-level privileges.                      |
+| DatabasePrivs  | List of database-level privileges.                     |
+| TablePrivs     | List of table-level privileges.                        |
+| ResourcePrivs  | List of resource privileges.                           |
+
+To view the detailed information for a specific user:
+
+```sql
+mysql> SHOW PROC "/auth/'root'@'%'";
++--------------------+------------------------------------------------+
+| Property           | Value                                          |
++--------------------+------------------------------------------------+
+| UserIdentity       | 'root'@'%'                                     |
+| AuthPlugin         | MYSQL_NATIVE_PASSWORD                          |
+| Roles              | [root]                                         |
+| GlobalPrivs        | []                                             |
+| CatalogPrivs       | []                                             |
+| DatabasePrivs      | []                                             |
+| TablePrivs         | []                                             |
+| ResourcePrivs      | []                                             |
+| DefaultRoles       | [root]                                         |
++--------------------+------------------------------------------------+
 ```
