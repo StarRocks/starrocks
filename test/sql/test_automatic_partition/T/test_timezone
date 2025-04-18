@@ -15,7 +15,7 @@ insert into t values(1, 1196440219);
 show partitions from t;
 SET time_zone = '+10:00';
 insert into t values(1, 1196440219);
-show partitions from t;
+show partitions from t order by PartitionName;
 select * from t where ts=1196440219;
 
 
