@@ -1,0 +1,27 @@
+-- name: test_dict_catalog_operation
+create database db_${uuid0};
+use db_${uuid0};
+CREATE TABLE `t_basic_operation` (
+  `id1` BIGINT NOT NULL COMMENT "",
+  `id2` BIGINT NOT NULL COMMENT "",
+  `id3` BIGINT NOT NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+INSERT INTO t_basic_operation VALUES (1, 2, 3);
+
+DROP DICTIONARY test_dict_basic_operation;
+CREATE DICTIONARY test_dict_basic_operation USING default_catalog.db_${uuid0}.t_basic_operation (id1 KEY, id2 VALUE);
+function: wait_refresh_dictionary_finish("test_dict_basic_operation", "FINISHED")
+
+SELECT dictionary_get("test_dict_basic_operation", id1) FROM default_catalog.db_${uuid0}.t_basic_operation;
+SELECT dictionary_get("test_dict_basic_operation", 1);
+
+DROP DICTIONARY test_dict_basic_operation;
+DROP TABLE t_basic_operation;
