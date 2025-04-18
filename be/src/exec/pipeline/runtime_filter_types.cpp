@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/runtime_filter_types.h"
 
+#include "hashjoin/hash_joiner_fwd.h"
+
 namespace starrocks::pipeline {
 
 StatusOr<bool> PartialRuntimeFilterMerger::add_partial_filters(
