@@ -179,6 +179,7 @@ set(EXEC_FILES
         ./formats/csv/default_value_converter_test.cpp
         ./formats/csv/string_converter_test.cpp
         ./formats/csv/varbinary_converter_test.cpp
+        ./formats/csv/struct_converter_test.cpp
         ./formats/json/binary_column_test.cpp
         ./formats/json/numeric_column_test.cpp
         ./formats/json/nullable_column_test.cpp
