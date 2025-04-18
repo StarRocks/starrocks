@@ -65,7 +65,7 @@ inline size_t count_zero(const T* data, size_t size) {
 #elif defined(__ARM_NEON) && defined(__aarch64__)
     const T* end16 = data + (size / 16 * 16);
     for (; data < end16; data += 16) {
-        uint8x16_t vdata = vld1q_u8(data);
+        uint8x16_t vdata = vld1q_u8(reinterpret_cast<const uint8_t*>(data));
         // result[i] = vdata[i] == 0 ? 0xFF : 0x00
         uint8x16_t result = vceqq_u8(vdata, vdupq_n_u8(0));
         // result[i] = result[i] & 0x1
