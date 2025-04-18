@@ -14,34 +14,20 @@
 
 package com.starrocks.service.arrow.flight.sql;
 
-import com.google.protobuf.ByteString;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlCommand;
-import com.starrocks.proto.PFetchArrowSchemaRequest;
-import com.starrocks.proto.PFetchArrowSchemaResult;
-import com.starrocks.proto.PUniqueId;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
-import com.starrocks.rpc.BrpcProxy;
-import com.starrocks.rpc.PBackendService;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.thrift.TNetworkAddress;
-import org.apache.arrow.memory.RootAllocator;
-import org.apache.arrow.vector.VectorSchemaRoot;
-import org.apache.arrow.vector.ipc.ArrowStreamReader;
-import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 
 // inherit ConnectProcessor to record the audit log and Query Detail
 public class ArrowFlightSqlConnectProcessor extends ConnectProcessor {
@@ -105,38 +91,21 @@ public class ArrowFlightSqlConnectProcessor extends ConnectProcessor {
     }
 
     @Override
-    public void processOnce() throws IOException {
+    public void processOnce() {
+        // set status of query to OK.
         ctx.getState().reset();
         executor = null;
+
+        // only handle query，so no need to dispatch
         ctx.setCommand(MysqlCommand.COM_QUERY);
         ctx.setStartTime();
         ctx.setResourceGroup(null);
+        ctx.resetErrorCode();
         this.handleQuery();
+
+        // Set command as sleep, so timeCheck will close the connection.
+        // When client's last query is long long ago (controlled by waitTimeout session variable).
         ctx.setStartTime();
-    }
-
-    public Schema fetchArrowSchema(TNetworkAddress beAddress, PUniqueId finstId, int timeout) {
-        PBackendService service = BrpcProxy.getBackendService(beAddress);
-        PFetchArrowSchemaRequest pRequest = new PFetchArrowSchemaRequest();
-        pRequest.setFinstId(finstId);
-        Future<PFetchArrowSchemaResult> future = service.fetchArrowSchema(pRequest);
-
-        try {
-            PFetchArrowSchemaResult fetchArrowSchemaResult = future.get(timeout, TimeUnit.SECONDS);
-
-            RootAllocator rootAllocator = new RootAllocator(Integer.MAX_VALUE);
-            try (ArrowStreamReader arrowStreamReader = new ArrowStreamReader(new ByteArrayInputStream(
-                    ByteString.copyFrom(fetchArrowSchemaResult.getSchema()).toByteArray()), rootAllocator)) {
-                VectorSchemaRoot vectorSchemaRoot = arrowStreamReader.getVectorSchemaRoot();
-                return vectorSchemaRoot.getSchema();
-            }
-        } catch (Exception e) {
-            if (e instanceof InterruptedException) {
-                Thread.currentThread().interrupt();
-                throw new RuntimeException("fetchArrowSchema was interrupted, reason: " + e.getMessage(), e);
-            }
-
-            throw new RuntimeException("fetchArrowSchema fail, reason: " + e.getMessage(), e);
-        }
+        ctx.setCommand(MysqlCommand.COM_SLEEP);
     }
 }

@@ -45,6 +45,8 @@ import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
+import com.starrocks.proto.PFetchArrowSchemaRequest;
+import com.starrocks.proto.PFetchArrowSchemaResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PListFailPointResponse;
@@ -310,6 +312,17 @@ public class BackendServiceClient {
             return service.processDictionaryCache(request);
         } catch (Throwable e) {
             LOG.warn("failed to execute processDictionaryCache, address={}:{}", address.getHostname(), address.getPort(), e);
+            throw new RpcException(address.hostname, e.getMessage());
+        }
+    }
+
+    public Future<PFetchArrowSchemaResult> fetchArrowSchema(
+            TNetworkAddress address, PFetchArrowSchemaRequest request) throws RpcException {
+        try {
+            final PBackendService service = BrpcProxy.getBackendService(address);
+            return service.fetchArrowSchema(request);
+        } catch (Throwable e) {
+            LOG.warn("failed to execute fetchArrowSchema, address={}:{}", address.getHostname(), address.getPort(), e);
             throw new RpcException(address.hostname, e.getMessage());
         }
     }

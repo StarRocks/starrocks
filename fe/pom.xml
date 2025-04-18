@@ -1157,6 +1157,18 @@ under the License.
 
             <dependency>
                 <groupId>org.apache.arrow</groupId>
+                <artifactId>arrow-memory-core</artifactId>
+                <version>${arrow.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.arrow</groupId>
+                <artifactId>arrow-flight</artifactId>
+                <version>${arrow.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.arrow</groupId>
                 <artifactId>flight-sql</artifactId>
                 <version>${arrow.version}</version>
             </dependency>
