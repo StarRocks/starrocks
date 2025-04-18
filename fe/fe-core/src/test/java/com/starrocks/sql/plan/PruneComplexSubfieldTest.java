@@ -674,7 +674,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
             String sql = "select pc0.a1 from pc0 where (([]) is not NULL)";
             String plan = getVerboseExplain(sql);
             assertContains(plan, "  0:OlapScanNode\n" +
-                    "     table: pc0, rollup: pc0\n" +
+                    "     TABLE: pc0, rollup: pc0\n" +
                     "     preAggregation: on\n" +
                     "     Predicates: array_length(CAST([] AS ARRAY<BOOLEAN>)) IS NOT NULL\n" +
                     "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
@@ -688,7 +688,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
             String sql = "select st3.sa3, array_length(st3.sa3) from sc0 where (([1,2,3]) is NOT NULL)";
             String plan = getVerboseExplain(sql);
             assertContains(plan, "  0:OlapScanNode\n" +
-                    "     table: sc0, rollup: sc0\n" +
+                    "     TABLE: sc0, rollup: sc0\n" +
                     "     preAggregation: on\n" +
                     "     Predicates: array_length([1,2,3]) IS NOT NULL\n" +
                     "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
@@ -706,7 +706,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
             String sql = "select pc0.a1[0],pc0.a1[1] from pc0 where (([]) is not NULL)";
             String plan = getVerboseExplain(sql);
             assertContains(plan, "  0:OlapScanNode\n" +
-                    "     table: pc0, rollup: pc0\n" +
+                    "     TABLE: pc0, rollup: pc0\n" +
                     "     preAggregation: on\n" +
                     "     Predicates: array_length(CAST([] AS ARRAY<BOOLEAN>)) IS NOT NULL\n" +
                     "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
@@ -720,7 +720,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
             String sql = "select st3.sa3[0], array_length(st3.sa3) from sc0 where (([1,2,3]) is NOT NULL)";
             String plan = getVerboseExplain(sql);
             assertContains(plan, "  0:OlapScanNode\n" +
-                    "     table: sc0, rollup: sc0\n" +
+                    "     TABLE: sc0, rollup: sc0\n" +
                     "     preAggregation: on\n" +
                     "     Predicates: array_length([1,2,3]) IS NOT NULL\n" +
                     "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
@@ -1038,7 +1038,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
-                "     table: pc0, rollup: pc0");
+                "     TABLE: pc0, rollup: pc0");
         assertContains(plan, "ColumnAccessPath");
     }
 
