@@ -97,7 +97,7 @@ probe runtime filters:
 - filter_id = 4, probe_expr = (26: O_ORDERKEY)
 column statistics:
 * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 7.29413E7] ESTIMATE
-* O_ORDERSTATUS-->[-Infinity, Infinity, 0.0, 1.0, 3.0] MCV: [[O:73204400][F:72941300][P:3854300]] ESTIMATE
+* O_ORDERSTATUS-->[-Infinity, Infinity, 0.0, 1.0, 3.0] MCV: [[F:72941300]] ESTIMATE
 
 PLAN FRAGMENT 3(F01)
 
@@ -269,7 +269,7 @@ OutPut Exchange Id: 13
 |  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
 |  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
 |
 |----10:EXCHANGE
 |       distribution type: BROADCAST
@@ -310,5 +310,6 @@ actualRows=0, avgRowSize=29.0
 cardinality: 1
 column statistics:
 * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
-* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
+* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] MCV: [[CANADA:1]] ESTIMATE
 [end]
+

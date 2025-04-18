@@ -223,17 +223,22 @@ public class HistogramStatisticsTest {
                 leftColumnRefOperator, rightColumnRefOperator);
 
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        connectContext.getSessionVariable().setCboEnableHistogramJoinEstimation(false);
         Statistics estimated = PredicateStatisticsCalculator.statisticsCalculate(binaryPredicateOperator, statistics);
-        Assert.assertEquals(estimated.getColumnStatistics().size(), 2);
+        Assert.assertEquals(2, estimated.getColumnStatistics().size());
         Assert.assertEquals(estimated.getColumnStatistic(leftColumnRefOperator).getHistogram(), leftHistogram);
         Assert.assertEquals(estimated.getColumnStatistic(rightColumnRefOperator).getHistogram(), rightHistogram);
         Assert.assertEquals(200000, estimated.getOutputRowCount(), 0.1);
 
         connectContext.getSessionVariable().setCboEnableHistogramJoinEstimation(true);
         estimated = PredicateStatisticsCalculator.statisticsCalculate(binaryPredicateOperator, statistics);
-        Assert.assertEquals(estimated.getColumnStatistics().size(), 2);
-        Assert.assertEquals(estimated.getColumnStatistic(leftColumnRefOperator).getHistogram(), leftHistogram);
-        Assert.assertEquals(estimated.getColumnStatistic(rightColumnRefOperator).getHistogram(), rightHistogram);
+        Assert.assertEquals(2, estimated.getColumnStatistics().size());
+        Assert.assertEquals(5, estimated.getColumnStatistic(leftColumnRefOperator).getHistogram().getMCV().size());
+        Assert.assertEquals(15, estimated.getColumnStatistic(leftColumnRefOperator).getHistogram().getBuckets().size());
+        Assert.assertEquals(5, estimated.getColumnStatistic(rightColumnRefOperator).getHistogram().getMCV().size());
+        Assert.assertEquals(15, estimated.getColumnStatistic(rightColumnRefOperator).getHistogram().getBuckets().size());
+        Assert.assertNotEquals(estimated.getColumnStatistic(leftColumnRefOperator).getHistogram(), leftHistogram);
+        Assert.assertNotEquals(estimated.getColumnStatistic(rightColumnRefOperator).getHistogram(), rightHistogram);
         Assert.assertEquals(83576, estimated.getOutputRowCount(), 0.1);
     }
 

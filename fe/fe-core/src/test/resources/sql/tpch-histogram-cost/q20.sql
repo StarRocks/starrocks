@@ -11,7 +11,7 @@ column statistics:
 * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
 * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
 * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
-* N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+* N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
 
 PLAN FRAGMENT 1(F11)
 
@@ -27,7 +27,7 @@ OutPut Exchange Id: 25
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
 |  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
 |
 23:Project
 |  output columns:
@@ -49,7 +49,7 @@ OutPut Exchange Id: 25
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
 |  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
 |
 |----21:EXCHANGE
 |       distribution type: SHUFFLE
@@ -90,7 +90,7 @@ OutPut Exchange Id: 21
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
 |  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
 |
 |----18:EXCHANGE
 |       distribution type: BROADCAST
@@ -128,12 +128,11 @@ table: nation, rollup: nation
 preAggregation: on
 Predicates: [10: N_NAME, CHAR, false] = 'ARGENTINA'
 partitionsRatio=1/1, tabletsRatio=1/1
-tabletList=10258
 actualRows=0, avgRowSize=29.0
 cardinality: 1
 column statistics:
 * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
-* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
+* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] MCV: [[ARGENTINA:1]] ESTIMATE
 
 PLAN FRAGMENT 4(F01)
 
