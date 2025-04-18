@@ -214,7 +214,7 @@ v3.5.0 以降、StarRocks は自動収集中に、テーブルのデータが前
 | statistic_auto_collect_max_predicate_column_size_on_sample_strategy | INT    | 16       | 自動フル収集タスクがサンプル収集ポリシーに当たったとき、テーブルに異常に多くのPredicate Columnがあり、この設定項目を超えた場合、タスクはPredicate Columnのフル収集に切り替わらず、すべての列のサンプル収集に維持されます。この設定項目は、この動作のためのPredicate Columnの最大値を制御します。 |
 | statistic_auto_collect_predicate_columns_threshold | INT     | 32       | 自動収集中にテーブルの列数がこの設定を超えた場合、Predicate Columnの列統計のみが収集されます。 |
 | statistic_predicate_columns_persist_interval_sec   | LONG    | 60       | FE が Predicate Column の統計情報を同期し、永続化する間隔。 |
-| statistic_predicate_columns_ttl_hours       | LONG    | 24       | Predicate Column 信息在 FE 中缓存淘汰时间。 |
+| statistic_predicate_columns_ttl_hours       | LONG    | 24       | FE にキャッシュされた Predicate Column 統計の消去時間。 |
 
 統計収集の大部分は自動ジョブに依存できますが、特定の要件がある場合は、ANALYZE TABLE ステートメントを実行して手動でタスクを作成するか、CREATE ANALYZE ステートメントを実行して自動タスクをカスタマイズできます。
 
@@ -225,9 +225,15 @@ ANALYZE TABLE を使用して手動収集タスクを作成できます。デフ
 #### 基本統計を手動で収集する
 
 ```SQL
-ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name])
-[WITH SYNC | ASYNC MODE]
-[PROPERTIES (property [,property])]
+ANALYZE [FULL|SAMPLE] TABLE tbl_name 
+    [( col_name [, col_name]... )
+    | col_name [, col_name]...
+    | ALL COLUMNS
+    | PREDICATE COLUMNS
+    | MULTIPLE COLUMNS ( col_name [, col_name]... )]
+[PARTITION (partition_name [, partition_name]...)]
+[WITH [SYNC | ASYNC] MODE]
+[PROPERTIES (property [, property]...)]
 ```
 
 パラメータの説明：
@@ -237,7 +243,11 @@ ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name])
   - SAMPLE: サンプル収集を示します。
   - 収集タイプが指定されていない場合、デフォルトで完全収集が使用されます。
 
-- `col_name`: 統計を収集する列。複数の列をカンマ（`,`）で区切ります。このパラメータが指定されていない場合、テーブル全体が収集されます。
+- 統計情報を収集するカラムの型：
+  - `col_name`： 統計情報を収集する列。複数の列はカンマ (`,`) で区切る。このパラメータが指定されない場合は、テーブル全体が収集される。
+  - `ALL COLUMNS`： すべての列から統計情報を収集する。v3.5.0 からサポートされている。
+  - `PREDICATE COLUMNS`：Predicate Column のみから統計情報を収集する。v3.5.0 からサポート。
+  - `MULTIPLE COLUMNS`：指定した複数の列から共同の統計情報を収集する。現在のところ、複数列の手動同期収集のみがサポートされている。手動で統計情報を収集する列の数は `statistics_max_multi_column_combined_num` を超えることはできず、デフォルト値は `10` である。v3.5.0 からサポートされている。
 
 - [WITH SYNC | ASYNC MODE]: 手動収集タスクを同期モードまたは非同期モードで実行するかどうか。指定しない場合、デフォルトで同期収集が使用されます。
 
@@ -272,6 +282,26 @@ ANALYZE SAMPLE TABLE tbl_name;
 ANALYZE SAMPLE TABLE tbl_name (v1, v2, v3) PROPERTIES(
     "statistic_sample_collect_rows" = "1000000"
 );
+```
+
+- 複数列のジョイント手動収集
+
+```sql
+-- 複数列ジョイントの手動サンプル収集
+ANALYZE SAMPLE TABLE tbl_name MULTIPLE COLUMNS (v1, v2);
+
+-- 複数列ジョイントの手動フル収集
+ANALYZE FULL TABLE tbl_name MULTIPLE COLUMNS (v1, v2);
+```
+
+- Predicate Column 手動収集
+
+```sql
+-- Predicate Column の手動サンプル収集
+ANALYZE SAMPLE TABLE tbl_name MULTIPLE COLUMNS (v1, v2)
+
+-- Predicate Column の手動フル収集
+ANALYZE FULL TABLE tbl_name MULTIPLE COLUMNS (v1, v2)
 ```
 
 #### ヒストグラムを手動で収集する
@@ -323,7 +353,9 @@ PROPERTIES(
 
 #### 自動収集タスクをカスタマイズする
 
-CREATE ANALYZE ステートメントを使用して自動収集タスクをカスタマイズできます。対応するテーブルに対して INSERT および SELECT 権限を持っている必要があります。
+StarRocks が提供するデフォルトの収集タスクは、すべてのデータベースとすべてのテーブルについて、ポリシーに従って自動的に統計を収集しますので、デフォルトでは、カスタムの収集タスクを作成する必要はありません。
+
+自動収集タスクをカスタマイズしたい場合は、CREATE ANALYZE ステートメントを使用して作成する必要があります。収集タスクを作成するには、収集するテーブルの INSERT 権限と SELECT 権限が必要です。
 
 ```SQL
 -- すべてのデータベースの統計を自動的に収集します。
@@ -335,6 +367,12 @@ CREATE ANALYZE [FULL|SAMPLE] DATABASE db_name
 
 -- テーブル内の指定された列の統計を自動的に収集します。
 CREATE ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name])
+[PROPERTIES (property [,property])]
+
+-- テーブル内の指定された列のヒストグラムを自動的に収集します。
+CREATE ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON col_name [, col_name]
+[WITH SYNC | ASYNC MODE]
+[WITH N BUCKETS]
 [PROPERTIES (property [,property])]
 ```
 
@@ -352,7 +390,6 @@ CREATE ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name])
 | **PROPERTIES**                        | **タイプ** | **デフォルト値** | **説明**                                              |
 | ------------------------------------- | -------- | ----------------- | ------------------------------------------------------------ |
 | statistic_auto_collect_ratio          | FLOAT    | 0.8               | 自動収集の統計が健全かどうかを判断するしきい値。統計の健全性がこのしきい値を下回る場合、自動収集がトリガーされます。 |
-| statistics_max_full_collect_data_size | INT      | 100               | 自動収集のためにデータを収集する最大パーティションサイズ。単位：GB。パーティションがこの値を超える場合、完全収集は破棄され、サンプル収集が代わりに実行されます。 |
 | statistic_sample_collect_rows         | INT      | 200000            | 収集する最小行数。パラメータ値がテーブルの実際の行数を超える場合、完全収集が実行されます。 |
 | statistic_exclude_pattern             | String   | null              | ジョブで除外する必要があるデータベースまたはテーブルの名前。ジョブで統計を収集しないデータベースとテーブルを指定できます。これは正規表現パターンであり、マッチする内容は `database.table` です。 |
 | statistic_auto_collect_interval       | LONG   |  0      | 自動収集の間隔。単位：秒。デフォルトでは、StarRocks はテーブルサイズに基づいて `statistic_auto_collect_small_table_interval` または `statistic_auto_collect_large_table_interval` を収集間隔として選択します。分析ジョブを作成する際に `statistic_auto_collect_interval` プロパティを指定した場合、この設定が `statistic_auto_collect_small_table_interval` および `statistic_auto_collect_large_table_interval` より優先されます。 |
@@ -378,6 +415,9 @@ CREATE ANALYZE TABLE tbl_name(c1, c2, c3);
 CREATE ANALYZE ALL PROPERTIES (
    "statistic_exclude_pattern" = "db_name\."
 );
+
+-- 指定されたデータベース、テーブル、列のヒストグラムを自動的に収集します。
+CREATE ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON c1,c2;
 ```
 
 自動サンプル収集
@@ -399,10 +439,43 @@ CREATE ANALYZE SAMPLE TABLE tbl_name(c1, c2, c3) PROPERTIES (
 
 ```
 
+**StarRocks が提供する自動収集タスクのかわりに、`db_name.tbl_name` テーブルを収集しないユーザー定義収集タスクを使用します。**
+
+```sql
+ADMIN SET FRONTEND CONFIG("enable_auto_collect_statistics"="false");
+DROP ALL ANALYZE JOB;
+CREATE ANALYZE FULL ALL db_name PROPERTIES (
+   "statistic_exclude_pattern" = "db_name.tbl_name"
+);
+```
+
+### データロード中に統計情報を収集する
+
+データロード直後のクエリに対する適切な実行計画を保証するために、StarRocks は INSERT INTO/OVERWRITE DML ステートメントの終了時に非同期統計収集タスクをトリガさせ、デフォルトでは DML 終了後 30 秒間待機します。統計収集タスクが 30 秒以内に終了しない場合は、DML の実行結果が返されます。
+
+#### INSERT INTO
+
+- 統計情報の収集は、パーティションへのデータの最初のロードに対してのみ行われます。
+- このロードの行数が `statistic_sample_collect_rows` より大きい場合、サンプル収集タスクが起動され、そうでない場合は完全収集が使用される。
+
+#### INSERT OVERWRITE
+
+- OVERWRITE 前後の行数の変化の比率が `statistic_sample_collect_ratio_threshold_of_first_load` より小さい場合、統計情報収集タスクは起動されない。
+- この OVERWRITE 操作の行数が `statistic_sample_collect_rows` より大きい場合、サンプル収集タスクが起動され、そうでない場合は完全収集が使用される。
+
+以下のプロパティ(PROPERTIES)は、データロード用にカスタマイズされた収集タスクを作成するために使用される。設定されていない場合は、対応する FE 設定項目の値が使用されます。
+
+| **PROPERTIES**                            | **タイプ** | **デフォルト** | **説明**                                                                                                     |
+|-------------------------------------------|-----------|--------------|------------------------------------------------------------------------------------------------------------- |
+| enable_statistic_collect_on_first_load    | BOOLEAN   | TRUE         | INSERT INTO/OVERWRITE実行後に統計収集タスクを起動するかどうか。                                                     |
+| semi_sync_collect_statistic_await_seconds | LONG      | 30           | 結果を返すまでに統計が収集されるのを待つ最大時間。                                                                    |
+| statistic_sample_collect_ratio_threshold_of_first_load | DOUBLE    | 0.1  | 統計収集タスクをトリガしないOVERWRITE操作におけるデータ変更の比率。                                               |
+| statistic_sample_collect_rows             | LONG      | 200000       | DML ステートメントによってロードされたデータ行の合計がこの値を超えると、サンプリング収集が統計収集に使用される。                |
+
 #### カスタム収集タスクを表示する
 
 ```SQL
-SHOW ANALYZE JOB [WHERE predicate]
+SHOW ANALYZE JOB [WHERE predicate][ORDER BY columns][LIMIT num]
 ```
 
 WHERE 句を使用して結果をフィルタリングできます。このステートメントは次の列を返します。
@@ -434,6 +507,7 @@ SHOW ANALYZE JOB where `database` = 'test';
 
 ```SQL
 DROP ANALYZE <ID>
+| DROP ALL ANALYZE JOB
 ```
 
 タスク ID は SHOW ANALYZE JOB ステートメントを使用して取得できます。
@@ -442,6 +516,10 @@ DROP ANALYZE <ID>
 
 ```SQL
 DROP ANALYZE 266030;
+```
+
+```SQL
+DROP ALL ANALYZE JOB;
 ```
 
 ## 収集タスクのステータスを表示する
@@ -475,7 +553,7 @@ SHOW ANALYZE STATUS [WHERE predicate];
 ### 基本統計のメタデータを表示する
 
 ```SQL
-SHOW STATS META [WHERE predicate]
+SHOW STATS META [WHERE predicate][ORDER BY columns][LIMIT num]
 ```
 
 このステートメントは次の列を返します。
@@ -489,6 +567,10 @@ SHOW STATS META [WHERE predicate]
 | UpdateTime | 現在のテーブルの最新の統計更新時間。     |
 | Properties | カスタムパラメータ。                                           |
 | Healthy    | 統計情報の健全性。                       |
+| ColumnStats  | 列の ANALYZE タイプ。                                 |
+| TabletStatsReportTime | テーブルの Tablet メタデータが FE で更新された時間。     |
+| TableHealthyMetrics    | 統計情報における健全性の指標。                 |
+| TableUpdateTime    | テーブルが更新された時間。                        |
 
 ### ヒストグラムのメタデータを表示する
 
@@ -513,8 +595,16 @@ SHOW HISTOGRAM META [WHERE predicate]
 
 ### 基本統計を削除する
 
+以下のステートメントは`default_catalog._statistics_.column_statistics`テーブルに格納されている統計情報を削除し、FEによってキャッシュされた対応するテーブル統計情報も無効になります。v3.5.0以降、このステートメントはこのテーブルの複数列のジョイント統計も削除します。
+
 ```SQL
 DROP STATS tbl_name
+```
+
+以下のステートメントは、`default_catalog._statistics_.multi_column_statistics`テーブルに格納されている複数列のジョイント統計情報を削除し、FEによってキャッシュされた対応するテーブルの複数列のジョイント統計情報も無効になります。このステートメントでは、テーブルの基本統計量は削除されません。
+
+```SQL
+DROP MULTIPLE COLUMNS STATS tbl_name
 ```
 
 ### ヒストグラムを削除する
