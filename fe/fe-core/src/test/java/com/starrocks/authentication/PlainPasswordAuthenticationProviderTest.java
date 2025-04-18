@@ -46,7 +46,8 @@ public class PlainPasswordAuthenticationProviderTest {
 
         // too short
         try {
-            provider.validatePassword(new UserIdentity("u", "%"), "aaa");
+            provider.validatePassword(new UserIdentity("u", "%"),
+                    new UserAuthOption(null, "aaa", true, NodePosition.ZERO));
             Assert.fail();
         } catch (AuthenticationException e) {
             Assert.assertTrue(e.getMessage().contains("password is too short"));
@@ -56,7 +57,8 @@ public class PlainPasswordAuthenticationProviderTest {
         String[] badPasswords = {"starrocks", "STARROCKS", "123456789", "STARROCKS123", "starrocks123", "STARROCKSstar"};
         for (String badPassword : badPasswords) {
             try {
-                provider.validatePassword(new UserIdentity("u", "%"), badPassword);
+                provider.validatePassword(new UserIdentity("u", "%"),
+                        new UserAuthOption(null, badPassword, true, NodePosition.ZERO));
                 Assert.fail();
             } catch (AuthenticationException e) {
                 Assert.assertTrue(e.getMessage().contains(
@@ -64,9 +66,11 @@ public class PlainPasswordAuthenticationProviderTest {
             }
         }
 
-        provider.validatePassword(new UserIdentity("u", "%"), "aaaAAA123");
+        provider.validatePassword(new UserIdentity("u", "%"),
+                new UserAuthOption(null, "aaaAAA123", true, NodePosition.ZERO));
         Config.enable_validate_password = false;
-        provider.validatePassword(new UserIdentity("u", "%"), "aaa");
+        provider.validatePassword(new UserIdentity("u", "%"),
+                new UserAuthOption(null, "aaa", true, NodePosition.ZERO));
     }
 
     @Test
@@ -76,7 +80,7 @@ public class PlainPasswordAuthenticationProviderTest {
         byte[] seed = "petals on a wet black bough".getBytes(StandardCharsets.UTF_8);
         ctx.setAuthDataSalt(seed);
         for (String password : passwords) {
-            UserAuthOption userAuthOption = new UserAuthOption(password, null, null, true, NodePosition.ZERO);
+            UserAuthOption userAuthOption = new UserAuthOption(null, password, true, NodePosition.ZERO);
             UserAuthenticationInfo info = provider.analyzeAuthOption(testUser, userAuthOption);
             byte[] scramble = MysqlPassword.scramble(seed, password);
             provider.authenticate(ctx, testUser.getUser(), "10.1.1.1", scramble, info);
@@ -101,8 +105,7 @@ public class PlainPasswordAuthenticationProviderTest {
 
         byte[] p = MysqlPassword.makeScrambledPassword("bb");
 
-        UserAuthOption userAuthOption = new UserAuthOption(
-                new String(p, StandardCharsets.UTF_8), null, null, false, NodePosition.ZERO);
+        UserAuthOption userAuthOption = new UserAuthOption(null, new String(p, StandardCharsets.UTF_8), false, NodePosition.ZERO);
 
         info = provider.analyzeAuthOption(testUser, userAuthOption);
         try {
