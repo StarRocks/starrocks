@@ -19,24 +19,45 @@
 #include <gtest/gtest.h>
 #include <velocypack/vpack.h>
 
+#include <cmath>
+#include <cstdint>
+#include <memory>
+#include <ostream>
+#include <sstream>
 #include <string>
 #include <vector>
 
+#include "column/column.h"
 #include "column/const_column.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
+#include "common/object_pool.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "gtest/gtest-param-test.h"
 #include "gutil/casts.h"
+#include "gutil/integral_types.h"
 #include "gutil/strings/strip.h"
+#include "storage/rowset/binary_dict_page.h"
+#include "storage/rowset/binary_plain_page.h"
+#include "storage/rowset/binary_prefix_page.h"
+#include "storage/rowset/bitshuffle_page.h"
+#include "storage/rowset/dict_page.h"
+#include "storage/rowset/frame_of_reference_page.h"
+#include "storage/rowset/options.h"
+#include "storage/rowset/page_builder.h"
+#include "storage/rowset/page_io.h"
+#include "storage/rowset/plain_page.h"
+#include "storage/rowset/rle_page.h"
 #include "testutil/assert.h"
 #include "types/logical_type.h"
+#include "util/compression/block_compression.h"
 #include "util/json.h"
 #include "util/json_flattener.h"
+#include "util/slice.h"
 
 namespace starrocks {
 
@@ -438,4 +459,490 @@ TEST_F(JsonFlattenerTest, testPointJson) {
     EXPECT_EQ("4", result_col[0]->debug_item(1));
 }
 
+TEST_P(JsonFlattenerTest, testClean) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto json_column = JsonColumn::create();
+    for (int k = 0; k < 5; k++) {
+        vpack::Builder builder;
+        builder.openObject(true);
+        for (int j = 0; j < 500; j++) {
+            builder.add("fixkey", vpack::Value("fixvalue" + std::to_string(j)));
+            builder.add("key" + std::to_string(j), vpack::Value("value" + std::to_string(j)));
+        }
+        builder.close();
+
+        JsonValue jv;
+        jv.assign(builder);
+        json_column->append(&jv);
+    }
+
+    std::vector<const Column*> columns{json_column.get()};
+    {
+        config::vector_chunk_size = 1;
+        JsonPathDeriver jf;
+        jf.derived(columns);
+        jf.set_generate_filter(true);
+        config::vector_chunk_size = 4096;
+        EXPECT_EQ(true, jf.has_remain_json());
+        EXPECT_EQ({"fixkey"}, jf.flat_paths());
+        EXPECT_EQ({TYPE_VARCHAR}, jf.flat_types());
+        EXPECT_EQ(nullptr, jf.remain_fitler());
+    }
+}
+
+TEST_P(JsonFlattenerTest, testComplexJsonExtract) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto json_column = JsonColumn::create();
+
+    // clang-format off
+    std::vector<std::string> jsons = {
+        R"({"K1": 123, "K2": "some", "K5": {"nf": {"s1": "text", "subfield2": 123, "subfield3": ["a", "b", "c"]}}})",
+        R"({"K1": 456, "K2": "anor", "K6": {"nf": {"s1": 789, "subfield2": "text", "subfield3": [1, 2, 3]}}})",
+        R"({"K1": 789, "K2": "yete", "K7": {"nf": {"s1": "text", "subfield2": ["x", "y", "z"], "subfield3": 456}}})",
+        R"({"K1": 101, "K2": "onee", "K8": {"nf": {"s1": 101112, "subfield2": "text", "subfield3": 123}}})",
+        R"({"K1": 131, "K2": "fine", "K9": {"nf": {"s1": ["p", "q", "r"], "subfield2": 789, "subfield3": "text"}}})",
+    };
+    // clang-format on
+
+    for (auto& str : jsons) {
+        ASSIGN_OR_ABORT(auto json_value, JsonValue::parse(str));
+        json_column->append(&json_value);
+    }
+    std::vector<const Column*> columns{json_column.get()};
+
+    {
+        JsonPathDeriver jf;
+        jf.derived(columns);
+        EXPECT_EQ(true, jf.has_remain_json());
+        EXPECT_EQ({"asdf"}, jf.flat_paths());
+        EXPECT_EQ({"asdf"}, jf.flat_types());
+    }
+    {}
+}
+
+static std::string string_2_asc(const std::string& input) {
+    std::stringstream oss;
+    oss << "'";
+    for (char c : input) {
+        // if (c == '\n') {
+        //     oss << "\\n";
+        // } else if (c == '\t') {
+        //     oss << "\\t";
+        // } else if (std::isprint(static_cast<unsigned char>(c))) {
+        //     oss << c;
+        // } else {
+        //     oss << "0x" << std::hex << (static_cast<unsigned int>(c) & 0xFF);
+        // }
+
+        oss << "0X" << std::hex << (static_cast<unsigned int>(c) & 0xFF);
+    }
+    oss << "'";
+    return oss.str();
+}
+
+static std::string uint8_2_asc(const uint8_t* input, size_t len) {
+    std::stringstream oss;
+    oss << "'";
+    for (size_t i = 0; i < len; i++) {
+        // if (c == '\n') {
+        //     oss << "\\n";
+        // } else if (c == '\t') {
+        //     oss << "\\t";
+        // } else if (std::isprint(static_cast<unsigned char>(c))) {
+        //     oss << c;
+        // } else {
+        //     oss << "0x" << std::hex << (static_cast<unsigned int>(c) & 0xFF);
+        // }
+
+        oss << "0X" << std::hex << (static_cast<unsigned int>(input[i]) & 0xFF);
+    }
+    oss << "'";
+    return oss.str();
+}
+
+static StatusOr<size_t> get_compress_size(CompressionTypePB type, const std::vector<Slice>& slices,
+                                          int compress_level) {
+    const BlockCompressionCodec* _compress_codec = nullptr;
+    RETURN_IF_ERROR(get_block_compression_codec(type, &_compress_codec, compress_level));
+
+    faststring compressed_body;
+    RETURN_IF_ERROR(PageIO::compress_page_body(_compress_codec, 0.1, slices, &compressed_body));
+
+    size_t x = compressed_body.size();
+    compressed_body.clear();
+    return x;
+}
+
+static Status get_compress_size2(CompressionTypePB type, const std::vector<Slice>& slices, int compress_level,
+                                 faststring* compressed_body) {
+    const BlockCompressionCodec* _compress_codec = nullptr;
+    RETURN_IF_ERROR(get_block_compression_codec(type, &_compress_codec, compress_level));
+    RETURN_IF_ERROR(PageIO::compress_page_body(_compress_codec, 0.1, slices, compressed_body));
+    return Status::OK();
+}
+
+TEST_F(JsonFlattenerTest, testSizeJson) {
+    std::string json1 = R"({"Bool": false, "arr": [10, 20, 30]})";
+    std::string json2 = R"(false)";
+    std::string json3 = R"([10, 20, 30])";
+
+    ASSIGN_OR_ABORT(auto jv1, JsonValue::parse(json1));
+    ASSIGN_OR_ABORT(auto jv2, JsonValue::parse(json2));
+    ASSIGN_OR_ABORT(auto jv3, JsonValue::parse(json3));
+
+    ColumnPtr col1 = JsonColumn::create();
+    ColumnPtr col2 = JsonColumn::create();
+    ColumnPtr col3 = JsonColumn::create();
+
+    // std::vector<Slice>
+
+    for (int i = 0; i < 3616768; i++) {
+        down_cast<JsonColumn*>(col1.get())->append(&jv1);
+        down_cast<JsonColumn*>(col2.get())->append(&jv2);
+        down_cast<JsonColumn*>(col3.get())->append(&jv3);
+    }
+
+    auto rd1 = col1->raw_data();
+    auto rd2 = col2->raw_data();
+    auto rd3 = col3->raw_data();
+
+    const auto* sl1 = reinterpret_cast<const Slice*>(rd1);
+    const auto* sl2 = reinterpret_cast<const Slice*>(rd2);
+    const auto* sl3 = reinterpret_cast<const Slice*>(rd3);
+
+    std::vector<Slice> slices1;
+    std::vector<Slice> slices2;
+    std::vector<Slice> slices3;
+
+    size_t uncompress1 = 0;
+    size_t uncompress2 = 0;
+    size_t uncompress3 = 0;
+
+    for (int i = 0; i < 3616768; i++) {
+        slices1.push_back(sl1[i]);
+        slices2.push_back(sl2[i]);
+        slices3.push_back(sl3[i]);
+
+        uncompress1 += sl1[i].size;
+        uncompress2 += sl2[i].size;
+        uncompress3 += sl3[i].size;
+    }
+
+    LOG(INFO) << "sl1 " << sl1[0].size << " sl2 " << sl2[0].size << " sl3 " << sl3[0].size;
+
+    LOG(INFO) << "sl1 " << string_2_asc(sl1[0].to_string()) << " sl2 " << string_2_asc(sl2[0].to_string()) << " sl3 "
+              << string_2_asc(sl3[0].to_string());
+
+    LOG(INFO) << "col1 " << col1->byte_size() << " col2 " << col2->byte_size() << " col3 " << col3->byte_size();
+
+    LOG(INFO) << "uncompress1[" << uncompress1 << "], uncompress2[" << uncompress2 << "], uncompress3[" << uncompress3
+              << "]";
+
+    std::vector<CompressionTypePB> compress_types{CompressionTypePB::SNAPPY,    CompressionTypePB::LZ4,
+                                                  CompressionTypePB::LZ4_FRAME, CompressionTypePB::ZLIB,
+                                                  CompressionTypePB::ZSTD,      CompressionTypePB::GZIP};
+
+    for (auto type : compress_types) {
+        ASSIGN_OR_ABORT(size_t compress1, get_compress_size(type, slices1, 3));
+        ASSIGN_OR_ABORT(size_t compress2, get_compress_size(type, slices2, 3));
+        ASSIGN_OR_ABORT(size_t compress3, get_compress_size(type, slices3, 3));
+        LOG(INFO) << "Compression[" << type << "], compress1[" << compress1 << "], compress2[" << compress2
+                  << "], compress3[" << compress3 << "]";
+    }
+    /*
+    sl1 23 sl2 6 sl3 8
+    sl1 '0xb0x170x2DBool0x19Carr0x20x8(\n(0x14(0x1e0x3\t' sl2 'Efalse' sl3 '0x20x8(\n(0x14(0x1e'
+    col1 83185664 col2 21700608 col3 28934144
+                  uncompress1[83185664], uncompress2[21700608], uncompress3[28934144]
+    Compression[3], compress1[3929812],    compress2[1019544],    compress3[1360270]
+    Compression[4], compress1[326252],     compress2[85116],      compress3[113485]
+    Compression[5], compress1[330383],     compress2[86196],      compress3[114928]
+    Compression[6], compress1[201825],     compress2[31641],      compress3[42170]
+    Compression[7], compress1[7648],       compress2[2003],       compress3[2665]
+    Compression[8], compress1[201837],     compress2[31653],      compress3[42182]
+*/
+}
+
+static size_t addPage(const uint8_t* rd1, std::vector<Slice>& slices1, ObjectPool& pool) {
+    PageBuilderOptions opts;
+    opts.data_page_size = config::data_page_size;
+    auto pb1 = std::make_unique<BinaryPlainPageBuilder>(opts);
+
+    size_t size = 0;
+    size_t remaing = 3616768;
+    while (remaing > 0) {
+        size_t num_written = pb1->add(rd1, remaing);
+        rd1 += sizeof(Slice) * num_written;
+        remaing -= num_written;
+
+        if (num_written < remaing) {
+            faststring* ev1 = pb1->finish();
+            size += ev1->size();
+            faststring* co = pool.add(new faststring());
+            ev1->swap(*co);
+            slices1.emplace_back(*co);
+            pb1->reset();
+        }
+    }
+
+    faststring* ev1 = pb1->finish();
+    size += ev1->size();
+    faststring* co = pool.add(new faststring());
+    ev1->swap(*co);
+    slices1.emplace_back(*co);
+
+    return size;
+}
+
+TEST_F(JsonFlattenerTest, testSizeJson2) {
+    std::string json1 = R"({"Bool": false, "arr": [10, 20, 30]})";
+    std::string json2 = R"(false)";
+    std::string json3 = R"([10, 20, 30])";
+
+    ASSIGN_OR_ABORT(auto jv1, JsonValue::parse(json1));
+    ASSIGN_OR_ABORT(auto jv2, JsonValue::parse(json2));
+    ASSIGN_OR_ABORT(auto jv3, JsonValue::parse(json3));
+
+    ColumnPtr col1 = JsonColumn::create();
+    ColumnPtr col2 = JsonColumn::create();
+    ColumnPtr col3 = JsonColumn::create();
+
+    // std::vector<Slice>
+
+    for (int i = 0; i < 3616768; i++) {
+        down_cast<JsonColumn*>(col1.get())->append(&jv1);
+        down_cast<JsonColumn*>(col2.get())->append(&jv2);
+        down_cast<JsonColumn*>(col3.get())->append(&jv3);
+    }
+
+    auto rd1 = col1->raw_data();
+    auto rd2 = col2->raw_data();
+    auto rd3 = col3->raw_data();
+
+    std::vector<Slice> slices1;
+    std::vector<Slice> slices2;
+    std::vector<Slice> slices3;
+
+    ObjectPool pool;
+    size_t uncompress1 = addPage(rd1, slices1, pool);
+    size_t uncompress2 = addPage(rd2, slices2, pool);
+    size_t uncompress3 = addPage(rd3, slices3, pool);
+
+    LOG(INFO) << "encoded1[" << uncompress1 << "], encoded2[" << uncompress2 << "], encoded3[" << uncompress3 << "]";
+
+    std::vector<CompressionTypePB> compress_types{CompressionTypePB::SNAPPY,    CompressionTypePB::LZ4,
+                                                  CompressionTypePB::LZ4_FRAME, CompressionTypePB::ZLIB,
+                                                  CompressionTypePB::ZSTD,      CompressionTypePB::GZIP};
+
+    for (auto type : compress_types) {
+        ASSIGN_OR_ABORT(size_t compress1, get_compress_size(type, slices1, 3));
+        ASSIGN_OR_ABORT(size_t compress2, get_compress_size(type, slices2, 3));
+        ASSIGN_OR_ABORT(size_t compress3, get_compress_size(type, slices3, 3));
+        LOG(INFO) << "Compression[" << type << "], compress1[" << compress1 << "], compress2[" << compress2
+                  << "], compress3[" << compress3 << "]";
+    }
+    /*
+                  uncompress1[83185664], uncompress2[21700608], uncompress3[28934144]
+    Compression[3], compress1[3929812],    compress2[1019544],    compress3[1360270]
+    Compression[4], compress1[326252],     compress2[85116],      compress3[113485]
+    Compression[5], compress1[330383],     compress2[86196],      compress3[114928]
+    Compression[6], compress1[201825],     compress2[31641],      compress3[42170]
+    Compression[7], compress1[7648],       compress2[2003],       compress3[2665]
+    Compression[8], compress1[201837],     compress2[31653],      compress3[42182]
+
+                  uncompress1[83185664], uncompress2[21700608], uncompress3[28934144]
+                     encoded1[57871820],    encoded2[57871820],    encoded3[57871820]
+    Compression[3], compress1[18430381],   compress2[18188905],   compress3[17995585]
+    Compression[4], compress1[14802162],   compress2[14558656],   compress3[14478402]
+    Compression[5], compress1[14804377],   compress2[14560871],   compress3[14480623]
+    Compression[6], compress1[6946753],    compress2[6032825],    compress3[5190669]
+    Compression[7], compress1[4359341],    compress2[3864812],    compress3[2711603]
+    Compression[8], compress1[6946765],    compress2[6032837],    compress3[5190681]
+*/
+}
+
+static void test_json_compress(std::string json_str, CompressionTypePB type) {
+    ASSIGN_OR_ABORT(auto jv1, JsonValue::parse(json_str));
+
+    ColumnPtr col1 = JsonColumn::create();
+    for (int i = 0; i < 3616768; i++) {
+        down_cast<JsonColumn*>(col1.get())->append(&jv1);
+    }
+
+    auto rd1 = col1->raw_data();
+
+    const auto* sl1 = reinterpret_cast<const Slice*>(rd1);
+    size_t uncompress1 = 0;
+
+    for (int i = 0; i < 3616768; i++) {
+        uncompress1 += sl1[i].size;
+    }
+
+    PageBuilderOptions opts;
+    opts.data_page_size = config::data_page_size;
+    auto pb1 = std::make_unique<BinaryDictPageBuilder>(opts);
+
+    size_t encode_size = 0;
+    size_t compress_size = 0;
+    size_t remaing = 3616768;
+    while (remaing > 0) {
+        size_t num_written = pb1->add(rd1, remaing);
+        if (num_written < remaing) {
+            faststring* ev1 = pb1->finish();
+            encode_size += ev1->size();
+            std::vector<Slice> slices1;
+            slices1.emplace_back(*ev1);
+
+            ASSIGN_OR_ABORT(size_t compress1, get_compress_size(type, slices1, 3));
+            compress_size += compress1;
+            pb1->reset();
+        }
+
+        rd1 += sizeof(Slice) * num_written;
+        remaing -= num_written;
+    }
+
+    LOG(INFO) << "uncopmress[" << uncompress1 << "], encoded1[" << encode_size << "], compressType[" << type
+              << "], compress[" << compress_size << "]";
+}
+
+TEST_F(JsonFlattenerTest, testSizeJson3) {
+    std::vector<CompressionTypePB> compress_types{CompressionTypePB::SNAPPY, CompressionTypePB::LZ4,
+                                                  CompressionTypePB::ZSTD, CompressionTypePB::GZIP};
+    for (auto type : compress_types) {
+        test_json_compress(R"({"Bool": false, "arr": [10, 20, 30]})", type);
+    }
+    /*
+data: R"({"Bool": false, "arr": [10, 20, 30]})"
+uncopmress[83185664], encoded1[97618840], compressType[3], compress[18411485]
+uncopmress[83185664], encoded1[97618840], compressType[4], compress[14873621]
+uncopmress[83185664], encoded1[97618840], compressType[5], compress[14895956]
+uncopmress[83185664], encoded1[97618840], compressType[6], compress[6015560]
+uncopmress[83185664], encoded1[97618840], compressType[7], compress[9172240]
+uncopmress[83185664], encoded1[97618840], compressType[8], compress[6033428]
+
+uncopmress[83185664], encoded1[87120], compressType[3], compress[11660]
+uncopmress[83185664], encoded1[87120], compressType[4], compress[9680]
+uncopmress[83185664], encoded1[87120], compressType[7], compress[9900]
+uncopmress[83185664], encoded1[87120], compressType[8], compress[11000]
+
+*/
+}
+TEST_F(JsonFlattenerTest, testSizeJson31) {
+    std::vector<CompressionTypePB> compress_types{CompressionTypePB::SNAPPY,    CompressionTypePB::LZ4,
+                                                  CompressionTypePB::LZ4_FRAME, CompressionTypePB::ZLIB,
+                                                  CompressionTypePB::ZSTD,      CompressionTypePB::GZIP};
+    for (auto type : compress_types) {
+        test_json_compress(R"(false)", type);
+    }
+    /*
+data: R"(false)"
+uncopmress[21700608], encoded1[36114744], compressType[3], compress[15470978]
+uncopmress[21700608], encoded1[36114744], compressType[4], compress[14593235]
+uncopmress[21700608], encoded1[36114744], compressType[5], compress[14601500]
+uncopmress[21700608], encoded1[36114744], compressType[6], compress[4846045]
+uncopmress[21700608], encoded1[36114744], compressType[7], compress[8726187]
+uncopmress[21700608], encoded1[36114744], compressType[8], compress[4852657]
+
+uncopmress[21700608], encoded1[87120], compressType[3], compress[11660]
+uncopmress[21700608], encoded1[87120], compressType[4], compress[9680]
+uncopmress[21700608], encoded1[87120], compressType[5], compress[12980]
+uncopmress[21700608], encoded1[87120], compressType[6], compress[8360]
+uncopmress[21700608], encoded1[87120], compressType[7], compress[9900]
+uncopmress[21700608], encoded1[87120], compressType[8], compress[11000]
+*/
+}
+
+TEST_F(JsonFlattenerTest, testSizeJson32) {
+    std::vector<CompressionTypePB> compress_types{CompressionTypePB::SNAPPY,    CompressionTypePB::LZ4,
+                                                  CompressionTypePB::LZ4_FRAME, CompressionTypePB::ZLIB,
+                                                  CompressionTypePB::ZSTD,      CompressionTypePB::GZIP};
+    for (auto type : compress_types) {
+        test_json_compress(R"([10, 20, 30])", type);
+    }
+    /*
+data: R"([10, 20, 30])"
+uncopmress[28934144], encoded1[43392776], compressType[3], compress[15832392]
+uncopmress[28934144], encoded1[43392776], compressType[4], compress[14634834]
+uncopmress[28934144], encoded1[43392776], compressType[5], compress[14644764]
+uncopmress[28934144], encoded1[43392776], compressType[6], compress[4082554]
+uncopmress[28934144], encoded1[43392776], compressType[7], compress[8114796]
+uncopmress[28934144], encoded1[43392776], compressType[8], compress[4090498]
+*/
+}
+
+static void print_value(std::string str) {
+    ASSIGN_OR_ABORT(auto jv1, JsonValue::parse(str));
+
+    size_t length = 10000;
+
+    ColumnPtr col1 = JsonColumn::create();
+    for (int i = 0; i < length; i++) {
+        down_cast<JsonColumn*>(col1.get())->append(&jv1);
+    }
+
+    auto rd1 = col1->raw_data();
+    const auto* sl1 = reinterpret_cast<const Slice*>(rd1);
+    size_t uncompress1 = 0;
+
+    LOG(INFO) << "column bytes: " << col1->byte_size();
+    LOG(INFO) << "decode value: " << string_2_asc(sl1[0].to_string());
+
+    for (int i = 0; i < length; i++) {
+        uncompress1 += sl1[i].size;
+    }
+
+    PageBuilderOptions opts;
+    opts.data_page_size = config::data_page_size;
+    auto pb1 = std::make_unique<BinaryPlainPageBuilder>(opts);
+
+    size_t encode_size = 0;
+    size_t compress_size = 0;
+    size_t remaing = length;
+    int i = 0;
+    while (remaing > 0) {
+        size_t num_written = pb1->add(rd1, remaing);
+        if (num_written <= remaing) {
+            faststring* ev1 = pb1->finish();
+            encode_size += ev1->size();
+
+            LOG(INFO) << "loop[" << i << "], num_written[" << num_written << "], ev1[" << ev1->size() << "]"
+                      << ", encode_size: [" << encode_size << "]";
+
+            if (i < 1) {
+                LOG(INFO) << "encode value: " << string_2_asc(ev1->ToString());
+            }
+
+            std::vector<Slice> slices1;
+            slices1.emplace_back(*ev1);
+
+            faststring compress1;
+            get_compress_size2(CompressionTypePB::LZ4_FRAME, slices1, 3, &compress1);
+            compress_size += compress1.size();
+
+            LOG(INFO) << "loop[" << i << "], compress1[" << compress1.size() << "], compress_size[" << compress_size
+                      << "]";
+
+            if (i < 1) {
+                LOG(INFO) << "compress value: " << string_2_asc(compress1.ToString());
+            }
+
+            pb1->reset();
+        }
+
+        rd1 += sizeof(Slice) * num_written;
+        remaing -= num_written;
+        i++;
+    }
+
+    LOG(INFO) << "uncopmress[" << uncompress1 << "], encoded1[" << encode_size << "]";
+}
+
+TEST_F(JsonFlattenerTest, testSizeJson33) {
+    print_value(R"(false)");
+}
+
+TEST_F(JsonFlattenerTest, testSizeJson34) {
+    print_value(R"({"Bool": false, "arr": [10, 20, 30]})");
+}
 } // namespace starrocks

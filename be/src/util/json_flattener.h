@@ -27,6 +27,7 @@
 #include <string_view>
 #include <tuple>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "column/nullable_column.h"
@@ -145,7 +146,7 @@ private:
     void _visit_json_paths(const vpack::Slice& value, JsonFlatPath* root, size_t mark_row);
 
     // clean sparsity path, to save memory
-    void _clean_sparsity_path(JsonFlatPath* root, size_t check_hits_min);
+    void _clean_sparsity_path(const std::string_view& name, JsonFlatPath* root, size_t check_hits_min);
 
 private:
     struct JsonFlatDesc {
@@ -153,14 +154,15 @@ private:
         uint8_t type = 31; // JSON_NULL_TYPE_BITS
         // column path hit count, some json may be null or none, so hit use to record the actual value
         // e.g: {"a": 1, "b": 2}, path "$.c" not exist, so hit is 0
-        uint64_t hits = 0;
+        uint32_t hits = 0;
 
         // for json-uint, json-uint is uint64_t, check the maximum value and downgrade to bigint
         uint64_t max = 0;
 
         // same key may appear many times in json, so we need avoid duplicate compute hits
-        int64_t last_row = -1;
-        uint64_t multi_times = 0;
+        uint32_t last_row = -1;
+        uint32_t multi_times = 0;
+        uint32_t base_type_count = 0; // for count the base type, e.g: int, double, string
     };
 
     bool _has_remain = false;
@@ -177,6 +179,7 @@ private:
 
     bool _generate_filter = false;
     std::shared_ptr<BloomFilter> _remain_filter = nullptr;
+    std::unordered_set<std::string_view> _remain_keys;
 };
 
 // flattern JsonColumn to flat json A,B,C
