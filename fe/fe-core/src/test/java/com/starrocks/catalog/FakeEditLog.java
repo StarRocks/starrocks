@@ -43,6 +43,7 @@ import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStateBatch;
 import mockit.Mock;
@@ -115,6 +116,14 @@ public class FakeEditLog extends MockUp<EditLog> {
 
     @Mock
     public void logBackupJob(BackupJob job) {
+    }
+
+    @Mock
+    public void logAddBackend(Backend be) {
+    }
+
+    @Mock
+    public void logAddComputeNode(ComputeNode cn) {
     }
 
     public TransactionState getTransaction(long transactionId) {
