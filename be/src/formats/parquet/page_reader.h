@@ -28,7 +28,7 @@
 namespace starrocks {
 class ObjectCache;
 class BlockCompressionCodec;
-}
+} // namespace starrocks
 
 namespace starrocks::parquet {
 

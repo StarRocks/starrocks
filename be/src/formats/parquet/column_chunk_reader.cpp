@@ -113,7 +113,7 @@ Status ColumnChunkReader::_parse_page_header() {
     if (page_type == tparquet::PageType::DATA_PAGE) {
         const auto& page_header = _page_reader->current_header()->data_page_header;
         _num_values = page_header.num_values;
-        _opts.stats->has_page_statistics |= _opts.
+        _opts.stats->has_page_statistics |=
                 (page_header.__isset.statistics &&
                  (page_header.statistics.__isset.min_value || page_header.statistics.__isset.min));
         _current_page_no_null = (page_header.__isset.statistics && page_header.statistics.__isset.null_count &&
