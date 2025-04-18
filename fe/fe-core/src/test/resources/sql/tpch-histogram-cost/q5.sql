@@ -8,7 +8,7 @@ RESULT SINK
 distribution type: GATHER
 cardinality: 5
 column statistics:
-* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
 * sum-->[810.9, 104949.5, 0.0, 8.0, 5.0] ESTIMATE
 
 PLAN FRAGMENT 1(F11)
@@ -22,7 +22,7 @@ OutPut Exchange Id: 27
 |  offset: 0
 |  cardinality: 5
 |  column statistics:
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
 |  * sum-->[810.9, 104949.5, 0.0, 8.0, 5.0] ESTIMATE
 |
 25:AGGREGATE (merge finalize)
@@ -30,7 +30,7 @@ OutPut Exchange Id: 27
 |  group by: [46: N_NAME, VARCHAR, false]
 |  cardinality: 5
 |  column statistics:
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
 |  * sum-->[810.9, 104949.5, 0.0, 8.0, 5.0] ESTIMATE
 |
 24:EXCHANGE
@@ -50,7 +50,7 @@ OutPut Exchange Id: 24
 |  group by: [46: N_NAME, VARCHAR, false]
 |  cardinality: 5
 |  column statistics:
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
 |  * sum-->[810.9, 104949.5, 0.0, 8.0, 5.0] ESTIMATE
 |
 22:Project
@@ -59,7 +59,7 @@ OutPut Exchange Id: 24
 |  54 <-> [25: L_EXTENDEDPRICE, DOUBLE, false] * 1.0 - [26: L_DISCOUNT, DOUBLE, false]
 |  cardinality: 16381891
 |  column statistics:
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
 |  * expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 21:HASH JOIN
@@ -73,10 +73,10 @@ OutPut Exchange Id: 24
 |  cardinality: 16381891
 |  column statistics:
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] MCV: [[0.05:54639500][0.07:54619200][0.02:54617300][0.01:54583400][0.10:54581500]] ESTIMATE
 |  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
 |  * expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 |----20:EXCHANGE
@@ -95,9 +95,9 @@ OutPut Exchange Id: 24
 |  column statistics:
 |  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.2E8] ESTIMATE
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] MCV: [[0.05:54639500][0.07:54619200][0.02:54617300][0.01:54583400][0.10:54581500]] ESTIMATE
 |  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
 |
 12:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -109,10 +109,10 @@ OutPut Exchange Id: 24
 |  column statistics:
 |  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.2E8] ESTIMATE
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] MCV: [[0.05:54639500][0.07:54619200][0.02:54617300][0.01:54583400][0.10:54581500]] ESTIMATE
 |  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
 |
 |----11:EXCHANGE
 |       distribution type: BROADCAST
@@ -222,7 +222,7 @@ OutPut Exchange Id: 11
 |  column statistics:
 |  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 200000.0] ESTIMATE
 |  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
 |
 9:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -234,8 +234,8 @@ OutPut Exchange Id: 11
 |  column statistics:
 |  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 200000.0] ESTIMATE
 |  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
 |
 |----8:EXCHANGE
 |       distribution type: BROADCAST
@@ -265,8 +265,8 @@ OutPut Exchange Id: 08
 |  46 <-> [46: N_NAME, CHAR, false]
 |  cardinality: 5
 |  column statistics:
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
 |
 6:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -276,8 +276,8 @@ OutPut Exchange Id: 08
 |  output columns: 45, 46
 |  cardinality: 5
 |  column statistics:
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] MCV: [[CANADA:1][UNITED STATES:1][VIETNAM:1][MOROCCO:1][ARGENTINA:1]] ESTIMATE
 |  * N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |
@@ -320,5 +320,5 @@ actualRows=0, avgRowSize=29.0
 cardinality: 1
 column statistics:
 * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
-* R_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] MCV: [[EUROPE:1][AFRICA:1][AMERICA:1][ASIA:1][MIDDLE EAST:1]] ESTIMATE
+* R_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] MCV: [[AFRICA:1]] ESTIMATE
 [end]
