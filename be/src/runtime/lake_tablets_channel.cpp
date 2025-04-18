@@ -840,12 +840,13 @@ void LakeTabletsChannel::update_profile() {
         auto* merged_profile = RuntimeProfile::merge_isomorphic_profiles(&obj_pool, tablets_profile);
         RuntimeProfile* final_profile = _profile->create_child("PeerReplicas");
         auto* tablets_counter = ADD_COUNTER(final_profile, "TabletsNum", TUnit::UNIT);
-        COUNTER_UPDATE(tablets_counter, tablets_profile.size());
+        COUNTER_SET(tablets_counter, static_cast<int64_t>(tablets_profile.size()));
         final_profile->copy_all_info_strings_from(merged_profile);
         final_profile->copy_all_counters_from(merged_profile);
     }
 }
 
+#define ADD_AND_SET_COUNTER(profile, name, type, val) (ADD_COUNTER(profile, name, type))->set(val)
 #define ADD_AND_UPDATE_COUNTER(profile, name, type, val) (ADD_COUNTER(profile, name, type))->update(val)
 #define ADD_AND_UPDATE_TIMER(profile, name, val) (ADD_TIMER(profile, name))->update(val)
 #define DEFAULT_IF_NULL(ptr, value, default_value) ((ptr) ? (value) : (default_value))
@@ -870,10 +871,10 @@ void LakeTabletsChannel::_update_tablet_profile(DeltaWriter* writer, RuntimeProf
     const FlushStatistic* flush_stat = writer->get_flush_stats();
     ADD_AND_UPDATE_COUNTER(profile, "MemtableFlushedCount", TUnit::UNIT,
                            DEFAULT_IF_NULL(flush_stat, flush_stat->flush_count, 0));
-    ADD_AND_UPDATE_COUNTER(profile, "MemtableFlushingCount", TUnit::UNIT,
-                           DEFAULT_IF_NULL(flush_stat, flush_stat->cur_flush_count, 0));
-    ADD_AND_UPDATE_COUNTER(profile, "MemtableQueueCount", TUnit::UNIT,
-                           DEFAULT_IF_NULL(flush_stat, flush_stat->queueing_memtable_num.load(), 0));
+    ADD_AND_SET_COUNTER(profile, "MemtableFlushingCount", TUnit::UNIT,
+                        DEFAULT_IF_NULL(flush_stat, flush_stat->cur_flush_count, 0));
+    ADD_AND_SET_COUNTER(profile, "MemtableQueueCount", TUnit::UNIT,
+                        DEFAULT_IF_NULL(flush_stat, flush_stat->queueing_memtable_num.load(), 0));
     ADD_AND_UPDATE_TIMER(profile, "FlushTaskPendingTime", DEFAULT_IF_NULL(flush_stat, flush_stat->pending_time_ns, 0));
     ADD_AND_UPDATE_COUNTER(profile, "MemtableInsertCount", TUnit::UNIT,
                            DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.insert_count.load(), 0));
