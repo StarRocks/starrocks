@@ -65,7 +65,7 @@ public class NodeMgrTest {
     @Test
     public void testRemoveClusterIdAndRoleFile() throws Exception {
         NodeMgr nodeMgr = new NodeMgr();
-        nodeMgr.initialize(new String[0]);
+        nodeMgr.initialize(null);
         File imageDir = new File("/tmp/starrocks_nodemgr_test_" + UUID.randomUUID());
         imageDir.deleteOnExit();
 
