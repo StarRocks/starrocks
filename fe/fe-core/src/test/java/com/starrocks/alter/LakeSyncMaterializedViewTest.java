@@ -285,8 +285,9 @@ public class LakeSyncMaterializedViewTest {
         } catch (Throwable e) {
             Assert.assertTrue(e.getMessage().contains("Materialized view[sync_mv1] already exists in " +
                     "the table tbl1"));
+        } finally {
+            starRocksAssert.dropMaterializedView("sync_mv1");
         }
-        starRocksAssert.dropMaterializedView("sync_mv1");
     }
 
     // create sync mv that mv's name already existed in other table
