@@ -298,10 +298,10 @@ ANALYZE FULL TABLE tbl_name MULTIPLE COLUMNS (v1, v2);
 
 ```sql
 -- Predicate Column の手動サンプル収集
-ANALYZE SAMPLE TABLE tbl_name PREDICATE COLUMNS (v1, v2)
+ANALYZE SAMPLE TABLE tbl_name PREDICATE COLUMNS
 
 -- Predicate Column の手動フル収集
-ANALYZE FULL TABLE tbl_name PREDICATE COLUMNS (v1, v2)
+ANALYZE FULL TABLE tbl_name PREDICATE COLUMNS
 ```
 
 #### ヒストグラムを手動で収集する
