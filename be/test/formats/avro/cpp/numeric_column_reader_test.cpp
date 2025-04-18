@@ -32,6 +32,28 @@ public:
         return ColumnHelper::create_column(type_desc, true, false, 0, true);
     }
 
+    std::vector<uint8_t> encode_decimal_bytes(int64_t unscaled_value, size_t fixed_size = 0) {
+        std::vector<uint8_t> bytes;
+        bool is_negative = unscaled_value < 0;
+        uint64_t abs_value = std::abs(unscaled_value);
+
+        while (abs_value > 0) {
+            bytes.insert(bytes.begin(), abs_value & 0xFF);
+            abs_value >>= 8;
+        }
+
+        if (bytes.empty()) {
+            bytes.push_back(0);
+        }
+        if (fixed_size > bytes.size()) {
+            size_t padding = fixed_size - bytes.size();
+            uint8_t pad_byte = is_negative ? 0xFF : 0x00;
+            bytes.insert(bytes.begin(), padding, pad_byte);
+        }
+
+        return bytes;
+    }
+
 private:
     std::string _col_name = "k1";
     cctz::time_zone _timezone = cctz::utc_time_zone();
@@ -143,13 +165,24 @@ TEST_F(NumericColumnReaderTest, test_decimal) {
     }
 
     {
-        std::string string_v = "13.22";
+        std::string string_v = "13.2";
         avro::GenericDatum datum(string_v);
         CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
     }
 
-    ASSERT_EQ(5, column->size());
-    ASSERT_EQ("[1.00, 10.00, 11.00, 12.11, 13.22]", column->debug_string());
+    {
+        // actual decimal value is 14.33
+        int64_t decimal_v = 1433;
+        auto encoded_bytes = encode_decimal_bytes(decimal_v);
+        avro::LogicalType logical_type(avro::LogicalType::DECIMAL);
+        logical_type.setPrecision(10);
+        logical_type.setScale(2);
+        avro::GenericDatum datum(avro::AVRO_BYTES, logical_type, encoded_bytes);
+        CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+    }
+
+    ASSERT_EQ(6, column->size());
+    ASSERT_EQ("[1.00, 10.00, 11.00, 12.11, 13.20, 14.33]", column->debug_string());
 }
 
 } // namespace starrocks

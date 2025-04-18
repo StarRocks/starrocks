@@ -34,6 +34,7 @@ public:
         _test_exec_dir = starrocks_home + "/be/test/formats/test_data/avro/cpp/";
         _counter = _obj_pool.add(new ScannerCounter());
         _state = create_runtime_state();
+        _timezone = cctz::utc_time_zone();
     }
 
     ChunkPtr create_src_chunk(const std::vector<SlotDescriptor*>& slot_descs) {
@@ -94,6 +95,7 @@ private:
     ObjectPool _obj_pool;
     ScannerCounter* _counter;
     std::shared_ptr<RuntimeState> _state;
+    cctz::time_zone _timezone;
 };
 
 TEST_F(AvroReaderTest, test_get_schema_primitive_types) {
@@ -229,7 +231,7 @@ TEST_F(AvroReaderTest, test_read_primitive_types) {
         slot_descs.emplace_back(&slot_desc);
     }
 
-    column_readers = create_column_readers(slot_descs, cctz::utc_time_zone(), false);
+    column_readers = create_column_readers(slot_descs, _timezone, false);
     reader->TEST_init(&slot_descs, &column_readers, column_not_found_as_null);
 
     // create chunk
@@ -263,7 +265,7 @@ TEST_F(AvroReaderTest, test_read_complex_types) {
         slot_descs.emplace_back(&slot_desc);
     }
 
-    column_readers = create_column_readers(slot_descs, cctz::utc_time_zone(), false);
+    column_readers = create_column_readers(slot_descs, _timezone, false);
     reader->TEST_init(&slot_descs, &column_readers, column_not_found_as_null);
 
     // create chunk
@@ -298,7 +300,7 @@ TEST_F(AvroReaderTest, test_read_complex_nest_types) {
         slot_descs.emplace_back(&slot_desc);
     }
 
-    column_readers = create_column_readers(slot_descs, cctz::utc_time_zone(), false);
+    column_readers = create_column_readers(slot_descs, _timezone, false);
     reader->TEST_init(&slot_descs, &column_readers, column_not_found_as_null);
 
     // create chunk
@@ -338,7 +340,7 @@ TEST_F(AvroReaderTest, test_read_logical_types) {
         slot_descs.emplace_back(&tmp_slot_descs[i]);
     }
 
-    column_readers = create_column_readers(slot_descs, cctz::utc_time_zone(), false);
+    column_readers = create_column_readers(slot_descs, _timezone, false);
     reader->TEST_init(&slot_descs, &column_readers, column_not_found_as_null);
 
     // create chunk
