@@ -48,3 +48,24 @@ select c0, lead(c5, 5, '12345') over() from common_duplicate;
 select c0, lag(c5, 5, 123) over() from common_duplicate;
 select c0, lag(c5, 5, 123.456) over() from common_duplicate;
 select c0, lead(c6, 5, '2021-11-11') over() from common_duplicate;
+
+use test;
+CREATE TABLE test_data (
+  col_1 INT,
+  col_2 INT,
+  col_3 INT NOT NULL
+) PROPERTIES ("compression" = "LZ4","replicated_storage" = "true","replication_num" = "1");
+
+INSERT INTO test_data (col_1, col_2, col_3)
+VALUES
+  (1, 1, 1),
+  (2, 2, 2),
+  (3, 3, 3),
+  (4, 4, 4),
+  (5, 5, 5);
+
+SELECT
+  col_1,
+  col_2,
+  LAG(col_2, 2, col_3) OVER (ORDER BY col_1) AS lag_result
+FROM test_data;
