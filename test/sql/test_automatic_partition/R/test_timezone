@@ -1,0 +1,91 @@
+-- name: test_from_unix_timezone
+create table t(id bigint, ts bigint) partition by from_unixtime(ts, 'yyyy-MM-dd HH:mm:ss', 'UTC');
+-- result:
+-- !result
+SET time_zone = '+8:00';
+-- result:
+-- !result
+insert into t values(1, 1196440219);
+-- result:
+-- !result
+show partitions from t;
+-- result:
+[REGEX].*p20071130163019.*
+-- !result
+SET time_zone = '+10:00';
+-- result:
+-- !result
+insert into t values(1, 1196440219);
+-- result:
+-- !result
+show partitions from t;
+-- result:
+[REGEX].*p20071130163019.*
+-- !result
+select * from t where ts=1196440219;
+-- result:
+1	1196440219
+1	1196440219
+-- !result
+
+-- name: test_from_unix_time
+create table t(id bigint, ts bigint) partition by from_unixtime(ts, 'yyyy-MM-dd HH:mm:ss');
+-- result:
+-- !result
+SET time_zone = '+8:00';
+-- result:
+-- !result
+insert into t values(1, 1196440219);
+-- result:
+-- !result
+show partitions from t;
+-- result:
+[REGEX].*p20071201003019.*
+-- !result
+SET time_zone = '+10:00';
+-- result:
+-- !result
+insert into t values(1, 1196440219);
+-- result:
+-- !result
+show partitions from t order by PartitionName;
+-- result:
+[REGEX].*p20071201003019.*
+.*p20071201023019.*
+-- !result
+select * from t where ts=1196440219;
+-- result:
+1	1196440219
+-- !result
+
+-- name: test_from_unix_timezone_exception
+create table t(id bigint, ts bigint) partition by from_unixtime(ts, 'yyyy-MM-dd HH:mm:ss', 'UTC');
+-- result:
+-- !result
+insert into t(id) values(1);
+-- result:
+-- !result
+show partitions from t;
+-- result:
+[REGEX].*NULL.*
+-- !result
+select from_unixtime(-1, 'yyyy-MM-dd HH:mm:ss', 'UTC');
+-- result:
+None
+-- !result
+select from_unixtime(1, '', 'UTC');
+-- result:
+None
+-- !result
+
+-- name: test_from_unix_timezone_not_const
+create table t(ts bigint, format string, timezone string);
+-- result:
+-- !result
+insert into t values(1, 'yyyy-MM-dd HH:mm:ss', 'UTC');
+-- result:
+-- !result
+select from_unixtime(ts, format, timezone) from t;
+-- result:
+1970-01-01 00:00:01
+-- !result
