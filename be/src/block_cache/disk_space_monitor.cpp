@@ -15,6 +15,7 @@
 #include "block_cache/disk_space_monitor.h"
 
 #include "block_cache/block_cache.h"
+#include "block_cache/datacache_utils.h"
 #include "common/config.h"
 #include "util/await.h"
 #include "util/thread.h"
@@ -37,6 +38,10 @@ StatusOr<size_t> DiskSpaceMonitor::FileSystemWrapper::directory_size(const std::
     });
     RETURN_IF_ERROR(st);
     return capacity;
+}
+
+dev_t DiskSpaceMonitor::FileSystemWrapper::device_id(const std::string& path) {
+    return DataCacheUtils::disk_device_id(path);
 }
 
 DiskSpaceMonitor::DiskSpaceMonitor(BlockCache* cache) : _fs(std::make_unique<FileSystemWrapper>()), _cache(cache) {}
@@ -107,14 +112,14 @@ bool DiskSpaceMonitor::adjust_spaces(std::vector<DirSpace>* dir_spaces) {
     _min_disk_dirs = _dir_spaces.size();
     for (size_t dir_index = 0; dir_index < _dir_spaces.size(); ++dir_index) {
         auto& dir_space = _dir_spaces[dir_index];
-        int disk_id = _fs->disk_id(dir_space.path);
-        if (_disk_stats.find(disk_id) == _disk_stats.end()) {
+        int device_id = _fs->device_id(dir_space.path);
+        if (_disk_stats.find(device_id) == _disk_stats.end()) {
             DiskStats disk;
-            disk.disk_id = disk_id;
+            disk.device_id = device_id;
             disk.path = dir_space.path;
-            _disk_stats[disk_id] = disk;
+            _disk_stats[device_id] = disk;
         }
-        _disk_to_dirs[disk_id].push_back(dir_index);
+        _disk_to_dirs[device_id].push_back(dir_index);
     }
     for (const auto& pair : _disk_to_dirs) {
         const auto& dirs = pair.second;
@@ -157,8 +162,8 @@ void DiskSpaceMonitor::_update_disk_stats() {
 int64_t DiskSpaceMonitor::_max_disk_used_rate() {
     int64_t max_used_rate = 0;
     for (const auto& pair : _disk_to_dirs) {
-        const auto& disk_id = pair.first;
-        const auto& disk = _disk_stats[disk_id];
+        const auto& device_id = pair.first;
+        const auto& disk = _disk_stats[device_id];
         int64_t used_rate = (disk.capacity_bytes - disk.available_bytes) * 100 / disk.capacity_bytes;
         if (used_rate > max_used_rate) {
             max_used_rate = used_rate;
@@ -172,8 +177,8 @@ void DiskSpaceMonitor::_init_spaces_by_cache_dir() {
     for (auto& dir_space : _dir_spaces) {
         auto ret = _fs->directory_size(dir_space.path);
         if (ret.ok() && ret.value() > 0) {
-            int disk_id = _fs->disk_id(dir_space.path);
-            auto& disk = _disk_stats[disk_id];
+            int device_id = _fs->device_id(dir_space.path);
+            auto& disk = _disk_stats[device_id];
             // The space under datacache directories can be reused, so ignore their usage.
             disk.available_bytes += ret.value();
             if (disk.available_bytes > disk.capacity_bytes) {
@@ -216,36 +221,40 @@ bool DiskSpaceMonitor::_adjust_spaces_by_disk_usage(bool immediate) {
                 return false;
             }
         }
-    } else {
+    } else if (!immediate) {
         return false;
     }
 
     int64_t delta_rate = 0;
     if (!shrink) {
         // Increase cache quota
-        delta_rate = (config::datacache_disk_safe_level - max_disk_used_rate) / _max_disk_dirs;
+        delta_rate = (config::datacache_disk_safe_level - max_disk_used_rate) / static_cast<int64_t>(_max_disk_dirs);
         DCHECK_GT(delta_rate, 0);
     } else {
         // Decrease cache quota
-        delta_rate = (config::datacache_disk_safe_level - max_disk_used_rate) / _min_disk_dirs;
+        delta_rate = (config::datacache_disk_safe_level - max_disk_used_rate) / static_cast<int64_t>(_min_disk_dirs);
         DCHECK_LT(delta_rate, 0);
     }
     _update_spaces_by_cache_usage();
 
     int64_t total_cache_quota = 0;
     for (const auto& pair : _disk_to_dirs) {
-        const auto& disk_id = pair.first;
+        const auto& device_id = pair.first;
         const auto& dirs = pair.second;
-        const auto& disk = _disk_stats[disk_id];
+        const auto& disk = _disk_stats[device_id];
         int64_t delta_quota = disk.capacity_bytes / 100 * delta_rate;
-        size_t disk_cache_quota = 0;
         for (uint32_t dir_index : dirs) {
             auto& dir_space = _dir_spaces[dir_index];
-            dir_space.size += delta_quota;
-            dir_space.size = dir_space.size / QUOTA_ALIGN_UNIT * QUOTA_ALIGN_UNIT;
-            disk_cache_quota += dir_space.size;
+            int64_t new_quota = dir_space.size + delta_quota;
+            int64_t safe_limit = disk.capacity_bytes * config::datacache_disk_safe_level * 0.01 / dirs.size();
+            if (new_quota > safe_limit) {
+                new_quota = safe_limit;
+            } else if (new_quota < 0) {
+                new_quota = 0;
+            }
+            dir_space.size = new_quota / QUOTA_ALIGN_UNIT * QUOTA_ALIGN_UNIT;
+            total_cache_quota += dir_space.size;
         }
-        total_cache_quota += disk_cache_quota;
     }
 
     _disk_free_period = 0;

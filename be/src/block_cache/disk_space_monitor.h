@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <sys/stat.h>
+
 #include <atomic>
 #include <mutex>
 #include <thread>
@@ -30,10 +32,10 @@ class BlockCache;
 class DiskSpaceMonitor {
 public:
     struct DiskStats {
-        int disk_id = 0;
+        dev_t device_id = 0;
         std::string path;
-        size_t capacity_bytes = 0;
-        size_t available_bytes = 0;
+        int64_t capacity_bytes = 0;
+        int64_t available_bytes = 0;
     };
 
     // Wrap a new class to make it easy controlled in unittest.
@@ -43,7 +45,7 @@ public:
 
         virtual StatusOr<size_t> directory_size(const std::string& dir);
 
-        virtual int disk_id(const std::string& path) { return DiskInfo::disk_id(path.c_str()); }
+        virtual dev_t device_id(const std::string& path);
 
         virtual ~FileSystemWrapper() {}
     };
@@ -90,12 +92,12 @@ private:
     }
 
     std::vector<DirSpace> _dir_spaces;
-    // <disk_id, DiskStats>
-    std::unordered_map<int, DiskStats> _disk_stats;
+    // <device_id, DiskStats>
+    std::unordered_map<dev_t, DiskStats> _disk_stats;
 
     // The datacache can be configured to have multiple data directories on the same physical disk.
-    // <disk_id, dir_space_index_list>
-    std::unordered_map<int, std::vector<uint32_t>> _disk_to_dirs;
+    // <device_id, dir_space_index_list>
+    std::unordered_map<dev_t, std::vector<uint32_t>> _disk_to_dirs;
     // Max directory count in one disk
     size_t _max_disk_dirs = 0;
     // Minimum directory count in one disk

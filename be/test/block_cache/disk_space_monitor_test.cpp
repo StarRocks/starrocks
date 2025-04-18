@@ -30,7 +30,7 @@ namespace starrocks {
 class MockFileSystem : public DiskSpaceMonitor::FileSystemWrapper {
 public:
     struct DiskSpaceInfo {
-        int disk_id;
+        dev_t device_id;
         SpaceInfo space_info;
     };
 
@@ -44,17 +44,17 @@ public:
 
     StatusOr<size_t> directory_size(const std::string& dir) override { return _dir_capacity; }
 
-    int disk_id(const std::string& path) override {
+    dev_t device_id(const std::string& path) override {
         auto info = _disk_space_info(path);
         if (!info) {
             return -1;
         }
-        return info->disk_id;
+        return info->device_id;
     }
 
-    void set_space(int disk_id, const std::string& disk_prefix, const SpaceInfo& space) {
+    void set_space(dev_t device_id, const std::string& disk_prefix, const SpaceInfo& space) {
         DiskSpaceInfo info;
-        info.disk_id = disk_id;
+        info.device_id = device_id;
         info.space_info = space;
         _space_infos[disk_prefix] = info;
     }
@@ -141,15 +141,15 @@ TEST_F(DiskSpaceMonitorTest, adjust_for_dirty_cache_dir) {
     mock_fs->set_space(2, "disk2", space_info);
     mock_fs->set_global_directory_capacity(200 * GB);
 
-    std::vector<DirSpace> dir_spaces = {
-            {.path = "disk1/dir1", .size = 0}, {.path = "disk1/dir2", .size = 0}, {.path = "disk2/dir2", .size = 0}};
+    std::vector<DirSpace> dir_spaces = {{.path = "disk1/dir1", .size = 0}, {.path = "disk2/dir2", .size = 0}};
 
-    // disk1 usage: (1000G - 180G - 200G) / 1000G = 62%
-    // This will not triger adjustment because it between low level and high level.
-    ASSERT_FALSE(space_monitor->adjust_spaces(&dir_spaces));
-    for (auto& dir : dir_spaces) {
-        ASSERT_EQ(dir.size, 0);
-    }
+    // other: 1000G - 180G - 200G = 620G
+    // new quota: 1000G * 0.7 - other = 80G
+    //
+    ASSERT_TRUE(space_monitor->adjust_spaces(&dir_spaces));
+    LOG(INFO) << "[Gavin] dir0: " << dir_spaces[0].size << ", dir2: " << dir_spaces[1].size;
+    ASSERT_EQ(dir_spaces[0].size, 80 * GB);
+    ASSERT_EQ(dir_spaces[1].size, 80 * GB);
 }
 
 TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota) {
