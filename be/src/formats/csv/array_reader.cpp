@@ -95,6 +95,9 @@ bool HiveTextArrayReader::split_array_elements(const Slice& s, std::vector<Slice
     }
     if (right >= left) {
         elements.emplace_back(s.data + left, right - left);
+    } else {
+        // for the case right = left will add an empty string into the elements
+        elements.emplace_back("");
     }
 
     return true;
