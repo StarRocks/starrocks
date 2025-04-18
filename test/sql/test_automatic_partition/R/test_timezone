@@ -48,7 +48,7 @@ SET time_zone = '+10:00';
 insert into t values(1, 1196440219);
 -- result:
 -- !result
-show partitions from t;
+show partitions from t order by PartitionName;
 -- result:
 [REGEX].*p20071201003019.*
 .*p20071201023019.*
