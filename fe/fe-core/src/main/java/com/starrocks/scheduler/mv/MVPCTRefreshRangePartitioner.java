@@ -343,9 +343,10 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         if (partitionTTLNumber > 0 && toRefreshPartitionNum > partitionTTLNumber) {
             // remove the oldest partitions
             int toRemoveNum = toRefreshPartitionNum - partitionTTLNumber;
-            toRefreshPartitions.entrySet().stream()
+            List<String> keysToRemove = toRefreshPartitions.keySet().stream()
                     .limit(toRemoveNum)
-                    .forEach(e -> toRefreshPartitions.remove(e.getKey()));
+                    .collect(Collectors.toList());
+            keysToRemove.forEach(toRefreshPartitions::remove);
         }
     }
 
