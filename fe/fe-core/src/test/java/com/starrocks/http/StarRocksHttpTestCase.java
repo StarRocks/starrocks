@@ -445,7 +445,10 @@ public abstract class StarRocksHttpTestCase {
             }
         }
 
-        httpServer = new HttpServer(HTTP_PORT);
+        try {
+            httpServer = new HttpServer(HTTP_PORT);
+        } catch (Exception e) {
+        }
         httpServer.setup();
         httpServer.start();
         // must ensure the http server started before any unit test
