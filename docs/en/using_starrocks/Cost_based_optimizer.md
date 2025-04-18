@@ -212,7 +212,7 @@ The following table describes the default settings. If you need to modify them, 
 | statistic_auto_collect_max_predicate_column_size_on_sample_strategy | INT    | 16       | When the Auto Full Collection task hits the sampled collection policy, if the table has an unusually large number of Predicate Columns and exceeds this configuration item, the task will not switch to full collection of the Predicate Columns, but maintains  to be the sampled collection of all columns. This configuration item controls the maximum value of Predicate Column for this behavior. |
 | statistic_auto_collect_predicate_columns_threshold | INT     | 32       | If the number of columns in the table exceeds this configuration during automatic collection, only the column statistics for the Predicate Column will be collected. |
 | statistic_predicate_columns_persist_interval_sec   | LONG    | 60       | The interval at which FE synchronize and persists statistics of Predicate Column. |
-| statistic_predicate_columns_ttl_hours       | LONG    | 24       | Predicate Column 信息在 FE 中缓存淘汰时间。 |
+| statistic_predicate_columns_ttl_hours       | LONG    | 24       | The elimination time of the Predicate Column statistics cached in FE. |
 
 You can rely on automatic jobs for a majority of statistics collection, but if you have specific requirements, you can manually create a task by executing the ANALYZE TABLE statement or customize an automatic task by executing the CREATE ANALYZE  statement.
 
@@ -223,9 +223,15 @@ You can use ANALYZE TABLE to create a manual collection task. By default, manual
 #### Manually collect basic statistics
 
 ```SQL
-ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name])
-[WITH SYNC | ASYNC MODE]
-[PROPERTIES (property [,property])]
+ANALYZE [FULL|SAMPLE] TABLE tbl_name 
+    [( col_name [, col_name]... )
+    | col_name [, col_name]...
+    | ALL COLUMNS
+    | PREDICATE COLUMNS
+    | MULTIPLE COLUMNS ( col_name [, col_name]... )]
+[PARTITION (partition_name [, partition_name]...)]
+[WITH [SYNC | ASYNC] MODE]
+[PROPERTIES (property [, property]...)]
 ```
 
 Parameter description:
@@ -235,7 +241,11 @@ Parameter description:
   - SAMPLE: indicates sampled collection.
   - If no collection type is specified, full collection is used by default.
 
-- `col_name`: columns from which to collect statistics. Separate multiple columns with commas (`,`). If this parameter is not specified, the entire table is collected.
+- The type of the column from which to collect statistics:
+  - `col_name`: Columns from which to collect statistics. Separate multiple columns with commas (`,`). If this parameter is not specified, the entire table is collected.
+  - `ALL COLUMNS`: Collect statistics from all columns. Supported since v3.5.0.
+  - `PREDICATE COLUMNS`: Collect statistics from only Predicate Columns. Supported since v3.5.0.
+  - `MULTIPLE COLUMNS`: Collects joint statistics from the specified multiple columns. Currently, only manual synchronous collection of multiple columns is supported. The number of columns for manual statistics collection cannot exceed `statistics_max_multi_column_combined_num`, the default value is `10`. Supported since v3.5.0.
 
 - [WITH SYNC | ASYNC MODE]: whether to run the manual collection task in synchronous or asynchronous mode. Synchronous collection is used by default if you do not specify this parameter.
 
@@ -270,6 +280,27 @@ ANALYZE SAMPLE TABLE tbl_name;
 ANALYZE SAMPLE TABLE tbl_name (v1, v2, v3) PROPERTIES(
     "statistic_sample_collect_rows" = "1000000"
 );
+```
+
+- Manual collection of multi-column joint statistics
+
+```sql
+-- Manual sampled collection of multi-column joint statistics
+ANALYZE SAMPLE TABLE tbl_name MULTIPLE COLUMNS (v1, v2);
+
+-- Manual full collection of multi-column joint statistics
+ANALYZE FULL TABLE tbl_name MULTIPLE COLUMNS (v1, v2);
+```
+
+
+- Manual collection of Predicate Column
+
+```sql
+-- Manual sampled collection of Predicate Column
+ANALYZE SAMPLE TABLE tbl_name MULTIPLE COLUMNS (v1, v2)
+
+-- Manual full collection of Predicate Column
+ANALYZE FULL TABLE tbl_name MULTIPLE COLUMNS (v1, v2)
 ```
 
 #### Manually collect histograms
@@ -321,8 +352,9 @@ PROPERTIES(
 
 #### Customize an automatic collection task
 
-You can use the CREATE ANALYZE statement to customize an automatic collection task. You must have the INSERT and SELECT privileges on the coreesponding table to perform the ANALYZE TABLE operation.
+The default collection tasks provided by StarRocks automatically collect statistics for all databases and all tables according to the policy, and by default, you do not need to create custom collection tasks.
 
+If you want to customize an automatic collection task, you need to create it through the CREATE ANALYZE statement. To create a collection task, you need the INSERT and SELECT permissions for the table being collected.
 
 ```SQL
 -- Automatically collect stats of all databases.
@@ -334,6 +366,12 @@ CREATE ANALYZE [FULL|SAMPLE] DATABASE db_name
 
 -- Automatically collect stats of specified columns in a table.
 CREATE ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name])
+[PROPERTIES (property [,property])]
+
+-- Automatically collect histograms of specified columns in a table.
+CREATE ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON col_name [, col_name]
+[WITH SYNC | ASYNC MODE]
+[WITH N BUCKETS]
 [PROPERTIES (property [,property])]
 ```
 
@@ -351,7 +389,6 @@ Parameter description:
 | **PROPERTIES**                        | **Type** | **Default value** | **Description**                                              |
 | ------------------------------------- | -------- | ----------------- | ------------------------------------------------------------ |
 | statistic_auto_collect_ratio          | FLOAT    | 0.8               | The threshold for determining  whether the statistics for automatic collection are healthy. If the statistics health is below this threshold, automatic collection is triggered. |
-| statistics_max_full_collect_data_size | INT      | 100               | The size of the largest partition for automatic collection to collect data. Unit: GB.If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
 | statistic_sample_collect_rows         | INT      | 200000            | The minimum number of rows to collect.If the parameter value exceeds the actual number of rows in your table, full collection is performed. |
 | statistic_exclude_pattern             | String   | null              | The name of the database or table that needs to be excluded in the job. You can specify the database and table that do not collect statistics in the job. Note that this is a regular expression pattern, and the match content is `database.table`. |
 | statistic_auto_collect_interval       | LONG   |  0      | The interval for automatic collection. Unit: seconds. By default, StarRocks chooses `statistic_auto_collect_small_table_interval` or `statistic_auto_collect_large_table_interval` as the collection interval based on the table size. If you specified the `statistic_auto_collect_interval` property when you create an analyze job, this setting takes precedence over `statistic_auto_collect_small_table_interval` and `statistic_auto_collect_large_table_interval`. |
@@ -377,6 +414,9 @@ CREATE ANALYZE TABLE tbl_name(c1, c2, c3);
 CREATE ANALYZE ALL PROPERTIES (
    "statistic_exclude_pattern" = "db_name\."
 );
+
+-- Automatically collect histograms of specified database, table, or columns.
+CREATE ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON c1,c2;
 ```
 
 Automatic sampled collection
@@ -398,10 +438,44 @@ CREATE ANALYZE SAMPLE TABLE tbl_name(c1, c2, c3) PROPERTIES (
 
 ```
 
+**Instead of the auto collection task provided by StarRocks, use a user-defined collection task that does not collect the `db_name.tbl_name` table.**
+
+```sql
+ADMIN SET FRONTEND CONFIG("enable_auto_collect_statistics"="false");
+DROP ALL ANALYZE JOB;
+CREATE ANALYZE FULL ALL db_name PROPERTIES (
+   "statistic_exclude_pattern" = "db_name.tbl_name"
+);
+```
+
+### Collect statistics during data loading
+
+To ensure a good execution plan for queries immediately after data loading, StarRocks triggers an asynchronous statistic collection task at the end of the INSERT INTO/OVERWRITE DML statements, which by default waits for 30 seconds after the DML finishes. If the statistics collection task does not finish in 30 seconds, the DML execution result is returned.
+
+#### INSERT INTO
+
+- Statistics is collected only for the first import of data into the partition.
+- If the number of rows in this import is greater than `statistic_sample_collect_rows`, the sampled collection task is triggered, otherwise full collection is used.
+
+#### INSERT OVERWRITE
+
+- If the ratio of the change in the number of rows before and after the OVERWRITE is less than `statistic_sample_collect_ratio_threshold_of_first_load`, the statistics collection task is not triggered.
+- If the number of rows in this OVERWRITE operation is greater than `statistic_sample_collect_rows`, then a sampled collection task is triggered, otherwise full collection is used.
+
+The following properties (PROPERTIES) are used to create customized collection tasks for data loading. If not configured, the value of the corresponding FE configuration item is used.
+
+| **PROPERTIES**                            | **Type** | **Dedault** | **Description**                                                                           |
+|-------------------------------------------|----------|-------------|------------------------------------------------------------------------------------------ |
+| enable_statistic_collect_on_first_load    | BOOLEAN  | TRUE        | Whether to trigger the statistics collection task after executing INSERT INTO/OVERWRITE.  |
+| semi_sync_collect_statistic_await_seconds | LONG     | 30          | Maximum time to wait for statistics to be collected before returning results.             |
+| statistic_sample_collect_ratio_threshold_of_first_load | DOUBLE    | 0.1  | The ratio of data changes in OVERWRITE operations that will not trigger statistics collection tasks. |
+| statistic_sample_collect_rows             | LONG     | 200000      | When the total data rows loaded via DML statements exceeds this value, sampled collection is used for statistics collection. |
+
+
 #### View custom collection tasks
 
 ```SQL
-SHOW ANALYZE JOB [WHERE predicate]
+SHOW ANALYZE JOB [WHERE predicate][ORDER BY columns][LIMIT num]
 ```
 
 You can filter results by using the WHERE clause. The statement returns the following columns.
@@ -433,6 +507,7 @@ SHOW ANALYZE JOB where `database` = 'test';
 
 ```SQL
 DROP ANALYZE <ID>
+| DROP ALL ANALYZE JOB
 ```
 
 The task ID can be obtained by using the SHOW ANALYZE JOB statement.
@@ -441,6 +516,10 @@ Examples
 
 ```SQL
 DROP ANALYZE 266030;
+```
+
+```SQL
+DROP ALL ANALYZE JOB;
 ```
 
 ## View status of collection tasks
@@ -474,7 +553,7 @@ This statement returns the following columns.
 ### View metadata of basic statistics
 
 ```SQL
-SHOW STATS META [WHERE predicate]
+SHOW STATS META [WHERE predicate][ORDER BY columns][LIMIT num]
 ```
 
 This statement returns the following columns.
@@ -488,6 +567,10 @@ This statement returns the following columns.
 | UpdateTime | The latest statistics update time for the current table.     |
 | Properties | Custom parameters.                                           |
 | Healthy    | The health of statistical information.                       |
+| ColumnStats  | Column ANALYZE type.                                       |
+| TabletStatsReportTime | The time when the Tablet metadata for the table was updated in the FE. |
+| TableHealthyMetrics    | Metric of health in statistical information.     |
+| TableUpdateTime    | The time when the table was updated.                 |
 
 ### View metadata of histograms
 
@@ -512,8 +595,16 @@ You can delete statistical information you do not need. When you delete statisti
 
 ### Delete basic statistics
 
+The following statement deletes the statistics stored in the `default_catalog._statistics_.column_statistics` table, and the corresponding table statistics cached by FE will also be invalidated. Since v3.5.0, this statement also deletes multi-column joint statistics for this table.
+
 ```SQL
 DROP STATS tbl_name
+```
+
+The following statement deletes the multi-column joint statistics stored in the `default_catalog._statistics_.multi_column_statistics` table, and the multi-column joint statistics in the corresponding table cached by FE will also be invalidated. This statement does not delete the basic statistics of the table.
+
+```SQL
+DROP MULTIPLE COLUMNS STATS tbl_name
 ```
 
 ### Delete histograms
