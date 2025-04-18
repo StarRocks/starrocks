@@ -340,6 +340,14 @@ public class AnalyzeTestUtil {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");");
+        starRocksAssert.withTable("CREATE TABLE test.test_exclude ( \n" + 
+                " id INT, \n" +
+                " name VARCHAR(50), \n" +
+                " age INT, \n" +
+                " email VARCHAR(100)) \n" +
+                " DUPLICATE KEY(id) PROPERTIES ( \n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
     }
 
     public static String getDbName() {
