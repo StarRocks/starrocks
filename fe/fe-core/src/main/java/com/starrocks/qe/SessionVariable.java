@@ -3412,6 +3412,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return broadcastRowCountLimit;
     }
 
+    public void setBroadcastRowCountLimit(long broadcastRowCountLimit) {
+        this.broadcastRowCountLimit = broadcastRowCountLimit;
+    }
+
     public double getBroadcastRightTableScaleFactor() {
         return broadcastRightTableScaleFactor;
     }
