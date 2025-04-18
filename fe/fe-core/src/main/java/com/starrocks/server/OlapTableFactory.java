@@ -231,6 +231,13 @@ public class OlapTableFactory implements AbstractTableFactory {
                     throw new DdlException("Cannot create table " +
                             "without persistent volume in current run mode \"" + runMode + "\"");
                 }
+                if (properties != null && (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE)
+                        || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX)
+                        || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR)
+                        || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR))) {
+                    throw new DdlException("Cannot create table " +
+                            "with flat json config in current run mode \"" + runMode + "\"");
+                }
                 table = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
                 StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
                 if (table.isCloudNativeTable() && !svm.bindTableToStorageVolume(volume, db.getId(), tableId)) {
