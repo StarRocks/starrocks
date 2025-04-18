@@ -198,9 +198,69 @@ protected:
     PTabletWriterOpenResult _open_response;
 };
 
+<<<<<<< HEAD
 TEST_F(LocalTabletsChannelTest, test_profile) {
     auto open_request = _open_request;
     ASSERT_OK(_tablets_channel->open(open_request, &_open_response, _schema_param, false));
+=======
+using RpcLoadDisagnosePair = std::pair<PLoadDiagnoseRequest*, ReusableClosure<PLoadDiagnoseResult>*>;
+
+TEST_F(LocalTabletsChannelTest, diagnose_stack_trace) {
+    _open_secondary_request.set_timeout_ms(100);
+    ASSERT_OK(_tablets_channel->open(_open_secondary_request, &_open_response, _schema_param, false));
+    PTabletWriterAddChunkRequest add_chunk_request;
+    add_chunk_request.mutable_id()->CopyFrom(_load_id);
+    add_chunk_request.set_index_id(_index_id);
+    add_chunk_request.set_sender_id(0);
+    add_chunk_request.set_eos(true);
+    add_chunk_request.set_packet_seq(0);
+
+    auto old_threshold = config::load_diagnose_rpc_timeout_stack_trace_threshold_ms;
+    DeferOp defer([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("LocalTabletsChannel::rpc::load_diagnose_send");
+        SyncPoint::GetInstance()->DisableProcessing();
+        PFailPointTriggerMode trigger_mode;
+        trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+        auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(
+                "tablets_channel_wait_secondary_replica_block");
+        fp->setMode(trigger_mode);
+        config::load_fp_tablets_channel_wait_secondary_replica_block_ms = -1;
+        config::load_diagnose_rpc_timeout_stack_trace_threshold_ms = old_threshold;
+    });
+
+    PFailPointTriggerMode trigger_mode;
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    auto fp =
+            starrocks::failpoint::FailPointRegistry::GetInstance()->get("tablets_channel_wait_secondary_replica_block");
+    fp->setMode(trigger_mode);
+    config::load_fp_tablets_channel_wait_secondary_replica_block_ms = 50;
+    config::load_diagnose_rpc_timeout_stack_trace_threshold_ms = 0;
+
+    int32_t num_diagnose = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("LocalTabletsChannel::rpc::load_diagnose_send", [&](void* arg) {
+        RpcLoadDisagnosePair* rpc_pair = (RpcLoadDisagnosePair*)arg;
+        PLoadDiagnoseRequest* request = rpc_pair->first;
+        ReusableClosure<PLoadDiagnoseResult>* closure = rpc_pair->second;
+        EXPECT_FALSE(request->has_profile());
+        EXPECT_TRUE(request->has_stack_trace() && request->stack_trace());
+        closure->result.mutable_stack_trace_status()->set_status_code(TStatusCode::OK);
+        closure->Run();
+        num_diagnose += 1;
+    });
+
+    bool close_channel;
+    PTabletWriterAddBatchResult add_chunk_response;
+    _tablets_channel->add_chunk(nullptr, add_chunk_request, &add_chunk_response, &close_channel);
+    ASSERT_TRUE(add_chunk_response.status().status_code() == TStatusCode::OK)
+            << add_chunk_response.status().error_msgs(0);
+    ASSERT_TRUE(close_channel);
+    ASSERT_EQ(1, num_diagnose);
+}
+
+TEST_F(LocalTabletsChannelTest, test_primary_replica_profile) {
+    ASSERT_OK(_tablets_channel->open(_open_primary_request, &_open_response, _schema_param, false));
+>>>>>>> 3fee8fadb9 ([UT] Fix some incorrect load profile counters (#58152))
 
     PTabletWriterAddChunkRequest add_chunk_request;
     add_chunk_request.mutable_id()->CopyFrom(_load_id);
@@ -240,6 +300,19 @@ TEST_F(LocalTabletsChannelTest, test_profile) {
     auto* primary_replicas_profile = profile->get_child("PrimaryReplicas");
     ASSERT_NE(nullptr, primary_replicas_profile);
     ASSERT_EQ(1, primary_replicas_profile->get_counter("TabletsNum")->value());
+}
+
+TEST_F(LocalTabletsChannelTest, test_secondary_replica_profile) {
+    _open_secondary_request.set_timeout_ms(100);
+    ASSERT_OK(_tablets_channel->open(_open_secondary_request, &_open_response, _schema_param, false));
+    _tablets_channel->update_profile();
+    auto* profile = _root_profile->get_child(fmt::format("Index (id={})", _index_id));
+    ASSERT_NE(nullptr, profile);
+    ASSERT_EQ(1, profile->get_counter("OpenRpcCount")->value());
+    ASSERT_EQ(0, profile->get_counter("AddChunkRpcCount")->value());
+    auto* secondary_replicas_profile = profile->get_child("SecondaryReplicas");
+    ASSERT_NE(nullptr, secondary_replicas_profile);
+    ASSERT_EQ(1, secondary_replicas_profile->get_counter("TabletsNum")->value());
 }
 
 } // namespace starrocks
