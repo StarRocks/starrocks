@@ -75,6 +75,7 @@ import com.starrocks.thrift.TQueryPlanInfo;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TTabletVersionInfo;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.warehouse.Warehouse;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.logging.log4j.LogManager;
@@ -125,6 +126,16 @@ public class TableQueryPlanAction extends RestBaseAction {
             if (Strings.isNullOrEmpty(dbName)
                     || Strings.isNullOrEmpty(tableName)) {
                 throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST, "{database}/{table} must be selected");
+            }
+            if (request.getRequest().headers().contains(WAREHOUSE_KEY)) {
+                String warehouseName = request.getRequest().headers().get(WAREHOUSE_KEY);
+                Warehouse wh = globalStateMgr.getWarehouseMgr().getWarehouseAllowNull(warehouseName);
+                if (wh == null) {
+                    throw new StarRocksHttpException(HttpResponseStatus.NOT_FOUND,
+                            "Warehouse [" + warehouseName + "] " + "does not exist");
+                } else {
+                    ConnectContext.get().setCurrentWarehouse(warehouseName);
+                }
             }
             if (Strings.isNullOrEmpty(postContent)) {
                 throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST,
