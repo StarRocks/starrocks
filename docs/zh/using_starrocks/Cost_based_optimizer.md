@@ -291,10 +291,10 @@ ANALYZE FULL TABLE tbl_name MULTIPLE COLUMNS (v1, v2);
 
 ```sql
 -- 手动抽样采集 Predicate Column
-ANALYZE SAMPLE TABLE tbl_name MULTIPLE COLUMNS (v1, v2)
+ANALYZE SAMPLE TABLE tbl_name PREDICATE COLUMNS (v1, v2)
 
 -- 手动全量采集 Predicate Column
-ANALYZE FULL TABLE tbl_name MULTIPLE COLUMNS (v1, v2)
+ANALYZE FULL TABLE tbl_name PREDICATE COLUMNS (v1, v2)
 ```
 
 #### 手动采集直方图统计信息
