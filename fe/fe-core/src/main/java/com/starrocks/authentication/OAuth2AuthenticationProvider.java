@@ -15,11 +15,8 @@
 package com.starrocks.authentication;
 
 import com.starrocks.mysql.MysqlCodec;
-import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.UserAuthOption;
-import com.starrocks.sql.ast.UserIdentity;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
@@ -43,19 +40,8 @@ public class OAuth2AuthenticationProvider implements AuthenticationProvider {
     }
 
     @Override
-    public UserAuthenticationInfo analyzeAuthOption(UserIdentity userIdentity, UserAuthOption userAuthOption)
+    public void authenticate(ConnectContext context, String user, String host, byte[] authResponse)
             throws AuthenticationException {
-        UserAuthenticationInfo info = new UserAuthenticationInfo();
-        info.setAuthPlugin(AuthPlugin.Server.AUTHENTICATION_OAUTH2.name());
-        info.setPassword(MysqlPassword.EMPTY_PASSWORD);
-        info.setOrigUserHost(userIdentity.getUser(), userIdentity.getHost());
-        info.setAuthString(userAuthOption == null ? null : userAuthOption.getAuthString());
-        return info;
-    }
-
-    @Override
-    public void authenticate(ConnectContext context, String user, String host, byte[] password,
-                             UserAuthenticationInfo authenticationInfo) throws AuthenticationException {
         /*
           If the auth plugin used by the client for this authentication is not AUTHENTICATION_OAUTH2_CLIENT,
           then the authentication success will be directly returned.
