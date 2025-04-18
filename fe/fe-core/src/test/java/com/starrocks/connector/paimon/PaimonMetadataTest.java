@@ -38,6 +38,9 @@ import com.starrocks.credential.CloudType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
+import com.starrocks.sql.ast.ColWithComment;
+import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
@@ -199,6 +202,8 @@ public class PaimonMetadataTest {
                 result = new ArrayList<>(Collections.singleton("col1"));
                 paimonNativeTable.location().toString();
                 result = "hdfs://127.0.0.1:10000/paimon";
+                paimonNativeTable.primaryKeys();
+                result = List.of("col2");
             }
         };
         com.starrocks.catalog.Table table = metadata.getTable(connectContext, "db1", "tbl1");
@@ -206,6 +211,13 @@ public class PaimonMetadataTest {
         Assert.assertTrue(metadata.tableExists(connectContext, "db1", "tbl1"));
         Assert.assertEquals("db1", paimonTable.getCatalogDBName());
         Assert.assertEquals("tbl1", paimonTable.getCatalogTableName());
+        Assert.assertEquals("CREATE TABLE `tbl1` (\n" +
+                        "  `col2` int(11) DEFAULT NULL,\n" +
+                        "  `col3` double DEFAULT NULL\n" +
+                        ")\n" +
+                        "PARTITION BY (col1)\n" +
+                        "PROPERTIES (\"primary-key\" = \"col2\");",
+                AstToStringBuilder.getExternalCatalogTableDdlStmt(paimonTable));
         Assert.assertEquals(Lists.newArrayList("col1"), paimonTable.getPartitionColumnNames());
         Assert.assertEquals("hdfs://127.0.0.1:10000/paimon", paimonTable.getTableLocation());
         Assert.assertEquals(ScalarType.INT, paimonTable.getBaseSchema().get(0).getType());
