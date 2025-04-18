@@ -310,6 +310,26 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: false
 * **Introduced in**: v3.4.0
 
+### enable_parquet_reader_bloom_filter
+
+* **Default**: true
+* **Type**: Boolean
+* **Unit**: -
+* **Description**: Whether to enable Bloom Filter optimization when reading Parquet files.
+  * `true` (Default): Enable Bloom Filter optimization when reading Parquet files.
+  * `false`: Disable Bloom Filter optimization when reading Parquet files.
+* **Introduced in**: v3.5.0
+
+### enable_parquet_reader_page_index
+
+* **Default**: true
+* **Type**: Boolean
+* **Unit**: -
+* **Description**: Whether to enable Page Index optimization when reading Parquet files.
+  * `true` (Default): Enable Page Index optimization when reading Parquet files.
+  * `false`: Disable Page Index optimization when reading Parquet files.
+* **Introduced in**: v3.5.0
+
 ### follower_query_forward_mode
 
 * **Description**: Specifies to which FE nodes the query statements are routed.
@@ -755,6 +775,16 @@ Specifies the maximum number of unqualified data rows that can be logged. Valid 
 ### lower_case_table_names (global)
 
 Used for MySQL client compatibility. No practical usage. Table names in StarRocks are case-sensitive.
+
+### lower_upper_support_utf8
+
+* **Default**: false
+* **Type**: Boolean
+* **Unit**: -
+* **Description**: Whether to support case conversion for UTF-8 characters in `lower` and `upper` functions.Valid values:
+  * `true`: Support case conversion for UTF-8 characters.
+  * `false` (Default): Not to support case conversion for UTF-8 characters.
+* **Introduced in**: v3.5.0
 
 ### materialized_view_rewrite_mode (v3.2 and later)
 
