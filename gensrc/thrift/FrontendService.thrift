@@ -2104,6 +2104,17 @@ struct TGetApplicableRolesResponse {
     2: optional i64 next_table_id_offset;
 }
 
+struct TUpdateFailPointRequest {
+    1: optional string name;
+    2: optional bool is_enable;
+    3: optional i32 times;
+    4: optional double probability;
+}
+
+struct TUpdateFailPointResponse {
+    1: optional Status.TStatus status;
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -2243,5 +2254,7 @@ service FrontendService {
     TGetWarehouseMetricsRespone getWarehouseMetrics(1: TGetWarehouseMetricsRequest request)
 
     TGetWarehouseQueriesResponse getWarehouseQueries(1: TGetWarehouseQueriesRequest request)
+
+    TUpdateFailPointResponse updateFailPointStatus(1: TUpdateFailPointRequest request)
 }
 
