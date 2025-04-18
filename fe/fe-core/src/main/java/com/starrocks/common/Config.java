@@ -3656,4 +3656,10 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long max_graceful_exit_time_second = 60;
+
+    /**
+     * Whether to enable tracing historical nodes when cluster scale
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_trace_historical_node = false;
 }

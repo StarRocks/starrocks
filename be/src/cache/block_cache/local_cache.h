@@ -15,33 +15,16 @@
 #pragma once
 
 #include "cache/block_cache/cache_options.h"
-#include "cache/block_cache/dummy_types.h"
 #include "cache/block_cache/io_buffer.h"
 #include "common/status.h"
 
-#ifdef WITH_STARCACHE
-#include "starcache/star_cache.h"
-#endif
-
 namespace starrocks {
-
-// We use the `starcache::ObjectHandle` directly because implementing a new one seems unnecessary.
-// Importing the starcache headers here is not graceful, but the `cachelib` doesn't support
-// object cache and we'll deprecate it for some performance reasons. Now there is no need to
-// pay too much attention to the compatibility and upper-level abstraction of the cachelib interface.
-#ifdef WITH_STARCACHE
-using DataCacheMetrics = starcache::CacheMetrics;
-using DataCacheStatus = starcache::CacheStatus;
-#else
-using DataCacheMetrics = DummyCacheMetrics;
-using DataCacheStatus = DummyCacheStatus;
-#endif
 
 enum class DataCacheEngineType { STARCACHE };
 
-class KvCache {
+class LocalCache {
 public:
-    virtual ~KvCache() = default;
+    virtual ~LocalCache() = default;
 
     // Init KV cache
     virtual Status init(const CacheOptions& options) = 0;
@@ -56,7 +39,7 @@ public:
 
     virtual bool exist(const std::string& key) const = 0;
 
-    // Remove data from cache. The offset must be aligned by block size
+    // Remove data from cache.
     virtual Status remove(const std::string& key) = 0;
 
     // Update the datacache memory quota.
