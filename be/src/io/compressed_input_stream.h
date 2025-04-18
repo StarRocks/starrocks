@@ -41,6 +41,9 @@ public:
 
     Status skip(int64_t n) override;
 
+    // fill data, at least length, no more than limit
+    StatusOr<size_t> fill(void* data, size_t length, size_t limit);
+
     // TODO: add custom statistics
     StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() override {
         return _source_stream->get_numeric_statistics();

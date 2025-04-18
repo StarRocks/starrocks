@@ -75,12 +75,15 @@ struct ColumnOffsetIndexCtx {
 struct ColumnReaderOptions {
     std::string timezone;
     bool case_sensitive = false;
+    bool use_file_pagecache = false;
     int chunk_size = 0;
     HdfsScanStats* stats = nullptr;
     RandomAccessFile* file = nullptr;
     const tparquet::RowGroup* row_group_meta = nullptr;
     uint64_t first_row_index = 0;
     const FileMetaData* file_meta_data = nullptr;
+    int64_t modification_time = 0;
+    uint64_t file_size = 0;
 };
 
 class StoredColumnReader;
