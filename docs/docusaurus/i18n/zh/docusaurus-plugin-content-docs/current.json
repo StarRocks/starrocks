@@ -1,6 +1,6 @@
 {
   "version.label": {
-    "message": "Stable-3.1",
+    "message": "3.1",
     "description": "The label for version 3.1"
   },
   "sidebar.docs.category.Introduction to StarRocks": {
