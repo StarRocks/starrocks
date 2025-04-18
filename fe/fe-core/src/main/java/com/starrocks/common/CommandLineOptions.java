@@ -22,37 +22,48 @@ import com.starrocks.journal.bdbje.BDBToolOptions;
 public class CommandLineOptions {
 
     private boolean isVersion;
-    private boolean runBdbTools;
     private BDBToolOptions bdbToolOpts = null;
+    private String helpers;
+    private String hostType;
+    private boolean startFromSnapshot;
 
-    public CommandLineOptions(boolean isVersion, BDBToolOptions bdbToolOptions) {
-        this.isVersion = isVersion;
-        this.bdbToolOpts = bdbToolOptions;
-        if (this.bdbToolOpts != null) {
-            runBdbTools = true;
-        } else {
-            runBdbTools = false;
-        }
+    public void setVersion(boolean version) {
+        isVersion = version;
+    }
+
+    public void setBdbToolOpts(BDBToolOptions bdbToolOpts) {
+        this.bdbToolOpts = bdbToolOpts;
+    }
+
+    public void setHelpers(String helpers) {
+        this.helpers = helpers;
+    }
+
+    public void setHostType(String hostType) {
+        this.hostType = hostType;
+    }
+
+    public void setStartFromSnapshot(boolean startFromSnapshot) {
+        this.startFromSnapshot = startFromSnapshot;
     }
 
     public boolean isVersion() {
         return isVersion;
     }
 
-    public boolean runBdbTools() {
-        return runBdbTools;
-    }
-
     public BDBToolOptions getBdbToolOpts() {
         return bdbToolOpts;
     }
 
-    @Override
-    public String toString() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("print version: " + isVersion).append("\n");
-        sb.append("bdb tool options: \n(\n" + bdbToolOpts).append("\n)\n");
-        return sb.toString();
+    public String getHelpers() {
+        return helpers;
     }
 
+    public String getHostType() {
+        return hostType;
+    }
+
+    public boolean isStartFromSnapshot() {
+        return startFromSnapshot;
+    }
 }

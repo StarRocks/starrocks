@@ -134,13 +134,13 @@ public class FrontendOptionsTest {
     public void testChooseHostType() throws UnknownHostException {
         mockNet();
         useFqdn = true;
-        FrontendOptions.init(new String[] {"-host_type", "ip"});
+        FrontendOptions.init("ip");
         Assert.assertTrue(!useFqdn);
         useFqdn = false;
-        FrontendOptions.init(new String[] {"-host_type", "fqdn"});
+        FrontendOptions.init("fqdn");
         Assert.assertTrue(useFqdn);
         useFqdn = false;
-        FrontendOptions.init(new String[] {});
+        FrontendOptions.init(null);
         Assert.assertTrue(!useFqdn);
     }
 
@@ -363,14 +363,14 @@ public class FrontendOptionsTest {
         // fqdn
         mkdir(true, metaPath);
         useFqdnFile = false;
-        FrontendOptions.init(new String[] {});
+        FrontendOptions.init(null);
         Assert.assertTrue(useFqdnFile);
         File dir = new File(metaPath);
         deleteDir(dir);
         // ip
         mkdir(false, metaPath);
         useFqdnFile = true;
-        FrontendOptions.init(new String[] {});
+        FrontendOptions.init(null);
         Assert.assertTrue(!useFqdnFile);
         dir = new File(metaPath);
         deleteDir(dir);

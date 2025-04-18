@@ -241,7 +241,7 @@ public class MockedFrontend {
                 // set dns cache ttl
                 java.security.Security.setProperty("networkaddress.cache.ttl", "60");
 
-                FrontendOptions.init(new String[0]);
+                FrontendOptions.init(null);
                 ExecuteEnv.setup();
 
                 if (!startBDB) {
@@ -263,7 +263,7 @@ public class MockedFrontend {
                     }
                 };
 
-                GlobalStateMgr.getCurrentState().initialize(args);
+                GlobalStateMgr.getCurrentState().initialize(null);
 
                 if (RunMode.isSharedDataMode()) {
                     // setup and start StarManager service

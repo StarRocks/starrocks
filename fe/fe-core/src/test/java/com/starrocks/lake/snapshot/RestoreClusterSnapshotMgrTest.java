@@ -111,8 +111,7 @@ public class RestoreClusterSnapshotMgrTest {
         };
 
         Assert.assertThrows(StarRocksException.class, () -> {
-            RestoreClusterSnapshotMgr.init("src/test/resources/conf/cluster_snapshot.yaml",
-                    new String[] { "-cluster_snapshot" });
+            RestoreClusterSnapshotMgr.init("src/test/resources/conf/cluster_snapshot.yaml", true);
         });
 
         Assert.assertFalse(RestoreClusterSnapshotMgr.isRestoring());
@@ -155,8 +154,7 @@ public class RestoreClusterSnapshotMgrTest {
             }
         };
 
-        RestoreClusterSnapshotMgr.init("src/test/resources/conf/cluster_snapshot.yaml",
-                new String[] { "-cluster_snapshot" });
+        RestoreClusterSnapshotMgr.init("src/test/resources/conf/cluster_snapshot.yaml", true);
 
         Assert.assertTrue(RestoreClusterSnapshotMgr.getRestoredSnapshotInfo().getSnapshotName()
                 .equals("automated_cluster_snapshot_1704038400000"));
