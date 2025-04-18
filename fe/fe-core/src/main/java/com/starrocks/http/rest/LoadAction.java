@@ -37,7 +37,6 @@ package com.starrocks.http.rest;
 import com.google.common.base.Strings;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -101,12 +100,10 @@ public class LoadAction extends RestBaseAction {
             nodeIds = systemInfoService.getAvailableBackends().stream().map(be -> be.getId()).collect(Collectors.toList());
         }
 
-        if (Config.enable_block_list_for_stream_load) {
-            List<Long> filterNodeIds = nodeIds.stream()
-                                              .filter(id -> !SimpleScheduler.isInBlocklist(id)).collect(Collectors.toList());
-            if (filterNodeIds != null && !filterNodeIds.isEmpty()) {
-                nodeIds = filterNodeIds;
-            }
+        List<Long> filterNodeIds = nodeIds.stream()
+                .filter(id -> !SimpleScheduler.isInBlocklist(id)).collect(Collectors.toList());
+        if (filterNodeIds != null && !filterNodeIds.isEmpty()) {
+            nodeIds = filterNodeIds;
         }
 
         if (CollectionUtils.isEmpty(nodeIds)) {
