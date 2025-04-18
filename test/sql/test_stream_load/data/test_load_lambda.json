@@ -1,0 +1,37 @@
+{
+  "id": 1,
+  "timestamp": "2025-04-17 11:00:00",
+  "agent": {
+    "findings": {
+      "f1": {
+        "type": "type1",
+        "cid": "cid1"
+      },
+      "f2": {
+        "type": "type2",
+        "cid": "cid2"
+      }
+    }
+  },
+  "events": {
+    "context": [
+      {
+        "type": "type1",
+        "vid": "vid1"
+      },
+      {
+        "type": "type2",
+        "vid": "vid2"
+      }
+    ]
+  },
+  "http": {
+    "request": {
+      "method": "POST",
+      "path": "/starrocks/test",
+      "headers": {
+        "ip": "127.0.0.1"
+      }
+    }
+  }
+}

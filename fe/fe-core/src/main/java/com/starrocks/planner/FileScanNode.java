@@ -569,7 +569,7 @@ public class FileScanNode extends LoadScanNode {
             TFileFormatType formatType = Load.getFormatType(context.fileGroup.getFileFormat(), fileStatus.path);
             List<String> columnsFromPath = HdfsUtil.parseColumnsFromPath(fileStatus.path,
                     context.fileGroup.getColumnsFromPath());
-            int numberOfColumnsFromFile = context.slotDescByName.size() - columnsFromPath.size();
+            int numberOfColumnsFromFile = context.params.getSrc_slot_idsSize() - columnsFromPath.size();
 
             smallestLocations = locationsHeap.poll();
             long leftBytes = fileStatus.size - curFileOffset;
