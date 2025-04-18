@@ -203,6 +203,7 @@ Status ShortCircuitHybridScanNode::_process_value_chunk(std::vector<bool>& found
         if (!status.ok()) {
             // todo retry
             LOG(WARNING) << "fail to execute multi get: " << status.detailed_message();
+            return status;
         }
 
         // merge all tablet result
