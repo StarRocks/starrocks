@@ -482,6 +482,7 @@ CONF_Int32(make_snapshot_rpc_timeout_ms, "20000");
 // OlapTableSink sender's send interval, should be less than the real response time of a tablet writer rpc.
 CONF_mInt32(olap_table_sink_send_interval_ms, "10");
 
+CONF_mInt32(load_replica_state_probe_interval_ms, "5000");
 // If load rpc timeout is larger than this value, slow log will be printed every time,
 // if smaller than this value, will reduce slow log print frequency.
 // 0 is print slow log every time.

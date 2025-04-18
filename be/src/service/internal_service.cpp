@@ -422,6 +422,12 @@ void PInternalServiceImplBase<T>::tablet_writer_cancel(google::protobuf::RpcCont
                                                        google::protobuf::Closure* done) {}
 
 template <typename T>
+void PInternalServiceImplBase<T>::load_replica_state(google::protobuf::RpcController* controller,
+                                                     const PLoadReplicaStateRequest* request,
+                                                     PLoadReplicaStateResult* response,
+                                                     google::protobuf::Closure* done) {}
+
+template <typename T>
 void PInternalServiceImplBase<T>::load_diagnose(google::protobuf::RpcController* controller,
                                                 const PLoadDiagnoseRequest* request, PLoadDiagnoseResult* response,
                                                 google::protobuf::Closure* done) {}

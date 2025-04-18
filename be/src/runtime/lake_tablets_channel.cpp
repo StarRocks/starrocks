@@ -85,6 +85,9 @@ public:
 
     void update_profile() override;
 
+    void get_replica_state(const std::string& remote_ip, const PLoadReplicaStateRequest* request,
+                           PLoadReplicaStateResult* response) override;
+
     MemTracker* mem_tracker() { return _mem_tracker; }
 
 private:
@@ -843,6 +846,16 @@ void LakeTabletsChannel::update_profile() {
         COUNTER_UPDATE(tablets_counter, tablets_profile.size());
         final_profile->copy_all_info_strings_from(merged_profile);
         final_profile->copy_all_counters_from(merged_profile);
+    }
+}
+
+void LakeTabletsChannel::get_replica_state(const std::string& remote_ip, const PLoadReplicaStateRequest* request,
+                                           PLoadReplicaStateResult* response) {
+    for (int64_t tablet_id : request->tablet_ids()) {
+        auto state = response->add_tablet_states();
+        state->set_tablet_id(tablet_id);
+        state->set_state(PLoadReplicaStateResult_ReplicaStatePB_NOT_FOUND);
+        state->set_message("shared-data does not have multiple replicas");
     }
 }
 

@@ -47,6 +47,8 @@ class PTabletWriterAddBatchResult;
 class PTabletWriterAddChunkRequest;
 class PTabletWriterAddSegmentRequest;
 class PTabletWriterAddSegmentResult;
+class PLoadReplicaStateRequest;
+class PLoadReplicaStateResult;
 class TableMetrics;
 
 class TabletsChannel {
@@ -62,6 +64,9 @@ public:
 
     virtual void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                            PTabletWriterAddBatchResult* response, bool* close_channel_ptr) = 0;
+
+    virtual void get_replica_state(const std::string& remote_ip, const PLoadReplicaStateRequest* request,
+                                   PLoadReplicaStateResult* response) = 0;
 
     virtual void cancel() = 0;
 
