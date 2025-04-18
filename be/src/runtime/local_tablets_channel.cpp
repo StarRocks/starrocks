@@ -1055,7 +1055,7 @@ void LocalTabletsChannel::update_profile() {
         auto* merged_profile = RuntimeProfile::merge_isomorphic_profiles(&obj_pool, peer_or_primary_replica_profiles);
         RuntimeProfile* final_profile = _profile->create_child(replicated_storage ? "PrimaryReplicas" : "PeerReplicas");
         auto* tablets_counter = ADD_COUNTER(final_profile, "TabletsNum", TUnit::UNIT);
-        COUNTER_UPDATE(tablets_counter, peer_or_primary_replica_profiles.size());
+        COUNTER_SET(tablets_counter, static_cast<int64_t>(peer_or_primary_replica_profiles.size()));
         final_profile->copy_all_info_strings_from(merged_profile);
         final_profile->copy_all_counters_from(merged_profile);
     }
@@ -1064,12 +1064,13 @@ void LocalTabletsChannel::update_profile() {
         auto* merged_profile = RuntimeProfile::merge_isomorphic_profiles(&obj_pool, secondary_replica_profiles);
         RuntimeProfile* final_profile = _profile->create_child("SecondaryReplicas");
         auto* tablets_counter = ADD_COUNTER(final_profile, "TabletsNum", TUnit::UNIT);
-        COUNTER_UPDATE(tablets_counter, peer_or_primary_replica_profiles.size());
+        COUNTER_SET(tablets_counter, static_cast<int64_t>(secondary_replica_profiles.size()));
         final_profile->copy_all_info_strings_from(merged_profile);
         final_profile->copy_all_counters_from(merged_profile);
     }
 }
 
+#define ADD_AND_SET_COUNTER(profile, name, type, val) (ADD_COUNTER(profile, name, type))->set(val)
 #define ADD_AND_UPDATE_COUNTER(profile, name, type, val) (ADD_COUNTER(profile, name, type))->update(val)
 #define ADD_AND_UPDATE_TIMER(profile, name, val) (ADD_TIMER(profile, name))->update(val)
 
@@ -1093,8 +1094,8 @@ void LocalTabletsChannel::_update_peer_replica_profile(DeltaWriter* writer, Runt
 
     const FlushStatistic& flush_stat = writer->get_flush_stats();
     ADD_AND_UPDATE_COUNTER(profile, "MemtableFlushedCount", TUnit::UNIT, flush_stat.flush_count);
-    ADD_AND_UPDATE_COUNTER(profile, "MemtableFlushingCount", TUnit::UNIT, flush_stat.cur_flush_count);
-    ADD_AND_UPDATE_COUNTER(profile, "MemtableQueueCount", TUnit::UNIT, flush_stat.queueing_memtable_num);
+    ADD_AND_SET_COUNTER(profile, "MemtableFlushingCount", TUnit::UNIT, flush_stat.cur_flush_count);
+    ADD_AND_SET_COUNTER(profile, "MemtableQueueCount", TUnit::UNIT, flush_stat.queueing_memtable_num);
     ADD_AND_UPDATE_TIMER(profile, "FlushTaskPendingTime", flush_stat.pending_time_ns);
     auto& memtable_stat = flush_stat.memtable_stats;
     ADD_AND_UPDATE_COUNTER(profile, "MemtableInsertCount", TUnit::UNIT, memtable_stat.insert_count);
@@ -1117,8 +1118,10 @@ void LocalTabletsChannel::_update_primary_replica_profile(DeltaWriter* writer, R
         return;
     }
     auto& replicate_stat = replicate_token->get_stat();
-    ADD_AND_UPDATE_COUNTER(profile, "ReplicatePendingTaskCount", TUnit::UNIT, replicate_stat.num_pending_tasks);
-    ADD_AND_UPDATE_COUNTER(profile, "ReplicateExecutingTaskCount", TUnit::UNIT, replicate_stat.num_running_tasks);
+    ADD_AND_SET_COUNTER(profile, "ReplicatePendingTaskCount", TUnit::UNIT,
+                        static_cast<int64_t>(replicate_stat.num_pending_tasks));
+    ADD_AND_SET_COUNTER(profile, "ReplicateExecutingTaskCount", TUnit::UNIT,
+                        static_cast<int64_t>(replicate_stat.num_running_tasks));
     ADD_AND_UPDATE_COUNTER(profile, "ReplicateFinishedTaskCount", TUnit::UNIT, replicate_stat.num_finished_tasks);
     ADD_AND_UPDATE_TIMER(profile, "ReplicateTaskPendingTime", replicate_stat.pending_time_ns);
     ADD_AND_UPDATE_TIMER(profile, "ReplicateTaskExecuteTime", replicate_stat.execute_time_ns);
@@ -1141,8 +1144,8 @@ void LocalTabletsChannel::_update_secondary_replica_profile(DeltaWriter* writer,
         return;
     }
     auto& stat = segment_flush_token->get_stat();
-    ADD_AND_UPDATE_COUNTER(profile, "FlushPendingTaskCount", TUnit::UNIT, stat.num_pending_tasks);
-    ADD_AND_UPDATE_COUNTER(profile, "FlushExecutingTaskCount", TUnit::UNIT, stat.num_running_tasks);
+    ADD_AND_SET_COUNTER(profile, "FlushPendingTaskCount", TUnit::UNIT, static_cast<int64_t>(stat.num_pending_tasks));
+    ADD_AND_SET_COUNTER(profile, "FlushExecutingTaskCount", TUnit::UNIT, static_cast<int64_t>(stat.num_running_tasks));
     ADD_AND_UPDATE_COUNTER(profile, "FlushFinishedTaskCount", TUnit::UNIT, stat.num_finished_tasks);
     ADD_AND_UPDATE_TIMER(profile, "FlushTaskPendingTime", stat.pending_time_ns);
     ADD_AND_UPDATE_TIMER(profile, "FlushTaskExecuteTime", stat.execute_time_ns);
