@@ -15,7 +15,6 @@
 package com.starrocks.authentication;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.io.Writable;
@@ -28,6 +27,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.MysqlSerializer;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
@@ -42,7 +42,9 @@ import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import mockit.Mock;
 import mockit.MockUp;
@@ -123,8 +125,6 @@ public class PasswordPolicyTest {
         SecurityPolicyMgr securityPolicyMgr = new SecurityPolicyMgr();
         GlobalStateMgr.getCurrentState().setSecurityPolicyManager(securityPolicyMgr);
 
-        Config.enable_validate_password = true;
-        Config.enable_password_reuse = false;
         ConnectContext context = new ConnectContext();
 
         CreatePasswordPolicyStmt createPolicyStmt = (CreatePasswordPolicyStmt) SqlParser.parseSingleStatement(
@@ -350,8 +350,9 @@ public class PasswordPolicyTest {
         Thread.sleep(100);
 
         List<SetListItem> vars = Lists.newArrayList();
-        byte[] passwordBytes = MysqlPassword.makeScrambledPassword("!Ab345678");
-        vars.add(new SetPassVar(new UserIdentity("u1", "%"), new String(passwordBytes, StandardCharsets.UTF_8)));
+        UserAuthOption userAuthOption =
+                new UserAuthOption(AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.name(), "!Ab345678", true, NodePosition.ZERO);
+        vars.add(new SetPassVar(new UserIdentity("u1", "%"), userAuthOption, NodePosition.ZERO));
         SetStmt setStmt = new SetStmt(vars);
         com.starrocks.sql.analyzer.Analyzer.analyze(setStmt, context);
         SetExecutor executor = new SetExecutor(context, setStmt);
@@ -385,9 +386,6 @@ public class PasswordPolicyTest {
 
         SecurityPolicyMgr securityPolicyMgr = new SecurityPolicyMgr();
         GlobalStateMgr.getCurrentState().setSecurityPolicyManager(securityPolicyMgr);
-
-        Config.enable_validate_password = true;
-        Config.enable_password_reuse = false;
 
         CreatePasswordPolicyStmt createPolicyStmt = (CreatePasswordPolicyStmt) SqlParser.parseSingleStatement(
                 "CREATE PASSWORD POLICY pp1 comment \"pp1 comment\"\n" +
@@ -453,8 +451,6 @@ public class PasswordPolicyTest {
         SecurityPolicyMgr securityPolicyMgr = new SecurityPolicyMgr();
         GlobalStateMgr.getCurrentState().setSecurityPolicyManager(securityPolicyMgr);
 
-        Config.enable_validate_password = true;
-        Config.enable_password_reuse = false;
         ConnectContext context = new ConnectContext();
 
         CreatePasswordPolicyStmt createPolicyStmt = (CreatePasswordPolicyStmt) SqlParser.parseSingleStatement(
@@ -533,8 +529,6 @@ public class PasswordPolicyTest {
         SecurityPolicyMgr securityPolicyMgr = new SecurityPolicyMgr();
         GlobalStateMgr.getCurrentState().setSecurityPolicyManager(securityPolicyMgr);
 
-        Config.enable_validate_password = true;
-        Config.enable_password_reuse = false;
         ConnectContext context = new ConnectContext();
         context.setThreadLocalInfo();
 

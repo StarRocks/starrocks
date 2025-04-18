@@ -22,6 +22,7 @@ import com.starrocks.epack.authorization.PasswordPolicy;
 import com.starrocks.epack.authorization.SecurityPolicyMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
 
 import java.nio.charset.StandardCharsets;
@@ -30,15 +31,20 @@ import java.util.Map;
 public class PlainPasswordAuthenticationProviderEPack extends PlainPasswordAuthenticationProvider {
 
     @Override
-    protected void validatePassword(UserIdentity userIdentity, String password) throws AuthenticationException {
+    protected void validatePassword(UserIdentity userIdentity, UserAuthOption userAuthOption) throws AuthenticationException {
         SecurityPolicyMgr securityPolicyMgr = GlobalStateMgr.getCurrentState().getSecurityPolicyManager();
         PasswordPolicy passwordPolicy = securityPolicyMgr.getGlobalPasswordPolicy();
+
+        String password = userAuthOption.getAuthString();
 
         if (passwordPolicy == null) {
             if (Config.enable_validate_password) {
                 PasswordPolicy.defaultPasswordPolicy.checkPasswordValid(password);
             }
         } else {
+            if (!userAuthOption.isPasswordPlain()) {
+                throw new AuthenticationException("Because the Password Policy is in effect, you cannot use a hashed password.");
+            }
             passwordPolicy.checkPasswordValid(password);
         }
 

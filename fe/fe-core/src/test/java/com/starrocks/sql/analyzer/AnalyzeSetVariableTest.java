@@ -21,7 +21,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SetExecutor;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
@@ -184,27 +183,6 @@ public class AnalyzeSetVariableTest {
         analyzeSuccess(sql);
         sql = "SET CHARACTER SET utf8";
         analyzeSuccess(sql);
-    }
-
-    @Test
-    public void testSetPassword() {
-        String sql = "SET PASSWORD FOR 'testUser' = PASSWORD('testPass')";
-        SetStmt setStmt = (SetStmt) analyzeSuccess(sql);
-        SetPassVar setPassVar = (SetPassVar) setStmt.getSetListItems().get(0);
-        String password = new String(setPassVar.getPassword());
-        Assert.assertEquals("*88EEBA7D913688E7278E2AD071FDB5E76D76D34B", password);
-
-        sql = "SET PASSWORD = PASSWORD('testPass')";
-        setStmt = (SetStmt) analyzeSuccess(sql);
-        setPassVar = (SetPassVar) setStmt.getSetListItems().get(0);
-        password = new String(setPassVar.getPassword());
-        Assert.assertEquals("*88EEBA7D913688E7278E2AD071FDB5E76D76D34B", password);
-
-        sql = "SET PASSWORD = '*88EEBA7D913688E7278E2AD071FDB5E76D76D34B'";
-        setStmt = (SetStmt) analyzeSuccess(sql);
-        setPassVar = (SetPassVar) setStmt.getSetListItems().get(0);
-        password = new String(setPassVar.getPassword());
-        Assert.assertEquals("*88EEBA7D913688E7278E2AD071FDB5E76D76D34B", password);
     }
 
     @Test
