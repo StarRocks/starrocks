@@ -1,0 +1,33 @@
+-- name: test_from_unix_timezone
+create table t(id bigint, ts bigint) partition by from_unixtime(ts, 'yyyy-MM-dd HH:mm:ss', 'UTC');
+SET time_zone = '+8:00';
+insert into t values(1, 1196440219);
+show partitions from t;
+SET time_zone = '+10:00';
+insert into t values(1, 1196440219);
+show partitions from t;
+select * from t where ts=1196440219;
+
+-- name: test_from_unix_time
+create table t(id bigint, ts bigint) partition by from_unixtime(ts, 'yyyy-MM-dd HH:mm:ss');
+SET time_zone = '+8:00';
+insert into t values(1, 1196440219);
+show partitions from t;
+SET time_zone = '+10:00';
+insert into t values(1, 1196440219);
+show partitions from t;
+select * from t where ts=1196440219;
+
+
+-- name: test_from_unix_timezone_exception
+create table t(id bigint, ts bigint) partition by from_unixtime(ts, 'yyyy-MM-dd HH:mm:ss', 'UTC');
+insert into t(id) values(1);
+show partitions from t;
+
+select from_unixtime(-1, 'yyyy-MM-dd HH:mm:ss', 'UTC');
+select from_unixtime(1, '', 'UTC');
+
+-- name: test_from_unix_timezone_not_const
+create table t(ts bigint, format string, timezone string);
+insert into t values(1, 'yyyy-MM-dd HH:mm:ss', 'UTC');
+select from_unixtime(ts, format, timezone) from t;

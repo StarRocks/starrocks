@@ -710,6 +710,9 @@ public:
 
     static Status from_unix_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
+    static Status from_unix_timezone_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status from_unix_timezone_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
     /**
      * @param: [timestamp, formatstr]
      * @paramType columns: [IntColumn, BinaryColumn]
@@ -717,6 +720,7 @@ public:
      */
     DEFINE_VECTORIZED_FN(from_unix_to_datetime_with_format_64);
     DEFINE_VECTORIZED_FN(from_unix_to_datetime_with_format_32);
+    DEFINE_VECTORIZED_FN(from_unix_to_datetime_with_format_timezone);
 
     /**
      * return number of seconds in this day.
@@ -826,10 +830,16 @@ private:
 
     DEFINE_VECTORIZED_FN_TEMPLATE(_t_from_unix_with_format);
     DEFINE_VECTORIZED_FN_TEMPLATE(_t_from_unix_with_format_general);
+    DEFINE_VECTORIZED_FN_TEMPLATE(_t_from_unix_with_format_timezone);
 
     template <LogicalType TIMESTAMP_TYPE>
     static StatusOr<ColumnPtr> _t_from_unix_with_format_const(std::string& format_content, FunctionContext* context,
                                                               const starrocks::Columns& columns);
+    template <LogicalType TIMESTAMP_TYPE>
+    static StatusOr<ColumnPtr> _t_from_unix_with_format_timezone_const(const std::string& format_content,
+                                                                       const std::string& timezone_content,
+                                                                       FunctionContext* context,
+                                                                       const Columns& columns);
 
     static StatusOr<ColumnPtr> convert_tz_general(FunctionContext* context, const Columns& columns);
 
@@ -875,7 +885,9 @@ public:
 private:
     struct FromUnixState {
         bool const_format{false};
+        bool const_timezone{false};
         std::string format_content;
+        std::string timezone_content;
         FromUnixState() = default;
     };
 
