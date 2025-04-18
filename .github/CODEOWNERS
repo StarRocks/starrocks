@@ -129,6 +129,7 @@
 /be/src/runtime/stream_load/*           @StarRocks/load-unload-maintainer
 /be/src/runtime/load*                   @StarRocks/load-unload-maintainer
 /be/src/runtime/tablets_channel.cpp     @StarRocks/load-unload-maintainer
+/be/src/runtime/local_tablets_channel*  @StarRocks/load-unload-maintainer
 /be/src/runtime/export_sink.cpp         @StarRocks/load-unload-maintainer
 
 # meta upgrade/downgrade compatibility
