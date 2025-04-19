@@ -1,0 +1,114 @@
+-- name: test_merge_commit
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `t0`
+(
+    `id` int(11) NOT NULL COMMENT "用户 ID",
+    `name` varchar(65533) NULL COMMENT "用户姓名",
+    `score` int(11) NOT NULL COMMENT "用户得分"
+)
+ENGINE=OLAP
+PRIMARY KEY(`id`)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+ "replication_num" = "1"
+);
+-- result:
+-- !result
+
+CONCURRENCY {
+-- thread name 1:
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue"  -H "format:json" -H "enable_merge_commit:true" -H "merge_commit_interval_ms:3000" -H "merge_commit_parallel:4" -d '{"id":1,"name":"n1","score":1}' ${url}/api/db_${uuid0}/t0/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+
+-- thread name 2:
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue"  -H "format:json" -H "enable_merge_commit:true" -H "merge_commit_interval_ms:3000" -H "merge_commit_parallel:4" -d '{"id":2,"name":"n2","score":2}' ${url}/api/db_${uuid0}/t0/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+
+-- thread name 3:
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue"  -H "format:json" -H "enable_merge_commit:true" -H "merge_commit_interval_ms:3000" -H "merge_commit_parallel:4" -d '{"id":3,"name":"n3","score":3}' ${url}/api/db_${uuid0}/t0/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+
+} END CONCURRENCY
+
+sync;
+-- result:
+-- !result
+select * from t0 order by id;
+-- result:
+1	n1	1
+2	n2	2
+3	n3	3
+-- !result
+
+CONCURRENCY {
+-- thread name 4:
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue"  -H "format:json" -H "enable_merge_commit:true" -H "merge_commit_interval_ms:3000" -H "merge_commit_parallel:4" -H "merge_commit_async:true" -d '{"id":4,"name":"n4","score":4}' ${url}/api/db_${uuid0}/t0/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+
+-- thread name 5:
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue"  -H "format:json" -H "enable_merge_commit:true" -H "merge_commit_interval_ms:3000" -H "merge_commit_parallel:4" -H "merge_commit_async:true" -d '{"id":5,"name":"n5","score":5}' ${url}/api/db_${uuid0}/t0/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+
+-- thread name 6:
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue"  -H "format:json" -H "enable_merge_commit:true" -H "merge_commit_interval_ms:3000" -H "merge_commit_parallel:4" -H "merge_commit_async:true" -d '{"id":6,"name":"n6","score":6}' ${url}/api/db_${uuid0}/t0/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+
+} END CONCURRENCY
+
+select sleep(5);
+-- result:
+1
+-- !result
+sync;
+-- result:
+-- !result
+select * from t0 order by id;
+-- result:
+1	n1	1
+2	n2	2
+3	n3	3
+4	n4	4
+5	n5	5
+6	n6	6
+-- !result
