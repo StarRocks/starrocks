@@ -20,6 +20,8 @@
 #include <rapidjson/stringbuffer.h>
 
 #include <string>
+#include <sstream>
+#include <chrono>
 
 #include "cache/block_cache/block_cache.h"
 #include "cache/block_cache/block_cache_hit_rate_counter.hpp"
@@ -34,6 +36,7 @@ const static std::string HEADER_JSON = "application/json";
 const static std::string ACTION_KEY = "action";
 const static std::string ACTION_STAT = "stat";
 const static std::string ACTION_APP_STAT = "app_stat";
+const static std::string ACTION_PROMETHEUS = "prometheus";
 
 std::string cache_status_str(const DataCacheStatus& status) {
     std::string str_status;
@@ -59,7 +62,9 @@ bool DataCacheAction::_check_request(HttpRequest* req) {
         HttpChannel::send_reply(req, HttpStatus::METHOD_NOT_ALLOWED, "Method Not Allowed");
         return false;
     }
-    if (req->param(ACTION_KEY) != ACTION_STAT && req->param(ACTION_KEY) != ACTION_APP_STAT) {
+    if (req->param(ACTION_KEY) != ACTION_STAT && 
+        req->param(ACTION_KEY) != ACTION_APP_STAT && 
+        req->param(ACTION_KEY) != ACTION_PROMETHEUS) {
         HttpChannel::send_reply(req, HttpStatus::NOT_FOUND, "Not Found");
         return false;
     }
@@ -77,8 +82,12 @@ void DataCacheAction::handle(HttpRequest* req) {
         _handle_error(req, strings::Substitute("No more metrics for current cache engine type"));
     } else if (req->param(ACTION_KEY) == ACTION_STAT) {
         _handle_stat(req);
-    } else {
+    } else if (req->param(ACTION_KEY) == ACTION_APP_STAT) {
         _handle_app_stat(req);
+    } else if (req->param(ACTION_KEY) == ACTION_PROMETHEUS) {
+        _handle_prometheus(req);
+    } else {
+        _handle_error(req, strings::Substitute("Unknown action type"));
     }
 }
 
@@ -190,6 +199,53 @@ void DataCacheAction::_handle_app_stat(HttpRequest* req) {
         root.AddMember("hit_rate_last_minute", rapidjson::Value(hit_rate_counter->hit_rate_last_minute()), allocator);
 #endif
     });
+}
+
+void DataCacheAction::_handle_prometheus(HttpRequest* req) {
+    if (!_block_cache || !_block_cache->is_initialized()) {
+        _handle_error(req, "Cache system is not ready");
+        return;
+    }
+
+    std::stringstream ss;
+    auto&& metrics = _block_cache->cache_metrics(2);
+    BlockCacheHitRateCounter* hit_rate_counter = BlockCacheHitRateCounter::instance();
+
+    // Cache status
+    ss << "# HELP starrocks_cache_status Cache status\n"
+       << "# TYPE starrocks_cache_status gauge\n"
+       << "starrocks_cache_status{status=\"" << cache_status_str(metrics.status) << "\"} 1\n";
+
+    // Memory metrics
+    ss << "# HELP starrocks_cache_memory_bytes Memory usage in bytes\n"
+       << "# TYPE starrocks_cache_memory_bytes gauge\n"
+       << "starrocks_cache_memory_bytes{type=\"quota\"} " << metrics.mem_quota_bytes << "\n"
+       << "starrocks_cache_memory_bytes{type=\"used\"} " << metrics.mem_used_bytes << "\n";
+
+    // Hit/miss operations
+    ss << "# HELP starrocks_cache_operations_total Total cache operations\n"
+       << "# TYPE starrocks_cache_operations_total counter\n"
+       << "starrocks_cache_operations_total{type=\"hit\"} " << metrics.detail_l1->hit_count << "\n"
+       << "starrocks_cache_operations_total{type=\"miss\"} " << metrics.detail_l1->miss_count << "\n";
+
+    // Hit rate
+    ss << "# HELP starrocks_cache_hit_rate Cache hit rate\n"
+       << "# TYPE starrocks_cache_hit_rate gauge\n"
+       << "starrocks_cache_hit_rate " << hit_rate_counter->hit_rate() << "\n";
+
+    // Last minute metrics
+    ss << "# HELP starrocks_cache_hit_rate_last_minute Cache hit rate in last minute\n"
+       << "# TYPE starrocks_cache_hit_rate_last_minute gauge\n"
+       << "starrocks_cache_hit_rate_last_minute " << hit_rate_counter->hit_rate_last_minute() << "\n";
+
+    // Disk metrics
+    ss << "# HELP starrocks_cache_disk_bytes Disk usage in bytes\n"
+       << "# TYPE starrocks_cache_disk_bytes gauge\n"
+       << "starrocks_cache_disk_bytes{type=\"quota\"} " << metrics.disk_quota_bytes << "\n"
+       << "starrocks_cache_disk_bytes{type=\"used\"} " << metrics.disk_used_bytes << "\n";
+
+    req->add_output_header(HttpHeaders::CONTENT_TYPE, "text/plain; version=0.0.4");
+    HttpChannel::send_reply(req, ss.str());
 }
 
 void DataCacheAction::_handle_error(HttpRequest* req, const std::string& err_msg) {

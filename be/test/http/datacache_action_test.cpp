@@ -18,6 +18,7 @@
 #include <event2/http_struct.h>
 #include <gtest/gtest.h>
 #include <rapidjson/document.h>
+#include <chrono>
 
 #include "cache/block_cache/block_cache.h"
 #include "cache/block_cache/block_cache_hit_rate_counter.hpp"
@@ -148,6 +149,92 @@ TEST_F(DataCacheActionTest, stat_with_uninitialized_cache) {
     rapidjson::Document doc;
     doc.Parse(k_response_str.c_str());
     ASSERT_STREQ("Cache system is not ready", doc["error"].GetString());
+}
+
+TEST_F(DataCacheActionTest, prometheus_metrics_format) {
+    BlockCacheHitRateCounter* counter = BlockCacheHitRateCounter::instance();
+    counter->reset();
+    counter->update(100, 50); // 100 bytes hit, 50 bytes miss
+
+    auto cache = std::make_shared<BlockCache>();
+    ASSERT_TRUE(init_datacache_instance("starcache", cache.get()).ok());
+
+    DataCacheAction action(cache.get());
+    HttpRequest request(_evhttp_req);
+    request._method = HttpMethod::GET;
+    request._params.emplace("action", "prometheus");
+    request.set_handler(&action);
+    action.on_header(&request);
+    action.handle(&request);
+
+    // Verify Prometheus format
+    std::string response = k_response_str;
+    
+    // Check metric types
+    EXPECT_TRUE(response.find("# TYPE starrocks_cache_hit_rate gauge") != std::string::npos);
+    EXPECT_TRUE(response.find("# TYPE starrocks_cache_operations_total counter") != std::string::npos);
+    EXPECT_TRUE(response.find("# TYPE starrocks_cache_memory_bytes gauge") != std::string::npos);
+    
+    // Check metric values
+    EXPECT_TRUE(response.find("starrocks_cache_hit_rate 0.666667") != std::string::npos);
+    EXPECT_TRUE(response.find("starrocks_cache_operations_total{type=\"hit\"} 100") != std::string::npos);
+    EXPECT_TRUE(response.find("starrocks_cache_operations_total{type=\"miss\"} 50") != std::string::npos);
+    
+    // Check help text
+    EXPECT_TRUE(response.find("# HELP starrocks_cache_hit_rate Cache hit rate") != std::string::npos);
+    EXPECT_TRUE(response.find("# HELP starrocks_cache_operations_total Total cache operations") != std::string::npos);
+}
+
+TEST_F(DataCacheActionTest, prometheus_metrics_edge_cases) {
+    BlockCacheHitRateCounter* counter = BlockCacheHitRateCounter::instance();
+    counter->reset();
+    
+    // Test zero values
+    counter->update(0, 0);
+    
+    auto cache = std::make_shared<BlockCache>();
+    ASSERT_TRUE(init_datacache_instance("starcache", cache.get()).ok());
+
+    DataCacheAction action(cache.get());
+    HttpRequest request(_evhttp_req);
+    request._method = HttpMethod::GET;
+    request._params.emplace("action", "prometheus");
+    request.set_handler(&action);
+    action.on_header(&request);
+    action.handle(&request);
+
+    std::string response = k_response_str;
+    EXPECT_TRUE(response.find("starrocks_cache_hit_rate 0") != std::string::npos);
+    EXPECT_TRUE(response.find("starrocks_cache_operations_total{type=\"hit\"} 0") != std::string::npos);
+    EXPECT_TRUE(response.find("starrocks_cache_operations_total{type=\"miss\"} 0") != std::string::npos);
+}
+
+TEST_F(DataCacheActionTest, prometheus_metrics_performance) {
+    BlockCacheHitRateCounter* counter = BlockCacheHitRateCounter::instance();
+    counter->reset();
+    
+    auto cache = std::make_shared<BlockCache>();
+    ASSERT_TRUE(init_datacache_instance("starcache", cache.get()).ok());
+
+    DataCacheAction action(cache.get());
+    
+    // Measure response time for metrics endpoint
+    auto start = std::chrono::high_resolution_clock::now();
+    
+    for (int i = 0; i < 1000; ++i) {
+        HttpRequest request(_evhttp_req);
+        request._method = HttpMethod::GET;
+        request._params.emplace("action", "prometheus");
+        request.set_handler(&action);
+        action.on_header(&request);
+        action.handle(&request);
+    }
+    
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    
+    // Ensure metrics collection doesn't take too long
+    EXPECT_LT(duration.count(), 1000); // Less than 1 second for 1000 requests
 }
 
 } // namespace starrocks
