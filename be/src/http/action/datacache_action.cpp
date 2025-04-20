@@ -222,11 +222,54 @@ void DataCacheAction::_handle_prometheus(HttpRequest* req) {
        << "starrocks_cache_memory_bytes{type=\"quota\"} " << metrics.mem_quota_bytes << "\n"
        << "starrocks_cache_memory_bytes{type=\"used\"} " << metrics.mem_used_bytes << "\n";
 
+    // Memory usage rate
+    double mem_used_rate = 0.0;
+    if (metrics.mem_quota_bytes > 0) {
+        mem_used_rate = std::round(double(metrics.mem_used_bytes) / double(metrics.mem_quota_bytes) * 100.0) / 100.0;
+    }
+    ss << "# HELP starrocks_cache_memory_usage_rate Memory usage rate\n"
+       << "# TYPE starrocks_cache_memory_usage_rate gauge\n"
+       << "starrocks_cache_memory_usage_rate " << mem_used_rate << "\n";
+
+    // Disk metrics
+    ss << "# HELP starrocks_cache_disk_bytes Disk usage in bytes\n"
+       << "# TYPE starrocks_cache_disk_bytes gauge\n"
+       << "starrocks_cache_disk_bytes{type=\"quota\"} " << metrics.disk_quota_bytes << "\n"
+       << "starrocks_cache_disk_bytes{type=\"used\"} " << metrics.disk_used_bytes << "\n";
+
+    // Disk usage rate
+    double disk_used_rate = 0.0;
+    if (metrics.disk_quota_bytes > 0) {
+        disk_used_rate = std::round(double(metrics.disk_used_bytes) / double(metrics.disk_quota_bytes) * 100.0) / 100.0;
+    }
+    ss << "# HELP starrocks_cache_disk_usage_rate Disk usage rate\n"
+       << "# TYPE starrocks_cache_disk_usage_rate gauge\n"
+       << "starrocks_cache_disk_usage_rate " << disk_used_rate << "\n";
+
+    // Disk spaces
+    for (size_t i = 0; i < metrics.disk_dir_spaces.size(); ++i) {
+        ss << "# HELP starrocks_cache_disk_space Disk space configuration\n"
+           << "# TYPE starrocks_cache_disk_space gauge\n"
+           << "starrocks_cache_disk_space{path=\"" << metrics.disk_dir_spaces[i].path 
+           << "\",quota_bytes=\"" << metrics.disk_dir_spaces[i].quota_bytes << "\"} 1\n";
+    }
+
+    // Meta metrics
+    ss << "# HELP starrocks_cache_meta_bytes Meta data usage in bytes\n"
+       << "# TYPE starrocks_cache_meta_bytes gauge\n"
+       << "starrocks_cache_meta_bytes " << metrics.meta_used_bytes << "\n";
+
     // Hit/miss operations
     ss << "# HELP starrocks_cache_operations_total Total cache operations\n"
        << "# TYPE starrocks_cache_operations_total counter\n"
        << "starrocks_cache_operations_total{type=\"hit\"} " << metrics.detail_l1->hit_count << "\n"
        << "starrocks_cache_operations_total{type=\"miss\"} " << metrics.detail_l1->miss_count << "\n";
+
+    // Hit/miss bytes
+    ss << "# HELP starrocks_cache_bytes_total Total cache bytes\n"
+       << "# TYPE starrocks_cache_bytes_total counter\n"
+       << "starrocks_cache_bytes_total{type=\"hit\"} " << metrics.detail_l1->hit_bytes << "\n"
+       << "starrocks_cache_bytes_total{type=\"miss\"} " << metrics.detail_l1->miss_bytes << "\n";
 
     // Hit rate
     ss << "# HELP starrocks_cache_hit_rate Cache hit rate\n"
@@ -238,11 +281,47 @@ void DataCacheAction::_handle_prometheus(HttpRequest* req) {
        << "# TYPE starrocks_cache_hit_rate_last_minute gauge\n"
        << "starrocks_cache_hit_rate_last_minute " << hit_rate_counter->hit_rate_last_minute() << "\n";
 
-    // Disk metrics
-    ss << "# HELP starrocks_cache_disk_bytes Disk usage in bytes\n"
-       << "# TYPE starrocks_cache_disk_bytes gauge\n"
-       << "starrocks_cache_disk_bytes{type=\"quota\"} " << metrics.disk_quota_bytes << "\n"
-       << "starrocks_cache_disk_bytes{type=\"used\"} " << metrics.disk_used_bytes << "\n";
+    // Buffer metrics
+    ss << "# HELP starrocks_cache_buffer_items Buffer items count\n"
+       << "# TYPE starrocks_cache_buffer_items gauge\n"
+       << "starrocks_cache_buffer_items " << metrics.detail_l2->buffer_item_count << "\n";
+
+    ss << "# HELP starrocks_cache_buffer_bytes Buffer items bytes\n"
+       << "# TYPE starrocks_cache_buffer_bytes gauge\n"
+       << "starrocks_cache_buffer_bytes " << metrics.detail_l2->buffer_item_bytes << "\n";
+
+    // Read metrics
+    ss << "# HELP starrocks_cache_read_bytes_total Total read bytes\n"
+       << "# TYPE starrocks_cache_read_bytes_total counter\n"
+       << "starrocks_cache_read_bytes_total{type=\"memory\"} " << metrics.detail_l2->read_mem_bytes << "\n"
+       << "starrocks_cache_read_bytes_total{type=\"disk\"} " << metrics.detail_l2->read_disk_bytes << "\n";
+
+    // Write metrics
+    ss << "# HELP starrocks_cache_write_operations_total Total write operations\n"
+       << "# TYPE starrocks_cache_write_operations_total counter\n"
+       << "starrocks_cache_write_operations_total{type=\"success\"} " << metrics.detail_l2->write_success_count << "\n"
+       << "starrocks_cache_write_operations_total{type=\"fail\"} " << metrics.detail_l2->write_fail_count << "\n";
+
+    ss << "# HELP starrocks_cache_write_bytes_total Total write bytes\n"
+       << "# TYPE starrocks_cache_write_bytes_total counter\n"
+       << "starrocks_cache_write_bytes_total " << metrics.detail_l2->write_bytes << "\n";
+
+    // Remove metrics
+    ss << "# HELP starrocks_cache_remove_operations_total Total remove operations\n"
+       << "# TYPE starrocks_cache_remove_operations_total counter\n"
+       << "starrocks_cache_remove_operations_total{type=\"success\"} " << metrics.detail_l2->remove_success_count << "\n"
+       << "starrocks_cache_remove_operations_total{type=\"fail\"} " << metrics.detail_l2->remove_fail_count << "\n";
+
+    ss << "# HELP starrocks_cache_remove_bytes_total Total remove bytes\n"
+       << "# TYPE starrocks_cache_remove_bytes_total counter\n"
+       << "starrocks_cache_remove_bytes_total " << metrics.detail_l2->remove_bytes << "\n";
+
+    // Current operation counts
+    ss << "# HELP starrocks_cache_current_operations Current operations count\n"
+       << "# TYPE starrocks_cache_current_operations gauge\n"
+       << "starrocks_cache_current_operations{type=\"reading\"} " << metrics.detail_l2->current_reading_count << "\n"
+       << "starrocks_cache_current_operations{type=\"writing\"} " << metrics.detail_l2->current_writing_count << "\n"
+       << "starrocks_cache_current_operations{type=\"removing\"} " << metrics.detail_l2->current_removing_count << "\n";
 
     req->add_output_header(HttpHeaders::CONTENT_TYPE, "text/plain; version=0.0.4");
     HttpChannel::send_reply(req, ss.str());

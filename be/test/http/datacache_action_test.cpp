@@ -174,6 +174,13 @@ TEST_F(DataCacheActionTest, prometheus_metrics_format) {
     EXPECT_TRUE(response.find("# TYPE starrocks_cache_hit_rate gauge") != std::string::npos);
     EXPECT_TRUE(response.find("# TYPE starrocks_cache_operations_total counter") != std::string::npos);
     EXPECT_TRUE(response.find("# TYPE starrocks_cache_memory_bytes gauge") != std::string::npos);
+    EXPECT_TRUE(response.find("# TYPE starrocks_cache_disk_bytes gauge") != std::string::npos);
+    EXPECT_TRUE(response.find("# TYPE starrocks_cache_meta_bytes gauge") != std::string::npos);
+    EXPECT_TRUE(response.find("# TYPE starrocks_cache_buffer_items gauge") != std::string::npos);
+    EXPECT_TRUE(response.find("# TYPE starrocks_cache_read_bytes_total counter") != std::string::npos);
+    EXPECT_TRUE(response.find("# TYPE starrocks_cache_write_operations_total counter") != std::string::npos);
+    EXPECT_TRUE(response.find("# TYPE starrocks_cache_remove_operations_total counter") != std::string::npos);
+    EXPECT_TRUE(response.find("# TYPE starrocks_cache_current_operations gauge") != std::string::npos);
     
     // Check metric values
     EXPECT_TRUE(response.find("starrocks_cache_hit_rate 0.666667") != std::string::npos);
@@ -183,6 +190,14 @@ TEST_F(DataCacheActionTest, prometheus_metrics_format) {
     // Check help text
     EXPECT_TRUE(response.find("# HELP starrocks_cache_hit_rate Cache hit rate") != std::string::npos);
     EXPECT_TRUE(response.find("# HELP starrocks_cache_operations_total Total cache operations") != std::string::npos);
+    EXPECT_TRUE(response.find("# HELP starrocks_cache_memory_bytes Memory usage in bytes") != std::string::npos);
+    EXPECT_TRUE(response.find("# HELP starrocks_cache_disk_bytes Disk usage in bytes") != std::string::npos);
+    EXPECT_TRUE(response.find("# HELP starrocks_cache_meta_bytes Meta data usage in bytes") != std::string::npos);
+    EXPECT_TRUE(response.find("# HELP starrocks_cache_buffer_items Buffer items count") != std::string::npos);
+    EXPECT_TRUE(response.find("# HELP starrocks_cache_read_bytes_total Total read bytes") != std::string::npos);
+    EXPECT_TRUE(response.find("# HELP starrocks_cache_write_operations_total Total write operations") != std::string::npos);
+    EXPECT_TRUE(response.find("# HELP starrocks_cache_remove_operations_total Total remove operations") != std::string::npos);
+    EXPECT_TRUE(response.find("# HELP starrocks_cache_current_operations Current operations count") != std::string::npos);
 }
 
 TEST_F(DataCacheActionTest, prometheus_metrics_edge_cases) {
@@ -204,9 +219,19 @@ TEST_F(DataCacheActionTest, prometheus_metrics_edge_cases) {
     action.handle(&request);
 
     std::string response = k_response_str;
+    
+    // Check zero values
     EXPECT_TRUE(response.find("starrocks_cache_hit_rate 0") != std::string::npos);
     EXPECT_TRUE(response.find("starrocks_cache_operations_total{type=\"hit\"} 0") != std::string::npos);
     EXPECT_TRUE(response.find("starrocks_cache_operations_total{type=\"miss\"} 0") != std::string::npos);
+    EXPECT_TRUE(response.find("starrocks_cache_memory_bytes{type=\"used\"} 0") != std::string::npos);
+    EXPECT_TRUE(response.find("starrocks_cache_disk_bytes{type=\"used\"} 0") != std::string::npos);
+    EXPECT_TRUE(response.find("starrocks_cache_meta_bytes 0") != std::string::npos);
+    EXPECT_TRUE(response.find("starrocks_cache_buffer_items 0") != std::string::npos);
+    EXPECT_TRUE(response.find("starrocks_cache_read_bytes_total{type=\"memory\"} 0") != std::string::npos);
+    EXPECT_TRUE(response.find("starrocks_cache_write_operations_total{type=\"success\"} 0") != std::string::npos);
+    EXPECT_TRUE(response.find("starrocks_cache_remove_operations_total{type=\"success\"} 0") != std::string::npos);
+    EXPECT_TRUE(response.find("starrocks_cache_current_operations{type=\"reading\"} 0") != std::string::npos);
 }
 
 TEST_F(DataCacheActionTest, prometheus_metrics_performance) {
@@ -235,6 +260,27 @@ TEST_F(DataCacheActionTest, prometheus_metrics_performance) {
     
     // Ensure metrics collection doesn't take too long
     EXPECT_LT(duration.count(), 1000); // Less than 1 second for 1000 requests
+}
+
+TEST_F(DataCacheActionTest, prometheus_metrics_disk_spaces) {
+    auto cache = std::make_shared<BlockCache>();
+    ASSERT_TRUE(init_datacache_instance("starcache", cache.get()).ok());
+
+    DataCacheAction action(cache.get());
+    HttpRequest request(_evhttp_req);
+    request._method = HttpMethod::GET;
+    request._params.emplace("action", "prometheus");
+    request.set_handler(&action);
+    action.on_header(&request);
+    action.handle(&request);
+
+    std::string response = k_response_str;
+    
+    // Check disk spaces format
+    EXPECT_TRUE(response.find("# HELP starrocks_cache_disk_space Disk space configuration") != std::string::npos);
+    EXPECT_TRUE(response.find("# TYPE starrocks_cache_disk_space gauge") != std::string::npos);
+    EXPECT_TRUE(response.find("starrocks_cache_disk_space{path=") != std::string::npos);
+    EXPECT_TRUE(response.find("quota_bytes=") != std::string::npos);
 }
 
 } // namespace starrocks

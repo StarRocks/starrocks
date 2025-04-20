@@ -272,6 +272,11 @@ void StarRocksMetrics::initialize(const std::vector<std::string>& paths, bool in
 void StarRocksMetrics::_update() {
     _update_process_thread_num();
     _update_process_fd_num();
+    
+    // Update data cache metrics
+    if (auto* block_cache = ExecEnv::GetInstance()->block_cache()) {
+        block_cache->_update_metrics();
+    }
 }
 
 // get num of thread of starrocks_be process
