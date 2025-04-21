@@ -425,7 +425,6 @@ Status CacheEnv::_init_datacache() {
         RETURN_IF_ERROR(DataCacheUtils::parse_conf_datacache_mem_size(config::datacache_mem_size, mem_limit,
                                                                       &cache_options.mem_space_size));
 
-        size_t total_quota_bytes = 0;
         for (auto& root_path : _store_paths) {
             // Because we have unified the datacache between datalake and starlet, we also need to unify the
             // cache path and quota.
@@ -460,7 +459,6 @@ Status CacheEnv::_init_datacache() {
             }
 #endif
             cache_options.disk_spaces.push_back({.path = datacache_path, .size = static_cast<size_t>(disk_size)});
-            total_quota_bytes += disk_size;
         }
 
         if (cache_options.disk_spaces.empty()) {
