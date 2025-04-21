@@ -46,6 +46,7 @@ import com.starrocks.sql.optimizer.task.TaskContext;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /*
  * Push down subfield expression to scan node
@@ -561,7 +562,9 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
                     localContext.put(columnRef, expr);
                 }
             }
-
+            // remove already-existing outer column refs.
+            extraOuterColRefs = extraOuterColRefs.stream()
+                    .filter(columnRef -> !outerColRefSet.contains(columnRef)).collect(Collectors.toList());
             ColumnRefSet childSubfieldOutputs = ColumnRefSet.of();
             childSubfieldOutputs.union(extraOuterColRefs);
             Optional<Operator> project = generatePushDownProject(optExpression, childSubfieldOutputs, localContext);
