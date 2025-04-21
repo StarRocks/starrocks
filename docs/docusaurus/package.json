@@ -30,8 +30,6 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
-<<<<<<< HEAD
-=======
   "overrides": {
     "react-router": {
       "path-to-regexp": "1.9.0"
@@ -44,7 +42,6 @@
     },
     "webpack-dev-middleware": "5.3.4"
   },
->>>>>>> 58607ce165 ([Doc] upgrade to Docusaurus 3.7 (#58253))
   "devDependencies": {
     "@docusaurus/module-type-aliases": "3.7.0",
     "@docusaurus/types": "3.7.0"
