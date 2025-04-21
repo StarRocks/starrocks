@@ -1,0 +1,79 @@
+-- name: test_cast_json_to_map
+CREATE TABLE t (
+    c1 int,
+    c2 json
+) PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t values
+(1, '[1,2,3]'),
+(2, '"abc"'),
+(3, 'null'),
+(4, 'true'),
+(5, '1'),
+(6, '{"1":1, "2":true, "3":null, "4":[5,6,7], "5":{"k51":"v51","k52":"v52"}}');
+-- result:
+-- !result
+select c1, cast(c2 as map<string,json>) as m from t order by c1;
+-- result:
+1	None
+2	None
+3	None
+4	None
+5	None
+6	{"1":'1',"2":'true',"3":'null',"4":'[5, 6, 7]',"5":'{"k51": "v51", "k52": "v52"}'}
+-- !result
+select c1, cast(c2 as map<int,json>) as m from t order by c1;
+-- result:
+1	None
+2	None
+3	None
+4	None
+5	None
+6	{1:'1',2:'true',3:'null',4:'[5, 6, 7]',5:'{"k51": "v51", "k52": "v52"}'}
+-- !result
+select c1, cast(c2 as map<string,string>) as m from t order by c1;
+-- result:
+1	None
+2	None
+3	None
+4	None
+5	None
+6	{"1":"1","2":"true","3":null,"4":"[5, 6, 7]","5":"{\"k51\": \"v51\", \"k52\": \"v52\"}"}
+-- !result
+select c1, cast(c2 as map<int,string>) as m from t order by c1;
+-- result:
+1	None
+2	None
+3	None
+4	None
+5	None
+6	{1:"1",2:"true",3:null,4:"[5, 6, 7]",5:"{\"k51\": \"v51\", \"k52\": \"v52\"}"}
+-- !result
+select c1, cast(c2 as map<string,array<int>>) as m from t order by c1;
+-- result:
+1	None
+2	None
+3	None
+4	None
+5	None
+6	{"1":null,"2":null,"3":null,"4":[5,6,7],"5":null}
+-- !result
+select c1, cast(c2 as map<string,struct<k51 string,k52 string>>) as m from t order by c1;
+-- result:
+1	None
+2	None
+3	None
+4	None
+5	None
+6	{"1":null,"2":null,"3":null,"4":{"k51":"5","k52":"6"},"5":{"k51":"v51","k52":"v52"}}
+-- !result
+select c1, cast(c2 as map<string,map<string,string>>) as m from t order by c1;
+-- result:
+1	None
+2	None
+3	None
+4	None
+5	None
+6	{"1":null,"2":null,"3":null,"4":null,"5":{"k51":"v51","k52":"v52"}}
+-- !result
