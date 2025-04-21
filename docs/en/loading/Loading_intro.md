@@ -3,6 +3,8 @@ displayed_sidebar: docs
 toc_max_heading_level: 3
 ---
 
+<head><meta name="docsearch:pagerank" content="100"/></head>
+
 # Loading options
 
 Data loading is the process of cleansing and transforming raw data from various data sources based on your business requirements and loading the resulting data into StarRocks to facilitate analysis.
