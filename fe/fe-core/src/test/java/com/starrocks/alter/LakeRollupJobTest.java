@@ -204,7 +204,7 @@ public class LakeRollupJobTest {
     }
 
     @Test
-    public void testrestoreColumnUniqueIdIfNeed() {
+    public void testRestoreColumnUniqueIdIfNeed() {
         Column a = new Column();
         Column b = new Column();
         List<Column> columns = List.of(a, b);
