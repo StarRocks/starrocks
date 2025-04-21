@@ -63,10 +63,13 @@ public class DeduplicateSemiInputTest extends TPCDS1TTestBase {
         assertContains(plan,
                 " RIGHT SEMI JOIN (join-predicate [7: cs_bill_cdemo_sk = 42: ss_addr_sk] post-join-predicate [null])\n" +
                         "                            EXCHANGE SHUFFLE[7]\n" +
-                        "                                SCAN (columns[7: cs_bill_cdemo_sk] predicate[7: cs_bill_cdemo_sk IS NOT NULL])\n" +
-                        "                            AGGREGATE ([GLOBAL] aggregate [{}] group by [[42: ss_addr_sk]] having [null]\n" +
+                        "                                SCAN (columns[7: cs_bill_cdemo_sk] " +
+                        "predicate[7: cs_bill_cdemo_sk IS NOT NULL])\n" +
+                        "                            AGGREGATE ([GLOBAL] aggregate [{}] " +
+                        "group by [[42: ss_addr_sk]] having [null]\n" +
                         "                                EXCHANGE SHUFFLE[42]\n" +
-                        "                                    AGGREGATE ([LOCAL] aggregate [{}] group by [[42: ss_addr_sk]] having [null]\n" +
+                        "                                    AGGREGATE ([LOCAL] aggregate [{}] " +
+                        "group by [[42: ss_addr_sk]] having [null]\n" +
                         "                                        SCAN (columns[42: ss_addr_sk] predicate[null])");
 
     }
