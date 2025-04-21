@@ -2380,4 +2380,80 @@ TEST_F(VectorizedCastExprTest, unsupported_test) {
     ASSERT_FALSE(Expr::create_vectorized_expr(&pool, cast_expr, &expr3, &runtime_state).ok());
 }
 
+TTypeDesc gen_map_type_desc(TPrimitiveType::type key_type, TPrimitiveType::type value_type) {
+    std::vector<TTypeNode> types_list;
+    TTypeNode type_map;
+
+    type_map.type = TTypeNodeType::MAP;
+    types_list.push_back(type_map);
+
+    TTypeNode type_key;
+    TScalarType key_scalar_type;
+    key_scalar_type.__set_type(key_type);
+    key_scalar_type.__set_precision(0);
+    key_scalar_type.__set_scale(0);
+    key_scalar_type.__set_len(0);
+    type_key.__set_scalar_type(key_scalar_type);
+    types_list.push_back(type_key);
+
+    TTypeNode type_value;
+    TScalarType value_scalar_type;
+    value_scalar_type.__set_type(value_type);
+    value_scalar_type.__set_precision(0);
+    value_scalar_type.__set_scale(0);
+    value_scalar_type.__set_len(0);
+    type_value.__set_scalar_type(value_scalar_type);
+    types_list.push_back(type_value);
+
+    TTypeDesc type_desc;
+    type_desc.__set_types(types_list);
+    return type_desc;
+}
+
+static std::string cast_json_to_map(LogicalType key_type, LogicalType value_type, const std::string& str) {
+    TExprNode cast_expr;
+    cast_expr.opcode = TExprOpcode::CAST;
+    cast_expr.node_type = TExprNodeType::CAST_EXPR;
+    cast_expr.num_children = 2;
+    cast_expr.__isset.opcode = true;
+    cast_expr.__isset.child_type = true;
+    cast_expr.child_type = to_thrift(TYPE_JSON);
+    cast_expr.type = gen_map_type_desc(to_thrift(key_type), to_thrift(value_type));
+
+    ObjectPool pool;
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
+
+    auto json = JsonValue::parse(str);
+    if (!json.ok()) {
+        return "INVALID JSON";
+    }
+
+    cast_expr.type = gen_type_desc(cast_expr.child_type);
+    MockVectorizedExpr<TYPE_JSON> col1(cast_expr, 1, &json.value());
+    expr->_children.push_back(&col1);
+
+    ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+    if (ptr->size() != 1) {
+        return "EMPTY";
+    }
+    return ptr->debug_item(0);
+}
+
+TEST_F(VectorizedCastExprTest, json_to_map) {
+    EXPECT_EQ(R"({'1':1,'2':true,'3':null,'4':[5, 6, 7],'5':{"k51": "v51"}})",
+              cast_json_to_map(TYPE_VARCHAR, TYPE_JSON,
+                               R"({"1":1, "2":true, "3":null, "4":[5,6,7], "5":{"k51":"v51"}})"));
+    EXPECT_EQ(R"({'1':'1','2':'true','3':NULL,'4':'[5, 6, 7]','5':'{"k51": "v51"}'})",
+              cast_json_to_map(TYPE_VARCHAR, TYPE_VARCHAR,
+                               R"({"1":1, "2":true, "3":null, "4":[5,6,7], "5":{"k51":"v51"}})"));
+    EXPECT_EQ(R"({1:1,2:true,3:null,4:[5, 6, 7],5:{"k51": "v51"}})",
+              cast_json_to_map(TYPE_INT, TYPE_JSON, R"({"1":1, "2":true, "3":null, "4":[5,6,7], "5":{"k51":"v51"}})"));
+    EXPECT_EQ(
+            R"({1:'1',2:'true',3:NULL,4:'[5, 6, 7]',5:'{"k51": "v51"}'})",
+            cast_json_to_map(TYPE_INT, TYPE_VARCHAR, R"({"1":1, "2":true, "3":null, "4":[5,6,7], "5":{"k51":"v51"}})"));
+    EXPECT_EQ(R"(NULL)", cast_json_to_map(TYPE_VARCHAR, TYPE_JSON, R"([1,2,3])"));
+    EXPECT_EQ(R"({1:1,3:NULL,NULL:NULL})",
+              cast_json_to_map(TYPE_INT, TYPE_INT, R"({"1":1, "k2":2, "3":"v3", "k4":"v4"})"));
+}
+
 } // namespace starrocks

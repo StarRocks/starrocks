@@ -394,4 +394,22 @@ public class TypeTest {
         Assert.assertTrue(type == AggregateType.extendedPrecision(type, true));
         Assert.assertTrue(type != AggregateType.extendedPrecision(type, false));
     }
+
+    @Test
+    public void testCastJsonToMap() {
+        Type jsonType = Type.JSON;
+        List<Type> mapTypes = Lists.newArrayList(
+                new MapType(Type.VARCHAR, Type.JSON),
+                new MapType(Type.INT, Type.VARCHAR),
+                new MapType(Type.VARCHAR, new ArrayType(Type.INT)),
+                new MapType(Type.VARCHAR, new ArrayType(Type.JSON)),
+                new MapType(Type.VARCHAR, new ArrayType(Type.JSON)),
+                new MapType(Type.VARCHAR, new MapType(Type.VARCHAR, Type.BOOLEAN)),
+                new MapType(Type.VARCHAR, new MapType(Type.INT, Type.JSON)),
+                new MapType(Type.VARCHAR, new MapType(Type.INT, new ArrayType(Type.VARCHAR)))
+        );
+        for (Type mapType : mapTypes) {
+            Assert.assertTrue(Type.canCastTo(jsonType, mapType));
+        }
+    }
 }
