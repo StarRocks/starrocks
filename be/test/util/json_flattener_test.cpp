@@ -52,7 +52,11 @@ namespace starrocks {
 
 class JsonPathDeriverTest
         : public ::testing::TestWithParam<
-                  std::tuple<std::string, std::string, bool, std::vector<std::string>, std::vector<LogicalType>>> {};
+                  std::tuple<std::string, std::string, bool, std::vector<std::string>, std::vector<LogicalType>>> {
+public:
+    void SetUp() override { config::enable_json_flat_complex_type = true; }
+    void TearDown() override { config::enable_json_flat_complex_type = false; }
+};
 
 TEST_P(JsonPathDeriverTest, json_path_deriver_test) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
