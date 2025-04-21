@@ -38,7 +38,9 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.UserException;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TFileFormatType;
 import mockit.Expectations;
@@ -307,5 +309,90 @@ public class LoadTest {
         Assert.assertEquals(TFileFormatType.FORMAT_CSV_DEFLATE, Load.getFormatType("csv", "hdfs://127.0.0.1:9000/some_file.deflate"));
         Assert.assertEquals(TFileFormatType.FORMAT_CSV_ZSTD, Load.getFormatType("csv", "hdfs://127.0.0.1:9000/some_file.zst"));
         Assert.assertEquals(TFileFormatType.FORMAT_CSV_PLAIN, Load.getFormatType("csv", "hdfs://127.0.0.1:9000/some_file"));
+    }
+
+    @Test
+    public void testLambda() throws Exception {
+        String c0Name = "c0";
+        columns.add(new Column(c0Name, Type.INT, true, null, true, null, ""));
+        String c1Name = "c1";
+        columns.add(new Column(c1Name, Type.STRING, false, null, true, null, ""));
+        String c2Name = "c2";
+        columns.add(new Column(c2Name, Type.STRING, false, null, true, null, ""));
+        String c3Name = "c3";
+        columns.add(new Column(c3Name, Type.STRING, false, null, true, null, ""));
+
+        new Expectations() {
+            {
+                table.getBaseSchema();
+                result = columns;
+                table.getColumn(c0Name);
+                result = columns.get(0);
+                table.getColumn(c1Name);
+                result = columns.get(1);
+                table.getColumn(c2Name);
+                result = columns.get(2);
+                table.getColumn(c3Name);
+                result = columns.get(3);
+            }
+        };
+
+        String columnsSQL =
+                "COLUMNS (" +
+                "   c0,t0,c1,t1," +
+                "   c2=get_json_string(" +
+                "           array_filter(" +
+                "               e -> get_json_string(e,'$.name')='Tom'," +
+                "               CAST(parse_json(t0) AS ARRAY<JSON>)" +
+                "           )[1]," +
+                "      '$.id')," +
+                "   c3=get_json_string(" +
+                "           map_values(" +
+                "               map_filter(" +
+                "                   (k,v) -> get_json_string(v,'$.name')='Jerry'," +
+                "                   CAST(parse_json(t1) AS MAP<STRING,JSON>)" +
+                "              )" +
+                "           )[1]," +
+                "       '$.id')" +
+                " )";
+        columnsFromPath.add("c1");
+        ImportColumnsStmt columnsStmt =
+                com.starrocks.sql.parser.SqlParser.parseImportColumns(columnsSQL, SqlModeHelper.MODE_DEFAULT);
+        columnExprs.addAll(columnsStmt.getColumns());
+        Load.initColumns(table, columnExprs, null, exprsByName, analyzer, srcTupleDesc,
+                slotDescByName, params, true, true, columnsFromPath);
+        Assert.assertEquals(7, slotDescByName.size());
+        Assert.assertTrue(slotDescByName.containsKey("c0"));
+        Assert.assertTrue(slotDescByName.containsKey("t0"));
+        Assert.assertTrue(slotDescByName.containsKey("c1"));
+        Assert.assertTrue(slotDescByName.containsKey("t1"));
+        Assert.assertTrue(slotDescByName.containsKey("e"));
+        Assert.assertTrue(slotDescByName.containsKey("k"));
+        Assert.assertTrue(slotDescByName.containsKey("v"));
+        Assert.assertEquals(4, params.getSrc_slot_idsSize());
+        Assert.assertEquals(2, exprsByName.size());
+        Assert.assertTrue(exprsByName.containsKey("c2"));
+        Assert.assertTrue(exprsByName.containsKey("c3"));
+
+        int t0SlotId = slotDescByName.get("t0").getId().asInt();
+        int eSlotId = slotDescByName.get("e").getId().asInt();
+        String c2ExprExplain = String.format(
+                "get_json_string[(array_filter(CAST(parse_json(<slot %d>) AS ARRAY<JSON>), " +
+                "array_map(<slot %d> -> get_json_string(<slot %d>, '$.name') = 'Tom', " +
+                "CAST(parse_json(<slot %d>) AS ARRAY<JSON>)))[1], '$.id'); args: JSON,VARCHAR; " +
+                "result: VARCHAR; args nullable: true; result nullable: true]",
+                    t0SlotId, eSlotId, eSlotId, t0SlotId);
+        Assert.assertEquals(c2ExprExplain, exprsByName.get("c2").explain());
+
+        int t1SlotId = slotDescByName.get("t1").getId().asInt();
+        int kSlotId = slotDescByName.get("k").getId().asInt();
+        int vSlotId = slotDescByName.get("v").getId().asInt();
+        String c3ExprExplain = String.format(
+                "get_json_string[(map_values(map_filter(CAST(parse_json(<slot %d>) AS MAP<VARCHAR(65533),JSON>), " +
+                "map_values(map_apply((<slot %d>, <slot %d>) -> map{<slot %d>:get_json_string(<slot %d>, '$.name') = 'Jerry'}, " +
+                "CAST(parse_json(<slot %d>) AS MAP<VARCHAR(65533),JSON>)))))[1], '$.id'); args: JSON,VARCHAR; " +
+                "result: VARCHAR; args nullable: true; result nullable: true]",
+                t1SlotId, kSlotId, vSlotId, kSlotId, vSlotId, t1SlotId);
+        Assert.assertEquals(c3ExprExplain, exprsByName.get("c3").explain());
     }
 }
