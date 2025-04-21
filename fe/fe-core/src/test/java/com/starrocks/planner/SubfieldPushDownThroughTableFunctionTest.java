@@ -129,8 +129,19 @@ public class SubfieldPushDownThroughTableFunctionTest extends PlanTestNoneDBBase
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");";
+        String createTableSql3 = "CREATE TABLE student_score\n" +
+                "(\n" +
+                "    `id` bigint(20) NULL COMMENT \"\",\n" +
+                "    `scores` ARRAY<int> NULL COMMENT \"\"\n" +
+                ")\n" +
+                "DUPLICATE KEY (id)\n" +
+                "DISTRIBUTED BY HASH(`id`)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
         starRocksAssert.withTable(createTableSql1);
         starRocksAssert.withTable(createTableSql2);
+        starRocksAssert.withTable(createTableSql3);
     }
 
     @Test
@@ -303,6 +314,24 @@ public class SubfieldPushDownThroughTableFunctionTest extends PlanTestNoneDBBase
         checkTableFunctionOuterCols(sql, expectOuterCols);
     }
 
+    @Test
+    public void test5() throws Exception {
+        String sql = "select id, scores, unnest from student_score left join unnest(scores) as " +
+                "unnest on true order by 1, 3;";
+        String plan = UtFrameUtils.getFragmentPlan(connectContext, sql);
+        assertCContains(plan, "  2:SORT\n" +
+                "  |  order by: <slot 1> 1: id ASC, <slot 3> 3: unnest ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  1:TableValueFunction\n" +
+                "  |  tableFunctionName: unnest\n" +
+                "  |  columns: [unnest]\n" +
+                "  |  returnTypes: [INT]");
+        Map<Integer, Set<Integer>> expectOuterCols = Maps.newHashMap();
+        expectOuterCols.put(1, ImmutableSet.of(1, 2));
+        checkTableFunctionOuterCols(sql, expectOuterCols);
+    }
+
     private void checkTableFunctionOuterCols(String sql, Map<Integer, Set<Integer>> expectOuterCols)
             throws Exception {
         ExecPlan plan = getExecPlan(sql);
@@ -313,6 +342,7 @@ public class SubfieldPushDownThroughTableFunctionTest extends PlanTestNoneDBBase
                 .collect(Collectors.toMap(node -> node.getId().asInt(), node -> node));
         for (Map.Entry<Integer, Set<Integer>> e : expectOuterCols.entrySet()) {
             Assert.assertTrue(tableFunctionNodes.containsKey(e.getKey()));
+            Assert.assertEquals(tableFunctionNodes.get(e.getKey()).getOuterSlots().size(), e.getValue().size());
             Set<Integer> actual = new HashSet<>(tableFunctionNodes.get(e.getKey()).getOuterSlots());
             Assert.assertEquals(actual, e.getValue());
         }
