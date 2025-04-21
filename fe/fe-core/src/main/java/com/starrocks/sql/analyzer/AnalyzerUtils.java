@@ -1937,4 +1937,27 @@ public class AnalyzerUtils {
         }
         return expr;
     }
+
+    public static boolean isGranularityGreater(String g1, String g2) {
+        Map<String, Integer> orderMap = Map.of(
+                "minute", 0,
+                "hour", 1,
+                "day", 2,
+                "month", 3,
+                "year", 4
+        );
+
+        if (g1 == null || g2 == null) {
+            return false;
+        }
+
+        Integer order1 = orderMap.get(g1.toLowerCase());
+        Integer order2 = orderMap.get(g2.toLowerCase());
+
+        if (order1 == null || order2 == null) {
+            return false;
+        }
+
+        return order1 > order2;
+    }
 }
