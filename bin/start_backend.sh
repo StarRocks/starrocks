@@ -33,6 +33,7 @@ OPTS=$(getopt \
     -l 'be' \
     -l 'logconsole' \
     -l 'meta_tool' \
+    -l 'index_tool' \
     -l numa: \
     -l 'check_mem_leak' \
     -l 'jemalloc_debug' \
@@ -46,6 +47,7 @@ RUN_BE=0
 RUN_NUMA="-1"
 RUN_LOG_CONSOLE=0
 RUN_META_TOOL=0
+RUN_INDEX_TOOL=0
 RUN_CHECK_MEM_LEAK=0
 RUN_JEMALLOC_DEBUG=0
 
@@ -57,6 +59,7 @@ while true; do
         --logconsole) RUN_LOG_CONSOLE=1 ; shift ;;
         --numa) RUN_NUMA=$2; shift 2 ;;
         --meta_tool) RUN_META_TOOL=1 ; shift ;;
+        --index_tool) RUN_INDEX_TOOL=1; shift ;;
         --check_mem_leak) RUN_CHECK_MEM_LEAK=1 ; shift ;;
         --jemalloc_debug) RUN_JEMALLOC_DEBUG=1 ; shift ;;
         --) shift ;  break ;;
@@ -165,6 +168,12 @@ export_cachelib_lib_path
 # ====== handle meta_tool sub command before any modification change
 if [ ${RUN_META_TOOL} -eq 1 ] ; then
     ${STARROCKS_HOME}/lib/$BIN_NAME meta_tool "$@"
+    exit $?
+fi
+
+# ===== handle index_tool sub command before any modification change
+if [ ${RUN_INDEX_TOOL} -eq 1 ]; then
+    ${STARROCKS_HOME}/lib/${BIN_NAME} index_tool "$@"
     exit $?
 fi
 

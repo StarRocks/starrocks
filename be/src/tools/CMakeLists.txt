@@ -21,6 +21,10 @@ add_library(Tools STATIC
     meta_tool.cpp
 )
 
+add_library(IndexTools STATIC
+    index_tool.cpp
+)
+
 # libmockjvm will be build as shared lib. we use it to mock a libjvm.so to 
 # make sure BE can start without real java runtime
 add_library(mockjvm SHARED mock_jvm.c)

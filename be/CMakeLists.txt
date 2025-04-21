@@ -883,6 +883,7 @@ set(STARROCKS_LINK_LIBS
     Webserver
     TestUtil
     Tools
+    IndexTools
     Geo
     Cache
     ${WL_END_GROUP}
@@ -1219,6 +1220,7 @@ install(FILES
     ${BASE_DIR}/../bin/stop_cn.sh
     ${BASE_DIR}/../bin/show_be_version.sh
     ${BASE_DIR}/../bin/meta_tool.sh
+    ${BASE_DIR}/../bin/index_tool.sh
     PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
     GROUP_READ GROUP_WRITE GROUP_EXECUTE
     WORLD_READ WORLD_EXECUTE
