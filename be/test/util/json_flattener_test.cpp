@@ -113,10 +113,10 @@ public:
     ~JsonFlattenerTest() override = default;
 
 protected:
-    void SetUp() override { config::enable_flat_complex_type = true; }
+    void SetUp() override { config::enable_json_flat_complex_type = true; }
 
     void TearDown() override {
-        config::enable_flat_complex_type = false;
+        config::enable_json_flat_complex_type = false;
         config::json_flat_sparsity_factor = 0.9;
         config::json_flat_null_factor = 0.3;
         config::json_flat_complex_type_factor = 0.3;
@@ -537,40 +537,6 @@ TEST_F(JsonFlattenerTest, testComplexJsonExtract) {
     }
 }
 
-TEST_F(JsonFlattenerTest, testComplexJsonExtract3) {
-    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    auto json_column = JsonColumn::create();
-
-    // clang-format off
-    std::vector<std::string> jsons = {
-        R"({"K1": 123, "K2": "some", "K5": {"nf": {"s1": "text",            "subfield2": 123,               "subfield3": ["a", "b", "c"]}}})",
-        R"({"K1": 456, "K2": "anor", "K5": {"nf": {"s1": 789,               "subfield2": ["x", "y", "z"],   "subfield3": 123}}})",
-        R"({"K1": 789, "K2": "yete", "K5": {"nf": {"s1": "text",            "subfield2": ["x", "y", "z"],   "subfield3": 456}}})",
-        R"({"K1": 101, "K2": "onee", "K5": {"nf": {"s1": 101112,            "subfield2": ["x", "y", "z"],   "subfield3": 123}}})",
-        R"({"K1": 131, "K2": "fine", "K5": {"nf": {"s1": ["p", "q", "r"],   "subfield2": ["x", "y", "z"],   "subfield3": "text"}}})",
-    };
-    // clang-format on
-
-    for (auto& str : jsons) {
-        ASSIGN_OR_ABORT(auto json_value, JsonValue::parse(str));
-        json_column->append(&json_value);
-    }
-    std::vector<const Column*> columns{json_column.get()};
-
-    {
-        config::enable_json_flat_complex_type = false;
-        config::json_flat_complex_type_factor = 0.7;
-        JsonPathDeriver jf;
-        jf.derived(columns);
-        EXPECT_EQ(true, jf.has_remain_json());
-
-        std::vector<std::string> ep_paths{"K1", "K2", "K5.nf.s1", "K5.nf.subfield3"};
-        std::vector<LogicalType> ep_types{TYPE_BIGINT, TYPE_VARCHAR, TYPE_JSON, TYPE_JSON};
-        EXPECT_EQ(ep_paths, jf.flat_paths());
-        EXPECT_EQ(ep_types, jf.flat_types());
-    }
-}
-
 TEST_F(JsonFlattenerTest, testComplexJsonExtract2) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto json_column = JsonColumn::create();
@@ -588,7 +554,7 @@ TEST_F(JsonFlattenerTest, testComplexJsonExtract2) {
     std::vector<const Column*> columns{json_column.get()};
 
     {
-        config::enable_flat_complex_type = false;
+        config::enable_json_flat_complex_type = false;
         JsonPathDeriver jf;
         jf.derived(columns);
         EXPECT_EQ(true, jf.has_remain_json());

@@ -647,13 +647,16 @@ uint32_t JsonPathDeriver::_dfs_finalize(JsonFlatPath* node, const std::string& a
         return 1;
     }
 }
-
 void dfs_add_remain_keys(JsonFlatPath* node, std::unordered_set<std::string_view>* remain_keys) {
-    for (auto& [key, child] : node->children) {
+    auto iter = node->children.begin();
+    while (iter != node->children.end()) {
+        auto child = iter->second.get();
+        dfs_add_remain_keys(child, remain_keys);
         if (child->remain) {
-            remain_keys->insert(key);
-            dfs_add_remain_keys(child.get(), remain_keys);
+            node->remain |= true;
+            remain_keys->insert(iter->first);
         }
+        iter++;
     }
 }
 
@@ -694,9 +697,9 @@ void JsonPathDeriver::_finalize() {
         _types.emplace_back(node->type);
     }
 
+    dfs_add_remain_keys(_path_root.get(), &_remain_keys);
     _has_remain |= _path_root->remain;
     if (_has_remain && _generate_filter) {
-        dfs_add_remain_keys(_path_root.get(), &_remain_keys);
         if (_remain_keys.size() > FILTER_MAX_ELEMNT_NUMS) {
             _generate_filter = false;
             _remain_keys.clear();
