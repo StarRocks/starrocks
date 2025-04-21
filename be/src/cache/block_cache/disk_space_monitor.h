@@ -47,7 +47,17 @@ public:
         int64_t available_bytes = 0;
 
         int64_t used_bytes() { return capacity_bytes - available_bytes; }
-        double used_rate() { return static_cast<double>(capacity_bytes - available_bytes) / capacity_bytes; }
+    };
+
+    struct DiskOptions {
+        int64_t cache_lower_limit = 0;
+
+        int64_t low_level_size = 0;
+        int64_t safe_level_size = 0;
+        int64_t high_level_size = 0;
+
+        int64_t adjust_interval_s = 0;
+        int64_t idle_for_expansion_s = 0;
     };
 
     struct AdjustContext {
@@ -55,8 +65,7 @@ public:
         size_t total_cache_usage = 0;
     };
 
-    DiskSpace(dev_t device_id, const std::string& path, std::shared_ptr<FileSystemWrapper> fs)
-            : _device_id(device_id), _path(path), _fs(fs) {}
+    DiskSpace(const std::string& path, std::shared_ptr<FileSystemWrapper> fs) : _path(path), _fs(fs) {}
 
     Status init_spaces(const std::vector<DirSpace>& dir_spaces);
 
@@ -67,7 +76,7 @@ public:
     size_t cache_quota();
 
     // The align unit when adjusting cache disk quota. We set it to 10G to keep consistent with underlying cache file size,
-    // which can help reduce processing the specail tail files.
+    // which can help reduce processing the special tail files.
     const static size_t kQuotaAlignUnit;
 
     // The cache usage threshold for automatically increase disk quota, if the cache usage is under this level,
@@ -77,14 +86,15 @@ public:
 
 private:
     Status _update_disk_stats();
-
-    void _revise_disk_stats_by_cache_dir();
+    void _update_disk_options();
 
     void _update_spaces_by_cache_quota(size_t cache_avalil_bytes);
 
     bool _allow_expansion(const AdjustContext& ctx);
 
     size_t _cache_usage(const AdjustContext& ctx);
+    size_t _cache_file_space_usage();
+    size_t _calc_new_cache_quota(size_t cur_cache_usage);
 
     size_t _check_cache_limit(int64_t cache_quota);
 
@@ -92,9 +102,9 @@ private:
 
     size_t _check_cache_high_limit(int64_t cache_quota);
 
-    dev_t _device_id = 0;
     std::string _path;
     DiskStats _disk_stats;
+    DiskOptions _disk_opts;
 
     // The datacache can be configured to have multiple data directories on the same physical disk.
     std::vector<DirSpace> _dir_spaces;
