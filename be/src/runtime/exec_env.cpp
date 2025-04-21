@@ -463,7 +463,7 @@ Status CacheEnv::_init_datacache() {
             total_quota_bytes += disk_size;
         }
 
-        if (cache_options.disk_spaces.empty() || total_quota_bytes != 0) {
+        if (cache_options.disk_spaces.empty()) {
             config::datacache_auto_adjust_enable = false;
         }
 
