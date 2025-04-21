@@ -185,6 +185,11 @@ public class CompactionScheduler extends Daemon {
             }
         }
 
+        if (isScheduleDisabled()) {
+            LOG.debug("Lake compaction schedule has been disabled");
+            return;
+        }
+
         // Create new compaction tasks.
         int index = 0;
         List<PartitionStatisticsSnapshot> partitions =
@@ -222,6 +227,12 @@ public class CompactionScheduler extends Daemon {
                 job.abort();
             }
         }
+    }
+
+    private boolean isScheduleDisabled() {
+        // right now, we follow the previous design which disable compaction scheduling
+        // by setting `lake_compaction_max_tasks` to 0
+        return Config.lake_compaction_max_tasks == 0;
     }
 
     private void finishJob(CompactionJob job, String errorMsg) {
