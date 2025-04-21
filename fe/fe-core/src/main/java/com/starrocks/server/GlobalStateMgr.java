@@ -1162,7 +1162,7 @@ public class GlobalStateMgr {
         nodeMgr.setImageDir(imageDir);
     }
 
-    public void initialize(String[] args) throws Exception {
+    public void initialize(String helpers) throws Exception {
         // set meta dir first.
         // we already set these variables in constructor. but GlobalStateMgr is a singleton class.
         // so they may be set before Config is initialized.
@@ -1174,7 +1174,7 @@ public class GlobalStateMgr {
         boolean isFirstTimeStart = nodeMgr.isVersionAndRoleFilesNotExist();
         try {
             // 0. get local node and helper node info
-            nodeMgr.initialize(args);
+            nodeMgr.initialize(helpers);
 
             // 1. create dirs and files
             if (Config.edit_log_type.equalsIgnoreCase("bdb")) {

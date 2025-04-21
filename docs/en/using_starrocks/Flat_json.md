@@ -64,6 +64,7 @@ You can verify whether the executed query benefits from Flat JSON optimization t
 2. Create a table with JSON columns. In this example, use INSERT INTO to load JSON data into the table.
 
    ```SQL
+    -- method1: Create a table with JSON columns and configure Flat JSON at creation time. It only support share-nothing cluster.
    CREATE TABLE `t1` (
        `k1` int,
        `k2` JSON,
@@ -73,7 +74,26 @@ You can verify whether the executed query benefits from Flat JSON optimization t
    DUPLICATE KEY(`k1`)
    COMMENT "OLAP"
    DISTRIBUTED BY HASH(`k1`) BUCKETS 2
-   PROPERTIES ("replication_num" = "3");
+   PROPERTIES (
+     "replication_num" = "3",
+     "flat_json.enable" = "true",
+     "flat_json.null.factor" = "0.5",
+     "flat_json.sparsity.factor" = "0.5",
+     "flat_json.column.max" = "50");
+   )
+   
+   -- method2: Enabling the Flat JSON feature is required, and this approach is applicable to both share-nothing and share-data clusters.
+   CREATE TABLE `t1` (
+       `k1` int,
+       `k2` JSON,
+       `k3` VARCHAR(20),
+       `k4` JSON
+   )             
+   DUPLICATE KEY(`k1`)
+   COMMENT "OLAP"
+   DISTRIBUTED BY HASH(`k1`) BUCKETS 2
+   PROPERTIES ("replication_num" = "3");   
+    
       
    INSERT INTO t1 (k1,k2) VALUES
    (11,parse_json('{"str":"test_flat_json","Integer":123456,"Double":3.14158,"Object":{"c":"d"},"arr":[10,20,30],"Bool":false,"null":null}')),
@@ -145,6 +165,21 @@ Starting from version v3.3.3:
 - The results extracted by Flat JSON are divided into common columns and reserved field columns. When all JSON Schemas are consistent, no reserved field columns are generated.
 - Flat JSON only stores common field columns and reserved field columns, without additionally storing the original JSON data.
 - When loading data, common fields will automatically infer types as BIGINT/LARGEINT/DOUBLE/STRING. Unrecognized types will be inferred as JSON types, and reserved field columns will be stored as JSON types.
+
+## Enabling Flat JSON Feature (Only support shared-nothing cluster)
+
+1. During table creation, `flat_json.enable` property can be set in the table parameters. See [Table Creation](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) for reference.
+   The Flat JSON feature can also be enabled or reconfigured by modifying table properties directly. Example:
+   ```SQL
+   alter table t1 set ("flat_json.enable" = "true")
+   
+   alter table t1 set ("flat_json.null.factor" = "0.1")
+   
+   alter table t1 set ("flat_json.sparsity.factor" = "0.8")
+   
+   alter table t1 set ("flat_json.column.max" = "90")
+   ```
+2. Enable FE pruning feature: `SET GLOBAL cbo_prune_json_subfield = true;`
 
 ## Enabling Flat JSON Feature (Before Version 3.4)
 
