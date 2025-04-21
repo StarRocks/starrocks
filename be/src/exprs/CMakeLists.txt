@@ -17,7 +17,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 
-set(EXPR_FILES 
+set(EXPR_FILES
   agg/data_sketch/ds_theta.cpp
   agg/factory/aggregate_factory.cpp
   agg/factory/aggregate_resolver_approx.cpp
@@ -50,6 +50,7 @@ set(EXPR_FILES
   cast_expr_array.cpp
   cast_expr_json.cpp
   cast_expr_struct.cpp
+  cast_expr_map.cpp
   cast_nested.cpp
   column_ref.cpp
   placeholder_ref.cpp
@@ -106,8 +107,8 @@ set(EXPR_FILES
 )
 
 if(STARROCKS_JIT_ENABLE)
-  set(EXPR_FILES ${EXPR_FILES} 
-      jit/ir_helper.cpp 
+  set(EXPR_FILES ${EXPR_FILES}
+      jit/ir_helper.cpp
       jit/jit_engine.cpp
       jit/jit_expr.cpp)
 

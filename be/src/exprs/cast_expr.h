@@ -153,6 +153,27 @@ private:
     std::vector<JsonPath> _json_paths;
 };
 
+// Cast Json to MAP
+class CastJsonToMap final : public Expr {
+public:
+    CastJsonToMap(const TExprNode& node, Expr* key_cast_expr, Expr* value_cast_expr)
+            : Expr(node), _key_cast_expr(std::move(key_cast_expr)), _value_cast_expr(std::move(value_cast_expr)) {}
+
+    CastJsonToMap(const CastJsonToMap& rhs) : Expr(rhs) {}
+
+    ~CastJsonToMap() override = default;
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
+
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new CastJsonToMap(*this)); }
+
+private:
+    // nullptr if MAP key is not TYPE_VARCHAR
+    Expr* _key_cast_expr;
+    // nullptr if MAP value is not TYPE_JSON
+    Expr* _value_cast_expr;
+};
+
 // cast one ARRAY to another ARRAY.
 // For example.
 //   cast ARRAY<tinyint> to ARRAY<int>
