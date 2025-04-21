@@ -31,7 +31,7 @@ displayed_sidebar: docs
 - セッション変数 `big_query_profile_threshold` のデフォルト値が 0 から 30（秒）に変更されました。[#57177](https://github.com/StarRocks/starrocks/pull/57177)
 - 新しい FE 設定項目 `enable_mv_refresh_collect_profile` が追加され、マテリアライズドビューのリフレッシュ中に Profile 情報を収集するかどうかを制御できるようになりました。デフォルト値は `false`（以前はシステムで Profile がデフォルトで収集されていました）。[#56971](https://github.com/StarRocks/starrocks/pull/56971)
 
-## 3.4.1
+## 3.4.1（廃止予定）
 
 リリース日: 2025年3月12日
 
