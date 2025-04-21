@@ -118,4 +118,25 @@ public class CompactionJobTest {
         String s = job.getExecutionProfile();
         Assert.assertFalse(s.isEmpty());
     }
+
+    @Test
+    public void testSuccessCompactInputFIleSize() {
+        Database db = new Database();
+        Table table = new Table(Table.TableType.CLOUD_NATIVE);
+        PhysicalPartition partition = new PhysicalPartition(0, "", 1, null);
+        CompactionJob job = new CompactionJob(db, table, partition, 10010, true);
+
+        Assert.assertTrue(job.getAllowPartialSuccess());
+        List<CompactionTask> list = new ArrayList<>();
+        list.add(new CompactionTask(100));
+        list.add(new CompactionTask(101));
+        job.setTasks(list);
+        new MockUp<CompactionTask>() {
+            @Mock
+            public CompactionTask.TaskResult getResult() {
+                return CompactionTask.TaskResult.NOT_FINISHED;
+            }
+        };
+        Assert.assertEquals(job.getSuccessCompactInputFileSize(), 0);
+    }
 }

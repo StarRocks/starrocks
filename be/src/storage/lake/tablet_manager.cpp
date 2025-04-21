@@ -703,9 +703,12 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(CompactionTaskContext* contex
     ASSIGN_OR_RETURN(auto input_rowsets, compaction_policy->pick_rowsets());
     ASSIGN_OR_RETURN(auto algorithm, compaction_policy->choose_compaction_algorithm(input_rowsets));
     std::vector<uint32_t> input_rowsets_id;
+    size_t total_input_rowsets_file_size = 0;
     for (auto& rowset : input_rowsets) {
         input_rowsets_id.emplace_back(rowset->id());
+        total_input_rowsets_file_size += rowset->data_size();
     }
+    context->stats->input_file_size += total_input_rowsets_file_size;
     ASSIGN_OR_RETURN(auto tablet_schema, get_output_rowset_schema(input_rowsets_id, tablet_metadata.get()));
     if (algorithm == VERTICAL_COMPACTION) {
         return std::make_shared<VerticalCompactionTask>(std::move(tablet), std::move(input_rowsets), context,

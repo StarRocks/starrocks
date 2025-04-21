@@ -162,6 +162,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         long minRetainVersion;
         long startTime = System.currentTimeMillis();
         long minActiveTxnId = computeMinActiveTxnId(db, table);
+        long preExtraFileSize = 0;
         Map<ComputeNode, List<TabletInfoPB>> nodeToTablets = new HashMap<>();
 
         Locker locker = new Locker();
@@ -175,6 +176,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
             if (minRetainVersion <= 0) {
                 minRetainVersion = Math.max(1, visibleVersion - Config.lake_autovacuum_max_previous_versions);
             }
+            preExtraFileSize = partition.getExtraFileSize();
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
         }
@@ -224,6 +226,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
             }
         }
 
+        long extraFileSize = 0;
         for (Future<VacuumResponse> responseFuture : responseFutures) {
             try {
                 VacuumResponse response = responseFuture.get();
@@ -235,6 +238,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
                     vacuumedFiles += response.vacuumedFiles;
                     vacuumedFileSize += response.vacuumedFileSize;
                     vacuumedVersion = Math.min(vacuumedVersion, response.vacuumedVersion);
+                    extraFileSize += response.extraFileSize;
 
                     if (response.tabletInfos != null) {
                         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
@@ -270,11 +274,14 @@ public class AutovacuumDaemon extends FrontendDaemon {
             // the vacuumedVersion isthe minimum success vacuum version among all tablets within the partition which
             // means that all the garbage files before the vacuumVersion have been deleted.
             partition.setLastSuccVacuumVersion(vacuumedVersion);
+            long incrementExtraFileSize = partition.getExtraFileSize() - preExtraFileSize;
+            partition.setExtraFileSize(extraFileSize + incrementExtraFileSize);
         }
         LOG.info("Vacuumed {}.{}.{} hasError={} vacuumedFiles={} vacuumedFileSize={} " +
-                        "visibleVersion={} minRetainVersion={} minActiveTxnId={} vacuumVersion={} cost={}ms",
+                        "visibleVersion={} minRetainVersion={} minActiveTxnId={} vacuumVersion={} extraFileSize={} cost={}ms",
                 db.getFullName(), table.getName(), partition.getId(), hasError, vacuumedFiles, vacuumedFileSize,
-                visibleVersion, minRetainVersion, minActiveTxnId, vacuumedVersion, System.currentTimeMillis() - startTime);
+                visibleVersion, minRetainVersion, minActiveTxnId, vacuumedVersion, extraFileSize, 
+                System.currentTimeMillis() - startTime);
     }
 
     private static long computeMinActiveTxnId(Database db, Table table) {
