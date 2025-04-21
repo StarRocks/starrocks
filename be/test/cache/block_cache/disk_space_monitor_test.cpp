@@ -185,7 +185,7 @@ TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota) {
     {
         size_t batch_size = MB;
         const std::string cache_key = "test_file";
-        for (size_t i = 0; i < 20; ++i) {
+        for (size_t i = 0; i < 19; ++i) {
             char ch = 'a' + i % 26;
             std::string value(batch_size, ch);
             Status st = cache->write(cache_key + std::to_string(i), 0, batch_size, value.c_str());
@@ -212,9 +212,9 @@ TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota) {
         config::datacache_disk_idle_seconds_for_expansion = 1;
         sleep(3);
         auto metrics = cache->cache_metrics();
-        // other: 500M - 300M - 20M = 180M
-        // new quota: 500 * 0.7 - other = 170M
-        ASSERT_EQ(metrics.disk_quota_bytes, 170 * MB);
+        // other: 500M - 300M - 19M = 181M
+        // new quota: 500 * 0.7 - other = 169M, 169M/10 * 10 = 160M
+        ASSERT_EQ(metrics.disk_quota_bytes, 160 * MB);
     }
 
     cache->shutdown();

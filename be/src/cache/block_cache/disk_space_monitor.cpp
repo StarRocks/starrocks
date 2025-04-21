@@ -147,7 +147,7 @@ bool DiskSpace::_allow_expansion(const AdjustContext& ctx) {
         return false;
     }
     if (ctx.total_cache_quota > 0) {
-        double cache_used_rate = static_cast<double>(ctx.total_cache_usage / ctx.total_cache_quota);
+        double cache_used_rate = static_cast<double>(ctx.total_cache_usage) / ctx.total_cache_quota;
         if (cache_used_rate < kAutoIncreaseThreshold) {
             return false;
         }
