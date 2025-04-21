@@ -374,6 +374,11 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
                 it++;
             }
         }
+
+        if (_tablet_meta->historical_schemas().count(_tablet_meta->schema().id()) <= 0) {
+            auto& item = (*_tablet_meta->mutable_historical_schemas())[_tablet_meta->schema().id()];
+            item.CopyFrom(_tablet_meta->schema());
+        }
     }
 
     VLOG(2) << fmt::format(

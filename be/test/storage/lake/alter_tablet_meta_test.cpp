@@ -296,6 +296,7 @@ void AlterTabletMetaTest::test_alter_update_tablet_schema(KeysType keys_type) {
     }
 
     // compaction
+    auto schema_id3 = tablet_metadata->schema().id();
     {
         TxnLogPB log;
         auto op_compaction_meta = log.mutable_op_compaction();
@@ -323,10 +324,17 @@ void AlterTabletMetaTest::test_alter_update_tablet_schema(KeysType keys_type) {
         ASSERT_TRUE(tablet_metadata->rowsets_size() == 2);
         ASSERT_TRUE(tablet_metadata->rowset_to_schema().size() == 2);
         ASSERT_TRUE(tablet_metadata->historical_schemas().size() == 2);
-        ASSERT_TRUE(tablet_metadata->historical_schemas().count(schema_id1) > 0);
-        ASSERT_TRUE(tablet_metadata->historical_schemas().count(schema_id2) > 0);
-        ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id0) == schema_id1);
-        ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id1) == schema_id2);
+        if (keys_type == PRIMARY_KEYS) {
+            ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id0) == schema_id1);
+            ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id1) == schema_id3);
+            ASSERT_TRUE(tablet_metadata->historical_schemas().count(schema_id1) > 0);
+            ASSERT_TRUE(tablet_metadata->historical_schemas().count(schema_id3) > 0);
+        } else {
+            ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id0) == schema_id1);
+            ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id1) == schema_id2);
+            ASSERT_TRUE(tablet_metadata->historical_schemas().count(schema_id1) > 0);
+            ASSERT_TRUE(tablet_metadata->historical_schemas().count(schema_id2) > 0);
+        }
     }
 
     // compaction one rowset
@@ -356,19 +364,20 @@ void AlterTabletMetaTest::test_alter_update_tablet_schema(KeysType keys_type) {
         auto rowset_id1 = tablet_metadata->rowsets(1).id();
         ASSERT_TRUE(tablet_metadata->rowsets_size() == 2);
         ASSERT_TRUE(tablet_metadata->rowset_to_schema().size() == 2);
-        ASSERT_TRUE(tablet_metadata->historical_schemas().size() == 2);
-        ASSERT_TRUE(tablet_metadata->historical_schemas().count(schema_id1) > 0);
-        ASSERT_TRUE(tablet_metadata->historical_schemas().count(schema_id2) > 0);
         if (keys_type == PRIMARY_KEYS) {
-            ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id0) == schema_id2);
-            ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id1) == schema_id1);
+            ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id0) == schema_id3);
+            ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id1) == schema_id3);
+            ASSERT_TRUE(tablet_metadata->historical_schemas().size() == 1);
+            ASSERT_TRUE(tablet_metadata->historical_schemas().count(schema_id3) > 0);
         } else {
             ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id0) == schema_id1);
             ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id1) == schema_id2);
+            ASSERT_TRUE(tablet_metadata->historical_schemas().size() == 2);
+            ASSERT_TRUE(tablet_metadata->historical_schemas().count(schema_id1) > 0);
+            ASSERT_TRUE(tablet_metadata->historical_schemas().count(schema_id2) > 0);
         }
     }
 
-    auto schema_id3 = tablet_metadata->schema().id();
     {
         TxnLogPB log;
         auto op_write_meta = log.mutable_op_write();
@@ -392,15 +401,17 @@ void AlterTabletMetaTest::test_alter_update_tablet_schema(KeysType keys_type) {
         auto rowset_id2 = tablet_metadata->rowsets(2).id();
         ASSERT_TRUE(tablet_metadata->rowsets_size() == 3);
         ASSERT_TRUE(tablet_metadata->rowset_to_schema().size() == 3);
-        ASSERT_TRUE(tablet_metadata->historical_schemas().size() == 3);
-        ASSERT_TRUE(tablet_metadata->historical_schemas().count(schema_id1) > 0);
-        ASSERT_TRUE(tablet_metadata->historical_schemas().count(schema_id2) > 0);
         if (keys_type == PRIMARY_KEYS) {
-            ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id0) == schema_id2);
-            ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id1) == schema_id1);
+            ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id0) == schema_id3);
+            ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id1) == schema_id3);
+            ASSERT_TRUE(tablet_metadata->historical_schemas().count(schema_id3) > 0);
+            ASSERT_TRUE(tablet_metadata->historical_schemas().size() == 1);
         } else {
             ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id0) == schema_id1);
             ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id1) == schema_id2);
+            ASSERT_TRUE(tablet_metadata->historical_schemas().count(schema_id1) > 0);
+            ASSERT_TRUE(tablet_metadata->historical_schemas().count(schema_id2) > 0);
+            ASSERT_TRUE(tablet_metadata->historical_schemas().size() == 3);
         }
         ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id2) == schema_id3);
     }
@@ -433,15 +444,16 @@ void AlterTabletMetaTest::test_alter_update_tablet_schema(KeysType keys_type) {
         auto rowset_id1 = tablet_metadata->rowsets(1).id();
         ASSERT_TRUE(tablet_metadata->rowsets_size() == 2);
         ASSERT_TRUE(tablet_metadata->rowset_to_schema().size() == 2);
-        ASSERT_TRUE(tablet_metadata->historical_schemas().size() == 2);
         if (keys_type == PRIMARY_KEYS) {
-            ASSERT_TRUE(tablet_metadata->historical_schemas().count(schema_id2) > 0);
-            ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id0) == schema_id2);
+            ASSERT_TRUE(tablet_metadata->historical_schemas().count(schema_id3) > 0);
+            ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id0) == schema_id3);
             ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id1) == schema_id3);
+            ASSERT_TRUE(tablet_metadata->historical_schemas().size() == 1);
         } else {
             ASSERT_TRUE(tablet_metadata->historical_schemas().count(schema_id1) > 0);
             ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id0) == schema_id1);
             ASSERT_TRUE(tablet_metadata->rowset_to_schema().at(rowset_id1) == schema_id3);
+            ASSERT_TRUE(tablet_metadata->historical_schemas().size() == 2);
         }
     }
 }
