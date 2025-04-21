@@ -110,6 +110,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.BranchOptions;
 import com.starrocks.connector.TagOptions;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SqlModeHelper;
@@ -4186,7 +4187,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             isPlainPassword = false;
         }
-        UserAuthOption authOption = new UserAuthOption(null, stringLiteral.getStringValue(), isPlainPassword, pos);
+        UserAuthOption authOption = new UserAuthOption(AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.name(),
+                stringLiteral.getStringValue(), isPlainPassword, pos);
 
         if (context.user() != null) {
             return new SetPassVar((UserIdentity) visit(context.user()), authOption, pos);

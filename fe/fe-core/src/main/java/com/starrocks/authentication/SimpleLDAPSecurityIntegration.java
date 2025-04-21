@@ -31,7 +31,7 @@ public class SimpleLDAPSecurityIntegration extends SecurityIntegration {
     }
 
     @Override
-    public AuthenticationProvider getAuthenticationProvider() throws AuthenticationException {
+    public AuthenticationProvider getAuthenticationProvider() {
         String ldapServerHost = propertyMap.getOrDefault(AUTHENTICATION_LDAP_SIMPLE_SERVER_HOST,
                 Config.authentication_ldap_simple_server_host);
 
@@ -48,6 +48,6 @@ public class SimpleLDAPSecurityIntegration extends SecurityIntegration {
                 Config.authentication_ldap_simple_user_search_attr);
 
         return new LDAPAuthProviderForNative(ldapServerHost, ldapServerPort, ldapBindRootDn, ldapBindRootPwd, ldapBindBaseDn,
-                ldapUserSearchAttr);
+                ldapUserSearchAttr, null);
     }
 }
