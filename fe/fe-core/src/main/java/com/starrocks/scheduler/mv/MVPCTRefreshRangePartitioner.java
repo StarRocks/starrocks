@@ -333,8 +333,8 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         return inputRanges.keySet();
     }
 
-    private void filterPartitionsByTTL(Map<String, PCell> toRefreshPartitions,
-                                       boolean isMockPartitionIds) {
+    protected void filterPartitionsByTTL(Map<String, PCell> toRefreshPartitions,
+                                         boolean isMockPartitionIds) {
         if (CollectionUtils.sizeIsEmpty(toRefreshPartitions)) {
             return;
         }
@@ -357,9 +357,10 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         if (partitionTTLNumber > 0 && toRefreshPartitionNum > partitionTTLNumber) {
             // remove the oldest partitions
             int toRemoveNum = toRefreshPartitionNum - partitionTTLNumber;
-            toRefreshPartitions.entrySet().stream()
+            List<String> keysToRemove = toRefreshPartitions.keySet().stream()
                     .limit(toRemoveNum)
-                    .forEach(e -> toRefreshPartitions.remove(e.getKey()));
+                    .collect(Collectors.toList());
+            keysToRemove.forEach(toRefreshPartitions::remove);
         }
     }
 
