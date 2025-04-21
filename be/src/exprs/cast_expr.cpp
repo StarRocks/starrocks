@@ -1148,8 +1148,8 @@ public:
             return Status::NotSupported("JIT casting does not support decimal");
         } else {
             ASSIGN_OR_RETURN(datum.value, IRHelper::cast_to_type(b, l, FromType, ToType));
-            if constexpr ((lt_is_integer<FromType> || lt_is_float<FromType>) &&
-                          (lt_is_integer<ToType> || lt_is_float<ToType>)) {
+            if constexpr ((lt_is_integer<FromType> || lt_is_float<FromType>)&&(lt_is_integer<ToType> ||
+                                                                               lt_is_float<ToType>)) {
                 typedef RunTimeCppType<FromType> FromCppType;
                 typedef RunTimeCppType<ToType> ToCppType;
 
