@@ -191,6 +191,7 @@ set(EXEC_FILES
         ./formats/avro/cpp/binary_column_reader_test.cpp
         ./formats/avro/cpp/date_column_reader_test.cpp
         ./formats/avro/cpp/numeric_column_reader_test.cpp
+        ./formats/avro/cpp/utils_test.cpp
         ./formats/orc/orc_chunk_reader_test.cpp
         ./formats/orc/orc_column_reader_test.cpp
         ./formats/orc/orc_file_writer_test.cpp

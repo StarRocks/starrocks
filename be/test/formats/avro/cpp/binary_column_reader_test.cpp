@@ -24,12 +24,12 @@
 #include "gen_cpp/Descriptors_types.h"
 #include "testutil/assert.h"
 
-namespace starrocks {
+namespace starrocks::avrocpp {
 
 class BinaryColumnReaderTest : public ::testing::Test {
 public:
-    avrocpp::ColumnReaderUniquePtr get_column_reader(const TypeDescriptor& type_desc, bool invalid_as_null) {
-        return avrocpp::ColumnReader::get_nullable_column_reader(_col_name, type_desc, _timezone, invalid_as_null);
+    ColumnReaderUniquePtr get_column_reader(const TypeDescriptor& type_desc, bool invalid_as_null) {
+        return ColumnReader::get_nullable_column_reader(_col_name, type_desc, _timezone, invalid_as_null);
     }
 
     MutableColumnPtr create_adaptive_nullable_column(const TypeDescriptor& type_desc) {
@@ -178,4 +178,4 @@ TEST_F(BinaryColumnReaderTest, test_invalid_as_null) {
     ASSERT_EQ("[NULL, NULL, NULL, NULL]", column->debug_string());
 }
 
-} // namespace starrocks
+} // namespace starrocks::avrocpp

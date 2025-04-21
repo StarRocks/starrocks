@@ -21,6 +21,8 @@
 
 namespace starrocks::avrocpp {
 
+// ------ integer, float ------
+
 template <typename T>
 Status NumericColumnReader<T>::read_datum(const avro::GenericDatum& datum, Column* column) {
     auto numeric_column = down_cast<FixedLengthColumn<T>*>(column);
@@ -137,13 +139,91 @@ Status NumericColumnReader<T>::read_string_value(const avro::GenericDatum& datum
 }
 
 template class NumericColumnReader<int8_t>;
-template class NumericColumnReader<uint8_t>;
 template class NumericColumnReader<int16_t>;
 template class NumericColumnReader<int32_t>;
 template class NumericColumnReader<int64_t>;
 template class NumericColumnReader<int128_t>;
 template class NumericColumnReader<float>;
 template class NumericColumnReader<double>;
+
+// ------ boolean ------
+
+Status BooleanColumnReader::read_datum(const avro::GenericDatum& datum, Column* column) {
+    auto numeric_column = down_cast<FixedLengthColumn<uint8_t>*>(column);
+    switch (datum.type()) {
+    case avro::AVRO_INT:
+    case avro::AVRO_LONG:
+    case avro::AVRO_FLOAT:
+    case avro::AVRO_DOUBLE:
+    case avro::AVRO_BOOL:
+        return read_numeric_value(datum, numeric_column);
+
+    case avro::AVRO_STRING:
+        return read_string_value(datum, numeric_column);
+
+    default:
+        return Status::NotSupported(fmt::format("Unsupported avro type {} to boolean. column: {}",
+                                                avro::toString(datum.type()), _col_name));
+    }
+}
+
+Status BooleanColumnReader::read_numeric_value(const avro::GenericDatum& datum, FixedLengthColumn<uint8_t>* column) {
+    switch (datum.type()) {
+    case avro::AVRO_INT: {
+        bool from = datum.value<int32_t>() != 0 ? true : false;
+        column->append(from);
+        return Status::OK();
+    }
+
+    case avro::AVRO_LONG: {
+        bool from = datum.value<int64_t>() != 0 ? true : false;
+        column->append(from);
+        return Status::OK();
+    }
+
+    case avro::AVRO_FLOAT: {
+        const auto& from = datum.value<float>();
+        column->append(implicit_cast<bool>(from));
+        return Status::OK();
+    }
+
+    case avro::AVRO_DOUBLE: {
+        const auto& from = datum.value<double>();
+        column->append(implicit_cast<bool>(from));
+        return Status::OK();
+    }
+
+    case avro::AVRO_BOOL: {
+        column->append(datum.value<bool>());
+        return Status::OK();
+    }
+
+    default:
+        return Status::NotSupported(fmt::format("Unsupported avro type {} to boolean. column: {}",
+                                                avro::toString(datum.type()), _col_name));
+    }
+}
+
+Status BooleanColumnReader::read_string_value(const avro::GenericDatum& datum, FixedLengthColumn<uint8_t>* column) {
+    const auto& from = datum.value<std::string>();
+
+    StringParser::ParseResult r;
+    bool v = StringParser::string_to_bool(from.data(), from.size(), &r);
+    if (r == StringParser::PARSE_SUCCESS) {
+        column->append(v);
+        return Status::OK();
+    }
+    v = implicit_cast<bool>(StringParser::string_to_float<double>(from.data(), from.size(), &r));
+    if (r == StringParser::PARSE_SUCCESS) {
+        column->append(v);
+        return Status::OK();
+    }
+
+    return Status::DataQualityError(
+            fmt::format("Unable to cast string value to boolean. value: {}, column: {}", from, _col_name));
+}
+
+// ------ decimal ------
 
 template <typename T>
 Status DecimalColumnReader<T>::read_datum(const avro::GenericDatum& datum, Column* column) {

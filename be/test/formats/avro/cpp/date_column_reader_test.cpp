@@ -25,13 +25,13 @@
 #include "testutil/assert.h"
 #include "util/timezone_utils.h"
 
-namespace starrocks {
+namespace starrocks::avrocpp {
 
 class DateColumnReaderTest : public ::testing::Test {
 public:
-    avrocpp::ColumnReaderUniquePtr get_column_reader(const TypeDescriptor& type_desc, const cctz::time_zone& timezone,
-                                                     bool invalid_as_null) {
-        return avrocpp::ColumnReader::get_nullable_column_reader(_col_name, type_desc, timezone, invalid_as_null);
+    ColumnReaderUniquePtr get_column_reader(const TypeDescriptor& type_desc, const cctz::time_zone& timezone,
+                                            bool invalid_as_null) {
+        return ColumnReader::get_nullable_column_reader(_col_name, type_desc, timezone, invalid_as_null);
     }
 
     avrocpp::ColumnReaderUniquePtr get_column_reader(const TypeDescriptor& type_desc, bool invalid_as_null) {
@@ -223,4 +223,4 @@ TEST_F(DateColumnReaderTest, test_datetime_invalid_as_null) {
     ASSERT_EQ("[NULL]", column->debug_string());
 }
 
-} // namespace starrocks
+} // namespace starrocks::avrocpp

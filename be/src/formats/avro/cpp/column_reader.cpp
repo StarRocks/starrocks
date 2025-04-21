@@ -28,7 +28,7 @@ ColumnReaderUniquePtr ColumnReader::get_nullable_column_reader(const std::string
     ColumnReaderUniquePtr reader = nullptr;
     switch (type_desc.type) {
     case TYPE_BOOLEAN:
-        reader = std::make_unique<NumericColumnReader<uint8_t>>(col_name, type_desc);
+        reader = std::make_unique<BooleanColumnReader>(col_name, type_desc);
         break;
 
     case TYPE_TINYINT:

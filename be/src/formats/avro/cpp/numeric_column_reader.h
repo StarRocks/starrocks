@@ -34,6 +34,19 @@ private:
     Status read_string_value(const avro::GenericDatum& datum, FixedLengthColumn<T>* column);
 };
 
+class BooleanColumnReader final : public ColumnReader {
+public:
+    explicit BooleanColumnReader(const std::string& col_name, const TypeDescriptor& type_desc)
+            : ColumnReader(col_name, type_desc) {}
+    ~BooleanColumnReader() override = default;
+
+    Status read_datum(const avro::GenericDatum& datum, Column* column) override;
+
+private:
+    Status read_numeric_value(const avro::GenericDatum& datum, FixedLengthColumn<uint8_t>* column);
+    Status read_string_value(const avro::GenericDatum& datum, FixedLengthColumn<uint8_t>* column);
+};
+
 // A decimal logical type annotates Avro 'bytes' or 'fixed' types.
 // The byte array must contain the two’s-complement representation of the unscaled integer value
 // in big-endian byte order.

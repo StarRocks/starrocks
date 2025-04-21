@@ -22,12 +22,12 @@
 #include "gen_cpp/Descriptors_types.h"
 #include "testutil/assert.h"
 
-namespace starrocks {
+namespace starrocks::avrocpp {
 
 class NumericColumnReaderTest : public ::testing::Test {
 public:
-    avrocpp::ColumnReaderUniquePtr get_column_reader(const TypeDescriptor& type_desc, bool invalid_as_null) {
-        return avrocpp::ColumnReader::get_nullable_column_reader(_col_name, type_desc, _timezone, invalid_as_null);
+    ColumnReaderUniquePtr get_column_reader(const TypeDescriptor& type_desc, bool invalid_as_null) {
+        return ColumnReader::get_nullable_column_reader(_col_name, type_desc, _timezone, invalid_as_null);
     }
 
     MutableColumnPtr create_adaptive_nullable_column(const TypeDescriptor& type_desc) {
@@ -69,8 +69,8 @@ private:
     cctz::time_zone _timezone = cctz::utc_time_zone();
 };
 
-TEST_F(NumericColumnReaderTest, test_int) {
-    auto type_desc = TypeDescriptor::from_logical_type(TYPE_INT);
+TEST_F(NumericColumnReaderTest, test_bool) {
+    auto type_desc = TypeDescriptor::from_logical_type(TYPE_BOOLEAN);
     auto column = create_adaptive_nullable_column(type_desc);
     auto reader = get_column_reader(type_desc, false);
 
@@ -81,25 +81,76 @@ TEST_F(NumericColumnReaderTest, test_int) {
     }
 
     {
-        int32_t int_v = 10;
+        bool bool_v = false;
+        avro::GenericDatum datum(bool_v);
+        CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+    }
+
+    {
+        int32_t int_v = 1;
         avro::GenericDatum datum(int_v);
         CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
     }
 
     {
-        int64_t long_v = 11;
+        int64_t long_v = 0;
         avro::GenericDatum datum(long_v);
         CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
     }
 
     {
-        std::string string_v = "12";
+        std::string string_v = "true";
         avro::GenericDatum datum(string_v);
         CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
     }
 
-    ASSERT_EQ(4, column->size());
-    ASSERT_EQ("[1, 10, 11, 12]", column->debug_string());
+    {
+        std::string string_v = "False";
+        avro::GenericDatum datum(string_v);
+        CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+    }
+
+    ASSERT_EQ(6, column->size());
+    ASSERT_EQ("[1, 0, 1, 0, 1, 0]", column->debug_string());
+}
+
+TEST_F(NumericColumnReaderTest, test_numeric) {
+    std::vector<TypeDescriptor> type_descs{
+            TypeDescriptor::from_logical_type(TYPE_TINYINT), TypeDescriptor::from_logical_type(TYPE_SMALLINT),
+            TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_BIGINT),
+            TypeDescriptor::from_logical_type(TYPE_LARGEINT)};
+
+    for (const auto& type_desc : type_descs) {
+        auto column = create_adaptive_nullable_column(type_desc);
+        auto reader = get_column_reader(type_desc, false);
+
+        {
+            bool bool_v = true;
+            avro::GenericDatum datum(bool_v);
+            CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+        }
+
+        {
+            int32_t int_v = 10;
+            avro::GenericDatum datum(int_v);
+            CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+        }
+
+        {
+            int64_t long_v = -11;
+            avro::GenericDatum datum(long_v);
+            CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+        }
+
+        {
+            std::string string_v = "12";
+            avro::GenericDatum datum(string_v);
+            CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+        }
+
+        ASSERT_EQ(4, column->size());
+        ASSERT_EQ("[1, 10, -11, 12]", column->debug_string());
+    }
 }
 
 TEST_F(NumericColumnReaderTest, test_int_invalid) {
@@ -431,4 +482,4 @@ TEST_F(NumericColumnReaderTest, test_decimal_invalid_as_null) {
     ASSERT_EQ("[NULL, NULL, NULL, NULL]", column->debug_string());
 }
 
-} // namespace starrocks
+} // namespace starrocks::avrocpp
