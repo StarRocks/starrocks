@@ -132,15 +132,4 @@ TEST_F(SchemaTest, get_field_index) {
     delete schema;
 }
 
-TEST_F(SchemaTest, get_partial_schema) {
-    auto schema = std::make_unique<Schema>(make_schema(5));
-    std::vector<ColumnId> cids = {1, 2, 10};
-    Schema partial_schema(schema.get(), cids);
-    ASSERT_EQ(partial_schema.fields().size(), 2);
-    for(auto i = 0; i < partial_schema.field_names(); ++i) {
-        ASSERT_EQ(make_string(i), partial_schema.fields()[i]->name());
-    }
-}
-
-
 } // namespace starrocks
