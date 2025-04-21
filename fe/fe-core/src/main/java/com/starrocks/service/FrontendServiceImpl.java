@@ -772,6 +772,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TColumnStatsUsageRes result = ColumnStatsUsageSystemTable.query(request);
         result.getItems().removeIf(item -> {
             try {
+                if (item.getTable_database() == null || item.getTable_name() == null) {
+                    return true;
+                }
                 Authorizer.checkTableAction(context, item.getTable_database(), item.getTable_name(), PrivilegeType.SELECT);
                 return false;
             } catch (AccessDeniedException e) {
