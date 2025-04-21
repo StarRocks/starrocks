@@ -36,7 +36,7 @@ public class OIDCSecurityIntegration extends SecurityIntegration {
     }
 
     @Override
-    public AuthenticationProvider getAuthenticationProvider() throws AuthenticationException {
+    public AuthenticationProvider getAuthenticationProvider() {
         String jwksUrl = propertyMap.get(OpenIdConnectAuthenticationProvider.OIDC_JWKS_URL);
         String principalFiled = propertyMap.get(OpenIdConnectAuthenticationProvider.OIDC_PRINCIPAL_FIELD);
         String commaSeparatedIssuer = propertyMap.get(OpenIdConnectAuthenticationProvider.OIDC_REQUIRED_ISSUER);

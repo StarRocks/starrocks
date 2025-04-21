@@ -122,9 +122,9 @@ public class AuthenticationManagerTest {
         // login from 10.1.1.2 with password will fail
         Map.Entry<UserIdentity, UserAuthenticationInfo> entry =
                 masterManager.getBestMatchedUserIdentity(testUser.getUser(), "10.1.1.2");
-        PlainPasswordAuthenticationProvider provider = new PlainPasswordAuthenticationProvider();
+        PlainPasswordAuthenticationProvider provider = new PlainPasswordAuthenticationProvider(entry.getValue().getPassword());
         Assert.assertThrows(AuthenticationException.class, () ->
-                provider.authenticate(ctx, entry.getKey().getUser(), entry.getKey().getHost(), scramble, entry.getValue()));
+                provider.authenticate(ctx, entry.getKey().getUser(), entry.getKey().getHost(), scramble));
 
         // start to replay
         AuthenticationMgr followerManager = new AuthenticationMgr();
@@ -168,8 +168,7 @@ public class AuthenticationManagerTest {
         Map.Entry<UserIdentity, UserAuthenticationInfo> entry1 =
                 followerManager.getBestMatchedUserIdentity(testUser.getUser(), "10.1.1.2");
         Assert.assertThrows(AuthenticationException.class, () ->
-                provider.authenticate(ctx, entry1.getKey().getUser(), entry1.getKey().getHost(), scramble,
-                        entry1.getValue()));
+                provider.authenticate(ctx, entry1.getKey().getUser(), entry1.getKey().getHost(), scramble));
 
         // purely loaded from image
         AuthenticationMgr imageManager = new AuthenticationMgr();
@@ -182,8 +181,7 @@ public class AuthenticationManagerTest {
         Map.Entry<UserIdentity, UserAuthenticationInfo> entry2 =
                 followerManager.getBestMatchedUserIdentity(testUser.getUser(), "10.1.1.2");
         Assert.assertThrows(AuthenticationException.class, () ->
-                provider.authenticate(ctx, entry2.getKey().getUser(), entry2.getKey().getHost(), scramble,
-                        entry2.getValue()));
+                provider.authenticate(ctx, entry2.getKey().getUser(), entry2.getKey().getHost(), scramble));
     }
 
     @Test

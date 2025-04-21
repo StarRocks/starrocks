@@ -14,64 +14,19 @@
 
 package com.starrocks.authentication;
 
-import com.starrocks.common.Config;
-import com.starrocks.common.io.Writable;
 import com.starrocks.mysql.MysqlPassword;
-import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.Analyzer;
-import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AlterUserStmt;
-import com.starrocks.sql.ast.CreateUserStmt;
+import com.starrocks.sql.analyzer.UserAuthOptionAnalyzer;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.sql.parser.SqlParser;
-import com.starrocks.utframe.UtFrameUtils;
-import mockit.Mock;
-import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.nio.charset.StandardCharsets;
 
 public class PlainPasswordAuthenticationProviderTest {
-    protected PlainPasswordAuthenticationProvider provider = new PlainPasswordAuthenticationProvider();
     private ConnectContext ctx = new ConnectContext();
-
-    @Test
-    public void testValidPassword() throws Exception {
-        Config.enable_validate_password = true;
-
-        // too short
-        try {
-            provider.validatePassword(new UserIdentity("u", "%"),
-                    new UserAuthOption(null, "aaa", true, NodePosition.ZERO));
-            Assert.fail();
-        } catch (AuthenticationException e) {
-            Assert.assertTrue(e.getMessage().contains("password is too short"));
-        }
-
-        // only number
-        String[] badPasswords = {"starrocks", "STARROCKS", "123456789", "STARROCKS123", "starrocks123", "STARROCKSstar"};
-        for (String badPassword : badPasswords) {
-            try {
-                provider.validatePassword(new UserIdentity("u", "%"),
-                        new UserAuthOption(null, badPassword, true, NodePosition.ZERO));
-                Assert.fail();
-            } catch (AuthenticationException e) {
-                Assert.assertTrue(e.getMessage().contains(
-                        "password should contains at least one digit, one lowercase letter and one uppercase letter!"));
-            }
-        }
-
-        provider.validatePassword(new UserIdentity("u", "%"),
-                new UserAuthOption(null, "aaaAAA123", true, NodePosition.ZERO));
-        Config.enable_validate_password = false;
-        provider.validatePassword(new UserIdentity("u", "%"),
-                new UserAuthOption(null, "aaa", true, NodePosition.ZERO));
-    }
 
     @Test
     public void testAuthentication() throws Exception {
@@ -79,25 +34,29 @@ public class PlainPasswordAuthenticationProviderTest {
         String[] passwords = {"asdf123", "starrocks", "testtest"};
         byte[] seed = "petals on a wet black bough".getBytes(StandardCharsets.UTF_8);
         ctx.setAuthDataSalt(seed);
+
         for (String password : passwords) {
             UserAuthOption userAuthOption = new UserAuthOption(null, password, true, NodePosition.ZERO);
-            UserAuthenticationInfo info = provider.analyzeAuthOption(testUser, userAuthOption);
+            UserAuthenticationInfo info = UserAuthOptionAnalyzer.analyzeAuthOption(testUser, userAuthOption);
+            PlainPasswordAuthenticationProvider provider = (PlainPasswordAuthenticationProvider) AuthenticationProviderFactory
+                    .create(info.getAuthPlugin(), new String(info.getPassword()));
+
             byte[] scramble = MysqlPassword.scramble(seed, password);
-            provider.authenticate(ctx, testUser.getUser(), "10.1.1.1", scramble, info);
+            provider.authenticate(ctx, testUser.getUser(), "10.1.1.1", scramble);
         }
 
         // no password
-        UserAuthenticationInfo info = provider.analyzeAuthOption(testUser, null);
+        PlainPasswordAuthenticationProvider provider = new PlainPasswordAuthenticationProvider(MysqlPassword.EMPTY_PASSWORD);
+        UserAuthenticationInfo info = UserAuthOptionAnalyzer.analyzeAuthOption(testUser, null);
         ctx.setAuthDataSalt(new byte[0]);
-        provider.authenticate(ctx, testUser.getUser(), "10.1.1.1", new byte[0], info);
+        provider.authenticate(ctx, testUser.getUser(), "10.1.1.1", new byte[0]);
         try {
             ctx.setAuthDataSalt("x".getBytes(StandardCharsets.UTF_8));
             provider.authenticate(
                     ctx,
                     testUser.getUser(),
                     "10.1.1.1",
-                    "xx".getBytes(StandardCharsets.UTF_8),
-                    info);
+                    "xx".getBytes(StandardCharsets.UTF_8));
             Assert.fail();
         } catch (AuthenticationException e) {
             Assert.assertTrue(e.getMessage().contains("password length mismatch!"));
@@ -106,16 +65,16 @@ public class PlainPasswordAuthenticationProviderTest {
         byte[] p = MysqlPassword.makeScrambledPassword("bb");
 
         UserAuthOption userAuthOption = new UserAuthOption(null, new String(p, StandardCharsets.UTF_8), false, NodePosition.ZERO);
+        info = UserAuthOptionAnalyzer.analyzeAuthOption(testUser, userAuthOption);
 
-        info = provider.analyzeAuthOption(testUser, userAuthOption);
+        provider = new PlainPasswordAuthenticationProvider(info.getPassword());
         try {
             ctx.setAuthDataSalt(seed);
             provider.authenticate(
                     ctx,
                     testUser.getUser(),
                     "10.1.1.1",
-                    MysqlPassword.scramble(seed, "xx"),
-                    info);
+                    MysqlPassword.scramble(seed, "xx"));
             Assert.fail();
         } catch (AuthenticationException e) {
             Assert.assertTrue(e.getMessage().contains("password mismatch!"));
@@ -127,8 +86,7 @@ public class PlainPasswordAuthenticationProviderTest {
                     ctx,
                     testUser.getUser(),
                     "10.1.1.1",
-                    MysqlPassword.scramble(seed, "bb"),
-                    info);
+                    MysqlPassword.scramble(seed, "bb"));
 
         } catch (AuthenticationException e) {
             Assert.fail();
@@ -141,40 +99,10 @@ public class PlainPasswordAuthenticationProviderTest {
                     ctx,
                     testUser.getUser(),
                     "10.1.1.1",
-                    remotePassword,
-                    info);
+                    remotePassword);
 
         } catch (AuthenticationException e) {
             Assert.fail();
         }
-    }
-
-    @Test
-    public void testValidatePassword() throws Exception {
-        new MockUp<EditLog>() {
-            @Mock
-            public void logEdit(short op, Writable writable) {
-                return;
-            }
-        };
-        GlobalStateMgr.getCurrentState().setEditLog(new EditLog(null));
-        AuthenticationMgr authenticationMgr = new AuthenticationMgr();
-        GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
-
-        Config.enable_validate_password = true;
-        Config.enable_password_reuse = false;
-        ConnectContext context = new ConnectContext();
-
-        String sql = "create user u1 identified by '123456abcD!'";
-        CreateUserStmt stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, context);
-        Analyzer.analyze(stmt, context);
-        authenticationMgr.createUser(stmt);
-
-        sql = "alter user u1 identified by '123456abcD!'";
-        AlterUserStmt alterUserStmt = (AlterUserStmt) SqlParser.parse(sql, context.getSessionVariable().getSqlMode()).get(0);
-        Assert.assertThrows(SemanticException.class, () -> Analyzer.analyze(alterUserStmt, context));
-
-        Config.enable_validate_password = false;
-        Config.enable_password_reuse = true;
     }
 }
