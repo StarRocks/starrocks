@@ -153,3 +153,118 @@ SELECT regexp_extract_all(str, "([[:lower:]]+)C([[:lower:]]+)", 3) from tsr;
 SELECT regexp_extract_all(str, regex, 3) from tsr;
 -- result:
 -- !result
+
+-- name: test_regexp_count
+CREATE TABLE `tsc` (
+  `str` varchar(65533) NULL COMMENT "",
+  `regex` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`str`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`str`) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into tsc values ('abc123def456', '[0-9]'), ('test.com test.net test.org', '\\.'), ('a b  c   d', '\\s+'), ('ababababab', 'ab'), ('', '.'), (NULL, '.');
+-- result:
+-- !result
+select regexp_count('abc123def456', '[0-9]');
+-- result:
+6
+-- !result
+select regexp_count('test.com test.net test.org', '\\.');
+-- result:
+3
+-- !result
+select regexp_count('a b  c   d', '\\s+');
+-- result:
+3
+-- !result
+select regexp_count('ababababab', 'ab');
+-- result:
+5
+-- !result
+select regexp_count('', '.');
+-- result:
+0
+-- !result
+select regexp_count(NULL, '.');
+-- result:
+None
+-- !result
+select regexp_count('abc', NULL);
+-- result:
+None
+-- !result
+select regexp_count('abc中文def', '[\\p{Han}]+');
+-- result:
+1
+-- !result
+select regexp_count('AbCdExCeF', 'C');
+-- result:
+2
+-- !result
+select regexp_count('1a 2b 14m', '\\d+');
+-- result:
+3
+-- !result
+select str, regex, regexp_count(str, regex) from tsc order by str, regex;
+-- result:
+None	.	None
+	.	0
+a b  c   d	\s+	3
+abc123def456	[0-9]	6
+ababababab	ab	5
+test.com test.net test.org	\.	3
+-- !result
+-- name: test_regexp_count_invalid
+CREATE TABLE `tsc_invalid` (
+  `str` varchar(65533) NULL COMMENT "",
+  `regex` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`str`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`str`) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into tsc_invalid values 
+('abc123def456', '[0-9'),
+('test string', '(unclosed'),
+('repetition test', '?invalid'),
+('valid test', 'valid');
+-- result:
+-- !result
+select str, regex, regexp_count(str, regex) from tsc_invalid order by str, regex;
+-- result:
+abc123def456	[0-9	None
+repetition test	?invalid	None
+test string	(unclosed	None
+valid test	valid	1
+-- !result
+select regexp_count('test string', '[0-9');
+-- result:
+[REGEX].*Invalid regex expression: \[0-9.*
+-- !result
+select regexp_count('test string', '(unclosed');
+-- result:
+[REGEX].*Invalid regex expression: \(unclosed.*
+-- !result
+select regexp_count('test string', '?invalid');
+-- result:
+[REGEX].*Invalid regex expression: \?invalid.*
+-- !result
+select regexp_count('test string', 'a{,}');
+-- result:
+0
+-- !result
+select regexp_count(NULL, '[0-9');
+-- result:
+None
+-- !result
+select regexp_count('', '[0-9');
+-- result:
+[REGEX].*Invalid regex expression: \[0-9.*
+-- !result
+select regexp_count('test', NULL);
+-- result:
+None
+-- !result
