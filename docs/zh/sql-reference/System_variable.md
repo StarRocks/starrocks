@@ -793,6 +793,26 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
   * `false`（默认）：不支持 UTF-8 字符的大小写转换。
 * 引入版本：v3.5.0
 
+### low_cardinality_optimize_on_lake
+
+* 默认值：true
+* 类型：Boolean
+* 单位：-
+* 描述：是否在数据湖查询中启用低基数优化。有效值：
+  * `true`（默认）：在数据湖查询中启用低基数优化。
+  * `false`: 在数据湖查询中禁用低基数优化。
+* 引入版本：v3.5.0
+
+<!--
+### always_collect_low_card_dict_on_lake
+
+* 默认值：false
+* 类型：Boolean
+* 单位：-
+* 描述：是否基于统计信息收集低基数信息。
+* 引入版本：v3.5.0
+-->
+
 ### materialized_view_rewrite_mode（3.2 及以后）
 
 指定异步物化视图的查询改写模式。有效值：

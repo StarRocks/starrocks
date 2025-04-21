@@ -781,10 +781,30 @@ Used for MySQL client compatibility. No practical usage. Table names in StarRock
 * **Default**: false
 * **Type**: Boolean
 * **Unit**: -
-* **Description**: Whether to support case conversion for UTF-8 characters in `lower` and `upper` functions.Valid values:
+* **Description**: Whether to support case conversion for UTF-8 characters in `lower` and `upper` functions. Valid values:
   * `true`: Support case conversion for UTF-8 characters.
   * `false` (Default): Not to support case conversion for UTF-8 characters.
 * **Introduced in**: v3.5.0
+
+### low_cardinality_optimize_on_lake
+
+* **Default**: true
+* **Type**: Boolean
+* **Unit**: -
+* **Description**: Whether to enable low cardinality optimization on data lake queries. Valid values:
+  * `true` (Default): Enable low cardinality optimization on data lake queries.
+  * `false`: Disable low cardinality optimization on data lake queries.
+* **Introduced in**: v3.5.0
+
+<!--
+### always_collect_low_card_dict_on_lake
+
+* **Default**: false
+* **Type**: Boolean
+* **Unit**: -
+* **Description**: Whether to collect low cardinality information via statistics.
+* **Introduced in**: v3.5.0
+-->
 
 ### materialized_view_rewrite_mode (v3.2 and later)
 

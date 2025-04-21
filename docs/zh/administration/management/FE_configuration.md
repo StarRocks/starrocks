@@ -1879,6 +1879,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：查询触发 Query Feedback 分析的执行时间阈值。
 - 引入版本：v3.4.0
 
+##### low_cardinality_threshold
+
+- 默认值：255
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：低基数字典阈值。
+- 引入版本：v3.5.0
+
 ### 导入导出
 
 ##### load_straggler_wait_second
