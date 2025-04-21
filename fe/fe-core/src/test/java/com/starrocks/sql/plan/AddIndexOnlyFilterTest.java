@@ -29,5 +29,15 @@ public class AddIndexOnlyFilterTest extends PlanTestBase {
         assertContains(plan, "Predicates: ngram_search");
         thriftPlan = getThriftPlan(sql);
         assertContains(thriftPlan, "is_index_only_filter:true");
+
+        sql = "WITH test_table_cte as (\n" +
+                "\tSELECT concat(t1a, '2') as name FROM test_all_type\n" +
+                ")\n" +
+                "SELECT name\n" +
+                "FROM test_table_cte\n" +
+                "ORDER BY ngram_search(name, 'needle', 4);";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "Predicates: ngram_search");
+
     }
 }
