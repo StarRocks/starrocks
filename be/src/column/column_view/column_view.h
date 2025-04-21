@@ -23,7 +23,8 @@ namespace starrocks {
 class ColumnView final : public CowFactory<ColumnFactory<ColumnViewBase, ColumnView>, ColumnView, Column> {
 public:
     using Super = CowFactory<ColumnFactory<ColumnViewBase, ColumnView>, ColumnView, Column>;
-    explicit ColumnView(ColumnPtr&& default_column) : Super(std::move(default_column)) {}
+    explicit ColumnView(ColumnPtr&& default_column, long concat_rows_limit, long concat_bytes_limit)
+            : Super(std::move(default_column), concat_rows_limit, concat_bytes_limit) {}
     ColumnView(const ColumnView& column_view) : Super(column_view) {}
     ColumnView(ColumnView&& column_view) = delete;
     bool is_view() const override { return true; }

@@ -58,14 +58,21 @@ public:
 
     void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
 
-    explicit ColumnViewBase(ColumnPtr&& default_column) : _default_column(std::move(default_column)) {}
+    ColumnViewBase(ColumnPtr&& default_column, long concat_rows_limit, long concat_bytes_limit)
+            : _default_column(std::move(default_column)),
+              _concat_rows_limit(concat_rows_limit),
+              _concat_bytes_limit(concat_bytes_limit) {}
+
     ColumnViewBase(const ColumnViewBase& that)
             : _default_column(that._default_column->clone()),
+              _concat_rows_limit(that._concat_rows_limit),
+              _concat_bytes_limit(that._concat_bytes_limit),
               _habitats(that._habitats),
               _num_rows(that._num_rows),
               _tasks(that._tasks),
               _habitat_idx(that._habitat_idx),
-              _row_idx(that._row_idx) {}
+              _row_idx(that._row_idx),
+              _concat_column(that._concat_column) {}
 
     ColumnViewBase(ColumnViewBase&&) = delete;
     void append_default() override;
@@ -133,13 +140,17 @@ protected:
     virtual void _append_selective(int habitat_idx, const ColumnPtr& src, const std::vector<uint32_t>& index_container);
 
     virtual void _to_view() const;
+    void _concat_if_need() const;
 
     ColumnPtr _default_column;
-    std::vector<ColumnPtr> _habitats;
+    const long _concat_rows_limit;
+    const long _concat_bytes_limit;
+    mutable std::vector<ColumnPtr> _habitats;
     size_t _num_rows{0};
     mutable std::once_flag _to_view_flag;
     mutable std::vector<std::function<void()> > _tasks;
     mutable Locations _habitat_idx;
     mutable Locations _row_idx;
+    mutable ColumnPtr _concat_column;
 };
 } // namespace starrocks

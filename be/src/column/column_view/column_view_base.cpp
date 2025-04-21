@@ -19,16 +19,23 @@
 
 namespace starrocks {
 size_t ColumnViewBase::container_memory_usage() const {
+    if (_concat_column) {
+        return _concat_column->container_memory_usage();
+    }
     size_t usage = 0;
     for (const auto& column : _habitats) {
         usage += column->container_memory_usage();
     }
-    usage += sizeof(ColumnViewBase::LocationType) * _num_rows;
+    usage += sizeof(ColumnViewBase::LocationType) * 2 * _num_rows;
     return usage;
 }
 
 size_t ColumnViewBase::reference_memory_usage(size_t from, size_t size) const {
     _to_view();
+
+    if (_concat_column) {
+        return _concat_column->reference_memory_usage(from, size);
+    }
 
     size_t usage = 0;
     for (auto i = from; i < from + size; i++) {
@@ -48,11 +55,14 @@ size_t ColumnViewBase::reference_memory_usage(size_t from, size_t size) const {
 }
 
 size_t ColumnViewBase::memory_usage() const {
+    if (_concat_column) {
+        return _concat_column->memory_usage();
+    }
     size_t usage = 0;
     for (const auto& column : _habitats) {
         usage += column->memory_usage();
     }
-    usage += sizeof(ColumnViewBase::LocationType) * _num_rows;
+    usage += sizeof(ColumnViewBase::LocationType) * 2 * _num_rows;
     return usage;
 }
 
@@ -70,7 +80,10 @@ void ColumnViewBase::append(const Column& src, size_t offset, size_t count) {
     if (src.is_view()) {
         const ColumnViewBase& src_view = static_cast<const ColumnViewBase&>(src);
         src_view._to_view();
-
+        if (src_view._concat_column) {
+            append(*src_view._concat_column, offset, count);
+            return;
+        }
         std::vector<std::vector<uint32_t> > selections(src_view._habitats.size());
         for (auto hi = 0; hi < src_view._habitats.size(); ++hi) {
             selections[hi].reserve(src_view._habitats[hi]->size());
@@ -146,6 +159,10 @@ void ColumnViewBase::_append_selective(int habitat_idx, const ColumnPtr& src,
 void ColumnViewBase::append_to(Column& dest_column, const uint32_t* indexes, uint32_t from, uint32_t count) const {
     _to_view();
     DCHECK(from + count <= _num_rows);
+    if (_concat_column) {
+        dest_column.append_selective(*_concat_column, indexes, from, count);
+        return;
+    }
     for (auto i = from; i < from + count; ++i) {
         const auto n = indexes[i];
         const auto& habitat_column = _habitats[_habitat_idx[n]];
@@ -157,6 +174,31 @@ void ColumnViewBase::append_to(Column& dest_column, const uint32_t* indexes, uin
             dest_column.append(*ColumnHelper::get_data_column(habitat_column.get()), ordinal, 1);
         }
     }
+}
+
+void ColumnViewBase::_concat_if_need() const {
+    if (_concat_rows_limit != -1 && _num_rows >= _concat_rows_limit) {
+        return;
+    }
+
+    if (_concat_bytes_limit != -1 && memory_usage() >= _concat_bytes_limit) {
+        return;
+    }
+    auto dst_column = clone_empty();
+    for (auto i = 0; i < _num_rows; ++i) {
+        const auto& habitat_column = _habitats[_habitat_idx[i]];
+        const auto ordinal = habitat_column->is_constant() ? 0 : _row_idx[i];
+        if (habitat_column->is_null(ordinal)) {
+            DCHECK(dst_column->is_nullable());
+            dst_column->append_nulls(1);
+        } else {
+            dst_column->append(*ColumnHelper::get_data_column(habitat_column.get()), ordinal, 1);
+        }
+    }
+    _concat_column = std::move(dst_column);
+    _habitat_idx.clear();
+    _row_idx.clear();
+    _habitats.clear();
 }
 
 void ColumnViewBase::_to_view() const {
@@ -171,6 +213,7 @@ void ColumnViewBase::_to_view() const {
             task();
         }
         _tasks.clear();
+        _concat_if_need();
     });
 }
 } // namespace starrocks

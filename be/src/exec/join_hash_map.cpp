@@ -475,8 +475,13 @@ void JoinHashTable::_init_build_column(const HashTableParam& param) {
                 }
             }
             _table_items->build_slots.emplace_back(hash_table_slot);
-            const auto use_view = (join_key_col_refs.find(slot->id()) == join_key_col_refs.end());
-            MutableColumnPtr column = ColumnHelper::create_column(slot->type(), slot->is_nullable(), use_view);
+            const auto use_view =
+                    (join_key_col_refs.find(slot->id()) == join_key_col_refs.end()) &&
+                    (param.column_view_concat_rows_limit >= 0 || param.column_view_concat_bytes_limit >= 0);
+
+            MutableColumnPtr column = ColumnHelper::create_column(slot->type(), slot->is_nullable(), use_view,
+                                                                  param.column_view_concat_rows_limit,
+                                                                  param.column_view_concat_bytes_limit);
             if (column->is_nullable()) {
                 auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column);
                 nullable_column->append_default_not_null_value();

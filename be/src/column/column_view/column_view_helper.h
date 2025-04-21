@@ -19,6 +19,7 @@
 #include "runtime/types.h"
 namespace starrocks {
 struct ColumnViewHelper {
-    static std::optional<MutableColumnPtr> create_column_view(const TypeDescriptor& type_desc, bool nullable);
+    static std::optional<MutableColumnPtr> create_column_view(const TypeDescriptor& type_desc, bool nullable,
+                                                              long concat_rows_limit, long concat_bytes_limit);
 };
 } // namespace starrocks

@@ -274,9 +274,11 @@ MutableColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bo
     return create_column(type_desc, nullable, false, 0);
 }
 
-MutableColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool nullable, bool use_view_if_needed) {
+MutableColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool nullable, bool use_view_if_needed,
+                                             long column_view_concat_rows_limit, long column_view_concat_bytes_limit) {
     if (use_view_if_needed) {
-        auto opt_column = ColumnViewHelper::create_column_view(type_desc, nullable);
+        auto opt_column = ColumnViewHelper::create_column_view(type_desc, nullable, column_view_concat_rows_limit,
+                                                               column_view_concat_bytes_limit);
         if (opt_column.has_value()) {
             return std::move(opt_column.value());
         }

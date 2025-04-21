@@ -10,7 +10,7 @@ from lineorder inner join customer on lo_custkey = c_custkey
 where lo_orderdate between 19920101 and 19921231
 group by lo_partkey
 )
-select count(1), 0!=sum(array_sum(array_map(x->murmur_hash3_32(x, p_name), custkeys)))
+select /*+SET_VAR(column_view_concat_rows_limit=1,column_view_concat_bytes_limit=1)*/ count(1), 0!=sum(array_sum(array_map(x->murmur_hash3_32(x, p_name), custkeys)))
 from part inner join[broadcast] cte on cte.lo_partkey = part.p_partkey;
 -- result:
 197929	1
@@ -22,7 +22,7 @@ from lineorder inner join customer on lo_custkey = c_custkey
 where lo_orderdate between 19920101 and 19921231
 group by lo_partkey
 )
-select count(1), 0!=sum(murmur_hash3_32(p_name, custkeys))
+select /*+SET_VAR(column_view_concat_rows_limit=1,column_view_concat_bytes_limit=1)*/ count(1), 0!=sum(murmur_hash3_32(p_name, custkeys))
 from part inner join[broadcast] cte on cte.lo_partkey = part.p_partkey;
 -- result:
 197929	1
@@ -34,7 +34,7 @@ from lineorder inner join customer on lo_custkey = c_custkey
 where lo_orderdate between 19920101 and 19921231
 group by lo_partkey
 )
-select count(1), 0!=sum(murmur_hash3_32(p_name, custkeys->'$.value'))
+select /*+SET_VAR(column_view_concat_rows_limit=1,column_view_concat_bytes_limit=1)*/ count(1), 0!=sum(murmur_hash3_32(p_name, custkeys->'$.value'))
 from part inner join[broadcast] cte on cte.lo_partkey = part.p_partkey;
 -- result:
 197929	1
@@ -46,7 +46,7 @@ from lineorder inner join customer on lo_custkey = c_custkey
 where lo_orderdate between 19920101 and 19921231
 group by lo_partkey
 )
-select count(1), 0!=sum(murmur_hash3_32(p_name, custkeys.value))
+select /*+SET_VAR(column_view_concat_rows_limit=1,column_view_concat_bytes_limit=1)*/ count(1), 0!=sum(murmur_hash3_32(p_name, custkeys.value))
 from part inner join[broadcast] cte on cte.lo_partkey = part.p_partkey;
 -- result:
 197929	1
@@ -61,7 +61,70 @@ group by lo_partkey
 cte as (
 select lo_partkey, map{"value":custkeys} custkeys from cte0
 )
-select count(1), 0!=sum(murmur_hash3_32(p_name, custkeys["value"]))
+select /*+SET_VAR(column_view_concat_rows_limit=1,column_view_concat_bytes_limit=1)*/ count(1), 0!=sum(murmur_hash3_32(p_name, custkeys["value"]))
+from part inner join[broadcast] cte on cte.lo_partkey = part.p_partkey;
+-- result:
+197929	1
+-- !result
+with cte as(
+select lo_partkey,
+  array_agg(concat_ws(":",lo_partkey,c_custkey,c_name,c_city,c_nation,c_region,c_phone,c_mktsegment)) custkeys
+from lineorder inner join customer on lo_custkey = c_custkey
+where lo_orderdate between 19920101 and 19921231
+group by lo_partkey
+)
+select /*+SET_VAR(column_view_concat_rows_limit=10000000000000,column_view_concat_bytes_limit=1000000000000000)*/ count(1), 0!=sum(array_sum(array_map(x->murmur_hash3_32(x, p_name), custkeys)))
+from part inner join[broadcast] cte on cte.lo_partkey = part.p_partkey;
+-- result:
+197929	1
+-- !result
+with cte as(
+select lo_partkey,
+group_concat(concat_ws(":",lo_partkey,c_custkey,c_name,c_city,c_nation,c_region,c_phone,c_mktsegment)) custkeys
+from lineorder inner join customer on lo_custkey = c_custkey
+where lo_orderdate between 19920101 and 19921231
+group by lo_partkey
+)
+select /*+SET_VAR(column_view_concat_rows_limit=10000000000000,column_view_concat_bytes_limit=1000000000000000)*/ count(1), 0!=sum(murmur_hash3_32(p_name, custkeys))
+from part inner join[broadcast] cte on cte.lo_partkey = part.p_partkey;
+-- result:
+197929	1
+-- !result
+with cte as(
+select lo_partkey,
+json_object("value",group_concat(concat_ws(":",lo_partkey,c_custkey,c_name,c_city,c_nation,c_region,c_phone,c_mktsegment))) custkeys
+from lineorder inner join customer on lo_custkey = c_custkey
+where lo_orderdate between 19920101 and 19921231
+group by lo_partkey
+)
+select /*+SET_VAR(column_view_concat_rows_limit=10000000000000,column_view_concat_bytes_limit=1000000000000000)*/ count(1), 0!=sum(murmur_hash3_32(p_name, custkeys->'$.value'))
+from part inner join[broadcast] cte on cte.lo_partkey = part.p_partkey;
+-- result:
+197929	1
+-- !result
+with cte as(
+select lo_partkey,
+named_struct("value",group_concat(concat_ws(":",lo_partkey,c_custkey,c_name,c_city,c_nation,c_region,c_phone,c_mktsegment))) custkeys
+from lineorder inner join customer on lo_custkey = c_custkey
+where lo_orderdate between 19920101 and 19921231
+group by lo_partkey
+)
+select /*+SET_VAR(column_view_concat_rows_limit=10000000000000,column_view_concat_bytes_limit=1000000000000000)*/ count(1), 0!=sum(murmur_hash3_32(p_name, custkeys.value))
+from part inner join[broadcast] cte on cte.lo_partkey = part.p_partkey;
+-- result:
+197929	1
+-- !result
+with cte0 as(
+select lo_partkey,
+group_concat(concat_ws(":",lo_partkey,c_custkey,c_name,c_city,c_nation,c_region,c_phone,c_mktsegment)) custkeys
+from lineorder inner join customer on lo_custkey = c_custkey
+where lo_orderdate between 19920101 and 19921231
+group by lo_partkey
+),
+cte as (
+select lo_partkey, map{"value":custkeys} custkeys from cte0
+)
+select /*+SET_VAR(column_view_concat_rows_limit=10000000000000,column_view_concat_bytes_limit=1000000000000000)*/ count(1), 0!=sum(murmur_hash3_32(p_name, custkeys["value"]))
 from part inner join[broadcast] cte on cte.lo_partkey = part.p_partkey;
 -- result:
 197929	1
