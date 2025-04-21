@@ -21,7 +21,6 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -49,16 +48,6 @@ public class JoinReorderDrivingTable extends JoinOrder {
 
     public JoinReorderDrivingTable(OptimizerContext context) {
         super(context);
-    }
-
-    private boolean isSameTableJoin(GroupInfo left, GroupInfo right) {
-        if (!(left.bestExprInfo.expr.getOp() instanceof LogicalScanOperator l)) {
-            return false;
-        }
-        if (!(right.bestExprInfo.expr.getOp() instanceof LogicalScanOperator r)) {
-            return false;
-        }
-        return l.getTable().getId() == r.getTable().getId();
     }
 
 
@@ -94,13 +83,7 @@ public class JoinReorderDrivingTable extends JoinOrder {
         atoms.remove(drivingTableIndex);
         atoms.add(0, drivingTable);
 
-        // 3. order other atmos based on srot
-        atoms.subList(1, atoms.size()).sort((a, b) -> {
-            double diff = b.bestExprInfo.cost - a.bestExprInfo.cost;
-            return (diff < 0 ? -1 : (diff > 0 ? 1 : 0));
-        });
-
-        // 4. construct join tree
+        // 3. construct join tree
         boolean[] used = new boolean[atomSize];
         int usedNum = 1;
         GroupInfo leftGroup = atoms.get(0); // driving table
@@ -123,11 +106,6 @@ public class JoinReorderDrivingTable extends JoinOrder {
 
             used[nextIndex] = true;
             GroupInfo rightGroup = atoms.get(nextIndex);
-
-            // avoid self join
-            if (isSameTableJoin(leftGroup, rightGroup)) {
-                return;
-            }
 
             // if right table output more then one column, like t1 join t2 on t1.c1 = t2.c1 join t3 on t2.c2= t3.c2
             // right table is t2, it will output 2 columns, we can't do this optimization
@@ -157,7 +135,7 @@ public class JoinReorderDrivingTable extends JoinOrder {
             ColumnRefOperator left = null;
             ColumnRefOperator right = null;
             for (ScalarOperator child : onPredicate.get(0).getChildren()) {
-                // just support col op col right now for simply
+                // just support col-op-col right now for simply
                 if (!(child instanceof ColumnRefOperator colRef)) {
                     return;
                 }
@@ -173,21 +151,6 @@ public class JoinReorderDrivingTable extends JoinOrder {
                 } else {
                     right = colRef;
                 }
-            }
-
-            Projection projection = joinExpr.get().expr.getOp().getProjection();
-            if (projection != null) {
-                // remove right table's output column from new join's output, because we don't need it anymore
-                rightGroup.bestExprInfo.expr.getOutputColumns().getColumnRefOperators(context.getColumnRefFactory())
-                        .forEach(col -> {
-                            projection.getColumnRefMap().remove(col);
-
-                        });
-
-                // add left table's on predicate column into new join's projection
-                projection.getColumnRefMap().values().stream().forEach(col -> {
-                    projection.getColumnRefMap().putIfAbsent((ColumnRefOperator) col, col);
-                });
             }
 
             // rewrite on-predicate

@@ -175,7 +175,7 @@ public class ReorderJoinRule extends Rule {
         return rewrite(input, JoinReorderFactory.createJoinReorderCardinalityPreserving(), context);
     }
 
-    public OptExpression rewrite_for_distinct_join(OptExpression input, OptimizerContext context) {
+    public OptExpression rewriteForDistinctJoin(OptExpression input, OptimizerContext context) {
         return rewrite(input, JoinReorderFactory.createJoinReorderDrivingTable(), context);
     }
 

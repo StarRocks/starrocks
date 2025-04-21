@@ -158,7 +158,7 @@ public class SemiJoinDeduplicateRule implements TreeRewriteRule {
 
             LogicalAggregationOperator aggOperator = (LogicalAggregationOperator) opt.getOp();
             // support distinct or count(distinct)
-            if (!aggOperator.getAggregations().isEmpty() ||
+            if (!aggOperator.getAggregations().isEmpty() &&
                     !aggOperator.getAggregations().values().stream().allMatch(agg -> agg.isDistinct())) {
                 return visitChildren(opt, context);
             }

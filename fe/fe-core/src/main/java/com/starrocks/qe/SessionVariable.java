@@ -1782,6 +1782,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = LOWER_UPPER_SUPPORT_UTF8)
     private boolean lowerUpperSupportUTF8 = false;
 
+    // this sv controls whether to create distinct agg below semi join
+    // -1 means disable this optimization
+    // 0 means auto, and the optimizer will decide whether to enable this optimization based on cardinality
+    // 1 means froce, optimizer will add distinct agg below semi-join regardless of cardinality
     @VarAttr(name = SEMI_JOIN_DEDUPLICATE_MODE)
     private int semiJoinDeduplicateMode = 0;
 
@@ -1791,9 +1795,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = JOIN_REORDER_DRIVING_TABLE_MAX_ELEMENT)
     private int joinReorderDrivingTableMaxElement = 5;
 
-    // global, local
+    // when enable distinct agg below semi-join optimization
+    // this sv controls create a global agg or local agg
+    // local won't add exchange node, but the aggregate effect will be worse than global
     @VarAttr(name = CBO_PUSH_DOWN_DISTINCT, flag = VariableMgr.INVISIBLE)
-    private String cboPushDownDISTINCT = "global";
+    private String cboPushDownDistinct = "global";
 
     @VarAttr(name = ENABLE_DATACACHE_SHARING)
     private boolean enableDataCacheSharing = true;
@@ -4888,7 +4894,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public String getCboPushDownDistinct() {
-        return cboPushDownDISTINCT;
+        return cboPushDownDistinct;
     }
 
     public int getJoinReorderDrivingTableMaxElement() {

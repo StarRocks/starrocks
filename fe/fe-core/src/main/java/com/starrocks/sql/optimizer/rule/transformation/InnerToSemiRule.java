@@ -49,7 +49,7 @@ public class InnerToSemiRule extends TransformationRule {
         ColumnRefSet back = context.getTaskContext().getRequiredColumns();
         context.getTaskContext().setRequiredColumns(columnRefSet);
 
-        OptExpression newChild = new ReorderJoinRule().rewrite_for_distinct_join(input.inputAt(0), context);
+        OptExpression newChild = new ReorderJoinRule().rewriteForDistinctJoin(input.inputAt(0), context);
         context.getTaskContext().setRequiredColumns(back);
 
         newChild = rewriteInnerToSemi(newChild);
