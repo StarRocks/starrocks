@@ -1232,7 +1232,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return result;
     }
 
+<<<<<<< HEAD
     private long loadTxnBeginImpl(TLoadTxnBeginRequest request, String clientIp) throws UserException {
+=======
+    private long loadTxnBeginImpl(TLoadTxnBeginRequest request, String clientIp) throws Exception {
+>>>>>>> eeb7906095 ([BugFix] store exception at TransactionResult. (#57979))
         checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
                 request.getTbl(), request.getUser_ip());
 
@@ -1283,7 +1287,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 request.getUser(), request.getUser_ip(), timeoutSecond * 1000, resp, false, warehouseId);
         if (!resp.stateOK()) {
             LOG.warn(resp.msg);
+<<<<<<< HEAD
             throw new UserException(resp.msg);
+=======
+            throw resp.getException();
+>>>>>>> eeb7906095 ([BugFix] store exception at TransactionResult. (#57979))
         }
 
         StreamLoadTask task = streamLoadManager.getTaskByLabel(request.getLabel());
