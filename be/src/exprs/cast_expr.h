@@ -114,6 +114,68 @@ private:
     TypeDescriptor _cast_to_type_desc;
 };
 
+<<<<<<< HEAD
+=======
+// Cast Json to struct<ANY>
+class CastJsonToStruct final : public Expr {
+public:
+    CastJsonToStruct(const TExprNode& node, std::vector<Expr*> field_casts)
+            : Expr(node), _field_casts(std::move(field_casts)) {
+        _json_paths.reserve(_type.field_names.size());
+        for (int j = 0; j < _type.field_names.size(); j++) {
+            std::string path_string = "$." + _type.field_names[j];
+            auto res = JsonPath::parse(Slice(path_string));
+            if (!res.ok()) {
+                throw std::runtime_error("Failed to parse JSON path: " + path_string);
+            }
+            _json_paths.emplace_back(res.value());
+        }
+    }
+
+    ~CastJsonToStruct() override = default;
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* input_chunk) override;
+    Expr* clone(ObjectPool* pool) const override {
+        auto cloned = std::unique_ptr<CastJsonToStruct>(new CastJsonToStruct(*this));
+        cloned->_field_casts.reserve(_field_casts.size());
+        for (int i = 0; i < _field_casts.size(); ++i) {
+            if (_field_casts[i] != nullptr) {
+                cloned->_field_casts.emplace_back(Expr::copy(pool, _field_casts[i]));
+            }
+        }
+        return pool->add(cloned.release());
+    }
+
+private:
+    // Invoked only by clone.
+    CastJsonToStruct(const CastJsonToStruct& rhs) : Expr(rhs), _json_paths(rhs._json_paths) {}
+
+    std::vector<Expr*> _field_casts;
+    std::vector<JsonPath> _json_paths;
+};
+
+// Cast Json to MAP
+class CastJsonToMap final : public Expr {
+public:
+    CastJsonToMap(const TExprNode& node, Expr* key_cast_expr, Expr* value_cast_expr)
+            : Expr(node), _key_cast_expr(std::move(key_cast_expr)), _value_cast_expr(std::move(value_cast_expr)) {}
+
+    CastJsonToMap(const CastJsonToMap& rhs) : Expr(rhs) {}
+
+    ~CastJsonToMap() override = default;
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
+
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new CastJsonToMap(*this)); }
+
+private:
+    // nullptr if MAP key is not TYPE_VARCHAR
+    Expr* _key_cast_expr;
+    // nullptr if MAP value is not TYPE_JSON
+    Expr* _value_cast_expr;
+};
+
+>>>>>>> 66a9f44153 ([Feature] Support to cast json to map (#58045))
 // cast one ARRAY to another ARRAY.
 // For example.
 //   cast ARRAY<tinyint> to ARRAY<int>
