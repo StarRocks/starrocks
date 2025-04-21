@@ -26,8 +26,8 @@ StatusOr<ColumnPtr> CastJsonToMap::evaluate_checked(ExprContext* context, Chunk*
     }
 
     ColumnViewer<TYPE_JSON> src_viewer(src_column);
-    NullColumn::MutablePtr null_column = NullColumn::create();
-    UInt32Column::MutablePtr offsets_column = UInt32Column::create();
+    NullColumn::Ptr null_column = NullColumn::create();
+    UInt32Column::Ptr offsets_column = UInt32Column::create();
     ColumnBuilder<TYPE_VARCHAR> keys_builder(src_column->size());
     ColumnBuilder<TYPE_JSON> values_builder(src_column->size());
 
