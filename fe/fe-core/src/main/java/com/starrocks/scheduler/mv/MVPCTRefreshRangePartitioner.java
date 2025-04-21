@@ -333,8 +333,8 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         return inputRanges.keySet();
     }
 
-    private void filterPartitionsByTTL(Map<String, PCell> toRefreshPartitions,
-                                       boolean isMockPartitionIds) {
+    protected void filterPartitionsByTTL(Map<String, PCell> toRefreshPartitions,
+                                         boolean isMockPartitionIds) {
         if (CollectionUtils.sizeIsEmpty(toRefreshPartitions)) {
             return;
         }
