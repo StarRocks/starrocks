@@ -44,13 +44,14 @@ Schema::Schema(Schema* schema, const std::vector<ColumnId>& cids)
     _fields.resize(cids.size());
     auto ori_sort_idxes = schema->sort_key_idxes();
     std::map<ColumnId, int32_t> cids_to_field_id;
-    for (int i = 0; i < cids.size(); i++) {
+    for (int j = 0, i = 0; i < cids.size(); i++) {
         if (cids[i] >= schema->_fields.size()) {
             _fields.resize(_fields.size() - 1);
             continue;
         }
         _fields[i] = schema->_fields[cids[i]];
-        cids_to_field_id[cids[i]] = i;
+        cids_to_field_id[cids[i]] = j;
+        j++;
     }
     for (auto idx : ori_sort_idxes) {
         if (cids_to_field_id.count(idx) > 0) {
