@@ -39,7 +39,15 @@ Status CompactionTask::execute_index_major_compaction(TxnLogPB* txn_log) {
         auto metadata = _tablet.metadata();
         if (metadata->enable_persistent_index() &&
             metadata->persistent_index_type() == PersistentIndexTypePB::CLOUD_NATIVE) {
-            return _tablet.tablet_manager()->update_mgr()->execute_index_major_compaction(*metadata, txn_log);
+            RETURN_IF_ERROR(_tablet.tablet_manager()->update_mgr()->execute_index_major_compaction(*metadata, txn_log));
+            if (txn_log->has_op_compaction() && !txn_log->op_compaction().input_sstables().empty()) {
+                size_t total_input_sstable_file_size = 0;
+                for (const auto& input_sstable : txn_log->op_compaction().input_sstables()) {
+                    total_input_sstable_file_size += input_sstable.filesize();
+                }
+                _context->stats->input_file_size += total_input_sstable_file_size;
+            }
+            return Status::OK();
         }
     }
     return Status::OK();

@@ -150,4 +150,16 @@ public class CompactionTask {
             return null;
         }
     }
+
+    public long getSuccessCompactInputFileSize() {
+        if (!isDone()) {
+            return 0;
+        }
+        try {
+            CompactResponse response = responseFuture.get();
+            return response.successCompactionInputFileSize;
+        } catch (Exception e) {
+            return 0;
+        }        
+    }
 }
