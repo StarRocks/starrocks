@@ -18,9 +18,9 @@
   "dependencies": {
     "@algolia/client-search": "^4.20.0",
     "@docsearch/react": "3",
-    "@docusaurus/core": "^3.1.1",
+    "@docusaurus/core": "3.7.0",
     "@docusaurus/plugin-client-redirects": "^3.1.1",
-    "@docusaurus/preset-classic": "^3.1.1",
+    "@docusaurus/preset-classic": "3.7.0",
     "@docusaurus/theme-search-algolia": "^3.1.1",
     "@mdx-js/react": "^3.0.0",
     "axios": "^1.7.8",
@@ -30,9 +30,24 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
+<<<<<<< HEAD
+=======
+  "overrides": {
+    "react-router": {
+      "path-to-regexp": "1.9.0"
+    },
+    "express": {
+      "path-to-regexp": "0.1.10"
+    },
+    "serve-handler": {
+      "path-to-regexp": "3.3.0"
+    },
+    "webpack-dev-middleware": "5.3.4"
+  },
+>>>>>>> 58607ce165 ([Doc] upgrade to Docusaurus 3.7 (#58253))
   "devDependencies": {
-    "@docusaurus/module-type-aliases": "^3.1.1",
-    "@docusaurus/types": "^3.1.1"
+    "@docusaurus/module-type-aliases": "3.7.0",
+    "@docusaurus/types": "3.7.0"
   },
   "browserslist": {
     "production": [
