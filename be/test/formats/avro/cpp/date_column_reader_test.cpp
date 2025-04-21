@@ -38,7 +38,7 @@ public:
         return get_column_reader(type_desc, _timezone, invalid_as_null);
     }
 
-    MutableColumnPtr create_adaptive_nullable_column(const TypeDescriptor& type_desc) {
+    ColumnPtr create_adaptive_nullable_column(const TypeDescriptor& type_desc) {
         return ColumnHelper::create_column(type_desc, true, false, 0, true);
     }
 
