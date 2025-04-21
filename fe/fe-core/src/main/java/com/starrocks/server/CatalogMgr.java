@@ -21,6 +21,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.authorization.NativeAccessController;
+import com.starrocks.authorization.cauthz.starrocks.CauthzStarRocksAccessController;
 import com.starrocks.authorization.ranger.hive.RangerHiveAccessController;
 import com.starrocks.authorization.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.catalog.Catalog;
@@ -119,6 +120,8 @@ public class CatalogMgr {
                 if (serviceName == null || serviceName.isEmpty()) {
                     if (Config.access_control.equals("ranger")) {
                         Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
+                    } else if (Config.access_control.equals("cauthz")) {
+                        Authorizer.getInstance().setAccessControl(catalogName, new CauthzStarRocksAccessController());
                     } else {
                         Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
                     }
@@ -209,6 +212,8 @@ public class CatalogMgr {
                 if (Strings.isNullOrEmpty(serviceName)) {
                     if (Config.access_control.equals("ranger")) {
                         Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
+                    } else if (Config.access_control.equals("cauthz")) {
+                        Authorizer.getInstance().setAccessControl(catalogName, new CauthzStarRocksAccessController());
                     } else {
                         Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
                     }
@@ -291,6 +296,8 @@ public class CatalogMgr {
             if (serviceName == null || serviceName.isEmpty()) {
                 if (Config.access_control.equals("ranger")) {
                     Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
+                } else if (Config.access_control.equals("cauthz")) {
+                    Authorizer.getInstance().setAccessControl(catalogName, new CauthzStarRocksAccessController());
                 } else {
                     Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
                 }
@@ -357,6 +364,8 @@ public class CatalogMgr {
             if (Strings.isNullOrEmpty(serviceName)) {
                 if (Config.access_control.equals("ranger")) {
                     Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
+                } else if (Config.access_control.equals("cauthz")) {
+                    Authorizer.getInstance().setAccessControl(catalogName, new CauthzStarRocksAccessController());
                 } else {
                     Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
                 }
