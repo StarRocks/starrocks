@@ -22,20 +22,12 @@ import com.starrocks.authentication.OAuth2Context;
 import com.starrocks.authentication.OpenIdConnectAuthenticationProvider;
 import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.common.Config;
+import com.starrocks.mysql.MysqlPassword;
 import org.json.JSONObject;
 
+import java.nio.charset.StandardCharsets;
+
 public class AuthPlugin {
-    private static final PlainPasswordAuthenticationProvider PLAIN_PASSWORD_AUTHENTICATION_PROVIDER =
-            new PlainPasswordAuthenticationProvider();
-
-    private static final LDAPAuthProviderForNative LDAP_AUTH_PROVIDER = new LDAPAuthProviderForNative(
-            Config.authentication_ldap_simple_server_host,
-            Config.authentication_ldap_simple_server_port,
-            Config.authentication_ldap_simple_bind_root_dn,
-            Config.authentication_ldap_simple_bind_root_pwd,
-            Config.authentication_ldap_simple_bind_base_dn,
-            Config.authentication_ldap_simple_user_search_attr);
-
     private static final Pattern COMMA_SPLIT = Pattern.compile("\\s*,\\s*");
     public enum Server {
         MYSQL_NATIVE_PASSWORD,
@@ -47,11 +39,19 @@ public class AuthPlugin {
             AuthPlugin.Server authPlugin = this;
             switch (authPlugin) {
                 case MYSQL_NATIVE_PASSWORD -> {
-                    return PLAIN_PASSWORD_AUTHENTICATION_PROVIDER;
+                    return new PlainPasswordAuthenticationProvider(
+                            authString == null ? MysqlPassword.EMPTY_PASSWORD : authString.getBytes(StandardCharsets.UTF_8));
                 }
 
                 case AUTHENTICATION_LDAP_SIMPLE -> {
-                    return LDAP_AUTH_PROVIDER;
+                    return new LDAPAuthProviderForNative(
+                            Config.authentication_ldap_simple_server_host,
+                            Config.authentication_ldap_simple_server_port,
+                            Config.authentication_ldap_simple_bind_root_dn,
+                            Config.authentication_ldap_simple_bind_root_pwd,
+                            Config.authentication_ldap_simple_bind_base_dn,
+                            Config.authentication_ldap_simple_user_search_attr,
+                            authString);
                 }
 
                 case AUTHENTICATION_OPENID_CONNECT -> {
