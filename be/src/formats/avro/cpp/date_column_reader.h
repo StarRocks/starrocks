@@ -23,6 +23,8 @@
 
 namespace starrocks::avrocpp {
 
+// A date logical type annotates an Avro 'int',
+// where the int stores the number of days from the unix epoch, 1 January 1970 (ISO calendar).
 class DateColumnReader final : public ColumnReader {
 public:
     explicit DateColumnReader(const std::string& col_name, const TypeDescriptor& type_desc)
@@ -36,6 +38,11 @@ private:
     Status read_string_value(const avro::GenericDatum& datum, FixedLengthColumn<DateValue>* column);
 };
 
+// timestamp-millis: logical type annotates an Avro 'long',
+// where the long stores the number of milliseconds from the unix epoch, 1 January 1970 00:00:00.000.
+//
+// timestamp-micros: logical type annotates an Avro 'long',
+// where the long stores the number of microseconds from the unix epoch, 1 January 1970 00:00:00.000000.
 class DatetimeColumnReader final : public ColumnReader {
 public:
     explicit DatetimeColumnReader(const std::string& col_name, const TypeDescriptor& type_desc,

@@ -64,26 +64,22 @@ Status BinaryColumnReader::read_numeric_value(const avro::GenericDatum& datum, B
     switch (datum.type()) {
     case avro::AVRO_INT: {
         const auto& from = datum.value<int32_t>();
-        auto sv = std::to_string(from);
-        return check_append_binary_column(sv, _col_name, _type_desc, column);
+        return check_append_binary_column(std::to_string(from), _col_name, _type_desc, column);
     }
 
     case avro::AVRO_LONG: {
         const auto& from = datum.value<int64_t>();
-        auto sv = std::to_string(from);
-        return check_append_binary_column(sv, _col_name, _type_desc, column);
+        return check_append_binary_column(std::to_string(from), _col_name, _type_desc, column);
     }
 
     case avro::AVRO_FLOAT: {
         const auto& from = datum.value<float>();
-        auto sv = std::to_string(from);
-        return check_append_binary_column(sv, _col_name, _type_desc, column);
+        return check_append_binary_column(std::to_string(from), _col_name, _type_desc, column);
     }
 
     case avro::AVRO_DOUBLE: {
         const auto& from = datum.value<double>();
-        auto sv = std::to_string(from);
-        return check_append_binary_column(sv, _col_name, _type_desc, column);
+        return check_append_binary_column(std::to_string(from), _col_name, _type_desc, column);
     }
 
     case avro::AVRO_BOOL: {

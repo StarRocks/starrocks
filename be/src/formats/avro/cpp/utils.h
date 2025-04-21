@@ -28,7 +28,7 @@ class AvroUtils {
 public:
     static std::string logical_type_to_string(const avro::LogicalType& logical_type);
 
-    static int64_t bytes_to_decimal_long(const std::vector<uint8_t>& from);
+    static int128_t bytes_to_decimal_integer(const std::vector<uint8_t>& from);
     static DateValue int_to_date_value(int32_t from);
     static StatusOr<TimestampValue> long_to_timestamp_value(const avro::GenericDatum& datum,
                                                             const cctz::time_zone& timezone);

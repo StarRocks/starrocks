@@ -283,6 +283,46 @@ TEST_F(AvroReaderTest, test_read_complex_types) {
     ASSERT_TRUE(st.is_end_of_file());
 }
 
+TEST_F(AvroReaderTest, test_read_complex_types_as_varchar) {
+    std::string filename = "complex.avro";
+    std::vector<SlotDescriptor*> slot_descs;
+    std::vector<avrocpp::ColumnReaderUniquePtr> column_readers;
+    bool column_not_found_as_null = false;
+    int rows_to_read = 2;
+
+    // init reader for read
+    auto reader = create_avro_reader(filename);
+
+    std::vector<SlotDescriptor> tmp_slot_descs;
+    ASSERT_OK(reader->get_schema(&tmp_slot_descs));
+
+    // read as varchar type
+    for (auto& slot_desc : tmp_slot_descs) {
+        slot_descs.emplace_back(_obj_pool.add(
+                new SlotDescriptor(slot_desc.id(), slot_desc.col_name(),
+                                   TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH))));
+    }
+
+    column_readers = create_column_readers(slot_descs, _timezone, false);
+    reader->TEST_init(&slot_descs, &column_readers, column_not_found_as_null);
+
+    // create chunk
+    auto chunk = create_src_chunk(slot_descs);
+
+    // read data
+    ASSERT_OK(reader->read_chunk(chunk, rows_to_read));
+    materialize_src_chunk_adaptive_nullable_column(chunk);
+    ASSERT_EQ(1, chunk->num_rows());
+    ASSERT_EQ(
+            "['{\"id\":1,\"name\":\"avro\"}', 'HEARTS', '[\"one\",\"two\",\"three\"]', '{\"a\":1,\"b\":2}', '100', "
+            "'abababababababab']",
+            chunk->debug_row(0));
+
+    chunk = create_src_chunk(slot_descs);
+    auto st = reader->read_chunk(chunk, rows_to_read);
+    ASSERT_TRUE(st.is_end_of_file());
+}
+
 TEST_F(AvroReaderTest, test_read_complex_nest_types) {
     std::string filename = "complex_nest.avro";
     std::vector<SlotDescriptor*> slot_descs;

@@ -47,17 +47,18 @@ std::string AvroUtils::logical_type_to_string(const avro::LogicalType& logical_t
     }
 }
 
-int64_t AvroUtils::bytes_to_decimal_long(const std::vector<uint8_t>& from) {
-    int64_t long_v = 0;
+int128_t AvroUtils::bytes_to_decimal_integer(const std::vector<uint8_t>& from) {
+    // todo: optimize int128_t
+    int128_t t_int = 0;
     for (size_t i = 0; i < from.size(); ++i) {
-        long_v = (long_v << 8) | from[i];
+        t_int = (t_int << 8) | from[i];
     }
 
     // maybe negative
     if ((from[0] & 0x80) != 0) {
-        long_v -= (1LL << (8 * from.size()));
+        t_int -= (int128_t(1) << (8 * from.size()));
     }
-    return long_v;
+    return t_int;
 }
 
 DateValue AvroUtils::int_to_date_value(int32_t from) {
@@ -102,8 +103,8 @@ static Status datum_to_rapidjson(const avro::GenericDatum& datum, bool use_logic
         auto logical_type = datum.logicalType();
 
         if (use_logical_type && logical_type.type() == avro::LogicalType::DECIMAL) {
-            auto long_v = AvroUtils::bytes_to_decimal_long(from);
-            out.SetDouble(static_cast<double>(long_v) / std::pow(10, logical_type.scale()));
+            out.SetDouble(static_cast<double>(AvroUtils::bytes_to_decimal_integer(from)) /
+                          std::pow(10, logical_type.scale()));
         } else {
             out.SetString(reinterpret_cast<const char*>(from.data()), from.size(), allocator);
         }
@@ -225,8 +226,8 @@ static Status datum_to_rapidjson(const avro::GenericDatum& datum, bool use_logic
         auto logical_type = datum.logicalType();
 
         if (use_logical_type && logical_type.type() == avro::LogicalType::DECIMAL) {
-            auto long_v = AvroUtils::bytes_to_decimal_long(from);
-            out.SetDouble(static_cast<double>(long_v) / std::pow(10, logical_type.scale()));
+            out.SetDouble(static_cast<double>(AvroUtils::bytes_to_decimal_integer(from)) /
+                          std::pow(10, logical_type.scale()));
         } else {
             out.SetString(reinterpret_cast<const char*>(from.data()), from.size(), allocator);
         }

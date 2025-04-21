@@ -34,6 +34,9 @@ private:
     Status read_string_value(const avro::GenericDatum& datum, FixedLengthColumn<T>* column);
 };
 
+// A decimal logical type annotates Avro 'bytes' or 'fixed' types.
+// The byte array must contain the two’s-complement representation of the unscaled integer value
+// in big-endian byte order.
 template <typename T>
 class DecimalColumnReader final : public ColumnReader {
 public:

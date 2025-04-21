@@ -244,47 +244,39 @@ static inline Status check_append_bytes_to_decimal_column(const std::vector<uint
                                                           int32_t avro_precision, int32_t avro_scale, int new_precision,
                                                           int new_scale, DecimalV3Column<T>* column) {
     // get avro decimal value
-    auto long_v = AvroUtils::bytes_to_decimal_long(from);
+    auto integer_v = AvroUtils::bytes_to_decimal_integer(from);
 
     // check whether precision and scale are same
     if (new_precision == avro_precision && new_scale == avro_scale) {
-        column->append(static_cast<T>(long_v));
+        column->append(static_cast<T>(integer_v));
         return Status::OK();
     }
 
     // to new decimal value if different
-    int64_t x = std::abs(long_v) / avro_scale;
-    int64_t tmp_x = x;
-    for (int i = 0; i < new_precision - new_scale; ++i) {
-        tmp_x /= 10;
-    }
-    if (tmp_x != 0) {
-        return Status::DataQualityError(fmt::format("Value is overflow. value: {}, column: {}, type: decimal({},{})",
-                                                    long_v, col_name, new_precision, new_scale));
+    int128_t x = std::abs(integer_v) / get_scale_factor<T>(avro_scale);
+    if (x / get_scale_factor<T>(new_precision - new_scale) != 0) {
+        return Status::DataQualityError(
+                fmt::format("Value is overflow. value: {}, column: {}, "
+                            "original type: decimal({},{}), new type: decimal({},{})",
+                            integer_v, col_name, avro_precision, avro_scale, new_precision, new_scale));
     }
 
-    int64_t y = std::abs(long_v) % avro_scale;
+    int128_t y = std::abs(integer_v) % get_scale_factor<T>(avro_scale);
     if (new_scale > avro_scale) {
-        for (int i = 0; i < new_scale - avro_scale; ++i) {
-            y *= 10;
-        }
+        y *= get_scale_factor<T>(new_scale - avro_scale);
     } else if (new_scale < avro_scale) {
-        int64_t multiple = 1;
-        for (int i = 0; i < avro_scale - new_scale; ++i) {
-            multiple *= 10;
-        }
-
-        if (y % multiple != 0) {
+        if (y % get_scale_factor<T>(avro_scale - new_scale) != 0) {
             return Status::DataQualityError(
-                    fmt::format("Value is overflow. value: {}, column: {}, type: decimal({},{})", long_v, col_name,
-                                new_precision, new_scale));
+                    fmt::format("Value is overflow. value: {}, column: {}, "
+                                "original type: decimal({},{}), new type: decimal({},{})",
+                                integer_v, col_name, avro_precision, avro_scale, new_precision, new_scale));
         }
 
-        y /= multiple;
+        y /= get_scale_factor<T>(avro_scale - new_scale);
     }
 
-    int64_t new_value = x * new_scale + y;
-    if (long_v < 0) {
+    int128_t new_value = x * get_scale_factor<T>(new_scale) + y;
+    if (integer_v < 0) {
         new_value *= -1;
     }
 

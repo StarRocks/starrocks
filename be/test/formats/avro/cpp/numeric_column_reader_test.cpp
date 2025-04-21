@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include <avrocpp/NodeImpl.hh>
+
 #include "column/column_helper.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "testutil/assert.h"
@@ -33,25 +35,33 @@ public:
     }
 
     std::vector<uint8_t> encode_decimal_bytes(int64_t unscaled_value, size_t fixed_size = 0) {
-        std::vector<uint8_t> bytes;
         bool is_negative = unscaled_value < 0;
-        uint64_t abs_value = std::abs(unscaled_value);
 
-        while (abs_value > 0) {
-            bytes.insert(bytes.begin(), abs_value & 0xFF);
-            abs_value >>= 8;
+        size_t bytes_size = fixed_size == 0 ? 8 : fixed_size;
+        std::vector<uint8_t> result(bytes_size);
+
+        for (size_t i = 0; i < bytes_size; ++i) {
+            result[bytes_size - 1 - i] = static_cast<uint8_t>(unscaled_value & 0xFF);
+            unscaled_value >>= 8;
         }
 
-        if (bytes.empty()) {
-            bytes.push_back(0);
-        }
-        if (fixed_size > bytes.size()) {
-            size_t padding = fixed_size - bytes.size();
-            uint8_t pad_byte = is_negative ? 0xFF : 0x00;
-            bytes.insert(bytes.begin(), padding, pad_byte);
-        }
+        if (fixed_size == 0) {
+            // remove 0x00 or oxFF prefix
+            size_t i = 0;
+            while (i + 1 < result.size()) {
+                if (is_negative && result[i] == 0xFF && (result[i + 1] & 0x80)) {
+                    ++i;
+                } else if (!is_negative && result[i] == 0x00 && !(result[i + 1] & 0x80)) {
+                    ++i;
+                } else {
+                    break;
+                }
+            }
 
-        return bytes;
+            return std::vector<uint8_t>(result.begin() + i, result.end());
+        } else {
+            return result;
+        }
     }
 
 private:
@@ -159,6 +169,13 @@ TEST_F(NumericColumnReaderTest, test_decimal) {
     }
 
     {
+        // negative
+        int64_t long_v = -11;
+        avro::GenericDatum datum(long_v);
+        CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+    }
+
+    {
         double double_v = 12.11;
         avro::GenericDatum datum(double_v);
         CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
@@ -171,18 +188,247 @@ TEST_F(NumericColumnReaderTest, test_decimal) {
     }
 
     {
-        // actual decimal value is 14.33
+        // bytes type, actual decimal value is 14.33
         int64_t decimal_v = 1433;
         auto encoded_bytes = encode_decimal_bytes(decimal_v);
+
         avro::LogicalType logical_type(avro::LogicalType::DECIMAL);
         logical_type.setPrecision(10);
         logical_type.setScale(2);
+
         avro::GenericDatum datum(avro::AVRO_BYTES, logical_type, encoded_bytes);
+
         CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
     }
 
-    ASSERT_EQ(6, column->size());
-    ASSERT_EQ("[1.00, 10.00, 11.00, 12.11, 13.20, 14.33]", column->debug_string());
+    {
+        // bytes type, actual decimal value is -14.33
+        int64_t decimal_v = -1433;
+        auto encoded_bytes = encode_decimal_bytes(decimal_v);
+
+        avro::LogicalType logical_type(avro::LogicalType::DECIMAL);
+        logical_type.setPrecision(10);
+        logical_type.setScale(2);
+
+        avro::GenericDatum datum(avro::AVRO_BYTES, logical_type, encoded_bytes);
+
+        CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+    }
+
+    {
+        // bytes type, actual decimal value is 14.330, scale is different
+        int64_t decimal_v = 14330;
+        auto encoded_bytes = encode_decimal_bytes(decimal_v);
+
+        avro::LogicalType logical_type(avro::LogicalType::DECIMAL);
+        logical_type.setPrecision(10);
+        logical_type.setScale(3);
+
+        avro::GenericDatum datum(avro::AVRO_BYTES, logical_type, encoded_bytes);
+
+        CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+    }
+
+    {
+        // fixed type, actual decimal value is 15.34
+        int64_t decimal_v = 1534;
+        size_t fixed_size = 8;
+        auto encoded_bytes = encode_decimal_bytes(decimal_v, fixed_size);
+
+        avro::LogicalType logical_type(avro::LogicalType::DECIMAL);
+        logical_type.setPrecision(10);
+        logical_type.setScale(2);
+
+        auto node = avro::NodePtr(new avro::NodeFixed(avro::HasName(avro::Name(_col_name)), avro::HasSize(fixed_size)));
+        node->setLogicalType(logical_type);
+
+        avro::GenericFixed fixed(node, encoded_bytes);
+
+        avro::GenericDatum datum(avro::AVRO_FIXED, logical_type, fixed);
+
+        CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+    }
+
+    {
+        // fixed type, actual decimal value is -15.34
+        int64_t decimal_v = -1534;
+        size_t fixed_size = 8;
+        auto encoded_bytes = encode_decimal_bytes(decimal_v, fixed_size);
+
+        avro::LogicalType logical_type(avro::LogicalType::DECIMAL);
+        logical_type.setPrecision(10);
+        logical_type.setScale(2);
+
+        auto node = avro::NodePtr(new avro::NodeFixed(avro::HasName(avro::Name(_col_name)), avro::HasSize(fixed_size)));
+        node->setLogicalType(logical_type);
+
+        avro::GenericFixed fixed(node, encoded_bytes);
+
+        avro::GenericDatum datum(avro::AVRO_FIXED, logical_type, fixed);
+
+        CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+    }
+
+    ASSERT_EQ(11, column->size());
+    ASSERT_EQ("[1.00, 10.00, 11.00, -11.00, 12.11, 13.20, 14.33, -14.33, 14.33, 15.34, -15.34]",
+              column->debug_string());
+}
+
+TEST_F(NumericColumnReaderTest, test_decimal_invalid) {
+    auto type_desc = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 3, 1);
+    auto column = create_adaptive_nullable_column(type_desc);
+    auto reader = get_column_reader(type_desc, false);
+
+    {
+        // bytes type, actual decimal value is 14.31
+        int64_t decimal_v = 1431;
+        auto encoded_bytes = encode_decimal_bytes(decimal_v);
+
+        avro::LogicalType logical_type(avro::LogicalType::DECIMAL);
+        logical_type.setPrecision(10);
+        logical_type.setScale(2);
+
+        avro::GenericDatum datum(avro::AVRO_BYTES, logical_type, encoded_bytes);
+
+        auto st = reader->read_datum_for_adaptive_column(datum, column.get());
+        ASSERT_TRUE(st.is_data_quality_error());
+    }
+
+    {
+        // bytes type, actual decimal value is 114.3
+        int64_t decimal_v = 1143;
+        auto encoded_bytes = encode_decimal_bytes(decimal_v);
+
+        avro::LogicalType logical_type(avro::LogicalType::DECIMAL);
+        logical_type.setPrecision(10);
+        logical_type.setScale(1);
+
+        avro::GenericDatum datum(avro::AVRO_BYTES, logical_type, encoded_bytes);
+
+        auto st = reader->read_datum_for_adaptive_column(datum, column.get());
+        ASSERT_TRUE(st.is_data_quality_error());
+    }
+
+    {
+        // fixed type, actual decimal value is 14.31
+        int64_t decimal_v = 1431;
+        size_t fixed_size = 8;
+        auto encoded_bytes = encode_decimal_bytes(decimal_v, fixed_size);
+
+        avro::LogicalType logical_type(avro::LogicalType::DECIMAL);
+        logical_type.setPrecision(10);
+        logical_type.setScale(2);
+
+        auto node = avro::NodePtr(new avro::NodeFixed(avro::HasName(avro::Name(_col_name)), avro::HasSize(fixed_size)));
+        node->setLogicalType(logical_type);
+
+        avro::GenericFixed fixed(node, encoded_bytes);
+
+        avro::GenericDatum datum(avro::AVRO_FIXED, logical_type, fixed);
+
+        auto st = reader->read_datum_for_adaptive_column(datum, column.get());
+        ASSERT_TRUE(st.is_data_quality_error());
+    }
+
+    {
+        // fixed type, actual decimal value is 114.3
+        int64_t decimal_v = 1143;
+        size_t fixed_size = 8;
+        auto encoded_bytes = encode_decimal_bytes(decimal_v, fixed_size);
+
+        avro::LogicalType logical_type(avro::LogicalType::DECIMAL);
+        logical_type.setPrecision(10);
+        logical_type.setScale(1);
+
+        auto node = avro::NodePtr(new avro::NodeFixed(avro::HasName(avro::Name(_col_name)), avro::HasSize(fixed_size)));
+        node->setLogicalType(logical_type);
+
+        avro::GenericFixed fixed(node, encoded_bytes);
+
+        avro::GenericDatum datum(avro::AVRO_FIXED, logical_type, fixed);
+
+        auto st = reader->read_datum_for_adaptive_column(datum, column.get());
+        ASSERT_TRUE(st.is_data_quality_error());
+    }
+
+    ASSERT_EQ(0, column->size());
+}
+
+TEST_F(NumericColumnReaderTest, test_decimal_invalid_as_null) {
+    auto type_desc = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 3, 1);
+    auto column = create_adaptive_nullable_column(type_desc);
+    auto reader = get_column_reader(type_desc, true);
+
+    {
+        // bytes type, actual decimal value is 14.31
+        int64_t decimal_v = 1431;
+        auto encoded_bytes = encode_decimal_bytes(decimal_v);
+
+        avro::LogicalType logical_type(avro::LogicalType::DECIMAL);
+        logical_type.setPrecision(10);
+        logical_type.setScale(2);
+
+        avro::GenericDatum datum(avro::AVRO_BYTES, logical_type, encoded_bytes);
+
+        CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+    }
+
+    {
+        // bytes type, actual decimal value is 114.3
+        int64_t decimal_v = 1143;
+        auto encoded_bytes = encode_decimal_bytes(decimal_v);
+
+        avro::LogicalType logical_type(avro::LogicalType::DECIMAL);
+        logical_type.setPrecision(10);
+        logical_type.setScale(1);
+
+        avro::GenericDatum datum(avro::AVRO_BYTES, logical_type, encoded_bytes);
+
+        CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+    }
+
+    {
+        // fixed type, actual decimal value is 14.31
+        int64_t decimal_v = 1431;
+        size_t fixed_size = 8;
+        auto encoded_bytes = encode_decimal_bytes(decimal_v, fixed_size);
+
+        avro::LogicalType logical_type(avro::LogicalType::DECIMAL);
+        logical_type.setPrecision(10);
+        logical_type.setScale(2);
+
+        auto node = avro::NodePtr(new avro::NodeFixed(avro::HasName(avro::Name(_col_name)), avro::HasSize(fixed_size)));
+        node->setLogicalType(logical_type);
+
+        avro::GenericFixed fixed(node, encoded_bytes);
+
+        avro::GenericDatum datum(avro::AVRO_FIXED, logical_type, fixed);
+
+        CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+    }
+
+    {
+        // fixed type, actual decimal value is 114.3
+        int64_t decimal_v = 1143;
+        size_t fixed_size = 8;
+        auto encoded_bytes = encode_decimal_bytes(decimal_v, fixed_size);
+
+        avro::LogicalType logical_type(avro::LogicalType::DECIMAL);
+        logical_type.setPrecision(10);
+        logical_type.setScale(1);
+
+        auto node = avro::NodePtr(new avro::NodeFixed(avro::HasName(avro::Name(_col_name)), avro::HasSize(fixed_size)));
+        node->setLogicalType(logical_type);
+
+        avro::GenericFixed fixed(node, encoded_bytes);
+
+        avro::GenericDatum datum(avro::AVRO_FIXED, logical_type, fixed);
+
+        CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+    }
+
+    ASSERT_EQ(4, column->size());
+    ASSERT_EQ("[NULL, NULL, NULL, NULL]", column->debug_string());
 }
 
 } // namespace starrocks
