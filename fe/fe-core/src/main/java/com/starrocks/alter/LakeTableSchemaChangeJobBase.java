@@ -19,11 +19,11 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
@@ -91,8 +91,8 @@ public abstract class LakeTableSchemaChangeJobBase extends AlterJobV2 {
         abstract void unlock(Database db);
 
         @Nullable
-        LakeTable getTable(long tableId) {
-            return (LakeTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        OlapTable getTable(long tableId) {
+            return (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         }
 
         @Override
@@ -149,11 +149,11 @@ public abstract class LakeTableSchemaChangeJobBase extends AlterJobV2 {
     }
 
     @NotNull
-    LakeTable getTableOrThrow(@Nullable LockedDatabase db, long tableId) throws AlterCancelException {
+    OlapTable getTableOrThrow(@Nullable LockedDatabase db, long tableId) throws AlterCancelException {
         if (db == null) {
             throw new AlterCancelException("Database does not exist");
         }
-        LakeTable table = db.getTable(tableId);
+        OlapTable table = db.getTable(tableId);
         if (table == null) {
             throw new AlterCancelException("Table does not exist. tableId=" + tableId);
         }
