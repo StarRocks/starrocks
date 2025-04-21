@@ -35,6 +35,18 @@ The following issues have been fixed:
 
 Release Date: March 12, 2025
 
+:::tip
+
+This version has been taken offline due to metadata loss issues in **shared-data clusters**.
+
+- **Problem**: When there are committed compaction transactions that are not yet been published during a shift of Leader FE node in a shared-data cluster, metadata loss may occur after the shift.
+
+- **Impact scope**: This problem only affects shared-data clusters. Shared-nothing clusters are unaffected.
+
+- **Temporary workaround**: When the Publish task is returned with an error, you can execute `SHOW PROC 'compactions'` to check if there are any partitions that have two compaction transactions with empty `FinishTime`. You can execute `ALTER TABLE DROP PARTITION FORCE` to drop the partitions to avoid Publish tasks getting hang.
+
+:::
+
 ### New Features and Enhancements
 
 - Data lake analytics supports Deletion Vector in Delta Lake.
