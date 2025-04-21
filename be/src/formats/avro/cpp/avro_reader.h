@@ -14,13 +14,12 @@
 
 #pragma once
 
-#include <cctz/time_zone.h>
-
 #include <avrocpp/DataFile.hh>
 #include <avrocpp/Generic.hh>
 #include <avrocpp/Stream.hh>
 
 #include "column/chunk.h"
+#include "formats/avro/cpp/column_reader.h"
 
 namespace starrocks {
 
@@ -65,12 +64,29 @@ public:
     AvroReader() = default;
     ~AvroReader();
 
-    Status init(std::unique_ptr<avro::InputStream> input_stream);
+    Status init(std::unique_ptr<avro::InputStream> input_stream, const std::string& filename, RuntimeState* state,
+                ScannerCounter* counter, const std::vector<SlotDescriptor*>* slot_descs,
+                const std::vector<avrocpp::ColumnReaderUniquePtr>* column_readers, bool col_not_found_as_null);
+
+    void TEST_init(const std::vector<SlotDescriptor*>* slot_descs,
+                   const std::vector<avrocpp::ColumnReaderUniquePtr>* column_readers, bool col_not_found_as_null);
+
+    Status read_chunk(ChunkPtr& chunk, int rows_to_read);
 
     Status get_schema(std::vector<SlotDescriptor>* schema);
 
 private:
-    std::unique_ptr<avro::DataFileReader<avro::GenericDatum>> _reader = nullptr;
+    Status read_row(ChunkPtr& chunk, const avro::GenericRecord& record);
+
+    std::unique_ptr<avro::DataFileReader<avro::GenericDatum>> _file_reader = nullptr;
+
+    // only used in read data
+    std::string _filename = "";
+    RuntimeState* _state = nullptr;
+    ScannerCounter* _counter = nullptr;
+    const std::vector<SlotDescriptor*>* _slot_descs = nullptr;
+    const std::vector<avrocpp::ColumnReaderUniquePtr>* _column_readers = nullptr;
+    bool _col_not_found_as_null = false;
 };
 
 using AvroReaderUniquePtr = std::unique_ptr<AvroReader>;
