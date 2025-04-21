@@ -245,15 +245,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             // If upgraded from an old version and do schema change,
             // the schema saved in indexSchemaMap is the schema in the old version, whose uniqueId is -1,
             // so here we initialize column uniqueId here.
-            List<Column> columns = indexSchemaMap.get(shadowIdxId);
-            boolean needRestoreColumnUniqueId = (columns.get(0).getUniqueId() < 0);
-            if (needRestoreColumnUniqueId) {
-                for (int i = 0; i < columns.size(); i++) {
-                    Column col = columns.get(i);
-                    Preconditions.checkState(col.getUniqueId() <= 0, col.getUniqueId());
-                    col.setUniqueId(i);
-                }
-            }
+            restoreColumnUniqueIdIfNeed(indexSchemaMap.get(shadowIdxId));
 
             table.setIndexMeta(shadowIdxId, indexIdToName.get(shadowIdxId), indexSchemaMap.get(shadowIdxId), 0, 0,
                     indexShortKeyMap.get(shadowIdxId), TStorageType.COLUMN,

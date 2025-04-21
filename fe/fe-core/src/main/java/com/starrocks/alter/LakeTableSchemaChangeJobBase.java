@@ -16,8 +16,10 @@
 package com.starrocks.alter;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
@@ -35,6 +37,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.List;
 import java.util.Optional;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
@@ -55,6 +58,17 @@ public abstract class LakeTableSchemaChangeJobBase extends AlterJobV2 {
 
     public LakeTableSchemaChangeJobBase(JobType jobType) {
         super(jobType);
+    }
+
+    protected void restoreColumnUniqueIdIfNeed(List<Column> columns) {
+        boolean needRestoreColumnUniqueId = (columns.get(0).getUniqueId() < 0);
+        if (needRestoreColumnUniqueId) {
+            for (int i = 0; i < columns.size(); i++) {
+                Column col = columns.get(i);
+                Preconditions.checkState(col.getUniqueId() <= 0, col.getUniqueId());
+                col.setUniqueId(i);
+            }
+        }
     }
 
     @Nullable
