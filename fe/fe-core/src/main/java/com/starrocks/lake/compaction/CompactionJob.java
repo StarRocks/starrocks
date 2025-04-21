@@ -207,4 +207,12 @@ public class CompactionJob {
         }
         return new CompactionProfile(stat).toString();
     }
+
+    public long getSuccessCompactInputFileSize() {
+        long res = 0;
+        for (CompactionTask task : tasks) {
+            res += task.getSuccessCompactInputFileSize();
+        }
+        return res;
+    }
 }
