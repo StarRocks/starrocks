@@ -31,7 +31,7 @@ The following issues have been fixed:
 - The default value of the session variable `big_query_profile_threshold` has been changed from 0 to 30 (seconds). [#57177](https://github.com/StarRocks/starrocks/pull/57177)
 - A new FE configuration item `enable_mv_refresh_collect_profile` has been added to control whether to collect Profile information during materialized view refresh. The default value is `false` (previously, the system collected Profile by default). [#56971](https://github.com/StarRocks/starrocks/pull/56971)
 
-## 3.4.1
+## 3.4.1 (Yanked)
 
 Release Date: March 12, 2025
 
