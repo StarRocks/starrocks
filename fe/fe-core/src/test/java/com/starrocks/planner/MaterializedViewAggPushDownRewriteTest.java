@@ -1114,4 +1114,64 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
         starRocksAssert.dropTable("test_pt9");
         starRocksAssert.dropMaterializedView("test_pt8_mv");
     }
+
+    @Test
+    public void testAggPushDownWithSubQuery() throws Exception {
+        String tbl1 = "CREATE TABLE `test_pt8` (\n" +
+                "  `id` bigint(20) NULL,\n" +
+                "  `pt` date NOT NULL,\n" +
+                "  `gmv` bigint(20) NULL,\n" +
+                "  `gmv2` bigint(20) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`id`)\n" +
+                "PARTITION BY date_trunc('day', pt)\n" +
+                "DISTRIBUTED BY HASH(`pt`)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        String tbl2 = "CREATE TABLE `test_pt9` (\n" +
+                "  `id` bigint(20) NULL COMMENT \"id\",\n" +
+                "  `pt` date NOT NULL,\n" +
+                "  `name` varchar(20) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`id`)\n" +
+                "PARTITION BY date_trunc('day', pt)\n" +
+                "DISTRIBUTED BY HASH(`pt`)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");\n" ;
+        starRocksAssert.withTable(tbl1);
+        starRocksAssert.withTable(tbl2);
+        String mv1 = "CREATE MATERIALIZED VIEW `test_pt8_mv` \n" +
+                "PARTITION BY (`pt`)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "REFRESH ASYNC START(\"2024-11-22 17:34:45\") EVERY(INTERVAL 1 MINUTE)\n" +
+                "PROPERTIES (\n" +
+                "\"query_rewrite_consistency\" = \"LOOSE\",\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS\n" +
+                "SELECT  `id`,`pt`,SUM(`gmv`) AS `sum_gmv`\n" +
+                "FROM `test_pt8` GROUP BY  `id`,`pt`;\n";
+        starRocksAssert.withRefreshedMaterializedView(mv1);
+        String mv2 = "CREATE MATERIALIZED VIEW `test_pt9_mv` \n" +
+                "PARTITION BY (`pt`)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "REFRESH ASYNC START(\"2024-11-22 17:34:45\") EVERY(INTERVAL 1 MINUTE)\n" +
+                "PROPERTIES (\n" +
+                "\"query_rewrite_consistency\" = \"LOOSE\",\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS\n" +
+                "SELECT  `id`,`pt`,count(1) AS `sum_gmv`\n" +
+                "FROM `test_pt9` GROUP BY  `id`,`pt`;\n";
+        starRocksAssert.withRefreshedMaterializedView(mv2);
+        String query = "SELECT SUM(gmv)\n" +
+                "FROM test_pt8 WHERE id IN ( SELECT distinct id FROM test_pt9 WHERE id in (select 1 from lineorder) )";
+        sql(query).contains("test_pt8_mv").contains("test_pt9_mv");
+        starRocksAssert.dropTable("test_pt8");
+        starRocksAssert.dropTable("test_pt9");
+        starRocksAssert.dropMaterializedView("test_pt8_mv");
+        starRocksAssert.dropMaterializedView("test_pt9_mv");
+    }
 }
