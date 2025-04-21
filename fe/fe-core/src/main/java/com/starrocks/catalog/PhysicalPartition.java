@@ -116,6 +116,8 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     @SerializedName(value = "bucketNum")
     private int bucketNum = 0;
+    
+    private volatile long extraFileSize = 0;
 
     private PhysicalPartition() {
 
@@ -210,6 +212,18 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     public void setLastSuccVacuumVersion(long lastSuccVacuumVersion) {
         this.lastSuccVacuumVersion = lastSuccVacuumVersion;
+    }
+
+    public long getExtraFileSize() {
+        return extraFileSize;
+    }
+
+    public void setExtraFileSize(long extraFileSize) {
+        this.extraFileSize = extraFileSize;
+    }
+
+    public void incExtraFileSize(long addFileSize) {
+        this.extraFileSize += addFileSize;
     }
 
     /*
