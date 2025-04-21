@@ -13,8 +13,8 @@
 // limitations under the License.
 
 #pragma once
-#include "common/global_types.h"
-#include "storage/olap_common.h"
+
+#include <string>
 
 namespace starrocks {
 
@@ -40,6 +40,10 @@ const std::string INVERTED_INDEX_PARSER_STANDARD = "standard";
 const std::string INVERTED_INDEX_PARSER_ENGLISH = "english";
 const std::string INVERTED_INDEX_PARSER_CHINESE = "chinese";
 const std::string LIKE_FN_NAME = "like";
+
+const std::string INVERTED_INDEX_OMIT_TERM_FREQ_AND_POSITION_KEY = "omit_term_freq_and_position";
+const std::string INVERTED_INDEX_OMIT_TERM_FREQ_AND_POSITION_YES = "true";
+const std::string INVERTED_INDEX_OMIT_TERM_FREQ_AND_POSITION_NO = "false";
 
 const std::string INVERTED_INDEX_TOKENIZED_KEY = "tokenized";
 

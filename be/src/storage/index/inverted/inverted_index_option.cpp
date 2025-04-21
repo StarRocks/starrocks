@@ -62,6 +62,15 @@ InvertedIndexParserType get_inverted_index_parser_type_from_string(const std::st
     return InvertedIndexParserType::PARSER_UNKNOWN;
 }
 
+std::string get_omit_term_freq_and_position_from_properties(const std::map<std::string, std::string>& properties) {
+    for (const auto& prop : properties) {
+        if (boost::to_lower_copy(prop.first) == INVERTED_INDEX_OMIT_TERM_FREQ_AND_POSITION_KEY) {
+            return prop.second;
+        }
+    }
+    return INVERTED_INDEX_OMIT_TERM_FREQ_AND_POSITION_YES;
+}
+
 std::string get_parser_string_from_properties(const std::map<std::string, std::string>& properties) {
     for (const auto& prop : properties) {
         if (boost::to_lower_copy(prop.first) == INVERTED_INDEX_PARSER_KEY) {

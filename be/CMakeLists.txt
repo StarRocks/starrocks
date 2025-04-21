@@ -165,6 +165,9 @@ set(JEMALLOC_HOME "${THIRDPARTY_DIR}/jemalloc")
 
 # Set all libraries
 
+add_library(clucene-ic STATIC IMPORTED)
+set_target_properties(clucene-ic PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libic.a)
+
 add_library(clucene-core STATIC IMPORTED)
 set_target_properties(clucene-core PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libclucene-core-static.a)
 
@@ -918,6 +921,7 @@ set(STARROCKS_DEPENDENCIES
     ${STARROCKS_DEPENDENCIES}
     build_version
     ${WL_START_GROUP}
+    clucene-ic
     clucene-core
     clucene-shared
     clucene-contribs-lib

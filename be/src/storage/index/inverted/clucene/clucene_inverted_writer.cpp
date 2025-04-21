@@ -15,13 +15,12 @@
 #include "storage/index/inverted/clucene/clucene_inverted_writer.h"
 
 #include <CLucene/analysis/LanguageBasedAnalyzer.h>
-#include <CLucene/util/Misc.h>
-#include <fmt/format.h>
 
 #include <boost/locale/encoding_utf.hpp>
 
 #include "common/status.h"
 #include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/inverted_index_analyzer.h"
 #include "types/logical_type.h"
 #include "util/faststring.h"
 
@@ -82,39 +81,40 @@ public:
             }
         }
 
-        _char_string_reader = std::make_unique<lucene::util::StringReader>(L"");
+        _char_string_reader = std::make_unique<lucene::util::SStringReader<char>>();
 
         _doc = std::make_unique<lucene::document::Document>();
 
-        if (_parser_type == InvertedIndexParserType::PARSER_STANDARD) {
-            _analyzer = std::make_unique<lucene::analysis::standard::StandardAnalyzer>();
-        } else if (_parser_type == InvertedIndexParserType::PARSER_ENGLISH) {
-            _analyzer = std::make_unique<lucene::analysis::SimpleAnalyzer>();
-        } else if (_parser_type == InvertedIndexParserType::PARSER_CHINESE) {
-            auto chinese_analyzer = _CLNEW lucene::analysis::LanguageBasedAnalyzer();
-            chinese_analyzer->setLanguage(L"cjk");
-            _analyzer.reset(chinese_analyzer);
-        } else {
-            // ANALYSER_NOT_SET, ANALYSER_NONE use default SimpleAnalyzer
-            _analyzer = std::make_unique<lucene::analysis::SimpleAnalyzer>();
+        ASSIGN_OR_RETURN(_analyzer, InvertedIndexAnalyzer::create_analyzer(_parser_type));
+        if (_analyzer == nullptr) {
+            return Status::InternalError(fmt::format("Inverted index analyzer could not be created for parser type: {}",
+                                                     inverted_index_parser_type_to_string(_parser_type)));
         }
+
         _index_writer = std::make_unique<lucene::index::IndexWriter>(_directory.c_str(), _analyzer.get(), create);
         _index_writer->setMaxBufferedDocs(-1);
         _index_writer->setRAMBufferSizeMB(RAMBufferSizeMB);
         _index_writer->setMaxFieldLength(MAX_FIELD_LEN);
         _index_writer->setMergeFactor(MERGE_FACTOR);
         _index_writer->setUseCompoundFile(false);
+        _index_writer->setEnableCorrectTermWrite(true);
         _doc->clear();
 
-        int field_config = int(lucene::document::Field::STORE_NO);
-        if (_parser_type == InvertedIndexParserType::PARSER_NONE) {
-            field_config |= int(lucene::document::Field::INDEX_UNTOKENIZED);
-        } else {
-            field_config |= int(lucene::document::Field::INDEX_TOKENIZED);
-        }
-        _field = new lucene::document::Field(_field_name.c_str(), field_config);
-        _field->setOmitNorms(true);
+        RETURN_IF_ERROR(create_field(&_field));
         _doc->add(*_field);
+        return Status::OK();
+    }
+
+    Status create_field(lucene::document::Field** field) const {
+        int field_config = static_cast<int>(lucene::document::Field::STORE_NO) |
+                           static_cast<int>(lucene::document::Field::INDEX_NONORMS);
+        field_config |= _parser_type == InvertedIndexParserType::PARSER_NONE
+                                ? static_cast<int>(lucene::document::Field::INDEX_UNTOKENIZED)
+                                : static_cast<int>(lucene::document::Field::INDEX_TOKENIZED);
+        *field = new lucene::document::Field(_field_name.c_str(), field_config);
+        (*field)->setOmitTermFreqAndPositions(
+                get_omit_term_freq_and_position_from_properties(_inverted_index->index_properties()) ==
+                INVERTED_INDEX_OMIT_TERM_FREQ_AND_POSITION_YES);
         return Status::OK();
     }
 
@@ -124,22 +124,16 @@ public:
             for (int i = 0; i < count; ++i) {
                 const char* s = _val->data;
                 size_t size = _val->size;
-                // Data in Slice does not contained any null-terminated. Any api in Boost/std
-                // which write the result into a given memory area does not fit in this case.
-                // So we still use boost::locale::conv::utf_to_utf<TCHAR> to construct a new
-                // wstring in every loop for the correctness.
-                std::wstring tchar = boost::locale::conv::utf_to_utf<TCHAR>(s, s + size);
 
-                if (_parser_type == InvertedIndexParserType::PARSER_ENGLISH ||
-                    _parser_type == InvertedIndexParserType::PARSER_CHINESE ||
-                    _parser_type == InvertedIndexParserType::PARSER_STANDARD) {
-                    _char_string_reader->init(tchar.c_str(), tchar.size(), false);
+                if (!_val->empty() && (_parser_type == InvertedIndexParserType::PARSER_ENGLISH ||
+                                       _parser_type == InvertedIndexParserType::PARSER_CHINESE ||
+                                       _parser_type == InvertedIndexParserType::PARSER_STANDARD)) {
+                    _char_string_reader->init(s, size, false);
                     auto stream = _analyzer->reusableTokenStream(_field->name(), _char_string_reader.get());
                     _field->setValue(stream);
                     _index_writer->addDocument(_doc.get());
                 } else {
-                    _field->setValueRef(const_cast<TCHAR*>(tchar.c_str()));
-                    _index_writer->addDocument(_doc.get());
+                    _index_writer->addNullDocument(_doc.get());
                 }
                 ++_val;
                 _rid++;
@@ -152,20 +146,9 @@ public:
     void add_nulls(uint32_t count) override {
         _null_bitmap.addRange(_rid, _rid + count);
         _rid += count;
-        TCHAR* data = const_cast<TCHAR*>(empty_value.data());
         if constexpr (is_string_type(field_type)) {
             for (int i = 0; i < count; ++i) {
-                if (_parser_type == InvertedIndexParserType::PARSER_ENGLISH ||
-                    _parser_type == InvertedIndexParserType::PARSER_CHINESE ||
-                    _parser_type == InvertedIndexParserType::PARSER_STANDARD) {
-                    _char_string_reader->init(data, 0, false);
-                    auto stream = _analyzer->reusableTokenStream(_field->name(), _char_string_reader.get());
-                    _field->setValue(stream);
-                    _index_writer->addDocument(_doc.get());
-                } else {
-                    _field->setValueRef(data);
-                    _index_writer->addDocument(_doc.get());
-                }
+                _index_writer->addNullDocument(_doc.get());
             }
         }
     }
@@ -224,7 +207,7 @@ private:
     lucene::document::Field* _field{};
     std::unique_ptr<lucene::index::IndexWriter> _index_writer{};
     std::unique_ptr<lucene::analysis::Analyzer> _analyzer{};
-    std::unique_ptr<lucene::util::StringReader> _char_string_reader{};
+    std::unique_ptr<lucene::util::Reader> _char_string_reader{};
     std::string _directory;
     const TabletIndex* _index_meta;
     InvertedIndexParserType _parser_type;

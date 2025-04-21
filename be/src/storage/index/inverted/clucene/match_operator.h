@@ -22,18 +22,22 @@
 
 namespace starrocks {
 
+class InvertedIndexCtx;
+
 // MatchOperator is the base operator which wraps index search operations
 // and it would be the minimum cache unit in the searching of inverted index.
 class MatchOperator {
 public:
-    MatchOperator(lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir, std::wstring field_name)
-            : _searcher(searcher), _dir(dir), _field_name(std::move(field_name)){};
+    MatchOperator(InvertedIndexCtx* ctx, lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir,
+                  std::wstring field_name)
+            : _inverted_index_ctx(ctx), _searcher(searcher), _dir(dir), _field_name(std::move(field_name)) {}
     virtual ~MatchOperator() = default;
-    Status match(roaring::Roaring* result);
+    Status match(roaring::Roaring& result);
 
 protected:
-    virtual Status _match_internal(lucene::search::HitCollector* hit_collector) = 0;
+    virtual Status _match_internal(roaring::Roaring& result) = 0;
 
+    InvertedIndexCtx* _inverted_index_ctx;
     lucene::search::IndexSearcher* _searcher;
     lucene::store::Directory* _dir;
     std::wstring _field_name;
@@ -41,34 +45,37 @@ protected:
 
 class MatchTermOperator : public MatchOperator {
 public:
-    MatchTermOperator(lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir, std::wstring field_name,
-                      std::wstring term)
-            : MatchOperator(searcher, dir, std::move(field_name)), _term(std::move(term)){};
+    MatchTermOperator(InvertedIndexCtx* ctx, lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir,
+                      std::wstring field_name, std::string search_str)
+            : MatchOperator(ctx, searcher, dir, std::move(field_name)), _search_str(std::move(search_str)) {}
 
 protected:
-    std::wstring _term;
-    Status _match_internal(lucene::search::HitCollector* hit_collector) override;
+    std::string _search_str;
+
+    Status _match_internal(roaring::Roaring& result) override;
 };
 
 class MatchRangeOperator : public MatchOperator {
 public:
-    MatchRangeOperator(lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir, std::wstring field_name,
-                       std::wstring bound, bool inclusive)
-            : MatchOperator(searcher, dir, std::move(field_name)), _bound(std::move(bound)), _inclusive(inclusive){};
+    MatchRangeOperator(InvertedIndexCtx* ctx, lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir,
+                       std::wstring field_name, std::string bound, bool inclusive)
+            : MatchOperator(ctx, searcher, dir, std::move(field_name)),
+              _bound(std::move(bound)),
+              _inclusive(inclusive) {}
 
 protected:
     virtual std::unique_ptr<lucene::search::RangeQuery> create_query(lucene::index::Term* term) = 0;
-    Status _match_internal(lucene::search::HitCollector* hit_collector) override;
+    Status _match_internal(roaring::Roaring& result) override;
 
-    std::wstring _bound;
+    std::string _bound;
     bool _inclusive;
 };
 
 class MatchGreatThanOperator final : public MatchRangeOperator {
 public:
-    MatchGreatThanOperator(lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir,
-                           std::wstring field_name, std::wstring bound, bool inclusive)
-            : MatchRangeOperator(searcher, dir, std::move(field_name), std::move(bound), inclusive){};
+    MatchGreatThanOperator(InvertedIndexCtx* ctx, lucene::search::IndexSearcher* searcher,
+                           lucene::store::Directory* dir, std::wstring field_name, std::string bound, bool inclusive)
+            : MatchRangeOperator(ctx, searcher, dir, std::move(field_name), std::move(bound), inclusive) {}
 
 protected:
     std::unique_ptr<lucene::search::RangeQuery> create_query(lucene::index::Term* term) override {
@@ -78,9 +85,9 @@ protected:
 
 class MatchLessThanOperator final : public MatchRangeOperator {
 public:
-    MatchLessThanOperator(lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir,
-                          std::wstring field_name, std::wstring bound, bool inclusive)
-            : MatchRangeOperator(searcher, dir, std::move(field_name), std::move(bound), inclusive){};
+    MatchLessThanOperator(InvertedIndexCtx* ctx, lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir,
+                          std::wstring field_name, std::string bound, bool inclusive)
+            : MatchRangeOperator(ctx, searcher, dir, std::move(field_name), std::move(bound), inclusive) {}
 
 protected:
     std::unique_ptr<lucene::search::RangeQuery> create_query(lucene::index::Term* term) override {
@@ -90,31 +97,31 @@ protected:
 
 class MatchWildcardOperator final : public MatchOperator {
 public:
-    MatchWildcardOperator(lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir,
-                          std::wstring field_name, std::wstring wildard)
-            : MatchOperator(searcher, dir, std::move(field_name)), _wildcard(std::move(wildard)) {}
+    MatchWildcardOperator(InvertedIndexCtx* ctx, lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir,
+                          std::wstring field_name, std::string wildard)
+            : MatchOperator(ctx, searcher, dir, std::move(field_name)), _wildcard(std::move(wildard)) {}
 
 protected:
-    Status _match_internal(lucene::search::HitCollector* hit_collector) override;
+    Status _match_internal(roaring::Roaring& result) override;
 
 private:
-    std::wstring _wildcard;
+    std::string _wildcard;
 };
 
 class MatchPhraseOperator final : public MatchOperator {
 public:
-    MatchPhraseOperator(lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir, std::wstring field_name,
-                        std::wstring terms, int slop, InvertedIndexParserType parser_type)
-            : MatchOperator(searcher, dir, std::move(field_name)),
-              _compound_term(std::move(terms)),
+    MatchPhraseOperator(InvertedIndexCtx* ctx, lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir,
+                        std::wstring field_name, std::string query_str, int slop, InvertedIndexParserType parser_type)
+            : MatchOperator(ctx, searcher, dir, std::move(field_name)),
+              _query_str(std::move(query_str)),
               _slop(slop),
               _parser_type(parser_type) {}
 
 protected:
-    Status _match_internal(lucene::search::HitCollector* hit_collector) override;
+    Status _match_internal(roaring::Roaring& result) override;
 
 private:
-    std::wstring _compound_term;
+    std::string _query_str;
     int _slop;
     InvertedIndexParserType _parser_type;
 };

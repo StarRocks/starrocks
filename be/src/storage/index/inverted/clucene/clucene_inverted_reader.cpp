@@ -21,6 +21,8 @@
 
 #include "storage/index/index_descriptor.h"
 #include "storage/index/inverted/clucene/match_operator.h"
+#include "storage/index/inverted/inverted_index_analyzer.h"
+#include "storage/index/inverted/inverted_index_context.h"
 #include "types/logical_type.h"
 #include "util/defer_op.h"
 #include "util/faststring.h"
@@ -52,9 +54,6 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
     const auto* search_query = reinterpret_cast<const Slice*>(query_value);
     auto act_len = strnlen(search_query->data, search_query->size);
     std::string search_str(search_query->data, act_len);
-    std::wstring search_wstr = boost::locale::conv::utf_to_utf<TCHAR>(search_str);
-    VLOG(2) << "begin to query the inverted index from clucene"
-            << ", column_name: " << column_name << ", search_str: " << search_str;
     std::wstring column_name_ws = std::wstring(column_name.begin(), column_name.end());
 
     if (!index_exists(_index_path)) {
@@ -70,36 +69,41 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
     DeferOp defer([&]() { CLOSE_DIR(directory) });
     lucene::search::IndexSearcher index_searcher(directory);
 
+    std::unique_ptr<InvertedIndexCtx> inverted_index_ctx = std::make_unique<InvertedIndexCtx>();
+    inverted_index_ctx->setParserType(_parser_type);
+    inverted_index_ctx->setQueryType(query_type);
+    inverted_index_ctx->setReaderType(get_inverted_index_reader_type());
+
     switch (query_type) {
     case InvertedIndexQueryType::MATCH_ALL_QUERY:
     case InvertedIndexQueryType::EQUAL_QUERY:
-        match_operator =
-                std::make_unique<MatchTermOperator>(&index_searcher, nullptr, column_name_ws.c_str(), search_wstr);
+        match_operator = std::make_unique<MatchTermOperator>(inverted_index_ctx.get(), &index_searcher, nullptr,
+                                                             column_name_ws, search_str);
         break;
     case InvertedIndexQueryType::MATCH_PHRASE_QUERY:
         // in phrase query
-        match_operator = std::make_unique<MatchPhraseOperator>(&index_searcher, nullptr, column_name_ws.c_str(),
-                                                               search_wstr, 0, _parser_type);
+        match_operator = std::make_unique<MatchPhraseOperator>(inverted_index_ctx.get(), &index_searcher, nullptr,
+                                                               column_name_ws, search_str, 0, _parser_type);
         break;
     case InvertedIndexQueryType::LESS_THAN_QUERY:
-        match_operator = std::make_unique<MatchLessThanOperator>(&index_searcher, nullptr, column_name_ws.c_str(),
-                                                                 search_wstr, false);
+        match_operator = std::make_unique<MatchLessThanOperator>(inverted_index_ctx.get(), &index_searcher, nullptr,
+                                                                 column_name_ws, search_str, false);
         break;
     case InvertedIndexQueryType::LESS_EQUAL_QUERY:
-        match_operator = std::make_unique<MatchLessThanOperator>(&index_searcher, nullptr, column_name_ws.c_str(),
-                                                                 search_wstr, true);
+        match_operator = std::make_unique<MatchLessThanOperator>(inverted_index_ctx.get(), &index_searcher, nullptr,
+                                                                 column_name_ws, search_str, true);
         break;
     case InvertedIndexQueryType::GREATER_THAN_QUERY:
-        match_operator = std::make_unique<MatchGreatThanOperator>(&index_searcher, nullptr, column_name_ws.c_str(),
-                                                                  search_wstr, false);
+        match_operator = std::make_unique<MatchGreatThanOperator>(inverted_index_ctx.get(), &index_searcher, nullptr,
+                                                                  column_name_ws, search_str, false);
         break;
     case InvertedIndexQueryType::GREATER_EQUAL_QUERY:
-        match_operator = std::make_unique<MatchGreatThanOperator>(&index_searcher, nullptr, column_name_ws.c_str(),
-                                                                  search_wstr, true);
+        match_operator = std::make_unique<MatchGreatThanOperator>(inverted_index_ctx.get(), &index_searcher, nullptr,
+                                                                  column_name_ws, search_str, true);
         break;
     case InvertedIndexQueryType::MATCH_WILDCARD_QUERY:
-        match_operator =
-                std::make_unique<MatchWildcardOperator>(&index_searcher, nullptr, column_name_ws.c_str(), search_wstr);
+        match_operator = std::make_unique<MatchWildcardOperator>(inverted_index_ctx.get(), &index_searcher, nullptr,
+                                                                 column_name_ws, search_str);
         break;
     default:
         return Status::InvalidArgument("Unknown query type");
@@ -107,7 +111,7 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
 
     roaring::Roaring result;
     try {
-        RETURN_IF_ERROR(match_operator->match(&result));
+        RETURN_IF_ERROR(match_operator->match(result));
     } catch (CLuceneError& e) {
         LOG(WARNING) << "CLuceneError occured, error msg: " << e.what();
         return Status::InternalError(fmt::format("CLuceneError occured, error msg: {}", e.what()));

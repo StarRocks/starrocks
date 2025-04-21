@@ -255,6 +255,7 @@ set(STORAGE_FILES
     rows_mapper.cpp
     primary_key_compaction_conflict_resolver.cpp
     local_primary_key_compaction_conflict_resolver.cpp
+    index/inverted/inverted_index_analyzer.cpp
     index/inverted/inverted_index_iterator.cpp
     index/inverted/inverted_index_option.cpp
     index/inverted/inverted_plugin_factory.cpp

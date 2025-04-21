@@ -33,6 +33,8 @@ InvertedIndexParserType get_inverted_index_parser_type_from_string(const std::st
 
 std::string get_parser_string_from_properties(const std::map<std::string, std::string>& properties);
 
+std::string get_omit_term_freq_and_position_from_properties(const std::map<std::string, std::string>& properties);
+
 bool is_tokenized_from_properties(const std::map<std::string, std::string>& properties);
 
 } // namespace starrocks
