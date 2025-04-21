@@ -15,6 +15,7 @@
 #include "block_cache/datacache_utils.h"
 
 #include <fmt/format.h>
+#include <sys/stat.h>
 
 #include <filesystem>
 
@@ -161,7 +162,7 @@ Status DataCacheUtils::change_disk_path(const std::string& old_disk_path, const 
     std::filesystem::path old_path(old_disk_path);
     std::filesystem::path new_path(new_disk_path);
     if (std::filesystem::exists(old_path)) {
-        if (DiskInfo::disk_id(old_path.c_str()) != DiskInfo::disk_id(new_path.c_str())) {
+        if (disk_device_id(old_path.c_str()) != disk_device_id(new_path.c_str())) {
             LOG(ERROR) << "fail to rename the old dataache directory [" << old_path.string() << "] to the new one ["
                        << new_path.string() << "] because they are located on different disks.";
             return Status::InternalError("The old datacache directory is different from the new one");
@@ -178,6 +179,14 @@ Status DataCacheUtils::change_disk_path(const std::string& old_disk_path, const 
         }
     }
     return Status::OK();
+}
+
+dev_t DataCacheUtils::disk_device_id(const std::string& disk_path) {
+    struct stat s;
+    if (stat(disk_path.c_str(), &s) != 0) {
+        return 0;
+    }
+    return s.st_dev;
 }
 
 } // namespace starrocks
