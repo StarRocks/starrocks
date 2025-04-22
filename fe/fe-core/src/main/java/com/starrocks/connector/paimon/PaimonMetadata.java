@@ -97,7 +97,6 @@ import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.connector.ColumnTypeConverter.fromPaimonSchemas;
 import static com.starrocks.connector.ColumnTypeConverter.toPaimonRowType;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
-import static com.starrocks.connector.paimon.PaimonApiConverter.getPaimonView;
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 
 public class PaimonMetadata implements ConnectorMetadata {
@@ -316,6 +315,19 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
         PaimonView view = getPaimonView(this.catalogName, dbName, viewName, paimonNativeView);
         tables.put(identifier, view);
+        return view;
+    }
+
+    private PaimonView getPaimonView(String catalogName, String dbName, String viewName, View paimonNativeView) {
+        List<DataField> fields = paimonNativeView.rowType().getFields();
+        List<Column> fullSchema = fromPaimonSchemas(fields);
+        String comment = "";
+        if (paimonNativeView.comment().isPresent()) {
+            comment = paimonNativeView.comment().get();
+        }
+        PaimonView view = new PaimonView(CONNECTOR_ID_GENERATOR.getNextId().asInt(),
+                catalogName, dbName, viewName, fullSchema, paimonNativeView.query());
+        view.setComment(comment);
         return view;
     }
 
