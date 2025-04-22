@@ -23,6 +23,7 @@ import org.apache.paimon.data.InternalArray;
 import org.apache.paimon.data.InternalMap;
 import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.data.Timestamp;
+import org.apache.paimon.data.variant.Variant;
 import org.apache.paimon.types.RowKind;
 
 import java.io.Serializable;
@@ -124,6 +125,12 @@ public final class StarRocksRow implements InternalRow, DataSetters, Serializabl
     @Override
     public byte[] getBinary(int pos) {
         return (byte[]) (data.get(pos)[rowCount]);
+    }
+
+    @Override
+    public Variant getVariant(int i) {
+        // todo: do not support variant now
+        return null;
     }
 
     @Override

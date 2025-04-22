@@ -34,6 +34,7 @@ import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.qe.ConnectContext;
@@ -56,6 +57,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.paimon.data.BinaryRow;
 import org.apache.paimon.io.DataFileMeta;
+import org.apache.paimon.rest.RESTToken;
+import org.apache.paimon.rest.RESTTokenFileIO;
 import org.apache.paimon.table.DataTable;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.DeletionFile;
@@ -66,6 +69,7 @@ import org.apache.paimon.utils.InstantiationUtil;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -409,19 +413,34 @@ public class PaimonScanNode extends ScanNode {
         if (paimonTable != null) {
             msg.hdfs_scan_node.setTable_name(paimonTable.getName());
             try {
-                String dataTokenPath = DlfUtil.getDataTokenPath(paimonTable.getTableLocation());
-                if (!Strings.isNullOrEmpty(dataTokenPath)) {
-                    dataTokenPath = "/secret/DLF/data/" + Base64Util.encodeBase64WithoutPadding(dataTokenPath);
-                    File dataTokenFile = new File(dataTokenPath);
+                if (paimonTable.getNativeTable().fileIO() instanceof DlfPaimonFileIO) {
+                    String dataTokenPath = DlfUtil.getDataTokenPath(paimonTable.getTableLocation());
+                    if (!Strings.isNullOrEmpty(dataTokenPath)) {
+                        dataTokenPath = "/secret/DLF/data/" + Base64Util.encodeBase64WithoutPadding(dataTokenPath);
+                        File dataTokenFile = new File(dataTokenPath);
 
-                    if (dataTokenFile.exists()) {
-                        Map<String, String> options = ((DlfPaimonFileIO)((DataTable) paimonTable.getNativeTable()).fileIO())
-                                .dlsFileSystemOptions(false);
-                        cloudConfiguration = CloudConfigurationFactory.buildDlfConfigurationForStorage(
-                                DlfUtil.setDataToken(dataTokenFile), options);
-                    } else {
-                        LOG.warn("Cannot find data token file " + dataTokenPath);
+                        if (dataTokenFile.exists()) {
+                            Map<String, String> options = ((DlfPaimonFileIO) ((DataTable) paimonTable.getNativeTable()).fileIO())
+                                    .dlsFileSystemOptions(false);
+                            cloudConfiguration = CloudConfigurationFactory.buildDlfConfigurationForStorage(
+                                    DlfUtil.setDataToken(dataTokenFile), options);
+                        } else {
+                            LOG.warn("Cannot find data token file " + dataTokenPath);
+                        }
                     }
+                } else if (paimonTable.getNativeTable().fileIO() instanceof RESTTokenFileIO) {
+                    RESTTokenFileIO fileIO = (RESTTokenFileIO) paimonTable.getNativeTable().fileIO();
+                    RESTToken token = fileIO.validToken();
+                    Map<String, String> properties = new HashMap<>();
+                    properties.put(CloudConfigurationConstants.ALIYUN_OSS_ACCESS_KEY,
+                            token.token().get("fs.oss.accessKeyId"));
+                    properties.put(CloudConfigurationConstants.ALIYUN_OSS_SECRET_KEY,
+                            token.token().get("fs.oss.accessKeySecret"));
+                    properties.put(CloudConfigurationConstants.ALIYUN_OSS_STS_TOKEN,
+                            token.token().get("fs.oss.securityToken"));
+                    properties.put(CloudConfigurationConstants.ALIYUN_OSS_ENDPOINT,
+                            token.token().get("fs.oss.endpoint"));
+                    cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
                 }
             } catch (Exception e) {
                 LOG.warn("Fail to get data token: " + e.getMessage());

@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.aliyun.datalake.catalog.CatalogClient;
 import com.aliyun.datalake.common.DlfDataToken;
+import com.aliyun.datalake.common.DlfMetaToken;
 import com.aliyun.datalake.common.credential.SimpleStsCredentialsProvider;
 import com.aliyun.datalake.common.impl.Base64Util;
 import com.aliyun.datalake.core.DlfAuthContext;
@@ -36,7 +37,12 @@ import org.apache.logging.log4j.Logger;
 import org.apache.paimon.CoreOptions;
 import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.fs.FileIO;
+import org.apache.paimon.options.Options;
+import org.apache.paimon.rest.RESTCatalogLoader;
+import org.apache.paimon.rest.RESTTokenFileIO;
+import org.apache.paimon.table.AppendOnlyFileStoreTable;
 import org.apache.paimon.table.DataTable;
+import org.apache.paimon.table.PrimaryKeyFileStoreTable;
 import org.apache.paimon.types.DataField;
 
 import java.io.File;
@@ -174,63 +180,92 @@ public class PaimonTable extends Table {
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         TPaimonTable tPaimonTable = new TPaimonTable();
 
-        if (paimonNativeTable instanceof DlfPaimonTable) {
-            FileIO paimonFileIO = ((DlfPaimonTable) paimonNativeTable).fileIO();
-            if (paimonFileIO instanceof DlfPaimonFileIO) {
-                CatalogClient client = DlfUtil.getFieldValue(paimonFileIO, "client");
-                DlfAuthContext dlfAuthContext = DlfUtil.getFieldValue(paimonFileIO, "dlfAuthContext");
-                Map<String, String> options = ((DlfPaimonFileIO) paimonFileIO).dlsFileSystemOptions(false);
-                Properties properties = new Properties();
-                for (Map.Entry<String, String> entry : options.entrySet()) {
-                    properties.setProperty(entry.getKey(), entry.getValue());
-                }
-                String dlfAuthConfigPrefix = DlfUtil.getFieldValue(paimonFileIO, "dlfAuthConfigPrefix");
-                org.apache.paimon.fs.Path basePath = DlfUtil.getFieldValue(paimonFileIO, "basePath");
+        FileIO paimonFileIO = paimonNativeTable.fileIO();
+        if (paimonFileIO instanceof DlfPaimonFileIO) {
+            CatalogClient client = DlfUtil.getFieldValue(paimonFileIO, "client");
+            DlfAuthContext dlfAuthContext = DlfUtil.getFieldValue(paimonFileIO, "dlfAuthContext");
+            Map<String, String> options = ((DlfPaimonFileIO) paimonFileIO).dlsFileSystemOptions(false);
+            Properties properties = new Properties();
+            for (Map.Entry<String, String> entry : options.entrySet()) {
+                properties.setProperty(entry.getKey(), entry.getValue());
+            }
+            String dlfAuthConfigPrefix = DlfUtil.getFieldValue(paimonFileIO, "dlfAuthConfigPrefix");
+            org.apache.paimon.fs.Path basePath = DlfUtil.getFieldValue(paimonFileIO, "basePath");
 
-                String dataTokenPath = DlfUtil.getDataTokenPath(getTableLocation());
-                dataTokenPath = "/secret/DLF/data/" + Base64Util.encodeBase64WithoutPadding(dataTokenPath);
-                File dataTokenFile = new File(dataTokenPath);
-                Map<String, String> dataToken = new HashMap<>();
-                if (dataTokenFile.exists()) {
-                    try {
-                        dataToken = DlfUtil.setDataToken(dataTokenFile);
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
+            String dataTokenPath = DlfUtil.getDataTokenPath(getTableLocation());
+            dataTokenPath = "/secret/DLF/data/" + Base64Util.encodeBase64WithoutPadding(dataTokenPath);
+            File dataTokenFile = new File(dataTokenPath);
+            Map<String, String> dataToken = new HashMap<>();
+            if (dataTokenFile.exists()) {
+                try {
+                    dataToken = DlfUtil.setDataToken(dataTokenFile);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+                SimpleStsCredentialsProvider<DlfDataToken> provider = new SimpleStsCredentialsProvider<>();
+                // Ignore fs.dlf since there is no longer this kind of scheme
+                properties.setProperty("fs.oss.credentials.provider",
+                        "com.aliyun.jindodata.oss.auth.CommonCredentialsProvider");
+                properties.remove("aliyun.oss.provider.url");
+                properties.put("fs.oss.accessKeyId", dataToken.get(ALIYUN_OSS_ACCESS_KEY));
+                properties.put("fs.oss.accessKeySecret", dataToken.get(ALIYUN_OSS_SECRET_KEY));
+                properties.put("fs.oss.securityToken", dataToken.get(ALIYUN_OSS_STS_TOKEN));
+
+                properties.setProperty("fs.dls.credentials.provider",
+                        "com.aliyun.jindodata.dls.auth.CommonCredentialsProvider");
+                properties.remove("aliyun.dls.provider.url");
+                properties.put("fs.dls.accessKeyId", dataToken.get(ALIYUN_OSS_ACCESS_KEY));
+                properties.put("fs.dls.accessKeySecret", dataToken.get(ALIYUN_OSS_SECRET_KEY));
+                properties.put("fs.dls.securityToken", dataToken.get(ALIYUN_OSS_STS_TOKEN));
+                // DLF 2.3 version updated
+                properties.put("dlf.tokenCache.data.accessKeyId", dataToken.get(ALIYUN_OSS_ACCESS_KEY));
+                properties.put("dlf.tokenCache.data.accessKeySecret", dataToken.get(ALIYUN_OSS_SECRET_KEY));
+                properties.put("dlf.tokenCache.data.securityToken", dataToken.get(ALIYUN_OSS_STS_TOKEN));
+                provider.init(properties, "", DlfDataToken.class);
+                paimonFileIO = new DlfPaimonFileIO(client,
+                        provider,
+                        dlfAuthContext,
+                        properties,
+                        dlfAuthConfigPrefix,
+                        basePath);
+                paimonNativeTable = new DlfPaimonTable(paimonFileIO,
+                        ((DlfPaimonTable) paimonNativeTable).location(),
+                        ((DlfPaimonTable) paimonNativeTable).schema(),
+                        DlfUtil.getFieldValue(paimonNativeTable, "catalogEnvironment"),
+                        DlfUtil.getFieldValue(paimonNativeTable, "checker"));
+            } else {
+                LOG.warn("Cannot find data token file " + dataTokenPath);
+            }
+        } else if (paimonFileIO instanceof RESTTokenFileIO) {
+            // For DLF 2.5 JNI writer
+            try {
+                if (paimonNativeTable instanceof AppendOnlyFileStoreTable) {
+                    Options options = ((RESTCatalogLoader) (((AppendOnlyFileStoreTable) paimonNativeTable)
+                            .catalogEnvironment().catalogLoader()))
+                            .context().options();
+                    if (options.get("token.provider").equalsIgnoreCase("dlf")
+                            && !Strings.isNullOrEmpty(options.get("dlf.token-path"))) {
+                        DlfMetaToken token = DlfUtil.getDlfToken(options.get("dlf.token-path"));
+                        options.remove("dlf.token-path");
+                        options.set("dlf.access-key-id", token.getAccessKeyId());
+                        options.set("dlf.access-key-secret", token.getAccessKeySecret());
+                        options.set("dlf.security-token", token.getSecurityToken());
                     }
-                    SimpleStsCredentialsProvider<DlfDataToken> provider = new SimpleStsCredentialsProvider<>();
-                    // Ignore fs.dlf since there is no longer this kind of scheme
-                    properties.setProperty("fs.oss.credentials.provider",
-                            "com.aliyun.jindodata.oss.auth.CommonCredentialsProvider");
-                    properties.remove("aliyun.oss.provider.url");
-                    properties.put("fs.oss.accessKeyId", dataToken.get(ALIYUN_OSS_ACCESS_KEY));
-                    properties.put("fs.oss.accessKeySecret", dataToken.get(ALIYUN_OSS_SECRET_KEY));
-                    properties.put("fs.oss.securityToken", dataToken.get(ALIYUN_OSS_STS_TOKEN));
-
-                    properties.setProperty("fs.dls.credentials.provider",
-                            "com.aliyun.jindodata.dls.auth.CommonCredentialsProvider");
-                    properties.remove("aliyun.dls.provider.url");
-                    properties.put("fs.dls.accessKeyId", dataToken.get(ALIYUN_OSS_ACCESS_KEY));
-                    properties.put("fs.dls.accessKeySecret", dataToken.get(ALIYUN_OSS_SECRET_KEY));
-                    properties.put("fs.dls.securityToken", dataToken.get(ALIYUN_OSS_STS_TOKEN));
-                    // DLF 2.3 version updated
-                    properties.put("dlf.tokenCache.data.accessKeyId", dataToken.get(ALIYUN_OSS_ACCESS_KEY));
-                    properties.put("dlf.tokenCache.data.accessKeySecret", dataToken.get(ALIYUN_OSS_SECRET_KEY));
-                    properties.put("dlf.tokenCache.data.securityToken", dataToken.get(ALIYUN_OSS_STS_TOKEN));
-                    provider.init(properties, "", DlfDataToken.class);
-                    paimonFileIO = new DlfPaimonFileIO(client,
-                            provider,
-                            dlfAuthContext,
-                            properties,
-                            dlfAuthConfigPrefix,
-                            basePath);
-                    paimonNativeTable = new DlfPaimonTable(paimonFileIO,
-                            ((DlfPaimonTable) paimonNativeTable).location(),
-                            ((DlfPaimonTable) paimonNativeTable).schema(),
-                            DlfUtil.getFieldValue(paimonNativeTable, "catalogEnvironment"),
-                            DlfUtil.getFieldValue(paimonNativeTable, "checker"));
-                } else {
-                    LOG.warn("Cannot find data token file " + dataTokenPath);
+                } else if (paimonNativeTable instanceof PrimaryKeyFileStoreTable) {
+                    Options options = ((RESTCatalogLoader) (((PrimaryKeyFileStoreTable) paimonNativeTable)
+                            .catalogEnvironment().catalogLoader()))
+                            .context().options();
+                    if (options.get("token.provider").equalsIgnoreCase("dlf")
+                            && !Strings.isNullOrEmpty(options.get("dlf.token-path"))) {
+                        DlfMetaToken token = DlfUtil.getDlfToken(options.get("dlf.token-path"));
+                        options.remove("dlf.token-path");
+                        options.set("dlf.access-key-id", token.getAccessKeyId());
+                        options.set("dlf.access-key-secret", token.getAccessKeySecret());
+                        options.set("dlf.security-token", token.getSecurityToken());
+                    }
                 }
+            } catch (Exception e) {
+                LOG.warn(e.getMessage());
             }
         }
         String encodedTable = PaimonScanNode.encodeObjectToString(paimonNativeTable);

@@ -107,6 +107,15 @@ public class PaimonConnector implements Connector {
             properties.keySet().stream()
                     .filter(k -> k.startsWith("dlf.") && !k.equals(DLF_AUTH_USER_NAME))
                     .forEach(k -> paimonOptions.setString(k, properties.get(k)));
+        } else if (catalogType.equalsIgnoreCase("rest")) {
+            // DLF 2.5
+            if ("dlf".equalsIgnoreCase(properties.get("token.provider"))) {
+                this.paimonOptions.set(URI.key(), properties.get("uri"));
+                this.paimonOptions.set("token.provider", "dlf");
+                properties.keySet().stream()
+                        .filter(k -> k.startsWith("dlf."))
+                        .forEach(k -> paimonOptions.setString(k, properties.get(k)));
+            }
         }
         if (Strings.isNullOrEmpty(warehousePath)
                 && !catalogType.equals("hive")
@@ -116,7 +125,9 @@ public class PaimonConnector implements Connector {
             throw new StarRocksConnectorException("The property %s must be set.", PAIMON_CATALOG_WAREHOUSE);
         }
         // use only for oss-hdfs
-        if (!Strings.isNullOrEmpty(warehousePath) && warehousePath.charAt(warehousePath.length() - 1) != '/') {
+        if (!Strings.isNullOrEmpty(warehousePath)
+                && !catalogType.equals("rest")
+                && warehousePath.charAt(warehousePath.length() - 1) != '/') {
             warehousePath += "/";
         }
         if (!Strings.isNullOrEmpty(warehousePath)) {
@@ -185,18 +196,29 @@ public class PaimonConnector implements Connector {
 
     public Catalog getPaimonNativeCatalog() {
         try {
-            if (catalogType.equalsIgnoreCase("dlf-paimon")) {
+            if ((catalogType.equalsIgnoreCase("rest") && this.paimonOptions.get("token.provider").equalsIgnoreCase("dlf"))
+                    || catalogType.equalsIgnoreCase("dlf-paimon")) {
                 // For DLF 2.0, we should judge ramUser to see if catalog can be cached
                 String ramUser = DlfUtil.getRamUser();
-                // When reading information_schema, we should keep ramUser
-                if (this.ramUser == null || this.ramUser.isEmpty()
-                        || (!ramUser.isEmpty() && !this.ramUser.equals(ramUser))) {
-                    this.ramUser = ramUser;
-                    setRamUser(ramUser);
-                } else if (paimonOptions.get(DLF_AUTH_USER_NAME).equals(ramUser) && paimonNativeCatalog != null) {
-                    return paimonNativeCatalog;
-                } else {
-                    setRamUser(this.ramUser);
+                boolean noAK = Strings.isNullOrEmpty(this.paimonOptions.get("dlf.access-key-id"))
+                        || Strings.isNullOrEmpty(this.paimonOptions.get("dlf.access-key-secret"));
+                // Only search for meta token path when users do not config ak/sk themselves
+                if ("dlf".equalsIgnoreCase(this.paimonOptions.get("token.provider")) && noAK) {
+                    // For DLF 2.5, we should get the exact meta token for user
+                    paimonOptions.set("dlf.token-path", DlfUtil.getMetaToken(ramUser));
+                }
+                // Do not need ram user check when using ak/sk
+                if (noAK) {
+                    // When reading information_schema, we should keep ramUser
+                    if (this.ramUser == null || this.ramUser.isEmpty()
+                            || (!ramUser.isEmpty() && !this.ramUser.equals(ramUser))) {
+                        this.ramUser = ramUser;
+                        setRamUser(ramUser);
+                    } else if (paimonOptions.get(DLF_AUTH_USER_NAME).equals(ramUser) && paimonNativeCatalog != null) {
+                        return paimonNativeCatalog;
+                    } else {
+                        setRamUser(this.ramUser);
+                    }
                 }
             } else if (paimonNativeCatalog != null) {
                 // For non DLF 2.0, keep the old method
@@ -218,7 +240,7 @@ public class PaimonConnector implements Connector {
         } catch (Exception e) {
             if (e instanceof NullPointerException ||
                     (e.getMessage() != null && e.getMessage().contains(DLF_AUTH_USER_NAME))) {
-                throw new StarRocksConnectorException("Current user is not a ram user.", e);
+                throw new StarRocksConnectorException("NPE found. Maybe current user is not a ram user.", e);
             }
             throw new StarRocksConnectorException("Error creating a paimon catalog.", e);
         }

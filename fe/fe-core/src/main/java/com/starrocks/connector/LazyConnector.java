@@ -24,6 +24,7 @@ import com.starrocks.connector.paimon.PaimonConnector;
 import com.starrocks.sql.analyzer.Authorizer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import com.starrocks.privilege.DlfAccessController;
 
 import java.util.List;
 import java.util.Map;
@@ -56,7 +57,10 @@ public class LazyConnector implements Connector {
                         } else if (context.getProperties().get(PaimonConnector.PAIMON_CATALOG_TYPE) != null
                                 && context.getProperties().get(PaimonConnector.PAIMON_CATALOG_TYPE).equalsIgnoreCase("dlf-paimon")) {
                             Authorizer.getInstance().setAccessControl(context.getCatalogName(),
-                                    new com.starrocks.privilege.DlfAccessController(context.getProperties()));
+                                    new DlfAccessController(context.getProperties()));
+                        } else if (context.getProperties().get(PaimonConnector.PAIMON_CATALOG_TYPE) != null
+                                && context.getProperties().get(PaimonConnector.PAIMON_CATALOG_TYPE).equalsIgnoreCase("rest")) {
+                            // dlf 2.5 server will check, do nothing
                         } else {
                             Authorizer.getInstance()
                                     .setAccessControl(context.getCatalogName(), new NativeAccessController());

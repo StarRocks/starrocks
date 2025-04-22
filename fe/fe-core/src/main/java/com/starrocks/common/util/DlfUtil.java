@@ -18,6 +18,8 @@
 package com.starrocks.common.util;
 
 import com.aliyun.datalake.common.DlfDataToken;
+import com.aliyun.datalake.common.DlfMetaToken;
+import com.aliyun.datalake.common.impl.Base64Util;
 import com.aliyun.datalake.external.com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Strings;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
@@ -79,6 +81,11 @@ public class DlfUtil {
         return DlfUtil.conf;
     }
 
+    public static String getMetaToken(String ramUser) {
+        // fixed currently, maybe can get from config later
+        return "/secret/DLF/meta/" + Base64Util.encodeBase64WithoutPadding(ramUser);
+    }
+
     public static Map<String, String> setDataToken(File dataTokenFile) throws IOException {
         ObjectMapper mapper = new ObjectMapper();
         DlfDataToken dataToken = mapper.readValue(dataTokenFile, DlfDataToken.class);
@@ -123,5 +130,15 @@ public class DlfUtil {
         String dbPart = parts[4];
         String tablePart = parts[6];
         return DlfUtil.getRamUser() + ":" + clgPart + ":" + dbPart + ":" + tablePart;
+    }
+
+    public static DlfMetaToken getDlfToken(String path) {
+        try {
+            File dlfToken = new File(path);
+            ObjectMapper mapper = new ObjectMapper();
+            return mapper.readValue(dlfToken, DlfMetaToken.class);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 }
