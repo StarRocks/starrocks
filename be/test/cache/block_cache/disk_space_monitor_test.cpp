@@ -24,6 +24,7 @@
 #include "common/statusor.h"
 #include "fs/fs_util.h"
 #include "testutil/scoped_updater.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -94,6 +95,8 @@ public:
         }
     }
 
+    static void insert_to_cache(BlockCache* cache, size_t count);
+
 private:
     BlockCache* _cache = nullptr;
 };
@@ -101,6 +104,17 @@ private:
 const size_t DiskSpaceMonitorTest::kBlockSize = 256 * KB;
 
 #ifdef WITH_STARCACHE
+
+void DiskSpaceMonitorTest::insert_to_cache(BlockCache* cache, size_t count) {
+    size_t batch_size = MB;
+    const std::string cache_key = "test_file";
+    for (size_t i = 0; i < count; ++i) {
+        char ch = 'a' + i % 26;
+        std::string value(batch_size, ch);
+        Status st = cache->write(cache_key + std::to_string(i), 0, batch_size, value.c_str());
+        ASSERT_TRUE(st.ok()) << st.message();
+    }
+}
 
 TEST_F(DiskSpaceMonitorTest, adjust_for_empty_cache_dir) {
     SCOPED_UPDATE(bool, config::datacache_auto_adjust_enable, true);
@@ -183,14 +197,7 @@ TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota) {
 
     // Fill cache data
     {
-        size_t batch_size = MB;
-        const std::string cache_key = "test_file";
-        for (size_t i = 0; i < 19; ++i) {
-            char ch = 'a' + i % 26;
-            std::string value(batch_size, ch);
-            Status st = cache->write(cache_key + std::to_string(i), 0, batch_size, value.c_str());
-            ASSERT_TRUE(st.ok()) << st.message();
-        }
+        insert_to_cache(cache.get(), 19);
         auto metrics = cache->cache_metrics();
         int64_t used_rate = metrics.disk_used_bytes * 100 / metrics.disk_quota_bytes;
         ASSERT_GT(used_rate, DiskSpace::kAutoIncreaseThreshold);
@@ -220,6 +227,63 @@ TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota) {
     cache->shutdown();
 }
 
+TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota_with_limit) {
+    SCOPED_UPDATE(bool, config::datacache_enable, true);
+    SCOPED_UPDATE(bool, config::datacache_auto_adjust_enable, false);
+    SCOPED_UPDATE(int64_t, config::datacache_min_disk_quota_for_adjustment, 0);
+    SCOPED_UPDATE(int64_t, config::datacache_disk_adjust_interval_seconds, 1);
+    SCOPED_UPDATE(int64_t, config::datacache_disk_idle_seconds_for_expansion, 300);
+    SCOPED_UPDATE(int64_t, config::datacache_disk_high_level, 80);
+    SCOPED_UPDATE(int64_t, config::datacache_disk_safe_level, 70);
+    SCOPED_UPDATE(int64_t, config::datacache_disk_low_level, 60);
+    config::datacache_disk_size = "25%";
+    DeferOp defer([]() { config::datacache_disk_size = "100%"; });
+
+    auto options = create_simple_options(kBlockSize, 0, 20 * MB);
+    auto cache = create_cache(options);
+
+    MockFileSystem* mock_fs = new MockFileSystem;
+    SpaceInfo space_info = {.capacity = 500 * MB, .free = 400 * MB, .available = 300 * MB};
+    mock_fs->set_space(1, ".", space_info);
+
+    auto& space_monitor = cache->_disk_space_monitor;
+    space_monitor->_fs.reset(mock_fs);
+    space_monitor->init(&options.disk_spaces);
+
+    // Fill cache data
+    {
+        insert_to_cache(cache.get(), 19);
+        auto metrics = cache->cache_metrics();
+        int64_t used_rate = metrics.disk_used_bytes * 100 / metrics.disk_quota_bytes;
+        ASSERT_GT(used_rate, DiskSpace::kAutoIncreaseThreshold);
+    }
+
+    {
+        auto metrics = cache->cache_metrics();
+        ASSERT_EQ(metrics.disk_quota_bytes, 20 * MB);
+    }
+
+    {
+        config::datacache_auto_adjust_enable = true;
+        sleep(3);
+        auto metrics = cache->cache_metrics();
+        ASSERT_EQ(metrics.disk_quota_bytes, 20 * MB);
+    }
+
+    {
+        config::datacache_disk_idle_seconds_for_expansion = 1;
+        sleep(3);
+        auto metrics = cache->cache_metrics();
+        // other: 500M - 300M - 19M = 181M
+        // new quota: 500 * 0.7 - other = 169M, 169M/10 * 10 = 160M
+        // max: 500 * 0.25 = 125M, 125M/10 * 10 = 120M
+        // new quota: min(160M, 120M) = 120M
+        ASSERT_EQ(metrics.disk_quota_bytes, 120 * MB);
+    }
+
+    cache->shutdown();
+}
+
 TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota) {
     SCOPED_UPDATE(bool, config::datacache_enable, true);
     SCOPED_UPDATE(bool, config::datacache_auto_adjust_enable, false);
@@ -243,14 +307,7 @@ TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota) {
 
     // Fill cache data
     {
-        size_t batch_size = MB;
-        const std::string cache_key = "test_file";
-        for (size_t i = 0; i < 50; ++i) {
-            char ch = 'a' + i % 26;
-            std::string value(batch_size, ch);
-            Status st = cache->write(cache_key + std::to_string(i), 0, batch_size, value.c_str());
-            ASSERT_TRUE(st.ok());
-        }
+        insert_to_cache(cache.get(), 50);
         auto metrics = cache->cache_metrics();
         int64_t used_rate = metrics.disk_used_bytes * 100 / metrics.disk_quota_bytes;
         ASSERT_GT(used_rate, DiskSpace::kAutoIncreaseThreshold);
@@ -304,14 +361,7 @@ TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota_to_zero) {
 
     // Fill cache data
     {
-        size_t batch_size = MB;
-        const std::string cache_key = "test_file";
-        for (size_t i = 0; i < 50; ++i) {
-            char ch = 'a' + i % 26;
-            std::string value(batch_size, ch);
-            Status st = cache->write(cache_key + std::to_string(i), 0, batch_size, value.c_str());
-            ASSERT_TRUE(st.ok());
-        }
+        insert_to_cache(cache.get(), 50);
         auto metrics = cache->cache_metrics();
         int64_t used_rate = metrics.disk_used_bytes * 100 / metrics.disk_quota_bytes;
         ASSERT_GT(used_rate, DiskSpace::kAutoIncreaseThreshold);
@@ -354,14 +404,7 @@ TEST_F(DiskSpaceMonitorTest, get_directory_capacity) {
 
     // Fill cache data
     {
-        size_t batch_size = MB;
-        const std::string cache_key = "test_file";
-        for (size_t i = 0; i < 20; ++i) {
-            char ch = 'a' + i % 26;
-            std::string value(batch_size, ch);
-            Status st = cache->write(cache_key + std::to_string(i), 0, batch_size, value.c_str());
-            ASSERT_TRUE(st.ok());
-        }
+        insert_to_cache(cache.get(), 20);
 
         auto& disk_spaces = options.disk_spaces;
         auto& space_monitor = cache->_disk_space_monitor;
