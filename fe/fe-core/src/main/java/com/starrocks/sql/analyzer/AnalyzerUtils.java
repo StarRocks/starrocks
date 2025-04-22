@@ -1506,12 +1506,12 @@ public class AnalyzerUtils {
                         endTime = beginTime.plusDays(interval);
                         break;
                     case "month":
-                        beginTime = beginTime.withDayOfMonth(1);
+                        beginTime = beginTime.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
                         partitionName = partitionPrefix + beginTime.format(DateUtils.MONTH_FORMATTER_UNIX);
                         endTime = beginTime.plusMonths(interval);
                         break;
                     case "year":
-                        beginTime = beginTime.withDayOfYear(1);
+                        beginTime = beginTime.withDayOfYear(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
                         partitionName = partitionPrefix + beginTime.format(DateUtils.YEAR_FORMATTER_UNIX);
                         endTime = beginTime.plusYears(interval);
                         break;
