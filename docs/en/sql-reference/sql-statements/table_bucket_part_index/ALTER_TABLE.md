@@ -207,7 +207,7 @@ ALTER TABLE [<db_name>.]<tbl_name>
 DROP PARTITION [ IF EXISTS ] <partition_name> [ FORCE ]
 ```
 
-- Drop partitions in batch (Supported from v3.3.1):
+- Drop partitions in batch (Supported from v3.4.0):
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
