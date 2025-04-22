@@ -240,6 +240,10 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                             // Used to collect statistics when the partition is first imported
                             response->mutable_tablet_row_nums()->insert({tablet_id, row_nums});
                         }
+                        if (skip_write_tablet_metadata) {
+                            auto& map = *response->mutable_tablet_metas();
+                            map[tablet_id].CopyFrom(*metadata);
+                        }
                     } else {
                         g_publish_version_failed_tasks << 1;
                         if (res.status().is_resource_busy()) {
@@ -280,20 +284,6 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
         LOG(INFO) << "Published txns=" << JoinInts(request->txn_ids(), ",")
                   << ". tablets=" << JoinInts(request->tablet_ids(), ",") << " cost=" << cost
                   << "us, trace: " << trace->MetricsAsJSON();
-    }
-    if (request->has_enable_aggregate_publish() && request->enable_aggregate_publish() &&
-        response->status().status_code() == 0) {
-        for (auto tablet_id : request->tablet_ids()) {
-            auto tablet_metadata = _tablet_mgr->get_tablet_metadata(tablet_id, request->new_version());
-            if (!tablet_metadata.ok()) {
-                LOG(WARNING) << "Fail to get tablet metadata. tablet_id: " << tablet_id
-                             << ", version: " << request->new_version() << ", error: " << tablet_metadata.status();
-                tablet_metadata.status().to_protobuf(response->mutable_status());
-                break;
-            }
-            auto& map = *response->mutable_tablet_metas();
-            map[tablet_id].CopyFrom(*(tablet_metadata.value()));
-        }
     }
     TEST_SYNC_POINT("LakeServiceImpl::publish_version:return");
 }
@@ -401,6 +391,8 @@ void LakeServiceImpl::aggregate_publish_version(::google::protobuf::RpcControlle
     }
 
     ctx.wait();
+    // TODO(zhangqiang)
+    // submit put_aggregate_tablet_metadata to thread pool to avoid block brpc thread.
     Status final_status =
             ctx.has_failure
                     ? ctx.publish_status
