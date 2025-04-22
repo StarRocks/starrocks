@@ -17,7 +17,6 @@ package com.starrocks.epack.authentication;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.epack.authorization.RoleMappingMetaMgr;
@@ -26,6 +25,7 @@ import com.starrocks.epack.qe.ShowExecutorVisitorEPack;
 import com.starrocks.epack.sql.analyzer.RoleMappingStatementAnalyzer;
 import com.starrocks.epack.sql.ast.CreateRoleMappingStatement;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.persist.SecurityIntegrationPersistInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -330,8 +330,8 @@ public class SecurityIntegrationTest {
 
         new MockUp<LDAPAuthProviderForExternal>() {
             @Mock
-            public void authenticate(ConnectContext context, String user, String host, byte[] password,
-                                     UserAuthenticationInfo authenticationInfo) throws AuthenticationException {
+            public void authenticate(ConnectContext context, String user, String host, byte[] authResponse)
+                    throws AuthenticationException {
             }
         };
 
@@ -349,11 +349,12 @@ public class SecurityIntegrationTest {
         byte[] seed = "petals on a wet black bough".getBytes(StandardCharsets.UTF_8);
         byte[] scramble = MysqlPassword.scramble(seed, "abc");
         connectContext.setAuthDataSalt(seed);
+        connectContext.setAuthPlugin(AuthPlugin.Client.MYSQL_CLEAR_PASSWORD.toString());
         UserIdentity userIdentity =
                 AuthenticationHandler.authenticate(connectContext, "ldap_external_user", "192.168.0.1", scramble);
 
         System.out.println(userIdentity);
-        Assert.assertEquals("'ldap_external_user'@'ldap3'", userIdentity.toString());
+        Assert.assertEquals("'ldap_external_user'@'192.168.0.1'", userIdentity.toString());
         Assert.assertTrue(userIdentity.isEphemeral());
     }
 

@@ -16,11 +16,8 @@ package com.starrocks.authentication;
 
 import com.starrocks.common.Config;
 import com.starrocks.mysql.MysqlCodec;
-import com.starrocks.mysql.MysqlPassword;
-import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
 import org.ietf.jgss.GSSContext;
 import org.ietf.jgss.GSSCredential;
@@ -45,27 +42,16 @@ public class KerberosAuthenticationProvider implements AuthenticationProvider {
     public static String NT_GSS_KRB5_PRINCIPAL_OID = "1.2.840.113554.1.2.2.1";
     public static String GSS_KRB5_MECH_OID = "1.2.840.113554.1.2.2";
 
-    @Override
-    public UserAuthenticationInfo analyzeAuthOption(UserIdentity userIdentity, UserAuthOption userAuthOption)
-            throws AuthenticationException {
-        UserAuthenticationInfo info = new UserAuthenticationInfo();
-        info.setAuthPlugin(AuthPlugin.Server.AUTHENTICATION_KERBEROS.name());
-        info.setPassword(MysqlPassword.EMPTY_PASSWORD);
-        info.setOrigUserHost(userIdentity.getUser(), userIdentity.getHost());
-        if (userAuthOption == null || userAuthOption.getAuthString() == null) {
-            info.setAuthString(Config.authentication_kerberos_service_principal.split("@")[1]);
-        } else {
-            info.setAuthString(userAuthOption.getAuthString());
-        }
-        return info;
+    private final String userForAuthPlugin;
+
+    public KerberosAuthenticationProvider(String userForAuthPlugin) {
+        this.userForAuthPlugin = userForAuthPlugin;
     }
 
     @Override
-    public void authenticate(ConnectContext context, String user, String host, byte[] password,
-                             UserAuthenticationInfo authenticationInfo) throws AuthenticationException {
+    public void authenticate(ConnectContext context, String user, String host, byte[] authResponse)
+            throws AuthenticationException {
         try {
-            String userForAuthPlugin = authenticationInfo.getAuthString();
-
             String spn = Config.authentication_kerberos_service_principal;
             String keytab = Config.authentication_kerberos_service_key_tab;
             String remoteUser = user + "@" + userForAuthPlugin;
@@ -90,7 +76,7 @@ public class KerberosAuthenticationProvider implements AuthenticationProvider {
             }
 
             boolean result = Subject.doAs(serverSubject,
-                    (PrivilegedExceptionAction<Boolean>) () -> runWithPrincipal(spn, password, remoteUser, gssManager));
+                    (PrivilegedExceptionAction<Boolean>) () -> runWithPrincipal(spn, authResponse, remoteUser, gssManager));
 
             if (!result) {
                 throw new AuthenticationException("Failed to authenticate for [user: " + user + "] by kerberos");

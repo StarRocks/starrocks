@@ -15,12 +15,8 @@
 package com.starrocks.authentication;
 
 import com.google.common.base.Strings;
-import com.starrocks.mysql.MysqlPassword;
-import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.mysql.security.LdapSecurity;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.UserAuthOption;
-import com.starrocks.sql.ast.UserIdentity;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -32,43 +28,34 @@ public class LDAPAuthProviderForNative implements AuthenticationProvider {
     private final String ldapBindRootPwd;
     private final String ldapBindBaseDN;
     private final String ldapSearchFilter;
+    private final String ldapUserDN;
 
     public LDAPAuthProviderForNative(String ldapServerHost,
                                      int ldapServerPort,
                                      String ldapBindRootDN,
                                      String ldapBindRootPwd,
                                      String ldapBindBaseDN,
-                                     String ldapSearchFilter) {
+                                     String ldapSearchFilter,
+                                     String ldapUserDN) {
         this.ldapServerHost = ldapServerHost;
         this.ldapServerPort = ldapServerPort;
         this.ldapBindRootDN = ldapBindRootDN;
         this.ldapBindRootPwd = ldapBindRootPwd;
         this.ldapBindBaseDN = ldapBindBaseDN;
         this.ldapSearchFilter = ldapSearchFilter;
+        this.ldapUserDN = ldapUserDN;
     }
 
     @Override
-    public UserAuthenticationInfo analyzeAuthOption(UserIdentity userIdentity, UserAuthOption userAuthOption)
+    public void authenticate(ConnectContext context, String user, String host, byte[] authResponse)
             throws AuthenticationException {
-        UserAuthenticationInfo info = new UserAuthenticationInfo();
-        info.setAuthPlugin(AuthPlugin.Server.AUTHENTICATION_LDAP_SIMPLE.toString());
-        info.setPassword(MysqlPassword.EMPTY_PASSWORD);
-        info.setOrigUserHost(userIdentity.getUser(), userIdentity.getHost());
-        info.setAuthString(userAuthOption == null ? null : userAuthOption.getAuthString());
-        return info;
-    }
-
-    @Override
-    public void authenticate(ConnectContext context, String user, String host, byte[] remotePassword,
-                             UserAuthenticationInfo authenticationInfo) throws AuthenticationException {
-        String userForAuthPlugin = authenticationInfo.getAuthString();
         //clear password terminate string
-        byte[] clearPassword = remotePassword;
-        if (remotePassword[remotePassword.length - 1] == 0) {
-            clearPassword = Arrays.copyOf(remotePassword, remotePassword.length - 1);
+        byte[] clearPassword = authResponse;
+        if (authResponse[authResponse.length - 1] == 0) {
+            clearPassword = Arrays.copyOf(authResponse, authResponse.length - 1);
         }
-        if (!Strings.isNullOrEmpty(userForAuthPlugin)) {
-            if (!LdapSecurity.checkPassword(userForAuthPlugin, new String(clearPassword, StandardCharsets.UTF_8),
+        if (!Strings.isNullOrEmpty(ldapUserDN)) {
+            if (!LdapSecurity.checkPassword(ldapUserDN, new String(clearPassword, StandardCharsets.UTF_8),
                     ldapServerHost, ldapServerPort)) {
                 throw new AuthenticationException("Failed to authenticate for [user: " + user + "] by ldap");
             }

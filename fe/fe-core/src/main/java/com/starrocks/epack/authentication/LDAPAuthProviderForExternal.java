@@ -16,12 +16,9 @@ package com.starrocks.epack.authentication;
 
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationProvider;
-import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.UserAuthOption;
-import com.starrocks.sql.ast.UserIdentity;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -40,12 +37,6 @@ public class LDAPAuthProviderForExternal implements AuthenticationProvider {
 
     public LDAPAuthProviderForExternal(String securityIntegrationName) {
         this.securityIntegrationName = securityIntegrationName;
-    }
-
-    @Override
-    public UserAuthenticationInfo analyzeAuthOption(
-            UserIdentity userIdentity, UserAuthOption userAuthOption) throws AuthenticationException {
-        throw new AuthenticationException("unsupported");
     }
 
     private static boolean checkLdapUserPwd(LDAPSecurityIntegration securityIntegration,
@@ -135,13 +126,13 @@ public class LDAPAuthProviderForExternal implements AuthenticationProvider {
     }
 
     @Override
-    public void authenticate(ConnectContext context, String user, String host, byte[] password,
-                             UserAuthenticationInfo authenticationInfo) throws AuthenticationException {
+    public void authenticate(ConnectContext context, String user, String host, byte[] authResponse)
+            throws AuthenticationException {
         LDAPSecurityIntegration ldapSecurityIntegration = (LDAPSecurityIntegration) GlobalStateMgr.getCurrentState()
                 .getAuthenticationMgr().getSecurityIntegration(securityIntegrationName);
         try {
             boolean authenticated = LDAPAuthProviderForExternal.authenticate(
-                    user, StringUtils.stripEnd(new String(password), "\0"), ldapSecurityIntegration);
+                    user, StringUtils.stripEnd(new String(authResponse), "\0"), ldapSecurityIntegration);
             if (!authenticated) {
                 throw new AuthenticationException(String.format(
                         "external ldap authentication failure for user %s@%s", user, host));

@@ -19,6 +19,7 @@ import com.starrocks.analysis.InformationFunction;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.mysql.MysqlCodec;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -94,8 +95,10 @@ public class SecurityIntegrationTest {
         MysqlCodec.writeInt1(outputStream, 1);
         MysqlCodec.writeLenEncodedString(outputStream, idToken);
 
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setAuthPlugin(AuthPlugin.Client.AUTHENTICATION_OPENID_CONNECT_CLIENT.toString());
         AuthenticationHandler.authenticate(
-                new ConnectContext(), "harbor", "127.0.0.1", outputStream.toByteArray());
+                connectContext, "harbor", "127.0.0.1", outputStream.toByteArray());
     }
 
     private String getOpenIdConnect(String fileName) throws IOException {
@@ -169,6 +172,7 @@ public class SecurityIntegrationTest {
 
         try {
             ConnectContext connectContext = new ConnectContext();
+            connectContext.setAuthPlugin(AuthPlugin.Client.AUTHENTICATION_OPENID_CONNECT_CLIENT.toString());
             AuthenticationHandler.authenticate(
                     connectContext, "harbor", "127.0.0.1", outputStream.toByteArray());
             StatementBase statementBase = SqlParser.parse("select current_group()", connectContext.getSessionVariable()).get(0);
@@ -212,23 +216,14 @@ public class SecurityIntegrationTest {
         LDAPAuthProviderForNative ldapAuthProviderForNative =
                 (LDAPAuthProviderForNative) ldapSecurityIntegration.getAuthenticationProvider();
 
-        UserAuthenticationInfo userAuthenticationInfo = new UserAuthenticationInfo();
-        userAuthenticationInfo.setAuthString("");
-        Assert.assertThrows(AuthenticationException.class, () ->
-                ldapAuthProviderForNative.authenticate(
-                        new ConnectContext(),
-                        "admin",
-                        "%",
-                        "x".getBytes(StandardCharsets.UTF_8),
-                        userAuthenticationInfo));
+        ConnectContext context = new ConnectContext();
+        context.setAuthPlugin(AuthPlugin.Client.AUTHENTICATION_OPENID_CONNECT_CLIENT.toString());
 
-        userAuthenticationInfo.setAuthString("cn=admin,dc=example,dc=com");
         Assert.assertThrows(AuthenticationException.class, () ->
                 ldapAuthProviderForNative.authenticate(
-                        new ConnectContext(),
+                        context,
                         "admin",
                         "%",
-                        "x".getBytes(StandardCharsets.UTF_8),
-                        userAuthenticationInfo));
+                        "x".getBytes(StandardCharsets.UTF_8)));
     }
 }

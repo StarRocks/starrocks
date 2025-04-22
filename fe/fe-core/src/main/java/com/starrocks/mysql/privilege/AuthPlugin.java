@@ -22,23 +22,14 @@ import com.starrocks.authentication.OAuth2AuthenticationProvider;
 import com.starrocks.authentication.OAuth2Context;
 import com.starrocks.authentication.OpenIdConnectAuthenticationProvider;
 import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
+import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.common.Config;
-import com.starrocks.epack.authentication.PlainPasswordAuthenticationProviderEPack;
+import com.starrocks.mysql.MysqlPassword;
 import org.json.JSONObject;
 
-public class AuthPlugin {
-    private static final PlainPasswordAuthenticationProvider PLAIN_PASSWORD_AUTHENTICATION_PROVIDER =
-            new PlainPasswordAuthenticationProviderEPack();
-    
-    private static final LDAPAuthProviderForNative LDAP_AUTH_PROVIDER = new LDAPAuthProviderForNative(
-            Config.authentication_ldap_simple_server_host,
-            Config.authentication_ldap_simple_server_port,
-            Config.authentication_ldap_simple_bind_root_dn,
-            Config.authentication_ldap_simple_bind_root_pwd,
-            Config.authentication_ldap_simple_bind_base_dn,
-            Config.authentication_ldap_simple_user_search_attr);
+import java.nio.charset.StandardCharsets;
 
-    private static final KerberosAuthenticationProvider KERBEROS_AUTH_PROVIDER = new KerberosAuthenticationProvider();
+public class AuthPlugin {
 
     private static final Pattern COMMA_SPLIT = Pattern.compile("\\s*,\\s*");
 
@@ -53,15 +44,25 @@ public class AuthPlugin {
             AuthPlugin.Server authPlugin = this;
             switch (authPlugin) {
                 case MYSQL_NATIVE_PASSWORD -> {
-                    return PLAIN_PASSWORD_AUTHENTICATION_PROVIDER;
+                    return new PlainPasswordAuthenticationProvider(
+                            authString == null ? MysqlPassword.EMPTY_PASSWORD : authString.getBytes(StandardCharsets.UTF_8));
                 }
 
                 case AUTHENTICATION_LDAP_SIMPLE -> {
-                    return LDAP_AUTH_PROVIDER;
+                    return new LDAPAuthProviderForNative(
+                            Config.authentication_ldap_simple_server_host,
+                            Config.authentication_ldap_simple_server_port,
+                            Config.authentication_ldap_simple_bind_root_dn,
+                            Config.authentication_ldap_simple_bind_root_pwd,
+                            Config.authentication_ldap_simple_bind_base_dn,
+                            Config.authentication_ldap_simple_user_search_attr,
+                            authString);
                 }
 
                 case AUTHENTICATION_KERBEROS -> {
-                    return KERBEROS_AUTH_PROVIDER;
+                    String userForAuthPlugin = authString == null ?
+                            Config.authentication_kerberos_service_principal.split("@")[1] : authString;
+                    return new KerberosAuthenticationProvider(userForAuthPlugin);
                 }
 
                 case AUTHENTICATION_OPENID_CONNECT -> {
@@ -140,7 +141,8 @@ public class AuthPlugin {
     public static String covertFromServerToClient(String serverPluginName) {
         if (serverPluginName.equalsIgnoreCase(Server.MYSQL_NATIVE_PASSWORD.toString())) {
             return Client.MYSQL_NATIVE_PASSWORD.toString();
-        } else if (serverPluginName.equalsIgnoreCase(Server.AUTHENTICATION_LDAP_SIMPLE.toString())) {
+        } else if (serverPluginName.equalsIgnoreCase(Server.AUTHENTICATION_LDAP_SIMPLE.toString())
+                || serverPluginName.equalsIgnoreCase(SecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP)) {
             return Client.MYSQL_CLEAR_PASSWORD.toString();
         } else if (serverPluginName.equalsIgnoreCase(Server.AUTHENTICATION_KERBEROS.toString())) {
             return Client.AUTHENTICATION_KERBEROS_CLIENT.toString();
@@ -149,6 +151,7 @@ public class AuthPlugin {
         } else if (serverPluginName.equalsIgnoreCase(Server.AUTHENTICATION_OAUTH2.toString())) {
             return Client.AUTHENTICATION_OAUTH2_CLIENT.toString();
         }
+
         return null;
     }
 

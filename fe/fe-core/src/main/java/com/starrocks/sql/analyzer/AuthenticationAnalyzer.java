@@ -11,17 +11,14 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.authentication.AuthenticationProvider;
-import com.starrocks.authentication.AuthenticationProviderFactory;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.common.Config;
 import com.starrocks.epack.sql.ast.UserPasswordOption;
-import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterUserStmt;
@@ -31,11 +28,8 @@ import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserLockOption;
-
-import java.util.Arrays;
 
 public class AuthenticationAnalyzer {
     public static void analyze(StatementBase statement, ConnectContext session) {
@@ -87,7 +81,8 @@ public class AuthenticationAnalyzer {
                 stmt.getDefaultRoles().forEach(r -> validRoleName(r, "Valid role name fail", true));
             }
 
-            UserAuthenticationInfo userAuthenticationInfo = analyzeAuthOption(stmt.getUserIdentity(), stmt.getAuthOption());
+            UserAuthenticationInfo userAuthenticationInfo =
+                    UserAuthOptionAnalyzer.analyzeAuthOption(stmt.getUserIdentity(), stmt.getAuthOption());
 
             UserPasswordOption userPasswordOption = stmt.getPasswordOption();
             if (userPasswordOption != null) {
@@ -113,7 +108,8 @@ public class AuthenticationAnalyzer {
             }
 
             if (stmt.getAuthOption() != null) {
-                UserAuthenticationInfo userAuthenticationInfo = analyzeAuthOption(stmt.getUserIdentity(), stmt.getAuthOption());
+                UserAuthenticationInfo userAuthenticationInfo =
+                        UserAuthOptionAnalyzer.analyzeAuthOption(stmt.getUserIdentity(), stmt.getAuthOption());
                 stmt.setAuthenticationInfo(userAuthenticationInfo);
             }
 
@@ -122,26 +118,6 @@ public class AuthenticationAnalyzer {
             }
 
             return null;
-        }
-
-        private UserAuthenticationInfo analyzeAuthOption(UserIdentity userIdentity, UserAuthOption userAuthOption) {
-            String authPluginUsing;
-            if (userAuthOption == null || userAuthOption.getAuthPlugin() == null) {
-                authPluginUsing = AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.toString();
-            } else {
-                authPluginUsing = userAuthOption.getAuthPlugin();
-            }
-            String authString = userAuthOption == null ? null : userAuthOption.getAuthString();
-            AuthenticationProvider provider = AuthenticationProviderFactory.create(authPluginUsing, authString);
-            if (provider == null) {
-                throw new SemanticException("Cannot find " + authPluginUsing
-                        + " from " + Arrays.toString(AuthPlugin.Client.values()));
-            }
-            try {
-                return provider.analyzeAuthOption(userIdentity, userAuthOption);
-            } catch (AuthenticationException e) {
-                throw new SemanticException(e.getMessage());
-            }
         }
 
         private boolean needProtectAdminUser(UserIdentity userIdentity, ConnectContext context) {
