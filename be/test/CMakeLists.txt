@@ -187,6 +187,11 @@ set(EXEC_FILES
         ./formats/avro/binary_column_test.cpp
         ./formats/avro/numeric_column_test.cpp
         ./formats/avro/nullable_column_test.cpp
+        ./formats/avro/cpp/avro_reader_test.cpp
+        ./formats/avro/cpp/binary_column_reader_test.cpp
+        ./formats/avro/cpp/date_column_reader_test.cpp
+        ./formats/avro/cpp/numeric_column_reader_test.cpp
+        ./formats/avro/cpp/utils_test.cpp
         ./formats/orc/orc_chunk_reader_test.cpp
         ./formats/orc/orc_column_reader_test.cpp
         ./formats/orc/orc_file_writer_test.cpp
@@ -495,6 +500,7 @@ set(EXEC_FILES
         ./util/download_util_test.cpp
         ./util/numeric_types_test.cpp
         ./util/stack_util_test.cpp
+        ./util/byte_stream_split_test.cpp
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
@@ -512,6 +518,7 @@ set(EXEC_FILES
         ./storage/lake/write_combined_txn_log_test.cpp
         ./cache/block_cache/datacache_utils_test.cpp
         ./cache/block_cache/block_cache_hit_rate_counter_test.cpp
+        ./cache/block_cache/peer_cache_test.cpp
         ./cache/object_cache/lrucache_module_test.cpp
         ./cache/object_cache/object_cache_test.cpp
         ./util/thrift_rpc_helper_test.cpp

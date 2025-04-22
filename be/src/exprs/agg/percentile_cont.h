@@ -179,27 +179,34 @@ public:
     using InputCppType = RunTimeCppType<LT>;
     using InputColumnType = RunTimeColumnType<LT>;
 
+    void init_state_if_needed(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state) const {
+        if (UNLIKELY(ctx->get_num_args() != 2)) {
+            ctx->set_error("Percentile rate is required");
+            return;
+        }
+        const auto* rate = down_cast<const ConstColumn*>(columns[1]);
+        double rate_value = rate->get(0).get_double();
+        if (UNLIKELY(rate_value < 0 || rate_value > 1)) {
+            ctx->set_error("Percentile rate must be between 0 and 1");
+            return;
+        }
+        this->data(state).rate = rate_value;
+    }
+
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
+        this->init_state_if_needed(ctx, columns, state);
+
         const auto& column = down_cast<const InputColumnType&>(*columns[0]);
         this->data(state).update(column.get_data()[row_num]);
-
-        if (ctx->get_num_args() == 2) {
-            const auto* rate = down_cast<const ConstColumn*>(columns[1]);
-            this->data(state).rate = rate->get(row_num).get_double();
-            DCHECK(this->data(state).rate >= 0 && this->data(state).rate <= 1);
-        }
     }
 
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
+        this->init_state_if_needed(ctx, columns, state);
+
         const auto& column = down_cast<const InputColumnType&>(*columns[0]);
         this->data(state).update_batch(column.get_data());
-
-        if (ctx->get_num_args() == 2) {
-            const auto* rate = down_cast<const ConstColumn*>(columns[1]);
-            this->data(state).rate = rate->get(0).get_double();
-        }
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
@@ -278,8 +285,24 @@ template <LogicalType LT>
 class PercentileContDiscAggregateFunction<LT, StringLTGuard<LT>>
         : public AggregateFunctionBatchHelper<PercentileState<LT>, PercentileContDiscAggregateFunction<LT>> {
 public:
+    void init_state_if_needed(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state) const {
+        if (UNLIKELY(ctx->get_num_args() != 2)) {
+            ctx->set_error("Percentile rate is required");
+            return;
+        }
+        const auto* rate = down_cast<const ConstColumn*>(columns[1]);
+        double rate_value = rate->get(0).get_double();
+        if (UNLIKELY(rate_value < 0 || rate_value > 1)) {
+            ctx->set_error("Percentile rate must be between 0 and 1");
+            return;
+        }
+        this->data(state).rate = rate_value;
+    }
+
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
+        this->init_state_if_needed(ctx, columns, state);
+
         const auto& column = down_cast<const BinaryColumn&>(*columns[0]);
 
         // use mem_pool to hold the slice's data, otherwise after chunk is processed, the memory of slice used is gone
@@ -289,12 +312,6 @@ public:
         memcpy(pos, column.get_data()[row_num].get_data(), element_size);
 
         this->data(state).update(Slice(pos, element_size));
-
-        if (ctx->get_num_args() == 2) {
-            const auto* rate = down_cast<const ConstColumn*>(columns[1]);
-            this->data(state).rate = rate->get(row_num).get_double();
-            DCHECK(this->data(state).rate >= 0 && this->data(state).rate <= 1);
-        }
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
@@ -490,7 +507,10 @@ class PercentileDiscAggregateFunction final : public PercentileContDiscAggregate
         const double& rate = this->data(state).rate;
 
         ResultColumnType* column = down_cast<ResultColumnType*>(to);
-        DCHECK(!new_vector.empty());
+        if (new_vector.empty()) {
+            column->append_default();
+            return;
+        }
         if (new_vector.size() == 1 || rate == 1) {
             column->append(new_vector.back());
             return;

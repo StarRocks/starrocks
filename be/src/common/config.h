@@ -613,10 +613,14 @@ CONF_Int32(update_memory_limit_percent, "60");
 // Disable metadata cache when metadata_cache_memory_limit_percent <= 0.
 CONF_mInt32(metadata_cache_memory_limit_percent, "30"); // 30%
 
-// if `enable_retry_apply`, it apply failed due to some tolerable error(e.g. memory exceed limit)
-// the failed apply task will retry after `retry_apply_interval_second`
+// If enable_retry_apply is set to true, the system will attempt retries when apply fails.
+// Retry scenarios for apply operations include the following cases:
+//   1. ​Retry indefinitely for explicitly retryable errors (e.g., memory limits)
+// ​  2. No retry for explicitly non-retryable errors (e.g., Corruption) → Directly enter error state
+// ​  3. Retry until timeout: If still failing after timeout duration → Enter error state
 CONF_mBool(enable_retry_apply, "true");
 CONF_mInt32(retry_apply_interval_second, "30");
+CONF_mInt32(retry_apply_timeout_second, "7200");
 
 // Update interval of tablet stat cache.
 CONF_mInt32(tablet_stat_cache_update_interval_second, "300");
@@ -830,6 +834,8 @@ CONF_mBool(enable_bitmap_union_disk_format_with_set, "false");
 
 // pipeline poller timeout guard
 CONF_mInt64(pipeline_poller_timeout_guard_ms, "-1");
+// whether to enable large column detection in the pipeline execution framework.
+CONF_mBool(pipeline_enable_large_column_checker, "false");
 
 // The number of scan threads pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_thread_num, "0");
@@ -1178,6 +1184,7 @@ CONF_Int64(spill_read_buffer_min_bytes, "1048576");
 CONF_mInt64(mem_limited_chunk_queue_block_size, "8388608");
 
 CONF_Int32(internal_service_query_rpc_thread_num, "-1");
+CONF_Int32(internal_service_datacache_rpc_thread_num, "-1");
 
 /*
  * When compile with ENABLE_STATUS_FAILED, every use of RETURN_INJECT has probability of 1/cardinality_of_inject
@@ -1202,7 +1209,7 @@ CONF_mInt64(max_length_for_bitmap_function, "1000000");
 // Configuration items for datacache
 CONF_Bool(datacache_enable, "true");
 CONF_mString(datacache_mem_size, "0");
-CONF_mString(datacache_disk_size, "0");
+CONF_mString(datacache_disk_size, "100%");
 CONF_Int64(datacache_block_size, "262144"); // 256K
 CONF_Bool(datacache_checksum_enable, "false");
 CONF_Bool(datacache_direct_io_enable, "false");
@@ -1441,7 +1448,7 @@ CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "false");
 CONF_mInt32(dictionary_cache_refresh_timeout_ms, "60000"); // 1 min
 CONF_mInt32(dictionary_cache_refresh_threadpool_size, "8");
 // json flat flag
-CONF_mBool(enable_json_flat, "true");
+CONF_mBool(enable_json_flat, "false");
 
 // enable compaction is base on flat json, not whole json
 CONF_mBool(enable_compaction_flat_json, "true");
@@ -1606,7 +1613,7 @@ CONF_mInt64(load_spill_merge_max_thread, "16");
 CONF_mInt64(pk_column_lazy_load_threshold_bytes, "314572800");
 
 // ignore union type tag in avro kafka routine load
-CONF_mBool(avro_ignore_union_type_tag, "false");
+CONF_mBool(avro_ignore_union_type_tag, "true");
 
 // default batch size for simdjson lib
 CONF_mInt32(json_parse_many_batch_size, "1000000");
@@ -1624,4 +1631,7 @@ CONF_mInt64(rf_branchless_ratio, "8");
 CONF_mInt32(big_query_sec, "1");
 
 CONF_mInt64(split_exchanger_buffer_chunk_num, "1000");
+
+// when to split hashmap/hashset into two level hashmap/hashset, negative number means use default value
+CONF_mInt64(two_level_memory_threshold, "-1");
 } // namespace starrocks::config

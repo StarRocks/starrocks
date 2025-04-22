@@ -528,18 +528,16 @@ public class StatisticExecutor {
             AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
             if (table.isNativeTableOrMaterializedView()) {
                 if (statsJob.isMultiColumnStatsJob()) {
-                    List<StatsConstants.StatisticsType> statisticsTypes = statsJob.getStatisticsTypes();
                     // TODO(stephen): support auto collect column groups and multiple statistics type
                     Set<Integer> columnIds = statsJob.columnGroups.get(0).stream()
                             .map(table::getColumn)
                             .map(Column::getUniqueId)
                             .collect(Collectors.toSet());
-                    for (StatsConstants.StatisticsType type : statisticsTypes) {
-                        MultiColumnStatsMeta meta = new MultiColumnStatsMeta(db.getId(), table.getId(), columnIds,
-                                statsJob.getAnalyzeType(), type, analyzeStatus.getEndTime(), statsJob.getProperties());
-                        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addMultiColumnStatsMeta(meta);
-                        GlobalStateMgr.getCurrentState().getAnalyzeMgr().refreshMultiColumnStatisticsCache(meta.getTableId());
-                    }
+                    MultiColumnStatsMeta meta = new MultiColumnStatsMeta(db.getId(), table.getId(), columnIds,
+                            statsJob.getAnalyzeType(), statsJob.getStatisticsTypes(),
+                            analyzeStatus.getEndTime(), statsJob.getProperties());
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().addMultiColumnStatsMeta(meta);
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().refreshMultiColumnStatisticsCache(meta.getTableId());
                 } else {
                     BasicStatsMeta basicStatsMeta = analyzeMgr.getTableBasicStatsMeta(table.getId());
                     if (basicStatsMeta == null) {
@@ -547,11 +545,13 @@ public class StatisticExecutor {
                         basicStatsMeta = new BasicStatsMeta(db.getId(), table.getId(),
                                 statsJob.getColumnNames(), statsJob.getAnalyzeType(), analyzeStatus.getEndTime(),
                                 statsJob.getProperties(), existUpdateRows);
+                        basicStatsMeta.increaseStatsCollectionCount(analyzeStatus);
                     } else {
                         basicStatsMeta = basicStatsMeta.clone();
                         basicStatsMeta.setUpdateTime(analyzeStatus.getEndTime());
                         basicStatsMeta.setProperties(statsJob.getProperties());
                         basicStatsMeta.setAnalyzeType(statsJob.getAnalyzeType());
+                        basicStatsMeta.increaseStatsCollectionCount(analyzeStatus);
                     }
 
                     for (String column : ListUtils.emptyIfNull(statsJob.getColumnNames())) {

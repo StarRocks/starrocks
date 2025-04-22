@@ -16,6 +16,7 @@
 
 #include <filesystem>
 
+#include "cache/status.h"
 #include "common/logging.h"
 #include "common/statusor.h"
 #include "gutil/strings/fastmem.h"
@@ -54,7 +55,7 @@ Status StarCacheWrapper::init(const CacheOptions& options) {
 
     _enable_tiered_cache = options.enable_tiered_cache;
     _enable_datacache_persistence = options.enable_datacache_persistence;
-    _cache = std::make_unique<starcache::StarCache>();
+    _cache = std::make_shared<starcache::StarCache>();
     return to_status(_cache->init(opt));
 }
 

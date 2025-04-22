@@ -1,0 +1,24 @@
+-- name: test_agg_split_two_phase
+create table t0 (
+    c0 STRING,
+    c1 STRING
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 3 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t0 SELECT generate_series, generate_series FROM TABLE(generate_series(1,  1500));
+-- result:
+-- !result
+insert into t0 SELECT generate_series, NULL FROM TABLE(generate_series(1,  1500));
+-- result:
+-- !result
+update information_schema.be_configs set value = "0" where name= "two_level_memory_threshold";
+-- result:
+-- !result
+select c1 from t0 where c1 is null group by c1;
+-- result:
+None
+-- !result
+select c1, count(*) from t0 where c1 is null group by c1;
+-- result:
+None	1500
+-- !result

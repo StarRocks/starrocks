@@ -36,8 +36,17 @@ Status LoadSpillOutputDataStream::append(RuntimeState* state, const std::vector<
     // preallocate block
     RETURN_IF_ERROR(_preallocate(total_size));
     // append data
-    _append_bytes += total_size;
-    return _block->append(data);
+    auto st = _block->append(data);
+    if (st.is_capacity_limit_exceeded()) {
+        // No space left on device
+        // Try to acquire a new block from remote storage.
+        RETURN_IF_ERROR(_switch_to_remote_block(total_size));
+        st = _block->append(data);
+    }
+    if (st.ok()) {
+        _append_bytes += total_size;
+    }
+    return st;
 }
 
 Status LoadSpillOutputDataStream::flush() {
@@ -47,6 +56,21 @@ Status LoadSpillOutputDataStream::flush() {
 
 bool LoadSpillOutputDataStream::is_remote() const {
     return _block ? _block->is_remote() : false;
+}
+
+// this function will be called when local disk is full
+Status LoadSpillOutputDataStream::_switch_to_remote_block(size_t block_size) {
+    if (_block->size() > 0) {
+        // Freeze current block firstly.
+        RETURN_IF_ERROR(_freeze_current_block());
+    } else {
+        // Release empty block.
+        RETURN_IF_ERROR(_block_manager->release_block(_block));
+        _block = nullptr;
+    }
+    // Acquire new block.
+    ASSIGN_OR_RETURN(_block, _block_manager->acquire_block(block_size, true /* force remote */));
+    return Status::OK();
 }
 
 Status LoadSpillOutputDataStream::_freeze_current_block() {
@@ -63,7 +87,7 @@ Status LoadSpillOutputDataStream::_freeze_current_block() {
 
 Status LoadSpillOutputDataStream::_preallocate(size_t block_size) {
     // Try to preallocate from current block first.
-    if (_block == nullptr || !_block->preallocate(block_size)) {
+    if (_block == nullptr || !_block->try_acquire_sizes(block_size)) {
         // Freeze current block firstly.
         RETURN_IF_ERROR(_freeze_current_block());
         // Acquire new block.
@@ -77,6 +101,11 @@ SpillMemTableSink::SpillMemTableSink(LoadSpillBlockManager* block_manager, Table
     _block_manager = block_manager;
     _writer = writer;
     _profile = profile;
+    if (_profile == nullptr) {
+        // use dummy profile
+        _dummy_profile = std::make_unique<RuntimeProfile>("dummy");
+        _profile = _dummy_profile.get();
+    }
     _runtime_state = std::make_shared<RuntimeState>();
     _spiller_factory = spill::make_spilled_factory();
     std::string tracker_label = "LoadSpillMerge-" + std::to_string(_block_manager->tablet_id()) + "-" +

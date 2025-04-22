@@ -58,6 +58,16 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
     private final LinkedHashMap<TUniqueId, SlotContext> requiringSmallSlots = new LinkedHashMap<>();
     private int numAllocatedSmallSlots = 0;
 
+    private final long warehouseId;
+
+    public SlotSelectionStrategyV2(long warehouseId) {
+        this.warehouseId = warehouseId;
+    }
+
+    public QueryQueueOptions getOpts() {
+        return opts;
+    }
+
     @Override
     public void onRequireSlot(LogicalSlot slot) {
         updateOptionsPeriodically();
@@ -115,7 +125,7 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
     }
 
     @Override
-    public List<LogicalSlot> peakSlotsToAllocate(SlotTracker slotTracker) {
+    public List<LogicalSlot> peakSlotsToAllocate(BaseSlotTracker slotTracker) {
         updateOptionsPeriodically();
 
         List<LogicalSlot> slotsToAllocate = Lists.newArrayList();
@@ -155,14 +165,14 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
         return opts;
     }
 
-    private void updateOptionsPeriodically() {
+    public void updateOptionsPeriodically() {
         long now = System.currentTimeMillis();
         if (now - lastUpdateOptionsTime < UPDATE_OPTIONS_INTERVAL_MS) {
             return;
         }
 
         lastUpdateOptionsTime = now;
-        QueryQueueOptions newOpts = QueryQueueOptions.createFromEnv();
+        QueryQueueOptions newOpts = QueryQueueOptions.createFromEnv(this.warehouseId);
         if (!newOpts.equals(opts)) {
             opts = newOpts;
 

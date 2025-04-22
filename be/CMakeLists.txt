@@ -153,19 +153,15 @@ set(BOOST_ROOT ${THIRDPARTY_DIR})
 set(Boost_NO_WARN_NEW_VERSIONS ON)
 
 if (NOT APPLE)
-    find_package(Boost 1.80.0 REQUIRED COMPONENTS thread regex program_options filesystem context)
+    find_package(Boost 1.80.0 REQUIRED COMPONENTS thread regex program_options filesystem context iostreams)
 else()
-    find_package(Boost 1.80.0 COMPONENTS thread regex program_options filesystem context)
+    find_package(Boost 1.80.0 COMPONENTS thread regex program_options filesystem context iostreams)
 endif()
 include_directories(${Boost_INCLUDE_DIRS})
 message(STATUS ${Boost_LIBRARIES})
 
 set(GPERFTOOLS_HOME "${THIRDPARTY_DIR}/gperftools")
 set(JEMALLOC_HOME "${THIRDPARTY_DIR}/jemalloc")
-
-if (${JEMALLOC_DEBUG})
-    set(JEMALLOC_HOME "${THIRDPARTY_DIR}/jemalloc-debug")
-endif()
 
 # Set all libraries
 
@@ -272,8 +268,13 @@ set_target_properties(openssl PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib
 add_library(leveldb STATIC IMPORTED GLOBAL)
 set_target_properties(leveldb PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libleveldb.a)
 
-add_library(jemalloc STATIC IMPORTED)
-set_target_properties(jemalloc PROPERTIES IMPORTED_LOCATION ${JEMALLOC_HOME}/lib/libjemalloc_pic.a)
+if ("${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG" OR "${CMAKE_BUILD_TYPE}" STREQUAL "RELEASE")
+    add_library(jemalloc SHARED IMPORTED)
+    set_target_properties(jemalloc PROPERTIES IMPORTED_LOCATION ${JEMALLOC_HOME}/lib-shared/libjemalloc.so)
+else()
+    add_library(jemalloc STATIC IMPORTED)
+    set_target_properties(jemalloc PROPERTIES IMPORTED_LOCATION ${JEMALLOC_HOME}/lib-static/libjemalloc.a)
+endif()
 
 add_library(brotlicommon STATIC IMPORTED)
 set_target_properties(brotlicommon PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libbrotlicommon.a)
@@ -397,6 +398,9 @@ set_target_properties(jansson PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib
 add_library(avro STATIC IMPORTED GLOBAL)
 set_target_properties(avro PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libavro.a)
 
+add_library(avrocpp STATIC IMPORTED GLOBAL)
+set_target_properties(avrocpp PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libavrocpp_s.a)
+
 add_library(serdes STATIC IMPORTED GLOBAL)
 set_target_properties(serdes PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libserdes.a)
 
@@ -413,7 +417,7 @@ include_directories(SYSTEM ${gRPC_INCLUDE_DIR})
 add_library(protobuf::libprotobuf ALIAS protobuf)
 add_library(ZLIB::ZLIB ALIAS libz)
 
-# Disable libdefalte on aarch64
+# Disable libdeflate on aarch64
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
     add_library(libdeflate STATIC IMPORTED GLOBAL)
     set_target_properties(libdeflate PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libdeflate.a)
@@ -947,6 +951,7 @@ set(STARROCKS_DEPENDENCIES
     opentelemetry_exporter_jaeger_trace
     jansson
     avro
+    avrocpp
     serdes
     fiu
     icuuc

@@ -329,7 +329,11 @@ public class UtFrameUtils {
     }
 
     public static void createMinStarRocksCluster() {
-        createMinStarRocksCluster(false, RunMode.SHARED_NOTHING);
+        if (RunMode.isSharedDataMode()) {
+            createMinStarRocksCluster(RunMode.SHARED_DATA);
+        } else {
+            createMinStarRocksCluster(RunMode.SHARED_NOTHING);
+        }
     }
 
     // create a min starrocks cluster with the given runMode

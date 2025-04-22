@@ -15,6 +15,7 @@
 #include "cache/block_cache/disk_space_monitor.h"
 
 #include "cache/block_cache/block_cache.h"
+#include "cache/block_cache/datacache_utils.h"
 #include "common/config.h"
 #include "util/await.h"
 #include "util/thread.h"
@@ -30,31 +31,22 @@ const size_t DiskSpace::kQuotaAlignUnit = 10uL * 1024 * 1024;
 const double DiskSpace::kAutoIncreaseThreshold = 0.9;
 
 Status DiskSpace::init_spaces(const std::vector<DirSpace>& dir_spaces) {
+    _dir_spaces = dir_spaces;
     Status st = _update_disk_stats();
     if (!st.ok()) {
         LOG(ERROR) << "fail to init disk space, reason: " << st.message();
         return st;
     }
-    _dir_spaces = dir_spaces;
+    _update_disk_options();
 
-    // Revise the original disk space state.
-    // The disk space occupied by old datacache files should be excluded because these space can
-    // be reused by datacache .
-    _revise_disk_stats_by_cache_dir();
-
-    // We check this switch after some infomation are initialized, because even if it is off now,
-    // we still need these infomation once the switch is turn on online.
+    // We check this switch after some information are initialized, because even if it is off now,
+    // we still need this information once the switch is turn on online.
     if (!config::datacache_auto_adjust_enable) {
         return st;
     }
 
-    double delta_rate = config::datacache_disk_safe_level * 0.01 - _disk_stats.used_rate();
-    size_t cache_avail_bytes = 0;
-    if (delta_rate > 0) {
-        int64_t delta_size = _disk_stats.capacity_bytes * delta_rate;
-        cache_avail_bytes = _check_cache_low_limit(delta_size);
-    }
-    _update_spaces_by_cache_quota(cache_avail_bytes);
+    int64_t cache_quota = _calc_new_cache_quota(_cache_file_space_usage());
+    _update_spaces_by_cache_quota(cache_quota);
     return st;
 }
 
@@ -64,39 +56,31 @@ bool DiskSpace::adjust_spaces(const AdjustContext& ctx) {
         LOG(ERROR) << "fail to check and adjust cache disk spaces, reason: " << st.message();
         return false;
     }
+    _update_disk_options();
 
-    double used_rate = _disk_stats.used_rate();
-    int64_t cur_level = static_cast<int64_t>(used_rate * 100);
-    if (cur_level < config::datacache_disk_low_level) {
-        _disk_free_period += config::datacache_disk_adjust_interval_seconds;
+    if (_disk_stats.used_bytes() < _disk_opts.low_level_size) {
+        _disk_free_period += _disk_opts.adjust_interval_s;
         if (!_allow_expansion(ctx)) {
             return false;
         }
-    } else if (cur_level <= config::datacache_disk_high_level) {
+    } else if (_disk_stats.used_bytes() <= _disk_opts.high_level_size) {
         return false;
     }
 
-    double delta_rate = config::datacache_disk_safe_level * 0.01 - used_rate;
-    int64_t delta_quota = _disk_stats.capacity_bytes * delta_rate;
-    // TODO: Support obtaining the cache usage of each directory in starcache, to make it more accurate.
-    _update_spaces_by_cache_usage(ctx);
-
-    int64_t old_cache_quota = total_cache_quota();
-    int64_t new_cache_quota = old_cache_quota + delta_quota;
-
-    new_cache_quota = _check_cache_low_limit(new_cache_quota);
+    int64_t old_cache_quota = cache_quota();
+    int64_t new_cache_quota = _calc_new_cache_quota(_cache_usage(ctx));
     _update_spaces_by_cache_quota(new_cache_quota);
-    _disk_free_period = 0;
 
+    _disk_free_period = 0;
     return new_cache_quota != old_cache_quota;
 }
 
-size_t DiskSpace::total_cache_quota() {
-    size_t cache_quota = 0;
+size_t DiskSpace::cache_quota() {
+    size_t quota = 0;
     for (auto& dir : _dir_spaces) {
-        cache_quota += dir.size;
+        quota += dir.size;
     }
-    return cache_quota;
+    return quota;
 }
 
 Status DiskSpace::_update_disk_stats() {
@@ -108,23 +92,35 @@ Status DiskSpace::_update_disk_stats() {
     auto& space_info = ret.value();
     _disk_stats.capacity_bytes = space_info.capacity;
     _disk_stats.available_bytes = space_info.available;
-    VLOG(2) << "Get disk statistics, capaticy: " << _disk_stats.capacity_bytes
-            << ", available: " << _disk_stats.available_bytes << ", used_rate: " << _disk_stats.used_rate();
+    VLOG(2) << "Get disk statistics, capacity: " << _disk_stats.capacity_bytes
+            << ", available: " << _disk_stats.available_bytes << ", used_bytes: " << _disk_stats.used_bytes();
 
     return Status::OK();
 }
 
-void DiskSpace::_revise_disk_stats_by_cache_dir() {
+size_t DiskSpace::_cache_file_space_usage() {
+    size_t size = 0;
     for (auto& dir : _dir_spaces) {
         auto ret = _fs->directory_size(dir.path);
-        if (ret.ok() && ret.value() > 0) {
-            // The space under datacache directories can be reused, so ignore their usage.
-            _disk_stats.available_bytes += ret.value();
-            if (_disk_stats.available_bytes > _disk_stats.capacity_bytes) {
-                _disk_stats.available_bytes = _disk_stats.capacity_bytes;
-            }
+        if (ret.ok()) {
+            size += ret.value();
         }
     }
+    if (size > _disk_stats.capacity_bytes) {
+        size = _disk_stats.capacity_bytes;
+    }
+    return size;
+}
+
+void DiskSpace::_update_disk_options() {
+    _disk_opts.cache_lower_limit = config::datacache_min_disk_quota_for_adjustment;
+    _disk_opts.cache_upper_limit = DataCacheUtils::parse_conf_datacache_disk_size(_path, config::datacache_disk_size,
+                                                                                  _disk_stats.capacity_bytes);
+    _disk_opts.low_level_size = _disk_stats.capacity_bytes * 0.01 * config::datacache_disk_low_level;
+    _disk_opts.safe_level_size = _disk_stats.capacity_bytes * 0.01 * config::datacache_disk_safe_level;
+    _disk_opts.high_level_size = _disk_stats.capacity_bytes * 0.01 * config::datacache_disk_high_level;
+    _disk_opts.adjust_interval_s = config::datacache_disk_adjust_interval_seconds;
+    _disk_opts.idle_for_expansion_s = config::datacache_disk_idle_seconds_for_expansion;
 }
 
 void DiskSpace::_update_spaces_by_cache_quota(size_t cache_avail_bytes) {
@@ -134,21 +130,35 @@ void DiskSpace::_update_spaces_by_cache_quota(size_t cache_avail_bytes) {
     }
 }
 
-void DiskSpace::_update_spaces_by_cache_usage(const AdjustContext& ctx) {
-    if (ctx.total_cache_quota > 0) {
-        double cache_used_rate = static_cast<double>(ctx.total_cache_usage) / ctx.total_cache_quota;
-        for (auto& dir : _dir_spaces) {
-            dir.size = dir.size * cache_used_rate;
-        }
+size_t DiskSpace::_cache_usage(const AdjustContext& ctx) {
+    if (ctx.total_cache_quota == 0) {
+        return 0;
     }
+
+    // TODO: Support obtaining the cache usage of each directory in starcache, to make it more accurate.
+    double cache_used_rate = static_cast<double>(ctx.total_cache_usage) / ctx.total_cache_quota;
+    size_t usage = cache_quota() * cache_used_rate;
+    return usage;
+}
+
+size_t DiskSpace::_calc_new_cache_quota(size_t cur_cache_usage) {
+    int64_t other_usage = _disk_stats.used_bytes() - cur_cache_usage;
+    int64_t new_cache_quota = _disk_opts.safe_level_size - other_usage;
+    if (new_cache_quota > 0) {
+        new_cache_quota = _check_cache_limit(new_cache_quota);
+    } else {
+        new_cache_quota = 0;
+    }
+
+    return new_cache_quota;
 }
 
 bool DiskSpace::_allow_expansion(const AdjustContext& ctx) {
-    if (_disk_free_period < config::datacache_disk_idle_seconds_for_expansion) {
+    if (_disk_free_period < _disk_opts.idle_for_expansion_s) {
         return false;
     }
     if (ctx.total_cache_quota > 0) {
-        double cache_used_rate = static_cast<double>(ctx.total_cache_usage / ctx.total_cache_quota);
+        double cache_used_rate = static_cast<double>(ctx.total_cache_usage) / ctx.total_cache_quota;
         if (cache_used_rate < kAutoIncreaseThreshold) {
             return false;
         }
@@ -156,8 +166,16 @@ bool DiskSpace::_allow_expansion(const AdjustContext& ctx) {
     return true;
 }
 
+size_t DiskSpace::_check_cache_limit(int64_t cache_quota) {
+    size_t result = _check_cache_low_limit(cache_quota);
+    if (result > 0) {
+        result = _check_cache_high_limit(result);
+    }
+    return result;
+}
+
 size_t DiskSpace::_check_cache_low_limit(int64_t cache_quota) {
-    if (cache_quota < config::datacache_min_disk_quota_for_adjustment) {
+    if (cache_quota < _disk_opts.cache_lower_limit) {
         if (_disabled) {
             // If the cache quata is already disabled, skip adjusting it repeatedly.
             VLOG(1) << "Skip updating the disk cache quota because the target quota is less than"
@@ -175,22 +193,28 @@ size_t DiskSpace::_check_cache_low_limit(int64_t cache_quota) {
     return cache_quota;
 }
 
+size_t DiskSpace::_check_cache_high_limit(int64_t cache_quota) {
+    if (cache_quota > _disk_opts.safe_level_size) {
+        LOG(INFO) << "Correct the cache quota because it reaches the high limit. quota: " << cache_quota;
+        cache_quota = _disk_opts.safe_level_size;
+    }
+    if (cache_quota > _disk_opts.cache_upper_limit) {
+        cache_quota = _disk_opts.cache_upper_limit;
+    }
+    return cache_quota;
+}
+
 StatusOr<size_t> DiskSpace::FileSystemWrapper::directory_size(const std::string& dir) {
     size_t capacity = 0;
-    auto st = FileSystem::Default()->iterate_dir2(dir, [&](DirEntry entry) {
+    RETURN_IF_ERROR(FileSystem::Default()->iterate_dir2(dir, [&](DirEntry entry) {
         capacity += entry.size.value();
         return true;
-    });
-    RETURN_IF_ERROR(st);
+    }));
     return capacity;
 }
 
 dev_t DiskSpace::FileSystemWrapper::device_id(const std::string& path) {
-    struct stat s;
-    if (stat(path.c_str(), &s) != 0) {
-        return 0;
-    }
-    return s.st_dev;
+    return DataCacheUtils::disk_device_id(path);
 }
 
 DiskSpaceMonitor::DiskSpaceMonitor(BlockCache* cache)
@@ -218,9 +242,8 @@ Status DiskSpaceMonitor::init(std::vector<DirSpace>* dir_spaces) {
 
     _disk_spaces.clear();
     for (auto& disk2spaces : disk_to_dir_spaces) {
-        auto& device_id = disk2spaces.first;
         auto& dirs = disk2spaces.second;
-        _disk_spaces.emplace_back(device_id, dirs[0].path, _fs);
+        _disk_spaces.emplace_back(dirs[0].path, _fs);
         auto& disk_space = _disk_spaces.back();
         RETURN_IF_ERROR(disk_space.init_spaces(dirs));
     }

@@ -16,23 +16,24 @@ package com.starrocks.authentication;
 
 import com.nimbusds.jose.jwk.JWKSet;
 import com.starrocks.mysql.MysqlCodec;
-import com.starrocks.mysql.MysqlPassword;
-import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.UserAuthOption;
-import com.starrocks.sql.ast.UserIdentity;
 
 import java.nio.ByteBuffer;
 
 public class OpenIdConnectAuthenticationProvider implements AuthenticationProvider {
+    public static final String OIDC_JWKS_URL = "jwks_url";
+    public static final String OIDC_PRINCIPAL_FIELD = "principal_field";
+    public static final String OIDC_REQUIRED_ISSUER = "required_issuer";
+    public static final String OIDC_REQUIRED_AUDIENCE = "required_audience";
+
     private final String jwksUrl;
     private final String principalFiled;
-    private final String requiredIssuer;
-    private final String requiredAudience;
+    private final String[] requiredIssuer;
+    private final String[] requiredAudience;
 
     public OpenIdConnectAuthenticationProvider(String jwksUrl, String principalFiled,
-                                               String requiredIssuer, String requiredAudience) {
+                                               String[] requiredIssuer, String[] requiredAudience) {
         this.jwksUrl = jwksUrl;
         this.principalFiled = principalFiled;
         this.requiredIssuer = requiredIssuer;
@@ -40,19 +41,8 @@ public class OpenIdConnectAuthenticationProvider implements AuthenticationProvid
     }
 
     @Override
-    public UserAuthenticationInfo analyzeAuthOption(UserIdentity userIdentity, UserAuthOption userAuthOption)
+    public void authenticate(ConnectContext context, String user, String host, byte[] authResponse)
             throws AuthenticationException {
-        UserAuthenticationInfo info = new UserAuthenticationInfo();
-        info.setAuthPlugin(AuthPlugin.Server.AUTHENTICATION_OPENID_CONNECT.name());
-        info.setPassword(MysqlPassword.EMPTY_PASSWORD);
-        info.setOrigUserHost(userIdentity.getUser(), userIdentity.getHost());
-        info.setAuthString(userAuthOption == null ? null : userAuthOption.getAuthString());
-        return info;
-    }
-
-    @Override
-    public void authenticate(ConnectContext context, String user, String host, byte[] authResponse, byte[] randomString,
-                             UserAuthenticationInfo authenticationInfo) throws AuthenticationException {
         try {
             ByteBuffer authBuffer = ByteBuffer.wrap(authResponse);
             //1 Byte for capability mysql client

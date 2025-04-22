@@ -174,8 +174,8 @@ public:
                 rowset_writer_context.rowset_path_prefix, rowset_writer_context.rowset_id.to_string(), 0, 100);
         (void)FileSystem::Default()->new_random_access_file(seg_path);
         fs::create_directories(index_path).ok();
-        int* _num_segment = (int*)((char*)_rowset_writer.get() + offsetof(VerticalRowsetWriter, _num_segment));
-        (*_num_segment) = 1;
+        VerticalRowsetWriter* rowset_writer = (VerticalRowsetWriter*)(_rowset_writer.get());
+        rowset_writer->_num_segment = 1;
         // test for the abnormal destory for rowset writer
     }
 

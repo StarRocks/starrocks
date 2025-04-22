@@ -315,17 +315,22 @@ TabletMetadataPtr TabletManager::get_latest_cached_tablet_metadata(int64_t table
 StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id, int64_t version, bool fill_cache,
                                                                int64_t expected_gtid,
                                                                const std::shared_ptr<FileSystem>& fs) {
-    if (version <= kInitialVersion) {
-        // Handle tablet initial metadata
-        auto initial_metadata =
-                get_tablet_metadata(tablet_initial_metadata_location(tablet_id), fill_cache, expected_gtid, fs);
-        if (initial_metadata.ok()) {
-            auto tablet_metadata = std::make_shared<TabletMetadata>(*initial_metadata.value());
-            tablet_metadata->set_id(tablet_id);
-            return tablet_metadata;
-        }
+    auto tablet_metadata_or =
+            get_tablet_metadata(tablet_metadata_location(tablet_id, version), fill_cache, expected_gtid, fs);
+    if (!tablet_metadata_or.status().is_not_found() || version > kInitialVersion) {
+        return tablet_metadata_or;
     }
-    return get_tablet_metadata(tablet_metadata_location(tablet_id, version), fill_cache, expected_gtid, fs);
+
+    // Handle tablet initial metadata
+    auto initial_metadata_or =
+            get_tablet_metadata(tablet_initial_metadata_location(tablet_id), fill_cache, expected_gtid, fs);
+    if (!initial_metadata_or.ok()) {
+        return tablet_metadata_or;
+    }
+
+    auto tablet_metadata = std::make_shared<TabletMetadata>(*initial_metadata_or.value());
+    tablet_metadata->set_id(tablet_id);
+    return tablet_metadata;
 }
 
 StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& path, bool fill_cache,
@@ -714,9 +719,12 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(CompactionTaskContext* contex
     ASSIGN_OR_RETURN(auto input_rowsets, compaction_policy->pick_rowsets());
     ASSIGN_OR_RETURN(auto algorithm, compaction_policy->choose_compaction_algorithm(input_rowsets));
     std::vector<uint32_t> input_rowsets_id;
+    size_t total_input_rowsets_file_size = 0;
     for (auto& rowset : input_rowsets) {
         input_rowsets_id.emplace_back(rowset->id());
+        total_input_rowsets_file_size += rowset->data_size();
     }
+    context->stats->input_file_size += total_input_rowsets_file_size;
     ASSIGN_OR_RETURN(auto tablet_schema, get_output_rowset_schema(input_rowsets_id, tablet_metadata.get()));
     if (algorithm == VERTICAL_COMPACTION) {
         return std::make_shared<VerticalCompactionTask>(std::move(tablet), std::move(input_rowsets), context,

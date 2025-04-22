@@ -49,7 +49,7 @@ Materialized views are special physical tables that hold precomputed query resul
 
 Views, or logical views, are virtual tables that do not hold any data. Views only display data that is the results of queries against other existing physical tables. The query that defines a view is run every time the view is referenced in a query.
 
-## [Privileges](../administration/user_privs/privilege_overview.md)
+## [Privileges](../administration/user_privs/user_privs.md)
 
 Privileges determine which users can perform which operations on which objects. StarRocks adopts two types of privilege models: identity-based access control and role-based access control. You can first assign privileges to roles, and then assign roles to users. In this case, privileges are passed to users through roles. Or, you can directly assign privileges to user identities.
 

@@ -348,8 +348,10 @@ public:
     Status evaluate_agg_fn_exprs(Chunk* chunk, bool use_intermediate);
     Status evaluate_agg_input_column(Chunk* chunk, std::vector<ExprContext*>& agg_expr_ctxs, int i);
 
-    Status output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk);
-    Status output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk, size_t num_input_rows, bool use_selection);
+    Status output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk,
+                                     bool force_use_intermediate_as_output = false);
+    Status output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk, size_t num_input_rows, bool use_selection,
+                                     bool force_use_intermediate_as_output = false);
 
     // convert input chunk to spill format
     Status convert_to_spill_format(Chunk* input_chunk, ChunkPtr* chunk);
@@ -359,7 +361,8 @@ public:
     // and are mainly used in the first stage of two-stage aggregation when aggr reduction is low
     // selection[i] = 0: found in hash table
     // selection[1] = 1: not found in hash table
-    Status output_chunk_by_streaming_with_selection(Chunk* input_chunk, ChunkPtr* chunk);
+    Status output_chunk_by_streaming_with_selection(Chunk* input_chunk, ChunkPtr* chunk,
+                                                    bool force_use_intermediate_as_output = false);
 
     // At first, we use single hash map, if hash map is too big,
     // we convert the single hash map to two level hash map.
@@ -592,6 +595,13 @@ protected:
 
     Status _create_aggregate_function(starrocks::RuntimeState* state, const TFunction& fn, bool is_result_nullable,
                                       const AggregateFunction** ret);
+
+    int64_t get_two_level_threahold() {
+        if (config::two_level_memory_threshold < 0) {
+            return two_level_memory_threshold;
+        }
+        return config::two_level_memory_threshold;
+    }
 
     template <class HashMapWithKey>
     friend struct AllocateState;

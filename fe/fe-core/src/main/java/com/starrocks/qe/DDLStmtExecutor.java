@@ -153,6 +153,7 @@ import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
+import com.starrocks.sql.spm.SPMStmtExecutor;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeJob;
@@ -928,16 +929,18 @@ public class DDLStmtExecutor {
                 }
                 context.getGlobalStateMgr().getAnalyzeMgr().addAnalyzeJob(analyzeJob);
 
-                ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
-                // from current session, may execute analyze stmt
-                statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
-                        context.getSessionVariable().getStatisticCollectParallelism());
-                Thread thread = new Thread(() -> {
-                    statsConnectCtx.setThreadLocalInfo();
-                    StatisticExecutor statisticExecutor = new StatisticExecutor();
-                    analyzeJob.run(statsConnectCtx, statisticExecutor);
-                });
-                thread.start();
+                if (Config.enable_trigger_analyze_job_immediate) {
+                    ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+                    // from current session, may execute analyze stmt
+                    statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
+                            context.getSessionVariable().getStatisticCollectParallelism());
+                    Thread thread = new Thread(() -> {
+                        statsConnectCtx.setThreadLocalInfo();
+                        StatisticExecutor statisticExecutor = new StatisticExecutor();
+                        analyzeJob.run(statsConnectCtx, statisticExecutor);
+                    });
+                    thread.start();
+                }
             });
             return null;
         }
@@ -1267,11 +1270,13 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateBaselinePlanStatement(CreateBaselinePlanStmt statement,
                                                               ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> SPMStmtExecutor.execute(context, statement));
             return null;
         }
 
         @Override
         public ShowResultSet visitDropBaselinePlanStatement(DropBaselinePlanStmt statement, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> SPMStmtExecutor.execute(context, statement));
             return null;
         }
     }

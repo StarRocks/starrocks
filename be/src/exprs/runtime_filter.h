@@ -343,23 +343,22 @@ protected:
     std::vector<RuntimeFilter*> _group_colocate_filters;
 };
 
-struct HashValueIterator {
-    HashValueIterator(std::vector<uint32_t>& hash_values) : hash_values(hash_values) {}
-    virtual ~HashValueIterator() = default;
-    virtual void for_each(const std::function<void(size_t, uint32_t&)>& func) = 0;
-
-    std::vector<uint32_t>& hash_values;
+template <typename F>
+concept HashValueForEachFunc = requires(F f, size_t index, uint32_t& hash_value) {
+    { f(index, hash_value) }
+    ->std::same_as<void>;
 };
 
-struct FullScanIterator final : HashValueIterator {
+struct FullScanIterator {
     typedef void (Column::*HashFuncType)(uint32_t*, uint32_t, uint32_t) const;
     static constexpr HashFuncType FNV_HASH = &Column::fnv_hash;
     static constexpr HashFuncType CRC32_HASH = &Column::crc32_hash;
 
     FullScanIterator(std::vector<uint32_t>& hash_values, size_t num_rows)
-            : HashValueIterator(hash_values), num_rows(num_rows) {}
+            : hash_values(hash_values), num_rows(num_rows) {}
 
-    void for_each(const std::function<void(size_t, uint32_t&)>& func) override {
+    template <HashValueForEachFunc ForEachFuncType>
+    void for_each(ForEachFuncType func) {
         for (size_t i = 0; i < num_rows; i++) {
             func(i, hash_values[i]);
         }
@@ -371,18 +370,20 @@ struct FullScanIterator final : HashValueIterator {
         }
     }
 
+    std::vector<uint32_t>& hash_values;
     size_t num_rows;
 };
 
-struct SelectionIterator final : HashValueIterator {
+struct SelectionIterator {
     typedef void (Column::*HashFuncType)(uint32_t*, uint8_t*, uint16_t, uint16_t) const;
     static constexpr HashFuncType FNV_HASH = &Column::fnv_hash_with_selection;
     static constexpr HashFuncType CRC32_HASH = &Column::crc32_hash_with_selection;
 
     SelectionIterator(std::vector<uint32_t>& hash_values, uint8_t* selection, uint16_t from, uint16_t to)
-            : HashValueIterator(hash_values), selection(selection), from(from), to(to) {}
+            : hash_values(hash_values), selection(selection), from(from), to(to) {}
 
-    void for_each(const std::function<void(size_t, uint32_t&)>& func) override {
+    template <HashValueForEachFunc ForEachFuncType>
+    void for_each(ForEachFuncType func) {
         for (size_t i = from; i < to; i++) {
             if (selection[i]) {
                 func(i, hash_values[i]);
@@ -396,20 +397,22 @@ struct SelectionIterator final : HashValueIterator {
         }
     }
 
+    std::vector<uint32_t>& hash_values;
     uint8_t* selection;
     uint16_t from;
     uint16_t to;
 };
 
-struct SelectedIndexIterator final : HashValueIterator {
+struct SelectedIndexIterator {
     typedef void (Column::*HashFuncType)(uint32_t*, uint16_t*, uint16_t) const;
     static constexpr HashFuncType FNV_HASH = &Column::fnv_hash_selective;
     static constexpr HashFuncType CRC32_HASH = &Column::crc32_hash_selective;
 
     SelectedIndexIterator(std::vector<uint32_t>& hash_values, uint16_t* sel, uint16_t sel_size)
-            : HashValueIterator(hash_values), sel(sel), sel_size(sel_size) {}
+            : hash_values(hash_values), sel(sel), sel_size(sel_size) {}
 
-    void for_each(const std::function<void(size_t, uint32_t&)>& func) override {
+    template <HashValueForEachFunc ForEachFuncType>
+    void for_each(ForEachFuncType func) {
         for (uint16_t i = 0; i < sel_size; i++) {
             func(sel[i], hash_values[sel[i]]);
         }
@@ -420,6 +423,8 @@ struct SelectedIndexIterator final : HashValueIterator {
             (input_column->*hash_func)(hash_values.data(), sel, sel_size);
         }
     }
+
+    std::vector<uint32_t>& hash_values;
     uint16_t* sel;
     uint16_t sel_size;
 };

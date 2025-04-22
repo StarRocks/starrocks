@@ -46,7 +46,7 @@ under the License.
         <jackson.version>2.15.2</jackson.version>
         <spark.version>3.5.5</spark.version>
         <tomcat.version>8.5.70</tomcat.version>
-        <parquet.version>1.14.0</parquet.version>
+        <parquet.version>1.15.1</parquet.version>
         <hadoop.version>3.4.1</hadoop.version>
         <gcs.connector.version>hadoop3-2.2.26</gcs.connector.version>
         <skip.plugin>false</skip.plugin>
@@ -72,7 +72,9 @@ under the License.
         <delta-kernel.version>4.0.0rc1</delta-kernel.version>
         <iceberg.version>1.7.1</iceberg.version>
         <staros.version>3.4-rc6</staros.version>
-        <jetty.version>10.0.24</jetty.version>
+        <!-- hadoop-azure requires no more than jetty10+ -->
+        <!-- https://stackoverflow.com/questions/66713254/spark-wasb-and-jetty-11 -->
+        <jetty.version>9.4.57.v20241219</jetty.version>
     </properties>
 
     <profiles>
@@ -755,6 +757,10 @@ under the License.
                         <groupId>ch.qos.reload4j</groupId>
                         <artifactId>reload4j</artifactId>
                     </exclusion>
+                    <exclusion>
+                        <groupId>javax.ws.rs</groupId>
+                        <artifactId>jsr311-api</artifactId>
+                    </exclusion>
                 </exclusions>
             </dependency>
 
@@ -1344,6 +1350,10 @@ under the License.
                     <exclusion>
                         <groupId>com.nimbusds</groupId>
                         <artifactId>nimbus-jose-jwt</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>com.sun.jersey</groupId>
+                        <artifactId>jersey-bundle</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>

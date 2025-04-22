@@ -48,12 +48,12 @@ public:
 
     virtual std::string debug_string() const = 0;
 
+    virtual bool try_acquire_sizes(size_t size) = 0;
+
     size_t size() const { return _size; }
     size_t num_rows() const { return _num_rows; }
     bool is_remote() const { return _is_remote; }
     void set_is_remote(bool is_remote) { _is_remote = is_remote; }
-
-    virtual bool preallocate(size_t write_size) = 0;
 
     void inc_num_rows(size_t num_rows) { _num_rows += num_rows; }
 
@@ -114,6 +114,8 @@ struct AcquireBlockOptions {
     bool exclusive = false;
     size_t block_size = 0;
     BlockAffinityGroup affinity_group = kDefaultBlockAffinityGroup;
+    // force to use remote block
+    bool force_remote = false;
 };
 
 // BlockManager is used to manage the life cycle of the Block.

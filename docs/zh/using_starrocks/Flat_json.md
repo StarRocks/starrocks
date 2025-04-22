@@ -28,7 +28,6 @@ FROM logs;
 
 StarRocks 引入了 Flat JSON 功能，以提高 JSON 数据查询效率和降低用户使用 JSON 的复杂度。
 - 从 3.3.0 版本开始提供此功能，默认情况下关闭，需要手动启用。
-- 从 3.4.0 版本开始，默认启用 Flat JSON 功能，无需用户手动操作。
 
 ## 什么是 Flat JSON
 
@@ -65,9 +64,28 @@ Flat JSON 的核心原理是在导入时检测 JSON 数据，将 JSON 数据中�
 ## 使用示例
 
 1. 开启功能（参考其他章节）
-2. 创建一张包含 JSON 列的表，本示例使用 INSERT INTO 向表中导入 JSON 数据。
+2. 创建一张包含 JSON 列的表，可以在建表时同时开启以及配置Flat JSON。本示例使用 INSERT INTO 向表中导入 JSON 数据。
 
    ```SQL
+   -- 可以在建表时同时开启以及配置Flat JSON,这种方式目前仅适用于存算一体的集群
+   CREATE TABLE `t1` (
+       `k1` int,
+       `k2` JSON,
+       `k3` VARCHAR(20),
+       `k4` JSON
+   )             
+   DUPLICATE KEY(`k1`)
+   COMMENT "OLAP"
+   DISTRIBUTED BY HASH(`k1`) BUCKETS 2
+   PROPERTIES (
+     "replication_num" = "3",
+     "flat_json.enable" = "true",
+     "flat_json.null.factor" = "0.5",
+     "flat_json.sparsity.factor" = "0.5",
+     "flat_json.column.max" = "50");
+   )
+   
+   -- 需要依赖额外开启Flat JSON的功能，但是这种方式既适用于存算一体又适用于存算分离的集群
    CREATE TABLE `t1` (
        `k1` int,
        `k2` JSON,
@@ -150,6 +168,20 @@ StarRocks 存算一体集群自 v3.3.0 起支持 Flat JSON，存算分离集群�
 - Flat JSON 提取的结果分为公共的列和保留字段列，当所有 JSON Schema 一致时，不会生成保留字段列。
 - Flat JSON 仅存储公共字段列和保留字段列，不会再额外存储原始 JSON 数据。
 - 导入数据时，公共字段会自动推导类型为 BIGINT/LARGEINT/DOUBLE/STRING,不能识别的类型推导为 JSON 类型，保留字段列会存储为 JSON 类型。
+
+## 开启 Flat JSON 功能（目前此方式仅适用存算一体的集群）
+
+1. 建表时可以在参数中设置`flat_json.enable`。可以参考[建表](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)。可以直接通过修改表的参数来开启Flat Json或者重新配置相关参数，示例如下:
+   ```SQL
+   alter table t1 set ("flat_json.enable" = "true")
+   
+   alter table t1 set ("flat_json.null.factor" = "0.1")
+   
+   alter table t1 set ("flat_json.sparsity.factor" = "0.8")
+   
+   alter table t1 set ("flat_json.column.max" = "90")
+   ```
+2. 开启 FE 裁剪功能：`SET GLOBAL cbo_prune_json_subfield = true;`
 
 ## 开启 Flat JSON 功能（3.4 之前版本）
 

@@ -63,6 +63,7 @@ import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowDataDistributionStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowDeleteStmt;
@@ -73,6 +74,7 @@ import com.starrocks.sql.ast.ShowIndexStmt;
 import com.starrocks.sql.ast.ShowLoadStmt;
 import com.starrocks.sql.ast.ShowLoadWarningsStmt;
 import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
+import com.starrocks.sql.ast.ShowMultiColumnStatsMetaStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowProcStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadStmt;
@@ -315,6 +317,14 @@ public class ShowStmtAnalyzer {
 
         @Override
         public Void visitShowDataStatement(ShowDataStmt node, ConnectContext context) {
+            String dbName = node.getDbName();
+            dbName = getDatabaseName(dbName, context);
+            node.setDbName(dbName);
+            return null;
+        }
+
+        @Override
+        public Void visitShowDataDistributionStatement(ShowDataDistributionStmt node, ConnectContext context) {
             String dbName = node.getDbName();
             dbName = getDatabaseName(dbName, context);
             node.setDbName(dbName);
@@ -744,6 +754,12 @@ public class ShowStmtAnalyzer {
 
         @Override
         public Void visitShowBasicStatsMetaStatement(ShowBasicStatsMetaStmt node, ConnectContext context) {
+            analyzeOrderByItems(node);
+            return null;
+        }
+
+        @Override
+        public Void visitShowMultiColumnsStatsMetaStatement(ShowMultiColumnStatsMetaStmt node, ConnectContext context) {
             analyzeOrderByItems(node);
             return null;
         }

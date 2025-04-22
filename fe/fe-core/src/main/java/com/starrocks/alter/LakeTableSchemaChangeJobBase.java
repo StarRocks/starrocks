@@ -16,14 +16,16 @@
 package com.starrocks.alter;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
@@ -35,6 +37,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.List;
 import java.util.Optional;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
@@ -55,6 +58,17 @@ public abstract class LakeTableSchemaChangeJobBase extends AlterJobV2 {
 
     public LakeTableSchemaChangeJobBase(JobType jobType) {
         super(jobType);
+    }
+
+    protected void restoreColumnUniqueIdIfNeed(List<Column> columns) {
+        boolean needRestoreColumnUniqueId = (columns.get(0).getUniqueId() < 0);
+        if (needRestoreColumnUniqueId) {
+            for (int i = 0; i < columns.size(); i++) {
+                Column col = columns.get(i);
+                Preconditions.checkState(col.getUniqueId() <= 0, col.getUniqueId());
+                col.setUniqueId(i);
+            }
+        }
     }
 
     @Nullable
@@ -91,8 +105,8 @@ public abstract class LakeTableSchemaChangeJobBase extends AlterJobV2 {
         abstract void unlock(Database db);
 
         @Nullable
-        LakeTable getTable(long tableId) {
-            return (LakeTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        OlapTable getTable(long tableId) {
+            return (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         }
 
         @Override
@@ -149,11 +163,11 @@ public abstract class LakeTableSchemaChangeJobBase extends AlterJobV2 {
     }
 
     @NotNull
-    LakeTable getTableOrThrow(@Nullable LockedDatabase db, long tableId) throws AlterCancelException {
+    OlapTable getTableOrThrow(@Nullable LockedDatabase db, long tableId) throws AlterCancelException {
         if (db == null) {
             throw new AlterCancelException("Database does not exist");
         }
-        LakeTable table = db.getTable(tableId);
+        OlapTable table = db.getTable(tableId);
         if (table == null) {
             throw new AlterCancelException("Table does not exist. tableId=" + tableId);
         }

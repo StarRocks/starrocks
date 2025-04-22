@@ -37,6 +37,7 @@
 #include "types/date_value.hpp"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
+#include "util/orlp/pdqsort.h"
 
 namespace starrocks {
 
@@ -460,7 +461,6 @@ requires(!lt_is_date<SlotType>) Status ChunkPredicateBuilder<E, Type>::normalize
                     continue;
                 }
 
-                std::set<RangeValueType> values;
                 if (pred->null_in_set()) {
                     if (pred->is_eq_null()) {
                         // TODO: equal null is also can be normalized, will be optimized later
@@ -475,6 +475,8 @@ requires(!lt_is_date<SlotType>) Status ChunkPredicateBuilder<E, Type>::normalize
                     }
                 }
 
+                boost::container::flat_set<RangeValueType> values;
+                values.reserve(pred->hash_set().size());
                 for (const auto& value : pred->hash_set()) {
                     values.insert(value);
                 }
@@ -494,7 +496,7 @@ requires(!lt_is_date<SlotType>) Status ChunkPredicateBuilder<E, Type>::normalize
             ASSIGN_OR_RETURN(auto* expr_context, _exprs[i].expr_context(_opts.obj_pool, _opts.runtime_state));
             bool ok = get_predicate_value<Negative>(_opts.obj_pool, slot, get_root_expr(expr_context), expr_context,
                                                     &value, &op, &status);
-            if (ok && range->add_fixed_values(FILTER_IN, std::set<RangeValueType>{value}).ok()) {
+            if (ok && range->add_fixed_values(FILTER_IN, boost::container::flat_set<RangeValueType>{value}).ok()) {
                 _normalized_exprs[i] = true;
             }
         }
@@ -537,7 +539,7 @@ requires lt_is_date<SlotType> Status ChunkPredicateBuilder<E, Type>::normalize_i
             }
             std::vector<SlotId> slot_ids;
             if (1 == l->get_slot_ids(&slot_ids) && slot_ids[0] == slot.id()) {
-                std::set<DateValue> values;
+                boost::container::flat_set<DateValue> values;
 
                 if (pred_type == starrocks::TYPE_DATETIME) {
                     const auto* pred =
@@ -561,6 +563,7 @@ requires lt_is_date<SlotType> Status ChunkPredicateBuilder<E, Type>::normalize_i
                         }
                     }
 
+                    values.reserve(pred->hash_set().size());
                     for (const TimestampValue& ts : pred->hash_set()) {
                         auto date = implicit_cast<DateValue>(ts);
                         if (implicit_cast<TimestampValue>(date) == ts) {
@@ -583,6 +586,8 @@ requires lt_is_date<SlotType> Status ChunkPredicateBuilder<E, Type>::normalize_i
                             continue;
                         }
                     }
+
+                    values.reserve(pred->hash_set().size());
                     for (const DateValue& date : pred->hash_set()) {
                         values.insert(date);
                     }
@@ -605,7 +610,7 @@ requires lt_is_date<SlotType> Status ChunkPredicateBuilder<E, Type>::normalize_i
             ASSIGN_OR_RETURN(auto* expr_context, _exprs[i].expr_context(_opts.obj_pool, _opts.runtime_state));
             bool ok = get_predicate_value<Negative>(_opts.obj_pool, slot, get_root_expr(expr_context), expr_context,
                                                     &value, &op, &status);
-            if (ok && range->add_fixed_values(FILTER_IN, std::set<DateValue>{value}).ok()) {
+            if (ok && range->add_fixed_values(FILTER_IN, boost::container::flat_set<DateValue>{value}).ok()) {
                 _normalized_exprs[i] = true;
             }
         }
@@ -745,11 +750,11 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
                         _child_builders.emplace_back(child_builder);
                     }
                 } else {
-                    std::set<RangeValueType> values;
-                    for (const auto& value : pred->hash_set()) {
-                        values.insert(value);
-                    }
-                    (void)range->add_fixed_values(FILTER_IN, values);
+                    std::vector<RangeValueType> values(pred->hash_set().begin(), pred->hash_set().end());
+                    ::pdqsort(values.begin(), values.end());
+
+                    boost::container::flat_set<RangeValueType> value_set(values.begin(), values.end());
+                    (void)range->add_fixed_values(FILTER_IN, value_set);
                 }
             }
         }
@@ -843,7 +848,7 @@ Status ChunkPredicateBuilder<E, Type>::normalize_not_in_or_not_equal_predicate(
             ASSIGN_OR_RETURN(auto* expr_context, _exprs[i].expr_context(_opts.obj_pool, _opts.runtime_state));
             bool ok = get_predicate_value<Negative>(_opts.obj_pool, slot, get_root_expr(expr_context), expr_context,
                                                     &value, &op, &status);
-            if (ok && range->add_fixed_values(FILTER_NOT_IN, std::set<RangeValueType>{value}).ok()) {
+            if (ok && range->add_fixed_values(FILTER_NOT_IN, boost::container::flat_set<RangeValueType>{value}).ok()) {
                 _normalized_exprs[i] = true;
             }
         }
@@ -869,7 +874,6 @@ Status ChunkPredicateBuilder<E, Type>::normalize_not_in_or_not_equal_predicate(
                     continue;
                 }
 
-                std::set<RangeValueType> values;
                 if (pred->null_in_set()) {
                     if (pred->is_eq_null()) {
                         continue;
@@ -884,6 +888,8 @@ Status ChunkPredicateBuilder<E, Type>::normalize_not_in_or_not_equal_predicate(
                     }
                 }
 
+                boost::container::flat_set<RangeValueType> values;
+                values.reserve(pred->hash_set().size());
                 for (const auto& value : pred->hash_set()) {
                     values.insert(value);
                 }
@@ -1000,31 +1006,41 @@ Status ChunkPredicateBuilder<E, Type>::normalize_expressions() {
 template <BoxedExprType E, CompoundNodeType Type>
 Status ChunkPredicateBuilder<E, Type>::build_olap_filters() {
     constexpr bool Negative = Type == CompoundNodeType::OR;
-    olap_filters.clear();
 
-    // False alert from clang-tidy-14
-    // NOLINTNEXTLINE(performance-for-range-copy)
-    for (auto iter : column_value_ranges) {
-        std::vector<TCondition> filters;
-        std::visit([&](auto&& range) { range.template to_olap_filter<Negative>(filters); }, iter.second);
-        const bool empty_range = std::visit([](auto&& range) { return range.is_empty_value_range(); }, iter.second);
-        if (empty_range) {
-            if constexpr (!Negative) {
-                return Status::EndOfFile("EOF, Filter by always false condition");
-            } else {
-                auto not_null_filter =
-                        std::visit([&](auto&& range) { return range.to_olap_not_null_filter(); }, iter.second);
-                filters.clear();
-                filters.emplace_back(std::move(not_null_filter));
+    auto process = [&]<typename ConditionType>(std::vector<ConditionType>& result_filters) {
+        result_filters.clear();
+
+        // False alert from clang-tidy-14
+        // NOLINTNEXTLINE(performance-for-range-copy)
+        for (auto& iter : column_value_ranges) {
+            std::vector<ConditionType> filters;
+            std::visit([&](auto&& range) { range.template to_olap_filter<ConditionType, Negative>(filters); },
+                       iter.second);
+            const bool empty_range = std::visit([](auto&& range) { return range.is_empty_value_range(); }, iter.second);
+            if (empty_range) {
+                if constexpr (!Negative) {
+                    return Status::EndOfFile("EOF, Filter by always false condition");
+                } else {
+                    auto not_null_filter = std::visit(
+                            [&](auto&& range) { return range.template to_olap_not_null_filter<ConditionType>(); },
+                            iter.second);
+                    filters.clear();
+                    filters.emplace_back(std::move(not_null_filter));
+                }
+            }
+
+            for (auto& filter : filters) {
+                result_filters.emplace_back(std::move(filter));
             }
         }
+        return Status::OK();
+    };
 
-        for (auto& filter : filters) {
-            olap_filters.emplace_back(std::move(filter));
-        }
+    if (_opts.is_olap_scan) {
+        return process(olap_filters);
+    } else {
+        return process(external_filters);
     }
-
-    return Status::OK();
 }
 
 // Try to convert the ranges predicates applied on key columns to in predicates to increase
@@ -1083,12 +1099,21 @@ Status ChunkPredicateBuilder<E, Type>::build_scan_keys(bool unlimited, int32_t m
 template <BoxedExprType E, CompoundNodeType Type>
 Status ChunkPredicateBuilder<E, Type>::_get_column_predicates(PredicateParser* parser,
                                                               ColumnPredicatePtrs& col_preds_owner) {
-    for (auto& f : olap_filters) {
-        std::unique_ptr<ColumnPredicate> p(parser->parse_thrift_cond(f));
-        RETURN_IF(!p, Status::RuntimeError("invalid filter"));
-        p->set_index_filter_only(f.is_index_filter_only);
-        col_preds_owner.emplace_back(std::move(p));
+    auto process_filter_conditions = [&]<typename ConditionType>(const std::vector<ConditionType>& filters) {
+        for (const auto& filter : filters) {
+            std::unique_ptr<ColumnPredicate> p(parser->parse_thrift_cond(filter));
+            RETURN_IF(!p, Status::RuntimeError("invalid filter"));
+            p->set_index_filter_only(filter.is_index_filter_only);
+            col_preds_owner.emplace_back(std::move(p));
+        }
+        return Status::OK();
+    };
+    if (_opts.is_olap_scan) {
+        RETURN_IF_ERROR(process_filter_conditions(olap_filters));
+    } else {
+        RETURN_IF_ERROR(process_filter_conditions(external_filters));
     }
+
     for (auto& f : is_null_vector) {
         std::unique_ptr<ColumnPredicate> p(parser->parse_thrift_cond(f));
         RETURN_IF(!p, Status::RuntimeError("invalid filter"));
@@ -1115,7 +1140,7 @@ Status ChunkPredicateBuilder<E, Type>::_get_column_predicates(PredicateParser* p
         }
     }
 
-    if (_opts.runtime_state->enable_join_runtime_filter_pushdown()) {
+    if (_is_root_builder && _opts.runtime_state->enable_join_runtime_filter_pushdown() && _opts.is_olap_scan) {
         for (const auto& it : _opts.runtime_filters->descriptors()) {
             RuntimeFilterProbeDescriptor* desc = it.second;
             SlotId slot_id;
@@ -1328,6 +1353,10 @@ StatusOr<RuntimeFilterPredicates> ScanConjunctsManager::get_runtime_filter_predi
             continue;
         }
         if (desc->is_topn_filter()) {
+            continue;
+        }
+        // If the runtime filter's partition-by-exprs's size is greater than 1, skip to push it down to storage engine.
+        if (desc->num_partition_by_exprs() > 1) {
             continue;
         }
         if (!parser->can_pushdown(slot_desc)) {

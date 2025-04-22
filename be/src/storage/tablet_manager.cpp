@@ -425,8 +425,9 @@ Status TabletManager::drop_tablet(TTabletId tablet_id, TabletDropFlag flag) {
             (void)dropped_tablet->set_tablet_state(TABLET_SHUTDOWN);
         }
 
+        // just try to remove the tablet meta. if failed, it will be removed in sweep_shutdown_tablet
         if (auto st = _remove_tablet_meta(dropped_tablet); !st.ok()) {
-            return Status::InternalError(strings::Substitute("fail to remove tablet $0 $1", tablet_id, st.to_string()));
+            LOG(WARNING) << "Fail to remove tablet meta. tablet_id=" << tablet_id << " status=" << st;
         }
 
         // Remove the tablet directory in background to avoid holding the lock of tablet map shard for long.
@@ -1059,7 +1060,7 @@ void TabletManager::sweep_shutdown_tablet(const DroppedTabletInfo& info,
         }
         remove_meta = true;
     } else if (!st.is_not_found()) {
-        LOG(ERROR) << "Fail to get tablet meta: " << st;
+        LOG(ERROR) << "Fail to get tablet " << tablet->tablet_id() << " meta: " << st;
         return;
     }
 
@@ -1074,16 +1075,20 @@ void TabletManager::sweep_shutdown_tablet(const DroppedTabletInfo& info,
     }
 
     if (st.ok() || st.is_not_found()) {
-        finished_tablets.push_back(info);
         LOG(INFO) << ((info.flag == kMoveFilesToTrash) ? "Moved " : " Removed ") << tablet->tablet_id_path();
     } else {
-        remove_meta = false;
         LOG(WARNING) << "Fail to remove or move " << tablet->tablet_id_path() << " :" << st;
+        return;
     }
 
     if (remove_meta) {
         st = _remove_tablet_meta(tablet);
-        LOG_IF(ERROR, !st.ok()) << "Fail to remove tablet meta of tablet " << tablet->tablet_id() << ": " << st;
+        // if we fail to remove tablet meta, we should retry later
+        if (st.ok() || st.is_not_found()) {
+            finished_tablets.push_back(info);
+        } else {
+            LOG(ERROR) << "Fail to remove tablet meta of tablet " << tablet->tablet_id() << ": " << st;
+        }
     }
 }
 
@@ -1186,7 +1191,12 @@ Status TabletManager::delete_shutdown_tablet(int64_t tablet_id) {
         return st;
     }
     st = _remove_tablet_meta(tablet);
-    LOG_IF(ERROR, !st.ok()) << "Fail to remove tablet meta of tablet " << tablet->tablet_id() << ", status:" << st;
+    if (st.ok() || st.is_not_found()) {
+        LOG(INFO) << "Removed tablet meta of tablet " << tablet->tablet_id();
+    } else {
+        LOG(ERROR) << "Fail to remove tablet meta of tablet " << tablet->tablet_id() << ", status:" << st;
+        return st;
+    }
     std::unique_lock l(_shutdown_tablets_lock);
     _shutdown_tablets.erase(tablet_id);
     return Status::OK();
@@ -1382,7 +1392,7 @@ Status TabletManager::_create_inital_rowset_unlocked(const TCreateTabletReq& req
             context.version = version;
             // there is no data in init rowset, so overlapping info is unknown.
             context.segments_overlap = OVERLAP_UNKNOWN;
-
+            context.flat_json_config = tablet->flat_json_config();
             std::unique_ptr<RowsetWriter> rowset_writer;
             st = RowsetFactory::create_rowset_writer(context, &rowset_writer);
             if (!st.ok()) {
@@ -1617,7 +1627,7 @@ void TabletManager::get_tablets_basic_infos(int64_t table_id, int64_t partition_
         for (auto& shard : _tablets_shards) {
             std::vector<TabletSharedPtr> all_tablets_by_shard = _get_all_tablets_from_shard(shard);
             for (auto& tablet : all_tablets_by_shard) {
-                auto table_id_in_meta = tablet->tablet_meta()->table_id();
+                auto table_id_in_meta = tablet->belonged_table_id();
                 if ((table_id == -1 || table_id_in_meta == table_id) &&
                     (authorized_table_ids == nullptr ||
                      authorized_table_ids->find(table_id_in_meta) != authorized_table_ids->end())) {
@@ -1825,6 +1835,7 @@ void TabletManager::_add_shutdown_tablet_unlocked(int64_t tablet_id, DroppedTabl
     auto iter = _shutdown_tablets.find(tablet_id);
     if (iter != _shutdown_tablets.end()) {
         if ((iter->second).tablet != nullptr) {
+            // just try to remove the tablet meta. if failed, it will be removed in sweep_shutdown_tablet
             auto st = _remove_tablet_meta((iter->second).tablet);
             if (!st.ok()) {
                 LOG(WARNING) << "Fail to remove previous table meta, id: " << tablet_id << " status: " << st;

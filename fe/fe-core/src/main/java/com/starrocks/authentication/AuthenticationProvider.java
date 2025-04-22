@@ -15,17 +15,8 @@
 package com.starrocks.authentication;
 
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.UserAuthOption;
-import com.starrocks.sql.ast.UserIdentity;
 
 public interface AuthenticationProvider {
-
-    /**
-     * valid authentication info, and initialize the UserAuthenticationInfo structure
-     * used when creating a user or modifying user's authentication information
-     */
-    UserAuthenticationInfo analyzeAuthOption(
-            UserIdentity userIdentity, UserAuthOption userAuthOption) throws AuthenticationException;
 
     /**
      * login authentication
@@ -34,15 +25,13 @@ public interface AuthenticationProvider {
             ConnectContext context,
             String user,
             String host,
-            byte[] password,
-            byte[] randomString,
-            UserAuthenticationInfo authenticationInfo) throws AuthenticationException;
+            byte[] authResponse) throws AuthenticationException;
 
     /**
      * Some special Authentication Methods need to pass more information, and authMoreDataPacket is a unified interface.
      * <a href="https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_connection_phase_packets_protocol_auth_more_data.html">...</a>
      */
-    default byte[] authMoreDataPacket(String user, String host) throws AuthenticationException {
+    default byte[] authMoreDataPacket(ConnectContext context, String user, String host) throws AuthenticationException {
         return null;
     }
 
@@ -52,7 +41,8 @@ public interface AuthenticationProvider {
      * server can send this packet tp ask client to use another authentication method.
      * <a href="https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_connection_phase_packets_protocol_auth_switch_request.html">...</a>
      */
-    default byte[] authSwitchRequestPacket(String user, String host, byte[] randomString) throws AuthenticationException {
+    default byte[] authSwitchRequestPacket(ConnectContext context, String user, String host)
+            throws AuthenticationException {
         return null;
     }
 }

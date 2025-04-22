@@ -162,6 +162,7 @@ public class GlobalSlotProvider implements SlotProvider {
     private void releaseSlotToSlotManager(LogicalSlot slot) {
         TNetworkAddress leaderEndpoint = GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderRpcEndpoint();
         TReleaseSlotRequest slotRequest = new TReleaseSlotRequest();
+        slotRequest.setWarehouse_id(slot.getWarehouseId());
         slotRequest.setSlot_id(slot.getSlotId());
 
         try {

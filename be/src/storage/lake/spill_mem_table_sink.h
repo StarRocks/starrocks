@@ -48,6 +48,9 @@ private:
     // Freeze current block and append it to block container
     Status _freeze_current_block();
 
+    // Switch to remote block when local disk is full
+    Status _switch_to_remote_block(size_t block_size);
+
 private:
     LoadSpillBlockManager* _block_manager = nullptr;
     spill::BlockPtr _block;
@@ -79,6 +82,8 @@ private:
     TabletWriter* _writer;
     // destroy spiller before runtime_state
     std::shared_ptr<RuntimeState> _runtime_state;
+    // used when input profile is nullptr
+    std::unique_ptr<RuntimeProfile> _dummy_profile;
     RuntimeProfile* _profile = nullptr;
     spill::SpillerFactoryPtr _spiller_factory;
     std::shared_ptr<spill::Spiller> _spiller;

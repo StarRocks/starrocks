@@ -39,10 +39,12 @@
 #include "runtime/runtime_state.h"
 #include "util/debug/query_trace.h"
 #include "util/defer_op.h"
+#include "util/failpoint/fail_point.h"
 #include "util/runtime_profile.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks::pipeline {
+DEFINE_FAIL_POINT(operator_return_large_column);
 
 PipelineDriver::~PipelineDriver() noexcept {
     if (_workgroup != nullptr) {
@@ -339,12 +341,25 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         (maybe_chunk.value()->num_rows() > 0 ||
                          (maybe_chunk.value()->owner_info().is_last_chunk() && !next_op->ignore_empty_eos()))) {
                         size_t row_num = maybe_chunk.value()->num_rows();
+                        size_t chunk_bytes = maybe_chunk.value()->bytes_usage();
                         if (UNLIKELY(row_num > runtime_state->chunk_size())) {
                             return Status::InternalError(
                                     fmt::format("Intermediate chunk size must not be greater than {}, actually {} "
                                                 "after {}-th operator {} in {}",
                                                 runtime_state->chunk_size(), row_num, i, curr_op->get_name(),
                                                 to_readable_string()));
+                        }
+
+                        bool capacity_exceed = false;
+                        FAIL_POINT_TRIGGER_EXECUTE(operator_return_large_column, { capacity_exceed = true; });
+
+                        if (UNLIKELY(config::pipeline_enable_large_column_checker)) {
+                            if (capacity_exceed || maybe_chunk.value()->has_capacity_limit_reached()) {
+                                return Status::CapacityLimitExceed(
+                                        fmt::format("Large column detected at "
+                                                    "after {}-th operator {} in {}",
+                                                    i, curr_op->get_name(), to_readable_string()));
+                            }
                         }
 
                         maybe_chunk.value()->check_or_die();
@@ -361,6 +376,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         if (row_num > 0L) {
                             COUNTER_UPDATE(curr_op->_pull_row_num_counter, row_num);
                             COUNTER_UPDATE(curr_op->_pull_chunk_num_counter, 1);
+                            COUNTER_UPDATE(curr_op->_pull_chunk_bytes_counter, chunk_bytes);
                             COUNTER_UPDATE(next_op->_push_chunk_num_counter, 1);
                             COUNTER_UPDATE(next_op->_push_row_num_counter, row_num);
                         }

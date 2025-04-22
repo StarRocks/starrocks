@@ -58,6 +58,7 @@ import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.ExternalHistogramStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
+import com.starrocks.statistic.MultiColumnStatsMeta;
 import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.storagevolume.StorageVolume;
@@ -126,6 +127,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_BACKEND_STATE_CHANGE_V2, Backend.class)
             .put(OperationType.OP_ADD_COMPUTE_NODE, ComputeNode.class)
             .put(OperationType.OP_DROP_COMPUTE_NODE, DropComputeNodeLog.class)
+            .put(OperationType.OP_UPDATE_HISTORICAL_NODE, UpdateHistoricalNodeLog.class)
             .put(OperationType.OP_ADD_FRONTEND_V2, Frontend.class)
             .put(OperationType.OP_ADD_FIRST_FRONTEND_V2, Frontend.class)
             .put(OperationType.OP_UPDATE_FRONTEND_V2, Frontend.class)
@@ -210,6 +212,8 @@ public class EditLogDeserializer {
             .put(OperationType.OP_REMOVE_EXTERNAL_BASIC_STATS_META, ExternalBasicStatsMeta.class)
             .put(OperationType.OP_ADD_EXTERNAL_HISTOGRAM_STATS_META, ExternalHistogramStatsMeta.class)
             .put(OperationType.OP_REMOVE_EXTERNAL_HISTOGRAM_STATS_META, ExternalHistogramStatsMeta.class)
+            .put(OperationType.OP_ADD_MULTI_COLUMN_STATS_META, MultiColumnStatsMeta.class)
+            .put(OperationType.OP_REMOVE_MULTI_COLUMN_STATS_META, MultiColumnStatsMeta.class)
             .put(OperationType.OP_MODIFY_HIVE_TABLE_COLUMN, ModifyTableColumnOperationLog.class)
             .put(OperationType.OP_CREATE_CATALOG, Catalog.class)
             .put(OperationType.OP_DROP_CATALOG, DropCatalogLog.class)

@@ -477,6 +477,12 @@ struct TListMaterializedViewStatusResult {
     1: optional list<TMaterializedViewStatus> materialized_views
 }
 
+// Pagination cursor for request segmentation
+struct TRequestPagination {
+    1: optional i64 offset
+    2: optional i64 limit
+}
+
 // Arguments to showTasks/ShowTaskRuns
 struct TGetTasksParams {
     1: optional string db
@@ -487,6 +493,8 @@ struct TGetTasksParams {
     4: optional string query_id
     // task's state
     5: optional string state
+
+    6: optional TRequestPagination pagination
 }
 
 struct TTaskInfo {
@@ -610,6 +618,7 @@ struct TRoutineLoadJobInfo {
     19: optional string other_msg
     20: optional string latest_source_position
     21: optional string offset_lag
+    22: optional string timestamp_progress
 }
 
 struct TGetRoutineLoadJobsResult {
@@ -1628,6 +1637,7 @@ struct TResourceLogicalSlot {
     5: optional i64 expired_pending_time_ms
     6: optional i64 expired_allocated_time_ms
     7: optional i64 fe_start_time_ms
+    8: optional i64 warehouse_id
 
     100: optional i32 num_fragments
     101: optional i32 pipeline_dop
@@ -1654,6 +1664,7 @@ struct TFinishSlotRequirementResponse {
 
 struct TReleaseSlotRequest {
     1: optional Types.TUniqueId slot_id
+    2: optional i64 warehouse_id
 }
 
 struct TReleaseSlotResponse {
@@ -1932,11 +1943,71 @@ struct TListSessionsResponse {
     2: optional list<TSessionInfo> sessions;
 }
 
+struct TListConnectionRequest {
+    1: optional TAuthInfo auth_info;
+    2: optional string for_user;
+    3: optional bool show_full;
+}
+
+struct TConnectionInfo {
+    1: optional string connection_id;
+    2: optional string user;
+    3: optional string host;
+    4: optional string db;
+    5: optional string command;
+    6: optional string connection_start_time;
+    7: optional string time;
+    8: optional string state;
+    9: optional string info;
+    10: optional string isPending;
+}
+
+struct TListConnectionResponse {
+    1: optional Status.TStatus status;
+    2: optional list<TConnectionInfo> connections;
+}
+
 struct TGetKeysRequest {
 }
 
 struct TGetKeysResponse {
     1: optional list<binary> key_metas;
+}
+
+struct TGetWarehouseMetricsRequest {
+    1: optional TAuthInfo auth_info
+}
+struct TGetWarehouseMetricsResponeItem {
+    1: optional string warehouse_id;
+    2: optional string warehouse_name;
+    3: optional string queue_pending_length;
+    4: optional string queue_running_length;
+    5: optional string max_pending_length;
+    6: optional string max_pending_time_second;
+    7: optional string earliest_query_wait_time;
+    8: optional string max_required_slots;
+    9: optional string sum_required_slots;
+    10: optional string remain_slots;
+    11: optional string max_slots;
+}
+struct TGetWarehouseMetricsRespone {
+    1:optional list<TGetWarehouseMetricsResponeItem> metrics;
+}
+
+struct TGetWarehouseQueriesRequest {
+    1: optional TAuthInfo auth_info
+}
+struct TGetWarehouseQueriesResponseItem {
+    1: optional string warehouse_id;
+    2: optional string warehouse_name;
+    3: optional string query_id;
+    4: optional string state;
+    5: optional string est_costs_slots;
+    6: optional string allocate_slots;
+    7: optional string queued_wait_seconds;
+}
+struct TGetWarehouseQueriesResponse {
+    1: optional list<TGetWarehouseQueriesResponseItem> queries;
 }
 
 struct TStartCheckpointRequest {
@@ -2152,6 +2223,8 @@ service FrontendService {
     TListSessionsResponse listSessions(1: TListSessionsRequest request)
     TGetTemporaryTablesInfoResponse getTemporaryTablesInfo(1: TGetTemporaryTablesInfoRequest request)
 
+    TListConnectionResponse listConnections(1: TListConnectionRequest request)
+
     TReportFragmentFinishResponse reportFragmentFinish(TReportFragmentFinishParams request)
 
     TStartCheckpointResponse startCheckpoint(1: TStartCheckpointRequest request)
@@ -2166,5 +2239,9 @@ service FrontendService {
     TGetApplicableRolesResponse getApplicableRoles(1: TGetApplicableRolesRequest request)
 
     TGetKeywordsResponse getKeywords(1: TGetKeywordsRequest request)
+
+    TGetWarehouseMetricsRespone getWarehouseMetrics(1: TGetWarehouseMetricsRequest request)
+
+    TGetWarehouseQueriesResponse getWarehouseQueries(1: TGetWarehouseQueriesRequest request)
 }
 

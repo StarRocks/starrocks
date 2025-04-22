@@ -34,7 +34,7 @@ From v3.1.0 onwards, StarRocks supports defining read-only files in remote stora
 ### Syntax
 
 ```SQL
-FILES( data_location , [data_format] [, schema_detect ] [, StorageCredentialParams ] [, columns_from_path ] [, list_files_only ])
+FILES( data_location , [data_format] [, schema_detect ] [, StorageCredentialParams ] [, columns_from_path ] [, list_files_only ] [, list_recursively])
 ```
 
 ### Parameters

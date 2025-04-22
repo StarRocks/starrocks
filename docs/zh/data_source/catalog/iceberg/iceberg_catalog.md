@@ -195,6 +195,7 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
 | iceberg.catalog.oauth2.server-uri | 否  | 从 OAuth2 服务器获取 Token 的端点。 |
 | iceberg.catalog.vended-credentials-enabled | 否  | 是否使用 REST 后端提供的 Credential 访问文件系统。默认：`true`。|
 | iceberg.catalog.warehouse  | 否      | Catalog 的仓库位置或标志符，如 `s3://my_bucket/warehouse_location` 或 `sandbox`。 |
+| iceberg.catalog.rest.nested-namespace-enabled  | 否      | 是否支持查询嵌套namespace下的数据。默认：`false`.     |
 
 例如，创建一个名为 `tabular` 的 Iceberg Catalog，使用 Tabular 作为元数据服务：
 
@@ -237,6 +238,11 @@ mysql> select * from smith_polaris.`ns1.ns2.tpch_namespace`.tbl;
 +------+
 3 rows in set (0.34 sec)
 ```
+
+#### S3 Tables
+
+详细信息，参考 [为 AWS S3 表创建 Iceberg REST Catalog](./iceberg_rest_s3.md)。
+
 
 ##### JDBC
 

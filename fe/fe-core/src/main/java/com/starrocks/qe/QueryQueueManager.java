@@ -19,6 +19,8 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
 import com.starrocks.qe.scheduler.RecoverableException;
+import com.starrocks.qe.scheduler.slot.BaseSlotManager;
+import com.starrocks.qe.scheduler.slot.LocalSlotProvider;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.qe.scheduler.slot.QueryQueueOptions;
 import com.starrocks.qe.scheduler.slot.SlotEstimator;
@@ -58,6 +60,13 @@ public class QueryQueueManager {
             LogicalSlot slotRequirement = createSlot(context, coord);
             coord.setSlot(slotRequirement);
 
+            // LocalSlotProvider does not need to queue, just return directly. Currently, it is only used to adjust DOP
+            // through requireSlot->PipelineDriverAllocator.
+            if (slotProvider instanceof LocalSlotProvider) {
+                slotProvider.requireSlot(slotRequirement);
+                return;
+            }
+
             isPending = true;
             context.setPending(true);
             MetricRepo.COUNTER_QUERY_QUEUE_PENDING.increase(1L);
@@ -66,13 +75,15 @@ public class QueryQueueManager {
 
             long deadlineEpochMs = slotRequirement.getExpiredPendingTimeMs();
             LogicalSlot allocatedSlot = null;
+            final long warehouseId = context.getCurrentWarehouseId();
+            final BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
             while (allocatedSlot == null) {
                 // Check timeout.
                 long currentMs = System.currentTimeMillis();
                 if (slotRequirement.isPendingTimeout()) {
                     MetricRepo.COUNTER_QUERY_QUEUE_TIMEOUT.increase(1L);
                     slotProvider.cancelSlotRequirement(slotRequirement);
-                    int queryQueuePendingTimeout = GlobalVariable.getQueryQueuePendingTimeoutSecond();
+                    int queryQueuePendingTimeout = slotManager.getQueryQueuePendingTimeoutSecond(warehouseId);
                     int queryTimeout = coord.getJobSpec().getQueryOptions().query_timeout;
                     String timeoutVar = queryQueuePendingTimeout < queryTimeout ?
                             String.format("the session variable [%s]", GlobalVariable.QUERY_QUEUE_PENDING_TIMEOUT_SECOND) :
@@ -128,8 +139,10 @@ public class QueryQueueManager {
 
         long nowMs = context.getStartTime();
         long queryTimeoutSecond = coord.getJobSpec().getQueryOptions().getQuery_timeout();
-        long expiredPendingTimeMs =
-                nowMs + Math.min(GlobalVariable.getQueryQueuePendingTimeoutSecond(), queryTimeoutSecond) * 1000L;
+        final BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
+        long queryQueuePendingTimeoutSecond =
+                slotManager.getQueryQueuePendingTimeoutSecond(context.getCurrentWarehouseId());
+        long expiredPendingTimeMs = nowMs + Math.min(queryQueuePendingTimeoutSecond, queryTimeoutSecond) * 1000L;
         long expiredAllocatedTimeMs = nowMs + queryTimeoutSecond * 1000L;
 
         int numFragments = coord.getFragments().size();
@@ -140,9 +153,11 @@ public class QueryQueueManager {
         }
 
         int numSlots = estimateNumSlots(context, coord);
+        long warehouseId = context.getCurrentWarehouseId();
 
-        return new LogicalSlot(coord.getQueryId(), frontend.getNodeName(), groupId, numSlots, expiredPendingTimeMs,
-                expiredAllocatedTimeMs, frontend.getStartTime(), numFragments, pipelineDop);
+        return new LogicalSlot(coord.getQueryId(), frontend.getNodeName(), warehouseId,
+                groupId, numSlots, expiredPendingTimeMs, expiredAllocatedTimeMs,
+                frontend.getStartTime(), numFragments, pipelineDop);
     }
 
     private int estimateNumSlots(ConnectContext context, DefaultCoordinator coord) {

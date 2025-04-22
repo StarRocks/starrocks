@@ -18,7 +18,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.re2j.Pattern;
-import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
@@ -475,6 +474,18 @@ public class FunctionAnalyzer {
             }
         }
 
+        if (fnName.getFunction().equals(FunctionSet.DICT_MERGE)) {
+            if (functionCallExpr.hasChild(1)) {
+                Expr kExpr = functionCallExpr.getChild(1);
+                Optional<Long> k = extractIntegerValue(kExpr);
+                if (!k.isPresent() || k.get() >= Integer.MAX_VALUE || k.get() < 0) {
+                    throw new SemanticException(
+                            "The second parameter of DICT_MERGE must be a constant positive integer: " +
+                                    functionCallExpr.toSql(), kExpr.getPos());
+                }
+            }
+        }
+
         if (fnName.getFunction().equals(FunctionSet.APPROX_TOP_K)) {
             Optional<Long> k = Optional.empty();
             Optional<Long> counterNum = Optional.empty();
@@ -530,14 +541,18 @@ public class FunctionAnalyzer {
             if (functionCallExpr.getChildren().size() != 2) {
                 throw new SemanticException(fnName + " requires two parameters");
             }
-            if (!(functionCallExpr.getChild(1) instanceof DecimalLiteral) &&
-                    !(functionCallExpr.getChild(1) instanceof IntLiteral)) {
-                throw new SemanticException(fnName + " 's second parameter's data type is wrong ");
+            Expr child1 = functionCallExpr.getChild(1);
+            if (!child1.isConstant() || !child1.getType().isNumericType()) {
+                throw new SemanticException(fnName + " 's second parameter should be constant and its type should be numeric",
+                        functionCallExpr.getPos());
             }
-            double rate = ((LiteralExpr) functionCallExpr.getChild(1)).getDoubleValue();
-            if (rate < 0 || rate > 1) {
-                throw new SemanticException(
-                        fnName + " second parameter'value should be between 0 and 1");
+            // If the input parameter is literal, check its range is [0, 1]; otherwise it will be checked in the be's implement.
+            if (child1 instanceof LiteralExpr) {
+                double rate = ((LiteralExpr) functionCallExpr.getChild(1)).getDoubleValue();
+                if (rate < 0 || rate > 1) {
+                    throw new SemanticException(
+                            fnName + " second parameter'value should be between 0 and 1",  functionCallExpr.getChild(1).getPos());
+                }
             }
         }
 
@@ -580,7 +595,7 @@ public class FunctionAnalyzer {
                 throw new SemanticException(fnName + " function should have two args", functionCallExpr.getPos());
             }
             if (functionCallExpr.getChild(0).isConstant() || functionCallExpr.getChild(1).isConstant()) {
-                throw new SemanticException(fnName + " function 's args must be column");
+                throw new SemanticException(fnName + " function 's args must be constant");
             }
         }
 

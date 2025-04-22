@@ -388,9 +388,9 @@ public class CreateLakeTableTest {
                         "properties('enable_persistent_index' = 'true', 'persistent_index_type' = 'cloud_native');"));
         LakeTable lakeTable = getLakeTable("lake_test", "test_unique_id");
         // Clear unique id first
-        lakeTable.setMaxColUniqueId(0);
+        lakeTable.setMaxColUniqueId(-1);
         for (Column column : lakeTable.getColumns()) {
-            column.setUniqueId(0);
+            column.setUniqueId(-1);
         }
         lakeTable.gsonPostProcess();
         Assert.assertEquals(3, lakeTable.getMaxColUniqueId());
@@ -435,5 +435,20 @@ public class CreateLakeTableTest {
         Map<String, String> nationProps = nation.getProperties();
         Assert.assertTrue(nationProps.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT));
         Assert.assertTrue(nationProps.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT));
+    }
+
+    @Test
+    public void testCreateTableWithPartitionAggregation() throws Exception {
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.dup_test_enable_partition_agg (key1 int, key2 varchar(10))\n" +
+                        "distributed by hash(key1) buckets 3\n" +
+                        "properties('replication_num' = '1', 'enable_partition_aggregation' = 'true');"));
+        checkLakeTable("lake_test", "dup_test_enable_partition_agg");
+
+        String sql = "show create table lake_test.dup_test_enable_partition_agg";
+        ShowCreateTableStmt showCreateTableStmt =
+                (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        ShowResultSet resultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
+        Assert.assertFalse(resultSet.getResultRows().isEmpty());
     }
 }

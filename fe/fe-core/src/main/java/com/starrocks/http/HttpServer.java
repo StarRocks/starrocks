@@ -76,9 +76,11 @@ import com.starrocks.http.rest.LoadAction;
 import com.starrocks.http.rest.MetaReplayerCheckAction;
 import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.http.rest.MigrationAction;
+import com.starrocks.http.rest.OAuth2Action;
 import com.starrocks.http.rest.ProfileAction;
 import com.starrocks.http.rest.QueryDetailAction;
 import com.starrocks.http.rest.QueryDumpAction;
+import com.starrocks.http.rest.QueryProgressAction;
 import com.starrocks.http.rest.RowCountAction;
 import com.starrocks.http.rest.SetConfigAction;
 import com.starrocks.http.rest.ShowDataAction;
@@ -195,6 +197,7 @@ public class HttpServer {
         ColocateMetaService.UpdateGroupAction.registerAction(controller);
         GlobalDictMetaService.ForbitTableAction.registerAction(controller);
         ProfileAction.registerAction(controller);
+        QueryProgressAction.registerAction(controller);
         QueryDetailAction.registerAction(controller);
         ConnectionAction.registerAction(controller);
         ShowDataAction.registerAction(controller);
@@ -225,6 +228,8 @@ public class HttpServer {
         TableQueryPlanAction.registerAction(controller);
 
         BootstrapFinishAction.registerAction(controller);
+
+        OAuth2Action.registerAction(controller);
     }
 
     public void start() {

@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include <storage/flat_json_config.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -106,11 +108,14 @@ class JsonPathDeriver {
 public:
     JsonPathDeriver() = default;
     JsonPathDeriver(const std::vector<std::string>& paths, const std::vector<LogicalType>& types, bool has_remain);
+    void init_flat_json_config(const FlatJsonConfig* flat_json_config);
 
     ~JsonPathDeriver() = default;
 
     // dervie paths
     void derived(const std::vector<const Column*>& json_datas);
+
+    StatusOr<size_t> check_null_factor(const std::vector<const Column*>& json_datas);
 
     void derived(const std::vector<const ColumnReader*>& json_readers);
 
@@ -139,6 +144,9 @@ private:
 
     void _visit_json_paths(const vpack::Slice& value, JsonFlatPath* root, size_t mark_row);
 
+    // clean sparsity path, to save memory
+    void _clean_sparsity_path(JsonFlatPath* root, size_t check_hits_min);
+
 private:
     struct JsonFlatDesc {
         // json compatible type
@@ -160,6 +168,9 @@ private:
     std::vector<LogicalType> _types;
 
     double _min_json_sparsity_factory = config::json_flat_sparsity_factor;
+    double _max_json_null_factor = config::json_flat_null_factor;
+    int _max_column = config::json_flat_column_max;
+
     size_t _total_rows;
     FlatJsonHashMap<JsonFlatPath*, JsonFlatDesc> _derived_maps;
     std::shared_ptr<JsonFlatPath> _path_root;

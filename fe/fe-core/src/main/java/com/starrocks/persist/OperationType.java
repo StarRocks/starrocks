@@ -202,6 +202,9 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_REMOVE_MULTI_COLUMN_STATS_META = 10019;
 
+    @IgnorableOnReplayFailed
+    public static final short OP_MODIFY_FLAT_JSON_CONFIG = 10020;
+
 
     // workgroup 10021 ~ 10030
     @IgnorableOnReplayFailed
@@ -272,6 +275,9 @@ public class OperationType {
 
     @IgnorableOnReplayFailed
     public static final short OP_DROP_COMPUTE_NODE = 10202;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_UPDATE_HISTORICAL_NODE = 10210;
 
     // new operator for partition 10241 ~ 10260
     public static final short OP_ADD_PARTITION_V2 = 10241;
