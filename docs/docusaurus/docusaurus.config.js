@@ -60,7 +60,7 @@ const config = {
               return 'https://github.com/StarRocks/starrocks/edit/main/docs/' + locale + '/' + docPath
           },
           admonitions: { keywords:
-              ['experimental','note','tip','info','caution','danger'],
+              ['experimental','beta', 'note','tip','info','caution','danger'],
           },
           // Versions:
           // We don't want to show `main` or `current`, we want to show the released versions.
