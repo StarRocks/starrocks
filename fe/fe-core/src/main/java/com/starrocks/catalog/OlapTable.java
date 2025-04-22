@@ -89,6 +89,7 @@ import com.starrocks.common.util.Util;
 import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.DataCacheInfo;
+import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.ColocatePersistInfo;
@@ -431,6 +432,7 @@ public class OlapTable extends Table {
         }
     }
 
+<<<<<<< HEAD
     public void addDoubleWritePartition(String sourcePartitionName, String tempPartitionName) {
         Partition temp = tempPartitions.getPartition(tempPartitionName);
         if (temp != null) {
@@ -443,6 +445,18 @@ public class OlapTable extends Table {
         } else {
             LOG.warn("partition {} does not exist", tempPartitionName);
         }
+=======
+    protected void restoreColumnUniqueIdIfNeed() {
+        boolean needRestoreColumnUniqueId = (indexIdToMeta.values().stream().findFirst().
+                get().getSchema().get(0).getUniqueId() < 0);
+        if (needRestoreColumnUniqueId) {
+            setMaxColUniqueId(LakeTableHelper.restoreColumnUniqueId(this));
+        }
+    }
+
+    public void addDoubleWritePartition(long sourcePartitionId, long tempPartitionId) {
+        doubleWritePartitions.put(sourcePartitionId, tempPartitionId);
+>>>>>>> 01137bd65c ([BugFix] Fix uniqueness checking for column unique id in schema change (#58164))
     }
 
     public void clearDoubleWritePartition() {
