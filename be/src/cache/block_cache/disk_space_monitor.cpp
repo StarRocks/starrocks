@@ -114,6 +114,8 @@ size_t DiskSpace::_cache_file_space_usage() {
 
 void DiskSpace::_update_disk_options() {
     _disk_opts.cache_lower_limit = config::datacache_min_disk_quota_for_adjustment;
+    _disk_opts.cache_upper_limit = DataCacheUtils::parse_conf_datacache_disk_size(_path, config::datacache_disk_size,
+                                                                                  _disk_stats.capacity_bytes);
     _disk_opts.low_level_size = _disk_stats.capacity_bytes * 0.01 * config::datacache_disk_low_level;
     _disk_opts.safe_level_size = _disk_stats.capacity_bytes * 0.01 * config::datacache_disk_safe_level;
     _disk_opts.high_level_size = _disk_stats.capacity_bytes * 0.01 * config::datacache_disk_high_level;
@@ -195,6 +197,9 @@ size_t DiskSpace::_check_cache_high_limit(int64_t cache_quota) {
     if (cache_quota > _disk_opts.safe_level_size) {
         LOG(INFO) << "Correct the cache quota because it reaches the high limit. quota: " << cache_quota;
         cache_quota = _disk_opts.safe_level_size;
+    }
+    if (cache_quota > _disk_opts.cache_upper_limit) {
+        cache_quota = _disk_opts.cache_upper_limit;
     }
     return cache_quota;
 }

@@ -51,6 +51,7 @@ public:
 
     struct DiskOptions {
         int64_t cache_lower_limit = 0;
+        int64_t cache_upper_limit = 0;
 
         int64_t low_level_size = 0;
         int64_t safe_level_size = 0;
