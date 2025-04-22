@@ -10,6 +10,49 @@ After upgrading StarRocks to v3.3, DO NOT downgrade it directly to v3.2.0, v3.2.
 
 :::
 
+## 3.3.13
+
+Release Date: April 22, 2025
+
+### Improvements
+
+- Added memory consumption metrics for queries in FE in audit logs and the QueryDetail interface. [#57731](https://github.com/StarRocks/starrocks/pull/57731)
+- Optimized the strategy for concurrent creation of expression partitions. [#57899](https://github.com/StarRocks/starrocks/pull/57899)
+- Added monitoring metrics for the number of active FE nodes. [#57857](https://github.com/StarRocks/starrocks/pull/57857)
+- The `information_schema.task_runs` view supports pushdown of the LIMIT clause. [#57404](https://github.com/StarRocks/starrocks/pull/57404)
+- Fixed several CVE issues. [#57705](https://github.com/StarRocks/starrocks/pull/57705) [#57620](https://github.com/StarRocks/starrocks/pull/57620)
+- Primary Key tables support retry during the PUBLISH stage, enhancing system disaster recovery capabilities. [#57354](https://github.com/StarRocks/starrocks/pull/57354)
+- Reduced memory consumption of Flat JSON. [#57357](https://github.com/StarRocks/starrocks/pull/57357)
+- The `information_schema.routine_load_jobs` view adds the `timestamp_progress` column, consistent with the SHOW ROUTINE LOAD statement return. [#57123](https://github.com/StarRocks/starrocks/pull/57123)
+- Disallowed unauthorized behaviors from StarRocks to LDAP. [#57131](https://github.com/StarRocks/starrocks/pull/57131)
+- Supports returning an error when the schema of an AVRO file does not match the schema of the Hive table. [#57296](https://github.com/StarRocks/starrocks/pull/57296)
+- Materialized views support the `excluded_refresh_tables` property. [#56428](https://github.com/StarRocks/starrocks/pull/56428)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Flat JSON does not support the `get_json_bool` function. [#58077](https://github.com/StarRocks/starrocks/pull/58077)
+- SHOW AUTHENTICATION statement returns the password. [#58072](https://github.com/StarRocks/starrocks/pull/58072)
+- The `percentile_count` function returns incorrect values. [#58038](https://github.com/StarRocks/starrocks/pull/58038)
+- Issues caused by spilling strategies. [#58022](https://github.com/StarRocks/starrocks/pull/58022)
+- After a BE is blacklisted, Stream Load still dispatches tasks to the BE, causing task failures. [#57919](https://github.com/StarRocks/starrocks/pull/57919)
+- Issues when using the `cast` function with semi-structured data types. [#57804](https://github.com/StarRocks/starrocks/pull/57804)
+- The `array_map` function returns incorrect values. [#57756](https://github.com/StarRocks/starrocks/pull/57756)
+- In the scenario of a single tablet, using multiple `distinct` functions on the same column with a single-column GROUP BY clause leads to incorrect query results. [#57690](https://github.com/StarRocks/starrocks/pull/57690)
+- MIN/MAX values in the profiles of big queries are inaccurate. [#57655](https://github.com/StarRocks/starrocks/pull/57655)
+- Non-partitioned materialized views based on Delta Lake data cannot rewrite queries. [#57686](https://github.com/StarRocks/starrocks/pull/57686)
+- A Routine Load deadlock issue. [#57430](https://github.com/StarRocks/starrocks/pull/57430)
+- Predicate pushdown issues with DATE/DATETIME columns. [#57576](https://github.com/StarRocks/starrocks/pull/57576)
+- An issue when the `percentile_disc` function has an empty input. [#57572](https://github.com/StarRocks/starrocks/pull/57572)
+- When modifying the bucket distribution of a table with the statement `ALTER TABLE {table} PARTITIONS (p1, p1) DISTRIBUTED BY ...`, specifying duplicate partition names could result in failure to delete internally generated temporary partitions. [#57005](https://github.com/StarRocks/starrocks/pull/57005)
+- ALTER TABLE MODIFY COLUMN fails with expression partitioned tables based on `str2date` function. [#57487](https://github.com/StarRocks/starrocks/pull/57487)
+- CACHE SELECT issue with semi-structured columns. [#57448](https://github.com/StarRocks/starrocks/pull/57448)
+- Upgrade compatibility issue caused by `hadoop-lib`. [#57436](https://github.com/StarRocks/starrocks/pull/57436)
+- Case sensitivity error issues when creating partitions. [#54867](https://github.com/StarRocks/starrocks/pull/54867)
+- Some columns generate incorrect sort keys during updates. [#57375](https://github.com/StarRocks/starrocks/pull/57375)
+- Unknown issues caused by nested window functions . [#57216](https://github.com/StarRocks/starrocks/pull/57216)
+
 ## 3.3.12
 
 Release date: April 3, 2025
