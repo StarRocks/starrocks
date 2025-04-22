@@ -10,6 +10,49 @@ StarRocks を v3.3 にアップグレードした後、直接 v3.2.0、v3.2.1、
 
 :::
 
+## 3.3.13
+
+リリース日: 2025年4月22日
+
+### 改善点
+
+- 監査ログおよび QueryDetail インターフェースに、FEのメモリ消費指標を追加しました。[#57731](https://github.com/StarRocks/starrocks/pull/57731)
+- 式に基づくパーティションの同時作成時の戦略を最適化しました。[#57899](https://github.com/StarRocks/starrocks/pull/57899)
+- 活動中の FE ノード数の監視指標を追加しました。[#57857](https://github.com/StarRocks/starrocks/pull/57857)
+- `information_schema.task_runs` ビューで LIMIT 句のプッシュダウンをサポートしました。[#57404](https://github.com/StarRocks/starrocks/pull/57404)
+- 複数の CVE 問題を修正しました。[#57705](https://github.com/StarRocks/starrocks/pull/57705) [#57620](https://github.com/StarRocks/starrocks/pull/57620)
+- 主キー表は PUBLISH 段階での再試行をサポートし、システムの災害復旧能力を強化しました。[#57354](https://github.com/StarRocks/starrocks/pull/57354)
+- Flat JSON のメモリ消費を削減しました。[#57357](https://github.com/StarRocks/starrocks/pull/57357)
+- `information_schema.routine_load_jobs` ビューに `timestamp_progress` 列を追加し、SHOW ROUTINE LOAD 文の戻り値と一致させました。[#57123](https://github.com/StarRocks/starrocks/pull/57123)
+- StarRocks を使用する際、LDAP に対する未承認の行動を防止しました。[#57131](https://github.com/StarRocks/starrocks/pull/57131)
+- AVRO ファイルのスキーマと Hive テーブルのスキーマが一致しない場合にエラーを報告します。[#57296](https://github.com/StarRocks/starrocks/pull/57296)
+- マテリアライズドビューで `excluded_refresh_tables` 属性をサポートしました。[#56428](https://github.com/StarRocks/starrocks/pull/56428)
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- Flat JSON が `get_json_bool` 関数をサポートしていません。[#58077](https://github.com/StarRocks/starrocks/pull/58077)
+- SHOW AUTHENTICATION 文がパスワードを返します。[#58072](https://github.com/StarRocks/starrocks/pull/58072)
+- `percentile_count` 関数が誤った値を返します。[#58038](https://github.com/StarRocks/starrocks/pull/58038)
+- 大規模演算子のスピル戦略に関連する問題。[#58022](https://github.com/StarRocks/starrocks/pull/58022)
+- BE がブラックリストに追加された後、Stream Load が引き続き BE にタスクを分配し、タスクが失敗します。[#57919](https://github.com/StarRocks/starrocks/pull/57919)
+- 半構造化データ型で `cast` 関数を使用する際の問題。[#57804](https://github.com/StarRocks/starrocks/pull/57804)
+- `array_map` 関数が誤った値を返します。[#57756](https://github.com/StarRocks/starrocks/pull/57756)
+- 単一の Tablet シナリオで同一の列に対して複数の `distinct` 関数を使用し、単一列 GROUP BY でクエリ結果が誤る問題。[#57690](https://github.com/StarRocks/starrocks/pull/57690)
+- 大規模クエリのクエリプロファイルで MIN/MAX 値が不正確です。[#57655](https://github.com/StarRocks/starrocks/pull/57655)
+- Delta Lake データに基づく非分割マテリアライズドビューがクエリの書き換えに失敗します。[#57686](https://github.com/StarRocks/starrocks/pull/57686)
+- Routine Load のデッドロック問題。[#57430](https://github.com/StarRocks/starrocks/pull/57430)
+- DATE/DATETIME 列の述語プッシュダウンの誤り。[#57576](https://github.com/StarRocks/starrocks/pull/57576)
+- `percentile_disc` 関数が空の入力で問題を引き起こす。[#57572](https://github.com/StarRocks/starrocks/pull/57572)
+- `ALTER TABLE {table} PARTITIONS (p1, p1) DISTRIBUTED BY ... 文でパーティション名を重複指定すると、内部で生成された一時パーティションが削除できなくなる問題を修正。``#57005`
+- `str2date` 関数に基づく表の ALTER TABLE MODIFY COLUMN が失敗する問題。[#57487](https://github.com/StarRocks/starrocks/pull/57487)
+- 半構造化列に対する CACHE SELECT 問題。[#57448](https://github.com/StarRocks/starrocks/pull/57448)
+- `hadoop-lib`によるアップグレード互換性の問題。[#57436](https://github.com/StarRocks/starrocks/pull/57436)
+- パーティション作成時の大文字と小文字の区別エラーの問題。[#54867](https://github.com/StarRocks/starrocks/pull/54867)
+- 一部の列更新で誤ったソートキーが生成される問題。[#57375](https://github.com/StarRocks/starrocks/pull/57375)
+- ネストされたウィンドウ関数が不明な問題を引き起こす。[#57216](https://github.com/StarRocks/starrocks/pull/57216)
+
 ## 3.3.12
 
 リリース日: 2025 年 4 月 3 日
