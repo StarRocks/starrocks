@@ -10,6 +10,49 @@ displayed_sidebar: docs
 
 :::
 
+## 3.3.13
+
+发布日期：2025 年 4 月 22 日
+
+### 功能优化
+
+- 审计日志和 QueryDetail 接口中增加查询在 FE 的内存消耗指标。[#57731](https://github.com/StarRocks/starrocks/pull/57731)
+- 优化并发创建表达式分区时的策略。[#57899](https://github.com/StarRocks/starrocks/pull/57899)
+- 增加存活的 FE 节点数的监控指标。[#57857](https://github.com/StarRocks/starrocks/pull/57857)
+- `information_schema.task_runs` 视图支持 LIMIT 下推。[57404](https://github.com/StarRocks/starrocks/pull/57404)
+- 修复一些 CVE 问题。[#57705](https://github.com/StarRocks/starrocks/pull/57705) [#57620](https://github.com/StarRocks/starrocks/pull/57620)
+- 主键表在 PUBLISH 阶段支持 Retry，增强系统容灾能力。[#57354](https://github.com/StarRocks/starrocks/pull/57354)
+- 降低 Flat JSON 的内存占用。[#57357](https://github.com/StarRocks/starrocks/pull/57357)
+- `information_schema.routine_load_jobs` 视图增加 `timestamp_progress` 列，和 SHOW ROUTINE LOAD 语句返回保持一致。[#57123](https://github.com/StarRocks/starrocks/pull/57123)
+- 防止通过 StarRocks 向 LDAP 传递一些非授权行为。[#57131](https://github.com/StarRocks/starrocks/pull/57131)
+- 当 AVRO 文件的 Schema 和 Hive 表的 Schema 不同时报错。[#57296](https://github.com/StarRocks/starrocks/pull/57296)
+- 物化视图支持 `excluded_refresh_tables` 属性。[#56428](https://github.com/StarRocks/starrocks/pull/56428)
+
+### 问题修复
+
+修复了如下问题：
+
+- Flat JSON 不支持 `get_json_bool` 函数。[#58077](https://github.com/StarRocks/starrocks/pull/58077)
+- SHOW AUTHENTICATION 语句返回密码。[#58072](https://github.com/StarRocks/starrocks/pull/58072)
+- `percentile_count` 函数返回错误。[#58038](https://github.com/StarRocks/starrocks/pull/58038)
+- 大算子落盘策略导致的问题。[#58022](https://github.com/StarRocks/starrocks/pull/58022)
+- BE 被加入黑名单后，Stream Load 依然会将任务分发该 BE 导致任务失败。[#57919](https://github.com/StarRocks/starrocks/pull/57919)
+- 基于半结构化数据类型使用 `cast` 函数时的问题。[#57804](https://github.com/StarRocks/starrocks/pull/57804)
+- `array_map` 函数返回错误。[#57756](https://github.com/StarRocks/starrocks/pull/57756)
+- 在单 Tablet 场景下，对同一列使用多个 `distinct` 函数并基于单列 GROUP BY 导致查询结果错误。[#57690](https://github.com/StarRocks/starrocks/pull/57690)
+- 大查询的 Query Profile 中的 MIN/MAX 值不准。[#57655](https://github.com/StarRocks/starrocks/pull/57655)
+- 基于 Delta Lake 数据的非分区物化视图无法改写查询。[#57686](https://github.com/StarRocks/starrocks/pull/57686)
+- Routine Load 死锁问题。[#57430](https://github.com/StarRocks/starrocks/pull/57430)
+- DATE/DATETIME 列的谓词下推错误。[#57576](https://github.com/StarRocks/starrocks/pull/57576)
+- `percentile_disc` 函数在空输入时导致的问题。[#57572](https://github.com/StarRocks/starrocks/pull/57572)
+- 通过 `ALTER TABLE {table} PARTITIONS (p1, p1) DISTRIBUTED BY ...` 语句修改表的分桶方式时，如果重复指定分区名，内部生成的临时分区无法删除。[#57005](https://github.com/StarRocks/starrocks/pull/57005)
+- 基于 `str2date` 函数的表达式分区表 ALTER TABLE MODIFY COLUMN 失败。[#57487](https://github.com/StarRocks/starrocks/pull/57487)
+- 针对半结构化列的 CACHE SELECT 问题。[#57448](https://github.com/StarRocks/starrocks/pull/57448)
+- `hadoop-lib` 引入的升级兼容性问题。[#57436](https://github.com/StarRocks/starrocks/pull/57436)
+- 创建分区时大小写敏感的情况报错的问题。[#54867](https://github.com/StarRocks/starrocks/pull/54867)
+- 部分列更新生成错误的排序键。[#57375](https://github.com/StarRocks/starrocks/pull/57375)
+- 嵌套的窗口函数导致未知问题。[#57216](https://github.com/StarRocks/starrocks/pull/57216)
+
 ## 3.3.12
 
 发布日期：2025 年 4 月 3 日
