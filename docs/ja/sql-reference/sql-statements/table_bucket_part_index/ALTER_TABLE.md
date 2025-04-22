@@ -207,7 +207,7 @@ ALTER TABLE [<db_name>.]<tbl_name>
 DROP PARTITION [ IF EXISTS ] <partition_name> [ FORCE ]
 ```
 
-- バッチでパーティションを削除する (v3.3.1以降でサポート):
+- バッチでパーティションを削除する (v3.4.0以降でサポート):
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
