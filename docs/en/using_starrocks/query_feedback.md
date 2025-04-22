@@ -3,7 +3,11 @@ displayed_sidebar: docs
 sidebar_position: 11
 ---
 
+import Beta from '../_assets/commonMarkdown/_beta.mdx'
+
 # Query Feedback
+
+<Beta />
 
 This topic introduces the Query Feedback feature, its application scenarios, and how to optimize query plans based on feedback from execution statistics using Query Plan Advisor.
 

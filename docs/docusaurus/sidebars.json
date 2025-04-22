@@ -12,7 +12,8 @@
                 "introduction/what_is_starrocks",
                 "introduction/Architecture",
                 "introduction/Features",
-                "introduction/versioning"
+                "introduction/versioning",
+                "introduction/maturity"
             ]
         },
         {

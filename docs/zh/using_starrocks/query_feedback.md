@@ -3,7 +3,11 @@ displayed_sidebar: docs
 sidebar_position: 11
 ---
 
+import Beta from '../_assets/commonMarkdown/_beta.mdx'
+
 # Query Feedback
+
+<Beta />
 
 本文介绍 Query Feedback 功能的基本概念和使用场景，以及如何利用 Query Plan Advisor 基于执行详情反馈优化查询计划（Query Plan）。
 

@@ -3,7 +3,11 @@ displayed_sidebar: docs
 sidebar_position: 11
 ---
 
+import Beta from '../_assets/commonMarkdown/_beta.mdx'
+
 # クエリフィードバック
+
+<Beta />
 
 このトピックでは、クエリフィードバック機能、その適用シナリオ、および Query Plan Advisor を使用して実行統計からのフィードバックに基づいてクエリプランを最適化する方法を紹介します。
 

@@ -3,7 +3,11 @@ displayed_sidebar: docs
 sidebar_position: 0.91
 ---
 
+import Experimental from '../../_assets/commonMarkdown/_experimental.mdx'
+
 # Python UDF
+
+<Experimental />
 
 本文介绍如何使用 Python 语言编写用户定义函数（User Defined Function，简称 UDF）。
 

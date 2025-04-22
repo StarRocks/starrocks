@@ -3,7 +3,11 @@ displayed_sidebar: docs
 sidebar_position: 0.91
 ---
 
+import Experimental from '../../_assets/commonMarkdown/_experimental.mdx'
+
 # Python UDF
+
+<Experimental />
 
 このトピックでは、Python を使用してユーザー定義関数 (UDF) を開発する方法について説明します。
 

@@ -3,11 +3,11 @@ displayed_sidebar: docs
 sidebar_position: 0.91
 ---
 
+import Experimental from '../../_assets/commonMarkdown/_experimental.mdx'
+
 # Python UDF
 
-:::experimental
-experimental feature
-:::
+<Experimental />
 
 This topic describes how to develop User Defined Functions (UDF) using Python.
 
