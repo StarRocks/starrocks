@@ -29,7 +29,6 @@ import com.starrocks.task.AgentBatchTask;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import dev.failsafe.internal.util.Lists;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.AfterClass;
