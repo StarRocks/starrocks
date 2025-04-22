@@ -22,14 +22,10 @@ import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PaimonView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
-import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorProperties;
@@ -88,7 +84,6 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -102,8 +97,8 @@ import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.connector.ColumnTypeConverter.fromPaimonSchemas;
 import static com.starrocks.connector.ColumnTypeConverter.toPaimonRowType;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
-import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 import static com.starrocks.connector.paimon.PaimonApiConverter.getPaimonView;
+import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 
 public class PaimonMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(PaimonMetadata.class);
@@ -169,7 +164,7 @@ public class PaimonMetadata implements ConnectorMetadata {
     public void dropTable(DropTableStmt stmt) throws DdlException {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
-        Table paimonTable = getTable(stmt.getDbName(), stmt.getTableName());
+        Table paimonTable = getTable(new ConnectContext(), stmt.getDbName(), stmt.getTableName());
         if (paimonTable == null) {
             return;
         }
