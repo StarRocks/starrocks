@@ -1506,6 +1506,7 @@ public class AnalyzerUtils {
                         endTime = beginTime.plusDays(interval);
                         break;
                     case "month":
+<<<<<<< HEAD
                         beginTime = beginTime.withDayOfMonth(1);
                         partitionName = partitionPrefix + beginTime.format(DateUtils.MONTH_FORMATTER_UNIX);
                         endTime = beginTime.plusMonths(interval);
@@ -1513,6 +1514,15 @@ public class AnalyzerUtils {
                     case "year":
                         beginTime = beginTime.withDayOfYear(1);
                         partitionName = partitionPrefix + beginTime.format(DateUtils.YEAR_FORMATTER_UNIX);
+=======
+                        beginTime = beginTime.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
+                        partitionName = DEFAULT_PARTITION_NAME_PREFIX + beginTime.format(DateUtils.MONTH_FORMATTER_UNIX);
+                        endTime = beginTime.plusMonths(interval);
+                        break;
+                    case "year":
+                        beginTime = beginTime.withDayOfYear(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
+                        partitionName = DEFAULT_PARTITION_NAME_PREFIX + beginTime.format(DateUtils.YEAR_FORMATTER_UNIX);
+>>>>>>> 0f36b398b5 ([BugFix] Fix expression partition fail with month/year granularity (#58182))
                         endTime = beginTime.plusYears(interval);
                         break;
                     default:
