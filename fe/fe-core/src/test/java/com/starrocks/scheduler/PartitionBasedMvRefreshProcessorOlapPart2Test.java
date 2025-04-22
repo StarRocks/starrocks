@@ -19,6 +19,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
@@ -315,6 +316,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
         starRocksAssert.dropTable("tbl1");
     }
 
+
     @Test
     public void testTaskRun() {
         starRocksAssert.withTable(new MTable("tbl6", "k2",
@@ -359,6 +361,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                     taskRun.setTaskId(taskId);
                     taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
 
+                    Config.enable_task_history_archive = false;
                     Assert.assertTrue(taskRunScheduler.addPendingTaskRun(taskRun));
                     Assert.assertNotNull(taskRunScheduler.getRunnableTaskRun(taskId));
 
@@ -378,6 +381,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                         Thread.sleep(100);
                     }
                     starRocksAssert.dropMaterializedView("test_task_run");
+                    Config.enable_task_history_archive = true;
                 }
         );
     }

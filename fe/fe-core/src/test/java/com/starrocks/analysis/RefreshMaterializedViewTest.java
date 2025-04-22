@@ -1268,12 +1268,11 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                         "    v1 int\n" +
                         ")\n" +
                         "PROPERTIES('replication_num' = '1');");
-
         starRocksAssert.createDatabaseIfNotExists("mv_db")
                 .useDatabase("mv_db")
                 .withMaterializedView("CREATE MATERIALIZED VIEW test_mv\n"
                         + "DISTRIBUTED BY HASH(`k1`)\n"
-                        + "REFRESH ASYNC\n"
+                        + "REFRESH DEFERRED ASYNC\n"
                         + "AS SELECT k1 from trunc_db.trunc_db_t1;");
 
         executeInsertSql(connectContext, "insert into trunc_db.trunc_db_t1 values(2, 10)");
@@ -1329,7 +1328,6 @@ public class RefreshMaterializedViewTest extends MVTestBase {
         starRocksAssert.dropTable("drop_db.tbl_with_mv");
         starRocksAssert.dropMaterializedView("drop_mv_db.test_mv");
     }
-
 
     @Test
     public void testCreateExcludedRefreshTablesSupportMV() throws Exception {
