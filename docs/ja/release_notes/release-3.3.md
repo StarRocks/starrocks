@@ -45,7 +45,7 @@ StarRocks を v3.3 にアップグレードした後、直接 v3.2.0、v3.2.1、
 - Routine Load のデッドロック問題。[#57430](https://github.com/StarRocks/starrocks/pull/57430)
 - DATE/DATETIME 列の述語プッシュダウンの誤り。[#57576](https://github.com/StarRocks/starrocks/pull/57576)
 - `percentile_disc` 関数が空の入力で問題を引き起こす。[#57572](https://github.com/StarRocks/starrocks/pull/57572)
-- `ALTER TABLE {table} PARTITIONS (p1, p1) DISTRIBUTED BY ... 文でパーティション名を重複指定すると、内部で生成された一時パーティションが削除できなくなる問題を修正。``#57005`
+- `ALTER TABLE {table} PARTITIONS (p1, p1) DISTRIBUTED BY ...` 文でパーティション名を重複指定すると、内部で生成された一時パーティションが削除できなくなる問題を修正。[#57005](https://github.com/StarRocks/starrocks/pull/57005)
 - `str2date` 関数に基づく表の ALTER TABLE MODIFY COLUMN が失敗する問題。[#57487](https://github.com/StarRocks/starrocks/pull/57487)
 - 半構造化列に対する CACHE SELECT 問題。[#57448](https://github.com/StarRocks/starrocks/pull/57448)
 - `hadoop-lib`によるアップグレード互換性の問題。[#57436](https://github.com/StarRocks/starrocks/pull/57436)
