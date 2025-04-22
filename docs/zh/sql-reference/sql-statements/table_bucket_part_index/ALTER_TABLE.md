@@ -214,7 +214,7 @@ ALTER TABLE [<db_name>.]<tbl_name>
 DROP PARTITION [ IF EXISTS ] <partition_name> [ FORCE ]
 ```
 
-批量删除分区（自 v3.3.1 起支持）：
+批量删除分区（自 v3.4.0 起支持）：
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
