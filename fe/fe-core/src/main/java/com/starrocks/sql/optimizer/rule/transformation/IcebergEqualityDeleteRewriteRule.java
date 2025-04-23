@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
@@ -190,7 +191,7 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
 
             LogicalJoinOperator.Builder builder = LogicalJoinOperator.builder()
                     .setJoinType(JoinOperator.LEFT_ANTI_JOIN)
-                    .setJoinHint(JoinOperator.HINT_BROADCAST)
+                    .setJoinHint(HintNode.HINT_JOIN_BROADCAST)
                     .setOnPredicate(onPredicate)
                     .setOriginalOnPredicate(onPredicate);
 
