@@ -47,8 +47,8 @@ public final class AggStateIf extends AggregateFunction {
         try {
             FunctionName functionName = new FunctionName(aggFunc.functionName() + FunctionSet.AGG_STATE_IF);
             List<Type> argTypes = new ArrayList<>();
-            argTypes.add(Type.BOOLEAN);
             argTypes.addAll(Arrays.asList(aggFunc.getArgs()));
+            argTypes.add(Type.BOOLEAN);
             AggStateIf aggStateIf = new AggStateIf(functionName, argTypes, aggFunc.getReturnType(),
                     aggFunc.getIntermediateTypeOrReturnType());
             aggStateIf.setBinaryType(TFunctionBinaryType.BUILTIN);

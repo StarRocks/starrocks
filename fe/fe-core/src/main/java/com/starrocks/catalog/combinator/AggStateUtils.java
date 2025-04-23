@@ -187,16 +187,17 @@ public class AggStateUtils {
             // `_if`'s input types are boolean + original input types
             String aggFuncName = AggStateUtils.getAggFuncNameOfCombinator(func.functionName());
 
-            Type[] oldArgumentTypes = Arrays.copyOfRange(argumentTypes, 1, argumentTypes.length);
+            Type[] oldArgumentTypes = Arrays.copyOfRange(argumentTypes, 0, argumentTypes.length - 1);
 
             FunctionParams oldFunctionParams =
-                    new FunctionParams(params.isStar(), params.exprs().subList(1, params.exprs().size()),
+                    new FunctionParams(params.isStar(), params.exprs().subList(0, params.exprs().size() - 1),
                             params.getExprsNames() == null ? null :
-                                    params.getExprsNames().subList(1, params.getExprsNames().size()),
+                                    params.getExprsNames().subList(0, params.getExprsNames().size() - 1),
                             params.isDistinct(), params.getOrderByElements() == null ? null :
-                            params.getOrderByElements().subList(1, params.getOrderByElements().size()));
+                            params.getOrderByElements().subList(0, params.getOrderByElements().size() - 1));
 
-            Boolean[] oldArgumentIsConstants = Arrays.copyOfRange(argumentIsConstants, 1, argumentIsConstants.length);
+            Boolean[] oldArgumentIsConstants =
+                    Arrays.copyOfRange(argumentIsConstants, 0, argumentIsConstants.length - 1);
 
             Function argFn = FunctionAnalyzer.getAnalyzedAggregateFunction(session, aggFuncName,
                     oldFunctionParams, oldArgumentTypes, oldArgumentIsConstants, pos);
