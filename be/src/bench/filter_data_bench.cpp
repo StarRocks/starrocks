@@ -88,12 +88,14 @@ static inline size_t filter_simd_compress(const Filter& filter, T* data) {
     }
 #endif
     constexpr size_t batch_size = 512 / (sizeof(T) * 8);
+#ifdef __AVX512F__
+    constexpr size_t mask_batch_size = batch_size / 8;
+#endif
     size_t res = 0;
     size_t batches = bit_mask.size() * 8 / batch_size;
     if constexpr (sizeof(T) * 8 == 32) {
         for (size_t i = 0; i < batches; i++) {
 #ifdef __AVX512F__
-            constexpr size_t mask_batch_size = batch_size / 8;
             __mmask16 m = *(reinterpret_cast<const uint16_t*>(bit_mask.data() + i * mask_batch_size));
             __m512i src = _mm512_loadu_epi32(data + i * batch_size);
             _mm512_mask_compressstoreu_epi32(data + res, m, src);
