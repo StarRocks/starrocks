@@ -32,9 +32,8 @@ LRUCacheModule::~LRUCacheModule() {
     }
 }
 
-Status LRUCacheModule::insert(const std::string& key, void* value, size_t size,
-                              ObjectCacheDeleter deleter, ObjectCacheHandlePtr* handle,
-                              ObjectCacheWriteOptions* options) {
+Status LRUCacheModule::insert(const std::string& key, void* value, size_t size, ObjectCacheDeleter deleter,
+                              ObjectCacheHandlePtr* handle, ObjectCacheWriteOptions* options) {
     if (!_check_write(size, options)) {
         return Status::InternalError("cache insertion is rejected");
     }
