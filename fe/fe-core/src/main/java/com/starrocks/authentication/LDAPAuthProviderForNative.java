@@ -20,6 +20,7 @@ import com.starrocks.qe.ConnectContext;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import javax.naming.NamingException;
 
 public class LDAPAuthProviderForNative implements AuthenticationProvider {
     private final String ldapServerHost;
@@ -54,16 +55,17 @@ public class LDAPAuthProviderForNative implements AuthenticationProvider {
         if (authResponse[authResponse.length - 1] == 0) {
             clearPassword = Arrays.copyOf(authResponse, authResponse.length - 1);
         }
-        if (!Strings.isNullOrEmpty(ldapUserDN)) {
-            if (!LdapSecurity.checkPassword(ldapUserDN, new String(clearPassword, StandardCharsets.UTF_8),
-                    ldapServerHost, ldapServerPort)) {
-                throw new AuthenticationException("Failed to authenticate for [user: " + user + "] by ldap");
+
+        try {
+            if (!Strings.isNullOrEmpty(ldapUserDN)) {
+                LdapSecurity.checkPassword(ldapUserDN, new String(clearPassword, StandardCharsets.UTF_8),
+                        ldapServerHost, ldapServerPort);
+            } else {
+                LdapSecurity.checkPasswordByRoot(user, new String(clearPassword, StandardCharsets.UTF_8),
+                        ldapServerHost, ldapServerPort, ldapBindRootDN, ldapBindRootPwd, ldapBindBaseDN, ldapSearchFilter);
             }
-        } else {
-            if (!LdapSecurity.checkPasswordByRoot(user, new String(clearPassword, StandardCharsets.UTF_8),
-                    ldapServerHost, ldapServerPort, ldapBindRootDN, ldapBindRootPwd, ldapBindBaseDN, ldapSearchFilter)) {
-                throw new AuthenticationException("Failed to authenticate for [user: " + user + "] by ldap");
-            }
+        } catch (NamingException e) {
+            throw new AuthenticationException(e.getMessage());
         }
     }
 }
