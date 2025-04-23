@@ -228,6 +228,9 @@ public class Utils {
         // choose one aggregator
         LakeAggregator lakeAggregator = new LakeAggregator();
         ComputeNode aggregatorNode = lakeAggregator.chooseAggregatorNode(warehouseId);
+        if (aggregatorNode == null) {
+            throw new NoAliveBackendException("No alive aggregator node for handle aggregate publish version");
+        }
         AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
         List<ComputeNodePB> computeNodes = new ArrayList<>();
         List<PublishVersionRequest> publishReqs = new ArrayList<>();
