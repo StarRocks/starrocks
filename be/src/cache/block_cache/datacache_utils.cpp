@@ -62,8 +62,8 @@ Status DataCacheUtils::parse_conf_datacache_mem_size(const std::string& conf_mem
     return Status::OK();
 }
 
-StatusOr<int64_t> DataCacheUtils::parse_conf_datacache_disk_size(const std::string& disk_path, const std::string& disk_size_str,
-                                                       int64_t disk_limit) {
+StatusOr<int64_t> DataCacheUtils::parse_conf_datacache_disk_size(const std::string& disk_path,
+                                                                 const std::string& disk_size_str, int64_t disk_limit) {
     if (disk_limit <= 0) {
         std::filesystem::path dpath(disk_path);
         std::error_code ec;
