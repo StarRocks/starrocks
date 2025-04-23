@@ -68,8 +68,9 @@ public class ExecuteExceptionHandler {
     }
 
     public static boolean isRetryableStatus(TStatusCode statusCode) {
-        return statusCode == TStatusCode.REMOTE_FILE_NOT_FOUND || statusCode == TStatusCode.GLOBAL_DICT_ERROR ||
-                statusCode == TStatusCode.THRIFT_RPC_ERROR;
+        return statusCode == TStatusCode.REMOTE_FILE_NOT_FOUND
+                || statusCode == TStatusCode.THRIFT_RPC_ERROR
+                || statusCode == TStatusCode.GLOBAL_DICT_NOT_MATCH;
     }
 
     // If modifications are made to the partition files of a Hive table by user,
