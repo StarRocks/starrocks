@@ -349,7 +349,13 @@ Status FileReader::get_next(ChunkPtr* chunk) {
 
     if (_cur_row_group_idx < _row_group_size) {
         size_t row_count = _chunk_size;
-        Status status = _row_group_readers[_cur_row_group_idx]->get_next(chunk, &row_count);
+        Status status;
+        try {
+            status = _row_group_readers[_cur_row_group_idx]->get_next(chunk, &row_count);
+        } catch (std::exception& e) {
+            return Status::InternalError(
+                    strings::Substitute("Encountered Exception while reading. reason = $0", e.what()));
+        }
         if (status.ok() || status.is_end_of_file()) {
             if (row_count > 0) {
                 RETURN_IF_ERROR(_scanner_ctx->append_or_update_not_existed_columns_to_chunk(chunk, row_count));
