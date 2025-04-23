@@ -17,8 +17,10 @@ package com.starrocks.authorization;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
-public class  PrivilegeBuiltinConstants {
+public class PrivilegeBuiltinConstants {
 
     public static final String ROOT_ROLE_NAME = "root";
     public static final long ROOT_ROLE_ID = -1;
@@ -35,15 +37,18 @@ public class  PrivilegeBuiltinConstants {
     public static final String PUBLIC_ROLE_NAME = "public";
     public static final long PUBLIC_ROLE_ID = -5;
 
-    public static final Set<String> BUILT_IN_ROLE_NAMES =
-            new HashSet<>(Arrays.asList(ROOT_ROLE_NAME, DB_ADMIN_ROLE_NAME, CLUSTER_ADMIN_ROLE_NAME,
-                    USER_ADMIN_ROLE_NAME, PUBLIC_ROLE_NAME));
-
-    public static final Set<Long> IMMUTABLE_BUILT_IN_ROLE_IDS = new HashSet<>(Arrays.asList(
-            ROOT_ROLE_ID, DB_ADMIN_ROLE_ID, CLUSTER_ADMIN_ROLE_ID, USER_ADMIN_ROLE_ID));
+    public static final String SECURITY_ADMIN_ROLE_NAME = "security_admin";
+    public static final long SECURITY_ADMIN_ROLE_ID = -106;
 
     public static final Set<String> IMMUTABLE_BUILT_IN_ROLE_NAMES = new HashSet<>(Arrays.asList(
-            ROOT_ROLE_NAME, DB_ADMIN_ROLE_NAME, CLUSTER_ADMIN_ROLE_NAME, USER_ADMIN_ROLE_NAME));
+            ROOT_ROLE_NAME, DB_ADMIN_ROLE_NAME, CLUSTER_ADMIN_ROLE_NAME, USER_ADMIN_ROLE_NAME, SECURITY_ADMIN_ROLE_NAME));
+
+    public static final Set<Long> IMMUTABLE_BUILT_IN_ROLE_IDS = new HashSet<>(Arrays.asList(
+            ROOT_ROLE_ID, DB_ADMIN_ROLE_ID, CLUSTER_ADMIN_ROLE_ID, USER_ADMIN_ROLE_ID, SECURITY_ADMIN_ROLE_ID));
+
+    public static final Set<String> BUILT_IN_ROLE_NAMES =
+            Set.copyOf(Stream.concat(IMMUTABLE_BUILT_IN_ROLE_NAMES.stream(), Set.of(PUBLIC_ROLE_NAME).stream())
+                    .collect(Collectors.toSet()));
 
     public static final long ALL_CATALOGS_ID = -1; // -1 represent all catalogs
 

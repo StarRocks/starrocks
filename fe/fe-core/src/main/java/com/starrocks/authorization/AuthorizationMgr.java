@@ -168,7 +168,8 @@ public class AuthorizationMgr {
                     PrivilegeType.REPOSITORY,
                     PrivilegeType.CREATE_RESOURCE_GROUP,
                     PrivilegeType.CREATE_GLOBAL_FUNCTION,
-                    PrivilegeType.CREATE_STORAGE_VOLUME);
+                    PrivilegeType.CREATE_STORAGE_VOLUME,
+                    PrivilegeType.SECURITY);
             initPrivilegeCollections(rolePrivilegeCollection, ObjectType.SYSTEM, dbAdminSystemGrant, null, false);
 
             for (ObjectType t : Arrays.asList(
@@ -215,7 +216,21 @@ public class AuthorizationMgr {
                     provider.getAvailablePrivType(ObjectType.USER));
             rolePrivilegeCollection.disableMutable(); // not mutable
 
-            // 5. public
+            // 5. security_admin
+            rolePrivilegeCollection = initBuiltinRoleUnlocked(
+                    PrivilegeBuiltinConstants.SECURITY_ADMIN_ROLE_ID,
+                    PrivilegeBuiltinConstants.SECURITY_ADMIN_ROLE_NAME,
+                    "built-in security administration role");
+            // GRANT SECURITY ON SYSTEM
+            initPrivilegeCollections(
+                    rolePrivilegeCollection,
+                    ObjectType.SYSTEM,
+                    Arrays.asList(PrivilegeType.SECURITY, PrivilegeType.OPERATE),
+                    null,
+                    false);
+            rolePrivilegeCollection.disableMutable(); // not mutable
+
+            // 6. public
             rolePrivilegeCollection = initBuiltinRoleUnlocked(PrivilegeBuiltinConstants.PUBLIC_ROLE_ID,
                     PrivilegeBuiltinConstants.PUBLIC_ROLE_NAME,
                     "built-in public role which is owned by any user");
@@ -225,7 +240,7 @@ public class AuthorizationMgr {
             rolePrivilegeCollection.grant(ObjectType.TABLE, Collections.singletonList(PrivilegeType.SELECT), object,
                     false);
 
-            // 6. builtin user root
+            // 7. builtin user root
             UserPrivilegeCollectionV2 rootCollection = new UserPrivilegeCollectionV2();
             rootCollection.grantRole(PrivilegeBuiltinConstants.ROOT_ROLE_ID);
             rootCollection.setDefaultRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
