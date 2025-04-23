@@ -1386,7 +1386,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                             // finished for decommission or balance, and the redundant replica has been deleted
                             // from some BE, but the BE's tablet report doesn't see this deletion and still report
                             // the deleted tablet info to FE.
-                            if (e.getErrorCode() != InternalErrorCode.REPLICA_ENOUGH_ERR) {
+                            if (e.getInternalErrorCode() != InternalErrorCode.REPLICA_ENOUGH_ERR) {
                                 LOG.debug("failed add to meta. tablet[{}], backend[{}]. {}",
                                         tabletId, backendId, e.getMessage());
                             }

@@ -14,6 +14,7 @@
 
 package com.starrocks.authentication;
 
+import com.starrocks.common.ErrorCode;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.ConnectContext;
 import org.apache.commons.lang3.StringUtils;
@@ -33,24 +34,25 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
             String user,
             String host,
             byte[] authResponse) throws AuthenticationException {
+        String usePassword = authResponse.length == 0 ? "NO" : "YES";
         byte[] randomString = context.getAuthDataSalt();
         // The password sent by mysql client has already been scrambled(encrypted) using random string,
         // so we don't need to scramble it again.
         if (randomString != null) {
             byte[] saltPassword = MysqlPassword.getSaltFromPassword(password);
             if (saltPassword.length != authResponse.length) {
-                throw new AuthenticationException("password length mismatch!");
+                throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, user, usePassword);
             }
 
             if (authResponse.length > 0 && !MysqlPassword.checkScramble(authResponse, randomString, saltPassword)) {
-                throw new AuthenticationException("password mismatch!");
+                throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, user, usePassword);
             }
         } else {
             // Plain remote password, scramble it first.
             byte[] scrambledRemotePass = MysqlPassword.makeScrambledPassword((StringUtils.stripEnd(
                     new String(authResponse, StandardCharsets.UTF_8), "\0")));
             if (!MysqlPassword.checkScrambledPlainPass(password, scrambledRemotePass)) {
-                throw new AuthenticationException("password mismatch!");
+                throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, user, usePassword);
             }
         }
     }
