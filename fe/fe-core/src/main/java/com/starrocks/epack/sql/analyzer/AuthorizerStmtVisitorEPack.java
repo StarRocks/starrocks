@@ -62,18 +62,6 @@ import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
-import com.starrocks.sql.ast.integration.AlterSecurityIntegrationStatement;
-import com.starrocks.sql.ast.integration.CreateSecurityIntegrationStatement;
-import com.starrocks.sql.ast.integration.DropSecurityIntegrationStatement;
-import com.starrocks.sql.ast.integration.ShowCreateSecurityIntegrationStatement;
-import com.starrocks.sql.ast.integration.ShowSecurityIntegrationStatement;
-import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
-import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
-import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
-import com.starrocks.sql.ast.warehouse.SetWarehouseStmt;
-import com.starrocks.sql.ast.warehouse.ShowClustersStmt;
-import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
-import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
@@ -327,67 +315,6 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     }
 
     // ---------------------------------------- Security Integration Statement ---------------------------------------
-    @Override
-    public Void visitCreateSecurityIntegrationStatement(CreateSecurityIntegrationStatement statement, ConnectContext context) {
-        try {
-            Authorizer.checkSystemAction(context,
-                    PrivilegeTypeEPack.SECURITY);
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeTypeEPack.SECURITY.name(), ObjectType.SYSTEM.name(), null);
-        }
-        return null;
-    }
-
-    @Override
-    public Void visitDropSecurityIntegrationStatement(DropSecurityIntegrationStatement statement, ConnectContext context) {
-        try {
-            Authorizer.checkSystemAction(context, PrivilegeTypeEPack.SECURITY);
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeTypeEPack.SECURITY.name(), ObjectType.SYSTEM.name(), null);
-        }
-        return null;
-    }
-
-    @Override
-    public Void visitAlterSecurityIntegrationStatement(AlterSecurityIntegrationStatement statement, ConnectContext context) {
-        try {
-            Authorizer.checkSystemAction(context, PrivilegeTypeEPack.SECURITY);
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeTypeEPack.SECURITY.name(), ObjectType.SYSTEM.name(), null);
-        }
-        return null;
-    }
-
-    @Override
-    public Void visitShowSecurityIntegrationStatement(ShowSecurityIntegrationStatement statement, ConnectContext context) {
-        try {
-            Authorizer.checkSystemAction(context, PrivilegeTypeEPack.SECURITY);
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeTypeEPack.SECURITY.name(), ObjectType.SYSTEM.name(), null);
-        }
-        return null;
-    }
-
-    @Override
-    public Void visitShowCreateSecurityIntegrationStatement(ShowCreateSecurityIntegrationStatement statement,
-                                                            ConnectContext context) {
-        try {
-            Authorizer.checkSystemAction(context, PrivilegeTypeEPack.SECURITY);
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeTypeEPack.SECURITY.name(), ObjectType.SYSTEM.name(), null);
-        }
-        return null;
-    }
 
     @Override
     public Void visitCreateRoleMappingStatement(CreateRoleMappingStatement statement, ConnectContext context) {
@@ -445,77 +372,6 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeTypeEPack.SECURITY.name(), ObjectType.SYSTEM.name(), null);
-        }
-        return null;
-    }
-
-    // --------------------------------- Warehouse Statement ---------------------------------
-    @Override
-    public Void visitCreateWarehouseStatement(CreateWarehouseStmt statement, ConnectContext context) {
-        try {
-            Authorizer.checkSystemAction(context, PrivilegeTypeEPack.CREATE_WAREHOUSE);
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeTypeEPack.CREATE_WAREHOUSE.name(), ObjectType.SYSTEM.name(), null);
-        }
-        return null;
-    }
-
-    @Override
-    public Void visitSuspendWarehouseStatement(SuspendWarehouseStmt statement, ConnectContext context) {
-        try {
-            AuthorizerEPack.checkWarehouseAction(context, statement.getWarehouseName(), PrivilegeType.ALTER);
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.ALTER.name(), ObjectTypeEPack.WAREHOUSE.name(), statement.getWarehouseName());
-        }
-        return null;
-    }
-
-    @Override
-    public Void visitResumeWarehouseStatement(ResumeWarehouseStmt statement, ConnectContext context) {
-        try {
-            AuthorizerEPack.checkWarehouseAction(context, statement.getWarehouseName(), PrivilegeType.ALTER);
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.ALTER.name(), ObjectTypeEPack.WAREHOUSE.name(), statement.getWarehouseName());
-        }
-        return null;
-    }
-
-    public Void visitDropWarehouseStatement(DropWarehouseStmt statement, ConnectContext context) {
-        try {
-            AuthorizerEPack.checkWarehouseAction(context, statement.getWarehouseName(), PrivilegeType.DROP);
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.DROP.name(), ObjectTypeEPack.WAREHOUSE.name(), statement.getWarehouseName());
-        }
-        return null;
-    }
-
-    public Void visitSetWarehouseStatement(SetWarehouseStmt statement, ConnectContext context) {
-        String warehouseName = statement.getWarehouseName();
-        checkWarehouseUsagePrivilege(warehouseName, context);
-        return null;
-    }
-
-    public Void visitShowWarehousesStatement(ShowWarehousesStmt statement, ConnectContext context) {
-        // `show warehouses` only show warehouses that user has any privilege on, we will check it in
-        // the execution logic, not here, see `handleShowWarehouses()` for details.
-        return null;
-    }
-
-    public Void visitShowClusterStatement(ShowClustersStmt statement, ConnectContext context) {
-        try {
-            AuthorizerEPack.checkAnyActionOnWarehouse(context, statement.getWarehouseName());
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.ANY.name(), ObjectTypeEPack.WAREHOUSE.name(), statement.getWarehouseName());
         }
         return null;
     }

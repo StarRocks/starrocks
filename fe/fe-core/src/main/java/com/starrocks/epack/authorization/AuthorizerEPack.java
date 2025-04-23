@@ -8,7 +8,6 @@ import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Authorizer;
 
 public class AuthorizerEPack extends Authorizer {
@@ -29,21 +28,6 @@ public class AuthorizerEPack extends Authorizer {
         String catalog = catalogName == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : catalogName;
         ((AccessControllerEPack) getInstance().getAccessControlOrDefault(catalog)).checkAnyActionOnPolicy(
                 context, policyType, catalog, db, policy);
-    }
-
-    public static void checkWarehouseAction(ConnectContext context, String name,
-                                            PrivilegeType privilegeType) throws AccessDeniedException {
-        ((AccessControllerEPack) getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME))
-                .checkWarehouseAction(context, name, privilegeType);
-    }
-
-    public static void checkAnyActionOnWarehouse(ConnectContext context, String name)
-            throws AccessDeniedException {
-        // Any user has an implicit usage permission on the default_warehouse
-        if (!WarehouseManager.isDefaultWarehouse(name)) {
-            ((AccessControllerEPack) getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME))
-                    .checkAnyActionOnWarehouse(context, name);
-        }
     }
 
     public static void checkFailoverGroupAction(ConnectContext context, String name,

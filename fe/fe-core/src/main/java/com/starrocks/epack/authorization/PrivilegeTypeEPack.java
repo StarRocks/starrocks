@@ -17,7 +17,6 @@ public class PrivilegeTypeEPack extends PrivilegeType {
     public static final PrivilegeTypeEPack CREATE_ROW_ACCESS_POLICY = new PrivilegeTypeEPack(20002,
             "CREATE ROW ACCESS POLICY");
     public static final PrivilegeTypeEPack APPLY = new PrivilegeTypeEPack(20003, "APPLY");
-    public static final PrivilegeTypeEPack SECURITY = new PrivilegeTypeEPack(20005, "SECURITY");
     public static final PrivilegeTypeEPack CREATE_FAILOVER_GROUP =
             new PrivilegeTypeEPack(20006, "CREATE FAILOVER GROUP");
 
@@ -41,8 +40,6 @@ public class PrivilegeTypeEPack extends PrivilegeType {
             return CREATE_ROW_ACCESS_POLICY.name;
         } else if (id == APPLY.id) {
             return APPLY.name;
-        } else if (id == SECURITY.id) {
-            return SECURITY.name;
         } else if (id == CREATE_FAILOVER_GROUP.id) {
             return CREATE_FAILOVER_GROUP.name;
         } else {
