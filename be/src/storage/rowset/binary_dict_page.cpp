@@ -283,5 +283,6 @@ Status BinaryDictPageDecoder<Type>::next_dict_codes(const SparseRange<>& range, 
 
 template class BinaryDictPageDecoder<TYPE_CHAR>;
 template class BinaryDictPageDecoder<TYPE_VARCHAR>;
+template class BinaryDictPageDecoder<TYPE_JSON>;
 
 } // namespace starrocks

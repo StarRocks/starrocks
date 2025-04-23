@@ -35,6 +35,13 @@ void JsonColumn::append_datum(const Datum& datum) {
     BaseClass::append(datum.get<JsonValue*>());
 }
 
+bool JsonColumn::append_strings_overflow(const Buffer<Slice>& strs, size_t max_length) {
+    for (const auto& s : strs) {
+        append(JsonValue(s));
+    }
+    return true;
+}
+
 int JsonColumn::compare_at(size_t left_idx, size_t right_idx, const starrocks::Column& rhs,
                            int nan_direction_hint) const {
     JsonValue* x = get_object(left_idx);
