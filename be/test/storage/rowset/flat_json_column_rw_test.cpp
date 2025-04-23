@@ -52,9 +52,13 @@ public:
     ~FlatJsonColumnRWTest() override = default;
 
 protected:
-    void SetUp() override { _meta.reset(new ColumnMetaPB()); }
+    void SetUp() override {
+        config::enable_json_flat_complex_type = true;
+        _meta.reset(new ColumnMetaPB());
+    }
 
     void TearDown() override {
+        config::enable_json_flat_complex_type = false;
         config::json_flat_sparsity_factor = 0.9;
         config::json_flat_null_factor = 0.3;
     }
