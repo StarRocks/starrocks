@@ -4843,6 +4843,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitAlterTableAutoIncrementClause(StarRocksParser.AlterTableAutoIncrementClauseContext context) {
+        long autoIncrementValue = Long.parseLong(context.INTEGER_VALUE().getText());
+        return new AlterTableAutoIncrementClause(autoIncrementValue, createPos(context));
+    }
+
+    @Override
     public ParseNode visitModifyPropertiesClause(StarRocksParser.ModifyPropertiesClauseContext context) {
         Map<String, String> properties = new HashMap<>();
         List<Property> propertyList = visit(context.propertyList().property(), Property.class);
@@ -4868,17 +4874,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitOptimizeRange(StarRocksParser.OptimizeRangeContext context) {
         StringLiteral start = null;
         StringLiteral end = null;
-        
+
         // Extract start value if present
         if (context.start != null) {
             start = (StringLiteral) visit(context.start);
         }
-        
+
         // Extract end value if present
         if (context.end != null) {
             end = (StringLiteral) visit(context.end);
         }
-        
+
         // Create and return OptimizeRange object with position information
         return new OptimizeRange(start, end, createPos(context));
     }

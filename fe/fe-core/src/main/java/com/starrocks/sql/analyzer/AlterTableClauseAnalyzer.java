@@ -1647,4 +1647,18 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         }
         return null;
     }
+
+    @Override
+    public Void visitAlterTableAutoIncrementClause(AlterTableAutoIncrementClause clause, ConnectContext context) {
+        if (!table.isOlapTable()) {
+            throw new SemanticException("Only olap table supports AUTO_INCREMENT clause");
+        }
+
+        long newValue = clause.getAutoIncrementValue();
+        if (newValue <= 0) {
+            throw new SemanticException("AUTO_INCREMENT value must be positive");
+        }
+
+        return null;
+    }
 }
