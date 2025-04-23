@@ -297,7 +297,7 @@ CONF_Int64(index_stream_cache_capacity, "10737418240");
 CONF_Int32(data_page_size, "65536");
 
 // Cache for storage page size
-CONF_mString(storage_page_cache_limit, "20%");
+CONF_mString(storage_page_cache_limit, "-1");
 // whether to disable page cache feature in storage
 CONF_mBool(disable_storage_page_cache, "false");
 // whether to enable the bitmap index memory cache
@@ -1208,7 +1208,7 @@ CONF_mInt64(max_length_for_bitmap_function, "1000000");
 
 // Configuration items for datacache
 CONF_Bool(datacache_enable, "true");
-CONF_mString(datacache_mem_size, "0");
+CONF_mString(datacache_mem_size, "20%");
 CONF_mString(datacache_disk_size, "100%");
 CONF_Int64(datacache_block_size, "262144"); // 256K
 CONF_Bool(datacache_checksum_enable, "false");
@@ -1238,9 +1238,9 @@ CONF_Double(datacache_scheduler_threads_per_cpu, "0.125");
 CONF_Bool(datacache_tiered_cache_enable, "false");
 // Whether to persist cached data
 CONF_Bool(datacache_persistence_enable, "true");
-// DataCache engines, alternatives: starcache.
+// DataCache engines, alternatives: starcache, lrucache, mixed
 // `cachelib` is not support now.
-// Set the default value empty to indicate whether it is manully configured by users.
+// Set the default value empty to indicate whether it is manually configured by users.
 // If not, we need to adjust the default engine based on build switches like "WITH_STARCACHE".
 CONF_String(datacache_engine, "");
 // The interval time (millisecond) for agent report datacache metrics to FE.
@@ -1293,7 +1293,7 @@ CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
 CONF_Int64(block_cache_max_concurrent_inserts, "1500000");
 CONF_Bool(block_cache_checksum_enable, "false");
 CONF_Bool(block_cache_direct_io_enable, "false");
-CONF_String(block_cache_engine, "");
+CONF_String_enum(block_cache_engine, "", "starcache,lru_cache,hybrid_cache");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 // max wal file size in l0

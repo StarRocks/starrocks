@@ -132,10 +132,7 @@ Status JITEngine::init() {
 #if BE_TEST
     _func_cache = new_lru_cache(32000); // 1k capacity per cache of 32 shards in LRU cache
 #else
-    int64_t mem_limit = MemInfo::physical_mem();
-    if (GlobalEnv::GetInstance()->process_mem_tracker()->has_limit()) {
-        mem_limit = GlobalEnv::GetInstance()->process_mem_tracker()->limit();
-    }
+    int64_t mem_limit = GlobalEnv::GetInstance()->mem_limit();
     int64_t jit_lru_cache_size = config::jit_lru_cache_size;
     if (jit_lru_cache_size <= 0) {
         if (mem_limit < JIT_CACHE_LOWEST_LIMIT) {

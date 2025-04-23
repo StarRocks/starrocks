@@ -164,9 +164,8 @@ public:
     MemTracker* jemalloc_metadata_traker() { return _jemalloc_metadata_tracker.get(); }
     std::shared_ptr<MemTracker> get_mem_tracker_by_type(MemTrackerType type);
     std::vector<std::shared_ptr<MemTracker>> mem_trackers() const;
+    int64_t mem_limit() const { return _mem_limit; }
 
-    StatusOr<int64_t> get_storage_page_cache_size();
-    int64_t check_storage_page_cache_size(int64_t storage_cache_limit);
     static int64_t calc_max_query_memory(int64_t process_mem_limit, int64_t percent);
 
 private:
@@ -176,6 +175,8 @@ private:
     void _reset_tracker();
 
     std::shared_ptr<MemTracker> regist_tracker(MemTrackerType type, int64_t bytes_limit, MemTracker* parent);
+
+    int64_t _mem_limit = 0;
 
     // root process memory tracker
     std::shared_ptr<MemTracker> _process_mem_tracker;
@@ -255,13 +256,18 @@ public:
     ObjectCache* external_table_meta_cache() const { return _starcache_based_object_cache.get(); }
     StoragePageCache* page_cache() const { return _page_cache.get(); }
 
+    StatusOr<int64_t> get_storage_page_cache_size();
+    int64_t check_storage_page_cache_size(int64_t storage_cache_limit);
+
 private:
+    Status _handle_compatibility_config();
     Status _init_datacache();
     Status _init_starcache_based_object_cache();
     Status _init_lru_base_object_cache();
     Status _init_page_cache();
 
     GlobalEnv* _global_env;
+    int64_t _mem_limit = 0;
     std::vector<StorePath> _store_paths;
 
     std::shared_ptr<BlockCache> _block_cache;

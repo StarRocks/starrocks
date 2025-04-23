@@ -197,6 +197,7 @@ Status GlobalEnv::_init_mem_tracker() {
         ss << "Invalid mem limit: " << bytes_limit;
         return Status::InternalError(ss.str());
     }
+    _mem_limit = bytes_limit;
 
     _process_mem_tracker = regist_tracker(MemTrackerType::PROCESS, bytes_limit, nullptr);
     _jemalloc_metadata_tracker = regist_tracker(MemTrackerType::JEMALLOC, -1, process_mem_tracker());
@@ -277,29 +278,6 @@ void GlobalEnv::_reset_tracker() {
     }
 }
 
-StatusOr<int64_t> GlobalEnv::get_storage_page_cache_size() {
-    int64_t mem_limit = MemInfo::physical_mem();
-    if (process_mem_tracker()->has_limit()) {
-        mem_limit = process_mem_tracker()->limit();
-    }
-    return ParseUtil::parse_mem_spec(config::storage_page_cache_limit.value(), mem_limit);
-}
-
-int64_t GlobalEnv::check_storage_page_cache_size(int64_t storage_cache_limit) {
-    if (storage_cache_limit > MemInfo::physical_mem()) {
-        LOG(WARNING) << "Config storage_page_cache_limit is greater than memory size, config="
-                     << config::storage_page_cache_limit.value() << ", memory=" << MemInfo::physical_mem();
-    }
-    if (!config::disable_storage_page_cache) {
-        if (storage_cache_limit < kcacheMinSize) {
-            LOG(WARNING) << "Storage cache limit is too small, use default size.";
-            storage_cache_limit = kcacheMinSize;
-        }
-        LOG(INFO) << "Set storage page cache size " << storage_cache_limit;
-    }
-    return storage_cache_limit;
-}
-
 std::shared_ptr<MemTracker> GlobalEnv::regist_tracker(MemTrackerType type, int64_t bytes_limit, MemTracker* parent) {
     auto mem_tracker = std::make_shared<MemTracker>(type, bytes_limit, MemTracker::type_to_label(type), parent);
     _mem_tracker_map[type] = mem_tracker;
@@ -341,8 +319,10 @@ CacheEnv* CacheEnv::GetInstance() {
 
 Status CacheEnv::init(const std::vector<StorePath>& store_paths) {
     _global_env = GlobalEnv::GetInstance();
+    _mem_limit = _global_env->mem_limit();
     _store_paths = store_paths;
 
+    RETURN_IF_ERROR(_handle_compatibility_config());
     RETURN_IF_ERROR(_init_datacache());
     RETURN_IF_ERROR(_init_starcache_based_object_cache());
     RETURN_IF_ERROR(_init_lru_base_object_cache());
@@ -376,8 +356,8 @@ Status CacheEnv::_init_starcache_based_object_cache() {
 
 Status CacheEnv::_init_lru_base_object_cache() {
     ObjectCacheOptions options;
-    ASSIGN_OR_RETURN(int64_t storage_cache_limit, _global_env->get_storage_page_cache_size());
-    storage_cache_limit = _global_env->check_storage_page_cache_size(storage_cache_limit);
+    ASSIGN_OR_RETURN(int64_t storage_cache_limit, get_storage_page_cache_size());
+    storage_cache_limit = check_storage_page_cache_size(storage_cache_limit);
     options.capacity = storage_cache_limit;
 
     _lru_based_object_cache = std::make_shared<LRUCacheModule>(options);
@@ -392,9 +372,7 @@ Status CacheEnv::_init_page_cache() {
     return Status::OK();
 }
 
-Status CacheEnv::_init_datacache() {
-    _block_cache = std::make_shared<BlockCache>();
-
+Status CacheEnv::_handle_compatibility_config() {
     // When configured old `block_cache` configurations, use the old items for compatibility.
     if (config::block_cache_enable) {
         config::datacache_enable = true;
@@ -416,14 +394,36 @@ Status CacheEnv::_init_datacache() {
     }
 #endif
 
+    return Status::OK();
+}
+
+StatusOr<int64_t> CacheEnv::get_storage_page_cache_size() {
+    return ParseUtil::parse_mem_spec(config::storage_page_cache_limit.value(), _mem_limit);
+}
+
+int64_t CacheEnv::check_storage_page_cache_size(int64_t storage_cache_limit) {
+    if (storage_cache_limit > _mem_limit) {
+        LOG(WARNING) << "Config storage_page_cache_limit is greater than memory size, config=" << storage_cache_limit
+                     << ", memory=" << _mem_limit;
+        storage_cache_limit = _mem_limit;
+    }
+    if (!config::disable_storage_page_cache) {
+        if (storage_cache_limit < kcacheMinSize) {
+            LOG(WARNING) << "Storage cache limit is too small, use default size.";
+            storage_cache_limit = kcacheMinSize;
+        }
+        LOG(INFO) << "Set storage page cache size " << storage_cache_limit;
+    }
+    return storage_cache_limit;
+}
+
+Status CacheEnv::_init_datacache() {
+    _block_cache = std::make_shared<BlockCache>();
+
     if (config::datacache_enable) {
         CacheOptions cache_options;
-        int64_t mem_limit = MemInfo::physical_mem();
-        if (_global_env->process_mem_tracker()->has_limit()) {
-            mem_limit = _global_env->process_mem_tracker()->limit();
-        }
-        RETURN_IF_ERROR(DataCacheUtils::parse_conf_datacache_mem_size(config::datacache_mem_size, mem_limit,
-                                                                      &cache_options.mem_space_size));
+        RETURN_IF_ERROR(DataCacheUtils::parse_conf_datacache_mem_size(
+                config::datacache_mem_size, _mem_limit, &cache_options.mem_space_size));
 
         for (auto& root_path : _store_paths) {
             // Because we have unified the datacache between datalake and starlet, we also need to unify the
