@@ -113,16 +113,23 @@ Status StoragePageCache::insert(const CacheKey& key, const Slice& data, PageCach
     int64_t mem_size = data.size;
 #endif
 
-    auto deleter = [](const starrocks::CacheKey& key, void* value) { delete[](uint8_t*) value; };
+    Slice* cache_item = new Slice(data.data, data.size);
+    auto deleter = [](const starrocks::CacheKey& key, void* value) {
+        auto* cache_item = (Slice*) value;
+        delete[](uint8_t*) cache_item->data;
+        delete cache_item;
+    };
 
     ObjectCacheWriteOptions options;
     options.priority = in_memory ? 1 : 0;
     ObjectCacheHandle* obj_handle = nullptr;
     // Use mem size managed by memory allocator as this record charge size.
     // At the same time, we should record this record size for data fetching when lookup.
-    Status st = _cache->insert(key.encode(), data.data, data.size, mem_size, deleter, &obj_handle, &options);
+    Status st = _cache->insert(key.encode(), cache_item, mem_size, deleter, &obj_handle, &options);
     if (st.ok()) {
         *handle = PageCacheHandle(_cache, obj_handle);
+    } else {
+        delete cache_item;
     }
     return st;
 }
