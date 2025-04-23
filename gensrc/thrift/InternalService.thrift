@@ -324,6 +324,9 @@ struct TQueryOptions {
   150: optional map<string, string> ann_params;
   151: optional double pq_refine_factor;
   152: optional double k_factor;
+
+  
+  180: optional bool lower_upper_support_utf8;
 }
 
 // A scan range plus the parameters needed to execute that scan.

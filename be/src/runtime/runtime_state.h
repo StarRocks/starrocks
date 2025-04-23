@@ -505,6 +505,10 @@ public:
         return this->_broadcast_join_right_offsprings;
     }
 
+    bool lower_upper_support_utf8() const {
+        return _query_options.__isset.lower_upper_support_utf8 && _query_options.lower_upper_support_utf8;
+    }
+
 private:
     // Set per-query state.
     void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
