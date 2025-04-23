@@ -15,6 +15,7 @@
 package com.starrocks.mysql.security;
 
 import com.google.common.base.Strings;
+import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.common.util.NetUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -22,6 +23,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.Hashtable;
 import javax.naming.Context;
 import javax.naming.NamingEnumeration;
+import javax.naming.NamingException;
 import javax.naming.directory.DirContext;
 import javax.naming.directory.InitialDirContext;
 import javax.naming.directory.SearchControls;
@@ -31,10 +33,10 @@ public class LdapSecurity {
     private static final Logger LOG = LogManager.getLogger(LdapSecurity.class);
 
     //bind to ldap server to check password
-    public static boolean checkPassword(String dn, String password, String ldapServerHost, int ldapServerPort) {
+    public static void checkPassword(String dn, String password, String ldapServerHost, int ldapServerPort)
+            throws AuthenticationException, NamingException {
         if (Strings.isNullOrEmpty(password)) {
-            LOG.warn("empty password is not allowed for simple authentication");
-            return false;
+            throw new AuthenticationException("empty password is not allowed for simple authentication");
         }
 
         String url = "ldap://" + NetUtils.getHostPortInAccessibleFormat(ldapServerHost, ldapServerPort);
@@ -49,9 +51,6 @@ public class LdapSecurity {
         try {
             //this will send a bind call to ldap server, throw exception if failed
             ctx = new InitialDirContext(env);
-            return true;
-        } catch (Exception e) {
-            LOG.warn("check ldap password failed, dn = {}", dn, e);
         } finally {
             if (ctx != null) {
                 try {
@@ -60,24 +59,21 @@ public class LdapSecurity {
                 }
             }
         }
-
-        return false;
     }
 
     //1. bind ldap server by root dn
     //2. search user
     //3. if match exactly one, check password
-    public static boolean checkPasswordByRoot(String user,
-                                              String password,
-                                              String ldapServerHost,
-                                              int ldapServerPort,
-                                              String ldapBindRootDN,
-                                              String ldapBindRootPwd,
-                                              String ldapBindBaseDN,
-                                              String ldapSearchFilter) {
+    public static void checkPasswordByRoot(String user,
+                                           String password,
+                                           String ldapServerHost,
+                                           int ldapServerPort,
+                                           String ldapBindRootDN,
+                                           String ldapBindRootPwd,
+                                           String ldapBindBaseDN,
+                                           String ldapSearchFilter) throws AuthenticationException, NamingException {
         if (Strings.isNullOrEmpty(ldapBindRootPwd)) {
-            LOG.warn("empty password is not allowed for simple authentication");
-            return false;
+            throw new AuthenticationException("empty password is not allowed for simple authentication");
         }
 
         String url = "ldap://" + NetUtils.getHostPortInAccessibleFormat(ldapServerHost, ldapServerPort);
@@ -111,8 +107,7 @@ public class LdapSecurity {
                 if (results.hasMore()) {
                     matched++;
                     if (matched > 1) {
-                        LOG.warn("searched more than one entry from ldap server for user {}", user);
-                        return false;
+                        throw new AuthenticationException("searched more than one entry from ldap server for user " + user);
                     }
 
                     SearchResult result = results.next();
@@ -123,13 +118,10 @@ public class LdapSecurity {
             }
 
             if (matched != 1) {
-                LOG.warn("ldap search matched user count {}", matched);
-                return false;
+                throw new AuthenticationException("ldap search matched user count " + matched);
             }
 
-            return checkPassword(userDN, password, ldapServerHost, ldapServerPort);
-        } catch (Exception e) {
-            LOG.warn("call ldap exception ", e);
+            checkPassword(userDN, password, ldapServerHost, ldapServerPort);
         } finally {
             if (ctx != null) {
                 try {
@@ -138,8 +130,6 @@ public class LdapSecurity {
                 }
             }
         }
-
-        return false;
     }
 
     // trim prefix and suffix of target from src

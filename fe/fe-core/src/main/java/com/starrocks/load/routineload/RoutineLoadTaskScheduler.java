@@ -257,7 +257,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
             releaseBeSlot(routineLoadTaskInfo);
             routineLoadManager.getJob(routineLoadTaskInfo.getJobId())
                     .updateState(JobState.PAUSED,
-                            new ErrorReason(e.getErrorCode(), "failed to create task: " + e.getMessage()),
+                            new ErrorReason(e.getInternalErrorCode(), "failed to create task: " + e.getMessage()),
                             false);
             throw e;
         }
