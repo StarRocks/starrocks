@@ -178,5 +178,4 @@ Status ProtobufFile::load(::google::protobuf::Message* message, bool fill_cache)
     }
     return Status::OK();
 }
-
 } // namespace starrocks
