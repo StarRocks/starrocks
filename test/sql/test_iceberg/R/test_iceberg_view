@@ -12,6 +12,62 @@ select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_${uuid0}
 drop view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_${uuid0};
 -- result:
 -- !result
+<<<<<<< HEAD
+=======
+create view if not exists iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} as select k1, k2 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
+-- result:
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} order by k1;
+-- result:
+1	beijing
+2	shanghai
+-- !result
+alter view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} add dialect select k1, k2, k3 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
+-- result:
+E: (1064, 'Invalid view version: Cannot add multiple queries for dialect starrocks')
+-- !result
+alter view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} add dialect starrocks select k1, k2, k3 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
+-- result:
+E: (1064, 'Invalid view version: Cannot add multiple queries for dialect starrocks')
+-- !result
+alter view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} modify dialect starrocks select k1, k2, k3 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
+-- result:
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} order by k1;
+-- result:
+1	beijing	zhangsan
+2	shanghai	lisi
+-- !result
+alter view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} set properties ('k1'='v1');
+-- result:
+-- !result
+drop view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0};
+-- result:
+-- !result
+create view if not exists iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_cte_${uuid0} as
+with cte as (select 1 as col1) select * from cte;
+-- result:
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_cte_${uuid0};
+-- result:
+1
+-- !result
+drop view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_cte_${uuid0};
+-- result:
+-- !result
+create view if not exists iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_cte_${uuid0} as
+with cte as (select k1, k2 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table) select * from cte;
+-- result:
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_cte_${uuid0} order by k1;
+-- result:
+1	beijing
+2	shanghai
+-- !result
+drop view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_cte_${uuid0};
+-- result:
+-- !result
+>>>>>>> 670b961a47 ([BugFix] Fix can not query iceberg view with CTE (#58266))
 drop catalog iceberg_sql_test_${uuid0};
 -- result:
 -- !result
