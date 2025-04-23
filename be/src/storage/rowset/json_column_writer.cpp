@@ -54,7 +54,7 @@ FlatJsonColumnWriter::FlatJsonColumnWriter(const ColumnWriterOptions& opts, Type
           _json_writer(std::move(json_writer)) {}
 
 Status FlatJsonColumnWriter::init() {
-    _json_meta->mutable_json_meta()->set_format_version(kJsonMetaDefaultFormatVersion);
+    _json_meta->mutable_json_meta()->set_format_version(kJsonMetaRemainFilterVersion);
     _json_meta->mutable_json_meta()->set_has_remain(false);
     _json_meta->mutable_json_meta()->set_is_flat(false);
 
@@ -82,6 +82,8 @@ Status FlatJsonColumnWriter::append(const Column& column) {
 Status FlatJsonColumnWriter::_flat_column(Columns& json_datas) {
     // all json datas must full json
     JsonPathDeriver deriver;
+    deriver.set_generate_filter(true);
+
     std::vector<const Column*> vc;
     for (const auto& js : json_datas) {
         vc.emplace_back(js.get());
@@ -91,6 +93,7 @@ Status FlatJsonColumnWriter::_flat_column(Columns& json_datas) {
     _flat_paths = deriver.flat_paths();
     _flat_types = deriver.flat_types();
     _has_remain = deriver.has_remain_json();
+    _remain_filter = deriver.remain_fitler();
 
     VLOG(2) << "FlatJsonColumnWriter flat_column flat json: "
             << JsonFlatPath::debug_flat_json(_flat_paths, _flat_types, _has_remain);
@@ -135,7 +138,7 @@ Status FlatJsonColumnWriter::_init_flat_writers() {
     _json_meta->mutable_json_meta()->set_has_remain(_has_remain);
     _json_meta->mutable_json_meta()->set_is_flat(true);
 
-    if (_remain_filter != nullptr) {
+    if (_has_remain && _remain_filter != nullptr) {
         _json_meta->mutable_json_meta()->set_remain_filter(_remain_filter->data(), _remain_filter->size());
     }
 
@@ -168,11 +171,18 @@ Status FlatJsonColumnWriter::_init_flat_writers() {
         } else {
             opts.meta->set_is_nullable(true);
         }
-        opts.meta->set_encoding(DEFAULT_ENCODING);
-        opts.meta->set_compression(_json_meta->compression());
+
+        if (_flat_types[i] == TYPE_JSON && (!_has_remain || i != _flat_paths.size() - 1)) {
+            // try to use dict encoding for flat json
+            opts.meta->set_encoding(EncodingTypePB::DICT_ENCODING);
+            opts.meta->set_compression(_json_meta->compression());
+        } else {
+            opts.meta->set_encoding(_json_meta->encoding());
+            opts.meta->set_compression(_json_meta->compression());
+        }
 
         if (_flat_types[i] == LogicalType::TYPE_JSON) {
-            opts.meta->mutable_json_meta()->set_format_version(kJsonMetaDefaultFormatVersion);
+            opts.meta->mutable_json_meta()->set_format_version(kJsonMetaRemainFilterVersion);
             opts.meta->mutable_json_meta()->set_is_flat(false);
         }
 
