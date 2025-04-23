@@ -250,6 +250,8 @@ public:
     const NullData& null_column_data() const { return _null_column->get_data(); }
     const NullData& immutable_null_column_data() const { return _null_column->get_data(); }
 
+    const Column* immutable_data_column() const { return _data_column.get(); }
+
     Column* mutable_data_column() { return _data_column.get(); }
     // TODO(COW): remove const_cast
     NullColumn* mutable_null_column() const { return const_cast<NullColumn*>(_null_column.get()); }

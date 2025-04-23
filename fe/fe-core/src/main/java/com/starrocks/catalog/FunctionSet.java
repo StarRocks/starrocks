@@ -44,6 +44,7 @@ import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.builtins.VectorizedBuiltinFunctions;
 import com.starrocks.catalog.combinator.AggStateCombinator;
+import com.starrocks.catalog.combinator.AggStateIf;
 import com.starrocks.catalog.combinator.AggStateMergeCombinator;
 import com.starrocks.catalog.combinator.AggStateUnionCombinator;
 import com.starrocks.catalog.combinator.AggStateUtils;
@@ -543,6 +544,7 @@ public class FunctionSet {
     public static final String AGG_STATE_SUFFIX = "_state";
     public static final String AGG_STATE_UNION_SUFFIX = "_union";
     public static final String AGG_STATE_MERGE_SUFFIX = "_merge";
+    public static final String AGG_STATE_IF = "_if";
 
     private static final Logger LOGGER = LogManager.getLogger(FunctionSet.class);
 
@@ -1028,6 +1030,7 @@ public class FunctionSet {
             // register `_merge`/`_union` combinator for aggregate functions
             AggStateUnionCombinator.of(aggFunc).stream().forEach(this::addBuiltInFunction);
             AggStateMergeCombinator.of(aggFunc).stream().forEach(this::addBuiltInFunction);
+            AggStateIf.of(aggFunc).stream().forEach(this::addBuiltInFunction);
         }
     }
 

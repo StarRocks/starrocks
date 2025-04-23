@@ -1,0 +1,268 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#pragma once
+#include "column/column_helper.h"
+#include "exprs/agg/aggregate.h"
+#ifdef __x86_64__
+#include <immintrin.h>
+#endif
+#if defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_acle.h>
+#include <arm_neon.h>
+#endif
+
+namespace starrocks {
+struct AggStateIfState {};
+
+class AggStateIf final : public AggregateFunctionBatchHelper<AggStateIfState, AggStateIf> {
+public:
+    AggStateIf(AggStateDesc agg_state_desc, const AggregateFunction* function)
+            : _agg_state_desc(std::move(agg_state_desc)), _function(function) {
+        DCHECK(_function != nullptr);
+    }
+    const AggStateDesc* get_agg_state_desc() const { return &_agg_state_desc; }
+
+    void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override { _function->create(ctx, ptr); }
+
+    void destroy(FunctionContext* ctx, AggDataPtr __restrict ptr) const override { _function->destroy(ctx, ptr); }
+
+    size_t size() const override { return _function->size(); }
+
+    size_t alignof_size() const override { return _function->alignof_size(); }
+
+    bool is_pod_state() const override { return _function->is_pod_state(); }
+
+    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
+        _function->reset(ctx, args, state);
+    }
+
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                size_t row_num) const override {
+        throw std::runtime_error("agg if doesn't implement update");
+    }
+
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
+        _function->merge(ctx, column, state, row_num);
+    }
+
+    void serialize_to_column([[maybe_unused]] FunctionContext* ctx, ConstAggDataPtr __restrict state,
+                             Column* to) const override {
+        _function->serialize_to_column(ctx, state, to);
+    }
+
+    void convert_to_serialize_format([[maybe_unused]] FunctionContext* ctx, const Columns& srcs, size_t chunk_size,
+                                     ColumnPtr* dst) const override {
+        _function->convert_to_serialize_format(ctx, srcs, chunk_size, dst);
+    }
+
+    void finalize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,
+                            Column* to) const override {
+        _function->finalize_to_column(ctx, state, to);
+    }
+
+    // override batch interface for better performance
+    void update_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
+                      AggDataPtr* states) const override {
+        auto column_size = ctx->get_num_args() + 1;
+        const Column* data_columns[column_size - 1];
+        ColumnPtr newNullableColumn;
+        update_help(ctx, chunk_size, columns, data_columns, newNullableColumn);
+        _function->update_batch(ctx, chunk_size, state_offset, data_columns, states);
+    }
+
+    void update_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
+                                  AggDataPtr* states, const Filter& filter) const override {
+        auto column_size = ctx->get_num_args() + 1;
+        const Column* data_columns[column_size - 1];
+        ColumnPtr newNullableColumn;
+        update_help(ctx, chunk_size, columns, data_columns, newNullableColumn);
+        _function->update_batch_selectively(ctx, chunk_size, state_offset, data_columns, states, filter);
+    }
+
+    void update_help(FunctionContext* ctx, size_t chunk_size, const Column** columns, const Column** replace_columns,
+                     ColumnPtr& newNullableColumn) const {
+        auto fake_null_column = NullColumn::create(columns[0]->size(), 0);
+        uint8_t* __restrict fake_null_column_raw_data = fake_null_column->mutable_raw_data();
+
+        // step 1: merge predicate_column into fake_null_column
+        if (columns[0]->is_nullable()) {
+            const NullableColumn* nullable_predicate_column = down_cast<const NullableColumn*>(columns[0]);
+            if (!nullable_predicate_column->has_null()) {
+                const uint8_t* __restrict nullable_predicate_data_col_raw_data;
+                nullable_predicate_data_col_raw_data =
+                        ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(nullable_predicate_column->data_column())->raw_data();
+                for (size_t i = 0; i < chunk_size; ++i) {
+                    // false is 0, but null is 1
+                    fake_null_column_raw_data[i] = !nullable_predicate_data_col_raw_data[i];
+                }
+            } else {
+                const auto& nullable_predicate_null_col_data = nullable_predicate_column->immutable_null_column_data();
+                const auto& nullable_predicate_data_col_data =
+                        down_cast<const UInt8Column*>(nullable_predicate_column->immutable_data_column())->get_data();
+                // we treat false(0) as null(which is 1)
+                for (size_t i = 0; i < chunk_size; ++i) {
+                    fake_null_column_raw_data[i] = static_cast<uint8_t>((!nullable_predicate_data_col_data[i]) ||
+                                                                        nullable_predicate_null_col_data[i]);
+                }
+            }
+        } else {
+            const uint8_t* __restrict predicate_column_raw_data =
+                    ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(columns[0])->raw_data();
+            for (size_t i = 0; i < chunk_size; ++i) {
+                fake_null_column_raw_data[i] = !predicate_column_raw_data[i];
+            }
+        }
+
+        // agg_state_if's _function always be nullable version of agg function(like NullableAggregateFunctionUnary)
+        // so we merge filter column into agg function's arg column, and leave others to nullable agg function
+        // by this, we can only call batch interface to avoid too many virtual function call
+        auto column_size = ctx->get_num_args() + 1;
+        DCHECK(column_size >= 2);
+        const NullableColumn* first_nullable_arg_col = nullptr;
+        // pick the first nullable arg
+        for (int i = 1; i < column_size; i++) {
+            if (columns[i]->is_nullable()) {
+                first_nullable_arg_col = down_cast<const NullableColumn*>(columns[i]);
+                break;
+            }
+        }
+
+        ColumnPtr dataColumn;
+        if (first_nullable_arg_col == nullptr || !first_nullable_arg_col->has_null()) {
+            dataColumn = const_cast<Column*>(columns[1])->get_ptr();
+        } else {
+            // step 2: merge first_nullable_arg_col(if exsited)'s null_column into fake_null_column
+            const uint8_t* __restrict nulls = first_nullable_arg_col->immutable_null_column_data().data();
+            // merge two null column
+            ColumnHelper::or_two_filters(&fake_null_column->get_data(), nulls);
+            dataColumn = first_nullable_arg_col;
+        }
+
+        dataColumn = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, dataColumn);
+        if (dataColumn->is_nullable()) {
+            NullableColumn* original_nullable_column =
+                    const_cast<NullableColumn*>(down_cast<const NullableColumn*>(columns[1]));
+            newNullableColumn =
+                    NullableColumn::create(original_nullable_column->data_column_mutable_ptr(), fake_null_column);
+        } else {
+            newNullableColumn = NullableColumn::create(dataColumn, fake_null_column);
+        }
+
+        replace_columns[0] = newNullableColumn.get();
+        for (int i = 2; i < column_size; i++) {
+            replace_columns[i - 1] = columns[i];
+        }
+    }
+
+    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
+                                   AggDataPtr __restrict state) const override {
+        auto fake_null_column = NullColumn::create(columns[0]->size(), 0);
+        uint8_t* __restrict fake_null_column_raw_data = fake_null_column->mutable_raw_data();
+
+        // step 1: merge predicate_column into fake_null_column
+        if (columns[0]->is_nullable()) {
+            const NullableColumn* nullable_predicate_column = down_cast<const NullableColumn*>(columns[0]);
+            if (!nullable_predicate_column->has_null()) {
+                const uint8_t* __restrict nullable_predicate_data_col_raw_data;
+                nullable_predicate_data_col_raw_data =
+                        ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(nullable_predicate_column->data_column())->raw_data();
+                for (size_t i = 0; i < chunk_size; ++i) {
+                    // false is 0, but null is 1
+                    fake_null_column_raw_data[i] = !nullable_predicate_data_col_raw_data[i];
+                }
+            } else {
+                const auto& nullable_predicate_null_col_data = nullable_predicate_column->immutable_null_column_data();
+                const auto& nullable_predicate_data_col_data =
+                        down_cast<const UInt8Column*>(nullable_predicate_column->immutable_data_column())->get_data();
+                // we treat false(0) as null(which is 1)
+                for (size_t i = 0; i < chunk_size; ++i) {
+                    fake_null_column_raw_data[i] = static_cast<uint8_t>((!nullable_predicate_data_col_data[i]) ||
+                                                                        nullable_predicate_null_col_data[i]);
+                }
+            }
+        } else {
+            const uint8_t* __restrict predicate_column_raw_data =
+                    ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(columns[0])->raw_data();
+            for (size_t i = 0; i < chunk_size; ++i) {
+                fake_null_column_raw_data[i] = !predicate_column_raw_data[i];
+            }
+        }
+
+        // agg_state_if's _function always be nullable version of agg function(like NullableAggregateFunctionUnary)
+        // so we merge filter column into agg function's arg column, and leave others to nullable agg function
+        // by this, we can only call batch interface to avoid too many virtual function call
+        auto column_size = ctx->get_num_args() + 1;
+        DCHECK(column_size >= 2);
+        const NullableColumn* first_nullable_arg_col = nullptr;
+        // pick the first nullable arg
+        for (int i = 1; i < column_size; i++) {
+            if (columns[i]->is_nullable()) {
+                first_nullable_arg_col = down_cast<const NullableColumn*>(columns[i]);
+                break;
+            }
+        }
+
+        ColumnPtr dataColumn;
+        if (first_nullable_arg_col == nullptr || !first_nullable_arg_col->has_null()) {
+            dataColumn = const_cast<Column*>(columns[1])->get_ptr();
+        } else {
+            // step 2: merge first_nullable_arg_col(if exsited)'s null_column into fake_null_column
+            const uint8_t* __restrict nulls = first_nullable_arg_col->immutable_null_column_data().data();
+            // merge two null column
+            ColumnHelper::or_two_filters(&fake_null_column->get_data(), nulls);
+            dataColumn = first_nullable_arg_col;
+        }
+
+        dataColumn = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, dataColumn);
+        ColumnPtr newNullableColumn;
+        if (dataColumn->is_nullable()) {
+            NullableColumn* original_nullable_column =
+                    const_cast<NullableColumn*>(down_cast<const NullableColumn*>(columns[1]));
+            newNullableColumn =
+                    NullableColumn::create(original_nullable_column->data_column_mutable_ptr(), fake_null_column);
+        } else {
+            newNullableColumn = NullableColumn::create(dataColumn, fake_null_column);
+        }
+        const Column* data_columns[column_size - 1];
+        data_columns[0] = newNullableColumn.get();
+        for (int i = 2; i < column_size; i++) {
+            data_columns[i - 1] = columns[i];
+        }
+        return _function->update_batch_single_state(ctx, chunk_size, data_columns, state);
+    }
+
+    // merge‘s logic is same with _function
+    void merge_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
+                     AggDataPtr* states) const override {
+        _function->merge_batch(ctx, chunk_size, state_offset, column, states);
+    }
+
+    void merge_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
+                                 AggDataPtr* states, const Filter& filter) const override {
+        _function->merge_batch_selectively(ctx, chunk_size, state_offset, column, states, filter);
+    }
+
+    void merge_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column* input, size_t start,
+                                  size_t size) const override {
+        _function->merge_batch_single_state(ctx, state, input, start, size);
+    }
+
+    std::string get_name() const override { return "agg_state_if"; }
+
+private:
+    const AggStateDesc _agg_state_desc;
+    const AggregateFunction* _function;
+};
+} // namespace starrocks

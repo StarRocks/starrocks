@@ -29,6 +29,7 @@
 #include "exec/limited_pipeline_chunk_buffer.h"
 #include "exec/pipeline/operator.h"
 #include "exec/spill/spiller.hpp"
+#include "exprs/agg/agg_state_if.h"
 #include "exprs/agg/agg_state_merge.h"
 #include "exprs/agg/agg_state_union.h"
 #include "exprs/agg/aggregate_state_allocator.h"
@@ -47,6 +48,7 @@ static const std::unordered_set<std::string> ALWAYS_NULLABLE_RESULT_AGG_FUNCS = 
 
 static const std::string AGG_STATE_UNION_SUFFIX = "_union";
 static const std::string AGG_STATE_MERGE_SUFFIX = "_merge";
+static const std::string AGG_STATE_IF_SUFFIX = "_if";
 static const std::string FUNCTION_COUNT = "count";
 
 template <bool UseIntermediateAsOutput>
@@ -159,8 +161,8 @@ void AggregatorParams::init() {
         VLOG_ROW << fn.name.function_name << ", arg nullable " << desc.nodes[0].has_nullable_child
                  << ", result nullable " << desc.nodes[0].is_nullable;
 
-        auto& func_name = fn.name.function_name;
-        if (func_name == FUNCTION_COUNT) {
+        if (fn.name.function_name == FUNCTION_COUNT ||
+            fn.name.function_name == (FUNCTION_COUNT + AGG_STATE_IF_SUFFIX)) {
             // count function is always not nullable
             agg_fn_types[i] = {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_BIGINT), {}, false, false};
         } else {
@@ -176,8 +178,12 @@ void AggregatorParams::init() {
             TypeDescriptor return_type = TypeDescriptor::from_thrift(fn.ret_type);
             TypeDescriptor serde_type = TypeDescriptor::from_thrift(fn.aggregate_fn.intermediate_type);
             agg_fn_types[i] = {return_type, serde_type, arg_typedescs, has_nullable_child, is_nullable};
-            agg_fn_types[i].is_always_nullable_result = ALWAYS_NULLABLE_RESULT_AGG_FUNCS.contains(func_name);
-            if (func_name == "array_agg" || func_name == "group_concat") {
+            agg_fn_types[i].is_always_nullable_result =
+                    ALWAYS_NULLABLE_RESULT_AGG_FUNCS.contains(fn.name.function_name);
+            if (fn.__isset.agg_state_desc && fn.name.function_name.ends_with(AGG_STATE_IF_SUFFIX)) {
+                agg_fn_types[i].is_always_nullable_result = true;
+            }
+            if (fn.name.function_name == "array_agg" || fn.name.function_name == "group_concat") {
                 // set order by info
                 if (fn.aggregate_fn.__isset.is_asc_order && fn.aggregate_fn.__isset.nulls_first &&
                     !fn.aggregate_fn.is_asc_order.empty()) {
@@ -460,7 +466,11 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
         } else if (dynamic_cast<const AggStateMerge*>(agg_func)) {
             auto* agg_state_merge = down_cast<const AggStateMerge*>(agg_func);
             agg_state_desc = agg_state_merge->get_agg_state_desc();
+        } else if (dynamic_cast<const AggStateIf*>(agg_func)) {
+            auto* agg_state_if = down_cast<const AggStateIf*>(agg_func);
+            agg_state_desc = agg_state_if->get_agg_state_desc();
         }
+
         if (agg_state_desc != nullptr) {
             return_type = agg_state_desc->get_return_type();
             arg_types = agg_state_desc->get_arg_types();
@@ -513,10 +523,6 @@ Status Aggregator::_create_aggregate_function(starrocks::RuntimeState* state, co
     // check whether it's _merge/_union combinator if it contains agg state type
     auto& func_name = fn.name.function_name;
     if (fn.__isset.agg_state_desc) {
-        if (arg_types.size() != 1) {
-            return Status::InternalError(strings::Substitute("Invalid agg function plan: $0 with (arg type $1)",
-                                                             func_name, arg_types.size()));
-        }
         auto agg_state_desc = AggStateDesc::from_thrift(fn.agg_state_desc);
         auto nested_func_name = agg_state_desc.get_func_name();
         if (nested_func_name + AGG_STATE_MERGE_SUFFIX == func_name) {
@@ -541,6 +547,17 @@ Status Aggregator::_create_aggregate_function(starrocks::RuntimeState* state, co
             auto union_agg_func = std::make_shared<AggStateUnion>(std::move(agg_state_desc), nested_func);
             *ret = union_agg_func.get();
             _combinator_function.emplace_back(std::move(union_agg_func));
+        } else if (nested_func_name + AGG_STATE_IF_SUFFIX == func_name) {
+            // aggregate _if combinator
+            auto* nested_func = AggStateDesc::get_agg_state_func(&agg_state_desc);
+            if (nested_func == nullptr) {
+                return Status::InternalError(
+                        strings::Substitute("if combinator function $0 fails to get the nested agg func: $1 ",
+                                            func_name, nested_func_name));
+            }
+            auto if_agg_func = std::make_shared<AggStateIf>(std::move(agg_state_desc), nested_func);
+            *ret = if_agg_func.get();
+            _combinator_function.emplace_back(std::move(if_agg_func));
         } else {
             return Status::InternalError(
                     strings::Substitute("Agg function combinator is not implemented: $0 ", func_name));
