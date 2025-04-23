@@ -14,6 +14,7 @@
 
 package com.starrocks.mysql.privilege;
 
+import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.mysql.security.LdapSecurity;
 import org.junit.Assert;
 import org.junit.Test;
@@ -56,11 +57,13 @@ public class LdapSecurityTest {
 
     @Test
     public void testConnectionFail() {
-        Assert.assertFalse(LdapSecurity.checkPassword("cn=admin,dc=example,dc=com", "12345", "localhost", 389));
-        Assert.assertFalse(LdapSecurity.checkPasswordByRoot("admin", "", "localhost", 389,
+        Assert.assertThrows(javax.naming.CommunicationException.class,
+                () -> LdapSecurity.checkPassword("cn=admin,dc=example,dc=com", "12345", "localhost", 389));
+        Assert.assertThrows(AuthenticationException.class, () -> LdapSecurity.checkPasswordByRoot("admin", "", "localhost", 389,
                 "cn=admin,dc=example,dc=com", "", "cn=admin,dc=example,dc=com", ""));
 
-        Assert.assertFalse(LdapSecurity.checkPasswordByRoot("admin", "12345", "localhost", 389,
-                "cn=admin,dc=example,dc=com", "12345", "cn=admin,dc=example,dc=com", ""));
+        Assert.assertThrows(javax.naming.CommunicationException.class,
+                () -> LdapSecurity.checkPasswordByRoot("admin", "12345", "localhost", 389,
+                        "cn=admin,dc=example,dc=com", "12345", "cn=admin,dc=example,dc=com", ""));
     }
 }

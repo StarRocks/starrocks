@@ -170,7 +170,7 @@ public class ExecuteExceptionHandler {
                 }
             }
             // if it is cancelled due to backend not alive, rebuild the plan and retry again
-            if (e.getErrorCode().equals(InternalErrorCode.CANCEL_NODE_NOT_ALIVE_ERR)) {
+            if (e.getInternalErrorCode().equals(InternalErrorCode.CANCEL_NODE_NOT_ALIVE_ERR)) {
                 rebuildExecPlan(e, context);
                 return;
             }
