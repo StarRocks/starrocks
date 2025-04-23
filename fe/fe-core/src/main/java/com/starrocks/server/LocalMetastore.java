@@ -5344,12 +5344,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         ConcurrentHashMap<Long, Long> idMap = new ConcurrentHashMap<>();
         idMap.put(tableId, newAutoIncrementValue);
         AutoIncrementInfo info = new AutoIncrementInfo(idMap);
-        try {
-            stateMgr.getEditLog().logSaveAutoIncrementId(info);
-        } catch (IOException e) {
-            LOG.warn("Failed to log auto increment id change for table: {}", tableId, e);
-            throw new DdlException("Failed to alter auto increment value: " + e.getMessage());
-        }
+        stateMgr.getEditLog().logSaveAutoIncrementId(info);
 
         LOG.info("Set auto_increment value for table {}.{} to {}", dbName, tableName, newAutoIncrementValue);
     }
