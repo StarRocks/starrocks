@@ -115,8 +115,8 @@ Status StoragePageCache::insert(const CacheKey& key, const Slice& data, PageCach
 
     Slice* cache_item = new Slice(data.data, data.size);
     auto deleter = [](const starrocks::CacheKey& key, void* value) {
-        auto* cache_item = (Slice*) value;
-        delete[](uint8_t*) cache_item->data;
+        auto* cache_item = (Slice*)value;
+        delete[] (uint8_t*)cache_item->data;
         delete cache_item;
     };
 
