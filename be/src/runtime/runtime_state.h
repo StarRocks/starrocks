@@ -505,23 +505,10 @@ public:
         return this->_broadcast_join_right_offsprings;
     }
 
-<<<<<<< HEAD
-=======
-    bool enable_event_scheduler() const { return _enable_event_scheduler; }
-    void set_enable_event_scheduler(bool enable) { _enable_event_scheduler = enable; }
-
-    bool enable_join_runtime_filter_pushdown() const {
-        return _query_options.__isset.enable_join_runtime_filter_pushdown &&
-               _query_options.enable_join_runtime_filter_pushdown;
-    }
-
     bool lower_upper_support_utf8() const {
         return _query_options.__isset.lower_upper_support_utf8 && _query_options.lower_upper_support_utf8;
     }
 
-    DebugActionMgr& debug_action_mgr() { return _debug_action_mgr; }
-
->>>>>>> 4c027fe694 ([Feature] upper/lower support utf8 (#56192))
 private:
     // Set per-query state.
     void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
