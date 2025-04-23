@@ -34,12 +34,12 @@
 
 #include "util/parse_util.h"
 
-#include "util/mem_info.h"
+#include <fmt/format.h>
 #include "util/string_parser.hpp"
 
 namespace starrocks {
 
-int64_t ParseUtil::parse_mem_spec(const std::string& mem_spec_str, const int64_t memory_limit) {
+StatusOr<int64_t> ParseUtil::parse_mem_spec(const std::string& mem_spec_str, const int64_t memory_limit) {
     bool is_percent = false;
     if (mem_spec_str.empty()) {
         return 0;
@@ -89,18 +89,16 @@ int64_t ParseUtil::parse_mem_spec(const std::string& mem_spec_str, const int64_t
     if (multiplier != -1) {
         // Parse float - MB or GB
         auto limit_val = StringParser::string_to_float<double>(mem_spec_str.data(), number_str_len, &result);
-
         if (result != StringParser::PARSE_SUCCESS) {
-            return -1;
+            return Status::InvalidArgument(fmt::format("Parse mem string: {}", mem_spec_str));
         }
 
         bytes = multiplier * limit_val;
     } else {
         // Parse int - bytes or percent
         auto limit_val = StringParser::string_to_int<int64_t>(mem_spec_str.data(), number_str_len, &result);
-
         if (result != StringParser::PARSE_SUCCESS) {
-            return -1;
+            return Status::InvalidArgument(fmt::format("Parse mem string: {}", mem_spec_str));
         }
 
         if (is_percent) {
@@ -108,11 +106,6 @@ int64_t ParseUtil::parse_mem_spec(const std::string& mem_spec_str, const int64_t
         } else {
             bytes = limit_val;
         }
-    }
-
-    // Accept -1 as indicator for infinite memory that we report by a 0 return value.
-    if (bytes == -1) {
-        return 0;
     }
 
     return bytes;
