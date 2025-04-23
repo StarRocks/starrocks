@@ -61,6 +61,7 @@ import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
+import com.starrocks.sql.ast.AlterTableAutoIncrementClause;
 import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
