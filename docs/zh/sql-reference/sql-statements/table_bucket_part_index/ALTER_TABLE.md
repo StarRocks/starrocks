@@ -578,7 +578,11 @@ DISTRIBUTED BY HASH(order_id);
 ALTER TABLE orders ORDER BY (dt,revenue,state);
 ```
 
+import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
+
 #### STRUCT 类型列增删字段（MODIFY COLUMN ADD/DROP FIELD）
+
+<Beta />
 
 自 v3.2.10 及 v3.3.2 起，StarRocks 支持向 STRUCT 类型列增删字段。该字段可以为嵌套 STRUCT 类型或存在于 ARRAY 类型中。
 

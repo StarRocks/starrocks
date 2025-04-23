@@ -1,8 +1,11 @@
 ---
 displayed_sidebar: docs
 ---
+import Experimental from '../_assets/commonMarkdown/_experimental.mdx'
 
-# [プレビュー] Apache® Pulsar™ からデータを継続的にロード
+# Apache® Pulsar™ からデータを継続的にロード
+
+<Experimental />
 
 StarRocks バージョン 2.5 以降、Routine Load は Apache® Pulsar™ からデータを継続的にロードすることをサポートしています。Pulsar は、ストア・コンピュート分離アーキテクチャを持つ分散型のオープンソースのパブサブメッセージングおよびストリーミングプラットフォームです。Routine Load を介して Pulsar からデータをロードする方法は、Apache Kafka からデータをロードする方法に似ています。このトピックでは、CSV 形式のデータを例に、Routine Load を介して Apache Pulsar からデータをロードする方法を紹介します。
 

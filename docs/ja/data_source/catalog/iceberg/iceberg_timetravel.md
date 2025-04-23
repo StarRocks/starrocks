@@ -2,7 +2,11 @@
 displayed_sidebar: docs
 ---
 
+import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
+
 # Iceberg Catalog でのタイムトラベル
+
+<Beta />
 
 このトピックでは、Iceberg catalog に対する StarRocks のタイムトラベル機能を紹介します。この機能は v3.4.0 以降でサポートされています。
 

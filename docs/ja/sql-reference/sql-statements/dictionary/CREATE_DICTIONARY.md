@@ -2,7 +2,11 @@
 displayed_sidebar: docs
 ---
 
+import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
+
 # CREATE DICTIONARY
+
+<Beta />
 
 元のオブジェクトに基づいて辞書オブジェクトを作成します。辞書オブジェクトは、元のオブジェクトからのキーと値のマッピングをハッシュテーブルの形式で整理し、すべての BE ノードのメモリにキャッシュされます。キャッシュされたテーブルとして見ることができます。
 

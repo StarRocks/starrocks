@@ -3,7 +3,11 @@ displayed_sidebar: docs
 sidebar_position: 50
 ---
 
+import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
+
 # ディスクへのスピル
+
+<Beta />
 
 このトピックでは、大規模なオペレーターの中間計算結果をローカルディスクとオブジェクトストレージにスピルする方法について説明します。
 

@@ -3,7 +3,11 @@ displayed_sidebar: docs
 toc_max_heading_level: 4
 ---
 
-# [プレビュー] MaxCompute catalog
+import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+
+# MaxCompute catalog
+
+<Beta />
 
 StarRocks は v3.3 以降、Alibaba Cloud MaxCompute（以前は ODPS として知られていました）catalog をサポートしています。
 

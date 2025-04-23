@@ -3,7 +3,11 @@ displayed_sidebar: docs
 keywords: ['fuzai', 'ziyuan'] 
 ---
 
+import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
+
 # 中间结果落盘
+
+<Beta />
 
 本文介绍如何将大算子的中间计算结果落盘 (Spill to disk) 至本地磁盘或对象存储。
 

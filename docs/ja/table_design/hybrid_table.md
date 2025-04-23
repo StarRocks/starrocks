@@ -3,7 +3,11 @@ displayed_sidebar: docs
 sidebar_position: 60
 ---
 
-# [プレビュー] 行と列のハイブリッドストレージ
+import Beta from '../_assets/commonMarkdown/_beta.mdx'
+
+# 行と列のハイブリッドストレージ
+
+<Beta />
 
 OLAPデータベースとして、StarRocksは元々列指向（カラムナ）ストレージにデータを保存しており、集計クエリのような複雑なクエリのパフォーマンスを向上させます。v3.2.3以降、StarRocksは行と列のハイブリッドストレージでのデータ保存もサポートしており、データは行ごとおよび列ごとに保存されます。このハイブリッドストレージは、主キーに基づく高い同時実行性、低レイテンシーのポイントクエリや部分更新に適しており、列指向ストレージに匹敵する効率的な分析機能を提供します。さらに、ハイブリッドストレージは[prepared statements](../sql-reference/sql-statements/prepared_statement.md)をサポートしており、クエリパフォーマンスとセキュリティを向上させます。
 

@@ -3,7 +3,11 @@ displayed_sidebar: docs
 toc_max_heading_level: 5
 ---
 
+import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+
 # Paimon catalog
+
+<Beta />
 
 StarRocks 从 3.1 版本开始支持 Paimon Catalog。
 

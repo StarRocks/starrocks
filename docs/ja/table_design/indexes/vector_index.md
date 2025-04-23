@@ -3,7 +3,11 @@ displayed_sidebar: docs
 sidebar_position: 60
 ---
 
+import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+
 # ベクターインデックス
+
+<Beta />
 
 このトピックでは、StarRocks のベクターインデックス機能と、それを使用した近似最近傍探索 (ANNS) の方法について紹介します。
 

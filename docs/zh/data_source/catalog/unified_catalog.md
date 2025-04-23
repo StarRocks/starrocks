@@ -3,7 +3,11 @@ displayed_sidebar: docs
 toc_max_heading_level: 5
 ---
 
+import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+
 # Unified catalog
+
+<Beta />
 
 Unified Catalog 是一种 External Catalog，自 3.2 版本起支持。通过 Unified Catalog，您可以把 Apache Hive™、Apache Iceberg、Apache Hudi、 Delta Lake 和 Apache Kudu 数据源作为一个融合的数据源，不需要执行导入就可以直接操作其中的表数据，包括：
 

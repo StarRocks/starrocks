@@ -3,7 +3,11 @@ displayed_sidebar: docs
 sidebar_position: 60
 ---
 
+import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+
 # 向量索引
+
+<Beta />
 
 本文介绍 StarRocks 的向量索引功能，以及如何使用该功能进行近似最近邻搜索（ANNS）。
 

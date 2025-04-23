@@ -75,7 +75,11 @@ DISTRIBUTED BY HASH(site_id);
 > - テーブルを作成する際には、`DISTRIBUTED BY HASH` 句を使用してバケット化カラムを指定する必要があります。詳細については、[バケット化](../data_distribution/Data_distribution.md#bucketing)を参照してください。
 > - v2.5.7以降、StarRocks はテーブル作成時やパーティション追加時にバケット数 (BUCKETS) を自動的に設定できます。バケット数を手動で設定する必要はありません。詳細については、[バケット数の設定](../data_distribution/Data_distribution.md#set-the-number-of-buckets)を参照してください。
 
+import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+
 ## 一般的な集計関数の状態
+
+<Beta />
 
 StarRocks は v3.4.0 から一般的な集計関数の状態をサポートしています。
 

@@ -3,7 +3,11 @@ displayed_sidebar: docs
 sidebar_position: 40
 ---
 
-# [プレビュー] N-gram ブルームフィルターインデックス
+import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+
+# N-gram ブルームフィルターインデックス
+
+<Beta />
 
 N-gram ブルームフィルターインデックスは、特に LIKE クエリの高速化や `ngram_search` および `ngram_search_case_insensitive` 関数の計算速度を向上させるために使用される特別な [ブルームフィルターインデックス](./Bloomfilter_index.md) です。
 

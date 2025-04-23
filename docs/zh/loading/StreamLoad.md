@@ -239,7 +239,11 @@ SELECT * FROM table2;
 4 rows in set (0.01 sec)
 ```
 
+import Beta from '../_assets/commonMarkdown/_beta.mdx'
+
 #### 合并 Stream Load 请求
+
+<Beta />
 
 从 v3.4.0 开始，系统支持合并多个 Stream Load 请求。
 

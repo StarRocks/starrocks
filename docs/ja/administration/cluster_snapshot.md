@@ -3,7 +3,11 @@ displayed_sidebar: docs
 sidebar_label: クラスタスナップショット
 ---
 
+import Beta from '../_assets/commonMarkdown/_beta.mdx'
+
 # 自動クラスタスナップショット
+
+<Beta />
 
 このトピックでは、共有データクラスタでの災害復旧のためにクラスタスナップショットを自動化する方法について説明します。
 

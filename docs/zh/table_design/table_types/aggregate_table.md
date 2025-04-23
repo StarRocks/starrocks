@@ -78,7 +78,11 @@ DISTRIBUTED BY HASH(site_id);
 > - 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键。分桶键的更多说明，请参见[分桶](../data_distribution/Data_distribution.md#分桶)。
 > - 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../data_distribution/Data_distribution.md#设置分桶数量)。
 
+import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+
 ## 通用聚合函数状态
+
+<Beta />
 
 StarRocks 自 v3.4.0 起支持通用聚合函数状态。
 

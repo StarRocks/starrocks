@@ -239,7 +239,11 @@ SELECT * FROM table2;
 4 rows in set (0.01 sec)
 ```
 
+import Beta from '../_assets/commonMarkdown/_beta.mdx'
+
 #### Stream Load リクエストをマージする
+
+<Beta />
 
 v3.4.0 以降、システムは複数の Stream Load リクエストをマージすることをサポートしています。
 

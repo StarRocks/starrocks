@@ -3,7 +3,11 @@ displayed_sidebar: docs
 sidebar_label: 集群快照
 ---
 
+import Beta from '../_assets/commonMarkdown/_beta.mdx'
+
 # 自动化集群快照
+
+<Beta />
 
 本文介绍如何在存算分离集群上启用自动化集群快照以实现灾难恢复。
 

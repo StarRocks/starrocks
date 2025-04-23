@@ -3,7 +3,11 @@ displayed_sidebar: docs
 toc_max_heading_level: 5
 ---
 
+import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+
 # 統合カタログ
+
+<Beta />
 
 統合カタログは、StarRocks が v3.2 以降で提供する外部カタログの一種で、Apache Hive™、Apache Iceberg、Apache Hudi、Delta Lake、Apache Kudu のデータソースを取り込みなしで統合データソースとして扱うことができます。統合カタログを使用すると、次のことが可能です。
 

@@ -1,8 +1,11 @@
 ---
 displayed_sidebar: docs
 ---
+import Experimental from '../../_assets/commonMarkdown/_experimental.mdx'
 
-# [実験的機能] Kudu catalog
+# Kudu catalog
+
+<Experimental />
 
 StarRocks は v3.3 以降で Kudu catalog をサポートしています。
 

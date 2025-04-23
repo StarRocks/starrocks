@@ -2,9 +2,11 @@
 displayed_sidebar: docs
 ---
 
+import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
+
 # CREATE  DICTIONARY
 
-
+<Beta />
 
 基于原始对象创建字典对象。字典对象会以哈希表的形式组织**原始对象中的键值对映射关系**，并缓存在所有 BE 节点的内存中，可以视为一张缓存表。
 

@@ -2,7 +2,11 @@
 displayed_sidebar: docs
 ---
 
+import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
+
 # Time Travel with Iceberg Catalog
+
+<Beta />
 
 本文介绍了 StarRocks 针对 Iceberg Catalog 支持的 Time Travel 功能。该功能从 v3.4.0 开始支持。
 
