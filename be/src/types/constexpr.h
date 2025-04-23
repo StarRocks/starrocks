@@ -34,6 +34,7 @@ const static uint8_t DEFAULT_HLL_LOG_K = 17;
 // For JSON type
 constexpr int kJsonDefaultSize = 128;
 constexpr int kJsonMetaDefaultFormatVersion = 1;
+constexpr int kJsonMetaRemainFilterVersion = 2;
 
 constexpr __int128 MAX_INT128 = ~((__int128)0x01 << 127);
 constexpr __int128 MIN_INT128 = ((__int128)0x01 << 127);
