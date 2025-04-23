@@ -96,6 +96,7 @@ import com.starrocks.sql.ast.AlterStorageVolumeClause;
 import com.starrocks.sql.ast.AlterStorageVolumeCommentClause;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
+import com.starrocks.sql.ast.AlterTableAutoIncrementClause;
 import com.starrocks.sql.ast.AlterTableClause;
 import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableOperationClause;
