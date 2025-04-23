@@ -14,12 +14,9 @@
 
 package com.starrocks.alter;
 
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -76,7 +73,6 @@ public class AlterTableAutoIncrementTest {
             }
             Assert.assertEquals(2, lastId);
 
-            // Alter auto_increment to 3
             stmt.execute("ALTER TABLE test_auto_increment AUTO_INCREMENT = 3");
 
             // Insert another row without specifying id
