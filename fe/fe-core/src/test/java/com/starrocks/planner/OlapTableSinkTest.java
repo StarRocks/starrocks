@@ -624,7 +624,7 @@ public class OlapTableSinkTest {
         int lowUsageIndex1 = OlapTableSink.findPrimaryReplica(olapTable, bePrimaryMap, infoService,
                 index, selectedBackedIds, multipleReplicaList);
         //note: even though in bePrimaryMap, primary replica num in be2 < primary replica num in be3,
-        //      but be2 is in shutting down, so choose replica3 as primary replica.
+        //      but be2 is in shutting down, so choose replica3 as primary replica. 
         Assert.assertEquals(multipleReplicaList.get(lowUsageIndex1).getId(), replica3.getId());
         Assert.assertEquals(multipleReplicaList.get(lowUsageIndex1).getBackendId(), be3.getId());
 
