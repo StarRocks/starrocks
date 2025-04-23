@@ -901,4 +901,18 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         GlobalStateMgr.getCurrentState().getEditLog().logModifyViewDef(alterViewInfo);
         return null;
     }
+
+    @Override
+    public Void visitAlterTableAutoIncrementClause(AlterTableAutoIncrementClause clause, ConnectContext context) {
+        Locker locker = new Locker();
+        try (AutoCloseableLock writeLock = locker.lockAndCheckExist(db, table, LockType.WRITE)) {
+            try {
+                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .alterTableAutoIncrement(db.getFullName(), table.getName(), clause.getAutoIncrementValue());
+            } catch (DdlException e) {
+                throw new AlterJobException(e.getMessage());
+            }
+        }
+        return null;
+    }
 }

@@ -90,6 +90,7 @@ import com.starrocks.sql.ast.warehouse.ShowClustersStmt;
 import com.starrocks.sql.ast.warehouse.ShowNodesStmt;
 import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
 import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
+import com.starrocks.sql.ast.AlterTableAutoIncrementClause;
 
 public interface AstVisitor<R, C> {
     default R visit(ParseNode node) {
@@ -1234,6 +1235,10 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitReorderColumnsClause(ReorderColumnsClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitAlterTableAutoIncrementClause(AlterTableAutoIncrementClause clause, C context) {
         return visitNode(clause, context);
     }
 
