@@ -2320,8 +2320,12 @@ setQuantifier
 
 selectItem
     : expression (AS? (identifier | string))?                                            #selectSingle
-    | qualifiedName '.' ASTERISK_SYMBOL                                                  #selectAll
-    | ASTERISK_SYMBOL                                                                    #selectAll
+    | qualifiedName '.' ASTERISK_SYMBOL excludeClause?                                   #selectAll
+    | ASTERISK_SYMBOL excludeClause?                                                     #selectAll
+    ;
+
+excludeClause
+    : ( EXCEPT | EXCLUDE ) '(' identifier (',' identifier)* ')'
     ;
 
 relations
@@ -3108,4 +3112,5 @@ nonReserved
     | FIELD
     | ARRAY_ELEMENT
     | PERSISTENT
+    | EXCLUDE | EXCEPT
     ;

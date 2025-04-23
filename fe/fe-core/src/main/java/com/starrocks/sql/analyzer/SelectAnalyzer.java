@@ -42,6 +42,7 @@ import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -50,6 +51,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -230,6 +232,34 @@ public class SelectAnalyzer {
                             INTERNAL_ERROR);
                 }
 
+                List<String> excludedColumns = item.getExcludedColumns();
+                if (excludedColumns != null && CollectionUtils.isNotEmpty(excludedColumns)) {
+                    Set<String> existingColumnsLower = fields.stream()
+                            .map(field -> field.getName().toLowerCase())
+                            .collect(Collectors.toSet());
+                    Set<String> excludedLower = excludedColumns.stream()
+                            .map(String::toLowerCase)
+                            .collect(Collectors.toSet());
+                    List<String> missingColumns = excludedColumns.stream()
+                            .filter(col -> !existingColumnsLower.contains(col.toLowerCase()))
+                            .collect(Collectors.toList());
+
+                    if (!missingColumns.isEmpty()) {
+                        String tableDesc = item.getTblName() != null ? 
+                                "table '" + item.getTblName() + "'" : "current scope";
+                        throw new SemanticException("Column(s) %s do not exist in %s", 
+                                missingColumns, tableDesc);
+                    }
+
+                    fields = fields.stream()
+                            .filter(field -> !excludedLower.contains(field.getName().toLowerCase()))
+                            .collect(Collectors.toList());
+                    if (fields.isEmpty()) {
+                        String tableDesc = item.getTblName() != null ? 
+                                "table '" + item.getTblName() + "'" : "query scope";
+                        throw new SemanticException("EXCLUDE clause removes all columns from %s", tableDesc);
+                    }
+                }
                 for (Field field : fields) {
                     int fieldIndex = scope.getRelationFields().indexOf(field);
                     /*
