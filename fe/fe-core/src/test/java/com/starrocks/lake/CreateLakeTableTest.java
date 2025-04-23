@@ -388,9 +388,9 @@ public class CreateLakeTableTest {
                         "properties('enable_persistent_index' = 'true', 'persistent_index_type' = 'cloud_native');"));
         LakeTable lakeTable = getLakeTable("lake_test", "test_unique_id");
         // Clear unique id first
-        lakeTable.setMaxColUniqueId(0);
+        lakeTable.setMaxColUniqueId(-1);
         for (Column column : lakeTable.getColumns()) {
-            column.setUniqueId(0);
+            column.setUniqueId(-1);
         }
         lakeTable.gsonPostProcess();
         Assert.assertEquals(3, lakeTable.getMaxColUniqueId());

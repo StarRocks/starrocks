@@ -264,9 +264,7 @@ public class LakeTable extends OlapTable {
     @Override
     public void gsonPostProcess() throws IOException {
         super.gsonPostProcess();
-        if (getMaxColUniqueId() <= 0) {
-            setMaxColUniqueId(LakeTableHelper.restoreColumnUniqueId(this));
-        }
+        restoreColumnUniqueIdIfNeed();
     }
 
     @Override
