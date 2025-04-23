@@ -34,6 +34,7 @@
 
 package com.starrocks.planner;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
@@ -87,6 +88,7 @@ import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TDataSink;
@@ -851,6 +853,18 @@ public class OlapTableSink extends DataSink {
         return locationParam;
     }
 
+    @VisibleForTesting
+    public static int findPrimaryReplica(OlapTable table,
+                                         Map<Long, Long> bePrimaryMap,
+                                         SystemInfoService infoService,
+                                         MaterializedIndex index,
+                                         List<Long> selectedBackedIds,
+                                         List<Replica> replicas) {
+        int lowUsageIndex = findPrimaryReplica(table, bePrimaryMap, infoService,
+                index, selectedBackedIds, 0, replicas);
+        return lowUsageIndex;
+    }
+
     private static int findPrimaryReplica(OlapTable table,
                                           Map<Long, Long> bePrimaryMap,
                                           SystemInfoService infoService,
@@ -871,15 +885,20 @@ public class OlapTableSink extends DataSink {
         int lowUsageIndex = -1;
         for (int i = 0; i < replicas.size(); i++) {
             Replica replica = replicas.get(i);
-            if (lowUsageIndex == -1 && !replica.getLastWriteFail()
-                    && !infoService.getBackend(replica.getBackendId()).getLastWriteFail()) {
+            boolean isHealthy = !replica.getLastWriteFail()
+                    && !infoService.getBackend(replica.getBackendId()).getLastWriteFail();
+            //when single replica, to ensure the load job could loading normally, BE SHUTDOWN status could not be checked.
+            if (replicas.size() > 1) {
+                isHealthy = isHealthy
+                        && infoService.getBackend(replica.getBackendId()).getStatus() != ComputeNode.Status.SHUTDOWN;
+            }
+            if (lowUsageIndex == -1 && isHealthy) {
                 lowUsageIndex = i;
             }
             if (lowUsageIndex != -1
                     && bePrimaryMap.getOrDefault(replica.getBackendId(), (long) 0) < bePrimaryMap
                     .getOrDefault(replicas.get(lowUsageIndex).getBackendId(), (long) 0)
-                    && !replica.getLastWriteFail()
-                    && !infoService.getBackend(replica.getBackendId()).getLastWriteFail()) {
+                    && isHealthy) {
                 lowUsageIndex = i;
             }
         }

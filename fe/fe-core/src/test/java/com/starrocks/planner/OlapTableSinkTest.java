@@ -52,12 +52,16 @@ import com.starrocks.common.Status;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionValue;
+import com.starrocks.system.Backend;
+import com.starrocks.system.BackendHbResponse;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TOlapTableLocationParam;
 import com.starrocks.thrift.TOlapTablePartition;
 import com.starrocks.thrift.TOlapTablePartitionParam;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletLocation;
@@ -67,7 +71,9 @@ import com.starrocks.thrift.TWriteQuorumType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
+import mockit.Mock;
 import mockit.Mocked;
+import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
@@ -552,5 +558,87 @@ public class OlapTableSinkTest {
         sink.complete();
         LOG.info("sink is {}", sink.toThrift());
         LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
+    }
+
+    @Test
+    public void testFindPrimaryReplica() throws StarRocksException {
+
+        //init be node
+        Backend be1 = new Backend(1001L, "127.0.0.1", 9050);
+        Backend be2 = new Backend(1002L, "127.0.0.2", 9050);
+        Backend be3 = new Backend(1003L, "127.0.0.3", 9050);
+        long hbTimestamp = System.currentTimeMillis();
+        BackendHbResponse be1Response =
+                new BackendHbResponse(be1.getId(), be1.getBePort(), be1.getHttpPort(), be1.getBrpcPort(),
+                        be1.getStarletPort(), hbTimestamp, be1.getVersion(), be1.getCpuCores(), 0);
+        BackendHbResponse be2Response =
+                new BackendHbResponse(be2.getId(), be2.getBePort(), be2.getHttpPort(), be2.getBrpcPort(),
+                        be2.getStarletPort(), hbTimestamp, be2.getVersion(), be2.getCpuCores(), 0);
+        BackendHbResponse be3Response =
+                new BackendHbResponse(be3.getId(), be3.getBePort(), be3.getHttpPort(), be3.getBrpcPort(),
+                        be3.getStarletPort(), hbTimestamp, be3.getVersion(), be3.getCpuCores(), 0);
+        be1.handleHbResponse(be1Response, false);
+        be2.handleHbResponse(be2Response, false);
+        be3.handleHbResponse(be3Response, false);
+        BackendHbResponse shutdownResponse =
+                new BackendHbResponse(be2.getId(), TStatusCode.SHUTDOWN, "be2 is in shutting down");
+        be2.handleHbResponse(shutdownResponse, false);
+        //check be node status
+        Assert.assertEquals(ComputeNode.Status.OK, be1.getStatus());
+        Assert.assertEquals(ComputeNode.Status.SHUTDOWN, be2.getStatus());
+        Assert.assertEquals(ComputeNode.Status.OK, be3.getStatus());
+
+        Map<Long, Backend> idToBackendRef = new HashMap<>();
+        idToBackendRef.put(be1.getId(), be1);
+        idToBackendRef.put(be2.getId(), be2);
+        idToBackendRef.put(be3.getId(), be3);
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public Backend getBackend(long backendId) {
+                return idToBackendRef.get(backendId);
+            }
+        };
+        //init primary replica num for be node
+        Map<Long, Long> bePrimaryMap = new HashMap<>();
+        bePrimaryMap.put(be1.getId(), 2L);
+        bePrimaryMap.put(be2.getId(), 0L);
+        bePrimaryMap.put(be3.getId(), 1L);
+
+        OlapTable olapTable = new OlapTable();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        MaterializedIndex index = new MaterializedIndex(1L, MaterializedIndex.IndexState.NORMAL);
+        List<Long> selectedBackedIds = Lists.newArrayList();
+
+        //1.check primary replica selection in multiple replica
+        Replica replica1 = new Replica(11L, be1.getId(), Replica.ReplicaState.NORMAL, 1, 0);
+        Replica replica2 = new Replica(22L, be2.getId(), Replica.ReplicaState.NORMAL, 1, 0);
+        Replica replica3 = new Replica(33L, be3.getId(), Replica.ReplicaState.NORMAL, 1, 0);
+        replica1.setLastWriteFail(false);
+        replica2.setLastWriteFail(false);
+        replica3.setLastWriteFail(false);
+        List<Replica> multipleReplicaList = new ArrayList<>();
+        multipleReplicaList.add(replica1);
+        multipleReplicaList.add(replica2);
+        multipleReplicaList.add(replica3);
+
+        int lowUsageIndex1 = OlapTableSink.findPrimaryReplica(olapTable, bePrimaryMap, infoService,
+                index, selectedBackedIds, multipleReplicaList);
+        //note: even though in bePrimaryMap, primary replica num in be2 < primary replica num in be3,
+        //      but be2 is in shutting down, so choose replica3 as primary replica.
+        Assert.assertEquals(multipleReplicaList.get(lowUsageIndex1).getId(), replica3.getId());
+        Assert.assertEquals(multipleReplicaList.get(lowUsageIndex1).getBackendId(), be3.getId());
+
+        //2.check primary replica selection in single replica
+        Replica replica4 = new Replica(44L, be2.getId(), Replica.ReplicaState.NORMAL, 1, 0);
+        replica4.setLastWriteFail(false);
+        List<Replica> singleReplicaList = new ArrayList<>();
+        singleReplicaList.add(replica4);
+
+        int lowUsageIndex2 = OlapTableSink.findPrimaryReplica(olapTable, bePrimaryMap, infoService,
+                index, selectedBackedIds, singleReplicaList);
+        //note: even though be2 is in shutting down, to ensure the load job could loading normally,
+        //      be2 SHUTDOWN status could not be checked, so choose replica4 as primary replica.
+        Assert.assertEquals(singleReplicaList.get(lowUsageIndex2).getId(), replica4.getId());
+        Assert.assertEquals(singleReplicaList.get(lowUsageIndex2).getBackendId(), be2.getId());
     }
 }
