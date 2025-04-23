@@ -922,13 +922,16 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
     @Override
     public Void visitAlterTableAutoIncrementClause(AlterTableAutoIncrementClause clause, ConnectContext context) {
         Locker locker = new Locker();
-        try (AutoCloseableLock writeLock = locker.lockAndCheckExist(db, table, LockType.WRITE)) {
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+        try {
             try {
                 GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .alterTableAutoIncrement(db.getFullName(), table.getName(), clause.getAutoIncrementValue());
             } catch (DdlException e) {
                 throw new AlterJobException(e.getMessage());
             }
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         }
         return null;
     }
