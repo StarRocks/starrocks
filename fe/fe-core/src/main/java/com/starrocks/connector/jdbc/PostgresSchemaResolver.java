@@ -129,6 +129,10 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
                 break;
         }
 
+        if (typeName.equalsIgnoreCase("uuid")) {
+            return ScalarType.createVarcharType(36);
+        }
+
         if (primitiveType != PrimitiveType.DECIMAL32) {
             return ScalarType.createType(primitiveType);
         } else {
