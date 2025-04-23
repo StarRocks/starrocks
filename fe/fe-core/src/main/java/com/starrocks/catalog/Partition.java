@@ -153,6 +153,8 @@ public class Partition extends MetaObject implements PhysicalPartition, GsonPost
 
     private volatile long lastSuccVacuumVersion = 0;
 
+    private volatile long extraFileSize = 0;
+
     private Partition() {
     }
 
@@ -636,6 +638,18 @@ public class Partition extends MetaObject implements PhysicalPartition, GsonPost
 
     public void setLastSuccVacuumVersion(long lastSuccVacuumVersion) {
         this.lastSuccVacuumVersion = lastSuccVacuumVersion;
+    }
+
+    public long getExtraFileSize() {
+        return extraFileSize;
+    }
+
+    public void setExtraFileSize(long extraFileSize) {
+        this.extraFileSize = extraFileSize;
+    }
+
+    public void incExtraFileSize(long addFileSize) {
+        this.extraFileSize += addFileSize;
     }
 
     public String generatePhysicalPartitionName(long physicalPartitionId) {
