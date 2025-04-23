@@ -5330,7 +5330,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         return ImmutableMap.of("Partition", totalCount);
     }
 
-     public void alterTableAutoIncrement(String dbName, String tableName, long newAutoIncrementValue) throws DdlException {
+    public void alterTableAutoIncrement(String dbName, String tableName, long newAutoIncrementValue) throws DdlException {
         Table table = getTable(dbName, tableName);
         Long tableId = table.getId();
         Long currentValue = getCurrentAutoIncrementIdByTableId(tableId);
