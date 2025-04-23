@@ -1,4 +1,4 @@
--- name: test_percentile_approx 
+-- name: test_percentile_approx_weighted 
 CREATE TABLE t1 (
     c1 int,
     c2 double,
