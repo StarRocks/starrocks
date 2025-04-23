@@ -81,6 +81,7 @@ import com.starrocks.sql.ast.translate.TranslateStmt;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
 import com.starrocks.sql.ast.txn.RollbackStmt;
+import com.starrocks.sql.ast.AlterTableAutoIncrementClause;
 import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
@@ -90,7 +91,6 @@ import com.starrocks.sql.ast.warehouse.ShowClustersStmt;
 import com.starrocks.sql.ast.warehouse.ShowNodesStmt;
 import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
 import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
-import com.starrocks.sql.ast.AlterTableAutoIncrementClause;
 
 public interface AstVisitor<R, C> {
     default R visit(ParseNode node) {
