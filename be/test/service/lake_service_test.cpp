@@ -2374,28 +2374,50 @@ TEST_F(LakeServiceTest, test_aggregate_publish_version) {
         item2.CopyFrom(schema_pb3);
     }
 
-    EXPECT_CALL(mock_service, publish_version(_, _, _, _))
-            .WillOnce(Invoke([&](::google::protobuf::RpcController*, const PublishVersionRequest*,
-                                 PublishVersionResponse* resp, ::google::protobuf::Closure* done) {
-                resp->mutable_status()->set_status_code(0);
-                auto& item1 = (*resp->mutable_tablet_metas())[1];
-                item1.CopyFrom(metadata1);
-                auto& item2 = (*resp->mutable_tablet_metas())[2];
-                item2.CopyFrom(metadata2);
-                done->Run();
-            }));
+    // normal response
+    {
+        EXPECT_CALL(mock_service, publish_version(_, _, _, _))
+                .WillOnce(Invoke([&](::google::protobuf::RpcController*, const PublishVersionRequest*,
+                                     PublishVersionResponse* resp, ::google::protobuf::Closure* done) {
+                    resp->mutable_status()->set_status_code(0);
+                    auto& item1 = (*resp->mutable_tablet_metas())[1];
+                    item1.CopyFrom(metadata1);
+                    auto& item2 = (*resp->mutable_tablet_metas())[2];
+                    item2.CopyFrom(metadata2);
+                    done->Run();
+                }));
 
-    PublishVersionResponse response;
-    brpc::Controller cntl;
-    google::protobuf::Closure* done = brpc::NewCallback([]() {});
-    _lake_service.aggregate_publish_version(&cntl, &request, &response, done);
+        PublishVersionResponse response;
+        brpc::Controller cntl;
+        google::protobuf::Closure* done = brpc::NewCallback([]() {});
+        _lake_service.aggregate_publish_version(&cntl, &request, &response, done);
 
-    EXPECT_EQ(response.status().status_code(), 0);
-    auto res = _tablet_mgr->get_single_tablet_metadata(1, 2);
-    ASSERT_TRUE(res.ok());
-    TabletMetadataPtr metadata3 = std::move(res).value();
-    ASSERT_EQ(metadata3->schema().id(), 10);
-    ASSERT_EQ(metadata3->historical_schemas_size(), 2);
+        EXPECT_EQ(response.status().status_code(), 0);
+        auto res = _tablet_mgr->get_single_tablet_metadata(1, 2);
+        ASSERT_TRUE(res.ok());
+        TabletMetadataPtr metadata3 = std::move(res).value();
+        ASSERT_EQ(metadata3->schema().id(), 10);
+        ASSERT_EQ(metadata3->historical_schemas_size(), 2);
+    }
+
+    // publish version failed
+    {
+        EXPECT_CALL(mock_service, publish_version(_, _, _, _))
+                .WillOnce(Invoke([&](::google::protobuf::RpcController*, const PublishVersionRequest*,
+                                     PublishVersionResponse* resp, ::google::protobuf::Closure* done) {
+                    resp->mutable_status()->set_status_code(1);
+                    auto& item1 = (*resp->mutable_tablet_metas())[1];
+                    item1.CopyFrom(metadata1);
+                    done->Run();
+                }));
+
+        PublishVersionResponse response;
+        brpc::Controller cntl;
+        google::protobuf::Closure* done = brpc::NewCallback([]() {});
+        _lake_service.aggregate_publish_version(&cntl, &request, &response, done);
+
+        EXPECT_EQ(response.status().status_code(), 6);
+    }
 
     server.Stop(0);
     server.Join();
