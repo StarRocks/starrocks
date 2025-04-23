@@ -5329,4 +5329,26 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 }).sum();
         return ImmutableMap.of("Partition", totalCount);
     }
+
+     public void alterTableAutoIncrement(String dbName, String tableName, long newAutoIncrementValue) throws DdlException {
+        Table table = getTable(dbName, tableName);
+        Long tableId = table.getId();
+        Long currentValue = getCurrentAutoIncrementIdByTableId(tableId);
+
+        if (currentValue != null && newAutoIncrementValue <= currentValue) {
+            throw new DdlException("New auto_increment value must be greater than current value: " + currentValue);
+        }
+
+        addOrReplaceAutoIncrementIdByTableId(tableId, newAutoIncrementValue);
+
+        AutoIncrementInfo info = new AutoIncrementInfo(tableId, newAutoIncrementValue);
+        try {
+            stateMgr.getEditLog().logAutoIncrementId(info);
+        } catch (IOException e) {
+            LOG.warn("Failed to log auto increment id change for table: {}", tableId, e);
+            throw new DdlException("Failed to alter auto increment value: " + e.getMessage());
+        }
+
+        LOG.info("Set auto_increment value for table {}.{} to {}", dbName, tableName, newAutoIncrementValue);
+    }
 }

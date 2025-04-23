@@ -60,6 +60,8 @@ public enum AlterOpType {
     ADD_PARTITION,
     // Optimize table
     OPTIMIZE,
+    // ALTER AUTO_INCREMENT counter
+    ALTER_AUTO_INCREMENT,
     // ALTER_OTHER must be the last one
     ALTER_OTHER,
     // INVALID_OP must be the last one
@@ -110,6 +112,8 @@ public enum AlterOpType {
             return DROP_ROLLUP;
         } else if (alterClause instanceof OptimizeClause) {
             return OPTIMIZE;
+        } else if (alterClause instanceof AlterTableAutoIncrementClause) {
+            return ALTER_AUTO_INCREMENT;
         }
 
         return ALTER_OTHER;
