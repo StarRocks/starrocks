@@ -23,10 +23,11 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import java.util.List;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.List;
 
 public class AlterTableAutoIncrementTest {
     private static ConnectContext connectContext;
@@ -84,7 +85,7 @@ public class AlterTableAutoIncrementTest {
         // Verify we now have 4 rows in total
         resultRows = executeQuery("SELECT COUNT(*) FROM test_auto_increment");
         Assert.assertEquals("4", resultRows.get(0).get(0));
-      }
+    }
 
     /**
      * Helper method to execute a query and return the result rows.
