@@ -46,10 +46,10 @@ This is a failpoint written in Byteman script that triggers an exception when ca
 ADMIN ENABLE FAILPOINT 'bdb_ha_get_leader_exception' ON FRONTEND;
 
 // Disable after 10 executions
-ADMIN ENABLE FAILPOINT 'bdb_ha_get_leader_exception' ON FRONTEND WITH 10 TIMES;
+ADMIN ENABLE FAILPOINT 'bdb_ha_get_leader_exception' WITH 10 TIMES ON FRONTEND;
 
 // Trigger with 10% probability
-ADMIN ENABLE FAILPOINT 'bdb_ha_get_leader_exception' ON FRONTEND WITH 0.1 PROBABILITY;
+ADMIN ENABLE FAILPOINT 'bdb_ha_get_leader_exception' WITH 0.1 PROBABILITY ON FRONTEND;
 
 // Disable
 ADMIN DISABLE FAILPOINT 'bdb_ha_get_leader_exception' ON FRONTEND;

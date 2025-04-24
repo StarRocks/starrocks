@@ -4381,15 +4381,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
         if (ctx.ENABLE() != null) {
-            if (ctx.TIMES() != null) {
-                int nTimes = Integer.parseInt(ctx.INTEGER_VALUE().getText());
+            if (ctx.times != null) {
+                int nTimes = Integer.parseInt(ctx.times.getText());
                 if (nTimes <= 0) {
                     throw new ParsingException(String.format(
                             "Invalid TIMES value %d, it should be a positive integer", nTimes));
                 }
                 return new UpdateFailPointStatusStatement(failpointName, nTimes, backendList, createPos(ctx));
-            } else if (ctx.PROBABILITY() != null) {
-                double probability = Double.parseDouble(ctx.DECIMAL_VALUE().getText());
+            } else if (ctx.prob != null) {
+                double probability = Double.parseDouble(ctx.prob.getText());
                 if (probability < 0 || probability > 1) {
                     throw new ParsingException(String.format(
                             "Invalid PROBABILITY value %f, it should be in range [0, 1]", probability));
