@@ -1455,6 +1455,12 @@ CONF_mBool(enable_compaction_flat_json, "true");
 // direct read flat json
 CONF_mBool(enable_lazy_dynamic_flat_json, "true");
 
+// enable flat complex type (/array/object/hyper type), diables for save storage
+CONF_mBool(enable_json_flat_complex_type, "false");
+
+// if disable flat complex type, check complex type rate in hyper-type column
+CONF_mDouble(json_flat_complex_type_factor, "0.3");
+
 // extract flat json column when row_num * null_factor > null_row_num
 CONF_mDouble(json_flat_null_factor, "0.3");
 
