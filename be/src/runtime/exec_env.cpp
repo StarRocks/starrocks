@@ -453,8 +453,10 @@ Status CacheEnv::_init_datacache() {
             // dataleke and starlet cache as the quota of the unified cache. Otherwise, the cache quota will remain zero
             // and then automatically adjusted based on the current avalible disk space.
             if (config::datacache_unified_instance_enable && (!config::datacache_auto_adjust_enable || disk_size > 0)) {
-                int64_t starlet_cache_size = DataCacheUtils::parse_conf_datacache_disk_size(
-                        datacache_path, fmt::format("{}%", config::starlet_star_cache_disk_size_percent), -1);
+                ASSIGN_OR_RETURN(
+                        int64_t starlet_cache_size,
+                        DataCacheUtils::parse_conf_datacache_disk_size(
+                                datacache_path, fmt::format("{}%", config::starlet_star_cache_disk_size_percent), -1));
                 disk_size = std::max(disk_size, starlet_cache_size);
             }
 #endif
