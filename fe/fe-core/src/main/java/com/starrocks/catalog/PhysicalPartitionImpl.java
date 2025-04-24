@@ -111,6 +111,8 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
 
     private volatile long lastSuccVacuumVersion = 0;
 
+    private volatile long extraFileSize = 0;
+
     public PhysicalPartitionImpl(long id, String name, long parentId, long sharedGroupId, MaterializedIndex baseIndex) {
         this.id = id;
         this.name = name;
@@ -205,6 +207,21 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
     @Override
     public void setLastSuccVacuumVersion(long lastSuccVacuumVersion) {
         this.lastSuccVacuumVersion = lastSuccVacuumVersion;
+    }
+
+    @Override
+    public long getExtraFileSize() {
+        return extraFileSize;
+    }
+
+    @Override
+    public void setExtraFileSize(long extraFileSize) {
+        this.extraFileSize = extraFileSize;
+    }
+
+    @Override
+    public void incExtraFileSize(long addFileSize) {
+        this.extraFileSize += addFileSize;
     }
 
     /*
