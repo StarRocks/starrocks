@@ -81,6 +81,7 @@ struct LakeIOOptions {
     bool skip_disk_cache = false;
     // Specify different buffer size for different read scenarios
     int64_t buffer_size = -1;
+    bool cache_file_only = false; // only used for CACHE SELECT
     bool fill_metadata_cache = false;
     bool use_page_cache = false;
     std::shared_ptr<FileSystem> fs;
