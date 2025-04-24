@@ -166,42 +166,6 @@ public class MaterializedViewAnalyzerTest {
         }
     }
 
-<<<<<<< HEAD
-    @RepeatedTest(value = 1)
-    public void testReplacePaimonTableAlias(@Mocked SlotRef slotRef, @Mocked PaimonTable table) {
-        MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor materializedViewAnalyzerVisitor =
-                new MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor();
-        BaseTableInfo baseTableInfo = new BaseTableInfo("test_catalog", "test_db", "test_tbl",
-                "test_tbl:7920f06f-df49-472f-9662-97ac5c32da96(test_tbl) REFERENCES");
-        {
-            new Expectations() {
-                {
-                    table.getCatalogName();
-                    result = "test_catalog";
-                    table.getDbName();
-                    result = "test_db";
-                    table.getTableIdentifier();
-                    result = "test_tbl:7920f06f-df49-472f-9662-97ac5c32da96(test_tbl) REFERENCES";
-                }
-            };
-
-            Assert.assertTrue(materializedViewAnalyzerVisitor.replacePaimonTableAlias(slotRef, table, baseTableInfo));
-        }
-
-        {
-            new Expectations() {
-                {
-                    table.getCatalogName();
-                    result = "test_catalog2";
-
-                }
-            };
-            Assert.assertFalse(materializedViewAnalyzerVisitor.replacePaimonTableAlias(slotRef, table, baseTableInfo));
-        }
-    }
-
-=======
->>>>>>> 5110ba490b ([Feature] Support paimon time type and fix paimon MV (#58292))
     @Test
     public void testCreateIcebergTable() throws Exception {
         {
