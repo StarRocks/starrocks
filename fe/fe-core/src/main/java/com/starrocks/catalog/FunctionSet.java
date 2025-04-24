@@ -1024,12 +1024,15 @@ public class FunctionSet {
     public void addBuiltin(AggregateFunction aggFunc) {
         addBuiltInFunction(aggFunc);
 
-        if (AggStateUtils.isSupportedAggStateFunction(aggFunc)) {
+        if (AggStateUtils.isSupportedAggStateFunction(aggFunc, false)) {
             // register `_state` combinator
             AggStateCombinator.of(aggFunc).stream().forEach(this::addBuiltInFunction);
             // register `_merge`/`_union` combinator for aggregate functions
             AggStateUnionCombinator.of(aggFunc).stream().forEach(this::addBuiltInFunction);
             AggStateMergeCombinator.of(aggFunc).stream().forEach(this::addBuiltInFunction);
+        }
+
+        if (AggStateUtils.isSupportedAggStateFunction(aggFunc, true)) {
             AggStateIf.of(aggFunc).stream().forEach(this::addBuiltInFunction);
         }
     }
@@ -1053,9 +1056,6 @@ public class FunctionSet {
         // count(*)
         addBuiltin(AggregateFunction.createBuiltin(FunctionSet.COUNT,
                 new ArrayList<>(), Type.BIGINT, Type.BIGINT, false, true, true));
-
-        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.COUNT_IF,
-                Lists.newArrayList(Type.BOOLEAN), Type.BIGINT, Type.BIGINT, true, true, true));
 
         // EXCHANGE_BYTES/_SPEED with various arguments
         addBuiltin(AggregateFunction.createBuiltin(EXCHANGE_BYTES,

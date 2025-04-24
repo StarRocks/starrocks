@@ -17,10 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
-import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -32,6 +29,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -53,7 +51,8 @@ public class RewriteCountIfFunction extends TransformationRule {
                 aggregationOperator.getAggregations().entrySet()) {
             CallOperator aggFunction = aggregation.getValue();
 
-            if (aggFunction.isAggregate() && aggFunction.getFnName().equals(FunctionSet.COUNT_IF)) {
+            if (aggFunction.isAggregate() && aggFunction.getFnName().equals(FunctionSet.COUNT_IF) &&
+                    aggFunction.getArguments().size() == 1) {
                 return true;
             }
         }
@@ -70,28 +69,19 @@ public class RewriteCountIfFunction extends TransformationRule {
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationOperator.getAggregations().entrySet()) {
             CallOperator aggFunction = entry.getValue();
 
-            if (aggFunction.isAggregate() && aggFunction.getFnName().equals(FunctionSet.COUNT_IF)) {
+            if (aggFunction.isAggregate() && aggFunction.getFnName().equals(FunctionSet.COUNT_IF) &&
+                    aggFunction.getArguments().size() == 1) {
                 ScalarOperator aggExpr = aggFunction.getArguments().get(0);
-
-                // Args for the IF function
-                List<ScalarOperator> args = Lists.newArrayList();
-                args.add(aggExpr);
-                args.add(ConstantOperator.createBigint(1));
-                args.add(ConstantOperator.createNull(Type.BIGINT));
-
                 Preconditions.checkState(aggExpr.getType().isBoolean());
-                Function ifFn = Expr.getBuiltinFunction(FunctionSet.IF,
-                        new Type[] {aggExpr.getType(), Type.BIGINT, Type.BIGINT}, Function.CompareMode.IS_IDENTICAL);
-                Preconditions.checkNotNull(ifFn);
 
-                CallOperator ifCall = new CallOperator(FunctionSet.IF, Type.BIGINT, args, ifFn);
-                Function countFn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {Type.BIGINT},
-                        Function.CompareMode.IS_IDENTICAL);
+                ScalarOperator auto_fill = ConstantOperator.createTinyInt((byte) 1);
+                List<ScalarOperator> newChild = new ArrayList<>();
+                newChild.add(auto_fill);
+                newChild.addAll(aggFunction.getArguments());
+                CallOperator newCallOp = new CallOperator(aggFunction.getFnName(), aggFunction.getType(), newChild,
+                        aggFunction.getFunction(), aggFunction.isDistinct(), aggFunction.isRemovedDistinct());
 
-                CallOperator countCall = new CallOperator(FunctionSet.COUNT, Type.BIGINT,
-                        Lists.newArrayList(ifCall), countFn);
-
-                newAggMap.put(entry.getKey(), countCall);
+                newAggMap.put(entry.getKey(), newCallOp);
                 changed = true;
             } else {
                 newAggMap.put(entry.getKey(), entry.getValue());

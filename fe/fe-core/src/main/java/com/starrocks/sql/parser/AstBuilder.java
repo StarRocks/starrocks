@@ -8799,7 +8799,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     "function", aggFuncName, argTypes), createPos(context));
         }
         AggregateFunction aggFunc = (AggregateFunction) result;
-        if (!AggStateUtils.isSupportedAggStateFunction(aggFunc)) {
+        if (!AggStateUtils.isSupportedAggStateFunction(aggFunc, false)) {
             throw new ParsingException(String.format("AggStateType function %s with input %s is not supported yet.",
                     aggFuncName, argTypes), createPos(context));
         }

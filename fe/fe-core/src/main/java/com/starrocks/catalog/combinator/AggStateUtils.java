@@ -66,7 +66,7 @@ public class AggStateUtils {
      * @param aggFunc the aggregate function to check
      * @return true if the aggregate function is supported in the combinator
      */
-    public static boolean isSupportedAggStateFunction(AggregateFunction aggFunc) {
+    public static boolean isSupportedAggStateFunction(AggregateFunction aggFunc, boolean isAggIf) {
         if (aggFunc == null) {
             return false;
         }
@@ -82,7 +82,7 @@ public class AggStateUtils {
         }
         String fnName = aggFunc.functionName();
         // count only support count(col)
-        if (FunctionSet.COUNT.equalsIgnoreCase(fnName) && aggFunc.getArgs().length == 0) {
+        if (FunctionSet.COUNT.equalsIgnoreCase(fnName) && aggFunc.getArgs().length == 0 && !isAggIf) {
             return false;
         }
         if (ONLY_NUMERIC_ARGUMENT_FUNCTIONS_L1.contains(fnName) &&

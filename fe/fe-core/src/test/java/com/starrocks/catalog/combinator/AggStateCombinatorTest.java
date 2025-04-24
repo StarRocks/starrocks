@@ -105,7 +105,8 @@ public class AggStateCombinatorTest extends MVTestBase {
             if (!(func instanceof AggregateFunction)) {
                 continue;
             }
-            if ((func instanceof AggStateMergeCombinator) || (func instanceof AggStateUnionCombinator)) {
+            if ((func instanceof AggStateMergeCombinator) || (func instanceof AggStateUnionCombinator) ||
+                    (func instanceof AggStateIf)) {
                 continue;
             }
             builtInAggregateFunctions.add((AggregateFunction) func);
@@ -280,7 +281,7 @@ public class AggStateCombinatorTest extends MVTestBase {
         var builtInAggregateFunctions = getBuiltInAggFunctions();
         int i = 0;
         for (AggregateFunction aggFunc : builtInAggregateFunctions) {
-            if (!AggStateUtils.isSupportedAggStateFunction(aggFunc)) {
+            if (!AggStateUtils.isSupportedAggStateFunction(aggFunc, false)) {
                 continue;
             }
 
@@ -335,7 +336,7 @@ public class AggStateCombinatorTest extends MVTestBase {
         Set<String> supportedAggFunctions = Sets.newHashSet();
         Set<String> unSupportedAggFunctions = Sets.newHashSet();
         for (AggregateFunction aggFunc : builtInAggregateFunctions) {
-            if (!AggStateUtils.isSupportedAggStateFunction(aggFunc)) {
+            if (!AggStateUtils.isSupportedAggStateFunction(aggFunc, false)) {
                 unSupportedAggFunctions.add(aggFunc.functionName());
                 continue;
             }
@@ -357,7 +358,7 @@ public class AggStateCombinatorTest extends MVTestBase {
         var builtInAggregateFunctions = getBuiltInAggFunctions();
         Set<String> supportedAggFunctions = Sets.newHashSet();
         for (AggregateFunction aggFunc : builtInAggregateFunctions) {
-            if (!AggStateUtils.isSupportedAggStateFunction(aggFunc)) {
+            if (!AggStateUtils.isSupportedAggStateFunction(aggFunc, false)) {
                 continue;
             }
             supportedAggFunctions.add(aggFunc.functionName());
@@ -393,7 +394,7 @@ public class AggStateCombinatorTest extends MVTestBase {
         var builtInAggregateFunctions = getBuiltInAggFunctions();
         Set<String> supportedAggFunctions = Sets.newHashSet();
         for (AggregateFunction aggFunc : builtInAggregateFunctions) {
-            if (!AggStateUtils.isSupportedAggStateFunction(aggFunc)) {
+            if (!AggStateUtils.isSupportedAggStateFunction(aggFunc, false)) {
                 continue;
             }
             supportedAggFunctions.add(aggFunc.functionName());
@@ -434,7 +435,7 @@ public class AggStateCombinatorTest extends MVTestBase {
         {
             int i = 0;
             for (AggregateFunction aggFunc : builtInAggregateFunctions) {
-                if (!AggStateUtils.isSupportedAggStateFunction(aggFunc)) {
+                if (!AggStateUtils.isSupportedAggStateFunction(aggFunc, false)) {
                     continue;
                 }
                 if (i >= MAX_AGG_FUNC_NUM_IN_TEST) {
@@ -485,7 +486,7 @@ public class AggStateCombinatorTest extends MVTestBase {
         {
             int i = 0;
             for (AggregateFunction aggFunc : builtInAggregateFunctions) {
-                if (!AggStateUtils.isSupportedAggStateFunction(aggFunc)) {
+                if (!AggStateUtils.isSupportedAggStateFunction(aggFunc, false)) {
                     continue;
                 }
                 if (i > MAX_AGG_FUNC_NUM_IN_TEST) {
@@ -538,7 +539,7 @@ public class AggStateCombinatorTest extends MVTestBase {
         {
             int i = 0;
             for (AggregateFunction aggFunc : builtInAggregateFunctions) {
-                if (!AggStateUtils.isSupportedAggStateFunction(aggFunc)) {
+                if (!AggStateUtils.isSupportedAggStateFunction(aggFunc, false)) {
                     continue;
                 }
                 if (i > MAX_AGG_FUNC_NUM_IN_TEST) {
