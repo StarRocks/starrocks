@@ -18,6 +18,7 @@ import com.google.api.client.util.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Reference;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.connector.exception.GlobalDictNotMatchException;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
@@ -54,6 +55,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.starrocks.utframe.MockedBackend.MockPBackendService;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -210,6 +212,57 @@ public class StartSchedulingTest extends SchedulerTestBase {
             scheduler.updateFragmentExecStatus(request);
         });
         Assert.assertTrue(scheduler.isDone());
+    }
+
+    @Test
+    public void testDeployFutureThrowRetryableException() throws Exception {
+        AtomicInteger numDeployedFragments = new AtomicInteger(0);
+
+        setBackendService(address -> {
+
+            final int numFragments = numDeployedFragments.incrementAndGet();
+            if (numFragments == 1) {
+                return new MockPBackendService();
+            }
+
+            if (numFragments == 2) {
+                return new MockPBackendService() {
+                    @Override
+                    public Future<PExecPlanFragmentResult> execPlanFragmentAsync(PExecPlanFragmentRequest request) {
+                        return submit(() -> {
+                            PExecPlanFragmentResult result = new PExecPlanFragmentResult();
+                            StatusPB pStatus = new StatusPB();
+                            pStatus.statusCode = TStatusCode.CANCELLED.getValue();
+                            pStatus.errorMsgs = Collections.singletonList("test CANCELLED error message");
+                            result.status = pStatus;
+                            return result;
+                        });
+                    }
+                };
+            }
+
+            if (numFragments == 3) {
+                return new MockPBackendService() {
+                    @Override
+                    public Future<PExecPlanFragmentResult> execPlanFragmentAsync(PExecPlanFragmentRequest request) {
+                        return submit(() -> {
+                            PExecPlanFragmentResult result = new PExecPlanFragmentResult();
+                            StatusPB pStatus = new StatusPB();
+                            pStatus.statusCode = TStatusCode.GLOBAL_DICT_NOT_MATCH.getValue();
+                            pStatus.errorMsgs = Collections.singletonList("test GLOBAL_DICT_NOT_MATCH error message");
+                            result.status = pStatus;
+                            return result;
+                        });
+                    }
+                };
+            }
+
+            return new MockPBackendService();
+        });
+        String sql =
+                "select count(1) from lineitem UNION ALL select count(1) from lineitem UNION ALL select count(1) from lineitem";
+        DefaultCoordinator scheduler = getScheduler(sql);
+        Assert.assertThrows(GlobalDictNotMatchException.class, scheduler::exec);
     }
 
     @Test
