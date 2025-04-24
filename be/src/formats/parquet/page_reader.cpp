@@ -27,7 +27,9 @@
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/utils.h"
 #include "gutil/strings/substitute.h"
+#include "parquet_types.h"
 #include "runtime/exec_env.h"
+#include "util/raw_container.h"
 #include "util/thrift_util.h"
 
 namespace starrocks::parquet {
@@ -55,48 +57,80 @@ PageReader::PageReader(io::SeekableInputStream* stream, uint64_t start_offset, u
 
 Status PageReader::next_page() {
     if (_opts.use_file_pagecache) {
-        _uncompressed_buf.reset();
+        _cache_buf.reset();
     }
     return seek_to_offset(_next_header_pos);
 }
 
-Status PageReader::next_header() {
-    if (_offset != _next_header_pos) {
-        return Status::InternalError(
-                strings::Substitute("Try to parse parquet column header in wrong position, offset=$0 vs expect=$1",
-                                    _offset, _next_header_pos));
+Status PageReader::_deal_page_with_cache() {
+    std::string& page_cache_key = _current_page_cache_key();
+    ObjectCacheHandle* cache_handle = nullptr;
+    Status st = _cache->lookup(page_cache_key, &cache_handle);
+    if (st.ok()) {
+        _opts.stats->page_cache_read_counter += 1;
+        _cache_buf = *(static_cast<const BufferPtr*>(_cache->value(cache_handle)));
+        _cache->release(cache_handle);
+        uint32_t header_length = _cache_buf->size();
+        auto st = deserialize_thrift_msg(_cache_buf->data(), &header_length, TProtocolType::COMPACT, &_cur_header);
+        DCHECK(st.ok());
+        _next_header_pos = _offset + _cur_header.compressed_page_size;
+        _uncompressed_data = Slice(_cache_buf->data() + header_length, _cache_buf->size() - header_length);
+        size_t data_length = _codec != tparquet::CompressionCodec::UNCOMPRESSED ? _cur_header.compressed_page_size
+                                                                                : _cur_header.uncompressed_page_size;
+        RETURN_IF_ERROR(_skip_bytes(header_length + data_length));
+    } else {
+        _cache_buf = std::make_shared<std::vector<uint8_t>>();
+        RETURN_IF_ERROR(_read_and_deserialize_header(true));
+        RETURN_IF_ERROR(_read_and_decompress_internal(true));
+        BufferPtr* capture = new BufferPtr(_cache_buf);
+        Status st = Status::InternalError("write file page cache failed");
+        int64_t page_cache_size = sizeof(BufferPtr) + _cache_buf->size();
+        DeferOp op([&st, this, capture, &cache_handle]() {
+            if (st.ok()) {
+                _opts.stats->page_cache_write_counter += 1;
+                _cache->release(cache_handle);
+            } else {
+                delete capture;
+            }
+        });
+        auto deleter = [](const CacheKey& key, void* value) { delete (BufferPtr*)value; };
+        ObjectCacheWriteOptions options;
+        options.evict_probability = _opts.datacache_options->datacache_evict_probability;
+        st = _cache->insert(page_cache_key, capture, page_cache_size, page_cache_size, deleter, &cache_handle,
+                            &options);
     }
 
-    DCHECK(_num_values_read <= _num_values_total);
-    if (_num_values_read >= _num_values_total || _next_read_page_idx >= _page_num) {
-        LOG_IF(WARNING, _num_values_read > _num_values_total)
-                << "Read more values than expected, read=" << _num_values_read << ", expect=" << _num_values_total;
-        return Status::EndOfFile("");
-    }
+    return Status::OK();
+}
 
+Status PageReader::_read_and_deserialize_header(bool need_fill_cache) {
     size_t allowed_page_size = kDefaultPageHeaderSize;
     size_t remaining = _finish_offset - _offset;
     uint32_t header_length = 0;
 
     RETURN_IF_ERROR(_stream->seek(_offset));
+    BufferPtr page_buffer;
+    if (need_fill_cache) {
+        DCHECK(_cache_buf);
+        page_buffer = _cache_buf;
+    } else {
+        page_buffer = std::make_shared<std::vector<uint8_t>>();
+    }
 
     do {
         allowed_page_size = std::min(std::min(allowed_page_size, remaining), kMaxPageHeaderSize);
-
-        std::vector<uint8_t> page_buffer;
-        const uint8_t* page_buf = nullptr;
+        const uint8_t* page_buf = page_buffer->data();
 
         // prefer peek data instead to read data.
         bool peek_mode = false;
         {
             auto st = _stream->peek(allowed_page_size);
-            if (st.ok() && st.value().size() == allowed_page_size) {
+            if (!need_fill_cache && st.ok() && st.value().size() == allowed_page_size) {
                 page_buf = (const uint8_t*)st.value().data();
                 peek_mode = true;
             } else {
-                page_buffer.reserve(allowed_page_size);
-                RETURN_IF_ERROR(_stream->read_at_fully(_offset, page_buffer.data(), allowed_page_size));
-                page_buf = page_buffer.data();
+                raw::stl_vector_resize_uninitialized(page_buffer.get(), allowed_page_size);
+                RETURN_IF_ERROR(_stream->read_at_fully(_offset, page_buffer->data(), allowed_page_size));
                 auto st = _stream->peek(allowed_page_size);
                 if (st.ok()) {
                     _opts.stats->bytes_read -= allowed_page_size;
@@ -128,7 +162,29 @@ Status PageReader::next_header() {
     } while (true);
     DCHECK(header_length > 0);
     _offset += header_length;
-    _next_header_pos = _offset + _cur_header.compressed_page_size;
+    return Status::OK();
+}
+
+Status PageReader::next_header() {
+    if (_offset != _next_header_pos) {
+        return Status::InternalError(
+                strings::Substitute("Try to parse parquet column header in wrong position, offset=$0 vs expect=$1",
+                                    _offset, _next_header_pos));
+    }
+
+    DCHECK(_num_values_read <= _num_values_total);
+    if (_num_values_read >= _num_values_total || _next_read_page_idx >= _page_num) {
+        LOG_IF(WARNING, _num_values_read > _num_values_total)
+                << "Read more values than expected, read=" << _num_values_read << ", expect=" << _num_values_total;
+        return Status::EndOfFile("");
+    }
+
+    if (_opts.use_file_pagecache) {
+        RETURN_IF_ERROR(_deal_page_with_cache());
+    } else {
+        RETURN_IF_ERROR(_read_and_deserialize_header(false));
+    }
+
     if (_cur_header.type == tparquet::PageType::DATA_PAGE || _cur_header.type == tparquet::PageType::DATA_PAGE_V2) {
         _num_values_read += _cur_header.data_page_header.num_values;
         _next_read_page_idx++;
@@ -180,46 +236,18 @@ std::string& PageReader::_current_page_cache_key() {
 StatusOr<Slice> PageReader::read_and_decompress_page_data() {
     _opts.stats->page_read_counter += 1;
     if (!_opts.use_file_pagecache) {
-        return _read_and_decompress_internal(false);
-    }
-
-    std::string& page_cache_key = _current_page_cache_key();
-    ObjectCacheHandle* cache_handle = nullptr;
-    Status st = _cache->lookup(page_cache_key, &cache_handle);
-    if (st.ok()) {
-        _opts.stats->page_cache_read_counter += 1;
-        _uncompressed_buf = *(static_cast<const BufferPtr*>(_cache->value(cache_handle)));
-        _cache->release(cache_handle);
-        size_t data_length = _codec != tparquet::CompressionCodec::UNCOMPRESSED ? _cur_header.compressed_page_size
-                                                                                : _cur_header.uncompressed_page_size;
-        RETURN_IF_ERROR(_skip_bytes(data_length));
-        DCHECK_EQ(_uncompressed_buf->size(), _cur_header.uncompressed_page_size);
+        RETURN_IF_ERROR(_read_and_decompress_internal(false));
+        return _uncompressed_data;
     } else {
-        _uncompressed_buf = std::make_shared<std::vector<uint8_t>>();
-        ASSIGN_OR_RETURN([[maybe_unused]] auto ret, _read_and_decompress_internal(true))
-        BufferPtr* capture = new BufferPtr(_uncompressed_buf);
-        Status st = Status::InternalError("write footer cache failed");
-        int64_t page_cache_size = sizeof(BufferPtr) + _uncompressed_buf->size();
-        DeferOp op([&st, this, capture, &cache_handle]() {
-            if (st.ok()) {
-                _opts.stats->page_cache_write_counter += 1;
-                _cache->release(cache_handle);
-            } else {
-                delete capture;
-            }
-        });
-        auto deleter = [](const CacheKey& key, void* value) { delete (BufferPtr*)value; };
-        ObjectCacheWriteOptions options;
-        options.evict_probability = _opts.datacache_options->datacache_evict_probability;
-        st = _cache->insert(page_cache_key, capture, page_cache_size, page_cache_size, deleter, &cache_handle,
-                            &options);
+        return _uncompressed_data;
     }
-
-    return Slice(_uncompressed_buf->data(), _uncompressed_buf->size());
 }
 
-StatusOr<Slice> PageReader::_read_and_decompress_internal(bool need_fill_buf) {
-    bool is_compressed = _codec != tparquet::CompressionCodec::UNCOMPRESSED;
+Status PageReader::_read_and_decompress_internal(bool need_fill_cache) {
+    bool is_compressed = _codec != tparquet::CompressionCodec::UNCOMPRESSED &&
+                         (_cur_header.type != tparquet::PageType::DATA_PAGE_V2 ||
+                          !(_cur_header.data_page_header_v2.__isset.is_compressed) ||
+                          (_cur_header.data_page_header_v2.is_compressed));
     if (is_compressed && _compress_codec == nullptr) {
         auto compress_type = ParquetUtils::convert_compression_codec(_codec);
         RETURN_IF_ERROR(get_block_compression_codec(compress_type, &_compress_codec));
@@ -228,48 +256,60 @@ StatusOr<Slice> PageReader::_read_and_decompress_internal(bool need_fill_buf) {
 
     size_t uncompressed_size = _cur_header.uncompressed_page_size;
     size_t read_size = is_compressed ? _cur_header.compressed_page_size : uncompressed_size;
-    std::vector<uint8_t>& read_buffer = is_compressed ? *_compressed_buf : *_uncompressed_buf;
     _opts.stats->request_bytes_read += read_size;
     _opts.stats->request_bytes_read_uncompressed += uncompressed_size;
 
     // check if we can zero copy read.
     Slice read_data;
+    RETURN_IF_ERROR(_stream->seek(_offset));
     auto ret = _peek(read_size);
-    if (!need_fill_buf && ret.ok() && ret.value().size() == read_size) {
+    if (!need_fill_cache && ret.ok() && ret.value().size() == read_size) {
         _opts.stats->bytes_read += read_size;
         // peek dos not advance offset.
         RETURN_IF_ERROR(_skip_bytes(read_size));
         read_data = Slice(ret.value().data(), read_size);
     } else {
-        read_buffer.reserve(read_size);
-        read_data = Slice(read_buffer.data(), read_size);
+        std::vector<uint8_t>& read_buffer = is_compressed ? *_compressed_buf : *_uncompressed_buf;
+        //TODO cache compressed data
+        if (!need_fill_cache || (is_compressed && !_cache_compressed_data)) {
+            read_buffer.reserve(read_size);
+            read_data = Slice(read_buffer.data(), read_size);
+        } else {
+            auto original_size = _cache_buf->size();
+            raw::stl_vector_resize_uninitialized(_cache_buf.get(), original_size + read_size);
+            read_data = Slice(_cache_buf->data() + original_size, read_size);
+        }
         RETURN_IF_ERROR(_read_bytes(read_data.data, read_data.size));
     }
 
     // if it's compressed, we have to uncompress page
     // otherwise we just assign slice.
-    Slice uncompressed_data;
-    if (is_compressed &&
-        (_cur_header.type != tparquet::PageType::DATA_PAGE_V2 ||
-         !(_cur_header.data_page_header_v2.__isset.is_compressed) || (_cur_header.data_page_header_v2.is_compressed))) {
-        raw::stl_vector_resize_uninitialized(_uncompressed_buf.get(), uncompressed_size);
-        uncompressed_data = Slice(_uncompressed_buf->data(), uncompressed_size);
+    if (is_compressed) {
+        if (need_fill_cache && !_cache_compressed_data) {
+            auto original_size = _cache_buf->size();
+            raw::stl_vector_resize_uninitialized(_cache_buf.get(), uncompressed_size + original_size);
+            _uncompressed_data = Slice(_cache_buf->data() + original_size, uncompressed_size);
+        } else {
+            raw::stl_vector_resize_uninitialized(_uncompressed_buf.get(), uncompressed_size);
+            _uncompressed_data = Slice(_uncompressed_buf->data(), uncompressed_size);
+        }
 
         if (_cur_header.type == tparquet::PageType::DATA_PAGE_V2) {
             uint32_t bytes_level_size = _cur_header.data_page_header_v2.definition_levels_byte_length +
                                         _cur_header.data_page_header_v2.repetition_levels_byte_length;
-            memcpy(uncompressed_data.data, read_data.data, bytes_level_size);
+            memcpy(_uncompressed_data.data, read_data.data, bytes_level_size);
             read_data.remove_prefix(bytes_level_size);
-            uncompressed_data.remove_prefix(bytes_level_size);
-            RETURN_IF_ERROR(_compress_codec->decompress(read_data, &uncompressed_data));
-            uncompressed_data = Slice(_uncompressed_buf->data(), uncompressed_size);
+            auto* mark_pointer = _uncompressed_data.data;
+            _uncompressed_data.remove_prefix(bytes_level_size);
+            RETURN_IF_ERROR(_compress_codec->decompress(read_data, &_uncompressed_data));
+            _uncompressed_data = Slice(mark_pointer, uncompressed_size);
         } else {
-            RETURN_IF_ERROR(_compress_codec->decompress(read_data, &uncompressed_data));
+            RETURN_IF_ERROR(_compress_codec->decompress(read_data, &_uncompressed_data));
         }
     } else {
-        uncompressed_data = read_data;
+        _uncompressed_data = read_data;
     }
-    return uncompressed_data;
+    return Status::OK();
 }
 
 } // namespace starrocks::parquet

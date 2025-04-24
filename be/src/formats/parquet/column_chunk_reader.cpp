@@ -95,11 +95,7 @@ Status ColumnChunkReader::next_page() {
 Status ColumnChunkReader::_parse_page_header() {
     SCOPED_RAW_TIMER(&_opts.stats->page_read_ns);
     DCHECK(_page_parse_state == INITIALIZED || _page_parse_state == PAGE_DATA_PARSED);
-    size_t off = _page_reader->get_offset();
     RETURN_IF_ERROR(_page_reader->next_header());
-    size_t now = _page_reader->get_offset();
-    _opts.stats->request_bytes_read += (now - off);
-    _opts.stats->request_bytes_read_uncompressed += (now - off);
     _page_parse_state = PAGE_HEADER_PARSED;
 
     // The page num values will be used for late materialization before parsing page data,

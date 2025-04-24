@@ -57,10 +57,6 @@ public:
         return _stream->seek(offset);
     }
 
-    uint64_t get_next_header_pos() const { return _next_header_pos; }
-
-    uint64_t get_offset() const { return _offset; }
-
     Status next_page();
 
     bool is_last_page() { return _num_values_read >= _num_values_total || _next_read_page_idx >= _page_num; }
@@ -82,7 +78,9 @@ private:
 
     void _init_page_cache_key();
     std::string& _current_page_cache_key();
-    StatusOr<Slice> _read_and_decompress_internal(bool need_fill_buf);
+    Status _deal_page_with_cache();
+    Status _read_and_deserialize_header(bool need_fill_cache);
+    Status _read_and_decompress_internal(bool need_fill_cache);
 
     io::SeekableInputStream* const _stream;
     tparquet::PageHeader _cur_header;
@@ -107,6 +105,11 @@ private:
     using BufferPtr = std::shared_ptr<std::vector<uint8_t>>;
     BufferPtr _compressed_buf;
     BufferPtr _uncompressed_buf;
+
+    BufferPtr _cache_buf;
+    bool _cache_compressed_data = false;
+
+    Slice _uncompressed_data;
 };
 
 } // namespace starrocks::parquet
