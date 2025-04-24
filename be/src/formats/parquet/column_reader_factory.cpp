@@ -18,8 +18,11 @@
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
 #include "formats/utils.h"
+#include "util/failpoint/fail_point.h"
 
 namespace starrocks::parquet {
+
+DEFINE_FAIL_POINT(parquet_reader_returns_global_dict_not_match_status);
 
 StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions& opts, const ParquetField* field,
                                                       const TypeDescriptor& col_type) {
@@ -158,6 +161,11 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
 
 StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(ColumnReaderPtr ori_reader, const GlobalDictMap* dict,
                                                       SlotId slot_id, int64_t num_rows) {
+    FAIL_POINT_TRIGGER_EXECUTE(parquet_reader_returns_global_dict_not_match_status, {
+        return Status::GlobalDictNotMatch(
+                fmt::format("SlotId: {}, Not dict encoded and not low rows on global dict column. ", slot_id));
+    });
+
     if (ori_reader->get_column_parquet_field()->type == ColumnType::ARRAY) {
         ASSIGN_OR_RETURN(ColumnReaderPtr child_reader,
                          ColumnReaderFactory::create(
