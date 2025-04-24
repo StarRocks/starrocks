@@ -17,16 +17,16 @@ package com.starrocks.alter;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultSet;
+import com.starrocks.qe.StmtExecutor;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import java.util.List;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
-import java.sql.Statement;
 
 public class AlterTableAutoIncrementTest {
     private static ConnectContext connectContext;
@@ -54,48 +54,47 @@ public class AlterTableAutoIncrementTest {
                 "DISTRIBUTED BY HASH(`id`) BUCKETS 1 " +
                 "PROPERTIES(\"replication_num\" = \"1\");");
 
-        // Insert some data
-        String jdbcUrl = "jdbc:mysql://127.0.0.1:" + connectContext.getSessionVariable().getQueryPort() + "/test";
-        try (Connection conn = DriverManager.getConnection(jdbcUrl, "root", "")) {
-            Statement stmt = conn.createStatement();
+        // Insert rows with predetermined auto-increment values
+        connectContext.executeSql("INSERT INTO test_auto_increment (id, name) VALUES (1, 'test1')");
+        connectContext.executeSql("INSERT INTO test_auto_increment (id, name) VALUES (2, 'test2')");
 
-            // Insert rows with predetermined auto-increment values
-            stmt.execute("INSERT INTO test_auto_increment (id, name) VALUES (1, 'test1')");
-            stmt.execute("INSERT INTO test_auto_increment (id, name) VALUES (2, 'test2')");
+        // Verify current auto-increment values (should be 1, 2)
+        List<List<String>> resultRows = executeQuery("SELECT id FROM test_auto_increment ORDER BY id");
+        Assert.assertEquals(2, resultRows.size());
+        Assert.assertEquals("1", resultRows.get(0).get(0));
+        Assert.assertEquals("2", resultRows.get(1).get(0));
 
-            // Verify current auto-increment values (should be 1, 2)
-            ResultSet rs = stmt.executeQuery("SELECT * FROM test_auto_increment ORDER BY id");
-            int lastId = 0;
-            while (rs.next()) {
-                lastId = rs.getInt("id");
-                String name = rs.getString("name");
-                System.out.println("ID: " + lastId + ", Name: " + name);
-            }
-            Assert.assertEquals(2, lastId);
+        // Alter table to set auto-increment to 3
+        connectContext.executeSql("ALTER TABLE test_auto_increment AUTO_INCREMENT = 3");
 
-            stmt.execute("ALTER TABLE test_auto_increment AUTO_INCREMENT = 3");
+        // Insert another row without specifying id
+        connectContext.executeSql("INSERT INTO test_auto_increment (name) VALUES ('test3')");
 
-            // Insert another row without specifying id
-            stmt.execute("INSERT INTO test_auto_increment (name) VALUES ('test3')");
+        // Verify that the new row has id=3
+        resultRows = executeQuery("SELECT id FROM test_auto_increment WHERE name = 'test3'");
+        Assert.assertEquals(1, resultRows.size());
+        Assert.assertEquals("3", resultRows.get(0).get(0));
 
-            // Verify that the new row has id=3
-            rs = stmt.executeQuery("SELECT * FROM test_auto_increment WHERE name = 'test3'");
-            if (rs.next()) {
-                int id = rs.getInt("id");
-                Assert.assertEquals(3, id);
-            } else {
-                Assert.fail("Row with name='test3' not found");
-            }
+        // Insert one more row to check auto-increment continues from 3
+        connectContext.executeSql("INSERT INTO test_auto_increment (name) VALUES ('test4')");
+        resultRows = executeQuery("SELECT id FROM test_auto_increment WHERE name = 'test4'");
+        Assert.assertEquals(1, resultRows.size());
+        Assert.assertEquals("4", resultRows.get(0).get(0));
 
-            // Insert one more row to check auto-increment continues from 3
-            stmt.execute("INSERT INTO test_auto_increment (name) VALUES ('test4')");
-            rs = stmt.executeQuery("SELECT * FROM test_auto_increment WHERE name = 'test4'");
-            if (rs.next()) {
-                int id = rs.getInt("id");
-                Assert.assertEquals(4, id);
-            } else {
-                Assert.fail("Row with name='test4' not found");
-            }
-        }
+        // Verify we now have 4 rows in total
+        resultRows = executeQuery("SELECT COUNT(*) FROM test_auto_increment");
+        Assert.assertEquals("4", resultRows.get(0).get(0));
+      }
+
+    /**
+     * Helper method to execute a query and return the result rows.
+     */
+    private List<List<String>> executeQuery(String sql) throws Exception {
+        StatementBase stmt = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+        StmtExecutor executor = new StmtExecutor(connectContext, stmt);
+        executor.execute();
+        ShowResultSet resultSet = executor.getShowResultSet();
+        Assert.assertNotNull("Failed to get result set for query: " + sql, resultSet);
+        return resultSet.getResultRows();
     }
 }
