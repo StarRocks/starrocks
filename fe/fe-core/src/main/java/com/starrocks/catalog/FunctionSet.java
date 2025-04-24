@@ -1214,7 +1214,7 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(BITMAP_UNION, Lists.newArrayList(Type.BITMAP),
                 Type.BITMAP,
                 Type.BITMAP,
-                true, false, true));
+                true, true, true));
 
         // Type.VARCHAR must before all other type, so bitmap_agg(varchar) can convert to bitmap_agg(bigint)
         addBuiltin(AggregateFunction.createBuiltin(BITMAP_AGG, Lists.newArrayList(Type.BIGINT),

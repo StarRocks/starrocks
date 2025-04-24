@@ -32,7 +32,7 @@ void AggregateFuncResolver::register_bitmap() {
             "bitmap_union_int", false, AggregateFactory::MakeBitmapUnionIntAggregateFunction<TYPE_INT>());
     add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT, BitmapValue>(
             "bitmap_union_int", false, AggregateFactory::MakeBitmapUnionIntAggregateFunction<TYPE_BIGINT>());
-    add_aggregate_mapping<TYPE_OBJECT, TYPE_OBJECT, BitmapValue>("bitmap_union", false,
+    add_aggregate_mapping<TYPE_OBJECT, TYPE_OBJECT, BitmapValue>("bitmap_union", true,
                                                                  AggregateFactory::MakeBitmapUnionAggregateFunction());
 
     add_aggregate_mapping<TYPE_BOOLEAN, TYPE_OBJECT, BitmapValue>(
