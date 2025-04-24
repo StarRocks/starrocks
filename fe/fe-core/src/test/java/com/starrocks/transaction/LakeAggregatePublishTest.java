@@ -17,16 +17,21 @@ package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
+import com.starrocks.common.NoAliveBackendException;
+import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.Utils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.DefaultWarehouse;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
@@ -35,8 +40,15 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.lang.reflect.Field;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyLong;
+//import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class LakeAggregatePublishTest {
     private static final Logger LOG = LogManager.getLogger(LakeAggregatePublishTest.class);
@@ -96,9 +108,10 @@ public class LakeAggregatePublishTest {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         long transactionId1 = globalTransactionMgr.
                 beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
-                        GlobalStateMgrTestUtil.testTxnLable1,
+                        "label1",
                         transactionSource,
-                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second,
+                        -1);
         // commit a transaction
         VisibleStateWaiter waiter1 = globalTransactionMgr.commitTransaction(db.getId(), transactionId1, transTablets1,
                 Lists.newArrayList(), null);
@@ -108,4 +121,39 @@ public class LakeAggregatePublishTest {
 
         Assert.assertTrue(waiter1.await(10, TimeUnit.SECONDS));
     }
+
+    @Test
+    public void testNoComputeNode() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE);
+    
+        List<Tablet> tablets = Lists.newArrayList();
+        for (Partition partition : table.getPartitions()) {
+            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
+            tablets.addAll(baseIndex.getTablets());
+        }
+
+        WarehouseManager originalManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        try {
+            Field warehouseMgrField = GlobalStateMgr.class.getDeclaredField("warehouseMgr");
+            warehouseMgrField.setAccessible(true);
+        
+            WarehouseManager mockManager = mock(WarehouseManager.class);
+            when(mockManager.warehouseExists(anyLong())).thenReturn(true);
+            when(mockManager.getComputeNodeAssignedToTablet(anyLong(), any(LakeTablet.class)))
+                    .thenReturn(null);
+            when(mockManager.getBackgroundWarehouse()).thenReturn(new DefaultWarehouse(100, "test"));
+            warehouseMgrField.set(GlobalStateMgr.getCurrentState(), mockManager);
+
+        
+            Assert.assertThrows(NoAliveBackendException.class, () -> {
+                Utils.aggregatePublishVersion(tablets, null, 1, 2, null, null, -1, null);
+            });
+        } finally {
+            Field warehouseMgrField = GlobalStateMgr.class.getDeclaredField("warehouseMgr");
+            warehouseMgrField.setAccessible(true);
+            warehouseMgrField.set(GlobalStateMgr.getCurrentState(), originalManager);
+        }
+    }
+
 }
