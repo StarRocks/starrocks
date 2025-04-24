@@ -106,7 +106,7 @@ Status PageReader::next_header() {
     DCHECK(header_length > 0);
     _offset += header_length;
     _next_header_pos = _offset + _cur_header.compressed_page_size;
-    if (_cur_header.type == tparquet::PageType::DATA_PAGE) {
+    if (_cur_header.type == tparquet::PageType::DATA_PAGE || _cur_header.type == tparquet::PageType::DATA_PAGE_V2) {
         _num_values_read += _cur_header.data_page_header.num_values;
         _next_read_page_idx++;
     }

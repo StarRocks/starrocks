@@ -4372,21 +4372,26 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitUpdateFailPointStatusStatement(
             StarRocksParser.UpdateFailPointStatusStatementContext ctx) {
         String failpointName = ((StringLiteral) visit(ctx.string(0))).getStringValue();
-        List<String> backendList = null;
-        if (ctx.BACKEND() != null) {
-            String tmp = ((StringLiteral) visit(ctx.string(1))).getStringValue();
-            backendList = Lists.newArrayList(tmp.split(","));
+        List<String> backendList;
+        if (ctx.FRONTEND() != null) {
+            backendList = null;
+        } else {
+            backendList = new ArrayList<>();
+            if (ctx.BACKEND() != null) {
+                String strValue = ((StringLiteral) visit(ctx.string(1))).getStringValue();
+                backendList = Lists.newArrayList(strValue.split(","));
+            }
         }
         if (ctx.ENABLE() != null) {
-            if (ctx.TIMES() != null) {
-                int nTimes = Integer.parseInt(ctx.INTEGER_VALUE().getText());
+            if (ctx.times != null) {
+                int nTimes = Integer.parseInt(ctx.times.getText());
                 if (nTimes <= 0) {
                     throw new ParsingException(String.format(
                             "Invalid TIMES value %d, it should be a positive integer", nTimes));
                 }
                 return new UpdateFailPointStatusStatement(failpointName, nTimes, backendList, createPos(ctx));
-            } else if (ctx.PROBABILITY() != null) {
-                double probability = Double.parseDouble(ctx.DECIMAL_VALUE().getText());
+            } else if (ctx.prob != null) {
+                double probability = Double.parseDouble(ctx.prob.getText());
                 if (probability < 0 || probability > 1) {
                     throw new ParsingException(String.format(
                             "Invalid PROBABILITY value %f, it should be in range [0, 1]", probability));
@@ -4394,8 +4399,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 return new UpdateFailPointStatusStatement(failpointName, probability, backendList, createPos(ctx));
             }
             return new UpdateFailPointStatusStatement(failpointName, true, backendList, createPos(ctx));
+        } else {
+            return new UpdateFailPointStatusStatement(failpointName, false, backendList, createPos(ctx));
         }
-        return new UpdateFailPointStatusStatement(failpointName, false, backendList, createPos(ctx));
     }
 
     @Override
@@ -5693,11 +5699,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitSelectAll(StarRocksParser.SelectAllContext context) {
         NodePosition pos = createPos(context);
+        List<String> excludedColumns = new ArrayList<>();
+        if (context.excludeClause() != null) {
+            StarRocksParser.ExcludeClauseContext excludeCtx = context.excludeClause();
+            for (StarRocksParser.IdentifierContext idCtx : excludeCtx.identifier()) {
+                excludedColumns.add(((Identifier) visit(idCtx)).getValue());
+            }
+        }
         if (context.qualifiedName() != null) {
             QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-            return new SelectListItem(qualifiedNameToTableName(qualifiedName), pos);
+            return new SelectListItem(qualifiedNameToTableName(qualifiedName), pos, excludedColumns);
         }
-        return new SelectListItem(null, pos);
+        return new SelectListItem(null, pos, excludedColumns);
     }
 
     @Override
