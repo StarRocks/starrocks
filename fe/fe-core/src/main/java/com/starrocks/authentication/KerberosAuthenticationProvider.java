@@ -49,12 +49,12 @@ public class KerberosAuthenticationProvider implements AuthenticationProvider {
     }
 
     @Override
-    public void authenticate(ConnectContext context, String user, String host, byte[] authResponse)
+    public void authenticate(ConnectContext context, UserIdentity userIdentity, byte[] authResponse)
             throws AuthenticationException {
         try {
             String spn = Config.authentication_kerberos_service_principal;
             String keytab = Config.authentication_kerberos_service_key_tab;
-            String remoteUser = user + "@" + userForAuthPlugin;
+            String remoteUser = userIdentity.getUser() + "@" + userForAuthPlugin;
 
             GSSManager gssManager;
             Subject serverSubject = new Subject();
@@ -79,10 +79,11 @@ public class KerberosAuthenticationProvider implements AuthenticationProvider {
                     (PrivilegedExceptionAction<Boolean>) () -> runWithPrincipal(spn, authResponse, remoteUser, gssManager));
 
             if (!result) {
-                throw new AuthenticationException("Failed to authenticate for [user: " + user + "] by kerberos");
+                throw new AuthenticationException(
+                        "Failed to authenticate for [user: " + userIdentity.getUser() + "] by kerberos");
             }
         } catch (Exception e) {
-            throw new AuthenticationException("Failed to authenticate for [user: " + user + "] " +
+            throw new AuthenticationException("Failed to authenticate for [user: " + userIdentity.getUser() + "] " +
                     "by kerberos, msg: " + e.getMessage());
         }
     }

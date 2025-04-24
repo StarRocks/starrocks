@@ -26,7 +26,6 @@ public class PrivilegeTypeEPack extends PrivilegeType {
                     .put(CREATE_MASKING_POLICY.name(), CREATE_MASKING_POLICY)
                     .put(CREATE_ROW_ACCESS_POLICY.name(), CREATE_ROW_ACCESS_POLICY)
                     .put(APPLY.name(), APPLY)
-                    .put(SECURITY.name(), SECURITY)
                     .put(CREATE_FAILOVER_GROUP.name(), CREATE_FAILOVER_GROUP)
                     .build();
 

@@ -16,6 +16,7 @@ package com.starrocks.authentication;
 
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
+import com.starrocks.epack.authentication.AuthenticationMgrEPack;
 import com.starrocks.mysql.MysqlAuthPacket;
 import com.starrocks.mysql.MysqlAuthPacketTest;
 import com.starrocks.mysql.MysqlChannel;
@@ -52,6 +53,13 @@ public class AuthenticationProviderTest {
 
     @Test
     public void testAuthentication() throws Exception {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            boolean isLeader() {
+                return true;
+            }
+        };
+
         UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test", "%");
         String[] passwords = {"asdf123", "starrocks", "testtest"};
         byte[] seed = "petals on a wet black bough".getBytes(StandardCharsets.UTF_8);
@@ -64,20 +72,19 @@ public class AuthenticationProviderTest {
                     .create(info.getAuthPlugin(), new String(info.getPassword()));
 
             byte[] scramble = MysqlPassword.scramble(seed, password);
-            provider.authenticate(ctx, testUser.getUser(), "10.1.1.1", scramble);
+            provider.authenticate(ctx, testUser, scramble);
         }
 
         // no password
         PlainPasswordAuthenticationProvider provider = new PlainPasswordAuthenticationProvider(MysqlPassword.EMPTY_PASSWORD);
         UserAuthenticationInfo info = UserAuthOptionAnalyzer.analyzeAuthOption(testUser, null);
         ctx.setAuthDataSalt(new byte[0]);
-        provider.authenticate(ctx, testUser.getUser(), "10.1.1.1", new byte[0]);
+        provider.authenticate(ctx, testUser, new byte[0]);
         try {
             ctx.setAuthDataSalt("x".getBytes(StandardCharsets.UTF_8));
             provider.authenticate(
                     ctx,
-                    testUser.getUser(),
-                    "10.1.1.1",
+                    testUser,
                     "xx".getBytes(StandardCharsets.UTF_8));
             Assert.fail();
         } catch (AuthenticationException e) {
@@ -94,8 +101,7 @@ public class AuthenticationProviderTest {
             ctx.setAuthDataSalt(seed);
             provider.authenticate(
                     ctx,
-                    testUser.getUser(),
-                    "10.1.1.1",
+                    testUser,
                     MysqlPassword.scramble(seed, "xx"));
             Assert.fail();
         } catch (AuthenticationException e) {
@@ -106,8 +112,7 @@ public class AuthenticationProviderTest {
             ctx.setAuthDataSalt(seed);
             provider.authenticate(
                     ctx,
-                    testUser.getUser(),
-                    "10.1.1.1",
+                    testUser,
                     MysqlPassword.scramble(seed, "bb"));
 
         } catch (AuthenticationException e) {
@@ -119,8 +124,7 @@ public class AuthenticationProviderTest {
             ctx.setAuthDataSalt(null);
             provider.authenticate(
                     ctx,
-                    testUser.getUser(),
-                    "10.1.1.1",
+                    testUser,
                     remotePassword);
 
         } catch (AuthenticationException e) {
@@ -146,7 +150,7 @@ public class AuthenticationProviderTest {
         doNothing().when(editLog).logEdit(anyShort(), any());
         GlobalStateMgr.getCurrentState().setEditLog(editLog);
 
-        AuthenticationMgr authenticationMgr = new AuthenticationMgr();
+        AuthenticationMgr authenticationMgr = new AuthenticationMgrEPack();
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
         CreateUserStmt createUserStmt = (CreateUserStmt) SqlParser
                 .parse("create user test identified with mysql_native_password by '12345'", 32).get(0);
@@ -208,7 +212,7 @@ public class AuthenticationProviderTest {
         doNothing().when(editLog).logEdit(anyShort(), any());
         GlobalStateMgr.getCurrentState().setEditLog(editLog);
 
-        AuthenticationMgr authenticationMgr = new AuthenticationMgr();
+        AuthenticationMgr authenticationMgr = new AuthenticationMgrEPack();
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
         CreateUserStmt createUserStmt = (CreateUserStmt) SqlParser
                 .parse("create user test identified with authentication_ldap_simple", 32).get(0);

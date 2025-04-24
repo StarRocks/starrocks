@@ -19,6 +19,7 @@ import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.UserIdentity;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -126,30 +127,30 @@ public class LDAPAuthProviderForExternal implements AuthenticationProvider {
     }
 
     @Override
-    public void authenticate(ConnectContext context, String user, String host, byte[] authResponse)
+    public void authenticate(ConnectContext context, UserIdentity userIdentity, byte[] authResponse)
             throws AuthenticationException {
         LDAPSecurityIntegration ldapSecurityIntegration = (LDAPSecurityIntegration) GlobalStateMgr.getCurrentState()
                 .getAuthenticationMgr().getSecurityIntegration(securityIntegrationName);
         try {
             boolean authenticated = LDAPAuthProviderForExternal.authenticate(
-                    user, StringUtils.stripEnd(new String(authResponse), "\0"), ldapSecurityIntegration);
+                    userIdentity.getUser(), StringUtils.stripEnd(new String(authResponse), "\0"), ldapSecurityIntegration);
             if (!authenticated) {
                 throw new AuthenticationException(String.format(
-                        "external ldap authentication failure for user %s@%s", user, host));
+                        "external ldap authentication failure for user %s@%s", userIdentity.getUser(), userIdentity.getHost()));
             }
         } catch (Exception e) {
             throw new AuthenticationException(String.format(
                     "external ldap authentication failure for user %s@%s with exception, error: %s",
-                    user, host, e.getMessage()), e);
+                    userIdentity.getUser(), userIdentity.getHost(), e.getMessage()), e);
         }
 
         AuthorizationMgr authorizationMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         Set<Long> roleIds = authorizationMgr.getRoleMappingMetaMgr()
-                .getMappedRoleIdsForLdapUser(securityIntegrationName, user);
+                .getMappedRoleIdsForLdapUser(securityIntegrationName, userIdentity.getUser());
         if (roleIds.isEmpty()) {
             LOG.info("authenticate '{}' with security integration '{}' successfully," +
                             " but cannot map any role, will try other auth mechanisms",
-                    user, securityIntegrationName);
+                    userIdentity.getUser(), securityIntegrationName);
             throw new AuthenticationException("Cannot map any role ids for security integration");
         } else {
             context.setCurrentRoleIds(roleIds);

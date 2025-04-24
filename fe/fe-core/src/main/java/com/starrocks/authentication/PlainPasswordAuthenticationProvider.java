@@ -38,16 +38,12 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
         this.password = password;
     }
 
-    @Override
     public void authenticate(
             ConnectContext context,
-            String user,
-            String host,
+            UserIdentity userIdentity,
             byte[] authResponse) throws AuthenticationException {
         AuthenticationMgrEPack authenticationMgr =
                 (AuthenticationMgrEPack) GlobalStateMgr.getCurrentState().getAuthenticationMgr();
-        UserIdentity userIdentity = authenticationMgr.getBestMatchedUserIdentity(user, host).getKey();
-
         String usePassword = authResponse.length == 0 ? "NO" : "YES";
 
         byte[] randomString = context.getAuthDataSalt();
@@ -56,7 +52,7 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
         if (randomString != null) {
             byte[] saltPassword = MysqlPassword.getSaltFromPassword(password);
             if (saltPassword.length != authResponse.length) {
-                throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, user, usePassword);
+                throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, userIdentity.getUser(), usePassword);
             }
 
             if (authResponse.length > 0 && !MysqlPassword.checkScramble(authResponse, randomString, saltPassword)) {
@@ -82,14 +78,14 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
                     throw new AuthenticationException(ex.getMessage());
                 }
 
-                throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, user, usePassword);
+                throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, userIdentity.getUser(), usePassword);
             }
         } else {
             // Plain remote password, scramble it first.
             byte[] scrambledRemotePass = MysqlPassword.makeScrambledPassword((
                     StringUtils.stripEnd(new String(authResponse, StandardCharsets.UTF_8), "\0")));
             if (!MysqlPassword.checkScrambledPlainPass(password, scrambledRemotePass)) {
-                throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, user, usePassword);
+                throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, userIdentity.getUser(), usePassword);
             }
         }
 

@@ -16,14 +16,14 @@ alter system set password policy pp1;
 drop user if exists u1;
 -- result:
 -- !result
-create user u1 expire_password=true;
+create user u1 identified by "1234567aB!" expire_password=true;
 -- result:
 -- !result
 select HOST, USER, PASSWORD_EXPIRED, PASSWORD_POLICY, IS_LOCKED from sys.users where USER="u1";
 -- result:
 %	u1	1		0
 -- !result
-alter user u1 expire_password=false;
+alter user u1 identified by "1234567aC!" expire_password=false;
 -- result:
 -- !result
 select HOST, USER, PASSWORD_EXPIRED, PASSWORD_POLICY, IS_LOCKED from sys.users where USER="u1";
