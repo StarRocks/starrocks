@@ -217,7 +217,7 @@ Status JsonColumnCompactor::append(const Column& column) {
 }
 
 Status JsonColumnCompactor::finish() {
-    _json_meta->mutable_json_meta()->set_format_version(kJsonMetaDefaultFormatVersion);
+    _json_meta->mutable_json_meta()->set_format_version(kJsonMetaRemainFilterVersion);
     _json_meta->mutable_json_meta()->set_has_remain(false);
     _json_meta->mutable_json_meta()->set_is_flat(false);
     return _json_writer->finish();
