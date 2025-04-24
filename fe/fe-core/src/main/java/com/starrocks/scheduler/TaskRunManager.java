@@ -108,9 +108,6 @@ public class TaskRunManager implements MemoryTrackable {
                 return true;
             }
             return false;
-        } catch (Exception e) {
-            LOG.warn("failed to kill task run: {}", taskRun, e);
-            throw e;
         } finally {
             // if it's force, remove it from running TaskRun map no matter it's killed or not
             if (force) {
