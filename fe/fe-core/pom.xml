@@ -870,6 +870,11 @@ under the License.
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>bundle</artifactId>
         </dependency>
+
+        <dependency>
+            <groupId>org.jboss.byteman</groupId>
+            <artifactId>byteman</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
