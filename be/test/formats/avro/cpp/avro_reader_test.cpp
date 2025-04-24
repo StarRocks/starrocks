@@ -73,9 +73,9 @@ public:
         CHECK_OK(file_or.status());
 
         auto avro_reader = std::make_unique<AvroReader>();
-        CHECK_OK(avro_reader->init(
-                std::make_unique<AvroBufferInputStream>(std::move(file_or.value()), 1048576, _counter), filename,
-                _state.get(), _counter, nullptr, nullptr, true));
+        CHECK_OK(avro_reader->init(std::make_unique<AvroBufferInputStream>(
+                                           std::move(file_or.value()), config::avro_reader_buffer_size_bytes, _counter),
+                                   filename, _state.get(), _counter, nullptr, nullptr, true));
         return avro_reader;
     }
 

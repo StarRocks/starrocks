@@ -1,0 +1,46 @@
+-- name: test_avro_columns_from_path
+
+create database db_${uuid0};
+use db_${uuid0};
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/avro_format/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/avro_format/${uuid0}/dt=2025-04-16 >/dev/null || echo "exit 0" >/dev/null
+
+shell: ossutil64 cp --force ./sql/test_files/avro_format/primitive.avro oss://${oss_bucket}/test_files/avro_format/${uuid0}/dt=2025-04-16/ | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 501. OK num: 1(upload 1 files).
+-- !result
+
+desc files(
+    "path" = "oss://${oss_bucket}/test_files/avro_format/${uuid0}/*/*",
+    "format" = "avro",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "columns_from_path" = "dt");
+-- result:
+null_field	varchar(1048576)	YES
+bool_field	boolean	YES
+int_field	int	YES
+long_field	bigint	YES
+float_field	float	YES
+double_field	double	YES
+bytes_field	varbinary(1048576)	YES
+string_field	varchar(1048576)	YES
+dt	varchar(65533)	YES
+-- !result
+
+select dt, int_field from files(
+    "path" = "oss://${oss_bucket}/test_files/avro_format/${uuid0}/*/*",
+    "format" = "avro",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "columns_from_path" = "dt");
+-- result:
+2025-04-16	123
+-- !result
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/avro_format/${uuid0}/ > /dev/null

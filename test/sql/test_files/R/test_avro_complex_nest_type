@@ -1,0 +1,47 @@
+-- name: test_avro_complex_nest_type
+
+create database db_${uuid0};
+use db_${uuid0};
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/avro_format/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+shell: ossutil64 cp --force ./sql/test_files/avro_format/complex_nest.avro oss://${oss_bucket}/test_files/avro_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 2,309. OK num: 1(upload 1 files).
+-- !result
+
+desc files(
+    "path" = "oss://${oss_bucket}/test_files/avro_format/${uuid0}/*",
+    "format" = "avro",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+record_of_record	struct<inner struct<val int(11)>>	YES
+record_of_array	struct<list array<int(11)>>	YES
+record_of_map	struct<dict map<varchar(1048576),varchar(1048576)>>	YES
+array_of_record	array<struct<value varchar(1048576)>>	YES
+array_of_array	array<array<int>>	YES
+array_of_map	array<map<varchar(1048576),int>>	YES
+map_of_record	map<varchar(1048576),struct<id int(11)>>	YES
+map_of_array	map<varchar(1048576),array<int>>	YES
+map_of_map	map<varchar(1048576),map<varchar(1048576),varchar(1048576)>>	YES
+record_array_of_record	struct<entries array<struct<flag boolean>>>	YES
+record_array_of_map	struct<entries array<map<varchar(1048576),varchar(1048576)>>>	YES
+array_map_record	array<map<varchar(1048576),struct<ok boolean>>>	YES
+map_array_record	map<varchar(1048576),array<struct<score float>>>	YES
+-- !result
+
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/avro_format/${uuid0}/*",
+    "format" = "avro",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+{"inner":{"val":123}}	{"list":[1,2,3]}	{"dict":{"a":"x","b":"y"}}	[{"value":"one"},{"value":"two"}]	[[1,2],[3,4]]	[{"a":1,"b":2},{"c":3}]	{"r1":{"id":10},"r2":{"id":20}}	{"nums":[5,6,7]}	{"outer":{"inner":"val"}}	{"entries":[{"flag":1},{"flag":0}]}	{"entries":[{"x":"1"},{"y":"2"}]}	[{"one":{"ok":1}},{"two":{"ok":0}}]	{"group":[{"score":99.9},{"score":88.8}]}
+-- !result
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/avro_format/${uuid0}/ > /dev/null

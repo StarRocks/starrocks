@@ -91,6 +91,9 @@ bool AvroBufferInputStream::fill() {
 }
 
 AvroReader::~AvroReader() {
+    if (_datum != nullptr) {
+        _datum.reset();
+    }
     if (_file_reader != nullptr) {
         _file_reader->close();
         _file_reader.reset();
@@ -102,6 +105,7 @@ Status AvroReader::init(std::unique_ptr<avro::InputStream> input_stream, const s
                         const std::vector<avrocpp::ColumnReaderUniquePtr>* column_readers, bool col_not_found_as_null) {
     try {
         _file_reader = std::make_unique<avro::DataFileReader<avro::GenericDatum>>(std::move(input_stream));
+        _datum = std::make_unique<avro::GenericDatum>(_file_reader->dataSchema());
     } catch (const avro::Exception& ex) {
         auto err_msg = fmt::format("Avro reader init throws exception: {}", ex.what());
         LOG(WARNING) << err_msg;
@@ -131,20 +135,17 @@ Status AvroReader::read_chunk(ChunkPtr& chunk, int rows_to_read) {
     }
 
     try {
-        const auto& schema = _file_reader->dataSchema();
-        avro::GenericDatum datum(schema);
-
-        while (rows_to_read > 0 && _file_reader->read(datum)) {
+        while (rows_to_read > 0 && _file_reader->read(*_datum)) {
             auto num_rows = chunk->num_rows();
 
-            DCHECK(datum.type() == avro::AVRO_RECORD);
-            const auto& record = datum.value<avro::GenericRecord>();
+            DCHECK(_datum->type() == avro::AVRO_RECORD);
+            const auto& record = _datum->value<avro::GenericRecord>();
 
             auto st = read_row(chunk, record);
             if (st.is_data_quality_error()) {
                 if (_counter->num_rows_filtered++ < MAX_ERROR_LINES_IN_FILE) {
                     std::string json_str;
-                    (void)AvroUtils::datum_to_json(datum, &json_str);
+                    (void)AvroUtils::datum_to_json(*_datum, &json_str);
                     _state->append_error_msg_to_file(json_str, std::string(st.message()));
                     LOG(WARNING) << "Failed to read row. error: " << st;
                 }

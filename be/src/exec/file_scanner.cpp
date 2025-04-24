@@ -20,6 +20,7 @@
 #include "column/column_helper.h"
 #include "column/hash_set.h"
 #include "column/vectorized_fwd.h"
+#include "exec/avro_cpp_scanner.h"
 #include "exec/csv_scanner.h"
 #include "exec/orc_scanner.h"
 #include "exec/parquet_scanner.h"
@@ -453,6 +454,10 @@ Status FileScanner::sample_schema(RuntimeState* state, const TBrokerScanRange& s
         case TFileFormatType::FORMAT_CSV_DEFLATE:
         case TFileFormatType::FORMAT_CSV_ZSTD:
             p_scanner = std::make_unique<CSVScanner>(state, &profile, sample_range, &counter, true);
+            break;
+
+        case TFileFormatType::FORMAT_AVRO:
+            p_scanner = std::make_unique<AvroCppScanner>(state, &profile, sample_range, &counter, true);
             break;
 
         default:

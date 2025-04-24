@@ -64,12 +64,27 @@ Status BinaryColumnReader::read_numeric_value(const avro::GenericDatum& datum, B
     switch (datum.type()) {
     case avro::AVRO_INT: {
         const auto& from = datum.value<int32_t>();
-        return check_append_binary_column(std::to_string(from), _col_name, _type_desc, column);
+        auto logical_type = datum.logicalType();
+
+        if (logical_type.type() == avro::LogicalType::DATE) {
+            const auto& date_value = AvroUtils::int_to_date_value(from);
+            return check_append_binary_column(date_value.to_string(), _col_name, _type_desc, column);
+        } else {
+            return check_append_binary_column(std::to_string(from), _col_name, _type_desc, column);
+        }
     }
 
     case avro::AVRO_LONG: {
         const auto& from = datum.value<int64_t>();
-        return check_append_binary_column(std::to_string(from), _col_name, _type_desc, column);
+        auto logical_type = datum.logicalType();
+
+        if (logical_type.type() == avro::LogicalType::TIMESTAMP_MILLIS ||
+            logical_type.type() == avro::LogicalType::TIMESTAMP_MICROS) {
+            ASSIGN_OR_RETURN(auto timestamp_value, AvroUtils::long_to_timestamp_value(datum, _timezone));
+            return check_append_binary_column(timestamp_value.to_string(), _col_name, _type_desc, column);
+        } else {
+            return check_append_binary_column(std::to_string(from), _col_name, _type_desc, column);
+        }
     }
 
     case avro::AVRO_FLOAT: {
@@ -103,13 +118,29 @@ Status BinaryColumnReader::read_string_value(const avro::GenericDatum& datum, Bi
 
     case avro::AVRO_BYTES: {
         const auto& from = datum.value<std::vector<uint8_t>>();
-        return check_append_binary_column(std::string(from.begin(), from.end()), _col_name, _type_desc, column);
+        auto logical_type = datum.logicalType();
+
+        if (logical_type.type() == avro::LogicalType::DECIMAL) {
+            double double_value =
+                    static_cast<double>(AvroUtils::bytes_to_decimal_integer(from)) / std::pow(10, logical_type.scale());
+            return check_append_binary_column(std::to_string(double_value), _col_name, _type_desc, column);
+        } else {
+            return check_append_binary_column(std::string(from.begin(), from.end()), _col_name, _type_desc, column);
+        }
     }
 
     case avro::AVRO_FIXED: {
         const auto& from = datum.value<avro::GenericFixed>();
         const auto& v = from.value();
-        return check_append_binary_column(std::string(v.begin(), v.end()), _col_name, _type_desc, column);
+        auto logical_type = datum.logicalType();
+
+        if (logical_type.type() == avro::LogicalType::DECIMAL) {
+            double double_value =
+                    static_cast<double>(AvroUtils::bytes_to_decimal_integer(v)) / std::pow(10, logical_type.scale());
+            return check_append_binary_column(std::to_string(double_value), _col_name, _type_desc, column);
+        } else {
+            return check_append_binary_column(std::string(v.begin(), v.end()), _col_name, _type_desc, column);
+        }
     }
 
     default:

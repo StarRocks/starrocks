@@ -81,6 +81,7 @@ private:
     std::unique_ptr<avro::DataFileReader<avro::GenericDatum>> _file_reader = nullptr;
 
     // only used in read data
+    std::unique_ptr<avro::GenericDatum> _datum = nullptr;
     std::string _filename = "";
     RuntimeState* _state = nullptr;
     ScannerCounter* _counter = nullptr;

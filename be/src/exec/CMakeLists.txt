@@ -105,6 +105,7 @@ set(EXEC_FILES
     json_scanner.cpp
     json_parser.cpp
     avro_scanner.cpp
+    avro_cpp_scanner.cpp
     project_node.cpp
     dict_decode_node.cpp
     repeat_node.cpp
