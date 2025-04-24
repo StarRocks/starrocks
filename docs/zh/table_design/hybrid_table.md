@@ -5,48 +5,47 @@ sidebar_position: 60
 
 import Beta from '../_assets/commonMarkdown/_beta.mdx'
 
-# 行列混存表
+# 行列混存
 
 <Beta />
 
-StarRocks 属于 OLAP 数据库，原先数据是按列存储的方式，能够提高复杂查询（例如聚合查询）的性能。自 3.2.3 开始，StarRocks 还支持行列混存的表存储格式，能够支撑基于主键的高并发、低延时点查，以及数据部分列更新等场景，同时还保留了原有列存的高效分析能力。此外，行列混存表还支持[预准备语句](../sql-reference/sql-statements/prepared_statement.md)，能够提高查询的性能和安全性。
+作为一个OLAP数据库，StarRocks最初使用列式存储来增强复杂查询的性能，例如聚合查询。从v3.2.3开始，StarRocks也支持将数据存储在行列混存中，即数据以逐行和逐列的方式存储。这种行列混存非常适合于基于主键的高并发、低延迟点查询和部分列更新等场景，同时提供与列式存储相当的高效分析能力。此外，行列混存支持[prepared statements](../sql-reference/sql-statements/prepared_statement.md)，这提高了查询性能和安全性。
 
-## 列存和行列混存对比
+## 列式存储与行列混存的比较
 
 **行列混存**
 
-- 存储方式：数据同时按照列和行存储。简单来说，行列混存表会额外加一个隐藏的二进制类型的列 `__row`，写入数据至表的同时还会将一行数据所有 value 列编码后的值写入列 `__row`（如下所示）。由于数据同时按照列和行存储，因此会带来额外的存储成本。
+- 存储方式：数据以逐行和逐列的方式存储。简单来说，使用行列混存的表包含一个额外的、隐藏的二进制类型列`__row`。当数据写入表时，每行涉及的值列的所有值都会被编码并写入`__row`列（如下图所示）。由于数据以逐行和逐列的方式存储，会产生额外的存储成本。
 
    ![img](../_assets/table_design/hybrid_table.png)
 
-- 适用场景：能够兼顾行存和列存的场景，但是会带来额外的存储成本。<ul><li>按行存储的适用场景。</li><ul><li>基于主键的高并发点查。</li><li>表的字段个数比较少，并且通常会查询大部分字段。</li><li>部分列更新（更新多列和少量数据行）</li></ul><li>列存的场景：复杂数据分析。</li></ul>
+- 场景：支持逐行和逐列存储的用户场景，但会产生额外的存储成本。<ul><li>逐行存储的用户场景：</li><ul><li>基于主键的高并发点查询。</li><li>查询由少量字段组成的表中的大多数字段。</li><li>部分列更新（更具体地说，需要更新多个列和少量数据行）</li></ul><li>逐列存储的用户场景：复杂数据分析。</li></ul>
 
-**列存**
+**列式存储**
 
-- 存储方式：按列存储数据。
+- 存储方式：数据以逐列的方式存储。
 
-   ![img](../_assets/table_design/columnar_table.png)
+  ![img](../_assets/table_design/hybrid_table.png)
 
-- 适用场景：复杂数据分析。 <ul><li>针对海量数据进行复杂查询分析，比如聚合分析、多表关联查询。 </li><li>表的字段比较多（比如大宽表），但查询的字段不多。</li></ul>
+- 场景：复杂数据分析。<ul><li>对海量数据集进行复杂查询和分析，例如聚合分析和多表连接查询。</li><li>表由许多字段组成（如宽表），但对这些表的查询仅涉及少数列。</li></ul>
 
-## 基本操作
+## 基本用法
 
-### 创建行列混存表
+### 创建使用行列混存的表
 
-1. 开启 FE 配置项 `enable_experimental_rowstore`。
+1. 启用FE配置项`enable_experimental_rowstore`。
 
    ```SQL
    ADMIN SET FRONTEND CONFIG ("enable_experimental_rowstore" = "true");
    ```
 
-2. 建表时在 `PROPERTIES` 中配置 `"STORE_TYPE" = "column_with_row"`。
+2. 在创建表时在`PROPERTIES`中指定`"STORE_TYPE" = "column_with_row"`。
 
 :::note
 
-- 必须为主键表。
-- `__row` 列的长度不能超过 1 MB。
-- 自 3.2.4 起，列的类型新增支持 BITMAP、HLL、JSON、ARRAY、MAP 和 STRUCT。
-- 表中除了主键列外必须包含更多的列。
+- 表必须是主键表。
+- `__row`列的长度不能超过1 MB。
+- 从v3.2.4开始，StarRocks扩展支持以下列类型：BITMAP, HLL, JSON, ARRAY, MAP, 和 STRUCT。
 
 :::
 
@@ -58,26 +57,26 @@ CREATE TABLE users (
   revenue bigint
 )
 PRIMARY KEY (id)
-DISTRIBUTED BY HASH(id)
-PROPERTIES ("storage_type" = "column_with_row");
+DISTRIBUTED by HASH (id)
+PROPERTIES ("store_type" = "column_with_row");
 ```
 
-### 增删改数据
+### 插入、删除和更新数据
 
-和列存表一样，您可以通过数据导入和 DML 语句向行列混存表中增加、删除和修改数据。本小节使用 DML 语句和上述行列混存表进行演示。
+与使用列式存储的表类似，您可以通过数据导入和DML语句在使用行列混存的表上插入、删除和更新数据。本节演示如何在上述使用行列混存的表上运行DML语句。
 
-1. 插入数据。
+1. 插入一行数据。
 
-   ```SQL
-   INSERT INTO users (id, country, city, revenue)
-   VALUES 
-   (1, 'USA', 'New York', 5000),
-   (2, 'UK', 'London', 4500),
-   (3, 'France', 'Paris', 6000),
-   (4, 'Germany', 'Berlin', 4000),
-   (5, 'Japan', 'Tokyo', 7000),
-   (6, 'Australia', 'Sydney', 7500);
-   ```
+   1. ```SQL
+      INSERT INTO users (id, country, city, revenue)
+      VALUES 
+        (1, 'USA', 'New York', 5000),
+        (2, 'UK', 'London', 4500),
+        (3, 'France', 'Paris', 6000),
+        (4, 'Germany', 'Berlin', 4000),
+        (5, 'Japan', 'Tokyo', 7000),
+        (6, 'Australia', 'Sydney', 7500);
+      ```
 
 2. 删除一行数据。
 
@@ -85,7 +84,7 @@ PROPERTIES ("storage_type" = "column_with_row");
    DELETE FROM users WHERE id = 6;
    ```
 
-3. 修改一行数据。
+3. 更新一行数据。
 
    ```SQL
    UPDATE users SET revenue = 6500 WHERE id = 4;
@@ -93,9 +92,9 @@ PROPERTIES ("storage_type" = "column_with_row");
 
 ### 查询数据
 
-这里以点查为例。点查走短路径，即直接查询按行存储的数据，可以提高查询性能。
+本节以点查询为例。点查询采用短路，直接查询行存储中的数据，可以提高查询性能。
 
-依然使用上述行列混存表进行演示。该表经过上述的建表和数据变更操作，其包含的数据应该为：
+以下示例仍然使用上述使用行列混存的表。在上述表创建和数据修改操作之后，表存储的数据如下：
 
 ```SQL
 MySQL [example_db]> SELECT * FROM users ORDER BY id;
@@ -111,79 +110,77 @@ MySQL [example_db]> SELECT * FROM users ORDER BY id;
 5 rows in set (0.03 sec)
 ```
 
-1. 确保系统已经开启短路径查询。短路径查询开启后，满足条件（用于评估是否为点查）的查询会走短路径，直接查询按行存储的数据。
+1. 确保系统启用了查询短路。一旦启用查询短路，符合特定条件的查询（用于评估查询是否为点查询）将采用短路扫描行存储中的数据。
 
    ```SQL
    SHOW VARIABLES LIKE '%enable_short_circuit%';
    ```
 
-   如果短路径查询未开启，可以执行命令 `SET enable_short_circuit = true;`，设置变量 [`enable_short_circuit`](../sql-reference/System_variable.md#enable_short_circuit) 为 `true`。
+   如果查询短路未启用，运行`SET enable_short_circuit = true;`命令将变量[`enable_short_circuit`](../sql-reference/System_variable.md)设置为`true`。
 
-2. 查询数据。如果查询满足本条件：WHERE 子句的条件列必须包含所有主键列，并且运算符为  `=` 或者 `IN`，该查询才会走短路径。
+2. 查询数据。如果查询符合WHERE子句中的条件列包含所有主键列，并且WHERE子句中的操作符为`=`或`IN`的条件，查询将采用快捷方式。
 
    :::note
-
-   WHERE 子句的条件列在包含所有主键列的基础上，还可以包含其他列。
-
+   WHERE子句中的条件列可以包含除所有主键列之外的其他列。
    :::
 
    ```SQL
    SELECT * FROM users WHERE id=1;
    ```
 
-   您可以通过查看查询规划来确认查询是否走短路径。如果查询规划中包括 `Short Circuit Scan: true`，则代表查询走的是短路径。
+3. 检查查询计划以验证查询是否可以使用短路。如果查询计划中包含`Short Circuit Scan: true`，则查询可以采用短路。
 
-   ```SQL
-   MySQL [example_db]> EXPLAIN SELECT * FROM users WHERE id=1;
-   +---------------------------------------------------------+
-   | Explain String                                          |
-   +---------------------------------------------------------+
-   | PLAN FRAGMENT 0                                         |
-   |  OUTPUT EXPRS:1: id | 2: country | 3: city | 4: revenue |
-   |   PARTITION: RANDOM                                     |
-   |                                                         |
-   |   RESULT SINK                                           |
-   |                                                         |
-   |   0:OlapScanNode                                        |
-   |      TABLE: users                                       |
-   |      PREAGGREGATION: OFF. Reason: null                  |
-   |      PREDICATES: 1: id = 1                              |
-   |      partitions=1/1                                     |
-   |      rollup: users                                      |
-   |      tabletRatio=1/6                                    |
-   |      tabletList=10184                                   |
-   |      cardinality=-1                                     |
-   |      avgRowSize=0.0                                     |
-   |      Short Circuit Scan: true                           | -- 短路径查询生效
-   +---------------------------------------------------------+
-   17 rows in set (0.00 sec)
-   ```
+      ```SQL
+      MySQL [example_db]> EXPLAIN SELECT * FROM users WHERE id=1;
+      +---------------------------------------------------------+
+      | Explain String                                          |
+      +---------------------------------------------------------+
+      | PLAN FRAGMENT 0                                         |
+      |  OUTPUT EXPRS:1: id | 2: country | 3: city | 4: revenue |
+      |   PARTITION: RANDOM                                     |
+      |                                                         |
+      |   RESULT SINK                                           |
+      |                                                         |
+      |   0:OlapScanNode                                        |
+      |      TABLE: users                                       |
+      |      PREAGGREGATION: OFF. Reason: null                  |
+      |      PREDICATES: 1: id = 1                              |
+      |      partitions=1/1                                     |
+      |      rollup: users                                      |
+      |      tabletRatio=1/6                                    |
+      |      tabletList=10184                                   |
+      |      cardinality=-1                                     |
+      |      avgRowSize=0.0                                     |
+      |      Short Circuit Scan: true                           | -- 查询可以使用快捷方式。
+      +---------------------------------------------------------+
+      17 rows in set (0.00 sec)
+      ```
 
-### 使用预准备语句
+### 使用prepared statements
 
-您可以使用[预准备语句](../sql-reference/sql-statements/prepared_statement.md#使用预准备语句)来查询行列混存表的数据。例如：
+您可以使用[prepared statements](../sql-reference/sql-statements/prepared_statement.md#use-prepared-statements)查询使用行列混存的表中的数据。
 
 ```SQL
--- 准备语句以供执行。
+-- 准备要执行的语句。
 PREPARE select_all_stmt FROM 'SELECT * FROM users';
 PREPARE select_by_id_stmt FROM 'SELECT * FROM users WHERE id = ?';
 
--- 声明语句中的变量。
+-- 在语句中声明变量。
 SET @id1 = 1, @id2 = 2;
 
--- 使用已声明的变量来执行语句。
--- 分别查询 ID 为 1 和 2 的数据
+-- 使用声明的变量执行语句。
+-- 分别查询ID为1或2的数据。
 EXECUTE select_by_id_stmt USING @id1;
 EXECUTE select_by_id_stmt USING @id2;
 ```
 
-## 注意事项
+## 限制
 
-- StarRocks 存算分离集群暂不支持行列混存表。
-- 自 3.2.4 版本起，行列混存表支持 [ALTER TABLE](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md)。
-- 短路径查询目前仅适合定期批量导入后纯查询的场景。因为目前短路径查询和写流程中的 apply 步骤互斥访问索引，所以写操作可能会堵塞短路径查询，导致写入时会影响点查的响应时间。
-- 行列混存表可能会大幅增加存储空间的占用。因为数据会按行和列格式存储两份，并且按行存储压缩比可能不如按列存储高。
-- 行列混存表会增加数据导入耗时和资源占用。
-- 如果业务场景中有在线服务的需求，行列混存表可以作为一种可行的解决方案，但其性能可能无法与成熟 OLTP 数据库竞争。
-- 行列混存表不支持列模式部分更新等依赖按列存储的特性。
-- 仅适用于主键表。
+- 目前，StarRocks存算分离集群不支持行列混存。
+- 从v3.2.4开始，可以使用[ALTER TABLE](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md)对使用行列混存的表进行修改。
+- 查询短路目前仅适用于计划批量数据导入后的查询。因为当查询短路发生在数据写入过程的应用阶段时，可能会导致索引互斥，数据写入可能会阻塞查询短路，影响数据写入期间点查询的响应时间。
+- 行列混存可能显著增加存储消耗。这是因为数据同时以行和列格式存储，并且行存储的数据压缩率可能不如列存储高。
+- 行列混存可能增加数据导入过程中的时间和资源消耗。
+- 使用行列混存的表可以成为在线服务的可行解决方案，但这种类型表的性能可能无法与成熟的OLTP数据库竞争。
+- 使用行列混存的表不支持依赖于列式存储的功能，例如列模式下的部分更新。
+- 使用行列混存的表必须是主键表。

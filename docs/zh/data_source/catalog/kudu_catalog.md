@@ -7,36 +7,36 @@ import Experimental from '../../_assets/commonMarkdown/_experimental.mdx'
 
 <Experimental />
 
-StarRocks 从 3.3 版本开始支持 Kudu Catalog。
+StarRocks 从 v3.3 开始支持 Kudu catalog。
 
-Kudu Catalog 是一种 External Catalog。通过 Kudu Catalog，您不需要执行数据导入就可以直接查询 Apache Kudu 里的数据。
+Kudu catalog 是一种 external catalog，允许您在不导入数据的情况下查询 Apache Kudu 的数据。
 
-此外，您还可以基于 Kudu Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 能力来实现数据转换和导入。
+此外，您还可以基于 Kudu catalog 使用 [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 直接转换和导入 Kudu 的数据。
 
-为保证正常访问 Kudu 内的数据，StarRocks 集群必须集成以下关键组件：
+为了确保在您的 Kudu 集群上成功执行 SQL 工作负载，您的 StarRocks 集群需要与以下重要组件集成：
 
-- 元数据服务。当前支持的元数据服务包括 Kudu 文件系统 (File System)、Hive Metastore（以下简称 HMS）。
+- 像 Kudu 文件系统或 Hive metastore 这样的 Metastore
 
-## 使用说明
+## 使用注意事项
 
-Kudu Catalog 仅支持查询 Kudu 数据，不支持针对 Kudu 的写/删操作。
+您只能使用 Kudu catalog 查询数据。您不能使用 Kudu catalog 删除、删除或插入数据到您的 Kudu 集群中。
 
-## 准备工作
+## 集成准备
 
-在创建 Kudu Catalog 之前，请确保 StarRocks 集群能够正常访问 Kudu 集群及元数据服务。
+在创建 Kudu catalog 之前，请确保您的 StarRocks 集群可以与 Kudu 集群的存储系统和 metastore 集成。
 
 > **注意**
 >
-> 如果查询时因为域名无法识别 (Unknown Host) 而发生访问失败，您需要将 KUDU 集群中各节点的主机名及 IP 地址之间的映射关系配置到 **/etc/hosts** 路径中。
+> 如果在发送查询时返回未知主机的错误，您必须将 KUDU 集群节点的主机名和 IP 地址之间的映射添加到 **/etc/hosts** 路径中。
 
 ### Kerberos 认证
 
-如果 KUDU 集群或 HMS 开启了 Kerberos 认证，则需要在 StarRocks 集群中做如下配置：
+如果您的 KUDU 集群或 Hive metastore 启用了 Kerberos 认证，请按如下方式配置您的 StarRocks 集群：
 
-- 在每个 FE 和 每个 BE 上执行 `kinit -kt keytab_path principal` 命令，从 Key Distribution Center (KDC) 获取到 Ticket Granting Ticket (TGT)。执行命令的用户必须拥有访问 HMS 和 KUDU 的权限。注意，使用该命令访问 KDC 具有时效性，因此需要使用 cron 定期执行该命令。
-- 在每个 FE 的 **$FE_HOME/conf/fe.conf** 文件和每个 BE 的 **$BE_HOME/conf/be.conf** 文件中添加 `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"`。其中，`/etc/krb5.conf` 是 **krb5.conf** 文件的路径，可以根据文件的实际路径进行修改。
+- 在每个 FE 和每个 BE 上运行 `kinit -kt keytab_path principal` 命令，从密钥分发中心 (KDC) 获取票证授予票证 (TGT)。要运行此命令，您必须具有访问 KUDU 集群和 Hive metastore 的权限。请注意，使用此命令访问 KDC 是时间敏感的。因此，您需要使用 cron 定期运行此命令。
+- 将 `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"` 添加到每个 FE 的 **$FE_HOME/conf/fe.conf** 文件和每个 BE 的 **$BE_HOME/conf/be.conf** 文件中。在此示例中，`/etc/krb5.conf` 是 **krb5.conf** 文件的保存路径。您可以根据需要修改路径。
 
-## 创建 Kudu Catalog
+## 创建 Kudu catalog
 
 ### 语法
 
@@ -46,49 +46,48 @@ CREATE EXTERNAL CATALOG <catalog_name>
 PROPERTIES
 (
     "type" = "kudu",
-    CatalogParams,
+    CatalogParams
 )
 ```
 
-### 参数说明
+### 参数
 
 #### catalog_name
 
-Kudu Catalog 的名称。命名要求如下：
+Kudu catalog 的名称。命名约定如下：
 
-- 必须由字母 (a-z 或 A-Z)、数字 (0-9) 或下划线 (_) 组成，且只能以字母开头。
-- 总长度不能超过 1023 个字符。
-- Catalog 名称大小写敏感。
+- 名称可以包含字母、数字 (0-9) 和下划线 (_)。必须以字母开头。
+- 名称区分大小写，且不能超过 1023 个字符。
 
 #### comment
 
-Kudu Catalog 的描述。此参数为可选。
+Kudu catalog 的描述。此参数是可选的。
 
 #### type
 
-数据源的类型。设置为 `kudu`。
+数据源的类型。将值设置为 `kudu`。
 
 #### CatalogParams
 
-StarRocks 访问 Kudu 集群元数据的相关参数配置。
+StarRocks 访问 Kudu 集群元数据的一组参数。
 
-`CatalogParams` 包含如下参数。
+下表描述了您需要在 `CatalogParams` 中配置的参数。
 
-| 参数                            | 是否必须 | 说明                                                                                                                                                                                                                                                |
-|-------------------------------|------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| kudu.catalog.type             | 是    | Kudu 使用的元数据类型。设置为 `kudu`、`hive`。                                                                                                                                                                                                                  |
-| kudu.master                   | 否    | 指定 `Kudu Master` 连接地址，默认为：`localhost:7051`。                                                                                                                                                                                                                  |
-| hive.metastore.uris           | 否    | HMS 的 URI， 格式：`thrift://<HMS IP 地址>:<HMS 端口号>`。仅在 `kudu.catalog.type` = `hive` 时设置。<br />如果您的 HMS 开启了高可用模式，此处可以填写多个 HMS 地址并用逗号分隔，例如：`"thrift://<HMS IP 地址 1>:<HMS 端口号 1>,thrift://<HMS IP 地址 2>:<HMS 端口号 2>,thrift://<HMS IP 地址 3>:<HMS 端口号 3>"`。 |
-| kudu.schema-emulation.enabled | 否    | 是否启用模拟 `schema` 功能，默认处于关闭状态（`false`），即所有表都属于 `default` `schema`。                                                                                                                                                                                  |
-| kudu.schema-emulation.prefix  | 否    | 仅在 `kudu.schema-emulation.enabled` = `true` 即启用模拟 `schema` 功能时，需设置匹配前缀，默认采用前缀空字符串：` `。                                                                                                                                                            |
+| 参数                     | 是否必需 | 描述                                                                                                                                                                                                                                                                                                                                                                                                                 |
+|--------------------------|----------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| kudu.catalog.type        | 是       | 您用于 Kudu 集群的 metastore 类型。将此参数设置为 `kudu` 或 `hive`。                                                                                                                                                                                                                                                                                                                                                 |
+| kudu.master              | 否       | 指定 Kudu Master 地址，默认为 `localhost:7051`。                                                                                                                                                                                                                                                                                                                                                                     |
+| hive.metastore.uris      | 否       | Hive metastore 的 URI。格式：`thrift://<metastore_IP_address>:<metastore_port>`。如果您的 Hive metastore 启用了高可用 (HA)，您可以指定多个 metastore URI，并用逗号 (`,`) 分隔，例如，`"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`。 |
+| kudu.schema-emulation.enabled | 否       | 启用或禁用 `schema` 仿真的选项。默认情况下，它是关闭的 (false)，这意味着所有表都属于 `default` `schema`。                                                                                                                                                                                                                                                                                                           |
+| kudu.schema-emulation.prefix | 否       | 仅当 `kudu.schema-emulation.enabled` = `true` 时才设置 `schema` 仿真的前缀。默认前缀为空字符串：` `。                                                                                                                                                                                                                                                                                                                   |
 
-> **说明**
+> **注意**
 >
-> 若使用 HMS 作为元数据服务，则在查询 Kudu 数据之前，必须将所有 HMS 节点的主机名及 IP 地址之间的映射关系添加到 **/etc/hosts** 路径。否则，发起查询时，StarRocks 可能无法访问 HMS。
+> 如果您使用 Hive metastore，必须在查询 Kudu 数据之前将 Hive metastore 节点的主机名和 IP 地址之间的映射添加到 `/etc/hosts` 路径中。否则，StarRocks 在启动查询时可能无法访问您的 Hive metastore。
 
 ### 示例
 
-- 以下示例创建了一个名为 `kudu_catalog` 的 Kudu Catalog，其元数据类型 `kudu.catalog.type` 为 `kudu`，用于查询 Kudu 集群里的数据。
+- 以下示例创建一个名为 `kudu_catalog` 的 Kudu catalog，其 metastore 类型 `kudu.catalog.type` 设置为 `kudu`，用于查询 Kudu 集群的数据。
 
   ```SQL
   CREATE EXTERNAL CATALOG kudu_catalog
@@ -102,7 +101,7 @@ StarRocks 访问 Kudu 集群元数据的相关参数配置。
   );
   ```
 
-- 以下示例创建了一个名为 `kudu_catalog` 的 Kudu Catalog，其元数据类型 `kudu.catalog.type` 为 `hive`，用于查询 Kudu 集群里的数据。
+- 以下示例创建一个名为 `kudu_catalog` 的 Kudu catalog，其 metastore 类型 `kudu.catalog.type` 设置为 `hive`，用于查询 Kudu 集群的数据。
 
   ```SQL
   CREATE EXTERNAL CATALOG kudu_catalog
@@ -117,81 +116,81 @@ StarRocks 访问 Kudu 集群元数据的相关参数配置。
   );
   ```
 
-## 查看 Kudu Catalog
+## 查看 Kudu catalog
 
-您可以通过 [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
+您可以使用 [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) 查询当前 StarRocks 集群中的所有 catalog：
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-您也可以通过 [SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Kudu Catalog `kudu_catalog` 的创建语句：
+您还可以使用 [SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) 查询 external catalog 的创建语句。以下示例查询名为 `kudu_catalog` 的 Kudu catalog 的创建语句：
 
 ```SQL
 SHOW CREATE CATALOG kudu_catalog;
 ```
 
-## 删除 Kudu Catalog
+## 删除 Kudu catalog
 
-您可以通过 [DROP CATALOG](../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) 删除某个 External Catalog。
+您可以使用 [DROP CATALOG](../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) 删除 external catalog。
 
-例如，通过如下命令删除 Kudu Catalog `kudu_catalog`：
+以下示例删除名为 `kudu_catalog` 的 Kudu catalog：
 
 ```SQL
 DROP Catalog kudu_catalog;
 ```
 
-## 查看 Kudu 表结构
+## 查看 Kudu 表的 schema
 
-您可以通过如下方法查看 Kudu 表的表结构：
+您可以使用以下语法之一查看 Kudu 表的 schema：
 
-- 查看表结构
+- 查看 schema
 
   ```SQL
   DESC[RIBE] <catalog_name>.<database_name>.<table_name>;
   ```
 
-- 从 CREATE 命令查看表结构和表文件存放位置
+- 从 CREATE 语句查看 schema 和位置
 
   ```SQL
   SHOW CREATE TABLE <catalog_name>.<database_name>.<table_name>;
   ```
 
-## 查询 Kudu 表数据
+## 查询 Kudu 表
 
-1. 通过 [SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) 查看指定 Catalog 所属的 Kudu Catalog 中的数据库：
+1. 使用 [SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) 查看 Kudu 集群中的数据库：
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>;
    ```
 
-2. 通过 [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) 切换当前会话生效的 Catalog：
+2. 使用 [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) 在当前会话中切换到目标 catalog：
 
    ```SQL
    SET CATALOG <catalog_name>;
    ```
 
-   再通过 [USE](../../sql-reference/sql-statements/Database/USE.md) 指定当前会话生效的数据库：
+   然后，使用 [USE](../../sql-reference/sql-statements/Database/USE.md) 指定当前会话中的活动数据库：
 
    ```SQL
    USE <db_name>;
    ```
 
-   或者，也可以通过 [USE](../../sql-reference/sql-statements/Database/USE.md) 直接将会话切换到目标 Catalog 下的指定数据库：
+   或者，您可以使用 [USE](../../sql-reference/sql-statements/Database/USE.md) 直接指定目标 catalog 中的活动数据库：
 
    ```SQL
    USE <catalog_name>.<db_name>;
    ```
 
-3. 通过 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 查询目标数据库中的目标表：
+3. 使用 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 查询指定数据库中的目标表：
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10;
    ```
 
-## 导入 Kudu 数据
+## 从 Kudu 导入数据
 
-假设有一个 OLAP 表，表名为 `olap_tbl`。您可以这样来转换该表中的数据，并把数据导入到 StarRocks 中：
+假设您有一个名为 `olap_tbl` 的 OLAP 表，您可以像下面这样转换和导入数据：
 
 ```SQL
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM kudu_table;

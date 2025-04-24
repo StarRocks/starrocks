@@ -9,59 +9,60 @@ import Beta from '../../_assets/commonMarkdown/_beta.mdx'
 
 <Beta />
 
-StarRocks 从 3.1 版本开始支持 Paimon Catalog。
+StarRocks 从 v3.1 开始支持 Paimon catalog。
 
-Paimon Catalog 是一种 External Catalog。通过 Paimon Catalog，您不需要执行数据导入就可以直接查询 Apache Paimon 里的数据。
+Paimon catalog 是一种 external catalog，可以让您在不进行数据导入的情况下查询 Apache Paimon 的数据。
 
-此外，您还可以基于 Paimon Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 能力来实现数据转换和导入。
+此外，您还可以基于 Paimon catalog 使用 [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 直接转换和导入 Paimon 的数据。
 
-为保证正常访问 Paimon 内的数据，StarRocks 集群必须能够访问 Paimon 集群的存储系统和元数据服务。目前 StarRocks 支持以下存储系统和元数据服务：
+为了确保在您的 Paimon 集群上成功执行 SQL 工作负载，您的 StarRocks 集群必须能够访问 Paimon 集群的存储系统和元存储。StarRocks 支持以下存储系统和元存储：
 
-- 分布式文件系统 (HDFS) 或对象存储。当前支持的对象存储包括：如 AWS S3、Microsoft Azure Storage、Google GCS、其他兼容 S3 协议的对象存储（如阿里云 OSS、MinIO）。
+- 分布式文件系统（HDFS）或对象存储，如 AWS S3、Microsoft Azure Storage、Google GCS 或其他兼容 S3 的存储系统（例如 MinIO）
+- 元存储，如您的文件系统或 Hive 元存储
 
-- 元数据服务。当前支持的元数据服务包括文件系统 (File System)、Hive Metastore（以下简称 HMS）。
+## 使用注意事项
 
-## 使用说明
+您只能使用 Paimon catalog 查询数据。您不能使用 Paimon catalog 删除、删除或插入数据到您的 Paimon 集群中。
 
-Paimon Catalog 仅支持查询 Paimon 数据，不支持针对 Paimon 的写/删操作。
+## 集成准备
 
-## 准备工作
-
-在创建 Paimon Catalog 之前，请确保 StarRocks 集群能够正常访问 Paimon 的文件存储及元数据服务。
+在创建 Paimon catalog 之前，请确保您的 StarRocks 集群可以与 Paimon 集群的存储系统和元存储集成。
 
 ### AWS IAM
 
-如果 Paimon 使用 AWS S3 作为文件存储，您需要选择一种合适的认证鉴权方案，确保 StarRocks 集群可以访问相关的 AWS 云资源。
+如果您的 Paimon 集群使用 AWS S3 作为存储，请选择合适的身份验证方法并进行必要的准备，以确保您的 StarRocks 集群可以访问相关的 AWS 云资源。
 
-您可以选择如下认证鉴权方案：
+推荐以下身份验证方法：
 
-- Instance Profile（推荐）
-- Assumed Role
-- IAM User
+- 实例配置文件（推荐）
+- 假设角色
+- IAM 用户
 
-有关 StarRocks 访问 AWS 认证鉴权的详细内容，参见[配置 AWS 认证方式 - 准备工作](../../integrations/authenticate_to_aws_resources.md#准备工作)。
+在上述三种身份验证方法中，实例配置文件是最广泛使用的。
+
+有关更多信息，请参见 [AWS IAM 中的身份验证准备](../../integrations/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication)。
 
 ### HDFS
 
-如果使用 HDFS 作为文件存储，则需要在 StarRocks 集群中做如下配置：
+如果您选择 HDFS 作为存储，请按以下方式配置您的 StarRocks 集群：
 
-- （可选）设置用于访问 HDFS 集群和 HMS 的用户名。 您可以在每个 FE 的 **fe/conf/hadoop_env.sh** 文件、以及每个 BE 的 **be/conf/hadoop_env.sh** 文件（或每个 CN 的 **cn/conf/hadoop_env.sh** 文件）最开头增加 `export HADOOP_USER_NAME="<user_name>"` 来设置该用户名。配置完成后，需重启各个 FE 和 BE（或 CN）使配置生效。如果不设置该用户名，则默认使用 FE 和 BE（或 CN）进程的用户名进行访问。每个 StarRocks 集群仅支持配置一个用户名。
-- 查询 Paimon 数据时，StarRocks 集群的 FE 和 BE（或 CN）会通过 HDFS 客户端访问 HDFS 集群。一般情况下，StarRocks 会按照默认配置来启动 HDFS 客户端，无需手动配置。但在以下场景中，需要进行手动配置：
-  - 如果 HDFS 集群开启了高可用（High Availability，简称为“HA”）模式，则需要将 HDFS 集群中的 **hdfs-site.xml** 文件放到每个 FE 的 **$FE_HOME/conf** 路径下、以及每个 BE 的 **$BE_HOME/conf** 路径（或每个 CN 的 **$CN_HOME/conf** 路径）下。
-  - 如果 HDFS 集群配置了 ViewFs，则需要将 HDFS 集群中的 **core-site.xml** 文件放到每个 FE 的 **$FE_HOME/conf** 路径下、以及每个 BE 的 **$BE_HOME/conf** 路径（或每个 CN 的 **$CN_HOME/conf** 路径）下。
+- （可选）设置用于访问您的 HDFS 集群和 Hive 元存储的用户名。默认情况下，StarRocks 使用 FE 和 BE 或 CN 进程的用户名访问您的 HDFS 集群和 Hive 元存储。您还可以通过在每个 FE 的 **fe/conf/hadoop_env.sh** 文件的开头和每个 BE 或 CN 的 **be/conf/hadoop_env.sh** 文件的开头添加 `export HADOOP_USER_NAME="<user_name>"` 来设置用户名。在这些文件中设置用户名后，重启每个 FE 和每个 BE 或 CN 以使参数设置生效。您只能为每个 StarRocks 集群设置一个用户名。
+- 当您查询 Paimon 数据时，您的 StarRocks 集群的 FEs 和 BEs 或 CNs 使用 HDFS 客户端访问您的 HDFS 集群。在大多数情况下，您无需配置您的 StarRocks 集群即可实现此目的，StarRocks 使用默认配置启动 HDFS 客户端。您仅需在以下情况下配置您的 StarRocks 集群：
+  - 如果您的 HDFS 集群启用了高可用性（HA）：将您的 HDFS 集群的 **hdfs-site.xml** 文件添加到每个 FE 的 **$FE_HOME/conf** 路径和每个 BE 或 CN 的 **$BE_HOME/conf** 路径。
+  - 如果您的 HDFS 集群启用了 View File System (ViewFs)：将您的 HDFS 集群的 **core-site.xml** 文件添加到每个 FE 的 **$FE_HOME/conf** 路径和每个 BE 或 CN 的 **$BE_HOME/conf** 路径。
 
 > **注意**
 >
-> 如果查询时因为域名无法识别 (Unknown Host) 而发生访问失败，您需要将 HDFS 集群中各节点的主机名及 IP 地址之间的映射关系配置到 **/etc/hosts** 路径中。
+> 如果在发送查询时返回未知主机的错误，您必须将您的 HDFS 集群节点的主机名和 IP 地址的映射添加到 **/etc/hosts** 路径。
 
-### Kerberos 认证
+### Kerberos 身份验证
 
-如果 HDFS 集群或 HMS 开启了 Kerberos 认证，则需要在 StarRocks 集群中做如下配置：
+如果您的 HDFS 集群或 Hive 元存储启用了 Kerberos 身份验证，请按以下方式配置您的 StarRocks 集群：
 
-- 在每个 FE 和 每个 BE（或 CN）上执行 `kinit -kt keytab_path principal` 命令，从 Key Distribution Center (KDC) 获取到 Ticket Granting Ticket (TGT)。执行命令的用户必须拥有访问 HMS 和 HDFS 的权限。注意，使用该命令访问 KDC 具有时效性，因此需要使用 cron 定期执行该命令。
-- 在每个 FE 的 **$FE_HOME/conf/fe.conf** 文件和每个 BE 的 **$BE_HOME/conf/be.conf** 文件（或每个 CN 的 **$CN_HOME/conf/cn.conf** 文件）中添加 `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"`。其中，`/etc/krb5.conf` 是 **krb5.conf** 文件的路径，可以根据文件的实际路径进行修改。
+- 在每个 FE 和每个 BE 或 CN 上运行 `kinit -kt keytab_path principal` 命令，从密钥分发中心 (KDC) 获取票证授予票证 (TGT)。要运行此命令，您必须具有访问您的 HDFS 集群和 Hive 元存储的权限。请注意，使用此命令访问 KDC 是时间敏感的。因此，您需要使用 cron 定期运行此命令。
+- 将 `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"` 添加到每个 FE 的 **$FE_HOME/conf/fe.conf** 文件和每个 BE 或 CN 的 **$BE_HOME/conf/be.conf** 文件中。在此示例中，`/etc/krb5.conf` 是 **krb5.conf** 文件的保存路径。您可以根据需要修改路径。
 
-## 创建 Paimon Catalog
+## 创建 Paimon catalog
 
 ### 语法
 
@@ -76,60 +77,59 @@ PROPERTIES
 )
 ```
 
-### 参数说明
+### 参数
 
 #### catalog_name
 
-Paimon Catalog 的名称。命名要求如下：
+Paimon catalog 的名称。命名规则如下：
 
-- 必须由字母 (a-z 或 A-Z)、数字 (0-9) 或下划线 (_) 组成，且只能以字母开头。
-- 总长度不能超过 1023 个字符。
-- Catalog 名称大小写敏感。
+- 名称可以包含字母、数字 (0-9) 和下划线 (_)。必须以字母开头。
+- 名称区分大小写，长度不能超过 1023 个字符。
 
 #### comment
 
-Paimon Catalog 的描述。此参数为可选。
+Paimon catalog 的描述。此参数是可选的。
 
 #### type
 
-数据源的类型。设置为 `paimon`。
+数据源的类型。将值设置为 `paimon`。
 
 #### CatalogParams
 
-StarRocks 访问 Paimon 集群元数据的相关参数配置。
+关于 StarRocks 如何访问 Paimon 集群元数据的一组参数。
 
-`CatalogParams` 包含如下参数。
+下表描述了您需要在 `CatalogParams` 中配置的参数。
 
-| 参数                      | 是否必须   | 说明                                                         |
+| 参数                      | 是否必需 | 描述                                                         |
 | ------------------------ | -------- | ------------------------------------------------------------ |
-| paimon.catalog.type      | 是       | Paimon 使用的元数据类型。设置为 `filesystem` 或 `hive`。           |
-| paimon.catalog.warehouse | 是       | Paimon 数据所在的 Warehouse 存储路径。 |
-| hive.metastore.uris      | 否       | HMS 的 URI， 格式：`thrift://<HMS IP 地址>:<HMS 端口号>`。仅在 `paimon.catalog.type` = `hive` 时设置。<br />如果您的 HMS 开启了高可用模式，此处可以填写多个 HMS 地址并用逗号分隔，例如：`"thrift://<HMS IP 地址 1>:<HMS 端口号 1>,thrift://<HMS IP 地址 2>:<HMS 端口号 2>,thrift://<HMS IP 地址 3>:<HMS 端口号 3>"`。 |
+| paimon.catalog.type      | 是       | 您用于 Paimon 集群的元存储类型。将此参数设置为 `filesystem` 或 `hive`。 |
+| paimon.catalog.warehouse | 是       | 您的 Paimon 数据的仓库存储路径。                             |
+| hive.metastore.uris      | 否       | 您的 Hive 元存储的 URI。格式：`thrift://<metastore_IP_address>:<metastore_port>`。如果您的 Hive 元存储启用了高可用性（HA），您可以指定多个元存储 URI，并用逗号（`,`）分隔，例如，`"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`。 |
 
-> **说明**
+> **注意**
 >
-> 若使用 HMS 作为元数据服务，则在查询 Paimon 数据之前，必须将所有 HMS 节点的主机名及 IP 地址之间的映射关系添加到 **/etc/hosts** 路径。否则，发起查询时，StarRocks 可能无法访问 HMS。
+> 如果您使用 Hive 元存储，您必须在查询 Paimon 数据之前将您的 Hive 元存储节点的主机名和 IP 地址的映射添加到 `/etc/hosts` 路径。否则，当您启动查询时，StarRocks 可能无法访问您的 Hive 元存储。
 
 #### StorageCredentialParams
 
-StarRocks 访问 Paimon 集群文件存储的相关参数配置。
+关于 StarRocks 如何与您的存储系统集成的一组参数。此参数集是可选的。
 
-如果您使用 HDFS 作为存储系统，则不需要配置 `StorageCredentialParams`。
+如果您使用 HDFS 作为存储，则无需配置 `StorageCredentialParams`。
 
-如果您使用 AWS S3、阿里云 OSS、其他兼容 S3 协议的对象存储、Microsoft Azure Storage、或 GCS，则必须配置 `StorageCredentialParams`。
+如果您使用 AWS S3、其他兼容 S3 的存储系统、Microsoft Azure Storage 或 Google GCS 作为存储，则必须配置 `StorageCredentialParams`。
 
 ##### AWS S3
 
-如果选择 AWS S3 作为 Paimon 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+如果您选择 AWS S3 作为 Paimon 集群的存储，请采取以下操作之一：
 
-- 基于 Instance Profile 进行认证和鉴权
+- 要选择基于实例配置文件的身份验证方法，请按如下方式配置 `StorageCredentialParams`：
 
   ```SQL
   "aws.s3.use_instance_profile" = "true",
   "aws.s3.endpoint" = "<aws_s3_endpoint>"
   ```
 
-- 基于 Assumed Role 进行认证和鉴权
+- 要选择基于假设角色的身份验证方法，请按如下方式配置 `StorageCredentialParams`：
 
   ```SQL
   "aws.s3.use_instance_profile" = "true",
@@ -137,7 +137,7 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
   "aws.s3.endpoint" = "<aws_s3_endpoint>"
   ```
 
-- 基于 IAM User 进行认证和鉴权
+- 要选择基于 IAM 用户的身份验证方法，请按如下方式配置 `StorageCredentialParams`：
 
   ```SQL
   "aws.s3.use_instance_profile" = "false",
@@ -146,37 +146,21 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
   "aws.s3.endpoint" = "<aws_s3_endpoint>"
   ```
 
-`StorageCredentialParams` 包含如下参数。
+下表描述了您需要在 `StorageCredentialParams` 中配置的参数。
 
-| 参数                        | 是否必须   | 说明                                                         |
+| 参数                           | 是否必需 | 描述                                                         |
 | --------------------------- | -------- | ------------------------------------------------------------ |
-| aws.s3.use_instance_profile | 是       | 指定是否开启 Instance Profile 和 Assumed Role 两种鉴权方式。取值范围：`true` 和 `false`。默认值：`false`。 |
-| aws.s3.iam_role_arn         | 否       | 有权限访问 AWS S3 Bucket 的 IAM Role 的 ARN。采用 Assumed Role 鉴权方式访问 AWS S3 时，必须指定此参数。 |
-| aws.s3.endpoint             | 是       | 用于访问 AWS S3 Bucket 的 Endpoint。示例：`https://s3.us-west-2.amazonaws.com`。                |
-| aws.s3.access_key           | 否       | IAM User 的 Access Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。 |
-| aws.s3.secret_key           | 否       | IAM User 的 Secret Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。 |
+| aws.s3.use_instance_profile | 是       | 指定是否启用基于实例配置文件的身份验证方法和基于假设角色的身份验证方法。有效值：`true` 和 `false`。默认值：`false`。 |
+| aws.s3.iam_role_arn         | 否       | 在您的 AWS S3 存储桶上具有权限的 IAM 角色的 ARN。如果您使用基于假设角色的身份验证方法访问 AWS S3，您必须指定此参数。 |
+| aws.s3.endpoint             | 是       | 用于连接到您的 AWS S3 存储桶的端点。例如，`https://s3.us-west-2.amazonaws.com`。 |
+| aws.s3.access_key           | 否       | 您的 IAM 用户的访问密钥。如果您使用基于 IAM 用户的身份验证方法访问 AWS S3，您必须指定此参数。 |
+| aws.s3.secret_key           | 否       | 您的 IAM 用户的秘密密钥。如果您使用基于 IAM 用户的身份验证方法访问 AWS S3，您必须指定此参数。 |
 
-有关如何选择用于访问 AWS S3 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS S3 的认证参数](../../integrations/authenticate_to_aws_resources.md#访问-aws-s3-的认证参数)。
+有关如何选择访问 AWS S3 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS S3 的身份验证参数](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)。
 
-##### 阿里云 OSS
+##### 兼容 S3 的存储系统
 
-如果选择阿里云 OSS 作为 Paimon 集群的文件存储，需要在 `StorageCredentialParams` 中配置如下认证参数：
-
-```SQL
-"aliyun.oss.access_key" = "<user_access_key>",
-"aliyun.oss.secret_key" = "<user_secret_key>",
-"aliyun.oss.endpoint" = "<oss_endpoint>" 
-```
-
-| 参数                            | 是否必须 | 说明                                                         |
-| ------------------------------- | -------- | ------------------------------------------------------------ |
-| aliyun.oss.endpoint             | 是      | 阿里云 OSS Endpoint, 如 `oss-cn-beijing.aliyuncs.com`，您可根据 Endpoint 与地域的对应关系进行查找，请参见 [访问域名和数据中心](https://help.aliyun.com/document_detail/31837.html)。    |
-| aliyun.oss.access_key           | 是      | 指定阿里云账号或 RAM 用户的 AccessKey ID，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.html)。                                     |
-| aliyun.oss.secret_key           | 是      | 指定阿里云账号或 RAM 用户的 AccessKey Secret，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.html)。      |
-
-##### 兼容 S3 协议的对象存储
-
-如果选择兼容 S3 协议的对象存储（如 MinIO）作为 Paimon 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+如果您选择兼容 S3 的存储系统，例如 MinIO，作为 Paimon 集群的存储，请按如下方式配置 `StorageCredentialParams` 以确保成功集成：
 
 ```SQL
 "aws.s3.enable_ssl" = "false",
@@ -186,37 +170,37 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
 "aws.s3.secret_key" = "<iam_user_secret_key>"
 ```
 
-`StorageCredentialParams` 包含如下参数。
+下表描述了您需要在 `StorageCredentialParams` 中配置的参数。
 
-| 参数                             | 是否必须   | 说明                                                  |
-| -------------------------------- | -------- | ------------------------------------------------------------ |
-| aws.s3.enable_ssl                | Yes      | 是否开启 SSL 连接。<br />取值范围：`true` 和 `false`。默认值：`true`。 |
-| aws.s3.enable_path_style_access  | Yes      | 是否开启路径类型访问 (Path-Style Access)。<br />取值范围：`true` 和 `false`。默认值：`false`。对于 MinIO，必须设置为 `true`。<br />路径类型 URL 使用如下格式：`https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`。例如，如果您在美国西部（俄勒冈）区域中创建一个名为 `DOC-EXAMPLE-BUCKET1` 的存储桶，并希望访问该存储桶中的 `alice.jpg` 对象，则可使用以下路径类型 URL：`https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`。 |
-| aws.s3.endpoint                  | Yes      | 用于访问兼容 S3 协议的对象存储的 Endpoint。 |
-| aws.s3.access_key                | Yes      | IAM User 的 Access Key。 |
-| aws.s3.secret_key                | Yes      | IAM User 的 Secret Key。 |
+| 参数                           | 是否必需 | 描述                                                         |
+| ------------------------------- | -------- | ------------------------------------------------------------ |
+| aws.s3.enable_ssl               | 是       | 指定是否启用 SSL 连接。<br />有效值：`true` 和 `false`。默认值：`true`。 |
+| aws.s3.enable_path_style_access | 是       | 指定是否启用路径样式访问。<br />有效值：`true` 和 `false`。默认值：`false`。对于 MinIO，您必须将值设置为 `true`。<br />路径样式 URL 使用以下格式：`https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`。例如，如果您在美国西部（俄勒冈）区域创建了一个名为 `DOC-EXAMPLE-BUCKET1` 的存储桶，并且您想要访问该存储桶中的 `alice.jpg` 对象，您可以使用以下路径样式 URL：`https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`。 |
+| aws.s3.endpoint                 | 是       | 用于连接到您的兼容 S3 的存储系统而不是 AWS S3 的端点。       |
+| aws.s3.access_key               | 是       | 您的 IAM 用户的访问密钥。                                     |
+| aws.s3.secret_key               | 是       | 您的 IAM 用户的秘密密钥。                                     |
 
 ##### Microsoft Azure Storage
 
 ###### Azure Blob Storage
 
-如果选择 Blob Storage 作为 Paimon 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+如果您选择 Blob Storage 作为 Paimon 集群的存储，请采取以下操作之一：
 
-- 基于 Shared Key 进行认证和鉴权
+- 要选择共享密钥身份验证方法，请按如下方式配置 `StorageCredentialParams`：
 
   ```SQL
   "azure.blob.storage_account" = "<storage_account_name>",
   "azure.blob.shared_key" = "<storage_account_shared_key>"
   ```
 
-  `StorageCredentialParams` 包含如下参数。
+  下表描述了您需要在 `StorageCredentialParams` 中配置的参数。
 
-  | **参数**                   | **是否必须** | **说明**                         |
-  | -------------------------- | ------------ | -------------------------------- |
-  | azure.blob.storage_account | 是           | Blob Storage 账号的用户名。      |
-  | azure.blob.shared_key      | 是           | Blob Storage 账号的 Shared Key。 |
+  | 参数                      | 是否必需 | 描述                                                         |
+  | -------------------------- | -------- | ------------------------------------------------------------ |
+  | azure.blob.storage_account | 是       | 您的 Blob Storage 账户的用户名。                             |
+  | azure.blob.shared_key      | 是       | 您的 Blob Storage 账户的共享密钥。                           |
 
-- 基于 SAS Token 进行认证和鉴权
+- 要选择 SAS 令牌身份验证方法，请按如下方式配置 `StorageCredentialParams`：
 
   ```SQL
   "azure.blob.storage_account" = "<storage_account_name>",
@@ -224,19 +208,19 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
   "azure.blob.sas_token" = "<storage_account_SAS_token>"
   ```
 
-  `StorageCredentialParams` 包含如下参数。
+  下表描述了您需要在 `StorageCredentialParams` 中配置的参数。
 
-  | **参数**                  | **是否必须** | **说明**                                 |
-  | ------------------------- | ------------ | ---------------------------------------- |
-  | azure.blob.storage_account| 是           | Blob Storage 账号的用户名。              |
-  | azure.blob.container      | 是           | 数据所在 Blob 容器的名称。               |
-  | azure.blob.sas_token      | 是           | 用于访问 Blob Storage 账号的 SAS Token。 |
+  | 参数                      | 是否必需 | 描述                                                         |
+  | ------------------------- | -------- | ------------------------------------------------------------ |
+  | azure.blob.storage_account| 是       | 您的 Blob Storage 账户的用户名。                             |
+  | azure.blob.container      | 是       | 存储您数据的 blob 容器的名称。                               |
+  | azure.blob.sas_token      | 是       | 用于访问您的 Blob Storage 账户的 SAS 令牌。                  |
 
 ###### Azure Data Lake Storage Gen2
 
-如果选择 Data Lake Storage Gen2 作为 Paimon 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+如果您选择 Data Lake Storage Gen2 作为 Paimon 集群的存储，请采取以下操作之一：
 
-- 基于 Managed Identity 进行认证和鉴权
+- 要选择托管身份身份验证方法，请按如下方式配置 `StorageCredentialParams`：
 
   ```SQL
   "azure.adls2.oauth2_use_managed_identity" = "true",
@@ -244,29 +228,29 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
   "azure.adls2.oauth2_client_id" = "<service_client_id>"
   ```
 
-  `StorageCredentialParams` 包含如下参数。
+  下表描述了您需要在 `StorageCredentialParams` 中配置的参数。
 
-  | **参数**                                | **是否必须** | **说明**                                                |
-  | --------------------------------------- | ------------ | ------------------------------------------------------- |
-  | azure.adls2.oauth2_use_managed_identity | 是           | 指定是否开启 Managed Identity 鉴权方式。设置为 `true`。 |
-  | azure.adls2.oauth2_tenant_id            | 是           | 数据所属 Tenant 的 ID。                                 |
-  | azure.adls2.oauth2_client_id            | 是           | Managed Identity 的 Client (Application) ID。           |
+  | 参数                               | 是否必需 | 描述                                                         |
+  | --------------------------------------- | -------- | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_use_managed_identity | 是       | 指定是否启用托管身份身份验证方法。将值设置为 `true`。         |
+  | azure.adls2.oauth2_tenant_id            | 是       | 您要访问的数据的租户 ID。                                     |
+  | azure.adls2.oauth2_client_id            | 是       | 托管身份的客户端（应用程序）ID。                              |
 
-- 基于 Shared Key 进行认证和鉴权
+- 要选择共享密钥身份验证方法，请按如下方式配置 `StorageCredentialParams`：
 
   ```SQL
   "azure.adls2.storage_account" = "<storage_account_name>",
   "azure.adls2.shared_key" = "<storage_account_shared_key>"
   ```
 
-  `StorageCredentialParams` 包含如下参数。
+  下表描述了您需要在 `StorageCredentialParams` 中配置的参数。
 
-  | **参数**                    | **是否必须** | **说明**                                   |
-  | --------------------------- | ------------ | ------------------------------------------ |
-  | azure.adls2.storage_account | 是           | Data Lake Storage Gen2 账号的用户名。      |
-  | azure.adls2.shared_key      | 是           | Data Lake Storage Gen2 账号的 Shared Key。 |
+  | 参数                   | 是否必需 | 描述                                                         |
+  | --------------------------- | -------- | ------------------------------------------------------------ |
+  | azure.adls2.storage_account | 是       | 您的 Data Lake Storage Gen2 存储账户的用户名。               |
+  | azure.adls2.shared_key      | 是       | 您的 Data Lake Storage Gen2 存储账户的共享密钥。             |
 
-- 基于 Service Principal 进行认证和鉴权
+- 要选择服务主体身份验证方法，请按如下方式配置 `StorageCredentialParams`：
 
   ```SQL
   "azure.adls2.oauth2_client_id" = "<service_client_id>",
@@ -274,31 +258,31 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
   "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
   ```
 
-  `StorageCredentialParams` 包含如下参数。
+  下表描述了您需要在 `StorageCredentialParams` 中配置的参数。
 
-  | **参数**                           | **是否必须** | **说明**                                                     |
-  | ---------------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.adls2.oauth2_client_id       | 是           | Service Principal 的 Client (Application) ID。               |
-  | azure.adls2.oauth2_client_secret   | 是           | 新建的 Client (Application) Secret。                         |
-  | azure.adls2.oauth2_client_endpoint | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
+  | 参数                          | 是否必需 | 描述                                                         |
+  | ---------------------------------- | -------- | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_client_id       | 是       | 服务主体的客户端（应用程序）ID。                              |
+  | azure.adls2.oauth2_client_secret   | 是       | 创建的新客户端（应用程序）密钥的值。                          |
+  | azure.adls2.oauth2_client_endpoint | 是       | 服务主体或应用程序的 OAuth 2.0 令牌端点（v1）。               |
 
 ###### Azure Data Lake Storage Gen1
 
-如果选择 Data Lake Storage Gen1 作为 Paimon 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+如果您选择 Data Lake Storage Gen1 作为 Paimon 集群的存储，请采取以下操作之一：
 
-- 基于 Managed Service Identity 进行认证和鉴权
+- 要选择托管服务身份身份验证方法，请按如下方式配置 `StorageCredentialParams`：
 
   ```SQL
   "azure.adls1.use_managed_service_identity" = "true"
   ```
 
-  `StorageCredentialParams` 包含如下参数。
+  下表描述了您需要在 `StorageCredentialParams` 中配置的参数。
 
-  | **参数**                                 | **是否必须** | **说明**                                                     |
-  | ---------------------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.adls1.use_managed_service_identity | 是           | 指定是否开启 Managed Service Identity 鉴权方式。设置为 `true`。 |
+  | 参数                                | 是否必需 | 描述                                                         |
+  | ---------------------------------------- | -------- | ------------------------------------------------------------ |
+  | azure.adls1.use_managed_service_identity | 是       | 指定是否启用托管服务身份身份验证方法。将值设置为 `true`。     |
 
-- 基于 Service Principal 进行认证和鉴权
+- 要选择服务主体身份验证方法，请按如下方式配置 `StorageCredentialParams`：
 
   ```SQL
   "azure.adls1.oauth2_client_id" = "<application_client_id>",
@@ -306,31 +290,31 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
   "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
   ```
 
-  `StorageCredentialParams` 包含如下参数。
+  下表描述了您需要在 `StorageCredentialParams` 中配置的参数。
 
-  | **参数**                      | **是否必须**  | **说明**                                                     |
-  | ----------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.adls1.oauth2_client_id  | 是           | Service Principal 的 Client (Application) ID。               |
-  | azure.adls1.oauth2_credential | 是           | 新建的 Client (Application) Secret。                         |
-  | azure.adls1.oauth2_endpoint   | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
+  | 参数                     | 是否必需 | 描述                                                         |
+  | ----------------------------- | -------- | ------------------------------------------------------------ |
+  | azure.adls1.oauth2_client_id  | 是       | 服务主体的客户端（应用程序）ID。                              |
+  | azure.adls1.oauth2_credential | 是       | 创建的新客户端（应用程序）密钥的值。                          |
+  | azure.adls1.oauth2_endpoint   | 是       | 服务主体或应用程序的 OAuth 2.0 令牌端点（v1）。               |
 
 ##### Google GCS
 
-如果选择 Google GCS 作为 Paimon 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+如果您选择 Google GCS 作为 Paimon 集群的存储，请采取以下操作之一：
 
-- 基于 VM 进行认证和鉴权
+- 要选择基于 VM 的身份验证方法，请按如下方式配置 `StorageCredentialParams`：
 
-  ```SQL
+```SQL
   "gcp.gcs.use_compute_engine_service_account" = "true"
   ```
 
-  `StorageCredentialParams` 包含如下参数。
+  下表描述了您需要在 `StorageCredentialParams` 中配置的参数。
 
-  | **参数**                                   | **默认值** | **取值样例** | **说明**                                                 |
-  | ------------------------------------------ | ---------- | ------------ | -------------------------------------------------------- |
-  | gcp.gcs.use_compute_engine_service_account | false      | true         | 是否直接使用 Compute Engine 上面绑定的 Service Account。 |
+  | 参数                                  | 默认值         | 示例值       | 描述                                                         |
+  | ------------------------------------------ | ------------- | ------------- | ------------------------------------------------------------ |
+  | gcp.gcs.use_compute_engine_service_account | FALSE         | TRUE          | 指定是否直接使用绑定到您的 Compute Engine 的服务账户。         |
 
-- 基于 Service Account 进行认证和鉴权
+- 要选择基于服务账户的身份验证方法，请按如下方式配置 `StorageCredentialParams`：
 
   ```SQL
   "gcp.gcs.service_account_email" = "<google_service_account_email>",
@@ -338,31 +322,31 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
   "gcp.gcs.service_account_private_key" = "<google_service_private_key>"
   ```
 
-  `StorageCredentialParams` 包含如下参数。
+  下表描述了您需要在 `StorageCredentialParams` 中配置的参数。
 
-  | **参数**                               | **默认值** | **取值样例**                                                 | **说明**                                                     |
-  | -------------------------------------- | ---------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-  | gcp.gcs.service_account_email          | ""         | "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)" | 创建 Service Account 时生成的 JSON 文件中的 Email。          |
-  | gcp.gcs.service_account_private_key_id | ""         | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | 创建 Service Account 时生成的 JSON 文件中的 Private Key ID。 |
-  | gcp.gcs.service_account_private_key    | ""         | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | 创建 Service Account 时生成的 JSON 文件中的 Private Key。    |
+  | 参数                              | 默认值         | 示例值                                                      | 描述                                                         |
+  | -------------------------------------- | ------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+  | gcp.gcs.service_account_email          | ""            | "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)" | 在创建服务账户时生成的 JSON 文件中的电子邮件地址。            |
+  | gcp.gcs.service_account_private_key_id | ""            | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | 在创建服务账户时生成的 JSON 文件中的私钥 ID。                |
+  | gcp.gcs.service_account_private_key    | ""            | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | 在创建服务账户时生成的 JSON 文件中的私钥。                   |
 
-- 基于 Impersonation 进行认证和鉴权
+- 要选择基于模拟的身份验证方法，请按如下方式配置 `StorageCredentialParams`：
 
-  - 使用 VM 实例模拟 Service Account
+  - 使 VM 实例模拟服务账户：
 
     ```SQL
     "gcp.gcs.use_compute_engine_service_account" = "true",
     "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"
     ```
 
-    `StorageCredentialParams` 包含如下参数。
+    下表描述了您需要在 `StorageCredentialParams` 中配置的参数。
 
-    | **参数**                                   | **默认值** | **取值样例** | **说明**                                                     |
-    | ------------------------------------------ | ---------- | ------------ | ------------------------------------------------------------ |
-    | gcp.gcs.use_compute_engine_service_account | false      | true         | 是否直接使用 Compute Engine 上面绑定的 Service Account。     |
-    | gcp.gcs.impersonation_service_account      | ""         | "hello"      | 需要模拟的目标 Service Account。 |
+    | 参数                                  | 默认值         | 示例值       | 描述                                                         |
+    | ------------------------------------------ | ------------- | ------------- | ------------------------------------------------------------ |
+    | gcp.gcs.use_compute_engine_service_account | FALSE         | TRUE          | 指定是否直接使用绑定到您的 Compute Engine 的服务账户。         |
+    | gcp.gcs.impersonation_service_account      | ""            | "hello"       | 您要模拟的服务账户。                                         |
 
-  - 使用一个 Service Account（暂时命名为“Meta Service Account”）模拟另一个 Service Account（暂时命名为“Data Service Account”）
+  - 使服务账户（暂时命名为元服务账户）模拟另一个服务账户（暂时命名为数据服务账户）：
 
     ```SQL
     "gcp.gcs.service_account_email" = "<google_service_account_email>",
@@ -371,22 +355,22 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
     "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
     ```
 
-    `StorageCredentialParams` 包含如下参数。
+    下表描述了您需要在 `StorageCredentialParams` 中配置的参数。
 
-    | **参数**                               | **默认值** | **取值样例**                                                 | **说明**                                                     |
-    | -------------------------------------- | ---------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-    | gcp.gcs.service_account_email          | ""         | "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)" | 创建 Meta Service Account 时生成的 JSON 文件中的 Email。     |
-    | gcp.gcs.service_account_private_key_id | ""         | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | 创建 Meta Service Account 时生成的 JSON 文件中的 Private Key ID。 |
-    | gcp.gcs.service_account_private_key    | ""         | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | 创建 Meta Service Account 时生成的 JSON 文件中的 Private Key。 |
-    | gcp.gcs.impersonation_service_account  | ""         | "hello"                                                      | 需要模拟的目标 Data Service Account。 |
+    | 参数                              | 默认值         | 示例值                                                      | 描述                                                         |
+    | -------------------------------------- | ------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+    | gcp.gcs.service_account_email          | ""            | "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)" | 在创建元服务账户时生成的 JSON 文件中的电子邮件地址。          |
+    | gcp.gcs.service_account_private_key_id | ""            | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | 在创建元服务账户时生成的 JSON 文件中的私钥 ID。              |
+    | gcp.gcs.service_account_private_key    | ""            | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | 在创建元服务账户时生成的 JSON 文件中的私钥。                 |
+    | gcp.gcs.impersonation_service_account  | ""            | "hello"                                                      | 您要模拟的数据服务账户。                                     |
 
 ### 示例
 
-以下示例创建了一个名为 `paimon_catalog_fs` 的 Paimon Catalog，其元数据类型 `paimon.catalog.type` 为 `filesystem`，用于查询 Paimon 集群里的数据。
+以下示例创建一个名为 `paimon_catalog_fs` 的 Paimon catalog，其元存储类型 `paimon.catalog.type` 设置为 `filesystem`，用于从您的 Paimon 集群查询数据。
 
 #### AWS S3
 
-- 如果基于 Instance Profile 进行鉴权和认证
+- 如果您选择基于实例配置文件的身份验证方法，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG paimon_catalog_fs
@@ -400,7 +384,7 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
   );
   ```
 
-- 如果基于 Assumed Role 进行鉴权和认证
+- 如果您选择基于假设角色的身份验证方法，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG paimon_catalog_fs
@@ -415,7 +399,7 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
   );
   ```
 
-- 如果基于 IAM User 进行鉴权和认证
+- 如果您选择基于 IAM 用户的身份验证方法，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG paimon_catalog_fs
@@ -431,24 +415,9 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
   );
   ```
 
-#### 阿里云 OSS
+#### 兼容 S3 的存储系统
 
-```SQL
-CREATE EXTERNAL CATALOG paimon_catalog_fs
-PROPERTIES
-(
-    "type" = "paimon",
-    "paimon.catalog.type" = "filesystem",
-    "paimon.catalog.warehouse" = "<oss_paimon_warehouse_path>",
-    "aliyun.oss.access_key" = "<user_access_key>",
-    "aliyun.oss.secret_key" = "<user_secret_key>",
-    "aliyun.oss.endpoint" = "<oss_endpoint>"
-);
-```
-
-#### 兼容 S3 协议的对象存储
-
-以 MinIO 为例：
+以 MinIO 为例。运行如下命令：
 
 ```SQL
 CREATE EXTERNAL CATALOG paimon_catalog_fs
@@ -469,7 +438,7 @@ PROPERTIES
 
 ##### Azure Blob Storage
 
-- 如果基于 Shared Key 进行认证和鉴权，可以按如下创建 Paimon Catalog：
+- 如果您选择共享密钥身份验证方法，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG paimon_catalog_fs
@@ -483,7 +452,7 @@ PROPERTIES
   );
   ```
 
-- 如果基于 SAS Token 进行认证和鉴权，可以按如下创建 Paimon Catalog：
+- 如果您选择 SAS 令牌身份验证方法，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG paimon_catalog_fs
@@ -500,7 +469,7 @@ PROPERTIES
 
 ##### Azure Data Lake Storage Gen1
 
-- 如果基于 Managed Service Identity 进行认证和鉴权，可以按如下创建 Paimon Catalog：
+- 如果您选择托管服务身份身份验证方法，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG paimon_catalog_fs
@@ -513,7 +482,7 @@ PROPERTIES
   );
   ```
 
-- 如果基于 Service Principal 进行认证和鉴权，可以按如下创建 Paimon Catalog：
+- 如果您选择服务主体身份验证方法，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG paimon_catalog_fs
@@ -530,7 +499,7 @@ PROPERTIES
 
 ##### Azure Data Lake Storage Gen2
 
-- 如果基于 Managed Identity 进行认证和鉴权，可以按如下创建 Paimon Catalog：
+- 如果您选择托管身份身份验证方法，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG paimon_catalog_fs
@@ -545,7 +514,7 @@ PROPERTIES
   );
   ```
 
-- 如果基于 Shared Key 进行认证和鉴权，可以按如下创建 Paimon Catalog：
+- 如果您选择共享密钥身份验证方法，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG paimon_catalog_fs
@@ -559,7 +528,7 @@ PROPERTIES
   );
   ```
 
-- 如果基于 Service Principal 进行认证和鉴权，可以按如下创建 Paimon Catalog：
+- 如果您选择服务主体身份验证方法，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG paimon_catalog_fs
@@ -576,7 +545,7 @@ PROPERTIES
 
 #### Google GCS
 
-- 如果基于 VM 进行认证和鉴权，可以按如下创建 Paimon Catalog：
+- 如果您选择基于 VM 的身份验证方法，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG paimon_catalog_fs
@@ -589,7 +558,7 @@ PROPERTIES
   );
   ```
 
-- 如果基于 Service Account 进行认证和鉴权，可以按如下创建 Paimon Catalog：
+- 如果您选择基于服务账户的身份验证方法，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG paimon_catalog_fs
@@ -604,9 +573,9 @@ PROPERTIES
   );
   ```
 
-- 如果基于 Impersonation 进行认证和鉴权
+- 如果您选择基于模拟的身份验证方法：
 
-  - 使用 VM 实例模拟 Service Account，可以按如下创建 Paimon Catalog：
+  - 如果您使 VM 实例模拟服务账户，请运行如下命令：
 
     ```SQL
     CREATE EXTERNAL CATALOG paimon_catalog_fs
@@ -620,7 +589,7 @@ PROPERTIES
     );
     ```
 
-  - 使用一个 Service Account 模拟另一个 Service Account，可以按如下创建 Paimon Catalog：
+  - 如果您使服务账户模拟另一个服务账户，请运行如下命令：
 
     ```SQL
     CREATE EXTERNAL CATALOG paimon_catalog_fs
@@ -636,81 +605,81 @@ PROPERTIES
     );
     ```
 
-## 查看 Paimon Catalog
+## 查看 Paimon catalog
 
-您可以通过 [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
+您可以使用 [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) 查询当前 StarRocks 集群中的所有 catalog：
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-您也可以通过 [SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Paimon Catalog `paimon_catalog_fs` 的创建语句：
+您还可以使用 [SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) 查询 external catalog 的创建语句。以下示例查询名为 `paimon_catalog_fs` 的 Paimon catalog 的创建语句：
 
 ```SQL
 SHOW CREATE CATALOG paimon_catalog_fs;
 ```
 
-## 删除 Paimon Catalog
+## 删除 Paimon catalog
 
-您可以通过 [DROP CATALOG](../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) 删除某个 External Catalog。
+您可以使用 [DROP CATALOG](../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) 删除 external catalog。
 
-例如，通过如下命令删除 Paimon Catalog `paimon_catalog_fs`：
+以下示例删除名为 `paimon_catalog_fs` 的 Paimon catalog：
 
 ```SQL
 DROP Catalog paimon_catalog_fs;
 ```
 
-## 查看 Paimon 表结构
+## 查看 Paimon 表的 schema
 
-您可以通过如下方法查看 Paimon 表的表结构：
+您可以使用以下语法之一查看 Paimon 表的 schema：
 
-- 查看表结构
+- 查看 schema
 
   ```SQL
   DESC[RIBE] <catalog_name>.<database_name>.<table_name>;
   ```
 
-- 从 CREATE 命令查看表结构和表文件存放位置
+- 从 CREATE 语句中查看 schema 和位置
 
   ```SQL
   SHOW CREATE TABLE <catalog_name>.<database_name>.<table_name>;
   ```
 
-## 查询 Paimon 表数据
+## 查询 Paimon 表
 
-1. 通过 [SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) 查看指定 Catalog 所属的 Paimon Catalog 中的数据库：
+1. 使用 [SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) 查看您的 Paimon 集群中的数据库：
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>;
    ```
 
-2. 通过 [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) 切换当前会话生效的 Catalog：
+2. 使用 [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) 在当前会话中切换到目标 catalog：
 
    ```SQL
    SET CATALOG <catalog_name>;
    ```
 
-   再通过 [USE](../../sql-reference/sql-statements/Database/USE.md) 指定当前会话生效的数据库：
+   然后，使用 [USE](../../sql-reference/sql-statements/Database/USE.md) 指定当前会话中的活动数据库：
 
    ```SQL
    USE <db_name>;
    ```
 
-   或者，也可以通过 [USE](../../sql-reference/sql-statements/Database/USE.md) 直接将会话切换到目标 Catalog 下的指定数据库：
+   或者，您可以使用 [USE](../../sql-reference/sql-statements/Database/USE.md) 直接指定目标 catalog 中的活动数据库：
 
    ```SQL
    USE <catalog_name>.<db_name>;
    ```
 
-3. 通过 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 查询目标数据库中的目标表：
+3. 使用 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 查询指定数据库中的目标表：
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10;
    ```
 
-## 导入 Paimon 数据
+## 从 Paimon 导入数据
 
-假设有一个 OLAP 表，表名为 `olap_tbl`。您可以这样来转换该表中的数据，并把数据导入到 StarRocks 中：
+假设您有一个名为 `olap_tbl` 的 OLAP 表，您可以按如下方式转换和导入数据：
 
 ```SQL
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM paimon_table;
