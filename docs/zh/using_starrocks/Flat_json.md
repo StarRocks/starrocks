@@ -3,14 +3,18 @@ displayed_sidebar: docs
 sidebar_position: 110
 ---
 
-# [Preview] Flat JSON
+import Beta from '../_assets/commonMarkdown/_beta.mdx'
 
-本文介绍 Flat JSON 的基本概念，以及如何使用该功能。
+# Flat JSON
 
-自 2.2.0 版本起，StarRocks 支持 JSON 数据类型，用于支持更加灵活的数据存储。但在查询 JSON 时，大部分场景并不是直接读取完整的 JSON 数据，而是访问指定路径下的数据，举例：
+<Beta />
+
+本文介绍了Flat JSON的基本概念及如何使用此功能。
+
+从2.2.0版本开始，StarRocks支持JSON数据类型，以实现更灵活的数据存储。然而，在查询JSON时，大多数场景并不涉及直接读取整个JSON数据，而是访问指定路径的数据。例如：
 
 ```SQL
--- 将日志中必填的字段存储为固定字段，将其他经常随业务变更的字段打包为 JSON 存储。
+-- 将日志中需要的字段存储为固定字段，将其他随业务频繁变化的字段打包为JSON。
 SELECT
     time,
     event,
@@ -20,18 +24,17 @@ SELECT
 FROM logs;
 ```
 
-由于 JSON 类型的特殊性，在查询中 JSON 类型的性能表现并不如标准类型（INT，STRING 等），其原因有：
-- 存储开销：JSON 是半结构化类型，需要存储每行数据的结构信息，导致存储占用多且压缩效率低。
-- 查询复杂性：查询时需要根据运行时数据检测数据结构，难以实现向量化执行优化。
-- 冗余数据：查询时需读取完整的 JSON 数据，包含大量冗余字段。
+由于JSON类型的特殊性，其查询性能不如标准类型（如INT、STRING等）。原因包括：
+- 存储开销：JSON是一种半结构化类型，需要存储每行的结构信息，导致存储使用量高且压缩效率低。
+- 查询复杂性：查询需要基于运行时数据检测数据结构，难以实现向量化执行优化。
+- 冗余数据：查询需要读取整个JSON数据，其中包含许多冗余字段。
 
+StarRocks引入了Flat JSON功能，以提高JSON数据查询效率并降低使用JSON的复杂性。
+- 此功能从3.3.0版本开始提供，默认禁用，需要手动启用。
 
-StarRocks 引入了 Flat JSON 功能，以提高 JSON 数据查询效率和降低用户使用 JSON 的复杂度。
-- 从 3.3.0 版本开始提供此功能，默认情况下关闭，需要手动启用。
+## 什么是Flat JSON
 
-## 什么是 Flat JSON
-
-Flat JSON 的核心原理是在导入时检测 JSON 数据，将 JSON 数据中的公共字段提取为标准类型数据存储。在查询 JSON 时，通过这些公共字段数据优化 JSON 的查询速度。示例数据：
+Flat JSON的核心原理是在导入时检测JSON数据，并从JSON数据中提取常用字段，作为标准类型数据存储。在查询JSON时，这些常用字段优化了JSON的查询速度。示例数据：
 
 ```Plaintext
 1, {"a": 1, "b": 21, "c": 3, "d": 4}
@@ -42,31 +45,36 @@ Flat JSON 的核心原理是在导入时检测 JSON 数据，将 JSON 数据中�
 6, {"c": 6, "d": 1}
 ```
 
-在导入上述这组 JSON 数据时，`a` 和 `b` 两个字段在大部分的 JSON 数据中都存在并且其数据类型相似（都是 INT），那么可以将 `a`，`b` 两个字段的数据都从 JSON 中读取出来，单独存储为两列 INT。当查询中使用到这两列时，就可以直接读取 `a`，`b` 两列的数据，无需读取 JSON 中额外的字段，在计算时减少对 JSON 结构的处理开销。
+在导入上述JSON数据时，字段`a`和`b`在大多数JSON数据中存在且数据类型相似（均为INT）。因此，可以从JSON中提取字段`a`和`b`的数据，并分别存储为两个INT列。当在查询中使用这两列时，可以直接读取其数据，而无需处理额外的JSON字段，从而减少处理JSON结构的计算开销。
 
+## 验证Flat JSON是否有效
 
-## 验证 Flat JSON 是否生效
+导入数据后，可以查询相应列的提取子列：
 
-导入数据后，可以查询对应列提取的子列：
+```SQL
+SELECT flat_json_meta(<json_column>)
+FROM <table_name>[_META_];
+```
 
-    ```SQL
-    SELECT flat_json_meta(<json_column>)
-    FROM <table_name>[_META_];
-    ```
-
-
-可以通过 [Query Profile](../administration/query_profile_overview.md) 验证执行的查询是否受益于 FlatJSON 优化，观测以下几个指标：
-  - `PushdownAccessPaths`：下推存储的子字段路径数量。
-  - `AccessPathHits`：命中 Flat JSON 子字段的次数，其子项详细打印了具体命中的 JSON。
-  - `AccessPathUnhits`：未命中 Flat JSON 子字段的次数，其子项详细打印了具体未命中的 JSON 。
-  - `JsonFlattern`：当存在未命中 Flat JSON 时，系统现场提取子列的耗时。
+您可以通过观察以下指标，在[Query Profile](../administration/query_profile_overview.md)中验证执行的查询是否受益于Flat JSON优化：
+- `PushdownAccessPaths`: 推送到存储的子字段路径数量。
+- `AccessPathHits`: Flat JSON子字段命中次数，包含具体JSON命中信息。
+- `AccessPathUnhits`: Flat JSON子字段未命中次数，包含具体JSON未命中信息。
+- `JsonFlattern`: 当Flat JSON未命中时，现场提取子列所花费的时间。
 
 ## 使用示例
 
+<<<<<<< HEAD
 1. 开启功能（参考其他章节）
 2. 创建一张包含 JSON 列的表，本示例使用 INSERT INTO 向表中导入 JSON 数据。
 
    ```SQL
+=======
+1. 启用该功能（参考其他章节）
+2. 创建包含JSON列的表。在此示例中，使用INSERT INTO将JSON数据加载到表中。
+
+   ```SQL
+    -- 方法1：创建包含JSON列的表，并在创建时配置Flat JSON。仅支持存算一体集群。
    CREATE TABLE `t1` (
        `k1` int,
        `k2` JSON,
@@ -76,7 +84,27 @@ Flat JSON 的核心原理是在导入时检测 JSON 数据，将 JSON 数据中�
    DUPLICATE KEY(`k1`)
    COMMENT "OLAP"
    DISTRIBUTED BY HASH(`k1`) BUCKETS 2
-   PROPERTIES ("replication_num" = "3");
+   PROPERTIES (
+     "replication_num" = "3",
+     "flat_json.enable" = "true",
+     "flat_json.null.factor" = "0.5",
+     "flat_json.sparsity.factor" = "0.5",
+     "flat_json.column.max" = "50");
+   )
+   
+   -- 方法2：需要启用Flat JSON功能，此方法适用于存算一体和存算分离集群。
+>>>>>>> 0ce9a59a03 ([Doc] add badge for experimental features (#57403))
+   CREATE TABLE `t1` (
+       `k1` int,
+       `k2` JSON,
+       `k3` VARCHAR(20),
+       `k4` JSON
+   )             
+   DUPLICATE KEY(`k1`)
+   COMMENT "OLAP"
+   DISTRIBUTED BY HASH(`k1`) BUCKETS 2
+   PROPERTIES ("replication_num" = "3");   
+    
       
    INSERT INTO t1 (k1,k2) VALUES
    (11,parse_json('{"str":"test_flat_json","Integer":123456,"Double":3.14158,"Object":{"c":"d"},"arr":[10,20,30],"Bool":false,"null":null}')),
@@ -91,7 +119,7 @@ Flat JSON 的核心原理是在导入时检测 JSON 数据，将 JSON 数据中�
    (20,parse_json('{"str":"test_str6","Integer":444,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}'));
    ```
 
-3. 查看对于 `k2` 列提取的子列。
+3. 查看`k2`列的提取子列。
 
    ```Plaintext
    SELECT flat_json_meta(k2) FROM t1[_META_];
@@ -113,7 +141,7 @@ Flat JSON 的核心原理是在导入时检测 JSON 数据，将 JSON 数据中�
    SELECT get_json_string(k2,'\$.Bool') FROM t1 WHERE k2->'arr' = '[10,20,30]';
    ```
 
-7. 查看 [Query Profile](../administration/query_profile_overview.md) 中 Flat JSON 相关指标
+7. 在[Query Profile](../administration/query_profile_overview.md)中查看Flat JSON相关指标
    ```yaml
       PushdownAccessPaths: 2
       - Table: t1
@@ -126,37 +154,55 @@ Flat JSON 的核心原理是在导入时检测 JSON 数据，将 JSON 数据中�
       - AccessPathUnhits: 0
       - JsonFlattern: 0ns
    ```
-   
+
 ## 功能限制
 
-- StarRocks 所有表类型都支持 Flat JSON。
-- 兼容历史数据，无须重新导入。历史数据会和 Flat JSON 打平的数据共存。
-- 历史数据在不发生变更时不会自动应用 Flat JSON 优化，但导入新数据，或者发生 Compactoin，会应用 Flat JSON 优化
-- 开启 Flat JSON 后会增加导入 JSON 的耗时，提取的 JSON 越多，耗时越长。
-- Flat JSON 仅能支持物化 JSON Object 中的公共 Key，不支持物化 JSON Array 中的 Key
-- Flat JSON 并不改变数据的排序方式，因此查询性能、数据压缩率仍然会受到数据排序的影响，为了得到最优性能，可以进一步调整数据的排序方式 
-
+- StarRocks中的所有表模型都支持Flat JSON。
+- 兼容历史数据，无需重新导入。历史数据将与Flat JSON扁平化的数据共存。
+- 历史数据不会自动应用Flat JSON优化，除非加载新数据或进行Compaction。
+- 启用Flat JSON会增加JSON的导入时间，提取的JSON越多，所需时间越长。
+- Flat JSON仅支持物化JSON对象中的常用键，不支持JSON数组中的键。
+- Flat JSON不改变数据排序方式，因此查询性能和数据压缩率仍会受到数据排序的影响。为了达到最佳性能，可能需要进一步调整数据排序。
 
 ## 版本说明
 
-StarRocks 存算一体集群自 v3.3.0 起支持 Flat JSON，存算分离集群自 v3.3.3 起支持。
+StarRocks存算一体集群从v3.3.0开始支持Flat JSON，存算分离集群从v3.3.3开始支持。
 
-在 v3.3.0、v3.3.1、v3.3.2 版本中：
-- 导入数据时，支持提取公共字段、单独存储为 JSON 类型，未实现类型推导。
-- 会同时存储提取的列和原始 JSON 数据。提取的数据会在原始数据删除时一起删除。
+在v3.3.0、v3.3.1和v3.3.2版本中：
+- 在加载数据时，支持提取常用字段并单独存储为JSON类型，无需类型推断。
+- 提取的列和原始JSON数据都将存储。提取的数据将与原始数据一起删除。
 
-自 v3.3.3 版本起：
-- Flat JSON 提取的结果分为公共的列和保留字段列，当所有 JSON Schema 一致时，不会生成保留字段列。
-- Flat JSON 仅存储公共字段列和保留字段列，不会再额外存储原始 JSON 数据。
-- 导入数据时，公共字段会自动推导类型为 BIGINT/LARGEINT/DOUBLE/STRING,不能识别的类型推导为 JSON 类型，保留字段列会存储为 JSON 类型。
+从v3.3.3版本开始：
+- Flat JSON提取的结果分为常用列和保留字段列。当所有JSON Schema一致时，不会生成保留字段列。
+- Flat JSON仅存储常用字段列和保留字段列，不额外存储原始JSON数据。
+- 在加载数据时，常用字段将自动推断为BIGINT/LARGEINT/DOUBLE/STRING类型。无法识别的类型将推断为JSON类型，保留字段列将存储为JSON类型。
 
+<<<<<<< HEAD
 ## 开启 Flat JSON 功能（3.4 之前版本）
+=======
+## 启用Flat JSON功能（仅支持存算一体集群）
 
-1. 修改 BE 配置: `enable_json_flat`， 3.4 之前版本默认为 `false`。修改方式参考
-[Configure BE parameters](../administration/management/BE_configuration.md#configure-be-parameters)
-2. 开启 FE 裁剪功能：`SET GLOBAL cbo_prune_json_subfield = true;`
+1. 在创建表时，可以在表参数中设置`flat_json.enable`属性。参考[表创建](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)。
+   Flat JSON功能也可以通过直接修改表属性来启用或重新配置。示例：
+   ```SQL
+   alter table t1 set ("flat_json.enable" = "true")
+   
+   alter table t1 set ("flat_json.null.factor" = "0.1")
+   
+   alter table t1 set ("flat_json.sparsity.factor" = "0.8")
+   
+   alter table t1 set ("flat_json.column.max" = "90")
+   ```
+2. 启用FE分区裁剪功能：`SET GLOBAL cbo_prune_json_subfield = true;`
 
-## 其他可选 BE 配置
+## 启用Flat JSON功能（3.4版本之前）
+>>>>>>> 0ce9a59a03 ([Doc] add badge for experimental features (#57403))
+
+1. 修改BE配置：`enable_json_flat`，在3.4版本之前默认为`false`。修改方法参考
+[配置BE参数](../administration/management/BE_configuration.md#configure-be-parameters)
+2. 启用FE分区裁剪功能：`SET GLOBAL cbo_prune_json_subfield = true;`
+
+## 其他可选BE配置
 
 - [json_flat_null_factor](../administration/management/BE_configuration.md#json_flat_null_factor)
 - [json_flat_column_max](../administration/management/BE_configuration.md#json_flat_column_max)
