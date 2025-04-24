@@ -2081,7 +2081,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 for (Map.Entry<Long, Long> mark : firstThree) {
                     sb.append(mark.getValue()); // TabletId
                     sb.append('(');
-                    Backend backend = stateMgr.getNodeMgr().getClusterInfo().getBackend(mark.getKey());
+                    ComputeNode backend = stateMgr.getNodeMgr().getClusterInfo()
+                            .getBackendOrComputeNode(mark.getKey());
                     sb.append(backend != null ? backend.getHost() : "N/A");
                     sb.append(") ");
                 }
