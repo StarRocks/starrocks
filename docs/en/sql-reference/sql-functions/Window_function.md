@@ -6,39 +6,6 @@ sidebar_position: 0.9
 
 # Window functions
 
-- [Window functions](#window-functions)
-  - [Background](#background)
-  - [Usage](#usage)
-    - [Syntax](#syntax)
-    - [PARTITION BY clause](#partition-by-clause)
-    - [ORDER BY clause](#order-by-clause)
-    - [Window clause](#window-clause)
-  - [Window function sample table](#window-function-sample-table)
-  - [Function examples](#function-examples)
-    - [AVG()](#avg)
-    - [COUNT()](#count)
-    - [CUME\_DIST()](#cume_dist)
-    - [DENSE\_RANK()](#dense_rank)
-    - [FIRST\_VALUE()](#first_value)
-    - [LAST\_VALUE()](#last_value)
-    - [LAG()](#lag)
-    - [LEAD()](#lead)
-    - [MAX()](#max)
-    - [MIN()](#min)
-    - [NTILE()](#ntile)
-    - [PERCENT\_RANK()](#percent_rank)
-    - [RANK()](#rank)
-    - [ROW\_NUMBER()](#row_number)
-    - [QUALIFY()](#qualify)
-    - [SUM()](#sum)
-    - [VARIANCE, VAR\_POP, VARIANCE\_POP](#variance-var_pop-variance_pop)
-    - [VAR\_SAMP, VARIANCE\_SAMP](#var_samp-variance_samp)
-    - [STD, STDDEV, STDDEV\_POP](#std-stddev-stddev_pop)
-    - [STDDEV\_SAMP](#stddev_samp)
-    - [COVAR\_SAMP](#covar_samp)
-    - [COVAR\_POP](#covar_pop)
-    - [CORR](#corr)
-
 ## Background
 
 The window function is a special class of built-in functions. Similar to the aggregation function, it also does calculations on multiple input rows to get a single data value. The difference is that the window function processes the input data within a specific window, rather than using the "group by" method. The data in each window can be sorted and grouped using the over() clause. The window function **computes a separate value for each row**, rather than computing one value for each group. This flexibility allows users to add additional columns to the select clause and further filter the result set. The window function can only appear in the select list and the outermost position of a clause. It takes effect at the end of the query, that is, after the `join`, `where`, and `group by` operations are performed. The window function is often used to analyze trends, calculate outliers, and perform bucketing analyses on large-scale data.
