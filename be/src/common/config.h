@@ -1455,6 +1455,9 @@ CONF_mBool(enable_compaction_flat_json, "true");
 // direct read flat json
 CONF_mBool(enable_lazy_dynamic_flat_json, "true");
 
+// enable flat json remain filter
+CONF_mBool(enable_json_flat_remain_filter, "true");
+
 // enable flat complex type (/array/object/hyper type), diables for save storage
 CONF_mBool(enable_json_flat_complex_type, "false");
 
