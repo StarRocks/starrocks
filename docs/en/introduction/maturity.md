@@ -24,7 +24,7 @@ Most of the StarRocks features are GA, and if there is no label in the documenta
 - **Stability**: Well tested.
 May be not good for corner cases.
 - **Maturity**: Core functionality is complete and ready for user testing. May lack secondary features, full performance optimization, or contain known limitations.
-- **Interface**: The interface may be changed in the future. May be not backward compatible, may change a little.
+- **Interface**: The interface may be changed in the future. May be not backward compatible.
 - **Availability**: Beta features are off by default, and need to be allowed by setting a parameter with SQL or in a configuration file.
 - **Production readiness**: Beta features are not recommended for production use.
 - **Support**: Please open a [GitHub issue](https://github.com/StarRocks/starrocks/issues) or ask questions in [Slack](https://starrocks.io/redirecting-to-slack) and the StarRocks Engineering team will try to help you.
