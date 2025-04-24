@@ -63,6 +63,14 @@ public:
     Status convert(const ColumnPtr& src, Column* dst) override;
 };
 
+class Int32ToTimeConverter final : public ColumnConverter {
+public:
+    Int32ToTimeConverter() = default;
+    ~Int32ToTimeConverter() override = default;
+
+    Status convert(const ColumnPtr& src, Column* dst) override;
+};
+
 class Int32ToDateTimeConverter final : public ColumnConverter {
 public:
     Int32ToDateTimeConverter() = default;
@@ -383,6 +391,9 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
         case LogicalType::TYPE_DOUBLE:
             *converter = std::make_unique<NumericToNumericConverter<int32_t, double>>();
             break;
+        case LogicalType::TYPE_TIME:
+            *converter = std::make_unique<Int32ToTimeConverter>();
+            break;
         case LogicalType::TYPE_DATE:
             *converter = std::make_unique<Int32ToDateConverter>();
             break;
@@ -590,6 +601,33 @@ Status parquet::Int32ToDateConverter::convert(const ColumnPtr& src, Column* dst)
     memcpy(dst_null_data.data(), src_null_data.data(), size);
     for (size_t i = 0; i < size; i++) {
         dst_data[i]._julian = src_data[i] + date::UNIX_EPOCH_JULIAN;
+    }
+    dst_nullable_column->set_has_null(src_nullable_column->has_null());
+    return Status::OK();
+}
+
+Status Int32ToTimeConverter::convert(const ColumnPtr& src, Column* dst) {
+    auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
+    // hive only support null column
+    // TODO: support not null
+    auto* dst_nullable_column = down_cast<NullableColumn*>(dst);
+    dst_nullable_column->resize_uninitialized(src_nullable_column->size());
+
+    auto* src_column = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(src_nullable_column->data_column());
+    auto* dst_column = ColumnHelper::as_raw_column<DoubleColumn>(dst_nullable_column->data_column());
+
+    auto& src_data = src_column->get_data();
+    auto& dst_data = dst_column->get_data();
+    auto& src_null_data = src_nullable_column->null_column()->get_data();
+    auto& dst_null_data = dst_nullable_column->null_column()->get_data();
+
+    size_t size = src_column->size();
+
+    for (size_t i = 0; i < size; i++) {
+        dst_null_data[i] = src_null_data[i];
+        if (!src_null_data[i]) {
+            dst_data.data()[i] = src_data.data()[i] / 1000;
+        }
     }
     dst_nullable_column->set_has_null(src_nullable_column->has_null());
     return Status::OK();
