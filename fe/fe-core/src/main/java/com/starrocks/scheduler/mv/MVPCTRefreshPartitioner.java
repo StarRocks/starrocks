@@ -131,6 +131,10 @@ public abstract class MVPCTRefreshPartitioner {
                                                         Set<String> mvPotentialPartitionNames,
                                                         boolean tentative);
 
+    public abstract void filterPartitionByAdaptiveRefreshNumber(Set<String> mvPartitionsToRefresh,
+                                                        Set<String> mvPotentialPartitionNames,
+                                                        boolean tentative);
+
     /**
      * Check whether the base table is supported partition refresh or not.
      */

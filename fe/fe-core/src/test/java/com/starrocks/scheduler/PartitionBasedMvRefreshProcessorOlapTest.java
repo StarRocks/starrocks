@@ -883,16 +883,42 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
     }
 
     @Test
-    public void testFilterPartitionByRefreshNumber() throws Exception {
+    public void testFilterPartitionByRefreshNumberWithUnion() throws Exception {
+
+        String mvName = "mv_with_test_refresh_with_union";
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        starRocksAssert.withMaterializedView("create materialized view test.mv_with_test_refresh_with_union\n" +
+                "partition by k1\n" +
+                "distributed by hash(k2) buckets 10\n" +
+                "refresh deferred manual\n" +
+                "as select k1, k2, v1 from tbl1 union all select k1, k2, v1 from tbl2;");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), mvName));
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        initAndExecuteTaskRun(taskRun);
+
+        PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                taskRun.getProcessor();
+        processor.filterPartitionByAdaptiveRefreshNumber(materializedView.getPartitionNames(),
+                Sets.newHashSet(), materializedView);
+        MvTaskRunContext mvContext = processor.getMvContext();
+        Assert.assertNull(mvContext.getNextPartitionStart());
+        Assert.assertNull(mvContext.getNextPartitionEnd());
+        starRocksAssert.dropMaterializedView(mvName);
+    }
+
+    @Test
+    public void testFilterRangePartitionByAdaptiveRefreshNumber() throws Exception {
         // PARTITION p0 values [('2021-12-01'),('2022-01-01'))
         // PARTITION p1 values [('2022-01-01'),('2022-02-01'))
         // PARTITION p2 values [('2022-02-01'),('2022-03-01'))
         // PARTITION p3 values [('2022-03-01'),('2022-04-01'))
         // PARTITION p4 values [('2022-04-01'),('2022-05-01'))
 
-        String mvName = "mv_with_test_refresh";
+        String mvName = "mv_with_test_refresh_range_partition";
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        starRocksAssert.withMaterializedView("create materialized view test.mv_with_test_refresh\n" +
+        starRocksAssert.withMaterializedView("create materialized view test.mv_with_test_refresh_range_partition\n" +
                 "partition by k1\n" +
                 "distributed by hash(k2) buckets 10\n" +
                 "refresh deferred manual\n" +
@@ -902,21 +928,60 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
-        materializedView.getTableProperty().setPartitionRefreshNumber(3);
 
-        PartitionBasedMvRefreshProcessor processor = createProcessor(taskRun, materializedView);
-        processor.filterPartitionByRefreshNumber(materializedView.getPartitionNames(), Sets.newHashSet(), materializedView);
+        PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                taskRun.getProcessor();
+        processor.filterPartitionByAdaptiveRefreshNumber(materializedView.getPartitionNames(),
+                Sets.newHashSet(), materializedView);
         MvTaskRunContext mvContext = processor.getMvContext();
-        Assert.assertEquals("2022-03-01", mvContext.getNextPartitionStart());
-        Assert.assertEquals("2022-05-01", mvContext.getNextPartitionEnd());
-
-        initAndExecuteTaskRun(taskRun);
-
-        processor.filterPartitionByRefreshNumber(Sets.newHashSet(), Sets.newHashSet(), materializedView);
-        mvContext = processor.getMvContext();
         Assert.assertNull(mvContext.getNextPartitionStart());
         Assert.assertNull(mvContext.getNextPartitionEnd());
         starRocksAssert.dropMaterializedView(mvName);
+    }
+
+    @Test
+    public void testFilterListPartitionByAdaptiveRefreshNumber() throws Exception {
+
+        String mvName = "mv_with_test_refresh_list_partition";
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        String createSQL = "CREATE TABLE test.list_partition_tbl1 (\n" +
+                "      id BIGINT,\n" +
+                "      age SMALLINT,\n" +
+                "      dt VARCHAR(10),\n" +
+                "      province VARCHAR(64) not null\n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY LIST (province) (\n" +
+                "     PARTITION p1 VALUES IN (\"beijing\",\"chongqing\") ,\n" +
+                "     PARTITION p2 VALUES IN (\"guangdong\") \n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")";
+        starRocksAssert.withTable(createSQL);
+
+        String sql = "create materialized view test.mv_with_test_refresh_list_partition " +
+                "refresh deferred manual\n" +
+                "distributed by hash(dt, province) buckets 10 " +
+                "as select dt, province, avg(age) from list_partition_tbl1 group by dt, province;";
+        starRocksAssert.withMaterializedView(sql);
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), mvName));
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        initAndExecuteTaskRun(taskRun);
+
+        PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                taskRun.getProcessor();
+        processor.filterPartitionByAdaptiveRefreshNumber(materializedView.getPartitionNames(),
+                Sets.newHashSet(), materializedView);
+        MvTaskRunContext mvContext = processor.getMvContext();
+        Assert.assertNull(mvContext.getNextPartitionStart());
+        Assert.assertNull(mvContext.getNextPartitionEnd());
+        starRocksAssert.dropMaterializedView(mvName);
+        starRocksAssert.dropTable("list_partition_tbl1");
     }
 
     @Test
