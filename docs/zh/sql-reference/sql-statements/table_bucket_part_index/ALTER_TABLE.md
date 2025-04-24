@@ -106,11 +106,7 @@ ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 
 #### 添加分区
 
-<<<<<<< HEAD
-增加分区时支持使用 Range 分区和 List 分区。
-=======
 可以选择添加Range分区或List分区。不支持添加表达式分区。
->>>>>>> 0ce9a59a03 ([Doc] add badge for experimental features (#57403))
 
 语法：
 
