@@ -55,7 +55,7 @@ FlatJsonColumnWriter::FlatJsonColumnWriter(const ColumnWriterOptions& opts, Type
           _flat_json_config(opts.flat_json_config) {}
 
 Status FlatJsonColumnWriter::init() {
-    _json_meta->mutable_json_meta()->set_format_version(kJsonMetaRemainFilterVersion);
+    _json_meta->mutable_json_meta()->set_format_version(kJsonMetaDefaultFormatVersion);
     _json_meta->mutable_json_meta()->set_has_remain(false);
     _json_meta->mutable_json_meta()->set_is_flat(false);
 
@@ -184,7 +184,7 @@ Status FlatJsonColumnWriter::_init_flat_writers() {
         }
 
         if (_flat_types[i] == LogicalType::TYPE_JSON) {
-            opts.meta->mutable_json_meta()->set_format_version(kJsonMetaRemainFilterVersion);
+            opts.meta->mutable_json_meta()->set_format_version(kJsonMetaDefaultFormatVersion);
             opts.meta->mutable_json_meta()->set_is_flat(false);
         }
 

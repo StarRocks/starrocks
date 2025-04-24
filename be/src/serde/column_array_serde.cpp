@@ -347,7 +347,7 @@ public:
     // uint32: number of datums
     // datums: [size1[payload1][size2][payload2]
     static uint8_t* serialize(const JsonColumn& column, uint8_t* buff) {
-        buff = write_little_endian_32(kJsonMetaRemainFilterVersion, buff);
+        buff = write_little_endian_32(kJsonMetaDefaultFormatVersion, buff);
         buff = write_little_endian_32(column.get_pool().size(), buff);
         for (const auto& obj : column.get_pool()) {
             constexpr uint64_t size_field_length = sizeof(uint64_t);
