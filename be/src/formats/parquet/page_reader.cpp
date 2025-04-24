@@ -73,7 +73,7 @@ Status PageReader::_deal_page_with_cache() {
         uint32_t header_length = _cache_buf->size();
         auto st = deserialize_thrift_msg(_cache_buf->data(), &header_length, TProtocolType::COMPACT, &_cur_header);
         DCHECK(st.ok());
-        _next_header_pos = _offset + _cur_header.compressed_page_size;
+        _next_header_pos = _offset + header_length + _cur_header.compressed_page_size;
         _uncompressed_data = Slice(_cache_buf->data() + header_length, _cache_buf->size() - header_length);
         size_t data_length = _codec != tparquet::CompressionCodec::UNCOMPRESSED ? _cur_header.compressed_page_size
                                                                                 : _cur_header.uncompressed_page_size;
@@ -131,6 +131,7 @@ Status PageReader::_read_and_deserialize_header(bool need_fill_cache) {
             } else {
                 raw::stl_vector_resize_uninitialized(page_buffer.get(), allowed_page_size);
                 RETURN_IF_ERROR(_stream->read_at_fully(_offset, page_buffer->data(), allowed_page_size));
+                page_buf = page_buffer->data();
                 auto st = _stream->peek(allowed_page_size);
                 if (st.ok()) {
                     _opts.stats->bytes_read -= allowed_page_size;
@@ -143,6 +144,10 @@ Status PageReader::_read_and_deserialize_header(bool need_fill_cache) {
         auto st = deserialize_thrift_msg(page_buf, &header_length, TProtocolType::COMPACT, &_cur_header);
 
         if (st.ok()) {
+            DCHECK(header_length > 0);
+            page_buffer->resize(header_length);
+            _next_header_pos = _offset + header_length + _cur_header.compressed_page_size;
+            RETURN_IF_ERROR(_skip_bytes(header_length));
             if (peek_mode) {
                 _opts.stats->bytes_read += header_length;
             }
@@ -160,8 +165,6 @@ Status PageReader::_read_and_deserialize_header(bool need_fill_cache) {
 
         allowed_page_size *= 2;
     } while (true);
-    DCHECK(header_length > 0);
-    _offset += header_length;
     return Status::OK();
 }
 
@@ -261,7 +264,7 @@ Status PageReader::_read_and_decompress_internal(bool need_fill_cache) {
 
     // check if we can zero copy read.
     Slice read_data;
-    RETURN_IF_ERROR(_stream->seek(_offset));
+    DCHECK(_next_header_pos - _offset == read_size);
     auto ret = _peek(read_size);
     if (!need_fill_cache && ret.ok() && ret.value().size() == read_size) {
         _opts.stats->bytes_read += read_size;
