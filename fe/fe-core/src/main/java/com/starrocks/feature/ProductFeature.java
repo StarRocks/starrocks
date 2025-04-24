@@ -64,6 +64,12 @@ public class ProductFeature {
                         "designated warehouse.",
                 ""
         ));
+        features.add(new ProductFeature(
+                "warehouse-query-queue",
+                "The warehouse-level query queue manages query execution by dynamically queuing or " +
+                        "scaling compute resources based on real-time workload, ensuring performance while optimizing costs.",
+                ""
+        ));
         FEATURES = ImmutableList.copyOf(features);
     }
 
