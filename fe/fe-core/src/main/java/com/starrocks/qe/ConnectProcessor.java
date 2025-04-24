@@ -81,6 +81,9 @@ import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.txn.BeginStmt;
+import com.starrocks.sql.ast.txn.CommitStmt;
+import com.starrocks.sql.ast.txn.RollbackStmt;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.SqlDigestBuilder;
@@ -372,8 +375,12 @@ public class ConnectProcessor {
                 parsedStmt.setOrigStmt(new OriginStatement(originStmt, i));
                 Tracers.init(ctx, parsedStmt.getTraceMode(), parsedStmt.getTraceModule());
 
-                if (ctx.getExplicitTxnState() != null && !(parsedStmt instanceof InsertStmt)) {
-                    ErrorReport.report(ErrorCode.ERR_TXN_IMPORT_SAME_TABLE);
+                if (ctx.getExplicitTxnState() != null &&
+                        !((parsedStmt instanceof InsertStmt && !((InsertStmt) parsedStmt).isOverwrite()) ||
+                                parsedStmt instanceof BeginStmt ||
+                                parsedStmt instanceof CommitStmt ||
+                                parsedStmt instanceof RollbackStmt)) {
+                    ErrorReport.report(ErrorCode.ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT);
                     ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
                     return;
                 }

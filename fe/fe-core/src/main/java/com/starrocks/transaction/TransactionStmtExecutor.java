@@ -121,9 +121,8 @@ public class TransactionStmtExecutor {
         try {
             if (transactionState.getDbId() == 0) {
                 transactionState.setDbId(database.getId());
-                DatabaseTransactionMgr databaseTransactionMgr =
-                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                                .getDatabaseTransactionMgr(database.getId());
+                DatabaseTransactionMgr databaseTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                        .getDatabaseTransactionMgr(database.getId());
                 databaseTransactionMgr.upsertTransactionState(transactionState);
             }
 
