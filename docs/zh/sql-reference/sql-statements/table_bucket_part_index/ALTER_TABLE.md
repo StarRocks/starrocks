@@ -45,7 +45,7 @@ alter_clause1[, alter_clause2, ...]
 - bitmap index: 修改 bitmap index。
 - swap: 原子替换两张表。
 - compaction: 对指定表或分区手动执行 Compaction（数据版本合并）。**从 3.1 版本开始支持。**
-- drop persistent index: 存算分离下删除主键索引。**从3.3.10 版本开始支持。**
+- drop persistent index: 存算分离下删除主键索引。**从3.3.9 版本开始支持。**
 
 ## 使用限制和注意事项
 
@@ -837,7 +837,7 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
 执行完 Compaction 后，您可以通过查询 `information_schema` 数据库下的 `be_compactions` 表来查看 Compaction 后的数据版本变化 （`SELECT * FROM information_schema.be_compactions;`）。
 
 
-### 删除主键索引 (3.3.10 版本起)
+### 删除主键索引 (3.3.9 版本起)
 
 语法：
 
