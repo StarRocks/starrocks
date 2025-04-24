@@ -103,7 +103,7 @@ void DiagnoseDaemon::_perform_stack_trace(const std::string& context) {
     }
     int64_t start_time = MonotonicMillis();
     int64_t id = _diagnose_id.fetch_add(1);
-    std::string stack_trace = get_stack_trace_for_all_threads(fmt::format("DIAGNOSE {} - ", id));
+    std::string stack_trace = get_stack_trace_for_all_threads_with_prefix(fmt::format("DIAGNOSE {} - ", id));
     _last_stack_trace_time_ms = MonotonicMillis();
     LOG(INFO) << "diagnose stack trace, id: " << id << ", cost: " << (_last_stack_trace_time_ms - start_time)
               << " ms, size: " << stack_trace.size() << ", context: [" << context << "]";
