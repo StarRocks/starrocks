@@ -1,0 +1,23 @@
+RULE bdb_ha_get_leader_exception
+CLASS  com.starrocks.ha.BDBHA
+METHOD getLeader()
+HELPER com.starrocks.failpoint.FailPointHelper
+IF shouldTrigger("bdb_ha_get_leader_exception")
+DO throw new RuntimeException("failpoint triggered");
+ENDRULE
+
+RULE stmt_executor_process_profile_async_exception
+CLASS com.starrocks.qe.StmtExecutor
+METHOD processProfileAsync(ExecPlan, int)
+HELPER com.starrocks.failpoint.FailPointHelper
+IF shouldTrigger("stmt_executor_process_profile_async_exception")
+DO throw new NullPointerException("failpoint triggered");
+ENDRULE
+
+RULE bdb_write_jitter
+CLASS com.starrocks.journal.bdbje.BDBJEJournal
+METHOD batchWriteCommit()
+HELPER com.starrocks.failpoint.FailPointHelper
+IF shouldTrigger("bdb_write_jitter")
+DO sleep(10000);
+ENDRULE

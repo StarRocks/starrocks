@@ -92,6 +92,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.failpoint.FailPointExecutor;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.http.HttpResultSender;
 import com.starrocks.load.EtlJobType;
@@ -2143,7 +2144,7 @@ public class StmtExecutor {
     }
 
     private void handleUpdateFailPointStatusStmt() throws Exception {
-        FailPointExecutor executor = new FailPointExecutor(context, parsedStmt);
+        FailPointExecutor executor = new FailPointExecutor(parsedStmt);
         executor.execute();
     }
 

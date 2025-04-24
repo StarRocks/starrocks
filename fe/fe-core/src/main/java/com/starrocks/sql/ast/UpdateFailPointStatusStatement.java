@@ -16,9 +16,12 @@ package com.starrocks.sql.ast;
 
 import com.google.common.base.Joiner;
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.failpoint.TriggerPolicy;
 import com.starrocks.proto.FailPointTriggerModeType;
 import com.starrocks.proto.PFailPointTriggerMode;
+import com.starrocks.proto.PUpdateFailPointStatusRequest;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.thrift.TUpdateFailPointRequest;
 
 import java.util.List;
 
@@ -50,6 +53,40 @@ public class UpdateFailPointStatusStatement extends StatementBase {
         return name;
     }
 
+    public PUpdateFailPointStatusRequest toProto() {
+        PFailPointTriggerMode mode = new PFailPointTriggerMode();
+        if (isEnable) {
+            if (nTimes != null) {
+                mode.mode = FailPointTriggerModeType.ENABLE_N_TIMES;
+                mode.nTimes = nTimes;
+            } else if (probability != null) {
+                mode.mode = FailPointTriggerModeType.PROBABILITY_ENABLE;
+                mode.probability = probability.doubleValue();
+            } else {
+                mode.mode = FailPointTriggerModeType.ENABLE;
+            }
+        } else {
+            mode.mode = FailPointTriggerModeType.DISABLE;
+        }
+        PUpdateFailPointStatusRequest request = new PUpdateFailPointStatusRequest();
+        request.failPointName = name;
+        request.triggerMode = mode;
+        return request;
+    }
+
+    public TUpdateFailPointRequest toThrift() {
+        TUpdateFailPointRequest request = new TUpdateFailPointRequest();
+        request.setName(name);
+        request.setIs_enable(isEnable);
+        if (nTimes != null) {
+            request.setTimes(nTimes);
+        }
+        if (probability != null) {
+            request.setProbability(probability);
+        }
+        return request;
+    }
+
     public PFailPointTriggerMode getFailPointMode() {
         PFailPointTriggerMode mode = new PFailPointTriggerMode();
         if (isEnable) {
@@ -68,8 +105,26 @@ public class UpdateFailPointStatusStatement extends StatementBase {
         return mode;
     }
 
+    public TriggerPolicy getTriggerPolicy() {
+        if (nTimes != null) {
+            return TriggerPolicy.timesPolicy(nTimes);
+        }
+        if (probability != null) {
+            return TriggerPolicy.probabilityPolicy(probability);
+        }
+        return TriggerPolicy.enablePolicy();
+    }
+
     public List<String> getBackends() {
         return backends;
+    }
+
+    public boolean isForFrontend() {
+        return backends == null;
+    }
+
+    public boolean getIsEnable() {
+        return isEnable;
     }
 
     @Override
@@ -96,7 +151,9 @@ public class UpdateFailPointStatusStatement extends StatementBase {
         } else if (probability != null) {
             sb.append(" WITH ").append(probability).append(" PROBABILITY");
         }
-        if (backends != null) {
+        if (backends == null) {
+            sb.append(" ON FRONTEND");
+        } else if (!backends.isEmpty()) {
             sb.append(" ON BACKEND '").append(Joiner.on(",").join(backends)).append("'");
         }
         return sb.toString();

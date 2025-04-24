@@ -75,6 +75,7 @@ under the License.
         <!-- hadoop-azure requires no more than jetty10+ -->
         <!-- https://stackoverflow.com/questions/66713254/spark-wasb-and-jetty-11 -->
         <jetty.version>9.4.57.v20241219</jetty.version>
+        <byteman.version>4.0.24</byteman.version>
     </properties>
 
     <profiles>
@@ -1369,6 +1370,13 @@ under the License.
                         <artifactId>commons-lang</artifactId>
                     </exclusion>
                 </exclusions>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/org.jboss.byteman/byteman -->
+            <dependency>
+                <groupId>org.jboss.byteman</groupId>
+                <artifactId>byteman</artifactId>
+                <version>${byteman.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
