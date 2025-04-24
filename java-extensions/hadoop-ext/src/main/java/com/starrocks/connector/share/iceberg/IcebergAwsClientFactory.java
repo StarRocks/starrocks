@@ -15,7 +15,9 @@
 package com.starrocks.connector.share.iceberg;
 
 import org.apache.iceberg.aws.AwsClientFactory;
+import org.apache.iceberg.aws.AwsClientProperties;
 import org.apache.iceberg.aws.AwsProperties;
+import org.apache.iceberg.aws.s3.S3FileIOProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
@@ -106,14 +108,18 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
 
         s3UseAWSSDKDefaultBehavior = Boolean.parseBoolean(properties.getOrDefault(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false"));
         s3UseInstanceProfile = Boolean.parseBoolean(properties.getOrDefault(AWS_S3_USE_INSTANCE_PROFILE, "false"));
-        s3AccessKey = properties.getOrDefault(AWS_S3_ACCESS_KEY, "");
-        s3SecretKey = properties.getOrDefault(AWS_S3_SECRET_KEY, "");
-        s3SessionToken = properties.getOrDefault(AWS_S3_SESSION_TOKEN, "");
+        s3AccessKey = properties.getOrDefault(S3FileIOProperties.ACCESS_KEY_ID,
+                properties.getOrDefault(AWS_S3_ACCESS_KEY, ""));
+        s3SecretKey = properties.getOrDefault(S3FileIOProperties.SECRET_ACCESS_KEY,
+                properties.getOrDefault(AWS_S3_SECRET_KEY, ""));
+        s3SessionToken = properties.getOrDefault(S3FileIOProperties.SESSION_TOKEN,
+                properties.getOrDefault(AWS_S3_SESSION_TOKEN, ""));
         s3IamRoleArn = properties.getOrDefault(AWS_S3_IAM_ROLE_ARN, "");
         s3StsRegion = properties.getOrDefault(AWS_S3_STS_REGION, "");
         s3StsEndpoint = properties.getOrDefault(AWS_S3_STS_ENDPOINT, "");
         s3ExternalId = properties.getOrDefault(AWS_S3_EXTERNAL_ID, "");
-        s3Region = properties.getOrDefault(AWS_S3_REGION, "");
+        s3Region = properties.getOrDefault(AwsClientProperties.CLIENT_REGION,
+                properties.getOrDefault(AWS_S3_REGION, ""));
         s3Endpoint = properties.getOrDefault(AWS_S3_ENDPOINT, "");
         s3EnablePathStyleAccess =
                 Boolean.parseBoolean(properties.getOrDefault(AWS_S3_ENABLE_PATH_STYLE_ACCESS, "false"));
