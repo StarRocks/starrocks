@@ -138,7 +138,7 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
         _is_flat_json = json_meta.is_flat();
         _has_remain = json_meta.has_remain();
 
-        if (json_meta.has_remain_filter() && json_meta.format_version() >= kJsonMetaRemainFilterVersion) {
+        if (json_meta.has_remain_filter() && config::enable_json_flat_remain_filter) {
             DCHECK(_has_remain);
             DCHECK(!json_meta.remain_filter().empty());
             RETURN_IF_ERROR(BloomFilter::create(BLOCK_BLOOM_FILTER, &_remain_filter));
