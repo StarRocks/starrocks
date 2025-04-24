@@ -1,8 +1,11 @@
 ---
 displayed_sidebar: docs
 ---
+import Experimental from '../_assets/commonMarkdown/_experimental.mdx'
 
-# [Preview] Continuously load data from Apache® Pulsar™
+# Continuously load data from Apache® Pulsar™
+
+<Experimental />
 
 As of StarRocks version 2.5, Routine Load supports continuously loading data from Apache® Pulsar™. Pulsar is distributed, open source pub-sub messaging and streaming platform with a store-compute separation architecture. Loading data from Pulsar via Routine Load is similar to loading data from Apache Kafka. This topic uses CSV-formatted data as an example to introduce how to load data from Apache Pulsar via Routine Load.
 

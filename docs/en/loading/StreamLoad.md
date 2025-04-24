@@ -239,7 +239,11 @@ SELECT * FROM table2;
 4 rows in set (0.01 sec)
 ```
 
+import Beta from '../_assets/commonMarkdown/_beta.mdx'
+
 #### Merge Stream Load requests
+
+<Beta />
 
 From v3.4.0, the system supports merging multiple Stream Load requests.
 

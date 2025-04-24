@@ -12,7 +12,8 @@
                 "introduction/what_is_starrocks",
                 "introduction/Architecture",
                 "introduction/Features",
-                "introduction/versioning"
+                "introduction/versioning",
+                "introduction/maturity"
             ]
         },
         {
@@ -192,6 +193,7 @@
                 "loading/Stream_Load_transaction_interface",
                 "loading/Flink_cdc_load",
                 "loading/Flink-connector-starrocks",
+                "loading/load_from_pulsar",
                 "loading/Load_to_Primary_Key_tables",
                 "loading/Etl_in_loading",
                 "loading/loading_tools",

@@ -2,13 +2,17 @@
 displayed_sidebar: docs
 ---
 
+import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
+
 # Iceberg Catalog でのタイムトラベル
+
+<Beta />
 
 このトピックでは、Iceberg catalog に対する StarRocks のタイムトラベル機能を紹介します。この機能は v3.4.0 以降でサポートされています。
 
 ## 概要
 
-各 Iceberg テーブルはメタデータスナップショットログを保持しており、それに適用された変更を表します。データベースはこれらの履歴スナップショットにアクセスすることで Iceberg テーブルに対してタイムトラベルクエリを実行できます。Iceberg はスナップショットのライフサイクル管理を高度に行うために、スナップショットのブランチングとタグ付けをサポートしており、各ブランチまたはタグはカスタマイズされた保持ポリシーに基づいて独自のライフサイクルを維持できます。Iceberg のブランチングとタグ付け機能の詳細については、[公式ドキュメント](https://iceberg.apache.org/docs/latest/branching/)を参照してください。
+各 Iceberg テーブルはメタデータスナップショットログを保持しており、それに対する変更を表します。データベースはこれらの履歴スナップショットにアクセスすることで Iceberg テーブルに対してタイムトラベルクエリを実行できます。Iceberg はスナップショットのライフサイクル管理を高度に行うために、スナップショットのブランチングとタグ付けをサポートしており、各ブランチやタグはカスタマイズされた保持ポリシーに基づいて独自のライフサイクルを維持できます。Iceberg のブランチングとタグ付け機能の詳細については、[公式ドキュメント](https://iceberg.apache.org/docs/latest/branching/) を参照してください。
 
 Iceberg のスナップショットブランチングとタグ付け機能を統合することで、StarRocks は Iceberg catalog 内でのブランチとタグの作成および管理、そしてテーブルに対するタイムトラベルクエリをサポートしています。
 
@@ -35,12 +39,12 @@ maxSnapshotAge ::= <int> { DAYS | HOURS | MINUTES }
 
 - `branch_name`: 作成するブランチの名前。
 - `AS OF VERSION`: ブランチを作成するスナップショット（バージョン）の ID。
-- `RETAIN`: ブランチを保持する期間。形式: `<int> <unit>`。サポートされる単位: `DAYS`、`HOURS`、`MINUTES`。例: `7 DAYS`、`12 HOURS`、`30 MINUTES`。
+- `RETAIN`: ブランチを保持する期間。形式: `<int> <unit>`。サポートされる単位: `DAYS`, `HOURS`, `MINUTES`。例: `7 DAYS`, `12 HOURS`, `30 MINUTES`。
 - `WITH SNAPSHOT RETENTION`: 保持するスナップショットの最小数および/またはスナップショットを保持する最大時間。
 
 **例**
 
-テーブル `iceberg.sales.order` のバージョン（スナップショット ID）`12345` に基づいてブランチ `test-branch` を作成し、ブランチを `7` 日間保持し、ブランチ上に少なくとも `2` つのスナップショットを保持します。
+テーブル `iceberg.sales.order` のバージョン（スナップショット ID）`12345` に基づいてブランチ `test-branch` を作成し、ブランチを `7` 日間保持し、ブランチ上で少なくとも `2` つのスナップショットを保持します。
 
 ```SQL
 ALTER TABLE iceberg.sales.order CREATE BRANCH `test-branch` 
@@ -49,7 +53,7 @@ RETAIN 7 DAYS
 WITH SNAPSHOT RETENTION 2 SNAPSHOTS;
 ```
 
-### 特定のブランチにデータをロードする
+### テーブルの特定のブランチにデータをロード
 
 **構文**
 
@@ -62,7 +66,7 @@ INSERT INTO [catalog.][database.]table_name
 **パラメータ**
 
 - `branch_name`: データをロードするテーブルブランチの名前。
-- `query_statement`: 結果が宛先テーブルにロードされるクエリ文。StarRocks がサポートする任意の SQL 文を使用できます。
+- `query_statement`: 結果が宛先テーブルにロードされるクエリステートメント。StarRocks がサポートする任意の SQL ステートメントを使用できます。
 
 **例**
 
@@ -89,7 +93,7 @@ CREATE [OR REPLACE] TAG [IF NOT EXISTS] <tag_name>
 
 - `tag_name`: 作成するタグの名前。
 - `AS OF VERSION`: タグを作成するスナップショット（バージョン）の ID。
-- `RETAIN`: タグを保持する期間。形式: `<int> <unit>`。サポートされる単位: `DAYS`、`HOURS`、`MINUTES`。例: `7 DAYS`、`12 HOURS`、`30 MINUTES`。
+- `RETAIN`: タグを保持する期間。形式: `<int> <unit>`。サポートされる単位: `DAYS`, `HOURS`, `MINUTES`。例: `7 DAYS`, `12 HOURS`, `30 MINUTES`。
 
 **例**
 
@@ -101,7 +105,7 @@ AS OF VERSION 12345
 RETAIN 7 DAYS;
 ```
 
-### ブランチを別のブランチに高速転送する
+### ブランチを別のブランチにファストフォワード
 
 **構文**
 
@@ -112,21 +116,21 @@ EXECUTE fast_forward('<from_branch>', '<to_branch>')
 
 **パラメータ**
 
-- `from_branch`: 高速転送したいブランチ。ブランチ名を引用符で囲みます。
-- `to_branch`: `from_branch` を高速転送するブランチ。ブランチ名を引用符で囲みます。
+- `from_branch`: ファストフォワードしたいブランチ。ブランチ名をクォートで囲みます。
+- `to_branch`: `from_branch` をファストフォワードしたいブランチ。ブランチ名をクォートで囲みます。
 
 **例**
 
-`main` ブランチを `test-branch` ブランチに高速転送します。
+`main` ブランチを `test-branch` ブランチにファストフォワードします。
 
 ```SQL
 ALTER TABLE iceberg.sales.order
 EXECUTE fast_forward('main', 'test-branch');
 ```
 
-### スナップショットを選択適用する
+### スナップショットを選択的に適用
 
-特定のスナップショットを選択してテーブルの現在の状態に適用できます。この操作は既存のスナップショットに基づいて新しいスナップショットを作成し、元のスナップショットには影響を与えません。
+特定のスナップショットを選択してテーブルの現在の状態に適用できます。この操作により、既存のスナップショットに基づいて新しいスナップショットが作成され、元のスナップショットは影響を受けません。
 
 **構文**
 
@@ -137,7 +141,7 @@ EXECUTE cherrypick_snapshot(<snapshot_id>)
 
 **パラメータ**
 
-`snapshot_id`: 選択適用したいスナップショットの ID。
+`snapshot_id`: 選択的に適用したいスナップショットの ID。
 
 **例**
 
@@ -146,9 +150,9 @@ ALTER TABLE iceberg.sales.order
 EXECUTE cherrypick_snapshot(54321);
 ```
 
-### スナップショットを期限切れにする
+### スナップショットの期限切れ
 
-特定の時点より前のスナップショットを期限切れにできます。この操作は期限切れのスナップショットのデータファイルを削除します。
+特定の時点よりも前のスナップショットを期限切れにできます。この操作により、期限切れのスナップショットのデータファイルが削除されます。
 
 **構文**
 
@@ -164,7 +168,7 @@ ALTER TABLE iceberg.sales.order
 EXECUTE expire_snapshot('2023-12-17 00:14:38')
 ```
 
-### ブランチまたはタグを削除する
+### ブランチまたはタグの削除
 
 **構文**
 
@@ -195,14 +199,14 @@ DROP TAG `test-tag`;
 
 **パラメータ**
 
-`tag_or_branch`: タイムトラベルしたいブランチまたはタグの名前。ブランチ名が指定された場合、クエリはブランチの最新スナップショットにタイムトラベルします。タグ名が指定された場合、クエリはタグが参照するスナップショットにタイムトラベルします。
+`tag_or_branch`: タイムトラベルしたいブランチまたはタグの名前。ブランチ名が指定された場合、クエリはブランチのヘッドスナップショットにタイムトラベルします。タグ名が指定された場合、クエリはタグが参照するスナップショットにタイムトラベルします。
 
 **例**
 
 ```SQL
--- ブランチの最新スナップショットにタイムトラベルします。
+-- ブランチのヘッドスナップショットにタイムトラベル。
 SELECT * FROM iceberg.sales.order VERSION AS OF 'test-branch';
--- タグが参照するスナップショットにタイムトラベルします。
+-- タグが参照するスナップショットにタイムトラベル。
 SELECT * FROM iceberg.sales.order VERSION AS OF 'test-tag';
 ```
 
@@ -234,7 +238,7 @@ SELECT * FROM iceberg.sales.order VERSION AS OF 12345;
 
 **パラメータ**
 
-`date_and_time_function`: StarRocks がサポートする任意の[日付と時刻の関数](../../../sql-reference/sql-functions/date-time-functions/now.md)。
+`date_and_time_function`: StarRocks がサポートする任意の [日付および時刻関数](../../../sql-reference/sql-functions/date-time-functions/now.md)。
 
 **例**
 

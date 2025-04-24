@@ -2,9 +2,13 @@
 displayed_sidebar: docs
 ---
 
-# 翻译 Trino SQL
+import Beta from '../../_assets/commonMarkdown/_beta.mdx'
 
-自 v3.3.9 起，StarRocks 支持将 Trino SQL 语句翻译为 StarRocks SQL 语句。
+# Translate Trino SQL
+
+<Beta />
+
+从 v3.3.9 开始，StarRocks 支持将 Trino SQL 语句转换为 StarRocks SQL 语句。
 
 ## 语法
 
@@ -12,9 +16,9 @@ displayed_sidebar: docs
 TRANSLATE TRINO <SELECT_statement>
 ```
 
-## 参数说明
+## 参数
 
-`SELECT_statement`：需要翻译的 Trino SQL 语句。
+`SELECT_statement`：您想要转换的 Trino SQL 语句。
 
 ## 返回
 
