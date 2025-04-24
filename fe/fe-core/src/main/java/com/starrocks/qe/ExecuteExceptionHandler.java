@@ -33,6 +33,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -56,6 +57,11 @@ public class ExecuteExceptionHandler {
         } else {
             throw e;
         }
+    }
+
+    public static boolean isRetryableStatus(TStatusCode statusCode) {
+        return statusCode == TStatusCode.REMOTE_FILE_NOT_FOUND
+                || statusCode == TStatusCode.THRIFT_RPC_ERROR;
     }
 
     // If modifications are made to the partition files of a Hive table by user,

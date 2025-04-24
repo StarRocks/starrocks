@@ -155,6 +155,7 @@ public:
     FragmentContextManager* fragment_mgr();
 
     void cancel(const Status& status, bool cancelled_by_fe);
+    void set_cancelled_by_fe() { _cancelled_by_fe = true; }
 
     void set_is_runtime_filter_coordinator(bool flag) { _is_runtime_filter_coordinator = flag; }
 
@@ -388,7 +389,7 @@ public:
     QueryContextManager(size_t log2_num_slots);
     ~QueryContextManager();
     Status init();
-    QueryContext* get_or_register(const TUniqueId& query_id);
+    StatusOr<QueryContext*> get_or_register(const TUniqueId& query_id, bool return_error_if_not_exist = false);
     QueryContextPtr get(const TUniqueId& query_id, bool need_prepared = false);
     size_t size();
     bool remove(const TUniqueId& query_id);
