@@ -146,7 +146,8 @@ public:
 
         ColumnPtr dataColumn;
         if (first_nullable_arg_col == nullptr) {
-            dataColumn = const_cast<Column*>(columns[1])->get_ptr();
+            // if all not-null, pick the first column
+            dataColumn = const_cast<Column*>(columns[0])->get_ptr();
         } else {
             dataColumn = first_nullable_arg_col;
             if (first_nullable_arg_col->has_null()) {
