@@ -3,7 +3,11 @@ displayed_sidebar: docs
 sidebar_position: 40
 ---
 
-# [Preview] N-gram bloom filter index
+import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+
+# N-gram bloom filter index
+
+<Beta />
 
 The N-gram bloom filter index is a special [Bloom filter index](./Bloomfilter_index.md) which is typically used to accelerate the LIKE queries and the calculation speed of the `ngram_search` and `ngram_search_case_insensitive` functions.
 

@@ -3,7 +3,11 @@ displayed_sidebar: docs
 toc_max_heading_level: 4
 ---
 
-# [Preview] MaxCompute catalog
+import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+
+# MaxCompute catalog
+
+<Beta />
 
 StarRocks supports Alibaba Cloud MaxCompute (previously known as ODPS) catalogs from v3.3 onwards.
 

@@ -2,7 +2,11 @@
 displayed_sidebar: docs
 ---
 
+import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
+
 # Time Travel with Iceberg Catalog
+
+<Beta />
 
 This topic introduces StarRocks' Time Travel feature for Iceberg catalogs. This feature is supported from v3.4.0 onwards.
 

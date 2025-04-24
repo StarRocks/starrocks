@@ -3,7 +3,11 @@ displayed_sidebar: docs
 sidebar_position: 50
 ---
 
+import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
+
 # Spill to disk
+
+<Beta />
 
 This topic describes how to spill intermediate computation results of large operators to local disks and object storage.
 
