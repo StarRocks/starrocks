@@ -884,7 +884,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_normal(const TAlterTabletRe
                 for (auto& ver : versions_to_be_changed) {
                     ss << ver << ",";
                 }
-                return Status::InternalError(fmt::format("fail to get rowset by version: {}, {}", version, ss.str()));
+                return Status::InternalError(fmt::format("fail to get rowset by version: {}", ss.str()));
             }
             // prepare tablet reader to prevent rowsets being compacted
             std::unique_ptr<TabletReader> tablet_reader =
@@ -993,7 +993,7 @@ Status SchemaChangeHandler::_get_versions_to_be_changed(const TabletSharedPtr& b
                                                         std::vector<Version>* versions_to_be_changed) {
     RowsetSharedPtr rowset = base_tablet->rowset_with_max_version();
     if (rowset == nullptr) {
-        return Status::InternalError(fmt::format("tablet: {} has no version", base_tabelt->full_name()));
+        return Status::InternalError(fmt::format("tablet: {} has no version", base_tablet->full_name()));
     }
     std::vector<Version> span_versions;
     if (!base_tablet->capture_consistent_versions(Version(0, rowset->version().second), &span_versions).ok()) {
@@ -1072,7 +1072,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
         std::unique_ptr<RowsetWriter> rowset_writer;
         status = RowsetFactory::create_rowset_writer(writer_context, &rowset_writer);
         if (!status.ok()) {
-            return Status::InternalError(fmt::format("bulid rowset writer failed: {}", status));
+            return Status::InternalError(fmt::format("bulid rowset writer failed: {}", status.to_string()));
         }
 
         auto st = sc_procedure->process(sc_params.rowset_readers[i].get(), rowset_writer.get(), new_tablet, base_tablet,
@@ -1084,7 +1084,8 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
         auto new_rowset = rowset_writer->build();
         if (!new_rowset.ok()) {
             VLOG(2) << _alter_msg_header << "failed to build rowset: " << new_rowset.status() << ". exit alter process";
-            _task_detail_msg += fmt::format("[fail to build rowset: {}. exit alter process]", new_rowset.status());
+            _task_detail_msg +=
+                    fmt::format("[fail to build rowset: {}. exit alter process]", new_rowset.status().to_string());
             break;
         }
         if (config::enable_rowset_verify) {
