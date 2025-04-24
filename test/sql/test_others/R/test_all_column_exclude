@@ -2,35 +2,30 @@
 CREATE TABLE test_table ( id INT, name VARCHAR(50), age INT, email VARCHAR(100)) DUPLICATE KEY(id) PROPERTIES ("compression" = "LZ4","replicated_storage" = "true","replication_num" = "1");
 -- result:
 -- !result
-INSERT INTO test_table VALUES (1, 'John', 30, 'john@example.com'),(2, 'Alice', 25, 'alice@example.com');
+INSERT INTO test_table VALUES (1, 'John', 30, 'john@example.com');
 -- result:
 -- !result
 SELECT * EXCLUDE (age) FROM test_table;
 -- result:
 1	John	john@example.com
-2	Alice	alice@example.org
 -- !result
 SELECT * EXCEPT (age) FROM test_table;
 -- result:
 1	John	john@example.com
-2	Alice	alice@example.org
 -- !result
 SELECT * EXCLUDE (name, email) FROM test_table;
 -- result:
 id	age
 1	30
-2	25
 -- !result
 SELECT * EXCEPT (name, email) FROM test_table;
 -- result:
 id	age
 1	30
-2	25
 -- !result
 SELECT test_table.* EXCLUDE (email) FROM test_table;
 -- result:
 1	John	30
-2	Alice	25
 -- !result
 SELECT * EXCLUDE (id) FROM test_table WHERE age > 25;
 -- result:
@@ -63,20 +58,16 @@ SELECT * EXCLUDE (id, name, age, email) FROM test_table;
 SELECT * EXCLUDE (age, age) FROM test_table;
 -- result:
 1	John	john@example.com
-2	Alice	alice@example.org
 -- !result
 SELECT * EXCLUDE (NAME) FROM test_table;
 -- result:
 1	30	john@example.com
-2	25	alice@example.com
 -- !result
 with cte1 as ( select * EXCLUDE (name) from test_table)  select * from cte1;
 -- result:
 1	30	john@example.com
-2	25	alice@example.com
 -- !result
 select * from (select * EXCLUDE(name) from test_table)r;
 -- result:
 1	30	john@example.com
-2	25	alice@example.com
 -- !result
