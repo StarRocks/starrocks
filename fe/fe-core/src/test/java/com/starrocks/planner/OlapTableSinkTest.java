@@ -628,7 +628,7 @@ public class OlapTableSinkTest {
         Assert.assertEquals(multipleReplicaList.get(lowUsageIndex1).getId(), replica3.getId());
         Assert.assertEquals(multipleReplicaList.get(lowUsageIndex1).getBackendId(), be3.getId());
 
-        //2.check primary replica selection in single replica
+        //2.check primary replica selection in single replica 
         Replica replica4 = new Replica(44L, be2.getId(), Replica.ReplicaState.NORMAL, 1, 0);
         replica4.setLastWriteFail(false);
         List<Replica> singleReplicaList = new ArrayList<>();
