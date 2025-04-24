@@ -36,7 +36,7 @@ May be not good for corner cases.
 - **Interface**: Stable API.
 - **Availability**: GA features are on by default.
 - **Production readiness**: Production ready.
-- **Support**: The CelerData support team provides support to CelerData customers. Open-source community members should open a [GitHub issue](https://github.com/StarRocks/starrocks/issues) or ask questions in [Slack](https://starrocks.io/redirecting-to-slack) and the StarRocks Engineering team will try to help you.
+- **Support**: The support team provides support to customers. Open-source community members should open a [GitHub issue](https://github.com/StarRocks/starrocks/issues) or ask questions in [Slack](https://starrocks.io/redirecting-to-slack) and the StarRocks Engineering team will try to help you.
 
 ## Deprecated features
 
