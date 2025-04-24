@@ -15,7 +15,7 @@ Most of the StarRocks features are GA, and if there is no label in the documenta
 - **Stability**: Possibly buggy, with minor known issues.
 - **Maturity**: Low
 - **Interface**: The interface may be changed in the future. This includes command syntax, configuration parameters, defaults, feature removal, etc.
-- **Availability**: Beta features are off by default, and need to be allowed by setting a parameter with SQL or in a configuration file.
+- **Availability**: Experimental features are off by default, and need to be allowed by setting a parameter with SQL or in a configuration file.
 - **Production readiness**: Experimental features should not be used in production.
 - **Support**: Please open a [GitHub issue](https://github.com/StarRocks/starrocks/issues) or ask questions in [Slack](https://starrocks.io/redirecting-to-slack) and the StarRocks Engineering team will try to help you.
 
