@@ -17,7 +17,6 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Joiner;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -44,7 +43,6 @@ import org.junit.Assert;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -168,6 +166,7 @@ public class MaterializedViewAnalyzerTest {
         }
     }
 
+<<<<<<< HEAD
     @RepeatedTest(value = 1)
     public void testReplacePaimonTableAlias(@Mocked SlotRef slotRef, @Mocked PaimonTable table) {
         MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor materializedViewAnalyzerVisitor =
@@ -201,6 +200,8 @@ public class MaterializedViewAnalyzerTest {
         }
     }
 
+=======
+>>>>>>> 5110ba490b ([Feature] Support paimon time type and fix paimon MV (#58292))
     @Test
     public void testCreateIcebergTable() throws Exception {
         {

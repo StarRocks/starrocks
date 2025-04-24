@@ -318,6 +318,8 @@ Status JniScanner::_fill_column(FillColumnArgs* pargs) {
         RETURN_IF_ERROR((_append_string_data<TYPE_CHAR>(args)));
     } else if (column_type == LogicalType::TYPE_VARBINARY) {
         RETURN_IF_ERROR((_append_string_data<TYPE_VARBINARY>(args)));
+    } else if (column_type == LogicalType::TYPE_TIME) {
+        RETURN_IF_ERROR((_append_primitive_data<TYPE_TIME>(args)));
     } else if (column_type == LogicalType::TYPE_DATE) {
         RETURN_IF_ERROR((_append_primitive_data<TYPE_DATE>(args)));
     } else if (column_type == LogicalType::TYPE_DATETIME) {

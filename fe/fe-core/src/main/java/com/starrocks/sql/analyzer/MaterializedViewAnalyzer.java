@@ -1092,13 +1092,18 @@ public class MaterializedViewAnalyzer {
                     }
                 } else if (table.isPaimonTable()) {
                     PaimonTable paimonTable = (PaimonTable) table;
-                    if (replacePaimonTableAlias(slotRef, paimonTable, baseTableInfo)) {
+                    if (paimonTable.getCatalogName().equals(baseTableInfo.getCatalogName()) &&
+                            paimonTable.getCatalogDBName().equals(baseTableInfo.getDbName()) &&
+                            paimonTable.getTableIdentifier().equals(baseTableInfo.getTableIdentifier())) {
+                        slotRef.setTblName(new TableName(baseTableInfo.getCatalogName(),
+                                baseTableInfo.getDbName(), paimonTable.getName()));
                         break;
                     }
                 }
             }
         }
 
+<<<<<<< HEAD
         boolean replacePaimonTableAlias(SlotRef slotRef, PaimonTable paimonTable, BaseTableInfo baseTableInfo) {
             if (paimonTable.getCatalogName().equals(baseTableInfo.getCatalogName()) &&
                     paimonTable.getDbName().equals(baseTableInfo.getDbName()) &&
@@ -1110,6 +1115,8 @@ public class MaterializedViewAnalyzer {
             return false;
         }
 
+=======
+>>>>>>> 5110ba490b ([Feature] Support paimon time type and fix paimon MV (#58292))
         private void checkPartitionColumnType(Column partitionColumn) {
             PrimitiveType type = partitionColumn.getPrimitiveType();
             if (!type.isFixedPointType() && !type.isDateType() && !type.isStringType()) {
