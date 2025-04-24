@@ -16,6 +16,8 @@ package com.starrocks.connector.iceberg;
 
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.connector.share.iceberg.IcebergAwsClientFactory;
+import org.apache.iceberg.aws.AwsClientProperties;
+import org.apache.iceberg.aws.s3.S3FileIOProperties;
 import org.junit.Assert;
 import org.junit.Test;
 import software.amazon.awssdk.regions.Region;
@@ -44,6 +46,26 @@ public class IcebergAwsClientFactoryTest {
 
         Assert.assertNull(factory.dynamo());
         Assert.assertNull(factory.kms());
+    }
+
+    @Test
+    public void testVendedCredentials() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, "ak");
+        properties.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY, "sk");
+        properties.put(CloudConfigurationConstants.AWS_S3_ENDPOINT, "endpoint");
+        properties.put(CloudConfigurationConstants.AWS_S3_REGION, "xxx");
+        IcebergAwsClientFactory factory = new IcebergAwsClientFactory();
+        factory.initialize(properties);
+        Assert.assertNotNull(factory.s3());
+        // test vended credentials
+        properties = new HashMap<>();
+        properties.put(S3FileIOProperties.ACCESS_KEY_ID, "ak");
+        properties.put(S3FileIOProperties.SECRET_ACCESS_KEY, "sk");
+        properties.put(AwsClientProperties.CLIENT_REGION, "xxx");
+        factory = new IcebergAwsClientFactory();
+        factory.initialize(properties);
+        Assert.assertNotNull(factory.s3());
     }
 
     @Test
