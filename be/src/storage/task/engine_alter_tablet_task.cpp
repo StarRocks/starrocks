@@ -62,6 +62,7 @@ Status EngineAlterTabletTask::execute() {
     Status res;
     std::string alter_msg_header = strings::Substitute("[Alter Job:$0, tablet:$1]: ", _alter_tablet_req.job_id,
                                                        _alter_tablet_req.base_tablet_id);
+    std::string task_detail_msg = "";
     if (_alter_tablet_req.tablet_type == TTabletType::TABLET_TYPE_LAKE) {
         lake::SchemaChangeHandler handler(ExecEnv::GetInstance()->lake_tablet_manager());
         res = handler.process_alter_tablet(_alter_tablet_req);
@@ -69,11 +70,12 @@ Status EngineAlterTabletTask::execute() {
         SchemaChangeHandler handler;
         handler.set_alter_msg_header(alter_msg_header);
         res = handler.process_alter_tablet(_alter_tablet_req);
+        task_detail_msg = handler.get_task_detail_msg();
     }
     if (!res.ok()) {
         LOG(WARNING) << alter_msg_header << "failed to do alter task. status=" << res.to_string()
                      << " detail run msg: " << '\n'
-                     << handler.get_task_detail_msg();
+                     << task_detail_msg;
         StarRocksMetrics::instance()->create_rollup_requests_failed.increment(1);
         return res;
     }

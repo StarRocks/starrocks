@@ -3982,7 +3982,7 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, Ch
         VLOG(2) << err_msg_header << "link_from: base_tablet's max_version:" << max_version
                 << " < alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
                 << " base_tablet:" << base_tablet->tablet_id();
-        task_detail_msg += fmt::format("[base_tablet:{} max_version:{} < alter_version:{}]", base_tabelt->tablet_id(),
+        task_detail_msg += fmt::format("[base_tablet:{} max_version:{} < alter_version:{}]", base_tablet->tablet_id(),
                                        max_version, request_version);
         return Status::InternalError("link_from: max_version < request version");
     }
@@ -4012,7 +4012,7 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, Ch
         VLOG(2) << err_msg_header << "link_from: get base tablet rowsets error tablet:" << base_tablet->tablet_id()
                 << " version:" << request_version << " reason:" << st;
         task_detail_msg += fmt::format("[base tablet:{} get applied rowset failed, version:{}, status:{}]",
-                                       base_tablet->tablet_id(), request_version, st);
+                                       base_tablet->tablet_id(), request_version, st.to_string());
         return st;
     }
 
@@ -4174,7 +4174,7 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, Ch
     st = kv_store->write_batch(&wb);
     if (!st.ok()) {
         VLOG(2) << err_msg_header << "Fail to delete old meta and write new meta: " << tablet_id << ": " << st;
-        task_detail_msg += fmt::format("[fail to delete old meta and write new meta, status:{}]", st);
+        task_detail_msg += fmt::format("[fail to delete old meta and write new meta, status:{}]", st.to_string());
         return Status::InternalError("Fail to delete old meta and write new meta");
     }
 
@@ -4187,7 +4187,7 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, Ch
     st = _load_from_pb(*updates_pb);
     if (!st.ok()) {
         VLOG(2) << err_msg_header << "_load_from_pb failed tablet_id:" << tablet_id << " " << st;
-        task_detail_msg += fmt::format("[tablet:{} load_from_pb failed, {}]", tablet_id, st);
+        task_detail_msg += fmt::format("[tablet:{} load_from_pb failed, {}]", tablet_id, st.to_string());
         return st;
     }
     RETURN_IF_ERROR(_tablet.set_tablet_state(TabletState::TABLET_RUNNING));
@@ -4259,7 +4259,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
         VLOG(2) << err_msg_header << "convert_from: get base tablet rowsets error tablet:" << base_tablet->tablet_id()
                 << " request_version:" << request_version << " reason:" << status;
         task_detail_msg += fmt::format("[base_tablet: {} get applied rowset failed, version:{}, status: {}]",
-                                       base_tablet->tablet_id(), request_version, status);
+                                       base_tablet->tablet_id(), request_version, status.to_string());
         return status;
     }
 
@@ -4350,7 +4350,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
                 status = status.clone_and_append(strings::Substitute("$0 convert_from base_tablet: $1", err_msg_header,
                                                                      base_tablet->tablet_id()));
                 VLOG(2) << status.message();
-                task_detail_msg += fmt::format("[rowset verify failed, status: {}]", status);
+                task_detail_msg += fmt::format("[rowset verify failed, status: {}]", status.to_string());
                 return status;
             }
         }
@@ -4425,8 +4425,8 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
     status = kv_store->write_batch(&wb);
     if (!status.ok()) {
         VLOG(2) << err_msg_header << "Fail to delete old meta and write new meta: " << tablet_id << ": " << status;
-        task_detail_msg +=
-                fmt::format("[fail to delete old meta and write new meta, tablet:{}, status:{}]", tablet_id, status);
+        task_detail_msg += fmt::format("[fail to delete old meta and write new meta, tablet:{}, status:{}]", tablet_id,
+                                       status.to_string());
         return Status::InternalError(err_msg_header + "Fail to delete old meta and write new meta");
     }
 
@@ -4440,7 +4440,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
     status = _load_from_pb(*updates_pb);
     if (!status.ok()) {
         VLOG(2) << err_msg_header << "_load_from_pb failed tablet_id:" << tablet_id << " " << status;
-        task_detail_msg += fmt::format("[tablet: {} load_from_pb failed, {}]", tablet_id, status);
+        task_detail_msg += fmt::format("[tablet: {} load_from_pb failed, {}]", tablet_id, status.to_string());
         return status;
     }
 
@@ -4531,8 +4531,8 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
         VLOG(2) << err_msg_header << "reorder_from skipped: max_version:" << this->max_version()
                 << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
                 << " base_tablet:" << base_tablet->tablet_id();
-        task_detail_msg += fmt
-                : format("skip reorder_from, max_version:{} >= request_version:{}", this->max_version, request_version);
+        task_detail_msg += fmt::format("skip reorder_from, max_version:{} >= request_version:{}", this->max_version(),
+                                       request_version);
         std::unique_lock wrlock(_tablet.get_header_lock());
         RETURN_IF_ERROR(_tablet.set_tablet_state(TabletState::TABLET_RUNNING));
         _tablet.save_meta();
@@ -4552,7 +4552,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
         VLOG(2) << err_msg_header << "reorder_from: get base tablet rowsets error tablet:" << base_tablet->tablet_id()
                 << " request_version:" << request_version << " reason:" << status;
         task_detail_msg += fmt::format("[base tablet:{} get applied rowset failed, version:{}, status:{}]",
-                                       base_tablet->tablet_id(), request_version, st);
+                                       base_tablet->tablet_id(), request_version, status.to_string());
         return status;
     }
     std::unique_ptr<MemPool> mem_pool(new MemPool());
@@ -4622,8 +4622,8 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
         status = RowsetFactory::create_rowset_writer(writer_context, &rowset_writer);
         if (!status.ok()) {
             VLOG(2) << err_msg_header << "build rowset writer failed";
-            task_detail_msg += fmt::format("[build rowset writer fail, status:{}]", status);
-            return Status::InternalError(fmt::format("build rowset writer failed: {}"), status.to_string());
+            task_detail_msg += fmt::format("[build rowset writer fail, status:{}]", status.to_string());
+            return Status::InternalError(fmt::format("build rowset writer failed: {}", status.to_string()));
         }
 
         ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
@@ -4695,7 +4695,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
                 status = status.clone_and_append(strings::Substitute("$0 reorder_from base_tablet: $1", err_msg_header,
                                                                      base_tablet->tablet_id()));
                 VLOG(2) << status.message();
-                task_detail_msg += fmt::format("[rowset verify failed, status:{}]", status);
+                task_detail_msg += fmt::format("[rowset verify failed, status:{}]", status.to_string());
                 return status;
             }
         }
@@ -4772,8 +4772,8 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
     status = kv_store->write_batch(&wb);
     if (!status.ok()) {
         VLOG(2) << err_msg_header << "Fail to delete old meta and write new meta" << tablet_id << ": " << status;
-        task_detail_msg +=
-                fmt::format("[fail to delete old meta and write new meta, tablet:{}, status:{}]", tablet_id, status);
+        task_detail_msg += fmt::format("[fail to delete old meta and write new meta, tablet:{}, status:{}]", tablet_id,
+                                       status.to_string());
         return Status::InternalError(err_msg_header + "Fail to delete old meta and write new meta");
     }
 
@@ -4787,7 +4787,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
     status = _load_from_pb(*updates_pb);
     if (!status.ok()) {
         VLOG(2) << err_msg_header << "_load_from_pb failed tablet_id:" << tablet_id << " " << status;
-        task_detail_msg += fmt::format("[tablet: {} load_from_pb failed, {}]", tablet_id, status);
+        task_detail_msg += fmt::format("[tablet: {} load_from_pb failed, {}]", tablet_id, status.to_string());
         return status;
     }
 
