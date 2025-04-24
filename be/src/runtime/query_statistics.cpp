@@ -44,6 +44,7 @@ void QueryStatistics::to_pb(PQueryStatistics* statistics) {
     statistics->set_cpu_cost_ns(cpu_ns);
     statistics->set_mem_cost_bytes(mem_cost_bytes);
     statistics->set_spill_bytes(spill_bytes);
+    statistics->set_sent_bytes(sent_bytes);
     {
         std::lock_guard l(_lock);
         for (const auto& [table_id, stats_item] : _stats_items) {
@@ -73,6 +74,7 @@ void QueryStatistics::to_params(TAuditStatistics* params) {
     params->__set_cpu_cost_ns(cpu_ns);
     params->__set_mem_cost_bytes(mem_cost_bytes);
     params->__set_spill_bytes(spill_bytes);
+    params->__set_sent_bytes(sent_bytes);
     {
         std::lock_guard l(_lock);
         for (const auto& [table_id, stats_item] : _stats_items) {
@@ -90,6 +92,7 @@ void QueryStatistics::clear() {
     cpu_ns = 0;
     returned_rows = 0;
     spill_bytes = 0;
+	sent_bytes = 0;
     _stats_items.clear();
     _exec_stats_items.clear();
 }
@@ -166,6 +169,11 @@ void QueryStatistics::merge(int sender_id, QueryStatistics& other) {
         this->spill_bytes += spill_bytes;
     }
 
+    int64_t sent_bytes = other.sent_bytes.load();
+    if (other.sent_bytes.compare_exchange_strong(sent_bytes, 0)) {
+        this->sent_bytes += sent_bytes;
+    }
+
     {
         std::unordered_map<int64_t, std::shared_ptr<ScanStats>> other_stats_item;
         std::unordered_map<uint32_t, std::shared_ptr<NodeExecStats>> other_exec_stats_items;
@@ -202,6 +210,9 @@ void QueryStatistics::merge_pb(const PQueryStatistics& statistics) {
     }
     if (statistics.has_mem_cost_bytes()) {
         mem_cost_bytes = std::max<int64_t>(mem_cost_bytes, statistics.mem_cost_bytes());
+    }
+    if (statistics.has_sent_bytes()) {
+        sent_bytes += statistics.sent_bytes();
     }
     {
         std::lock_guard l(_lock);

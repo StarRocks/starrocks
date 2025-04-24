@@ -92,6 +92,10 @@ void ResultSinkOperator::close(RuntimeState* state) {
             QueryContext* query_ctx = state->query_ctx();
             auto query_statistic = query_ctx->final_query_statistic();
             query_statistic->set_returned_rows(_num_written_rows);
+
+            LOG(INFO) << "[" << query_ctx->query_id() << ", " << _fragment_ctx->fragment_instance_id()
+                      << "]: ResultSinkOperator::close has local " << query_ctx->cpu_cost() << ", send to fe "
+                      << query_statistic->get_cpu_ns();
             _sender->set_query_statistics(query_statistic);
 
             Status final_status = _fragment_ctx->final_status();

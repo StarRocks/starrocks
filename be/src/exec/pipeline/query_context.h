@@ -198,6 +198,8 @@ public:
         _delta_scan_bytes += scan_bytes;
     }
 
+	void incr_sent_bytes(int64_t sent_bytes) { _total_sent_bytes += sent_bytes; }
+
     void init_node_exec_stats(const std::vector<int32_t>& exec_stats_node_ids);
     bool need_record_exec_stats(int32_t plan_node_id) {
         auto it = _node_exec_stats.find(plan_node_id);
@@ -252,6 +254,7 @@ public:
     int64_t get_scan_bytes() const { return _total_scan_bytes; }
     std::atomic_int64_t* mutable_total_spill_bytes() { return &_total_spill_bytes; }
     int64_t get_spill_bytes() { return _total_spill_bytes; }
+	int64_t get_sent_bytes() { return _total_sent_bytes; }
 
     // Query start time, used to check how long the query has been running
     // To ensure that the minimum run time of the query will not be killed by the big query checking mechanism
@@ -267,7 +270,8 @@ public:
     std::shared_ptr<starrocks::debug::QueryTrace> shared_query_trace() { return _query_trace; }
 
     // Delta statistic since last retrieve
-    std::shared_ptr<QueryStatistics> intermediate_query_statistic();
+    std::shared_ptr<QueryStatistics> intermediate_query_statistic(int64_t delta_sent_bytes,
+                                                                  const TUniqueId& fragment_id, const std::string& log);
     // Merged statistic from all executor nodes
     std::shared_ptr<QueryStatistics> final_query_statistic();
     std::shared_ptr<QueryStatisticsRecvr> maintained_query_recv();
@@ -329,6 +333,7 @@ private:
     std::atomic<int64_t> _total_scan_rows_num = 0;
     std::atomic<int64_t> _total_scan_bytes = 0;
     std::atomic<int64_t> _total_spill_bytes = 0;
+	std::atomic<int64_t> _total_sent_bytes = 0;
     std::atomic<int64_t> _delta_cpu_cost_ns = 0;
     std::atomic<int64_t> _delta_scan_rows_num = 0;
     std::atomic<int64_t> _delta_scan_bytes = 0;
