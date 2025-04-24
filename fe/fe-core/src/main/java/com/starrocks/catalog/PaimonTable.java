@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Joiner;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.planner.PaimonScanNode;
@@ -167,6 +168,12 @@ public class PaimonTable extends Table {
     }
 
     @Override
+    public String getTableIdentifier() {
+        String uuid = getUUID();
+        return Joiner.on(":").join(name, uuid == null ? "" : uuid);
+    }
+
+    @Override
     public boolean equals(Object o) {
         if (this == o) {
             return true;
@@ -178,11 +185,11 @@ public class PaimonTable extends Table {
         return catalogName.equals(that.catalogName) &&
                 databaseName.equals(that.databaseName) &&
                 tableName.equals(that.tableName) &&
-                createTime == that.createTime;
+                Objects.equals(getTableIdentifier(), that.getTableIdentifier());
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(catalogName, databaseName, tableName, createTime);
+        return Objects.hash(catalogName, databaseName, tableName, getTableIdentifier());
     }
 }
