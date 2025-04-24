@@ -69,6 +69,7 @@ TEST(TestParseMemSpec, Normal) {
 
     test_parse_mem_spec("20%", test_memory_limit * 0.2);
     test_parse_mem_spec("-1", -1);
+    test_parse_mem_spec("", 0);
 }
 
 TEST(TestParseMemSpec, Bad) {
