@@ -272,8 +272,12 @@ std::string get_stack_trace_for_threads(const std::vector<int>& tids, int timeou
     return get_stack_trace_for_threads_with_pattern(tids, "", timeout_ms);
 }
 
-std::string get_stack_trace_for_all_threads(const std::string& line_prefix) {
+std::string get_stack_trace_for_all_threads_with_prefix(const std::string& line_prefix) {
     return get_stack_trace_for_threads_with_pattern(get_thread_id_list(), "", 3000, line_prefix);
+}
+
+std::string get_stack_trace_for_all_threads() {
+    return get_stack_trace_for_all_threads_with_prefix("");
 }
 
 std::string get_stack_trace_for_function(const std::string& function_pattern) {

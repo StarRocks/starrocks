@@ -39,7 +39,13 @@ void test_get_stack_trace_for_all_threads(const std::string& line_prefix) {
         std::snprintf(std::get<1>(*tuple), std::get<2>(*tuple), "mock_frame_%d", num_symbolize);
         num_symbolize += 1;
     });
-    std::string stack_trace = get_stack_trace_for_all_threads(line_prefix);
+
+    std::string stack_trace;
+    if (line_prefix.empty()) {
+        stack_trace = get_stack_trace_for_all_threads();
+    } else {
+        stack_trace = get_stack_trace_for_all_threads_with_prefix(line_prefix);
+    }
 
     std::vector<std::string> lines;
     std::istringstream stream(stack_trace);
