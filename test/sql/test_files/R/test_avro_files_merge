@@ -1,0 +1,109 @@
+-- name: test_avro_file_merge
+
+create database db_${uuid0};
+use db_${uuid0};
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/avro_format/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+shell: ossutil64 cp --force ./sql/test_files/avro_format/user1.avro oss://${oss_bucket}/test_files/avro_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 488. OK num: 1(upload 1 files).
+-- !result
+
+shell: ossutil64 cp --force ./sql/test_files/avro_format/user2.avro oss://${oss_bucket}/test_files/avro_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 351. OK num: 1(upload 1 files).
+-- !result
+
+desc files(
+    "path" = "oss://${oss_bucket}/test_files/avro_format/${uuid0}/user1.avro",
+    "format" = "avro",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+id	int	YES
+name	varchar(1048576)	YES
+info	struct<address varchar(1048576), email varchar(1048576)>	YES
+extra	varchar(1048576)	YES
+-- !result
+
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/avro_format/${uuid0}/user1.avro",
+    "format" = "avro",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+1	Alice	{"address":"123 Main St","email":"alice@example.com"}	VIP user
+2	Charlie	{"address":"456 Elm St","email":"charlie@example.com"}	None
+-- !result
+
+
+desc files(
+    "path" = "oss://${oss_bucket}/test_files/avro_format/${uuid0}/user2.avro",
+    "format" = "avro",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+id	bigint	YES
+name	varchar(1048576)	YES
+info	struct<age int(11), email varchar(1048576)>	YES
+-- !result
+
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/avro_format/${uuid0}/user2.avro",
+    "format" = "avro",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+3	Bob	{"age":30,"email":"bob@example.com"}
+-- !result
+
+
+desc files(
+    "path" = "oss://${oss_bucket}/test_files/avro_format/${uuid0}/user*.avro",
+    "format" = "avro",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+id	bigint	YES
+name	varchar(1048576)	YES
+info	varchar(1048576)	YES
+extra	varchar(1048576)	YES
+-- !result
+
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/avro_format/${uuid0}/user*.avro",
+    "format" = "avro",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}")
+order by id;
+-- result:
+[REGEX].*Column: extra is not found in file: .*user2.avro.* Consider setting 'fill_mismatch_column_with' = 'null' property.*
+-- !result
+
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/avro_format/${uuid0}/user*.avro",
+    "format" = "avro",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "fill_mismatch_column_with" = "null")
+order by id;
+-- result:
+1	Alice	{"address":"123 Main St","email":"alice@example.com"}	VIP user
+2	Charlie	{"address":"456 Elm St","email":"charlie@example.com"}	None
+3	Bob	{"age":30,"email":"bob@example.com"}	None
+-- !result
+
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/avro_format/${uuid0}/ > /dev/null

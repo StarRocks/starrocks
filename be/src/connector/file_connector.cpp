@@ -14,6 +14,7 @@
 
 #include "connector/file_connector.h"
 
+#include "exec/avro_cpp_scanner.h"
 #include "exec/avro_scanner.h"
 #include "exec/csv_scanner.h"
 #include "exec/exec_node.h"
@@ -94,7 +95,14 @@ Status FileDataSource::_create_scanner() {
     } else if (_scan_range.ranges[0].format_type == TFileFormatType::FORMAT_JSON) {
         _scanner = std::make_unique<JsonScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
     } else if (_scan_range.ranges[0].format_type == TFileFormatType::FORMAT_AVRO) {
-        _scanner = std::make_unique<AvroScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
+        if (_scan_range.params.__isset.file_scan_type &&
+            (_scan_range.params.file_scan_type == TFileScanType::FILES_INSERT ||
+             _scan_range.params.file_scan_type == TFileScanType::FILES_QUERY)) {
+            _scanner = std::make_unique<AvroCppScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
+        } else {
+            // avro routine load
+            _scanner = std::make_unique<AvroScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
+        }
     } else {
         _scanner = std::make_unique<CSVScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
     }
