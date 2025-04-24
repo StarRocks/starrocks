@@ -14,7 +14,6 @@
 
 package com.starrocks.scheduler;
 
-import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
@@ -31,7 +30,6 @@ import org.junit.jupiter.api.TestMethodOrder;
 import java.io.File;
 import java.io.IOException;
 import java.util.Collection;
-import java.util.Map;
 
 import static com.starrocks.sql.plan.ConnectorPlanTestBase.MOCK_PAIMON_CATALOG_NAME;
 
@@ -97,6 +95,7 @@ public class PartitionBasedMvRefreshProcessorPaimonTest extends MVTestBase {
                     Assertions.assertEquals(10, partitions.size());
                     triggerRefreshMv(testDb, partitionedMaterializedView);
 
+<<<<<<< HEAD
                     Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> versionMap =
                             partitionedMaterializedView.getRefreshScheme()
                                     .getAsyncRefreshContext().getBaseTableInfoVisibleVersionMap();
@@ -108,6 +107,9 @@ public class PartitionBasedMvRefreshProcessorPaimonTest extends MVTestBase {
                     triggerRefreshMv(testDb, partitionedMaterializedView);
 
                     Assertions.assertEquals(10, partitionedMaterializedView.getPartitions().size());
+=======
+                    Assert.assertEquals(10, partitionedMaterializedView.getPartitions().size());
+>>>>>>> 5110ba490b ([Feature] Support paimon time type and fix paimon MV (#58292))
                     triggerRefreshMv(testDb, partitionedMaterializedView);
 
                     String query = "SELECT d, count(pk) FROM " +

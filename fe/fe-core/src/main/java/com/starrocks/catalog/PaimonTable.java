@@ -14,7 +14,11 @@
 
 package com.starrocks.catalog;
 
+<<<<<<< HEAD
 import com.google.common.base.Strings;
+=======
+import com.google.common.base.Joiner;
+>>>>>>> 5110ba490b ([Feature] Support paimon time type and fix paimon MV (#58292))
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.paimon.PaimonUtils;
@@ -160,6 +164,12 @@ public class PaimonTable extends Table {
     }
 
     @Override
+    public String getTableIdentifier() {
+        String uuid = getUUID();
+        return Joiner.on(":").join(name, uuid == null ? "" : uuid);
+    }
+
+    @Override
     public boolean equals(Object o) {
         if (this == o) {
             return true;
@@ -171,11 +181,11 @@ public class PaimonTable extends Table {
         return catalogName.equals(that.catalogName) &&
                 databaseName.equals(that.databaseName) &&
                 tableName.equals(that.tableName) &&
-                createTime == that.createTime;
+                Objects.equals(getTableIdentifier(), that.getTableIdentifier());
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(catalogName, databaseName, tableName, createTime);
+        return Objects.hash(catalogName, databaseName, tableName, getTableIdentifier());
     }
 }

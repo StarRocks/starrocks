@@ -16,6 +16,10 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Joiner;
 import com.starrocks.alter.AlterJobMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.SlotRef;
+>>>>>>> 5110ba490b ([Feature] Support paimon time type and fix paimon MV (#58292))
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -90,6 +94,81 @@ public class MaterializedViewAnalyzerTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testMaterializedAnalyPaimonTable(@Mocked SlotRef slotRef, @Mocked PaimonTable table) {
+        MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor materializedViewAnalyzerVisitor =
+                new MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor();
+
+        {
+            // test check partition column can not be found
+            boolean checkSuccess = false;
+            new Expectations() {
+                {
+                    table.isUnPartitioned();
+                    result = false;
+                }
+            };
+            try {
+                materializedViewAnalyzerVisitor.checkPartitionColumnWithBasePaimonTable(slotRef, table);
+                checkSuccess = true;
+            } catch (Exception e) {
+                Assert.assertTrue(e.getMessage(),
+                        e.getMessage().contains("Materialized view partition column in partition exp " +
+                                "must be base table partition column"));
+            }
+            Assert.assertFalse(checkSuccess);
+        }
+
+        {
+            // test check successfully
+            boolean checkSuccess = false;
+            new Expectations() {
+                {
+                    table.isUnPartitioned();
+                    result = false;
+
+                    table.getPartitionColumnNames();
+                    result = Lists.newArrayList("dt");
+
+                    slotRef.getColumnName();
+                    result = "dt";
+
+                    table.getColumn("dt");
+                    result = new Column("dt", ScalarType.createType(PrimitiveType.DATE));
+                }
+            };
+            try {
+                materializedViewAnalyzerVisitor.checkPartitionColumnWithBasePaimonTable(slotRef, table);
+                checkSuccess = true;
+            } catch (Exception e) {
+            }
+            Assert.assertTrue(checkSuccess);
+        }
+
+        {
+            //test paimon table is unparitioned
+            new Expectations() {
+                {
+                    table.isUnPartitioned();
+                    result = true;
+                }
+            };
+
+            boolean checkSuccess = false;
+            try {
+                materializedViewAnalyzerVisitor.checkPartitionColumnWithBasePaimonTable(slotRef, table);
+            } catch (Exception e) {
+                Assert.assertTrue(e.getMessage(),
+                        e.getMessage().contains("Materialized view partition column in partition exp " +
+                                "must be base table partition column"));
+            }
+            Assert.assertFalse(checkSuccess);
+        }
+    }
+
+    @Test
+>>>>>>> 5110ba490b ([Feature] Support paimon time type and fix paimon MV (#58292))
     public void testCreateIcebergTable1() throws Exception {
         {
             String mvName = "iceberg_parttbl_mv1";
