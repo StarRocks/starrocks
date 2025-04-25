@@ -475,6 +475,7 @@ public class ExecutionDAG {
 
             TNetworkAddress dummyServer = new TNetworkAddress("0.0.0.0", 0);
             int bucketNum = destExecFragment.getBucketNum();
+            Preconditions.checkArgument(bucketNum != 0);
             for (int bucketSeq = 0; bucketSeq < bucketNum; bucketSeq++) {
                 TPlanFragmentDestination dest = new TPlanFragmentDestination();
 
@@ -501,6 +502,7 @@ public class ExecutionDAG {
                 execFragment.addDestination(dest);
             }
         } else {
+            Preconditions.checkArgument(!destExecFragment.getInstances().isEmpty());
             // add destination host to this fragment's destination
             for (FragmentInstance destInstance : destExecFragment.getInstances()) {
                 TPlanFragmentDestination dest = new TPlanFragmentDestination();

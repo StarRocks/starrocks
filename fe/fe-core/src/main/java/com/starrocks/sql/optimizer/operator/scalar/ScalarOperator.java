@@ -44,6 +44,18 @@ public abstract class ScalarOperator implements Cloneable {
 
     private List<String> hints = Collections.emptyList();
 
+<<<<<<< HEAD
+=======
+    private boolean isIndexOnlyFilter = false;
+
+    // 1. depth is scalar operator's nested depth, it starts from 0(eg: ColumnRefOperator/ConstantOperator), incr +1 for each
+    // child nested; if it contains multi children, the max depth of children will be added to this operator's depth.
+    // 2. depth is marked to avoid infinite loop in some cases.
+    protected int depth = 0;
+
+    protected Optional<Integer> numberFlatChildren = Optional.empty();
+
+>>>>>>> 009e8b372f ([Enhancement] introduce max_scalar_operator_flat_children to avoid optimizer OOM (#58095))
     public ScalarOperator(OperatorType opType, Type type) {
         this.opType = requireNonNull(opType, "opType is null");
         this.type = requireNonNull(type, "type is null");
@@ -127,6 +139,54 @@ public abstract class ScalarOperator implements Cloneable {
     @Override
     public abstract boolean equals(Object other);
 
+<<<<<<< HEAD
+=======
+    public int getDepth() {
+        return depth;
+    }
+
+    public int getNumFlatChildren() {
+        if (numberFlatChildren.isPresent()) {
+            return numberFlatChildren.get();
+        }
+        int numFlatChildren = 0;
+        for (ScalarOperator child : getChildren()) {
+            numFlatChildren += child.getNumFlatChildren() + 1;
+        }
+        numberFlatChildren = Optional.of(numFlatChildren);
+        return numberFlatChildren.get();
+    }
+
+    /**
+     * Incr depth for this operator: this.depth = 1 + max(depth of children)
+     */
+    public void incrDepth(List<ScalarOperator> args) {
+        // always add 1 for self
+        this.depth += 1;
+        if (args == null) {
+            return;
+        }
+        this.depth += args.stream().map(ScalarOperator::getDepth).max(Integer::compareTo).orElse(0);
+    }
+
+    /**
+     * Incr depth for this operator: this.depth = 1 + max(depth of children)
+     */
+    public void incrDepth(ScalarOperator... args) {
+        // always add 1 for self
+        this.depth += 1;
+
+        if (args == null) {
+            return;
+        }
+        int ans = 0;
+        for (ScalarOperator arg : args) {
+            ans = Math.max(ans, arg.getDepth());
+        }
+        this.depth += ans;
+    }
+
+>>>>>>> 009e8b372f ([Enhancement] introduce max_scalar_operator_flat_children to avoid optimizer OOM (#58095))
     /**
      * equivalent means logical equals, but may physical different, such as with different id
      */

@@ -1836,6 +1836,15 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long max_planner_scalar_rewrite_num = 100000;
 
+<<<<<<< HEAD
+=======
+    @ConfField(mutable = true, comment = "The max depth that scalar operator optimization can be applied")
+    public static int max_scalar_operator_optimize_depth = 256;
+
+    @ConfField(mutable = true, comment = "scalar operator maximum number of flat children.")
+    public static int max_scalar_operator_flat_children = 10000;
+
+>>>>>>> 009e8b372f ([Enhancement] introduce max_scalar_operator_flat_children to avoid optimizer OOM (#58095))
     /**
      * statistic collect flag
      */
