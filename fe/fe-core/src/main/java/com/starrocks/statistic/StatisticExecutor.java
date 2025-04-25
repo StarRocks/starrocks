@@ -537,7 +537,7 @@ public class StatisticExecutor {
                             statsJob.getAnalyzeType(), statsJob.getStatisticsTypes(),
                             analyzeStatus.getEndTime(), statsJob.getProperties());
                     GlobalStateMgr.getCurrentState().getAnalyzeMgr().addMultiColumnStatsMeta(meta);
-                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().refreshMultiColumnStatisticsCache(meta.getTableId());
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().refreshMultiColumnStatisticsCache(meta.getTableId(), true);
                 } else {
                     BasicStatsMeta basicStatsMeta = analyzeMgr.getTableBasicStatsMeta(table.getId());
                     if (basicStatsMeta == null) {
