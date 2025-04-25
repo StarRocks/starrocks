@@ -22,6 +22,7 @@
 #include "exprs/json_functions.h"
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
+#include "util/simdjson_util.h"
 
 namespace starrocks {
 
@@ -1228,4 +1229,36 @@ TEST_F(JsonParserTest, test_expanded_json_array_parser_with_root_error) {
     }
 }
 
+TEST_F(JsonParserTest, test_retrieve_value_from_simdjson_object_repeatedly) {
+    std::string input =
+            R"({"key0": "a long long string value. ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFGHIJKLMNOPQRSTUVWXYZ"})";
+    std::string input_value(
+            "a long long string value. ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFGHIJKLMNOPQRSTUVWXYZ "
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+    // Reserved for simdjson padding.
+    auto size = input.size();
+    input.resize(input.size() + simdjson::SIMDJSON_PADDING);
+    auto padded_size = input.size();
+
+    simdjson::ondemand::parser simdjson_parser;
+    std::unique_ptr<JsonParser> parser = std::make_unique<JsonDocumentStreamParser>(&simdjson_parser);
+    auto st = parser->parse(input.data(), size, padded_size);
+    ASSERT_TRUE(st.ok()) << st;
+
+    simdjson::ondemand::object row;
+    st = parser->get_current(&row);
+    ASSERT_TRUE(st.ok()) << st;
+
+    std::string key("key0");
+    for (int i = 0; i < 100000; ++i) {
+        simdjson::ondemand::value value;
+        row.find_field_unordered(key).get(value);
+
+        faststring buffer;
+        auto str_val = value_get_string_safe(&value, &buffer);
+
+        ASSERT_FALSE(str_val.error()) << str_val.error();
+        ASSERT_EQ(input_value, str_val.value());
+    }
+}
 } // namespace starrocks
