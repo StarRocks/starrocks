@@ -269,9 +269,8 @@ std::string DataDir::get_root_path_from_schema_hash_path_in_trash(const std::str
             .string();
 }
 
-// [NOTICE] We will igore error throw by load(),
-// so we must ensure that all tablets are either properly loaded or handled within load().
-Status DataDir::load() {
+// [NOTICE] we must ensure that all tablets are either properly loaded or handled within load().
+void DataDir::load() {
     // load tablet
     // create tablet from tablet meta and add it to tablet mgr
     int64_t load_tablet_start = MonotonicMillis();
@@ -305,6 +304,8 @@ Status DataDir::load() {
         if (!s.ok()) {
             // We don't need to make sure compact MUST success. Just ignore the error.
             LOG(ERROR) << "data dir " << _path << " compact meta before load failed";
+        } else {
+            LOG(WARNING) << "compact meta finished, retry load tablets from rocksdb. path: " << _path;
         }
         for (auto tablet_id : tablet_ids) {
             Status s = _tablet_manager->drop_tablet(tablet_id, kKeepMetaAndFiles);
@@ -313,7 +314,6 @@ Status DataDir::load() {
                 LOG(ERROR) << "data dir " << _path << " drop_tablet failed: " << s.message();
             }
         }
-        LOG(WARNING) << "compact meta finished, retry load tablets from rocksdb. path: " << _path;
         tablet_ids.clear();
         failed_tablet_ids.clear();
         load_tablet_status = TabletMetaManager::walk(_kv_store, load_tablet_func);
@@ -469,8 +469,6 @@ Status DataDir::load() {
             LOG(WARNING) << "Fail to finish loading rowsets, tablet id=" << tablet_id << ", status: " << st.to_string();
         }
     }
-
-    return Status::OK();
 }
 
 // gc unused tablet schemahash dir
