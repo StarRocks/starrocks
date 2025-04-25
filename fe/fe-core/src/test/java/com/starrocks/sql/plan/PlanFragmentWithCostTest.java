@@ -2432,4 +2432,54 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         assertContains(plan, "province-->[-Infinity, Infinity, 0.0, 1.0, 2.0]");
         assertContains(plan, "dt-->[-Infinity, Infinity, 0.0, 1.0, 2.0]");
     }
+
+    @Test
+    public void testBroadcastJoin() throws Exception {
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+        setTableStatistics(t0, 10000000);
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
+        setTableStatistics(t1, 10000);
+
+        String sql = "select * " +
+                " from t0 join t1 on t0.v3 = t1.v6 " +
+                "         join t2 on t0.v2 = t2.v8 and t1.v5 = t2.v7";
+        {
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  4:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BROADCAST)\n" +
+                    "  |  colocate: false, reason: \n" +
+                    "  |  equal join conjunct: 5: v5 = 7: v7");
+            assertContains(plan, "6:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BROADCAST)\n" +
+                    "  |  colocate: false, reason: \n" +
+                    "  |  equal join conjunct: 2: v2 = 8: v8\n" +
+                    "  |  equal join conjunct: 3: v3 = 6: v6");
+        }
+
+        long originLimit = connectContext.getSessionVariable().getBroadcastRowCountLimit();
+        {
+            // broadcast join should be disabled
+            connectContext.getSessionVariable().setBroadcastRowCountLimit(0);
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  8:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                    "  |  colocate: false, reason: \n" +
+                    "  |  equal join conjunct: 2: v2 = 8: v8\n" +
+                    "  |  equal join conjunct: 3: v3 = 6: v6\n" +
+                    "  |  \n" +
+                    "  |----7:EXCHANGE\n" +
+                    "  |    \n" +
+                    "  1:EXCHANGE");
+            assertContains(plan, "  6:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                    "  |  colocate: false, reason: \n" +
+                    "  |  equal join conjunct: 5: v5 = 7: v7\n" +
+                    "  |  \n" +
+                    "  |----5:EXCHANGE\n" +
+                    "  |    \n" +
+                    "  3:EXCHANGE");
+            connectContext.getSessionVariable().setBroadcastRowCountLimit(originLimit);
+        }
+    }
 }
