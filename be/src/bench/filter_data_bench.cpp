@@ -75,9 +75,9 @@ template <typename T>
 static inline size_t filter_simd_compress(const Filter& filter, T* data) {
     std::vector<uint8> bit_mask(filter.size() / 8);
 
-    constexpr size_t filter_batch_size = 64;
-    auto mask_offset = 0;
 #ifdef __AVX512BW__
+    auto mask_offset = 0;
+    constexpr size_t filter_batch_size = 64;
     const __m512i zero64 = _mm512_setzero_si512();
     for (size_t i = 0; i < filter.size(); i += filter_batch_size) {
         int64 m = _mm512_cmpneq_epi8_mask(_mm512_loadu_si512(reinterpret_cast<const __m512i*>(filter.data() + i)),
@@ -88,7 +88,9 @@ static inline size_t filter_simd_compress(const Filter& filter, T* data) {
     }
 #endif
     constexpr size_t batch_size = 512 / (sizeof(T) * 8);
+#ifdef __AVX512F__
     constexpr size_t mask_batch_size = batch_size / 8;
+#endif
     size_t res = 0;
     size_t batches = bit_mask.size() * 8 / batch_size;
     if constexpr (sizeof(T) * 8 == 32) {
