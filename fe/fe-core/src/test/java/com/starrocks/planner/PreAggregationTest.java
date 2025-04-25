@@ -66,6 +66,16 @@ public class PreAggregationTest {
                 "PROPERTIES (\n" +
                 " \"replication_num\" = \"1\"\n" +
                 ");");
+
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `test_agg_3` (\n" +
+                "  `k1` int(11) NULL,\n" +
+                "  `v1` int SUM NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "AGGREGATE KEY(`k1`)\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                " \"replication_num\" = \"1\"\n" +
+                ");");
     }
 
     public String getFragmentPlan(String sql) throws Exception {
@@ -121,5 +131,25 @@ public class PreAggregationTest {
         assertContains(plan, "0:OlapScanNode\n" +
                 "     TABLE: test_agg_2\n" +
                 "     PREAGGREGATION: ON\n");
+    }
+
+    @Test
+    public void testMetricTypeOfAggTableNotMatchAggragationReturnType() throws Exception {
+        String sql = "select \n" +
+                "col1, \n" +
+                "col2 \n" +
+                "from (\n" +
+                "select k1 col1, \n" +
+                "IFNULL(SUM(v1),0) col2 \n" +
+                "from test_agg_3 \n" +
+                "group by k1\n" +
+                ")tmp \n" +
+                "where 1=1 and col2 > 1 \n" +
+                "order by col1 \n" +
+                "asc limit 0,5";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 1> : 1: k1\n" +
+                "  |  <slot 4> : ifnull(CAST(2: v1 AS BIGINT), 0)");
     }
 }
