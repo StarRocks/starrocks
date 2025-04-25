@@ -118,10 +118,17 @@ public class WarehouseManagerEPack extends WarehouseManager {
     public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
         LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(warehouseId);
         checkWarehouseState(warehouse);
+        long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
         try {
-            return GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getPrimaryComputeNodeIdByShard(tablet.getShardId(), warehouse.getAnyAvailableCluster().getWorkerGroupId());
+            Set<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getAllNodeIdsInWorkerGroupByShard(tablet.getShardId(), workerGroupId, true);
+            if (!ids.isEmpty()) {
+                return ids.iterator().next();
+            } else {
+                return null;
+            }
         } catch (StarRocksException e) {
+            LOG.warn("Fail to get compute node ids from starMgr : {}", e.getMessage());
             return null;
         }
     }
@@ -131,9 +138,12 @@ public class WarehouseManagerEPack extends WarehouseManager {
         LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(warehouseId);
         checkWarehouseState(warehouse);
         try {
-            return GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getAllNodeIdsByShard(tablet.getShardId(), warehouse.getAnyAvailableCluster().getWorkerGroupId());
+            long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
+            Set<Long> nodeIds = GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getAllNodeIdsInWorkerGroupByShard(tablet.getShardId(), workerGroupId, true);
+            return new ArrayList<>(nodeIds);
         } catch (StarRocksException e) {
+            LOG.warn("Fail to get all compute node ids assigned to tablet {}, {}", tablet.getId(), e.getMessage());
             return null;
         }
     }

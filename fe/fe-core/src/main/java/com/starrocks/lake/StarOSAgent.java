@@ -35,6 +35,9 @@ import com.staros.proto.PlacementPreference;
 import com.staros.proto.PlacementRelationship;
 import com.staros.proto.QuitMetaGroupInfo;
 import com.staros.proto.ReplicaInfo;
+import com.staros.proto.ReplicaInfoSnapshot;
+import com.staros.proto.ReplicaInfoSnapshotList;
+import com.staros.proto.ReplicaRole;
 import com.staros.proto.ReplicationType;
 import com.staros.proto.ServiceInfo;
 import com.staros.proto.ShardGroupInfo;
@@ -61,6 +64,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -631,6 +635,10 @@ public class StarOSAgent {
                 return Optional.of(beId);
             }
         }
+        return updateNodeIdByWorkerInfo(info);
+    }
+
+    private Optional<Long> updateNodeIdByWorkerInfo(WorkerInfo info) {
         String workerAddr = info.getIpPort();
         String[] hostPorts = workerAddr.split(":");
         String host = hostPorts[0];
@@ -660,15 +668,19 @@ public class StarOSAgent {
         }
         if (result.isPresent()) {
             try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
-                workerToId.put(workerAddr, workerId);
-                workerToNode.put(workerId, result.get());
+                workerToId.put(workerAddr, info.getWorkerId());
+                workerToNode.put(info.getWorkerId(), result.get());
             }
         }
         return result;
     }
 
+    public long getPrimaryComputeNodeIdByShard(long shardId) throws StarRocksException {
+        return getPrimaryComputeNodeIdByShard(shardId, DEFAULT_WORKER_GROUP_ID);
+    }
+
     public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws StarRocksException {
-        List<Long> backendIds = getAllNodeIdsByShard(shardId, workerGroupId);
+        Set<Long> backendIds = getAllNodeIdsInWorkerGroupByShard(shardId, workerGroupId, true);
         if (backendIds.isEmpty()) {
             // If BE stops, routine load task may catch UserException during load plan,
             // and the job state will changed to PAUSED.
@@ -711,6 +723,40 @@ public class StarOSAgent {
                 .forEach(x -> x.ifPresent(nodeIds::add));
 
         return nodeIds;
+    }
+
+    public Set<Long> getAllNodeIdsInWorkerGroupByShard(long shardId, long workerGroupId, boolean onlyPrimary)
+            throws StarRocksException {
+        try {
+            List<ReplicaInfoSnapshotList> snapshotLists =
+                    client.getReplicaWorkerInfoSnapshotList(serviceId, Lists.newArrayList(shardId), workerGroupId);
+            Preconditions.checkState(snapshotLists.size() == 1);
+            List<ReplicaInfoSnapshot> snapshotList = snapshotLists.get(0).getReplicaSnapshotList();
+            if (onlyPrimary) {
+                snapshotList = snapshotList.stream().filter(x -> x.getReplicaRole() == ReplicaRole.PRIMARY)
+                        .collect(Collectors.toList());
+            }
+            List<Long> nodeIds = new ArrayList<>();
+            for (ReplicaInfoSnapshot snapshot : snapshotList) {
+                Optional<Long> opt = getOrUpdateNodeIdByReplicaSnapshot(snapshot.getWorkerId());
+                opt.ifPresent(nodeIds::add);
+            }
+            return new HashSet<>(nodeIds);
+        } catch (StarClientException e) {
+            throw new StarRocksException(e);
+        }
+    }
+
+    private Optional<Long> getOrUpdateNodeIdByReplicaSnapshot(long workerId) throws StarClientException {
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            // get the backend id directly from workerToBackend
+            Long beId = workerToNode.get(workerId);
+            if (beId != null) {
+                return Optional.of(beId);
+            }
+        }
+        WorkerInfo info = client.getWorkerInfo(serviceId, workerId);
+        return updateNodeIdByWorkerInfo(info);
     }
 
     public void createMetaGroup(long metaGroupId, List<Long> shardGroupIds) throws DdlException {
