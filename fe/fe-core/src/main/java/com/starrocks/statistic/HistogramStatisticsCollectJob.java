@@ -46,6 +46,21 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                     "   WHERE $randFilter and $columnName is not null $MCVExclude" +
                     "   ORDER BY $columnName LIMIT $totalRows) t";
 
+    private static final String COLLECT_HISTOGRAM_WITH_NDV_STATISTIC_TEMPLATE =
+            "SELECT $tableId, '$columnNameStr', $dbId, '$dbName.$tableName'," +
+                    " histogram_hll_ndv($columnName, '$buckets')," +
+                    " $mcv," +
+                    " NOW()" +
+                    " FROM `$dbName`.`$tableName`;";
+
+    private static final String COLLECT_BUCKETS_STATISTIC_TEMPLATE =
+            "SELECT cast(" + StatsConstants.STATISTIC_HISTOGRAM_VERSION + " as INT) as version," +
+                    " cast($dbId  as BIGINT), cast($tableId as BIGINT), '$columnNameStr'," +
+                    " histogram(`column_key`, cast($bucketNum as int), cast($sampleRatio as double))" +
+                    " FROM (SELECT $columnName as column_key FROM `$dbName`.`$tableName` where rand() <= $sampleRatio" +
+                    " and $columnName is not null $MCVExclude" +
+                    " ORDER BY $columnName LIMIT $totalRows) t";
+
     private static final String COLLECT_MCV_STATISTIC_TEMPLATE =
             "select cast(version as INT), cast(db_id as BIGINT), cast(table_id as BIGINT), " +
                     "cast(column_key as varchar), cast(column_value as varchar) from (" +
@@ -72,6 +87,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         double sampleRatio = Double.parseDouble(properties.get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
         long bucketNum = Long.parseLong(properties.get(StatsConstants.HISTOGRAM_BUCKET_NUM));
         long mcvSize = Long.parseLong(properties.get(StatsConstants.HISTOGRAM_MCV_SIZE));
+        boolean collectNdv = Boolean.parseBoolean(properties.get(StatsConstants.HISTOGRAM_COLLECT_NDV));
 
         long finishedSQLNum = 0;
         long totalCollectSQL = columnNames.size();
@@ -96,7 +112,13 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                 }
             }
 
-            sql = buildCollectHistogram(db, table, sampleRatio, bucketNum, mostCommonValues, columnName, columnType);
+            if (collectNdv) {
+                sql = buildCollectBuckets(db, table, sampleRatio, bucketNum, mostCommonValues, columnName, columnType);
+                List<TStatisticData> buckets = statisticExecutor.executeStatisticDQL(context, sql);
+                sql = buildCollectHistogramWithNdv(db, table, mostCommonValues, buckets.get(0).histogram, columnName);
+            } else {
+                sql = buildCollectHistogram(db, table, sampleRatio, bucketNum, mostCommonValues, columnName, columnType);
+            }
             collectStatisticSync(sql, context);
 
             finishedSQLNum++;
@@ -186,6 +208,73 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
 
         builder.append(build(context, COLLECT_HISTOGRAM_STATISTIC_TEMPLATE));
         return builder.toString();
+    }
+
+    private String buildCollectHistogramWithNdv(Database database, Table table, Map<String, String> mostCommonValues,
+                                                String buckets, String columnName) {
+        List<String> targetColumnNames = StatisticUtils.buildStatsColumnDef(HISTOGRAM_STATISTICS_TABLE_NAME).stream()
+                .map(ColumnDef::getName)
+                .collect(Collectors.toList());
+        String columnNames = "(" + String.join(", ", targetColumnNames) + ")";
+        StringBuilder builder = new StringBuilder("INSERT INTO ").append(HISTOGRAM_STATISTICS_TABLE_NAME)
+                .append(columnNames).append(" ");
+        String quoteColumName = StatisticUtils.quoting(table, columnName);
+
+        VelocityContext context = new VelocityContext();
+        context.put("tableId", table.getId());
+        context.put("columnName", quoteColumName);
+        context.put("columnNameStr", columnName);
+        context.put("dbId", database.getId());
+        context.put("dbName", database.getOriginName());
+        context.put("tableName", table.getName());
+
+        List<String> mcvList = new ArrayList<>();
+        for (Map.Entry<String, String> entry : mostCommonValues.entrySet()) {
+            mcvList.add("[\"" + entry.getKey() + "\",\"" + entry.getValue() + "\"]");
+        }
+
+        if (mostCommonValues.isEmpty()) {
+            context.put("mcv", "NULL");
+        } else {
+            context.put("mcv", "'[" + Joiner.on(",").join(mcvList) + "]'");
+        }
+
+        context.put("buckets", buckets);
+
+        builder.append(build(context, COLLECT_HISTOGRAM_WITH_NDV_STATISTIC_TEMPLATE));
+        return builder.toString();
+    }
+
+    private String buildCollectBuckets(Database database, Table table, double sampleRatio,
+                                      Long bucketNum, Map<String, String> mostCommonValues, String columnName,
+                                      Type columnType) {
+        String quoteColumName = StatisticUtils.quoting(table, columnName);
+
+        VelocityContext context = new VelocityContext();
+        context.put("tableId", table.getId());
+        context.put("columnName", quoteColumName);
+        context.put("columnNameStr", columnName);
+        context.put("dbId", database.getId());
+        context.put("dbName", database.getOriginName());
+        context.put("tableName", table.getName());
+
+        context.put("bucketNum", bucketNum);
+        context.put("sampleRatio", sampleRatio);
+        context.put("totalRows", Config.histogram_max_sample_row_count);
+
+        if (!mostCommonValues.isEmpty()) {
+            if (columnType.getPrimitiveType().isDateType() || columnType.getPrimitiveType().isCharFamily()) {
+                context.put("MCVExclude", " and " + quoteColumName + " not in (\"" +
+                        Joiner.on("\",\"").join(mostCommonValues.keySet()) + "\")");
+            } else {
+                context.put("MCVExclude", " and " + quoteColumName + " not in (" +
+                        Joiner.on(",").join(mostCommonValues.keySet()) + ")");
+            }
+        } else {
+            context.put("MCVExclude", "");
+        }
+
+        return build(context, COLLECT_BUCKETS_STATISTIC_TEMPLATE);
     }
 
     @Override

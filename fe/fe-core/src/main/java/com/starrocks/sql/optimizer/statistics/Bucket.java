@@ -22,12 +22,22 @@ public class Bucket {
     private final double upper;
     private final Long count;
     private final Long upperRepeats;
+    private final Optional<Long> distinctCount;
 
     public Bucket(double lower, double upper, Long count, Long upperRepeats) {
         this.lower = lower;
         this.upper = upper;
         this.count = count;
         this.upperRepeats = upperRepeats;
+        this.distinctCount = Optional.empty();
+    }
+
+    public Bucket(double lower, double upper, Long count, Long upperRepeats, Long distinctCount) {
+        this.lower = lower;
+        this.upper = upper;
+        this.count = count;
+        this.upperRepeats = upperRepeats;
+        this.distinctCount = Optional.of(distinctCount);
     }
 
     public double getLower() {
@@ -51,12 +61,13 @@ public class Bucket {
         if (lower <= value && value < upper) {
             long rowCount = count - previousBucketCount - upperRepeats;
 
-            if (useFixedPointEstimation) {
-                rowCount = (long) Math.ceil(Math.max(1, rowCount / Math.max(1, (upper - lower))));
-            } else {
-                rowCount = (long) Math.ceil(Math.max(1, rowCount / Math.max(1, distinctValuesCount)));
+            if (distinctCount.isPresent()) {
+                distinctValuesCount = distinctCount.get();
+            } else if (useFixedPointEstimation) {
+                distinctValuesCount = upper - lower;
             }
 
+            rowCount = (long) Math.ceil(Math.max(1, rowCount / Math.max(1, distinctValuesCount)));
             return Optional.of(rowCount);
         } else if (upper == value) {
             return Optional.of(upperRepeats);
