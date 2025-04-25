@@ -151,8 +151,8 @@ public class NativeAccessController implements AccessController {
     @Override
     public void checkFunctionAction(ConnectContext context, Database database, Function function,
                                     PrivilegeType privilegeType) throws AccessDeniedException {
-        checkFunctionAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), ObjectType.FUNCTION, database.getId(),
-                function, privilegeType);
+        checkFunctionAction(context.getCurrentUserIdentity(), context.getGroups(), context.getCurrentRoleIds(),
+                ObjectType.FUNCTION, database.getId(), function, privilegeType);
     }
 
     @Override
@@ -170,8 +170,9 @@ public class NativeAccessController implements AccessController {
     @Override
     public void checkGlobalFunctionAction(ConnectContext context, Function function,
                                           PrivilegeType privilegeType) throws AccessDeniedException {
-        checkFunctionAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), ObjectType.GLOBAL_FUNCTION,
-                PrivilegeBuiltinConstants.GLOBAL_FUNCTION_DEFAULT_DATABASE_ID, function, privilegeType);
+        checkFunctionAction(context.getCurrentUserIdentity(), context.getGroups(), context.getCurrentRoleIds(),
+                ObjectType.GLOBAL_FUNCTION, PrivilegeBuiltinConstants.GLOBAL_FUNCTION_DEFAULT_DATABASE_ID, function,
+                privilegeType);
     }
 
     @Override
@@ -185,8 +186,8 @@ public class NativeAccessController implements AccessController {
             throws AccessDeniedException {
         AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         try {
-            PrivilegeCollectionV2 collection =
-                    manager.mergePrivilegeCollection(context.getCurrentUserIdentity(), context.getCurrentRoleIds());
+            PrivilegeCollectionV2 collection = manager.mergePrivilegeCollection(context.getCurrentUserIdentity(),
+                    context.getGroups(), context.getCurrentRoleIds());
             // 1. check for specified action on any table in this db
             if (manager.provider.isAvailablePrivType(ObjectType.TABLE, privilegeType)) {
                 PEntryObject allTableInDbObject = manager.provider.generateObject(
@@ -276,8 +277,8 @@ public class NativeAccessController implements AccessController {
     public void withGrantOption(ConnectContext context, ObjectType type, List<PrivilegeType> wants,
                                 List<PEntryObject> objects) throws AccessDeniedException {
         AuthorizationMgr authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
-        if (!authorizationManager.allowGrant(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), type, wants,
-                objects)) {
+        if (!authorizationManager.allowGrant(context.getCurrentUserIdentity(), context.getGroups(), context.getCurrentRoleIds(),
+                type, wants, objects)) {
             throw new AccessDeniedException();
         }
     }
@@ -286,11 +287,12 @@ public class NativeAccessController implements AccessController {
      * Check whether current user has any privilege action on Function
      */
 
-    private void checkFunctionAction(UserIdentity currentUser, Set<Long> roleIds, ObjectType objectType, long databaseId,
+    private void checkFunctionAction(UserIdentity currentUser, Set<String> groups, Set<Long> roleIds, ObjectType objectType,
+                                     long databaseId,
                                      Function function, PrivilegeType privilegeType) throws AccessDeniedException {
         AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         try {
-            PrivilegeCollectionV2 collection = manager.mergePrivilegeCollection(currentUser, roleIds);
+            PrivilegeCollectionV2 collection = manager.mergePrivilegeCollection(currentUser, groups, roleIds);
             PEntryObject object = manager.provider.generateFunctionObject(objectType, databaseId, function.getFunctionId());
             boolean checkResult = manager.provider.check(objectType, privilegeType, object, collection);
             if (!checkResult) {
@@ -313,7 +315,7 @@ public class NativeAccessController implements AccessController {
         AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         try {
             PrivilegeCollectionV2 collection = manager.mergePrivilegeCollection(
-                    context.getCurrentUserIdentity(), context.getCurrentRoleIds());
+                    context.getCurrentUserIdentity(), context.getGroups(), context.getCurrentRoleIds());
             boolean checkResult = manager.checkAction(collection, objectType, privilegeType, objectTokens);
             if (!checkResult) {
                 throw new AccessDeniedException();
@@ -344,7 +346,7 @@ public class NativeAccessController implements AccessController {
         AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         try {
             PrivilegeCollectionV2 collection = manager.mergePrivilegeCollection(
-                    context.getCurrentUserIdentity(), context.getCurrentRoleIds());
+                    context.getCurrentUserIdentity(), context.getGroups(), context.getCurrentRoleIds());
             PEntryObject pEntryObject = manager.provider.generateObject(objectType, objectTokens);
             boolean checkResult = manager.provider.searchAnyActionOnObject(objectType, pEntryObject, collection);
             if (!checkResult) {
@@ -385,8 +387,8 @@ public class NativeAccessController implements AccessController {
 
         AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         try {
-            PrivilegeCollectionV2 collection =
-                    manager.mergePrivilegeCollection(context.getCurrentUserIdentity(), context.getCurrentRoleIds());
+            PrivilegeCollectionV2 collection = manager.mergePrivilegeCollection(
+                    context.getCurrentUserIdentity(), context.getGroups(), context.getCurrentRoleIds());
             PEntryObject pEntryObject = manager.provider.generateFunctionObject(objectType, databaseId, functionId);
             boolean checkResult = manager.provider.searchAnyActionOnObject(objectType, pEntryObject, collection);
             if (!checkResult) {

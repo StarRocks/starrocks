@@ -17,6 +17,7 @@ package com.starrocks.authentication;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.UserIdentity;
 import org.apache.commons.lang3.StringUtils;
 
 import java.nio.charset.StandardCharsets;
@@ -31,8 +32,7 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
     @Override
     public void authenticate(
             ConnectContext context,
-            String user,
-            String host,
+            UserIdentity userIdentity,
             byte[] authResponse) throws AuthenticationException {
         String usePassword = authResponse.length == 0 ? "NO" : "YES";
         byte[] randomString = context.getAuthDataSalt();
@@ -41,18 +41,18 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
         if (randomString != null) {
             byte[] saltPassword = MysqlPassword.getSaltFromPassword(password);
             if (saltPassword.length != authResponse.length) {
-                throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, user, usePassword);
+                throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, userIdentity.getUser(), usePassword);
             }
 
             if (authResponse.length > 0 && !MysqlPassword.checkScramble(authResponse, randomString, saltPassword)) {
-                throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, user, usePassword);
+                throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, userIdentity.getUser(), usePassword);
             }
         } else {
             // Plain remote password, scramble it first.
             byte[] scrambledRemotePass = MysqlPassword.makeScrambledPassword((StringUtils.stripEnd(
                     new String(authResponse, StandardCharsets.UTF_8), "\0")));
             if (!MysqlPassword.checkScrambledPlainPass(password, scrambledRemotePass)) {
-                throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, user, usePassword);
+                throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, userIdentity.getUser(), usePassword);
             }
         }
     }

@@ -64,20 +64,19 @@ public class AuthenticationProviderTest {
                     .create(info.getAuthPlugin(), new String(info.getPassword()));
 
             byte[] scramble = MysqlPassword.scramble(seed, password);
-            provider.authenticate(ctx, testUser.getUser(), "10.1.1.1", scramble);
+            provider.authenticate(ctx, testUser, scramble);
         }
 
         // no password
         PlainPasswordAuthenticationProvider provider = new PlainPasswordAuthenticationProvider(MysqlPassword.EMPTY_PASSWORD);
         UserAuthenticationInfo info = UserAuthOptionAnalyzer.analyzeAuthOption(testUser, null);
         ctx.setAuthDataSalt(new byte[0]);
-        provider.authenticate(ctx, testUser.getUser(), "10.1.1.1", new byte[0]);
+        provider.authenticate(ctx, testUser, new byte[0]);
         try {
             ctx.setAuthDataSalt("x".getBytes(StandardCharsets.UTF_8));
             provider.authenticate(
                     ctx,
-                    testUser.getUser(),
-                    "10.1.1.1",
+                    testUser,
                     "xx".getBytes(StandardCharsets.UTF_8));
             Assert.fail();
         } catch (AuthenticationException e) {
@@ -94,8 +93,7 @@ public class AuthenticationProviderTest {
             ctx.setAuthDataSalt(seed);
             provider.authenticate(
                     ctx,
-                    testUser.getUser(),
-                    "10.1.1.1",
+                    testUser,
                     MysqlPassword.scramble(seed, "xx"));
             Assert.fail();
         } catch (AuthenticationException e) {
@@ -106,8 +104,7 @@ public class AuthenticationProviderTest {
             ctx.setAuthDataSalt(seed);
             provider.authenticate(
                     ctx,
-                    testUser.getUser(),
-                    "10.1.1.1",
+                    testUser,
                     MysqlPassword.scramble(seed, "bb"));
 
         } catch (AuthenticationException e) {
@@ -119,8 +116,7 @@ public class AuthenticationProviderTest {
             ctx.setAuthDataSalt(null);
             provider.authenticate(
                     ctx,
-                    testUser.getUser(),
-                    "10.1.1.1",
+                    testUser,
                     remotePassword);
 
         } catch (AuthenticationException e) {

@@ -15,17 +15,19 @@
 package com.starrocks.authentication;
 
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.UserIdentity;
 
 public interface AuthenticationProvider {
 
     /**
-     * login authentication
+     * Attempt to authentication
+     *
+     * @param context      connection context
+     * @param userIdentity best matched user
+     * @param authResponse auth response received by mysql protocol
+     * @throws AuthenticationException when authentication fail
      */
-    void authenticate(
-            ConnectContext context,
-            String user,
-            String host,
-            byte[] authResponse) throws AuthenticationException;
+    void authenticate(ConnectContext context, UserIdentity userIdentity, byte[] authResponse) throws AuthenticationException;
 
     /**
      * Some special Authentication Methods need to pass more information, and authMoreDataPacket is a unified interface.
