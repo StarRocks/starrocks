@@ -144,8 +144,8 @@ static int64_t calc_max_compaction_memory(int64_t process_mem_limit) {
     return std::min<int64_t>(limit, process_mem_limit * percent / 100);
 }
 
-static int64_t calc_max_consistency_memory(int64_t process_mem_limit) {
-    int64_t limit = ParseUtil::parse_mem_spec(config::consistency_max_memory_limit, process_mem_limit);
+static StatusOr<int64_t> calc_max_consistency_memory(int64_t process_mem_limit) {
+    ASSIGN_OR_RETURN(int64_t limit, ParseUtil::parse_mem_spec(config::consistency_max_memory_limit, process_mem_limit));
     int64_t percent = config::consistency_max_memory_limit_percent;
 
     if (process_mem_limit < 0) {
@@ -178,7 +178,7 @@ Status GlobalEnv::_init_mem_tracker() {
     int64_t bytes_limit = 0;
     std::stringstream ss;
     // --mem_limit="" means no memory limit
-    bytes_limit = ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem());
+    ASSIGN_OR_RETURN(bytes_limit, ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem()));
     // use 90% of mem_limit as the soft mem limit of BE
     bytes_limit = bytes_limit * 0.9;
     if (bytes_limit <= 0) {
@@ -242,7 +242,7 @@ Status GlobalEnv::_init_mem_tracker() {
     _passthrough_mem_tracker = regist_tracker(MemTrackerType::PASSTHROUGH, -1, nullptr);
     _passthrough_mem_tracker->set_level(2);
     _clone_mem_tracker = regist_tracker(MemTrackerType::CLONE, -1, process_mem_tracker());
-    int64_t consistency_mem_limit = calc_max_consistency_memory(_process_mem_tracker->limit());
+    ASSIGN_OR_RETURN(int64_t consistency_mem_limit, calc_max_consistency_memory(_process_mem_tracker->limit()));
     _consistency_mem_tracker =
             regist_tracker(MemTrackerType::CONSISTENCY, consistency_mem_limit, process_mem_tracker());
     _datacache_mem_tracker = regist_tracker(MemTrackerType::DATACACHE, -1, process_mem_tracker());
@@ -277,7 +277,7 @@ void GlobalEnv::_reset_tracker() {
     }
 }
 
-int64_t GlobalEnv::get_storage_page_cache_size() {
+StatusOr<int64_t> GlobalEnv::get_storage_page_cache_size() {
     int64_t mem_limit = MemInfo::physical_mem();
     if (process_mem_tracker()->has_limit()) {
         mem_limit = process_mem_tracker()->limit();
@@ -376,7 +376,7 @@ Status CacheEnv::_init_starcache_based_object_cache() {
 
 Status CacheEnv::_init_lru_base_object_cache() {
     ObjectCacheOptions options;
-    int64_t storage_cache_limit = _global_env->get_storage_page_cache_size();
+    ASSIGN_OR_RETURN(int64_t storage_cache_limit, _global_env->get_storage_page_cache_size());
     storage_cache_limit = _global_env->check_storage_page_cache_size(storage_cache_limit);
     options.capacity = storage_cache_limit;
 
@@ -446,15 +446,17 @@ Status CacheEnv::_init_datacache() {
                 return Status::InternalError("Fail to create datacache directory");
             }
 
-            int64_t disk_size =
-                    DataCacheUtils::parse_conf_datacache_disk_size(datacache_path, config::datacache_disk_size, -1);
+            ASSIGN_OR_RETURN(int64_t disk_size, DataCacheUtils::parse_conf_datacache_disk_size(
+                                                        datacache_path, config::datacache_disk_size, -1));
 #ifdef USE_STAROS
             // If the `datacache_disk_size` is manually set a positive value, we will use the maximum cache quota between
             // dataleke and starlet cache as the quota of the unified cache. Otherwise, the cache quota will remain zero
             // and then automatically adjusted based on the current avalible disk space.
             if (config::datacache_unified_instance_enable && (!config::datacache_auto_adjust_enable || disk_size > 0)) {
-                int64_t starlet_cache_size = DataCacheUtils::parse_conf_datacache_disk_size(
-                        datacache_path, fmt::format("{}%", config::starlet_star_cache_disk_size_percent), -1);
+                ASSIGN_OR_RETURN(
+                        int64_t starlet_cache_size,
+                        DataCacheUtils::parse_conf_datacache_disk_size(
+                                datacache_path, fmt::format("{}%", config::starlet_star_cache_disk_size_percent), -1));
                 disk_size = std::max(disk_size, starlet_cache_size);
             }
 #endif

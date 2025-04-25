@@ -87,7 +87,7 @@ public:
 
 private:
     Status _update_disk_stats();
-    void _update_disk_options();
+    Status _update_disk_options();
 
     void _update_spaces_by_cache_quota(size_t cache_avalil_bytes);
 
