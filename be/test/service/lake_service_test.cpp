@@ -49,6 +49,8 @@ class MockLakeServiceImpl : public starrocks::LakeService {
 public:
     MOCK_METHOD4(publish_version, void(::google::protobuf::RpcController*, const ::starrocks::PublishVersionRequest*,
                                        ::starrocks::PublishVersionResponse*, ::google::protobuf::Closure* done));
+    MOCK_METHOD4(compact, void(::google::protobuf::RpcController*, const ::starrocks::CompactRequest*,
+                               ::starrocks::CompactResponse*, ::google::protobuf::Closure* done));
 };
 using ::testing::_;
 using ::testing::Invoke;
@@ -974,6 +976,123 @@ TEST_F(LakeServiceTest, test_compact) {
         ASSERT_FALSE(cntl.Failed());
         ASSERT_EQ(0, response.failed_tablets_size());
         ASSERT_TRUE(response.compaction_scores().contains(_tablet_id));
+    }
+}
+
+TEST_F(LakeServiceTest, test_aggregate_compact) {
+    auto agg_compact = [this](::google::protobuf::RpcController* cntl, const AggregateCompactRequest* request,
+                              CompactResponse* response) {
+        CountDownLatch latch(1);
+        auto cb = ::google::protobuf::NewCallback(&latch, &CountDownLatch::count_down);
+        _lake_service.aggregate_compact(cntl, request, response, cb);
+        latch.wait();
+    };
+
+    auto txn_id = next_id();
+    // empty requests
+    {
+        brpc::Controller cntl;
+        AggregateCompactRequest agg_request;
+        CompactResponse response;
+        agg_compact(&cntl, &agg_request, &response);
+        ASSERT_TRUE(cntl.Failed());
+        ASSERT_EQ("empty requests", cntl.ErrorText());
+    }
+    // compute nodes size not equal to requests size
+    {
+        brpc::Controller cntl;
+        AggregateCompactRequest agg_request;
+        CompactRequest request;
+        CompactResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_txn_id(txn_id);
+        request.set_version(1);
+        // add request to agg_request
+        agg_request.add_requests()->CopyFrom(request);
+        agg_compact(&cntl, &agg_request, &response);
+        ASSERT_TRUE(cntl.Failed());
+        ASSERT_EQ("compute nodes size not equal to requests size", cntl.ErrorText());
+    }
+    // compute node missing host/port
+    {
+        brpc::Controller cntl;
+        AggregateCompactRequest agg_request;
+        CompactRequest request;
+        ComputeNodePB cn;
+        cn.set_id(1);
+        CompactResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_txn_id(txn_id);
+        request.set_version(1);
+        // add request to agg_request
+        agg_request.add_requests()->CopyFrom(request);
+        agg_request.add_compute_nodes()->CopyFrom(cn);
+        agg_compact(&cntl, &agg_request, &response);
+        ASSERT_EQ("compute node missing host/port", response.status().error_msgs(0));
+    }
+    brpc::ServerOptions options;
+    options.num_threads = 1;
+    brpc::Server server;
+    MockLakeServiceImpl mock_service;
+    ASSERT_EQ(server.AddService(&mock_service, brpc::SERVER_DOESNT_OWN_SERVICE), 0);
+    ASSERT_EQ(server.Start(0, &options), 0);
+
+    butil::EndPoint server_addr = server.listen_address();
+    const int port = server_addr.port;
+    EXPECT_CALL(mock_service, compact(_, _, _, _))
+            .WillRepeatedly(Invoke([&](::google::protobuf::RpcController*, const CompactRequest*, CompactResponse* resp,
+                                       ::google::protobuf::Closure* done) {
+                TxnLogPB txnlog;
+                txnlog.set_tablet_id(100);
+                txnlog.set_txn_id(100);
+                resp->add_txn_logs()->CopyFrom(txnlog);
+                TxnLogPB txnlog2;
+                txnlog2.set_tablet_id(101);
+                txnlog2.set_txn_id(100);
+                resp->add_txn_logs()->CopyFrom(txnlog2);
+                done->Run();
+            }));
+    // compact success - single cn
+    {
+        brpc::Controller cntl;
+        AggregateCompactRequest agg_request;
+        CompactRequest request;
+        ComputeNodePB cn;
+        cn.set_host("127.0.0.1");
+        cn.set_brpc_port(port);
+        cn.set_id(1);
+        CompactResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_txn_id(txn_id);
+        request.set_version(1);
+        // add request to agg_request
+        agg_request.add_requests()->CopyFrom(request);
+        agg_request.add_compute_nodes()->CopyFrom(cn);
+        agg_compact(&cntl, &agg_request, &response);
+        ASSERT_FALSE(cntl.Failed());
+        ASSERT_EQ(0, response.failed_tablets_size());
+    }
+    // compact success - 3 cn
+    {
+        brpc::Controller cntl;
+        AggregateCompactRequest agg_request;
+        for (int i = 1; i <= 3; i++) {
+            CompactRequest request;
+            ComputeNodePB cn;
+            cn.set_host("127.0.0." + std::to_string(i));
+            cn.set_brpc_port(port);
+            cn.set_id(i);
+            request.add_tablet_ids(_tablet_id);
+            request.set_txn_id(txn_id);
+            request.set_version(1);
+            // add request to agg_request
+            agg_request.add_requests()->CopyFrom(request);
+            agg_request.add_compute_nodes()->CopyFrom(cn);
+        }
+        CompactResponse response;
+        agg_compact(&cntl, &agg_request, &response);
+        ASSERT_FALSE(cntl.Failed());
+        ASSERT_EQ(0, response.failed_tablets_size());
     }
 }
 

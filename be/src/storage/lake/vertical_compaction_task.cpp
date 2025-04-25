@@ -92,7 +92,12 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     RETURN_IF_ERROR(fill_compaction_segment_info(op_compaction, writer.get()));
     op_compaction->set_compact_version(_tablet.metadata()->version());
     RETURN_IF_ERROR(execute_index_major_compaction(txn_log.get()));
-    RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
+    if (_context->no_write_txnlog) {
+        // return txn_log to caller later
+        _context->txn_log = txn_log;
+    } else {
+        RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
+    }
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         // preload primary key table's compaction state
         Tablet t(_tablet.tablet_manager(), _tablet.id());

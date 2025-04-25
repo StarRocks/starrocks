@@ -22,6 +22,7 @@
 #include "agent/agent_server.h"
 #include "common/config.h"
 #include "common/status.h"
+#include "exec/write_combined_txn_log.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/join.h"
 #include "runtime/exec_env.h"
@@ -935,6 +936,123 @@ void LakeServiceImpl::compact(::google::protobuf::RpcController* controller, con
     }
 
     _tablet_mgr->compaction_scheduler()->compact(controller, request, response, guard.release());
+}
+
+struct AggregateCompactContext {
+    bthread::Mutex response_mtx;
+    Status final_status = Status::OK();
+    std::unique_ptr<BThreadCountDownLatch> latch;
+    CombinedTxnLogPB combined_txn_log;
+
+    void handle_failure(const std::string& error) {
+        std::lock_guard l(response_mtx);
+        final_status = Status::InternalError(error);
+    }
+
+    void collect_txnlogs(CompactResponse* response) {
+        std::lock_guard l(response_mtx);
+        for (const auto& log : response->txn_logs()) {
+            combined_txn_log.add_txn_logs()->CopyFrom(log);
+        }
+    }
+
+    void wait() {
+        if (latch) {
+            latch->wait();
+        }
+    }
+
+    void count_down() {
+        if (latch) {
+            latch->count_down();
+        }
+    }
+
+    void write_combined_txn_log() {
+        if (final_status.ok()) {
+            final_status = starrocks::write_combined_txn_log(combined_txn_log);
+        }
+    }
+};
+
+static void aggregate_compact_cb(brpc::Controller* cntl, CompactResponse* response,
+                                 AggregateCompactContext* ac_context) {
+    // 1. release context
+    std::unique_ptr<brpc::Controller> cntl_guard(cntl);
+    std::unique_ptr<CompactResponse> response_guard(response);
+
+    DeferOp defer([&]() { ac_context->count_down(); });
+
+    // 2. check status
+    if (cntl->Failed()) {
+        ac_context->handle_failure("link rpc channel failed");
+        return;
+    } else {
+        if (response->status().status_code() != 0) {
+            ac_context->handle_failure("call compact failed");
+            return;
+        }
+    }
+
+    // 3. collect txn logs
+    ac_context->collect_txnlogs(response);
+}
+
+void LakeServiceImpl::aggregate_compact(::google::protobuf::RpcController* controller,
+                                        const ::starrocks::AggregateCompactRequest* request,
+                                        ::starrocks::CompactResponse* response, ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+
+    if (request->requests_size() == 0) {
+        cntl->SetFailed("empty requests");
+        return;
+    }
+    if (request->compute_nodes_size() != request->requests_size()) {
+        cntl->SetFailed("compute nodes size not equal to requests size");
+        return;
+    }
+
+    AggregateCompactContext ac_context;
+    ac_context.latch = std::make_unique<BThreadCountDownLatch>(request->requests_size());
+
+    for (int i = 0; i < request->requests_size(); i++) {
+        const auto& single_req = request->requests(i);
+        const auto& compute_node = request->compute_nodes(i);
+        if (!compute_node.has_host() || !compute_node.has_brpc_port()) {
+            ac_context.handle_failure("compute node missing host/port");
+            ac_context.count_down();
+            continue;
+        }
+        brpc::Controller* node_cntl = new brpc::Controller();
+        CompactResponse* node_resp = new CompactResponse();
+        node_cntl->set_timeout_ms(single_req.timeout_ms());
+        butil::EndPoint endpoint;
+        std::string brpc_url = fmt::format("{}:{}", compute_node.host(), compute_node.brpc_port());
+        if (str2endpoint(brpc_url.c_str(), &endpoint)) {
+            ac_context.handle_failure("unknown endpoint, host=" + compute_node.host());
+            ac_context.count_down();
+            continue;
+        }
+        std::unique_ptr<brpc::Channel> channel(new brpc::Channel());
+        brpc::ChannelOptions options;
+        options.connect_timeout_ms = config::rpc_connect_timeout_ms;
+        channel->Init(endpoint, &options);
+        // TODO stub cache
+        auto stub = std::make_shared<starrocks::LakeService_Stub>(channel.release(),
+                                                                  google::protobuf::Service::STUB_OWNS_CHANNEL);
+        stub->compact(node_cntl, &single_req, node_resp,
+                      brpc::NewCallback(aggregate_compact_cb, node_cntl, node_resp, &ac_context));
+    }
+
+    // wait for all tasks to finish
+    ac_context.wait();
+
+    // write combined txn log
+    ac_context.write_combined_txn_log();
+
+    // fill response
+    ac_context.final_status.to_protobuf(response->mutable_status());
 }
 
 void LakeServiceImpl::abort_compaction(::google::protobuf::RpcController* controller,

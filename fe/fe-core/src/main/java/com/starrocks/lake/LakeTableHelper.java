@@ -241,4 +241,21 @@ public class LakeTableHelper {
                 sourceType == TransactionState.LoadJobSourceType.INSERT_STREAMING ||
                 sourceType == TransactionState.LoadJobSourceType.BATCH_LOAD_JOB;
     }
+
+    public static boolean enablePartitionAggregation(long dbId, long tableId) {
+        if (!RunMode.isSharedDataMode()) {
+            return false;
+        }
+        // get OlapTable
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        if (table == null) {
+            return false;
+        }
+        // check if table is LakeTable with partition aggregation
+        if (table.enablePartitionAggregation()) {
+            return true;
+        }
+
+        return false;
+    }
 }

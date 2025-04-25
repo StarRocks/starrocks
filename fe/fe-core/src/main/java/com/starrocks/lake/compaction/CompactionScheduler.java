@@ -30,8 +30,11 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.LakeAggregator;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.proto.AggregateCompactRequest;
 import com.starrocks.proto.CompactRequest;
+import com.starrocks.proto.ComputeNodePB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
@@ -318,12 +321,20 @@ public class CompactionScheduler extends Daemon {
         long nextCompactionInterval = Config.lake_min_compaction_interval_ms_on_success;
         CompactionJob job = new CompactionJob(db, table, partition, txnId, Config.lake_compaction_allow_partial_success);
         try {
-            List<CompactionTask> tasks = createCompactionTasks(currentVersion, beToTablets, txnId,
-                    job.getAllowPartialSuccess(), partitionStatisticsSnapshot.getPriority());
-            for (CompactionTask task : tasks) {
+            if (table.enablePartitionAggregation()) {
+                CompactionTask task = createAggregateCompactionTask(currentVersion, beToTablets, txnId,
+                        partitionStatisticsSnapshot.getPriority());
                 task.sendRequest();
+                job.setAggregateTask(task);
+                LOG.info("Create aggregate compaction task. {}", job.getDebugString());
+            } else {
+                List<CompactionTask> tasks = createCompactionTasks(currentVersion, beToTablets, txnId,
+                        job.getAllowPartialSuccess(), partitionStatisticsSnapshot.getPriority());
+                for (CompactionTask task : tasks) {
+                    task.sendRequest();
+                }
+                job.setTasks(tasks);
             }
-            job.setTasks(tasks);
             return job;
         } catch (Exception e) {
             LOG.error(e.getMessage(), e);
@@ -364,6 +375,49 @@ public class CompactionScheduler extends Daemon {
             tasks.add(task);
         }
         return tasks;
+    }
+
+    @NotNull
+    private CompactionTask createAggregateCompactionTask(long currentVersion, Map<Long, List<Long>> beToTablets, long txnId,
+            PartitionStatistics.CompactionPriority priority)
+            throws StarRocksException, RpcException {
+        // 1. build AggregateCompactRequest
+        AggregateCompactRequest aggRequest = new AggregateCompactRequest();
+        aggRequest.requests = Lists.newArrayList();
+        aggRequest.computeNodes = Lists.newArrayList();
+
+        for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
+            ComputeNode node = systemInfoService.getBackendOrComputeNode(entry.getKey());
+            if (node == null) {
+                throw new StarRocksException("Node " + entry.getKey() + " has been dropped");
+            }
+            ComputeNodePB nodePB = new ComputeNodePB();
+            nodePB.setHost(node.getHost());
+            nodePB.setBrpcPort(node.getBrpcPort());
+            nodePB.setId(entry.getKey());
+
+            CompactRequest request = new CompactRequest();
+            request.tabletIds = entry.getValue();
+            request.txnId = txnId;
+            request.version = currentVersion;
+            request.timeoutMs = LakeService.TIMEOUT_COMPACT;
+            request.allowPartialSuccess = false;
+            request.encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
+            request.forceBaseCompaction = (priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+
+            aggRequest.requests.add(request);
+            aggRequest.computeNodes.add(nodePB);
+        }
+
+        // 2. pick aggregator node and build lake serivce
+        WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        Warehouse warehouse = manager.getCompactionWarehouse();
+        LakeAggregator aggregator = new LakeAggregator();
+        ComputeNode aggregatorNode = aggregator.chooseAggregatorNode(warehouse.getId());
+        LakeService service = BrpcProxy.getLakeService(aggregatorNode.getHost(), aggregatorNode.getBrpcPort());
+
+        // 3. build AggregateCompactionTask
+        return new AggregateCompactionTask(aggregatorNode.getId(), service, aggRequest);
     }
 
     @NotNull
