@@ -44,7 +44,14 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.qe.SimpleScheduler;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+>>>>>>> c8930bfb4f ([BugFix] filter black list node in LoadLoadingTask.prepare for broker load (#58350))
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 
 import java.util.List;
@@ -102,4 +109,31 @@ public abstract class LoadScanNode extends ScanNode {
         }
     }
 
+<<<<<<< HEAD
+=======
+    // Return all available nodes under the warehouse to run load scan. Should consider different deployment modes
+    // 1. Share-nothing: only backends can be used for scan
+    // 2. Share-data: both backends and compute nodes can be used for scan
+    public static List<ComputeNode> getAvailableComputeNodes(long warehouseId) {
+        List<ComputeNode> nodes = Lists.newArrayList();
+        // TODO: need to refactor after be split into cn + dn
+        if (RunMode.isSharedDataMode()) {
+            List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+            for (long cnId : computeNodeIds) {
+                ComputeNode cn = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(cnId);
+                if (cn != null && cn.isAvailable() && !SimpleScheduler.isInBlocklist(cnId)) {
+                    nodes.add(cn);
+                }
+            }
+        } else {
+            for (ComputeNode be : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend().values()) {
+                if (be.isAvailable() && !SimpleScheduler.isInBlocklist(be.getId())) {
+                    nodes.add(be);
+                }
+            }
+        }
+        return nodes;
+    }
+
+>>>>>>> c8930bfb4f ([BugFix] filter black list node in LoadLoadingTask.prepare for broker load (#58350))
 }
