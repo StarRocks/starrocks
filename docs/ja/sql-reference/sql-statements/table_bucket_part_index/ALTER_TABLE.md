@@ -18,6 +18,7 @@ displayed_sidebar: docs
 - [テーブルプロパティの変更](#modify-table-properties)
 - [アトミックスワップ](#swap)
 - [手動データバージョンコンパクション](#manual-compaction-from-31)
+- [主キー永続インデックスの削除](#主キー永続インデックスの削除-339-より)
 
 :::tip
 この操作には、対象テーブルに対する ALTER 権限が必要です。
@@ -41,6 +42,7 @@ alter_clause1[, alter_clause2, ...]
 - ビットマップインデックス: インデックスを変更します（ビットマップインデックスのみ変更可能）。
 - スワップ: 2つのテーブルをアトミックに交換します。
 - コンパクション: ロードされたデータのバージョンをマージするために手動でコンパクションを実行します（**v3.1以降**でサポート）。
+- 永続インデックスの削除: 共有データクラスタの主キーテーブルの永続インデックスを削除します (**v3.3.9以降でサポートされています**)。
 
 ## 制限と使用上の注意
 
@@ -793,6 +795,20 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
 
 `information_schema` データベースの `be_compactions` テーブルにはコンパクション結果が記録されます。`SELECT * FROM information_schema.be_compactions;` を実行して、コンパクション後のデータバージョンをクエリできます。
 
+### 主キー永続インデックスの削除(3.3.9 より)
+
+構文:
+
+Syntax:
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
+```
+> **注意**
+>
+> StarRocks は、 共有データクラスタ内のクラウドネイティブ主キーテーブルの永続インデックスの削除にのみをサポートします。
+
 ## 例
 
 ### テーブル
@@ -1241,6 +1257,14 @@ ALTER TABLE compaction_test COMPACT (p202302,p203303);
 ALTER TABLE compaction_test CUMULATIVE COMPACT (p202302,p203303);
 
 ALTER TABLE compaction_test BASE COMPACT (p202302,p203303);
+```
+
+### プライマリキーの永続インデックスの削除
+
+共有データクラスタの主キーテーブル `db1.test_tbl` のタブレット `100` と `101` の永続インデックスを削除します。
+
+```sql
+ALTER TABLE db1.test_tbl DROP PERSISTENT INDEX ON TABLETS (100, 101);
 ```
 
 ## 参考文献
