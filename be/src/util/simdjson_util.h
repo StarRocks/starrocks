@@ -36,7 +36,7 @@ private:
     SimdjsonParser() {
         // The `_parser` is only used for `unescape`ing, which touches nothing of the parser's internal structure,
         // so the capacity doesn't matter.
-        (void)_parser.allocate(0);
+        [[maybe_unused]] auto err = _parser.allocate(0);
     }
     ~SimdjsonParser() = default;
 
