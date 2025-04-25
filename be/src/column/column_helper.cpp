@@ -19,6 +19,7 @@
 #include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
+#include "column/column_view/column_view_helper.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
@@ -31,11 +32,14 @@
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
+<<<<<<< HEAD
 
 NullColumnPtr ColumnHelper::one_size_not_null_column = NullColumn::create(1, 0);
 
 NullColumnPtr ColumnHelper::one_size_null_column = NullColumn::create(1, 1);
 
+=======
+>>>>>>> dc168b7f56 ([Enhancement] Use ColumnView to reduce CopyRightTableChunkTable time (#58043))
 Filter& ColumnHelper::merge_nullable_filter(Column* column) {
     if (column->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(column);
@@ -277,6 +281,18 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
     return create_column(type_desc, nullable, false, 0);
 }
 
+MutableColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool nullable, bool use_view_if_needed,
+                                             long column_view_concat_rows_limit, long column_view_concat_bytes_limit) {
+    if (use_view_if_needed) {
+        auto opt_column = ColumnViewHelper::create_column_view(type_desc, nullable, column_view_concat_rows_limit,
+                                                               column_view_concat_bytes_limit);
+        if (opt_column.has_value()) {
+            return std::move(opt_column.value());
+        }
+    }
+    return create_column(type_desc, nullable);
+}
+
 struct ColumnBuilder {
     template <LogicalType ltype>
     ColumnPtr operator()(const TypeDescriptor& type_desc, size_t size) {
@@ -320,9 +336,15 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
         auto data = create_column(type_desc.children[0], true, is_const, size);
         p = ArrayColumn::create(std::move(data), std::move(offsets));
     } else if (type_desc.type == LogicalType::TYPE_MAP) {
+<<<<<<< HEAD
         auto offsets = UInt32Column ::create(size);
         ColumnPtr keys = nullptr;
         ColumnPtr values = nullptr;
+=======
+        MutableColumnPtr offsets = UInt32Column::create(size);
+        MutableColumnPtr keys = nullptr;
+        MutableColumnPtr values = nullptr;
+>>>>>>> dc168b7f56 ([Enhancement] Use ColumnView to reduce CopyRightTableChunkTable time (#58043))
         if (type_desc.children[0].is_unknown_type()) {
             keys = create_column(TypeDescriptor{TYPE_NULL}, true, is_const, size);
         } else {
@@ -502,5 +524,9 @@ Ptr ChunkSliceTemplate<Ptr>::cutoff(size_t required_rows) {
 
 template struct ChunkSliceTemplate<ChunkPtr>;
 template struct ChunkSliceTemplate<ChunkUniquePtr>;
+<<<<<<< HEAD
 
+=======
+template struct ChunkSliceTemplate<SegmentedChunkPtr>;
+>>>>>>> dc168b7f56 ([Enhancement] Use ColumnView to reduce CopyRightTableChunkTable time (#58043))
 } // namespace starrocks

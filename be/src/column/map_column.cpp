@@ -18,6 +18,7 @@
 #include <set>
 
 #include "column/column_helper.h"
+#include "column/column_view/column_view.h"
 #include "column/datum.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
@@ -29,7 +30,6 @@
 #include "util/mysql_row_buffer.h"
 
 namespace starrocks {
-
 void MapColumn::check_or_die() const {
     CHECK_EQ(_offsets->get_data().back(), _keys->size());
     CHECK_EQ(_offsets->get_data().back(), _values->size());
@@ -129,6 +129,10 @@ void MapColumn::append(const Column& src, size_t offset, size_t count) {
 }
 
 void MapColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
+    if (src.is_map_view()) {
+        down_cast<const ColumnView*>(&src)->append_to(*this, indexes, from, size);
+        return;
+    }
     for (uint32_t i = 0; i < size; i++) {
         append(src, indexes[from + i], 1);
     }
@@ -736,5 +740,4 @@ void MapColumn::remove_duplicated_keys(bool need_recursive) {
         _offsets.swap(new_offsets);
     }
 }
-
 } // namespace starrocks

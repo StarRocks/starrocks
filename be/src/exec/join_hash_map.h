@@ -277,6 +277,13 @@ struct HashTableProbeState {
 struct HashTableParam {
     bool with_other_conjunct = false;
     bool enable_late_materialization = false;
+<<<<<<< HEAD
+=======
+    bool enable_partition_hash_join = false;
+    long column_view_concat_rows_limit = -1L;
+    long column_view_concat_bytes_limit = -1L;
+
+>>>>>>> dc168b7f56 ([Enhancement] Use ColumnView to reduce CopyRightTableChunkTable time (#58043))
     TJoinOp::type join_type = TJoinOp::INNER_JOIN;
     const RowDescriptor* build_row_desc = nullptr;
     const RowDescriptor* probe_row_desc = nullptr;

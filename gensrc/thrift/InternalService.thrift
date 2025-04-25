@@ -320,6 +320,26 @@ struct TQueryOptions {
   140: optional string catalog;
 
   141: optional i32 datacache_evict_probability;
+<<<<<<< HEAD
+=======
+
+  142: optional bool enable_pipeline_event_scheduler;
+
+  150: optional map<string, string> ann_params;
+  151: optional double pq_refine_factor;
+  152: optional double k_factor;
+
+  160: optional bool enable_join_runtime_filter_pushdown;
+  161: optional bool enable_join_runtime_bitset_filter;
+
+  170: optional bool enable_parquet_reader_bloom_filter;
+  171: optional bool enable_parquet_reader_page_index;
+  
+  180: optional bool lower_upper_support_utf8;
+
+  190: optional i64 column_view_concat_rows_limit;
+  191: optional i64 column_view_concat_bytes_limit;
+>>>>>>> dc168b7f56 ([Enhancement] Use ColumnView to reduce CopyRightTableChunkTable time (#58043))
 }
 
 
