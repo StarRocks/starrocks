@@ -5411,6 +5411,7 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
 
 Status TabletUpdates::get_rss_rowids_by_pk(Tablet* tablet, const Column& keys, EditVersion* read_version,
                                            std::vector<uint64_t>* rss_rowids, int64_t timeout_ms) {
+    TEST_ERROR_POINT("TabletUpdates::get_rss_rowids_by_pk");
     if (timeout_ms <= 0) {
         _index_lock.lock();
     } else {
