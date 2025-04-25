@@ -4619,11 +4619,11 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### lake_enable_vertical_compaction_fill_data_cache
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to allow compaction tasks to cache data on local disks in a shared-data cluster.
+- Description: Whether to allow vertical compaction tasks to cache data on local disks in a shared-data cluster.
 - Introduced in: v3.1.7, v3.2.3
 
 <!--
