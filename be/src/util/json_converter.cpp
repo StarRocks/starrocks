@@ -17,6 +17,7 @@
 #include "gutil/strings/substitute.h"
 #include "simdjson.h"
 #include "util/json.h"
+#include "util/simdjson_util.h"
 #include "util/string_parser.hpp"
 #include "velocypack/ValueType.h"
 #include "velocypack/vpack.h"
@@ -73,7 +74,9 @@ private:
             break;
         }
         case so::json_type::string: {
-            RETURN_IF_ERROR(convert(value.get_string().value(), field_name, is_object, builder));
+            faststring buffer;
+            auto str = value_get_string_safe(&value, &buffer);
+            RETURN_IF_ERROR(convert(str.value(), field_name, is_object, builder));
             break;
         }
         case so::json_type::boolean: {
@@ -95,9 +98,10 @@ private:
             builder->add(vpack::Value(vpack::ValueType::Object));
         }
         for (auto field : obj) {
-            std::string_view key = field.unescaped_key();
+            faststring buffer;
+            auto key = field_unescaped_key_safe(field, &buffer);
             auto value = field.value().value();
-            RETURN_IF_ERROR(convert(value, key, true, builder));
+            RETURN_IF_ERROR(convert(value, key.value(), true, builder));
         }
         builder->close();
         return Status::OK();
