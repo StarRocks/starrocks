@@ -14,6 +14,8 @@
 
 #include "column/binary_column.h"
 
+#include "column/column_view/column_view.h"
+
 #ifdef __x86_64__
 #include <immintrin.h>
 #endif
@@ -30,7 +32,6 @@
 #include "util/raw_container.h"
 
 namespace starrocks {
-
 template <typename T>
 void BinaryColumnBase<T>::check_or_die() const {
     CHECK_EQ(_bytes.size(), _offsets.back());
@@ -83,6 +84,10 @@ void BinaryColumnBase<T>::append(const Column& src, size_t offset, size_t count)
 
 template <typename T>
 void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
+    if (src.is_binary_view()) {
+        down_cast<const ColumnView*>(&src)->append_to(*this, indexes, from, size);
+        return;
+    }
     const auto& src_column = down_cast<const BinaryColumnBase<T>&>(src);
     const auto& src_offsets = src_column.get_offset();
     const auto& src_bytes = src_column.get_bytes();
@@ -629,8 +634,8 @@ void BinaryColumnBase<T>::deserialize_and_append_batch_nullable(Buffer<Slice>& s
                                          ? 4
                                          : *((uint32_t*)(srcs[0].data + sizeof(bool))); // first string size
     _bytes.reserve(chunk_size * string_size * 2);
-    ColumnFactory<Column, BinaryColumnBase<T>>::deserialize_and_append_batch_nullable(srcs, chunk_size, is_nulls,
-                                                                                      has_null);
+    ColumnFactory<Column, BinaryColumnBase<T> >::deserialize_and_append_batch_nullable(srcs, chunk_size, is_nulls,
+                                                                                       has_null);
 }
 
 template <typename T>
@@ -882,5 +887,4 @@ Status BinaryColumnBase<T>::capacity_limit_reached() const {
 
 template class BinaryColumnBase<uint32_t>;
 template class BinaryColumnBase<uint64_t>;
-
 } // namespace starrocks
