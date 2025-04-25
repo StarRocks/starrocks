@@ -36,6 +36,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -47,7 +48,12 @@ import java.util.List;
  * becomes:
  *   column >= '2023-02-26 00:00:00' AND column < '2023-02-27 00:00:00'
  *
- * This enables Iceberg to use its native partition pruning capabilities with StarRocks' date_trunc function.
+ * Also transforms DATE() function predicates:
+ *   DATE(column) = '2023-02-26'
+ * becomes:
+ *   column >= '2023-02-26 00:00:00' AND column < '2023-02-27 00:00:00'
+ *
+ * This enables Iceberg to use its native partition pruning capabilities with StarRocks' date functions.
  */
 public class IcebergDateTruncToRangeRule extends TransformationRule {
     private static final Logger LOG = LogManager.getLogger(IcebergDateTruncToRangeRule.class);
@@ -55,12 +61,12 @@ public class IcebergDateTruncToRangeRule extends TransformationRule {
     public static final IcebergDateTruncToRangeRule INSTANCE = new IcebergDateTruncToRangeRule(
             RuleType.TF_ICEBERG_DATE_TRUNC_TO_RANGE,
             Pattern.create(OperatorType.LOGICAL_FILTER)
-                    .addChildren(Pattern.create(OperatorType.LOGICAL_SCAN)));
+                 .addChildren(Pattern.create(OperatorType.LOGICAL_ICEBERG_SCAN)));
 
     public IcebergDateTruncToRangeRule() {
         this(RuleType.TF_ICEBERG_DATE_TRUNC_TO_RANGE,
                 Pattern.create(OperatorType.LOGICAL_FILTER)
-                     .addChildren(Pattern.create(OperatorType.LOGICAL_SCAN)));
+                     .addChildren(Pattern.create(OperatorType.LOGICAL_ICEBERG_SCAN)));
     }
 
     public IcebergDateTruncToRangeRule(RuleType type, Pattern pattern) {
@@ -71,7 +77,7 @@ public class IcebergDateTruncToRangeRule extends TransformationRule {
     public boolean check(OptExpression input, OptimizerContext context) {
         // First check if it's a filter applied to a scan
         if (!(input.getOp() instanceof LogicalFilterOperator) ||
-                !(input.getInputs().get(0).getOp() instanceof LogicalScanOperator)) {
+            !(input.getInputs().get(0).getOp() instanceof LogicalScanOperator)) {
             return false;
         }
 
@@ -82,23 +88,24 @@ public class IcebergDateTruncToRangeRule extends TransformationRule {
             return false;
         }
 
-        // Check if predicate contains any date_trunc calls
+        // Check if predicate contains any date_trunc or date calls
         LogicalFilterOperator filterOperator = (LogicalFilterOperator) input.getOp();
         ScalarOperator predicate = filterOperator.getPredicate();
-        return containsDateTrunc(predicate);
+        return containsDateFunction(predicate);
     }
 
-    private boolean containsDateTrunc(ScalarOperator predicate) {
+    private boolean containsDateFunction(ScalarOperator predicate) {
         if (predicate instanceof BinaryPredicateOperator) {
             BinaryPredicateOperator binOp = (BinaryPredicateOperator) predicate;
             if (binOp.getBinaryType() == BinaryType.EQ &&
-                    binOp.getChild(0) instanceof CallOperator &&
-                    ((CallOperator) binOp.getChild(0)).getFnName().equals(FunctionSet.DATE_TRUNC)) {
-                return true;
+                binOp.getChild(0) instanceof CallOperator) {
+                CallOperator callOp = (CallOperator) binOp.getChild(0);
+                String fnName = callOp.getFnName();
+                return fnName.equals(FunctionSet.DATE_TRUNC) || fnName.equals(FunctionSet.DATE);
             }
         } else if (predicate.getChildren().size() > 0) {
             for (ScalarOperator child : predicate.getChildren()) {
-                if (containsDateTrunc(child)) {
+                if (containsDateFunction(child)) {
                     return true;
                 }
             }
@@ -112,12 +119,12 @@ public class IcebergDateTruncToRangeRule extends TransformationRule {
         ScalarOperator predicate = filterOperator.getPredicate();
 
         // Apply transformation to the predicate
-        ScalarOperator newPredicate = predicate.accept(new DateTruncTransformer(), null);
+        ScalarOperator newPredicate = predicate.accept(new DateFunctionTransformer(), null);
 
         if (newPredicate != predicate) {
             LogicalFilterOperator newFilter = new LogicalFilterOperator(newPredicate);
             OptExpression result = OptExpression.create(newFilter, input.getInputs());
-            LOG.debug("Transformed date_trunc predicate for Iceberg table: {} -> {}",
+            LOG.debug("Transformed date function predicate for Iceberg table: {} -> {}",
                      predicate, newPredicate);
             return Lists.newArrayList(result);
         }
@@ -126,20 +133,25 @@ public class IcebergDateTruncToRangeRule extends TransformationRule {
     }
 
     /**
-     * Visitor that transforms date_trunc equality predicates to range expressions
+     * Visitor that transforms date_trunc and date function equality predicates to range expressions
      */
-    private static class DateTruncTransformer extends ScalarOperatorVisitor<ScalarOperator, Void> {
+    private static class DateFunctionTransformer extends ScalarOperatorVisitor<ScalarOperator, Void> {
         @Override
         public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator operator, Void context) {
             if (operator.getBinaryType() == BinaryType.EQ &&
-                    operator.getChild(0) instanceof CallOperator &&
-                    ((CallOperator) operator.getChild(0)).getFnName().equals(FunctionSet.DATE_TRUNC) &&
-                    operator.getChild(1) instanceof ConstantOperator) {
+                operator.getChild(0) instanceof CallOperator &&
+                operator.getChild(1) instanceof ConstantOperator) {
 
-                CallOperator dateTruncCall = (CallOperator) operator.getChild(0);
+                CallOperator callOp = (CallOperator) operator.getChild(0);
                 ConstantOperator dateValue = (ConstantOperator) operator.getChild(1);
+                ScalarOperator transformed = null;
 
-                ScalarOperator transformed = transformDateTruncPredicate(dateTruncCall, dateValue);
+                if (callOp.getFnName().equals(FunctionSet.DATE_TRUNC)) {
+                    transformed = transformDateTruncPredicate(callOp, dateValue);
+                } else if (callOp.getFnName().equals(FunctionSet.DATE)) {
+                    transformed = transformDateFunctionPredicate(callOp, dateValue);
+                }
+
                 if (transformed != null) {
                     return transformed;
                 }
@@ -181,10 +193,64 @@ public class IcebergDateTruncToRangeRule extends TransformationRule {
             }
 
             if (childrenChanged) {
-                return operator.withChildren(newChildren);
+                // Create a new operator with the new children
+                if (operator instanceof CallOperator) {
+                    CallOperator callOp = (CallOperator) operator;
+                    return new CallOperator(callOp.getFnName(), callOp.getType(), newChildren,
+                                           callOp.getFunction(), callOp.isDistinct());
+                } else if (operator instanceof BinaryPredicateOperator) {
+                    BinaryPredicateOperator binOp = (BinaryPredicateOperator) operator;
+                    return new BinaryPredicateOperator(binOp.getBinaryType(), newChildren.get(0), newChildren.get(1));
+                } else if (operator instanceof CompoundPredicateOperator) {
+                    CompoundPredicateOperator compOp = (CompoundPredicateOperator) operator;
+                    return new CompoundPredicateOperator(compOp.getCompoundType(), newChildren);
+                } else {
+                    // Default fallback
+                    throw new UnsupportedOperationException(
+                        "Unsupported operator type for withChildren: " + operator.getClass().getSimpleName());
+                }
             }
             return operator;
         }
+    }
+
+    /**
+     * Transforms a DATE() function equality predicate into a range expression.
+     * For DATE(column) = 'YYYY-MM-DD', converts to:
+     * column >= 'YYYY-MM-DD 00:00:00' AND column < 'YYYY-MM-DD+1 00:00:00'
+     */
+    private static ScalarOperator transformDateFunctionPredicate(CallOperator dateCall, ConstantOperator dateValue) {
+        if (!(dateCall.getChild(0) instanceof ColumnRefOperator)) {
+            return null;
+        }
+
+        ColumnRefOperator columnRef = (ColumnRefOperator) dateCall.getChild(0);
+
+        // If the column is already a DATE type, no need for range conversion
+        if (columnRef.getType().isDate()) {
+            return new BinaryPredicateOperator(BinaryType.EQ, columnRef, dateValue);
+        }
+
+        if (!dateValue.isConstantNull()) {
+            // Get the date value and convert to datetime range
+            LocalDate date = dateValue.getDate();
+            LocalDateTime startDate = date.atStartOfDay();
+            LocalDateTime endDate = date.plusDays(1).atStartOfDay();
+
+            // Create range predicates
+            ConstantOperator startConstant = ConstantOperator.createDatetime(startDate);
+            ConstantOperator endConstant = ConstantOperator.createDatetime(endDate);
+
+            BinaryPredicateOperator leftPredicate =
+                    new BinaryPredicateOperator(BinaryType.GE, columnRef, startConstant);
+
+            BinaryPredicateOperator rightPredicate =
+                    new BinaryPredicateOperator(BinaryType.LT, columnRef, endConstant);
+
+            return Utils.compoundAnd(leftPredicate, rightPredicate);
+        }
+
+        return null;
     }
 
     /**
@@ -192,7 +258,7 @@ public class IcebergDateTruncToRangeRule extends TransformationRule {
      */
     private static ScalarOperator transformDateTruncPredicate(CallOperator dateTruncCall, ConstantOperator dateValue) {
         if (!(dateTruncCall.getChild(0) instanceof ConstantOperator) ||
-                !(dateTruncCall.getChild(1) instanceof ColumnRefOperator)) {
+            !(dateTruncCall.getChild(1) instanceof ColumnRefOperator)) {
             return null;
         }
 

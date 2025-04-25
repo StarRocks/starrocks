@@ -203,4 +203,67 @@ public class IcebergDateTruncToRangeRuleTest {
         assertEquals(LocalDate.of(2023, 2, 1), lowerBound);
         assertEquals(LocalDate.of(2023, 3, 1), upperBound);
     }
+
+    @Test
+    public void testDateFunctionTransformation() {
+        // Create DATE(ts_col) = '2023-02-26' predicate for DATETIME column
+        ConstantOperator dateValue = ConstantOperator.createDate(LocalDate.of(2023, 2, 26));
+
+        CallOperator dateCall = new CallOperator(
+                FunctionSet.DATE,
+                Type.DATE,
+                Lists.newArrayList(timestampColumn));
+
+        BinaryPredicateOperator datePredicate = new BinaryPredicateOperator(
+                BinaryType.EQ, dateCall, dateValue);
+
+        // Create filter and scan operators
+        LogicalFilterOperator filterOperator = new LogicalFilterOperator(datePredicate);
+        LogicalScanOperator scanOperator = new LogicalScanOperator(
+                icebergTable,
+                Maps.newHashMap(),
+                Maps.newHashMap(),
+                null, -1, null);
+
+        // Create expression tree
+        OptExpression filterExpression = new OptExpression(filterOperator);
+        OptExpression scanExpression = new OptExpression(scanOperator);
+        filterExpression.getInputs().add(scanExpression);
+
+        // Apply the rule
+        List<OptExpression> result = rule.transform(filterExpression, context);
+
+        // Verify the result
+        assertEquals(1, result.size());
+        LogicalFilterOperator newFilterOp = (LogicalFilterOperator) result.get(0).getOp();
+        ScalarOperator newPredicate = newFilterOp.getPredicate();
+
+        // Should be transformed to: ts_col >= '2023-02-26 00:00:00' AND ts_col < '2023-02-27 00:00:00'
+        assertTrue(newPredicate instanceof CompoundPredicateOperator);
+        CompoundPredicateOperator compoundOp = (CompoundPredicateOperator) newPredicate;
+        assertEquals(com.starrocks.analysis.CompoundPredicate.Operator.AND, compoundOp.getCompoundType());
+
+        // Check first child: ts_col >= '2023-02-26 00:00:00'
+        ScalarOperator firstChild = compoundOp.getChild(0);
+        assertTrue(firstChild instanceof BinaryPredicateOperator);
+        BinaryPredicateOperator firstBinaryOp = (BinaryPredicateOperator) firstChild;
+        assertEquals(BinaryType.GE, firstBinaryOp.getBinaryType());
+        assertEquals(OperatorType.VARIABLE, firstBinaryOp.getChild(0).getOpType());
+        assertEquals(OperatorType.CONSTANT, firstBinaryOp.getChild(1).getOpType());
+
+        // Check second child: ts_col < '2023-02-27 00:00:00'
+        ScalarOperator secondChild = compoundOp.getChild(1);
+        assertTrue(secondChild instanceof BinaryPredicateOperator);
+        BinaryPredicateOperator secondBinaryOp = (BinaryPredicateOperator) secondChild;
+        assertEquals(BinaryType.LT, secondBinaryOp.getBinaryType());
+        assertEquals(OperatorType.VARIABLE, secondBinaryOp.getChild(0).getOpType());
+        assertEquals(OperatorType.CONSTANT, secondBinaryOp.getChild(1).getOpType());
+
+        // Check values in the range bounds
+        LocalDateTime lowerBound = ((ConstantOperator) firstBinaryOp.getChild(1)).getDatetime();
+        LocalDateTime upperBound = ((ConstantOperator) secondBinaryOp.getChild(1)).getDatetime();
+
+        assertEquals(LocalDateTime.of(2023, 2, 26, 0, 0, 0), lowerBound);
+        assertEquals(LocalDateTime.of(2023, 2, 27, 0, 0, 0), upperBound);
+    }
 }
