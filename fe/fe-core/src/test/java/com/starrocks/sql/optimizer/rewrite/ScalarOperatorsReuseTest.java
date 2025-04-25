@@ -316,6 +316,8 @@ public class ScalarOperatorsReuseTest {
 
     @Test
     public void testCaseWhenWithTooManyChildren1() {
+        final int prev = Config.max_scalar_operator_flat_children;
+        Config.max_scalar_operator_flat_children = 0;
         ColumnRefOperator column1 = columnRefFactory.create("t1", ScalarType.INT, true);
         ColumnRefOperator column2 = columnRefFactory.create("t2", ScalarType.INT, true);
         ScalarOperator or1 = generateCompoundPredicateOperator(column1, Config.max_scalar_operator_optimize_depth - 1);
@@ -333,10 +335,13 @@ public class ScalarOperatorsReuseTest {
         Map<Integer, Map<ScalarOperator, ColumnRefOperator>> commonSubScalarOperators =
                 ScalarOperatorsReuse.collectCommonSubScalarOperators(null, oldOperators, columnRefFactory);
         Assert.assertTrue(commonSubScalarOperators.size() == Config.max_scalar_operator_optimize_depth - 1);
+        Config.max_scalar_operator_flat_children = prev;
     }
 
     @Test
     public void testCaseWhenWithTooManyChildren2() {
+        final int prev = Config.max_scalar_operator_flat_children;
+        Config.max_scalar_operator_flat_children = 0;
         ColumnRefOperator column1 = columnRefFactory.create("t1", ScalarType.INT, true);
         ColumnRefOperator column2 = columnRefFactory.create("t2", ScalarType.INT, true);
         ScalarOperator or1 = generateCompoundPredicateOperator(column1, 2000);
@@ -357,5 +362,6 @@ public class ScalarOperatorsReuseTest {
         } catch (Exception e) {
             Assert.fail();
         }
+        Config.max_scalar_operator_flat_children = prev;
     }
 }

@@ -54,6 +54,8 @@ public abstract class ScalarOperator implements Cloneable {
     // 2. depth is marked to avoid infinite loop in some cases.
     protected int depth = 0;
 
+    protected Optional<Integer> numberFlatChildren = Optional.empty();
+
     public ScalarOperator(OperatorType opType, Type type) {
         this.opType = requireNonNull(opType, "opType is null");
         this.type = requireNonNull(type, "type is null");
@@ -153,6 +155,18 @@ public abstract class ScalarOperator implements Cloneable {
         return depth;
     }
 
+    public int getNumFlatChildren() {
+        if (numberFlatChildren.isPresent()) {
+            return numberFlatChildren.get();
+        }
+        int numFlatChildren = 0;
+        for (ScalarOperator child : getChildren()) {
+            numFlatChildren += child.getNumFlatChildren() + 1;
+        }
+        numberFlatChildren = Optional.of(numFlatChildren);
+        return numberFlatChildren.get();
+    }
+
     /**
      * Incr depth for this operator: this.depth = 1 + max(depth of children)
      */
@@ -162,7 +176,7 @@ public abstract class ScalarOperator implements Cloneable {
         if (args == null) {
             return;
         }
-        this.depth += args.stream().map(arg -> arg.getDepth()).max(Integer::compareTo).orElse(0);
+        this.depth += args.stream().map(ScalarOperator::getDepth).max(Integer::compareTo).orElse(0);
     }
 
     /**
