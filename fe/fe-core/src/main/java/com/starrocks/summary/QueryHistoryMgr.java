@@ -15,35 +15,37 @@
 package com.starrocks.summary;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SimpleExecutor;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.plan.ExecPlan;
-import com.starrocks.sql.spm.SPMAst2SQLBuilder;
-import com.starrocks.sql.spm.SPMPlan2SQLBuilder;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ExecutorService;
 
 public class QueryHistoryMgr {
     private static final Logger LOG = LogManager.getLogger(QueryHistoryMgr.class);
+
+    private static final String QUERY_HISTORY_SQL = "select dt, sql_digest, sql, query_ms from "
+            + StatsConstants.STATISTICS_DB_NAME + "." + StatsConstants.QUERY_HISTORY_TABLE_NAME + " where ";
 
     private static final int CONVERT_BATCH_SIZE = 100;
 
@@ -53,6 +55,8 @@ public class QueryHistoryMgr {
             1, Integer.MAX_VALUE,
             "query-history-executor", true);
 
+    private SimpleExecutor queryExecutor = new SimpleExecutor("QueryHistory", TResultSinkType.HTTP_PROTOCAL);
+
     private final List<QueryHistory> histories = Lists.newArrayListWithCapacity(CONVERT_BATCH_SIZE + 1);
 
     private StringBuffer buffer = new StringBuffer();
@@ -60,6 +64,46 @@ public class QueryHistoryMgr {
     private int batchSize = 0;
 
     private LocalDateTime lastLoadTime = LocalDateTime.now();
+
+    public LocalDateTime getLastLoadTime() {
+        return lastLoadTime;
+    }
+
+    public List<QueryHistory> queryLastHistory(LocalDateTime beginTime) {
+        String sql = QUERY_HISTORY_SQL + "dt >= '" + DateUtils.formatDateTimeUnix(beginTime) + "'";
+        try {
+            List<TResultBatch> datas = queryExecutor.executeDQL(sql);
+            List<QueryHistory> history = Lists.newArrayList();
+
+            for (TResultBatch batch : ListUtils.emptyIfNull(datas)) {
+                for (ByteBuffer buffer : batch.getRows()) {
+                    ByteBuf copied = Unpooled.copiedBuffer(buffer);
+                    String jsonString = copied.toString(Charset.defaultCharset());
+                    /*
+                     * SPM baselines table
+                     * 0.dt             | datetime
+                     * 1.sql_digest     | string
+                     * 2.sql            | string
+                     * 3.query_ms       | double
+                     */
+                    JsonElement obj = JsonParser.parseString(jsonString);
+                    JsonArray data = obj.getAsJsonObject().get("data").getAsJsonArray();
+                    QueryHistory qh = new QueryHistory();
+
+                    qh.setDatetime(DateUtils.parseUnixDateTime(data.get(0).getAsString()));
+                    qh.setSqlDigest(data.get(1).getAsString());
+                    qh.setOriginSQL(data.get(2).getAsString());
+                    qh.setQueryMs(data.get(3).getAsDouble());
+
+                    history.add(qh);
+                }
+            }
+            return history;
+        } catch (Exception e) {
+            LOG.warn("Failed to query query history.", e);
+        }
+        return List.of();
+    }
 
     public synchronized void addQueryHistory(ConnectContext ctx, ExecPlan plan) {
         if (!GlobalVariable.isEnableQueryHistory()) {
@@ -81,10 +125,14 @@ public class QueryHistoryMgr {
 
     private void loadQueryHistory(List<QueryHistory> list) {
         EXECUTOR.submit(() -> {
-            try {
-                for (QueryHistory query : list) {
+            for (QueryHistory query : list) {
+                try {
                     buffer.append(query.toJSON()).append(",");
+                } catch (Exception e) {
+                    LOG.warn("Failed to convert query history {}", query.getOriginSQL(), e);
                 }
+            }
+            try {
                 batchSize += list.size();
 
                 if (buffer.isEmpty()) {
@@ -128,44 +176,4 @@ public class QueryHistoryMgr {
                         + " WHERE dt <= '" + date + "'");
     }
 
-    private static class QueryHistory {
-        private final String originSQL;
-        private final StatementBase statement;
-        private final OptExpression physicalPlan;
-        private final List<ColumnRefOperator> outputs;
-        private final long queryMs;
-        private final String datetime;
-        private final Map<String, String> other = Map.of();
-
-        private QueryHistory(ConnectContext ctx, ExecPlan plan) {
-            originSQL = ctx.getExecutor().getOriginStmtInString();
-            statement = ctx.getExecutor().getParsedStmt();
-            physicalPlan = plan.getPhysicalPlan();
-            outputs = plan.getOutputColumns();
-
-            datetime = DateUtils.formatDateTimeUnix(LocalDateTime.now());
-            queryMs = System.currentTimeMillis() - ctx.getStartTime();
-        }
-
-        private String toJSON() {
-            Map<String, Object> jsonMaps = Maps.newHashMap();
-            jsonMaps.put("dt", datetime);
-            jsonMaps.put("frontend", GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getHost() + ":" +
-                    GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getQueryPort());
-            jsonMaps.put("sql", originSQL);
-            jsonMaps.put("plan_costs", physicalPlan.getCost());
-            jsonMaps.put("query_ms", queryMs);
-            jsonMaps.put("other", other);
-
-            SPMAst2SQLBuilder builder = new SPMAst2SQLBuilder(false, true);
-            String sqlDigest = builder.build((QueryStatement) statement);
-            SPMPlan2SQLBuilder planBuilder = new SPMPlan2SQLBuilder();
-            String planSQL = planBuilder.toSQL(List.of(), physicalPlan, outputs);
-
-            jsonMaps.put("sql_digest", sqlDigest);
-            jsonMaps.put("plan", planSQL);
-
-            return new Gson().toJson(jsonMaps);
-        }
-    }
 }
