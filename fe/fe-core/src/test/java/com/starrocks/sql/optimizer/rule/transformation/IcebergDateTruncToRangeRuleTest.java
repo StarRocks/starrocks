@@ -113,7 +113,7 @@ public class IcebergDateTruncToRangeRuleTest {
         // Should be transformed to: ts_col >= '2023-02-26 00:00:00' AND ts_col < '2023-02-27 00:00:00'
         assertTrue(newPredicate instanceof CompoundPredicateOperator);
         CompoundPredicateOperator compoundOp = (CompoundPredicateOperator) newPredicate;
-        assertEquals(com.starrocks.analysis.CompoundPredicate.Operator.AND, compoundOp.getCompoundType());
+        assertEquals(CompoundPredicateOperator.CompoundType.AND, compoundOp.getCompoundType());
 
         // Check first child: ts_col >= '2023-02-26 00:00:00'
         ScalarOperator firstChild = compoundOp.getChild(0);
@@ -178,7 +178,7 @@ public class IcebergDateTruncToRangeRuleTest {
         // Should be transformed to: date_col >= '2023-02-01' AND date_col < '2023-03-01'
         assertTrue(newPredicate instanceof CompoundPredicateOperator);
         CompoundPredicateOperator compoundOp = (CompoundPredicateOperator) newPredicate;
-        assertEquals(com.starrocks.analysis.CompoundPredicate.Operator.AND, compoundOp.getCompoundType());
+        assertEquals(CompoundPredicateOperator.CompoundType.AND, compoundOp.getCompoundType());
 
         // Check first child: date_col >= '2023-02-01'
         ScalarOperator firstChild = compoundOp.getChild(0);
@@ -242,7 +242,7 @@ public class IcebergDateTruncToRangeRuleTest {
         // Should be transformed to: ts_col >= '2023-02-26 00:00:00' AND ts_col < '2023-02-27 00:00:00'
         assertTrue(newPredicate instanceof CompoundPredicateOperator);
         CompoundPredicateOperator compoundOp = (CompoundPredicateOperator) newPredicate;
-        assertEquals(com.starrocks.analysis.CompoundPredicate.Operator.AND, compoundOp.getCompoundType());
+        assertEquals(CompoundPredicateOperator.CompoundType.AND, compoundOp.getCompoundType());
 
         // Check first child: ts_col >= '2023-02-26 00:00:00'
         ScalarOperator firstChild = compoundOp.getChild(0);
