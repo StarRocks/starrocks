@@ -359,6 +359,9 @@ void TabletUpdatesTest::test_writeread(bool enable_persistent_index) {
     auto rs2 = create_rowset(_tablet, keys, nullptr, true);
     ASSERT_TRUE(_tablet->rowset_commit(4, rs2).ok());
     ASSERT_EQ(4, _tablet->updates()->max_version());
+    ASSERT_TRUE(rs1->check_file_existence());
+    ASSERT_TRUE(rs2->check_file_existence());
+    ASSERT_TRUE(_tablet->updates()->rowset_check_file_existence());
 
     // read
     ASSERT_EQ(N, read_tablet(_tablet, 4));
@@ -470,15 +473,20 @@ void TabletUpdatesTest::test_writeread_with_delete(bool enable_persistent_index)
         keys.push_back(i);
     }
     // Insert [0, 1, 2 ... N)
-    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
+    auto r1 = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(2, r1).ok());
     ASSERT_EQ(2, _tablet->updates()->max_version());
+    ASSERT_TRUE(r1->check_file_existence());
 
     // Delete [0, 1, 2 ... N/2)
     Int64Column deletes;
     deletes.append_numbers(keys.data(), sizeof(int64_t) * keys.size() / 2);
-    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, {}, &deletes)).ok());
+    auto r2 = create_rowset(_tablet, {}, &deletes);
+    ASSERT_TRUE(_tablet->rowset_commit(3, r2).ok());
     ASSERT_EQ(3, _tablet->updates()->max_version());
     ASSERT_EQ(N / 2, read_tablet(_tablet, 3));
+    ASSERT_TRUE(r2->check_file_existence());
+    ASSERT_TRUE(_tablet->updates()->rowset_check_file_existence());
 
     // Delete [0, 1, 2 ... N) and insert [N, N+1, N+2 ... 2*N)
     deletes.resize(0);
@@ -497,6 +505,39 @@ TEST_F(TabletUpdatesTest, writeread_with_delete) {
 
 TEST_F(TabletUpdatesTest, writeread_with_delete_with_persistent_index) {
     test_writeread_with_delete(true);
+}
+
+TEST_F(TabletUpdatesTest, test_rowset_file_existence) {
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(true);
+    // write
+    const int N = 8000;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    // Insert [0, 1, 2 ... N)
+    auto r1 = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(2, r1).ok());
+    ASSERT_EQ(2, _tablet->updates()->max_version());
+    ASSERT_TRUE(r1->check_file_existence());
+
+    // Delete [0, 1, 2 ... N/2)
+    Int64Column deletes;
+    deletes.append_numbers(keys.data(), sizeof(int64_t) * keys.size() / 2);
+    auto r2 = create_rowset(_tablet, {}, &deletes);
+    ASSERT_TRUE(_tablet->rowset_commit(3, r2).ok());
+    ASSERT_EQ(3, _tablet->updates()->max_version());
+    ASSERT_EQ(N / 2, read_tablet(_tablet, 3));
+    ASSERT_TRUE(r2->check_file_existence());
+    ASSERT_TRUE(_tablet->updates()->rowset_check_file_existence());
+
+    // delete files from rs1 and rs2
+    r1->remove();
+    r2->remove();
+    ASSERT_FALSE(r1->check_file_existence());
+    ASSERT_FALSE(r2->check_file_existence());
+    ASSERT_FALSE(_tablet->updates()->rowset_check_file_existence());
 }
 
 TEST_F(TabletUpdatesTest, writeread_with_delete_with_sort_key) {
