@@ -642,17 +642,17 @@ public class SPMPlan2SQLBuilder {
                         left.getDistributionSpec().getType() == DistributionSpec.DistributionType.SHUFFLE);
                 Preconditions.checkState(
                         right.getDistributionSpec().getType() == DistributionSpec.DistributionType.SHUFFLE);
-                return JoinOperator.HINT_SHUFFLE;
+                return HintNode.HINT_JOIN_SHUFFLE;
             } else if (leftExchange) {
-                return JoinOperator.HINT_SHUFFLE;
+                return HintNode.HINT_JOIN_SHUFFLE;
             } else if (rightExchange) {
                 PhysicalDistributionOperator right = optExpression.inputAt(1).getOp().cast();
                 if (right.getDistributionSpec().getType() == DistributionSpec.DistributionType.BROADCAST) {
-                    return JoinOperator.HINT_BROADCAST;
+                    return HintNode.HINT_JOIN_BROADCAST;
                 } else {
                     Preconditions.checkState(
                             right.getDistributionSpec().getType() == DistributionSpec.DistributionType.SHUFFLE);
-                    return JoinOperator.HINT_BUCKET;
+                    return HintNode.HINT_JOIN_BUCKET;
                 }
             } else {
                 Preconditions.checkState(optExpression.getRequiredProperties().stream()
@@ -661,9 +661,9 @@ public class SPMPlan2SQLBuilder {
                     HashDistributionSpec spec = p.getDistributionProperty().getSpec().cast();
                     return HashDistributionDesc.SourceType.LOCAL.equals(spec.getHashDistributionDesc().getSourceType());
                 })) {
-                    return JoinOperator.HINT_COLOCATE;
+                    return HintNode.HINT_JOIN_COLOCATE;
                 } else {
-                    return JoinOperator.HINT_SHUFFLE;
+                    return HintNode.HINT_JOIN_SHUFFLE;
                 }
             }
         }

@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
@@ -106,7 +107,7 @@ public class SkewJoinOptimizeRule extends TransformationRule {
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         // respect the join hint
-        if (((LogicalJoinOperator) input.getOp()).getJoinHint().equals(JoinOperator.HINT_SKEW)) {
+        if (((LogicalJoinOperator) input.getOp()).getJoinHint().equals(HintNode.HINT_JOIN_SKEW)) {
             return true;
         }
 
@@ -233,7 +234,7 @@ public class SkewJoinOptimizeRule extends TransformationRule {
             }
         }
         // when use hint, we should check the skew column, and throw exception if not found
-        if (rightSkewColumn == null && oldJoinOperator.getJoinHint().equals(JoinOperator.HINT_SKEW)) {
+        if (rightSkewColumn == null && oldJoinOperator.getJoinHint().equals(HintNode.HINT_JOIN_SKEW)) {
             throw new StarRocksConnectorException("Can't find skew column");
         } else if (rightSkewColumn == null) {
             return Lists.newArrayList();
@@ -275,7 +276,7 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         LogicalJoinOperator.Builder joinBuilder = LogicalJoinOperator.builder();
         LogicalJoinOperator newJoinOperator = joinBuilder.withOperator(oldJoinOperator)
                 .setOnPredicate(andPredicateOperator)
-                .setJoinHint(JoinOperator.HINT_SKEW)
+                .setJoinHint(HintNode.HINT_JOIN_SKEW)
                 .build();
 
         OptExpression joinExpression = OptExpression.create(newJoinOperator, newLeftChild, newRightChild);
@@ -436,7 +437,7 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         LogicalJoinOperator.Builder joinBuilder = new LogicalJoinOperator.Builder();
         joinBuilder.setJoinType(JoinOperator.LEFT_OUTER_JOIN)
                 .setOnPredicate(onPredicate)
-                .setJoinHint(JoinOperator.HINT_BROADCAST);
+                .setJoinHint(HintNode.HINT_JOIN_BROADCAST);
         LogicalJoinOperator joinOperator = joinBuilder.build();
         OptExpression joinOptExpression = OptExpression.create(joinOperator, input, skewValueSaltOpt);
         Map<ColumnRefOperator, ScalarOperator> joinProjectMap = input.getOutputColumns().getStream().
