@@ -15,10 +15,12 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -28,8 +30,10 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class DeferProjectAfterTopNRule extends TransformationRule {
     public DeferProjectAfterTopNRule() {
@@ -53,6 +57,12 @@ public class DeferProjectAfterTopNRule extends TransformationRule {
         return false;
     }
 
+    private boolean mayBenefitFromPruningSubField(OptimizerContext context,
+                                                  Set<String> columnAccessPaths, ScalarOperator scalarOperator) {
+        return scalarOperator.getUsedColumns().getColumnRefOperators(context.getColumnRefFactory())
+                .stream().anyMatch(columnRefOperator -> columnAccessPaths.contains(columnRefOperator.getName()));
+    }
+
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalTopNOperator topNOperator = (LogicalTopNOperator) input.getOp();
@@ -62,12 +72,31 @@ public class DeferProjectAfterTopNRule extends TransformationRule {
 
         ColumnRefSet topNRequiredInputColumns = topNOperator.getRequiredChildInputColumns();
 
+        Set<String> columnsWithAccessPath = new HashSet<>();
+
+        if (input.getInputs().get(0).getInputs().get(0).getOp() instanceof LogicalOlapScanOperator) {
+            LogicalOlapScanOperator olapScanOperator =
+                    (LogicalOlapScanOperator) input.getInputs().get(0).getInputs().get(0).getOp();
+            List<ColumnAccessPath> columnAccessPaths = olapScanOperator.getColumnAccessPaths();
+            if (columnAccessPaths != null) {
+                columnAccessPaths.forEach(columnAccessPath -> {
+                    columnsWithAccessPath.add(columnAccessPath.getPath());
+                });
+            }
+        }
+
         boolean canDeferProject = projectMap.entrySet().stream().anyMatch(entry -> {
-            if (!topNRequiredInputColumns.contains(entry.getKey()) && !entry.getValue().isColumnRef()) {
-                return true;
+            if (!topNRequiredInputColumns.contains(entry.getKey())) {
+                if (entry.getValue().isColumnRef()) {
+                    return false;
+                }
+                // If some columns of the expression appear in ColumnAccessPath,
+                // it may benefit from pruning subfield, in which case we should keep it.
+                return !mayBenefitFromPruningSubField(context, columnsWithAccessPath, entry.getValue());
             }
             return false;
         });
+
         if (!canDeferProject) {
             return Collections.emptyList();
         }
@@ -77,7 +106,8 @@ public class DeferProjectAfterTopNRule extends TransformationRule {
         Map<ColumnRefOperator, ScalarOperator> postProjectionMap = new HashMap<>(projectOperator.getColumnRefMap());
 
         projectOperator.getColumnRefMap().forEach((columnRefOperator, scalarOperator) -> {
-            if (topNRequiredInputColumns.contains(columnRefOperator)) {
+            if (topNRequiredInputColumns.contains(columnRefOperator) ||
+                    mayBenefitFromPruningSubField(context, columnsWithAccessPath, scalarOperator)) {
                 preProjectionMap.put(columnRefOperator, scalarOperator);
                 // In theory, expressions calculated in pre-project do not need to be recalculated in post-project.
                 // Here we only keep the column ref operator in postProjectionMap.
@@ -90,6 +120,7 @@ public class DeferProjectAfterTopNRule extends TransformationRule {
                 postProjectionMap.put(columnRefOperator, columnRefOperator);
                 return;
             }
+
             scalarOperator.getUsedColumns().getColumnRefOperators(context.getColumnRefFactory()).forEach(k -> {
                 preProjectionMap.put(k, k);
             });
