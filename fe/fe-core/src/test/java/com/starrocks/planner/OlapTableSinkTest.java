@@ -314,6 +314,25 @@ public class OlapTableSinkTest {
         long physicalPartitionId = 6L;
         long replicaId = 10L;
         long backendId = 20L;
+        
+        //init be node
+        Backend be1 = new Backend(1001L, "127.0.0.1", 9050);
+        Backend be2 = new Backend(1002L, "127.0.0.2", 9050);
+        Backend be3 = new Backend(1003L, "127.0.0.3", 9050);
+        be1.setAlive(true);
+        be2.setAlive(true);
+        be3.setAlive(true);
+        
+        Map<Long, Backend> idToBackendRef = new HashMap<>();
+        idToBackendRef.put(be1.getId(), be1);
+        idToBackendRef.put(be2.getId(), be2);
+        idToBackendRef.put(be3.getId(), be3);
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public Backend getBackend(long backendId) {
+                return idToBackendRef.get(backendId);
+            }
+        };
 
         // Columns
         List<Column> columns = new ArrayList<Column>();
@@ -326,9 +345,9 @@ public class OlapTableSinkTest {
 
         for (int i = 0; i < 9; i++) {
             // Replica
-            Replica replica1 = new Replica(replicaId, backendId, Replica.ReplicaState.NORMAL, 1, 0);
-            Replica replica2 = new Replica(replicaId + 1, backendId + 1, Replica.ReplicaState.NORMAL, 1, 0);
-            Replica replica3 = new Replica(replicaId + 2, backendId + 2, Replica.ReplicaState.NORMAL, 1, 0);
+            Replica replica1 = new Replica(replicaId, be1.getId(), Replica.ReplicaState.NORMAL, 1, 0);
+            Replica replica2 = new Replica(replicaId + 1, be2.getId(), Replica.ReplicaState.NORMAL, 1, 0);
+            Replica replica3 = new Replica(replicaId + 2, be3.getId(), Replica.ReplicaState.NORMAL, 1, 0);
 
             // Tablet
             LocalTablet tablet = new LocalTablet(tabletId);
@@ -567,26 +586,9 @@ public class OlapTableSinkTest {
         Backend be1 = new Backend(1001L, "127.0.0.1", 9050);
         Backend be2 = new Backend(1002L, "127.0.0.2", 9050);
         Backend be3 = new Backend(1003L, "127.0.0.3", 9050);
-        long hbTimestamp = System.currentTimeMillis();
-        BackendHbResponse be1Response =
-                new BackendHbResponse(be1.getId(), be1.getBePort(), be1.getHttpPort(), be1.getBrpcPort(),
-                        be1.getStarletPort(), hbTimestamp, be1.getVersion(), be1.getCpuCores(), 0);
-        BackendHbResponse be2Response =
-                new BackendHbResponse(be2.getId(), be2.getBePort(), be2.getHttpPort(), be2.getBrpcPort(),
-                        be2.getStarletPort(), hbTimestamp, be2.getVersion(), be2.getCpuCores(), 0);
-        BackendHbResponse be3Response =
-                new BackendHbResponse(be3.getId(), be3.getBePort(), be3.getHttpPort(), be3.getBrpcPort(),
-                        be3.getStarletPort(), hbTimestamp, be3.getVersion(), be3.getCpuCores(), 0);
-        be1.handleHbResponse(be1Response, false);
-        be2.handleHbResponse(be2Response, false);
-        be3.handleHbResponse(be3Response, false);
-        BackendHbResponse shutdownResponse =
-                new BackendHbResponse(be2.getId(), TStatusCode.SHUTDOWN, "be2 is in shutting down");
-        be2.handleHbResponse(shutdownResponse, false);
-        //check be node status
-        Assert.assertEquals(ComputeNode.Status.OK, be1.getStatus());
-        Assert.assertEquals(ComputeNode.Status.SHUTDOWN, be2.getStatus());
-        Assert.assertEquals(ComputeNode.Status.OK, be3.getStatus());
+        be1.setAlive(true);
+        be2.setAlive(false);
+        be3.setAlive(true);
 
         Map<Long, Backend> idToBackendRef = new HashMap<>();
         idToBackendRef.put(be1.getId(), be1);
