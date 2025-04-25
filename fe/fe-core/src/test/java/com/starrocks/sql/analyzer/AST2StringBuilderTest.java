@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.StatementBase;
@@ -172,5 +173,25 @@ public class AST2StringBuilderTest {
                         "WHERE (NOT FALSE) IS NOT NULL)", viewStmt.getInlineViewDef());
         statementBase = SqlParser.parse(sql, new SessionVariable());
         Assert.assertEquals(1, statementBase.size());
+    }
+
+    @Test
+    public void testSelectStarExcludeToString() throws Exception {
+        String sql = "SELECT * EXCLUDE (name, email) FROM test_exclude;";
+
+        List<StatementBase> stmts = 
+                SqlParser.parse(sql, AnalyzeTestUtil.getConnectContext().getSessionVariable().getSqlMode());
+        Assert.assertEquals(1, stmts.size());
+
+        StatementBase stmt = stmts.get(0);
+        Assert.assertTrue(stmt instanceof QueryStatement);
+        QueryStatement queryStmt = (QueryStatement) stmt;
+
+        Analyzer.analyze(queryStmt, AnalyzeTestUtil.getConnectContext());
+
+        String expected = "SELECT * EXCLUDE ( `name`,`email` )  FROM test.test_exclude";
+        String actual =  AstToStringBuilder.toString(queryStmt);
+
+        Assert.assertEquals(expected, actual);
     }
 }

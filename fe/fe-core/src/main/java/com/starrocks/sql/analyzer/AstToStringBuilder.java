@@ -668,8 +668,17 @@ public class AstToStringBuilder {
                 } else {
                     selectItemLabel = "*";
                 }
-
                 sqlBuilder.append(selectItemLabel);
+
+                if (item.isStar() && !item.getExcludedColumns().isEmpty()) {
+                    sqlBuilder.append(" EXCLUDE ( ");
+                    sqlBuilder.append(
+                            item.getExcludedColumns().stream()
+                            .map(col -> "`" + col + "`")
+                            .collect(Collectors.joining(","))
+                    );
+                    sqlBuilder.append(" ) ");
+                }
             }
 
             String fromClause = visit(stmt.getRelation());

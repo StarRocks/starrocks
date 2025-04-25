@@ -1,0 +1,82 @@
+-- name: test_all_column_exclude @slow
+CREATE TABLE test_table ( id INT, name VARCHAR(50), age INT, email VARCHAR(100)) DUPLICATE KEY(id) PROPERTIES ("compression" = "LZ4","replicated_storage" = "true","replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO test_table VALUES (1, 'John', 30, 'john@example.com'),(2, 'Alice', 25, 'alice@example.com');
+-- result:
+-- !result
+SELECT * EXCLUDE (age) FROM test_table;
+-- result:
+1	John	john@example.com
+2	Alice	alice@example.org
+-- !result
+SELECT * EXCEPT (age) FROM test_table;
+-- result:
+1	John	john@example.com
+2	Alice	alice@example.org
+-- !result
+SELECT * EXCLUDE (name, email) FROM test_table;
+-- result:
+id	age
+1	30
+2	25
+-- !result
+SELECT * EXCEPT (name, email) FROM test_table;
+-- result:
+id	age
+1	30
+2	25
+-- !result
+SELECT test_table.* EXCLUDE (email) FROM test_table;
+-- result:
+1	John	30
+2	Alice	25
+-- !result
+SELECT * EXCLUDE (id) FROM test_table WHERE age > 25;
+-- result:
+John	30	john@example.com
+-- !result
+SELECT * EXCLUDE (age) AS t FROM test_table;
+-- result:
+[REGEX].*Unexpected input 'AS', the most similar input is.*
+-- !result
+SELECT * EXCLUDE (invalid_col) FROM test_table;
+-- result:
+[REGEX].*Column(s) [invalid_col] do not exist in current scope.*
+-- !result
+SELECT test_table.* EXCLUDE (department) FROM test_table;
+-- result:
+[REGEX].*Column(s) [department] do not exist in.*
+-- !result
+SELECT * EXCLUDE (age) FROM test_table WHERE id = 1;
+-- result:
+1	John	john@example.com
+-- !result
+SELECT id, name EXCLUDE (name) FROM test_table;
+-- result:
+[REGEX].*Unexpected input.*
+-- !result
+SELECT * EXCLUDE (id, name, age, email) FROM test_table;
+-- result:
+[REGEX].*EXCLUDE clause removes all columns from.*
+-- !result
+SELECT * EXCLUDE (age, age) FROM test_table;
+-- result:
+1	John	john@example.com
+2	Alice	alice@example.org
+-- !result
+SELECT * EXCLUDE (NAME) FROM test_table;
+-- result:
+1	30	john@example.com
+2	25	alice@example.com
+-- !result
+with cte1 as ( select * EXCLUDE (name) from test_table)  select * from cte1;
+-- result:
+1	30	john@example.com
+2	25	alice@example.com
+-- !result
+select * from (select * EXCLUDE(name) from test_table)r;
+-- result:
+1	30	john@example.com
+2	25	alice@example.com
+-- !result

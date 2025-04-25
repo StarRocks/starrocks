@@ -97,6 +97,7 @@ SQL ステートメント内のキーワード、例えば `CREATE` や `DROP` �
 
 - ELSE
 - EXCEPT
+- EXCLUDE
 - EXISTS
 - EXPLAIN
 
