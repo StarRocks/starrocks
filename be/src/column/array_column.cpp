@@ -17,6 +17,7 @@
 #include <cstdint>
 
 #include "column/column_helper.h"
+#include "column/column_view/column_view.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -27,7 +28,6 @@
 #include "util/mysql_row_buffer.h"
 
 namespace starrocks {
-
 void ArrayColumn::check_or_die() const {
     CHECK_EQ(_offsets->get_data().back(), _elements->size());
     DCHECK(_elements->is_nullable());
@@ -122,6 +122,10 @@ void ArrayColumn::append(const Column& src, size_t offset, size_t count) {
 }
 
 void ArrayColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
+    if (src.is_array_view()) {
+        down_cast<const ColumnView*>(&src)->append_to(*this, indexes, from, size);
+        return;
+    }
     for (uint32_t i = 0; i < size; i++) {
         append(src, indexes[from + i], 1);
     }
@@ -697,5 +701,4 @@ template bool ArrayColumn::is_all_array_lengths_equal<true>(const ColumnPtr& v1,
                                                             const NullColumnPtr& null_data);
 template bool ArrayColumn::is_all_array_lengths_equal<false>(const ColumnPtr& v1, const ColumnPtr& v2,
                                                              const NullColumnPtr& null_data);
-
 } // namespace starrocks
