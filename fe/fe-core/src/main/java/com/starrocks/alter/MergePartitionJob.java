@@ -238,10 +238,9 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
         optimizeClause.setSourcePartitionIds(filterdPartitionIds);
     }
 
-    public Multimap<Long, Long> createMergedTempPartitionsFromPartitions(
+    public void createMergedTempPartitionsFromPartitions(
             Database db, OlapTable olapTable, String namePostfix, List<Long> sourcePartitionIds,
             DistributionDesc distributionDesc, long warehouseId) throws DdlException {
-        Multimap<Long, Long> tempPartitionIdToSourcePartitionIds = ArrayListMultimap.create();
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         Preconditions.checkState(partitionInfo instanceof ExpressionRangePartitionInfo);  
         ExpressionRangePartitionInfo sourcePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo; 
@@ -309,7 +308,6 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
                 tempPartitionIdToSourcePartitionIds.put(partition.getId(), sourcePartitionId);
             }
         }
-        return tempPartitionIdToSourcePartitionIds;
     }
 
     /**
@@ -320,6 +318,10 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
     @Override
     protected void runPendingJob() throws AlterCancelException {
         Preconditions.checkState(jobState == JobState.PENDING, jobState);
+        if (optimizeClause == null) {
+            throw new AlterCancelException("optimize clause is null since FE restart, job: " + jobId);
+        }
+        this.optimizeOperation = optimizeClause.toString();
 
         LOG.info("begin to send create temp partitions. job: {}", jobId);
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
@@ -329,10 +331,6 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
 
         if (!checkTableStable(db)) {
             return;
-        }
-
-        if (optimizeClause == null) {
-            throw new AlterCancelException("optimize clause is null since FE restart, job: " + jobId);
         }
 
         OlapTable targetTable = checkAndGetTable(db, tableId);
@@ -348,7 +346,7 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
         // 2. create temp partitions
         long createPartitionStartTimestamp = System.currentTimeMillis();
         try {
-            tempPartitionIdToSourcePartitionIds = createMergedTempPartitionsFromPartitions(db, targetTable, null,
+            createMergedTempPartitionsFromPartitions(db, targetTable, null,
                         optimizeClause.getSourcePartitionIds(), optimizeClause.getDistributionDesc(), warehouseId);
             LOG.info("create temp partitions {} success. job: {}", tempPartitionIdToSourcePartitionIds, jobId);
         } catch (Exception e) {
@@ -361,7 +359,6 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
         this.watershedTxnId =
                     GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
         this.jobState = JobState.WAITING_TXN;
-        this.optimizeOperation = optimizeClause.toString();
         span.setAttribute("createPartitionElapse", createPartitionElapse);
         span.setAttribute("watershedTxnId", this.watershedTxnId);
         span.addEvent("setWaitingTxn");
@@ -634,7 +631,7 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
                 }
             }
 
-            if (tempPartitionNameToSourcePartitionNames.isEmpty()) {
+            if (hasFailedTask && tempPartitionNameToSourcePartitionNames.isEmpty()) {
                 throw new AlterCancelException("all partitions rewrite failed [" + errMsg + "]");
             }
 
