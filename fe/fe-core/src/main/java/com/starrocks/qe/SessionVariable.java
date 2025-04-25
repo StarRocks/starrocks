@@ -626,6 +626,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PHASED_SCHEDULER = "enable_phased_scheduler";
     public static final String PHASED_SCHEDULER_MAX_CONCURRENCY = "phased_scheduler_max_concurrency";
 
+    // EMR severless
+    public static final String ENABLE_DESC_TABLE_CACHE = "enable_desc_table_cache";
+
     public static final String CUSTOM_QUERY_ID = "custom_query_id";
 
     // Access ORC columns by name. By default, columns in ORC files are accessed by
@@ -2760,6 +2763,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_PARQUET_READER_PAGE_INDEX)
     private boolean enableParquetReaderPageIndex = true;
+    
+    @VarAttr(name = ENABLE_DESC_TABLE_CACHE)
+    private boolean enableDescTableCache = true;
+
+    public boolean isEnableDescTableCache() {
+        return enableDescTableCache;
+    }
+
+    public void setEnableDescTableCache(boolean enableDescTableCache) {
+        this.enableDescTableCache = enableDescTableCache;
+    }
 
     public int getPhasedSchedulerMaxConcurrency() {
         return phasedSchedulerMaxConcurrency;
