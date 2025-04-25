@@ -11,7 +11,6 @@ import com.starrocks.authorization.PEntryObject;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.authorization.RolePrivilegeCollectionV2;
-import com.starrocks.common.Pair;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -35,10 +34,10 @@ public class AuthorizationMgrEPack extends AuthorizationMgr {
     @Override
     protected void invalidateRolesInCacheRoleUnlocked(long roleId) throws PrivilegeException {
         Set<Long> badRoles = getAllDescendantsUnlocked(roleId);
-        List<Pair<UserIdentity, Set<Long>>> badKeys = new ArrayList<>();
-        for (Pair<UserIdentity, Set<Long>> pair : ctxToMergedPrivilegeCollections.asMap().keySet()) {
-            UserIdentity userIdentity = pair.first;
-            Set<Long> roleIds = pair.second;
+        List<UserPrivKey> badKeys = new ArrayList<>();
+        for (UserPrivKey userPrivKey : ctxToMergedPrivilegeCollections.asMap().keySet()) {
+            UserIdentity userIdentity = userPrivKey.userIdentity;
+            Set<Long> roleIds = userPrivKey.roleIds;
 
             if (userIdentity.isEphemeral()) {
                 Preconditions.checkNotNull(roleIds);
@@ -49,12 +48,12 @@ public class AuthorizationMgrEPack extends AuthorizationMgr {
 
             for (long badRoleId : badRoles) {
                 if (roleIds.contains(badRoleId)) {
-                    badKeys.add(pair);
+                    badKeys.add(userPrivKey);
                     break;
                 }
             }
         }
-        for (Pair<UserIdentity, Set<Long>> pair : badKeys) {
+        for (UserPrivKey pair : badKeys) {
             ctxToMergedPrivilegeCollections.invalidate(pair);
         }
     }
