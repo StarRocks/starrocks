@@ -1448,7 +1448,11 @@ public class MaterializedViewAnalyzer {
                     }
                 } else if (table.isPaimonTable()) {
                     PaimonTable paimonTable = (PaimonTable) table;
-                    if (replacePaimonTableAlias(slotRef, paimonTable, baseTableInfo)) {
+                    if (paimonTable.getCatalogName().equals(baseTableInfo.getCatalogName()) &&
+                            paimonTable.getDbName().equals(baseTableInfo.getDbName()) &&
+                            paimonTable.getTableIdentifier().equals(baseTableInfo.getTableIdentifier())) {
+                        slotRef.setTblName(new TableName(baseTableInfo.getCatalogName(),
+                                baseTableInfo.getDbName(), paimonTable.getName()));
                         break;
                     }
                 }

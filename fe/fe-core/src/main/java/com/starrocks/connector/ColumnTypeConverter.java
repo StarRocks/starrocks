@@ -53,6 +53,7 @@ import org.apache.paimon.types.IntType;
 import org.apache.paimon.types.LocalZonedTimestampType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.SmallIntType;
+import org.apache.paimon.types.TimeType;
 import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.types.TinyIntType;
 import org.apache.paimon.types.VarBinaryType;
@@ -546,6 +547,10 @@ public class ColumnTypeConverter {
 
         public Type visit(DateType dateType) {
             return ScalarType.createType(PrimitiveType.DATE);
+        }
+
+        public Type visit(TimeType timeType) {
+            return ScalarType.createType(PrimitiveType.TIME);
         }
 
         public Type visit(TimestampType timestampType) {
