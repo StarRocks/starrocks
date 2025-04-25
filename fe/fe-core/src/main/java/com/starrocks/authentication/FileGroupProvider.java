@@ -30,38 +30,32 @@ import java.io.Reader;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class FileGroupProvider extends GroupProvider {
     private static final Logger LOG = LogManager.getLogger(FileGroupProvider.class);
 
     public static final String TYPE = "file";
-
     public static final String GROUP_FILE_URL = "group_file_url";
+    public static final Set<String> REQUIRED_PROPERTIES = new HashSet<>(List.of(FileGroupProvider.GROUP_FILE_URL));
 
-    public static final Set<String> REQUIRED_PROPERTIES = new HashSet<>(List.of(
-            FileGroupProvider.GROUP_FILE_URL));
-
-    private final Map<String, Set<String>> userGroups;
+    private Map<String, Set<String>> userGroups;
 
     public FileGroupProvider(String name, Map<String, String> properties) {
         super(name, properties);
-        this.userGroups = new HashMap<>();
     }
 
     @Override
     public void init() throws DdlException {
+        userGroups = new ConcurrentHashMap<>();
+
         String groupFileUrl = properties.get(GROUP_FILE_URL);
-
         try {
-            InputStream fileInputStream = null;
-            try {
-                fileInputStream = getPath(groupFileUrl);
-
+            try (InputStream fileInputStream = getPath(groupFileUrl)) {
                 String s = readInputStreamToString(fileInputStream, StandardCharsets.UTF_8);
                 for (String line : s.split("\r?\n")) {
                     if (line.trim().isEmpty()) {
@@ -77,10 +71,6 @@ public class FileGroupProvider extends GroupProvider {
                         userGroups.putIfAbsent(user, new HashSet<>());
                         userGroups.get(user).add(groupName);
                     }
-                }
-            } finally {
-                if (fileInputStream != null) {
-                    fileInputStream.close();
                 }
             }
         } catch (IOException e) {
