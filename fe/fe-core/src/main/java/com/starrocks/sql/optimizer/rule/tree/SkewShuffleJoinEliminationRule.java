@@ -15,7 +15,7 @@ package com.starrocks.sql.optimizer.rule.tree;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.JoinOperator;
+import com.starrocks.analysis.HintNode;
 import com.starrocks.common.LocalExchangerType;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.JoinHelper;
@@ -450,7 +450,7 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             }
 
             // respect join hint
-            return joinOperator.getJoinHint().equals(JoinOperator.HINT_SKEW);
+            return joinOperator.getJoinHint().equals(HintNode.HINT_JOIN_SKEW);
         }
 
         private class ColumnRefReplacer extends BaseScalarOperatorShuttle {

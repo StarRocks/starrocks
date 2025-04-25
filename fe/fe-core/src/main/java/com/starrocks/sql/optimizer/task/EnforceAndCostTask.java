@@ -16,7 +16,7 @@ package com.starrocks.sql.optimizer.task;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.JoinOperator;
+import com.starrocks.analysis.HintNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.ChildOutputPropertyGuarantor;
@@ -287,7 +287,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         PhysicalJoinOperator node = (PhysicalJoinOperator) groupExpression.getOp();
         // If broadcast child has hint, need to change the cost to zero
         double childCost = childBestExpr.getCost(inputProperty);
-        if (JoinOperator.HINT_BROADCAST.equals(node.getJoinHint()) && childCost == Double.POSITIVE_INFINITY) {
+        if (HintNode.HINT_JOIN_BROADCAST.equals(node.getJoinHint()) && childCost == Double.POSITIVE_INFINITY) {
             List<PhysicalPropertySet> childInputProperties =
                     childBestExpr.getInputProperties(inputProperty);
             childBestExpr.updatePropertyWithCost(inputProperty, childInputProperties, 0);
