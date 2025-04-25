@@ -40,6 +40,7 @@ import com.starrocks.planner.FileScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.ast.ColumnDef;
@@ -100,6 +101,8 @@ public class LoadPlannerTest {
     private long execMemLimit = 1000000;
 
     @Mocked
+    private GlobalStateMgr globalStateMgr;
+    @Mocked
     Partition partition;
     @Mocked
     OlapTableSink sink;
@@ -124,6 +127,19 @@ public class LoadPlannerTest {
         idToBackendTmp.put(1L, b2);
         idToBackend = ImmutableMap.copyOf(idToBackendTmp);
         ctx = UtFrameUtils.createDefaultCtx();
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getServingState();
+                result = globalStateMgr;
+                minTimes = 0;
+
+                globalStateMgr.isReady();
+                result = true;
+                minTimes = 0;
+            }
+        };
+        SimpleScheduler.disableUpdateBlocklistThread();
     }
 
     @After
@@ -133,7 +149,7 @@ public class LoadPlannerTest {
     }
 
     @Test
-    public void testParallelInstance(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
+    public void testParallelInstance(@Mocked SystemInfoService systemInfoService,
                                      @Injectable Database db, @Injectable OlapTable table) throws StarRocksException {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -225,7 +241,7 @@ public class LoadPlannerTest {
     }
 
     @Test
-    public void testVectorizedLoad(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
+    public void testVectorizedLoad(@Mocked SystemInfoService systemInfoService,
                                    @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -359,8 +375,7 @@ public class LoadPlannerTest {
     }
 
     @Test
-    public void testPartialUpdatePlan(@Mocked GlobalStateMgr globalStateMgr,
-                                      @Mocked SystemInfoService systemInfoService,
+    public void testPartialUpdatePlan(@Mocked SystemInfoService systemInfoService,
                                       @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -460,8 +475,7 @@ public class LoadPlannerTest {
     }
 
     @Test
-    public void testColumnWithRowPartialUpdate(@Mocked GlobalStateMgr globalStateMgr,
-                                               @Mocked SystemInfoService systemInfoService,
+    public void testColumnWithRowPartialUpdate(@Mocked SystemInfoService systemInfoService,
                                                @Injectable Database db, @Injectable OlapTable table) throws Exception {
         new Expectations() {
             {
@@ -519,8 +533,7 @@ public class LoadPlannerTest {
     }
 
     @Test
-    public void testLoadWithOpColumnDefault(@Mocked GlobalStateMgr globalStateMgr,
-                                            @Mocked SystemInfoService systemInfoService,
+    public void testLoadWithOpColumnDefault(@Mocked SystemInfoService systemInfoService,
                                             @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -609,8 +622,7 @@ public class LoadPlannerTest {
     }
 
     @Test
-    public void testLoadWithOpColumnDelete(@Mocked GlobalStateMgr globalStateMgr,
-                                           @Mocked SystemInfoService systemInfoService,
+    public void testLoadWithOpColumnDelete(@Mocked SystemInfoService systemInfoService,
                                            @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -701,8 +713,7 @@ public class LoadPlannerTest {
     }
 
     @Test
-    public void testLoadWithOpColumnExpr(@Mocked GlobalStateMgr globalStateMgr,
-                                         @Mocked SystemInfoService systemInfoService,
+    public void testLoadWithOpColumnExpr(@Mocked SystemInfoService systemInfoService,
                                          @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -811,8 +822,7 @@ public class LoadPlannerTest {
     }
 
     @Test
-    public void testLoadWithOpAutoMapping(@Mocked GlobalStateMgr globalStateMgr,
-                                          @Mocked SystemInfoService systemInfoService,
+    public void testLoadWithOpAutoMapping(@Mocked SystemInfoService systemInfoService,
                                           @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -909,7 +919,7 @@ public class LoadPlannerTest {
     }
 
     @Test
-    public void testShuffle(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
+    public void testShuffle(@Mocked SystemInfoService systemInfoService,
                             @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -1023,7 +1033,7 @@ public class LoadPlannerTest {
     }
 
     @Test
-    public void testAggShuffle(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
+    public void testAggShuffle(@Mocked SystemInfoService systemInfoService,
                                @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -1168,7 +1178,7 @@ public class LoadPlannerTest {
     }
 
     @Test
-    public void testLoadLocalFile(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
+    public void testLoadLocalFile(@Mocked SystemInfoService systemInfoService,
                                   @Injectable Database db, @Injectable OlapTable table) throws StarRocksException {
         // table schema
         List<Column> columns = Lists.newArrayList();
