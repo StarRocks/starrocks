@@ -192,12 +192,6 @@ public class FunctionAnalyzer {
             FunctionCallExpr functionCallWithoutIf =
                     new FunctionCallExpr(argFuncNameWithoutIf, functionParamsWithOutIf);
             analyzeBuiltinAggFunction(argFuncNameWithoutIf, functionParamsWithOutIf, functionCallWithoutIf);
-
-            Type predicateType = functionCallExpr.getChild(functionCallExpr.getChildren().size() - 1).getType();
-            if (predicateType != Type.BOOLEAN) {
-                throw new SemanticException(
-                        "AggIf's last parameter's type must be boolean: " + functionCallExpr.toSql());
-            }
         }
     }
 

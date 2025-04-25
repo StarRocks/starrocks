@@ -101,10 +101,13 @@ public:
 
         // step 1: merge predicate_column into fake_null_column
         size_t predicate_col_index = column_size - 1;
-        if (columns[predicate_col_index]->is_nullable()) {
-            const NullableColumn* nullable_predicate_column =
-                    down_cast<const NullableColumn*>(columns[predicate_col_index]);
-            if (!nullable_predicate_column->has_null()) {
+        ColumnPtr predicate_column = ColumnHelper::unpack_and_duplicate_const_column(
+                chunk_size, columns[predicate_col_index]->as_mutable_ptr());
+        if (predicate_column->is_nullable()) {
+            const NullableColumn* nullable_predicate_column = down_cast<const NullableColumn*>(predicate_column.get());
+            size_t nullCount = nullable_predicate_column->null_count();
+
+            if (nullCount == 0) {
                 const uint8_t* __restrict nullable_predicate_data_col_raw_data;
                 nullable_predicate_data_col_raw_data =
                         ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(nullable_predicate_column->data_column())->raw_data();
@@ -112,6 +115,8 @@ public:
                     // false is 0, but null is 1
                     fake_null_column_raw_data[i] = !nullable_predicate_data_col_raw_data[i];
                 }
+            } else if (nullCount == predicate_column->size()) {
+                fake_null_column = NullColumn::create(columns[0]->size(), 1);
             } else {
                 const auto& nullable_predicate_null_col_data = nullable_predicate_column->immutable_null_column_data();
                 const auto& nullable_predicate_data_col_data =
@@ -124,7 +129,7 @@ public:
             }
         } else {
             const uint8_t* __restrict predicate_column_raw_data =
-                    ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(columns[predicate_col_index])->raw_data();
+                    ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(predicate_column)->raw_data();
             for (size_t i = 0; i < chunk_size; ++i) {
                 fake_null_column_raw_data[i] = !predicate_column_raw_data[i];
             }

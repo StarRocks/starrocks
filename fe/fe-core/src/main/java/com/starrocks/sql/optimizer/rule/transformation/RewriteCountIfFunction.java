@@ -17,7 +17,10 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.Expr;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -34,7 +37,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * For count_if(x) we will rewrite it to count(if(x, 1, null))
+ * For count_if(x) we will rewrite it to count_if(1,x)
  */
 public class RewriteCountIfFunction extends TransformationRule {
 
@@ -74,12 +77,18 @@ public class RewriteCountIfFunction extends TransformationRule {
                 ScalarOperator aggExpr = aggFunction.getArguments().get(0);
                 Preconditions.checkState(aggExpr.getType().isBoolean());
 
-                ScalarOperator auto_fill = ConstantOperator.createTinyInt((byte) 1);
+                ScalarOperator autoFill = ConstantOperator.createTinyInt((byte) 1);
                 List<ScalarOperator> newChild = new ArrayList<>();
-                newChild.add(auto_fill);
+                newChild.add(autoFill);
                 newChild.addAll(aggFunction.getArguments());
+
+                Function countFn =
+                        Expr.getBuiltinFunction(FunctionSet.COUNT_IF, new Type[] {Type.TINYINT, Type.BOOLEAN},
+                                Function.CompareMode.IS_IDENTICAL);
+                Preconditions.checkState(countFn != null);
+
                 CallOperator newCallOp = new CallOperator(aggFunction.getFnName(), aggFunction.getType(), newChild,
-                        aggFunction.getFunction(), aggFunction.isDistinct(), aggFunction.isRemovedDistinct());
+                        countFn, aggFunction.isDistinct(), aggFunction.isRemovedDistinct());
 
                 newAggMap.put(entry.getKey(), newCallOp);
                 changed = true;
