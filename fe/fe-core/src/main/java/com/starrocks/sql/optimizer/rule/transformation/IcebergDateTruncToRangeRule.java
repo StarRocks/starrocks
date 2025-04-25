@@ -77,7 +77,7 @@ public class IcebergDateTruncToRangeRule extends TransformationRule {
     public boolean check(OptExpression input, OptimizerContext context) {
         // First check if it's a filter applied to a scan
         if (!(input.getOp() instanceof LogicalFilterOperator) ||
-            !(input.getInputs().get(0).getOp() instanceof LogicalScanOperator)) {
+                !(input.getInputs().get(0).getOp() instanceof LogicalScanOperator)) {
             return false;
         }
 
@@ -98,7 +98,7 @@ public class IcebergDateTruncToRangeRule extends TransformationRule {
         if (predicate instanceof BinaryPredicateOperator) {
             BinaryPredicateOperator binOp = (BinaryPredicateOperator) predicate;
             if (binOp.getBinaryType() == BinaryType.EQ &&
-                binOp.getChild(0) instanceof CallOperator) {
+                    binOp.getChild(0) instanceof CallOperator) {
                 CallOperator callOp = (CallOperator) binOp.getChild(0);
                 String fnName = callOp.getFnName();
                 return fnName.equals(FunctionSet.DATE_TRUNC) || fnName.equals(FunctionSet.DATE);
@@ -139,8 +139,8 @@ public class IcebergDateTruncToRangeRule extends TransformationRule {
         @Override
         public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator operator, Void context) {
             if (operator.getBinaryType() == BinaryType.EQ &&
-                operator.getChild(0) instanceof CallOperator &&
-                operator.getChild(1) instanceof ConstantOperator) {
+                     operator.getChild(0) instanceof CallOperator &&
+                    operator.getChild(1) instanceof ConstantOperator) {
 
                 CallOperator callOp = (CallOperator) operator.getChild(0);
                 ConstantOperator dateValue = (ConstantOperator) operator.getChild(1);
@@ -258,7 +258,7 @@ public class IcebergDateTruncToRangeRule extends TransformationRule {
      */
     private static ScalarOperator transformDateTruncPredicate(CallOperator dateTruncCall, ConstantOperator dateValue) {
         if (!(dateTruncCall.getChild(0) instanceof ConstantOperator) ||
-            !(dateTruncCall.getChild(1) instanceof ColumnRefOperator)) {
+                !(dateTruncCall.getChild(1) instanceof ColumnRefOperator)) {
             return null;
         }
 
