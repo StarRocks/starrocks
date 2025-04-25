@@ -17,11 +17,8 @@
 #include "gutil/strings/substitute.h"
 #include "simdjson.h"
 #include "util/json.h"
-<<<<<<< HEAD
-#include "util/string_parser.hpp"
-=======
 #include "util/simdjson_util.h"
->>>>>>> 53410e7067 ([BugFix] safe processing simdjson unescape key and string (#58320))
+#include "util/string_parser.hpp"
 #include "velocypack/ValueType.h"
 #include "velocypack/vpack.h"
 
