@@ -171,6 +171,8 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
         threads.emplace_back([data_dir] {
             auto res = data_dir->load();
             if (!res.ok()) {
+                // We will igore error throw by data_dir->load(),
+                // so we must ensure that all tablets are either properly loaded or handled within load().
                 LOG(WARNING) << "Fail to load data dir=" << data_dir->path() << ", res=" << res.to_string();
             }
         });
