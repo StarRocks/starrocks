@@ -35,6 +35,7 @@
 #include "rowset_merger.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 #include "storage/compaction_utils.h"
@@ -72,6 +73,46 @@
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
+
+namespace {
+
+Status _update_delete_pks(MutableColumnPtr& total_delete_pks, MutableColumnPtr& delete_pks, PrimaryIndex& index,
+                          PrimaryIndex::DeletesMap& new_deletes) {
+    RETURN_IF_ERROR(index.erase(*delete_pks, &new_deletes));
+    if (total_delete_pks == nullptr) {
+        total_delete_pks = std::move(delete_pks);
+        return Status::OK();
+    }
+
+    total_delete_pks->append(*delete_pks);
+    return Status::OK();
+}
+
+Status _verify_delete_file(const std::string& del_file_path, const Column& deletes, FileSystem& fs) {
+    ASSIGN_OR_RETURN(auto read_file, fs.new_random_access_file(del_file_path));
+    ASSIGN_OR_RETURN(auto file_size, read_file->get_size());
+    std::vector<uint8_t> read_buffer;
+    TRY_CATCH_BAD_ALLOC(read_buffer.resize(file_size));
+    RETURN_IF_ERROR(read_file->read_at_fully(0, read_buffer.data(), read_buffer.size()));
+    auto col = deletes.clone_empty();
+    if (serde::ColumnArraySerde::deserialize(read_buffer.data(), col.get()) == nullptr) {
+        return Status::InternalError("column deserialization failed");
+    }
+    if (col->size() != deletes.size()) {
+        return Status::InternalError(
+                fmt::format("The delete files sizes are different col:{} dels:{}", col->size(), deletes.size()));
+    }
+    for (auto i = 0; i < col->size(); ++i) {
+        if (col->equals(i, deletes, i) == Column::EQUALS_FALSE) {
+            return Status::InternalError(
+                    fmt::format("The delete files values are different size:{} i:{} col:{} dels:{}", deletes.size(), i,
+                                col->debug_item(i), deletes.debug_item(i)));
+        }
+    }
+    return Status::OK();
+}
+
+} // namespace
 
 const std::string kBreakpointMsg = "primary key apply stopped";
 
@@ -1320,6 +1361,28 @@ bool TabletUpdates::check_delta_column_generate_from_version(EditVersion begin_v
     return false;
 }
 
+Status TabletUpdates::_create_delete_file_for_segment(const RowsetSharedPtr& rowset, const Column& deletes,
+                                                      FileSystem& fs) {
+    auto num_delfiles = rowset->num_delete_files();
+    auto rowset_path = Rowset::segment_del_file_path(rowset->rowset_path(), rowset->rowset_id(), num_delfiles);
+    if (fs.path_exists(rowset_path).ok()) {
+        RETURN_IF_ERROR(_verify_delete_file(rowset_path, deletes, fs));
+        return Status::OK();
+    }
+    ASSIGN_OR_RETURN(auto wfile, fs.new_writable_file(rowset_path));
+    size_t sz = serde::ColumnArraySerde::max_serialized_size(deletes);
+    std::vector<uint8_t> content(sz);
+    if (serde::ColumnArraySerde::serialize(deletes, content.data()) == nullptr) {
+        return Status::InternalError("deletes column serialize failed");
+    }
+    RETURN_IF_ERROR(wfile->append(Slice(content.data(), content.size())));
+    if (config::sync_tablet_meta) {
+        RETURN_IF_ERROR(wfile->sync());
+    }
+    RETURN_IF_ERROR(wfile->close());
+    return Status::OK();
+}
+
 Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_info, const RowsetSharedPtr& rowset) {
     CHECK_MEM_LIMIT("TabletUpdates::_apply_normal_rowset_commit");
     auto span = Tracer::Instance().start_trace_tablet("apply_rowset_commit", _tablet.tablet_id());
@@ -1445,6 +1508,7 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
 
     int64_t full_row_size = 0;
     int64_t full_rowset_size = 0;
+    MutableColumnPtr total_delete_pks = nullptr;
     if (rowset->rowset_meta()->get_meta_pb_without_schema().delfile_idxes_size() == 0) {
         for (uint32_t i = 0; i < rowset->num_segments(); i++) {
             st = state.load_upserts(rowset.get(), i);
@@ -1479,7 +1543,7 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
                 }
                 manager->index_cache().update_object_size(index_entry, index.memory_usage());
                 if (delete_pks != nullptr) {
-                    st = index.erase(*delete_pks, &new_deletes);
+                    st = _update_delete_pks(total_delete_pks, delete_pks, index, new_deletes);
                     if (!st.ok()) {
                         std::string msg = strings::Substitute("_apply_rowset_commit error: index erase failed: $0 $1",
                                                               st.to_string(), debug_string());
@@ -1567,7 +1631,7 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
                     }
                     manager->index_cache().update_object_size(index_entry, index.memory_usage());
                     if (delete_pks != nullptr) {
-                        st = index.erase(*delete_pks, &new_deletes);
+                        st = _update_delete_pks(total_delete_pks, delete_pks, index, new_deletes);
                         if (!st.ok()) {
                             std::string msg =
                                     strings::Substitute("_apply_rowset_commit error: index erase failed: $0 $1",
@@ -1721,6 +1785,19 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
     StarRocksMetrics::instance()->update_del_vector_deletes_new.increment(new_del);
     int64_t t_delvec = MonotonicMillis();
 
+    if (total_delete_pks != nullptr) {
+        std::shared_ptr<FileSystem> fs;
+        ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(rowset->rowset_path()));
+
+        st = _create_delete_file_for_segment(rowset, *total_delete_pks, *fs);
+        if (!st.ok() && !st.is_not_found()) {
+            std::string msg = strings::Substitute("_apply_rowset_commit error: Failed to write delete file $0 $1",
+                                                  st.to_string(), _debug_string(false, true));
+            failure_handler(msg, st.code(), true);
+            return apply_st;
+        }
+    }
+
     {
         std::lock_guard wl(_lock);
         FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_tablet_drop, { _edit_version_infos.clear(); });
@@ -1731,6 +1808,12 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
         }
         // 4. write meta
         const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
+        if (total_delete_pks != nullptr) {
+            // _delfile_idxes keep the idx for every delete file, so we need to add the idx to _delfile_idxes if we create a
+            // new delete file
+            rowset->rowset_meta()->add_delfile_idxes(rowset_meta_pb.num_segments() + rowset_meta_pb.num_delete_files());
+            rowset->rowset_meta()->set_num_delete_files(rowset_meta_pb.num_delete_files() + 1);
+        }
         // TODO reset tablet schema in rowset
         if (rowset_meta_pb.has_txn_meta()) {
             auto r = rowset->total_segment_data_size();

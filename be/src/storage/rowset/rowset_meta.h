@@ -229,6 +229,10 @@ public:
 
     uint32_t get_num_update_files() const { return _rowset_meta_pb->num_update_files(); }
 
+    void set_num_delete_files(uint32_t num_del_files) const { _rowset_meta_pb->set_num_delete_files(num_del_files); }
+
+    void add_delfile_idxes(uint32_t idx) { _rowset_meta_pb->add_delfile_idxes(idx); }
+
     // rowset_meta_pb keep `tablet_schema_pb` right now and it will use more memory.
     // But it is not necessary always hold tablet schema pb in memory. The access frequency of
     // tablet_schema_pb is very low and it could be generated from `_schema` temporarily.

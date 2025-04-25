@@ -532,6 +532,8 @@ private:
 
     void _reset_apply_status(const EditVersionInfo& version_info_apply);
 
+    Status _create_delete_file_for_segment(const RowsetSharedPtr& rowset, const Column& delete_pks, FileSystem& fs);
+
 private:
     Tablet& _tablet;
 

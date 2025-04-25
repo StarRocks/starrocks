@@ -4066,4 +4066,93 @@ TEST_F(TabletUpdatesTest, test_apply_breakpoint_check_pindex) {
     test_apply_breakpoint_check(true);
 }
 
+TEST_F(TabletUpdatesTest, test_updates_deletes_and_snapshot) {
+    srand(GetCurrentTimeMicros());
+    auto tablet0 = create_tablet_with_auto_increment(rand(), rand());
+    auto tablet1 = create_tablet_with_auto_increment(rand(), rand());
+    tablet0->set_enable_persistent_index(false);
+    tablet1->set_enable_persistent_index(false);
+
+    DeferOp defer([&]() {
+        auto tablet_mgr = StorageEngine::instance()->tablet_manager();
+        (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
+        (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
+        (void)fs::remove_all(tablet0->schema_hash_path());
+        (void)fs::remove_all(tablet1->schema_hash_path());
+    });
+
+    std::vector<int32_t> column_indexes = {0, 1};
+    std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(tablet1->tablet_schema(), column_indexes);
+    std::vector<int64_t> keys0 = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+    for (int i = 0; i < 4; i++) {
+        ASSERT_TRUE(tablet0->rowset_commit(i + 2 /*version*/, create_rowset_auto_increment(tablet0, keys0)).ok());
+    }
+
+    {
+        EditVersion version;
+        std::vector<RowsetSharedPtr> applied_rowsets;
+        ASSERT_TRUE(tablet0->updates()->get_applied_rowsets(5, &applied_rowsets, &version).ok());
+    }
+
+    // create a partial rowset, commit but not apply
+    tablet0->updates()->stop_apply(true);
+    std::vector<int64_t> partial_keys = {1000, 1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009};
+    RowsetSharedPtr partial_rowset = create_partial_rowset_auto_increment(tablet0, partial_keys, column_indexes, partial_schema);
+    ASSERT_TRUE(tablet0->rowset_commit(6, partial_rowset).ok());
+    ASSERT_EQ(tablet0->updates()->max_version(), 6);
+    EditVersion latest_applied_verison;
+    tablet0->updates()->get_latest_applied_version(&latest_applied_verison);
+    ASSERT_EQ(latest_applied_verison.major_number(), 5);
+    LOG(INFO) << "commit partial rowset success";
+
+    // create rowsets for tablet1
+    std::vector<int64_t> keys1 = {0, 1, 2, 3};
+    for (int i = 0; i < 2; i++) {
+        ASSERT_TRUE(tablet1->rowset_commit(i + 2 /*version*/, create_rowset_auto_increment(tablet1, keys1)).ok());
+    }
+    tablet0->updates()->stop_apply(false);
+    tablet0->updates()->check_for_apply();
+    {
+        EditVersion version;
+        std::vector<RowsetSharedPtr> applied_rowsets;
+        Status status = tablet0->updates()->get_applied_rowsets(6, &applied_rowsets, &version);
+        EditVersion latest_applied_verison;
+        tablet0->updates()->get_latest_applied_version(&latest_applied_verison);
+        ASSERT_EQ(latest_applied_verison.major_number(), 6);
+    }
+
+    // try to do snapshot
+    std::vector<int64_t> delta_versions = {4, 5, 6};
+    TabletMetaSharedPtr snapshot_tablet_meta = std::make_shared<TabletMeta>();
+    std::vector<RowsetSharedPtr> snapshot_rowsets;
+    std::vector<RowsetMetaSharedPtr> snapshot_rowset_metas;
+    std::string snapshot_id_path;
+    std::string snapshot_dir;
+    DeferOp remove([&]() {
+        (void)fs::remove_all(snapshot_dir);
+        (void)fs::remove_all(snapshot_id_path);
+    });
+
+    snapshot_prepare(tablet0, delta_versions, &snapshot_id_path, &snapshot_dir, &snapshot_rowsets,
+                     &snapshot_rowset_metas, snapshot_tablet_meta);
+
+    ASSERT_TRUE(SnapshotManager::instance()
+                        ->make_snapshot_on_tablet_meta(SNAPSHOT_TYPE_INCREMENTAL, snapshot_dir, tablet0,
+                                                       snapshot_rowset_metas, 0, 4 /*TSNAPSHOT_REQ_VERSION2*/)
+                        .ok());
+
+    // rowset status is applied in meta, rowset file is full rowset
+    // rowsets applied success, link files directly
+    for (const auto& rowset : snapshot_rowsets) {
+        ASSERT_TRUE(rowset->link_files_to(tablet0->data_dir()->get_meta(), snapshot_dir, rowset->rowset_id()).ok());
+    }
+
+    auto meta_dir = SnapshotManager::instance()->get_schema_hash_full_path(tablet0, snapshot_id_path);
+    SegmentFooterPB footer;
+    load_snapshot(meta_dir, tablet1, &footer);
+    ASSERT_EQ(footer.columns_size(), 3);
+    ASSERT_EQ(10, read_tablet(tablet0, tablet0->updates()->max_version()));
+    ASSERT_EQ(10, read_tablet(tablet1, tablet1->updates()->max_version()));
+}
+
 } // namespace starrocks
