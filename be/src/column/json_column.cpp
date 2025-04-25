@@ -19,6 +19,7 @@
 
 #include "column/bytes.h"
 #include "column/column_helper.h"
+#include "column/column_view/column_view.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
@@ -275,6 +276,10 @@ void JsonColumn::append_default() {
 }
 
 void JsonColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
+    if (src.is_json_view()) {
+        down_cast<const ColumnView*>(&src)->append_to(*this, indexes, from, size);
+        return;
+    }
     const auto* other_json = down_cast<const JsonColumn*>(&src);
     if (other_json->is_flat_json() && !is_flat_json()) {
         // only hit in AggregateIterator (Aggregate mode in storage)

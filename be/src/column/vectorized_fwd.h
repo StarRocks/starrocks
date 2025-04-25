@@ -109,6 +109,8 @@ class JsonColumn;
 class MapColumn;
 class StructColumn;
 
+class ColumnView;
+
 using ChunkPtr = std::shared_ptr<Chunk>;
 using ChunkUniquePtr = std::unique_ptr<Chunk>;
 using Chunks = std::vector<ChunkPtr>;

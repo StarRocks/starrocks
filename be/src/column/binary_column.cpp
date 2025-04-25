@@ -14,6 +14,8 @@
 
 #include "column/binary_column.h"
 
+#include "column/column_view/column_view.h"
+
 #ifdef __x86_64__
 #include <immintrin.h>
 #endif
@@ -30,7 +32,6 @@
 #include "util/raw_container.h"
 
 namespace starrocks {
-
 template <typename T>
 void BinaryColumnBase<T>::check_or_die() const {
     CHECK_EQ(_bytes.size(), _offsets.back());
@@ -71,6 +72,10 @@ void BinaryColumnBase<T>::append(const Column& src, size_t offset, size_t count)
 
 template <typename T>
 void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
+    if (src.is_binary_view()) {
+        down_cast<const ColumnView*>(&src)->append_to(*this, indexes, from, size);
+        return;
+    }
     const auto& src_column = down_cast<const BinaryColumnBase<T>&>(src);
     const auto& src_offsets = src_column.get_offset();
     const auto& src_bytes = src_column.get_bytes();
@@ -590,6 +595,44 @@ void BinaryColumnBase<T>::deserialize_and_append_batch(Buffer<Slice>& srcs, size
 }
 
 template <typename T>
+<<<<<<< HEAD
+=======
+void BinaryColumnBase<T>::serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& slice_sizes,
+                                                          size_t chunk_size, uint32_t max_one_row_size,
+                                                          const uint8_t* null_masks, bool has_null) const {
+    uint32_t* sizes = slice_sizes.data();
+
+    if (!has_null) {
+        for (size_t i = 0; i < chunk_size; ++i) {
+            memcpy(dst + i * max_one_row_size + sizes[i], &has_null, sizeof(bool));
+            sizes[i] += static_cast<uint32_t>(sizeof(bool)) +
+                        serialize(i, dst + i * max_one_row_size + sizes[i] + sizeof(bool));
+        }
+    } else {
+        for (size_t i = 0; i < chunk_size; ++i) {
+            memcpy(dst + i * max_one_row_size + sizes[i], null_masks + i, sizeof(bool));
+            sizes[i] += sizeof(bool);
+
+            if (!null_masks[i]) {
+                sizes[i] += serialize(i, dst + i * max_one_row_size + sizes[i]);
+            }
+        }
+    }
+}
+
+template <typename T>
+void BinaryColumnBase<T>::deserialize_and_append_batch_nullable(Buffer<Slice>& srcs, size_t chunk_size,
+                                                                Buffer<uint8_t>& is_nulls, bool& has_null) {
+    const uint32_t string_size = *((bool*)srcs[0].data) // is null
+                                         ? 4
+                                         : *((uint32_t*)(srcs[0].data + sizeof(bool))); // first string size
+    _bytes.reserve(chunk_size * string_size * 2);
+    ColumnFactory<Column, BinaryColumnBase<T> >::deserialize_and_append_batch_nullable(srcs, chunk_size, is_nulls,
+                                                                                       has_null);
+}
+
+template <typename T>
+>>>>>>> dc168b7f56 ([Enhancement] Use ColumnView to reduce CopyRightTableChunkTable time (#58043))
 void BinaryColumnBase<T>::fnv_hash(uint32_t* hashes, uint32_t from, uint32_t to) const {
     for (uint32_t i = from; i < to; ++i) {
         hashes[i] = HashUtil::fnv_hash(_bytes.data() + _offsets[i],
@@ -797,5 +840,4 @@ Status BinaryColumnBase<T>::capacity_limit_reached() const {
 
 template class BinaryColumnBase<uint32_t>;
 template class BinaryColumnBase<uint64_t>;
-
 } // namespace starrocks
