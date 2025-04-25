@@ -304,11 +304,11 @@ public class IcebergDateTruncToRangeRule extends TransformationRule {
             boolean isDate = columnRef.getType().isDate();
 
             ConstantOperator startConstant = isDate ?
-                    ConstantOperator.createDate(truncatedDate) :
+                    ConstantOperator.createDate(truncatedDate.toLocalDate()) :
                     ConstantOperator.createDatetime(truncatedDate);
 
             ConstantOperator endConstant = isDate ?
-                    ConstantOperator.createDate(nextDate) :
+                    ConstantOperator.createDate(nextDate.toLocalDate()) :
                     ConstantOperator.createDatetime(nextDate);
 
             BinaryPredicateOperator leftPredicate =
