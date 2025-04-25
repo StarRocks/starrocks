@@ -19,6 +19,7 @@
 #include "common/status.h"
 #include "gutil/strings/substitute.h"
 #include "util/json.h"
+#include "util/simdjson_util.h"
 
 namespace starrocks {
 
@@ -41,7 +42,8 @@ static Status add_column_with_numeric_value(BinaryColumn* column, const TypeDesc
 static Status add_column_with_string_value(BinaryColumn* column, const TypeDescriptor& type_desc,
                                            const std::string& name, simdjson::ondemand::value* value) {
     // simdjson::value::get_string() returns string without quotes.
-    std::string_view sv = value->get_string();
+    faststring buffer;
+    std::string_view sv = value_get_string_safe(value, &buffer);
 
     if (type_desc.len < sv.size()) {
         auto err_msg =
