@@ -26,7 +26,7 @@ import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -39,7 +39,6 @@ import mockit.Mocked;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -92,11 +91,11 @@ public class IcebergDateTruncToRangeRuleTest {
 
         // Create filter and scan operators
         LogicalFilterOperator filterOperator = new LogicalFilterOperator(dateTruncPredicate);
-        LogicalScanOperator scanOperator = new LogicalScanOperator(
+        LogicalIcebergScanOperator scanOperator = new LogicalIcebergScanOperator(
                 icebergTable,
                 Maps.newHashMap(),
                 Maps.newHashMap(),
-                null, -1, null);
+                -1, null);
 
         // Create expression tree
         OptExpression filterExpression = new OptExpression(filterOperator);
@@ -144,7 +143,8 @@ public class IcebergDateTruncToRangeRuleTest {
     public void testDateTruncMonthTransformation() {
         // Create date_trunc('month', date_col) = '2023-02-01' predicate for DATE column
         ConstantOperator monthUnit = ConstantOperator.createVarchar("month");
-        ConstantOperator dateValue = ConstantOperator.createDate(LocalDate.of(2023, 2, 1));
+        ConstantOperator dateValue = ConstantOperator.createDate(
+                LocalDateTime.of(2023, 2, 1, 0, 0, 0));
 
         CallOperator dateTruncCall = new CallOperator(
                 FunctionSet.DATE_TRUNC,
@@ -156,11 +156,11 @@ public class IcebergDateTruncToRangeRuleTest {
 
         // Create filter and scan operators
         LogicalFilterOperator filterOperator = new LogicalFilterOperator(dateTruncPredicate);
-        LogicalScanOperator scanOperator = new LogicalScanOperator(
+        LogicalIcebergScanOperator scanOperator = new LogicalIcebergScanOperator(
                 icebergTable,
                 Maps.newHashMap(),
                 Maps.newHashMap(),
-                null, -1, null);
+                -1, null);
 
         // Create expression tree
         OptExpression filterExpression = new OptExpression(filterOperator);
@@ -197,17 +197,18 @@ public class IcebergDateTruncToRangeRuleTest {
         assertEquals(OperatorType.CONSTANT, secondBinaryOp.getChild(1).getOpType());
 
         // Check values in the range bounds for DATE type
-        LocalDate lowerBound = ((ConstantOperator) firstBinaryOp.getChild(1)).getDate();
-        LocalDate upperBound = ((ConstantOperator) secondBinaryOp.getChild(1)).getDate();
+        LocalDateTime lowerBound = ((ConstantOperator) firstBinaryOp.getChild(1)).getDate();
+        LocalDateTime upperBound = ((ConstantOperator) secondBinaryOp.getChild(1)).getDate();
 
-        assertEquals(LocalDate.of(2023, 2, 1), lowerBound);
-        assertEquals(LocalDate.of(2023, 3, 1), upperBound);
+        assertEquals(LocalDateTime.of(2023, 2, 1, 0, 0, 0), lowerBound);
+        assertEquals(LocalDateTime.of(2023, 3, 1, 0, 0, 0), upperBound);
     }
 
     @Test
     public void testDateFunctionTransformation() {
         // Create DATE(ts_col) = '2023-02-26' predicate for DATETIME column
-        ConstantOperator dateValue = ConstantOperator.createDate(LocalDate.of(2023, 2, 26));
+        ConstantOperator dateValue = ConstantOperator.createDate(
+                LocalDateTime.of(2023, 2, 26, 0, 0, 0));
 
         CallOperator dateCall = new CallOperator(
                 FunctionSet.DATE,
@@ -219,11 +220,11 @@ public class IcebergDateTruncToRangeRuleTest {
 
         // Create filter and scan operators
         LogicalFilterOperator filterOperator = new LogicalFilterOperator(datePredicate);
-        LogicalScanOperator scanOperator = new LogicalScanOperator(
+        LogicalIcebergScanOperator scanOperator = new LogicalIcebergScanOperator(
                 icebergTable,
                 Maps.newHashMap(),
                 Maps.newHashMap(),
-                null, -1, null);
+                -1, null);
 
         // Create expression tree
         OptExpression filterExpression = new OptExpression(filterOperator);
