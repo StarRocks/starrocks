@@ -15,12 +15,10 @@ SELECT * EXCEPT (age) FROM test_table;
 -- !result
 SELECT * EXCLUDE (name, email) FROM test_table;
 -- result:
-id	age
 1	30
 -- !result
 SELECT * EXCEPT (name, email) FROM test_table;
 -- result:
-id	age
 1	30
 -- !result
 SELECT test_table.* EXCLUDE (email) FROM test_table;
@@ -37,11 +35,11 @@ SELECT * EXCLUDE (age) AS t FROM test_table;
 -- !result
 SELECT * EXCLUDE (invalid_col) FROM test_table;
 -- result:
-[REGEX].*Column(s) [invalid_col] do not exist in current scope.*
+[REGEX].*Column\(s\) \[invalid_col\] do not exist in current scope.*
 -- !result
 SELECT test_table.* EXCLUDE (department) FROM test_table;
 -- result:
-[REGEX].*Column(s) [department] do not exist in.*
+[REGEX].*Column\(s\) \[department\] do not exist in.*
 -- !result
 SELECT * EXCLUDE (age) FROM test_table WHERE id = 1;
 -- result:
