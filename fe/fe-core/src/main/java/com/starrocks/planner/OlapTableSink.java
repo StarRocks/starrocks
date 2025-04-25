@@ -88,7 +88,6 @@ import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TDataSink;
@@ -887,11 +886,13 @@ public class OlapTableSink extends DataSink {
             Replica replica = replicas.get(i);
             boolean isHealthy = !replica.getLastWriteFail()
                     && !infoService.getBackend(replica.getBackendId()).getLastWriteFail();
-            //when single replica, to ensure the load job could loading normally, BE SHUTDOWN status could not be checked.
+            
+            //when the node is in shutdown, the isAlive() would be false, so here use isAlive() to check.
+            //when single replica, to ensure the load job could loading, node shutdown status should not be checked.
             if (replicas.size() > 1) {
-                isHealthy = isHealthy
-                        && infoService.getBackend(replica.getBackendId()).getStatus() != ComputeNode.Status.SHUTDOWN;
+                isHealthy = isHealthy && infoService.getBackend(replica.getBackendId()).isAlive();
             }
+            
             if (lowUsageIndex == -1 && isHealthy) {
                 lowUsageIndex = i;
             }
