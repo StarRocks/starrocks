@@ -532,7 +532,8 @@ public class CostModel {
                 Group group = context.getGroupExpression().getGroup();
                 boolean existBestPlan = CollectionUtils.isNotEmpty(group.getAllBestExpressionWithCost());
                 if (existBestPlan && desc.getSourceType() != HashDistributionDesc.SourceType.SHUFFLE_AGG) {
-                    // check multi-stage agg, split aggregate node lose distinct flag, check the group's origin
+                    // Don't limited to multi-stage aggregate node, refs: invalidOneStageAggCost
+                    // split aggregate node lose distinct flag, check the group's origin
                     // aggregate
                     LogicalAggregationOperator originAgg = group.getFirstLogicalExpression().getOp().cast();
                     for (CallOperator callOperator : originAgg.getAggregations().values()) {
