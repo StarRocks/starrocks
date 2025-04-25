@@ -89,7 +89,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             return Status::OK();
         });
         _config_callback.emplace("storage_page_cache_limit", [&]() -> Status {
-            int64_t cache_limit = GlobalEnv::GetInstance()->get_storage_page_cache_size();
+            ASSIGN_OR_RETURN(int64_t cache_limit, GlobalEnv::GetInstance()->get_storage_page_cache_size());
             cache_limit = GlobalEnv::GetInstance()->check_storage_page_cache_size(cache_limit);
             StoragePageCache::instance()->set_capacity(cache_limit);
             return Status::OK();
@@ -98,7 +98,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             if (config::disable_storage_page_cache) {
                 StoragePageCache::instance()->set_capacity(0);
             } else {
-                int64_t cache_limit = GlobalEnv::GetInstance()->get_storage_page_cache_size();
+                ASSIGN_OR_RETURN(int64_t cache_limit, GlobalEnv::GetInstance()->get_storage_page_cache_size());
                 cache_limit = GlobalEnv::GetInstance()->check_storage_page_cache_size(cache_limit);
                 StoragePageCache::instance()->set_capacity(cache_limit);
             }
@@ -122,8 +122,8 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             std::vector<DirSpace> spaces;
             BlockCache::instance()->disk_spaces(&spaces);
             for (auto& space : spaces) {
-                int64_t disk_size =
-                        DataCacheUtils::parse_conf_datacache_disk_size(space.path, config::datacache_disk_size, -1);
+                ASSIGN_OR_RETURN(int64_t disk_size, DataCacheUtils::parse_conf_datacache_disk_size(
+                                                            space.path, config::datacache_disk_size, -1));
                 if (disk_size < 0) {
                     LOG(WARNING) << "Failed to update datacache disk spaces for the invalid disk_size: " << disk_size;
                     return Status::InternalError("Fail to update datacache disk spaces");

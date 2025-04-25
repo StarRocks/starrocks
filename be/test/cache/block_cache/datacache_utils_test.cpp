@@ -20,6 +20,7 @@
 
 #include "fs/fs_util.h"
 #include "gen_cpp/DataCache_types.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 class DataCacheUtilsTest : public ::testing::Test {};
@@ -79,20 +80,20 @@ TEST_F(DataCacheUtilsTest, parse_cache_space_size_str) {
     std::string disk_path = cache_dir;
     const int64_t kMaxLimit = 20L * 1024 * 1024 * 1024 * 1024; // 20T
     int64_t disk_size = 10;
-    ASSERT_EQ(DataCacheUtils::parse_conf_datacache_disk_size(disk_path, "10", kMaxLimit), disk_size);
+    ASSERT_EQ(DataCacheUtils::parse_conf_datacache_disk_size(disk_path, "10", kMaxLimit).value(), disk_size);
     disk_size *= 1024;
-    ASSERT_EQ(DataCacheUtils::parse_conf_datacache_disk_size(disk_path, "10K", kMaxLimit), disk_size);
+    ASSERT_EQ(DataCacheUtils::parse_conf_datacache_disk_size(disk_path, "10K", kMaxLimit).value(), disk_size);
     disk_size *= 1024;
-    ASSERT_EQ(DataCacheUtils::parse_conf_datacache_disk_size(disk_path, "10M", kMaxLimit), disk_size);
+    ASSERT_EQ(DataCacheUtils::parse_conf_datacache_disk_size(disk_path, "10M", kMaxLimit).value(), disk_size);
     disk_size *= 1024;
-    ASSERT_EQ(DataCacheUtils::parse_conf_datacache_disk_size(disk_path, "10G", kMaxLimit), disk_size);
+    ASSERT_EQ(DataCacheUtils::parse_conf_datacache_disk_size(disk_path, "10G", kMaxLimit).value(), disk_size);
     disk_size *= 1024;
-    ASSERT_EQ(DataCacheUtils::parse_conf_datacache_disk_size(disk_path, "10T", kMaxLimit), disk_size);
+    ASSERT_EQ(DataCacheUtils::parse_conf_datacache_disk_size(disk_path, "10T", kMaxLimit).value(), disk_size);
 
     // The disk size exceed disk limit
-    ASSERT_EQ(DataCacheUtils::parse_conf_datacache_disk_size(disk_path, "10T", 1024), 1024);
+    ASSERT_EQ(DataCacheUtils::parse_conf_datacache_disk_size(disk_path, "10T", 1024).value(), 1024);
 
-    disk_size = DataCacheUtils::parse_conf_datacache_disk_size(disk_path, "10%", kMaxLimit);
+    ASSIGN_OR_ASSERT_FAIL(disk_size, DataCacheUtils::parse_conf_datacache_disk_size(disk_path, "10%", kMaxLimit));
     ASSERT_EQ(disk_size, int64_t(10.0 / 100.0 * kMaxLimit));
 
     fs::remove_all(cache_dir).ok();
