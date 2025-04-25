@@ -58,7 +58,12 @@ UpdateManager::UpdateManager(MemTracker* mem_tracker)
           _update_state_cache(std::numeric_limits<size_t>::max()),
           _update_column_state_cache(std::numeric_limits<size_t>::max()) {
     _update_mem_tracker = mem_tracker;
-    _update_state_mem_tracker = std::make_unique<MemTracker>(-1, "rowset_update_state", mem_tracker);
+    int64_t preload_mem_limit = -1;
+    if (_update_mem_tracker != nullptr) {
+        preload_mem_limit = (int64_t)_update_mem_tracker->limit() *
+                            std::max(std::min(100, config::lake_pk_preload_memory_limit_percent), 0) / 100;
+    }
+    _update_state_mem_tracker = std::make_unique<MemTracker>(preload_mem_limit, "rowset_update_state", mem_tracker);
     _index_cache_mem_tracker = std::make_unique<MemTracker>(-1, "index_cache", mem_tracker);
     _del_vec_cache_mem_tracker = std::make_unique<MemTracker>(-1, "del_vec_cache", mem_tracker);
     _compaction_state_mem_tracker = std::make_unique<MemTracker>(-1, "compaction_state", mem_tracker);
@@ -527,7 +532,11 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
         if (st.ok()) {
             _update_column_state_cache.release(state_entry);
         } else {
-            LOG(WARNING) << "load RowsetColumnUpdateState error: " << st << " tablet: " << tablet->tablet_id();
+            if (st.is_mem_limit_exceeded() || st.is_time_out()) {
+                VLOG(2) << "load RowsetColumnUpdateState error: " << st << " tablet: " << tablet->tablet_id();
+            } else {
+                LOG(WARNING) << "load RowsetColumnUpdateState error: " << st << " tablet: " << tablet->tablet_id();
+            }
             _update_column_state_cache.remove(state_entry);
         }
     } else {
@@ -539,7 +548,11 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
         if (st.ok()) {
             _update_state_cache.release(state_entry);
         } else {
-            LOG(WARNING) << "load RowsetUpdateState error: " << st << " tablet: " << tablet->tablet_id();
+            if (st.is_mem_limit_exceeded() || st.is_time_out()) {
+                VLOG(2) << "load RowsetUpdateState error: " << st << " tablet: " << tablet->tablet_id();
+            } else {
+                LOG(WARNING) << "load RowsetUpdateState error: " << st << " tablet: " << tablet->tablet_id();
+            }
             _update_state_cache.remove(state_entry);
         }
     }
@@ -571,9 +584,9 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
 
     FAIL_POINT_TRIGGER_EXECUTE(on_rowset_finished_failed_due_to_mem,
                                { st = Status::MemoryLimitExceeded("on_rowset_finished failed"); });
-    // if failed due to memory limit which is not a critical issue. we don't need to abort the ingestion
-    // and we can still commit the txn.
-    if (st.is_mem_limit_exceeded()) {
+    // if failed due to memory limit or wait index lock timeout which is not a critical issue.
+    // we don't need to abort the ingestion and we can still commit the txn.
+    if (st.is_mem_limit_exceeded() || st.is_time_out()) {
         return Status::OK();
     }
     return st;
