@@ -338,12 +338,12 @@ public class StatisticsCalculatorTest {
     }
 
     @Test
-    public void testLogicalOlapTableEmptyPartition(@Mocked CachedStatisticStorage cachedStatisticStorage) {
+    public void testLogicalOlapTableEmptyPartition() {
         ColumnRefOperator idDate = columnRefFactory.create("id_date", Type.DATE, true);
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         Table table = globalStateMgr.getLocalMetastore().getDb("statistics_test").getTable("test_all_type");
 
-        List<Partition> partitions = new ArrayList<>(((OlapTable) table).getPartitions());
+        List<Partition> partitions = new ArrayList<>(table.getPartitions());
 
         Partition partition1 = partitions.get(0);
         Partition partition2 = partitions.get(1);
@@ -355,12 +355,11 @@ public class StatisticsCalculatorTest {
         List<Long> partitionIds = partitions.stream().filter(partition -> !(partition.getName().equalsIgnoreCase("p1"))).
                     mapToLong(Partition::getId).boxed().collect(Collectors.toList());
 
-        new Expectations() {
-            {
-                cachedStatisticStorage.getColumnStatistics(table, Lists.newArrayList("id_date"));
-                result = new ColumnStatistic(0, Utils.getLongFromDateTime(LocalDateTime.of(2014, 12, 01, 0, 0, 0)),
-                            0, 0, 30);
-                minTimes = 0;
+        new MockUp<CachedStatisticStorage>() {
+            @Mock
+            public List<ColumnStatistic> getColumnStatistics(Table table, List<String> columns) {
+                return List.of(new ColumnStatistic(0, Utils.getLongFromDateTime(
+                        LocalDateTime.of(2014, 12, 01, 0, 0, 0)), 0, 0, 30));
             }
         };
 
@@ -390,8 +389,7 @@ public class StatisticsCalculatorTest {
     }
 
     @Test
-    public void testLogicalOlapTableScanPartitionPrune1(@Mocked CachedStatisticStorage cachedStatisticStorage)
-                throws Exception {
+    public void testLogicalOlapTableScanPartitionPrune1(@Mocked CachedStatisticStorage cachedStatisticStorage) {
         FeConstants.runningUnitTest = true;
         ColumnRefOperator idDate = columnRefFactory.create("id_date", Type.DATE, true);
 
@@ -486,8 +484,7 @@ public class StatisticsCalculatorTest {
     }
 
     @Test
-    public void testLogicalOlapTableScanPartitionPrune2(@Mocked CachedStatisticStorage cachedStatisticStorage)
-                throws Exception {
+    public void testLogicalOlapTableScanPartitionPrune2(@Mocked CachedStatisticStorage cachedStatisticStorage) {
         FeConstants.runningUnitTest = true;
         ColumnRefOperator idDate = columnRefFactory.create("id_date", Type.DATE, true);
 
@@ -636,18 +633,18 @@ public class StatisticsCalculatorTest {
         // use middle ground method to estimate
         ConnectContext.get().getSessionVariable().setUseCorrelatedJoinEstimate(false);
         statisticsCalculator.estimatorStats();
-        Assert.assertEquals(expressionContext.getStatistics().getOutputRowCount(), 400000.0, 0.0001);
+        Assert.assertEquals(400000.0, expressionContext.getStatistics().getOutputRowCount(), 0.0001);
         // use correlated method to estimate
         ConnectContext.get().getSessionVariable().setUseCorrelatedJoinEstimate(true);
         statisticsCalculator.estimatorStats();
-        Assert.assertEquals(expressionContext.getStatistics().getOutputRowCount(), 1800000.0, 0.0001);
+        Assert.assertEquals(1800000.0, expressionContext.getStatistics().getOutputRowCount(), 0.0001);
 
         // on predicate : t0.v1 = t1.v3 and t0.v2 = t2.v4
         columnRefFactory.updateColumnToRelationIds(v4.getId(), 2);
         // use middle ground method to estimate
         ConnectContext.get().getSessionVariable().setUseCorrelatedJoinEstimate(false);
         statisticsCalculator.estimatorStats();
-        Assert.assertEquals(expressionContext.getStatistics().getOutputRowCount(), 40000.0, 0.0001);
+        Assert.assertEquals(40000.0, expressionContext.getStatistics().getOutputRowCount(), 0.0001);
         columnRefFactory.updateColumnToRelationIds(v4.getId(), 1);
 
         // on predicate : t0.v1 = t1.v3 and t0.v2 = t2.v4 and t3.v5 = t4.v6
@@ -663,7 +660,7 @@ public class StatisticsCalculatorTest {
         // use middle ground method to estimate
         ConnectContext.get().getSessionVariable().setUseCorrelatedJoinEstimate(false);
         statisticsCalculator.estimatorStats();
-        Assert.assertEquals(expressionContext.getStatistics().getOutputRowCount(), 4000.0, 0.0001);
+        Assert.assertEquals(4000.0, expressionContext.getStatistics().getOutputRowCount(), 0.0001);
 
         // on predicate : t0.v1 = t1.v3 + t1.v4 and t0.v2 = t1.v3 + t1.v4
         BinaryPredicateOperator eqOnPredicateWithAdd1 =
@@ -682,7 +679,7 @@ public class StatisticsCalculatorTest {
         // use middle ground method to estimate
         ConnectContext.get().getSessionVariable().setUseCorrelatedJoinEstimate(false);
         statisticsCalculator.estimatorStats();
-        Assert.assertEquals(expressionContext.getStatistics().getOutputRowCount(), 200000.0, 0.0001);
+        Assert.assertEquals(200000.0, expressionContext.getStatistics().getOutputRowCount(), 0.0001);
     }
 
     @Test
