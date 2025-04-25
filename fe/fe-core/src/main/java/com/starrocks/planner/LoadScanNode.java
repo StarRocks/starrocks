@@ -44,7 +44,12 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.qe.SimpleScheduler;
+>>>>>>> c8930bfb4f ([BugFix] filter black list node in LoadLoadingTask.prepare for broker load (#58350))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -115,13 +120,13 @@ public abstract class LoadScanNode extends ScanNode {
             List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
             for (long cnId : computeNodeIds) {
                 ComputeNode cn = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(cnId);
-                if (cn != null && cn.isAvailable()) {
+                if (cn != null && cn.isAvailable() && !SimpleScheduler.isInBlocklist(cnId)) {
                     nodes.add(cn);
                 }
             }
         } else {
             for (ComputeNode be : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend().values()) {
-                if (be.isAvailable()) {
+                if (be.isAvailable() && !SimpleScheduler.isInBlocklist(be.getId())) {
                     nodes.add(be);
                 }
             }
