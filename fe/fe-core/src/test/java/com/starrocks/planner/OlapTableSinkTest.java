@@ -639,7 +639,7 @@ public class OlapTableSinkTest {
         int lowUsageIndex2 = OlapTableSink.findPrimaryReplica(olapTable, bePrimaryMap, infoService,
                 index, selectedBackedIds, singleReplicaList);
         //note: even though be2 is in shutting down, to ensure the load job could loading normally,
-        //      be2 SHUTDOWN status could not be checked, so choose replica4 as primary replica.
+        //      be2 SHUTDOWN status could not be checked, so choose replica4 as primary replica. 
         Assert.assertEquals(singleReplicaList.get(lowUsageIndex2).getId(), replica4.getId());
         Assert.assertEquals(singleReplicaList.get(lowUsageIndex2).getBackendId(), be2.getId());
     }
