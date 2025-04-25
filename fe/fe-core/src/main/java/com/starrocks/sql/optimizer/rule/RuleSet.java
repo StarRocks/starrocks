@@ -70,6 +70,7 @@ import com.starrocks.sql.optimizer.rule.transformation.ExistentialApply2OuterJoi
 import com.starrocks.sql.optimizer.rule.transformation.ExternalScanPartitionPruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.FineGrainedRangePredicateRule;
 import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctDataSkewEliminateRule;
+import com.starrocks.sql.optimizer.rule.transformation.IcebergDateTruncToRangeRule;
 import com.starrocks.sql.optimizer.rule.transformation.InlineOneCTEConsumeRule;
 import com.starrocks.sql.optimizer.rule.transformation.IntersectAddDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
@@ -273,6 +274,7 @@ public class RuleSet {
                     new PushDownPredicateIntersectRule(),
                     new PushDownPredicateTableFunctionRule(),
                     new PushDownPredicateRepeatRule(),
+                    new IcebergDateTruncToRangeRule(),
 
                     new PushDownPredicateToExternalTableScanRule(),
                     new MergeTwoFiltersRule(),
