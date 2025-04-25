@@ -36,8 +36,6 @@ select * from t;
 2020-02-02
 -- !result
 
-
-
 -- name: test_merge_partitions_range
 create table t(k date) partition by date_trunc('day', k) distributed by hash(k);
 -- result:
@@ -95,4 +93,90 @@ show partitions from t;
 [REGEX].*p20200101.*
 .*p20200201.*
 .*p20200202.*
+-- !result
+
+-- name: test_time_slice
+create table t1(a int,b datetime)                partition by time_slice(b, interval 100 microsecond);
+-- result:
+-- !result
+alter table t1 partition by time_slice(b, interval 100 millisecond);
+-- result:
+E: (5064, 'Getting analyzing error. Detail message: Unsupported partition type for merge partitions.')
+-- !result
+create table t2(a int,b datetime)                partition by time_slice(b, interval 1 second);
+-- result:
+-- !result
+alter table t2 partition by time_slice(b, interval 1 minute);
+-- result:
+E: (5064, 'Getting analyzing error. Detail message: Unsupported table partition type when merge partitions.')
+-- !result
+create table t(a int,b datetime)                 partition by time_slice(b, interval 1 minute);
+-- result:
+-- !result
+insert into t values(101, '2001-01-01 00:00:00' + interval 3*101 hour);
+-- result:
+-- !result
+insert into t values(102, '2001-01-01 00:00:00' + interval 3*102 hour);
+-- result:
+-- !result
+insert into t values(103, '2001-01-01 00:00:00' + interval 3*103 hour);
+-- result:
+-- !result
+insert into t values(104, '2001-01-01 00:00:00' + interval 3*104 hour);
+-- result:
+-- !result
+insert into t values(105, '2001-01-01 00:00:00' + interval 3*105 hour);
+-- result:
+-- !result
+alter table t partition by time_slice(b, interval 2 day);
+-- result:
+E: (5064, 'Getting analyzing error. Detail message: Unsupported partition interval 2 when merge partitions.')
+-- !result
+alter table t partition by time_slice(b, interval 1 day);
+-- result:
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
+show partitions from t order by partitionName;
+-- result:
+[REGEX].*p20010113.*
+.*p20010114.*
+-- !result
+select * from t;
+-- result:
+103	2001-01-13 21:00:00
+105	2001-01-14 03:00:00
+101	2001-01-13 15:00:00
+102	2001-01-13 18:00:00
+104	2001-01-14 00:00:00
+-- !result
+
+-- name: test_corner_case
+create table t(a int, b datetime) partition by date_trunc('month', b);
+-- result:
+-- !result
+alter table t partition by date_trunc('year',b);
+-- result:
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
+insert into t values
+(1, '2001-01-01 01:00:00'),
+(2, '2001-01-01 02:00:00'),
+(3, '2001-01-10 01:00:00'),
+(4, '2001-02-01 01:00:00'),
+(5, '2002-01-01 01:00:00');
+-- result:
+-- !result
+alter table t partition by date_trunc('month',b);
+-- result:
+E: (5064, 'Getting analyzing error. Detail message: Unsupported from granularity month to granularity month when merge partitions.')
+-- !result
+alter table t partition by date_trunc('day',b);
+-- result:
+E: (5064, 'Getting analyzing error. Detail message: Unsupported from granularity month to granularity day when merge partitions.')
 -- !result
