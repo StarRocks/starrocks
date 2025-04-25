@@ -4883,6 +4883,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.columnViewConcatBytesLimit = value;
     }
 
+    public void setEnableDeferProjectAfterTopN(boolean enableDeferProjectAfterTopN) {
+        this.enableDeferProjectAfterTopN = enableDeferProjectAfterTopN;
+    }
+
     public boolean isEnableDeferProjectAfterTopN() {
         return enableDeferProjectAfterTopN;
     }

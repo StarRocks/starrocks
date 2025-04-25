@@ -1589,10 +1589,12 @@ public class WindowTest extends PlanTestBase {
                 "  |  order by: 2: v2 ASC\n" +
                 "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
                 "  |  \n" +
-                "  3:MERGING-EXCHANGE");
-        assertContains(plan, "  1:Project\n" +
+                "  3:Project\n" +
                 "  |  <slot 2> : 2: v2\n" +
-                "  |  <slot 6> : array_length(3: v3)");
+                "  |  <slot 6> : array_length(3: v3)\n" +
+                "  |  limit: 1\n" +
+                "  |  \n" +
+                "  2:MERGING-EXCHANGE");
     }
 
     @Test
