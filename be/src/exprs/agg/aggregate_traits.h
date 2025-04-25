@@ -46,6 +46,9 @@ struct AggDataTypeTraits<lt, FixedLengthLTGuard<lt>> {
     static bool is_equal(const RefType& lhs, const RefType& rhs) { return lhs == rhs; }
 
     static bool equals(const ValueType& lhs, const RefType& rhs) { return lhs == rhs; }
+
+    static bool is_less_equal(const RefType& lhs, const RefType& rhs) { return lhs <= rhs; }
+    static bool is_greater_equal(const RefType& lhs, const RefType& rhs) { return lhs >= rhs; }
 };
 
 // For pointer ref types
@@ -69,6 +72,9 @@ struct AggDataTypeTraits<lt, ObjectFamilyLTGuard<lt>> {
 
     static bool is_equal(const RefType& lhs, const RefType& rhs) { return *lhs == *rhs; }
     static bool equals(const ValueType& lhs, const RefType& rhs) { return lhs == *rhs; }
+
+    static bool is_less_equal(const RefType& lhs, const RefType& rhs) { return *lhs <= *rhs; }
+    static bool is_greater_equal(const RefType& lhs, const RefType& rhs) { return *lhs >= *rhs; }
 };
 
 template <LogicalType lt>
@@ -104,6 +110,9 @@ struct AggDataTypeTraits<lt, StringLTGuard<lt>> {
     }
 
     static bool is_equal(const RefType& lhs, const RefType& rhs) { return lhs == rhs; }
+
+    static bool is_less_equal(const RefType& lhs, const RefType& rhs) { return lhs <= rhs; }
+    static bool is_greater_equal(const RefType& lhs, const RefType& rhs) { return lhs >= rhs; }
 };
 
 template <LogicalType lt>

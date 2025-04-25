@@ -23,6 +23,7 @@
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_traits.h"
 #include "gutil/casts.h"
+#include "simdjson.h"
 #include "storage/types.h"
 
 namespace starrocks {
@@ -31,6 +32,28 @@ template <LogicalType LT>
 struct Bucket {
     using RefType = AggDataRefType<LT>;
     using ValueType = AggDataValueType<LT>;
+
+    static Bucket from_json(simdjson::ondemand::array bucket_json, const FunctionContext::TypeDesc* type_desc,
+                        MemPool* mem_pool) {
+        TypeInfoPtr type_info = get_type_info(LT, type_desc->precision, type_desc->scale);
+		auto bucket_iter = bucket_json.begin();
+
+        Datum lower_datum;
+        std::ignore = datum_from_string(type_info.get(), &lower_datum, std::string{std::string_view{*bucket_iter}},
+            mem_pool);
+		++bucket_iter;
+
+        Datum upper_datum;
+        std::ignore = datum_from_string(type_info.get(), &upper_datum, std::string{std::string_view{*bucket_iter}},
+            mem_pool);
+		++bucket_iter;
+
+        int64_t count = std::stoll(std::string{std::string_view{*bucket_iter}});
+		++bucket_iter;
+        int64_t upper_repeats = std::stoll(std::string{std::string_view{*bucket_iter}});
+
+        return Bucket(lower_datum.get<RefType>(), upper_datum.get<RefType>(), count, upper_repeats);
+    }
 
     Bucket() = default;
 
@@ -44,10 +67,18 @@ struct Bucket {
         return AggDataTypeTraits<LT>::is_equal(value, AggDataTypeTraits<LT>::get_ref(upper));
     }
 
+    bool is_greater_equal_to_lower(RefType value) {
+        return AggDataTypeTraits<LT>::is_greater_equal(value, AggDataTypeTraits<LT>::get_ref(lower));
+    }
+
+    bool is_less_equal_to_upper(RefType value) {
+        return AggDataTypeTraits<LT>::is_less_equal(value, AggDataTypeTraits<LT>::get_ref(upper));
+    }
+
     void update_upper(RefType value) { AggDataTypeTraits<LT>::assign_value(upper, value); }
 
-    Datum get_lower_datum() { return Datum(AggDataTypeTraits<LT>::get_ref(lower)); }
-    Datum get_upper_datum() { return Datum(AggDataTypeTraits<LT>::get_ref(upper)); }
+    Datum get_lower_datum() const { return Datum(AggDataTypeTraits<LT>::get_ref(lower)); }
+    Datum get_upper_datum() const { return Datum(AggDataTypeTraits<LT>::get_ref(upper)); }
 
     ValueType lower;
     ValueType upper;
