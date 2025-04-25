@@ -269,7 +269,7 @@ std::string DataDir::get_root_path_from_schema_hash_path_in_trash(const std::str
             .string();
 }
 
-// We will igore error throw by load(),
+// [NOTICE] We will igore error throw by load(),
 // so we must ensure that all tablets are either properly loaded or handled within load().
 Status DataDir::load() {
     // load tablet
@@ -303,7 +303,7 @@ Status DataDir::load() {
         LOG(WARNING) << "load tablets from rocksdb timeout, try to compact meta and retry. path: " << _path;
         Status s = _kv_store->compact();
         if (!s.ok()) {
-            // Only print log, do not return error.
+            // We don't need to make sure compact MUST success. Just ignore the error.
             LOG(ERROR) << "data dir " << _path << " compact meta before load failed";
         }
         for (auto tablet_id : tablet_ids) {
@@ -353,7 +353,7 @@ Status DataDir::load() {
             tablet->tablet_meta()->to_meta_pb(&tablet_meta_pb);
             Status s = TabletMetaManager::save(this, tablet_meta_pb);
             if (!s.ok()) {
-                // Only print log, do not return error.
+                // Only print log, do not return error. We can handle it later.
                 LOG(ERROR) << "data dir " << _path << " save tablet meta failed: " << s.message();
             }
         }
