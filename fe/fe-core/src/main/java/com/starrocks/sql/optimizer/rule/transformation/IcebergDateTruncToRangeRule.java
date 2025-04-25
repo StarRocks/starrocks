@@ -38,6 +38,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 /**
@@ -233,9 +234,9 @@ public class IcebergDateTruncToRangeRule extends TransformationRule {
 
         if (!dateValue.isConstantNull()) {
             // Get the date value and convert to datetime range
-            LocalDate date = dateValue.getDate();
-            LocalDateTime startDate = date.atStartOfDay();
-            LocalDateTime endDate = date.plusDays(1).atStartOfDay();
+            LocalDateTime dateTime = dateValue.getDate();
+            LocalDateTime startDate = dateTime.truncatedTo(ChronoUnit.DAYS);
+            LocalDateTime endDate = startDate.plusDays(1);
 
             // Create range predicates
             ConstantOperator startConstant = ConstantOperator.createDatetime(startDate);
@@ -307,8 +308,8 @@ public class IcebergDateTruncToRangeRule extends TransformationRule {
             ConstantOperator endConstant;
 
             if (isDate) {
-                startConstant = ConstantOperator.createDate(truncatedDate.toLocalDate());
-                endConstant = ConstantOperator.createDate(nextDate.toLocalDate());
+                startConstant = ConstantOperator.createDate(truncatedDate);
+                endConstant = ConstantOperator.createDate(nextDate);
             } else {
                 startConstant = ConstantOperator.createDatetime(truncatedDate);
                 endConstant = ConstantOperator.createDatetime(nextDate);
