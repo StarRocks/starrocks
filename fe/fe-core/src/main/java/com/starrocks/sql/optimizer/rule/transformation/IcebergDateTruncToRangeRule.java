@@ -55,12 +55,12 @@ public class IcebergDateTruncToRangeRule extends TransformationRule {
     public static final IcebergDateTruncToRangeRule INSTANCE = new IcebergDateTruncToRangeRule(
             RuleType.TF_ICEBERG_DATE_TRUNC_TO_RANGE,
             Pattern.create(OperatorType.LOGICAL_FILTER)
-                 .addChildren(Pattern.create(OperatorType.LOGICAL_SCAN)));
+                    .addChildren(Pattern.create(OperatorType.LOGICAL_SCAN)));
 
     public IcebergDateTruncToRangeRule() {
         this(RuleType.TF_ICEBERG_DATE_TRUNC_TO_RANGE,
              Pattern.create(OperatorType.LOGICAL_FILTER)
-                  .addChildren(Pattern.create(OperatorType.LOGICAL_SCAN)));
+                     .addChildren(Pattern.create(OperatorType.LOGICAL_SCAN)));
     }
 
     public IcebergDateTruncToRangeRule(RuleType type, Pattern pattern) {
@@ -71,7 +71,7 @@ public class IcebergDateTruncToRangeRule extends TransformationRule {
     public boolean check(OptExpression input, OptimizerContext context) {
         // First check if it's a filter applied to a scan
         if (!(input.getOp() instanceof LogicalFilterOperator) ||
-            !(input.getInputs().get(0).getOp() instanceof LogicalScanOperator)) {
+                !(input.getInputs().get(0).getOp() instanceof LogicalScanOperator)) {
             return false;
         }
 
@@ -92,8 +92,8 @@ public class IcebergDateTruncToRangeRule extends TransformationRule {
         if (predicate instanceof BinaryPredicateOperator) {
             BinaryPredicateOperator binOp = (BinaryPredicateOperator) predicate;
             if (binOp.getBinaryType() == BinaryType.EQ &&
-                binOp.getChild(0) instanceof CallOperator &&
-                ((CallOperator) binOp.getChild(0)).getFnName().equals(FunctionSet.DATE_TRUNC)) {
+                    binOp.getChild(0) instanceof CallOperator &&
+                    ((CallOperator) binOp.getChild(0)).getFnName().equals(FunctionSet.DATE_TRUNC)) {
                 return true;
             }
         } else if (predicate.getChildren().size() > 0) {
@@ -132,9 +132,9 @@ public class IcebergDateTruncToRangeRule extends TransformationRule {
         @Override
         public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator operator, Void context) {
             if (operator.getBinaryType() == BinaryType.EQ &&
-                operator.getChild(0) instanceof CallOperator &&
-                ((CallOperator) operator.getChild(0)).getFnName().equals(FunctionSet.DATE_TRUNC) &&
-                operator.getChild(1) instanceof ConstantOperator) {
+                    operator.getChild(0) instanceof CallOperator &&
+                    ((CallOperator) operator.getChild(0)).getFnName().equals(FunctionSet.DATE_TRUNC) &&
+                    operator.getChild(1) instanceof ConstantOperator) {
 
                 CallOperator dateTruncCall = (CallOperator) operator.getChild(0);
                 ConstantOperator dateValue = (ConstantOperator) operator.getChild(1);
@@ -192,7 +192,7 @@ public class IcebergDateTruncToRangeRule extends TransformationRule {
      */
     private static ScalarOperator transformDateTruncPredicate(CallOperator dateTruncCall, ConstantOperator dateValue) {
         if (!(dateTruncCall.getChild(0) instanceof ConstantOperator) ||
-            !(dateTruncCall.getChild(1) instanceof ColumnRefOperator)) {
+                !(dateTruncCall.getChild(1) instanceof ColumnRefOperator)) {
             return null;
         }
 
