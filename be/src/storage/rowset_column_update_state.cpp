@@ -52,12 +52,12 @@ Status RowsetColumnUpdateState::load(Tablet* tablet, Rowset* rowset, MemTracker*
     std::call_once(_load_once_flag, [&] {
         _tablet_id = tablet->tablet_id();
         _status = _do_load(tablet, rowset, update_mem_tracker);
-        if (!_status.ok()) {
+        if (!_status.ok() && !_status.is_mem_limit_exceeded() && !_status.is_time_out()) {
             LOG(WARNING) << "load RowsetColumnUpdateState error: " << _status << " tablet:" << _tablet_id << " stack:\n"
                          << get_stack_trace();
-            if (_status.is_mem_limit_exceeded()) {
-                LOG(WARNING) << CurrentThread::mem_tracker()->debug_string();
-            }
+        }
+        if (_status.is_mem_limit_exceeded()) {
+            LOG(WARNING) << CurrentThread::mem_tracker()->debug_string();
         }
     });
     return _status;
@@ -201,7 +201,8 @@ Status RowsetColumnUpdateState::_prepare_partial_update_states(Tablet* tablet, R
     int64_t t_start = MonotonicMillis();
     if (need_lock) {
         RETURN_IF_ERROR(tablet->updates()->get_rss_rowids_by_pk(tablet, *(_upserts[start_idx]->upserts), &read_version,
-                                                                &(_upserts[start_idx]->src_rss_rowids)));
+                                                                &(_upserts[start_idx]->src_rss_rowids),
+                                                                3000 /* timeout_ms */));
     } else {
         RETURN_IF_ERROR(tablet->updates()->get_rss_rowids_by_pk_unlock(
                 tablet, *(_upserts[start_idx]->upserts), &read_version, &(_upserts[start_idx]->src_rss_rowids)));
