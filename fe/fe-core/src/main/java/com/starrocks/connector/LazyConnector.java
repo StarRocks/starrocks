@@ -21,10 +21,11 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.paimon.PaimonConnector;
+import com.starrocks.privilege.BlankAccessController;
+import com.starrocks.privilege.DlfAccessController;
 import com.starrocks.sql.analyzer.Authorizer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import com.starrocks.privilege.DlfAccessController;
 
 import java.util.List;
 import java.util.Map;
@@ -45,22 +46,24 @@ public class LazyConnector implements Connector {
     }
 
     public void initIfNeeded() {
+        Map<String, String> properties = context.getProperties();
         synchronized (this) {
             if (delegate == null) {
                 try {
                     // init access control
-                    String serviceName = context.getProperties().get("ranger.plugin.hive.service.name");
+                    String serviceName = properties.get("ranger.plugin.hive.service.name");
                     if (serviceName == null || serviceName.isEmpty()) {
                         if (Config.access_control.equals("ranger")) {
                             Authorizer.getInstance()
                                     .setAccessControl(context.getCatalogName(), new RangerStarRocksAccessController());
-                        } else if (context.getProperties().get(PaimonConnector.PAIMON_CATALOG_TYPE) != null
-                                && context.getProperties().get(PaimonConnector.PAIMON_CATALOG_TYPE).equalsIgnoreCase("dlf-paimon")) {
+                        } else if (properties.get(PaimonConnector.PAIMON_CATALOG_TYPE) != null
+                                && properties.get(PaimonConnector.PAIMON_CATALOG_TYPE).equalsIgnoreCase("dlf-paimon")) {
                             Authorizer.getInstance().setAccessControl(context.getCatalogName(),
-                                    new DlfAccessController(context.getProperties()));
-                        } else if (context.getProperties().get(PaimonConnector.PAIMON_CATALOG_TYPE) != null
-                                && context.getProperties().get(PaimonConnector.PAIMON_CATALOG_TYPE).equalsIgnoreCase("rest")) {
+                                    new DlfAccessController(properties));
+                        } else if (properties.get(PaimonConnector.PAIMON_CATALOG_TYPE) != null
+                                && properties.get(PaimonConnector.PAIMON_CATALOG_TYPE).equalsIgnoreCase("rest")) {
                             // dlf 2.5 server will check, do nothing
+                            Authorizer.getInstance().setAccessControl(context.getCatalogName(), new BlankAccessController());
                         } else {
                             Authorizer.getInstance()
                                     .setAccessControl(context.getCatalogName(), new NativeAccessController());
