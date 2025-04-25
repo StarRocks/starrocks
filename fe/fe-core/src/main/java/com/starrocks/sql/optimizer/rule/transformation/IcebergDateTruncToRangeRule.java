@@ -59,7 +59,7 @@ public class IcebergDateTruncToRangeRule extends TransformationRule {
 
     public IcebergDateTruncToRangeRule() {
         this(RuleType.TF_ICEBERG_DATE_TRUNC_TO_RANGE,
-             Pattern.create(OperatorType.LOGICAL_FILTER)
+                Pattern.create(OperatorType.LOGICAL_FILTER)
                      .addChildren(Pattern.create(OperatorType.LOGICAL_SCAN)));
     }
 
