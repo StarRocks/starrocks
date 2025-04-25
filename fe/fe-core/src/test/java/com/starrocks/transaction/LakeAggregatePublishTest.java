@@ -23,6 +23,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.NoAliveBackendException;
+import com.starrocks.lake.LakeAggregator;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.qe.ConnectContext;
@@ -149,6 +150,10 @@ public class LakeAggregatePublishTest {
             Assert.assertThrows(NoAliveBackendException.class, () -> {
                 Utils.aggregatePublishVersion(tablets, null, 1, 2, null, null, -1, null);
             });
+
+            when(mockManager.getAliveComputeNodes(anyLong())).thenReturn(null);
+            LakeAggregator lakeAggregator = new LakeAggregator();
+            Assert.assertNotNull(lakeAggregator.chooseAggregatorNode(10));
         } finally {
             Field warehouseMgrField = GlobalStateMgr.class.getDeclaredField("warehouseMgr");
             warehouseMgrField.setAccessible(true);
