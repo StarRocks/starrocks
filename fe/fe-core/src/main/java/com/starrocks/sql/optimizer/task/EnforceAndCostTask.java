@@ -306,6 +306,10 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         // shuffling large left-hand table data
         ConnectContext ctx = ConnectContext.get();
         SessionVariable sv = ConnectContext.get().getSessionVariable();
+        // If the broadcast join is not enabled, return false directly
+        if (sv.getBroadcastRowCountLimit() <= 0) {
+            return false;
+        }
         int beNum = Math.max(1, ctx.getAliveBackendNumber());
         Statistics leftChildStats = groupExpression.getInputs().get(curChildIndex - 1).getStatistics();
         Statistics rightChildStats = groupExpression.getInputs().get(curChildIndex).getStatistics();
