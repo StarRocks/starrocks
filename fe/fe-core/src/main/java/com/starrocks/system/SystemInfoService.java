@@ -745,6 +745,9 @@ public class SystemInfoService implements GsonPostProcessable {
         if (backend == null) {
             backend = idToComputeNodeRef.get(nodeId);
         }
+        if (backend == null) {
+            LOG.warn("no backend or compute node found for [id={}]", nodeId);
+        }
         return backend;
     }
 

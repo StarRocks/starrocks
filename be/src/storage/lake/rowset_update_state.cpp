@@ -490,6 +490,11 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     // get rowset schema
     if (!params.op_write.has_txn_meta() || params.op_write.rewrite_segments_size() == 0 ||
         rowset_meta.num_rows() == 0) {
+        VLOG(3) << strings::Substitute(
+                "no need to rewrite segment, tablet_id:$0, txn_id:$1, has_txn_meta:$2, rewrite_segments_size:$3, "
+                "rowset_meta_num_rows:$4",
+                params.tablet->id(), txn_id, params.op_write.has_txn_meta(), params.op_write.rewrite_segments_size(),
+                rowset_meta.num_rows());
         return Status::OK();
     }
     RETURN_ERROR_IF_FALSE(params.op_write.rewrite_segments_size() == rowset_meta.segments_size());
@@ -559,9 +564,9 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     }
     int64_t t_rewrite_end = MonotonicMillis();
     LOG(INFO) << strings::Substitute(
-            "lake apply partial segment tablet:$0 rowset:$1 seg:$2 #column:$3 #rewrite:$4ms [$5 -> $6]",
+            "lake apply partial segment tablet:$0 rowset:$1 seg:$2 #column:$3 #rewrite:$4ms [$5 -> $6] txn_id:$7",
             params.tablet->id(), rowset_meta.id(), segment_id, unmodified_column_ids.size(),
-            t_rewrite_end - t_rewrite_start, src_path, dest_path);
+            t_rewrite_end - t_rewrite_start, src_path, dest_path, txn_id);
 
     // rename segment file
     if (need_rename) {
