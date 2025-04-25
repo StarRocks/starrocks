@@ -386,7 +386,7 @@ std::shared_ptr<std::string> StarOSWorker::insert_fs_cache(const std::string& ke
 
     CacheKey cache_key(key);
     auto value = new CacheValue(fs_cache_key, fs);
-    auto handle = _fs_cache->insert(cache_key, value, 1, 1, cache_value_deleter);
+    auto handle = _fs_cache->insert(cache_key, value, 1, cache_value_deleter);
     if (handle == nullptr) {
         delete value;
         return nullptr;

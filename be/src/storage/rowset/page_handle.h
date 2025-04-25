@@ -91,7 +91,8 @@ public:
         if (_is_data_owner) {
             return _data;
         }
-        return _cache_data.data();
+        Slice* item = (Slice*)_cache_data.data().data;
+        return Slice{item->data, item->size};
     }
 
     int64_t mem_usage() const {

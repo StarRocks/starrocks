@@ -105,13 +105,12 @@ public:
 
     void Insert(int key, int value, int charge) {
         std::string result;
-        _cache->release(
-                _cache->insert(EncodeKey(&result, key), EncodeValue(value), charge, charge, &CacheTest::Deleter));
+        _cache->release(_cache->insert(EncodeKey(&result, key), EncodeValue(value), charge, &CacheTest::Deleter));
     }
 
     void InsertDurable(int key, int value, int charge) {
         std::string result;
-        _cache->release(_cache->insert(EncodeKey(&result, key), EncodeValue(value), charge, charge, &CacheTest::Deleter,
+        _cache->release(_cache->insert(EncodeKey(&result, key), EncodeValue(value), charge, &CacheTest::Deleter,
                                        CachePriority::DURABLE));
     }
 
@@ -237,7 +236,7 @@ static void deleter(const CacheKey& key, void* v) {
 
 static void insert_LRUCache(LRUCache& cache, const CacheKey& key, int value, CachePriority priority) {
     uint32_t hash = key.hash(key.data(), key.size(), 0);
-    cache.release(cache.insert(key, hash, EncodeValue(value), value, value, &deleter, priority));
+    cache.release(cache.insert(key, hash, EncodeValue(value), value, &deleter, priority));
 }
 
 TEST_F(CacheTest, Usage) {
@@ -329,7 +328,7 @@ TEST_F(CacheTest, SetCapacity) {
         std::string result;
         auto cache_key = EncodeKey(&result, i);
         key_mem_size_1 += sizeof(LRUHandle) - 1 + cache_key.size();
-        handles[i] = _cache->insert(cache_key, EncodeValue(1000 + kCacheSize), 1, 1, &CacheTest::Deleter);
+        handles[i] = _cache->insert(cache_key, EncodeValue(1000 + kCacheSize), 1, &CacheTest::Deleter);
     }
     ASSERT_EQ(kCacheSize, _cache->get_capacity());
     ASSERT_EQ(32 + key_mem_size_1, _cache->get_memory_usage());
@@ -346,7 +345,7 @@ TEST_F(CacheTest, SetCapacity) {
         std::string result;
         auto cache_key = EncodeKey(&result, i);
         key_mem_size_2 += sizeof(LRUHandle) - 1 + cache_key.size();
-        handles[i] = _cache->insert(cache_key, EncodeValue(1000 + kCacheSize), 1, 1, &CacheTest::Deleter);
+        handles[i] = _cache->insert(cache_key, EncodeValue(1000 + kCacheSize), 1, &CacheTest::Deleter);
     }
     ASSERT_EQ(kCacheSize * 2, _cache->get_capacity());
     ASSERT_EQ(64 + key_mem_size_1 + key_mem_size_2, _cache->get_memory_usage());
