@@ -696,11 +696,6 @@ under the License.
 
         <dependency>
             <groupId>org.apache.paimon</groupId>
-            <artifactId>paimon-oss</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.paimon</groupId>
             <artifactId>paimon-jindo</artifactId>
             <version>${paimon.version}</version>
         </dependency>
