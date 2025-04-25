@@ -1170,10 +1170,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
 
         sql = "select array_length(a1) " +
                 "from (select * from pc0 order by v1 limit 10) x";
-        connectContext.getSessionVariable().setEnableDeferProjectAfterTopN(false);
         plan = getVerboseExplain(sql);
-        System.out.println(plan);
-        connectContext.getSessionVariable().setEnableDeferProjectAfterTopN(true);
         assertContains(plan, "ColumnAccessPath: [/a1/OFFSET]");
         assertContains(plan, "1:Project");
     }
