@@ -15,6 +15,7 @@
 #include "column/struct_column.h"
 
 #include "column/column_helper.h"
+#include "column/column_view/column_view.h"
 #include "util/mysql_row_buffer.h"
 
 namespace starrocks {
@@ -197,6 +198,10 @@ void StructColumn::update_rows(const Column& src, const uint32_t* indexes) {
 }
 
 void StructColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
+    if (src.is_struct_view()) {
+        down_cast<const ColumnView*>(&src)->append_to(*this, indexes, from, size);
+        return;
+    }
     DCHECK(src.is_struct());
     const auto& src_column = down_cast<const StructColumn&>(src);
     DCHECK_EQ(_fields.size(), src_column._fields.size());
