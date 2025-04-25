@@ -57,6 +57,7 @@ import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.service.PartitionMeasure;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddFieldClause;
@@ -439,8 +440,8 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) expressionPartitionDesc.getExpr();
             String functionName = functionCallExpr.getFnName().getFunction();
             if (!FunctionSet.DATE_TRUNC.equals(functionName) && !FunctionSet.TIME_SLICE.equals(functionName)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                        "Unsupported change to %s partition function when merge partitions", functionName);
+                ErrorReport.reportSemanticException("Unsupported change to %s partition function when merge partitions",
+                        ErrorCode.ERR_COMMON_ERROR, functionName);
             }
             if (clause.getDistributionDesc() != null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
@@ -450,6 +451,41 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "Unsupported specify partitions when merge partitions");
             }
+            PartitionMeasure alterMeasure = null;
+            try {
+                alterMeasure = AnalyzerUtils.checkAndGetPartitionMeasure(functionCallExpr);
+            } catch (AnalysisException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
+            }
+            if (alterMeasure.getInterval() != 1) {
+                ErrorReport.reportSemanticException("Unsupported partition interval %s when merge partitions",
+                        ErrorCode.ERR_COMMON_ERROR, alterMeasure.getInterval());
+            }
+
+            PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+            if (!(partitionInfo instanceof ExpressionRangePartitionInfo)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Unsupported table partition type when merge partitions");
+            }
+            ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+            List<Expr> partitionExprs = expressionRangePartitionInfo.getPartitionExprs(olapTable.getIdToColumn());
+            if (partitionExprs.size() != 1) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Unsupported partition type when merge partitions");
+            }
+            Expr expr = partitionExprs.get(0);
+            PartitionMeasure originMeasure = null;
+            try {
+                originMeasure = AnalyzerUtils.checkAndGetPartitionMeasure(expr);
+            } catch (AnalysisException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
+            }
+
+            if (!AnalyzerUtils.isGranularityGreater(alterMeasure.getGranularity(), originMeasure.getGranularity())) {
+                ErrorReport.reportSemanticException("Unsupported from granularity %s to granularity %s when merge partitions",
+                        ErrorCode.ERR_COMMON_ERROR, originMeasure.getGranularity(), alterMeasure.getGranularity());
+            }
+
             try {
                 expressionPartitionDesc.analyze(columnDefs, olapTable.getProperties());
             } catch (AnalysisException e) {
