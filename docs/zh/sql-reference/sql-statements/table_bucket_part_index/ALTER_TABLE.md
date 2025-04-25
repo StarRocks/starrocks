@@ -45,7 +45,7 @@ alter_clause1[, alter_clause2, ...]
 - bitmap index: 修改 bitmap index。
 - swap: 原子替换两张表。
 - compaction: 对指定表或分区手动执行 Compaction（数据版本合并）。**从 3.1 版本开始支持。**
-- drop persistent index: 存算分离下删除主键索引。**从3.3.9 版本开始支持。**
+- drop persistent index: 存算分离下删除主键索引。**从 3.3.9 版本开始支持。**
 
 ## 使用限制和注意事项
 
@@ -836,20 +836,18 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
 
 执行完 Compaction 后，您可以通过查询 `information_schema` 数据库下的 `be_compactions` 表来查看 Compaction 后的数据版本变化 （`SELECT * FROM information_schema.be_compactions;`）。
 
-
 ### 删除主键索引 (3.3.9 版本起)
 
 语法：
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
-drop persistent index on tablets(<tablet_id1, tablet_id2>);
+DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
 ```
 
 > **说明**
 >
 > 只支持在存算分离集群中删除 CLOUD_NATIVE 类型的主键索引
-
 
 ## 示例
 
@@ -1300,6 +1298,14 @@ ALTER TABLE compaction_test CUMULATIVE COMPACT (p202302,p203303);
 ALTER TABLE compaction_test BASE COMPACT (p202302,p203303);
 ```
 
+### 删除主键索引
+
+删除 `db1.test_tbl` 中 Tablet `100` 和 `101` 的主键索引 。
+
+```sql
+ALTER TABLE db1.test_tbl DROP PERSISTENT INDEX ON TABLETS (100, 101);
+```
+
 ## 相关参考
 
 - [CREATE TABLE](CREATE_TABLE.md)
@@ -1307,12 +1313,3 @@ ALTER TABLE compaction_test BASE COMPACT (p202302,p203303);
 - [SHOW TABLES](SHOW_TABLES.md)
 - [SHOW ALTER TABLE](SHOW_ALTER.md)
 - [DROP TABLE](DROP_TABLE.md)
-
-
-### 删除主键索引
-
-删除 `db1.test_tbl` 中 tablet `100` 和 `101` 的主键索引 。
-
-```sql
-ALTER TABLE db1.test_tbl DROP PERSISTENT INDEX ON TABLETS (100, 101);
-```
