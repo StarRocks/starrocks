@@ -4,11 +4,35 @@ displayed_sidebar: docs
 
 # Query Profile Structure and Metrics
 
-A Query Profile is a detailed report that provides insights into the execution of a SQL query within StarRocks. It offers a comprehensive view of the query's performance, including the time spent on each operation, the amount of data processed, and other relevant metrics. This information is invaluable for optimizing query performance, identifying bottlenecks, and troubleshooting issues. By analyzing the Query Profile, you can gain a deeper understanding of how your queries are executed and make data-driven decisions to improve their efficiency.
+## Overview
 
+A Query Profile is a detailed report that provides insights into the execution of a SQL query within StarRocks. It offers a comprehensive view of the query's performance, including the time spent on each operation, the amount of data processed, and other relevant metrics. This information is invaluable for optimizing query performance, identifying bottlenecks, and troubleshooting issues.
 
-## Execution Flow and Query Profile
-The Query Profile includes a multitude of metrics providing detailed information about query execution. In most cases, you only need to focus on the execution time of operators and the size of processed data. Once you identify bottlenecks, you can address them specifically.
+## Quick-Start
+
+> **Why this matters:** 80 % of real-world slow queries are solved by spotting one of three red-flag metrics. This cheat-sheet gets you there before you drown in numbers.
+
+### 1 Open the profile side-by-side with your SQL
+Run `ANALYZE PROFILE FOR <query_id>\G` or click **Profile** in the CelerData Web UI.  
+
+### 2 Skim the “Execution Overview” banner
+
+Examine key metrics for overall execution performance:
+- QueryExecutionWallTime: Total wall clock time for query execution
+- QueryPeakMemoryUsagePerNode: Peak memory usage per node, with values exceeding 80% of BE memory indicating potential risks of data spill or Out-of-Memory (OOM) errors
+- QueryCumulativeCpuTime / WallTime < 0.5 * num_cpu_cores means CPU is waiting (likely I/O or network)
+
+If none fire, your query is usually fine—stop here.
+
+### 3 Drill one level deeper
+
+Identify the operators that consume the most time or the most memory, analyze their metrics, and determine the underlying cause to pinpoint performance bottlenecks.
+
+The "Operator Metrics" section offers numerous guidelines to aid in identifying the root cause of performance issues.
+
+## Core Concepts
+
+### Query Execution Flow
 
 The comprehensive execution flow of a SQL query involves the following stages:
 1. **Planning**: The query undergoes parsing, analysis, and optimization, culminating in the generation of a query plan.
@@ -17,77 +41,61 @@ The comprehensive execution flow of a SQL query involves the following stages:
 
 ![SQL Execution Flow](../_assets/Profile/execution_flow.png)
 
+### Query Plan Structure
 
-## Structure of Query Profile
+The StarRocks execution engine is designed to execute queries in a distributed manner, and the structure of a Query Profile reflects this design. The following components make up the distributed query plan:
 
-The structure of a Query Profile is closely related to the design of StarRocks' execution engine and consists of the following five parts:
-
-- **Fragment**: Execution tree. A query is composed of one or more fragments.
-- **FragmentInstance**: Each fragment can have multiple instances, each instance is called a FragmentInstance, and is executed by different computing nodes.
-- **Pipeline**: A FragmentInstance is split into multiple pipelines. A pipeline is an execution chain consisting of a group of connected Operator instances.
-- **PipelineDriver**: A Pipeline can have multiple instances, each instance is called a PipelineDriver, to fully utilize multiple computing cores.
-- **Operator**: A PipelineDriver consists of multiple Operator instances.
+- **Fragment**: The highest level of the execution tree, representing a logical unit of work. A query can be divided into one or more fragments.
+- **FragmentInstance**: Each fragment is instantiated multiple times, with each instance (FragmentInstance) executed on a different computing node. This allows for parallel processing across nodes.
+- **Pipeline**: A FragmentInstance is further divided into multiple pipelines, which are sequences of connected Operator instances. Pipelines define the execution path for a FragmentInstance.
+- **PipelineDriver**: To maximize the utilization of computing resources, each pipeline can have multiple instances, known as PipelineDrivers. These drivers execute the pipeline in parallel, leveraging multiple computing cores.
+- **Operator**: The fundamental execution unit, an Operator instance is a part of a PipelineDriver. Operators implement specific algorithms, such as aggregation, join, or scan, to process data.
 
 ![profile-3](../_assets/Profile/profile-3.png)
 
-### Query Profile Merging Strategy
+### Pipeline Execution Engine Concepts
 
-By analyzing the structure of Query Profile, you can easily observe that multiple FragmentInstances associated with the same Fragment have a high degree of similarity in structure. Similarly, multiple PipelineDrivers belonging to the same Pipeline also exhibit similar structural features. To reduce the volume of the Query Profile, StarRocks by default merges the FragmentInstance layer and the PipelineDriver layer. As a result, the original five-layer structure is simplified to three layers:
+The Pipeline Engine is a key component of the StarRocks execution engine. It is responsible for executing the query plan in a parallel and efficient manner. The Pipeline Engine is designed to handle complex query plans and large volumes of data, ensuring high performance and scalability.
 
+Key concepts in the Pipeline Engine:
+- **Operator**: A fundamental unit of execution responsible for implementing specific algorithms (e.g., aggregation, join, scan)
+- **Pipeline**: A sequence of connected Operator instances representing the execution path
+- **PipelineDriver**: Multiple instances of a pipeline for parallel execution
+- **Schedule**: Non-blocking scheduling of pipelines using user-space time-slicing
+
+![pipeline_opeartors](../_assets/Profile/pipeline_operators.png)
+
+### Metric Merging Strategy
+
+By default, StarRocks merges the FragmentInstance and PipelineDriver layers to reduce profile volume, resulting in a simplified three-layer structure:
 - Fragment
 - Pipeline
 - Operator
 
-You can control this merging behavior through a session variable `pipeline_profile_level`, which has two valid values:
+You can control this merging behavior through the session variable `pipeline_profile_level`:
+- `1` (Default): Merged three-layer structure
+- `2`: Original five-layer structure
+- Other values: Treated as `1`
 
-- `1` (Default): StarRocks merges the metrics into a three-layer structure.
-- `2`: StarRocks does not merge the metrics. The original five-layer structure is retained.
-- Any other value will be treated as the default value `1`.
+When merging metrics, different strategies are used based on metric type:
 
-Generally, we do not recommend setting this parameter to `2` because the Query Profile with the five-layer structure has many limitations. For example, you cannot perform visualized analysis on the profile using any tools. Therefore, unless the merging process leads to the loss of crucial information, you do not need to adjust this parameter.
+- **Time-related metrics**: Take the average
+  - Example: `OperatorTotalTime` is the average time consumption
+  - `__MAX_OF_OperatorTotalTime` and `__MIN_OF_OperatorTotalTime` record extremes
 
-### Metric Merging and MIN/MAX Values
+- **Non-time-related metrics**: Sum the values
+  - Example: `PullChunkNum` is the sum across all instances
+  - `__MAX_OF_PullChunkNum` and `__MIN_OF_PullChunkNum` record extremes
 
-When merging FragmentInstance and PipelineDriver, all metrics with the same name are merged. Only the minimum and maximum values of each metric in all concurrent instances are recorded. Different types of metrics use different merging strategies:
+- **Constant metrics**: Same value across all instances (e.g., `DegreeOfParallelism`)
 
-- Time-related metrics take the average. For example:
-  - `OperatorTotalTime` is the average time consumption of all concurrent instances.
-  - `__MAX_OF_OperatorTotalTime` is the maximum time consumption among all concurrent instances.
-  - `__MIN_OF_OperatorTotalTime` is the minimum time consumption among all concurrent instances.
+Significant differences between MIN and MAX values often indicate data skew, particularly in aggregation and join operations.
 
-```SQL
-             - OperatorTotalTime: 2.192us
-               - __MAX_OF_OperatorTotalTime: 2.502us
-               - __MIN_OF_OperatorTotalTime: 1.882us
-```
-
-- Non-time-related metrics are summed. For example:
-  - `PullChunkNum` is the sum of this metric in all concurrent instances.
-  - `__MAX_OF_PullChunkNum` is the maximum value of this metric among all concurrent instances.
-  - `__MIN_OF_PullChunkNum` is the minimum value of this metric among all concurrent instances.
-
-```SQL
-             - PullChunkNum: 146.66K (146660)
-               - __MAX_OF_PullChunkNum: 24.45K (24450)
-               - __MIN_OF_PullChunkNum: 24.435K (24435)
-```
-
-- Some metrics without extreme values have the same value in all concurrent instances, for example: `DegreeOfParallelism`.
-
-Usually, if there is a significant difference between MIN and MAX values, it indicates a high probability of data skew. Possible scenarios include aggregation and join operations.
-
-```SQL
-             - OperatorTotalTime: 2m48s
-               - __MAX_OF_OperatorTotalTime: 10m30s
-               - __MIN_OF_OperatorTotalTime: 279.170us
-```
-
-## Query Profile Metrics List
-
+## Query Profile Metrics
 
 ### Summary Metrics
 
-It displays some basic information about this query.
+Basic information about the query execution:
 
 | Metric | Description |
 |--------|-------------|
@@ -159,61 +167,49 @@ Example:
 
 ### Execution Overview Metrics
 
+High-level execution statistics:
+
 | Metric | Description | Rule of Thumb |
 |--------|-------------|---------------|
-| FrontendProfileMergeTime | Query Profile processing time on the Frontend (FE) side. | < 10ms is normal |
-| QueryAllocatedMemoryUsage | Cumulative allocated memory across all compute nodes. |  |
-| QueryDeallocatedMemoryUsage | Cumulative deallocated memory across all compute nodes. |  |
-| QueryPeakMemoryUsagePerNode | Maximum peak memory across all compute nodes. | < 80% of node capacity is normal |
-| QuerySumMemoryUsage | Summary of peak memory across all compute nodes. |  |
-| QueryExecutionWallTime | Wall time of the execution. |  |
-| QueryCumulativeCpuTime | Cumulative CPU time across all compute nodes. | If the cumulative cpu time is much less than `walltime * totalCpuCores`, it means the bottleneck is not on CPU |
-| QueryCumulativeOperatorTime | Cumulative time across all nodes. This is a simple linear accumulation, but in reality, execution times of different operators may overlap. This parameter serves as the denominator for calculating the percentage of time spent on each operator. |  |
-| QueryCumulativeNetworkTime | Cumulative network time of all Exchange nodes. Similar to cumulative operator time, actual execution times of different Exchanges may overlap. |  |
-| QueryCumulativeScanTime | Cumulative IO time of all Scan nodes. Similar to cumulative operator time, actual execution times of different Scan operations may overlap. | |
-| QueryPeakScheduleTime | Maximum ScheduleTime metric across all Pipelines. | < 1s is normal for simple queries |
-| QuerySpillBytes | Size of data spilled to local disks. | < 1GB is normal, higher value suggests a memory-intensive query |
+| FrontendProfileMergeTime | FE-side profile processing time | < 10ms normal |
+| QueryAllocatedMemoryUsage | Total allocated memory across nodes | |
+| QueryDeallocatedMemoryUsage | Total deallocated memory across nodes | |
+| QueryPeakMemoryUsagePerNode | Maximum peak memory per node | < 80% capacity normal |
+| QuerySumMemoryUsage | Total peak memory across nodes | |
+| QueryExecutionWallTime | Wall time of execution | |
+| QueryCumulativeCpuTime | Total CPU time across nodes | Compare with `walltime * totalCpuCores` |
+| QueryCumulativeOperatorTime | Total operator execution time | Denominator for operator time percentages |
+| QueryCumulativeNetworkTime | Total Exchange node network time | |
+| QueryCumulativeScanTime | Total Scan node IO time | |
+| QueryPeakScheduleTime | Maximum Pipeline ScheduleTime | < 1s normal for simple queries |
+| QuerySpillBytes | Data spilled to disk | < 1GB normal |
 
 ### Fragment Metrics
 
+Fragment-level execution details:
+
 | Metric | Description |
 |--------|-------------|
-| InstanceNum | Number of all FragmentInstances for this Fragment. |
-| InstanceIds | IDs of all FragmentInstances for this Fragment. |
-| BackendNum | Number of BEs participating in the execution of this Fragment. |
-| BackendAddresses | Addresses of all BEs participating in the execution of this Fragment. |
-| FragmentInstancePrepareTime | Time spent in the Fragment Prepare phase. |
-| InstanceAllocatedMemoryUsage | Cumulative allocated memory for all FragmentInstances under this Fragment. |
-| InstanceDeallocatedMemoryUsage | Cumulative deallocated memory for all FragmentInstances under this Fragment. |
-| InstancePeakMemoryUsage | The peak memory usage across all FragmentInstances under this Fragment. |
+| InstanceNum | Number of FragmentInstances |
+| InstanceIds | IDs of all FragmentInstances |
+| BackendNum | Number of participating BEs |
+| BackendAddresses | BE addresses |
+| FragmentInstancePrepareTime | Fragment Prepare phase duration |
+| InstanceAllocatedMemoryUsage | Total allocated memory for instances |
+| InstanceDeallocatedMemoryUsage | Total deallocated memory for instances |
+| InstancePeakMemoryUsage | Peak memory across instances |
 
 ### Pipeline Metrics
 
-![pipeline_opeartors](../_assets/Profile/pipeline_operators.png)
-
-The Pipeline Engine is a key component of the StarRocks execution engine. It is responsible for executing the query plan in a parallel and efficient manner. The Pipeline Engine is designed to handle complex query plans and large volumes of data, ensuring high performance and scalability.
-
-
-Concepts in the Pipeline Engine:
-- **Operator**: This is a fundamental unit of execution in the Pipeline Engine. Each operator is responsible for implementing a specific algorithm, such as aggregation, join, or scan.
-- **Pipeline**: A pipeline is a sequence of connected Operator instances. It represents the execution path of a query plan.
-- **PipelineDriver**: A pipeline is instantiated as multiple drivers to support data-parallel execution. Each driver is responsible for executing a portion of the pipeline in parallel.
-- **Schedule**: Pipelines are scheduled in a non-blocking manner, utilizing user-space time-slicing. Operators are designed to be non-blocking and CPU-intensive, while other threads handle blocking operations such as disk I/O and network I/O.
-
-The relationship between core metrics is illustrated in the following diagram:
-- DriverTotalTime = ActiveTime + PendingTime + ScheduleTime
-- ActiveTime = ∑ OperatorTotalTime + OverheadTime, representing the total time spent on CPU-intensive tasks and actual work
-- PendingTime = InputEmptyTime + OutputFullTime + PreconditionBlockTime + PendingFinishTime
-- InputEmptyTime = FirstInputEmptyTime + FollowupInputEmptyTime, representing the time spent on waiting for the blocking operations
-
-In general, `ActiveTime` is close to `DriverTotalTime`, indicating a CPU-intensive query. However, there are exceptions for other scenarios:
-- **IO Intensive**: A high `BlockByInputEmpty` metric suggests that the CPU spends most of its time waiting for IO operations to complete.
-- **Data Skew**: The CPU is underutilized, with only a portion of the `PipelineDriver` being utilized, indicating data skew issues.
-- **Large Result Set**: A high `BlockByOutputFull` counter indicates that the execution is frequently blocked due to the result set being too large to return to the client.
-- **Concurrent Queries**: A high `ScheduleTime` counter indicates that there're many concurrent queries.
+Pipeline execution details and relationships:
 
 ![profile_pipeline_time_relationship](../_assets/Profile/profile_pipeline_time_relationship.jpeg)
 
+Key relationships:
+- DriverTotalTime = ActiveTime + PendingTime + ScheduleTime
+- ActiveTime = ∑ OperatorTotalTime + OverheadTime
+- PendingTime = InputEmptyTime + OutputFullTime + PreconditionBlockTime + PendingFinishTime
+- InputEmptyTime = FirstInputEmptyTime + FollowupInputEmptyTime
 
 | Metric | Description |
 |--------|-------------|
@@ -234,8 +230,7 @@ In general, `ActiveTime` is close to `DriverTotalTime`, indicating a CPU-intensi
 | BlockByOutputFull | Number of times the pipeline is blocked due to OutputFull. |
 | BlockByPrecondition | Number of times the pipeline is blocked due to unmet preconditions. |
 
-## Operator Specific Metrics
-### Basic Metrics
+### Operator Metrics
 
 | Metric | Description |
 |--------|-------------|
