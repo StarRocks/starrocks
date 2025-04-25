@@ -43,7 +43,7 @@ public:
         auto avro_reader = std::make_unique<AvroReader>();
         CHECK_OK(avro_reader->init(std::make_unique<AvroBufferInputStream>(
                                            std::move(file_or.value()), config::avro_reader_buffer_size_bytes, _counter),
-                                   filename, _state.get(), _counter, nullptr, nullptr, true));
+                                   filename, _state.get(), _counter, nullptr, &_column_readers, true));
         return avro_reader;
     }
 
@@ -131,6 +131,7 @@ private:
     RuntimeProfile* _profile;
     std::shared_ptr<RuntimeState> _state;
     cctz::time_zone _timezone;
+    std::vector<avrocpp::ColumnReaderUniquePtr> _column_readers;
 };
 
 TEST_F(AvroCppScannerTest, test_read_primitive_types) {
