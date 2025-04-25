@@ -71,6 +71,7 @@ import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.Load;
 import com.starrocks.load.loadv2.LoadJob;
+import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.ImportColumnDesc;
@@ -535,13 +536,13 @@ public class FileScanNode extends LoadScanNode {
             List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
             for (long cnId : computeNodeIds) {
                 ComputeNode cn = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(cnId);
-                if (cn != null && cn.isAvailable()) {
+                if (cn != null && cn.isAvailable() && !SimpleScheduler.isInBlocklist(cnId)) {
                     nodes.add(cn);
                 }
             }
         } else {
             for (ComputeNode be : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend().values()) {
-                if (be.isAvailable()) {
+                if (be.isAvailable() && !SimpleScheduler.isInBlocklist(be.getId())) {
                     nodes.add(be);
                 }
             }
