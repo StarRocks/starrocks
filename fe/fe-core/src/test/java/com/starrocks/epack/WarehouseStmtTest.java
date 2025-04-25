@@ -213,6 +213,8 @@ public class WarehouseStmtTest {
         DDLStmtExecutor.execute(stmt, connectCtx);
         Assert.assertEquals(LocalWarehouse.WarehouseState.SUSPENDED,
                 ((LocalWarehouse) warehouseMgr.getWarehouse("warehouse_1")).getState());
+
+        warehouseIdToSlotTracker = warehouseSlotManager.getWarehouseIdToSlotTracker();
         Assert.assertTrue(warehouseIdToSlotTracker.containsKey(warehouse.getId()));
 
         String resumeSql = "RESUME WAREHOUSE warehouse_1";
@@ -221,10 +223,12 @@ public class WarehouseStmtTest {
         DDLStmtExecutor.execute(stmt, connectCtx);
         Assert.assertEquals(LocalWarehouse.WarehouseState.AVAILABLE,
                 ((LocalWarehouse) warehouseMgr.getWarehouse("warehouse_1")).getState());
+        warehouseIdToSlotTracker = warehouseSlotManager.getWarehouseIdToSlotTracker();
         Assert.assertTrue(warehouseIdToSlotTracker.containsKey(warehouse.getId()));
 
         warehouseMgr.dropWarehouse(new DropWarehouseStmt(false, "warehouse_1"));
         Assert.assertFalse(warehouseMgr.warehouseExists("warehouse_1"));
+        warehouseIdToSlotTracker = warehouseSlotManager.getWarehouseIdToSlotTracker();
         Assert.assertFalse(warehouseIdToSlotTracker.containsKey(warehouse.getId()));
     }
 
@@ -272,7 +276,7 @@ public class WarehouseStmtTest {
         Assert.assertTrue(slotManager instanceof WarehouseSlotManager);
         WarehouseSlotManager warehouseSlotManager = (WarehouseSlotManager) slotManager;
         Map<Long, BaseSlotTracker> warehouseIdToSlotTracker = warehouseSlotManager.getWarehouseIdToSlotTracker();
-        Assert.assertTrue(warehouseIdToSlotTracker.containsKey(warehouseId));
+        Assert.assertFalse(warehouseIdToSlotTracker.containsKey(warehouseId));
 
         // test query options
         Assert.assertFalse(warehouseSlotManager.isEnableQueryQueueV2(warehouseId));
@@ -311,6 +315,7 @@ public class WarehouseStmtTest {
         DDLStmtExecutor.execute(stmt, connectCtx);
         Assert.assertEquals(LocalWarehouse.WarehouseState.SUSPENDED,
                 ((LocalWarehouse) warehouseMgr.getWarehouse("warehouse_1")).getState());
+        warehouseIdToSlotTracker = warehouseSlotManager.getWarehouseIdToSlotTracker();
         Assert.assertTrue(warehouseIdToSlotTracker.containsKey(warehouse.getId()));
 
         String resumeSql = "RESUME WAREHOUSE warehouse_1";
@@ -319,10 +324,12 @@ public class WarehouseStmtTest {
         DDLStmtExecutor.execute(stmt, connectCtx);
         Assert.assertEquals(LocalWarehouse.WarehouseState.AVAILABLE,
                 ((LocalWarehouse) warehouseMgr.getWarehouse("warehouse_1")).getState());
+        warehouseIdToSlotTracker = warehouseSlotManager.getWarehouseIdToSlotTracker();
         Assert.assertTrue(warehouseIdToSlotTracker.containsKey(warehouse.getId()));
 
         warehouseMgr.dropWarehouse(new DropWarehouseStmt(false, "warehouse_1"));
         Assert.assertFalse(warehouseMgr.warehouseExists("warehouse_1"));
+        warehouseIdToSlotTracker = warehouseSlotManager.getWarehouseIdToSlotTracker();
         Assert.assertFalse(warehouseIdToSlotTracker.containsKey(warehouse.getId()));
     }
 
@@ -364,7 +371,7 @@ public class WarehouseStmtTest {
         Assert.assertTrue(slotManager instanceof WarehouseSlotManager);
         WarehouseSlotManager warehouseSlotManager = (WarehouseSlotManager) slotManager;
         Map<Long, BaseSlotTracker> warehouseIdToSlotTracker = warehouseSlotManager.getWarehouseIdToSlotTracker();
-        Assert.assertTrue(warehouseIdToSlotTracker.containsKey(warehouseId));
+        Assert.assertFalse(warehouseIdToSlotTracker.containsKey(warehouseId));
 
         // test query options
         Assert.assertFalse(warehouseSlotManager.isEnableQueryQueueV2(warehouseId));

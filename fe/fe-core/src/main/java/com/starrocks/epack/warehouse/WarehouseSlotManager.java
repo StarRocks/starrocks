@@ -26,6 +26,7 @@ import com.starrocks.qe.scheduler.slot.BaseSlotTracker;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
 import com.starrocks.qe.scheduler.warehouse.WarehouseMetricEntity;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
@@ -56,11 +57,37 @@ public class WarehouseSlotManager extends BaseSlotManager {
 
     @Override
     public Map<Long, BaseSlotTracker> getWarehouseIdToSlotTracker() {
-        return warehouseIdToSlotTracker;
+        Map<Long, BaseSlotTracker> result = Maps.newHashMap();
+        for (Map.Entry<Long, BaseSlotTracker> e : warehouseIdToSlotTracker.entrySet()) {
+            // filter out warehouses which disable query queue
+            if (!isEnableQueryQueue(e.getKey())) {
+                continue;
+            }
+            result.put(e.getKey(), e.getValue());
+        }
+        return result;
     }
 
     public Map<Long, WarehouseMetricEntity> getWarehouseMetrics() {
-        return warehouseMetrics;
+        Map<Long, WarehouseMetricEntity> result = Maps.newHashMap();
+        for (Map.Entry<Long, WarehouseMetricEntity> e : warehouseMetrics.entrySet()) {
+            // filter out warehouses which disable query queue
+            if (!isEnableQueryQueue(e.getKey())) {
+                continue;
+            }
+            result.put(e.getKey(), e.getValue());
+        }
+        return result;
+    }
+
+    private boolean isEnableQueryQueue(long warehouseId) {
+        Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+        if (wh == null || !(wh instanceof LocalWarehouse)) {
+            return false;
+        }
+        LocalWarehouse localWarehouse = (LocalWarehouse) wh;
+        WarehouseProperty warehouseProperty = localWarehouse.getProperty();
+        return warehouseProperty.isEnableQueryQueue();
     }
 
     public void registerWarehouse(long warehouseId) {

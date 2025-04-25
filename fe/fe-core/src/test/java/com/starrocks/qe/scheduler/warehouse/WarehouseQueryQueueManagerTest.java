@@ -54,6 +54,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
+import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
+import static org.junit.Assert.assertEquals;
+
 public class WarehouseQueryQueueManagerTest extends SchedulerTestBase {
 
     private static int MAX_QUEUE_PENDING_LENGTH = 4;
@@ -149,7 +152,7 @@ public class WarehouseQueryQueueManagerTest extends SchedulerTestBase {
         // run without query queue
         DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
         manager.maybeWait(connectContext, coord);
-        Assert.assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
+        assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
         Assert.assertTrue(warehouseIdToSlotTracker.size() == 1);
         BaseSlotTracker baseSlotTracker = warehouseIdToSlotTracker.get(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         Assert.assertTrue(baseSlotTracker != null);
@@ -157,7 +160,7 @@ public class WarehouseQueryQueueManagerTest extends SchedulerTestBase {
         WarehouseSlotTracker slotTracker = (WarehouseSlotTracker) baseSlotTracker;
         Assert.assertTrue(slotTracker.getSlots().size() == 1);
         LogicalSlot logicalSlot = slotTracker.getSlots().iterator().next();
-        Assert.assertEquals(LogicalSlot.State.ALLOCATED, logicalSlot.getState());
+        assertEquals(LogicalSlot.State.ALLOCATED, logicalSlot.getState());
         coord.onFinished();
     }
 
@@ -167,7 +170,7 @@ public class WarehouseQueryQueueManagerTest extends SchedulerTestBase {
         Map<Long, BaseSlotTracker> warehouseIdToSlotTracker = slotManager.getWarehouseIdToSlotTracker();
         BaseSlotTracker baseSlotTracker = warehouseIdToSlotTracker.get(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         WarehouseSlotTracker slotTracker = (WarehouseSlotTracker) baseSlotTracker;
-        Assert.assertEquals(slotTracker.getMaxSlots(), Optional.of(2 * CPU_CORE_PER_BACKEND));
+        assertEquals(slotTracker.getMaxSlots(), Optional.of(2 * CPU_CORE_PER_BACKEND));
 
         Assert.assertTrue(warehouseIdToSlotTracker.size() == 1);
         Assert.assertTrue(slotManager.getSlots().isEmpty());
@@ -176,7 +179,7 @@ public class WarehouseQueryQueueManagerTest extends SchedulerTestBase {
         for (int i = 0; i < MAX_QUEUE_PENDING_LENGTH; i++) {
             DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
             manager.maybeWait(connectContext, coord);
-            Assert.assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
+            assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
             System.out.println(coord.getSlot());
             coordinators.add(coord);
         }
@@ -189,7 +192,7 @@ public class WarehouseQueryQueueManagerTest extends SchedulerTestBase {
         Map<Long, BaseSlotTracker> warehouseIdToSlotTracker = slotManager.getWarehouseIdToSlotTracker();
         BaseSlotTracker baseSlotTracker = warehouseIdToSlotTracker.get(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         WarehouseSlotTracker slotTracker = (WarehouseSlotTracker) baseSlotTracker;
-        Assert.assertEquals(slotTracker.getMaxSlots(), Optional.of(2 * CPU_CORE_PER_BACKEND));
+        assertEquals(slotTracker.getMaxSlots(), Optional.of(2 * CPU_CORE_PER_BACKEND));
 
         Assert.assertTrue(warehouseIdToSlotTracker.size() == 1);
         Assert.assertTrue(slotManager.getSlots().isEmpty());
@@ -200,7 +203,7 @@ public class WarehouseQueryQueueManagerTest extends SchedulerTestBase {
         for (int i = 0; i < MAX_QUEUE_PENDING_LENGTH; i++) {
             DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
             manager.maybeWait(connectContext, coord);
-            Assert.assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
+            assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
             System.out.println(coord.getSlot());
             runningCoords.add(coord);
         }
@@ -234,7 +237,7 @@ public class WarehouseQueryQueueManagerTest extends SchedulerTestBase {
                         pendingCoords.stream()
                                 .filter(coord -> coord.getSlot().getState().equals(LogicalSlot.State.REQUIRING))
                                 .count() == MAX_QUEUE_PENDING_LENGTH);
-        pendingCoords.forEach(coord -> Assert.assertEquals(LogicalSlot.State.REQUIRING, coord.getSlot().getState()));
+        pendingCoords.forEach(coord -> assertEquals(LogicalSlot.State.REQUIRING, coord.getSlot().getState()));
         try {
             DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
             pendingCoords.add(coord);
@@ -246,10 +249,39 @@ public class WarehouseQueryQueueManagerTest extends SchedulerTestBase {
         }
         runningCoords.forEach(Coordinator::onFinished);
         runningCoords.forEach(
-                coord -> Assert.assertEquals(LogicalSlot.State.RELEASED, coord.getSlot().getState()));
+                coord -> assertEquals(LogicalSlot.State.RELEASED, coord.getSlot().getState()));
 
         pendingCoords.forEach(Coordinator::onFinished);
         pendingCoords.forEach(
-                coord -> Assert.assertEquals(LogicalSlot.State.CANCELLED, coord.getSlot().getState()));
+                coord -> assertEquals(LogicalSlot.State.CANCELLED, coord.getSlot().getState()));
+    }
+
+    @Test
+    public void testWarehouseSlotManagerFilterValidWarehouses() {
+        WarehouseSlotManager slotManager = (WarehouseSlotManager) GlobalStateMgr.getCurrentState().getSlotManager();
+        Map<Long, BaseSlotTracker> warehouseIdToSlotTracker = slotManager.getWarehouseIdToSlotTracker();
+        assertThat(warehouseIdToSlotTracker.size()).isEqualTo(1);
+
+        Map<Long, WarehouseMetricEntity> warehouseMetricEntityMap = slotManager.getWarehouseMetrics();
+        assertThat(warehouseMetricEntityMap.size()).isEqualTo(1);
+        WarehouseMetricEntity warehouseMetricEntity = warehouseMetricEntityMap.get(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        assertThat(warehouseMetricEntity != null).isTrue();
+        assertThat(warehouseMetricEntity.getWarehouseId() == WarehouseManager.DEFAULT_WAREHOUSE_ID).isTrue();
+
+        BaseSlotTracker baseSlotTracker = warehouseIdToSlotTracker.get(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        assertThat(baseSlotTracker != null).isTrue();
+        WarehouseSlotTracker slotTracker = (WarehouseSlotTracker) baseSlotTracker;
+        assertThat(slotTracker.getWarehouseId() == WarehouseManager.DEFAULT_WAREHOUSE_ID).isTrue();
+
+        LocalWarehouse warehouse = (LocalWarehouse) GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        WarehouseProperty property = warehouse.getProperty();
+        property.setEnableQueryQueue(false);
+
+        warehouseIdToSlotTracker = slotManager.getWarehouseIdToSlotTracker();
+        assertThat(warehouseIdToSlotTracker.size()).isEqualTo(0);
+        warehouseMetricEntityMap = slotManager.getWarehouseMetrics();
+        assertThat(warehouseMetricEntityMap.size()).isEqualTo(0);
+        property.setEnableQueryQueue(true);
     }
 }
