@@ -19,7 +19,7 @@ displayed_sidebar: docs
 - [修改表的属性](#修改表的属性)
 - [对表进行原子替换](#swap-将两个表原子替换)
 - [手动执行 compaction 合并表数据](#手动-compaction31-版本起)
-- [删除主键索引](#仅支持存算分离删除cloud_native persistent_index)
+- [删除主键索引](#删除主键索引-339-版本起))
 
 :::tip
 该操作需要有对应表的 ALTER 权限。
