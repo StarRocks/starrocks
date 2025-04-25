@@ -159,6 +159,7 @@ public class LDAPGroupCacheMgr extends FrontendDaemon {
                     case SUPPORTED_LDAP_GROUP_TYPE_GROUP_OF_NAMES:
                     case SUPPORTED_LDAP_GROUP_TYPE_GROUP_OF_UNIQUE_NAMES: {
                         memberNames = getMemberNamesFromGroupOfNames(ctx, groupDN,
+                                securityIntegration.getLdapGroupMemberAttr(),
                                 securityIntegration.getLdapUserGroupMatchAttr());
                         break;
                     }
@@ -168,6 +169,7 @@ public class LDAPGroupCacheMgr extends FrontendDaemon {
                     }
                     case SUPPORTED_LDAP_GROUP_TYPE_AD_GROUP:
                         memberNames = getMemberNamesFromADGroup(ctx, groupDN,
+                                securityIntegration.getLdapGroupMemberAttr(),
                                 securityIntegration.getLdapUserGroupMatchAttr(),
                                 securityIntegration.getLdapGroupMatchUseMemberUid());
                         break;
@@ -221,14 +223,24 @@ public class LDAPGroupCacheMgr extends FrontendDaemon {
         return objectClassName;
     }
 
-    private static Set<String> getMemberNamesFromGroupOfNames(DirContext ctx,
+    protected static Set<String> getMemberNamesFromGroupOfNames(DirContext ctx,
                                                                String groupDN,
+                                                               String groupMemberAttr,
                                                                String ldapGroupMatchAttr) throws NamingException {
         Set<String> memberNames = new HashSet<>();
-        Attributes attrs = ctx.getAttributes(groupDN, new String[] {"member"});
-        Attribute member = attrs.get("member");
+        // 1. Determine member attribute id according to groupMemberAttr
+        Attributes attrs = ctx.getAttributes(groupDN);
+        String memberAttrId = getMemberAttrId(attrs, groupMemberAttr);
+        if (memberAttrId == null) {
+            LOG.info("failed to get member attr id by: {} from general group", groupMemberAttr);
+            return memberNames;
+        }
+
+        // 2. get memberNames by memberAttrId
+        LOG.info("start to get members by attribute id: {} from general group", memberAttrId);
+        Attribute member = attrs.get(memberAttrId);
         if (member == null) {
-            LOG.warn("cannot find 'member' attribute from general group '{}'", groupDN);
+            LOG.warn("cannot find '{}' attribute from general group '{}'", memberAttrId, groupDN);
             return memberNames;
         }
         NamingEnumeration<?> e = member.getAll();
@@ -239,7 +251,7 @@ public class LDAPGroupCacheMgr extends FrontendDaemon {
             String groupType = getGroupType(ctx, memberDN);
             if (Objects.equals(groupType, SUPPORTED_LDAP_GROUP_TYPE_GROUP_OF_NAMES) ||
                     Objects.equals(groupType, SUPPORTED_LDAP_GROUP_TYPE_GROUP_OF_UNIQUE_NAMES)) {
-                memberNames.addAll(getMemberNamesFromGroupOfNames(ctx, memberDN, ldapGroupMatchAttr));
+                memberNames.addAll(getMemberNamesFromGroupOfNames(ctx, memberDN, groupMemberAttr, ldapGroupMatchAttr));
             } else {
                 String name = retrieveMemberNameFromDn(memberDN, ldapGroupMatchAttr);
                 if (!Strings.isNullOrEmpty(name)) {
@@ -266,14 +278,15 @@ public class LDAPGroupCacheMgr extends FrontendDaemon {
         return memberNames;
     }
 
-    private static Set<String> getMemberNamesFromADGroup(DirContext ctx,
+    protected static Set<String> getMemberNamesFromADGroup(DirContext ctx,
                                                          String groupDN,
+                                                         String groupMemberAttr,
                                                          String ldapGroupMatchAttr,
                                                          boolean ldapGroupMatchUseMemberUid) throws NamingException {
         LOG.info("getting member names from AD group '{}'", groupDN);
         Set<String> memberNames = new HashSet<>();
-        // check whether `memberUid` attribute is present or not.
-        Attributes attrs = ctx.getAttributes(groupDN, new String[] {"memberUid", "member"});
+        // 1. try to get members by memberUid if ldap_group_match_use_member_uid is set to true.
+        Attributes attrs = ctx.getAttributes(groupDN);
         Attribute memberUid = attrs.get("memberUid");
         boolean memberRetrievedFromUid = false;
         if (ldapGroupMatchUseMemberUid && memberUid != null && memberUid.size() > 0) {
@@ -288,9 +301,18 @@ public class LDAPGroupCacheMgr extends FrontendDaemon {
             }
         }
 
-        Attribute member = attrs.get("member");
+        // 2. Determine member attribute id according to groupMemberAttr
+        String memberAttrId = getMemberAttrId(attrs, groupMemberAttr);
+        if (memberAttrId == null) {
+            LOG.info("failed to get member attr id by: {} from AD group", groupMemberAttr);
+            return memberNames;
+        }
+
+        // 3. get memberNames by memberAttrId
+        LOG.info("start to get members by attribute id: {} from AD group", memberAttrId);
+        Attribute member = attrs.get(memberAttrId);
         if (member == null) {
-            LOG.warn("cannot find 'member' attribute from ad group '{}'", groupDN);
+            LOG.warn("cannot find '{}' attribute from AD group '{}'", memberAttrId, groupDN);
             return memberNames;
         }
         NamingEnumeration<?> e = member.getAll();
@@ -301,7 +323,7 @@ public class LDAPGroupCacheMgr extends FrontendDaemon {
             String groupType = getGroupType(ctx, memberDN);
             if (Objects.equals(groupType, SUPPORTED_LDAP_GROUP_TYPE_AD_GROUP)) {
                 LOG.info("found sub AD group '{}' from '{}'", memberDN, groupDN);
-                memberNames.addAll(getMemberNamesFromADGroup(ctx, memberDN,
+                memberNames.addAll(getMemberNamesFromADGroup(ctx, memberDN, groupMemberAttr,
                         ldapGroupMatchAttr, ldapGroupMatchUseMemberUid));
             } else if (!memberRetrievedFromUid) {
                 String name = retrieveMemberNameFromDn(memberDN, ldapGroupMatchAttr);
@@ -312,6 +334,27 @@ public class LDAPGroupCacheMgr extends FrontendDaemon {
         }
 
         return memberNames;
+    }
+
+    // If groupMemberAttr is a regular expression,
+    // find the id that matches the regular expression from all attribute ids,
+    // otherwise memberAttrId=groupMemberAttr
+    protected static String getMemberAttrId(Attributes attrs, String groupMemberAttr) throws NamingException {
+        if (groupMemberAttr.startsWith("regex:")) {
+            String regex = groupMemberAttr.substring(groupMemberAttr.indexOf(":") + 1);
+            Pattern p = Pattern.compile(regex);
+            NamingEnumeration<String> ids = attrs.getIDs();
+            while (ids.hasMore()) {
+                String attrId = ids.next();
+                Matcher m = p.matcher(attrId);
+                if (m.find()) {
+                    return attrId;
+                }
+            }
+            return null;
+        } else {
+            return groupMemberAttr;
+        }
     }
 
     @VisibleForTesting

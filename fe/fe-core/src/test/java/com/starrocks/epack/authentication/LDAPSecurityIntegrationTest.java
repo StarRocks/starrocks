@@ -78,5 +78,14 @@ public class LDAPSecurityIntegrationTest {
         properties.put(LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_LDAP_SERVER_PORT, "abc");
         hostAndPort = integration.getHostAndPort();
         Assert.assertNull(hostAndPort);
+
+        properties.clear();
+        properties.put(LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_SSL_CONN_TRUST_STORE_PATH, "/path/truststore.jks");
+        properties.put(LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_LDAP_GROUP_MEMBER_ATTR,
+                "regex:member;range=(\\d+)-(\\d+)");
+        Assert.assertEquals("/path/truststore.jks", integration.getLdapSslConnTrustStorePath());
+        Assert.assertEquals("regex:member;range=(\\d+)-(\\d+)", integration.getLdapGroupMemberAttr());
+        properties.remove(LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_LDAP_GROUP_MEMBER_ATTR);
+        Assert.assertEquals("member", integration.getLdapGroupMemberAttr());
     }
 }

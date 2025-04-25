@@ -14,6 +14,7 @@
 
 package com.starrocks.epack.authentication;
 
+import com.google.common.collect.Lists;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authentication.AuthenticationMgr;
@@ -49,7 +50,16 @@ import org.junit.Test;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
+import javax.naming.directory.Attributes;
+import javax.naming.directory.BasicAttribute;
+import javax.naming.directory.BasicAttributes;
+import javax.naming.directory.DirContext;
+import javax.naming.directory.InitialDirContext;
+
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class SecurityIntegrationTest {
     private static ConnectContext connectContext;
@@ -513,5 +523,185 @@ public class SecurityIntegrationTest {
         createSecurityIntegration(res.getResultRows().get(0).get(1));
         // clean
         dropSecurityIntegration("ldap1forshowcreate");
+    }
+
+    @Test
+    public void testGetFinalMemberAttrId() throws Exception {
+        Attributes attributes = new BasicAttributes();
+        attributes.put(new BasicAttribute("member;range=0-1499", "aaa"));
+        attributes.put(new BasicAttribute("member;range=0-1499", "bbb"));
+        attributes.put(new BasicAttribute("member;range=0-1499", "ccc"));
+        attributes.put(new BasicAttribute("member;range=0-1499", "ddd"));
+        attributes.put(new BasicAttribute("member;range=0-1499", "eee"));
+        Assert.assertEquals("member", LDAPGroupCacheMgr.getMemberAttrId(attributes, "member"));
+        Assert.assertEquals("member;range=0-1499", LDAPGroupCacheMgr.getMemberAttrId(attributes,
+                "regex:member;range=(\\d+)-(\\d+)"));
+    }
+
+    @Test
+    public void testGetMemberNamesFromGroupOfNamesException() throws Exception {
+        String groupName = "cn=group_rd1,ou=Group,dc=example,dc=com";
+        InitialDirContext initialDirContext = mock(InitialDirContext.class);
+        mockGroupAttribute(initialDirContext, groupName, "member;range=0-1499", "groupOfNames",
+                Lists.newArrayList("uid=zhangsan,ou=people,dc=example,dc=com",
+                        "uid=lisi,ou=people,dc=example,dc=com", "uid=wangwu,ou=people,dc=example,dc=com",
+                        "uid=maliu,ou=people,dc=example,dc=com", "uid=xiaoming,ou=people,dc=example,dc=com",
+                        "cn=sub_group_rd1,ou=Group,dc=example,dc=com"));
+        mockGroupAttribute(initialDirContext, "cn=sub_group_rd1,ou=Group,dc=example,dc=com",
+                "member;range=0-1499", "groupOfNames",
+                Lists.newArrayList("uid=xiaohong,ou=people,dc=example,dc=com"));
+
+        // wrong regex
+        Set<String> names =  LDAPGroupCacheMgr.getMemberNamesFromGroupOfNames(initialDirContext, groupName,
+                "regex:aaa", "uid");
+        Assert.assertEquals(0, names.size());
+        names =  LDAPGroupCacheMgr.getMemberNamesFromGroupOfNames(initialDirContext, groupName,
+                "members", "uid");
+        Assert.assertEquals(0, names.size());
+    }
+
+    @Test
+    public void testGetMemberNamesFromADGroupException() throws Exception {
+        String groupName = "cn=group_rd1,ou=Group,dc=example,dc=com";
+        InitialDirContext initialDirContext = mock(InitialDirContext.class);
+        mockGroupAttribute(initialDirContext, groupName, "member;range=0-1499", "group",
+                Lists.newArrayList("uid=zhangsan,ou=people,dc=example,dc=com",
+                        "uid=lisi,ou=people,dc=example,dc=com", "uid=wangwu,ou=people,dc=example,dc=com",
+                        "uid=maliu,ou=people,dc=example,dc=com", "uid=xiaoming,ou=people,dc=example,dc=com",
+                        "cn=sub_group_rd1,ou=Group,dc=example,dc=com"));
+        mockGroupAttribute(initialDirContext, "cn=sub_group_rd1,ou=Group,dc=example,dc=com",
+                "member;range=0-1499", "group",
+                Lists.newArrayList("uid=xiaohong,ou=people,dc=example,dc=com"));
+
+        // wrong regex
+        Set<String> names =  LDAPGroupCacheMgr.getMemberNamesFromADGroup(initialDirContext, groupName,
+                "regex:aaa", "uid", false);
+        Assert.assertEquals(0, names.size());
+        names =  LDAPGroupCacheMgr.getMemberNamesFromADGroup(initialDirContext, groupName,
+                "members", "uid", false);
+        Assert.assertEquals(0, names.size());
+    }
+
+    @Test
+    public void testGetMemberNamesFromGroupOfNames() throws Exception {
+        // 1. test getNames by regex:member;range=(\d+)-(\d+)
+        String groupName = "cn=group_rd1,ou=Group,dc=example,dc=com";
+        InitialDirContext initialDirContext = mock(InitialDirContext.class);
+        mockGroupAttribute(initialDirContext, groupName, "member;range=0-1499", "groupOfNames",
+                Lists.newArrayList("uid=zhangsan,ou=people,dc=example,dc=com",
+                        "uid=lisi,ou=people,dc=example,dc=com", "uid=wangwu,ou=people,dc=example,dc=com",
+                        "uid=maliu,ou=people,dc=example,dc=com", "uid=xiaoming,ou=people,dc=example,dc=com",
+                        "cn=sub_group_rd1,ou=Group,dc=example,dc=com"));
+        mockGroupAttribute(initialDirContext, "cn=sub_group_rd1,ou=Group,dc=example,dc=com",
+                "member;range=0-1499", "groupOfNames",
+                Lists.newArrayList("uid=xiaohong,ou=people,dc=example,dc=com"));
+
+        Set<String> names = LDAPGroupCacheMgr.getMemberNamesFromGroupOfNames(initialDirContext, groupName,
+                "regex:member;range=(\\d+)-(\\d+)", "uid");
+        Assert.assertEquals(6, names.size());
+        Assert.assertTrue(names.contains("zhangsan"));
+        Assert.assertTrue(names.contains("lisi"));
+        Assert.assertTrue(names.contains("wangwu"));
+        Assert.assertTrue(names.contains("maliu"));
+        Assert.assertTrue(names.contains("xiaoming"));
+        Assert.assertTrue(names.contains("xiaohong"));
+
+        // 2. test getNames by member
+        String groupName2 = "cn=group_rd2,ou=Group,dc=example,dc=com";
+        mockGroupAttribute(initialDirContext, groupName2, "member", "groupOfNames",
+                Lists.newArrayList("uid=zhangsan,ou=people,dc=example,dc=com",
+                        "uid=lisi,ou=people,dc=example,dc=com", "uid=wangwu,ou=people,dc=example,dc=com",
+                        "uid=maliu,ou=people,dc=example,dc=com", "uid=xiaoming,ou=people,dc=example,dc=com",
+                        "cn=sub_group_rd2,ou=Group,dc=example,dc=com"));
+        mockGroupAttribute(initialDirContext, "cn=sub_group_rd2,ou=Group,dc=example,dc=com",
+                "member", "groupOfNames",
+                Lists.newArrayList("uid=xiaohong,ou=people,dc=example,dc=com"));
+
+        names = LDAPGroupCacheMgr.getMemberNamesFromGroupOfNames(initialDirContext, groupName2, "member", "uid");
+        Assert.assertEquals(6, names.size());
+        Assert.assertTrue(names.contains("zhangsan"));
+        Assert.assertTrue(names.contains("lisi"));
+        Assert.assertTrue(names.contains("wangwu"));
+        Assert.assertTrue(names.contains("maliu"));
+        Assert.assertTrue(names.contains("xiaoming"));
+        Assert.assertTrue(names.contains("xiaohong"));
+    }
+
+    @Test
+    public void testGetMemberNamesFromADGroup() throws Exception {
+        // 1. test getNames by regex:member;range=(\d+)-(\d+)
+        String groupName = "cn=group_rd1,ou=Group,dc=example,dc=com";
+        InitialDirContext initialDirContext = mock(InitialDirContext.class);
+        mockGroupAttribute(initialDirContext, groupName, "member;range=0-1499", "group",
+                Lists.newArrayList("uid=zhangsan,ou=people,dc=example,dc=com",
+                        "uid=lisi,ou=people,dc=example,dc=com", "uid=wangwu,ou=people,dc=example,dc=com",
+                        "uid=maliu,ou=people,dc=example,dc=com", "uid=xiaoming,ou=people,dc=example,dc=com",
+                        "cn=sub_group_rd1,ou=Group,dc=example,dc=com"));
+        mockGroupAttribute(initialDirContext, "cn=sub_group_rd1,ou=Group,dc=example,dc=com",
+                "member;range=0-1499", "group",
+                Lists.newArrayList("uid=xiaohong,ou=people,dc=example,dc=com"));
+
+        Set<String> names = LDAPGroupCacheMgr.getMemberNamesFromADGroup(initialDirContext, groupName,
+                "regex:member;range=(\\d+)-(\\d+)", "uid", false);
+        Assert.assertEquals(6, names.size());
+        Assert.assertTrue(names.contains("zhangsan"));
+        Assert.assertTrue(names.contains("lisi"));
+        Assert.assertTrue(names.contains("wangwu"));
+        Assert.assertTrue(names.contains("maliu"));
+        Assert.assertTrue(names.contains("xiaoming"));
+        Assert.assertTrue(names.contains("xiaohong"));
+
+        // 2. test getNames by member
+        String groupName2 = "cn=group_rd2,ou=Group,dc=example,dc=com";
+        mockGroupAttribute(initialDirContext, groupName2, "member", "group",
+                Lists.newArrayList("uid=zhangsan,ou=people,dc=example,dc=com",
+                        "uid=lisi,ou=people,dc=example,dc=com", "uid=wangwu,ou=people,dc=example,dc=com",
+                        "uid=maliu,ou=people,dc=example,dc=com", "uid=xiaoming,ou=people,dc=example,dc=com",
+                        "cn=sub_group_rd2,ou=Group,dc=example,dc=com"));
+        mockGroupAttribute(initialDirContext, "cn=sub_group_rd2,ou=Group,dc=example,dc=com",
+                "member", "group",
+                Lists.newArrayList("uid=xiaohong,ou=people,dc=example,dc=com"));
+
+        names = LDAPGroupCacheMgr.getMemberNamesFromADGroup(initialDirContext, groupName2, "member", "uid", false);
+        Assert.assertEquals(6, names.size());
+        Assert.assertTrue(names.contains("zhangsan"));
+        Assert.assertTrue(names.contains("lisi"));
+        Assert.assertTrue(names.contains("wangwu"));
+        Assert.assertTrue(names.contains("maliu"));
+        Assert.assertTrue(names.contains("xiaoming"));
+        Assert.assertTrue(names.contains("xiaohong"));
+
+        // 3. test getNames by memberUid
+        String groupName3 = "cn=group_rd3,ou=Group,dc=example,dc=com";
+        mockGroupAttribute(initialDirContext, groupName3, "member", "group",
+                Lists.newArrayList("uid=zhangsan,ou=people,dc=example,dc=com",
+                        "uid=lisi,ou=people,dc=example,dc=com", "uid=wangwu,ou=people,dc=example,dc=com",
+                        "uid=maliu,ou=people,dc=example,dc=com", "uid=xiaoming,ou=people,dc=example,dc=com",
+                        "cn=sub_group_rd2,ou=Group,dc=example,dc=com"));
+        mockGroupAttribute(initialDirContext, "cn=sub_group_rd3,ou=Group,dc=example,dc=com",
+                "memberUid", "group",
+                Lists.newArrayList("xiaohong"));
+
+        names = LDAPGroupCacheMgr.getMemberNamesFromADGroup(initialDirContext, groupName3, "member", "uid", true);
+        Assert.assertEquals(6, names.size());
+        Assert.assertTrue(names.contains("zhangsan"));
+        Assert.assertTrue(names.contains("lisi"));
+        Assert.assertTrue(names.contains("wangwu"));
+        Assert.assertTrue(names.contains("maliu"));
+        Assert.assertTrue(names.contains("xiaoming"));
+        Assert.assertTrue(names.contains("xiaohong"));
+    }
+
+    private void mockGroupAttribute(DirContext context, String groupDN,
+                                    String memberId, String groupType, List<String> members) throws Exception {
+        BasicAttribute attribute = new BasicAttribute(memberId);
+        for (String member : members) {
+            attribute.add(member);
+        }
+        BasicAttributes basicAttributes = new BasicAttributes();
+        basicAttributes.put(attribute);
+        basicAttributes.put("objectClass", groupType);
+
+        when(context.getAttributes(groupDN)).thenReturn(basicAttributes);
     }
 }

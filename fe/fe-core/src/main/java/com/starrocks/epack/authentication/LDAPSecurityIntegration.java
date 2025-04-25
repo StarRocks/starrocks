@@ -48,7 +48,6 @@ import javax.net.ssl.SSLContext;
 public class LDAPSecurityIntegration extends SecurityIntegration {
     private static final Logger LOG = LogManager.getLogger(LDAPSecurityIntegration.class);
 
-    public static final String LDAP_SEC_INTEGRATION_PROP_BASE_DN_KEY = "ldap_bind_base_dn";
     public static final String LDAP_SEC_INTEGRATION_PROP_ROOT_DN_KEY = "ldap_bind_root_dn";
     public static final String LDAP_SEC_INTEGRATION_PROP_ROOT_PWD_KEY = "ldap_bind_root_pwd";
     public static final String LDAP_SEC_INTEGRATION_PROP_CACHE_REFRESH_INTERVAL_KEY = "ldap_cache_refresh_interval";
@@ -56,17 +55,28 @@ public class LDAPSecurityIntegration extends SecurityIntegration {
     public static final String LDAP_SEC_INTEGRATION_PROP_LDAP_SERVER_PORT = "ldap_server_port";
     public static final String LDAP_SEC_INTEGRATION_PROP_LDAP_CONN_URL = "ldap_conn_url";
 
+    public static final String LDAP_SEC_INTEGRATION_PROP_SSL_CONN_ALLOW_INSECURE = "ldap_ssl_conn_allow_insecure";
+    public static final String LDAP_SEC_INTEGRATION_PROP_SSL_CONN_TRUST_STORE_PATH = "ldap_ssl_conn_trust_store_path";
+    public static final String LDAP_SEC_INTEGRATION_PROP_SSL_CONN_TRUST_STORE_PWD = "ldap_ssl_conn_trust_store_pwd";
+    public static final String LDAP_SEC_INTEGRATION_PROP_CONN_TIMEOUT_MS_KEY = "ldap_conn_timeout";
+    public static final String LDAP_SEC_INTEGRATION_PROP_CONN_READ_TIMEOUT_MS_KEY = "ldap_conn_read_timeout";
+
+    //========================  The following are the search related parameters  ==========================
+    public static final String LDAP_SEC_INTEGRATION_PROP_BASE_DN_KEY = "ldap_bind_base_dn";
+    public static final String LDAP_SEC_INTEGRATION_PROP_USER_SEARCH_ATTR = "ldap_user_search_attr";
+    /**
+     * If the user's attribute as the member of a group is different from the user's DN, you must specify this parameter.
+     */
+    public static final String LDAP_SEC_INTEGRATION_GROUP_MATCH_ATTR_KEY = "ldap_user_group_match_attr";
     /**
      * When `ldap_group_match_use_member_uid` set to "false",
      * we will not retrieve the member of the group based on `memberUid` attribute.
      */
     public static final String LDAP_SEC_INTEGRATION_PROP_USE_MEMBER_UID_KEY = "ldap_group_match_use_member_uid";
-    public static final String LDAP_SEC_INTEGRATION_PROP_SSL_CONN_ALLOW_INSECURE = "ldap_ssl_conn_allow_insecure";
-    public static final String LDAP_SEC_INTEGRATION_PROP_SSL_CONN_TRUST_STORE_PWD = "ldap_ssl_conn_trust_store_pwd";
-    public static final String LDAP_SEC_INTEGRATION_PROP_CONN_TIMEOUT_MS_KEY = "ldap_conn_timeout";
-    public static final String LDAP_SEC_INTEGRATION_PROP_CONN_READ_TIMEOUT_MS_KEY = "ldap_conn_read_timeout";
-
-    public static final String LDAP_SEC_INTEGRATION_GROUP_MATCH_ATTR_KEY = "ldap_user_group_match_attr";
+    /**
+     * The attribute id of group member. Default is "member"
+     */
+    public static final String LDAP_SEC_INTEGRATION_PROP_LDAP_GROUP_MEMBER_ATTR = "ldap_group_member_attr";
 
     public static final String LDAP_USER_SEARCH_DEFAULT_ATTR = "uid";
 
@@ -113,7 +123,7 @@ public class LDAPSecurityIntegration extends SecurityIntegration {
     }
 
     public String getLdapSslConnTrustStorePath() {
-        return propertyMap.getOrDefault("ldap_ssl_conn_trust_store_path", "");
+        return propertyMap.getOrDefault(LDAP_SEC_INTEGRATION_PROP_SSL_CONN_TRUST_STORE_PATH, "");
     }
 
     public String getLdapSslConnTrustStorePwd() {
@@ -133,7 +143,7 @@ public class LDAPSecurityIntegration extends SecurityIntegration {
     }
 
     public String getLdapUserSearchAttr() {
-        return propertyMap.getOrDefault("ldap_user_search_attr", LDAP_USER_SEARCH_DEFAULT_ATTR);
+        return propertyMap.getOrDefault(LDAP_SEC_INTEGRATION_PROP_USER_SEARCH_ATTR, LDAP_USER_SEARCH_DEFAULT_ATTR);
     }
 
     public String getLdapUserGroupMatchAttr() {
@@ -156,6 +166,10 @@ public class LDAPSecurityIntegration extends SecurityIntegration {
     public int getLdapCacheRefreshInterval() {
         return Integer.parseInt(
                 propertyMap.getOrDefault(LDAP_SEC_INTEGRATION_PROP_CACHE_REFRESH_INTERVAL_KEY, "900"));
+    }
+
+    public String getLdapGroupMemberAttr() {
+        return propertyMap.getOrDefault(LDAP_SEC_INTEGRATION_PROP_LDAP_GROUP_MEMBER_ATTR, "member");
     }
 
     @Override
