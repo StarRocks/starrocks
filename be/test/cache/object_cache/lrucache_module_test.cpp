@@ -54,7 +54,7 @@ void LRUCacheModuleTest::_insert_data() {
         *ptr = i;
 
         ObjectCacheHandlePtr handle = nullptr;
-        ASSERT_OK(_cache->insert(key, (void*)ptr, _value_size, _value_size, &Deleter, &handle, &_write_opt));
+        ASSERT_OK(_cache->insert(key, (void*)ptr, _value_size, &Deleter, &handle, &_write_opt));
         _cache->release(handle);
     }
 }

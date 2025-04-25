@@ -482,8 +482,7 @@ StatusOr<FileMetaDataPtr> FileMetaDataParser::get_file_metadata() {
         auto deleter = [](const CacheKey& key, void* value) { delete (FileMetaDataPtr*)value; };
         ObjectCacheWriteOptions options;
         options.evict_probability = _datacache_options->datacache_evict_probability;
-        st = _cache->insert(metacache_key, capture, file_metadata_size, file_metadata_size, deleter, &cache_handle,
-                            &options);
+        st = _cache->insert(metacache_key, capture, file_metadata_size, deleter, &cache_handle, &options);
     } else {
         LOG(ERROR) << "Parsing unexpected parquet file metadata size";
     }

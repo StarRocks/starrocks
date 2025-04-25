@@ -294,10 +294,10 @@ void LRUCache::_evict_one_entry(LRUHandle* e) {
     _usage -= e->charge;
 }
 
-Cache::Handle* LRUCache::insert(const CacheKey& key, uint32_t hash, void* value, size_t value_size, size_t charge,
+Cache::Handle* LRUCache::insert(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
                                 void (*deleter)(const CacheKey& key, void* value), CachePriority priority) {
     size_t key_mem_size = sizeof(LRUHandle) - 1 + key.size();
-    size_t kv_mem_size = charge + key_mem_size;
+    size_t kv_mem_size = value_size + key_mem_size;
     auto* e = reinterpret_cast<LRUHandle*>(malloc(key_mem_size));
     e->value = value;
     e->deleter = deleter;
@@ -429,10 +429,10 @@ bool ShardedLRUCache::adjust_capacity(int64_t delta, size_t min_capacity) {
     return true;
 }
 
-Cache::Handle* ShardedLRUCache::insert(const CacheKey& key, void* value, size_t value_size, size_t charge,
+Cache::Handle* ShardedLRUCache::insert(const CacheKey& key, void* value, size_t value_size,
                                        void (*deleter)(const CacheKey& key, void* value), CachePriority priority) {
     const uint32_t hash = _hash_slice(key);
-    return _shards[_shard(hash)].insert(key, hash, value, value_size, charge, deleter, priority);
+    return _shards[_shard(hash)].insert(key, hash, value, value_size, deleter, priority);
 }
 
 Cache::Handle* ShardedLRUCache::lookup(const CacheKey& key) {
