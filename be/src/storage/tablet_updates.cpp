@@ -5162,21 +5162,11 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
         index_entry->value().unload();
         index_cache.release(index_entry);
 
-        // rebuild primary index
         if (need_rebuild_pk_index) {
+            // rebuild primary index
             auto* pindex_load_executor = manager->get_pindex_load_executor();
-            auto latch_or =
-                    pindex_load_executor->submit_task(std::static_pointer_cast<Tablet>(_tablet.shared_from_this()));
-            if (latch_or.ok()) {
-                auto finished = latch_or.value()->wait_for(std::chrono::seconds(rebuild_pk_index_wait_seconds));
-                if (!finished) {
-                    LOG(INFO) << "persistent index is still loading, already wait " << rebuild_pk_index_wait_seconds
-                              << " seconds. tablet: " << tablet_id;
-                }
-            } else {
-                LOG(WARNING) << "fail to submit persistent index load task. tablet: " << tablet_id
-                             << ", error: " << latch_or.status().to_string();
-            }
+            (void)pindex_load_executor->submit_task_and_wait(
+                    std::static_pointer_cast<Tablet>(_tablet.shared_from_this()), rebuild_pk_index_wait_seconds);
         }
 
         LOG(INFO) << "load full snapshot done " << _debug_string(false) << ss.str();

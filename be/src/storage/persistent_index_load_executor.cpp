@@ -76,6 +76,28 @@ Status PersistentIndexLoadExecutor::refresh_max_thread_num() {
     }
 }
 
+Status PersistentIndexLoadExecutor::submit_task_and_wait(const TabletSharedPtr& tablet, int32_t wait_seconds) {
+    auto tablet_id = tablet->tablet_id();
+    auto latch_or = submit_task(tablet);
+
+    if (latch_or.ok()) {
+        auto finished = latch_or.value()->wait_for(std::chrono::seconds(wait_seconds));
+        if (!finished) {
+            auto msg = fmt::format("persistent index is still loading, already wait {} seconds. tablet: {}",
+                                   wait_seconds, tablet_id);
+            LOG(INFO) << msg;
+            return Status::TimedOut(msg);
+        }
+    } else {
+        auto msg = fmt::format("fail to submit persistent index load task. tablet: {}, error: {}", tablet_id,
+                               latch_or.status().to_string());
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
+    }
+
+    return Status::OK();
+}
+
 StatusOr<std::shared_ptr<CountDownLatch>> PersistentIndexLoadExecutor::submit_task(const TabletSharedPtr& tablet) {
     auto tablet_id = tablet->tablet_id();
     if (tablet->updates() == nullptr) {

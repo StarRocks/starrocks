@@ -529,22 +529,10 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
     // process.
 
     if (rowset->is_partial_update()) {
-        auto latch_or =
-                _pindex_load_executor->submit_task(std::static_pointer_cast<Tablet>(tablet->shared_from_this()));
-        if (latch_or.ok()) {
-            auto wait_seconds = config::pindex_rebuild_load_wait_seconds;
-            auto finished = latch_or.value()->wait_for(std::chrono::seconds(wait_seconds));
-            if (!finished) {
-                std::string msg = fmt::format("persistent index is still loading, already wait {} seconds. tablet: {}",
-                                              wait_seconds, tablet->tablet_id());
-                LOG(INFO) << msg;
-                return Status::Uninitialized(msg);
-            }
-        } else {
-            std::string msg = fmt::format("fail to submit persistent index load task. tablet: {}, error: {}",
-                                          tablet->tablet_id(), latch_or.status().to_string());
-            LOG(WARNING) << msg;
-            return Status::Uninitialized(msg);
+        auto task_st = _pindex_load_executor->submit_task_and_wait(
+                std::static_pointer_cast<Tablet>(tablet->shared_from_this()), config::pindex_rebuild_load_wait_seconds);
+        if (!task_st.ok()) {
+            return Status::Uninitialized(task_st.message());
         }
     }
 

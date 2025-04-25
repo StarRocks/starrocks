@@ -182,9 +182,8 @@ TEST_F(PersistentIndexLoadExecutorTest, test_submit_task) {
     index_cache.remove(index_entry);
 
     auto* pindex_load_executor = manager->get_pindex_load_executor();
-    auto latch_or = pindex_load_executor->submit_task(_tablet);
-    ASSERT_TRUE(latch_or.ok());
-    latch_or.value()->wait();
+    auto st = pindex_load_executor->submit_task_and_wait(_tablet, 60);
+    CHECK_OK(st);
     index_entry = index_cache.get_or_create(tablet_id);
     ASSERT_TRUE(index_entry->value().is_loaded());
 }

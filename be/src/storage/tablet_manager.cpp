@@ -1787,19 +1787,8 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
 
     if (add_tablet_st.ok() && need_rebuild_pk_index && tablet->updates() != nullptr) {
         // rebuild primary index
-        auto manager = StorageEngine::instance()->update_manager();
-        auto* pindex_load_executor = manager->get_pindex_load_executor();
-        auto latch_or = pindex_load_executor->submit_task(tablet);
-        if (latch_or.ok()) {
-            auto finished = latch_or.value()->wait_for(std::chrono::seconds(rebuild_pk_index_wait_seconds));
-            if (!finished) {
-                LOG(INFO) << "persistent index is still loading, already wait " << rebuild_pk_index_wait_seconds
-                          << " seconds. tablet: " << tablet_id;
-            }
-        } else {
-            LOG(WARNING) << "fail to submit persistent index load task. tablet: " << tablet_id
-                         << ", error: " << latch_or.status().to_string();
-        }
+        auto* pindex_load_executor = StorageEngine::instance()->update_manager()->get_pindex_load_executor();
+        (void)pindex_load_executor->submit_task_and_wait(tablet, rebuild_pk_index_wait_seconds);
     }
     return add_tablet_st;
 }

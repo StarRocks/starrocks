@@ -39,10 +39,13 @@ public:
     void shutdown();
 
     Status refresh_max_thread_num();
+    ThreadPool* TEST_get_load_pool() { return _load_pool.get(); }
 
-    StatusOr<std::shared_ptr<CountDownLatch>> submit_task(const TabletSharedPtr& tablet);
+    Status submit_task_and_wait(const TabletSharedPtr& tablet, int32_t wait_seconds);
 
 private:
+    StatusOr<std::shared_ptr<CountDownLatch>> submit_task(const TabletSharedPtr& tablet);
+
     std::unique_ptr<ThreadPool> _load_pool;
     std::mutex _lock;
     std::unordered_map<int64_t, std::shared_ptr<CountDownLatch>> _running_tablets;
