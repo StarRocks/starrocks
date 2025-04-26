@@ -132,7 +132,7 @@ This project is used by the following companies. Learn more about their use case
 - [Coinbase](https://www.youtube.com/watch?v=3Z9jSCaHnYg&list=PL0eWwaesODdhBhKSnvpfIEAB9sgk8rKmy)
 - [Demandbase](https://starrocks.medium.com/demandbase-ditches-denormalization-by-switching-off-clickhouse-44195d795a83)
 - [Didi](https://www.starrocks.io/blog/reduced-80-cost-didis-journey-from-multiple-olap-engines-to-starrocks)
-- [Eightfold](https://www.youtube.com/watch?v=qNk_-QTZk3E)
+- [Eightfold.ai](https://www.youtube.com/watch?v=qNk_-QTZk3E)
 - [Grab](https://engineering.grab.com/building-a-spark-observability)
 - [HerdWatch](https://medium.com/p/a7916a7e87bf)
 - [Naver](https://starrocks.medium.com/how-join-changed-how-we-approach-data-infra-at-naver-3a5bb1dac49f)
