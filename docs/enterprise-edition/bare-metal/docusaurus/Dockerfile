@@ -1,4 +1,4 @@
-FROM node:21-bookworm
+FROM node:22.14-bookworm
 
 WORKDIR /app/docusaurus
 ENV NODE_OPTIONS="--max-old-space-size=4096"

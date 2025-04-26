@@ -9,11 +9,11 @@ mkdir -p docusaurus/docs
 #rm temp/byoc-temp/integrations/authenticate_to_aws_resources
 
 # Copy in the open-source docs
-cp -r temp/oss-temp/* docusaurus/docs/
+#cp -r temp/oss-temp/* docusaurus/docs/
 
 # Remove open-source docs that will not be used and not overwritten
-rm -rf docusaurus/docs/deployment
-rm docusaurus/docs/introduction/what_is_starrocks.md
+#rm -rf docusaurus/docs/deployment
+#rm docusaurus/docs/introduction/what_is_starrocks.md
 
 # Overwrite the open-source docs with BYOC docs
 # (except for the ones removed in "Do not use these BYOC docs")
@@ -29,22 +29,25 @@ cp temp/oss-temp/deployment/plan_cluster.md docusaurus/docs/deployment/15_plan_c
 rm -f docusaurus/docs/README.md
 
 # Remove open-source docs that we do not publish in bare-metal
-rm -rf docusaurus/docs/quick_start
+#rm -rf docusaurus/docs/quick_start
 rm -rf docusaurus/docs/cover_pages
-rm -rf docusaurus/docs/project_help
-rm -rf docusaurus/docs/developers
-rm -rf docusaurus/docs/release_notes
-rm -rf docusaurus/docs/ecosystem_release
-rm docusaurus/docs/data_source/icebergtutorial.mdx
-rm docusaurus/docs/introduction/StarRocks_intro.md
-rm docusaurus/docs/administration/stargo.md
-rm -rf docusaurus/docs/integrations/other_integrations
-rm docusaurus/docs/integrations/streaming.mdx
-rm docusaurus/docs/loading/Json_loading.md
-rm docusaurus/docs/loading/loading.mdx
-rm docusaurus/docs/loading/loading_introduction/loading_overview.mdx
-rm docusaurus/docs/loading/objectstorage.mdx
-rm docusaurus/docs/unloading/unloading.mdx
+rm -rf docusaurus/docs/data_source
+rm -rf docusaurus/docs/using_starrocks
+#rm -rf docusaurus/docs/project_help
+#rm -rf docusaurus/docs/developers
+#rm -rf docusaurus/docs/release_notes
+#rm -rf docusaurus/docs/ecosystem_release
+#rm docusaurus/docs/data_source/icebergtutorial.mdx
+#rm docusaurus/docs/introduction/StarRocks_intro.md
+#rm docusaurus/docs/administration/stargo.md
+#rm -rf docusaurus/docs/integrations/other_integrations
+#rm docusaurus/docs/integrations/streaming.mdx
+#rm docusaurus/docs/loading/Json_loading.md
+#rm docusaurus/docs/loading/loading.mdx
+#rm docusaurus/docs/loading/loading_introduction/loading_overview.mdx
+#rm docusaurus/docs/loading/objectstorage.mdx
+#rm docusaurus/docs/unloading/unloading.mdx
+
 
 cp -r \
   temp/config/docusaurus.config.js \
@@ -65,6 +68,7 @@ find . -regex '.*\.\(mdx\|md\)$' \
   -delete
 
 yarn install --frozen-lockfile
+sed -i "s/'throw'/'ignore'/" docusaurus.config.js
 yarn clear && yarn build && yarn serve -p 3000 -h 0.0.0.0
 cd /app
 

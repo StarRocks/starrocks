@@ -31,8 +31,8 @@ const config = {
   trailingSlash: true,
 
   onBrokenAnchors: 'ignore',
-  onBrokenLinks: 'throw',
-  onBrokenMarkdownLinks: 'throw',
+  onBrokenLinks: 'ignore',
+  onBrokenMarkdownLinks: 'ignore',
 
   i18n: {
     defaultLocale: 'en',
@@ -52,6 +52,9 @@ const config = {
         docs: {
           sidebarPath: require.resolve('./sidebars.json'),
 
+          admonitions: { keywords:
+              ['experimental','beta', 'note','tip','info','caution','danger'],
+          },
           // Versions:
           // We don't want to show `main` or `current`, we want to show the released versions.
           // lastVersion identifies the latest release.

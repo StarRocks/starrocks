@@ -1,4 +1,8 @@
+import Beta from '../_assets/commonMarkdown/_beta.mdx'
+
 # Transparent Data Encryption
+
+<Beta />
 
 Enable Transparent Data Encryption (TDE) to protect your data in your StarRocks shared-data clusters.
 
