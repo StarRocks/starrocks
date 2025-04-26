@@ -1,0 +1,137 @@
+-- Test to verify column group selectivity estimation for external tables
+-- This test focuses on how multi-column statistics are used by the optimizer
+
+-- Disable auto statistics collection for controlled testing
+SET enable_auto_collect_statistics=false;
+
+-- Enable multi-column statistics collection
+SET enable_collect_predicate_columns=true;
+SET enable_collect_multi_column_stats=true;
+SET enable_auto_multi_column_stats_from_predicates=true;
+
+-- Create Iceberg catalog and database
+CREATE CATALOG IF NOT EXISTS iceberg_catalog
+PROPERTIES(
+    "type"="iceberg",
+    "iceberg.catalog.type"="hive",
+    "hive.metastore.uris"="thrift://127.0.0.1:9083"
+);
+
+CREATE DATABASE IF NOT EXISTS iceberg_catalog.selectivity_test;
+USE iceberg_catalog.selectivity_test;
+
+-- Create a test table with highly correlated columns for testing selectivity estimation
+CREATE TABLE IF NOT EXISTS order_data (
+    order_id BIGINT,
+    customer_id INT,
+    customer_tier VARCHAR(20),
+    product_id INT,
+    product_category VARCHAR(50),
+    order_date DATE,
+    ship_mode VARCHAR(20),
+    ship_region VARCHAR(30),
+    order_priority VARCHAR(10),
+    order_quantity INT,
+    unit_price DECIMAL(10,2),
+    discount DECIMAL(4,2),
+    order_amount DECIMAL(12,2)
+) ENGINE = ICEBERG
+PROPERTIES (
+    "format" = "parquet"
+);
+
+-- Insert data with strong correlations between columns
+INSERT INTO order_data VALUES
+-- High-priority, express shipments for premium customers
+(1001, 101, 'Premium', 5001, 'Electronics', '2023-01-05', 'Express', 'North America', 'High', 2, 1299.99, 0.05, 2469.98),
+(1002, 102, 'Premium', 5002, 'Electronics', '2023-01-10', 'Express', 'North America', 'High', 1, 2199.99, 0.05, 2089.99),
+(1003, 103, 'Premium', 5003, 'Computers', '2023-01-15', 'Express', 'Europe', 'High', 3, 899.99, 0.10, 2429.97),
+(1004, 104, 'Premium', 5004, 'Computers', '2023-01-20', 'Express', 'Europe', 'High', 1, 1599.99, 0.00, 1599.99),
+(1005, 105, 'Premium', 5001, 'Electronics', '2023-02-01', 'Express', 'Asia', 'High', 2, 1299.99, 0.05, 2469.98),
+
+-- Medium-priority, standard shipments for regular customers
+(1006, 201, 'Regular', 5010, 'Home Goods', '2023-02-05', 'Standard', 'North America', 'Medium', 4, 79.99, 0.00, 319.96),
+(1007, 202, 'Regular', 5011, 'Home Goods', '2023-02-10', 'Standard', 'North America', 'Medium', 2, 129.99, 0.10, 233.98),
+(1008, 203, 'Regular', 5012, 'Furniture', '2023-02-15', 'Standard', 'Europe', 'Medium', 1, 499.99, 0.00, 499.99),
+(1009, 204, 'Regular', 5013, 'Furniture', '2023-02-20', 'Standard', 'Europe', 'Medium', 1, 349.99, 0.05, 332.49),
+(1010, 205, 'Regular', 5010, 'Home Goods', '2023-03-01', 'Standard', 'Asia', 'Medium', 3, 79.99, 0.00, 239.97),
+
+-- Low-priority, economy shipments for budget customers
+(1011, 301, 'Budget', 5020, 'Clothing', '2023-03-05', 'Economy', 'North America', 'Low', 5, 29.99, 0.15, 127.46),
+(1012, 302, 'Budget', 5021, 'Clothing', '2023-03-10', 'Economy', 'North America', 'Low', 3, 39.99, 0.20, 95.98),
+(1013, 303, 'Budget', 5022, 'Accessories', '2023-03-15', 'Economy', 'Europe', 'Low', 4, 19.99, 0.10, 71.96),
+(1014, 304, 'Budget', 5023, 'Accessories', '2023-03-20', 'Economy', 'Europe', 'Low', 2, 24.99, 0.15, 42.48),
+(1015, 305, 'Budget', 5020, 'Clothing', '2023-04-01', 'Economy', 'Asia', 'Low', 6, 29.99, 0.20, 143.95);
+
+-- Run queries to generate predicate columns usage patterns
+-- These queries will establish column groups based on usage patterns
+
+-- Customer tier and shipping correlations
+SELECT * FROM order_data WHERE customer_tier = 'Premium' AND ship_mode = 'Express';
+SELECT * FROM order_data WHERE customer_tier = 'Regular' AND ship_mode = 'Standard';
+SELECT * FROM order_data WHERE customer_tier = 'Budget' AND ship_mode = 'Economy';
+
+-- Priority and region correlations
+SELECT * FROM order_data WHERE order_priority = 'High' AND ship_region = 'North America';
+SELECT * FROM order_data WHERE order_priority = 'Medium' AND ship_region = 'Europe';
+SELECT * FROM order_data WHERE order_priority = 'Low' AND ship_region = 'Asia';
+
+-- Product category and price correlations
+SELECT * FROM order_data WHERE product_category = 'Electronics' AND unit_price > 1000;
+SELECT * FROM order_data WHERE product_category = 'Home Goods' AND unit_price < 100;
+SELECT * FROM order_data WHERE product_category = 'Clothing' AND unit_price < 50;
+
+-- Customer tier and discount correlations
+SELECT * FROM order_data WHERE customer_tier = 'Premium' AND discount <= 0.05;
+SELECT * FROM order_data WHERE customer_tier = 'Budget' AND discount >= 0.15;
+
+-- Analyze the table to collect predicate columns
+ANALYZE TABLE order_data WITH SYNC MODE PREDICATE COLUMNS;
+
+-- Collect statistics for the table, which will include multi-column statistics
+ANALYZE TABLE order_data WITH SYNC MODE;
+
+-- Verify multi-column statistics collection
+SELECT column_names, row_count, distinct_count, data_size
+FROM information_schema.column_statistics
+WHERE table_name = 'order_data'
+  AND column_count > 1
+ORDER BY column_names;
+
+-- Check external multi-column statistics
+SELECT catalog_name, db_name, table_name, column_names, row_count, ndv, data_size
+FROM information_schema.external_multi_column_statistics
+WHERE table_name = 'order_data'
+ORDER BY column_names;
+
+-- Test query plans to see selectivity estimation in action
+-- These EXPLAIN statements should show how the optimizer uses multi-column statistics
+
+-- Should use customer_tier + ship_mode correlation
+EXPLAIN VERBOSE SELECT * FROM order_data WHERE customer_tier = 'Premium' AND ship_mode = 'Express';
+
+-- Should use order_priority + ship_region correlation
+EXPLAIN VERBOSE SELECT * FROM order_data WHERE order_priority = 'High' AND ship_region = 'North America';
+
+-- Should use product_category + unit_price correlation
+EXPLAIN VERBOSE SELECT * FROM order_data WHERE product_category = 'Electronics' AND unit_price > 1000;
+
+-- Should use customer_tier + discount correlation
+EXPLAIN VERBOSE SELECT * FROM order_data WHERE customer_tier = 'Premium' AND discount <= 0.05;
+
+-- Test multiple column combinations with more complex predicates
+EXPLAIN VERBOSE SELECT * FROM order_data
+WHERE customer_tier = 'Premium'
+  AND ship_mode = 'Express'
+  AND order_priority = 'High';
+
+-- Clean up
+DROP TABLE order_data;
+DROP DATABASE iceberg_catalog.selectivity_test;
+DROP CATALOG iceberg_catalog;
+
+-- Reset settings
+SET enable_collect_predicate_columns=false;
+SET enable_collect_multi_column_stats=false;
+SET enable_auto_multi_column_stats_from_predicates=false;
+SET enable_auto_collect_statistics=true;

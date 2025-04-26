@@ -568,41 +568,59 @@ public class StatisticExecutor {
                 // for external table
                 ExternalBasicStatsMeta externalBasicStatsMeta = analyzeMgr.getExternalTableBasicStatsMeta(
                         statsJob.getCatalogName(), db.getFullName(), table.getName());
-                if (externalBasicStatsMeta == null) {
-                    externalBasicStatsMeta = new ExternalBasicStatsMeta(statsJob.getCatalogName(), db.getFullName(),
-                            table.getName(), Lists.newArrayList(statsJob.getColumnNames()), statsJob.getAnalyzeType(),
-                            analyzeStatus.getEndTime(), statsJob.getProperties());
-                } else {
-                    externalBasicStatsMeta = externalBasicStatsMeta.clone();
-                    externalBasicStatsMeta.setUpdateTime(analyzeStatus.getEndTime());
-                    externalBasicStatsMeta.setProperties(statsJob.getProperties());
-                    externalBasicStatsMeta.setAnalyzeType(statsJob.getAnalyzeType());
-                    // set columns to the latest collect job's columns
-                    externalBasicStatsMeta.setColumns(Lists.newArrayList(statsJob.getColumnNames()));
-                }
 
-                Set<Long> sampledPartitions = new HashSet<>();
-                int allPartitionSize = -1;
-                if (statsJob.getAnalyzeType() == StatsConstants.AnalyzeType.SAMPLE) {
-                    ExternalSampleStatisticsCollectJob sampleStatsJob = (ExternalSampleStatisticsCollectJob) statsJob;
-                    sampledPartitions = sampleStatsJob.getSampledPartitionsHashValue();
-                    allPartitionSize = sampleStatsJob.getAllPartitionSize();
-                }
-                for (String column : ListUtils.emptyIfNull(statsJob.getColumnNames())) {
-                    // merge sampled partitions
-                    if (externalBasicStatsMeta.getColumnStatsMetaMap().containsKey(column)) {
-                        sampledPartitions.addAll(externalBasicStatsMeta.getColumnStatsMeta(column).
-                                getSampledPartitionsHashValue());
+                if (statsJob.isMultiColumnStatsJob()) {
+                    // Handle multi-column statistics for external tables
+                    LOG.info("Processing external multi-column statistics job for table: {}", table.getName());
+
+                    // No further processing needed as the insertion to external_multi_column_statistics
+                    // table is handled in ExternalMultiColumnStatisticsCollectJob.createInsertStmt()
+
+                    // Refresh connector statistics cache for the table
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                            .refreshConnectorTableBasicStatisticsCache(statsJob.getCatalogName(),
+                                    db.getFullName(), table.getName(), statsJob.getColumnNames(), refreshAsync);
+
+                    // Refresh external multi-column statistics cache
+                    GlobalStateMgr.getCurrentState().getStatisticStorage()
+                            .refreshExternalMultiColumnStatistics(table);
+                } else {
+                    if (externalBasicStatsMeta == null) {
+                        externalBasicStatsMeta = new ExternalBasicStatsMeta(statsJob.getCatalogName(), db.getFullName(),
+                                table.getName(), Lists.newArrayList(statsJob.getColumnNames()), statsJob.getAnalyzeType(),
+                                analyzeStatus.getEndTime(), statsJob.getProperties());
+                    } else {
+                        externalBasicStatsMeta = externalBasicStatsMeta.clone();
+                        externalBasicStatsMeta.setUpdateTime(analyzeStatus.getEndTime());
+                        externalBasicStatsMeta.setProperties(statsJob.getProperties());
+                        externalBasicStatsMeta.setAnalyzeType(statsJob.getAnalyzeType());
+                        // set columns to the latest collect job's columns
+                        externalBasicStatsMeta.setColumns(Lists.newArrayList(statsJob.getColumnNames()));
                     }
-                    ColumnStatsMeta meta =
-                            new ColumnStatsMeta(column, statsJob.getAnalyzeType(), analyzeStatus.getEndTime(),
-                                    sampledPartitions, allPartitionSize);
-                    externalBasicStatsMeta.addColumnStatsMeta(meta);
+
+                    Set<Long> sampledPartitions = new HashSet<>();
+                    int allPartitionSize = -1;
+                    if (statsJob.getAnalyzeType() == StatsConstants.AnalyzeType.SAMPLE) {
+                        ExternalSampleStatisticsCollectJob sampleStatsJob = (ExternalSampleStatisticsCollectJob) statsJob;
+                        sampledPartitions = sampleStatsJob.getSampledPartitionsHashValue();
+                        allPartitionSize = sampleStatsJob.getAllPartitionSize();
+                    }
+                    for (String column : ListUtils.emptyIfNull(statsJob.getColumnNames())) {
+                        // merge sampled partitions
+                        if (externalBasicStatsMeta.getColumnStatsMetaMap().containsKey(column)) {
+                            sampledPartitions.addAll(externalBasicStatsMeta.getColumnStatsMeta(column).
+                                    getSampledPartitionsHashValue());
+                        }
+                        ColumnStatsMeta meta =
+                                new ColumnStatsMeta(column, statsJob.getAnalyzeType(), analyzeStatus.getEndTime(),
+                                        sampledPartitions, allPartitionSize);
+                        externalBasicStatsMeta.addColumnStatsMeta(meta);
+                    }
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().addExternalBasicStatsMeta(externalBasicStatsMeta);
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                            .refreshConnectorTableBasicStatisticsCache(statsJob.getCatalogName(),
+                                    db.getFullName(), table.getName(), statsJob.getColumnNames(), refreshAsync);
                 }
-                GlobalStateMgr.getCurrentState().getAnalyzeMgr().addExternalBasicStatsMeta(externalBasicStatsMeta);
-                GlobalStateMgr.getCurrentState().getAnalyzeMgr()
-                        .refreshConnectorTableBasicStatisticsCache(statsJob.getCatalogName(),
-                                db.getFullName(), table.getName(), statsJob.getColumnNames(), refreshAsync);
             }
         }
         return analyzeStatus;

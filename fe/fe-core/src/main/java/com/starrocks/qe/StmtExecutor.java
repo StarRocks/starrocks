@@ -1671,6 +1671,11 @@ public class StmtExecutor {
             analyzeMgr.removeExternalBasicStatsMeta(tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
             List<String> columns = table.getBaseSchema().stream().map(Column::getName).collect(Collectors.toList());
             statisticStorage.expireConnectorTableColumnStatistics(table, columns);
+
+            // Also invalidate external multi-column statistics
+            if (table.isExternalTable()) {
+                statisticStorage.refreshExternalMultiColumnStatistics(table);
+            }
         } else {
             List<String> columns = table.getBaseSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
                     .collect(Collectors.toList());

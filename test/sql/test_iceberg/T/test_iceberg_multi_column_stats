@@ -1,0 +1,89 @@
+-- Test multi-column statistics collection and usage with Iceberg tables
+-- Disable auto statistics collection for the test
+SET enable_auto_collect_statistics=false;
+
+-- Create test catalog, db and table
+CREATE CATALOG IF NOT EXISTS iceberg_catalog
+PROPERTIES(
+    "type"="iceberg",
+    "iceberg.catalog.type"="sql",
+    "iceberg.catalog-impl"="org.apache.iceberg.jdbc.JdbcCatalog",
+    "warehouse"="hdfs://127.0.0.1:9000/user/iceberg/warehouse",
+    "uri"="jdbc:postgresql://127.0.0.1:5432/iceberg",
+    "jdbc.user"="iceberg",
+    "jdbc.password"="iceberg"
+);
+
+CREATE DATABASE IF NOT EXISTS iceberg_catalog.multi_column_test;
+USE iceberg_catalog.multi_column_test;
+
+-- Create test table
+CREATE TABLE IF NOT EXISTS iceberg_table (
+    id INT,
+    city VARCHAR(50),
+    state VARCHAR(50),
+    zip_code INT,
+    income DECIMAL(10,2),
+    education_level VARCHAR(50)
+) ENGINE = ICEBERG;
+
+-- Insert sample data with correlations between columns
+INSERT INTO iceberg_table VALUES
+(1, 'New York', 'NY', 10001, 75000.00, 'Bachelor'),
+(2, 'New York', 'NY', 10002, 82000.00, 'Master'),
+(3, 'New York', 'NY', 10003, 95000.00, 'PhD'),
+(4, 'Boston', 'MA', 02108, 80000.00, 'Bachelor'),
+(5, 'Boston', 'MA', 02109, 88000.00, 'Master'),
+(6, 'Boston', 'MA', 02110, 110000.00, 'PhD'),
+(7, 'San Francisco', 'CA', 94102, 110000.00, 'Bachelor'),
+(8, 'San Francisco', 'CA', 94103, 125000.00, 'Master'),
+(9, 'San Francisco', 'CA', 94104, 150000.00, 'PhD'),
+(10, 'Chicago', 'IL', 60601, 72000.00, 'Bachelor'),
+(11, 'Chicago', 'IL', 60602, 78000.00, 'Master'),
+(12, 'Chicago', 'IL', 60603, 90000.00, 'PhD');
+
+-- Enable multi-column statistics collection from predicate columns
+SET enable_collect_predicate_columns=true;
+SET enable_collect_multi_column_stats=true;
+
+-- Execute queries to generate predicate usage
+-- These queries have predicates that should be tracked for multi-column stats
+SELECT * FROM iceberg_table WHERE city = 'New York' AND state = 'NY';
+SELECT * FROM iceberg_table WHERE city = 'Boston' AND state = 'MA';
+SELECT * FROM iceberg_table WHERE city = 'San Francisco' AND state = 'CA';
+SELECT * FROM iceberg_table WHERE city = 'Chicago' AND state = 'IL';
+
+-- Queries with correlated numeric predicates
+SELECT * FROM iceberg_table WHERE zip_code > 60000 AND income > 100000;
+SELECT * FROM iceberg_table WHERE state = 'CA' AND income > 120000;
+SELECT * FROM iceberg_table WHERE education_level = 'PhD' AND income > 90000;
+
+-- Analyze the table to collect statistics
+-- If sync_mode is true, it will synchronize these statistics immediately
+ANALYZE TABLE iceberg_table WITH SYNC MODE PREDICATE COLUMNS;
+
+-- Collect multi-column stats based on the predicate columns usage
+ANALYZE TABLE iceberg_table WITH SYNC MODE;
+
+-- Verify that multi-column statistics were collected (meta query)
+SELECT column_names, row_count, distinct_count, data_size
+FROM information_schema.column_statistics
+WHERE table_name = 'iceberg_table'
+  AND column_count > 1
+ORDER BY column_names;
+
+-- Test queries that should use multi-column statistics for better cardinality estimates
+-- These should have improved cardinality estimates due to multi-column stats
+EXPLAIN SELECT * FROM iceberg_table WHERE city = 'New York' AND state = 'NY';
+EXPLAIN SELECT * FROM iceberg_table WHERE city = 'San Francisco' AND state = 'CA';
+EXPLAIN SELECT * FROM iceberg_table WHERE education_level = 'PhD' AND income > 90000;
+
+-- Clean up
+DROP TABLE iceberg_table;
+DROP DATABASE iceberg_catalog.multi_column_test;
+DROP CATALOG iceberg_catalog;
+
+-- Reset settings
+SET enable_collect_predicate_columns=false;
+SET enable_collect_multi_column_stats=false;
+SET enable_auto_collect_statistics=true;

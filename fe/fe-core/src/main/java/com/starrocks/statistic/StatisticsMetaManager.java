@@ -69,6 +69,12 @@ import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
 public class StatisticsMetaManager extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(StatisticsMetaManager.class);
 
+    private static TableKeeper externalHistogramStatisticsTableKeeper;
+    private static TableKeeper multiColumnStatisticsTableKeeper;
+    private static TableKeeper externalMultiColumnStatisticsTableKeeper;
+
+    private static DatabaseKeeper databaseKeeper;
+
     public StatisticsMetaManager() {
         super("statistics meta manager", 60L * 1000L);
     }
@@ -137,6 +143,10 @@ public class StatisticsMetaManager extends FrontendDaemon {
 
     private static final List<String> MULTI_COLUMN_STATISTICS_KEY_COLUMNS = ImmutableList.of(
             "table_id", "column_ids"
+    );
+
+    private static final List<String> EXTERNAL_MULTI_COLUMN_STATISTICS_KEY_COLUMNS = ImmutableList.of(
+            "table_uuid", "column_group"
     );
 
     private boolean createSampleStatisticsTable(ConnectContext context) {
@@ -307,6 +317,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
     private boolean createMultiColumnStatisticsTable(ConnectContext context) {
         LOG.info("create multi column statistics table start");
         TableName tableName = new TableName(STATISTICS_DB_NAME, MULTI_COLUMN_STATISTICS_TABLE_NAME);
+        KeysType keysType = RunMode.isSharedDataMode() ? KeysType.UNIQUE_KEYS : KeysType.PRIMARY_KEYS;
         Map<String, String> properties = Maps.newHashMap();
 
         try {
@@ -316,7 +327,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
                     tableName,
                     StatisticUtils.buildStatsColumnDef(MULTI_COLUMN_STATISTICS_TABLE_NAME),
                     EngineType.defaultEngine().name(),
-                    new KeysDesc(KeysType.PRIMARY_KEYS, MULTI_COLUMN_STATISTICS_KEY_COLUMNS),
+                    new KeysDesc(keysType, MULTI_COLUMN_STATISTICS_KEY_COLUMNS),
                     null,
                     new HashDistributionDesc(10, MULTI_COLUMN_STATISTICS_KEY_COLUMNS),
                     properties,
@@ -337,6 +348,36 @@ public class StatisticsMetaManager extends FrontendDaemon {
                     meta.getStatsTypes(), LocalDateTime.MIN, meta.getProperties()));
         }
         return checkTableExist(MULTI_COLUMN_STATISTICS_TABLE_NAME);
+    }
+
+    private boolean createExternalMultiColumnStatisticsTable(ConnectContext context) {
+        LOG.info("create external multi column statistics table start");
+        TableName tableName = new TableName(STATISTICS_DB_NAME, EXTERNAL_MULTI_COLUMN_STATISTICS_TABLE_NAME);
+        KeysType keysType = RunMode.isSharedDataMode() ? KeysType.UNIQUE_KEYS : KeysType.PRIMARY_KEYS;
+        Map<String, String> properties = Maps.newHashMap();
+
+        try {
+            int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
+            properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
+            CreateTableStmt stmt = new CreateTableStmt(false, false,
+                    tableName,
+                    StatisticUtils.buildStatsColumnDef(EXTERNAL_MULTI_COLUMN_STATISTICS_TABLE_NAME),
+                    EngineType.defaultEngine().name(),
+                    new KeysDesc(keysType, EXTERNAL_MULTI_COLUMN_STATISTICS_KEY_COLUMNS),
+                    null,
+                    new HashDistributionDesc(10, EXTERNAL_MULTI_COLUMN_STATISTICS_KEY_COLUMNS),
+                    properties,
+                    null,
+                    "");
+
+            Analyzer.analyze(stmt, context);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
+        } catch (StarRocksException e) {
+            LOG.warn("Failed to create external multi column statistics table", e);
+            return false;
+        }
+        LOG.info("create external multi column statistics table done");
+        return checkTableExist(EXTERNAL_MULTI_COLUMN_STATISTICS_TABLE_NAME);
     }
 
     private boolean createSPMBaselinesTable(ConnectContext context) {
@@ -517,6 +558,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
         refreshStatisticsTable(EXTERNAL_FULL_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(MULTI_COLUMN_STATISTICS_TABLE_NAME);
+        refreshStatisticsTable(EXTERNAL_MULTI_COLUMN_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(SPM_BASELINE_TABLE_NAME);
 
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromDroppedPartition();
@@ -547,6 +589,91 @@ public class StatisticsMetaManager extends FrontendDaemon {
             }
             trySleep(1);
         }
+    }
+
+    public boolean createStatisticTables(ConnectContext context) {
+        if (!createStatisticDatabase(context)) {
+            return false;
+        }
+        if (!createSampleStatisticsTable(context)) {
+            return false;
+        }
+        if (!createFullStatisticsTable(context)) {
+            return false;
+        }
+        if (!createHistogramStatisticsTable(context)) {
+            return false;
+        }
+        if (!createExternalFullStatisticsTable(context)) {
+            return false;
+        }
+        if (!createExternalHistogramStatisticsTable(context)) {
+            return false;
+        }
+        if (!createMultiColumnStatisticsTable(context)) {
+            return false;
+        }
+        if (!createExternalMultiColumnStatisticsTable(context)) {
+            return false;
+        }
+        if (!createSPMBaselinesTable(context)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public static synchronized TableKeeper getMultiColumnStatisticsTableKeeper() {
+        if (multiColumnStatisticsTableKeeper == null) {
+            multiColumnStatisticsTableKeeper = new TableKeeper(
+                    StatsConstants.STATISTICS_DB_NAME,
+                    StatsConstants.MULTI_COLUMN_STATISTICS_TABLE_NAME,
+                    () -> {
+                        String createStmt = "CREATE TABLE IF NOT EXISTS " + StatsConstants.STATISTICS_DB_NAME
+                                + "." + StatsConstants.MULTI_COLUMN_STATISTICS_TABLE_NAME + " (\n"
+                                + "    `table_id` BIGINT NOT NULL COMMENT \"table id\",\n"
+                                + "    `column_group` STRING NOT NULL COMMENT \"column group name\",\n"
+                                + "    `column_names` STRING NOT NULL COMMENT \"column names in this group\",\n"
+                                + "    `ndv` BIGINT NOT NULL COMMENT \"ndv of column group\",\n"
+                                + "    `update_time` DATETIME NOT NULL COMMENT \"last update time\"\n"
+                                + ") ENGINE=OLAP\n"
+                                + "PRIMARY KEY(`table_id`, `column_group`)\n"
+                                + "DISTRIBUTED BY HASH(`table_id`, `column_group`) BUCKETS 10\n"
+                                + "PROPERTIES (\n"
+                                + "\"replication_num\" = \"1\"\n"
+                                + ");";
+                        StatisticUtils.execUpdate(createStmt);
+                        return true;
+                    },
+                    new RetentionTask(StatsConstants.STATISTICS_DB_NAME,
+                            StatsConstants.MULTI_COLUMN_STATISTICS_TABLE_NAME, 30));
+        }
+        return multiColumnStatisticsTableKeeper;
+    }
+
+    public static synchronized TableKeeper getExternalMultiColumnStatisticsTableKeeper() {
+        if (externalMultiColumnStatisticsTableKeeper == null) {
+            externalMultiColumnStatisticsTableKeeper = new TableKeeper(
+                    StatsConstants.STATISTICS_DB_NAME,
+                    StatsConstants.EXTERNAL_MULTI_COLUMN_STATISTICS_TABLE_NAME,
+                    () -> {
+                        StatisticUtils.execUpdate(StatsConstants.EXTERNAL_MULTI_COLUMN_STATISTICS_TABLE_DDL);
+                        return true;
+                    },
+                    new RetentionTask(StatsConstants.STATISTICS_DB_NAME,
+                            StatsConstants.EXTERNAL_MULTI_COLUMN_STATISTICS_TABLE_NAME, 30));
+        }
+        return externalMultiColumnStatisticsTableKeeper;
+    }
+
+    private static Map<String, String> getKeyColumns(boolean isPartitionTable) {
+        // Implementation of getKeyColumns method
+        return null; // Placeholder return, actual implementation needed
+    }
+
+    private static Map<String, String> getKeyColumnList() {
+        // Implementation of getKeyColumnList method
+        return null; // Placeholder return, actual implementation needed
     }
 
 }

@@ -1,0 +1,157 @@
+-- Consolidated test for external multi-column statistics collection and selectivity estimation
+-- This test focuses on both collection and usage of multi-column statistics with Iceberg tables
+
+-- Disable auto statistics collection for controlled testing
+SET enable_auto_collect_statistics=false;
+
+-- Enable collection of multi-column statistics
+SET enable_collect_predicate_columns=true;
+SET enable_collect_multi_column_stats=true;
+SET enable_auto_multi_column_stats_from_predicates=true;
+
+-- Create Iceberg catalog and database
+CREATE CATALOG IF NOT EXISTS iceberg_catalog
+PROPERTIES(
+    "type"="iceberg",
+    "iceberg.catalog.type"="hive",
+    "hive.metastore.uris"="thrift://127.0.0.1:9083"
+);
+
+CREATE DATABASE IF NOT EXISTS iceberg_catalog.multi_column_test;
+USE iceberg_catalog.multi_column_test;
+
+-- Create a test table with correlated columns
+CREATE TABLE IF NOT EXISTS sales_data (
+    transaction_id BIGINT,
+    customer_id INT,
+    customer_tier VARCHAR(20), -- Premium, Regular, Budget
+    order_date DATE,
+    product_category VARCHAR(30),
+    product_subcategory VARCHAR(30),
+    region VARCHAR(30),
+    country VARCHAR(30),
+    payment_method VARCHAR(20),
+    quantity INT,
+    unit_price DECIMAL(10,2),
+    discount DECIMAL(5,2),
+    total_amount DECIMAL(12,2)
+) ENGINE = ICEBERG
+PROPERTIES (
+    "format" = "parquet"
+);
+
+-- Insert sample data with strong correlations between columns
+INSERT INTO sales_data VALUES
+-- Premium customers mostly buy Electronics at high prices in North America
+(1001, 101, 'Premium', '2023-01-05', 'Electronics', 'Smartphones', 'North America', 'USA', 'Credit Card', 1, 999.99, 0.00, 999.99),
+(1002, 102, 'Premium', '2023-01-10', 'Electronics', 'Laptops', 'North America', 'USA', 'Credit Card', 1, 1499.99, 0.00, 1499.99),
+(1003, 103, 'Premium', '2023-01-15', 'Electronics', 'Tablets', 'North America', 'Canada', 'PayPal', 2, 699.99, 0.00, 1399.98),
+(1004, 104, 'Premium', '2023-01-20', 'Electronics', 'Smartphones', 'Europe', 'UK', 'Credit Card', 1, 1099.99, 0.00, 1099.99),
+(1005, 105, 'Premium', '2023-01-25', 'Electronics', 'Laptops', 'Europe', 'Germany', 'Bank Transfer', 1, 1599.99, 0.00, 1599.99),
+
+-- Regular customers mostly buy Home Goods at medium prices in Europe
+(1006, 201, 'Regular', '2023-02-05', 'Home Goods', 'Furniture', 'Europe', 'France', 'Credit Card', 1, 499.99, 0.10, 449.99),
+(1007, 202, 'Regular', '2023-02-10', 'Home Goods', 'Kitchen', 'Europe', 'Italy', 'PayPal', 2, 199.99, 0.05, 379.98),
+(1008, 203, 'Regular', '2023-02-15', 'Home Goods', 'Decor', 'Europe', 'Spain', 'Credit Card', 3, 99.99, 0.00, 299.97),
+(1009, 204, 'Regular', '2023-02-20', 'Home Goods', 'Furniture', 'North America', 'USA', 'Credit Card', 1, 599.99, 0.15, 509.99),
+(1010, 205, 'Regular', '2023-02-25', 'Home Goods', 'Kitchen', 'North America', 'Canada', 'PayPal', 2, 249.99, 0.10, 449.98),
+
+-- Budget customers mostly buy Clothing at low prices in Asia
+(1011, 301, 'Budget', '2023-03-05', 'Clothing', 'Shirts', 'Asia', 'Japan', 'Credit Card', 3, 29.99, 0.20, 71.98),
+(1012, 302, 'Budget', '2023-03-10', 'Clothing', 'Pants', 'Asia', 'China', 'Digital Wallet', 2, 39.99, 0.25, 59.99),
+(1013, 303, 'Budget', '2023-03-15', 'Clothing', 'Shoes', 'Asia', 'India', 'Cash', 1, 49.99, 0.15, 42.49),
+(1014, 304, 'Budget', '2023-03-20', 'Clothing', 'Shirts', 'South America', 'Brazil', 'Credit Card', 4, 24.99, 0.30, 69.97),
+(1015, 305, 'Budget', '2023-03-25', 'Clothing', 'Accessories', 'South America', 'Argentina', 'Digital Wallet', 5, 14.99, 0.10, 67.46),
+
+-- Mixed patterns for Books category across regions
+(1016, 401, 'Premium', '2023-04-05', 'Books', 'Fiction', 'North America', 'USA', 'Credit Card', 2, 29.99, 0.00, 59.98),
+(1017, 402, 'Regular', '2023-04-10', 'Books', 'Non-Fiction', 'Europe', 'UK', 'PayPal', 3, 24.99, 0.05, 71.22),
+(1018, 403, 'Budget', '2023-04-15', 'Books', 'Magazines', 'Asia', 'Japan', 'Digital Wallet', 4, 9.99, 0.00, 39.96),
+(1019, 404, 'Premium', '2023-04-20', 'Books', 'Academic', 'North America', 'Canada', 'Credit Card', 1, 79.99, 0.00, 79.99),
+(1020, 405, 'Regular', '2023-04-25', 'Books', 'Fiction', 'Europe', 'France', 'Bank Transfer', 2, 19.99, 0.10, 35.98);
+
+-- Run queries to generate predicate column usage patterns
+-- Customer tier and product category correlations
+SELECT * FROM sales_data WHERE customer_tier = 'Premium' AND product_category = 'Electronics';
+SELECT * FROM sales_data WHERE customer_tier = 'Regular' AND product_category = 'Home Goods';
+SELECT * FROM sales_data WHERE customer_tier = 'Budget' AND product_category = 'Clothing';
+
+-- Region and product category correlations
+SELECT * FROM sales_data WHERE region = 'North America' AND product_category = 'Electronics';
+SELECT * FROM sales_data WHERE region = 'Europe' AND product_category = 'Home Goods';
+SELECT * FROM sales_data WHERE region = 'Asia' AND product_category = 'Clothing';
+
+-- Price range correlations
+SELECT * FROM sales_data WHERE product_category = 'Electronics' AND unit_price > 1000;
+SELECT * FROM sales_data WHERE product_category = 'Home Goods' AND unit_price BETWEEN 100 AND 500;
+SELECT * FROM sales_data WHERE product_category = 'Clothing' AND unit_price < 50;
+
+-- Region and country correlations
+SELECT * FROM sales_data WHERE region = 'North America' AND country = 'USA';
+SELECT * FROM sales_data WHERE region = 'Europe' AND country = 'Germany';
+SELECT * FROM sales_data WHERE region = 'Asia' AND country = 'Japan';
+
+-- Payment method correlations
+SELECT * FROM sales_data WHERE customer_tier = 'Premium' AND payment_method = 'Credit Card';
+SELECT * FROM sales_data WHERE region = 'Asia' AND payment_method = 'Digital Wallet';
+
+-- SECTION 1: Test predicate columns collection
+-- Analyze the table to collect predicate columns
+ANALYZE TABLE sales_data WITH SYNC MODE PREDICATE COLUMNS;
+
+-- Verify that predicate columns were collected
+SELECT column_name, predicate_count
+FROM information_schema.predicate_columns
+WHERE table_name = 'sales_data'
+ORDER BY predicate_count DESC
+LIMIT 10;
+
+-- SECTION 2: Test multi-column statistics collection
+-- Analyze the table to collect multi-column statistics
+ANALYZE TABLE sales_data WITH SYNC MODE;
+
+-- Verify that multi-column statistics were collected
+SELECT catalog_name, db_name, table_name, column_names, row_count, ndv, data_size
+FROM information_schema.external_multi_column_statistics
+WHERE table_name = 'sales_data'
+ORDER BY column_names;
+
+-- SECTION 3: Test selectivity estimation with multi-column statistics
+-- These EXPLAIN statements should show how the optimizer uses multi-column statistics for better cardinality estimation
+
+-- Customer tier and product category correlation (strong correlation)
+EXPLAIN VERBOSE SELECT * FROM sales_data
+WHERE customer_tier = 'Premium' AND product_category = 'Electronics';
+
+-- Region and product category correlation (strong correlation)
+EXPLAIN VERBOSE SELECT * FROM sales_data
+WHERE region = 'Europe' AND product_category = 'Home Goods';
+
+-- Product category and price range correlation (strong correlation)
+EXPLAIN VERBOSE SELECT * FROM sales_data
+WHERE product_category = 'Electronics' AND unit_price > 1000;
+
+-- Region and country correlation (strong correlation)
+EXPLAIN VERBOSE SELECT * FROM sales_data
+WHERE region = 'North America' AND country = 'USA';
+
+-- SECTION 4: Compare with random, non-correlated columns (should use individual column stats)
+EXPLAIN VERBOSE SELECT * FROM sales_data
+WHERE order_date = '2023-02-15' AND discount = 0.10;
+
+-- SECTION 5: Test complex predicates with multiple column combinations
+EXPLAIN VERBOSE SELECT * FROM sales_data
+WHERE customer_tier = 'Premium'
+  AND region = 'North America'
+  AND product_category = 'Electronics';
+
+-- Clean up
+DROP TABLE sales_data;
+DROP DATABASE iceberg_catalog.multi_column_test;
+DROP CATALOG iceberg_catalog;
+
+-- Reset settings
+SET enable_collect_predicate_columns=false;
+SET enable_collect_multi_column_stats=false;
+SET enable_auto_multi_column_stats_from_predicates=false;
+SET enable_auto_collect_statistics=true;

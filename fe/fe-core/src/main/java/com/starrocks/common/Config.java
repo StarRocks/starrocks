@@ -2151,6 +2151,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "max columns size of full analyze predicate columns instead of sample all columns")
     public static int statistic_auto_collect_max_predicate_column_size_on_sample_strategy = 16;
 
+    @ConfField(mutable = true, comment = "Enable automatic multi-column statistics collection from predicate columns")
+    public static boolean enable_auto_multi_column_stats_from_predicates = false;
+
+    @ConfField(mutable = true, comment = "Maximum number of predicate column groups for multi-column statistics")
+    public static int statistic_auto_collect_predicate_column_groups_max = 5;
+
     /**
      * The row number of sample collect, default 20w rows
      */
@@ -2913,7 +2919,7 @@ public class Config extends ConfigBase {
                     "Only takes effect for tables in clusters with run_mode=shared_data.\n")
     public static long lake_autovacuum_stale_partition_threshold = 12;
 
-    @ConfField(mutable = true, comment = 
+    @ConfField(mutable = true, comment =
             "Determine whether a vacuum operation needs to be initiated based on the vacuum version.\n")
     public static boolean lake_autovacuum_detect_vaccumed_version = true;
 
@@ -3535,7 +3541,7 @@ public class Config extends ConfigBase {
     public static String oidc_principal_field = "sub";
 
     /**
-     * Specifies a list of string. One of that must match the value of the JWT’s issuer (iss) field in order to consider
+     * Specifies a list of string. One of that must match the value of the JWT's issuer (iss) field in order to consider
      * this JWT valid. The iss field in the JWT identifies the principal that issued the JWT.
      */
     @ConfField(mutable = false)
@@ -3549,7 +3555,7 @@ public class Config extends ConfigBase {
     public static String[] oidc_required_audience = {};
 
     /**
-     * The authorization URL. The URL a user’s browser will be redirected to in order to begin the OAuth2 authorization process
+     * The authorization URL. The URL a user's browser will be redirected to in order to begin the OAuth2 authorization process
      */
     @ConfField(mutable = false)
     public static String oauth2_auth_server_url = "";
@@ -3601,14 +3607,14 @@ public class Config extends ConfigBase {
     public static String oauth2_principal_field = "sub";
 
     /**
-     * Specifies a string that must match the value of the JWT’s issuer (iss) field in order to consider this JWT valid.
+     * Specifies a string that must match the value of the JWT's issuer (iss) field in order to consider this JWT valid.
      * The iss field in the JWT identifies the principal that issued the JWT.
      */
     @ConfField(mutable = false)
     public static String oauth2_required_issuer = "";
 
     /**
-     * Specifies a string that must match the value of the JWT’s Audience (aud) field in order to consider this JWT valid.
+     * Specifies a string that must match the value of the JWT's Audience (aud) field in order to consider this JWT valid.
      * The aud field in the JWT identifies the recipients that the JWT is intended for.
      */
     @ConfField(mutable = false)

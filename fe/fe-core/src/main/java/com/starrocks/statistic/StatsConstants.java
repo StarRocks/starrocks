@@ -62,12 +62,13 @@ public class StatsConstants {
 
     public static final int STATISTICS_PARTITION_UPDATED_THRESHOLD = 10;
     public static final String STATISTICS_DB_NAME = "_statistics_";
-    public static final String SAMPLE_STATISTICS_TABLE_NAME = "table_statistic_v1";
+    public static final String SAMPLE_STATISTICS_TABLE_NAME = "sample_statistics";
     public static final String FULL_STATISTICS_TABLE_NAME = "column_statistics";
     public static final String EXTERNAL_FULL_STATISTICS_TABLE_NAME = "external_column_statistics";
     public static final String HISTOGRAM_STATISTICS_TABLE_NAME = "histogram_statistics";
     public static final String EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME = "external_histogram_statistics";
     public static final String MULTI_COLUMN_STATISTICS_TABLE_NAME = "multi_column_statistics";
+    public static final String EXTERNAL_MULTI_COLUMN_STATISTICS_TABLE_NAME = "external_multi_column_statistics";
 
 
     public static final String INFORMATION_SCHEMA = "information_schema";
@@ -155,4 +156,20 @@ public class StatsConstants {
         map.put(INIT_SAMPLE_STATS_JOB, "true");
         return map;
     }
+
+    // Add the path for TableKeeper to access the external multi-column statistics table DDL
+    public static final String EXTERNAL_MULTI_COLUMN_STATISTICS_TABLE_DDL =
+            "CREATE TABLE IF NOT EXISTS " + STATISTICS_DB_NAME + "." + EXTERNAL_MULTI_COLUMN_STATISTICS_TABLE_NAME + " (" +
+            "table_uuid STRING NOT NULL, " +
+            "column_group STRING NOT NULL, " +
+            "catalog_name STRING NOT NULL, " +
+            "db_name STRING NOT NULL, " +
+            "table_name STRING NOT NULL, " +
+            "column_names STRING NOT NULL, " +
+            "ndv BIGINT NOT NULL, " +
+            "update_time DATETIME NOT NULL" +
+            ") " +
+            "PRIMARY KEY(table_uuid, column_group) " +
+            "DISTRIBUTED BY HASH(table_uuid, column_group) BUCKETS 10 " +
+            "PROPERTIES('replication_num'='1')";
 }

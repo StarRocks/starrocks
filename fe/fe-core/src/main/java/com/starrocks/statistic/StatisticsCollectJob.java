@@ -134,8 +134,8 @@ public abstract class StatisticsCollectJob {
         return columnTypes;
     }
 
-    public List<String> getColumnNames() {
-        return columnNames;
+    public String[] getColumnNames() {
+        return columnNames.toArray(new String[0]);
     }
 
     public StatsConstants.AnalyzeType getAnalyzeType() {
@@ -163,7 +163,7 @@ public abstract class StatisticsCollectJob {
     }
 
     public boolean isMultiColumnStatsJob() {
-        return !statisticsTypes.isEmpty();
+        return CollectionUtils.isNotEmpty(statisticsTypes) && CollectionUtils.isNotEmpty(columnGroups);
     }
 
     public List<StatsConstants.StatisticsType> getStatisticsTypes() {
@@ -174,7 +174,7 @@ public abstract class StatisticsCollectJob {
         return columnGroups;
     }
 
-    abstract String getName();
+    public abstract String getName();
 
     protected void setDefaultSessionVariable(ConnectContext context) {
         SessionVariable sessionVariable = context.getSessionVariable();

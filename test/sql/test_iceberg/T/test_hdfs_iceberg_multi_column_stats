@@ -1,0 +1,133 @@
+-- Test multi-column statistics collection for HDFS-based Iceberg tables
+-- Disable auto statistics collection for the test
+SET enable_auto_collect_statistics=false;
+
+-- Create catalog with HDFS-based Iceberg configuration
+CREATE CATALOG IF NOT EXISTS iceberg_hdfs
+PROPERTIES(
+    "type"="iceberg",
+    "iceberg.catalog.type"="hadoop",
+    "warehouse"="hdfs://127.0.0.1:9000/user/iceberg/warehouse"
+);
+
+-- Create test database
+CREATE DATABASE IF NOT EXISTS iceberg_hdfs.mc_stats_test;
+USE iceberg_hdfs.mc_stats_test;
+
+-- Create a sales table with correlated columns for testing multi-column statistics
+CREATE TABLE IF NOT EXISTS sales_data (
+    transaction_id BIGINT,
+    product_category VARCHAR(50),
+    product_subcategory VARCHAR(50),
+    region VARCHAR(50),
+    store_id INT,
+    sale_date DATE,
+    customer_segment VARCHAR(50),
+    quantity INT,
+    price DECIMAL(10,2),
+    total_amount DECIMAL(12,2)
+) ENGINE = ICEBERG
+PROPERTIES (
+    "format" = "parquet",
+    "partitioning" = "product_category,region"
+);
+
+-- Insert sample data with meaningful correlations between columns
+INSERT INTO sales_data VALUES
+-- Electronics - North America
+(1001, 'Electronics', 'Smartphones', 'North America', 101, '2023-01-10', 'Premium', 1, 999.99, 999.99),
+(1002, 'Electronics', 'Smartphones', 'North America', 101, '2023-01-15', 'Premium', 2, 899.99, 1799.98),
+(1003, 'Electronics', 'Laptops', 'North America', 102, '2023-01-20', 'Business', 1, 1499.99, 1499.99),
+(1004, 'Electronics', 'Laptops', 'North America', 102, '2023-01-25', 'Business', 3, 1299.99, 3899.97),
+(1005, 'Electronics', 'Tablets', 'North America', 103, '2023-02-01', 'Standard', 2, 599.99, 1199.98),
+
+-- Electronics - Europe
+(1006, 'Electronics', 'Smartphones', 'Europe', 201, '2023-02-05', 'Premium', 1, 1099.99, 1099.99),
+(1007, 'Electronics', 'Smartphones', 'Europe', 201, '2023-02-10', 'Premium', 1, 999.99, 999.99),
+(1008, 'Electronics', 'Laptops', 'Europe', 202, '2023-02-15', 'Business', 2, 1599.99, 3199.98),
+(1009, 'Electronics', 'Tablets', 'Europe', 203, '2023-02-20', 'Standard', 4, 649.99, 2599.96),
+
+-- Clothing - North America
+(1010, 'Clothing', 'Shirts', 'North America', 104, '2023-03-01', 'Standard', 5, 49.99, 249.95),
+(1011, 'Clothing', 'Pants', 'North America', 104, '2023-03-05', 'Standard', 3, 69.99, 209.97),
+(1012, 'Clothing', 'Dresses', 'North America', 105, '2023-03-10', 'Premium', 2, 129.99, 259.98),
+(1013, 'Clothing', 'Shoes', 'North America', 105, '2023-03-15', 'Premium', 1, 159.99, 159.99),
+
+-- Clothing - Europe
+(1014, 'Clothing', 'Shirts', 'Europe', 204, '2023-03-20', 'Standard', 6, 59.99, 359.94),
+(1015, 'Clothing', 'Pants', 'Europe', 204, '2023-03-25', 'Standard', 4, 79.99, 319.96),
+(1016, 'Clothing', 'Dresses', 'Europe', 205, '2023-04-01', 'Premium', 3, 149.99, 449.97),
+(1017, 'Clothing', 'Shoes', 'Europe', 205, '2023-04-05', 'Premium', 2, 179.99, 359.98),
+
+-- Home Goods - North America
+(1018, 'Home Goods', 'Furniture', 'North America', 106, '2023-04-10', 'Standard', 1, 899.99, 899.99),
+(1019, 'Home Goods', 'Kitchenware', 'North America', 106, '2023-04-15', 'Standard', 3, 79.99, 239.97),
+(1020, 'Home Goods', 'Bedding', 'North America', 107, '2023-04-20', 'Premium', 2, 199.99, 399.98),
+
+-- Home Goods - Europe
+(1021, 'Home Goods', 'Furniture', 'Europe', 206, '2023-04-25', 'Standard', 1, 999.99, 999.99),
+(1022, 'Home Goods', 'Kitchenware', 'Europe', 206, '2023-05-01', 'Standard', 4, 89.99, 359.96),
+(1023, 'Home Goods', 'Bedding', 'Europe', 207, '2023-05-05', 'Premium', 2, 219.99, 439.98);
+
+-- Enable collection of predicate columns and multi-column statistics
+SET enable_collect_predicate_columns=true;
+SET enable_collect_multi_column_stats=true;
+SET enable_auto_multi_column_stats_from_predicates=true;
+
+-- Execute queries to generate predicate usage for column groups
+-- These queries will help identify important column correlations
+
+-- Category and subcategory correlations
+SELECT * FROM sales_data WHERE product_category = 'Electronics' AND product_subcategory = 'Smartphones';
+SELECT * FROM sales_data WHERE product_category = 'Clothing' AND product_subcategory = 'Shirts';
+
+-- Geographic correlations
+SELECT * FROM sales_data WHERE region = 'North America' AND store_id = 101;
+SELECT * FROM sales_data WHERE region = 'Europe' AND store_id > 200;
+
+-- Price-related correlations
+SELECT * FROM sales_data WHERE product_category = 'Electronics' AND price > 1000;
+SELECT * FROM sales_data WHERE product_subcategory = 'Smartphones' AND total_amount > 1000;
+
+-- Customer segment correlations
+SELECT * FROM sales_data WHERE customer_segment = 'Premium' AND product_category = 'Clothing';
+SELECT * FROM sales_data WHERE customer_segment = 'Business' AND product_subcategory = 'Laptops';
+
+-- Date-based correlations
+SELECT * FROM sales_data WHERE sale_date > '2023-03-01' AND product_category = 'Home Goods';
+SELECT * FROM sales_data WHERE region = 'Europe' AND sale_date BETWEEN '2023-02-01' AND '2023-04-30';
+
+-- Analyze the table to collect predicate columns
+ANALYZE TABLE sales_data WITH SYNC MODE PREDICATE COLUMNS;
+
+-- Collect full statistics including multi-column statistics
+ANALYZE TABLE sales_data WITH SYNC MODE;
+
+-- Verify external multi-column statistics were collected
+SELECT column_names, row_count, distinct_count, data_size
+FROM information_schema.column_statistics
+WHERE table_name = 'sales_data'
+  AND column_count > 1
+ORDER BY column_names;
+
+-- Check the content of external_multi_column_statistics table
+SELECT catalog_name, db_name, table_name, column_names, row_count, ndv, data_size
+FROM information_schema.external_multi_column_statistics
+WHERE table_name = 'sales_data'
+ORDER BY column_names;
+
+-- Test explain plans to see if the optimizer uses these statistics
+EXPLAIN SELECT * FROM sales_data WHERE product_category = 'Electronics' AND product_subcategory = 'Smartphones';
+EXPLAIN SELECT * FROM sales_data WHERE region = 'North America' AND store_id = 101;
+EXPLAIN SELECT * FROM sales_data WHERE customer_segment = 'Premium' AND product_category = 'Clothing';
+
+-- Clean up
+DROP TABLE sales_data;
+DROP DATABASE iceberg_hdfs.mc_stats_test;
+DROP CATALOG iceberg_hdfs;
+
+-- Reset settings
+SET enable_collect_predicate_columns=false;
+SET enable_collect_multi_column_stats=false;
+SET enable_auto_multi_column_stats_from_predicates=false;
+SET enable_auto_collect_statistics=true;

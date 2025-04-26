@@ -1,0 +1,125 @@
+-- name: test_iceberg_predicate_columns @sequential
+
+-- Disable automatic stats collection to ensure we only collect what we explicitly request
+admin set frontend config ('enable_statistic_collect_on_first_load'='false');
+admin set frontend config ('enable_statistic_collect'='false');
+
+-- Create an Iceberg catalog
+create external catalog iceberg_test_${uuid0}
+PROPERTIES (
+    "type"="iceberg",
+    "iceberg.catalog.type"="hive",
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}"
+);
+
+-- Create a test database and table
+create database iceberg_test_${uuid0}.test_db_${uuid0};
+
+-- Create a simple Iceberg table
+create table iceberg_test_${uuid0}.test_db_${uuid0}.test_table (
+    id int,
+    value bigint,
+    name string,
+    category string
+);
+
+-- Insert test data
+insert into iceberg_test_${uuid0}.test_db_${uuid0}.test_table values
+(1, 100, 'item1', 'A'),
+(2, 200, 'item2', 'B'),
+(3, 300, 'item3', 'A'),
+(4, 400, 'item4', 'C'),
+(5, 500, 'item5', 'B');
+
+-- Check initial stats usage (should be empty)
+select table_name, column_name, usage from information_schema.column_stats_usage
+where table_database = 'test_db_${uuid0}' and table_name = 'test_table'
+order by column_name;
+
+-- Analyze predicate columns
+[UC]analyze table iceberg_test_${uuid0}.test_db_${uuid0}.test_table predicate columns;
+
+-- Generate predicate usage through queries
+select * from iceberg_test_${uuid0}.test_db_${uuid0}.test_table where id = 1;
+select * from iceberg_test_${uuid0}.test_db_${uuid0}.test_table where id > 3;
+select * from iceberg_test_${uuid0}.test_db_${uuid0}.test_table where category = 'A';
+select * from iceberg_test_${uuid0}.test_db_${uuid0}.test_table where value between 200 and 400;
+
+-- Persist predicate columns
+admin execute on frontend 'import com.starrocks.statistic.columns.PredicateColumnsMgr; PredicateColumnsMgr.getInstance().persist();';
+
+-- Check predicate column usage
+select table_name, column_name, usage from information_schema.column_stats_usage
+where table_database = 'test_db_${uuid0}' and table_name = 'test_table'
+order by column_name;
+
+-- Analyze predicate columns again with sync mode
+[UC]analyze table iceberg_test_${uuid0}.test_db_${uuid0}.test_table predicate columns with sync mode;
+
+-- Check analyze status to see which columns were analyzed
+select `table`, array_join(array_sort(split(`columns`, ',')), ',') from information_schema.analyze_status
+where `database`='test_db_${uuid0}'
+order by Id;
+
+-- Generate aggregation and join usage
+-- Aggregation queries
+select id, count(*), sum(value) from iceberg_test_${uuid0}.test_db_${uuid0}.test_table group by id;
+select category, count(*), avg(value) from iceberg_test_${uuid0}.test_db_${uuid0}.test_table group by category;
+
+-- Create a second table for join testing
+create table iceberg_test_${uuid0}.test_db_${uuid0}.test_table2 (
+    id int,
+    extra_value bigint,
+    description string
+);
+
+insert into iceberg_test_${uuid0}.test_db_${uuid0}.test_table2 values
+(1, 1000, 'desc1'),
+(3, 3000, 'desc3'),
+(5, 5000, 'desc5');
+
+-- Join queries
+select t1.id, t1.name, t2.description from
+iceberg_test_${uuid0}.test_db_${uuid0}.test_table t1
+join iceberg_test_${uuid0}.test_db_${uuid0}.test_table2 t2
+on t1.id = t2.id;
+
+select t1.id, t1.name, t2.description from
+iceberg_test_${uuid0}.test_db_${uuid0}.test_table t1
+join iceberg_test_${uuid0}.test_db_${uuid0}.test_table2 t2
+on t1.id = t2.id
+where t1.category = 'A';
+
+-- Persist predicate columns again
+admin execute on frontend 'import com.starrocks.statistic.columns.PredicateColumnsMgr; PredicateColumnsMgr.getInstance().persist();';
+
+-- Check predicate column usage after all operations
+select table_name, column_name, usage from information_schema.column_stats_usage
+where table_database = 'test_db_${uuid0}' and table_name = 'test_table'
+order by column_name;
+
+select table_name, column_name, usage from information_schema.column_stats_usage
+where table_database = 'test_db_${uuid0}' and table_name = 'test_table2'
+order by column_name;
+
+-- Analyze predicate columns again
+[UC]analyze table iceberg_test_${uuid0}.test_db_${uuid0}.test_table predicate columns;
+
+-- Check analyze status again to see which column groups were created
+select `table`, array_join(array_sort(split(`columns`, ',')), ',') from information_schema.analyze_status
+where `database`='test_db_${uuid0}'
+order by Id;
+
+-- Test multi-column statistics for external tables
+[UC]analyze table iceberg_test_${uuid0}.test_db_${uuid0}.test_table multiple columns (id, category);
+
+-- Check if multi-column statistics were collected successfully
+select count(1) from _statistics_.external_multi_column_statistics
+where table_name like "%test_table%" and column_names = "id,category";
+
+-- Clean up
+drop catalog iceberg_test_${uuid0};
+
+-- Reset configuration
+admin set frontend config ('enable_statistic_collect_on_first_load'='true');
+admin set frontend config ('enable_statistic_collect'='false');

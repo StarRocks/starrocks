@@ -41,6 +41,12 @@ public interface StatisticStorage {
     default void refreshMultiColumnStatistics(Long tableId) {
     }
 
+    /**
+     * Refresh external multi-column statistics for the specified table
+     */
+    default void refreshExternalMultiColumnStatistics(Table table) {
+    }
+
     default void refreshHistogramStatistics(Table table, List<String> columns, boolean isSync) {
     }
 
@@ -77,7 +83,7 @@ public interface StatisticStorage {
     default Map<String, Histogram> getHistogramStatistics(Table table, List<String> columns) {
         return Maps.newHashMap();
     }
-    
+
     default Map<String, Histogram> getConnectorHistogramStatistics(Table table, List<String> columns) {
         return Maps.newHashMap();
     }
@@ -87,6 +93,13 @@ public interface StatisticStorage {
     }
 
     default MultiColumnCombinedStatistics getMultiColumnCombinedStatistics(Long tableId) {
+        return MultiColumnCombinedStatistics.EMPTY;
+    }
+
+    /**
+     * Get multi-column combined statistics for external tables.
+     */
+    default MultiColumnCombinedStatistics getExternalMultiColumnCombinedStatistics(Table table) {
         return MultiColumnCombinedStatistics.EMPTY;
     }
 
