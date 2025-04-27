@@ -129,6 +129,8 @@ public:
 
     MemTracker* mem_tracker() const { return _update_mem_tracker; }
 
+    MemTracker* update_state_mem_tracker() const { return _update_state_mem_tracker.get(); }
+
     string memory_stats();
 
     string detail_memory_stats();
@@ -136,7 +138,7 @@ public:
     string topn_memory_stats(size_t topn);
 
     Status update_primary_index_memory_limit(int32_t update_memory_limit_percent) {
-        int64_t byte_limits = ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem());
+        ASSIGN_OR_RETURN(int64_t byte_limits, ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem()));
         int32_t update_mem_percent = std::max(std::min(100, update_memory_limit_percent), 0);
         _index_cache.set_capacity(byte_limits * update_mem_percent);
         return Status::OK();

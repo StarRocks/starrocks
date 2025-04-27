@@ -588,7 +588,11 @@ Decouple the sort key from the primary key, and modify the sort key to `dt, reve
 ALTER TABLE orders ORDER BY (dt, revenue, state);
 ```
 
+import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
+
 #### Modify a STRUCT column to add or drop a field
+
+<Beta />
 
 From v3.2.10 and v3.3.2 onwards, StarRocks supports modifying a STRUCT column to add or drop a field, which can be nested or within an ARRAY type.
 

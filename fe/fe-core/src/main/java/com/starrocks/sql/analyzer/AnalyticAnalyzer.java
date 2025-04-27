@@ -69,10 +69,11 @@ public class AnalyticAnalyzer {
         for (Expr e : analyticExpr.getFnCall().getChildren()) {
             if (e.getType().isBitmapType() &&
                     !analyticFunction.getFn().functionName().equals(FunctionSet.BITMAP_UNION_COUNT) &&
+                    !analyticFunction.getFn().functionName().equals(FunctionSet.BITMAP_UNION) &&
                     !analyticFunction.getFn().functionName().equals(FunctionSet.LEAD) &&
                     !analyticFunction.getFn().functionName().equals(FunctionSet.LAG)) {
-                throw new SemanticException("bitmap type could only used for bitmap_union_count/lead/lag window function",
-                        e.getPos());
+                throw new SemanticException("bitmap type could only used for bitmap_union_count/bitmap_union/lead/lag " +
+                        "window function", e.getPos());
             } else if (e.getType().isHllType() &&
                     !analyticFunction.getFn().functionName().equals(AnalyticExpr.HLL_UNION_AGG) &&
                     !analyticFunction.getFn().functionName().equals(FunctionSet.LEAD) &&

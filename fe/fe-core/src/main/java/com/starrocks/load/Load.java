@@ -1152,6 +1152,8 @@ public class Load {
                 return TFileFormatType.FORMAT_ORC;
             } else if (fileFormat.toLowerCase().equals("json")) {
                 return TFileFormatType.FORMAT_JSON;
+            } else if (fileFormat.toLowerCase().equals("avro")) {
+                return TFileFormatType.FORMAT_AVRO;
             }
             // Attention: The compression type of csv format is from the suffix of filename.
         }

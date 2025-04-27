@@ -28,6 +28,7 @@ import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LiteralExpr;
@@ -876,24 +877,24 @@ public class QueryAnalyzer {
         }
 
         private void analyzeJoinHints(JoinRelation join) {
-            if (JoinOperator.HINT_BROADCAST.equals(join.getJoinHint())) {
+            if (HintNode.HINT_JOIN_BROADCAST.equals(join.getJoinHint())) {
                 if (join.getJoinOp() == JoinOperator.RIGHT_OUTER_JOIN
                         || join.getJoinOp() == JoinOperator.FULL_OUTER_JOIN
                         || join.getJoinOp() == JoinOperator.RIGHT_SEMI_JOIN
                         || join.getJoinOp() == JoinOperator.RIGHT_ANTI_JOIN) {
                     throw new SemanticException(join.getJoinOp().toString() + " does not support BROADCAST.");
                 }
-            } else if (JoinOperator.HINT_SHUFFLE.equals(join.getJoinHint())) {
+            } else if (HintNode.HINT_JOIN_SHUFFLE.equals(join.getJoinHint())) {
                 if (join.getJoinOp() == JoinOperator.CROSS_JOIN ||
                         (join.getJoinOp() == JoinOperator.INNER_JOIN && join.getOnPredicate() == null)) {
                     throw new SemanticException("CROSS JOIN does not support SHUFFLE.");
                 }
-            } else if (JoinOperator.HINT_BUCKET.equals(join.getJoinHint()) ||
-                    JoinOperator.HINT_COLOCATE.equals(join.getJoinHint())) {
+            } else if (HintNode.HINT_JOIN_BUCKET.equals(join.getJoinHint()) ||
+                    HintNode.HINT_JOIN_COLOCATE.equals(join.getJoinHint())) {
                 if (join.getJoinOp() == JoinOperator.CROSS_JOIN) {
                     throw new SemanticException("CROSS JOIN does not support " + join.getJoinHint() + ".");
                 }
-            } else if (JoinOperator.HINT_SKEW.equals(join.getJoinHint())) {
+            } else if (HintNode.HINT_JOIN_SKEW.equals(join.getJoinHint())) {
                 if (join.getJoinOp() == JoinOperator.CROSS_JOIN ||
                         (join.getJoinOp() == JoinOperator.INNER_JOIN && join.getOnPredicate() == null)) {
                     throw new SemanticException("CROSS JOIN does not support SKEW JOIN optimize");
@@ -921,7 +922,7 @@ public class QueryAnalyzer {
                 } else {
                     throw new SemanticException("Skew join values must be specified");
                 }
-            } else if (!JoinOperator.HINT_UNREORDER.equals(join.getJoinHint())) {
+            } else if (!HintNode.HINT_JOIN_UNREORDER.equals(join.getJoinHint())) {
                 throw new SemanticException("JOIN hint not recognized: " + join.getJoinHint());
             }
         }

@@ -19,6 +19,7 @@
 
 #include "column/bytes.h"
 #include "column/column_helper.h"
+#include "column/column_view/column_view.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
@@ -34,6 +35,14 @@ namespace starrocks {
 
 void JsonColumn::append_datum(const Datum& datum) {
     BaseClass::append(datum.get<JsonValue*>());
+}
+
+bool JsonColumn::append_strings_overflow(const Slice* data, size_t size, size_t max_length) {
+    for (size_t i = 0; i < size; i++) {
+        const auto& s = data[i];
+        append(JsonValue(s));
+    }
+    return true;
 }
 
 int JsonColumn::compare_at(size_t left_idx, size_t right_idx, const starrocks::Column& rhs,
@@ -253,6 +262,10 @@ void JsonColumn::append_default() {
 }
 
 void JsonColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
+    if (src.is_json_view()) {
+        down_cast<const ColumnView*>(&src)->append_to(*this, indexes, from, size);
+        return;
+    }
     const auto* other_json = down_cast<const JsonColumn*>(&src);
     if (other_json->is_flat_json() && !is_flat_json()) {
         // only hit in AggregateIterator (Aggregate mode in storage)

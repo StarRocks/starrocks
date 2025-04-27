@@ -48,7 +48,7 @@ void DataCacheUtils::set_metrics_from_thrift(TDataCacheMetrics& t_metrics, const
 
 Status DataCacheUtils::parse_conf_datacache_mem_size(const std::string& conf_mem_size_str, int64_t mem_limit,
                                                      size_t* mem_size) {
-    int64_t parsed_mem_size = ParseUtil::parse_mem_spec(conf_mem_size_str, mem_limit);
+    ASSIGN_OR_RETURN(int64_t parsed_mem_size, ParseUtil::parse_mem_spec(conf_mem_size_str, mem_limit));
     if (mem_limit > 0 && parsed_mem_size > mem_limit) {
         LOG(WARNING) << "the configured datacache memory size exceeds the limit, decreased it to the limit value."
                      << "mem_size: " << parsed_mem_size << ", mem_limit: " << mem_limit;
@@ -62,19 +62,20 @@ Status DataCacheUtils::parse_conf_datacache_mem_size(const std::string& conf_mem
     return Status::OK();
 }
 
-int64_t DataCacheUtils::parse_conf_datacache_disk_size(const std::string& disk_path, const std::string& disk_size_str,
-                                                       int64_t disk_limit) {
+StatusOr<int64_t> DataCacheUtils::parse_conf_datacache_disk_size(const std::string& disk_path,
+                                                                 const std::string& disk_size_str, int64_t disk_limit) {
     if (disk_limit <= 0) {
         std::filesystem::path dpath(disk_path);
         std::error_code ec;
         auto space_info = std::filesystem::space(dpath, ec);
         if (ec) {
-            LOG(ERROR) << "fail to get disk space info, path: " << dpath << ", error: " << ec.message();
-            return -1;
+            auto err_str = fmt::format("fail to get disk space info, path: {}, error: {}", disk_path, ec.message());
+            LOG(ERROR) << err_str;
+            return Status::InternalError(err_str);
         }
         disk_limit = space_info.capacity;
     }
-    int64_t disk_size = ParseUtil::parse_mem_spec(disk_size_str, disk_limit);
+    ASSIGN_OR_RETURN(int64_t disk_size, ParseUtil::parse_mem_spec(disk_size_str, disk_limit));
     if (disk_size > disk_limit) {
         LOG(WARNING) << "the configured datacache disk size exceeds the disk limit, decreased it to the limit value."
                      << ", path: " << disk_path << ", disk_size: " << disk_size << ", disk_limit: " << disk_limit;

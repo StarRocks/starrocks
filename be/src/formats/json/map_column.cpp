@@ -37,7 +37,8 @@ Status add_map_column(Column* column, const TypeDescriptor& type_desc, const std
         for (auto field : obj) {
             {
                 // This is a tricky way to transform a std::string to simdjson:ondemand:value
-                std::string_view field_name_str = field.unescaped_key();
+                // NOTE: no need to unescape the string as it will be passed into the parser again.
+                std::string_view field_name_str = field.escaped_key();
                 auto dummy_json = simdjson::padded_string(R"({"dummy_key": ")" + std::string(field_name_str) + R"("})");
                 simdjson::ondemand::document doc = parser.iterate(dummy_json);
                 simdjson::ondemand::object obj = doc.get_object();

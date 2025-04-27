@@ -150,7 +150,7 @@ void ObjectCacheBench::prepare_sequence_data(ObjectCache* cache, int64_t count) 
         *(int*)ptr = 1;
         ObjectCacheHandlePtr handle = nullptr;
         ObjectCacheWriteOptions options;
-        Status st = cache->insert(key, ptr, _page_size, _page_size, deleter, &handle, &options);
+        Status st = cache->insert(key, ptr, _page_size, deleter, &handle, &options);
         if (!st.ok()) {
             if (!st.is_already_exist()) {
                 LOG(FATAL) << "insert failed: " << st;
@@ -169,7 +169,7 @@ void ObjectCacheBench::prepare_data(ObjectCache* cache, int64_t count) {
         *(int*)ptr = 1;
         ObjectCacheHandlePtr handle = nullptr;
         ObjectCacheWriteOptions options;
-        Status st = cache->insert(key, ptr, _page_size, _page_size, deleter, &handle, &options);
+        Status st = cache->insert(key, ptr, _page_size, deleter, &handle, &options);
         if (!st.ok()) {
             if (!st.is_already_exist()) {
                 LOG(FATAL) << "insert failed: " << st;
@@ -236,7 +236,7 @@ void ObjectCacheBench::random_insert_multi_threads(benchmark::State* state, Obje
         *(int*)ptr = 1;
         ObjectCacheHandlePtr handle = nullptr;
         ObjectCacheWriteOptions options;
-        Status st = cache->insert(key, ptr, page_size, page_size, deleter, &handle, &options);
+        Status st = cache->insert(key, ptr, page_size, deleter, &handle, &options);
         if (!st.ok()) {
             if (!st.is_already_exist()) {
                 LOG(FATAL) << "insert failed: " << st;
