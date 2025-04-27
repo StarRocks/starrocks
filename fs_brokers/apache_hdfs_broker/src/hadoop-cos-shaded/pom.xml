@@ -44,6 +44,12 @@ under the License.
             <groupId>com.qcloud.cos</groupId>
             <artifactId>hadoop-cos</artifactId>
             <version>3.3.3-8.3.10</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.json</groupId>
+                    <artifactId>json</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.qcloud/cos_api-bundle -->
@@ -58,6 +64,13 @@ under the License.
             <groupId>com.qcloud</groupId>
             <artifactId>cosn-ranger-interface</artifactId>
             <version>1.0.5</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.json/json -->
+        <dependency>
+            <groupId>org.json</groupId>
+            <artifactId>json</artifactId>
+            <version>20231013</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.qcloud/chdfs_hadoop_plugin_network -->
