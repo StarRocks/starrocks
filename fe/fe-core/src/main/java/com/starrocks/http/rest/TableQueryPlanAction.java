@@ -177,7 +177,6 @@ public class TableQueryPlanAction extends RestBaseAction {
                     throw new StarRocksHttpException(HttpResponseStatus.FORBIDDEN,
                             "Only support OlapTable, CloudNativeTable and MaterializedView currently");
                 }
-
                 // parse/analysis/plan the sql and acquire tablet distributions
                 handleQuery(ConnectContext.get(), db.getFullName(), tableName, sql, resultMap);
             } finally {
