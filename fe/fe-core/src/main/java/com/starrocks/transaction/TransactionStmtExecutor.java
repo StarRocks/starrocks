@@ -17,6 +17,7 @@ package com.starrocks.transaction;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.primitives.Ints;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -50,6 +51,7 @@ import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
@@ -67,6 +69,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static com.starrocks.common.ErrorCode.ERR_TXN_NOT_EXIST;
@@ -118,9 +121,8 @@ public class TransactionStmtExecutor {
         try {
             if (transactionState.getDbId() == 0) {
                 transactionState.setDbId(database.getId());
-                DatabaseTransactionMgr databaseTransactionMgr =
-                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                                .getDatabaseTransactionMgr(database.getId());
+                DatabaseTransactionMgr databaseTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                        .getDatabaseTransactionMgr(database.getId());
                 databaseTransactionMgr.upsertTransactionState(transactionState);
             }
 
@@ -128,9 +130,13 @@ public class TransactionStmtExecutor {
                 throw ErrorReportException.report(ErrorCode.ERR_TXN_FORBID_CROSS_DB);
             }
 
-            if (transactionState.getTableIdList().contains(targetTable.getId())) {
-                throw ErrorReportException.report(ErrorCode.ERR_TXN_IMPORT_SAME_TABLE);
+            Map<TableName, Table> m = AnalyzerUtils.collectAllTable(dmlStmt);
+            for (Table table : m.values()) {
+                if (transactionState.getTableIdList().contains(table.getId())) {
+                    throw ErrorReportException.report(ErrorCode.ERR_TXN_IMPORT_SAME_TABLE);
+                }
             }
+
             transactionState.addTableIdList(targetTable.getId());
 
             ExplicitTxnState.ExplicitTxnStateItem item =

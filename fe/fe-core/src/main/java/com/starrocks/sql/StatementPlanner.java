@@ -163,7 +163,10 @@ public class StatementPlanner {
             throw e;
         } catch (Throwable e) {
             if (stmt instanceof DmlStmt) {
-                abortTransaction((DmlStmt) stmt, session, e.getMessage());
+                //If it is an explicit transaction, the transaction will not be aborted automatically.
+                if (session.getExplicitTxnState() == null) {
+                    abortTransaction((DmlStmt) stmt, session, e.getMessage());
+                }
             }
             throw e;
         } finally {
