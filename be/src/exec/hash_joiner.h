@@ -344,7 +344,7 @@ public:
 private:
     static bool _has_null(const ColumnPtr& column);
 
-    void _init_hash_table_param(HashTableParam* param);
+    void _init_hash_table_param(HashTableParam* param, RuntimeState* state);
 
     Status _prepare_key_columns(Columns& key_columns, const ChunkPtr& chunk, const vector<ExprContext*>& expr_ctxs) {
         key_columns.resize(0);

@@ -3,6 +3,7 @@ set(EXEC_FILES
         ./agent/heartbeat_server_test.cpp
         ./agent/master_info_test.cpp
         ./column/array_column_test.cpp
+        ./column/column_view_test.cpp
         ./column/array_view_column_test.cpp
         ./column/binary_column_test.cpp
         ./column/chunk_test.cpp
