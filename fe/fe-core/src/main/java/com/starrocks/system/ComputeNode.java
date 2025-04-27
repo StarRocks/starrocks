@@ -89,7 +89,7 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
     private AtomicBoolean isAlive;
 
     @SerializedName("isDecommissioned")
-    private final AtomicBoolean isDecommissioned;
+    private AtomicBoolean isDecommissioned;
     @SerializedName("decommissionType")
     private volatile int decommissionType;
 
@@ -612,6 +612,7 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
                 LOG.info("{} is alive, last start time: {}, hbTime: {}", this.toString(), this.lastStartTime,
                         hbResponse.getHbTime());
                 setAlive(true);
+                setDecommissioned(false);
             }
 
             if (this.cpuCores != hbResponse.getCpuCores()) {
@@ -650,6 +651,7 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
                 if (this.heartbeatRetryTimes > Config.heartbeat_retry_times) {
                     deadMessage = "exceed heartbeatRetryTimes";
                     needSetAlive = true;
+                    setDecommissioned(true);
                     lastMissingHeartbeatTime = System.currentTimeMillis();
                 }
             }
