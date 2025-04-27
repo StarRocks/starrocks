@@ -51,16 +51,16 @@ public class SPMAutoCapturer extends FrontendDaemon {
 
     @Override
     public long getInterval() {
-        return GlobalVariable.getSpmCaptureIntervalSeconds() * 1000;
+        return GlobalVariable.getSpmCaptureIntervalSeconds() * 100;
     }
 
     @Override
     protected void runAfterCatalogReady() {
-        if (getInterval() != GlobalVariable.getSpmCaptureIntervalSeconds() * 1000) {
-            setInterval(GlobalVariable.getSpmCaptureIntervalSeconds() * 1000);
-        }
-
         if (!GlobalVariable.isEnableSPMCapture()) {
+            return;
+        }
+        
+        if (lastWorkTime.plusSeconds(GlobalVariable.getSpmCaptureIntervalSeconds()).isAfter(LocalDateTime.now())) {
             return;
         }
 
