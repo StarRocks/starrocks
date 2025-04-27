@@ -559,10 +559,10 @@ public class TransactionState implements Writable, GsonPreProcessable {
     }
 
     public List<Long> getCallbackId() {
-        if (callbackId != -1) {
+        if (this.callbackIdList == null || this.callbackIdList.isEmpty()) {
             return Lists.newArrayList(callbackId);
         } else {
-            return new ArrayList<>(callbackIdList);
+            return Lists.newArrayList(this.callbackIdList);
         }
     }
 

@@ -320,6 +320,7 @@ public class ConnectContext {
         if (statement instanceof QueryStatement) {
             return true;
         }
+
         if (statement instanceof ExecuteStmt) {
             ExecuteStmt executeStmt = (ExecuteStmt) statement;
             PrepareStmtContext prepareStmtContext = getPreparedStmt(executeStmt.getStmtName());
