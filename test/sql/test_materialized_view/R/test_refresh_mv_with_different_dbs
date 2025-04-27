@@ -1,11 +1,8 @@
 -- name: test_refresh_mv_with_different_dbs
-create database db1;
+create database db_${uuid0}_1;
 -- result:
 -- !result
-use db1;
--- result:
--- !result
-create database db2;
+use db_${uuid0}_1;
 -- result:
 -- !result
 CREATE TABLE `t1` (
@@ -17,7 +14,10 @@ DUPLICATE KEY(`k1`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 3;
 -- result:
 -- !result
-CREATE TABLE db2.t1 (
+create database db_${uuid0}_2 ;
+-- result:
+-- !result
+CREATE TABLE db_${uuid0}_2.t1 (
 `k1` int,
 `k2` int,
 `k3` int
@@ -26,46 +26,43 @@ DUPLICATE KEY(`k1`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 3;
 -- result:
 -- !result
+INSERT INTO t1 VALUES (1,1,1);
+-- result:
+-- !result
+INSERT INTO db_${uuid0}_2.t1 VALUES (1,2,2);
+-- result:
+-- !result
+[UC]analyze full table t1;
+-- result:
+db_460a6e8e006a458c8f3cb50de43ee7a7_1.t1	analyze	status	OK
+-- !result
+[UC]analyze full table db_${uuid0}_2.t1;
+-- result:
+db_460a6e8e006a458c8f3cb50de43ee7a7_2.t1	analyze	status	OK
+-- !result
 CREATE MATERIALIZED VIEW mv1
 DISTRIBUTED BY HASH(k1) BUCKETS 10
 REFRESH ASYNC
 AS SELECT t1.k1 as k1, t1.k2 as k2, t2.k1 as k3, t2.k2 as k4
-FROM t1 join db2.t1 t2 on t1.k1=t2.k1;
+FROM t1 join db_${uuid0}_2.t1 t2 on t1.k1=t2.k1;
 -- result:
 -- !result
-INSERT INTO t1 VALUES (1,1,1);
--- result:
--- !result
-INSERT INTO db2.t1 VALUES (1,2,2);
--- result:
--- !result
-analyze full table t1;
--- result:
-db1.t1	analyze	status	OK
--- !result
-analyze full table db2.t1;
--- result:
-db2.t1	analyze	status	OK
--- !result
-function: wait_async_materialized_view_finish("db_${uuid0}", "mv1")
+function: wait_async_materialized_view_finish("db_${uuid0}_1", "mv1")
 -- result:
 None
 -- !result
-function: check_hit_materialized_view("SELECT t1.k1 as k1, t1.k2 as k2, t2.k1 as k3, t2.k2 as k4 FROM t1 join db2.t1 t2 on t1.k1=t2.k1;", "mv1")
+function: check_hit_materialized_view("SELECT t1.k1 as k1, t1.k2 as k2, t2.k1 as k3, t2.k2 as k4 FROM t1 join db_${uuid0}_2.t1 t2 on t1.k1=t2.k1;", "mv1")
 -- result:
 None
 -- !result
 SELECT t1.k1 as k1, t1.k2 as k2, t2.k1 as k3, t2.k2 as k4
-FROM t1 join db2.t1 t2 on t1.k1=t2.k1 order by 1, 2, 3, 4;
+FROM t1 join db_${uuid0}_2.t1 t2 on t1.k1=t2.k1 order by 1, 2, 3, 4;
 -- result:
 1	1	1	2
 -- !result
-drop materialized view mv1;
+drop database db_${uuid0}_1 force;
 -- result:
 -- !result
-drop table t1;
--- result:
--- !result
-drop table db2.t1;
+drop database db_${uuid0}_2 force;
 -- result:
 -- !result
