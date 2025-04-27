@@ -19,6 +19,10 @@ displayed_sidebar: docs
 - [修改表的属性](#修改表的属性)
 - [对表进行原子替换](#swap-将两个表原子替换)
 - [手动执行 compaction 合并表数据](#手动-compaction31-版本起)
+<<<<<<< HEAD
+=======
+- [删除主键索引](#删除主键索引-339-版本起))
+>>>>>>> e629082c5e ([Doc] [WIP] Drop persistent index in shared-data (#58358))
 
 :::tip
 该操作需要有对应表的 ALTER 权限。
@@ -44,6 +48,10 @@ alter_clause1[, alter_clause2, ...]
 - bitmap index: 修改 bitmap index。
 - swap: 原子替换两张表。
 - compaction: 对指定表或分区手动执行 Compaction（数据版本合并）。**从 3.1 版本开始支持。**
+<<<<<<< HEAD
+=======
+- drop persistent index: 存算分离下删除主键索引。**从 3.3.9 版本开始支持。**
+>>>>>>> e629082c5e ([Doc] [WIP] Drop persistent index in shared-data (#58358))
 
 ## 使用限制和注意事项
 
@@ -793,6 +801,19 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
 
 执行完 Compaction 后，您可以通过查询 `information_schema` 数据库下的 `be_compactions` 表来查看 Compaction 后的数据版本变化 （`SELECT * FROM information_schema.be_compactions;`）。
 
+### 删除主键索引 (3.3.9 版本起)
+
+语法：
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
+```
+
+> **说明**
+>
+> 只支持在存算分离集群中删除 CLOUD_NATIVE 类型的主键索引
+
 ## 示例
 
 ### Table
@@ -1242,6 +1263,17 @@ ALTER TABLE compaction_test CUMULATIVE COMPACT (p202302,p203303);
 ALTER TABLE compaction_test BASE COMPACT (p202302,p203303);
 ```
 
+<<<<<<< HEAD
+=======
+### 删除主键索引
+
+删除 `db1.test_tbl` 中 Tablet `100` 和 `101` 的主键索引 。
+
+```sql
+ALTER TABLE db1.test_tbl DROP PERSISTENT INDEX ON TABLETS (100, 101);
+```
+
+>>>>>>> e629082c5e ([Doc] [WIP] Drop persistent index in shared-data (#58358))
 ## 相关参考
 
 - [CREATE TABLE](CREATE_TABLE.md)
