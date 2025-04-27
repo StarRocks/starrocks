@@ -1049,6 +1049,7 @@ void LakeServiceImpl::aggregate_compact(::google::protobuf::RpcController* contr
     ac_context.wait();
 
     // write combined txn log
+    // TODO // submit write_combined_txn_log to thread pool to avoid block brpc thread.
     ac_context.write_combined_txn_log();
 
     // fill response

@@ -28,7 +28,7 @@ Status CloudNativeIndexCompactionTask::execute(CancelFunc cancel_func, ThreadPoo
     RETURN_IF_ERROR(cancel_func());
     RETURN_IF_ERROR(execute_index_major_compaction(txn_log.get()));
     _context->progress.update(100);
-    if (_context->no_write_txnlog) {
+    if (_context->skip_write_txnlog) {
         // return txn_log to caller later
         _context->txn_log = txn_log;
     } else {

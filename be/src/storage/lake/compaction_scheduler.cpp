@@ -126,7 +126,7 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
     compact_stat->set_in_queue_time_sec(context->stats->in_queue_time_sec);
     compact_stat->set_sub_task_count(_request->tablet_ids_size());
     compact_stat->set_total_compact_input_file_size(context->stats->input_file_size);
-    if (context->no_write_txnlog) {
+    if (context->skip_write_txnlog) {
         _response->add_txn_logs()->CopyFrom(*context->txn_log);
     }
     DCHECK(_request != nullptr);
@@ -264,7 +264,7 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
     for (auto tablet_id : request->tablet_ids()) {
         auto context = std::make_unique<CompactionTaskContext>(request->txn_id(), tablet_id, request->version(),
                                                                request->force_base_compaction(),
-                                                               request->no_write_txnlog(), cb);
+                                                               request->skip_write_txnlog(), cb);
         contexts_vec.push_back(std::move(context));
         // DO NOT touch `context` from here!
     }

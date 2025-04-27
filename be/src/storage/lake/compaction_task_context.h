@@ -67,12 +67,12 @@ struct CompactionTaskStats {
 // Context of a single tablet compaction task.
 struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     explicit CompactionTaskContext(int64_t txn_id_, int64_t tablet_id_, int64_t version_, bool force_base_compaction_,
-                                   bool no_write_txnlog_, std::shared_ptr<CompactionTaskCallback> cb_)
+                                   bool skip_write_txnlog_, std::shared_ptr<CompactionTaskCallback> cb_)
             : txn_id(txn_id_),
               tablet_id(tablet_id_),
               version(version_),
               force_base_compaction(force_base_compaction_),
-              no_write_txnlog(no_write_txnlog_),
+              skip_write_txnlog(skip_write_txnlog_),
               callback(std::move(cb_)) {}
 
 #ifndef NDEBUG
@@ -85,7 +85,7 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     const int64_t tablet_id;
     const int64_t version;
     const bool force_base_compaction;
-    const bool no_write_txnlog;
+    const bool skip_write_txnlog;
     std::atomic<int64_t> start_time{0};
     std::atomic<int64_t> finish_time{0};
     std::atomic<bool> skipped{false};

@@ -212,7 +212,7 @@ TEST_F(LakeCompactionSchedulerTest, test_compaction_cancel) {
     {
         auto cb = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, nullptr);
         CompactionTaskContext ctx(100 /* txn_id */, 101 /* tablet_id */, 1 /* version */,
-                                  false /* force_base_compaction */, false /* no_write_txnlog */, cb);
+                                  false /* force_base_compaction */, false /* skip_write_txnlog */, cb);
         cb->update_status(Status::Aborted("aborted for test"));
         EXPECT_FALSE(compaction_should_cancel(&ctx).ok());
     }
@@ -223,7 +223,7 @@ TEST_F(LakeCompactionSchedulerTest, test_compaction_cancel) {
         config::lake_compaction_check_valid_interval_minutes = -1;
         auto cb = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, nullptr);
         CompactionTaskContext ctx(100 /* txn_id */, 101 /* tablet_id */, 1 /* version */,
-                                  false /* force_base_compaction */, false /* no_write_txnlog */, cb);
+                                  false /* force_base_compaction */, false /* skip_write_txnlog */, cb);
         EXPECT_TRUE(compaction_should_cancel(&ctx).ok());
         config::lake_compaction_check_valid_interval_minutes = check_interval;
     }
@@ -234,7 +234,7 @@ TEST_F(LakeCompactionSchedulerTest, test_compaction_cancel) {
         config::lake_compaction_check_valid_interval_minutes = 24 * 60; // set to a big value
         auto cb = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, nullptr);
         CompactionTaskContext ctx(100 /* txn_id */, 101 /* tablet_id */, 1 /* version */,
-                                  false /* force_base_compaction */, false /* no_write_txnlog */, cb);
+                                  false /* force_base_compaction */, false /* skip_write_txnlog */, cb);
 
         cb->set_last_check_time(time(nullptr));
         EXPECT_TRUE(compaction_should_cancel(&ctx).ok());

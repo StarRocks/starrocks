@@ -326,7 +326,7 @@ public class CompactionScheduler extends Daemon {
                         partitionStatisticsSnapshot.getPriority());
                 task.sendRequest();
                 job.setAggregateTask(task);
-                LOG.info("Create aggregate compaction task. {}", job.getDebugString());
+                LOG.debug("Create aggregate compaction task. {}", job.getDebugString());
             } else {
                 List<CompactionTask> tasks = createCompactionTasks(currentVersion, beToTablets, txnId,
                         job.getAllowPartialSuccess(), partitionStatisticsSnapshot.getPriority());

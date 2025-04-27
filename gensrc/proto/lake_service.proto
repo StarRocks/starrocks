@@ -110,7 +110,7 @@ message CompactRequest {
     optional bool allow_partial_success = 5;
     optional bytes encryption_meta = 6;
     optional bool force_base_compaction = 7;
-    optional bool no_write_txnlog = 8;
+    optional bool skip_write_txnlog = 8;
 }
 
 message AggregateCompactRequest {

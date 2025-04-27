@@ -242,20 +242,23 @@ public class LakeTableHelper {
                 sourceType == TransactionState.LoadJobSourceType.BATCH_LOAD_JOB;
     }
 
-    public static boolean enablePartitionAggregation(long dbId, long tableId) {
+    // if one of the tables in tableIdList is LakeTable with partition aggregation, return true
+    // else return false
+    public static boolean enablePartitionAggregation(long dbId, List<Long> tableIdList) {
         if (!RunMode.isSharedDataMode()) {
             return false;
         }
-        // get OlapTable
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
-        if (table == null) {
-            return false;
+        // for each tableIdList
+        for (Long tableId : tableIdList) {
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+            if (table == null) {
+                continue;
+            }
+            // check if table is LakeTable with partition aggregation
+            if (table.enablePartitionAggregation()) {
+                return true;
+            }
         }
-        // check if table is LakeTable with partition aggregation
-        if (table.enablePartitionAggregation()) {
-            return true;
-        }
-
         return false;
     }
 }

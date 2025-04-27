@@ -121,7 +121,7 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     RETURN_IF_ERROR(fill_compaction_segment_info(op_compaction, writer.get()));
     op_compaction->set_compact_version(_tablet.metadata()->version());
     RETURN_IF_ERROR(execute_index_major_compaction(txn_log.get()));
-    if (_context->no_write_txnlog) {
+    if (_context->skip_write_txnlog) {
         // return txn_log to caller later
         _context->txn_log = txn_log;
     } else {
