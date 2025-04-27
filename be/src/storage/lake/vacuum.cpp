@@ -41,6 +41,30 @@
 
 namespace starrocks::lake {
 
+struct VacuumTabletMetaVerionRange {
+    // range is [min_version, max_version]
+    int64_t min_version = 0;
+    int64_t max_version = 0;
+
+    /*
+    * if tablet a has version range [1, ..., 10] ,
+    * and tablet b has version range [5, ..., 15],
+    * then the merged version range is [1, ..., 10]
+    *
+    * The merge will calc the range of these two tablets both can delete,
+    */
+    void merge(int64_t min, int64_t max) {
+        if (min_version == 0 && max_version == 0) {
+            min_version = min;
+            max_version = max;
+        } else {
+            min_version = std::min(min_version, min);
+            // get the low watermark of the max version
+            max_version = std::min(max_version, max);
+        }
+    }
+};
+
 static int get_num_delete_file_queued_tasks(void*) {
 #ifndef BE_TEST
     auto tp = ExecEnv::GetInstance()->delete_file_thread_pool();
@@ -291,6 +315,7 @@ static size_t collect_extra_files_size(const TabletMetadataPB& metadata, int64_t
 
 static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_view root_dir, TabletInfoPB& tablet_info,
                                       int64_t grace_timestamp, int64_t min_retain_version,
+                                      VacuumTabletMetaVerionRange* vacuum_version_range,
                                       AsyncFileDeleter* datafile_deleter, AsyncFileDeleter* metafile_deleter,
                                       int64_t* total_datafile_size, int64_t* vacuumed_version,
                                       int64_t* extra_datafile_size) {
@@ -379,8 +404,14 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
     }
     *vacuumed_version = final_retain_version;
     DCHECK_LE(version, final_retain_version);
-    for (auto v = version + 1; v < final_retain_version; v++) {
-        RETURN_IF_ERROR(metafile_deleter->delete_file(join_path(meta_dir, tablet_metadata_filename(tablet_id, v))));
+    if (vacuum_version_range == nullptr) {
+        for (auto v = version + 1; v < final_retain_version; v++) {
+            RETURN_IF_ERROR(metafile_deleter->delete_file(join_path(meta_dir, tablet_metadata_filename(tablet_id, v))));
+        }
+    } else {
+        // The vacuum_version_range is used to collect the version range of the tablet metadata files to be deleted.
+        // So we can decide the final version range to be deleted when aggregate partition is enabled.
+        vacuum_version_range->merge(version + 1, final_retain_version - 1);
     }
     tablet_info.set_min_version(final_retain_version);
     *total_datafile_size += prepare_vacuum_file_size;
@@ -400,8 +431,9 @@ static void erase_tablet_metadata_from_metacache(TabletManager* tablet_mgr, cons
 
 static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view root_dir,
                                      std::vector<TabletInfoPB>& tablet_infos, int64_t min_retain_version,
-                                     int64_t grace_timestamp, int64_t* vacuumed_files, int64_t* vacuumed_file_size,
-                                     int64_t* vacuumed_version, int64_t* extra_file_size) {
+                                     int64_t grace_timestamp, bool enable_partition_aggregation,
+                                     int64_t* vacuumed_files, int64_t* vacuumed_file_size, int64_t* vacuumed_version,
+                                     int64_t* extra_file_size) {
     DCHECK(tablet_mgr != nullptr);
     DCHECK(std::is_sorted(tablet_infos.begin(), tablet_infos.end(),
                           [](const auto& a, const auto& b) { return a.tablet_id() < b.tablet_id(); }));
@@ -413,21 +445,35 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
     auto metafile_delete_cb = [=](const std::vector<std::string>& files) {
         erase_tablet_metadata_from_metacache(tablet_mgr, files);
     };
+    std::unique_ptr<VacuumTabletMetaVerionRange> vacuum_version_range;
+    if (enable_partition_aggregation) {
+        vacuum_version_range = std::make_unique<VacuumTabletMetaVerionRange>();
+    }
     int64_t final_vacuum_version = std::numeric_limits<int64_t>::max();
     for (auto& tablet_info : tablet_infos) {
         int64_t tablet_vacuumed_version = 0;
         AsyncFileDeleter datafile_deleter(config::lake_vacuum_min_batch_delete_size);
         AsyncFileDeleter metafile_deleter(INT64_MAX, metafile_delete_cb);
         RETURN_IF_ERROR(collect_files_to_vacuum(tablet_mgr, root_dir, tablet_info, grace_timestamp, min_retain_version,
-                                                &datafile_deleter, &metafile_deleter, vacuumed_file_size,
-                                                &tablet_vacuumed_version, extra_file_size));
+                                                vacuum_version_range.get(), &datafile_deleter, &metafile_deleter,
+                                                vacuumed_file_size, &tablet_vacuumed_version, extra_file_size));
         RETURN_IF_ERROR(datafile_deleter.finish());
-        RETURN_IF_ERROR(metafile_deleter.finish());
-        if (final_vacuum_version > tablet_vacuumed_version) {
-            // set partition vacuumed_version to min tablet vacuumed version
-            final_vacuum_version = tablet_vacuumed_version;
-        }
         (*vacuumed_files) += datafile_deleter.delete_count();
+        if (!enable_partition_aggregation) {
+            RETURN_IF_ERROR(metafile_deleter.finish());
+            (*vacuumed_files) += metafile_deleter.delete_count();
+        }
+        // set partition vacuumed_version to min tablet vacuumed version
+        final_vacuum_version = std::min(final_vacuum_version, tablet_vacuumed_version);
+    }
+    if (enable_partition_aggregation) {
+        // collect meta files to vacuum at partition level
+        AsyncFileDeleter metafile_deleter(INT64_MAX, metafile_delete_cb);
+        auto meta_dir = join_path(root_dir, kMetadataDirectoryName);
+        for (auto v = vacuum_version_range->min_version; v <= vacuum_version_range->max_version; v++) {
+            RETURN_IF_ERROR(metafile_deleter.delete_file(join_path(meta_dir, tablet_metadata_filename(0, v))));
+        }
+        RETURN_IF_ERROR(metafile_deleter.finish());
         (*vacuumed_files) += metafile_deleter.delete_count();
     }
     *vacuumed_version = final_vacuum_version;
@@ -522,7 +568,8 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
               [](const auto& a, const auto& b) { return a.tablet_id() < b.tablet_id(); });
 
     RETURN_IF_ERROR(vacuum_tablet_metadata(tablet_mgr, root_loc, tablet_infos, min_retain_version, grace_timestamp,
-                                           &vacuumed_files, &vacuumed_file_size, &vacuumed_version, &extra_file_size));
+                                           request.enable_partition_aggregation(), &vacuumed_files, &vacuumed_file_size,
+                                           &vacuumed_version, &extra_file_size));
     extra_file_size -= vacuumed_file_size;
     if (request.delete_txn_log()) {
         RETURN_IF_ERROR(vacuum_txn_log(root_loc, min_active_txn_id, &vacuumed_files, &vacuumed_file_size));
