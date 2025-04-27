@@ -32,7 +32,7 @@ public class LakeAggregator {
 
     // TODO(zhangqiang)
     // Optimize the aggregator selection strategy
-    public ComputeNode chooseAggregatorNode(long warehouseId) {
+    public static ComputeNode chooseAggregatorNode(long warehouseId) {
         try {
             WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             List<ComputeNode> candidateNodes = warehouseManager.getAliveComputeNodes(warehouseId);
