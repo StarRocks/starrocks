@@ -3680,6 +3680,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         ImmutableMap.of(key, propertiesToPersist.get(key)));
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
             }
+            if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT)) {
+                String spec = propertiesToPersist.get(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT);
+                tableProperty.getProperties().put(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT, spec);
+                tableProperty.setTimeDriftConstraintSpec(spec);
+                ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(db.getId(), table.getId(),
+                        ImmutableMap.of(key, propertiesToPersist.get(key)));
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
+            }
         }
     }
 
@@ -3725,6 +3733,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 throw new DdlException("Invalid partition retention condition");
             }
             results.put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, partitionRetentionCondition);
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT)) {
+            String spec = properties.get(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT);
+            PropertyAnalyzer.analyzeTimeDriftConstraint(spec, table, properties);
+            results.put(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT, spec);
         }
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
             try {
