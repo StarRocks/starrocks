@@ -91,12 +91,18 @@ public class StatisticsCalcUtils {
     public static Statistics.Builder estimateMultiColumnCombinedStats(Table table,
                                                                       Statistics.Builder builder,
                                                                       Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
-        if (!table.isNativeTableOrMaterializedView()) {
+        MultiColumnCombinedStatistics cachedMcStats;
+        if (table.isNativeTableOrMaterializedView()) {
+            cachedMcStats = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                    .getMultiColumnCombinedStatistics(table.getId());
+        } else if (table.isExternalTable() &&
+                  (table.isHiveTable() || table.isIcebergTable() || table.isHudiTable() || table.isDeltaLakeTable())) {
+            cachedMcStats = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                    .getExternalMultiColumnCombinedStatistics(table);
+        } else {
             return builder;
         }
 
-        MultiColumnCombinedStatistics cachedMcStats = GlobalStateMgr.getCurrentState().getStatisticStorage()
-                .getMultiColumnCombinedStatistics(table.getId());
         if (cachedMcStats == null || cachedMcStats == MultiColumnCombinedStatistics.EMPTY) {
             return builder;
         }
@@ -192,7 +198,7 @@ public class StatisticsCalcUtils {
                         if (histogram != null) {
                             columnStatistic = ColumnStatistic.buildFrom(columnStatistic).setHistogram(histogram).build();
                         }
-                    }   
+                    }
                 }
                 builder.addColumnStatistic(ref, columnStatistic);
             }

@@ -115,10 +115,12 @@ public class PredicateColumnsMgr {
     }
 
     private void addOrUpdateColumnUsage(Table table, Column column, ColumnUsage.UseCase useCase) {
-        // only support OLAP table right now
-        if (!table.isNativeTableOrMaterializedView()) {
+        // Support both native tables and supported external tables (Hive, Iceberg, Hudi, and Delta Lake)
+        if (!table.isNativeTableOrMaterializedView() &&
+                !(table.isHiveTable() || table.isIcebergTable() || table.isHudiTable() || table.isDeltaLakeTable())) {
             return;
         }
+
         Optional<ColumnUsage> mayUsage = ColumnUsage.build(column, table, useCase);
         if (mayUsage.isEmpty()) {
             return;

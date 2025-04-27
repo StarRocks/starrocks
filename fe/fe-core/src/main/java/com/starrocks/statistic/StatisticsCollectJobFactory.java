@@ -231,7 +231,7 @@ public class StatisticsCollectJobFactory {
         List<Type> columnTypes =
                 columnNames.stream().map(col -> table.getColumn(col).getType()).collect(Collectors.toList());
         return buildExternalStatisticsCollectJob(catalogName, db, table, partitionNames, columnNames, columnTypes,
-                analyzeType, scheduleType, properties);
+                analyzeType, scheduleType, properties, List.of(), List.of());
     }
 
     public static StatisticsCollectJob buildExternalStatisticsCollectJob(String catalogName, Database db, Table table,
@@ -240,7 +240,9 @@ public class StatisticsCollectJobFactory {
                                                                          List<Type> columnTypes,
                                                                          StatsConstants.AnalyzeType analyzeType,
                                                                          StatsConstants.ScheduleType scheduleType,
-                                                                         Map<String, String> properties) {
+                                                                         Map<String, String> properties,
+                                                                         List<StatsConstants.StatisticsType> statisticsTypes,
+                                                                         List<List<String>> columnGroups) {
         // refresh table to get latest table/partition info
         GlobalStateMgr.getCurrentState().getMetadataMgr().refreshTable(catalogName,
                 db.getFullName(), table, Lists.newArrayList(), true);
@@ -259,6 +261,13 @@ public class StatisticsCollectJobFactory {
             partitionNames = ConnectorPartitionTraits.build(table).getPartitionNames();
             allPartitionNames = partitionNames;
         }
+
+        // For multi-column statistics
+        if (!CollectionUtils.isEmpty(statisticsTypes) && !CollectionUtils.isEmpty(columnGroups)) {
+            return new ExternalMultiColumnStatisticsCollectJob(catalogName, db, table, partitionNames, columnNames,
+                    columnTypes, analyzeType, scheduleType, properties, statisticsTypes, columnGroups);
+        }
+
         if (analyzeType.equals(StatsConstants.AnalyzeType.SAMPLE)) {
             int samplePartitionSize = properties.get(StatsConstants.STATISTIC_SAMPLE_COLLECT_PARTITIONS) != null ?
                     Integer.parseInt(properties.get(StatsConstants.STATISTIC_SAMPLE_COLLECT_PARTITIONS)) :
@@ -399,10 +408,104 @@ public class StatisticsCollectJobFactory {
         Set<String> updatedPartitions = StatisticUtils.getUpdatedPartitionNames(table, statisticsUpdateTime);
         LOG.info("create external full statistics job for table: {}, partitions: {}",
                 table.getName(), updatedPartitions);
+
+        // Check for multi-column statistics if enabled
+        if (Config.enable_auto_multi_column_stats_from_predicates &&
+                (table.isHiveTable() || table.isIcebergTable() || table.isHudiTable() || table.isDeltaLakeTable())) {
+            TableName tableName = new TableName(db.getFullName(), table.getName());
+            List<ColumnUsage> predicateColumns = PredicateColumnsMgr.getInstance().queryPredicateColumns(tableName);
+
+            if (!predicateColumns.isEmpty()) {
+                List<List<String>> columnGroups = identifyExternalMultiColumnGroups(predicateColumns, table);
+
+                if (!columnGroups.isEmpty()) {
+                    LOG.info("Creating external multi-column statistics job for table: {}, column groups: {}",
+                            table.getName(), columnGroups);
+
+                    List<StatsConstants.StatisticsType> statsTypes =
+                            Collections.singletonList(StatsConstants.StatisticsType.MCDISTINCT);
+
+                    allTableJobMap.add(buildExternalStatisticsCollectJob(job.getCatalogName(), db, table,
+                            updatedPartitions == null ? null : Lists.newArrayList(updatedPartitions),
+                            columnNames, columnTypes, StatsConstants.AnalyzeType.FULL, job.getScheduleType(),
+                            Maps.newHashMap(), statsTypes, columnGroups));
+
+                    return;
+                }
+            }
+        }
+
         allTableJobMap.add(buildExternalStatisticsCollectJob(job.getCatalogName(), db, table,
                 updatedPartitions == null ? null : Lists.newArrayList(updatedPartitions),
                 columnNames, columnTypes, StatsConstants.AnalyzeType.FULL, job.getScheduleType(), Maps.newHashMap()));
     }
+
+    /**
+     * Identify column groups for multi-column statistics for external tables
+     * @param predicateColumns list of predicate columns
+     * @param table the external table
+     * @return list of column groups for multi-column statistics
+     */
+    private static List<List<String>> identifyExternalMultiColumnGroups(List<ColumnUsage> predicateColumns, Table table) {
+        List<List<String>> columnGroups = Lists.newArrayList();
+        if (!Config.enable_auto_multi_column_stats_from_predicates) {
+            return columnGroups;
+        }
+
+        int maxColumnGroupSize = Math.min(Config.statistics_max_multi_column_combined_num,
+                                         Config.statistic_auto_collect_predicate_column_groups_max);
+
+        // Group by use case, prioritizing JOIN and PREDICATE
+        Map<EnumSet<ColumnUsage.UseCase>, List<ColumnUsage>> groupedByUseCase = predicateColumns.stream()
+                .collect(Collectors.groupingBy(ColumnUsage::getUseCases));
+
+        // Handle JOIN columns first (highest priority)
+        List<ColumnUsage> joinColumns = predicateColumns.stream()
+                .filter(c -> c.getUseCases().contains(ColumnUsage.UseCase.JOIN))
+                .limit(maxColumnGroupSize)
+                .collect(Collectors.toList());
+
+        if (joinColumns.size() >= 2 && joinColumns.size() <= maxColumnGroupSize) {
+            List<String> joinColumnNames = joinColumns.stream()
+                    .map(ColumnUsage::getColumnName)
+                    .collect(Collectors.toList());
+            columnGroups.add(joinColumnNames);
+        }
+
+        // Handle PREDICATE columns second (second priority)
+        List<ColumnUsage> predicateOnlyColumns = predicateColumns.stream()
+                .filter(c -> c.getUseCases().contains(ColumnUsage.UseCase.PREDICATE)
+                       && !c.getUseCases().contains(ColumnUsage.UseCase.JOIN))
+                .limit(maxColumnGroupSize)
+                .collect(Collectors.toList());
+
+        if (predicateOnlyColumns.size() >= 2 && predicateOnlyColumns.size() <= maxColumnGroupSize) {
+            List<String> predicateColumnNames = predicateOnlyColumns.stream()
+                    .map(ColumnUsage::getColumnName)
+                    .collect(Collectors.toList());
+            columnGroups.add(predicateColumnNames);
+        }
+
+        // Handle GROUP_BY columns third (third priority)
+        List<ColumnUsage> groupByColumns = predicateColumns.stream()
+                .filter(c -> c.getUseCases().contains(ColumnUsage.UseCase.GROUP_BY)
+                       && !c.getUseCases().contains(ColumnUsage.UseCase.JOIN)
+                       && !c.getUseCases().contains(ColumnUsage.UseCase.PREDICATE))
+                .limit(maxColumnGroupSize)
+                .collect(Collectors.toList());
+
+        if (groupByColumns.size() >= 2 && groupByColumns.size() <= maxColumnGroupSize) {
+            List<String> groupByColumnNames = groupByColumns.stream()
+                    .map(ColumnUsage::getColumnName)
+                    .collect(Collectors.toList());
+            columnGroups.add(groupByColumnNames);
+        }
+
+        return columnGroups.stream()
+                .limit(Config.statistic_auto_collect_predicate_column_groups_max)
+                .collect(Collectors.toList());
+    }
+
     private static void createExternalSampleStatsJob(List<StatisticsCollectJob> allTableJobMap,
                                                      LocalDateTime statisticsUpdateTime,
                                                      ExternalAnalyzeJob job, Database db, Table table,
@@ -595,10 +698,38 @@ public class StatisticsCollectJobFactory {
                     .collect(Collectors.toList());
         }
 
+        // Create single-column sample statistics job
         StatisticsCollectJob sample = buildStatisticsCollectJob(db, table, partitionIdList, columnNames, columnTypes,
                 StatsConstants.AnalyzeType.SAMPLE, job.getScheduleType(), job.getProperties(), List.of(), List.of());
         sample.setPriority(priority);
         allTableJobMap.add(sample);
+
+        // Create multi-column statistics job if enabled
+        if (Config.enable_auto_multi_column_stats_from_predicates && table.isNativeTableOrMaterializedView()) {
+            TableName tableName = new TableName(db.getOriginName(), table.getName());
+            List<ColumnUsage> predicateColumns = PredicateColumnsMgr.getInstance().queryPredicateColumns(tableName);
+
+            if (CollectionUtils.isNotEmpty(predicateColumns)) {
+                List<List<String>> columnGroups = identifyMultiColumnGroups(predicateColumns, table);
+
+                if (!columnGroups.isEmpty()) {
+                    LOG.debug("Creating multi-column sample statistics job for table: {}, column groups: {}",
+                            table.getName(), columnGroups);
+
+                    List<StatsConstants.StatisticsType> statsTypes =
+                            Collections.singletonList(StatsConstants.StatisticsType.MULTI_COLUMN_NDV);
+
+                    StatisticsCollectJob multiColumnJob = buildStatisticsCollectJob(db, table,
+                            partitionIdList,
+                            null, null, // We don't need columnNames for multi-column stats
+                            StatsConstants.AnalyzeType.SAMPLE, job.getScheduleType(), Maps.newHashMap(),
+                            statsTypes, columnGroups);
+
+                    multiColumnJob.setPriority(priority);
+                    allTableJobMap.add(multiColumnJob);
+                }
+            }
+        }
     }
 
     private static void createHistogramJob(List<StatisticsCollectJob> allTableJobMap, NativeAnalyzeJob job,
@@ -629,11 +760,39 @@ public class StatisticsCollectJobFactory {
         }
 
         if (!partitionList.isEmpty()) {
+            // Create single-column statistics job
             StatisticsCollectJob statisticsCollectJob = buildStatisticsCollectJob(db, table,
                     partitionList.stream().map(Partition::getId).collect(Collectors.toList()), columnNames, columnTypes,
                     analyzeType, job.getScheduleType(), Maps.newHashMap(), List.of(), List.of());
             statisticsCollectJob.setPriority(priority);
             allTableJobMap.add(statisticsCollectJob);
+
+            // Create multi-column statistics job if enabled
+            if (Config.enable_auto_multi_column_stats_from_predicates && table.isNativeTableOrMaterializedView()) {
+                TableName tableName = new TableName(db.getOriginName(), table.getName());
+                List<ColumnUsage> predicateColumns = PredicateColumnsMgr.getInstance().queryPredicateColumns(tableName);
+
+                if (CollectionUtils.isNotEmpty(predicateColumns)) {
+                    List<List<String>> columnGroups = identifyMultiColumnGroups(predicateColumns, table);
+
+                    if (!columnGroups.isEmpty()) {
+                        LOG.debug("Creating multi-column statistics job for table: {}, column groups: {}",
+                                table.getName(), columnGroups);
+
+                        List<StatsConstants.StatisticsType> statsTypes =
+                                Collections.singletonList(StatsConstants.StatisticsType.MULTI_COLUMN_NDV);
+
+                        StatisticsCollectJob multiColumnJob = buildStatisticsCollectJob(db, table,
+                                partitionList.stream().map(Partition::getId).collect(Collectors.toList()),
+                                null, null, // We don't need columnNames for multi-column stats
+                                analyzeType, job.getScheduleType(), Maps.newHashMap(),
+                                statsTypes, columnGroups);
+
+                        multiColumnJob.setPriority(priority);
+                        allTableJobMap.add(multiColumnJob);
+                    }
+                }
+            }
         }
     }
 }

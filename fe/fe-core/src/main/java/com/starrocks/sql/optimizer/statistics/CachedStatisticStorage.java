@@ -55,7 +55,8 @@ import java.util.stream.Collectors;
 public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(CachedStatisticStorage.class);
 
-    private final Executor statsCacheRefresherExecutor = Executors.newFixedThreadPool(Config.statistic_cache_thread_pool_size,
+    private final Executor statsCacheRefresherExecutor = Executors.newFixedThreadPool(
+            Config.statistic_cache_thread_pool_size,
             new ThreadFactoryBuilder().setDaemon(true).setNameFormat("stats-cache-refresher-%d").build());
 
     AsyncLoadingCache<TableStatsCacheKey, Optional<Long>> tableStatsCache =
@@ -78,6 +79,10 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
 
     AsyncLoadingCache<Long, Optional<MultiColumnCombinedStatistics>> multiColumnStats =
             createAsyncLoadingCache(new MultiColumnCombinedStatsCacheLoader());
+
+    AsyncLoadingCache<ExternalColumnNDVStats.ExternalColumnNDVStatsKey,
+            Optional<MultiColumnCombinedStatistics>> externalMultiColumnStats =
+            createAsyncLoadingCache(new ExternalMultiColumnCombinedStatsCacheLoader());
 
     @Override
     public Map<Long, Optional<Long>> getTableStatistics(Long tableId, Collection<Partition> partitions) {
@@ -613,6 +618,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         return connectorTableColumnStatsList;
     }
 
+    @Override
     public MultiColumnCombinedStatistics getMultiColumnCombinedStatistics(Long tableId) {
         if (StatisticUtils.statisticTableBlackListCheck(tableId)) {
             return MultiColumnCombinedStatistics.EMPTY;
@@ -628,23 +634,55 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             LOG.warn("Failed to execute tableStatsCache.getAll", e);
             Thread.currentThread().interrupt();
         } catch (Exception e) {
-            LOG.warn("Faied to execute tableStatsCache.getAll", e);
+            LOG.warn("Failed to execute tableStatsCache.getAll", e);
         }
         return MultiColumnCombinedStatistics.EMPTY;
     }
 
-    public void refreshMultiColumnStatistics(Long tableId) {
+    @Override
+    public MultiColumnCombinedStatistics getExternalMultiColumnCombinedStatistics(Table table) {
         try {
-            MultiColumnCombinedStatsCacheLoader loader = new MultiColumnCombinedStatsCacheLoader();
-            CompletableFuture<Optional<MultiColumnCombinedStatistics>> future =
-                    loader.asyncLoad(tableId, statsCacheRefresherExecutor);
-            Optional<MultiColumnCombinedStatistics> result = future.get();
-            multiColumnStats.synchronous().put(tableId, result);
-        } catch (InterruptedException e) {
-            LOG.warn("Failed to execute refresh multi-column combined statistics", e);
-            Thread.currentThread().interrupt();
+            if (table == null || !table.isExternalTable()) {
+                return MultiColumnCombinedStatistics.EMPTY;
+            }
+
+            String tableUUID = table.getUUID();
+            String catalogName = table.getCatalogName();
+            String dbName = table.getDbName();
+            String tableName = table.getName();
+
+            ExternalColumnNDVStats.ExternalColumnNDVStatsKey key =
+                    new ExternalColumnNDVStats.ExternalColumnNDVStatsKey(tableUUID, catalogName, dbName, tableName);
+
+            CompletableFuture<Optional<MultiColumnCombinedStatistics>> result = externalMultiColumnStats.get(key);
+            if (result.isDone()) {
+                Optional<MultiColumnCombinedStatistics> data = result.get();
+                return data.orElse(MultiColumnCombinedStatistics.EMPTY);
+            }
+
+            return MultiColumnCombinedStatistics.EMPTY;
         } catch (Exception e) {
-            LOG.warn("Failed to execute refresh multi-column combined statistics", e);
+            LOG.warn("Failed to get external multi column statistics for table " + table.getName(), e);
+            return MultiColumnCombinedStatistics.EMPTY;
+        }
+    }
+
+    public void refreshMultiColumnStatistics(Long tableId) {
+        multiColumnStats.synchronous().refresh(tableId);
+    }
+
+    @Override
+    public void refreshExternalMultiColumnStatistics(Table table) {
+        if (table != null && table.isExternalTable()) {
+            String tableUUID = table.getUUID();
+            String catalogName = table.getCatalogName();
+            String dbName = table.getDbName();
+            String tableName = table.getName();
+
+            ExternalColumnNDVStats.ExternalColumnNDVStatsKey key =
+                    new ExternalColumnNDVStats.ExternalColumnNDVStatsKey(tableUUID, catalogName, dbName, tableName);
+
+            externalMultiColumnStats.synchronous().refresh(key);
         }
     }
 
@@ -663,6 +701,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
                 .put("ConnectorTableStats", connectorTableCachedStatistics.synchronous().estimatedSize())
                 .put("ConnectorHistogramStats", connectorHistogramCache.synchronous().estimatedSize())
                 .put("MultiColumnCombinedStats", multiColumnStats.synchronous().estimatedSize())
+                .put("ExternalMultiColumnStats", externalMultiColumnStats.synchronous().estimatedSize())
                 .build();
     }
 
@@ -692,7 +731,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
                 sampleFromCache(partitionStatistics),
                 sampleFromCache(histogramCache),
                 sampleFromCache(connectorHistogramCache),
-                sampleFromCache(connectorTableCachedStatistics)
+                sampleFromCache(connectorTableCachedStatistics),
+                sampleFromCache(multiColumnStats),
+                sampleFromCache(externalMultiColumnStats)
         );
     }
 
@@ -703,6 +744,52 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
                 .maximumSize(Config.statistic_cache_columns)
                 .executor(statsCacheRefresherExecutor)
                 .buildAsync(cacheLoader);
+    }
+
+    @Override
+    public void refreshAll() {
+        tableStatsCache.invalidateAll();
+        columnStatistics.invalidateAll();
+        partitionStatistics.invalidateAll();
+        histogramCache.invalidateAll();
+        connectorTableCachedStatistics.invalidateAll();
+        connectorHistogramCache.invalidateAll();
+        multiColumnStats.invalidateAll();
+        externalMultiColumnStats.invalidateAll();
+    }
+
+    @Override
+    public void invalidateColumnsStatistics(long tableId, List<String> columnNames) {
+        if (columnNames == null || columnNames.isEmpty()) {
+            tableStatsCache.synchronous().invalidate(new TableStatsCacheKey(tableId, -1));
+            columnStatistics.synchronous().invalidateAll(columnStatistics.synchronous().asMap().keySet().stream()
+                    .filter(e -> e.tableId == tableId).collect(Collectors.toList()));
+            return;
+        }
+
+        tableStatsCache.synchronous().invalidate(new TableStatsCacheKey(tableId, -1));
+        for (String column : columnNames) {
+            columnStatistics.synchronous().invalidate(new ColumnStatsCacheKey(tableId, column));
+            partitionStatistics.synchronous().invalidate(new ColumnStatsCacheKey(tableId, column));
+            histogramCache.synchronous().invalidate(new ColumnStatsCacheKey(tableId, column));
+        }
+
+        // Invalidate multi-column statistics
+        multiColumnStats.synchronous().invalidate(tableId);
+
+        // Invalidate external multi-column statistics if this is an external table
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(tableId);
+        if (table != null && table.isExternalTable()) {
+            String tableUUID = table.getUUID();
+            String catalogName = table.getCatalogName();
+            String dbName = table.getDbName();
+            String tableName = table.getName();
+
+            ExternalColumnNDVStats.ExternalColumnNDVStatsKey key =
+                    new ExternalColumnNDVStats.ExternalColumnNDVStatsKey(tableUUID, catalogName, dbName, tableName);
+
+            externalMultiColumnStats.synchronous().invalidate(key);
+        }
     }
 
 }

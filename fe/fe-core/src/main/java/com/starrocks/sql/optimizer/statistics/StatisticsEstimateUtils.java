@@ -276,4 +276,112 @@ public class StatisticsEstimateUtils {
                 combinedFilteredStats,
                 combinedFilteredStats.getOutputRowCount());
     }
+
+    /**
+     * Estimates the NDV (number of distinct values) for an intersection of two column sets.
+     * Uses the principle of inclusion-exclusion for the estimation.
+     *
+     * @param set1 First set of column IDs
+     * @param set2 Second set of column IDs
+     * @param intersection The intersection of set1 and set2
+     * @param stats The statistics object containing NDV information
+     * @return A pair containing the estimated NDV and a confidence score
+     */
+    public static Pair<Double, Double> estimateIntersectionNDV(
+            Set<Long> set1,
+            Set<Long> set2,
+            Set<Long> intersection,
+            MultiColumnCombinedStatistics stats) {
+
+        if (intersection.isEmpty()) {
+            return null;
+        }
+
+        // Convert Long to Integer for internal storage
+        Set<Integer> intSet1 = new java.util.HashSet<>();
+        Set<Integer> intSet2 = new java.util.HashSet<>();
+        Set<Integer> intIntersection = new java.util.HashSet<>();
+
+        for (Long id : set1) {
+            intSet1.add(id.intValue());
+        }
+
+        for (Long id : set2) {
+            intSet2.add(id.intValue());
+        }
+
+        for (Long id : intersection) {
+            intIntersection.add(id.intValue());
+        }
+
+        // Get NDVs
+        Long ndv1 = stats.getDistinctCounts().get(intSet1);
+        Long ndv2 = stats.getDistinctCounts().get(intSet2);
+
+        if (ndv1 == null || ndv2 == null) {
+            return null;
+        }
+
+        // Use the maximum of the NDVs as an upper bound for the intersection
+        double estimatedNDV = Math.min(ndv1, ndv2);
+
+        // Confidence decreases with the size of the difference between sets
+        double confidence = 0.8;
+
+        return new Pair<>(estimatedNDV, confidence);
+    }
+
+    /**
+     * Estimates the NDV (number of distinct values) for a union of two column sets.
+     * Uses the principle of inclusion-exclusion for the estimation.
+     *
+     * @param set1 First set of column IDs
+     * @param set2 Second set of column IDs
+     * @param union The union of set1 and set2
+     * @param stats The statistics object containing NDV information
+     * @return A pair containing the estimated NDV and a confidence score
+     */
+    public static Pair<Double, Double> estimateUnionNDV(
+            Set<Long> set1,
+            Set<Long> set2,
+            Set<Long> union,
+            MultiColumnCombinedStatistics stats) {
+
+        if (union.isEmpty()) {
+            return null;
+        }
+
+        // Convert Long to Integer for internal storage
+        Set<Integer> intSet1 = new java.util.HashSet<>();
+        Set<Integer> intSet2 = new java.util.HashSet<>();
+        Set<Integer> intUnion = new java.util.HashSet<>();
+
+        for (Long id : set1) {
+            intSet1.add(id.intValue());
+        }
+
+        for (Long id : set2) {
+            intSet2.add(id.intValue());
+        }
+
+        for (Long id : union) {
+            intUnion.add(id.intValue());
+        }
+
+        // Get NDVs
+        Long ndv1 = stats.getDistinctCounts().get(intSet1);
+        Long ndv2 = stats.getDistinctCounts().get(intSet2);
+
+        if (ndv1 == null || ndv2 == null) {
+            return null;
+        }
+
+        // For union, use the sum of NDVs as an upper bound
+        double estimatedNDV = ndv1 + ndv2;
+
+        // Confidence decreases with the size of the union
+        double confidence = 0.7;
+
+        return new Pair<>(estimatedNDV, confidence);
+    }
 }

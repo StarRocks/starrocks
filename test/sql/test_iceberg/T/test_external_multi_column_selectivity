@@ -1,0 +1,139 @@
+-- Test for external multi-column statistics selectivity estimation on Iceberg tables
+-- This test focuses on validating how the query optimizer uses multi-column statistics
+-- for cardinality and selectivity estimation
+
+-- Disable auto statistics collection for controlled testing
+SET enable_auto_collect_statistics=false;
+
+-- Enable collection of multi-column statistics
+SET enable_collect_predicate_columns=true;
+SET enable_collect_multi_column_stats=true;
+SET enable_auto_multi_column_stats_from_predicates=true;
+
+-- Create Iceberg catalog and database
+CREATE CATALOG IF NOT EXISTS iceberg_catalog
+PROPERTIES(
+    "type"="iceberg",
+    "iceberg.catalog.type"="hive",
+    "hive.metastore.uris"="thrift://127.0.0.1:9083"
+);
+
+CREATE DATABASE IF NOT EXISTS iceberg_catalog.selectivity_test;
+USE iceberg_catalog.selectivity_test;
+
+-- Create a test table with strong correlations between columns
+CREATE TABLE IF NOT EXISTS order_data (
+    order_id BIGINT,
+    customer_id INT,
+    customer_tier VARCHAR(10), -- Bronze, Silver, Gold, Platinum
+    order_date DATE,
+    order_priority VARCHAR(15), -- Low, Medium, High, Critical
+    shipping_mode VARCHAR(20), -- Standard, Express, Next Day, Same Day
+    product_category VARCHAR(30),
+    product_subcategory VARCHAR(50),
+    quantity INT,
+    unit_price DECIMAL(10,2),
+    discount DECIMAL(5,2),
+    profit DECIMAL(12,2)
+) ENGINE = ICEBERG
+PROPERTIES (
+    "format" = "parquet"
+);
+
+-- Insert sample data with strong correlation patterns
+-- Each customer tier has specific shipping modes and priorities they tend to use
+INSERT INTO order_data VALUES
+-- Platinum customers mostly use Same Day shipping and Critical priority
+(1001, 5001, 'Platinum', '2023-01-05', 'Critical', 'Same Day', 'Electronics', 'Smartphones', 1, 999.99, 0.00, 299.99),
+(1002, 5002, 'Platinum', '2023-01-06', 'Critical', 'Same Day', 'Electronics', 'Laptops', 1, 1499.99, 50.00, 449.99),
+(1003, 5003, 'Platinum', '2023-01-07', 'Critical', 'Same Day', 'Electronics', 'Tablets', 2, 699.99, 0.00, 419.98),
+(1004, 5004, 'Platinum', '2023-01-08', 'High', 'Next Day', 'Furniture', 'Office Chairs', 1, 399.99, 0.00, 159.99),
+(1005, 5005, 'Platinum', '2023-01-09', 'Critical', 'Same Day', 'Electronics', 'Audio', 1, 299.99, 0.00, 119.99),
+
+-- Gold customers mostly use Next Day shipping and High priority
+(1006, 6001, 'Gold', '2023-01-10', 'High', 'Next Day', 'Electronics', 'Smartphones', 1, 799.99, 39.99, 199.99),
+(1007, 6002, 'Gold', '2023-01-11', 'High', 'Next Day', 'Home', 'Kitchen Appliances', 2, 199.99, 0.00, 159.98),
+(1008, 6003, 'Gold', '2023-01-12', 'High', 'Next Day', 'Clothing', 'Formal Wear', 1, 149.99, 0.00, 74.99),
+(1009, 6004, 'Gold', '2023-01-13', 'Medium', 'Express', 'Sports', 'Outdoor Gear', 1, 129.99, 10.00, 51.99),
+(1010, 6005, 'Gold', '2023-01-14', 'High', 'Next Day', 'Electronics', 'Cameras', 1, 599.99, 0.00, 239.99),
+
+-- Silver customers mostly use Express shipping and Medium priority
+(1011, 7001, 'Silver', '2023-01-15', 'Medium', 'Express', 'Books', 'Fiction', 2, 24.99, 0.00, 14.98),
+(1012, 7002, 'Silver', '2023-01-16', 'Medium', 'Express', 'Electronics', 'Accessories', 3, 19.99, 0.00, 29.97),
+(1013, 7003, 'Silver', '2023-01-17', 'Medium', 'Express', 'Home', 'Decor', 1, 79.99, 5.00, 29.99),
+(1014, 7004, 'Silver', '2023-01-18', 'Low', 'Standard', 'Clothing', 'Casual Wear', 2, 39.99, 0.00, 39.98),
+(1015, 7005, 'Silver', '2023-01-19', 'Medium', 'Express', 'Office', 'Supplies', 5, 9.99, 0.00, 24.95),
+
+-- Bronze customers mostly use Standard shipping and Low priority
+(1016, 8001, 'Bronze', '2023-01-20', 'Low', 'Standard', 'Grocery', 'Snacks', 10, 3.99, 0.00, 19.90),
+(1017, 8002, 'Bronze', '2023-01-21', 'Low', 'Standard', 'Books', 'Non-fiction', 1, 19.99, 2.00, 7.99),
+(1018, 8003, 'Bronze', '2023-01-22', 'Low', 'Standard', 'Electronics', 'Accessories', 2, 14.99, 0.00, 13.98),
+(1019, 8004, 'Bronze', '2023-01-23', 'Medium', 'Express', 'Beauty', 'Personal Care', 3, 12.99, 0.00, 19.47),
+(1020, 8005, 'Bronze', '2023-01-24', 'Low', 'Standard', 'Home', 'Storage', 2, 29.99, 5.00, 24.98);
+
+-- Run queries to generate predicate column usage patterns
+-- Customer tier and shipping mode correlations
+SELECT * FROM order_data WHERE customer_tier = 'Platinum' AND shipping_mode = 'Same Day';
+SELECT * FROM order_data WHERE customer_tier = 'Gold' AND shipping_mode = 'Next Day';
+SELECT * FROM order_data WHERE customer_tier = 'Silver' AND shipping_mode = 'Express';
+SELECT * FROM order_data WHERE customer_tier = 'Bronze' AND shipping_mode = 'Standard';
+
+-- Customer tier and order priority correlations
+SELECT * FROM order_data WHERE customer_tier = 'Platinum' AND order_priority = 'Critical';
+SELECT * FROM order_data WHERE customer_tier = 'Gold' AND order_priority = 'High';
+SELECT * FROM order_data WHERE customer_tier = 'Silver' AND order_priority = 'Medium';
+SELECT * FROM order_data WHERE customer_tier = 'Bronze' AND order_priority = 'Low';
+
+-- Category and price range correlations
+SELECT * FROM order_data WHERE product_category = 'Electronics' AND unit_price > 500;
+SELECT * FROM order_data WHERE product_category = 'Books' AND unit_price < 30;
+SELECT * FROM order_data WHERE product_category = 'Home' AND unit_price BETWEEN 50 AND 200;
+
+-- Analyze the table to collect predicate columns
+ANALYZE TABLE order_data WITH SYNC MODE PREDICATE COLUMNS;
+
+-- Verify the predicate columns that were collected
+SELECT column_name, predicate_count
+FROM information_schema.predicate_columns
+WHERE table_name = 'order_data'
+ORDER BY predicate_count DESC
+LIMIT 10;
+
+-- Analyze the table to collect multi-column statistics
+ANALYZE TABLE order_data WITH SYNC MODE;
+
+-- Verify that multi-column statistics were collected
+SELECT catalog_name, db_name, table_name, column_names, row_count, ndv, data_size
+FROM information_schema.external_multi_column_statistics
+WHERE table_name = 'order_data'
+ORDER BY column_names;
+
+-- Test selectivity estimation with EXPLAIN VERBOSE
+-- We expect to see better selectivity estimates for correlated columns
+
+-- Customer tier and shipping mode (strong correlation)
+EXPLAIN VERBOSE SELECT * FROM order_data
+WHERE customer_tier = 'Platinum' AND shipping_mode = 'Same Day';
+
+-- Customer tier and priority (strong correlation)
+EXPLAIN VERBOSE SELECT * FROM order_data
+WHERE customer_tier = 'Gold' AND order_priority = 'High';
+
+-- Category and price (medium correlation)
+EXPLAIN VERBOSE SELECT * FROM order_data
+WHERE product_category = 'Electronics' AND unit_price > 500;
+
+-- Compare with non-correlated columns (should use individual column stats)
+EXPLAIN VERBOSE SELECT * FROM order_data
+WHERE order_date = '2023-01-15' AND product_subcategory = 'Fiction';
+
+-- Clean up
+DROP TABLE order_data;
+DROP DATABASE iceberg_catalog.selectivity_test;
+DROP CATALOG iceberg_catalog;
+
+-- Reset settings
+SET enable_collect_predicate_columns=false;
+SET enable_collect_multi_column_stats=false;
+SET enable_auto_multi_column_stats_from_predicates=false;
+SET enable_auto_collect_statistics=true;

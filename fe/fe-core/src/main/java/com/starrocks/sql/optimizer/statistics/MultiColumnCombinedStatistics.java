@@ -40,6 +40,32 @@ public class MultiColumnCombinedStatistics {
         return distinctCounts;
     }
 
+    /**
+     * Add statistics for a set of column IDs
+     */
+    public void addColumnStatistic(Set<Long> columnIds, long ndv) {
+        // Convert Long IDs to Integer for internal storage
+        Set<Integer> intColumnIds = new java.util.HashSet<>();
+        for (Long id : columnIds) {
+            intColumnIds.add(id.intValue());
+        }
+        distinctCounts.put(intColumnIds, ndv);
+    }
+
+    /**
+     * Check if the statistics are empty
+     */
+    public boolean isEmpty() {
+        return distinctCounts.isEmpty();
+    }
+
+    /**
+     * Check if statistics for a specific column set exist
+     */
+    public boolean containsColumnSet(Set<?> columnIds) {
+        return distinctCounts.containsKey(columnIds);
+    }
+
     @Override
     public String toString() {
         return new ToStringBuilder(this)
