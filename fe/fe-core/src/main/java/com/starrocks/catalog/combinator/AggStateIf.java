@@ -45,7 +45,7 @@ public final class AggStateIf extends AggregateFunction {
 
     public static Optional<AggStateIf> of(AggregateFunction aggFunc) {
         try {
-            FunctionName functionName = new FunctionName(aggFunc.functionName() + FunctionSet.AGG_STATE_IF);
+            FunctionName functionName = new FunctionName(aggFunc.functionName() + FunctionSet.AGG_STATE_IF_SUFFIX);
             List<Type> argTypes = new ArrayList<>();
             argTypes.addAll(Arrays.asList(aggFunc.getArgs()));
             argTypes.add(Type.BOOLEAN);

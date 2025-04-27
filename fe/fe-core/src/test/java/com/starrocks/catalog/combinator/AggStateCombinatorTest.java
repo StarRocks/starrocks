@@ -147,12 +147,24 @@ public class AggStateCombinatorTest extends MVTestBase {
         List<Type> argTypes = Stream.of(aggFunc.getArgs()).map(this::mockType).collect(Collectors.toList());
         String aggStateFuncName = FunctionSet.getAggStateName(aggFunc.functionName());
         Type[] argumentTypes = argTypes.toArray(Type[]::new);
-        System.out.println("FunctionName:" + aggFunc.functionName() + ", Arg Types:" + argTypes
-                + ", Intermediate Types:" + aggFunc.getIntermediateTypeOrReturnType()
-                + ", ReturnType:" + aggFunc.getReturnType());
         FunctionParams params = new FunctionParams(false, Lists.newArrayList());
         Boolean[] argArgumentConstants = IntStream.range(0, aggFunc.getNumArgs())
                 .mapToObj(x -> new Boolean(false)).toArray(Boolean[]::new);
+        Function result = FunctionAnalyzer.getAnalyzedAggregateFunction(ConnectContext.get(),
+                aggStateFuncName, params, argumentTypes, argArgumentConstants, NodePosition.ZERO);
+        return result;
+    }
+
+    private Function getAggStateIfFunc(AggregateFunction aggFunc) {
+        List<Type> argTypes = Stream.of(aggFunc.getArgs()).map(this::mockType).collect(Collectors.toList());
+        argTypes.add(Type.BOOLEAN);
+        String aggStateFuncName = FunctionSet.getAggStateIfName(aggFunc.functionName());
+        Type[] argumentTypes = argTypes.toArray(Type[]::new);
+        FunctionParams params = new FunctionParams(false, null);
+        List<Boolean> argArgumentConstantsList = IntStream.range(0, aggFunc.getNumArgs())
+                .mapToObj(x -> new Boolean(false)).collect(Collectors.toList());
+        argArgumentConstantsList.add(false);
+        Boolean[] argArgumentConstants = argArgumentConstantsList.toArray(Boolean[]::new);
         Function result = FunctionAnalyzer.getAnalyzedAggregateFunction(ConnectContext.get(),
                 aggStateFuncName, params, argumentTypes, argArgumentConstants, NodePosition.ZERO);
         return result;
@@ -327,6 +339,8 @@ public class AggStateCombinatorTest extends MVTestBase {
             Assert.assertTrue(mergeCombinator.isPresent());
             var unionCombinator = AggStateUnionCombinator.of(aggFunc);
             Assert.assertTrue(unionCombinator.isPresent());
+            var ifCombinator = AggStateIf.of(aggFunc);
+            Assert.assertTrue(ifCombinator.isPresent());
         }
     }
 
@@ -347,9 +361,6 @@ public class AggStateCombinatorTest extends MVTestBase {
             Assert.assertFalse(result.getReturnType().isWildcardDecimal());
             Assert.assertFalse(result.getReturnType().isPseudoType());
         }
-        System.out.println("Supported Agg Functions size:" + supportedAggFunctions.size());
-        System.out.println("Supported Agg Functions:" + supportedAggFunctions);
-        System.out.println("UnSupported Agg Functions:" + unSupportedAggFunctions);
         Assert.assertTrue(supportedAggFunctions.size() >= SUPPORTED_AGG_STATE_FUNCTIONS.size());
     }
 
@@ -375,8 +386,6 @@ public class AggStateCombinatorTest extends MVTestBase {
             Type[] argumentTypes = { intermediateType };
             Boolean[] argArgumentConstants = { false };
 
-            System.out.println("Start to get func:" + aggStateFuncName + ", Arg Types:"
-                    + Stream.of(argumentTypes).collect(Collectors.toList()));
             Function result = FunctionAnalyzer.getAnalyzedAggregateFunction(ConnectContext.get(),
                     aggStateFuncName, params, argumentTypes, argArgumentConstants, NodePosition.ZERO);
             Assert.assertNotNull(result);
@@ -384,8 +393,6 @@ public class AggStateCombinatorTest extends MVTestBase {
             Assert.assertFalse(result.getReturnType().isWildcardDecimal());
             Assert.assertFalse(result.getReturnType().isPseudoType());
         }
-        System.out.println("Supported Agg Functions size:" + supportedAggFunctions.size());
-        System.out.println("Supported Agg Functions:" + supportedAggFunctions);
         Assert.assertTrue(supportedAggFunctions.size() >= SUPPORTED_AGG_STATE_FUNCTIONS.size());
     }
 
@@ -419,8 +426,32 @@ public class AggStateCombinatorTest extends MVTestBase {
             Assert.assertFalse(result.getReturnType().isWildcardDecimal());
             Assert.assertFalse(result.getReturnType().isPseudoType());
         }
-        System.out.println("Supported Agg Functions size:" + supportedAggFunctions.size());
-        System.out.println("Supported Agg Functions:" + supportedAggFunctions);
+        Assert.assertTrue(supportedAggFunctions.size() >= SUPPORTED_AGG_STATE_FUNCTIONS.size());
+    }
+
+    @Test
+    public void testFunctionAnalyzerIfCombinator() {
+        var builtInAggregateFunctions = getBuiltInAggFunctions();
+        Set<String> supportedAggFunctions = Sets.newHashSet();
+        for (AggregateFunction aggFunc : builtInAggregateFunctions) {
+            if (!AggStateUtils.isSupportedAggStateFunction(aggFunc, true)) {
+                continue;
+            }
+            supportedAggFunctions.add(aggFunc.functionName());
+
+            Function aggStateFunc = getAggStateIfFunc(aggFunc);
+            if (aggStateFunc == null) {
+                aggStateFunc = getAggStateIfFunc(aggFunc);
+            }
+
+            Assert.assertNotNull(aggStateFunc);
+            if (!(aggStateFunc instanceof AggStateIf)) {
+                aggStateFunc = getAggStateIfFunc(aggFunc);
+            }
+            // Assert.assertTrue(aggStateFunc instanceof AggStateIf);
+            Assert.assertFalse(aggStateFunc.getReturnType().isWildcardDecimal());
+            Assert.assertFalse(aggStateFunc.getReturnType().isPseudoType());
+        }
         Assert.assertTrue(supportedAggFunctions.size() >= SUPPORTED_AGG_STATE_FUNCTIONS.size());
     }
 

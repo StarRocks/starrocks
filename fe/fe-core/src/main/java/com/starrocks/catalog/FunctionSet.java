@@ -544,7 +544,7 @@ public class FunctionSet {
     public static final String AGG_STATE_SUFFIX = "_state";
     public static final String AGG_STATE_UNION_SUFFIX = "_union";
     public static final String AGG_STATE_MERGE_SUFFIX = "_merge";
-    public static final String AGG_STATE_IF = "_if";
+    public static final String AGG_STATE_IF_SUFFIX = "_if";
 
     private static final Logger LOGGER = LogManager.getLogger(FunctionSet.class);
 
@@ -1047,6 +1047,10 @@ public class FunctionSet {
 
     public static String getAggStateMergeName(String name) {
         return String.format("%s%s", name, AGG_STATE_MERGE_SUFFIX);
+    }
+
+    public static String getAggStateIfName(String name) {
+        return String.format("%s%s", name, AGG_STATE_IF_SUFFIX);
     }
 
     // Populate all the aggregate builtins in the globalStateMgr.

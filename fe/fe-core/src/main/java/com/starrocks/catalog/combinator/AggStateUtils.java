@@ -125,8 +125,8 @@ public class AggStateUtils {
             return fnName.substring(0, fnName.length() - FunctionSet.AGG_STATE_UNION_SUFFIX.length());
         } else if (fnName.endsWith(FunctionSet.AGG_STATE_MERGE_SUFFIX)) {
             return fnName.substring(0, fnName.length() - FunctionSet.AGG_STATE_MERGE_SUFFIX.length());
-        } else if (fnName.endsWith(FunctionSet.AGG_STATE_IF)) {
-            return fnName.substring(0, fnName.length() - FunctionSet.AGG_STATE_IF.length());
+        } else if (fnName.endsWith(FunctionSet.AGG_STATE_IF_SUFFIX)) {
+            return fnName.substring(0, fnName.length() - FunctionSet.AGG_STATE_IF_SUFFIX.length());
         } else {
             return fnName;
         }
@@ -187,10 +187,11 @@ public class AggStateUtils {
             // `_if`'s input types are boolean + original input types
             String aggFuncName = AggStateUtils.getAggFuncNameOfCombinator(func.functionName());
 
-            Type[] oldArgumentTypes = Arrays.copyOfRange(argumentTypes, 0, argumentTypes.length - 1);
+            Type[] argumentTypes = Arrays.copyOfRange(argumentTypes, 0, argumentTypes.length - 1);
 
             FunctionParams oldFunctionParams =
-                    new FunctionParams(params.isStar(), params.exprs().subList(0, params.exprs().size() - 1),
+                    new FunctionParams(params.isStar(),
+                            params.exprs() == null ? null : params.exprs().subList(0, params.exprs().size() - 1),
                             params.getExprsNames() == null ? null :
                                     params.getExprsNames().subList(0, params.getExprsNames().size() - 1),
                             params.isDistinct(), params.getOrderByElements() == null ? null :
@@ -198,9 +199,9 @@ public class AggStateUtils {
 
             Boolean[] oldArgumentIsConstants =
                     Arrays.copyOfRange(argumentIsConstants, 0, argumentIsConstants.length - 1);
-
+            // find the 
             Function argFn = FunctionAnalyzer.getAnalyzedAggregateFunction(session, aggFuncName,
-                    oldFunctionParams, oldArgumentTypes, oldArgumentIsConstants, pos);
+                    oldFunctionParams, argumentTypes, oldArgumentIsConstants, pos);
             if (argFn == null) {
                 return null;
             }
