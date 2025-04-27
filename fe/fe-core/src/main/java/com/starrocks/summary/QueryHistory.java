@@ -16,6 +16,7 @@ package com.starrocks.summary;
 
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -109,6 +110,8 @@ public class QueryHistory {
         String planStr = this.plan.getExplainString(StatementBase.ExplainLevel.LOGICAL);
         jsonMaps.put("sql_digest", sqlDigest);
         jsonMaps.put("plan", planStr);
-        return new Gson().toJson(jsonMaps);
+
+        Gson gson = new GsonBuilder().disableHtmlEscaping().create();
+        return gson.toJson(jsonMaps);
     }
 }
