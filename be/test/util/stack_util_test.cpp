@@ -16,7 +16,9 @@
 
 #include <fmt/format.h>
 #include <gtest/gtest.h>
+#include <sys/syscall.h>
 
+#include <future>
 #include <utility>
 
 #include "testutil/sync_point.h"
@@ -72,6 +74,37 @@ void test_get_stack_trace_for_all_threads(const std::string& line_prefix) {
 TEST(StackUtilTest, get_stack_trace_for_all_threads) {
     test_get_stack_trace_for_all_threads("");
     test_get_stack_trace_for_all_threads("MOCK_PREFIX - ");
+}
+
+TEST(StackUtilTest, get_stack_trace_for_thread) {
+    std::atomic_bool stop = false;
+    std::promise<pid_t> tid_promise;
+    std::thread thread([&]() {
+        tid_promise.set_value(syscall(SYS_gettid));
+        while (!stop) {
+            usleep(1000);
+        }
+    });
+
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("StackTraceTask::symbolize");
+        SyncPoint::GetInstance()->DisableProcessing();
+        stop.store(true);
+        thread.join();
+    });
+
+    std::atomic_int num_symbolize{0};
+    SyncPoint::GetInstance()->SetCallBack("StackTraceTask::symbolize", [&](void* arg) {
+        SymbolizeTuple* tuple = (SymbolizeTuple*)arg;
+        std::snprintf(std::get<1>(*tuple), std::get<2>(*tuple), "mock_frame_%d", num_symbolize.load());
+        num_symbolize += 1;
+    });
+    auto tid_future = tid_promise.get_future();
+    ASSERT_EQ(std::future_status::ready, tid_future.wait_for(std::chrono::seconds(60)));
+    std::string stack_trace = get_stack_trace_for_thread(tid_future.get(), 30000);
+    ASSERT_TRUE(num_symbolize > 0);
+    ASSERT_TRUE(stack_trace.find("mock_frame_") != std::string::npos);
 }
 
 } // namespace starrocks
