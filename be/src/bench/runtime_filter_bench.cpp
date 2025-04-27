@@ -16,12 +16,9 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
-#include <random>
-
 #include "bench.h"
 #include "column/column_helper.h"
 #include "exprs/runtime_filter.h"
-#include "exprs/runtime_filter_bank.h"
 #include "simd/simd.h"
 #include "util/time.h"
 

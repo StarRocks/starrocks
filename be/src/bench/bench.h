@@ -16,14 +16,10 @@
 #include <gtest/gtest.h>
 #include <testutil/assert.h>
 
-#include <memory>
 #include <numeric>
 #include <random>
 
-#include "column/chunk.h"
 #include "column/column_helper.h"
-#include "column/datum_tuple.h"
-#include "common/config.h"
 
 namespace starrocks {
 
@@ -32,7 +28,6 @@ inline int kTestChunkSize = 4096;
 class Bench {
 public:
     static ColumnPtr create_series_column(const TypeDescriptor& type_desc, int num_rows, bool nullable = true) {
-        // TODO: support more types.
         DCHECK_EQ(TYPE_INT, type_desc.type);
 
         ColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
@@ -46,6 +41,8 @@ public:
 
     static ColumnPtr create_random_column(const TypeDescriptor& type_desc, int num_rows, bool low_card, bool nullable,
                                           size_t min_length = 0) {
+        DCHECK(type_desc.type == TYPE_INT || type_desc.type == TYPE_VARCHAR);
+
         using UniformInt = std::uniform_int_distribution<std::mt19937::result_type>;
         using PoissonInt = std::poisson_distribution<std::mt19937::result_type>;
         ColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
