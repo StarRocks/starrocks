@@ -151,6 +151,8 @@ Status PageReader::_read_and_deserialize_header(bool need_fill_cache) {
             if (peek_mode) {
                 _opts.stats->bytes_read += header_length;
             }
+            _opts.stats->request_bytes_read += header_length;
+            _opts.stats->request_bytes_read_uncompressed + header_length;
             break;
         }
 
