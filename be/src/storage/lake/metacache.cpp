@@ -64,6 +64,17 @@ static bvar::Adder<uint64_t> g_segment_cache_miss;
 static bvar::Window<bvar::Adder<uint64_t>> g_segment_cache_miss_minute("lake", "segment_cache_miss_minute",
                                                                        &g_segment_cache_miss, 60);
 
+static bvar::Adder<uint64_t> g_aggregate_partition_cache_hit;
+static bvar::Window<bvar::Adder<uint64_t>> g_aggregate_partition_cache_hit_minute("lake",
+                                                                                  "aggregate_partition_hit_minute",
+                                                                                  &g_aggregate_partition_cache_hit, 60);
+
+static bvar::Adder<uint64_t> g_aggregate_partition_cache_miss;
+static bvar::Window<bvar::Adder<uint64_t>> g_aggregate_partition_cache_miss_minute("lake",
+                                                                                   "aggregate_partition_miss_minute",
+                                                                                   &g_aggregate_partition_cache_miss,
+                                                                                   60);
+
 #ifndef BE_TEST
 static Metacache* get_metacache() {
     auto mgr = ExecEnv::GetInstance()->lake_tablet_manager();
@@ -209,7 +220,7 @@ std::shared_ptr<const DelVector> Metacache::lookup_delvec(std::string_view key) 
 bool Metacache::lookup_aggregation_partition(std::string_view key) {
     auto handle = _cache->lookup(CacheKey(key));
     if (handle == nullptr) {
-        g_dv_cache_miss << 1;
+        g_aggregate_partition_cache_miss << 1;
         return false;
     }
     DeferOp defer([this, handle]() { _cache->release(handle); });
@@ -217,7 +228,7 @@ bool Metacache::lookup_aggregation_partition(std::string_view key) {
     try {
         auto value = static_cast<CacheValue*>(_cache->value(handle));
         auto is_aggregation = std::get<bool>(*value);
-        g_dv_cache_hit << 1;
+        g_aggregate_partition_cache_hit << 1;
         return is_aggregation;
     } catch (const std::bad_variant_access& e) {
         return false;
