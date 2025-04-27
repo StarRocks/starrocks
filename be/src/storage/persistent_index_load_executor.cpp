@@ -40,10 +40,10 @@ public:
         index_entry->update_expire_time(MonotonicMillis() + manager->get_index_cache_expire_ms(*_tablet));
         index_cache.update_object_size(index_entry, index_entry->value().memory_usage());
         if (st.ok()) {
-            VLOG(2) << "load primary index success. tablet: " << tablet_id;
+            VLOG(2) << "Load primary index success. tablet: " << tablet_id;
             index_cache.release(index_entry);
         } else {
-            LOG(WARNING) << "load primary index error: " << st << ", tablet: " << tablet_id;
+            LOG(WARNING) << "Load primary index error: " << st << ", tablet: " << tablet_id;
             index_cache.remove(index_entry);
         }
     }
@@ -76,21 +76,24 @@ Status PersistentIndexLoadExecutor::refresh_max_thread_num() {
     }
 }
 
-Status PersistentIndexLoadExecutor::submit_task_and_wait(const TabletSharedPtr& tablet, int32_t wait_seconds) {
+Status PersistentIndexLoadExecutor::submit_task_and_wait_for(const TabletSharedPtr& tablet, int32_t wait_seconds) {
     auto tablet_id = tablet->tablet_id();
-    auto latch_or = submit_task(tablet);
+    if (tablet->updates() == nullptr) {
+        return Status::InvalidArgument(fmt::format("Tablet {} is not primary key", tablet_id));
+    }
 
+    auto latch_or = submit_task(tablet);
     if (latch_or.ok()) {
         auto finished = latch_or.value()->wait_for(std::chrono::seconds(wait_seconds));
         if (!finished) {
-            auto msg = fmt::format("persistent index is still loading, already wait {} seconds. tablet: {}",
+            auto msg = fmt::format("Persistent index is still loading, already wait {} seconds. tablet: {}",
                                    wait_seconds, tablet_id);
             LOG(INFO) << msg;
             return Status::TimedOut(msg);
         }
     } else {
-        auto msg = fmt::format("fail to submit persistent index load task. tablet: {}, error: {}", tablet_id,
-                               latch_or.status().to_string());
+        auto msg = fmt::format("Fail to submit persistent index load task. tablet: {}, error: {}", tablet_id,
+                               latch_or.status().to_string(false));
         LOG(WARNING) << msg;
         return Status::InternalError(msg);
     }
@@ -99,10 +102,11 @@ Status PersistentIndexLoadExecutor::submit_task_and_wait(const TabletSharedPtr& 
 }
 
 StatusOr<std::shared_ptr<CountDownLatch>> PersistentIndexLoadExecutor::submit_task(const TabletSharedPtr& tablet) {
-    auto tablet_id = tablet->tablet_id();
-    if (tablet->updates() == nullptr) {
-        return Status::InvalidArgument(fmt::format("tablet {} is not primary key", tablet_id));
+    if (_load_pool == nullptr) {
+        return Status::Uninitialized("Persistent index load executor is not initialized");
     }
+
+    auto tablet_id = tablet->tablet_id();
 
     std::lock_guard<std::mutex> lock(_lock);
     auto it = _running_tablets.find(tablet_id);

@@ -172,6 +172,10 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             }
             return Status::OK();
         });
+        _config_callback.emplace("pindex_load_thread_pool_num_max", [&]() -> Status {
+            LOG(INFO) << "Set pindex_load_thread_pool_num_max: " << config::pindex_load_thread_pool_num_max;
+            return StorageEngine::instance()->update_manager()->get_pindex_load_executor()->refresh_max_thread_num();
+        });
         _config_callback.emplace("update_memory_limit_percent", [&]() -> Status {
             Status st = StorageEngine::instance()->update_manager()->update_primary_index_memory_limit(
                     config::update_memory_limit_percent);
@@ -346,10 +350,6 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 batch_write_mgr->txn_state_cache()->set_capacity(config::merge_commit_txn_state_cache_capacity);
             }
             return Status::OK();
-        });
-        _config_callback.emplace("pindex_load_thread_pool_num_max", [&]() -> Status {
-            LOG(INFO) << "set pindex_load_thread_pool_num_max: " << config::pindex_load_thread_pool_num_max;
-            return StorageEngine::instance()->update_manager()->get_pindex_load_executor()->refresh_max_thread_num();
         });
 
 #ifdef USE_STAROS

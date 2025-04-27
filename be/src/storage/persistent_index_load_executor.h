@@ -22,14 +22,17 @@ namespace starrocks {
 class Tablet;
 using TabletSharedPtr = std::shared_ptr<Tablet>;
 
-// PersistentIndexLoadExecutor is responsible for loading the persistent index
+// PersistentIndexLoadExecutor is responsible for asynchronous loading of the persistent index
 // for primary key tablet.
 //
-// The submit_task function returns CountDownLatch.
-// The caller can wait until the persistent index load is finished
-// or wait for a certain period if the persistent index is still loading.
+// It maintains a thread pool to submit and execute the persistent index load tasks,
+// and allows waiting for the task to finish within a specified timeout.
+// - Returns OK status if the task finishes within the specified timeout.
+// - Returns TIMEOUT status if the timeout expires before the task finishes.
 //
 // If the persistent index does not exist, it will be rebuilt.
+//
+// This class is thread-safe.
 class PersistentIndexLoadExecutor {
 public:
     PersistentIndexLoadExecutor() = default;
@@ -39,9 +42,11 @@ public:
     void shutdown();
 
     Status refresh_max_thread_num();
-    ThreadPool* TEST_get_load_pool() { return _load_pool.get(); }
 
-    Status submit_task_and_wait(const TabletSharedPtr& tablet, int32_t wait_seconds);
+    Status submit_task_and_wait_for(const TabletSharedPtr& tablet, int32_t wait_seconds);
+
+    ThreadPool* TEST_get_load_pool() { return _load_pool.get(); }
+    void TEST_reset_load_pool() { _load_pool.reset(); }
 
 private:
     StatusOr<std::shared_ptr<CountDownLatch>> submit_task(const TabletSharedPtr& tablet);

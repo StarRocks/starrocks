@@ -540,7 +540,8 @@ Status EngineStorageMigrationTask::_finish_primary_key_migration(const TabletSha
         }
 
         auto tablet_manager = StorageEngine::instance()->tablet_manager();
-        // don't wait rebuild pk index finished because migration task will block the ingestion
+        // don't wait rebuild pk index to finish because migration task does not support increment migration
+        // and needs to be completed as soon as possible
         res = tablet_manager->create_tablet_from_meta_snapshot(_dest_store, _tablet_id, tablet->schema_hash(),
                                                                schema_hash_path, false, _need_rebuild_pk_index, 0);
         if (!res.ok()) {

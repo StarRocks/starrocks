@@ -529,7 +529,7 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
     // process.
 
     if (rowset->is_partial_update()) {
-        auto task_st = _pindex_load_executor->submit_task_and_wait(
+        auto task_st = _pindex_load_executor->submit_task_and_wait_for(
                 std::static_pointer_cast<Tablet>(tablet->shared_from_this()), config::pindex_rebuild_load_wait_seconds);
         if (!task_st.ok()) {
             return Status::Uninitialized(task_st.message());

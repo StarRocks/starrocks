@@ -1788,7 +1788,7 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
     if (add_tablet_st.ok() && need_rebuild_pk_index && tablet->updates() != nullptr) {
         // rebuild primary index
         auto* pindex_load_executor = StorageEngine::instance()->update_manager()->get_pindex_load_executor();
-        (void)pindex_load_executor->submit_task_and_wait(tablet, rebuild_pk_index_wait_seconds);
+        (void)pindex_load_executor->submit_task_and_wait_for(tablet, rebuild_pk_index_wait_seconds);
     }
     return add_tablet_st;
 }

@@ -31,6 +31,7 @@
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
+#include "util/threadpool.h"
 
 namespace starrocks {
 
@@ -181,11 +182,93 @@ TEST_F(PersistentIndexLoadExecutorTest, test_submit_task) {
     ASSERT_FALSE(index_entry->value().is_loaded());
     index_cache.remove(index_entry);
 
+    // test submit task and wait to finish
     auto* pindex_load_executor = manager->get_pindex_load_executor();
-    auto st = pindex_load_executor->submit_task_and_wait(_tablet, 60);
+    auto st = pindex_load_executor->submit_task_and_wait_for(_tablet, 60);
     CHECK_OK(st);
     index_entry = index_cache.get_or_create(tablet_id);
     ASSERT_TRUE(index_entry->value().is_loaded());
+}
+
+TEST_F(PersistentIndexLoadExecutorTest, test_submit_task_twice) {
+    const int64_t key_start = 0;
+    const int num_row = 100000;
+    const size_t num_segment = 10;
+    LOG(INFO) << "rowset=1, segment=" << num_segment << ", num_row=" << num_row;
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+    std::vector<std::vector<Row>> segments;
+    std::srand(0);
+    generate_data(key_start, num_row, num_segment, segments);
+    auto rs = create_rowset(_tablet, segments, SegmentsOverlapPB::OVERLAPPING);
+    ASSERT_TRUE(_tablet->rowset_commit(2, rs).ok());
+    wait_for_version(2);
+    ASSERT_EQ(2, _tablet->updates()->max_version());
+
+    auto tablet_id = _tablet->tablet_id();
+    auto manager = StorageEngine::instance()->update_manager();
+    auto& index_cache = manager->index_cache();
+
+    auto index_entry = index_cache.get_or_create(tablet_id);
+    ASSERT_TRUE(index_entry->value().is_loaded());
+    index_entry->value().unload();
+    ASSERT_FALSE(index_entry->value().is_loaded());
+    index_cache.remove(index_entry);
+
+    // delete persistent index
+    std::string key = "tpi_";
+    starrocks::put_fixed64_le(&key, BigEndian::FromHost64(tablet_id));
+    Status st = _tablet->data_dir()->get_meta()->remove(starrocks::META_COLUMN_FAMILY_INDEX, key);
+    CHECK_OK(st);
+
+    // submit task to rebuild persistent index and not wait
+    auto* pindex_load_executor = manager->get_pindex_load_executor();
+    st = pindex_load_executor->submit_task_and_wait_for(_tablet, 0);
+    ASSERT_TRUE(st.is_time_out());
+
+    // submit task again, wait to finish
+    st = pindex_load_executor->submit_task_and_wait_for(_tablet, 60);
+    CHECK_OK(st);
+    index_entry = index_cache.get_or_create(tablet_id);
+    ASSERT_TRUE(index_entry->value().is_loaded());
+}
+
+TEST_F(PersistentIndexLoadExecutorTest, test_non_pk_tablet) {
+    // non pk tablet
+    auto tablet = std::make_shared<Tablet>();
+    auto tablet_meta = std::make_shared<TabletMeta>();
+    tablet_meta->set_tablet_id(10000);
+    tablet->set_tablet_meta(tablet_meta);
+
+    auto manager = StorageEngine::instance()->update_manager();
+    auto* pindex_load_executor = manager->get_pindex_load_executor();
+    auto st = pindex_load_executor->submit_task_and_wait_for(tablet, 60);
+    ASSERT_TRUE(st.is_invalid_argument());
+}
+
+TEST_F(PersistentIndexLoadExecutorTest, test_submit_task_fail) {
+    const int64_t key_start = 0;
+    const int num_row = 10000;
+    const size_t num_segment = 1;
+    LOG(INFO) << "rowset=1, segment=" << num_segment << ", num_row=" << num_row;
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+    std::vector<std::vector<Row>> segments;
+    std::srand(0);
+    generate_data(key_start, num_row, num_segment, segments);
+    auto rs = create_rowset(_tablet, segments, SegmentsOverlapPB::OVERLAPPING);
+    ASSERT_TRUE(_tablet->rowset_commit(2, rs).ok());
+    wait_for_version(2);
+    ASSERT_EQ(2, _tablet->updates()->max_version());
+
+    // load pool is not initialized and test submit task
+    auto* pindex_load_executor = StorageEngine::instance()->update_manager()->get_pindex_load_executor();
+    pindex_load_executor->TEST_reset_load_pool();
+    auto st = pindex_load_executor->submit_task_and_wait_for(_tablet, 60);
+    ASSERT_TRUE(st.is_internal_error());
+
+    // reset load pool
+    CHECK_OK(pindex_load_executor->init());
 }
 
 } // namespace starrocks

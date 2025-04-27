@@ -5165,7 +5165,7 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
         if (need_rebuild_pk_index) {
             // rebuild primary index
             auto* pindex_load_executor = manager->get_pindex_load_executor();
-            (void)pindex_load_executor->submit_task_and_wait(
+            (void)pindex_load_executor->submit_task_and_wait_for(
                     std::static_pointer_cast<Tablet>(_tablet.shared_from_this()), rebuild_pk_index_wait_seconds);
         }
 
