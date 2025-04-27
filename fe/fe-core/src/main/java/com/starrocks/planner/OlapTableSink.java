@@ -859,9 +859,8 @@ public class OlapTableSink extends DataSink {
                                          MaterializedIndex index,
                                          List<Long> selectedBackedIds,
                                          List<Replica> replicas) {
-        int lowUsageIndex = findPrimaryReplica(table, bePrimaryMap, infoService,
+        return findPrimaryReplica(table, bePrimaryMap, infoService,
                 index, selectedBackedIds, 0, replicas);
-        return lowUsageIndex;
     }
 
     private static int findPrimaryReplica(OlapTable table,
@@ -887,8 +886,9 @@ public class OlapTableSink extends DataSink {
             boolean isHealthy = !replica.getLastWriteFail()
                     && !infoService.getBackend(replica.getBackendId()).getLastWriteFail();
             
-            //when the node is in shutdown, the isAlive() would be false, so here use isAlive() to check.
-            //when single replica, to ensure the load job could loading, node shutdown status should not be checked.
+            // The isAlive() flag indicates node availability during shutdown sequences.
+            // For single-replica configurations, we bypass node status checks to maintain
+            // loading operation continuity despite shutdown transitions.
             if (replicas.size() > 1) {
                 isHealthy = isHealthy && infoService.getBackend(replica.getBackendId()).isAlive();
             }
