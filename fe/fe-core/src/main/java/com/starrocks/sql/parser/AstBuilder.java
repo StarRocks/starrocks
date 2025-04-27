@@ -306,6 +306,7 @@ import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
+import com.starrocks.sql.ast.ModifyColumnCommentClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.sql.ast.ModifyPartitionClause;
 import com.starrocks.sql.ast.ModifyStorageVolumePropertiesClause;
@@ -4919,6 +4920,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
         return new ModifyColumnClause(columnDef, columnPosition, rollupName, getProperties(context.properties()),
+                createPos(context));
+    }
+
+    @Override
+    public ParseNode visitModifyColumnCommentClause(StarRocksParser.ModifyColumnCommentClauseContext context) {
+        return new ModifyColumnCommentClause(
+                getIdentifierName(context.identifier()), ((StringLiteral) visit(context.comment())).getStringValue(),
                 createPos(context));
     }
 

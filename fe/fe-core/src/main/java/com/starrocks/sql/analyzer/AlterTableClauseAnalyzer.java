@@ -84,6 +84,7 @@ import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.ModifyColumnClause;
+import com.starrocks.sql.ast.ModifyColumnCommentClause;
 import com.starrocks.sql.ast.ModifyPartitionClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
@@ -903,6 +904,14 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
         clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
 
         clause.setColumn(columnDef.toColumn(table));
+        return null;
+    }
+
+    @Override
+    public Void visitModifyColumnCommentClause(ModifyColumnCommentClause clause, ConnectContext context) {
+        if (Strings.isNullOrEmpty(clause.getColumnName())) {
+            throw new SemanticException("Column name is not set");
+        }
         return null;
     }
 
