@@ -290,7 +290,7 @@ bool DiskSpaceMonitor::is_stopped() {
 void DiskSpaceMonitor::_adjust_datacache_callback() {
     while (!is_stopped()) {
         std::unique_lock<std::mutex> lck(_mutex);
-        if (config::datacache_enable && config::datacache_auto_adjust_enable &&
+        if (BlockCache::instance()->is_initialized() && config::datacache_auto_adjust_enable &&
             !_updating.load(std::memory_order_acquire)) {
             if (_adjust_spaces_by_disk_usage()) {
                 auto dir_spaces = all_dir_spaces();
