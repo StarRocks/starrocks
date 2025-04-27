@@ -8,16 +8,17 @@ displayed_sidebar: docs
 
 修改现有表，包括：
 
-- [重命名表、分区、索引或列](#rename)
-- [修改表注释](#alter-table-comment-from-v31)
-- [修改分区（添加/删除分区和修改分区属性）](#modify-partition)
-- [修改分桶方法和桶的数量](#modify-the-bucketing-method-and-number-of-buckets-from-v32)
-- [修改列（添加/删除列和更改列的顺序）](#modify-columns-adddelete-columns-change-the-order-of-columns)
-- [创建/删除汇总索引](#modify-rollup-index)
-- [修改Bitmap索引](#modify-bitmap-indexes)
-- [修改表属性](#modify-table-properties)
-- [原子交换](#swap)
-- [手动数据版本合并](#manual-compaction-from-31)
+- [修改表名、分区名、索引名、列名](#rename-对名称进行修改)
+- [修改表注释](#修改表的注释31-版本起)
+- [修改分区（增删分区和修改分区属性）](#操作-partition-相关语法)
+- [修改分桶方式和分桶数量](#修改分桶方式和分桶数量自-32-版本起)
+- [修改列（增删列和修改列顺序）](#修改列增删列和修改列顺序)
+- [创建或删除 rollup index](#操作-rollup-index-语法)
+- [修改 bitmap index](#bitmap-index-修改)
+- [修改表的属性](#修改表的属性)
+- [对表进行原子替换](#swap-将两个表原子替换)
+- [手动执行 compaction 合并表数据](#手动-compaction31-版本起)
+- [删除主键索引](#删除主键索引-339-版本起))
 
 :::tip
 此操作需要对目标表具有ALTER权限。
@@ -32,15 +33,16 @@ alter_clause1[, alter_clause2, ...]
 
 `alter_clause`可以包含以下操作：重命名、注释、分区、分桶、列、汇总索引、Bitmap索引、表属性、交换和合并。
 
-- 重命名：重命名表、汇总索引、分区或列（从**v3.3.2起支持**）。
-- 注释：修改表注释（从**v3.1起支持**）。
-- 分区：修改分区属性、删除分区或添加分区。
-- 分桶：修改分桶方法和桶的数量。
-- 列：添加、删除或重新排序列，或修改列类型。
-- 汇总索引：创建或删除汇总索引。
-- Bitmap索引：修改索引（仅支持修改Bitmap索引）。
-- 交换：两个表的原子交换。
-- 合并：执行手动合并以合并已加载数据的版本（从**v3.1起支持**）。
+- rename: 修改表名、rollup index 名、partition 名或列名（从 3.3.2 版本开始支持）。
+- comment: 修改表的注释。**从 3.1 版本开始支持。**
+- partition: 修改分区属性，删除分区，增加分区。
+- bucket：修改分桶方式和分桶数量。
+- column: 增加列，删除列，调整列顺序，修改列类型。*
+- rollup index: 创建或删除 rollup index。
+- bitmap index: 修改 bitmap index。
+- swap: 原子替换两张表。
+- compaction: 对指定表或分区手动执行 Compaction（数据版本合并）。**从 3.1 版本开始支持。**
+- drop persistent index: 存算分离下删除主键索引。**从 3.3.9 版本开始支持。**
 
 ## 限制和使用注意事项
 
@@ -848,6 +850,19 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
 
 `information_schema`数据库中的`be_compactions`表记录合并结果。可以运行`SELECT * FROM information_schema.be_compactions;`查询合并后的数据版本。
 
+### 删除主键索引 (3.3.9 版本起)
+
+语法：
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
+```
+
+> **说明**
+>
+> 只支持在存算分离集群中删除 CLOUD_NATIVE 类型的主键索引
+
 ## 示例
 
 ### 表
@@ -1298,7 +1313,15 @@ ALTER TABLE compaction_test CUMULATIVE COMPACT (p202302,p203303);
 ALTER TABLE compaction_test BASE COMPACT (p202302,p203303);
 ```
 
-## 参考
+### 删除主键索引
+
+删除 `db1.test_tbl` 中 Tablet `100` 和 `101` 的主键索引 。
+
+```sql
+ALTER TABLE db1.test_tbl DROP PERSISTENT INDEX ON TABLETS (100, 101);
+```
+
+## 相关参考
 
 - [CREATE TABLE](CREATE_TABLE.md)
 - [SHOW CREATE TABLE](SHOW_CREATE_TABLE.md)
