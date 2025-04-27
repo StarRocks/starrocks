@@ -24,6 +24,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
@@ -126,7 +127,9 @@ public class QueryHistoryMgr {
     }
 
     private void loadQueryHistory(List<QueryHistory> list) {
+        ConnectContext ctx = StatisticUtils.buildConnectContext();
         EXECUTOR.submit(() -> {
+            ctx.setThreadLocalInfo();
             for (QueryHistory query : list) {
                 try {
                     buffer.append(query.toJSON()).append(",");

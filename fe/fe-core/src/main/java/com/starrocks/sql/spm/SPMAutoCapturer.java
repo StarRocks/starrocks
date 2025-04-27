@@ -19,7 +19,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.AuditLog;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
@@ -31,6 +30,8 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.summary.QueryHistory;
 import com.starrocks.summary.QueryHistoryMgr;
+import org.apache.log4j.LogManager;
+import org.apache.log4j.Logger;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -38,6 +39,8 @@ import java.util.Map;
 import java.util.regex.Pattern;
 
 public class SPMAutoCapturer extends FrontendDaemon {
+    private static final Logger LOG = LogManager.getLogger(SPMAutoCapturer.class);
+
     private LocalDateTime lastWorkTime = LocalDateTime.now();
 
     private ConnectContext connect;
@@ -113,7 +116,7 @@ public class SPMAutoCapturer extends FrontendDaemon {
                 base.setUpdateTime(queryHistory.getDatetime());
                 plans.put(queryHistory.getSqlDigest(), base);
             } catch (Exception e) {
-                AuditLog.getStatisticAudit().warn("sql plan capture failed. sql: {}", queryHistory.getOriginSQL(), e);
+                LOG.warn("sql plan capture failed. sql: " + queryHistory.getOriginSQL(), e);
             }
         }
 

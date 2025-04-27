@@ -23,7 +23,6 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
-import com.starrocks.common.AuditLog;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.SimpleExecutor;
@@ -34,6 +33,8 @@ import com.starrocks.thrift.TResultSinkType;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.apache.commons.collections4.ListUtils;
+import org.apache.log4j.LogManager;
+import org.apache.log4j.Logger;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
 import java.nio.ByteBuffer;
@@ -45,6 +46,7 @@ import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 class SQLPlanGlobalStorage implements SQLPlanStorage {
+    private static final Logger LOG = LogManager.getLogger(SQLPlanGlobalStorage.class);
     /*
      * SPM baselines table
      * id         | bigint
@@ -100,7 +102,7 @@ class SQLPlanGlobalStorage implements SQLPlanStorage {
             }
             return bps;
         } catch (Exception e) {
-            AuditLog.getStatisticAudit().warn("sql plan baselines get all baseline fail", e);
+            LOG.warn("sql plan baselines get all baseline fail", e);
             return List.of();
         }
     }
@@ -137,7 +139,7 @@ class SQLPlanGlobalStorage implements SQLPlanStorage {
             message.setReplayBindSQLHash(plans.stream().map(BaselinePlan::getBindSqlHash).collect(Collectors.toList()));
             GlobalStateMgr.getCurrentState().getEditLog().logCreateSPMBaseline(message);
         } catch (Exception e) {
-            AuditLog.getStatisticAudit().warn("sql plan baselines store baseline fail", e);
+            LOG.warn("sql plan baselines store baseline fail", e);
         }
     }
 
@@ -165,7 +167,7 @@ class SQLPlanGlobalStorage implements SQLPlanStorage {
             p.setReplayIds(ids.stream().map(BaselineId::id).collect(Collectors.toList()));
             GlobalStateMgr.getCurrentState().getEditLog().logDropSPMBaseline(p);
         } catch (Exception e) {
-            AuditLog.getStatisticAudit().warn("sql plan baselines drop baseline fail", e);
+            LOG.warn("sql plan baselines drop baseline fail", e);
         }
     }
 
@@ -199,7 +201,8 @@ class SQLPlanGlobalStorage implements SQLPlanStorage {
                         new BaselinePlan(data.get(2).getAsString(), data.get(3).getAsString(), data.get(4).getAsLong(),
                                 data.get(5).getAsString(), data.get(6).getAsDouble());
                 bp.setId(data.get(0).getAsLong());
-                bp.setEnable(data.get(1).getAsBoolean());
+                bp.setGlobal(true);
+                bp.setEnable(data.get(1).getAsInt() == 1);
                 bp.setQueryMs(data.get(7).getAsDouble());
                 bp.setSource(data.get(8).getAsString());
                 bp.setUpdateTime(DateUtils.parseUnixDateTime(data.get(9).getAsString()));
@@ -239,7 +242,7 @@ class SQLPlanGlobalStorage implements SQLPlanStorage {
             List<TResultBatch> datas = executor.executeDQL(sql.toString());
             return castToBaselinePlan(datas);
         } catch (Exception e) {
-            AuditLog.getStatisticAudit().warn("sql plan baselines get baseline failed, sql: {}", source, e);
+            LOG.warn("sql plan baselines get baseline failed, sql: " + sql, e);
             return List.of();
         }
     }
@@ -253,7 +256,7 @@ class SQLPlanGlobalStorage implements SQLPlanStorage {
                     return castToBaselinePlan(datas).get(0);
                 }
             } catch (Exception e) {
-                AuditLog.getStatisticAudit().warn("sql plan baselines load baseline fail", e);
+                LOG.warn("sql plan baselines load baseline fail", e);
             }
             return null;
         }
@@ -268,7 +271,7 @@ class SQLPlanGlobalStorage implements SQLPlanStorage {
                         executor.executeDQL(QUERY_SQL + "WHERE id IN (" + String.join(", ", ks) + ");");
                 return castToBaselinePlan(datas).stream().collect(Collectors.toMap(BaselinePlan::getId, b -> b));
             } catch (Exception e) {
-                AuditLog.getStatisticAudit().warn("sql plan baselines load all baseline fail", e);
+                LOG.warn("sql plan baselines load all baseline fail", e);
             }
             return Map.of();
         }
