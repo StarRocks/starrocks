@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateType;
@@ -299,7 +300,10 @@ public class StatisticUtils {
                     new ColumnDef("null_count", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                     new ColumnDef("max", new TypeDef(maxType)),
                     new ColumnDef("min", new TypeDef(minType)),
-                    new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
+                    new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME))),
+                    new ColumnDef("collection_size", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT)), false,
+                            null, true, new ColumnDef.DefaultValueDef(true, new StringLiteral("-1")), ""));
+
             );
         } else if (tableName.equals(StatsConstants.FULL_STATISTICS_TABLE_NAME)) {
             return ImmutableList.of(
@@ -315,7 +319,9 @@ public class StatisticUtils {
                     new ColumnDef("null_count", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                     new ColumnDef("max", new TypeDef(maxType)),
                     new ColumnDef("min", new TypeDef(minType)),
-                    new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
+                    new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME))),
+                    new ColumnDef("collection_size", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT)), false,
+                            null, true, new ColumnDef.DefaultValueDef(true, new StringLiteral("-1")), ""));
             );
         } else if (tableName.equals(StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME)) {
             return ImmutableList.of(
