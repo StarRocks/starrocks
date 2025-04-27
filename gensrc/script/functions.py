@@ -1353,6 +1353,7 @@ vectorized_functions = [
     [170005, 'map_filter', True, False, 'ANY_MAP', ['ANY_MAP', 'ARRAY_BOOLEAN'], 'MapFunctions::map_filter'],
     [170006, 'distinct_map_keys', True, False, 'ANY_MAP', ['ANY_MAP'], 'MapFunctions::distinct_map_keys'],
     [170007, 'map_concat', True, False, 'ANY_MAP', ['ANY_MAP', "..."], 'MapFunctions::map_concat'],
+    [170008, 'map_from_entries', True, False, 'ANY_MAP', ['ANY_ARRAY'], 'MapFunctions::map_from_entries'],
 
     # map, array common functions
     [170100, 'cardinality', True, False, 'INT', ['ANY_MAP'], 'MapFunctions::map_size'],

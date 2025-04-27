@@ -124,6 +124,76 @@ StatusOr<ColumnPtr> MapFunctions::map_from_arrays(FunctionContext* context, cons
     }
 }
 
+
+StatusOr<ColumnPtr> MapFunctions::map_from_entries(FunctionContext* context, const Columns& columns) {
+    DCHECK_EQ(1, columns.size());
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    auto keys_column = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]);
+    NullColumn* keys_null = nullptr;
+    ArrayColumn* keys_data = nullptr;
+    if (keys_column->is_nullable()) {
+        auto keys = down_cast<NullableColumn*>(keys_column.get());
+        keys_null = keys->null_column().get();
+        keys_data = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(keys));
+    } else {
+        keys_data = down_cast<ArrayColumn*>(keys_column.get());
+    }
+
+    auto& keys_offsets = keys_data->offsets().get_data();
+
+    ColumnPtr& elements = keys_data->elements_column();
+    StructColumn* struct_column = nullptr;
+    if (elements->is_nullable()) {
+        auto keys = down_cast<NullableColumn*>(elements.get());
+        struct_column = down_cast<StructColumn*>(ColumnHelper::get_data_column(keys));
+    } else {
+        struct_column = down_cast<StructColumn*>(elements.get());
+    }
+    DCHECK_EQ(2, struct_column->fields().size());
+
+    auto num_rows = keys_data->size();
+    if (!keys_column->has_null()) {
+        for (int i = 0; i < num_rows; ++i) {
+            Datum v = keys_data->get(i);
+            const auto& items = v.get<DatumArray>();
+            for (const auto& item : items) {
+                DCHECK_EQ(2, item.get_struct().size());
+            }
+        }
+        auto copied_key_elements = struct_column->fields()[0]->clone_shared();
+        auto copied_value_elements = struct_column->fields()[1]->clone_shared();
+        auto copied_offsets = keys_data->offsets().clone_shared();
+        auto map_column = MapColumn::create(std::move(copied_key_elements), std::move(copied_value_elements),
+                                            std::static_pointer_cast<UInt32Column>(copied_offsets));
+        map_column->remove_duplicated_keys();
+        return map_column;
+    } else {
+        // build the null column
+        NullColumnPtr null_column = std::static_pointer_cast<NullColumn>(keys_null->clone_shared());
+        // check and construct offset column
+        auto& null_bits = null_column->get_data();
+        uint32_t offset = 0;
+        auto map_offsets_column = UInt32Column::create();
+        for (int i = 0; i < num_rows; ++i) {
+            map_offsets_column->append(offset);
+            if (!null_bits[i]) {
+                auto num_elements = keys_data->get_element_size(i);
+                offset += num_elements;
+            }
+        }
+        map_offsets_column->append(offset);
+
+        auto copied_key_elements = struct_column->fields()[0]->clone();
+        auto copied_value_elements = struct_column->fields()[1]->clone();
+        auto map_column = MapColumn::create(std::move(copied_key_elements), std::move(copied_value_elements),
+                                            std::static_pointer_cast<UInt32Column>(map_offsets_column));
+        map_column->remove_duplicated_keys();
+        return NullableColumn::create(std::move(map_column), std::move(null_column));
+    }
+    return nullptr;
+}
+
 StatusOr<ColumnPtr> MapFunctions::map_size(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(1, columns.size());
     RETURN_IF_COLUMNS_ONLY_NULL(columns);

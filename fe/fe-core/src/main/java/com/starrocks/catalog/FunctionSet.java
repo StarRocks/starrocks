@@ -476,6 +476,7 @@ public class FunctionSet {
     public static final String MAP_CONCAT = "map_concat";
 
     public static final String MAP_FROM_ARRAYS = "map_from_arrays";
+    public static final String MAP_FROM_ENTRIES = "map_from_entries";
     public static final String MAP_KEYS = "map_keys";
     public static final String MAP_SIZE = "map_size";
 
