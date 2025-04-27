@@ -18,7 +18,7 @@ displayed_sidebar: docs
 
 ```SQL
 CREATE STORAGE VOLUME [IF NOT EXISTS] <storage_volume_name>
-TYPE = { S3 | HDFS | AZBLOB| ADLS2  }
+TYPE = { S3 | HDFS | AZBLOB | ADLS2 }
 LOCATIONS = ('<remote_storage_path>')
 [ COMMENT '<comment_string>' ]
 PROPERTIES
