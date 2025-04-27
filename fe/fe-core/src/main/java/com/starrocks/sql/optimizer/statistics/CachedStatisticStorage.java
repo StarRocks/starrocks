@@ -633,6 +633,55 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         return connectorTableColumnStatsList;
     }
 
+<<<<<<< HEAD
+=======
+    public MultiColumnCombinedStatistics getMultiColumnCombinedStatistics(Long tableId) {
+        if (StatisticUtils.statisticTableBlackListCheck(tableId)) {
+            return MultiColumnCombinedStatistics.EMPTY;
+        }
+
+        try {
+            CompletableFuture<Optional<MultiColumnCombinedStatistics>> result = multiColumnStats.get(tableId);
+            if (result.isDone()) {
+                Optional<MultiColumnCombinedStatistics> data = result.get();
+                return data.orElse(MultiColumnCombinedStatistics.EMPTY);
+            }
+        } catch (InterruptedException e) {
+            LOG.warn("Failed to execute tableStatsCache.getAll", e);
+            Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            LOG.warn("Faied to execute tableStatsCache.getAll", e);
+        }
+        return MultiColumnCombinedStatistics.EMPTY;
+    }
+
+    @Override
+    public void refreshMultiColumnStatistics(Long tableId,  boolean isSync) {
+        try {
+            MultiColumnCombinedStatsCacheLoader loader = new MultiColumnCombinedStatsCacheLoader();
+            CompletableFuture<Optional<MultiColumnCombinedStatistics>> future =
+                    loader.asyncLoad(tableId, statsCacheRefresherExecutor);
+            if (isSync) {
+                Optional<MultiColumnCombinedStatistics> result = future.get();
+                multiColumnStats.synchronous().put(tableId, result);
+            } else {
+                future.whenComplete((res, e) ->
+                        multiColumnStats.synchronous().put(tableId, res));
+            }
+        } catch (InterruptedException e) {
+            LOG.warn("Failed to execute refresh multi-column combined statistics", e);
+            Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            LOG.warn("Failed to execute refresh multi-column combined statistics", e);
+        }
+    }
+
+    public void expireMultiColumnStatistics(Long tableId) {
+        Preconditions.checkNotNull(tableId);
+        multiColumnStats.synchronous().invalidate(tableId);
+    }
+
+>>>>>>> 46a1bdd3d5 ([BugFix] Clear fe follower stats cache when replaying remove_stats log (#58383))
     @Override
     public Map<String, Long> estimateCount() {
         return ImmutableMap.<String, Long>builder()

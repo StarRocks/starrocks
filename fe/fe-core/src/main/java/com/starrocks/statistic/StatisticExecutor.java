@@ -411,12 +411,26 @@ public class StatisticExecutor {
         } else {
             AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
             if (table.isNativeTableOrMaterializedView()) {
+<<<<<<< HEAD
                 BasicStatsMeta basicStatsMeta = analyzeMgr.getTableBasicStatsMeta(table.getId());
                 if (basicStatsMeta == null) {
                     long existUpdateRows = analyzeMgr.getExistUpdateRows(table.getId());
                     basicStatsMeta = new BasicStatsMeta(db.getId(), table.getId(),
                             statsJob.getColumnNames(), statsJob.getType(), analyzeStatus.getEndTime(),
                             statsJob.getProperties(), existUpdateRows);
+=======
+                if (statsJob.isMultiColumnStatsJob()) {
+                    // TODO(stephen): support auto collect column groups and multiple statistics type
+                    Set<Integer> columnIds = statsJob.columnGroups.get(0).stream()
+                            .map(table::getColumn)
+                            .map(Column::getUniqueId)
+                            .collect(Collectors.toSet());
+                    MultiColumnStatsMeta meta = new MultiColumnStatsMeta(db.getId(), table.getId(), columnIds,
+                            statsJob.getAnalyzeType(), statsJob.getStatisticsTypes(),
+                            analyzeStatus.getEndTime(), statsJob.getProperties());
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().addMultiColumnStatsMeta(meta);
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().refreshMultiColumnStatisticsCache(meta.getTableId(), true);
+>>>>>>> 46a1bdd3d5 ([BugFix] Clear fe follower stats cache when replaying remove_stats log (#58383))
                 } else {
                     basicStatsMeta = basicStatsMeta.clone();
                     basicStatsMeta.setUpdateTime(analyzeStatus.getEndTime());

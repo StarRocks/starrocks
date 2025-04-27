@@ -860,6 +860,10 @@ public class EditLog {
                 case OperationType.OP_REMOVE_BASIC_STATS_META: {
                     BasicStatsMeta basicStatsMeta = (BasicStatsMeta) journal.getData();
                     globalStateMgr.getAnalyzeMgr().replayRemoveBasicStatsMeta(basicStatsMeta);
+                    if (!GlobalStateMgr.isCheckpointThread()) {
+                        globalStateMgr.getAnalyzeMgr().expireTableAndColumnStatistics(basicStatsMeta.getDbId(),
+                                basicStatsMeta.getTableId(), basicStatsMeta.getColumns());
+                    }
                     break;
                 }
                 case OperationType.OP_ADD_HISTOGRAM_STATS_META: {
@@ -878,8 +882,32 @@ public class EditLog {
                 case OperationType.OP_REMOVE_HISTOGRAM_STATS_META: {
                     HistogramStatsMeta histogramStatsMeta = (HistogramStatsMeta) journal.getData();
                     globalStateMgr.getAnalyzeMgr().replayRemoveHistogramStatsMeta(histogramStatsMeta);
+                    if (!GlobalStateMgr.isCheckpointThread()) {
+                        globalStateMgr.getStatisticStorage().expireHistogramStatistics(
+                                histogramStatsMeta.getTableId(), Lists.newArrayList(histogramStatsMeta.getColumn()));
+                    }
                     break;
                 }
+<<<<<<< HEAD
+=======
+                case OperationType.OP_ADD_MULTI_COLUMN_STATS_META: {
+                    MultiColumnStatsMeta multiColumnStatsMeta = (MultiColumnStatsMeta) journal.data();
+                    globalStateMgr.getAnalyzeMgr().replayAddMultiColumnStatsMeta(multiColumnStatsMeta);
+                    if (!GlobalStateMgr.isCheckpointThread()) {
+                        globalStateMgr.getStatisticStorage().refreshMultiColumnStatistics(
+                                multiColumnStatsMeta.getTableId(), false);
+                    }
+                    break;
+                }
+                case OperationType.OP_REMOVE_MULTI_COLUMN_STATS_META: {
+                    MultiColumnStatsMeta multiColumnStatsMeta = (MultiColumnStatsMeta) journal.data();
+                    globalStateMgr.getAnalyzeMgr().replayRemoveMultiColumnStatsMeta(multiColumnStatsMeta);
+                    if (!GlobalStateMgr.isCheckpointThread()) {
+                        globalStateMgr.getStatisticStorage().expireMultiColumnStatistics(multiColumnStatsMeta.getTableId());
+                    }
+                    break;
+                }
+>>>>>>> 46a1bdd3d5 ([BugFix] Clear fe follower stats cache when replaying remove_stats log (#58383))
                 case OperationType.OP_ADD_EXTERNAL_BASIC_STATS_META: {
                     ExternalBasicStatsMeta basicStatsMeta = (ExternalBasicStatsMeta) journal.getData();
                     globalStateMgr.getAnalyzeMgr().replayAddExternalBasicStatsMeta(basicStatsMeta);
@@ -897,6 +925,12 @@ public class EditLog {
                 case OperationType.OP_REMOVE_EXTERNAL_BASIC_STATS_META: {
                     ExternalBasicStatsMeta basicStatsMeta = (ExternalBasicStatsMeta) journal.getData();
                     globalStateMgr.getAnalyzeMgr().replayRemoveExternalBasicStatsMeta(basicStatsMeta);
+                    if (!GlobalStateMgr.isCheckpointThread()) {
+                        globalStateMgr.getAnalyzeMgr().expireConnectorTableAndColumnStatistics(
+                                basicStatsMeta.getCatalogName(),
+                                basicStatsMeta.getDbName(), basicStatsMeta.getTableName(),
+                                basicStatsMeta.getColumns());
+                    }
                     break;
                 }
                 case OperationType.OP_ADD_EXTERNAL_HISTOGRAM_STATS_META: {
@@ -916,6 +950,12 @@ public class EditLog {
                 case OperationType.OP_REMOVE_EXTERNAL_HISTOGRAM_STATS_META: {
                     ExternalHistogramStatsMeta histogramStatsMeta = (ExternalHistogramStatsMeta) journal.getData();
                     globalStateMgr.getAnalyzeMgr().replayRemoveExternalHistogramStatsMeta(histogramStatsMeta);
+                    if (!GlobalStateMgr.isCheckpointThread()) {
+                        globalStateMgr.getAnalyzeMgr().expireConnectorTableHistogramStatisticsCache(
+                                histogramStatsMeta.getCatalogName(), histogramStatsMeta.getDbName(),
+                                histogramStatsMeta.getTableName(),
+                                Lists.newArrayList(histogramStatsMeta.getColumn()));
+                    }
                     break;
                 }
                 case OperationType.OP_MODIFY_HIVE_TABLE_COLUMN: {

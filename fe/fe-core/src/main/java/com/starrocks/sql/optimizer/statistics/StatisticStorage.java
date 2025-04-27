@@ -37,7 +37,14 @@ public interface StatisticStorage {
 
     default void refreshColumnStatistics(Table table, List<String> columns, boolean isSync) {
     }
+<<<<<<< HEAD
     
+=======
+
+    default void refreshMultiColumnStatistics(Long tableId, boolean isSync) {
+    }
+
+>>>>>>> 46a1bdd3d5 ([BugFix] Clear fe follower stats cache when replaying remove_stats log (#58383))
     default void refreshHistogramStatistics(Table table, List<String> columns, boolean isSync) {
     }
 
