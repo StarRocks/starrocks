@@ -42,7 +42,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class LakeRollupJobTest {
-    private static final String DB = "db_for_lake_mv";
+    private static final String DB = "db_for_lake_sync_mv";
 
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
