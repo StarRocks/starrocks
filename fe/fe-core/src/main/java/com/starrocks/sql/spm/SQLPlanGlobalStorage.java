@@ -23,6 +23,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
+import com.starrocks.common.AuditLog;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.SimpleExecutor;
@@ -33,8 +34,6 @@ import com.starrocks.thrift.TResultSinkType;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.apache.commons.collections4.ListUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
 import java.nio.ByteBuffer;
@@ -49,17 +48,19 @@ class SQLPlanGlobalStorage implements SQLPlanStorage {
     /*
      * SPM baselines table
      * id         | bigint
+     * is_enable  | boolean
      * bind_sql   | varchar(65530)
      * bind_sql_digest | varchar(65530)
      * bind_sql_hash | bigint
      * plan_sql   | varchar(65530)
      * costs      | double
+     * query_ms   | double
+     * source     | varchar(100)
      * update_time| datetime
      */
-    private static final Logger LOG = LogManager.getLogger(SQLPlanGlobalStorage.class);
     private static final String QUERY_SQL = "SELECT * FROM " + StatsConstants.SPM_BASELINE_TABLE_NAME + " ";
     private static final String INSERT_SQL = "INSERT INTO " + StatsConstants.SPM_BASELINE_TABLE_NAME + " VALUES ";
-    private static final String DELETE_SQL = "DELETE FROM " + StatsConstants.SPM_BASELINE_TABLE_NAME + " WHERE id = ";
+    private static final String DELETE_SQL = "DELETE FROM " + StatsConstants.SPM_BASELINE_TABLE_NAME + " WHERE id IN ";
 
     // for lazy load baseline plan
     private record BaselineId(long id, long bindSQLHash) {}
@@ -99,29 +100,44 @@ class SQLPlanGlobalStorage implements SQLPlanStorage {
             }
             return bps;
         } catch (Exception e) {
-            LOG.warn("sql plan baselines get all baseline fail", e);
+            AuditLog.getStatisticAudit().warn("sql plan baselines get all baseline fail", e);
             return List.of();
         }
     }
 
-    public void storeBaselinePlan(BaselinePlan plan) {
+    public void storeBaselinePlan(List<BaselinePlan> plans) {
         try {
-            plan.setId(GlobalStateMgr.getCurrentState().getNextId());
-            List<String> values = Lists.newArrayList();
-            values.add(String.valueOf(plan.getId()));
-            values.add("'" + plan.getBindSql() + "'");
-            values.add("'" + plan.getBindSqlDigest() + "'");
-            values.add(String.valueOf(plan.getBindSqlHash()));
-            values.add("'" + plan.getPlanSql() + "'");
-            values.add(String.valueOf(plan.getCosts()));
-            values.add("'" + DateUtils.formatDateTimeUnix(plan.getUpdateTime()) + "'");
-            String sql = INSERT_SQL + "(" + String.join(", ", values) + ");";
-            executor.executeDML(sql);
+            StringBuilder sb = new StringBuilder();
+            sb.append(INSERT_SQL).append(" ");
+            for (BaselinePlan plan : plans) {
+                plan.setId(GlobalStateMgr.getCurrentState().getNextId());
+                List<String> values = Lists.newArrayList();
+                values.add(String.valueOf(plan.getId()));
+                values.add(plan.isEnable() ? "true" : "false");
+                values.add("'" + plan.getBindSql() + "'");
+                values.add("'" + plan.getBindSqlDigest() + "'");
+                values.add(String.valueOf(plan.getBindSqlHash()));
+                values.add("'" + plan.getPlanSql() + "'");
+                values.add(String.valueOf(plan.getCosts()));
+                values.add(String.valueOf(plan.getQueryMs()));
+                values.add("'" + plan.getSource() + "'");
+                values.add("'" + DateUtils.formatDateTimeUnix(plan.getUpdateTime()) + "'");
+                sb.append("(").append(String.join(",", values)).append("),");
+            }
+            sb.setLength(sb.length() - 1);
+            sb.append(";");
+            executor.executeDML(sb.toString());
 
-            GlobalStateMgr.getCurrentState().getEditLog().logCreateSPMBaseline(plan);
-            allBaselineIds.add(new BaselineId(plan.getId(), plan.getBindSqlHash()));
+            for (BaselinePlan plan : plans) {
+                allBaselineIds.add(new BaselineId(plan.getId(), plan.getBindSqlHash()));
+            }
+
+            BaselinePlan message = new BaselinePlan(-1, -1);
+            message.setReplayIds(plans.stream().map(BaselinePlan::getId).collect(Collectors.toList()));
+            message.setReplayBindSQLHash(plans.stream().map(BaselinePlan::getBindSqlHash).collect(Collectors.toList()));
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateSPMBaseline(message);
         } catch (Exception e) {
-            LOG.warn("sql plan baselines store baseline fail", e);
+            AuditLog.getStatisticAudit().warn("sql plan baselines store baseline fail", e);
         }
     }
 
@@ -133,19 +149,23 @@ class SQLPlanGlobalStorage implements SQLPlanStorage {
         return plans.values().stream().filter(plan -> plan.getBindSqlDigest().equals(sqlDigest)).toList();
     }
 
-    public void dropBaselinePlan(long baseLineId) {
+    public void dropBaselinePlan(List<Long> baseLineIds) {
         try {
-            List<BaselineId> ids = allBaselineIds.stream().filter(b -> b.id == baseLineId).toList();
+            List<BaselineId> ids = allBaselineIds.stream().filter(b -> baseLineIds.contains(b.id)).toList();
             Preconditions.checkState(ids.size() == 1);
+
             for (BaselineId id : ids) {
-                executor.executeDML(DELETE_SQL + id.id + ";");
-                GlobalStateMgr.getCurrentState().getEditLog()
-                        .logDropSPMBaseline(new BaselinePlan(id.id, id.bindSQLHash));
                 allBaselineIds.remove(id);
                 cache.invalidate(id.id);
             }
+
+            String s = ids.stream().map(BaselineId::id).map(String::valueOf).collect(Collectors.joining(","));
+            executor.executeDML(DELETE_SQL + "(" + s + ");");
+            BaselinePlan p = new BaselinePlan(-1, -1);
+            p.setReplayIds(ids.stream().map(BaselineId::id).collect(Collectors.toList()));
+            GlobalStateMgr.getCurrentState().getEditLog().logDropSPMBaseline(p);
         } catch (Exception e) {
-            LOG.warn("sql plan baselines drop baseline fail", e);
+            AuditLog.getStatisticAudit().warn("sql plan baselines drop baseline fail", e);
         }
     }
 
@@ -163,19 +183,26 @@ class SQLPlanGlobalStorage implements SQLPlanStorage {
                 /*
                  * SPM baselines table
                  * 0.id         | bigint
-                 * 1.bind_sql   | varchar(65530)
-                 * 2.bind_sql_digest | varchar(65530)
-                 * 3.bind_sql_hash | bigint
-                 * 4.plan_sql   | varchar(65530)
-                 * 5.costs      | double
-                 * 6.update_time| datetime
+                 * 1.enable     | boolean
+                 * 2.bind_sql   | varchar(65530)
+                 * 3.bind_sql_digest | varchar(65530)
+                 * 4.bind_sql_hash | bigint
+                 * 5.plan_sql   | varchar(65530)
+                 * 6.costs      | double
+                 * 7.query_ms   | double
+                 * 8.source     | varchar(100)
+                 * 9.update_time| datetime
                  */
                 JsonElement obj = JsonParser.parseString(jsonString);
                 JsonArray data = obj.getAsJsonObject().get("data").getAsJsonArray();
-                BaselinePlan bp = new BaselinePlan(true, data.get(1).getAsString(), data.get(2).getAsString(),
-                        data.get(3).getAsLong(), data.get(4).getAsString(), data.get(5).getAsDouble(),
-                        DateUtils.parseUnixDateTime(data.get(6).getAsString()));
+                BaselinePlan bp =
+                        new BaselinePlan(data.get(2).getAsString(), data.get(3).getAsString(), data.get(4).getAsLong(),
+                                data.get(5).getAsString(), data.get(6).getAsDouble());
                 bp.setId(data.get(0).getAsLong());
+                bp.setEnable(data.get(1).getAsBoolean());
+                bp.setQueryMs(data.get(7).getAsDouble());
+                bp.setSource(data.get(8).getAsString());
+                bp.setUpdateTime(DateUtils.parseUnixDateTime(data.get(9).getAsString()));
                 result.add(bp);
             }
         }
@@ -185,9 +212,35 @@ class SQLPlanGlobalStorage implements SQLPlanStorage {
     @Override
     public void replayBaselinePlan(BaselinePlan plan, boolean isCreate) {
         if (isCreate) {
-            allBaselineIds.add(new BaselineId(plan.getId(), plan.getBindSqlHash()));
+            for (int i = 0; i < plan.getReplayIds().size(); i++) {
+                allBaselineIds.add(new BaselineId(plan.getReplayIds().get(i), plan.getReplayBindSQLHash().get(i)));
+            }
         } else {
-            allBaselineIds.removeIf(b -> b.id == plan.getId());
+            allBaselineIds.removeIf(b -> plan.getReplayIds().contains(b.id));
+        }
+    }
+
+    @Override
+    public List<BaselinePlan> queryBaselinePlan(List<String> sqlDigest, String source) {
+        if (sqlDigest.isEmpty()) {
+            return List.of();
+        }
+        StringBuilder sql = new StringBuilder(QUERY_SQL);
+        sql.append("WHERE ");
+        sql.append("source = ");
+        sql.append("'").append(source).append("'");
+
+        sql.append(" and bind_sql_digest IN (");
+        sqlDigest.forEach(digest -> sql.append("'").append(digest).append("',"));
+        sql.setLength(sql.length() - 1);
+        sql.append(")");
+
+        try {
+            List<TResultBatch> datas = executor.executeDQL(sql.toString());
+            return castToBaselinePlan(datas);
+        } catch (Exception e) {
+            AuditLog.getStatisticAudit().warn("sql plan baselines get baseline failed, sql: {}", source, e);
+            return List.of();
         }
     }
 
@@ -200,7 +253,7 @@ class SQLPlanGlobalStorage implements SQLPlanStorage {
                     return castToBaselinePlan(datas).get(0);
                 }
             } catch (Exception e) {
-                LOG.warn("sql plan baselines load baseline fail", e);
+                AuditLog.getStatisticAudit().warn("sql plan baselines load baseline fail", e);
             }
             return null;
         }
@@ -215,7 +268,7 @@ class SQLPlanGlobalStorage implements SQLPlanStorage {
                         executor.executeDQL(QUERY_SQL + "WHERE id IN (" + String.join(", ", ks) + ");");
                 return castToBaselinePlan(datas).stream().collect(Collectors.toMap(BaselinePlan::getId, b -> b));
             } catch (Exception e) {
-                LOG.warn("sql plan baselines load all baseline fail", e);
+                AuditLog.getStatisticAudit().warn("sql plan baselines load all baseline fail", e);
             }
             return Map.of();
         }

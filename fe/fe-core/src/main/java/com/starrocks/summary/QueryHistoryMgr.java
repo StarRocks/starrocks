@@ -44,9 +44,6 @@ import java.util.concurrent.ExecutorService;
 public class QueryHistoryMgr {
     private static final Logger LOG = LogManager.getLogger(QueryHistoryMgr.class);
 
-    private static final String QUERY_HISTORY_SQL = "select dt, sql_digest, sql, query_ms from "
-            + StatsConstants.STATISTICS_DB_NAME + "." + StatsConstants.QUERY_HISTORY_TABLE_NAME + " where ";
-
     private static final int CONVERT_BATCH_SIZE = 100;
 
     private static final int MAX_MEMORY_SIZE = 200 * 1024 * 1024; // 200 MB
@@ -55,7 +52,7 @@ public class QueryHistoryMgr {
             1, Integer.MAX_VALUE,
             "query-history-executor", true);
 
-    private SimpleExecutor queryExecutor = new SimpleExecutor("QueryHistory", TResultSinkType.HTTP_PROTOCAL);
+    private final SimpleExecutor queryExecutor = new SimpleExecutor("QueryHistory", TResultSinkType.HTTP_PROTOCAL);
 
     private final List<QueryHistory> histories = Lists.newArrayListWithCapacity(CONVERT_BATCH_SIZE + 1);
 
@@ -70,7 +67,12 @@ public class QueryHistoryMgr {
     }
 
     public List<QueryHistory> queryLastHistory(LocalDateTime beginTime) {
-        String sql = QUERY_HISTORY_SQL + "dt >= '" + DateUtils.formatDateTimeUnix(beginTime) + "'";
+        // get the second slow SQL for each SQL digest
+        // 1. avoid get a SQL only query once
+        String sql = "select dt, sql_digest, sql, query_ms, "
+                + " ROW_NUMBER() OVER (PARTITION BY sql_digest ORDER BY query_ms desc) as rn"
+                + " from " + StatsConstants.STATISTICS_DB_NAME + "." + StatsConstants.QUERY_HISTORY_TABLE_NAME
+                + " where rn = 2 and dt >= '" + DateUtils.formatDateTimeUnix(beginTime) + "'";
         try {
             List<TResultBatch> datas = queryExecutor.executeDQL(sql);
             List<QueryHistory> history = Lists.newArrayList();
