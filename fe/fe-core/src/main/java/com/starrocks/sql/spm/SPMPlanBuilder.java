@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.spm;
 
-import com.google.common.collect.Lists;
 import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.SetVarHint;
 import com.starrocks.analysis.StringLiteral;

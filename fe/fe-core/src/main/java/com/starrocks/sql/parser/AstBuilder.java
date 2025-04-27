@@ -8546,8 +8546,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         List<Long> ids = ctx.INTEGER_VALUE().stream()
                 .map(ParseTree::getText)
-                .map(Integer::parseInt)
-                .collect(toList());
+                .map(Long::parseLong).toList();
 
         return new DropBaselinePlanStmt(ids, createPos(ctx));
     }
