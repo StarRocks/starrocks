@@ -76,14 +76,22 @@ private:
 
     StatusOr<std::string_view> _peek(size_t size);
 
+    int32_t _data_length() {
+        return _codec != tparquet::CompressionCodec::UNCOMPRESSED ? _cur_header.compressed_page_size
+                                                                  : _cur_header.uncompressed_page_size;
+    }
+
     void _init_page_cache_key();
     std::string& _current_page_cache_key();
     Status _deal_page_with_cache();
     Status _read_and_deserialize_header(bool need_fill_cache);
     Status _read_and_decompress_internal(bool need_fill_cache);
+    bool _cache_decompressed_data();
+    Status _decompress_page(Slice& input, Slice* output);
 
     io::SeekableInputStream* const _stream;
     tparquet::PageHeader _cur_header;
+    uint32_t _header_length;
 
     uint64_t _offset = 0;
     uint64_t _next_header_pos = 0;
@@ -105,9 +113,7 @@ private:
     using BufferPtr = std::shared_ptr<std::vector<uint8_t>>;
     BufferPtr _compressed_buf;
     BufferPtr _uncompressed_buf;
-
     BufferPtr _cache_buf;
-    bool _cache_compressed_data = false;
 
     Slice _uncompressed_data;
 };

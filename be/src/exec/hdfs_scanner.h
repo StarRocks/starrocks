@@ -91,6 +91,8 @@ struct HdfsScanStats {
     int64_t page_read_counter = 0;
     int64_t page_cache_read_counter = 0;
     int64_t page_cache_write_counter = 0;
+    int64_t page_cache_read_decompressed_counter = 0;
+    int64_t page_cache_read_compressed_counter = 0;
     // reader init
     int64_t footer_read_ns = 0;
     int64_t footer_cache_read_ns = 0;

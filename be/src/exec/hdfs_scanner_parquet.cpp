@@ -79,6 +79,8 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     RuntimeProfile::Counter* page_read_counter = nullptr;
     RuntimeProfile::Counter* page_cache_read_counter = nullptr;
     RuntimeProfile::Counter* page_cache_write_counter = nullptr;
+    RuntimeProfile::Counter* page_cache_read_decompressed_counter = nullptr;
+    RuntimeProfile::Counter* page_cache_read_compressed_counter = nullptr;
 
     // reader init
     RuntimeProfile::Counter* footer_read_timer = nullptr;
@@ -143,6 +145,10 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
             ADD_CHILD_COUNTER(root, "PageCacheReadCounter", TUnit::UNIT, kParquetProfileSectionPrefix);
     page_cache_write_counter =
             ADD_CHILD_COUNTER(root, "PageCacheWriteCounter", TUnit::UNIT, kParquetProfileSectionPrefix);
+    page_cache_read_decompressed_counter =
+            ADD_CHILD_COUNTER(root, "PageCacheReadDecompressedCounter", TUnit::UNIT, kParquetProfileSectionPrefix);
+    page_cache_read_compressed_counter =
+            ADD_CHILD_COUNTER(root, "PageCacheReadCompressedCounter", TUnit::UNIT, kParquetProfileSectionPrefix);
     footer_read_timer = ADD_CHILD_TIMER(root, "ReaderInitFooterRead", kParquetProfileSectionPrefix);
     column_reader_init_timer = ADD_CHILD_TIMER(root, "ReaderInitColumnReaderInit", kParquetProfileSectionPrefix);
 
@@ -184,6 +190,8 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     COUNTER_UPDATE(page_read_counter, _app_stats.page_read_counter);
     COUNTER_UPDATE(page_cache_read_counter, _app_stats.page_cache_read_counter);
     COUNTER_UPDATE(page_cache_write_counter, _app_stats.page_cache_write_counter);
+    COUNTER_UPDATE(page_cache_read_decompressed_counter, _app_stats.page_cache_read_decompressed_counter);
+    COUNTER_UPDATE(page_cache_read_compressed_counter, _app_stats.page_cache_read_compressed_counter);
     COUNTER_UPDATE(footer_read_timer, _app_stats.footer_read_ns);
     COUNTER_UPDATE(footer_cache_write_counter, _app_stats.footer_cache_write_count);
     COUNTER_UPDATE(footer_cache_write_bytes, _app_stats.footer_cache_write_bytes);
