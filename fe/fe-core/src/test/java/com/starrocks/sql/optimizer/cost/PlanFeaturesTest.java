@@ -15,9 +15,13 @@
 package com.starrocks.sql.optimizer.cost;
 
 import com.google.common.base.Splitter;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.cost.feature.FeatureExtractor;
+import com.starrocks.sql.optimizer.cost.feature.OperatorFeatures;
 import com.starrocks.sql.optimizer.cost.feature.PlanFeatures;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.apache.commons.lang3.StringUtils;
@@ -44,6 +48,17 @@ class PlanFeaturesTest extends PlanTestBase {
             "select count(*) from t0 a join t0 b on a.v1 = b.v2" +
                     "| tables=[0,0,10003] " +
                     "| 40,2,0,16,2,4,0,4;41,2,0,16,2,2,0,0,0,2,2;45,2,0,16,0,4,0,0,0,2,0",
+
+            // mysql external table
+            "select * from ods_order where org_order_no" +
+                    "| tables=[0,0,test.ods_order]" +
+                    "| 40,0,0,0,0,0,0,0,41,0,0,0,0,0,0,0,0,0,0,42,0,0,0,0,0,0,0,0,0,44,0,0,0,0,0",
+            "select * from (select * from ods_order join mysql_table where k1  = 'a' and order_dt = 'c') t1 where t1.k2 = 'c'" +
+                    "| tables=[0,db1.tbl1,test.ods_order] " +
+                    "| 40,1,9,8,11,11,0,1,41,0,0,0,0,0,0,0,0,0,0,42,0,0,0,0,0,0,0,0,0,44",
+            "select * from ods_order join mysql_table where k1  = 'a' and order_dt = 'c'" +
+                    "| tables=[0,db1.tbl1,test.ods_order] " +
+                    "| 40,1,9,8,11,11,0,1,41,0,0,0,0,0,0,0,0,0,0,42,0,0,0,0,0,0,0,0,0,44",
 
     })
     public void testBasic(String query, String expectedTables, String expected) throws Exception {
@@ -79,7 +94,47 @@ class PlanFeaturesTest extends PlanTestBase {
         Assertions.assertEquals(3, numTables);
         Assertions.assertEquals(3, numEnvs);
         Assertions.assertEquals(1, numVars);
-        Assertions.assertEquals(194, numOperators);
+        Assertions.assertEquals(370, numOperators);
     }
 
+    @Test
+    public void testTableFeatures1() {
+        OlapTable t0 = (OlapTable) starRocksAssert.getTable("test", "t0");
+        Assertions.assertTrue(t0 != null);
+        OlapTable t00 = (OlapTable) starRocksAssert.getTable("test", "t0");
+        Assertions.assertTrue(t00 != null);
+        OlapTable t1 = (OlapTable) starRocksAssert.getTable("test", "t1");
+
+        OperatorFeatures.TableFeature f0 = new OperatorFeatures.TableFeature(t0, Statistics.builder().build());
+        Assertions.assertTrue(f0.getTable().equals(t0));
+        Assertions.assertTrue(f0.getRowCount() == t0.getRowCount());
+        Assertions.assertTrue(f0.getTableIdentifier().equals(String.valueOf(t0.getId())));
+
+        OperatorFeatures.TableFeature f00 = new OperatorFeatures.TableFeature(t00, Statistics.builder().build());
+        Assertions.assertTrue(f00.getTable().equals(t00));
+
+        OperatorFeatures.TableFeature f1 = new OperatorFeatures.TableFeature(t1, Statistics.builder().build());
+        Assertions.assertTrue(f1.getTable().equals(t1));
+        Assertions.assertFalse(f1.getTable().equals(t0));
+        Assertions.assertTrue(f1.getRowCount() == t1.getRowCount());
+        Assertions.assertFalse(f1.getTableIdentifier().equals(t0.getId()));
+
+        Assertions.assertTrue(f0.equals(f00));
+    }
+
+    @Test
+    public void testTableFeatures2() {
+        Table t0 = starRocksAssert.getTable("test", "ods_order");
+        Assertions.assertTrue(t0 != null);
+        Statistics statistics = Statistics.builder().build();
+        OperatorFeatures.TableFeature f0 = new OperatorFeatures.TableFeature(t0, statistics);
+        Assertions.assertTrue(f0.getTable().equals(t0));
+        Assertions.assertTrue(f0.getRowCount() == (long) statistics.getOutputRowCount());
+        String expect = String.format("%s.%s", t0.getCatalogDBName(), t0.getCatalogTableName());
+        Assertions.assertTrue(f0.getTableIdentifier().equals(expect));
+        Table t00 = starRocksAssert.getTable("test", "ods_order");
+
+        OperatorFeatures.TableFeature f00 = new OperatorFeatures.TableFeature(t00, statistics);
+        Assertions.assertTrue(f00.equals(f0));
+    }
 }
