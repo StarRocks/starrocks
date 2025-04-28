@@ -52,9 +52,12 @@ def create_app(model_file_arg=None):
             body = await request.body()
             csv_data = body.decode("utf-8").replace("\r\n", "\n")
             input_data = pd.read_csv(io.StringIO(csv_data))
-
             dinput = predict_data(input_data)
+
             predictions = model.predict(dinput)
+            # Restore the predictions
+            # The transform is hardcoded to "log" here as in utils#register_args. Adjust if needed.
+            predictions = utils.restore_predict(predictions, transform="log")
 
             return Response(
                 content="\n".join(map(str, predictions.tolist())),
@@ -73,6 +76,8 @@ def create_app(model_file_arg=None):
 
             dinput = predict_data(input_data)
             predictions = model.predict(dinput)
+            # Restore the predictions
+            predictions = utils.restore_predict(predictions, transform="log")
 
             return PredictionResponse(predictions=predictions.tolist())
         except Exception as e:

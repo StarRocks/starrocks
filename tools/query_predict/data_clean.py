@@ -37,7 +37,7 @@ def parse_line(line):
     for field in required_fields:
         value = field_map.get(field, "")
         if field in vector_fields:
-            value = [int(item) for item in value.strip("[]").split(",")]
+            value = [item for item in value.strip("[]").split(",")]
         reordered_fields.append(value)
     return reordered_fields
 

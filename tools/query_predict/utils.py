@@ -2,7 +2,6 @@ import argparse
 import json
 import numpy as np
 import pandas as pd
-from sklearn.metrics import mean_absolute_error
 
 # Convert bytes to human-readable format
 def bytes_to_human_readable(bytes):

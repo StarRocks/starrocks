@@ -1,8 +1,6 @@
 import pandas as pd
-from sklearn.metrics import mean_absolute_error
 import xgboost as xgb
 import utils
-
 
 def evaluate_predict_result(y_pred, y_test):
     mape = utils.mean_absolute_percentage_error(y_test, y_pred)
@@ -22,7 +20,7 @@ test_data = pd.read_csv(test_data_file)
 test_data = test_data[test_data[predict_value] != 0]
 test_data = utils.onehot_encode_tables(test_data)
 
-X_test_data, y_test_data = ( test_data.filter(regex=utils.features_regex), test_data[predict_value])
+X_test_data, y_test_data = (test_data.filter(regex=utils.features_regex), test_data[predict_value])
 y_test_data = utils.transform_predict(y_test_data, args.transform)
 dtest = xgb.DMatrix(X_test_data, label=y_test_data)
 
