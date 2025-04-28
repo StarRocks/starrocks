@@ -1,11 +1,9 @@
 -- name: test_column_with_row_variable
 ADMIN SET FRONTEND CONFIG ("enable_experimental_rowstore" = "true");
 -- result:
-[]
 -- !result
 DROP TABLE IF EXISTS t1_var;
 -- result:
-[]
 -- !result
 CREATE TABLE IF NOT EXISTS t1_var(
     k1 int,
@@ -22,7 +20,6 @@ PROPERTIES (
     "storage_type" = "column_with_row"
 );
 -- result:
-[]
 -- !result
 INSERT INTO t1_var(k1, k2, v1, v2, v3, v4) VALUES
     (1, 2, 'a2222222', 'a2222222', "2222-12-22", 33),
@@ -33,11 +30,9 @@ INSERT INTO t1_var(k1, k2, v1, v2, v3, v4) VALUES
     (3, 3, 'e2222222', 'e2222222', "2222-12-22", 100),
     (4, 4, 'f2222222', 'f2222222', "2222-12-22", 101);
 -- result:
-[]
 -- !result
 set enable_short_circuit = true;
 -- result:
-[]
 -- !result
 select length(v1), v1, v2, v3, v4 from t1_var where k1 = 3 and k2 = 3;
 -- result:
@@ -52,13 +47,10 @@ select k1, k2, v3, v4 from t1_var where k1 = 3 and k2 = 3 and v1 = 'a2222222';
 -- !result
 set enable_short_circuit = false;
 -- result:
-[]
 -- !result
 TRUNCATE TABLE t1_var;
 -- result:
-[]
 -- !result
 DROP TABLE t1_var FORCE;
 -- result:
-[]
 -- !result
