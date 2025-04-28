@@ -382,6 +382,14 @@ public:
 
     void stop_and_wait_apply_done();
 
+<<<<<<< HEAD
+=======
+    Status breakpoint_check();
+    Status compaction_random(MemTracker* mem_tracker);
+
+    bool rowset_check_file_existence() const;
+
+>>>>>>> 46a9c55856 ([BugFix] Fix data file lost when upgrade from versions below 3.2 (#58404))
 private:
     friend class Tablet;
     friend class PrimaryIndex;
