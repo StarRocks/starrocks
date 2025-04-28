@@ -456,8 +456,8 @@ Status ScalarColumnReader::read_range(const Range<uint64_t>& range, const Filter
     }
 }
 
-bool ScalarColumnReader::try_to_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
-                                                const std::vector<std::string>& sub_field_path, const size_t& layer) {
+bool ScalarColumnReader::can_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
+                                             const std::vector<std::string>& sub_field_path, const size_t& layer) {
     if (sub_field_path.size() != layer) {
         return false;
     }
@@ -466,7 +466,12 @@ bool ScalarColumnReader::try_to_use_dict_filter(ExprContext* ctx, bool is_decode
         return false;
     }
 
-    if (column_all_pages_dict_encoded()) {
+    return column_all_pages_dict_encoded();
+}
+
+bool ScalarColumnReader::try_to_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
+                                                const std::vector<std::string>& sub_field_path, const size_t& layer) {
+    if (this->can_use_dict_filter(ctx, is_decode_needed, slotId, sub_field_path, layer)) {
         if (_dict_filter_ctx == nullptr) {
             _dict_filter_ctx = std::make_unique<ColumnDictFilterContext>();
             _dict_filter_ctx->is_decode_needed = is_decode_needed;
@@ -475,9 +480,8 @@ bool ScalarColumnReader::try_to_use_dict_filter(ExprContext* ctx, bool is_decode
         }
         _dict_filter_ctx->conjunct_ctxs.push_back(ctx);
         return true;
-    } else {
-        return false;
     }
+    return false;
 }
 
 Status ScalarColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
@@ -613,13 +617,18 @@ Status LowCardColumnReader::read_range(const Range<uint64_t>& range, const Filte
     }
 }
 
-bool LowCardColumnReader::try_to_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
-                                                 const std::vector<std::string>& sub_field_path, const size_t& layer) {
+bool LowCardColumnReader::can_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
+                                              const std::vector<std::string>& sub_field_path, const size_t& layer) {
     if (sub_field_path.size() != layer) {
         return false;
     }
 
-    if (column_all_pages_dict_encoded()) {
+    return column_all_pages_dict_encoded();
+}
+
+bool LowCardColumnReader::try_to_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
+                                                 const std::vector<std::string>& sub_field_path, const size_t& layer) {
+    if (this->can_use_dict_filter(ctx, is_decode_needed, slotId, sub_field_path, layer)) {
         if (_dict_filter_ctx == nullptr) {
             _dict_filter_ctx = std::make_unique<ColumnDictFilterContext>();
             _dict_filter_ctx->is_decode_needed = is_decode_needed;
@@ -628,9 +637,8 @@ bool LowCardColumnReader::try_to_use_dict_filter(ExprContext* ctx, bool is_decod
         }
         _dict_filter_ctx->conjunct_ctxs.push_back(ctx);
         return true;
-    } else {
-        return false;
     }
+    return false;
 }
 
 Status LowCardColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {

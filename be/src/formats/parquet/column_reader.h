@@ -114,6 +114,11 @@ public:
 
     virtual void set_need_parse_levels(bool need_parse_levels) = 0;
 
+    virtual bool can_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
+                                     const std::vector<std::string>& sub_field_path, const size_t& layer) {
+        return false;
+    }
+
     virtual bool try_to_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
                                         const std::vector<std::string>& sub_field_path, const size_t& layer) {
         return false;

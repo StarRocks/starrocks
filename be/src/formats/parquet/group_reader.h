@@ -151,8 +151,9 @@ private:
     // Extract dict filter columns and conjuncts
     void _process_columns_and_conjunct_ctxs();
 
-    bool _try_to_use_dict_filter(const GroupReaderParam::Column& column, ExprContext* ctx,
-                                 std::vector<std::string>& sub_field_path, bool is_decode_needed);
+    std::vector<std::vector<std::string>> _get_expression_subfields(ExprContext* ctx);
+
+    bool _can_use_dict_filter(const GroupReaderParam::Column& column, ExprContext* ctx, bool is_decode_needed);
 
     void _init_read_chunk();
 

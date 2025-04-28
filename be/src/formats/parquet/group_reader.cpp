@@ -378,12 +378,27 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
     for (auto& column : _param.read_cols) {
         SlotId slot_id = column.slot_id();
         if (conjunct_ctxs_by_slot.find(slot_id) != conjunct_ctxs_by_slot.end()) {
+            bool can_use_dict_for_all_expressions = true;
             for (ExprContext* ctx : conjunct_ctxs_by_slot.at(slot_id)) {
                 std::vector<std::string> sub_field_path;
-                if (_try_to_use_dict_filter(column, ctx, sub_field_path, column.decode_needed)) {
-                    _use_as_dict_filter_column(read_col_idx, slot_id, sub_field_path);
-                } else {
-                    _left_conjunct_ctxs.emplace_back(ctx);
+                if (!_can_use_dict_filter(column, ctx, column.decode_needed)) {
+                    can_use_dict_for_all_expressions = false;
+                    break;
+                }
+            }
+
+            // otherwise enable it for all expressions in slot
+            if (can_use_dict_for_all_expressions) {
+                for (ExprContext* ctx : conjunct_ctxs_by_slot.at(slot_id)) {
+                    // we already know we can use it for all expressions here
+                    std::vector<std::string> sub_field_path = this->_get_expression_subfields(ctx)[0];
+                    if (_column_readers[column.slot_id()]->try_to_use_dict_filter(
+                                ctx, column.decode_needed, column.slot_id(), sub_field_path, 0)) {
+                        _use_as_dict_filter_column(read_col_idx, slot_id, sub_field_path);
+                    }
+                }
+            } else {
+                for (ExprContext* ctx : conjunct_ctxs_by_slot.at(slot_id)) {
                     // used for struct col, some dict filter conjunct pushed down to leaf some left
                     if (_left_no_dict_filter_conjuncts_by_slot.find(slot_id) ==
                         _left_no_dict_filter_conjuncts_by_slot.end()) {
@@ -391,6 +406,7 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
                     } else {
                         _left_no_dict_filter_conjuncts_by_slot[slot_id].emplace_back(ctx);
                     }
+                    _left_conjunct_ctxs.emplace_back(ctx);
                 }
             }
             _active_column_indices.emplace_back(read_col_idx);
@@ -420,11 +436,9 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
     }
 }
 
-bool GroupReader::_try_to_use_dict_filter(const GroupReaderParam::Column& column, ExprContext* ctx,
-                                          std::vector<std::string>& sub_field_path, bool is_decode_needed) {
-    const Expr* root_expr = ctx->root();
-    std::vector<std::vector<std::string>> subfields;
-    root_expr->get_subfields(&subfields);
+bool GroupReader::_can_use_dict_filter(const GroupReaderParam::Column& column, ExprContext* ctx,
+                                       bool is_decode_needed) {
+    std::vector<std::vector<std::string>> subfields = _get_expression_subfields(ctx);
 
     for (int i = 1; i < subfields.size(); i++) {
         if (subfields[i] != subfields[0]) {
@@ -432,16 +446,18 @@ bool GroupReader::_try_to_use_dict_filter(const GroupReaderParam::Column& column
         }
     }
 
-    if (subfields.size() != 0) {
-        sub_field_path = subfields[0];
-    }
+    return _column_readers[column.slot_id()]->can_use_dict_filter(ctx, is_decode_needed, column.slot_id(), subfields[0],
+                                                                  0);
+}
 
-    if (_column_readers[column.slot_id()]->try_to_use_dict_filter(ctx, is_decode_needed, column.slot_id(),
-                                                                  sub_field_path, 0)) {
-        return true;
-    } else {
-        return false;
+std::vector<std::vector<std::string>> GroupReader::_get_expression_subfields(ExprContext* ctx) {
+    std::vector<std::vector<std::string>> subfields;
+    const Expr* root_expr = ctx->root();
+    root_expr->get_subfields(&subfields);
+    if (subfields.empty()) {
+        subfields.emplace_back();
     }
+    return subfields;
 }
 
 ChunkPtr GroupReader::_create_read_chunk(const std::vector<int>& column_indices) {

@@ -258,8 +258,8 @@ Status StructColumnReader::read_range(const Range<uint64_t>& range, const Filter
     return Status::OK();
 }
 
-bool StructColumnReader::try_to_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
-                                                const std::vector<std::string>& sub_field_path, const size_t& layer) {
+bool StructColumnReader::can_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
+                                             const std::vector<std::string>& sub_field_path, const size_t& layer) {
     if (sub_field_path.size() <= layer) {
         return false;
     }
@@ -271,7 +271,17 @@ bool StructColumnReader::try_to_use_dict_filter(ExprContext* ctx, bool is_decode
     if (_child_readers[sub_field] == nullptr) {
         return false;
     }
-    return _child_readers[sub_field]->try_to_use_dict_filter(ctx, is_decode_needed, slotId, sub_field_path, layer + 1);
+    return _child_readers[sub_field]->can_use_dict_filter(ctx, is_decode_needed, slotId, sub_field_path, layer + 1);
+}
+
+bool StructColumnReader::try_to_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
+                                                const std::vector<std::string>& sub_field_path, const size_t& layer) {
+    if (this->can_use_dict_filter(ctx, is_decode_needed, slotId, sub_field_path, layer)) {
+        const std::string& sub_field = sub_field_path[layer];
+        return _child_readers[sub_field]->try_to_use_dict_filter(ctx, is_decode_needed, slotId, sub_field_path,
+                                                                 layer + 1);
+    }
+    return false;
 }
 
 Status StructColumnReader::filter_dict_column(ColumnPtr& column, Filter* filter,
