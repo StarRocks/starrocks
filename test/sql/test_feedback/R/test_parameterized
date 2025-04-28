@@ -1,0 +1,117 @@
+-- name: test_parameterized
+DROP DATABASE IF EXISTS test_feedback;
+-- result:
+-- !result
+CREATE DATABASE test_feedback;
+-- result:
+-- !result
+USE test_feedback;
+-- result:
+-- !result
+CREATE TABLE `test_feedback_parameterized` (
+  `date_col` date NULL COMMENT "",
+  `skew_city` string NULL COMMENT "",
+  `col1` int(11) NULL COMMENT "",
+  `col2` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+COMMENT "OLAP"
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into test_feedback_parameterized select "2000-01-01", "hangzhou", generate_series, 500 from TABLE(generate_series(1, 5000000));
+-- result:
+-- !result
+insert into test_feedback_parameterized select "2000-01-02", "hangzhou", generate_series, 500 from TABLE(generate_series(1, 5000000));
+-- result:
+-- !result
+insert into test_feedback_parameterized select "2000-01-03", "hangzhou", generate_series, 500 from TABLE(generate_series(1, 5000000));
+-- result:
+-- !result
+insert into test_feedback_parameterized select "2000-01-03", generate_series, generate_series, 500 from TABLE(generate_series(1, 10000));
+-- result:
+-- !result
+analyze table test_feedback_parameterized;
+-- result:
+test_feedback.test_feedback_parameterized	analyze	status	OK
+-- !result
+set enable_global_runtime_filter = false;
+-- result:
+-- !result
+truncate plan advisor;
+-- result:
+[REGEX]Clear all plan advisor in FE.*
+-- !result
+function: assert_explain_not_contains("select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou') t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-01') t", "RightChildEstimationErrorTuningGuide")
+-- result:
+None
+-- !result
+alter plan advisor add select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou') t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-01') t;
+-- result:
+[REGEX]Add query into plan advisor in FE.*
+-- !result
+function: assert_explain_contains("select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou') t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-01') t", "RightChildEstimationErrorTuningGuide")
+-- result:
+None
+-- !result
+function: assert_explain_not_contains("select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou') t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-03') t", "RightChildEstimationErrorTuningGuide")
+-- result:
+None
+-- !result
+alter plan advisor add select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou') t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-03') t;
+-- result:
+[REGEX]Add query into plan advisor in FE.*
+-- !result
+function: assert_explain_contains("select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou') t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-03') t", "RightChildEstimationErrorTuningGuide")
+-- result:
+None
+-- !result
+function: assert_explain_contains("select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou') t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-02') t", "RightChildEstimationErrorTuningGuide")
+-- result:
+None
+-- !result
+function: assert_explain_not_contains("select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou' and col2 = 500) t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-01') t", "RightChildEstimationErrorTuningGuide")
+-- result:
+None
+-- !result
+alter plan advisor add select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou' and col2 = 500) t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-01') t;
+-- result:
+[REGEX]Add query into plan advisor in FE.*
+-- !result
+function: assert_explain_contains("select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou' and col2 = 500) t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-01') t", "RightChildEstimationErrorTuningGuide")
+-- result:
+None
+-- !result
+function: assert_explain_not_contains("select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou' and col2 >= 500) t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-01') t", "RightChildEstimationErrorTuningGuide")
+-- result:
+None
+-- !result
+alter plan advisor add select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou' and col2 >= 500) t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-01') t;
+-- result:
+[REGEX]Add query into plan advisor in FE.*
+-- !result
+function: assert_explain_contains("select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou' and col2 >= 500) t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-01') t", "RightChildEstimationErrorTuningGuide")
+-- result:
+None
+-- !result
+function: assert_explain_not_contains("select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou' and col2 < 600) t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-01') t", "RightChildEstimationErrorTuningGuide")
+-- result:
+None
+-- !result
+alter plan advisor add select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou' and col2 < 600) t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-01') t;
+-- result:
+[REGEX]Add query into plan advisor in FE.*
+-- !result
+function: assert_explain_contains("select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou' and col2 < 600) t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-01') t", "RightChildEstimationErrorTuningGuide")
+-- result:
+None
+-- !result
+function: assert_explain_contains("select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou' and col2 < 550) t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-01') t", "RightChildEstimationErrorTuningGuide")
+-- result:
+None
+-- !result
+truncate plan advisor;
+-- result:
+[REGEX]Clear all plan advisor in FE.*
+-- !result
