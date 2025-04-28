@@ -23,6 +23,7 @@
 #include "storage/del_vector.h"
 #include "storage/kv_store.h"
 #include "storage/persistent_index_compaction_manager.h"
+#include "storage/persistent_index_load_executor.h"
 #include "storage/rowset_column_update_state.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
@@ -118,6 +119,9 @@ Status UpdateManager::init() {
 
     _persistent_index_compaction_mgr = std::make_unique<PersistentIndexCompactionManager>();
     RETURN_IF_ERROR(_persistent_index_compaction_mgr->init());
+
+    _pindex_load_executor = std::make_unique<PersistentIndexLoadExecutor>();
+    RETURN_IF_ERROR(_pindex_load_executor->init());
     return Status::OK();
 }
 
@@ -127,6 +131,9 @@ void UpdateManager::stop() {
     }
     if (_apply_thread_pool) {
         _apply_thread_pool->shutdown();
+    }
+    if (_pindex_load_executor) {
+        _pindex_load_executor->shutdown();
     }
 }
 
@@ -522,8 +529,15 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
     // before used in apply process, in that case, these will be loaded again in apply
     // process.
 
-    Status st;
+    if (rowset->is_partial_update()) {
+        auto task_st = _pindex_load_executor->submit_task_and_wait_for(
+                std::static_pointer_cast<Tablet>(tablet->shared_from_this()), config::pindex_rebuild_load_wait_seconds);
+        if (!task_st.ok()) {
+            return Status::Uninitialized(task_st.message());
+        }
+    }
 
+    Status st;
     if (rowset->is_column_mode_partial_update()) {
         auto state_entry = _update_column_state_cache.get_or_create(
                 strings::Substitute("$0_$1", tablet->tablet_id(), rowset_unique_id));
@@ -555,19 +569,6 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
                 LOG(WARNING) << "load RowsetUpdateState error: " << st << " tablet: " << tablet->tablet_id();
             }
             _update_state_cache.remove(state_entry);
-        }
-    }
-
-    if (st.ok()) {
-        auto index_entry = _index_cache.get_or_create(tablet->tablet_id());
-        st = index_entry->value().load(tablet);
-        index_entry->update_expire_time(MonotonicMillis() + get_index_cache_expire_ms(*tablet));
-        _index_cache.update_object_size(index_entry, index_entry->value().memory_usage());
-        if (st.ok()) {
-            _index_cache.release(index_entry);
-        } else {
-            LOG(WARNING) << "load primary index error: " << st << " tablet: " << tablet->tablet_id();
-            _index_cache.remove(index_entry);
         }
     }
 
