@@ -3686,4 +3686,10 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_trace_historical_node = false;
+
+    /**
+     * Whether to filter black list node for load
+     */
+    @ConfField(mutable = true)
+    public static boolean load_filter_black_list_node = true;
 }
