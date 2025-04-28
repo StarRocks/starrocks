@@ -182,13 +182,17 @@ public class StatisticUtils {
     }
 
     public static boolean checkStatisticTableStateNormal() {
+        List<String> tableNameList = Lists.newArrayList(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME,
+                StatsConstants.FULL_STATISTICS_TABLE_NAME, StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME,
+                StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME);
+        return checkStatisticTables(tableNameList);
+    }
+
+    public static boolean checkStatisticTables(List<String> tableNameList) {
         if (FeConstants.runningUnitTest) {
             return true;
         }
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(StatsConstants.STATISTICS_DB_NAME);
-        List<String> tableNameList = Lists.newArrayList(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME,
-                StatsConstants.FULL_STATISTICS_TABLE_NAME, StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME,
-                StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME);
 
         // check database
         if (db == null) {
@@ -213,7 +217,6 @@ public class StatisticUtils {
                 }
             }
         }
-
         return true;
     }
 

@@ -383,6 +383,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
             List<ColumnDef> columns = ImmutableList.of(
                     new ColumnDef("dt", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME))),
                     new ColumnDef("frontend", new TypeDef(ScalarType.createVarcharType(65530))),
+                    new ColumnDef("db", new TypeDef(ScalarType.createVarcharType(65530))),
                     new ColumnDef("sql_digest", new TypeDef(ScalarType.createVarcharType(65530))),
                     new ColumnDef("sql", new TypeDef(ScalarType.createVarcharType(65530))),
                     new ColumnDef("plan", new TypeDef(ScalarType.createVarcharType(65530))),

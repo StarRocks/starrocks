@@ -14,6 +14,8 @@
 
 package com.starrocks.summary;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -71,11 +73,24 @@ class StreamLoader {
                 .header("format", "json")
                 .header("label", label)
                 .header("columns", String.join(",", columns))
+                .header("strip_outer_array", "true")
                 .PUT(HttpRequest.BodyPublishers.ofString(sb))
                 .build();
 
         HttpClient client = HttpClient.newHttpClient();
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+        if (response.statusCode() == HttpStatus.SC_OK) {
+            JsonElement obj = JsonParser.parseString(response.body());
+            String status = obj.getAsJsonObject().get("Status").getAsString();
+            String message = obj.getAsJsonObject().get("Message").getAsString();
+
+            if (!status.equalsIgnoreCase("success")) {
+                return new Response(HttpStatus.SC_INTERNAL_SERVER_ERROR, message);
+            } else {
+                return new Response(HttpStatus.SC_OK, message);
+            }
+        }
         return new Response(response.statusCode(), response.body());
     }
 
