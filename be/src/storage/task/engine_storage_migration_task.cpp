@@ -46,8 +46,11 @@
 namespace starrocks {
 
 EngineStorageMigrationTask::EngineStorageMigrationTask(TTabletId tablet_id, TSchemaHash schema_hash,
-                                                       DataDir* dest_store)
-        : _tablet_id(tablet_id), _schema_hash(schema_hash), _dest_store(dest_store) {}
+                                                       DataDir* dest_store, bool need_rebuild_pk_index)
+        : _tablet_id(tablet_id),
+          _schema_hash(schema_hash),
+          _dest_store(dest_store),
+          _need_rebuild_pk_index(need_rebuild_pk_index) {}
 
 Status EngineStorageMigrationTask::execute() {
     StarRocksMetrics::instance()->storage_migrate_requests_total.increment(1);
@@ -537,8 +540,10 @@ Status EngineStorageMigrationTask::_finish_primary_key_migration(const TabletSha
         }
 
         auto tablet_manager = StorageEngine::instance()->tablet_manager();
+        // don't wait rebuild pk index to finish because migration task does not support increment migration
+        // and needs to be completed as soon as possible
         res = tablet_manager->create_tablet_from_meta_snapshot(_dest_store, _tablet_id, tablet->schema_hash(),
-                                                               schema_hash_path, false);
+                                                               schema_hash_path, false, _need_rebuild_pk_index, 0);
         if (!res.ok()) {
             LOG(WARNING) << "Fail to create tablet from meta snapshot. tablet_id: " << _tablet_id;
             WriteBatch wb;

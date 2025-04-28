@@ -156,6 +156,7 @@ public class AgentTaskTest {
         cloneTask =
                 new CloneTask(backendId1, "127.0.0.1", dbId, tableId, partitionId, indexId1, tabletId1, 0,
                         Arrays.asList(new TBackend("host1", 8290, 8390)), TStorageMedium.HDD, -1, 3600);
+        ((CloneTask) cloneTask).setNeedRebuildPkIndex(true);
 
         // modify tablet meta
         // <tablet id, tablet in memory/ tablet enable persistent index>
@@ -232,6 +233,7 @@ public class AgentTaskTest {
         Assert.assertEquals(TTaskType.CLONE, request4.getTask_type());
         Assert.assertEquals(cloneTask.getSignature(), request4.getSignature());
         Assert.assertNotNull(request4.getClone_req());
+        Assert.assertEquals(true, request4.getClone_req().isNeed_rebuild_pk_index());
 
         // modify enable_persistent_index
         TAgentTaskRequest request7 =
