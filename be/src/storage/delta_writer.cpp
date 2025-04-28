@@ -751,7 +751,7 @@ Status DeltaWriter::commit() {
         !_storage_engine->update_manager()->mem_tracker()->limit_exceeded_by_ratio(config::memory_high_level) &&
         !_storage_engine->update_manager()->update_state_mem_tracker()->any_limit_exceeded()) {
         auto st = _storage_engine->update_manager()->on_rowset_finished(_tablet.get(), _cur_rowset.get());
-        if (!st.ok()) {
+        if (!st.ok() && !st.is_uninitialized()) {
             _set_state(kAborted, st);
             return st;
         }

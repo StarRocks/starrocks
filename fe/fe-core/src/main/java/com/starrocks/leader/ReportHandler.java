@@ -1535,8 +1535,24 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
 
                 // always get old schema hash(as effective one)
                 int effectiveSchemaHash = tabletMeta.getOldSchemaHash();
-                StorageMediaMigrationTask task = new StorageMediaMigrationTask(backendId, tabletId,
-                        effectiveSchemaHash, storageMedium);
+
+                boolean needRebuildPkIndex = false;
+                Locker locker = new Locker();
+                locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+                try {
+                    PhysicalPartition partition = table.getPhysicalPartition(tabletMeta.getPhysicalPartitionId());
+                    if (partition == null) {
+                        continue;
+                    }
+                    needRebuildPkIndex = table.getKeysType() == KeysType.PRIMARY_KEYS
+                            && System.currentTimeMillis() - partition.getVisibleVersionTime()
+                                < Config.tablet_sched_pk_index_rebuild_threshold_seconds * 1000;
+                } finally {
+                    locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+                }
+
+                StorageMediaMigrationTask task = new StorageMediaMigrationTask(backendId, tabletId, effectiveSchemaHash,
+                        storageMedium, needRebuildPkIndex);
                 batchTask.addTask(task);
             }
         }

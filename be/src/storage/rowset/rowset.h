@@ -372,6 +372,16 @@ public:
         std::for_each(rowsets.begin(), rowsets.end(), [](const RowsetSharedPtr& rowset) { rowset->close(); });
     }
 
+    bool is_partial_update() const {
+        if (!rowset_meta()->get_meta_pb_without_schema().has_txn_meta()) {
+            return false;
+        }
+        // Merge condition and auto-increment-column-only partial update will also set txn_meta
+        // but will not set partial_update_column_ids
+        const auto& txn_meta = rowset_meta()->get_meta_pb_without_schema().txn_meta();
+        return !txn_meta.partial_update_column_ids().empty();
+    }
+
     bool is_column_mode_partial_update() const { return _rowset_meta->is_column_mode_partial_update(); }
 
     // only used in unit test

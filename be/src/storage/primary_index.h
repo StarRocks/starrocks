@@ -54,6 +54,9 @@ public:
     // [thread-safe]
     void unload();
 
+    // Whether index is normally loaded
+    bool is_loaded();
+
     // insert new primary keys into this index. caller need to make sure key doesn't exists
     // in index
     // [not thread-safe]
