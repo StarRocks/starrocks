@@ -1989,6 +1989,7 @@ struct TGetWarehouseMetricsResponeItem {
     9: optional string sum_required_slots;
     10: optional string remain_slots;
     11: optional string max_slots;
+    12: optional string extra_message;
 }
 struct TGetWarehouseMetricsRespone {
     1:optional list<TGetWarehouseMetricsResponeItem> metrics;
@@ -2005,6 +2006,11 @@ struct TGetWarehouseQueriesResponseItem {
     5: optional string est_costs_slots;
     6: optional string allocate_slots;
     7: optional string queued_wait_seconds;
+    8: optional string query;
+    9: optional string query_start_time;
+    10: optional string query_end_time;
+    11: optional string query_duration;
+    12: optional string extra_message;
 }
 struct TGetWarehouseQueriesResponse {
     1: optional list<TGetWarehouseQueriesResponseItem> queries;

@@ -869,6 +869,9 @@ public class StmtExecutor {
                 isForwardToLeaderOpt = Optional.of(true);
                 forwardToLeader();
             }
+
+            // process post-action after query is finished
+            context.onQueryFinished();
         }
     }
 
