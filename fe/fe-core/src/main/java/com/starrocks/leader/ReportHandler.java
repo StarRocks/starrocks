@@ -1256,7 +1256,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
 
                 boolean needRebuildPkIndex = false;
                 Locker locker = new Locker();
-                locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+                locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
                 try {
                     PhysicalPartition partition = table.getPhysicalPartition(tabletMeta.getPhysicalPartitionId());
                     if (partition == null) {
@@ -1266,7 +1266,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                             && System.currentTimeMillis() - partition.getVisibleVersionTime()
                                 < Config.tablet_sched_pk_index_rebuild_threshold_seconds * 1000;
                 } finally {
-                    locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+                    locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
                 }
 
                 StorageMediaMigrationTask task = new StorageMediaMigrationTask(backendId, tabletId, effectiveSchemaHash,
