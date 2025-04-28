@@ -161,3 +161,111 @@ insert into test_escaped_string select "aaaaa's";
 insert into test_escaped_string select "bbbbbbb";
 [UC] analyze table test_escaped_string update histogram on k1;
 function: assert_explain_costs_contains('select k1 from test_escaped_string', 'MCV')
+
+
+[UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', 'histogram_collect_ndv' = 'true');
+[UC] ANALYZE TABLE t2 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', 'histogram_collect_ndv' = 'true');
+[UC] ANALYZE TABLE t3 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0', 'histogram_collect_ndv' = 'true');
+
+SELECT buckets,mcv FROM _statistics_.histogram_statistics WHERE table_name = 'analyze_test_${uuid0}.t1' and column_name = 'k1';
+SELECT buckets,mcv FROM _statistics_.histogram_statistics WHERE table_name = 'analyze_test_${uuid0}.t2' and column_name = 'k1';
+SELECT buckets,mcv FROM _statistics_.histogram_statistics WHERE table_name = 'analyze_test_${uuid0}.t3' and column_name = 'k1';
+
+function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t1 WHERE k2=120', 'cardinality: 181')
+function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t1 WHERE k1="2020-05-11"', 'cardinality: 170')
+function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t1 WHERE k1="2020-06-11"', 'cardinality: 139')
+function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t1 WHERE k1="2020-07-11"', 'cardinality: 109')
+function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t2 WHERE k1="2020-05-11"', 'cardinality: 132')
+function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t2 WHERE k1="2020-06-11"', 'cardinality: 163')
+function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t2 WHERE k1="2020-07-11"', 'cardinality: 193')
+
+function: assert_explain_costs_contains('SELECT COUNT(*) FROM t1 JOIN t2 USING (k1)', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 3878570')
+function: assert_explain_costs_contains('SELECT COUNT(*) FROM t1 JOIN t2 USING (k1) WHERE t1.k1 BETWEEN "2020-01-21" AND "2020-01-30" ', 'cardinality: 176', 'cardinality: 2765', 'cardinality: 10239')
+
+function: assert_explain_costs_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k1 = n3.k1', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 90000', 'cardinality: 3878570', 'cardinality: 1014494067')
+function: assert_explain_costs_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k3 = n3.k3', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 90000', 'cardinality: 3878570', 'cardinality: 1230440210')
+
+-- distinct count estimations are especially useful when the values in columns are not dense.
+CREATE TABLE `t4` (
+    `k1`  date,
+    `k2`  int,
+    `k3`  int
+)
+PROPERTIES ('replication_num' = '1');
+CREATE TABLE `t5` LIKE `t1`;
+CREATE TABLE `t6` LIKE `t1`;
+
+INSERT INTO t4
+SELECT * FROM t1
+WHERE k2 % 3 != 2;
+
+INSERT INTO t5
+SELECT * FROM t2
+WHERE k2 % 3 != 2;
+
+INSERT INTO t6
+SELECT * FROM t3
+WHERE k2 % 3 != 2;
+
+SELECT k1, count(*)
+FROM t4
+GROUP BY k1
+ORDER BY k1
+LIMIT 10;
+
+SELECT k2, count(*)
+FROM t4
+GROUP BY k2
+ORDER BY k2
+LIMIT 10;
+
+SELECT k1, count(*)
+FROM t5
+GROUP BY k1
+ORDER BY k1
+LIMIT 10;
+
+SELECT k1, count(*)
+FROM t6
+GROUP BY k1
+ORDER BY k1
+LIMIT 10;
+
+-- expected results
+SELECT COUNT(*) FROM t4 WHERE k1="2020-02-01";
+SELECT COUNT(*) FROM t5 WHERE k1="2020-05-12";
+SELECT COUNT(*) FROM t5 WHERE k1="2020-07-11";
+
+SELECT COUNT(*) FROM t4 JOIN t5 USING (k1);
+SELECT COUNT(*) FROM t4 JOIN t5 USING (k1) WHERE t4.k1 BETWEEN "2020-01-21" AND "2020-01-30";
+
+SELECT COUNT(*) FROM (t4 n1 JOIN t5 n2 ON n1.k1 = n2.k1) JOIN t6 n3 ON n1.k1 = n3.k1;
+SELECT COUNT(*) FROM (t4 n1 JOIN t5 n2 ON n1.k1 = n2.k1) JOIN t6 n3 ON n1.k3 = n3.k3;
+
+[UC] ANALYZE TABLE t4 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0');
+[UC] ANALYZE TABLE t5 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0');
+[UC] ANALYZE TABLE t6 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0');
+
+function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t4 WHERE k1="2020-02-01"', 'cardinality: 76')
+function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t5 WHERE k1="2020-05-12"', 'cardinality: 109')
+function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t5 WHERE k1="2020-07-11"', 'cardinality: 106')
+
+function: assert_explain_costs_contains('SELECT COUNT(*) FROM t4 JOIN t5 USING (k1)', 'cardinality: 30100', 'cardinality: 30100', 'cardinality: 3428700')
+function: assert_explain_costs_contains('SELECT COUNT(*) FROM t4 JOIN t5 USING (k1) WHERE t4.k1 BETWEEN "2020-01-21" AND "2020-01-30" ', 'cardinality: 99', 'cardinality: 1523', 'cardinality: 861')
+
+function: assert_explain_costs_contains('SELECT COUNT(*) FROM (t4 n1 JOIN t5 n2 ON n1.k1 = n2.k1) JOIN t6 n3 ON n1.k1 = n3.k1', 'cardinality: 30100', 'cardinality: 30100', 'cardinality: 60000', 'cardinality: 3428700', 'cardinality: 1000240784')
+function: assert_explain_costs_contains('SELECT COUNT(*) FROM (t4 n1 JOIN t5 n2 ON n1.k1 = n2.k1) JOIN t6 n3 ON n1.k3 = n3.k3', 'cardinality: 30100', 'cardinality: 30100', 'cardinality: 60000', 'cardinality: 3428700', 'cardinality: 758438350')
+
+[UC] ANALYZE TABLE t4 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0', 'histogram_collect_ndv' = 'true');
+[UC] ANALYZE TABLE t5 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0', 'histogram_collect_ndv' = 'true');
+[UC] ANALYZE TABLE t6 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0', 'histogram_collect_ndv' = 'true');
+
+function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t4 WHERE k1="2020-02-01"', 'cardinality: 270')
+function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t5 WHERE k1="2020-05-12"', 'cardinality: 132')
+function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t5 WHERE k1="2020-07-11"', 'cardinality: 193')
+
+function: assert_explain_costs_contains('SELECT COUNT(*) FROM t4 JOIN t5 USING (k1)', 'cardinality: 30100', 'cardinality: 30100', 'cardinality: 2162260')
+function: assert_explain_costs_contains('SELECT COUNT(*) FROM t4 JOIN t5 USING (k1) WHERE t4.k1 BETWEEN "2020-01-21" AND "2020-01-30" ', 'cardinality: 99', 'cardinality: 1523', 'cardinality: 861')
+
+function: assert_explain_costs_contains('SELECT COUNT(*) FROM (t4 n1 JOIN t5 n2 ON n1.k1 = n2.k1) JOIN t6 n3 ON n1.k1 = n3.k1', 'cardinality: 30100', 'cardinality: 30100', 'cardinality: 60000', 'cardinality: 2162260', 'cardinality: 656323320')
+function: assert_explain_costs_contains('SELECT COUNT(*) FROM (t4 n1 JOIN t5 n2 ON n1.k1 = n2.k1) JOIN t6 n3 ON n1.k3 = n3.k3', 'cardinality: 30100', 'cardinality: 30100', 'cardinality: 60000', 'cardinality: 2162260', 'cardinality: 478298162')
