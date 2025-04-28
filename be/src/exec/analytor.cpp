@@ -948,18 +948,20 @@ void Analytor::_update_window_batch(int64_t partition_start, int64_t partition_e
             data_columns[j] = _agg_intput_columns[i][j].get();
         }
 
+        auto current_frame_start = frame_start;
+        auto current_frame_end = frame_end;
         // For lead/lag function, it uses the relationship between the frame_start and frame_end to determine
         // whether NULL value should be generated, so the frame should not be normalized.
         if (!_is_lead_lag_functions[i]) {
-            frame_start = std::max<int64_t>(frame_start, _partition.start);
+            current_frame_start = std::max<int64_t>(current_frame_start, _partition.start);
             // For half unounded window, we have not found the partition end, _found_partition_end.second refers to the next position.
             // And for others, _found_partition_end.second is identical to _partition.end, so we can always use _found_partition_end
             // instead of _partition.end to refer to the current right boundary.
-            frame_end = std::min<int64_t>(frame_end, _partition.end);
+            current_frame_end = std::min<int64_t>(current_frame_end, _partition.end);
         }
         _agg_functions[i]->update_batch_single_state_with_frame(
                 _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], data_columns,
-                partition_start, partition_end, frame_start, frame_end);
+                partition_start, partition_end, current_frame_start, current_frame_end);
     }
 }
 
