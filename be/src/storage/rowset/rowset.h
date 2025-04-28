@@ -391,6 +391,9 @@ public:
 
     size_t segment_memory_usage();
 
+    // check if the rowset files exist
+    bool check_file_existence();
+
 protected:
     friend class RowsetFactory;
 
