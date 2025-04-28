@@ -264,16 +264,56 @@ To retrieve data from disk and apply the predicates, the storage engine utilize 
 5. **Non-Pushdown Predicates**: Predicates that cannot be pushed down are evaluated.
 6. **Projection Expression**: Expressions, such as `SELECT a + 1`, are computed.
 
-**Common Performance Bottlenecks and Their Solutions:**
+#### Common Performance Bottlenecks and Their Solutions:
 
-| Bottleneck Cause | Red-Flag Metrics / Symptoms | Why it Slows OLAP_SCAN | Solutions |
-|-------------------|-------------------------------|------------------------|---------------------|
-| Heavy Raw I/O or Slow Storage | BytesRead, RawRowsRead, CompressedBytesRead, ScanTime, IOTaskExecTime dominate | Disk (or object-store) read bandwidth becomes the constraint | Put hot data on NVMe/SSD, Enable storage cache |
-| Poor Predicate | PushdownPredicates≈0; ExprFilterRows dominates; LIKE '%x%' or other complicated predicates | More rows flow into CPU thread-pool because filters aren’t applied in storage layer | Rewrite filters to simple comparisons, Build targeted MVs/indexes|
-| Low DOP or Thread-pool Saturation | High IOTaskWaitTime; low PeakIOTasks | Too few parallel scan tasks or threads blocked waiting for I/O slots | Increase the disk bandwidth or enlarge the cache |
-| Tablet / Data Skew Across BEs | Large max-min gap for OperatorTotalTime or BytesRead; one tablet own most data | One thread does disproportionate work, all others idle | Hash-bucket on high-cardinality key; Increase number of buckets |
-| Fragmented Rowsets & Tiny Segments | High RowsetsReadCount / SegmentsReadCount; long SegmentInit time | Many small files force frequent open/seek calls | Increase compactions threads or execute manual compacctions; Batch mini-loads |
-| High number of soft-deleted records | High DeleteFilterRows | Soft-delete will apply the delete predicate when reading | Compact the data; Reduce the frequency of delete operations | 
+#####  Heavy Raw I/O or Slow Storage 
+
+**Red-flag metrics / symptoms**:  BytesRead, RawRowsRead, CompressedBytesRead, ScanTime, IOTaskExecTime dominate 
+
+**Why it slows down OLAP scan**:  Disk (or object-store) read bandwidth becomes the constraint 
+
+**Solutions**:  Put hot data on NVMe/SSD, Enable storage cache 
+
+#####  Poor Predicate 
+
+**Red-flag metrics / symptoms**:  PushdownPredicates≈0; ExprFilterRows dominates; LIKE '%x%' or other complicated predicates 
+
+**Why it slows down OLAP scan**:  More rows flow into CPU thread-pool because filters aren’t applied in storage layer 
+
+**Solutions**:  Rewrite filters to simple comparisons, Build targeted MVs/indexes
+
+#####  Low DOP or Thread-pool Saturation 
+
+**Red-flag metrics / symptoms**:  High IOTaskWaitTime; low PeakIOTasks 
+
+**Why it slows down OLAP scan**:  Too few parallel scan tasks or threads blocked waiting for I/O slots 
+
+**Solutions**:  Increase the disk bandwidth or enlarge the cache 
+
+#####  Tablet / Data Skew Across BEs 
+
+**Red-flag metrics / symptoms**:  Large max-min gap for OperatorTotalTime or BytesRead; one tablet own most data 
+
+**Why it slows down OLAP scan**:  One thread does disproportionate work, all others idle 
+
+**Solutions**:  Hash-bucket on high-cardinality key; Increase number of buckets 
+
+#####  Fragmented Rowsets & Tiny Segments 
+
+**Red-flag metrics / symptoms**:  High RowsetsReadCount / SegmentsReadCount; long SegmentInit time 
+
+**Why it slows down OLAP scan**:  Many small files force frequent open/seek calls 
+
+**Solutions**:  Increase compactions threads or execute manual compacctions; Batch mini-loads 
+
+#####  High number of soft-deleted records 
+
+**Red-flag metrics / symptoms**:  High DeleteFilterRows 
+
+**Why it slows down OLAP scan**:  Soft-delete will apply the delete predicate when reading 
+
+**Solutions**:  Compact the data; Reduce the frequency of delete operations 
+ 
 
 The Scan Operator utilizes an additional thread pool for executing IO tasks. Therefore, the relationship between time metrics for this node is illustrated below:
 
@@ -424,13 +464,48 @@ In StarRocks the aggregation is implemented in distributed manner, which can be 
 
 **Common Performance Bottlenecks and Their Solutions:**
 
-| Bottleneck Cause | Red-Flag Metrics / Symptoms | Why it Hurts AGG Operators | Solutions |
-|-------------------|-------------------------------|---------------------------|-------------------------------|
-| High-cardinality GROUP BY → oversize hash table | HashTableSize, HashTableMemoryUsage, and AggComputeTime balloon; query gets close to memory limit | Hash-aggregate builds one entry per group; if millions of groups land in RAM the hash table becomes CPU- and memory-bound and can even spill | Enable sorted streaming aggregate; Add pre-aggregated MVs or roll-ups; Reduce key width / cast to INT |
-| Data-skewed shuffle between partial → final stages | Huge gap in HashTableSize or InputRowCount across instances; one fragment’s AggComputeTime dwarfs others | A single backend receives most of the hot keys and blocks the pipeline | Add salt column in the aggregation; Use `DISTINCT [skew]` hint |
-| Expensive or `DISTINCT`-style aggregate functions (e.g. `ARRAY_AGG`, `HLL_UNION`, `BITMAP_UNION`, `COUNT(DISTINCT)`) | AggregateFunctions dominates operator time; CPU still near 100 % after hash build finishes | State-heavy aggregation functions keep sizable sketches and run SIMD-heavy loops each row | Pre-compute HLL/Bitmap columns at ingest; Use approx_count_distinct or multi_distinct_* where accuracy allows; |
-| Poor first-stage (partial) aggregation | Very large InputRowCount, but AggComputeTime is modest; PassThroughRowCount is high; upstream EXCHANGE shows massive BytesSent | If partial aggregation on each BE doesn't pre-aggregate the dataset well, most raw rows traverse the network and pile up in the final AGG | Confirm plan shows two- or three-stage aggregation; Rewrite query to simple `GROUP BY` keys so optimizer can push partial AGG; set streaming_preaggregation_mode = 'force_preaggregation' |
-| Heavy expression evaluation on `GROUP BY` keys | ExprComputeTime high relative to `AggComputeTime` | Complex functions on every row before hashing dominate CPU | Materialize computed keys in a sub-query or generated column; Use column dictionary / pre-encoded values; Project downstream instead |
+###  Bottleneck Cause
+
+####  High-cardinality `GROUP BY` → oversize hash table 
+
+**Red-flag metrics / symptoms**:  HashTableSize, HashTableMemoryUsage, and AggComputeTime balloon; query gets close to memory limit 
+
+**Why it hurts Agg operators**:  Hash-aggregate builds one entry per group; if millions of groups land in RAM the hash table becomes CPU- and memory-bound and can even spill 
+
+**Solutions**:  Enable sorted streaming aggregate; Add pre-aggregated MVs or roll-ups; Reduce key width / cast to `INT` 
+
+####  Data-skewed shuffle between partial → final stages 
+
+**Red-flag metrics / symptoms**:  Huge gap in HashTableSize or InputRowCount across instances; one fragment’s AggComputeTime dwarfs others 
+
+**Why it hurts Agg operators**:  A single backend receives most of the hot keys and blocks the pipeline 
+
+**Solutions**:  Add salt column in the aggregation; Use `DISTINCT [skew]` hint 
+
+####  Expensive or `DISTINCT`-style aggregate functions (e.g., `ARRAY_AGG`, `HLL_UNION`, `BITMAP_UNION`, `COUNT(DISTINCT)`) 
+
+**Red-flag metrics / symptoms**:  AggregateFunctions dominates operator time; CPU still near 100 % after hash build finishes 
+
+**Why it hurts Agg operators**:  State-heavy aggregation functions keep sizable sketches and run SIMD-heavy loops each row 
+
+**Solutions**:  Pre-compute HLL/Bitmap columns at ingest; Use approx_count_distinct or multi_distinct_* where accuracy allows; 
+
+####  Poor first-stage (partial) aggregation 
+
+**Red-flag metrics / symptoms**:  Very large InputRowCount, but AggComputeTime is modest; PassThroughRowCount is high; upstream EXCHANGE shows massive BytesSent 
+
+**Why it hurts Agg operators**:  If partial aggregation on each BE doesn't pre-aggregate the dataset well, most raw rows traverse the network and pile up in the final AGG 
+
+**Solutions**:  Confirm plan shows two- or three-stage aggregation; Rewrite query to simple `GROUP BY` keys so optimizer can push partial AGG; set streaming_preaggregation_mode = 'force_preaggregation' 
+
+####  Heavy expression evaluation on `GROUP BY` keys 
+
+**Red-flag metrics / symptoms**:  ExprComputeTime high relative to `AggComputeTime` 
+
+**Why it hurts Agg operators**:  Complex functions on every row before hashing dominate CPU 
+
+**Solutions**:  Materialize computed keys in a sub-query or generated column; Use column dictionary / pre-encoded values; Project downstream instead 
+
 
 **Metrics List**
 
@@ -474,18 +549,92 @@ StarRocks relies on a vectorized, pipeline-friendly hash-join core that can be w
 
 
 **When joins become the bottleneck**
-| Typical cause | Profile symptoms / hot metrics | Why it hurts | Solutions |
-| --- | --- | --- | --- |
-| Build-side table too large for RAM | BuildRows, HashTableSize, BuildHashTableTime dominate; memory near limit or spills | Hash table has to live in memory, can become slow if it cannot fit into CPU cache | • Pick smaller table as build side • Add pre-aggregation or selective projection • Boost query/BE memory or enable hash-spill |
-| Large join probe time | High SearchHashTableTime | Inefficient data clustering can lead to poor CPU cache locality | Optimize data clustering by sorting the probe table on join keys |
-| Excessive Output Columns | High OutputBuildColumnTime or OutputProbeColumnTime | The processing of numerous output columns necessitates substantial data copying, which can be CPU-intensive | Optimize output columns by reducing their number; Exclude heavy columns from output; Consider retrieving unnecessary columns post-join |
-| Data skew after shuffle | One fragment’s ProbeRows ≫ others; OperatorTotalTime highly unbalanced | A single BE receives most hot keys; others go idle | • Use higher-cardinality key • pad composite key (concat(key,'-',mod(id,16))) |
-| Broadcasting a not-so-small table | Join type is BROADCAST; BytesSent and SendBatchTime soar on every BE | O(N²) network traffic and deserialisation | • Let optimizer pick shuffle (`SET broadcast_row_limit = lower`) • Force shuffle hint • Analyze table to collect statistics.  |
-| Missing or ineffective runtime filters | JoinRuntimeFilterEvaluate small, scans still read full table | Scans push all rows into probe side, wasting CPU & I/O | Rewrite join predicate to pure equality so RF can be generated; Avoid doing type casting in join key |
-| Non-equi (nested-loop) join sneak-in | Join node shows `CROSS` or `NESTLOOP`; ProbeRows*BuildRows skyrockets | O(rows×rows) comparisons; no hash key | • Add proper equality predicate or pre-filter • Materialise predicate result in temporary table, then re-join |
-| Hash-key casting / expression cost | High ExprComputeTime; hash function time rivals probe time | Keys must be cast or evaluated per row before hashing | • Store keys with matching types • Pre-compute complex expressions into generated columns |
-| No colocation on large join | Shuffle join between fact and dimension though buckets match | Random placement forces shuffle every query | • Put two tables in the same colocation group • Verify identical bucket count/key before ingest |
 
+####  Build-side table too large for RAM 
+
+**Profile symptoms / hot metrics**:  BuildRows, HashTableSize, BuildHashTableTime dominate; memory near limit or spills 
+
+**Why it hurts**:  Hash table has to live in memory, can become slow if it cannot fit into CPU cache 
+
+**Solutions**:
+- smaller table as build side
+- Add pre-aggregation or selective projection
+- Boost query/BE memory or enable hash-spill 
+
+####  Large join probe time 
+
+**Profile symptoms / hot metrics**:  High SearchHashTableTime 
+
+**Why it hurts**:  Inefficient data clustering can lead to poor CPU cache locality 
+
+**Solutions**:  Optimize data clustering by sorting the probe table on join keys 
+
+####  Excessive Output Columns 
+
+**Profile symptoms / hot metrics**:  High OutputBuildColumnTime or OutputProbeColumnTime 
+
+**Why it hurts**:  The processing of numerous output columns necessitates substantial data copying, which can be CPU-intensive 
+
+**Solutions**:  Optimize output columns by reducing their number; Exclude heavy columns from output; Consider retrieving unnecessary columns post-join 
+
+####  Data skew after shuffle 
+
+**Profile symptoms / hot metrics**:  One fragment’s ProbeRows ≫ others; OperatorTotalTime highly unbalanced 
+
+**Why it hurts**:  A single BE receives most hot keys; others go idle 
+
+**Solutions**: 
+- Use higher-cardinality key
+- pad composite key (concat(key,'-',mod(id,16))) 
+
+####  Broadcasting a not-so-small table 
+
+**Profile symptoms / hot metrics**:  Join type is BROADCAST; BytesSent and SendBatchTime soar on every BE 
+
+**Why it hurts**:  O(N²) network traffic and deserialisation 
+
+**Solutions**: 
+- Let optimizer pick shuffle (`SET broadcast_row_limit = lower`)
+- Force shuffle hint
+- Analyze table to collect statistics.  
+
+####  Missing or ineffective runtime filters 
+
+**Profile symptoms / hot metrics**:  JoinRuntimeFilterEvaluate small, scans still read full table 
+
+**Why it hurts**:  Scans push all rows into probe side, wasting CPU & I/O 
+
+**Solutions**:  Rewrite join predicate to pure equality so RF can be generated; Avoid doing type casting in join key 
+
+####  Non-equi (nested-loop) join sneak-in 
+
+**Profile symptoms / hot metrics**:  Join node shows `CROSS` or `NESTLOOP`; ProbeRows*BuildRows skyrockets 
+
+**Why it hurts**:  O(rows×rows) comparisons; no hash key 
+
+**Solutions**: 
+- Add proper equality predicate or pre-filter
+- Materialise predicate result in temporary table, then re-join 
+
+####  Hash-key casting / expression cost 
+
+**Profile symptoms / hot metrics**:  High ExprComputeTime; hash function time rivals probe time 
+
+**Why it hurts**:  Keys must be cast or evaluated per row before hashing 
+
+**Solutions**: 
+- Store keys with matching types
+- Pre-compute complex expressions into generated columns 
+
+####  No colocation on large join 
+
+**Profile symptoms / hot metrics**:  Shuffle join between fact and dimension though buckets match 
+
+**Why it hurts**:  Random placement forces shuffle every query 
+
+**Solutions**: 
+- Put two tables in the same colocation group
+- Verify identical bucket count/key before ingest 
 
 **Metrics List**
 
@@ -591,7 +740,7 @@ For ease of understanding various metrics, Merge can be represented as the follo
 
 ### Project Operator
 
-Project Operator is responsible for performing `SELECT <expr>` . If there're some expensive expressions in the query, this opeerator can take significant time.
+Project Operator is responsible for performing `SELECT <expr>`. If there're some expensive expressions in the query, this operator can take significant time.
 
 
 | Metric | Description |
