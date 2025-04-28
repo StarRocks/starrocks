@@ -85,7 +85,7 @@ PROPERTIES ("replication_num" = "1")
 AS 
   SELECT dt, sum(num) as num FROM external_mysql_t1 GROUP BY dt;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Materialized view partition expression `db_ca31a3fefd89443f8ad2d6699e123a4e`.`external_mysql_t1`.`dt` could not ref to external table.')
+[REGEX].*`external_mysql_t1`.`dt` could not ref to external table.*
 -- !result
 CREATE MATERIALIZED VIEW test_mv1 
 PARTITION BY dt
@@ -94,7 +94,7 @@ PROPERTIES ("replication_num" = "1")
 AS 
   SELECT dt, sum(num) as num FROM external_mysql_t1 GROUP BY dt;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Materialized view partition expression `db_ca31a3fefd89443f8ad2d6699e123a4e`.`external_mysql_t1`.`dt` could not ref to external table.')
+[REGEX].*`external_mysql_t1`.`dt` could not ref to external table.*
 -- !result
 CREATE MATERIALIZED VIEW test_mv1 
 REFRESH DEFERRED MANUAL 
