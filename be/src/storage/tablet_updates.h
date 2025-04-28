@@ -382,6 +382,8 @@ public:
 
     void stop_and_wait_apply_done();
 
+    bool rowset_check_file_existence() const;
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
