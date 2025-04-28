@@ -27,6 +27,7 @@ import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
+import com.starrocks.sql.ast.ListPartitionDesc;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.PartitionSpec;
@@ -221,8 +222,8 @@ public class IcebergApiConverterTest {
                 "  15: c15: required struct<20: col1: optional int>\n" +
                 "  16: c16: required time\n" +
                 "}", schema.toString());
-
-        PartitionSpec spec = IcebergApiConverter.parsePartitionFields(schema, Lists.newArrayList("c1"));
+        ListPartitionDesc partDesc = new ListPartitionDesc(Lists.newArrayList("c1"), null);
+        PartitionSpec spec = IcebergApiConverter.parsePartitionFields(schema, partDesc);
         assertTrue(spec.isPartitioned());
         assertEquals(1, spec.fields().size());
     }

@@ -607,6 +607,8 @@ public:
                                                         FunctionContext::FunctionStateScope scope);
     static Status ngram_search_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
+    DEFINE_VECTORIZED_FN(iceberg_truncate_string);
+
 private:
     static int index_of(const char* source, int source_count, const char* target, int target_count, int from_index);
 
@@ -804,18 +806,20 @@ StatusOr<ColumnPtr> StringFunctions::field(FunctionContext* context, const Colum
     for (const ColumnPtr& col : columns) {
         list.emplace_back(ColumnViewer<Type>(col));
     }
-
+    std::cout << "row size " << size << std::endl;
     for (int row = 0; row < size; row++) {
         auto value = list[0].value(row);
         int res = 0, id = 1;
         for (auto it = std::next(list.begin()); it != list.end(); it++) {
+            std::cout << "compare value with column:" << id << std::endl;
             if (!it->is_null(row) && value == it->value(row)) {
+                std::cout << "compare value success" << id << std::endl;
                 res = id;
                 break;
             }
             id++;
         }
-
+        std::cout << "add to result" << res << std::endl;
         result.append(res);
     }
 

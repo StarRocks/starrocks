@@ -513,6 +513,12 @@ struct TCompressedPartitionMap {
     3: optional string compressed_serialized_partitions
 }
 
+struct TIcebergPartitionInfo {
+    1: optional string partition_column_name
+    2: optional string transform_expr
+    3: optional Exprs.TExpr partition_expr
+}
+
 struct TIcebergTable {
     // table location
     1: optional string location
@@ -524,7 +530,7 @@ struct TIcebergTable {
     3: optional TIcebergSchema iceberg_schema
 
     // partition column names
-    4: optional list<string> partition_column_names
+    4: optional list<string> partition_column_names //Deprecated, move to TIcebergPartitionInfo
 
     // partition map may be very big, serialize costs too much, just use serialized byte[]
     5: optional TCompressedPartitionMap compressed_partitions
@@ -534,6 +540,8 @@ struct TIcebergTable {
 
     // Iceberg equality delete schema, used to support schema evolution
     7: optional TIcebergSchema iceberg_equal_delete_schema
+
+    8: optional list<TIcebergPartitionInfo> partition_info
 }
 
 struct THudiTable {

@@ -14,8 +14,11 @@
 
 #include "connector/utils.h"
 
+#include "column/chunk_extra_data.h"
 #include "column/column.h"
+#include "column/column_viewer.h"
 #include "column/datum.h"
+#include "exprs/base64.h"
 #include "exprs/expr.h"
 #include "formats/parquet/parquet_file_writer.h"
 #include "util/url_coding.h"
@@ -36,6 +39,172 @@ StatusOr<std::string> HiveUtils::make_partition_name(
         auto type = column_evaluators[i]->type();
         ASSIGN_OR_RETURN(auto value, column_value(type, column, 0));
         ss << column_names[i] << "=" << value << "/";
+    }
+    return ss.str();
+}
+
+std::string HiveUtils::to_string_int128(int128_t value) {
+    if (value < 0) {
+        value = -value;
+        return "-" + to_string_int128(value);
+    }
+    std::vector<char> result;
+    if (value == 0) {
+        return "0";
+    }
+    while (value > 0) {
+        result.push_back('0' + value % 10);
+        value /= 10;
+    }
+    std::reverse(result.begin(), result.end());
+    return std::string(result.begin(), result.end());
+}
+
+template <typename T>
+StatusOr<std::string> HiveUtils::format_decimal_value(T value, int scale) {
+    bool is_negative = value < 0;
+    if (is_negative) {
+        value = -value;
+    }
+    string res = std::to_string(value);
+
+    if (scale < 0) {
+        return Status::InvalidArgument("scale must be non-negative");
+    }
+
+    if (scale >= res.length()) {
+        res.insert(0, scale - res.length() + 1, '0');
+    }
+    int position = res.length() - scale;
+    res.insert(position, ".");
+
+    if (is_negative) {
+        res.insert(0, "-");
+    }
+    return res;
+}
+
+template <>
+StatusOr<std::string> HiveUtils::format_decimal_value<int128_t>(int128_t value, int scale) {
+    bool is_negative = value < 0;
+    if (is_negative) {
+        value = -value;
+    }
+
+    string res = to_string_int128(value); // 对于 int128_t 使用自定义的函数
+
+    if (scale < 0) {
+        throw std::invalid_argument("scale must be non-negative");
+    }
+
+    if (scale >= res.length()) {
+        res.insert(0, scale - res.length() + 1, '0');
+    }
+
+    int position = res.length() - scale;
+    res.insert(position, ".");
+
+    if (is_negative) {
+        res.insert(0, "-");
+    }
+    return res;
+}
+
+template StatusOr<std::string> HiveUtils::format_decimal_value<int32_t>(int32_t value, int scale);
+template StatusOr<std::string> HiveUtils::format_decimal_value<int64_t>(int64_t value, int scale);
+
+StatusOr<std::string> HiveUtils::iceberg_make_partition_name(const std::vector<std::string>& partition_column_names,
+                                                             const std::vector<std::string>& transform_exprs,
+                                                             const Chunk* chunk, std::vector<bool>& field_is_null) {
+    DCHECK_EQ(partition_column_names.size(), transform_exprs.size());
+    std::stringstream ss;
+    if (chunk->has_extra_data()) {
+        const auto& extra_data = down_cast<ChunkExtraColumnsData*>(chunk->get_extra_data().get());
+        const auto& metadatas = extra_data->chunk_data_metas();
+        const auto& columns = extra_data->columns();
+        DCHECK_EQ(columns.size(), partition_column_names.size());
+        field_is_null.resize(columns.size(), false);
+        for (size_t i = 0; i < columns.size(); i++) {
+            const auto& meta = metadatas.at(i);
+            std::string value;
+            auto column = columns[i];
+            if (column->size() < 1) {
+                return Status::InternalError("column size of extra chunk in make partition name is less than one");
+            } else if (column->is_null(0)) {
+                value = "null";
+                field_is_null[i] = true;
+            } else if (transform_exprs[i] == "void") {
+                value = "null";
+                field_is_null[i] = true;
+            } else if (transform_exprs[i] == "year") {
+                const auto years_from_epoch = ColumnViewer<TYPE_INT>(columns[i]).value(0);
+                value = std::to_string(years_from_epoch + 1970);
+            } else if (transform_exprs[i] == "month") {
+                const auto months_from_epoch = ColumnViewer<TYPE_INT>(columns[i]).value(0);
+                int year = 1970 + months_from_epoch / 12;
+                int month = months_from_epoch % 12 + 1;
+                std::ostringstream oss;
+                oss << year << "-" << std::setw(2) << std::setfill('0') << month;
+                value = oss.str();
+            } else if (transform_exprs[i] == "day") {
+                const auto days_from_epoch = ColumnViewer<TYPE_INT>(columns[i]).value(0);
+                std::time_t seconds = static_cast<std::time_t>(days_from_epoch) * 86400;
+                std::tm* gmt = std::gmtime(&seconds);
+                char buffer[20];
+                std::strftime(buffer, sizeof(buffer), "%Y-%m-%d", gmt);
+                value = std::string(buffer);
+            } else if (transform_exprs[i] == "hour") {
+                const auto hours_from_epoch = ColumnViewer<TYPE_INT>(columns[i]).value(0);
+                std::time_t seconds = static_cast<std::time_t>(hours_from_epoch) * 3600;
+                std::tm* gmt = std::gmtime(&seconds);
+                char buffer[20];
+                std::strftime(buffer, sizeof(buffer), "%Y-%m-%d-%H", gmt);
+                value = std::string(buffer);
+            } else if (transform_exprs[i].compare(0, 8, "truncate") == 0) {
+                ASSIGN_OR_RETURN(value, column_value(meta.type, column, 0));
+                // std::cout << "make extra data path for truncate" << std::endl;
+                // if (meta.type.type == TYPE_BINARY || meta.type.type == TYPE_VARBINARY ||
+                //     meta.type.type == TYPE_VARCHAR || meta.type.type == TYPE_CHAR) {
+                //     const auto& binary_column = ColumnViewer<TYPE_VARCHAR>(columns[i]);
+                //     const auto& slice = binary_column.value(0);
+                //     value = std::string(slice.data, slice.size);
+                // } else if (meta.type.type == TYPE_INT || meta.type.type == TYPE_BIGINT) {
+                //     const auto int_val = ColumnViewer<TYPE_BIGINT>(columns[i]).value(0);
+                //     value = std::to_string(int_val);
+                // } else if (meta.type.is_decimalv3_type()) {
+                //     auto scale = meta.type.scale;
+                //     StatusOr<std::string> res;
+                //     if (meta.type.type == TYPE_DECIMAL128) {
+                //         const auto decimal_val = ColumnViewer<TYPE_DECIMAL128>(columns[i]).value(0);
+                //         res = format_decimal_value(decimal_val, scale);
+                //     } else if (meta.type.type == TYPE_DECIMAL64) {
+                //         const auto decimal_val = ColumnViewer<TYPE_DECIMAL64>(columns[i]).value(0);
+                //         res = format_decimal_value(decimal_val, scale);
+                //     } else if (meta.type.type == TYPE_DECIMAL32) {
+                //         const auto decimal_val = ColumnViewer<TYPE_DECIMAL32>(columns[i]).value(0);
+                //         res = format_decimal_value(decimal_val, scale);
+                //     }
+                //     if (res.ok()) {
+                //         value = res.value();
+                //     } else {
+                //         return Status::InternalError("Unsupported type for iceberg partition column:" +
+                //                                      meta.type.debug_string());
+                //     }
+                // } else {
+                //     return Status::InternalError("not support truncate type:" + meta.type.debug_string());
+                // }
+            } else if (transform_exprs[i].compare(0, 6, "bucket") == 0) {
+                ASSIGN_OR_RETURN(value, column_value(meta.type, column, 0));
+            } else if (transform_exprs[i] == "identity") {
+                ASSIGN_OR_RETURN(value, column_value(meta.type, column, 0));
+            } else {
+                return Status::InternalError("Unsupported type for iceberg partition transform:" + transform_exprs[i]);
+            }
+            std::cout << "extra data column " << i << " value:" << value << std::endl;
+            ss << partition_column_names[i] << "=" << value << "/";
+        }
+    } else {
+        return Status::InternalError("make iceberg partition path failed, cuz chunk has no extra data");
     }
     return ss.str();
 }
@@ -90,8 +259,60 @@ StatusOr<std::string> HiveUtils::column_value(const TypeDescriptor& type_desc, c
     case TYPE_VARCHAR: {
         return url_encode(datum.get_slice().to_string());
     }
+    case TYPE_BINARY: {
+        // No secnario will reach here now, use TYPE_VARBINARY instead
+        /*
+            std::string origin_str = datum.get_slice().to_string();
+            if (origin_str.length() < type_desc.len) {
+                origin_str.append(type_desc.len - origin_str.length(), ' ');
+            }
+            std::string base_encode;
+            base64_encode(origin_str, &base_encode);
+            return url_encode(base_encode);
+        */
+    }
+    case TYPE_VARBINARY: {
+        std::cout << "partition datum:" << datum.get_slice().to_string() << "EOF" << std::endl;
+        int len = (size_t)(4.0 * ceil((double)datum.get_slice().get_size() / 3.0)) + 1;
+        char p[len];
+        memset(p, 0, len);
+        size_t res_len = base64_encode2((const unsigned char*)datum.get_slice().get_data(),
+                                        datum.get_slice().get_size(), (unsigned char*)p);
+        std::string base_encode;
+        if (res_len <= 0) {
+            base_encode = std::string(p, 0);
+        }
+        base_encode = std::string(p, res_len);
+        std::cout << "base64 datum size:" << datum.get_slice().get_size() << std::endl;
+        for (int i = 0; i < datum.get_slice().get_size(); i++) {
+            // 使用 std::hex 和 std::setw 来按十六进制格式输出字符的每个字节
+            std::cout << std::setw(2) << std::setfill('0') << std::hex << (int)(datum.get_slice()[i]) << " ";
+        }
+        std::cout << "base64 res:";
+        for (int i = 0; i < base_encode.size(); i++) {
+            // 使用 std::hex 和 std::setw 来按十六进制格式输出字符的每个字节
+            std::cout << std::setw(2) << std::setfill('0') << std::hex << (int)(base_encode[i]) << " ";
+        }
+        std::cout << std::endl;
+        auto res = url_encode(base_encode);
+        ;
+        std::cout << " url encode :" << res << std::endl;
+        return url_encode(base_encode);
+    }
+    case TYPE_DECIMAL32: {
+        auto value = datum.get_int32();
+        return format_decimal_value(value, type_desc.scale);
+    }
+    case TYPE_DECIMAL64: {
+        auto value = datum.get_int64();
+        return format_decimal_value(value, type_desc.scale);
+    }
+    case TYPE_DECIMAL128: {
+        auto value = datum.get_int128();
+        return format_decimal_value(value, type_desc.scale);
+    }
     default: {
-        return Status::InvalidArgument("unsupported partition column type" + type_desc.debug_string());
+        return Status::InvalidArgument("unsupported partition column type for column value" + type_desc.debug_string());
     }
     }
 }

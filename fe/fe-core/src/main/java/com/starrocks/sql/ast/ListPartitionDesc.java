@@ -232,7 +232,7 @@ public class ListPartitionDesc extends PartitionDesc {
                 if (columnDef.getName().equals(partitionCol)) {
                     if (columnDef.getType().isFloatingPointType() || columnDef.getType().isComplexType()
                             || columnDef.getType().isDecimalOfAnyVersion()) {
-                        throw new SemanticException(String.format("Invalid partition column '%s': %s",
+                        throw new SemanticException(String.format("Invalid external partition column '%s': %s",
                                 columnDef.getName(), "invalid data type " + columnDef.getType()));
                     }
                     found = true;

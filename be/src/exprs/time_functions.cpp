@@ -835,14 +835,18 @@ TimestampValue timestamp_add(TimestampValue tsv, int count) {
     return tsv.add<UNIT>(count);
 }
 
-#define DEFINE_TIME_ADD_FN(FN, UNIT)                                                                               \
-    DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, timestamp, value) { return timestamp_add<UNIT>(timestamp, value); } \
-                                                                                                                   \
+#define DEFINE_TIME_ADD_FN(FN, UNIT)                               \
+    DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, timestamp, value) { \
+        return timestamp_add<UNIT>(timestamp, value);              \
+    }                                                              \
+                                                                   \
     DEFINE_TIME_CALC_FN(FN, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);
 
-#define DEFINE_TIME_SUB_FN(FN, UNIT)                                                                                \
-    DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, timestamp, value) { return timestamp_add<UNIT>(timestamp, -value); } \
-                                                                                                                    \
+#define DEFINE_TIME_SUB_FN(FN, UNIT)                               \
+    DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, timestamp, value) { \
+        return timestamp_add<UNIT>(timestamp, -value);             \
+    }                                                              \
+                                                                   \
     DEFINE_TIME_CALC_FN(FN, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);
 
 #define DEFINE_TIME_ADD_AND_SUB_FN(FN_PREFIX, UNIT) \
@@ -2898,8 +2902,57 @@ Status TimeFunctions::date_trunc_close(FunctionContext* context, FunctionContext
     return Status::OK();
 }
 
+DEFINE_UNARY_FN_WITH_IMPL(iceberg_years_since_epoch_dateImpl, v) {
+    int y, m, d;
+    ((DateValue)v).to_date(&y, &m, &d);
+    auto ts = TimestampValue::create(y, m, d, 0, 0, 0, 0);
+    return years_diff_v2Impl::apply<TimestampValue, TimestampValue, int64_t>(ts, TimeFunctions::unix_epoch);
+}
+
+DEFINE_UNARY_FN_WITH_IMPL(iceberg_years_since_epoch_datetimeImpl, v) {
+    return years_diff_v2Impl::apply<TimestampValue, TimestampValue, int64_t>(v, TimeFunctions::unix_epoch);
+}
+
+DEFINE_TIME_UNARY_FN(iceberg_years_since_epoch_date, TYPE_DATE, TYPE_BIGINT);
+DEFINE_TIME_UNARY_FN(iceberg_years_since_epoch_datetime, TYPE_DATETIME, TYPE_BIGINT);
+
+DEFINE_UNARY_FN_WITH_IMPL(iceberg_months_since_epoch_dateImpl, v) {
+    int y, m, d;
+    ((DateValue)v).to_date(&y, &m, &d);
+    auto ts = TimestampValue::create(y, m, d, 0, 0, 0, 0);
+    return months_diff_v2Impl::apply<TimestampValue, TimestampValue, int64_t>(ts, TimeFunctions::unix_epoch);
+}
+
+DEFINE_UNARY_FN_WITH_IMPL(iceberg_months_since_epoch_datetimeImpl, v) {
+    return months_diff_v2Impl::apply<TimestampValue, TimestampValue, int64_t>(v, TimeFunctions::unix_epoch);
+}
+
+DEFINE_TIME_UNARY_FN(iceberg_months_since_epoch_date, TYPE_DATE, TYPE_BIGINT);
+DEFINE_TIME_UNARY_FN(iceberg_months_since_epoch_datetime, TYPE_DATETIME, TYPE_BIGINT);
+
+DEFINE_UNARY_FN_WITH_IMPL(iceberg_days_since_epoch_dateImpl, v) {
+    int y, m, d;
+    ((DateValue)v).to_date(&y, &m, &d);
+    auto ts = TimestampValue::create(y, m, d, 0, 0, 0, 0);
+    return days_diffImpl::apply<TimestampValue, TimestampValue, int64_t>(ts, TimeFunctions::unix_epoch);
+}
+
+DEFINE_UNARY_FN_WITH_IMPL(iceberg_days_since_epoch_datetimeImpl, v) {
+    return days_diffImpl::apply<TimestampValue, TimestampValue, int64_t>(v, TimeFunctions::unix_epoch);
+}
+
+DEFINE_TIME_UNARY_FN(iceberg_days_since_epoch_date, TYPE_DATE, TYPE_BIGINT);
+DEFINE_TIME_UNARY_FN(iceberg_days_since_epoch_datetime, TYPE_DATETIME, TYPE_BIGINT);
+
+DEFINE_UNARY_FN_WITH_IMPL(iceberg_hours_since_epoch_datetimeImpl, v) {
+    return hours_diffImpl::apply<TimestampValue, TimestampValue, int64_t>(v, TimeFunctions::unix_epoch);
+}
+
+DEFINE_TIME_UNARY_FN(iceberg_hours_since_epoch_datetime, TYPE_DATETIME, TYPE_BIGINT);
+
 // used as start point of time_slice.
 TimestampValue TimeFunctions::start_of_time_slice = TimestampValue::create(1, 1, 1, 0, 0, 0);
+TimestampValue TimeFunctions::unix_epoch = TimestampValue::create(1970, 1, 1, 0, 0, 0);
 std::string TimeFunctions::info_reported_by_time_slice = "time used with time_slice can't before 0001-01-01 00:00:00";
 #undef DEFINE_TIME_UNARY_FN
 #undef DEFINE_TIME_UNARY_FN_WITH_IMPL
