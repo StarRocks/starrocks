@@ -513,8 +513,8 @@ void RuntimeState::update_load_datacache_metrics(TReportExecStatusParams* load_p
         }
 #endif // USE_STAROS
     } else {
-        if (config::datacache_enable) {
-            const BlockCache* cache = BlockCache::instance();
+        const BlockCache* cache = BlockCache::instance();
+        if (cache->is_initialized()) {
             TDataCacheMetrics t_metrics{};
             DataCacheUtils::set_metrics_from_thrift(t_metrics, cache->cache_metrics());
             metrics.__set_metrics(t_metrics);
