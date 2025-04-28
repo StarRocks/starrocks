@@ -17,6 +17,7 @@ package com.starrocks.leader;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.InvalidMetaDirException;
+import com.starrocks.persist.ImageFormatVersion;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.After;
@@ -166,5 +167,19 @@ public class MetaHelperTest {
             }
         }
         dir.delete();
+    }
+
+    @Test
+    public void testGetImageFileDir() {
+        Assert.assertEquals(Config.meta_dir + "/image/v2", MetaHelper.getImageFileDir(true));
+        Assert.assertEquals(Config.meta_dir + "/image/starmgr", MetaHelper.getImageFileDir(false));
+        Assert.assertEquals(Config.meta_dir + "/image",
+                MetaHelper.getImageFileDir("", ImageFormatVersion.v1));
+        Assert.assertEquals(Config.meta_dir + "/image/starmgr",
+                MetaHelper.getImageFileDir("/starmgr", ImageFormatVersion.v1));
+        Assert.assertEquals(Config.meta_dir + "/image/v2",
+                MetaHelper.getImageFileDir("", ImageFormatVersion.v2));
+        Assert.assertEquals(Config.meta_dir + "/image/starmgr/v2",
+                MetaHelper.getImageFileDir("/starmgr", ImageFormatVersion.v2));
     }
 }

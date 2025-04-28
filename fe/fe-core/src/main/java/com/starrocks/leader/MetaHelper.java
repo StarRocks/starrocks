@@ -247,7 +247,7 @@ public class MetaHelper {
             throw new InvalidMetaDirException();
         }
 
-        Path imageDir = Paths.get(GlobalStateMgr.getImageDirPath());
+        Path imageDir = Paths.get(MetaHelper.getImageFileDir(true));
         Path bdbDir = Paths.get(BDBEnvironment.getBdbDir());
         boolean haveImageData = false;
         if (Files.exists(imageDir)) {

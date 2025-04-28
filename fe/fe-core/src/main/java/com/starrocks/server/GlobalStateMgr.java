@@ -281,11 +281,6 @@ public class GlobalStateMgr {
     private static final long REPLAYER_MAX_MS_PER_LOOP = 1000L;
     private static final long REPLAYER_MAX_LOGS_PER_LOOP = 100000L;
 
-    /**
-     * Meta and Image context
-     */
-    private volatile long epoch = 0;
-
     // Lock to perform atomic modification on map like 'idToDb' and 'fullNameToDb'.
     // These maps are all thread safe, we only use lock to perform atomic operations.
     // Operations like Get or Put do not need lock.
