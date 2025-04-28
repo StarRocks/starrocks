@@ -441,13 +441,14 @@ inline void neon_select_if_common_implement(uint8_t*& selector, T*& dst, const T
             }
         }
 
-        dst += 16;
+        const int elements_per_iteration = neon_width / data_size;
+        dst += elements_per_iteration;
         selector += 16;
         if constexpr (!left_const) {
-            a += 16;
+            a += elements_per_iteration;
         }
         if constexpr (!right_const) {
-            b += 16;
+            b += elements_per_iteration;
         }
     }
 }
