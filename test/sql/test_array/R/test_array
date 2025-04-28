@@ -321,5 +321,4 @@ select array_generate(3,3);
 -- !result
 select array_generate(3,2,1);
 -- result:
-[]
 -- !result

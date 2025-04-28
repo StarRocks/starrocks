@@ -456,27 +456,21 @@ PROPERTIES (
 "bucket_size" = "1"
 );
 -- result:
-[]
 -- !result
 insert into t values(1,1);
 -- result:
-[]
 -- !result
 insert into t values(1,2);
 -- result:
-[]
 -- !result
 insert into t values(1,3);
 -- result:
-[]
 -- !result
 insert into t values(1,4);
 -- result:
-[]
 -- !result
 insert into t values(1,5);
 -- result:
-[]
 -- !result
 select * from t;
 -- result:
@@ -488,7 +482,6 @@ select * from t;
 -- !result
 delete from t where k = 1;
 -- result:
-[]
 -- !result
 select * from t;
 -- result:
