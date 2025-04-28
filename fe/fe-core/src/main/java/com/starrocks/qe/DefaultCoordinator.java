@@ -1397,4 +1397,8 @@ public class DefaultCoordinator extends Coordinator {
     public ResultReceiver getReceiver() {
         return receiver;
     }
+
+    public ConnectContext getConnectContext() {
+        return connectContext;
+    }
 }
