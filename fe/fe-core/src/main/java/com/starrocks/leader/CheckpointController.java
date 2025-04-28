@@ -366,27 +366,26 @@ public class CheckpointController extends FrontendDaemon {
                 continue;
             }
 
-            boolean allFormatSuccess = true;
-            for (ImageFormatVersion formatVersion : getImageFormatVersionToPush()) {
-                String url = "http://" + NetUtils.getHostPortInAccessibleFormat(frontend.getHost(), Config.http_port)
-                        + "/put?version=" + imageVersion
-                        + "&port=" + Config.http_port
-                        + "&subdir=" + subDir
-                        + "&for_global_state=" + belongToGlobalStateMgr
-                        + "&image_format_version=" + formatVersion.toString();
-                try {
-                    MetaHelper.httpGet(url, PUT_TIMEOUT_SECOND * 1000);
+            boolean pushSuccess = true;
+            ImageFormatVersion formatVersion = belongToGlobalStateMgr ? ImageFormatVersion.v2 : ImageFormatVersion.v1;
+            String url = "http://" + NetUtils.getHostPortInAccessibleFormat(frontend.getHost(), Config.http_port)
+                    + "/put?version=" + imageVersion
+                    + "&port=" + Config.http_port
+                    + "&subdir=" + subDir
+                    + "&for_global_state=" + belongToGlobalStateMgr
+                    + "&image_format_version=" + formatVersion.toString();
+            try {
+                MetaHelper.httpGet(url, PUT_TIMEOUT_SECOND * 1000);
 
-                    LOG.info("push image successfully, url = {}", url);
-                    if (MetricRepo.hasInit) {
-                        MetricRepo.COUNTER_IMAGE_PUSH.increase(1L);
-                    }
-                } catch (IOException e) {
-                    allFormatSuccess = false;
-                    LOG.error("Exception when pushing image file. url = {}", url, e);
+                LOG.info("push image successfully, url = {}", url);
+                if (MetricRepo.hasInit) {
+                    MetricRepo.COUNTER_IMAGE_PUSH.increase(1L);
                 }
+            } catch (IOException e) {
+                pushSuccess = false;
+                LOG.error("Exception when pushing image file. url = {}", url, e);
             }
-            if (allFormatSuccess) {
+            if (pushSuccess) {
                 iterator.remove();
                 successPushedCnt++;
             }
@@ -394,17 +393,6 @@ public class CheckpointController extends FrontendDaemon {
 
         LOG.info("push image.{} from subdir [{}] to other nodes. totally {} nodes, push succeeded {} nodes",
                 imageVersion, subDir, needToPushCnt, successPushedCnt);
-    }
-
-    private List<ImageFormatVersion> getImageFormatVersionToPush() {
-        List<ImageFormatVersion> result = new ArrayList<>();
-        if (belongToGlobalStateMgr) {
-            result.add(ImageFormatVersion.v2);
-        } else {
-            // for staros mgr, there is only v1 format image.
-            result.add(ImageFormatVersion.v1);
-        }
-        return result;
     }
 
     private long getMinReplayedJournalId() {
