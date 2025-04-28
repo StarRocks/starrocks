@@ -784,7 +784,7 @@ public class MvRewriteHiveTest extends MVTestBase {
     }
 
     @Test
-    public void testHivePartitionPruneWithLeftJoin1() {
+    public void testHivePartitionPruneWithLeftJoin() {
         String mv1 = "CREATE MATERIALIZED VIEW mv1\n" +
                 "DISTRIBUTED BY RANDOM\n" +
                 "PROPERTIES (\"force_external_table_query_rewrite\" = \"true\") AS \n" +
