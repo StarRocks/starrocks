@@ -45,7 +45,7 @@ public class DeferProjectAfterTopNRule extends TransformationRule {
     public boolean check(OptExpression input, OptimizerContext context) {
         if (context.getSessionVariable().isEnableDeferProjectAfterTopN()) {
             LogicalTopNOperator topNOperator = (LogicalTopNOperator) input.getOp();
-            if (topNOperator.getPartitionPreAggCall() != null && !topNOperator.getPartitionPreAggCall().isEmpty()) {
+            if (topNOperator.getPartitionByColumns() != null && !topNOperator.getPartitionByColumns().isEmpty()) {
                 // ignore window function
                 return false;
             }
