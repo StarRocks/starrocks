@@ -22,7 +22,7 @@ MAP map_from_entries(ARRAY entries)
 
 ## Return value
 
-Returns a MAP that is constructed from the structs.
+Returns a MAP which is constructed from the structs array. If there are duplicated keys in a struct array, the later struct will overwrite the earlier ones that share the same key.
 
 ## Examples
 
@@ -38,5 +38,19 @@ select map_from_entries([row(1, 'a'), row(2,'b'), row(3, 'c')]);+---------------
 | map_from_entries([row(1, 'a'), row(2, 'b'), row(3, 'c')]) |
 +-----------------------------------------------------------+
 | {1:"a",2:"b",3:"c"}                                       |
++-----------------------------------------------------------+
+
+select map_from_entries([row(1, 'a'), row(1,'a'), row(3, 'c')]);
++-----------------------------------------------------------+
+| map_from_entries([row(1, 'a'), row(1, 'a'), row(3, 'c')]) |
++-----------------------------------------------------------+
+| {1:"a",3:"c"}                                             |
++-----------------------------------------------------------+
+
+select map_from_entries([row(1, 'a'), row(1,'b'), row(3, 'c')]);
++-----------------------------------------------------------+
+| map_from_entries([row(1, 'a'), row(1, 'b'), row(3, 'c')]) |
++-----------------------------------------------------------+
+| {1:"b",3:"c"}                                             |
 +-----------------------------------------------------------+
 ```
