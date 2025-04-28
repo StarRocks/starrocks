@@ -32,6 +32,8 @@ public class StatsConstants {
     public static final int STATISTIC_EXTERNAL_QUERY_VERSION = 6;
     public static final int STATISTIC_EXTERNAL_HISTOGRAM_VERSION = 7;
     public static final int STATISTIC_PARTITION_VERSION = 11;
+    public static final int STATISTIC_BATCH_VERSION_V5 = 9;
+    public static final int STATISTIC_DATA_VERSION_V2 = 10;
     public static final int STATISTIC_PARTITION_VERSION_V2 = 20;
 
 
@@ -48,6 +50,8 @@ public class StatsConstants {
                     .add(STATISTIC_EXTERNAL_HISTOGRAM_VERSION)
                     .add(STATISTIC_PARTITION_VERSION)
                     .add(STATISTIC_PARTITION_VERSION_V2)
+                    .add(STATISTIC_BATCH_VERSION_V5)
+                    .add(STATISTIC_DATA_VERSION_V2)
                     .build();
 
     public static final int STATISTICS_PARTITION_UPDATED_THRESHOLD = 10;

@@ -21,6 +21,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PrimitiveType;
@@ -69,7 +70,9 @@ public class StatisticsSQLTest extends PlanTestBase {
                 "  `v4` date NULL,\n" +
                 "  `v5` datetime NULL,\n" +
                 "  `s1` String NULL,\n" +
-                "  `j1` JSON NULL" +
+                "  `j1` JSON NULL,\n" +
+                "  `a1` ARRAY<int> NULL,\n" +
+                "  `m1` MAP<string, string> NULL" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`v1`, `v2`, v3)\n" +
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
@@ -130,11 +133,13 @@ public class StatisticsSQLTest extends PlanTestBase {
         Table t0 = GlobalStateMgr.getCurrentState().getDb("test").getTable("stat0");
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
-        List<String> columnNames = Lists.newArrayList("v3", "j1", "s1");
-        List<Type> columnTypes = Lists.newArrayList(Type.BIGINT, Type.JSON, Type.STRING);
+        List<String> columnNames = Lists.newArrayList("v3", "j1", "s1", "a1", "m1");
+        List<Type> columnTypes = Lists.newArrayList(Type.BIGINT, Type.JSON, Type.STRING, Type.ARRAY_INT,
+                Type.MAP_VARCHAR_VARCHAR);
         TabletSampleManager tabletSampleManager = TabletSampleManager.init(Maps.newHashMap(), t0);
         SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo(db.getFullName(), t0.getName());
-
+        GlobalStateMgr.getCurrentState().getStatisticStorage().updatePartitionStatistics(
+                t0.getId(), t0.getPartitions().iterator().next().getId(), 1000);
         ColumnSampleManager columnSampleManager = ColumnSampleManager.init(columnNames, columnTypes, t0,
                 sampleInfo);
 
@@ -143,19 +148,25 @@ public class StatisticsSQLTest extends PlanTestBase {
         String complexSql = sampleInfo.generateComplexTypeColumnTask(t0.getId(), db.getId(), t0.getName(), db.getFullName(),
                 columnSampleManager.getComplexTypeStats());
         assertCContains(complexSql, "INSERT INTO _statistics_.table_statistic_v1(table_id, column_name, db_id, table_name," +
-                " db_name, row_count, data_size, distinct_count, null_count, max, min, update_time) VALUES");
+                " db_name, row_count, data_size, distinct_count, null_count, max, min, update_time, collection_size) VALUES");
 
         String simpleSql = sampleInfo.generatePrimitiveTypeColumnTask(t0.getId(), db.getId(), t0.getName(),
                 db.getFullName(), columnSampleManager.splitPrimitiveTypeStats().get(0), tabletSampleManager);
         String except = String.format("SELECT %s, '%s', %s, '%s', '%s'",
                 t0.getId(), "v3", db.getId(), "test.stat0", "test");
         assertCContains(simpleSql, except);
+
         starRocksAssert.useDatabase("_statistics_");
 
         String plan = getFragmentPlan(simpleSql);
 
         Assert.assertEquals(2, StringUtils.countMatches(plan, "OlapScanNode"));
         assertCContains(plan, "left(");
+
+        simpleSql = sampleInfo.generatePrimitiveTypeColumnTask(t0.getId(), db.getId(), t0.getName(),
+                db.getFullName(), columnSampleManager.splitPrimitiveTypeStats().get(1), tabletSampleManager);
+        assertCContains(simpleSql, "1 * 4 * AVG(ARRAY_LENGTH(`a1`))");
+        assertCContains(simpleSql, "AVG(MAP_SIZE(`m1`))");
     }
 
     @Test
@@ -357,9 +368,10 @@ public class StatisticsSQLTest extends PlanTestBase {
                         Type.DATE));
         assertContains(sql, "table_id = 2 and column_name in (\"col1\", \"col2\")");
         assertContains(sql, "table_id = 2 and column_name in (\"col3\")");
-        assertContains(sql, "table_id = 2 and column_name in (\"col4\", \"col5\", \"col6\")");
+        assertContains(sql, "table_id = 2 and column_name in (\"col4\", \"col5\")");
         assertContains(sql, "table_id = 2 and column_name in (\"col7\")");
-        Assert.assertEquals(3, StringUtils.countMatches(sql, "UNION ALL"));
+        assertContains(sql, "table_id = 2 and column_name in (\"col6\")");
+        Assert.assertEquals(4, StringUtils.countMatches(sql, "UNION ALL"));
 
         sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(1L, 2L,
                 Lists.newArrayList("col1", "col2", "col3", "col4", "col5", "col6", "col7"),
@@ -411,6 +423,13 @@ public class StatisticsSQLTest extends PlanTestBase {
                         ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 23, 8)));
         assertContains(sql, "column_name in (\"col1\", \"col2\")");
         Assert.assertEquals(5, StringUtils.countMatches(sql, "UNION ALL"));
+    }
+
+    @Test
+    public void testExternalTableCollectionStatsType() {
+        String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a", Lists.newArrayList("col1", "col2"),
+                Lists.newArrayList(Type.ARRAY_INT, new MapType(Type.INT, Type.STRING)));
+        assertContains(sql, "cast(max(cast(max as string)) as string), cast(min(cast(min as string)) as string)");
     }
 
     @Test

@@ -16,10 +16,16 @@ package com.starrocks.statistic;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.alter.AlterJobV2;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -32,6 +38,9 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.ast.AddColumnClause;
+import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.HashDistributionDesc;
@@ -43,9 +52,12 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.starrocks.catalog.InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
 import static com.starrocks.statistic.StatsConstants.FULL_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.SAMPLE_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
@@ -304,6 +316,75 @@ public class StatisticsMetaManager extends FrontendDaemon {
         return checkTableExist(StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME);
     }
 
+    public boolean alterTable(String tableName) {
+        ConnectContext context = StatisticUtils.buildConnectContext();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(STATISTICS_DB_NAME);
+        Table table =  GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        try (ConnectContext.ScopeGuard guard = context.bindScope()) {
+            if (tableName.equals(FULL_STATISTICS_TABLE_NAME) || tableName.equalsIgnoreCase(SAMPLE_STATISTICS_TABLE_NAME)) {
+                return alterStatisticsTable(context, table);
+            } else {
+                throw new StarRocksPlannerException("Error table name " + tableName, ErrorType.INTERNAL_ERROR);
+            }
+        }
+    }
+
+    public boolean alterStatisticsTable(ConnectContext context, Table table) {
+        List<String> columnsToCheck = new ArrayList<>();
+        String tableType = table.getName().equals(FULL_STATISTICS_TABLE_NAME) ? "full" : "simple";
+        if (table.getName().equalsIgnoreCase(FULL_STATISTICS_TABLE_NAME)) {
+            columnsToCheck = FULL_STATISTICS_COMPATIBLE_COLUMNS;
+        } else if (table.getName().equalsIgnoreCase(SAMPLE_STATISTICS_TABLE_NAME)) {
+            columnsToCheck = SAMPLE_STATISTICS_COMPATIBLE_COLUMNS;
+        }
+
+        for (String columnName : columnsToCheck) {
+            if (table.getColumn(columnName) == null) {
+                if (columnName.equalsIgnoreCase("collection_size")) {
+                    ColumnDef.DefaultValueDef defaultValueDef = new ColumnDef.DefaultValueDef(true, new StringLiteral("-1"));
+                    ColumnDef columnDef = new ColumnDef(columnName, new TypeDef(ScalarType.createType(PrimitiveType.BIGINT)),
+                            false, null, true, defaultValueDef, "");
+                    AddColumnClause addColumnClause = new AddColumnClause(columnDef, null, null, new HashMap<>());
+                    AlterTableStmt alterTableStmt = new AlterTableStmt(
+                            new TableName(DEFAULT_INTERNAL_CATALOG_NAME, STATISTICS_DB_NAME, table.getName()),
+                            Lists.newArrayList(addColumnClause));
+
+                    try {
+                        Analyzer.analyze(alterTableStmt, context);
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(context, alterTableStmt);
+                    } catch (Exception e) {
+                        LOG.warn("Failed to add column {} on {} statistics table", columnName, tableType, e);
+                        return false;
+                    }
+
+                    while (table.getColumn(columnName) == null) {
+                        // `alter table` may be sync in the shared-nothing cluster. So we need to check if job is done.
+                        // TODO(stephen): This check is not robust because we can't get job handle here.
+                        List<AlterJobV2> unfinishedAlterJobs = GlobalStateMgr.getCurrentState().getAlterJobMgr()
+                                .getSchemaChangeHandler().getUnfinishedAlterJobV2ByTableId(table.getId());
+                        if (unfinishedAlterJobs.isEmpty()) {
+                            if (table.getColumn(columnName) != null) {
+                                break;
+                            } else {
+                                LOG.warn("Failed to add column {} on {} statistics table", columnName, tableType);
+                                return false;
+                            }
+                        } else {
+                            trySleep(5000);
+                        }
+                    }
+
+                    LOG.info("Finished to add column {} to table {}", columnName, table.getName());
+                } else {
+                    throw new StarRocksPlannerException("Error compatible column name " + columnName, ErrorType.INTERNAL_ERROR);
+                }
+            }
+        }
+
+        LOG.info("alter {} statistics table done", tableType);
+        return true;
+    }
+
     private void refreshAnalyzeJob() {
         for (Map.Entry<Long, BasicStatsMeta> entry :
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().entrySet()) {
@@ -355,6 +436,14 @@ public class StatisticsMetaManager extends FrontendDaemon {
         }
         if (checkTableExist(tableName)) {
             StatisticUtils.alterSystemTableReplicationNumIfNecessary(tableName);
+        }
+
+        while (!checkTableCompatible(tableName)) {
+            if (alterTable(tableName)) {
+                break;
+            }
+            LOG.warn("alter statistics table " + tableName + " failed");
+            trySleep(10000);
         }
     }
 

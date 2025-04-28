@@ -116,14 +116,13 @@ public class SampleInfo {
             builder.append(columnStats.getNullCount()).append(sep);
             builder.append(columnStats.getMax()).append(sep);
             builder.append(columnStats.getMin()).append(sep);
-            builder.append("NOW()");
+            builder.append("NOW()").append(sep);
+            builder.append(columnStats.getCollectionSize());
             builder.append(")");
             joiner.add(builder);
         }
         return joiner.toString();
     }
-
-
 
     public String generatePrimitiveTypeColumnTask(long tableId, long dbId, String tableName, String dbName,
                                                   List<ColumnStats> primitiveTypeStats,
@@ -158,7 +157,10 @@ public class SampleInfo {
         String fullQualifiedName = "`" + dbName + "`.`" + tableName + "`";
         StringJoiner joiner = new StringJoiner(", ");
         for (int i = 0; i < primitiveTypeStats.size(); i++) {
-            joiner.add(primitiveTypeStats.get(i).getQuotedColumnName() + " as col_" + (i + 1));
+            ColumnStats columnStats = primitiveTypeStats.get(i);
+            String alias = columnStats instanceof CollectionTypeColumnStats ? columnStats.getColumnName() :
+                    "col_" + (i + 1);
+            joiner.add(primitiveTypeStats.get(i).getQuotedColumnName() + " as " + alias);
         }
         String columnNames = joiner.toString();
         if (!highWeightTablets.isEmpty()) {
@@ -244,9 +246,15 @@ public class SampleInfo {
         builder.append(columnStats.getNullCount()).append(sep);
         builder.append(columnStats.getMax()).append(sep);
         builder.append(columnStats.getMin()).append(sep);
-        builder.append("NOW() FROM (");
-        builder.append("SELECT t0.`column_key`, COUNT(1) as count FROM (SELECT ");
-        builder.append(alias).append(" AS column_key FROM `base_cte_table`) as t0 GROUP BY t0.column_key) AS t1");
+        builder.append("NOW()").append(sep);
+        builder.append(columnStats.getCollectionSize());
+        if (columnStats instanceof CollectionTypeColumnStats) {
+            builder.append(" FROM `base_cte_table` AS t1");
+        } else {
+            builder.append(" FROM (");
+            builder.append("SELECT t0.`column_key`, COUNT(1) as count FROM (SELECT ");
+            builder.append(alias).append(" AS column_key FROM `base_cte_table`) as t0 GROUP BY t0.column_key) AS t1");
+        }
         return builder.toString();
     }
 

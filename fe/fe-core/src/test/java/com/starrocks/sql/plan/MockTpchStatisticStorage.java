@@ -326,7 +326,8 @@ public class MockTpchStatisticStorage implements StatisticStorage {
 
     @Override
     public Map<Long, Optional<Long>> getTableStatistics(Long tableId, Collection<Partition> partitions) {
-        return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> rowCountStats.get(tableId)));
+        return partitions.stream().collect(Collectors.toMap(Partition::getId,
+                p -> rowCountStats.getOrDefault(tableId, Optional.empty())));
     }
 
     @Override

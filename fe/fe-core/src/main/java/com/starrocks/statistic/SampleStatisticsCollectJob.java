@@ -65,7 +65,7 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
         }
 
         List<List<ColumnStats>> columnStatsBatchList = columnSampleManager.splitPrimitiveTypeStats();
-        if (columnStatsBatchList.size() == 0) {
+        if (columnStatsBatchList.isEmpty()) {
             analyzeStatus.setProgress(100);
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
             return;

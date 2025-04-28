@@ -17,6 +17,8 @@ package com.starrocks.statistic.sample;
 import com.starrocks.catalog.Type;
 import org.apache.commons.lang.StringEscapeUtils;
 
+import static com.starrocks.sql.optimizer.statistics.ColumnStatistic.DEFAULT_COLLECTION_SIZE;
+
 public abstract class ColumnStats {
 
     protected final String columnName;
@@ -45,5 +47,9 @@ public abstract class ColumnStats {
     public abstract String getMin();
 
     public abstract String getDistinctCount(double rowSampleRatio);
+
+    public String getCollectionSize() {
+        return String.valueOf(DEFAULT_COLLECTION_SIZE);
+    }
 
 }

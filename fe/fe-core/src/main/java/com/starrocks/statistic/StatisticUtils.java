@@ -302,7 +302,7 @@ public class StatisticUtils {
                     new ColumnDef("min", new TypeDef(minType)),
                     new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME))),
                     new ColumnDef("collection_size", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT)), false,
-                            null, true, new ColumnDef.DefaultValueDef(true, new StringLiteral("-1")), ""));
+                            null, true, new ColumnDef.DefaultValueDef(true, new StringLiteral("-1")), "")
 
             );
         } else if (tableName.equals(StatsConstants.FULL_STATISTICS_TABLE_NAME)) {
@@ -321,7 +321,7 @@ public class StatisticUtils {
                     new ColumnDef("min", new TypeDef(minType)),
                     new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME))),
                     new ColumnDef("collection_size", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT)), false,
-                            null, true, new ColumnDef.DefaultValueDef(true, new StringLiteral("-1")), ""));
+                            null, true, new ColumnDef.DefaultValueDef(true, new StringLiteral("-1")), "")
             );
         } else if (tableName.equals(StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME)) {
             return ImmutableList.of(
