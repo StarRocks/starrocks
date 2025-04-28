@@ -138,8 +138,19 @@ public class PreAggregationTest {
                 "order by col1 \n" +
                 "asc limit 0,5";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  1:Project\n" +
+        assertContains(plan, "  4:Project\n" +
                 "  |  <slot 1> : 1: k1\n" +
-                "  |  <slot 4> : ifnull(CAST(2: v1 AS BIGINT), 0)");
+                "  |  <slot 4> : ifnull(3: sum, 0)\n" +
+                "  |  limit: 5\n" +
+                "  |  \n" +
+                "  3:MERGING-EXCHANGE");
+        assertContains(plan, "  2:TOP-N\n" +
+                "  |  order by: <slot 1> 1: k1 ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 5\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 1> : 1: k1\n" +
+                "  |  <slot 3> : CAST(2: v1 AS BIGINT)");
     }
 }
