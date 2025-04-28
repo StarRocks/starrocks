@@ -109,6 +109,13 @@ public class AggStateUtils {
                 return false;
             }
         }
+
+        // array_agg_distinct with complex type will rewrite into array_agg(distinct)
+        // right now agg_if doesn't support distinct
+        if (isAggIf && FunctionSet.ARRAY_AGG_DISTINCT.equalsIgnoreCase(fnName) &&
+                Stream.of(aggFunc.getArgs()).anyMatch(t -> t.isComplexType())) {
+            return false;
+        }
         // bitmap_union_int
         return !FunctionSet.BITMAP_UNION_INT.equalsIgnoreCase(fnName) || aggFunc.getArgs()[0].isIntegerType();
     }
@@ -187,9 +194,9 @@ public class AggStateUtils {
             // `_if`'s input types are boolean + original input types
             String aggFuncName = AggStateUtils.getAggFuncNameOfCombinator(func.functionName());
 
-            Type[] argumentTypes = Arrays.copyOfRange(argumentTypes, 0, argumentTypes.length - 1);
+            Type[] argumentTypesWithoutIf = Arrays.copyOfRange(argumentTypes, 0, argumentTypes.length - 1);
 
-            FunctionParams oldFunctionParams =
+            FunctionParams functionParamsWithoutIf =
                     new FunctionParams(params.isStar(),
                             params.exprs() == null ? null : params.exprs().subList(0, params.exprs().size() - 1),
                             params.getExprsNames() == null ? null :
@@ -197,11 +204,11 @@ public class AggStateUtils {
                             params.isDistinct(), params.getOrderByElements() == null ? null :
                             params.getOrderByElements().subList(0, params.getOrderByElements().size() - 1));
 
-            Boolean[] oldArgumentIsConstants =
+            Boolean[] argumentIsConstantsWithoutIf =
                     Arrays.copyOfRange(argumentIsConstants, 0, argumentIsConstants.length - 1);
             // find the 
             Function argFn = FunctionAnalyzer.getAnalyzedAggregateFunction(session, aggFuncName,
-                    oldFunctionParams, argumentTypes, oldArgumentIsConstants, pos);
+                    functionParamsWithoutIf, argumentTypesWithoutIf, argumentIsConstantsWithoutIf, pos);
             if (argFn == null) {
                 return null;
             }

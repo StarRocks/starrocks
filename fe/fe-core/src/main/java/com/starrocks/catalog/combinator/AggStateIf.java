@@ -71,6 +71,22 @@ public final class AggStateIf extends AggregateFunction {
     }
 
     @Override
+    public AggregateFunction withNewTypes(List<Type> newArgTypes, Type newRetType) {
+        // NOTE: It's fine that only changes agg state function's arg types and return type but inner agg state desc's,
+        // since FunctionAnalyzer will adjust it later.
+        AggStateIf newFn = new AggStateIf(this.getFunctionName(), newArgTypes, newRetType, this.getIntermediateType());
+        newFn.setFunctionId(this.getFunctionId());
+        newFn.setChecksum(this.getChecksum());
+        newFn.setBinaryType(this.getBinaryType());
+        newFn.setHasVarArgs(this.hasVarArgs());
+        newFn.setId(this.getId());
+        newFn.setUserVisible(this.isUserVisible());
+        newFn.setAggStateDesc(this.getAggStateDesc());
+        newFn.setPolymorphic(this.isPolymorphic());
+        return newFn;
+    }
+
+    @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append(functionName());

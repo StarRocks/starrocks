@@ -62,7 +62,14 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 public class AggStateCombinatorTest extends MVTestBase {
-    private static final int MAX_AGG_FUNC_NUM_IN_TEST = 20;
+    private static final int MAX_AGG_FUNC_NUM_IN_TEST = 200000;
+    private static final Set<String> SUPPORTED_AGG_STATE_FUNCTIONS =
+            ImmutableSet.of("ndv", "percentile_disc", "corr", "multi_distinct_sum", "var_samp", "sum", "stddev_pop",
+                    "array_agg_distinct", "approx_count_distinct", "variance_samp", "min", "avg", "any_value", "stddev",
+                    "max_by", "multi_distinct_count", "retention", "mann_whitney_u_test", "min_by", "var_pop",
+                    "percentile_cont", "std", "max", "covar_samp", "stddev_samp", "array_unique_agg", "bitmap_agg",
+                    "ds_hll_count_distinct", "percentile_approx", "variance", "bitmap_union_int", "variance_pop",
+                    "covar_pop");
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -89,14 +96,6 @@ public class AggStateCombinatorTest extends MVTestBase {
 
         FeConstants.setLengthForVarchar = false;
     }
-
-    private static final Set<String> SUPPORTED_AGG_STATE_FUNCTIONS = ImmutableSet.of(
-            "ndv", "percentile_disc", "corr", "multi_distinct_sum", "var_samp", "sum", "stddev_pop",
-            "array_agg_distinct", "approx_count_distinct", "variance_samp", "min", "avg", "any_value",
-            "stddev", "max_by", "multi_distinct_count", "retention", "mann_whitney_u_test", "min_by",
-            "var_pop", "percentile_cont", "std", "max", "covar_samp", "stddev_samp", "array_unique_agg",
-            "bitmap_agg", "ds_hll_count_distinct", "percentile_approx", "variance", "bitmap_union_int",
-            "variance_pop", "covar_pop");
 
     private List<AggregateFunction> getBuiltInAggFunctions() {
         List<AggregateFunction> builtInAggregateFunctions = Lists.newArrayList();
@@ -148,8 +147,8 @@ public class AggStateCombinatorTest extends MVTestBase {
         String aggStateFuncName = FunctionSet.getAggStateName(aggFunc.functionName());
         Type[] argumentTypes = argTypes.toArray(Type[]::new);
         FunctionParams params = new FunctionParams(false, Lists.newArrayList());
-        Boolean[] argArgumentConstants = IntStream.range(0, aggFunc.getNumArgs())
-                .mapToObj(x -> new Boolean(false)).toArray(Boolean[]::new);
+        Boolean[] argArgumentConstants = IntStream.range(0, aggFunc.getNumArgs()).mapToObj(x -> Boolean.FALSE)
+                .toArray(Boolean[]::new);
         Function result = FunctionAnalyzer.getAnalyzedAggregateFunction(ConnectContext.get(),
                 aggStateFuncName, params, argumentTypes, argArgumentConstants, NodePosition.ZERO);
         return result;
@@ -161,8 +160,8 @@ public class AggStateCombinatorTest extends MVTestBase {
         String aggStateFuncName = FunctionSet.getAggStateIfName(aggFunc.functionName());
         Type[] argumentTypes = argTypes.toArray(Type[]::new);
         FunctionParams params = new FunctionParams(false, null);
-        List<Boolean> argArgumentConstantsList = IntStream.range(0, aggFunc.getNumArgs())
-                .mapToObj(x -> new Boolean(false)).collect(Collectors.toList());
+        List<Boolean> argArgumentConstantsList = IntStream.range(0, aggFunc.getNumArgs()).mapToObj(x -> Boolean.FALSE)
+                .collect(Collectors.toList());
         argArgumentConstantsList.add(false);
         Boolean[] argArgumentConstants = argArgumentConstantsList.toArray(Boolean[]::new);
         Function result = FunctionAnalyzer.getAnalyzedAggregateFunction(ConnectContext.get(),
@@ -225,6 +224,18 @@ public class AggStateCombinatorTest extends MVTestBase {
                 }
                 break;
             }
+            case FunctionSet.PERCENTILE_APPROX_WEIGHTED: {
+                args.add(colTypes.get(argTypes.get(0)));
+                if (argTypes.size() == 3) {
+                    args.add("1");
+                    args.add("0.5");
+                } else {
+                    args.add("1");
+                    args.add("0.5");
+                    args.add("1000");
+                }
+                break;
+            }
             default:
                 for (String argType : argTypes) {
                     args.add(colTypes.get(argType));
@@ -236,7 +247,7 @@ public class AggStateCombinatorTest extends MVTestBase {
     private void buildTableT1(List<String> funcNames,
                               Map<String, String> colTypes,
                               List<List<String>> aggArgTypes) {
-        buildTableT1(funcNames, colTypes, aggArgTypes, Lists.newArrayList(), Lists.newArrayList(), -1);
+        buildTableT1(funcNames, colTypes, aggArgTypes, Lists.newArrayList(), Lists.newArrayList(), -1, false);
     }
 
     private void buildTableT1(List<String> funcNames,
@@ -244,15 +255,14 @@ public class AggStateCombinatorTest extends MVTestBase {
                               List<List<String>> aggArgTypes,
                               List<String> aggStateColumns,
                               List<String> aggStateColNames) {
-        buildTableT1(funcNames, colTypes, aggArgTypes, aggStateColumns, aggStateColNames, -1);
+        buildTableT1(funcNames, colTypes, aggArgTypes, aggStateColumns, aggStateColNames, -1, false);
     }
 
     private void buildTableT1(List<String> funcNames,
                               Map<String, String> colTypes,
                               List<List<String>> aggArgTypes,
                               List<String> aggStateColumns,
-                              List<String> aggStateColNames,
-                              int size) {
+                              List<String> aggStateColNames, int size, boolean isAggIf) {
         String define = "c0 boolean,\n" +
                 "c1 tinyint(4),\n" +
                 "c2 smallint(6),\n" +
@@ -293,7 +303,7 @@ public class AggStateCombinatorTest extends MVTestBase {
         var builtInAggregateFunctions = getBuiltInAggFunctions();
         int i = 0;
         for (AggregateFunction aggFunc : builtInAggregateFunctions) {
-            if (!AggStateUtils.isSupportedAggStateFunction(aggFunc, false)) {
+            if (!AggStateUtils.isSupportedAggStateFunction(aggFunc, isAggIf)) {
                 continue;
             }
 
@@ -383,8 +393,8 @@ public class AggStateCombinatorTest extends MVTestBase {
             List<Type> argTypes = Stream.of(aggFunc.getArgs()).map(this::mockType).collect(Collectors.toList());
             intermediateType.setAggStateDesc(new AggStateDesc(aggFunc.functionName(),
                     aggFunc.getReturnType(), argTypes));
-            Type[] argumentTypes = { intermediateType };
-            Boolean[] argArgumentConstants = { false };
+            Type[] argumentTypes = {intermediateType};
+            Boolean[] argArgumentConstants = {false};
 
             Function result = FunctionAnalyzer.getAnalyzedAggregateFunction(ConnectContext.get(),
                     aggStateFuncName, params, argumentTypes, argArgumentConstants, NodePosition.ZERO);
@@ -414,8 +424,8 @@ public class AggStateCombinatorTest extends MVTestBase {
             List<Type> argTypes = Stream.of(aggFunc.getArgs()).map(this::mockType).collect(Collectors.toList());
             intermediateType.setAggStateDesc(new AggStateDesc(aggFunc.functionName(),
                     aggFunc.getReturnType(), argTypes));
-            Type[] argumentTypes = { intermediateType };
-            Boolean[] argArgumentConstants = { false };
+            Type[] argumentTypes = {intermediateType};
+            Boolean[] argArgumentConstants = {false};
 
             String aggStateFuncName = FunctionSet.getAggStateMergeName(aggFunc.functionName());
             FunctionParams params = new FunctionParams(false, Lists.newArrayList());
@@ -440,15 +450,9 @@ public class AggStateCombinatorTest extends MVTestBase {
             supportedAggFunctions.add(aggFunc.functionName());
 
             Function aggStateFunc = getAggStateIfFunc(aggFunc);
-            if (aggStateFunc == null) {
-                aggStateFunc = getAggStateIfFunc(aggFunc);
-            }
 
             Assert.assertNotNull(aggStateFunc);
-            if (!(aggStateFunc instanceof AggStateIf)) {
-                aggStateFunc = getAggStateIfFunc(aggFunc);
-            }
-            // Assert.assertTrue(aggStateFunc instanceof AggStateIf);
+            Assert.assertTrue(aggStateFunc instanceof AggStateIf);
             Assert.assertFalse(aggStateFunc.getReturnType().isWildcardDecimal());
             Assert.assertFalse(aggStateFunc.getReturnType().isPseudoType());
         }
@@ -556,8 +560,6 @@ public class AggStateCombinatorTest extends MVTestBase {
                     }
                 });
     }
-
-
 
     @Test
     public void testCreateAggStateTableWithAllFunctions() {
@@ -932,7 +934,7 @@ public class AggStateCombinatorTest extends MVTestBase {
         List<List<String>> aggArgTypes = Lists.newArrayList();
         List<String> columns = Lists.newArrayList();
         List<String> colNames = Lists.newArrayList();
-        buildTableT1(funcNames, colTypes, aggArgTypes, columns, colNames, MAX_AGG_FUNC_NUM_IN_TEST);
+        buildTableT1(funcNames, colTypes, aggArgTypes, columns, colNames, MAX_AGG_FUNC_NUM_IN_TEST, false);
 
         String sql = " CREATE TABLE test_agg_state_table ( \n" +
                 "k1  date, \n" +
@@ -988,6 +990,36 @@ public class AggStateCombinatorTest extends MVTestBase {
                                 "     table: test_agg_state_table, rollup: test_agg_state_table");
                     }
                 });
+        starRocksAssert.dropTable("t1");
+    }
+
+    @Test
+    public void testGenerateSqlTesterTestsTotalForAggIf() throws Exception {
+        List<String> funcNames = Lists.newArrayList();
+        Map<String, String> colTypes = Maps.newLinkedHashMap();
+        List<List<String>> aggArgTypes = Lists.newArrayList();
+        List<String> columns = Lists.newArrayList();
+        List<String> colNames = Lists.newArrayList();
+        buildTableT1(funcNames, colTypes, aggArgTypes, columns, colNames, MAX_AGG_FUNC_NUM_IN_TEST, true);
+
+        Set<String> ifFunctions = Sets.newHashSet();
+        for (int i = 0; i < funcNames.size(); i++) {
+            String fnName = funcNames.get(i);
+            List<String> argTypes = aggArgTypes.get(i);
+            String arg = buildAggFuncArgs(fnName, argTypes, colTypes);
+            String col;
+            if (arg.length() == 0) {
+                col = String.format("%s(c0)", FunctionSet.getAggStateIfName(fnName));
+            } else {
+                col = String.format("%s(%s, c0)", FunctionSet.getAggStateIfName(fnName), arg);
+            }
+            ifFunctions.add(col);
+        }
+        String sql1 = "select " + Joiner.on(", ").join(ifFunctions) + " from t1;";
+        System.out.println(sql1);
+        String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql1);
+        PlanTestBase.assertContains(plan, "if");
+
         starRocksAssert.dropTable("t1");
     }
 
