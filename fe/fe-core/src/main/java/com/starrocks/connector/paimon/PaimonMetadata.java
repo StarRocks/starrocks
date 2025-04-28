@@ -76,6 +76,7 @@ import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.data.Timestamp;
 import org.apache.paimon.io.DataFileMeta;
+import org.apache.paimon.io.DataInputViewStreamWrapper;
 import org.apache.paimon.metrics.Gauge;
 import org.apache.paimon.metrics.Metric;
 import org.apache.paimon.operation.metrics.ScanMetrics;
@@ -103,6 +104,7 @@ import org.apache.paimon.utils.DateTimeUtils;
 import org.apache.paimon.utils.PartitionPathUtils;
 
 import java.io.BufferedWriter;
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileWriter;
 import java.nio.file.Files;
@@ -880,15 +882,11 @@ public class PaimonMetadata implements ConnectorMetadata {
             CommitMessageSerializer commitMessageSerializer = new CommitMessageSerializer();
 
             for (TPaimonCommitMessage tPaimonCommitMessage : commitMessageList) {
-                String json = tPaimonCommitMessage.getCommit_info_string_list();
-                LOG.debug(json);
-                String[] stringArray = json.split(",");
-                List<CommitMessage> deserializedList = new ArrayList<>();
-                for (String s : stringArray) {
-                    byte[] b = Base64.getDecoder().decode(s);
-                    deserializedList.add(commitMessageSerializer.deserialize(3, b));
-                }
-                messList.addAll(deserializedList);
+                byte[] commitMessage = Base64.getDecoder().decode(tPaimonCommitMessage.getCommit_info_string_list());
+                ByteArrayInputStream bis = new ByteArrayInputStream(commitMessage);
+                List<CommitMessage> commitMessages = commitMessageSerializer.deserializeList(
+                        commitMessageSerializer.getVersion(), new DataInputViewStreamWrapper(bis));
+                messList.addAll(commitMessages);
             }
             commit.commit(messList);
             commit.close();

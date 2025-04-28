@@ -17,13 +17,14 @@ package com.starrocks.paimon.reader;
 import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.paimon.io.DataOutputViewStreamWrapper;
 import org.apache.paimon.table.Table;
 import org.apache.paimon.table.sink.BatchTableWrite;
 import org.apache.paimon.table.sink.CommitMessage;
 import org.apache.paimon.table.sink.CommitMessageSerializer;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
@@ -68,12 +69,9 @@ public class PaimonWriter {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
             List<CommitMessage> commitMessageList = batchTableWrite.prepareCommit();
             CommitMessageSerializer commitMessageSerializer = new CommitMessageSerializer();
-            List<String> stringList = new ArrayList<>();
-            for (CommitMessage commitMessage : commitMessageList) {
-                byte[] serialized = commitMessageSerializer.serialize(commitMessage);
-                stringList.add(Base64.getEncoder().encodeToString(serialized));
-            }
-            return String.join(",", stringList);
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            commitMessageSerializer.serializeList(commitMessageList, new DataOutputViewStreamWrapper(bos));
+            return Base64.getEncoder().encodeToString(bos.toByteArray());
         } catch (Exception e) {
             close();
             String msg = "Failed to commit a paimon table.";

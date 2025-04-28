@@ -591,7 +591,7 @@ struct THiveFileInfo {
 }
 
 struct TPaimonCommitMessage {
-    1: optional string commit_info_string_list
+    1: optional binary commit_info_string_list
 }
 
 struct TSinkCommitInfo {
