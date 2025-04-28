@@ -140,10 +140,7 @@ void Rowset::make_commit(int64_t version, uint32_t rowset_seg_id) {
 /**
  * Checks if all files associated with this rowset exist on disk.
  * 
- * This method verifies the existence of:
- * 1. All segment files
- * 2. All delete files
- * 3. All update files
+ * This method verifies the existence of: All segment files
  * 
  * If any file is missing, it logs a warning message with the expected path
  * and tablet ID, then returns false.
@@ -157,20 +154,6 @@ bool Rowset::check_file_existence() {
             LOG(WARNING) << "Segment file does not exist. Expected path: " << seg_path
                          << ". This might occur if the file was deleted or not generated correctly. "
                          << "Tablet ID: " << _rowset_meta->tablet_id();
-            return false;
-        }
-    }
-    for (int i = 0; i < num_delete_files(); ++i) {
-        std::string path = segment_del_file_path(_rowset_path, rowset_id(), i);
-        if (!fs::path_exist(path)) {
-            LOG(WARNING) << "del file not exist. path:" << path << ", tablet_id:" << _rowset_meta->tablet_id();
-            return false;
-        }
-    }
-    for (int i = 0; i < num_update_files(); ++i) {
-        std::string path = segment_upt_file_path(_rowset_path, rowset_id(), i);
-        if (!fs::path_exist(path)) {
-            LOG(WARNING) << "upt file not exist. path:" << path << ", tablet_id:" << _rowset_meta->tablet_id();
             return false;
         }
     }
