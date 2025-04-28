@@ -236,11 +236,7 @@ add_library(Storage STATIC
     lake/txn_log_applier.cpp
     lake/lake_local_persistent_index.cpp
     persistent_index_compaction_manager.cpp
-<<<<<<< HEAD
-=======
     persistent_index_load_executor.cpp
-    lake/local_pk_index_manager.cpp
->>>>>>> 2cbae6b9cb ([Enhancement] Support rebuild pk persistent index in clone (#57329))
     persistent_index_tablet_loader.cpp
     lake/lake_local_persistent_index_tablet_loader.cpp
     lake/lake_persistent_index.cpp
