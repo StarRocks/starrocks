@@ -22,6 +22,7 @@ import com.starrocks.qe.feedback.guide.TuningGuide;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 public class OperatorTuningGuides {
@@ -40,6 +41,21 @@ public class OperatorTuningGuides {
 
         public OperatorGuideInfo(int nodeId) {
             this.nodeId = nodeId;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+
+            OperatorGuideInfo that = (OperatorGuideInfo) o;
+            return nodeId == that.nodeId && Objects.equals(tuningGuides, that.tuningGuides);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(nodeId);
         }
     }
 
@@ -131,6 +147,19 @@ public class OperatorTuningGuides {
             sb.append("\n");
         }
         return sb.toString();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        return Objects.equals(operatorIdToTuningGuideInfo, ((OperatorTuningGuides) o).operatorIdToTuningGuideInfo);
+    }
+
+    @Override
+    public int hashCode() {
+        return 1;
     }
 
     public static class OptimizedRecord {

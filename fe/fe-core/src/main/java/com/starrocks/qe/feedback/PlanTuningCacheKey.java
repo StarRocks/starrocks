@@ -15,6 +15,7 @@
 package com.starrocks.qe.feedback;
 
 import com.google.common.collect.Lists;
+import com.starrocks.qe.feedback.skeleton.ScanNode;
 import com.starrocks.qe.feedback.skeleton.SkeletonNode;
 
 import java.util.List;
@@ -29,6 +30,8 @@ public class PlanTuningCacheKey {
 
     private List<Integer> cachedHashCodes = Lists.newArrayList();
 
+    private boolean isParameterizedMode = false;
+
 
     public PlanTuningCacheKey(String sql, SkeletonNode root) {
         this.sql = sql;
@@ -36,14 +39,42 @@ public class PlanTuningCacheKey {
         extractSkeletonNodes(root);
     }
 
+    public List<SkeletonNode> getSkeletonNodes() {
+        return skeletonNodes;
+    }
+
     public String getSql() {
         return sql;
     }
 
+    public void enableParameterizedMode() {
+        if (isParameterizedMode) {
+            return;
+        }
+
+        isParameterizedMode = true;
+        skeletonNodes.stream()
+                .filter(node -> node instanceof ScanNode)
+                .map(node -> (ScanNode) node)
+                .forEach(ScanNode::enableParameterizedMode);
+    }
+
+    public void disableParameterizedMode() {
+        if (!isParameterizedMode) {
+            return;
+        }
+
+        isParameterizedMode = false;
+        skeletonNodes.stream()
+                .filter(node -> node instanceof ScanNode)
+                .map(node -> (ScanNode) node)
+                .forEach(ScanNode::disableParameterizedMode);
+    }
+
+
     @Override
     public int hashCode() {
         if (cachedHashCodes.isEmpty()) {
-            cachedHashCodes.add(sql.hashCode());
             for (SkeletonNode node : skeletonNodes) {
                 cachedHashCodes.add(node.hashCode());
             }
@@ -61,7 +92,7 @@ public class PlanTuningCacheKey {
             return false;
         }
         PlanTuningCacheKey that = (PlanTuningCacheKey) o;
-        return Objects.equals(sql, that.sql) && Objects.equals(skeletonNodes, that.skeletonNodes);
+        return Objects.equals(skeletonNodes, that.skeletonNodes);
     }
 
     private void extractSkeletonNodes(SkeletonNode node) {

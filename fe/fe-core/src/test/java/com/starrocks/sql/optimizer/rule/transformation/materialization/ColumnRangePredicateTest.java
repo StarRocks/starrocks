@@ -209,4 +209,5 @@ public class ColumnRangePredicateTest {
             Assert.assertEquals(ConstantOperator.TRUE, ret);
         }
     }
+
 }
