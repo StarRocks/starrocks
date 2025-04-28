@@ -190,6 +190,27 @@ public class Utils {
         publishVersionBatch(tablets, txnInfos, baseVersion, newVersion, compactionScores, null, warehouseId, tabletRowNums);
     }
 
+    public static boolean processTablets(List<Tablet> tablets, long warehouseId,
+                                         WarehouseManager warehouseManager,
+                                         Map<ComputeNode, List<Long>> nodeToTablets,
+                                         List<Long> rebuildPindexTabletIds, long baseVersion) {
+        for (Tablet tablet : tablets) {
+            ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
+            if (computeNode == null) {
+                LOG.warn("No alive node in warehouse for handle publish version request, try to use background warehouse");
+                return false;
+            }
+        
+            nodeToTablets.computeIfAbsent(computeNode, k -> Lists.newArrayList()).add(tablet.getId());
+        
+            if (baseVersion == ((LakeTablet) tablet).rebuildPindexVersion() && baseVersion != 0) {
+                rebuildPindexTabletIds.add(tablet.getId());
+                LOG.info("lake tablet {} publish rebuild pindex version {}", tablet.getId(), baseVersion);
+            }
+        }
+        return true;
+    }
+
     public static void aggregatePublishVersion(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
                                                long baseVersion, long newVersion,
                                                Map<Long, Double> compactionScores,
@@ -204,32 +225,30 @@ public class Utils {
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         if (!warehouseManager.warehouseExists(warehouseId)) {
             LOG.warn("publish version operation should be successful even if the warehouse is not exist, " +
-                    "and switch the warehouse id from {} to {}", warehouseId, warehouseManager.getBackgroundWarehouse().getId());
+                    "and switch the warehouse id from {} to {}", warehouseId, 
+                    warehouseManager.getBackgroundWarehouse().getName());
             warehouseId = warehouseManager.getBackgroundWarehouse().getId();
         }
 
         List<Long> rebuildPindexTabletIds = new ArrayList<>();
-        for (Tablet tablet : tablets) {
-            ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
-            if (computeNode == null) {
-                LOG.warn("No alive node in warehouse for handle publish version request, try to use background warehouse");
-                computeNode = warehouseManager.getComputeNodeAssignedToTablet(warehouseManager.getBackgroundWarehouse().getId(),
-                        (LakeTablet) tablet);
-                if (computeNode == null) {
-                    throw new NoAliveBackendException("No alive node for handle publish version request in background warehouse");
-                }
-            }
-            nodeToTablets.computeIfAbsent(computeNode, k -> Lists.newArrayList()).add(tablet.getId());
-            if (baseVersion == ((LakeTablet) tablet).rebuildPindexVersion() && baseVersion != 0) {
-                rebuildPindexTabletIds.add(tablet.getId());
-                LOG.info("lake tablet {} publish rebuild pindex version {}", tablet.getId(), baseVersion);
-            }
+        boolean success = 
+                processTablets(tablets, warehouseId, warehouseManager, nodeToTablets, rebuildPindexTabletIds, baseVersion);
+        if (!success && warehouseId != warehouseManager.getBackgroundWarehouse().getId()) {
+            warehouseId = warehouseManager.getBackgroundWarehouse().getId();
+            rebuildPindexTabletIds.clear();
+            nodeToTablets.clear();
+            success = 
+                    processTablets(tablets, warehouseId, warehouseManager, nodeToTablets, rebuildPindexTabletIds, baseVersion);
         }
+        if (!success) {
+            throw new NoAliveBackendException("No alive node for handle publish version request in background warehouse");
+        }
+
         // choose one aggregator
         LakeAggregator lakeAggregator = new LakeAggregator();
         ComputeNode aggregatorNode = lakeAggregator.chooseAggregatorNode(warehouseId);
         if (aggregatorNode == null) {
-            throw new NoAliveBackendException("No alive aggregator node for handle aggregate publish version");
+            throw new NoAliveBackendException("No alive compute node for handle aggregate publish version");
         }
         AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
         List<ComputeNodePB> computeNodes = new ArrayList<>();

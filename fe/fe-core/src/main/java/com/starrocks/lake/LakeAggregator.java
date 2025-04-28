@@ -22,7 +22,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
-import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 
 
 public class LakeAggregator {
@@ -37,8 +37,7 @@ public class LakeAggregator {
             WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             List<ComputeNode> candidateNodes = warehouseManager.getAliveComputeNodes(warehouseId);
             if (candidateNodes != null && !candidateNodes.isEmpty()) {
-                Random random = new Random();
-                return candidateNodes.get(random.nextInt(candidateNodes.size()));
+                return candidateNodes.get(ThreadLocalRandom.current().nextInt(candidateNodes.size()));
             } else {
                 Long nodeId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                                 .getNodeSelector().seqChooseBackendOrComputeId();
