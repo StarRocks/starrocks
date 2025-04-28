@@ -54,7 +54,6 @@ INSERT INTO mv_hive_${uuid0}.mv_hive_db_${uuid0}.t4 VALUES
 set catalog default_catalog;
 create database db_${uuid0};
 use db_${uuid0};
-set materialized_view_union_rewrite_mode=2;
 
 -- NOTE: test mv with the single table
 CREATE MATERIALIZED VIEW test_mv1 
@@ -74,8 +73,11 @@ function: print_hit_materialized_view("SELECT t1.num as t1_num, t1.dt as t1_dt, 
 SELECT t1.num as t1_num, t1.dt as t1_dt, t2.num as t2_num, t2.dt as t2_dt FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 as t1 left join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 as t2 on t1.num=t2.num ORDER BY 1, 2, 3, 4;
 SELECT t1.num as t1_num, t1.dt as t1_dt, t2.num as t2_num, t2.dt as t2_dt FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 as t1 left join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 as t2 on t1.num=t2.num and t1.dt = '2020-06-24' order by 1, 2, 3, 4;
 SELECT t1.num as t1_num, t1.dt as t1_dt, t2.num as t2_num, t2.dt as t2_dt FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 as t1 left join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 as t2 on t1.num=t2.num and t2.dt = '2020-06-24' order by 1, 2, 3, 4;
+SELECT t1.num as t1_num, t1.dt as t1_dt, t2.num as t2_num, t2.dt as t2_dt FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 as t1 left join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 as t2 on t1.num=t2.num and t2.dt = '2020-06-24' and t2.num > 1 order by 1, 2, 3, 4;
+SELECT t1.num as t1_num, t1.dt as t1_dt, t2.num as t2_num, t2.dt as t2_dt FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 as t1 left join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 as t2 on t1.num=t2.num and t2.num > 1 order by 1, 2, 3, 4;
 SELECT t1.num as t1_num, t1.dt as t1_dt, t2.num as t2_num, t2.dt as t2_dt FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 as t1 left join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 as t2 on t1.num=t2.num where t1.dt = '2020-06-24' order by 1, 2, 3, 4;
-SELECT t1.num as t1_num, t1.dt as t1_dt, t2.num as t2_num, t2.dt as t2_dt FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 as t1 left join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 as t2 on t1.num=t2.num where t2.dt = '2020-06-24' order by 1, 2, 3, 4;
+SELECT t1.num as t1_num, t1.dt as t1_dt, t2.num as t2_num, t2.dt as t2_dt FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 as t1 left join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 as t2 on t1.num=t2.num where t2.dt = '2020-06-24' and t2.num > 1 order by 1, 2, 3, 4;
+SELECT t1.num as t1_num, t1.dt as t1_dt, t2.num as t2_num, t2.dt as t2_dt FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 as t1 left join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 as t2 on t1.num=t2.num where t2.num > 1 order by 1, 2, 3, 4;
 
 -- test t1 and t2 and t3
 
@@ -86,8 +88,10 @@ function: print_hit_materialized_view("SELECT t1.num as t1_num, t1.dt as t1_dt, 
 
 SELECT t1.num as t1_num, t1.dt as t1_dt, t2.num as t2_num, t3.dt as t2_dt FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 as t1 left join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 as t2 on t1.num=t2.num left join  mv_hive_${uuid0}.mv_hive_db_${uuid0}.t3 as t3 on t1.num=t3.num and t1.dt = '2020-06-24' order by 1, 2, 3, 4;
 SELECT t1.num as t1_num, t1.dt as t1_dt, t2.num as t2_num, t3.dt as t2_dt FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 as t1 left join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 as t2 on t1.num=t2.num left join  mv_hive_${uuid0}.mv_hive_db_${uuid0}.t3 as t3 on t1.num=t3.num and t3.dt = '2020-06-24' order by 1, 2, 3, 4;
+SELECT t1.num as t1_num, t1.dt as t1_dt, t2.num as t2_num, t3.dt as t2_dt FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 as t1 left join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 as t2 on t1.num=t2.num left join  mv_hive_${uuid0}.mv_hive_db_${uuid0}.t3 as t3 on t1.num=t3.num and t3.dt = '2020-06-24' and t3.num > 1 order by 1, 2, 3, 4;
 SELECT t1.num as t1_num, t1.dt as t1_dt, t2.num as t2_num, t3.dt as t2_dt FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 as t1 left join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 as t2 on t1.num=t2.num left join  mv_hive_${uuid0}.mv_hive_db_${uuid0}.t3 as t3 on t1.num=t3.num where t1.dt = '2020-06-24' order by 1, 2, 3, 4;
 SELECT t1.num as t1_num, t1.dt as t1_dt, t2.num as t2_num, t3.dt as t2_dt FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 as t1 left join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 as t2 on t1.num=t2.num left join  mv_hive_${uuid0}.mv_hive_db_${uuid0}.t3 as t3 on t1.num=t3.num where t3.dt = '2020-06-24' order by 1, 2, 3, 4;
+SELECT t1.num as t1_num, t1.dt as t1_dt, t2.num as t2_num, t3.dt as t2_dt FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 as t1 left join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 as t2 on t1.num=t2.num left join  mv_hive_${uuid0}.mv_hive_db_${uuid0}.t3 as t3 on t1.num=t3.num where t3.dt = '2020-06-24' and t3.num > 1 order by 1, 2, 3, 4;
 
 -- test t1 and t2 and t3 and t4
 function: print_hit_materialized_view("SELECT t1.num as t1_num, t1.dt as t1_dt, t2.num as t2_num, t2.dt as t2_dt FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 as t1 left join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 as t2 on t1.num=t2.num left join  mv_hive_${uuid0}.mv_hive_db_${uuid0}.t3 as t3 on t1.num=t3.num and t1.dt = '2020-06-24' left join  mv_hive_${uuid0}.mv_hive_db_${uuid0}.t4 as t4 on t1.num=t4.num and t4.dt = '2020-06-24' order by 1, 2, 3, 4;", "test_mv1")
