@@ -74,6 +74,11 @@ public class NodeMgrTest {
             return;
         }
 
+        File metaDir = new File(imageDir, "image");
+        if (!metaDir.mkdirs()) {
+            return;
+        }
+
         Config.meta_dir = imageDir.getAbsolutePath();
         Assert.assertTrue(nodeMgr.isVersionAndRoleFilesNotExist());
         nodeMgr.getClusterIdAndRoleOnStartup();

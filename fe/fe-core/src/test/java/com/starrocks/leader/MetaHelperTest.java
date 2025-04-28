@@ -85,8 +85,8 @@ public class MetaHelperTest {
             InvalidMetaDirException {
         Config.start_with_incomplete_meta = false;
         Config.meta_dir = testDir + "/meta";
-        mkdir(Config.meta_dir + "/image");
-        File file = new File(Config.meta_dir + "/image/image.123");
+        mkdir(Config.meta_dir + "/image/v2");
+        File file = new File(Config.meta_dir + "/image/v2/image.123");
         Assert.assertTrue(file.createNewFile());
 
         try {
