@@ -20,6 +20,7 @@
 #include "column/column_helper.h"
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
+#include "simd/delta_decode.h"
 #include "util/bit_stream_utils.h"
 #include "util/slice.h"
 
@@ -242,6 +243,7 @@ template <typename T>
 class DeltaBinaryPackedDecoder final : public Decoder {
 public:
     static_assert(std::is_integral_v<T>, "T must be an integral type");
+    static_assert(sizeof(T) == 4 || sizeof(T) == 8, "T must be 4 or 8 bytes");
     using UT = std::make_unsigned_t<T>;
     DeltaBinaryPackedDecoder() = default;
     ~DeltaBinaryPackedDecoder() override = default;
@@ -428,13 +430,24 @@ private:
             if (!decoder_->GetBatch(delta_bit_width_, buffer + i, values_decode)) {
                 return Status::Corruption("GetBatch failed");
             }
-            for (int j = 0; j < values_decode; ++j) {
-                // Addition between min_delta, packed int and last_value should be treated as
-                // unsigned addition. Overflow is as expected.
-                buffer[i + j] =
-                        static_cast<UT>(min_delta_) + static_cast<UT>(buffer[i + j]) + static_cast<UT>(last_value_);
-                last_value_ = buffer[i + j];
+            // original version using chain addition.
+            // for (int j = 0; j < values_decode; ++j) {
+            //     // Addition between min_delta, packed int and last_value should be treated as
+            //     // unsigned addition. Overflow is as expected.
+            //     buffer[i + j] =
+            //             static_cast<UT>(min_delta_) + static_cast<UT>(buffer[i + j]) + static_cast<UT>(last_value_);
+            //     last_value_ = buffer[i + j];
+            // }
+
+#ifdef __AVX2__
+            if constexpr (sizeof(T) == 4) {
+                delta_decode_chain_avx2_int32(buffer + i, values_decode, min_delta_, last_value_);
+            } else if constexpr (sizeof(T) == 8) {
+                delta_decode_chain_avx2_int64(buffer + i, values_decode, min_delta_, last_value_);
             }
+#else
+            delta_decode_chain_scalar<T>(buffer + i, values_decode, min_delta_, last_value_);
+#endif
             values_remaining_current_mini_block_ -= values_decode;
             i += values_decode;
         }

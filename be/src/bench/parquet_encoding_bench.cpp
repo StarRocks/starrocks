@@ -20,24 +20,51 @@
 
 #include "bench/bench_util.h"
 #include "formats/parquet/encoding.h"
+#include "formats/parquet/types.h"
 #include "util/compression/block_compression.h"
 
 namespace starrocks::parquet {
 
 inline int kTestChunkSize = 4096;
 
-static void BMRandomInt64(benchmark::State& state) {
+enum DataDistribution {
+    RANDOM = 0,
+    SERIES = 1,
+    PREFIX = 2,
+};
+
+std::string to_string(DataDistribution dist) {
+    switch (dist) {
+    case RANDOM:
+        return "RANDOM";
+    case SERIES:
+        return "SERIES";
+    case PREFIX:
+        return "PREFIX";
+    default:
+        return "UNKNOWN";
+    }
+}
+
+template <tparquet::Type::type PT, DataDistribution data_dist>
+static void BMTestInt(benchmark::State& state) {
     auto f = [&]() {
-        tparquet::Type::type PT = tparquet::Type::INT64;
-        using T = int64_t;
+        using T = typename PhysicalTypeTraits<PT>::CppType;
         tparquet::Encoding::type encoding_type = (tparquet::Encoding::type)state.range(0);
         const EncodingInfo* encoding_info;
         RETURN_IF_ERROR(EncodingInfo::get(PT, encoding_type, &encoding_info));
 
         int64_t num_rows = state.range(1);
-        int64_t min_value = state.range(2);
-        int64_t range_value = state.range(3);
-        std::vector<T> elements = BenchUtil::create_random_values<T>(num_rows, min_value, min_value + range_value);
+        std::vector<T> elements;
+        if constexpr (data_dist == RANDOM) {
+            int64_t min_value = state.range(2);
+            int64_t range_value = state.range(3);
+            elements = BenchUtil::create_random_values<T>(num_rows, min_value, min_value + range_value);
+        } else if constexpr (data_dist == SERIES) {
+            int64_t init_value = state.range(2);
+            int64_t delta_value = state.range(3);
+            elements = BenchUtil::create_series_values<T>(num_rows, init_value, delta_value);
+        }
 
         std::unique_ptr<Encoder> encoder;
         RETURN_IF_ERROR(encoding_info->create_encoder(&encoder));
@@ -72,24 +99,42 @@ static void BMRandomInt64(benchmark::State& state) {
     }
 }
 
-static void CustomArgsInt64(benchmark::internal::Benchmark* b) {
+static void CustomArgsRandomInt(benchmark::internal::Benchmark* b) {
+    using T = int32_t;
     std::vector<int64_t> encodings = {(int64_t)tparquet::Encoding::PLAIN,
                                       (int64_t)tparquet::Encoding::DELTA_BINARY_PACKED,
                                       (int64_t)tparquet::Encoding::BYTE_STREAM_SPLIT};
-    std::vector<int64_t> min_values = {std::numeric_limits<int64_t>::min() + 1000000, 0,
-                                       std::numeric_limits<int64_t>::max() - 1000000};
+    std::vector<int64_t> min_values = {std::numeric_limits<T>::min() + 1000000, 0,
+                                       std::numeric_limits<T>::max() - 1000000};
     std::vector<int64_t> ranges = {100, 10000, 1000000};
 
-    for (auto min_value : min_values) {
-        for (auto range : ranges) {
-            for (auto encoding : encodings) {
+    for (auto encoding : encodings) {
+        for (auto min_value : min_values) {
+            for (auto range : ranges) {
                 b->Args({encoding, kTestChunkSize, min_value, range});
             }
         }
     }
 }
 
-BENCHMARK(BMRandomInt64)->Apply(CustomArgsInt64);
+static void CustomArgsSeriesInt(benchmark::internal::Benchmark* b) {
+    using T = int32_t;
+    std::vector<int64_t> encodings = {(int64_t)tparquet::Encoding::PLAIN,
+                                      (int64_t)tparquet::Encoding::DELTA_BINARY_PACKED,
+                                      (int64_t)tparquet::Encoding::BYTE_STREAM_SPLIT};
+    std::vector<int64_t> delta_values = {-1000000, -1000, -10, 0, 10, 1000, 1000000};
+
+    for (auto encoding : encodings) {
+        for (auto delta_value : delta_values) {
+            b->Args({encoding, kTestChunkSize, 0, delta_value});
+        }
+    }
+}
+
+BENCHMARK_TEMPLATE(BMTestInt, tparquet::Type::INT32, RANDOM)->Apply(CustomArgsRandomInt);
+BENCHMARK_TEMPLATE(BMTestInt, tparquet::Type::INT64, RANDOM)->Apply(CustomArgsRandomInt);
+BENCHMARK_TEMPLATE(BMTestInt, tparquet::Type::INT32, SERIES)->Apply(CustomArgsSeriesInt);
+BENCHMARK_TEMPLATE(BMTestInt, tparquet::Type::INT64, SERIES)->Apply(CustomArgsSeriesInt);
 
 } // namespace starrocks::parquet
 
