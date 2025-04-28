@@ -128,6 +128,8 @@ import com.starrocks.thrift.TExportTaskRequest;
 import com.starrocks.thrift.TFetchDataParams;
 import com.starrocks.thrift.TFetchDataResult;
 import com.starrocks.thrift.TFinishTaskRequest;
+import com.starrocks.thrift.TGetTabletsInfoRequest;
+import com.starrocks.thrift.TGetTabletsInfoResult;
 import com.starrocks.thrift.THeartbeatResult;
 import com.starrocks.thrift.TMasterInfo;
 import com.starrocks.thrift.TMasterResult;
@@ -895,6 +897,13 @@ public class PseudoBackend {
             return null;
         }
 
+        @Override
+        public TGetTabletsInfoResult get_tablets_info(TGetTabletsInfoRequest request) throws TException {
+            TGetTabletsInfoResult result = new TGetTabletsInfoResult(new TStatus(TStatusCode.OK));
+            result.setReport_version(reportVersion.get());
+            result.setTablets(tabletManager.getAllTabletInfo());
+            return result;
+        }
     }
 
     private class PseudoPBackendService implements PBackendService {
