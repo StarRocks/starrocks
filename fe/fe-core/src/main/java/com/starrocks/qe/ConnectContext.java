@@ -212,6 +212,8 @@ public class ConnectContext {
     protected volatile Instant startTime = Instant.now();
     // last command end time
     protected volatile Instant endTime = Instant.ofEpochMilli(0);
+    // last command pending time(s), query's timeout should not contain pending time.
+    protected volatile int pendingTimeSecond = 0;
     // Cache thread info for this connection.
     protected ThreadInfo threadInfo;
 
@@ -697,12 +699,14 @@ public class ConnectContext {
     public void setStartTime() {
         startTime = Instant.now();
         returnRows = 0;
+        pendingTimeSecond = 0;
     }
 
     @VisibleForTesting
     public void setStartTime(Instant start) {
         startTime = start;
         returnRows = 0;
+        pendingTimeSecond = 0;
     }
 
     public void setEndTime() {
@@ -1104,8 +1108,29 @@ public class ConnectContext {
         }
     }
 
+    /**
+     * NOTE: The ExecTimeout should not contain the pending time which may be caused by QueryQueue's scheduler.
+     * </p>
+     * @return  Get the timeout for this session, unit: second
+     */
     public int getExecTimeout() {
+        return pendingTimeSecond + getExecTimeoutWithoutPendingTime();
+    }
+
+    private int getExecTimeoutWithoutPendingTime() {
         return executor != null ? executor.getExecTimeout() : sessionVariable.getQueryTimeoutS();
+    }
+
+    /**
+     * update the pending time for this session, unit: second
+     * @param pendingTimeSecond: the pending time for this session
+     */
+    public void setPendingTimeSecond(int pendingTimeSecond) {
+        this.pendingTimeSecond = pendingTimeSecond;
+    }
+
+    public long getPendingTimeSecond() {
+        return this.pendingTimeSecond;
     }
 
     private String getExecType() {
@@ -1116,10 +1141,15 @@ public class ConnectContext {
         return executor != null && executor.isExecLoadType();
     }
 
-    public void checkTimeout(long now) {
+    /**
+     * Check the connect context is timeout or not. If true, kill the connection, otherwise, return false.
+     * @param now : current time in milliseconds
+     * @return true if timeout, false otherwise
+     */
+    public boolean checkTimeout(long now) {
         long startTimeMillis = getStartTime();
         if (startTimeMillis <= 0) {
-            return;
+            return false;
         }
 
         long delta = now - startTimeMillis;
@@ -1160,6 +1190,7 @@ public class ConnectContext {
         if (killFlag) {
             kill(killConnection, errMsg);
         }
+        return killFlag;
     }
 
     // Helper to dump connection information.
