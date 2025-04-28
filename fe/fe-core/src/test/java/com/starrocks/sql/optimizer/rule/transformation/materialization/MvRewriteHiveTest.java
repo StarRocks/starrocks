@@ -157,7 +157,7 @@ public class MvRewriteHiveTest extends MVTestBase {
     public void testHiveUnionRewrite() throws Exception {
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
         createAndRefreshMv("create materialized view hive_union_mv_1 distributed by hash(s_suppkey) " +
-                        " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 5");
+                " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 5");
         String query1 = "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 10";
         String plan1 = getFragmentPlan(query1);
         PlanTestBase.assertContains(plan1, "0:UNION");
@@ -174,7 +174,7 @@ public class MvRewriteHiveTest extends MVTestBase {
         // enforce choose the hive scan operator, not mv plan
         connectContext.getSessionVariable().setUseNthExecPlan(1);
         createAndRefreshMv("create materialized view hive_union_mv_1 distributed by hash(s_suppkey) " +
-                        " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 5");
+                " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 5");
         createAndRefreshMv("create materialized view hive_join_mv_1" +
                 " distributed by hash(s_suppkey)" +
                 " as " +
@@ -194,10 +194,10 @@ public class MvRewriteHiveTest extends MVTestBase {
     @Test
     public void testHiveStaleness() throws Exception {
         createAndRefreshMv("create materialized view hive_staleness_1 distributed by hash(s_suppkey) " +
-                        "PROPERTIES (\n" +
-                        "\"mv_rewrite_staleness_second\" = \"60\"" +
-                        ") " +
-                        " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey = 5");
+                "PROPERTIES (\n" +
+                "\"mv_rewrite_staleness_second\" = \"60\"" +
+                ") " +
+                " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey = 5");
 
         // no refresh partitions if mv_rewrite_staleness is set.
         {
@@ -220,18 +220,18 @@ public class MvRewriteHiveTest extends MVTestBase {
     @Test
     public void testHivePartitionPrune1() throws Exception {
         createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_partition_prune_mv1`\n" +
-                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
-                        "PARTITION BY (`l_shipdate`)\n" +
-                        "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
-                        "REFRESH MANUAL\n" +
-                        "PROPERTIES (\n" +
-                        "\"replication_num\" = \"1\",\n" +
-                        "\"force_external_table_query_rewrite\" = \"true\"" +
-                        ")\n" +
-                        "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
-                        "FROM `hive0`.`partitioned_db`.`lineitem_par` as a \n " +
-                        "GROUP BY " +
-                        "`l_orderkey`, `l_suppkey`, `l_shipdate`;");
+                "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                "PARTITION BY (`l_shipdate`)\n" +
+                "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"force_external_table_query_rewrite\" = \"true\"" +
+                ")\n" +
+                "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
+                "FROM `hive0`.`partitioned_db`.`lineitem_par` as a \n " +
+                "GROUP BY " +
+                "`l_orderkey`, `l_suppkey`, `l_shipdate`;");
 
         // should not be rollup
         {
@@ -260,9 +260,9 @@ public class MvRewriteHiveTest extends MVTestBase {
                     "WHERE l_orderkey>1 GROUP BY `l_suppkey`;";
             String plan = getFragmentPlan(query);
             PlanTestBase.assertContains(plan, "1:AGGREGATE (update serialize)\n" +
-                            "  |  STREAMING\n" +
-                            "  |  output: sum(21: sum(l_orderkey))\n" +
-                            "  |  group by: 19: l_suppkey");
+                    "  |  STREAMING\n" +
+                    "  |  output: sum(21: sum(l_orderkey))\n" +
+                    "  |  group by: 19: l_suppkey");
             PlanTestBase.assertContains(plan, "PREDICATES: 18: l_orderkey > 1\n" +
                     "     partitions=6/6\n" +
                     "     rollup: hive_partition_prune_mv1");
@@ -780,6 +780,67 @@ public class MvRewriteHiveTest extends MVTestBase {
                         "     partitions=6/6\n" +
                         "     rollup: mv1");
             }
+        });
+    }
+
+    @Test
+    public void testHivePartitionPruneWithLeftJoin1() {
+        String mv1 = "CREATE MATERIALIZED VIEW mv1\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "PROPERTIES (\"force_external_table_query_rewrite\" = \"true\") AS \n" +
+                " SELECT o_orderkey, l_suppkey, l_shipdate, l_orderkey  " +
+                " FROM hive0.partitioned_db.lineitem_par as a " +
+                " LEFT JOIN hive0.partitioned_db.orders as b ON b.o_orderkey=a.l_orderkey;";
+
+
+        final List<TestListener> listeners = ImmutableList.of(
+                // enable mv
+                new EnableMVRewriteListener(),
+                new DisableMVRewriteListener(),
+
+                new EnableMVMultiStageRewriteListener(),
+                new DisableMVMultiStageRewriteListener()
+        );
+
+        starRocksAssert.withMaterializedView(mv1, (obj) -> {
+            final String mvName = (String) obj;
+            refreshMaterializedView(DB_NAME, mvName);
+
+            doTest(listeners, () -> {
+                {
+                    String query = "SELECT o_orderkey, l_suppkey, l_shipdate, l_orderkey  " +
+                            " FROM hive0.partitioned_db.lineitem_par as a " +
+                            " LEFT JOIN hive0.partitioned_db.orders as b ON b.o_orderkey=a.l_orderkey and l_shipdate='1998-01-01';";
+
+                    String plan = getFragmentPlan(query);
+                    PlanTestBase.assertContains(plan, "  4:HASH JOIN\n" +
+                            "  |  join op: LEFT OUTER JOIN (PARTITIONED)\n" +
+                            "  |  colocate: false, reason: \n" +
+                            "  |  equal join conjunct: 1: l_orderkey = 17: o_orderkey\n" +
+                            "  |  other join predicates: 16: l_shipdate = '1998-01-01'");
+                    PlanTestBase.assertContains(plan, "  2:HdfsScanNode\n" +
+                            "     TABLE: orders\n" +
+                            "     partitions=1095/1095");
+                    PlanTestBase.assertContains(plan, "  0:HdfsScanNode\n" +
+                            "     TABLE: lineitem_par\n" +
+                            "     partitions=6/6");
+                }
+                {
+                    String query = "SELECT o_orderkey, l_suppkey, l_shipdate, l_orderkey  " +
+                            " FROM hive0.partitioned_db.lineitem_par as a " +
+                            " LEFT JOIN hive0.partitioned_db.orders as b ON b.o_orderkey=a.l_orderkey " +
+                            "and b.o_orderdate='1998-01-01';";
+                    String plan = getFragmentPlan(query);
+                    PlanTestBase.assertContains(plan, "  0:HdfsScanNode\n" +
+                            "     TABLE: lineitem_par\n" +
+                            "     partitions=6/6");
+                    PlanTestBase.assertContains(plan, "  1:HdfsScanNode\n" +
+                            "     TABLE: orders\n" +
+                            "     PARTITION PREDICATES: 25: o_orderdate = '1998-01-01'\n" +
+                            "     partitions=0/1095");
+
+                }
+            });
         });
     }
 }
