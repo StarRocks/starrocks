@@ -228,3 +228,6 @@ drop table mv_hive_${uuid0}.mv_hive_db_${uuid0}.t3 force;
 drop table mv_hive_${uuid0}.mv_hive_db_${uuid0}.t4 force;
 -- result:
 -- !result
+drop database mv_hive_${uuid0}.mv_hive_db_${uuid0} force;
+-- result:
+-- !result
