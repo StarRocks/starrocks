@@ -16,6 +16,7 @@ package com.starrocks.qe.feedback.skeleton;
 
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.feedback.NodeExecStats;
+import com.starrocks.qe.feedback.ParameterizedPredicate;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 
@@ -29,6 +30,8 @@ public class ScanNode extends SkeletonNode {
 
     private final String tableIdentifier;
 
+    private final ParameterizedPredicate parameterizedPredicate;
+
     public ScanNode(OptExpression optExpression,
                     NodeExecStats nodeExecStats, SkeletonNode parent) {
         super(optExpression, nodeExecStats, parent);
@@ -36,6 +39,14 @@ public class ScanNode extends SkeletonNode {
         Table table = scanOperator.getTable();
         tableId = table.isExternalTableWithFileSystem() ? -1 : table.getId();
         tableIdentifier = scanOperator.getTable().getTableIdentifier();
+        this.parameterizedPredicate = new ParameterizedPredicate(predicate);
+    }
+
+    public ScanNode(OptExpression optExpression) {
+        super(optExpression, null, null);
+        this.tableId = 0;
+        this.tableIdentifier = null;
+        this.parameterizedPredicate = new ParameterizedPredicate(predicate);
     }
 
     public long getTableId() {
@@ -44,6 +55,22 @@ public class ScanNode extends SkeletonNode {
 
     public String getTableIdentifier() {
         return tableIdentifier;
+    }
+
+    public boolean isEnableParameterizedMode() {
+        return parameterizedPredicate.isEnableParameterizedMode();
+    }
+
+    public void enableParameterizedMode() {
+        parameterizedPredicate.enableParameterizedMode();
+    }
+
+    public void disableParameterizedMode() {
+        parameterizedPredicate.disableParameterizedMode();
+    }
+
+    public void mergeColumnRangePredicate(ScanNode scanNode) {
+        parameterizedPredicate.mergeColumnRange(scanNode.parameterizedPredicate);
     }
 
     @Override
@@ -55,15 +82,27 @@ public class ScanNode extends SkeletonNode {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        if (!super.equals(o)) {
+
+        ScanNode other = (ScanNode) o;
+
+        if (operatorId != other.operatorId || limit != other.limit || type != other.type ||
+                tableId != other.tableId || !Objects.equals(tableIdentifier, other.tableIdentifier)) {
             return false;
         }
-        ScanNode scanNode = (ScanNode) o;
-        return tableId == scanNode.tableId && Objects.equals(tableIdentifier, scanNode.tableIdentifier);
+
+        if (Objects.equals(predicate, other.predicate)) {
+            return true;
+        }
+
+        try {
+            return this.parameterizedPredicate.match(other.parameterizedPredicate);
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), tableId, tableIdentifier);
+        return Objects.hash(operatorId, type, limit, tableId, tableIdentifier);
     }
 }

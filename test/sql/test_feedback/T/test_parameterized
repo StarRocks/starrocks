@@ -1,0 +1,62 @@
+-- name: test_parameterized
+
+DROP DATABASE IF EXISTS test_feedback;
+CREATE DATABASE test_feedback;
+USE test_feedback;
+
+CREATE TABLE `test_feedback_parameterized` (
+  `date_col` date NULL COMMENT "",
+  `skew_city` string NULL COMMENT "",
+  `col1` int(11) NULL COMMENT "",
+  `col2` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+COMMENT "OLAP"
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into test_feedback_parameterized select "2000-01-01", "hangzhou", generate_series, 500 from TABLE(generate_series(1, 5000000));
+insert into test_feedback_parameterized select "2000-01-02", "hangzhou", generate_series, 500 from TABLE(generate_series(1, 5000000));
+insert into test_feedback_parameterized select "2000-01-03", "hangzhou", generate_series, 500 from TABLE(generate_series(1, 5000000));
+
+insert into test_feedback_parameterized select "2000-01-03", generate_series, generate_series, 500 from TABLE(generate_series(1, 10000));
+
+analyze table test_feedback_parameterized;
+set enable_global_runtime_filter = false;
+
+truncate plan advisor;
+
+-- test date_col = 2020-01-01
+function: assert_explain_not_contains("select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou') t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-01') t", "RightChildEstimationErrorTuningGuide")
+alter plan advisor add select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou') t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-01') t;
+function: assert_explain_contains("select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou') t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-01') t", "RightChildEstimationErrorTuningGuide")
+
+-- test date_col = 2020-01-03
+function: assert_explain_not_contains("select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou') t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-03') t", "RightChildEstimationErrorTuningGuide")
+alter plan advisor add select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou') t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-03') t;
+function: assert_explain_contains("select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou') t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-03') t", "RightChildEstimationErrorTuningGuide")
+
+-- test date_col = 2020-01-02 reuse tuning guide
+function: assert_explain_contains("select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou') t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-02') t", "RightChildEstimationErrorTuningGuide")
+
+-- test col2 = 500
+function: assert_explain_not_contains("select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou' and col2 = 500) t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-01') t", "RightChildEstimationErrorTuningGuide")
+alter plan advisor add select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou' and col2 = 500) t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-01') t;
+function: assert_explain_contains("select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou' and col2 = 500) t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-01') t", "RightChildEstimationErrorTuningGuide")
+
+-- test col2 >= 500
+function: assert_explain_not_contains("select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou' and col2 >= 500) t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-01') t", "RightChildEstimationErrorTuningGuide")
+alter plan advisor add select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou' and col2 >= 500) t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-01') t;
+function: assert_explain_contains("select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou' and col2 >= 500) t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-01') t", "RightChildEstimationErrorTuningGuide")
+
+-- test col2 < 600
+function: assert_explain_not_contains("select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou' and col2 < 600) t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-01') t", "RightChildEstimationErrorTuningGuide")
+alter plan advisor add select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou' and col2 < 600) t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-01') t;
+function: assert_explain_contains("select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou' and col2 < 600) t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-01') t", "RightChildEstimationErrorTuningGuide")
+
+-- test col2 is True after merge ranges. test col2 < 550
+function: assert_explain_contains("select count(*) from (select * from test_feedback_parameterized  t1 join (select * from test_feedback_parameterized where skew_city = 'hangzhou' and col2 < 550) t2 on t1.col1 = t2.col1 where t1.date_col='2000-01-01') t", "RightChildEstimationErrorTuningGuide")
+
+truncate plan advisor;
+
+
