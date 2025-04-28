@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.authorization.IdGenerator;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.ColocateTableIndex;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.KeysType;
@@ -26,10 +27,13 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.View;
 import com.starrocks.common.DdlException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.thrift.TStorageType;
 
@@ -152,5 +156,21 @@ public class MockedLocalMetaStore extends LocalMetastore {
         logicalPartition.addSubPartition(physicalPartition);
 
         return logicalPartition;
+    }
+
+    @Override
+    public void createView(CreateViewStmt stmt) throws DdlException {
+        String dbName = stmt.getDbName();
+        String tableName = stmt.getTable();
+        List<Column> columns = stmt.getColumns();
+
+        long tableId = idGenerator.getNextId();
+        View view = new View(tableId, tableName, columns);
+        view.setComment(stmt.getComment());
+        view.setInlineViewDefWithSqlMode(stmt.getInlineViewDef(),
+                ConnectContext.get().getSessionVariable().getSqlMode());
+
+        Database db = getDb(dbName);
+        db.registerTableUnlocked(view);
     }
 }
