@@ -97,7 +97,7 @@ Status HiveDataSource::open(RuntimeState* state) {
     RETURN_IF_ERROR(_check_all_slots_nullable());
 
     // Check that the system meets the requirements for enabling DataCache
-    if (config::datacache_enable && BlockCache::instance()->available()) {
+    if (BlockCache::instance()->available()) {
         // setup priority & ttl seconds
         int8_t datacache_priority = 0;
         int64_t datacache_ttl_seconds = 0;
@@ -161,7 +161,7 @@ Status HiveDataSource::open(RuntimeState* state) {
         _scan_range.datacache_options.priority == -1) {
         _datacache_options.enable_datacache = false;
     }
-    _use_file_metacache = config::datacache_enable && BlockCache::instance()->has_mem_cache();
+    _use_file_metacache = BlockCache::instance()->mem_cache_available();
     if (state->query_options().__isset.enable_file_metacache) {
         _use_file_metacache &= state->query_options().enable_file_metacache;
     }

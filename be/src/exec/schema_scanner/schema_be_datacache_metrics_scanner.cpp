@@ -63,8 +63,8 @@ Status SchemaBeDataCacheMetricsScanner::get_next(ChunkPtr* chunk, bool* eos) {
 
     row.emplace_back(_be_id);
 
-    if (config::datacache_enable) {
-        const BlockCache* cache = BlockCache::instance();
+    const BlockCache* cache = BlockCache::instance();
+    if (cache->is_initialized()) {
         // retrive different priority's used bytes from level = 2 metrics
         metrics = cache->cache_metrics(2);
 

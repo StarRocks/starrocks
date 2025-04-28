@@ -26,7 +26,6 @@ namespace starrocks {
 class BlockCache {
 public:
     using CacheKey = std::string;
-    using DeleterFunc = std::function<void()>;
 
     // Return a singleton block cache instance
     static BlockCache* instance();
@@ -88,6 +87,7 @@ public:
     bool has_disk_cache() const { return _disk_quota.load(std::memory_order_relaxed) > 0; }
 
     bool available() const { return is_initialized() && (has_mem_cache() || has_disk_cache()); }
+    bool mem_cache_available() const { return is_initialized() && has_mem_cache(); }
 
     void disk_spaces(std::vector<DirSpace>* spaces);
 
