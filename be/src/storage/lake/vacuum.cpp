@@ -42,14 +42,14 @@
 namespace starrocks::lake {
 
 struct VacuumTabletMetaVerionRange {
-    // range is [min_version, max_version]
+    // range is [min_version, max_version)
     int64_t min_version = 0;
     int64_t max_version = 0;
 
     /*
-    * if tablet a has version range [1, ..., 10] ,
-    * and tablet b has version range [5, ..., 15],
-    * then the merged version range is [1, ..., 10]
+    * if tablet a has version range [1, ..., 10) ,
+    * and tablet b has version range [5, ..., 15),
+    * then the merged version range is [1, ..., 10)
     *
     * The merge will calc the range of these two tablets both can delete,
     */
@@ -411,7 +411,7 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
     } else {
         // The vacuum_version_range is used to collect the version range of the tablet metadata files to be deleted.
         // So we can decide the final version range to be deleted when aggregate partition is enabled.
-        vacuum_version_range->merge(version + 1, final_retain_version - 1);
+        vacuum_version_range->merge(version + 1, final_retain_version);
     }
     tablet_info.set_min_version(final_retain_version);
     *total_datafile_size += prepare_vacuum_file_size;
@@ -470,7 +470,7 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
         // collect meta files to vacuum at partition level
         AsyncFileDeleter metafile_deleter(INT64_MAX, metafile_delete_cb);
         auto meta_dir = join_path(root_dir, kMetadataDirectoryName);
-        for (auto v = vacuum_version_range->min_version; v <= vacuum_version_range->max_version; v++) {
+        for (auto v = vacuum_version_range->min_version; v < vacuum_version_range->max_version; v++) {
             RETURN_IF_ERROR(metafile_deleter.delete_file(join_path(meta_dir, tablet_metadata_filename(0, v))));
         }
         RETURN_IF_ERROR(metafile_deleter.finish());
