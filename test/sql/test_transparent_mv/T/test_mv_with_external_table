@@ -17,7 +17,7 @@ PROPERTIES (
   "type" = "jdbc",
   "user" = "${external_mysql_user}",
   "password" = "${external_mysql_password}",
-  "jdbc_uri"="jdbc:mysql://${external_mysql_ip}:${external_mysql_port}",
+  "jdbc_uri"="jdbc:mysql://${external_mysql_ip}:${external_mysql_port}/mv_mysql_db_${uuid0}",
   "driver_url"="https://repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.28/mysql-connector-java-8.0.28.jar",
   "driver_class"="com.mysql.cj.jdbc.Driver"
 );
@@ -41,6 +41,8 @@ PROPERTIES (
 );
 
 set new_planner_optimize_timeout=10000;
+select count(*) from external_mysql_t1;
+select count(*) from external_mysql_t2;
 
 CREATE MATERIALIZED VIEW test_mv1 
 PARTITION BY dt

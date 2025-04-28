@@ -41,7 +41,7 @@ PROPERTIES (
   "type" = "jdbc",
   "user" = "${external_mysql_user}",
   "password" = "${external_mysql_password}",
-  "jdbc_uri"="jdbc:mysql://${external_mysql_ip}:${external_mysql_port}",
+  "jdbc_uri"="jdbc:mysql://${external_mysql_ip}:${external_mysql_port}/mv_mysql_db_${uuid0}",
   "driver_url"="https://repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.28/mysql-connector-java-8.0.28.jar",
   "driver_class"="com.mysql.cj.jdbc.Driver"
 );
@@ -70,14 +70,13 @@ PROPERTIES (
 set new_planner_optimize_timeout=10000;
 -- result:
 -- !result
-CREATE MATERIALIZED VIEW test_mv1 
-PARTITION BY dt
-REFRESH DEFERRED MANUAL 
-PROPERTIES ("replication_num" = "1")
-AS 
-  SELECT dt, sum(num) as num FROM external_mysql_t1 GROUP BY dt;
+select count(*) from external_mysql_t1;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Materialized view partition expression `db_ecd68e4b8e784225b5ecc69ec97ee46c`.`external_mysql_t1`.`dt` could not ref to external table.')
+20
+-- !result
+select count(*) from external_mysql_t2;
+-- result:
+20
 -- !result
 CREATE MATERIALIZED VIEW test_mv1 
 PARTITION BY dt
@@ -86,7 +85,16 @@ PROPERTIES ("replication_num" = "1")
 AS 
   SELECT dt, sum(num) as num FROM external_mysql_t1 GROUP BY dt;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Materialized view partition expression `db_ecd68e4b8e784225b5ecc69ec97ee46c`.`external_mysql_t1`.`dt` could not ref to external table.')
+E: (1064, 'Getting analyzing error. Detail message: Materialized view partition expression `db_ca31a3fefd89443f8ad2d6699e123a4e`.`external_mysql_t1`.`dt` could not ref to external table.')
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 
+PARTITION BY dt
+REFRESH DEFERRED MANUAL 
+PROPERTIES ("replication_num" = "1")
+AS 
+  SELECT dt, sum(num) as num FROM external_mysql_t1 GROUP BY dt;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Materialized view partition expression `db_ca31a3fefd89443f8ad2d6699e123a4e`.`external_mysql_t1`.`dt` could not ref to external table.')
 -- !result
 CREATE MATERIALIZED VIEW test_mv1 
 REFRESH DEFERRED MANUAL 
@@ -98,13 +106,19 @@ AS
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 function: print_hit_materialized_view("SELECT dt, sum(num) as num FROM external_mysql_t1 GROUP BY dt;", "test_mv1")
 -- result:
-False
+True
 -- !result
 SELECT dt, sum(num) as num FROM external_mysql_t1 GROUP BY dt order by 1, 2 limit 3;
 -- result:
+2020-06-15	3
+2020-06-18	5
+2020-06-21	7
 -- !result
 SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;
 -- result:
+2020-06-15	3
+2020-06-18	5
+2020-06-21	7
 -- !result
 shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use mv_mysql_db_${uuid0}; INSERT INTO t1 VALUES (3,"2020-06-15");'
 -- result:
@@ -113,24 +127,36 @@ shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_
 -- !result
 function: print_hit_materialized_view("SELECT dt, sum(num) as num FROM external_mysql_t1 GROUP BY dt;", "test_mv1")
 -- result:
-False
+True
 -- !result
 SELECT dt, sum(num) as num FROM external_mysql_t1 GROUP BY dt order by 1, 2 limit 3;
 -- result:
+2020-06-15	3
+2020-06-18	5
+2020-06-21	7
 -- !result
 SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;
 -- result:
+2020-06-15	3
+2020-06-18	5
+2020-06-21	7
 -- !result
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 function: print_hit_materialized_view("SELECT dt, sum(num) as num FROM external_mysql_t1 GROUP BY dt;", "test_mv1")
 -- result:
-False
+True
 -- !result
 SELECT dt, sum(num) as num FROM external_mysql_t1 GROUP BY dt order by 1, 2 limit 3;
 -- result:
+2020-06-15	6
+2020-06-18	5
+2020-06-21	7
 -- !result
 SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;
 -- result:
+2020-06-15	6
+2020-06-18	5
+2020-06-21	7
 -- !result
 drop materialized view default_catalog.db_${uuid0}.test_mv1;
 -- result:
@@ -149,10 +175,15 @@ False
 -- !result
 SELECT dt, sum(num) as num FROM external_mysql_t1 GROUP BY dt order by 1, 2 limit 3;
 -- result:
-E: (1064, 'open JDBCScanner failed, error: java.sql.SQLException: No database selected\n\tat com.mysql.cj.jdbc.exceptions.SQLError.createSQLException(SQLError.java:129)\n\tat com.mysql.cj.jdbc.exceptions.SQLExceptionsMapping.translateException(SQLExceptionsMapping.java:122)\n\tat com.mysql.cj.jdbc.ClientPreparedStatement.executeInternal(ClientPreparedStatement.java:953)\n\tat com.mysql.cj.jdbc.ClientPreparedStatement.executeQuery(ClientPreparedStatement.java:1009)\n\tat com.zaxxer.hikari.pool.ProxyPreparedStatement.executeQuery(ProxyPreparedStatement.java:52)\n\tat com.zaxxer.hikari.pool.HikariProxyPreparedStatement.executeQuery(HikariProxyPreparedStatement.java)\n\tat com.starrocks.jdbcbridge.JDBCScanner.open(JDBCScanner.java:95)\n: BE:10001')
+2020-06-15	6
+2020-06-18	5
+2020-06-21	7
 -- !result
 SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;
 -- result:
+2020-06-15	3
+2020-06-18	5
+2020-06-21	7
 -- !result
 shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use mv_mysql_db_${uuid0}; INSERT INTO t1 VALUES (3,"2020-06-15");'
 -- result:
@@ -165,10 +196,15 @@ False
 -- !result
 SELECT dt, sum(num) as num FROM external_mysql_t1 GROUP BY dt order by 1, 2 limit 3;
 -- result:
-E: (1064, 'open JDBCScanner failed, error: java.sql.SQLException: No database selected\n\tat com.mysql.cj.jdbc.exceptions.SQLError.createSQLException(SQLError.java:129)\n\tat com.mysql.cj.jdbc.exceptions.SQLExceptionsMapping.translateException(SQLExceptionsMapping.java:122)\n\tat com.mysql.cj.jdbc.ClientPreparedStatement.executeInternal(ClientPreparedStatement.java:953)\n\tat com.mysql.cj.jdbc.ClientPreparedStatement.executeQuery(ClientPreparedStatement.java:1009)\n\tat com.zaxxer.hikari.pool.ProxyPreparedStatement.executeQuery(ProxyPreparedStatement.java:52)\n\tat com.zaxxer.hikari.pool.HikariProxyPreparedStatement.executeQuery(HikariProxyPreparedStatement.java)\n\tat com.starrocks.jdbcbridge.JDBCScanner.open(JDBCScanner.java:95)\n: BE:10001')
+2020-06-15	9
+2020-06-18	5
+2020-06-21	7
 -- !result
 SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;
 -- result:
+2020-06-15	3
+2020-06-18	5
+2020-06-21	7
 -- !result
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 function: print_hit_materialized_view("SELECT dt, sum(num) as num FROM external_mysql_t1 GROUP BY dt;", "test_mv1")
@@ -177,10 +213,15 @@ False
 -- !result
 SELECT dt, sum(num) as num FROM external_mysql_t1 GROUP BY dt order by 1, 2 limit 3;
 -- result:
-E: (1064, 'open JDBCScanner failed, error: java.sql.SQLException: No database selected\n\tat com.mysql.cj.jdbc.exceptions.SQLError.createSQLException(SQLError.java:129)\n\tat com.mysql.cj.jdbc.exceptions.SQLExceptionsMapping.translateException(SQLExceptionsMapping.java:122)\n\tat com.mysql.cj.jdbc.ClientPreparedStatement.executeInternal(ClientPreparedStatement.java:953)\n\tat com.mysql.cj.jdbc.ClientPreparedStatement.executeQuery(ClientPreparedStatement.java:1009)\n\tat com.zaxxer.hikari.pool.ProxyPreparedStatement.executeQuery(ProxyPreparedStatement.java:52)\n\tat com.zaxxer.hikari.pool.HikariProxyPreparedStatement.executeQuery(HikariProxyPreparedStatement.java)\n\tat com.starrocks.jdbcbridge.JDBCScanner.open(JDBCScanner.java:95)\n: BE:10001')
+2020-06-15	9
+2020-06-18	5
+2020-06-21	7
 -- !result
 SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;
 -- result:
+2020-06-15	3
+2020-06-18	5
+2020-06-21	7
 -- !result
 drop materialized view default_catalog.db_${uuid0}.test_mv1;
 -- result:
