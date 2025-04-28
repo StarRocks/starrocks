@@ -225,7 +225,8 @@ public class Utils {
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         if (!warehouseManager.warehouseExists(warehouseId)) {
             LOG.warn("publish version operation should be successful even if the warehouse is not exist, " +
-                    "and switch the warehouse id from {} to {}", warehouseId, 
+                    "and switch the warehouse id from {} to {}[{}]", warehouseId, 
+                    warehouseManager.getBackgroundWarehouse().getId(),
                     warehouseManager.getBackgroundWarehouse().getName());
             warehouseId = warehouseManager.getBackgroundWarehouse().getId();
         }
