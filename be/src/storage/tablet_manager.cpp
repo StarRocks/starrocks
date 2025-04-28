@@ -113,11 +113,22 @@ Status TabletManager::_add_tablet_unlocked(const TabletSharedPtr& new_tablet, bo
         int64_t new_time = 0;
         int64_t old_version = 0;
         int64_t new_version = 0;
+        bool old_file_existence = true;
+        bool new_file_existence = true;
         if (new_tablet->updates() != nullptr) {
             old_time = old_tablet->updates()->max_rowset_creation_time();
             new_time = new_tablet->updates()->max_rowset_creation_time();
             old_version = old_tablet->updates()->max_version();
             new_version = new_tablet->updates()->max_version();
+            // Currently, we only perform file existence checks on Primary Key tables
+            // to determine tablet priority. This is because prior to version 3.2,
+            // the tablet priority evaluation logic was unstable and could lead to
+            // accidental garbage collection (GC) of data files during multiple BE restarts.
+            // Therefore, we've implemented file existence checks here specifically to bypass
+            // tablets whose data files might have been incorrectly GC'd. As for non-PK tables,
+            // since they don't carry this risk, we can safely ignore them for now.
+            old_file_existence = old_tablet->updates()->rowset_check_file_existence();
+            new_file_existence = new_tablet->updates()->rowset_check_file_existence();
         } else {
             old_tablet->obtain_header_rdlock();
             auto old_rowset = old_tablet->rowset_with_max_version();
@@ -128,11 +139,21 @@ Status TabletManager::_add_tablet_unlocked(const TabletSharedPtr& new_tablet, bo
             new_version = (new_rowset == nullptr) ? -1 : new_rowset->end_version();
             old_tablet->release_header_lock();
         }
-        bool replace_old = (new_version > old_version) || (new_version == old_version && new_time > old_time) ||
-                           // use for migration of primary key empty tablet
-                           (new_tablet->updates() != nullptr && old_version == 1 && new_version == 1);
 
-        if (replace_old) {
+        auto replace_old_fn = [&]() {
+            // Tablet with guaranteed data file existence is prioritized for adoption.
+            if (old_file_existence && !new_file_existence) {
+                return false;
+            } else if (!old_file_existence && new_file_existence) {
+                return true;
+            } else {
+                return (new_version > old_version) || (new_version == old_version && new_time > old_time) ||
+                       // use for migration of primary key empty tablet
+                       (new_tablet->updates() != nullptr && old_version == 1 && new_version == 1);
+            }
+        };
+
+        if (replace_old_fn()) {
             RETURN_IF_ERROR(_drop_tablet_unlocked(old_tablet->tablet_id(), kMoveFilesToTrash));
             RETURN_IF_ERROR(_update_tablet_map_and_partition_info(new_tablet));
             LOG(INFO) << "Added duplicated tablet. tablet_id=" << new_tablet->tablet_id()
