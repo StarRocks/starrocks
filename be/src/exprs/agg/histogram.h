@@ -34,22 +34,22 @@ struct Bucket {
     using ValueType = AggDataValueType<LT>;
 
     static Bucket from_json(simdjson::ondemand::array bucket_json, const FunctionContext::TypeDesc* type_desc,
-                        MemPool* mem_pool) {
+                            MemPool* mem_pool) {
         TypeInfoPtr type_info = get_type_info(LT, type_desc->precision, type_desc->scale);
-		auto bucket_iter = bucket_json.begin();
+        auto bucket_iter = bucket_json.begin();
 
         Datum lower_datum;
-        std::ignore = datum_from_string(type_info.get(), &lower_datum, std::string{std::string_view{*bucket_iter}},
-            mem_pool);
-		++bucket_iter;
+        std::ignore =
+                datum_from_string(type_info.get(), &lower_datum, std::string{std::string_view{*bucket_iter}}, mem_pool);
+        ++bucket_iter;
 
         Datum upper_datum;
-        std::ignore = datum_from_string(type_info.get(), &upper_datum, std::string{std::string_view{*bucket_iter}},
-            mem_pool);
-		++bucket_iter;
+        std::ignore =
+                datum_from_string(type_info.get(), &upper_datum, std::string{std::string_view{*bucket_iter}}, mem_pool);
+        ++bucket_iter;
 
         int64_t count = std::stoll(std::string{std::string_view{*bucket_iter}});
-		++bucket_iter;
+        ++bucket_iter;
         int64_t upper_repeats = std::stoll(std::string{std::string_view{*bucket_iter}});
 
         return Bucket(lower_datum.get<RefType>(), upper_datum.get<RefType>(), count, upper_repeats);

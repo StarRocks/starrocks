@@ -49,10 +49,10 @@ public:
             simdjson_parser.iterate(padded_buckets_string).get(doc);
             simdjson::ondemand::array outer_array = doc.get_array();
             for (auto bucket_json : outer_array) {
- 			    simdjson::ondemand::array inner_array = bucket_json.get_array();
+                simdjson::ondemand::array inner_array = bucket_json.get_array();
                 buckets.push_back(Bucket<LT>::from_json(inner_array, ctx->get_arg_type(0), &state.mem_pool));
             }
-        } catch (const simdjson::simdjson_error &e) {
+        } catch (const simdjson::simdjson_error& e) {
             throw std::runtime_error("histogram_hll_ndv: can't parse JSON specification of histogram buckets.");
         }
 
@@ -81,10 +81,9 @@ public:
         // find the correct bucket for the current value.
         if constexpr (lt_is_string<LT>) {
             Slice s = column->get_slice(row_num);
-            bucket_it = std::upper_bound(buckets.begin(), buckets.end(), s,
-                 [](auto& s, Bucket<LT>& bucket) {
-                   return bucket.is_less_equal_to_upper(s.data);
-                 });
+            bucket_it = std::upper_bound(buckets.begin(), buckets.end(), s, [](auto& s, Bucket<LT>& bucket) {
+                return bucket.is_less_equal_to_upper(s.data);
+            });
             if (bucket_it != buckets.end() && !bucket_it->is_greater_equal_to_lower(s.data)) {
                 bucket_it = buckets.end();
             }
@@ -92,10 +91,9 @@ public:
             hash = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
         } else {
             const auto& v = column->get_data();
-            bucket_it = std::upper_bound(buckets.begin(), buckets.end(), v[row_num],
-                 [](auto& value, Bucket<LT>& bucket) {
-                   return bucket.is_less_equal_to_upper(value);
-                 });
+            bucket_it = std::upper_bound(
+                    buckets.begin(), buckets.end(), v[row_num],
+                    [](auto& value, Bucket<LT>& bucket) { return bucket.is_less_equal_to_upper(value); });
             if (bucket_it != buckets.end() && !bucket_it->is_greater_equal_to_lower(v[row_num])) {
                 bucket_it = buckets.end();
             }
@@ -155,9 +153,9 @@ public:
 
                 std::string lower_str = datum_to_string(type_info.get(), buckets[i].get_lower_datum());
                 std::string upper_str = datum_to_string(type_info.get(), buckets[i].get_upper_datum());
-                buckets_json += toBucketJson(lower_str, upper_str, buckets[i].count, buckets[i].upper_repeats,
-                                             distinct_count) +
-                                ",";
+                buckets_json +=
+                        toBucketJson(lower_str, upper_str, buckets[i].count, buckets[i].upper_repeats, distinct_count) +
+                        ",";
             }
 
             buckets_json[buckets_json.size() - 1] = ']';
