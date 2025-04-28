@@ -20,7 +20,7 @@
 #include <memory>
 #include <vector>
 
-#include "bench.h"
+#include "bench/bench_util.h"
 #include "exprs/hash_functions.h"
 
 namespace starrocks {
@@ -43,7 +43,7 @@ private:
 
 void HashFunctionsBench::SetUp() {
     for (int i = 0; i < _num_column; i++) {
-        auto columnPtr = Bench::create_random_column(type_desc, _num_rows, false, false, 32);
+        auto columnPtr = BenchUtil::create_random_column(type_desc, _num_rows, false, false, 32);
         _columns.push_back(std::move(columnPtr));
     }
 }

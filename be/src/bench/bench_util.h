@@ -18,6 +18,7 @@
 
 #include <numeric>
 #include <random>
+#include <type_traits>
 
 #include "column/column_helper.h"
 
@@ -25,8 +26,42 @@ namespace starrocks {
 
 inline int kTestChunkSize = 4096;
 
-class Bench {
+class BenchUtil {
 public:
+    template <typename T>
+    static std::vector<T> create_series_data(int num_rows, T init_value, T delta_value) {
+        std::vector<T> elements(num_rows);
+        elements[0] = init_value;
+        for (int i = 1; i < num_rows; i++) {
+            elements[i] = elements[i - 1] + delta_value;
+        }
+        return elements;
+    }
+
+    template <typename T>
+    static std::vector<T> create_random_data(int num_rows, T min_value, T max_value) {
+        std::random_device dev;
+        std::mt19937 rng(dev());
+        std::vector<T> elements(num_rows);
+
+        if constexpr (std::is_integral_v<T>) {
+            std::uniform_int_distribution<T> dist(min_value, max_value);
+            for (int i = 0; i < num_rows; i++) {
+                elements[i] = dist(rng);
+            }
+        } else if constexpr (std::is_floating_point_v<T>) {
+            std::uniform_real_distribution<T> dist(min_value, max_value);
+            for (int i = 0; i < num_rows; i++) {
+                elements[i] = dist(rng);
+            }
+        } else {
+            static_assert(false, "Unsupported type. Must be integral or floating point.");
+        }
+        return elements;
+    }
+
+    static std::vector<string> create_random_string(int num_rows) {}
+
     static ColumnPtr create_series_column(const TypeDescriptor& type_desc, int num_rows, bool nullable = true) {
         DCHECK_EQ(TYPE_INT, type_desc.type);
 
