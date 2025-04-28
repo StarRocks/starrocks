@@ -59,6 +59,7 @@
 #include "storage/memtable_flush_executor.h"
 #include "storage/page_cache.h"
 #include "storage/persistent_index_compaction_manager.h"
+#include "storage/persistent_index_load_executor.h"
 #include "storage/segment_flush_executor.h"
 #include "storage/segment_replicate_executor.h"
 #include "storage/storage_engine.h"
@@ -164,6 +165,10 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 return mgr->update_max_threads(max_pk_index_compaction_thread_cnt);
             }
             return Status::OK();
+        });
+        _config_callback.emplace("pindex_load_thread_pool_num_max", [&]() -> Status {
+            LOG(INFO) << "Set pindex_load_thread_pool_num_max: " << config::pindex_load_thread_pool_num_max;
+            return StorageEngine::instance()->update_manager()->get_pindex_load_executor()->refresh_max_thread_num();
         });
         _config_callback.emplace("update_memory_limit_percent", [&]() -> Status {
             Status st = StorageEngine::instance()->update_manager()->update_primary_index_memory_limit(

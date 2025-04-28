@@ -41,6 +41,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.LocalTablet.TabletHealthStatus;
 import com.starrocks.catalog.MaterializedIndex;
@@ -189,7 +190,9 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
     private long finishedTime = -1;
 
     private LocalTablet tablet = null;
+    private KeysType tabletKeysType = null;
     private long visibleVersion = -1;
+    private long visibleVersionTime = -1;
     private long visibleTxnId = -1;
     private long committedVersion = -1;
 
@@ -375,11 +378,15 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         return tablet.getImmutableReplicas();
     }
 
-    public void setVersionInfo(long visibleVersion,
-                               long committedVersion, long visibleTxnId) {
+    public void setTabletKeysType(KeysType tabletKeysType) {
+        this.tabletKeysType = tabletKeysType;
+    }
+
+    public void setVersionInfo(long visibleVersion, long committedVersion, long visibleTxnId, long visibleVersionTime) {
         this.visibleVersion = visibleVersion;
         this.committedVersion = committedVersion;
         this.visibleTxnId = visibleTxnId;
+        this.visibleVersionTime = visibleVersionTime;
     }
 
     public long getVisibleTxnId() {
@@ -832,6 +839,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 visibleVersion, (int) (taskTimeoutMs / 1000));
         cloneTask.setPathHash(srcPathHash, destPathHash);
         cloneTask.setIsLocal(srcReplica.getBackendId() == destBackendId);
+        cloneTask.setNeedRebuildPkIndex(tabletKeysType == KeysType.PRIMARY_KEYS &&
+                System.currentTimeMillis() - visibleVersionTime < Config.tablet_sched_pk_index_rebuild_threshold_seconds * 1000);
 
         // if this is a balance task, or this is a repair task with REPLICA_MISSING/REPLICA_RELOCATING,
         // we create a new replica with state CLONE

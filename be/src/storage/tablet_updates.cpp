@@ -44,6 +44,7 @@
 #include "storage/local_primary_key_recover.h"
 #include "storage/merge_iterator.h"
 #include "storage/persistent_index.h"
+#include "storage/persistent_index_load_executor.h"
 #include "storage/primary_key_dump.h"
 #include "storage/rows_mapper.h"
 #include "storage/rowset/default_value_column_iterator.h"
@@ -4838,7 +4839,8 @@ void TabletUpdates::_to_updates_pb_unlocked(TabletUpdatesPB* updates_pb) const {
 }
 
 Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool restore_from_backup,
-                                    bool save_source_schema) {
+                                    bool save_source_schema, bool need_rebuild_pk_index,
+                                    int32_t rebuild_pk_index_wait_seconds) {
 #define CHECK_FAIL(status)                                                                       \
     do {                                                                                         \
         Status st = (status);                                                                    \
@@ -5090,6 +5092,13 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
         index_entry->update_expire_time(MonotonicMillis() + manager->get_index_cache_expire_ms(_tablet));
         index_entry->value().unload();
         index_cache.release(index_entry);
+
+        if (need_rebuild_pk_index) {
+            // rebuild primary index
+            auto* pindex_load_executor = manager->get_pindex_load_executor();
+            (void)pindex_load_executor->submit_task_and_wait_for(
+                    std::static_pointer_cast<Tablet>(_tablet.shared_from_this()), rebuild_pk_index_wait_seconds);
+        }
 
         LOG(INFO) << "load full snapshot done " << _debug_string(false) << ss.str();
 

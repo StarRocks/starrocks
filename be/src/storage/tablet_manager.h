@@ -151,7 +151,9 @@ public:
                                 const std::string& schema_hash_path, bool force = false, bool restore = false);
 
     Status create_tablet_from_meta_snapshot(DataDir* data_dir, TTabletId tablet_id, SchemaHash schema_hash,
-                                            const std::string& schema_hash_path, bool restore = false);
+                                            const std::string& schema_hash_path, bool restore = false,
+                                            bool need_rebuild_pk_index = false,
+                                            int32_t rebuild_pk_index_wait_seconds = 0);
 
     void release_schema_change_lock(TTabletId tablet_id);
 

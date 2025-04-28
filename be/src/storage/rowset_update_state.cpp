@@ -556,13 +556,10 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(Tablet* 
 }
 
 bool RowsetUpdateState::_check_partial_update(Rowset* rowset) {
-    if (!rowset->rowset_meta()->get_meta_pb_without_schema().has_txn_meta() || rowset->num_segments() == 0) {
+    if (rowset->num_segments() == 0) {
         return false;
     }
-    // Merge condition and auto-increment-column-only partial update will also set txn_meta
-    // but will not set partial_update_column_ids
-    const auto& txn_meta = rowset->rowset_meta()->get_meta_pb_without_schema().txn_meta();
-    return !txn_meta.partial_update_column_ids().empty();
+    return rowset->is_partial_update();
 }
 
 Status RowsetUpdateState::_rebuild_partial_update_states(Tablet* tablet, Rowset* rowset, uint32_t rowset_id,
