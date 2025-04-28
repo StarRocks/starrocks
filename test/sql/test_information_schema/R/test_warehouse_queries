@@ -14,6 +14,11 @@ STATE	varchar(2048)	YES	false	None
 EST_COSTS_SLOTS	varchar(2048)	YES	false	None	
 ALLOCATE_SLOTS	varchar(2048)	YES	false	None	
 QUEUED_WAIT_SECONDS	varchar(2048)	YES	false	None	
+QUERY	varchar(2048)	YES	false	None	
+QUERY_START_TIME	varchar(2048)	YES	false	None	
+QUERY_END_TIME	varchar(2048)	YES	false	None	
+QUERY_DURATION	varchar(2048)	YES	false	None	
+EXTRA_MESSAGE	varchar(2048)	YES	false	None	
 -- !result
 SELECT * FROM information_schema.warehouse_queries;
 -- result:

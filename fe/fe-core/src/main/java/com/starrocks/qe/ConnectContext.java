@@ -291,6 +291,9 @@ public class ConnectContext {
     // thread id is the thread who created this ConnectContext's id
     private AtomicLong currentThreadId = null;
 
+    // listeners for this connection
+    private List<Listener> listeners = Lists.newArrayList();
+
     public void setExplicitTxnState(ExplicitTxnState explicitTxnState) {
         this.explicitTxnState = explicitTxnState;
     }
@@ -1484,5 +1487,27 @@ public class ConnectContext {
 
     public void setCurrentThreadId(long currentThreadId) {
         this.currentThreadId = new AtomicLong(currentThreadId);
+    }
+
+    public interface Listener {
+        /**
+         * Trigger when query is finished
+         */
+        void onQueryFinished(ConnectContext state);
+    }
+
+    public void registerListener(Listener listener) {
+        this.listeners.add(listener);
+    }
+
+    public void onQueryFinished() {
+        for (Listener listener : listeners) {
+            try {
+                listener.onQueryFinished(this);
+            } catch (Exception e) {
+                // ignore
+                LOG.warn("onQueryFinished error", e);
+            }
+        }
     }
 }

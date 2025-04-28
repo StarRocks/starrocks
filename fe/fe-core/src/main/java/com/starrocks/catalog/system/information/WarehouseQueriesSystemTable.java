@@ -38,6 +38,11 @@ public class WarehouseQueriesSystemTable {
                         .column("EST_COSTS_SLOTS", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("ALLOCATE_SLOTS", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("QUEUED_WAIT_SECONDS", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("QUERY", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("QUERY_START_TIME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("QUERY_END_TIME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("QUERY_DURATION", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("EXTRA_MESSAGE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .build(), TSchemaTableType.SCH_WAREHOUSE_QUERIES);
     }
 }

@@ -180,6 +180,18 @@ public abstract class BaseSlotManager {
     }
 
     /**
+     * The max query queue concurrency limit for the slot manager.
+     * NOTE:
+     * - SlotTracker will always to allocate slot when running queries is below than the concurrency limit.
+     * - If the concurrency limit is less than 0, it means that the slot tracker will not limit the concurrency but will be
+     * controlled
+     *  by another resource usage monitor.
+     */
+    public int getQueryQueueConcurrencyLimit(long warehouseId) {
+        return GlobalVariable.getQueryQueueConcurrencyLimit();
+    }
+
+    /**
      * Whether the slot manager supports query queue v2.
      */
     public boolean isEnableQueryQueueV2(long warehouseId) {

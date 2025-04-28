@@ -43,6 +43,7 @@ public class WarehouseMetricsSystemTable {
                         .column("SUM_REQUIRED_SLOTS", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("REMAIN_SLOTS", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("MAX_SLOTS", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("EXTRA_MESSAGE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .build(), TSchemaTableType.SCH_WAREHOUSE_METRICS);
     }
 }
