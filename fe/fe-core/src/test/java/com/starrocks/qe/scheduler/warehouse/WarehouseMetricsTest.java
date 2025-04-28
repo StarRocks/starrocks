@@ -20,6 +20,8 @@ package com.starrocks.qe.scheduler.warehouse;
 import com.starrocks.thrift.TGetWarehouseMetricsResponeItem;
 import org.junit.Test;
 
+import java.util.Optional;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class WarehouseMetricsTest {
@@ -42,7 +44,8 @@ public class WarehouseMetricsTest {
 
     @Test
     public void testCreateWarehouseMetrics() {
-        WarehouseMetrics warehouseMetrics = new WarehouseMetrics(1, "test", 1, 1, 1, 1, 1, 1, 1, 1, 1);
+        WarehouseMetrics warehouseMetrics = new WarehouseMetrics(1, "test", 1, 1, 1, 1, 1, 1, 1, 1, 1,
+                Optional.empty());
         TGetWarehouseMetricsResponeItem thrift = warehouseMetrics.toThrift();
         assertThat(thrift.getWarehouse_id()).isEqualTo("1");
         assertThat(thrift.getWarehouse_name()).isEqualTo("test");

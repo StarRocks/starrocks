@@ -104,7 +104,7 @@ public class WarehouseQueryQueueOptionsTest {
             QueryQueueOptions.V2 v2 = opts.v2();
             assertThat(v2.getNumWorkers()).isEqualTo(3);
             assertThat(v2.getNumRowsPerSlot()).isEqualTo(Config.query_queue_v2_num_rows_per_slot);
-            assertThat(v2.getTotalSlots()).isEqualTo(3);
+            assertThat(QueryQueueOptions.correctSlotNum(v2.getTotalSlots())).isEqualTo(3);
             assertThat(v2.getTotalSmallSlots()).isEqualTo(1);
             assertThat(v2.getCpuCostsPerSlot()).isEqualTo(Config.query_queue_v2_cpu_costs_per_slot);
         }

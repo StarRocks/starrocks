@@ -39,6 +39,7 @@ SchemaScanner::ColumnDesc WarehouseMetricsScanner::_s_columns[] = {
         {"SUM_REQUIRED_SLOTS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
         {"REMAIN_SLOTS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
         {"MAX_SLOTS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"EXTRA_MESSAGE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
 };
 
 WarehouseMetricsScanner::WarehouseMetricsScanner()
@@ -98,7 +99,8 @@ Status WarehouseMetricsScanner::fill_chunk(ChunkPtr* chunk) {
                            Slice(item.max_required_slots),
                            Slice(item.sum_required_slots),
                            Slice(item.remain_slots),
-                           Slice(item.max_slots)};
+                           Slice(item.max_slots),
+                           Slice(item.extra_message)};
     for (const auto& [slot_id, index] : slot_id_map) {
         Column* column = (*chunk)->get_column_by_slot_id(slot_id).get();
         column->append_datum(datum_array[slot_id - 1]);

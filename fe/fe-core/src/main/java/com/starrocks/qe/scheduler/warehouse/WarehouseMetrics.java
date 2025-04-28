@@ -17,9 +17,12 @@
 
 package com.starrocks.qe.scheduler.warehouse;
 
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.scheduler.slot.BaseSlotTracker;
 import com.starrocks.qe.scheduler.slot.QueryQueueOptions;
 import com.starrocks.thrift.TGetWarehouseMetricsResponeItem;
+
+import java.util.Optional;
 
 public class WarehouseMetrics {
     private final long warehouseId;
@@ -33,10 +36,12 @@ public class WarehouseMetrics {
     private final int sumRequiredSlots;
     private final long remainSlots;
     private final long maxSlots;
+    private final Optional<BaseSlotTracker.ExtraMessage> extraMessage;
 
     public WarehouseMetrics(long warehouseId, String warehouseName, long queuePendingLength, long queueRunningLength,
                             long maxQueueQueueLength, double earliestQueryWaitTime, long maxQueuePendingTimeSecond,
-                            int maxRequiredSlots, int sumRequiredSlots, long remainSlots, long maxSlots) {
+                            int maxRequiredSlots, int sumRequiredSlots, long remainSlots, long maxSlots,
+                            Optional<BaseSlotTracker.ExtraMessage> extraMessage) {
         this.warehouseId = warehouseId;
         this.warehouseName = warehouseName;
         this.queuePendingLength = queuePendingLength;
@@ -48,10 +53,12 @@ public class WarehouseMetrics {
         this.sumRequiredSlots = sumRequiredSlots;
         this.remainSlots = remainSlots;
         this.maxSlots = maxSlots;
+        this.extraMessage = extraMessage;
     }
 
     public static WarehouseMetrics empty() {
-        return new WarehouseMetrics(0, "", 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        return new WarehouseMetrics(0, "", 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                Optional.empty());
     }
 
     public static WarehouseMetrics create(BaseSlotTracker tracker) {
@@ -60,10 +67,11 @@ public class WarehouseMetrics {
         // to avoid negative remain slots
         long remainSlots = QueryQueueOptions.correctSlotNum(tracker.getRemainSlots().orElse(0));
         long maxSlots = tracker.getMaxSlots().map(s -> QueryQueueOptions.correctSlotNum(s)).orElse(0);
+        final Optional<BaseSlotTracker.ExtraMessage> extraMessage = tracker.getExtraMessage();
         return new WarehouseMetrics(tracker.getWarehouseId(), tracker.getWarehouseName(),
-                tracker.getQueuePendingLength(), tracker.getAllocatedLength(), tracker.getMaxQueueQueueLength(),
+                tracker.getQueuePendingLength(), tracker.getNumAllocatedSlots(), tracker.getMaxQueueQueueLength(),
                 tracker.getEarliestQueryWaitTimeSecond(), tracker.getMaxQueuePendingTimeSecond(),
-                maxRequestSlots, sumRequestSlots, remainSlots, maxSlots);
+                maxRequestSlots, sumRequestSlots, remainSlots, maxSlots, extraMessage);
     }
 
     public TGetWarehouseMetricsResponeItem toThrift() {
@@ -79,6 +87,9 @@ public class WarehouseMetrics {
         item.setSum_required_slots(String.valueOf(sumRequiredSlots));
         item.setRemain_slots(String.valueOf(remainSlots));
         item.setMax_slots(String.valueOf(maxSlots));
+        if (extraMessage != null && extraMessage.isPresent()) {
+            item.setExtra_message(GsonUtils.GSON.toJson(extraMessage.get()));
+        }
         return item;
     }
 }

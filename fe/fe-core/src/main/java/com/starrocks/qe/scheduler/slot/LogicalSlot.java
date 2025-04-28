@@ -14,15 +14,22 @@
 
 package com.starrocks.qe.scheduler.slot;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.ResourceGroup;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.plugin.AuditEvent;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
+import com.starrocks.qe.QueryState;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TResourceLogicalSlot;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.warehouse.Warehouse;
+import org.apache.parquet.Strings;
 
 import java.util.Map;
 import java.util.Objects;
@@ -64,10 +71,12 @@ public class LogicalSlot {
     private int pipelineDop;
     private Optional<Integer> allocatedNumPhysicalSlots = Optional.empty();
     private Optional<Double> queuedWaitSeconds = Optional.empty();
+    private Optional<ExtraMessage> extraMessage = Optional.empty();
 
     private State state = State.CREATED;
 
-    public LogicalSlot(TUniqueId slotId, String requestFeName, long warehouseId, long groupId, int numPhysicalSlots,
+    public LogicalSlot(TUniqueId slotId, String requestFeName,
+                       long warehouseId, long groupId, int numPhysicalSlots,
                        long expiredPendingTimeMs, long expiredAllocatedTimeMs, long feStartTimeMs,
                        int numFragments, int pipelineDop) {
         this.slotId = slotId;
@@ -295,5 +304,151 @@ public class LogicalSlot {
         }
         LogicalSlot that = (LogicalSlot) obj;
         return Objects.equals(slotId, that.slotId);
+    }
+
+    public static class ExtraMessage {
+        // to avoid too long query string, use a trimmed string
+        private static final int QUERY_TRIM_LENGTH = 16;
+
+        private final String query;
+        private final long queryStartTime;
+        private final long queryEndTime;
+        private final long queryDuration;
+
+        @SerializedName("QueryState")
+        private final QueryState.MysqlStateType queryState;
+        @SerializedName("PlanMemCostBytes")
+        private final long planMemCostBytes;
+        @SerializedName("MemCostBytes")
+        private final long memCostBytes;
+        @SerializedName("PredictMemBytes")
+        private final long predictMemBytes;
+
+        public ExtraMessage(ConnectContext connectContext) {
+            this.query = getOriginalStmt(connectContext);
+            this.queryStartTime = getQueryStartTime(connectContext);
+            // this is the time when the query is finished
+            this.queryEndTime = System.currentTimeMillis();
+            this.queryDuration = getQueryDuration(connectContext);
+            if (connectContext != null && connectContext.getState() != null) {
+                this.queryState = connectContext.getState().getStateType();
+            } else {
+                this.queryState = QueryState.MysqlStateType.OK;
+            }
+            this.planMemCostBytes = getPlanMemCostBytes(connectContext);
+            this.memCostBytes = getMemCostBytes(connectContext);
+            this.predictMemBytes = getPredictMemBytes(connectContext);
+        }
+
+        private String getOriginalStmt(ConnectContext connectContext) {
+            if (connectContext == null) {
+                return "";
+            }
+            StmtExecutor executor = connectContext.getExecutor();
+            if (executor == null) {
+                return "";
+            }
+            String originalStmt = executor.getOriginStmtInString();
+            // only substring when the length is greater than QUERY_TRIM_LENGTH
+            if (!Strings.isNullOrEmpty(originalStmt) && originalStmt.length() > QUERY_TRIM_LENGTH) {
+                originalStmt = originalStmt.trim().substring(0, QUERY_TRIM_LENGTH);
+            }
+            return originalStmt;
+        }
+
+        private long getQueryStartTime(ConnectContext connectContext) {
+            if (connectContext == null) {
+                return 0;
+            }
+            return connectContext.getStartTime();
+        }
+
+        private long getQueryDuration(ConnectContext connectContext) {
+            if (connectContext == null) {
+                return 0;
+            }
+            long endTime = getQueryEndTime();
+            long result = endTime - connectContext.getStartTime();
+            return result <= 0 ? 0 : result;
+        }
+
+        private long getPlanMemCostBytes(ConnectContext connectContext) {
+            if (connectContext == null || connectContext.getAuditEventBuilder() == null) {
+                return 0;
+            }
+            AuditEvent auditEvent = connectContext.getAuditEventBuilder().build();
+            return (long) auditEvent.planMemCosts;
+        }
+
+        private long getMemCostBytes(ConnectContext connectContext) {
+            if (connectContext == null || connectContext.getAuditEventBuilder() == null) {
+                return 0;
+            }
+            AuditEvent auditEvent = connectContext.getAuditEventBuilder().build();
+            return auditEvent.memCostBytes;
+        }
+
+        private long getPredictMemBytes(ConnectContext connectContext) {
+            if (connectContext == null || connectContext.getAuditEventBuilder() == null) {
+                return 0;
+            }
+            AuditEvent auditEvent = connectContext.getAuditEventBuilder().build();
+            return auditEvent.predictMemBytes;
+        }
+
+        public long getPlanMemCostBytes() {
+            return planMemCostBytes;
+        }
+
+        public String getQuery() {
+            return query;
+        }
+
+        public long getQueryDuration() {
+            return queryDuration;
+        }
+
+        public long getQueryEndTime() {
+            return queryEndTime;
+        }
+
+        public long getQueryStartTime() {
+            return queryStartTime;
+        }
+
+        public QueryState.MysqlStateType getQueryState() {
+            return queryState;
+        }
+
+        public long getMemCostBytes() {
+            return memCostBytes;
+        }
+
+        public long getPredictMemBytes() {
+            return predictMemBytes;
+        }
+    }
+
+    public void setExtraMessage(ExtraMessage extraMessage) {
+        this.extraMessage = Optional.of(extraMessage);
+    }
+
+    public Optional<ExtraMessage> getExtraMessage() {
+        return extraMessage;
+    }
+
+    public static class ConnectContextListener implements ConnectContext.Listener {
+        private final LogicalSlot logicalSlot;
+        public ConnectContextListener(LogicalSlot logicalSlot) {
+            this.logicalSlot = logicalSlot;
+        }
+
+        @Override
+        public void onQueryFinished(ConnectContext context) {
+            if (Config.max_query_queue_history_slots_number > 0 && this.logicalSlot != null) {
+                LogicalSlot.ExtraMessage extraMessage = new LogicalSlot.ExtraMessage(context);
+                this.logicalSlot.setExtraMessage(extraMessage);
+            }
+        }
     }
 }

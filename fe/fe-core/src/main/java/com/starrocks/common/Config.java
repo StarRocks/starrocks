@@ -727,6 +727,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Slot estimator strategy of queue based queries: MBE/PBE/MAX/MIN")
     public static String query_queue_slots_estimator_strategy = SlotEstimatorFactory.EstimatorPolicy.createDefault().name();
 
+    @ConfField(mutable = true, comment = "The max number of history allocated slots for a query queue")
+    public static int max_query_queue_history_slots_number = 0;
+
     /**
      * Used to estimate the number of slots of a query based on the cardinality of the Source Node. It is equal to the
      * cardinality of the Source Node divided by the configuration value and is limited to between [1, DOP*numBEs].
