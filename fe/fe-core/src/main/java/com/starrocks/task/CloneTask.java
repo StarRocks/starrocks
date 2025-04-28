@@ -63,6 +63,9 @@ public class CloneTask extends AgentTask {
     // Migration between different disks on the same backend
     private boolean isLocal = false;
 
+    // Rebuild persistent index at the end of clone task
+    private boolean needRebuildPkIndex = false;
+
     public CloneTask(long backendId, String destBackendHost, long dbId, long tableId, long partitionId, long indexId,
                      long tabletId, int schemaHash, List<TBackend> srcBackends, TStorageMedium storageMedium,
                      long visibleVersion, int timeoutS) {
@@ -105,6 +108,10 @@ public class CloneTask extends AgentTask {
         this.isLocal = isLocal;
     }
 
+    public void setNeedRebuildPkIndex(boolean needRebuildPkIndex) {
+        this.needRebuildPkIndex = needRebuildPkIndex;
+    }
+
     public TCloneReq toThrift() {
         TCloneReq request = new TCloneReq(tabletId, schemaHash, srcBackends);
         request.setStorage_medium(storageMedium);
@@ -116,7 +123,7 @@ public class CloneTask extends AgentTask {
         }
         request.setTimeout_s(timeoutS);
         request.setIs_local(isLocal);
-
+        request.setNeed_rebuild_pk_index(needRebuildPkIndex);
         return request;
     }
 
@@ -129,7 +136,7 @@ public class CloneTask extends AgentTask {
         sb.append(", src backend: ").append(srcBackends.get(0).getHost()).append(", src path hash: ")
                 .append(srcPathHash);
         sb.append(", dest backend: ").append(destBackendHost).append(", dest path hash: ").append(destPathHash);
-        sb.append(", is local: ").append(isLocal);
+        sb.append(", is local: ").append(isLocal).append(", need rebuild pk index: ").append(needRebuildPkIndex);
         return sb.toString();
     }
 }

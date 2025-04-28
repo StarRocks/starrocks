@@ -1336,6 +1336,14 @@ CONF_mBool(enable_pindex_read_by_page, "true");
 
 // check need to rebuild pindex or not
 CONF_mBool(enable_rebuild_pindex_check, "true");
+
+// Number of max persistent index load threads
+CONF_mInt32(pindex_load_thread_pool_num_max, "8");
+// Max wait time to rebuild persistent index in full clone
+CONF_mInt32(pindex_rebuild_clone_wait_seconds, "120");
+// Max wait time to rebuild persistent index in load (preload update state)
+CONF_mInt32(pindex_rebuild_load_wait_seconds, "20");
+
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");
 
