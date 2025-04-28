@@ -49,7 +49,7 @@ private:
 };
 
 void HyperScanBench::SetUp() {
-    auto column = BenchUtil::create_random_column(type_desc, _num_rows, false, false, 20);
+    auto column = BenchUtil::create_random_string_column(_num_rows, 20);
     auto binary = down_cast<BinaryColumn*>(column.get());
     Bytes& data = binary->get_bytes();
     std::random_device rd;

@@ -18,18 +18,18 @@
 
 #include <numeric>
 #include <random>
+#include <string>
 #include <type_traits>
+#include <vector>
 
 #include "column/column_helper.h"
 
 namespace starrocks {
 
-inline int kTestChunkSize = 4096;
-
 class BenchUtil {
 public:
     template <typename T>
-    static std::vector<T> create_series_data(int num_rows, T init_value, T delta_value) {
+    static std::vector<T> create_series_values(int num_rows, T init_value, T delta_value) {
         std::vector<T> elements(num_rows);
         elements[0] = init_value;
         for (int i = 1; i < num_rows; i++) {
@@ -39,7 +39,9 @@ public:
     }
 
     template <typename T>
-    static std::vector<T> create_random_data(int num_rows, T min_value, T max_value) {
+    static std::vector<T> create_random_values(int num_rows, T min_value, T max_value) {
+        static_assert(std::is_integral_v<T> || std::is_floating_point_v<T>,
+                      "Unsupported type. Must be integral or floating point.");
         std::random_device dev;
         std::mt19937 rng(dev());
         std::vector<T> elements(num_rows);
@@ -55,70 +57,78 @@ public:
                 elements[i] = dist(rng);
             }
         } else {
-            static_assert(false, "Unsupported type. Must be integral or floating point.");
         }
         return elements;
     }
 
-    static std::vector<string> create_random_string(int num_rows) {}
-
-    static ColumnPtr create_series_column(const TypeDescriptor& type_desc, int num_rows, bool nullable = true) {
-        DCHECK_EQ(TYPE_INT, type_desc.type);
-
-        ColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
-        std::vector<int32_t> elements(num_rows);
-        std::iota(elements.begin(), elements.end(), 0);
-        for (auto& x : elements) {
-            column->append_datum(Datum((int32_t)x));
-        }
-        return column;
-    }
-
-    static ColumnPtr create_random_column(const TypeDescriptor& type_desc, int num_rows, bool low_card, bool nullable,
-                                          size_t min_length = 0) {
-        DCHECK(type_desc.type == TYPE_INT || type_desc.type == TYPE_VARCHAR);
-
-        using UniformInt = std::uniform_int_distribution<std::mt19937::result_type>;
-        using PoissonInt = std::poisson_distribution<std::mt19937::result_type>;
-        ColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
-
-        std::random_device dev;
-        std::mt19937 rng(dev());
-        UniformInt uniform_int;
-        if (low_card) {
-            uniform_int.param(UniformInt::param_type(1, 100 * std::pow(2, num_rows)));
-        } else {
-            uniform_int.param(UniformInt::param_type(1, 100'000 * std::pow(2, num_rows)));
-        }
-        PoissonInt poisson_int(100'000);
+    static std::vector<string> create_lowcard_string(int num_rows, int cardinality, int min_len, int max_len) {
         static std::string alphanum =
                 "0123456789"
                 "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
                 "abcdefghijklmnopqrstuvwxyz";
 
-        auto gen_rand_str = [&]() {
-            int str_len = uniform_int(rng) % 20 + min_length;
-            int str_start = std::min(poisson_int(rng) % alphanum.size(), alphanum.size() - str_len);
-            Slice rand_str(alphanum.c_str() + str_start, str_len);
-            return rand_str;
-        };
+        std::uniform_int_distribution<int> dist_len(min_len, max_len);
+        std::uniform_int_distribution<int> dist_char(0, alphanum.size() - 1);
+        std::mt19937 rng(std::random_device{}());
+        std::vector<std::string> dictionary;
+
+        // generate dictionary values.
+        for (size_t i = 0; i < cardinality; ++i) {
+            int len = dist_len(rng);
+            std::string str;
+            for (int j = 0; j < len; ++j) {
+                str += alphanum[dist_char(rng)];
+            }
+            dictionary.push_back(str);
+        }
+
+        std::vector<string> elements(num_rows);
+        std::uniform_int_distribution<size_t> dist_index(0, cardinality - 1);
+        for (int i = 0; i < num_rows; ++i) {
+            elements[i] = dictionary[dist_index(rng)];
+        }
+        return elements;
+    }
+
+    static std::vector<string> create_random_string(int num_rows, int min_length, int max_len) {
+        std::vector<string> elements(num_rows);
+        static std::string alphanum =
+                "0123456789"
+                "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                "abcdefghijklmnopqrstuvwxyz";
+
+        std::random_device dev;
+        std::mt19937 rng(dev());
+        std::uniform_int_distribution<int> dist_len(min_length, max_len);
+        std::uniform_int_distribution<int> dist_char(0, alphanum.size() - 1);
 
         for (int i = 0; i < num_rows; i++) {
-            if (nullable) {
-                int32_t x = uniform_int(rng);
-                if (x % 1000 == 0) {
-                    column->append_nulls(1);
-                    continue;
-                }
+            int len = dist_len(rng);
+            std::string str;
+            for (int j = 0; j < len; ++j) {
+                str += alphanum[dist_char(rng)];
             }
-            if (type_desc.type == TYPE_INT) {
-                int32_t x = uniform_int(rng);
-                column->append_datum(Datum(x));
-            } else if (type_desc.type == TYPE_VARCHAR) {
-                column->append_datum(Datum(gen_rand_str()));
-            } else {
-                std::cerr << "not supported" << std::endl;
-            }
+            elements[i] = str;
+        }
+        return elements;
+    }
+
+    static ColumnPtr create_series_int_column(int num_rows) {
+        TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
+        ColumnPtr column = ColumnHelper::create_column(type_desc, false);
+        std::vector<int32_t> elements = create_series_values<int32_t>(num_rows, 0, 1);
+        for (auto& x : elements) {
+            column->append_datum(Datum(x));
+        }
+        return column;
+    }
+
+    static ColumnPtr create_random_string_column(int num_rows, int min_length) {
+        std::vector<string> elements = create_random_string(num_rows, min_length, 60);
+        TypeDescriptor type_desc = TypeDescriptor(TYPE_VARCHAR);
+        ColumnPtr column = ColumnHelper::create_column(type_desc, false);
+        for (auto& x : elements) {
+            column->append_datum(Datum(Slice(x)));
         }
         return column;
     }
