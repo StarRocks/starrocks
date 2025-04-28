@@ -455,7 +455,7 @@ public class MvRewriteHiveTest extends MVTestBase {
                 "FROM `hive0`.`partitioned_db`.`lineitem_par` as a \n " +
                 "GROUP BY " +
                 "`l_orderkey`, `l_suppkey`, `l_shipdate`;";
-        String plan = getFragmentPlan(query1);
+        String plan = getFragmentPlan(query1, "MV");
         PlanTestBase.assertNotContains(plan, "hive_partitioned_mv");
         dropMv("test", "hive_partitioned_mv");
     }
@@ -794,10 +794,8 @@ public class MvRewriteHiveTest extends MVTestBase {
 
 
         final List<TestListener> listeners = ImmutableList.of(
-                // enable mv
                 new EnableMVRewriteListener(),
                 new DisableMVRewriteListener(),
-
                 new EnableMVMultiStageRewriteListener(),
                 new DisableMVMultiStageRewriteListener()
         );
@@ -810,7 +808,8 @@ public class MvRewriteHiveTest extends MVTestBase {
                 {
                     String query = "SELECT o_orderkey, l_suppkey, l_shipdate, l_orderkey  " +
                             " FROM hive0.partitioned_db.lineitem_par as a " +
-                            " LEFT JOIN hive0.partitioned_db.orders as b ON b.o_orderkey=a.l_orderkey and l_shipdate='1998-01-01';";
+                            " LEFT JOIN hive0.partitioned_db.orders as b " +
+                            " ON b.o_orderkey=a.l_orderkey and l_shipdate='1998-01-01';";
 
                     String plan = getFragmentPlan(query);
                     PlanTestBase.assertContains(plan, "  4:HASH JOIN\n" +

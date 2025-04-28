@@ -464,10 +464,16 @@ public class QueryOptimizer extends Optimizer {
         }
         context.getQueryMaterializationContext().setCurrentRewriteStage(MvRewriteStrategy.MVRewriteStage.PHASE1);
 
+        scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PARTITION_PRUNE_RULES);
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
+
         // do rule based mv rewrite
         doRuleBasedMaterializedViewRewrite(tree, rootTaskContext);
+
+        MvUtils.getScanOperator(tree).forEach(scan -> {
+            scan.resetOpRuleBit(OP_PARTITION_PRUNED);
+        });
         new SeparateProjectRule().rewrite(tree, rootTaskContext);
         deriveLogicalProperty(tree);
     }
