@@ -428,30 +428,30 @@ In StarRocks the aggregation is implemented in distributed manner, which can be 
 |-------------------|-------------------------------|---------------------------|-------------------------------|
 | High-cardinality GROUP BY → oversize hash table | HashTableSize, HashTableMemoryUsage, and AggComputeTime balloon; query gets close to memory limit | Hash-aggregate builds one entry per group; if millions of groups land in RAM the hash table becomes CPU- and memory-bound and can even spill | Enable sorted streaming aggregate; Add pre-aggregated MVs or roll-ups; Reduce key width / cast to INT |
 | Data-skewed shuffle between partial → final stages | Huge gap in HashTableSize or InputRowCount across instances; one fragment’s AggComputeTime dwarfs others | A single backend receives most of the hot keys and blocks the pipeline | Add salt column in the aggregation; Use `DISTINCT [skew]` hint |
-| Expensive or DISTINCT-style aggregate functions (e.g. ARRAY_AGG, HLL_UNION, BITMAP_UNION, COUNT(DISTINCT)) | AggregateFunctions dominates operator time; CPU still near 100 % after hash build finishes | State-heavy aggregation functions keep sizable sketches and run SIMD-heavy loops each row | Pre-compute HLL/Bitmap columns at ingest; Use approx_count_distinct or multi_distinct_* where accuracy allows; |
-| Poor first-stage (partial) aggregation | Very large InputRowCount, but AggComputeTime is modest; PassThroughRowCount is high; upstream EXCHANGE shows massive BytesSent | If partial aggregation on each BE doesn't pre-aggregate the dataset well, most raw rows traverse the network and pile up in the final AGG | Confirm plan shows two- or three-stage aggregation; Rewrite query to simple GROUP BY keys so optimizer can push partial AGG; set streaming_preaggregation_mode = 'force_preaggregation' |
-| Heavy expression evaluation on GROUP BY keys | ExprComputeTime high relative to AggComputeTime | Complex functions on every row before hashing dominate CPU | Materialize computed keys in a sub-query or generated column; Use column dictionary / pre-encoded values; Project downstream instead |
+| Expensive or `DISTINCT`-style aggregate functions (e.g. `ARRAY_AGG`, `HLL_UNION`, `BITMAP_UNION`, `COUNT(DISTINCT)`) | AggregateFunctions dominates operator time; CPU still near 100 % after hash build finishes | State-heavy aggregation functions keep sizable sketches and run SIMD-heavy loops each row | Pre-compute HLL/Bitmap columns at ingest; Use approx_count_distinct or multi_distinct_* where accuracy allows; |
+| Poor first-stage (partial) aggregation | Very large InputRowCount, but AggComputeTime is modest; PassThroughRowCount is high; upstream EXCHANGE shows massive BytesSent | If partial aggregation on each BE doesn't pre-aggregate the dataset well, most raw rows traverse the network and pile up in the final AGG | Confirm plan shows two- or three-stage aggregation; Rewrite query to simple `GROUP BY` keys so optimizer can push partial AGG; set streaming_preaggregation_mode = 'force_preaggregation' |
+| Heavy expression evaluation on `GROUP BY` keys | ExprComputeTime high relative to `AggComputeTime` | Complex functions on every row before hashing dominate CPU | Materialize computed keys in a sub-query or generated column; Use column dictionary / pre-encoded values; Project downstream instead |
 
 **Metrics List**
 
 | Metric | Description |
 |--------|-------------|
-| GroupingKeys | GROUP BY columns. |
-| AggregateFunctions | Time taken for aggregate function calculations. |
-| AggComputeTime | Time for AggregateFunctions + Group By. |
-| ChunkBufferPeakMem | Peak memory usage of the Chunk Buffer. |
-| ChunkBufferPeakSize | Peak size of the Chunk Buffer. |
-| ExprComputeTime | Time for expression computation. |
-| ExprReleaseTime | Time for expression release. |
-| GetResultsTime | Time to extract aggregate results. |
-| HashTableSize | Size of the Hash Table. |
-| HashTableMemoryUsage | Memory size of the Hash Table. |
-| InputRowCount | Number of input rows. |
-| PassThroughRowCount | In Auto mode, the number of data rows processed in streaming mode after low aggregation leads to degradation to streaming mode. |
-| ResultAggAppendTime | Time taken to append aggregate result columns. |
-| ResultGroupByAppendTime | Time taken to append Group By columns. |
-| ResultIteratorTime | Time to iterate over the Hash Table. |
-| StreamingTime | Processing time in streaming mode. |
+| `GroupingKeys` | `GROUP BY` columns. |
+| `AggregateFunctions` | Time taken for aggregate function calculations. |
+| `AggComputeTime` | Time for AggregateFunctions + Group By. |
+| `ChunkBufferPeakMem` | Peak memory usage of the Chunk Buffer. |
+| `ChunkBufferPeakSize` | Peak size of the Chunk Buffer. |
+| `ExprComputeTime` | Time for expression computation. |
+| `ExprReleaseTime` | Time for expression release. |
+| `GetResultsTime` | Time to extract aggregate results. |
+| `HashTableSize` | Size of the Hash Table. |
+| `HashTableMemoryUsage` | Memory size of the Hash Table. |
+| `InputRowCount` | Number of input rows. |
+| `PassThroughRowCount` | In Auto mode, the number of data rows processed in streaming mode after low aggregation leads to degradation to streaming mode. |
+| `ResultAggAppendTime` | Time taken to append aggregate result columns. |
+| `ResultGroupByAppendTime` | Time taken to append Group By columns. |
+| `ResultIteratorTime` | Time to iterate over the Hash Table. |
+| `StreamingTime` | Processing time in streaming mode. |
 
 ### Join Operator
 
@@ -463,9 +463,9 @@ During execution the join operator is split into Build (hash-table construction)
 
 **Join Strategies**
 
-StarRocks relies on a vectorised, pipeline-friendly hash-join core that can be wired into four physical strategies the cost-based optimiser weighs at plan time:
+StarRocks relies on a vectorized, pipeline-friendly hash-join core that can be wired into four physical strategies the cost-based optimizer weighs at plan time:
 
-| Strategy | When the optimiser picks it | What makes it fast |
+| Strategy | When the optimizer picks it | What makes it fast |
 |----------|-----------------------------|---------------------|
 | Colocate Join | Both tables belong to the same colocation group (identical bucket keys, bucket count, and replica layout).  ￼ | No network shuffle: each BE joins only its local buckets. |
 | Bucket-Shuffle Join | One of join tables has the same buckket key with join key | Only need to shuffle one join table, which can reduce the network cost |
@@ -480,9 +480,9 @@ StarRocks relies on a vectorised, pipeline-friendly hash-join core that can be w
 | Large join probe time | High SearchHashTableTime | Inefficient data clustering can lead to poor CPU cache locality | Optimize data clustering by sorting the probe table on join keys |
 | Excessive Output Columns | High OutputBuildColumnTime or OutputProbeColumnTime | The processing of numerous output columns necessitates substantial data copying, which can be CPU-intensive | Optimize output columns by reducing their number; Exclude heavy columns from output; Consider retrieving unnecessary columns post-join |
 | Data skew after shuffle | One fragment’s ProbeRows ≫ others; OperatorTotalTime highly unbalanced | A single BE receives most hot keys; others go idle | • Use higher-cardinality key • pad composite key (concat(key,'-',mod(id,16))) |
-| Broadcasting a not-so-small table | Join type is BROADCAST; BytesSent and SendBatchTime soar on every BE | O(N²) network traffic and deserialisation | • Let optimiser pick shuffle (SET broadcast_row_limit = lower) • Force shuffle hint • Analyze table to collect statistics.  |
+| Broadcasting a not-so-small table | Join type is BROADCAST; BytesSent and SendBatchTime soar on every BE | O(N²) network traffic and deserialisation | • Let optimizer pick shuffle (`SET broadcast_row_limit = lower`) • Force shuffle hint • Analyze table to collect statistics.  |
 | Missing or ineffective runtime filters | JoinRuntimeFilterEvaluate small, scans still read full table | Scans push all rows into probe side, wasting CPU & I/O | Rewrite join predicate to pure equality so RF can be generated; Avoid doing type casting in join key |
-| Non-equi (nested-loop) join sneak-in | Join node shows CROSS or NESTLOOP; ProbeRows*BuildRows skyrockets | O(rows×rows) comparisons; no hash key | • Add proper equality predicate or pre-filter • Materialise predicate result in temporary table, then re-join |
+| Non-equi (nested-loop) join sneak-in | Join node shows `CROSS` or `NESTLOOP`; ProbeRows*BuildRows skyrockets | O(rows×rows) comparisons; no hash key | • Add proper equality predicate or pre-filter • Materialise predicate result in temporary table, then re-join |
 | Hash-key casting / expression cost | High ExprComputeTime; hash function time rivals probe time | Keys must be cast or evaluated per row before hashing | • Store keys with matching types • Pre-compute complex expressions into generated columns |
 | No colocation on large join | Shuffle join between fact and dimension though buckets match | Random placement forces shuffle every query | • Put two tables in the same colocation group • Verify identical bucket count/key before ingest |
 
@@ -517,7 +517,7 @@ StarRocks relies on a vectorised, pipeline-friendly hash-join core that can be w
 | AggregateFunctions | Aggregate functions. |
 | ColumnResizeTime | Time taken for column resizing. |
 | PartitionSearchTime | Time taken to search partition boundaries. |
-| PeerGroupSearchTime | Time taken to search Peer Group boundaries. Meaningful only when the window type is RANGE. |
+| PeerGroupSearchTime | Time taken to search Peer Group boundaries. Meaningful only when the window type is `RANGE`. |
 | PeakBufferedRows | Peak number of rows in the buffer. |
 | RemoveUnusedRowsCount | Number of times unused buffers are removed. |
 | RemoveUnusedTotalRows | Total number of rows removed from unused buffers. |
@@ -636,3 +636,4 @@ OlapTableSink Operator is responsible for performing the `INSERT INTO <table>` o
 | RpcServerSideTime | Total RPC time consumption for loading recorded by the server side. |
 | PrepareDataTime | Total time consumption for the data preparation phase, including data format conversion and data quality check. |
 | SendDataTime | Local time consumption for sending the data, including time for serializing and compressing data, and for submitting tasks to the sender queue. |
+
