@@ -77,13 +77,16 @@ int init_test_env(int argc, char** argv) {
     std::vector<StorePath> paths;
     paths.emplace_back(config::storage_root_path);
 
-    auto compaction_mem_tracker = std::make_unique<MemTracker>();
-    auto update_mem_tracker = std::make_unique<MemTracker>();
+    auto* global_env = GlobalEnv::GetInstance();
+    config::disable_storage_page_cache = true;
+    auto st = global_env->init();
+    CHECK(st.ok()) << st;
+
     StorageEngine* engine = nullptr;
     EngineOptions options;
     options.store_paths = paths;
-    options.compaction_mem_tracker = compaction_mem_tracker.get();
-    options.update_mem_tracker = update_mem_tracker.get();
+    options.compaction_mem_tracker = global_env->compaction_mem_tracker();
+    options.update_mem_tracker = global_env->update_mem_tracker();
     Status s = StorageEngine::open(options, &engine);
     if (!s.ok()) {
         butil::DeleteFile(storage_root, true);
@@ -92,10 +95,6 @@ int init_test_env(int argc, char** argv) {
         return -1;
     }
     engine->start_schedule_apply_thread();
-    auto* global_env = GlobalEnv::GetInstance();
-    config::disable_storage_page_cache = true;
-    auto st = global_env->init();
-    CHECK(st.ok()) << st;
 
     // Pagecache is turned off by default, and some test cases require cache to be turned on,
     // and some test cases do not. For easy management, we turn cache off during unit test
