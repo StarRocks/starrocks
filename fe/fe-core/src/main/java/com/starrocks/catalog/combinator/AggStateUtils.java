@@ -117,7 +117,11 @@ public class AggStateUtils {
             return false;
         }
         // bitmap_union_int
-        return !FunctionSet.BITMAP_UNION_INT.equalsIgnoreCase(fnName) || aggFunc.getArgs()[0].isIntegerType();
+        if (FunctionSet.BITMAP_UNION_INT.equalsIgnoreCase(fnName) && !aggFunc.getArgs()[0].isIntegerType()) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -190,9 +194,9 @@ public class AggStateUtils {
             }
             result = AggStateMergeCombinator.of(argFn);
         } else if (func instanceof AggStateIf) {
-            // correct aggregate function for type correction
-            // `_if`'s input types are boolean + original input types
-            String aggFuncName = AggStateUtils.getAggFuncNameOfCombinator(func.functionName());
+            // correct aggregate function for type correction for deicaml
+            // `_if`'s input types are original input types + boolean
+            String aggFuncNameWithoutIf = AggStateUtils.getAggFuncNameOfCombinator(func.functionName());
 
             Type[] argumentTypesWithoutIf = Arrays.copyOfRange(argumentTypes, 0, argumentTypes.length - 1);
 
@@ -206,13 +210,14 @@ public class AggStateUtils {
 
             Boolean[] argumentIsConstantsWithoutIf =
                     Arrays.copyOfRange(argumentIsConstants, 0, argumentIsConstants.length - 1);
-            // find the 
-            Function argFn = FunctionAnalyzer.getAnalyzedAggregateFunction(session, aggFuncName,
+            // find the function without if, then rebuild the agg_if using argFnWithoutIf
+            // the different bwtween input agg_if and new agg_if is decimal's precision and scale will be added
+            Function argFnWithoutIf = FunctionAnalyzer.getAnalyzedAggregateFunction(session, aggFuncNameWithoutIf,
                     functionParamsWithoutIf, argumentTypesWithoutIf, argumentIsConstantsWithoutIf, pos);
-            if (argFn == null) {
+            if (argFnWithoutIf == null) {
                 return null;
             }
-            if (!(argFn instanceof AggregateFunction aggFunc)) {
+            if (!(argFnWithoutIf instanceof AggregateFunction aggFunc)) {
                 return null;
             }
             result = AggStateIf.of(aggFunc);

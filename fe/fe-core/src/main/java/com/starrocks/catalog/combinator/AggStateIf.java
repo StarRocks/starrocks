@@ -70,6 +70,8 @@ public final class AggStateIf extends AggregateFunction {
         return new AggStateIf(this);
     }
 
+    // this is used for complex type
+    // called by generatePolymorphicFunction
     @Override
     public AggregateFunction withNewTypes(List<Type> newArgTypes, Type newRetType) {
         // NOTE: It's fine that only changes agg state function's arg types and return type but inner agg state desc's,

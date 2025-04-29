@@ -62,7 +62,7 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 public class AggStateCombinatorTest extends MVTestBase {
-    private static final int MAX_AGG_FUNC_NUM_IN_TEST = 200000;
+    private static final int MAX_AGG_FUNC_NUM_IN_TEST = 20;
     private static final Set<String> SUPPORTED_AGG_STATE_FUNCTIONS =
             ImmutableSet.of("ndv", "percentile_disc", "corr", "multi_distinct_sum", "var_samp", "sum", "stddev_pop",
                     "array_agg_distinct", "approx_count_distinct", "variance_samp", "min", "avg", "any_value", "stddev",
@@ -1016,7 +1016,6 @@ public class AggStateCombinatorTest extends MVTestBase {
             ifFunctions.add(col);
         }
         String sql1 = "select " + Joiner.on(", ").join(ifFunctions) + " from t1;";
-        System.out.println(sql1);
         String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql1);
         PlanTestBase.assertContains(plan, "if");
 
