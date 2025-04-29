@@ -216,6 +216,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_ADD_MULTI_COLUMN_STATS_META, MultiColumnStatsMeta.class)
             .put(OperationType.OP_REMOVE_MULTI_COLUMN_STATS_META, MultiColumnStatsMeta.class)
             .put(OperationType.OP_MODIFY_HIVE_TABLE_COLUMN, ModifyTableColumnOperationLog.class)
+            .put(OperationType.OP_MODIFY_COLUMN_COMMENT, ModifyColumnCommentLog.class)
             .put(OperationType.OP_CREATE_CATALOG, Catalog.class)
             .put(OperationType.OP_DROP_CATALOG, DropCatalogLog.class)
             .put(OperationType.OP_ALTER_CATALOG, AlterCatalogLog.class)
