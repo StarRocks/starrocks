@@ -18,7 +18,6 @@ import com.google.api.client.util.Lists;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.epack.warehouse.WarehouseProperty;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.WarehouseManager;
