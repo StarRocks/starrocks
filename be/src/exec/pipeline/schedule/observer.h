@@ -110,6 +110,8 @@ public:
         }
     }
 
+    void detach_observers() { _observers.clear(); }
+
     void notify_source_observers() {
         for (auto* observer : _observers) {
             observer->source_trigger();

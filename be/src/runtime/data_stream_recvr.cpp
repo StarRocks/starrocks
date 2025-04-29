@@ -282,7 +282,6 @@ void DataStreamRecvr::close() {
     if (_closed) {
         return;
     }
-
     for (auto& _sender_queue : _sender_queues) {
         _sender_queue->close();
     }
