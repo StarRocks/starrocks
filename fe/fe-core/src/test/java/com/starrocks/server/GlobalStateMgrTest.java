@@ -50,7 +50,6 @@ import com.starrocks.journal.JournalException;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.persist.EditLog;
-import com.starrocks.persist.ImageFormatVersion;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.OperationType;
 import com.starrocks.qe.ConnectContext;
@@ -88,7 +87,7 @@ public class GlobalStateMgrTest {
     public void testSaveLoadHeader() throws Exception {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
 
-        ImageWriter imageWriter = new ImageWriter("", ImageFormatVersion.v2, 0);
+        ImageWriter imageWriter = new ImageWriter("", 0);
         // test json-format header
         UtFrameUtils.PseudoImage image2 = new UtFrameUtils.PseudoImage();
         imageWriter.setOutputStream(image2.getDataOutputStream());
@@ -252,6 +251,7 @@ public class GlobalStateMgrTest {
         private final boolean throwException;
 
         public MyGlobalStateMgr(boolean throwException) {
+            super();
             this.throwException = throwException;
         }
 
@@ -355,7 +355,7 @@ public class GlobalStateMgrTest {
         }
 
         GlobalStateMgr newState = new MyGlobalStateMgr(false);
-        newState.loadImage(Config.meta_dir + GlobalStateMgr.IMAGE_DIR);
+        newState.loadImage();
         Table table = newState.getLocalMetastore().getTable("db1", "t1");
         Assert.assertNotNull(table);
         table = newState.getLocalMetastore().getTable("db2", "t1");
