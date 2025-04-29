@@ -1136,26 +1136,7 @@ public class GlobalStateMgr {
         return Config.meta_dir + IMAGE_DIR;
     }
 
-<<<<<<< HEAD
-    public String getImageDir() {
-        return imageDir;
-    }
-
-    private void setMetaDir() {
-        this.imageDir = Config.meta_dir + IMAGE_DIR;
-        nodeMgr.setImageDir(imageDir);
-    }
-
     public void initialize(String[] args) throws Exception {
-        // set meta dir first.
-        // we already set these variables in constructor. but GlobalStateMgr is a singleton class.
-        // so they may be set before Config is initialized.
-        // set them here again to make sure these variables use values in fe.conf.
-        setMetaDir();
-
-=======
-    public void initialize(String helpers) throws Exception {
->>>>>>> c86907019b ([Enhancement] Delete the read/write logic of the v1 version of the global state image. (#58376))
         // must judge whether it is first time start here before initializing GlobalStateMgr.
         // Possibly remove clusterId and role to ensure that the system is not left in a half-initialized state.
         boolean isFirstTimeStart = nodeMgr.isVersionAndRoleFilesNotExist();
