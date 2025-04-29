@@ -81,7 +81,7 @@ SHOW USERS;
 
 您可以通过指定用户身份（user identity）、认证方式和默认角色来创建用户。
 
-StarRocks 支持使用用户密码登录或 LDAP 认证作为用户认证方式。有关 StarRocks 认证方式的更多信息，请参阅 [用户认证](./Authentication.md)。有关创建用户的更多操作说明，请参阅 [CREATE USER](../../sql-reference/sql-statements/account-management/CREATE_USER.md)。
+StarRocks 支持使用用户密码登录或 LDAP 认证作为用户认证方式。有关 StarRocks 认证方式的更多信息，请参阅 [用户认证](./auth/ldap_authentication.md)。有关创建用户的更多操作说明，请参阅 [CREATE USER](../../sql-reference/sql-statements/account-management/CREATE_USER.md)。
 
 以下示例创建用户 `jack`，仅允许其从 IP 地址 `172.10.1.10` 进行连接，为其设置密码为 `12345`，并将角色 `example_role` 分配给它作为其默认角色：
 

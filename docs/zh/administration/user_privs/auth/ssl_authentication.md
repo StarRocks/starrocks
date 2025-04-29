@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-sidebar_position: 10
+sidebar_position: 20
 ---
 
 # SSL 认证
@@ -65,7 +65,7 @@ verifyServerCertificate=false
 
 ## LDAP 认证
 
-LDAP 认证的配置方法已在官方文档 [设置用户认证](./Authentication.md) 中介绍。
+LDAP 认证的配置方法已在官方文档 [设置用户认证](./ldap_authentication.md) 中介绍。
 
 对于 JDBC 连接，由于 StarRocks 已支持 SSL 认证，无需自定义 `AuthPlugin`，可直接使用 JDBC 提供的 `MysqlClearPasswordPlugin`。
 

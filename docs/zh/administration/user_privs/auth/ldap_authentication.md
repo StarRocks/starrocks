@@ -1,17 +1,15 @@
 ---
 displayed_sidebar: docs
-sidebar_position: 50
+sidebar_position: 10
 ---
 
-# 设置用户认证
-
-本文介绍如何在 StarRocks 中设置用户认证 (authentication)。
-
-## 设置 LDAP 认证
+# LDAP 认证
 
 除传统用户名+密码认证方式外，StarRocks 还支持 Lightweight Directory Access Protocol（LDAP）认证。
 
-### 开启 LDAP 认证
+本文介绍如何在 StarRocks 中使用 LDAP 手动创建和验证用户。有关如何使用 Security Integration 将 StarRocks 与 LDAP 服务集成，请参阅 [使用 Security Integration 认证](./security_integration.md)。有关如何在 LDAP 服务中验证用户组的更多信息，请参阅 [验证用户组](./group_provider.md)。
+
+## 开启 LDAP 认证
 
 在 FE 节点的配置文件 **fe.conf** 中添加以下配置项。
 
@@ -35,7 +33,7 @@ authentication_ldap_simple_bind_root_dn =
 authentication_ldap_simple_bind_root_pwd =
 ```
 
-### 创建用户
+## 创建用户
 
 完成以上配置后，您还需要在 StarRocks 中创建相应用户，并指定其认证方式及认证信息。
 
@@ -51,13 +49,13 @@ CREATE USER tom IDENTIFIED WITH authentication_ldap_simple AS 'uid=tom,ou=compan
 
 如果您希望通过 StarRocks 直接在 LDAP 系统中检索用户的方式认证登录的用户，则在完成以上**额外配置后**，您无需在创建用户时指定用户在 LDAP 中的 DN。该用户在登录时，StarRocks 将在 LDAP 系统中检索该用户，如果有且仅有一个匹配结果，则认证成功果。
 
-### 认证用户
+## 认证用户
 
 使用 LDAP 认证时，您需要通过客户端传递明文密码给 StarRocks。
 
 典型客户端配置明文密码传递的方式包括以下三种。
 
-* **MySQL 客户端**
+### MySQL 客户端
 
 ```shell
 mysql -u<user_identity> -P<query_port> -h<fe_host> -p --default-auth mysql_clear_password --enable-cleartext-plugin
@@ -68,6 +66,8 @@ mysql -u<user_identity> -P<query_port> -h<fe_host> -p --default-auth mysql_clear
 ```shell
 mysql -utom -P9030 -h127.0.0.1 -p --default-auth mysql_clear_password --enable-cleartext-plugin
 ```
+
+### JDBC 客户端
 
 * **JDBC**
 

@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-sidebar_position: 10
+sidebar_position: 20
 keywords: ['ssl', 'tls']
 ---
 
@@ -66,7 +66,7 @@ To disable SSL authentication, follow these steps:
 
 ## LDAP authentication
 
-See [Authentication methods](./Authentication.md) for detailed instructions on enabling LDAP authentication.
+See [Authentication methods](./ldap_authentication.md) for detailed instructions on enabling LDAP authentication.
 
 For JDBC connections, since StarRocks supports SSL authentication, you do not need to customize `AuthPlugin`. You can use the built-in `MysqlClearPasswordPlugin`.
 

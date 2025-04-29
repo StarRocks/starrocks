@@ -81,7 +81,7 @@ Users with the system-defined role `user_admin` can create users, alter users, a
 
 You can create a user by specifying the user identity, authentication method, and default role.
 
-StarRocks supports user authentication with login credentials or LDAP authentication. For more information about StarRocks' authentication, see [Authentication](./Authentication.md). For more information and advanced instructions on creating a user, see [CREATE USER](../../sql-reference/sql-statements/account-management/CREATE_USER.md).
+StarRocks supports user authentication with login credentials or LDAP authentication. For more information about StarRocks' authentication, see [Authentication](./auth/ldap_authentication.md). For more information and advanced instructions on creating a user, see [CREATE USER](../../sql-reference/sql-statements/account-management/CREATE_USER.md).
 
 The following example creates the user `jack`, allows it to connect only from the IP address `172.10.1.10`, sets the password to `12345` for it, and assigns the role `example_role` to it as its default role:
 
