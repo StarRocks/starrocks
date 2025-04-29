@@ -36,6 +36,12 @@ import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
+import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.Function;
+>>>>>>> ad719f55b8 ([BugFix] Fix mv refresh failed with external tables (#58506))
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
@@ -175,7 +181,7 @@ public class MaterializedViewAnalyzer {
                 continue;
             }
 
-            if (!FeConstants.isReplayFromQueryDump && isExternalTableFromResource(table)) {
+            if (!FeConstants.isReplayFromQueryDump && !isSupportedExternalTables(table)) {
                 throw new SemanticException(
                         "Only supports creating materialized views based on the external table " +
                                 "which created by catalog", tableNameInfo.getPos());
@@ -189,14 +195,38 @@ public class MaterializedViewAnalyzer {
         return SUPPORTED_TABLE_TYPE.contains(table.getType()) || table instanceof OlapTable;
     }
 
-    private static boolean isExternalTableFromResource(Table table) {
+    /**
+     * Check if the table is external table from resource.
+     */
+    public static boolean isExternalTableFromResource(Table table) {
+        // external olap table is not supported to use for creating materialized view.
+        if (table instanceof ExternalOlapTable) {
+            return true;
+        }
+        // olap table is not external table
         if (table instanceof OlapTable) {
-            return false;
-        } else if (table instanceof JDBCTable || table instanceof MysqlTable) {
             return false;
         }
         String catalog = table.getCatalogName();
         return Strings.isBlank(catalog) || isResourceMappingCatalog(catalog);
+    }
+
+    /**
+     * We can support some external tables for creating materialized view.
+     * For more details see: https://github.com/StarRocks/starrocks/issues/19581
+     * @param table : table to check
+     * @return true if the external table is supported for materialized view
+     */
+    public static boolean isSupportedExternalTables(Table table) {
+        // if the table is not external table, return true directly
+        if (!isExternalTableFromResource(table)) {
+            return true;
+        }
+        // only jdbc external table can be used for creating mv
+        if (table instanceof JDBCTable || table instanceof MysqlTable) {
+            return true;
+        }
+        return false;
     }
 
     private static void processViews(QueryStatement queryStatement, Set<BaseTableInfo> baseTableInfos,
@@ -780,6 +810,7 @@ public class MaterializedViewAnalyzer {
 
         private void checkPartitionColumnWithBaseTable(CreateMaterializedViewStatement statement,
                                                        Map<TableName, Table> tableNameTableMap) {
+<<<<<<< HEAD
             SlotRef slotRef = getSlotRef(statement.getPartitionRefTableExpr());
             Table table = tableNameTableMap.get(slotRef.getTblNameWithoutAnalyzed());
 
@@ -799,6 +830,47 @@ public class MaterializedViewAnalyzer {
             } else {
                 throw new SemanticException("Materialized view with partition does not support base table type : %s",
                         table.getType());
+=======
+            List<Expr> partitionRefTableExprs = statement.getPartitionRefTableExpr();
+            for (int i = 0; i < partitionRefTableExprs.size(); i++) {
+                Expr expr = partitionRefTableExprs.get(i);
+                SlotRef slotRef = getSlotRef(expr);
+                TableName tableName = slotRef.getTblNameWithoutAnalyzed();
+                Table table = tableNameTableMap.get(tableName);
+                if (table == null) {
+                    throw new SemanticException("Materialized view partition expression %s could only ref to base table",
+                            slotRef.toSql());
+                }
+                if (!FeConstants.isReplayFromQueryDump && isExternalTableFromResource(table)) {
+                    throw new SemanticException("Materialized view partition expression %s could not ref to external table",
+                            slotRef.toSql());
+                }
+                if (table.isNativeTableOrMaterializedView()) {
+                    OlapTable olapTable = (OlapTable) table;
+                    if (changedPartitionByExprs.containsKey(i)) {
+                        // if generated column has changed partition by expr, use the new partition by expr
+                        Expr newPartitionByExpr = changedPartitionByExprs.get(i);
+                        if (!(newPartitionByExpr instanceof SlotRef)) {
+                            throw new SemanticException("Materialized view partition expression %s could only ref base table's " +
+                                    "partition expression without any change", slotRef.toSql());
+                        }
+                        slotRef = (SlotRef) newPartitionByExpr;
+                    }
+                    checkPartitionColumnWithBaseOlapTable(slotRef, olapTable);
+                } else if (table.isHiveTable() || table.isHudiTable() || table.isOdpsTable()) {
+                    checkPartitionColumnWithBaseHMSTable(slotRef, table);
+                } else if (table.isIcebergTable()) {
+                    checkPartitionColumnWithBaseIcebergTable(expr, slotRef, (IcebergTable) table);
+                } else if (table.isJDBCTable()) {
+                    checkPartitionColumnWithBaseJDBCTable(slotRef, (JDBCTable) table);
+                } else if (table.isPaimonTable()) {
+                    checkPartitionColumnWithBasePaimonTable(slotRef, (PaimonTable) table);
+                } else {
+                    throw new SemanticException("Materialized view with partition does not support base table type : %s",
+                            table.getType());
+                }
+                replaceTableAlias(slotRef, statement, tableNameTableMap);
+>>>>>>> ad719f55b8 ([BugFix] Fix mv refresh failed with external tables (#58506))
             }
             replaceTableAlias(slotRef, statement, tableNameTableMap);
         }
