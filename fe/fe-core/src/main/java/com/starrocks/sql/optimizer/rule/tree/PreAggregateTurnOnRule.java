@@ -355,8 +355,6 @@ public class PreAggregateTurnOnRule implements TreeRewriteRule {
                     return false;
                 }
             }
-
-
             if ((FunctionSet.BITMAP_UNION.equalsIgnoreCase(queryAggFuncName)
                     || FunctionSet.BITMAP_UNION_COUNT.equalsIgnoreCase(queryAggFuncName))) {
                 if (!AggregateType.BITMAP_UNION.equals(column.getAggregationType())) {
