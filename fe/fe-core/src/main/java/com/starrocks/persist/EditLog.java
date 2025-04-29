@@ -354,6 +354,11 @@ public class EditLog {
                     globalStateMgr.getAlterJobMgr().alterView(info, true);
                     break;
                 }
+                case OperationType.OP_SET_VIEW_SECURITY_LOG: {
+                    AlterViewInfo info = (AlterViewInfo) journal.data();
+                    globalStateMgr.getAlterJobMgr().setViewSecurity(info, true);
+                    break;
+                }
                 case OperationType.OP_RENAME_PARTITION_V2: {
                     TableInfo info = (TableInfo) journal.data();
                     globalStateMgr.getLocalMetastore().replayRenamePartition(info);
