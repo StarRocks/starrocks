@@ -341,15 +341,10 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_decimal(FunctionContext* con
     bool c0_is_const = false;
     PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
     const int size = c0->size();
-    std::cout << std::endl;
-    std::cout << "c0 int val: " << c0->get(0).get_val().index() << std::endl;
-    std::cout << "c1 int val: " << c1->get(0).get_val().index() << std::endl;
     int64_t width = c1->get(0).get_int32();
     auto decimalv3_col = ColumnHelper::cast_to_raw<Type>(c0);
-    std::cout << "orogin size:" << c0->size() << " decimal col size:" << decimalv3_col->size() << std::endl;
     const int32_t original_scale = decimalv3_col->scale();
     const int32_t original_precision = decimalv3_col->precision();
-    std::cout << c0->get(0).get_val().index() << std::endl;
     uint8_t* raw_null_flags = null_flags->get_data().data();
     RunTimeCppType<Type> max_val = 1;
     int32 pow = original_precision;
@@ -358,7 +353,6 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_decimal(FunctionContext* con
         pow--;
     }
 
-    std::cout << "TYPE:" << Type << std::endl;
     RunTimeCppType<Type>* raw_c0 = decimalv3_col->get_data().data();
     ColumnPtr res = RunTimeColumnType<Type>::create(original_precision, original_scale);
     res->resize_uninitialized(size);
@@ -366,9 +360,6 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_decimal(FunctionContext* con
     RunTimeCppType<Type>* raw_res = ColumnHelper::cast_to_raw<Type>(res)->get_data().data();
     // If c2 is not const, than we need to keep the originl scale
     if (c0_is_const) {
-        std::cout << ColumnHelper::cast_to_raw<Type>(c0)->get_data().size()
-                  // << "transform iceberg truncate c0:" << raw_c0[0] << " c1:" << raw_c1[0]
-                  << " scale:" << original_scale << " precision:" << original_precision << std::endl;
         raw_res[0] = raw_c0[0] - ((raw_c0[0] % width) + width) % width;
         res->resize(1);
         res = ConstColumn::create(std::move(res), size);
@@ -381,7 +372,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_decimal(FunctionContext* con
     for (int i = 0; i < size; i++) {
         if (raw_null_flags[i] != 1 && ABS(raw_res[i]) >= max_val) {
             std::stringstream error;
-            error << "Truncate to decimal( " << original_precision << ", " << original_scale
+            error << "Truncate to decimal(" << original_precision << ", " << original_scale
                   << ") failed, because the result is overflow.";
             context->set_error(error.str().c_str());
             return Status::RuntimeError(error.str());
@@ -411,7 +402,6 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_int(FunctionContext* context
 
     uint8_t* raw_null_flags = null_flags->get_data().data();
     auto int_col = ColumnHelper::cast_to_raw<Type>(c0);
-    std::cout << "TYPE:" << Type << std::endl;
     RunTimeCppType<Type>* raw_c0 = int_col->get_data().data();
     ColumnPtr res = RunTimeColumnType<Type>::create();
     res->resize_uninitialized(size);
@@ -502,7 +492,6 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_string(FunctionContext* contex
     RunTimeCppType<TYPE_VARCHAR>* raw_c0 = col->get_data().data();
     RunTimeCppType<TYPE_UNSIGNED_INT>* raw_res = ColumnHelper::cast_to_raw<TYPE_UNSIGNED_INT>(res)->get_data().data();
     // If c2 is not const, than we need to keep the originl scale
-    // std::cout << c0->get(0).get_val().index() << std::endl;
 
     if (c0_is_const) {
         murmur_hash3_x86_32(raw_c0[0].data, raw_c0[0].size, 0, (void*)&raw_res[0]);
@@ -538,7 +527,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_date(FunctionContext* context,
     RunTimeCppType<TYPE_DATE>* raw_c0 = col->get_data().data();
     RunTimeCppType<TYPE_UNSIGNED_INT>* raw_res = ColumnHelper::cast_to_raw<TYPE_UNSIGNED_INT>(res)->get_data().data();
     // If c2 is not const, than we need to keep the originl scale
-    // std::cout << c0->get(0).get_val().index() << std::endl;
+
     if (c0_is_const) {
         int64_t val = raw_c0[0].julian() - date::UNIX_EPOCH_JULIAN;
         murmur_hash3_x86_32(&val, sizeof(int64_t), 0, (void*)&raw_res[0]);
@@ -575,7 +564,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_datetime(FunctionContext* cont
     RunTimeCppType<TYPE_DATETIME>* raw_c0 = col->get_data().data();
     RunTimeCppType<TYPE_UNSIGNED_INT>* raw_res = ColumnHelper::cast_to_raw<TYPE_UNSIGNED_INT>(res)->get_data().data();
     // If c2 is not const, than we need to keep the originl scale
-    // std::cout << c0->get(0).get_val().index() << std::endl;
+
     if (c0_is_const) {
         int64_t result = timestamp::to_julian(raw_c0[0].timestamp());
         result *= SECS_PER_DAY;
@@ -643,7 +632,6 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_decimal(FunctionContext* conte
     RunTimeCppType<Type>* raw_c0 = decimalv3_col->get_data().data();
     RunTimeCppType<TYPE_UNSIGNED_INT>* raw_res = ColumnHelper::cast_to_raw<TYPE_UNSIGNED_INT>(res)->get_data().data();
     // If c2 is not const, than we need to keep the originl scale
-    // std::cout << c0->get(0).get_val().index() << std::endl;
     if (c0_is_const) {
         auto result = raw_c0[0];
         auto byte_array = int_to_byte_array(result);

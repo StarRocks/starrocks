@@ -147,7 +147,6 @@ StatusOr<ColumnPtr> BinaryFunctions::iceberg_truncate_binary(FunctionContext* co
     auto col = ColumnHelper::cast_to_raw<TYPE_BINARY>(c0);
     ColumnBuilder<TYPE_BINARY> result(size);
     RunTimeCppType<TYPE_BINARY>* raw_c0 = col->get_data().data();
-    // If c2 is not const, than we need to keep the originl scale
 
 #define SLICE_SIZE_MIN(x, y) x < y ? x : y
     for (auto i = 0; i < size; i++) {
@@ -157,11 +156,6 @@ StatusOr<ColumnPtr> BinaryFunctions::iceberg_truncate_binary(FunctionContext* co
             Slice src_value = raw_c0[i];
             std::string result_str(src_value.get_data(), SLICE_SIZE_MIN(width, src_value.get_size()));
             result.append(Slice(result_str.data(), result_str.size()));
-            std::cout << "truncate binary:" << std::endl;
-            for (int k = 0; k < result_str.size(); k++) {
-                std::cout << std::setw(2) << std::setfill('0') << std::hex << (int)(result_str[k]) << " ";
-            }
-            std::cout << std::endl;
         }
     }
 #undef SLICE_SIZE_MIN

@@ -408,7 +408,8 @@ public class ScalarOperatorToIcebergExpr {
                 case DECIMAL32:
                 case DECIMAL64:
                 case DECIMAL128:
-                    if (((ScalarType) operator.getType()).getScalarScale() < ((Types.DecimalType) context).scale()) {
+                    if (context != null
+                            && ((ScalarType) operator.getType()).getScalarScale() < ((Types.DecimalType) context).scale()) {
                         //In iceberg transform expr, the decimal's scale will influence the result, like truncate and bucket...
                         //For column value 123.40 and const value 123.4, column = value should be true
                         //But in iceberg transform, 123.40 and 123.4 are not the same, and the partition may be pruned incorretly.

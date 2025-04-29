@@ -304,14 +304,8 @@ Status KeyPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_d
 
         for (int j = 0; j < partition_columns.size(); j++) {
             auto type = _partition_expr_ctxs[j]->root()->type();
-            // std::cout << "partition expr root type:" << type.debug_string() << " " << " partition column num"
-            //           << partition_columns.size() << " row num:" << partition_columns[j]->size()
-            //           << " value:" << partition_columns[j]->get(i).get_slice().to_string()
-            //           << " value len: " << partition_columns[j]->get(i).get_slice().get_size() << std::endl;
-            // std::cout << "variant index = " << partition_columns[j]->get(i).get_val().index() << std::endl;
             ASSIGN_OR_RETURN(auto partition_value, connector::HiveUtils::column_value(type, partition_columns[j], i));
             partition_key.push_back(std::move(partition_value));
-            std::cout << "partition key exchanger:" << partition_key.at(partition_key.size() - 1) << std::endl;
         }
         key2indices[partition_key].push_back(i);
         //record the origin datum of partition key

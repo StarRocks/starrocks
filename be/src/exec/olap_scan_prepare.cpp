@@ -16,7 +16,6 @@
 
 #include <variant>
 
-#include "absl/strings/str_join.h"
 #include "column/type_traits.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/compound_predicate.h"
@@ -1116,8 +1115,6 @@ Status ChunkPredicateBuilder<E, Type>::_get_column_predicates(PredicateParser* p
     }
 
     for (auto& f : is_null_vector) {
-        std::cout << "construct column predicate2: " << f.column_name << ", " << f.condition_op << ", "
-                  << absl::StrJoin(f.condition_values, ",") << std::endl;
         std::unique_ptr<ColumnPredicate> p(parser->parse_thrift_cond(f));
         RETURN_IF(!p, Status::RuntimeError("invalid filter"));
         col_preds_owner.emplace_back(std::move(p));
@@ -1126,9 +1123,7 @@ Status ChunkPredicateBuilder<E, Type>::_get_column_predicates(PredicateParser* p
     const auto& slots = _opts.tuple_desc->decoded_slots();
     for (auto& [slot_index, expr_ctxs] : slot_index_to_expr_ctxs) {
         const SlotDescriptor* slot_desc = slots[slot_index];
-        std::cout << " expr slot: " << slot_desc->col_name() << std::endl;
         for (ExprContext* ctx : expr_ctxs) {
-            std::cout << "construct expr predicate: " << ctx->root()->debug_string() << std::endl;
             ASSIGN_OR_RETURN(auto tmp, parser->parse_expr_ctx(*slot_desc, _opts.runtime_state, ctx));
             std::unique_ptr<ColumnPredicate> p(std::move(tmp));
             if (p == nullptr) {

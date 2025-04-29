@@ -65,7 +65,6 @@ void IcebergChunkSink::callback_on_commit(const CommitResult& result) {
         iceberg_data_file.__set_format(result.format);
         iceberg_data_file.__set_record_count(result.file_statistics.record_count);
         iceberg_data_file.__set_file_size_in_bytes(result.file_statistics.file_size);
-        std::cout << "callback on commit :" << result.extra_data << std::endl;
         iceberg_data_file.__set_partition_null_fingerprint(result.extra_data);
 
         if (result.file_statistics.split_offsets.has_value()) {

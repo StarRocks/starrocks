@@ -110,6 +110,7 @@ import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.iceberg.NullOrder;
+import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.SortDirection;
 import org.apache.iceberg.SortField;
 import org.apache.iceberg.SortOrder;
@@ -277,7 +278,6 @@ public class InsertPlanner {
 
         //4. Fill key partition columns constant value for data lake format table (hive/iceberg/hudi/delta_lake)
         if (insertStmt.isSpecifyKeyPartition()) {
-            //TODO: make sure transform expr can not reach here
             optExprBuilder = fillKeyPartitionsColumn(columnRefFactory, insertStmt, outputColumns, optExprBuilder);
         }
 
@@ -973,7 +973,6 @@ public class InsertPlanner {
         boolean skip = false;
         if (stmt.isSpecifyKeyPartition()) {
             if (targetTable.isIcebergTable()) {
-                //TODO: maybe check transform partition here?
                 return ((IcebergTable) targetTable).partitionColumnIndexes().contains(columnIdx);
             } else if (targetTable.isHiveTable()) {
                 return columnIdx >= targetTable.getFullSchema().size() - targetTable.getPartitionColumnNames().size();
@@ -989,7 +988,17 @@ public class InsertPlanner {
         }
 
         Table targetTable = insertStmt.getTargetTable();
-        //todo: maybe check transform partition here?
+        if (targetTable instanceof IcebergTable) {
+            IcebergTable icebergTable = (IcebergTable) targetTable;
+            if (icebergTable.isPartitioned()) {
+                PartitionSpec partitionSpec = icebergTable.getNativeTable().spec();
+                boolean isInvalid = partitionSpec.fields().stream().anyMatch(field -> !field.transform().isIdentity());
+                if (isInvalid) {
+                    throw new SemanticException("Staitc insert into Iceberg table %s is not supported" + 
+                            " for not partitioned by identity transform", icebergTable.getName());
+                }
+            }
+        }
         if (!(targetTable.isHiveTable() || targetTable.isIcebergTable())) {
             return false;
         }

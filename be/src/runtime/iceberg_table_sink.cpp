@@ -100,18 +100,8 @@ Status IcebergTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operat
         std::vector<TExpr> partition_expr;
         std::vector<ExprContext*> partition_expr_ctxs;
         auto output_expr = this->get_output_expr();
-        // for (const auto& index : iceberg_table_desc->partition_index_in_schema()) {
-        //     partition_expr.push_back(output_expr[index]);
-        // }
+
         partition_expr = iceberg_table_desc->get_partition_exprs();
-        std::cout << "partition output expr print" << std::endl;
-        for (auto& expr : output_expr) {
-            expr.printTo(std::cout);
-        }
-        std::cout << "\npartition parition expr print" << std::endl;
-        for (auto& expr : partition_expr) {
-            expr.printTo(std::cout);
-        }
 
         RETURN_IF_ERROR(Expr::create_expr_trees(runtime_state->obj_pool(), partition_expr, &partition_expr_ctxs,
                                                 runtime_state));

@@ -834,19 +834,14 @@ template <TimeUnit UNIT>
 TimestampValue timestamp_add(TimestampValue tsv, int count) {
     return tsv.add<UNIT>(count);
 }
-
-#define DEFINE_TIME_ADD_FN(FN, UNIT)                               \
-    DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, timestamp, value) { \
-        return timestamp_add<UNIT>(timestamp, value);              \
-    }                                                              \
-                                                                   \
+#define DEFINE_TIME_ADD_FN(FN, UNIT)                                                                               \
+    DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, timestamp, value) { return timestamp_add<UNIT>(timestamp, value); } \
+                                                                                                                   \
     DEFINE_TIME_CALC_FN(FN, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);
 
-#define DEFINE_TIME_SUB_FN(FN, UNIT)                               \
-    DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, timestamp, value) { \
-        return timestamp_add<UNIT>(timestamp, -value);             \
-    }                                                              \
-                                                                   \
+#define DEFINE_TIME_SUB_FN(FN, UNIT)                                                                                \
+    DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, timestamp, value) { return timestamp_add<UNIT>(timestamp, -value); } \
+                                                                                                                    \
     DEFINE_TIME_CALC_FN(FN, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);
 
 #define DEFINE_TIME_ADD_AND_SUB_FN(FN_PREFIX, UNIT) \
@@ -2913,8 +2908,17 @@ DEFINE_UNARY_FN_WITH_IMPL(iceberg_years_since_epoch_datetimeImpl, v) {
     return years_diff_v2Impl::apply<TimestampValue, TimestampValue, int64_t>(v, TimeFunctions::unix_epoch);
 }
 
-DEFINE_TIME_UNARY_FN(iceberg_years_since_epoch_date, TYPE_DATE, TYPE_BIGINT);
-DEFINE_TIME_UNARY_FN(iceberg_years_since_epoch_datetime, TYPE_DATETIME, TYPE_BIGINT);
+StatusOr<ColumnPtr> TimeFunctions::iceberg_years_since_epoch_date(FunctionContext* context,
+                                                                  const starrocks::Columns& columns) {
+    return VectorizedStrictUnaryFunction<iceberg_years_since_epoch_dateImpl>::evaluate<TYPE_DATE, TYPE_BIGINT>(
+            VECTORIZED_FN_ARGS(0));
+}
+
+StatusOr<ColumnPtr> TimeFunctions::iceberg_years_since_epoch_datetime(FunctionContext* context,
+                                                                      const starrocks::Columns& columns) {
+    return VectorizedStrictUnaryFunction<iceberg_years_since_epoch_datetimeImpl>::evaluate<TYPE_DATETIME, TYPE_BIGINT>(
+            VECTORIZED_FN_ARGS(0));
+}
 
 DEFINE_UNARY_FN_WITH_IMPL(iceberg_months_since_epoch_dateImpl, v) {
     int y, m, d;
@@ -2927,8 +2931,17 @@ DEFINE_UNARY_FN_WITH_IMPL(iceberg_months_since_epoch_datetimeImpl, v) {
     return months_diff_v2Impl::apply<TimestampValue, TimestampValue, int64_t>(v, TimeFunctions::unix_epoch);
 }
 
-DEFINE_TIME_UNARY_FN(iceberg_months_since_epoch_date, TYPE_DATE, TYPE_BIGINT);
-DEFINE_TIME_UNARY_FN(iceberg_months_since_epoch_datetime, TYPE_DATETIME, TYPE_BIGINT);
+StatusOr<ColumnPtr> TimeFunctions::iceberg_months_since_epoch_date(FunctionContext* context,
+                                                                   const starrocks::Columns& columns) {
+    return VectorizedStrictUnaryFunction<iceberg_months_since_epoch_dateImpl>::evaluate<TYPE_DATE, TYPE_BIGINT>(
+            VECTORIZED_FN_ARGS(0));
+}
+
+StatusOr<ColumnPtr> TimeFunctions::iceberg_months_since_epoch_datetime(FunctionContext* context,
+                                                                       const starrocks::Columns& columns) {
+    return VectorizedStrictUnaryFunction<iceberg_months_since_epoch_datetimeImpl>::evaluate<TYPE_DATETIME, TYPE_BIGINT>(
+            VECTORIZED_FN_ARGS(0));
+}
 
 DEFINE_UNARY_FN_WITH_IMPL(iceberg_days_since_epoch_dateImpl, v) {
     int y, m, d;
@@ -2941,14 +2954,27 @@ DEFINE_UNARY_FN_WITH_IMPL(iceberg_days_since_epoch_datetimeImpl, v) {
     return days_diffImpl::apply<TimestampValue, TimestampValue, int64_t>(v, TimeFunctions::unix_epoch);
 }
 
-DEFINE_TIME_UNARY_FN(iceberg_days_since_epoch_date, TYPE_DATE, TYPE_BIGINT);
-DEFINE_TIME_UNARY_FN(iceberg_days_since_epoch_datetime, TYPE_DATETIME, TYPE_BIGINT);
+StatusOr<ColumnPtr> TimeFunctions::iceberg_days_since_epoch_date(FunctionContext* context,
+                                                                 const starrocks::Columns& columns) {
+    return VectorizedStrictUnaryFunction<iceberg_days_since_epoch_dateImpl>::evaluate<TYPE_DATE, TYPE_BIGINT>(
+            VECTORIZED_FN_ARGS(0));
+}
+
+StatusOr<ColumnPtr> TimeFunctions::iceberg_days_since_epoch_datetime(FunctionContext* context,
+                                                                     const starrocks::Columns& columns) {
+    return VectorizedStrictUnaryFunction<iceberg_days_since_epoch_datetimeImpl>::evaluate<TYPE_DATETIME, TYPE_BIGINT>(
+            VECTORIZED_FN_ARGS(0));
+}
 
 DEFINE_UNARY_FN_WITH_IMPL(iceberg_hours_since_epoch_datetimeImpl, v) {
     return hours_diffImpl::apply<TimestampValue, TimestampValue, int64_t>(v, TimeFunctions::unix_epoch);
 }
 
-DEFINE_TIME_UNARY_FN(iceberg_hours_since_epoch_datetime, TYPE_DATETIME, TYPE_BIGINT);
+StatusOr<ColumnPtr> TimeFunctions::iceberg_hours_since_epoch_datetime(FunctionContext* context,
+                                                                      const starrocks::Columns& columns) {
+    return VectorizedStrictUnaryFunction<iceberg_hours_since_epoch_datetimeImpl>::evaluate<TYPE_DATETIME, TYPE_BIGINT>(
+            VECTORIZED_FN_ARGS(0));
+}
 
 // used as start point of time_slice.
 TimestampValue TimeFunctions::start_of_time_slice = TimestampValue::create(1, 1, 1, 0, 0, 0);

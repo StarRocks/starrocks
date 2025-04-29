@@ -674,18 +674,18 @@ public class IcebergMetadataTest extends TableTestBase {
         Assert.assertEquals(111L, dataFile.valueCounts().get(1).longValue());
     }
 
-        @Test
-    public void testFinishSink() {
+    @Test
+    public void testFinishSink2() {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
 
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
-                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableJ, Maps.newHashMap());
 
         new Expectations(metadata) {
             {
-                metadata.getTable(anyString, anyString);
+                metadata.getTable((ConnectContext) any, anyString, anyString);
                 result = icebergTable;
                 minTimes = 0;
             }
@@ -693,11 +693,11 @@ public class IcebergMetadataTest extends TableTestBase {
 
         TSinkCommitInfo tSinkCommitInfo = new TSinkCommitInfo();
         TIcebergDataFile tIcebergDataFile = new TIcebergDataFile();
-        String path = mockedNativeTableA.location() + "/data/data_bucket=0/c.parquet";
+        String path = mockedNativeTableJ.location() + "/data/ts_month=2022-01/c.parquet";
         String format = "parquet";
         long recordCount = 10;
         long fileSize = 2000;
-        String partitionPath = mockedNativeTableA.location() + "/data/data_bucket=0/";
+        String partitionPath = mockedNativeTableJ.location() + "/data/ts_month=2022-01/";
         List<Long> splitOffsets = Lists.newArrayList(4L);
         tIcebergDataFile.setPath(path);
         tIcebergDataFile.setFormat(format);
@@ -712,7 +712,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo), null);
 
-        List<FileScanTask> fileScanTasks = Lists.newArrayList(mockedNativeTableA.newScan().planFiles());
+        List<FileScanTask> fileScanTasks = Lists.newArrayList(mockedNativeTableJ.newScan().planFiles());
         Assert.assertEquals(1, fileScanTasks.size());
         FileScanTask task = fileScanTasks.get(0);
         Assert.assertEquals(0, task.deletes().size());
@@ -742,8 +742,8 @@ public class IcebergMetadataTest extends TableTestBase {
         tSinkCommitInfo.setIceberg_data_file(tIcebergDataFile);
 
         metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo), null);
-        mockedNativeTableA.refresh();
-        TableScan scan = mockedNativeTableA.newScan().includeColumnStats();
+        mockedNativeTableJ.refresh();
+        TableScan scan = mockedNativeTableJ.newScan().includeColumnStats();
         fileScanTasks = Lists.newArrayList(scan.planFiles());
 
         Assert.assertEquals(1, fileScanTasks.size());

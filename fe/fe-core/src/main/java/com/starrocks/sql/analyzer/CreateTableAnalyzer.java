@@ -577,13 +577,11 @@ public class CreateTableAnalyzer {
         } else {
             if (engineName.equalsIgnoreCase(Table.TableType.ELASTICSEARCH.name())) {
                 EsUtil.analyzePartitionDesc(partitionDesc);
-            } else if (engineName.equalsIgnoreCase(Table.TableType.HIVE.name())) {
+            } else if (engineName.equalsIgnoreCase(Table.TableType.HIVE.name()) ||
+                    engineName.equalsIgnoreCase(Table.TableType.ICEBERG.name())) {
                 if (partitionDesc != null) {
                     ((ListPartitionDesc) partitionDesc).analyzeExternalPartitionColumns(stmt.getColumnDefs(), engineName);
                 }
-            } else if (engineName.equalsIgnoreCase(Table.TableType.ICEBERG.name())) {
-                //TODO: Delete this check
-                ((ListPartitionDesc) partitionDesc).checkIcebergPartitionColPos(stmt.getColumnDefs());
             } else {
                 if (partitionDesc != null) {
                     throw new SemanticException("Create " + engineName + " table should not contain partition desc",

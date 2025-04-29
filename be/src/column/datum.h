@@ -197,9 +197,6 @@ private:
                          uint64_t, int96_t, int128_t, Slice, decimal12_t, DecimalV2Value, float, double, DatumArray,
                          DatumMap, HyperLogLog*, BitmapValue*, PercentileValue*, JsonValue*>;
     Variant _value;
-
-public:
-    Variant get_val() { return _value; }
 };
 
 static const Datum kNullDatum{};

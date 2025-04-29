@@ -245,7 +245,7 @@ void ColumnValueRange<T>::to_olap_filter(std::vector<ConditionType>& filters) {
                 can_push = false;
             }
         }
-        std::cout << "to olap filter is fixed range can push:" << can_push << std::endl;
+
         if (can_push) {
             filters.push_back(std::move(condition));
         }

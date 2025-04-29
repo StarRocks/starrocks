@@ -281,11 +281,6 @@ public class IcebergMetadata implements ConnectorMetadata {
             throw new DdlException("Only list partition is supported for iceberg table");
         }
         PartitionSpec partitionSpec = parsePartitionFields(schema, (ListPartitionDesc) partitionDesc);
-        System.out.println("show partition sepc" + partitionSpec.toString());
-        for (int i = 0; i < partitionSpec.fields().size(); i++) {
-            System.out.println("fieldType:" + partitionSpec.fields().get(i).transform().getResultType(
-                    partitionSpec.schema().findType(partitionSpec.fields().get(i).sourceId())));
-        }
         Map<String, String> properties = stmt.getProperties() == null ? new HashMap<>() : stmt.getProperties();
         String tableLocation = properties.get(LOCATION_PROPERTY);
         String comment = stmt.getComment();
@@ -1185,12 +1180,17 @@ public class IcebergMetadata implements ConnectorMetadata {
                             .withRecordCount(dataFile.record_count)
                             .withFileSizeInBytes(dataFile.file_size_in_bytes)
                             .withSplitOffsets(dataFile.split_offsets);
-
+            String nullFingerprint = "";
+            if (!dataFile.isSetPartition_null_fingerprint()) {
+                nullFingerprint = "0".repeat(partitionSpec.fields().size());
+            } else {
+                nullFingerprint = dataFile.getPartition_null_fingerprint();
+            }
             if (partitionSpec.isPartitioned()) {
                 String relativePartitionLocation = getIcebergRelativePartitionPath(
                         nativeTbl.location(), dataFile.partition_path);
                 PartitionData partitionData = partitionDataFromPath(
-                        relativePartitionLocation, dataFile.getPartition_null_fingerprint(), partitionSpec, nativeTbl);
+                        relativePartitionLocation, nullFingerprint, partitionSpec, nativeTbl);
                 builder.withPartition(partitionData);
                 // builder.withPartitionPath(relativePartitionLocation);
             }
@@ -1211,7 +1211,6 @@ public class IcebergMetadata implements ConnectorMetadata {
             LOG.error("Failed to commit iceberg transaction on {}.{}", dbName, tableName, e);
             throw new StarRocksConnectorException(e.getMessage());
         } finally {
-            // TODO Check:
             // Do we really need that? because partition cache is associated with snapshotId
             icebergCatalog.invalidatePartitionCache(dbName, tableName);
         }

@@ -25,6 +25,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
@@ -179,8 +180,9 @@ public class IcebergTable extends Table {
 
     public PartitionField getPartitionField(String partitionColumnName) {
         List<PartitionField> allPartitionFields = getNativeTable().spec().fields();
+        Schema schema = this.getNativeTable().schema();
         for (PartitionField field : allPartitionFields) {
-            if (field.name().equalsIgnoreCase(partitionColumnName)) {
+            if (getPartitionSourceName(schema, field).equalsIgnoreCase(partitionColumnName)) {
                 return field;
             }
         }
@@ -340,9 +342,14 @@ public class IcebergTable extends Table {
         List<String> exprStr = IcebergApiConverter.toPartitionFields(nativeTable.spec(), true);
 
         List<Expr> partitionExprs = exprStr.stream()
-                .map(expr -> ColumnIdExpr.fromSql(expr).getExpr())
-                .collect(Collectors.toList());
-        partitionExprs.stream().forEach(expr -> System.out.println(expr));
+                .map(expr -> {
+                    if (expr.startsWith(FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX + "void")) {
+                        return (Expr) new NullLiteral();
+                    } else {
+                        return ColumnIdExpr.fromSql(expr).getExpr();
+                    }
+                }).collect(Collectors.toList());
+
         for (Expr expr : partitionExprs) {
             List<SlotRef> slotRefs = Lists.newArrayList();
             expr.collect(SlotRef.class, slotRefs);
@@ -369,11 +376,6 @@ public class IcebergTable extends Table {
                             Function builtinFunction = Expr.getBuiltinFunction(
                                     ((FunctionCallExpr) expr).getFnName().getFunction(), args, Function.CompareMode.IS_IDENTICAL);
                             ((FunctionCallExpr) expr).setFn(builtinFunction);
-                            System.out.println("builtinFunction.getReturnType(): " + builtinFunction.getReturnType().toString()
-                                    + " " + builtinFunction.getReturnType().getPrecision() 
-                                    + " "  + ((ScalarType) builtinFunction.getReturnType()).getScalarScale()
-                                    + " " + "child0 type:" + column.getType().getPrecision()
-                                    + " " + ((ScalarType) column.getType()).getScalarScale());
                             
                             if (((FunctionCallExpr) expr).getFnName().getFunction().equals(
                                     FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX + "truncate")) {

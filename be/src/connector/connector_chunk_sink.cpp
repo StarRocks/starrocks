@@ -16,9 +16,9 @@
 
 #include "column/chunk.h"
 #include "common/status.h"
+#include "connector/iceberg_chunk_sink.h"
 #include "connector/sink_memory_manager.h"
 #include "formats/file_writer.h"
-#include "iceberg_chunk_sink.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::connector {
@@ -50,7 +50,6 @@ Status ConnectorChunkSink::add(Chunk* chunk) {
     std::vector<bool> partition_field_null_list;
     if (partitioned) {
         if (typeid(*this) == typeid(IcebergChunkSink)) {
-            std::cout << "chunk sink is iceberg sink" << std::endl;
             ASSIGN_OR_RETURN(partition,
                              HiveUtils::iceberg_make_partition_name(
                                      _partition_column_names, dynamic_cast<IcebergChunkSink*>(this)->transform_expr(),
@@ -67,7 +66,6 @@ Status ConnectorChunkSink::add(Chunk* chunk) {
         null_fingerprint += (b ? '1' : '0');
     }
 
-    std::cout << "print null finger:" << null_fingerprint << std::endl;
 // null_fingerprint is used to distinguish with the secenario like NULL and string "null"
 // They are under the same dir path, but should not in the same data file.
 // We should record them in different files so that each data file could has its own meta info.
@@ -109,7 +107,6 @@ Status ConnectorChunkSink::add(Chunk* chunk) {
 Status ConnectorChunkSink::finish() {
     for (auto& [partition_key, writer_and_stream] : _writer_stream_pairs) {
         string extra_data = partition_key.substr(partition_key.rfind('&') + 1);
-        std::cout << "origin key:" << partition_key << " print null finger:" << extra_data << std::endl;
         callback_on_commit(writer_and_stream.first->commit().set_extra_data(extra_data));
     }
     return Status::OK();

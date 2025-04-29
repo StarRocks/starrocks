@@ -240,7 +240,7 @@ ChunkPtr LocalExchangeSourceOperator::_pull_key_partition_chunk(RuntimeState* st
         res->append_datum(datum.second->get(0));
         auto ptr = ConstColumn::create(std::move(res), 1);
         partition_key_columns.emplace_back(ptr);
-        extra_metas.emplace_back(datum.first, true /*useless*/, true /*useless*/);
+        extra_metas.push_back(ChunkExtraColumnsMeta{datum.first, true /*useless*/, true /*useless*/});
     }
     chunk_extra_data = std::make_shared<ChunkExtraColumnsData>(extra_metas, std::move(partition_key_columns));
     // Unlock during merging partition chunks into a full chunk.
