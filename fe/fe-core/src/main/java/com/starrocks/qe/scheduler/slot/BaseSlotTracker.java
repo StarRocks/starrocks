@@ -340,8 +340,14 @@ public abstract class BaseSlotTracker {
         return slots.get(slotId);
     }
 
+    // allocated slots that mean the slots which have been allocated and not released.
     public int getNumAllocatedSlots() {
         return numAllocatedSlots;
+    }
+
+    // return the number of allocated slots which is the current concurrency in the query queue
+    public int getCurrentCurrency() {
+        return allocatedSlots.size();
     }
 
     public long getWarehouseId() {

@@ -19,8 +19,10 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.BackendResourceStat;
+import org.assertj.core.api.Assertions;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -402,5 +404,75 @@ public class SlotSelectionStrategyV2Test {
         assertThat(slots.size() == historySlots.size() + slotTracker.getSlots().size());
 
         Config.max_query_queue_history_slots_number = 0;
+    }
+
+    @Test
+    public void testConcurrencyLimit1() {
+        QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
+
+        int oldVal = GlobalVariable.getQueryQueueConcurrencyLimit();
+        GlobalVariable.setQueryQueueConcurrencyLimit(10);
+
+        LogicalSlot slot1 = generateSlot(opts.v2().getTotalSlots() / 2 + 1);
+        LogicalSlot slot2 = generateSlot(opts.v2().getTotalSlots() / 2);
+        LogicalSlot slot3 = generateSlot(2);
+
+        // 1. Require and allocate slot1.
+        slotTracker.requireSlot(slot1);
+        Assertions.assertThat(strategy.peakSlotsToAllocate(slotTracker)).containsExactly(slot1);
+        slotTracker.allocateSlot(slot1);
+
+        // 2. Require slot2.
+        slotTracker.requireSlot(slot2);
+        Assertions.assertThat(strategy.peakSlotsToAllocate(slotTracker)).isEmpty();
+
+        // 3. Require enough small slots to make its priority lower.
+        Assertions.assertThat(slotTracker.getCurrentCurrency()).isEqualTo(1);
+        {
+            List<LogicalSlot> smallSlots = IntStream.range(0, 10)
+                    .mapToObj(i -> generateSlot(2))
+                    .collect(Collectors.toList());
+            smallSlots.forEach(slotTracker::requireSlot);
+
+            int concurrency = slotTracker.getCurrentCurrency();
+            int numPeakedSmallSlots = 0;
+            List<LogicalSlot> runningSmallSlots = com.google.common.collect.Lists.newArrayList();
+            while (concurrency < 9) {
+                List<LogicalSlot> peakSlots = strategy.peakSlotsToAllocate(slotTracker);
+                Assertions.assertThat(peakSlots.isEmpty()).isFalse();
+                numPeakedSmallSlots += peakSlots.size();
+                peakSlots.forEach(slotTracker::allocateSlot);
+                concurrency = slotTracker.getCurrentCurrency();
+                runningSmallSlots.addAll(peakSlots);
+            }
+            Assertions.assertThat(numPeakedSmallSlots == 10);
+            // since concurrency is 10, all small slots are blocked.
+            Assertions.assertThat(strategy.peakSlotsToAllocate(slotTracker)).isEmpty();
+            // release all running slots
+            runningSmallSlots.forEach(slot -> Assertions.assertThat(slotTracker.releaseSlot(slot.getSlotId())).isSameAs(slot));
+        }
+        Assertions.assertThat(slotTracker.getCurrentCurrency()).isEqualTo(1);
+
+        // Try peak the only rest slot2, but it is blocked by slot1.
+        Assertions.assertThat(strategy.peakSlotsToAllocate(slotTracker)).isEmpty();
+
+        // 4. slot3 cannot be peaked because it is blocked by slot2.
+        for (int i = 0; i < 10; i++) {
+            slotTracker.requireSlot(slot3);
+            // if current concurrency is zero, always peak one
+            Assertions.assertThat(strategy.peakSlotsToAllocate(slotTracker)).isEmpty();
+            Assertions.assertThat(slotTracker.releaseSlot(slot3.getSlotId())).isSameAs(slot3);
+        }
+        slotTracker.requireSlot(slot3);
+        Assertions.assertThat(strategy.peakSlotsToAllocate(slotTracker)).isEmpty();
+
+        // 5. slot2 and slot3 can be peaked after releasing slot1.
+        slotTracker.releaseSlot(slot1.getSlotId());
+        Assertions.assertThat(strategy.peakSlotsToAllocate(slotTracker)).containsExactly(slot2, slot3);
+
+        // reset concurrency limit
+        GlobalVariable.setQueryQueueConcurrencyLimit(oldVal);
     }
 }
