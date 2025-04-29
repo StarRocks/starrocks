@@ -23,6 +23,8 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.combinator.AggStateDesc;
+import com.starrocks.catalog.combinator.AggStateUtils;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -179,7 +181,7 @@ public class PreAggregateTurnOnRule implements TreeRewriteRule {
             }
 
             // check aggregation function
-            if (checkAggregations(context, scan)) {
+            if (checkTurnOffPreAggregations(context, scan)) {
                 return null;
             }
 
@@ -206,7 +208,13 @@ public class PreAggregateTurnOnRule implements TreeRewriteRule {
             return false;
         }
 
-        private boolean checkAggregations(PreAggregationContext context, PhysicalOlapScanOperator scan) {
+        /**
+         * Check the aggregation function
+         * @param context : pre-aggregation context
+         * @param scan : input scan node to check, if off pre-aggregation, set the reason
+         * @return false if the aggregation function can turn on pre-aggregation, otherwise true
+         */
+        private boolean checkTurnOffPreAggregations(PreAggregationContext context, PhysicalOlapScanOperator scan) {
             Map<ColumnRefOperator, Column> refColumnMap = scan.getColRefToColumnMetaMap();
 
             for (final ScalarOperator so : context.aggregations) {
@@ -308,29 +316,61 @@ public class PreAggregateTurnOnRule implements TreeRewriteRule {
                         continue;
                     }
 
-                    // value column
-                    if (FunctionSet.HLL_UNION_AGG.equalsIgnoreCase(call.getFnName()) ||
-                            FunctionSet.HLL_RAW_AGG.equalsIgnoreCase(call.getFnName())) {
-                        // skip
-                    } else if (AGGREGATE_ONLY_KEY.contains(call.getFnName().toLowerCase())) {
-                        scan.setTurnOffReason(
-                                "Aggregation function " + call.getFnName().toUpperCase() + " just work on key column");
-                        return true;
-                    } else if ((FunctionSet.BITMAP_UNION.equalsIgnoreCase(call.getFnName())
-                            || FunctionSet.BITMAP_UNION_COUNT.equalsIgnoreCase(call.getFnName()))) {
-                        if (!AggregateType.BITMAP_UNION.equals(column.getAggregationType())) {
-                            scan.setTurnOffReason(
-                                    "Aggregate Operator not match: BITMAP_UNION <--> " + column.getAggregationType());
-                            return true;
-                        }
-                    } else if (!call.getFnName().equalsIgnoreCase(column.getAggregationType().name())) {
-                        scan.setTurnOffReason(
-                                "Aggregate Operator not match: " + call.getFnName().toUpperCase() + " <--> " + column
-                                        .getAggregationType().name().toUpperCase());
+                    // If there is one reason to turn off pre-aggregation, turn it directly
+                    if (isTurnOffPreAggregation(call, column, scan)) {
                         return true;
                     }
                 }
             }
+            return false;
+        }
+
+        /**
+         * Whether turn off pre-aggregation:
+         * - ON : means to skip pre-aggregation and use query-execution threads rather than io threads to calculate aggregation
+         *  which can be more efficient.
+         * - OFF : means to do pre-aggregation and use io threads to calculate aggregation.
+         * @param queryAggFunc: the aggregation function in the query
+         * @param column : storage column with aggregation type
+         * @param scan : input scan node to check, if off pre-aggregation, set the reason
+         * @return true if the aggregation function can not turn on pre-aggregation, otherwise false
+         */
+        private boolean isTurnOffPreAggregation(CallOperator queryAggFunc,
+                                                Column column,
+                                                PhysicalOlapScanOperator scan) {
+            String queryAggFuncName = queryAggFunc.getFnName();
+            if (FunctionSet.HLL_UNION_AGG.equalsIgnoreCase(queryAggFuncName) ||
+                    FunctionSet.HLL_RAW_AGG.equalsIgnoreCase(queryAggFuncName)) {
+                return false;
+            } else if (AGGREGATE_ONLY_KEY.contains(queryAggFuncName.toLowerCase())) {
+                scan.setTurnOffReason(
+                        "Aggregation function " + queryAggFuncName.toUpperCase() + " just work on key column");
+                return true;
+            } else if (column.getAggregationType() == AggregateType.AGG_STATE_UNION) {
+                // if the storage column is agg state column and query's agg function is the same agg, turn on pre-aggregation
+                AggStateDesc aggStateDesc = column.getAggStateDesc();
+                String queryAggStateFuncName = AggStateUtils.getAggFuncNameOfCombinator(queryAggFuncName);
+                if (queryAggStateFuncName != null && aggStateDesc != null &&
+                        queryAggStateFuncName.equalsIgnoreCase(aggStateDesc.getFunctionName())) {
+                    return false;
+                }
+            }
+
+
+            if ((FunctionSet.BITMAP_UNION.equalsIgnoreCase(queryAggFuncName)
+                    || FunctionSet.BITMAP_UNION_COUNT.equalsIgnoreCase(queryAggFuncName))) {
+                if (!AggregateType.BITMAP_UNION.equals(column.getAggregationType())) {
+                    scan.setTurnOffReason(
+                            "Aggregate Operator not match: BITMAP_UNION <--> " + column.getAggregationType());
+                    return true;
+                }
+            } else if (!queryAggFuncName.equalsIgnoreCase(column.getAggregationType().name())) {
+                scan.setTurnOffReason(
+                        "Aggregate Operator not match: " + queryAggFunc.getFnName().toUpperCase() + " <--> " + column
+                                .getAggregationType().name().toUpperCase());
+                return true;
+            }
+
             return false;
         }
 
