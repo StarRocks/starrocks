@@ -7,7 +7,7 @@ sidebar_position: 10
 
 除传统用户名+密码认证方式外，StarRocks 还支持 Lightweight Directory Access Protocol（LDAP）认证。
 
-本文介绍如何在 StarRocks 中使用 LDAP 手动创建和验证用户。有关如何使用 Security Integration 将 StarRocks 与 LDAP 服务集成，请参阅 [使用 Security Integration 认证](./security_integration.md)。有关如何在 LDAP 服务中验证用户组的更多信息，请参阅 [验证用户组](./group_provider.md)。
+本文介绍如何在 StarRocks 中使用 LDAP 手动创建和验证用户。有关如何使用 Security Integration 将 StarRocks 与 LDAP 服务集成，请参阅 [使用安全集成认证](./security_integration.md)。有关如何在 LDAP 服务中验证用户组的更多信息，请参阅 [认证用户组](./group_provider.md)。
 
 ## 开启 LDAP 认证
 
