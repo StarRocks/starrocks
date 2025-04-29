@@ -82,7 +82,7 @@ public abstract class CheckpointWorker extends FrontendDaemon {
         createImage(np.epoch, np.journalId);
     }
 
-    private void init() {
+    protected void init() {
         this.servingGlobalState = GlobalStateMgr.getServingState();
     }
 
@@ -104,7 +104,7 @@ public abstract class CheckpointWorker extends FrontendDaemon {
         finishCheckpoint(epoch, journalId, true, "success");
     }
 
-    private boolean preCheckParamValid(long epoch, long journalId) {
+    protected boolean preCheckParamValid(long epoch, long journalId) {
         if (journalId < getImageJournalId()) {
             finishCheckpoint(epoch, journalId, false, "journalId is too small");
             return false;
