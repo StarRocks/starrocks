@@ -103,8 +103,8 @@ public class ImageLoaderTest {
             }
 
             ImageLoader imageLoader = new ImageLoader(imageDir.toString());
-            Assert.assertEquals("image.2000", imageLoader.getImageFile().getName());
-            Assert.assertEquals(ImageFormatVersion.v1, imageLoader.getImageFormatVersion());
+            Assert.assertEquals("image.1000", imageLoader.getImageFile().getName());
+            Assert.assertEquals(ImageFormatVersion.v2, imageLoader.getImageFormatVersion());
         } finally {
             for (Path path : pathList) {
                 Files.delete(path);
