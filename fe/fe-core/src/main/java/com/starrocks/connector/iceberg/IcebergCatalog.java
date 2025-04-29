@@ -245,9 +245,6 @@ public interface IcebergCatalog extends MemoryTrackable {
         PartitionsTable partitionsTable = (PartitionsTable) MetadataTableUtils.
                 createMetadataTableInstance(nativeTable, MetadataTableType.PARTITIONS);
         TableScan tableScan = partitionsTable.newScan();
-        // NOTE: if there is an exception raise because of snapshot id is not the latest one, it's expected
-        // using partition metadata table scan is more  efficient than doing file scan, but limitation is
-        // it only supports the latest snapshot id.
         if (snapshotId != -1) {
             tableScan = tableScan.useSnapshot(snapshotId);
         }
