@@ -34,6 +34,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.system.Backend;
@@ -45,6 +46,8 @@ import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TUniqueId;
 import mockit.Expectations;
 import mockit.Injectable;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
@@ -508,6 +511,13 @@ public class FileScanNodeTest {
     @Test
     public void testIllegalColumnSeparator(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
                                      @Injectable Database db, @Injectable OlapTable table) {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_NOTHING;
+            }
+        };
+
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
@@ -553,6 +563,13 @@ public class FileScanNodeTest {
     @Test
     public void testIllegalRowDelimiter(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
                                            @Injectable Database db, @Injectable OlapTable table) {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_NOTHING;
+            }
+        };
+
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
