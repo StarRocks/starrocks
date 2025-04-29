@@ -140,6 +140,7 @@ public class JDBCScanNode extends ScanNode {
 
         ArrayList<Expr> jdbcConjuncts = Expr.cloneList(conjuncts, sMap);
         for (Expr p : jdbcConjuncts) {
+            p = p.replaceLargeStringLiteral();
             filters.add(AstToStringBuilder.toString(p));
         }
     }
