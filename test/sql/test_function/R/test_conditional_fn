@@ -147,3 +147,10 @@ select nullif(ai, ass), ai, ass from tc order by i;
 None	None	["a","b"]
 None	None	None
 -- !result
+select if(i > 5, i, null) from tc;
+-- result:
+None
+None
+None
+None
+-- !result
