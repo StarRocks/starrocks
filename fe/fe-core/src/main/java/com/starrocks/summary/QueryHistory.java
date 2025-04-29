@@ -119,7 +119,8 @@ public class QueryHistory {
         SPMAst2SQLBuilder builder = new SPMAst2SQLBuilder(false, true);
         sqlDigest = builder.build((QueryStatement) statement);
 
-        String planStr = Explain.toString(plan.getPhysicalPlan(), plan.getOutputColumns());
+        Explain explain = new Explain(true, true, "\t", "|");
+        String planStr = explain.print(plan.getPhysicalPlan(), plan.getOutputColumns());
         jsonMaps.put("sql_digest", sqlDigest);
         jsonMaps.put("plan", planStr);
 
