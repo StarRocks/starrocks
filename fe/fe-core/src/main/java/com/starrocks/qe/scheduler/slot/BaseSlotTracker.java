@@ -14,10 +14,17 @@
 
 package com.starrocks.qe.scheduler.slot;
 
+import com.google.api.client.util.Lists;
+import com.google.common.annotations.VisibleForTesting;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.Config;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.service.ExecuteEnv;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
@@ -25,14 +32,18 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Queue;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentMap;
 
 /**
@@ -59,6 +70,8 @@ public abstract class BaseSlotTracker {
 
     protected List<BaseSlotTracker.Listener> listeners;
     protected SlotSelectionStrategy slotSelectionStrategy;
+    // history slots to record the slots which have been released for monitoring
+    private final Queue<LogicalSlot> historySlots = new ConcurrentLinkedQueue();
 
     public BaseSlotTracker(ResourceUsageMonitor resourceUsageMonitor, long warehouseId) {
         this.resourceUsageMonitor = resourceUsageMonitor;
@@ -81,10 +94,6 @@ public abstract class BaseSlotTracker {
 
     public long getQueuePendingLength() {
         return pendingSlots.size();
-    }
-
-    public long getAllocatedLength() {
-        return allocatedSlots.size();
     }
 
     public Optional<Integer> getMaxRequiredSlots() {
@@ -120,14 +129,33 @@ public abstract class BaseSlotTracker {
     public abstract Optional<Integer> getMaxSlots();
 
     /**
+     * Check if the slot tracker is beyond the capacity limit.
+     * @param slot : The slot to be checked.
+     * @return True if the slot tracker is beyond the capacity limit, false otherwise.
+     */
+    protected boolean isResourceCapacityEnough(LogicalSlot slot) {
+        final BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
+        if (GlobalVariable.isQueryQueueMaxQueuedQueriesEffective() &&
+                pendingSlots.size() >= slotManager.getQueryQueueMaxQueuedQueries(slot.getWarehouseId())) {
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Get the extra message of the slot tracker.
+     */
+    public Optional<ExtraMessage> getExtraMessage() {
+        return Optional.empty();
+    }
+
+    /**
      * Add a slot requirement.
      * @param slot The required slot.
      * @return True if the slot is required successfully or already required , false if the query queue is full.
      */
     public boolean requireSlot(LogicalSlot slot) {
-        final BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
-        if (GlobalVariable.isQueryQueueMaxQueuedQueriesEffective() &&
-                pendingSlots.size() >= slotManager.getQueryQueueMaxQueuedQueries(slot.getWarehouseId())) {
+        if (!isResourceCapacityEnough(slot)) {
             return false;
         }
 
@@ -143,6 +171,9 @@ public abstract class BaseSlotTracker {
 
         listeners.forEach(listener -> listener.onRequireSlot(slot));
         slot.onRequire();
+
+        // try to register the slot to the connected context
+        tryRegisterConnectContext(slot);
 
         return true;
     }
@@ -180,6 +211,50 @@ public abstract class BaseSlotTracker {
      * @return The released slot, or null if the slot has not been required or allocated.
      */
     public LogicalSlot releaseSlot(TUniqueId slotId) {
+        LogicalSlot slot = releaseSlotImpl(slotId);
+        if (slot != null) {
+            tryAddIntoHistorySlots(slot);
+        }
+        return slot;
+    }
+
+    protected void tryAddIntoHistorySlots(LogicalSlot slot) {
+        if (Config.max_query_queue_history_slots_number <= 0) {
+            return;
+        }
+        while (historySlots.size() > Config.max_query_queue_history_slots_number) {
+            historySlots.poll();
+        }
+        historySlots.add(slot);
+    }
+
+    /**
+     * Try to register the slot to the connected context for more observing information.
+     * @param slot: The slot to be registered.
+     */
+    protected void tryRegisterConnectContext(LogicalSlot slot) {
+        // ignore the slot is null or slot's extra message has been set
+        if (Config.max_query_queue_history_slots_number <= 0 ||
+                slot == null || (slot.getExtraMessage() != null && slot.getExtraMessage().isPresent())) {
+            return;
+        }
+        // find the connected context and register the logical slot
+        try {
+            TUniqueId slotId = slot.getSlotId();
+            UUID queryId = UUIDUtil.fromTUniqueid(slotId);
+            ConnectContext ctx = ExecuteEnv.getInstance().getScheduler().findContextByQueryId(queryId.toString());
+            if (ctx == null) {
+                LOG.debug("Failed to find the context for queryId: {}", queryId);
+                return;
+            }
+            LOG.debug("Registering the slot {} to context {}", slot, ctx);
+            ctx.registerListener(new LogicalSlot.ConnectContextListener(slot));
+        } catch (Exception e) {
+            LOG.warn("Failed to register the slot to context", e);
+        }
+    }
+
+    protected LogicalSlot releaseSlotImpl(TUniqueId slotId) {
         LogicalSlot slot = slots.remove(slotId);
         if (slot == null) {
             return null;
@@ -241,15 +316,38 @@ public abstract class BaseSlotTracker {
     }
 
     public Collection<LogicalSlot> getSlots() {
-        return slots.values();
+        if (Config.max_query_queue_history_slots_number > 0) {
+            List<LogicalSlot> result = Lists.newArrayList();
+            // the newest slots are in the front
+            result.addAll(slots.values());
+            List<LogicalSlot> histories = Lists.newArrayList(historySlots);
+            if (!histories.isEmpty()) {
+                Collections.reverse(histories);
+                result.addAll(histories);
+            }
+            return result;
+        } else {
+            return slots.values();
+        }
+    }
+
+    @VisibleForTesting
+    public Collection<LogicalSlot> getHistorySlots() {
+        return historySlots;
     }
 
     public LogicalSlot getSlot(TUniqueId slotId) {
         return slots.get(slotId);
     }
 
+    // allocated slots that mean the slots which have been allocated and not released.
     public int getNumAllocatedSlots() {
         return numAllocatedSlots;
+    }
+
+    // return the number of allocated slots which is the current concurrency in the query queue
+    public int getCurrentCurrency() {
+        return allocatedSlots.size();
     }
 
     public long getWarehouseId() {
@@ -280,6 +378,29 @@ public abstract class BaseSlotTracker {
         @Override
         public void onReleaseSlot(LogicalSlot slot) {
             pipelineDriverAllocator.release(slot);
+        }
+    }
+
+    /**
+     * Extra message for the slot tracker.
+     */
+    public static class ExtraMessage {
+        @SerializedName("Concurrency")
+        private final long concurrency;
+        @SerializedName("QueryQueueOption")
+        private final QueryQueueOptions.V2 v2;
+
+        public ExtraMessage(long concurrency, QueryQueueOptions.V2 v2) {
+            this.concurrency = concurrency;
+            this.v2 = v2;
+        }
+
+        public long getConcurrency() {
+            return concurrency;
+        }
+
+        public QueryQueueOptions.V2 getV2() {
+            return v2;
         }
     }
 }

@@ -57,15 +57,13 @@ public:
         }
     }
 
-    std::vector<avrocpp::ColumnReaderUniquePtr> create_column_readers(const std::vector<SlotDescriptor*>& slot_descs,
-                                                                      const cctz::time_zone& timezone,
-                                                                      bool invalid_as_null) {
-        std::vector<avrocpp::ColumnReaderUniquePtr> column_readers;
+    void create_column_readers(const std::vector<SlotDescriptor*>& slot_descs, const cctz::time_zone& timezone,
+                               bool invalid_as_null) {
+        _column_readers.clear();
         for (auto* slot_desc : slot_descs) {
-            column_readers.emplace_back(avrocpp::ColumnReader::get_nullable_column_reader(
+            _column_readers.emplace_back(avrocpp::ColumnReader::get_nullable_column_reader(
                     slot_desc->col_name(), slot_desc->type(), timezone, invalid_as_null));
         }
-        return column_readers;
     }
 
     AvroReaderUniquePtr create_avro_reader(const std::string& filename) {
@@ -73,9 +71,9 @@ public:
         CHECK_OK(file_or.status());
 
         auto avro_reader = std::make_unique<AvroReader>();
-        CHECK_OK(avro_reader->init(
-                std::make_unique<AvroBufferInputStream>(std::move(file_or.value()), 1048576, _counter), filename,
-                _state.get(), _counter, nullptr, nullptr, true));
+        CHECK_OK(avro_reader->init(std::make_unique<AvroBufferInputStream>(
+                                           std::move(file_or.value()), config::avro_reader_buffer_size_bytes, _counter),
+                                   filename, _state.get(), _counter, nullptr, &_column_readers, true));
         return avro_reader;
     }
 
@@ -96,6 +94,7 @@ private:
     ScannerCounter* _counter;
     std::shared_ptr<RuntimeState> _state;
     cctz::time_zone _timezone;
+    std::vector<avrocpp::ColumnReaderUniquePtr> _column_readers;
 };
 
 TEST_F(AvroReaderTest, test_get_schema_primitive_types) {
@@ -217,11 +216,10 @@ TEST_F(AvroReaderTest, test_get_schema_logical_types) {
 TEST_F(AvroReaderTest, test_read_primitive_types) {
     std::string filename = "primitive.avro";
     std::vector<SlotDescriptor*> slot_descs;
-    std::vector<avrocpp::ColumnReaderUniquePtr> column_readers;
     bool column_not_found_as_null = false;
     int rows_to_read = 2;
 
-    // init reader for read
+    // init reader for read schema
     auto reader = create_avro_reader(filename);
 
     std::vector<SlotDescriptor> tmp_slot_descs;
@@ -231,8 +229,12 @@ TEST_F(AvroReaderTest, test_read_primitive_types) {
         slot_descs.emplace_back(&slot_desc);
     }
 
-    column_readers = create_column_readers(slot_descs, _timezone, false);
-    reader->TEST_init(&slot_descs, &column_readers, column_not_found_as_null);
+    // create column readers
+    create_column_readers(slot_descs, _timezone, false);
+
+    // init reader for read data
+    // some fields such as _field_indexes does not inited normally, so init reader again.
+    reader->TEST_init(&slot_descs, &_column_readers, column_not_found_as_null);
 
     // create chunk
     auto chunk = create_src_chunk(slot_descs);
@@ -251,11 +253,10 @@ TEST_F(AvroReaderTest, test_read_primitive_types) {
 TEST_F(AvroReaderTest, test_read_complex_types) {
     std::string filename = "complex.avro";
     std::vector<SlotDescriptor*> slot_descs;
-    std::vector<avrocpp::ColumnReaderUniquePtr> column_readers;
     bool column_not_found_as_null = false;
     int rows_to_read = 2;
 
-    // init reader for read
+    // init reader for read schema
     auto reader = create_avro_reader(filename);
 
     std::vector<SlotDescriptor> tmp_slot_descs;
@@ -265,8 +266,12 @@ TEST_F(AvroReaderTest, test_read_complex_types) {
         slot_descs.emplace_back(&slot_desc);
     }
 
-    column_readers = create_column_readers(slot_descs, _timezone, false);
-    reader->TEST_init(&slot_descs, &column_readers, column_not_found_as_null);
+    // create column readers
+    create_column_readers(slot_descs, _timezone, false);
+
+    // init reader for read data
+    // some fields such as _field_indexes does not inited normally, so init reader again.
+    reader->TEST_init(&slot_descs, &_column_readers, column_not_found_as_null);
 
     // create chunk
     auto chunk = create_src_chunk(slot_descs);
@@ -286,11 +291,10 @@ TEST_F(AvroReaderTest, test_read_complex_types) {
 TEST_F(AvroReaderTest, test_read_complex_types_as_varchar) {
     std::string filename = "complex.avro";
     std::vector<SlotDescriptor*> slot_descs;
-    std::vector<avrocpp::ColumnReaderUniquePtr> column_readers;
     bool column_not_found_as_null = false;
     int rows_to_read = 2;
 
-    // init reader for read
+    // init reader for read schema
     auto reader = create_avro_reader(filename);
 
     std::vector<SlotDescriptor> tmp_slot_descs;
@@ -303,8 +307,12 @@ TEST_F(AvroReaderTest, test_read_complex_types_as_varchar) {
                                    TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH))));
     }
 
-    column_readers = create_column_readers(slot_descs, _timezone, false);
-    reader->TEST_init(&slot_descs, &column_readers, column_not_found_as_null);
+    // create column readers
+    create_column_readers(slot_descs, _timezone, false);
+
+    // init reader for read data
+    // some fields such as _field_indexes does not inited normally, so init reader again.
+    reader->TEST_init(&slot_descs, &_column_readers, column_not_found_as_null);
 
     // create chunk
     auto chunk = create_src_chunk(slot_descs);
@@ -326,11 +334,10 @@ TEST_F(AvroReaderTest, test_read_complex_types_as_varchar) {
 TEST_F(AvroReaderTest, test_read_complex_nest_types) {
     std::string filename = "complex_nest.avro";
     std::vector<SlotDescriptor*> slot_descs;
-    std::vector<avrocpp::ColumnReaderUniquePtr> column_readers;
     bool column_not_found_as_null = false;
     int rows_to_read = 2;
 
-    // init reader for read
+    // init reader for read schema
     auto reader = create_avro_reader(filename);
 
     std::vector<SlotDescriptor> tmp_slot_descs;
@@ -340,8 +347,12 @@ TEST_F(AvroReaderTest, test_read_complex_nest_types) {
         slot_descs.emplace_back(&slot_desc);
     }
 
-    column_readers = create_column_readers(slot_descs, _timezone, false);
-    reader->TEST_init(&slot_descs, &column_readers, column_not_found_as_null);
+    // create column readers
+    create_column_readers(slot_descs, _timezone, false);
+
+    // init reader for read data
+    // some fields such as _field_indexes does not inited normally, so init reader again.
+    reader->TEST_init(&slot_descs, &_column_readers, column_not_found_as_null);
 
     // create chunk
     auto chunk = create_src_chunk(slot_descs);
@@ -365,11 +376,10 @@ TEST_F(AvroReaderTest, test_read_complex_nest_types) {
 TEST_F(AvroReaderTest, test_read_logical_types) {
     std::string filename = "logical.avro";
     std::vector<SlotDescriptor*> slot_descs;
-    std::vector<avrocpp::ColumnReaderUniquePtr> column_readers;
     bool column_not_found_as_null = false;
     int rows_to_read = 2;
 
-    // init reader for read
+    // init reader for read schema
     auto reader = create_avro_reader(filename);
 
     std::vector<SlotDescriptor> tmp_slot_descs;
@@ -380,8 +390,12 @@ TEST_F(AvroReaderTest, test_read_logical_types) {
         slot_descs.emplace_back(&tmp_slot_descs[i]);
     }
 
-    column_readers = create_column_readers(slot_descs, _timezone, false);
-    reader->TEST_init(&slot_descs, &column_readers, column_not_found_as_null);
+    // create column readers
+    create_column_readers(slot_descs, _timezone, false);
+
+    // init reader for read data
+    // some fields such as _field_indexes does not inited normally, so init reader again.
+    reader->TEST_init(&slot_descs, &_column_readers, column_not_found_as_null);
 
     // create chunk
     auto chunk = create_src_chunk(slot_descs);

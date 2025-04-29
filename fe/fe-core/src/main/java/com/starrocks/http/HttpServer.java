@@ -97,7 +97,6 @@ import com.starrocks.http.rest.TableSchemaAction;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TriggerAction;
 import com.starrocks.http.rest.v2.TablePartitionAction;
-import com.starrocks.leader.MetaHelper;
 import com.starrocks.metric.GaugeMetric;
 import com.starrocks.metric.GaugeMetricImpl;
 import com.starrocks.metric.Metric;
@@ -120,7 +119,6 @@ import io.netty.util.concurrent.EventExecutor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.File;
 import java.util.List;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -209,16 +207,15 @@ public class HttpServer {
         ExecuteSqlAction.registerAction(controller);
 
         // meta service action
-        File imageDir = MetaHelper.getLeaderImageDir();
-        ImageAction.registerAction(controller, imageDir);
-        InfoAction.registerAction(controller, imageDir);
-        VersionAction.registerAction(controller, imageDir);
-        PutAction.registerAction(controller, imageDir);
-        JournalIdAction.registerAction(controller, imageDir);
-        CheckAction.registerAction(controller, imageDir);
-        DumpAction.registerAction(controller, imageDir);
-        DumpStarMgrAction.registerAction(controller, imageDir);
-        RoleAction.registerAction(controller, imageDir);
+        ImageAction.registerAction(controller);
+        InfoAction.registerAction(controller);
+        VersionAction.registerAction(controller);
+        PutAction.registerAction(controller);
+        JournalIdAction.registerAction(controller);
+        CheckAction.registerAction(controller);
+        DumpAction.registerAction(controller);
+        DumpStarMgrAction.registerAction(controller);
+        RoleAction.registerAction(controller);
 
         // external usage
         TableRowCountAction.registerAction(controller);

@@ -727,6 +727,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Slot estimator strategy of queue based queries: MBE/PBE/MAX/MIN")
     public static String query_queue_slots_estimator_strategy = SlotEstimatorFactory.EstimatorPolicy.createDefault().name();
 
+    @ConfField(mutable = true, comment = "The max number of history allocated slots for a query queue")
+    public static int max_query_queue_history_slots_number = 0;
+
     /**
      * Used to estimate the number of slots of a query based on the cardinality of the Source Node. It is equal to the
      * cardinality of the Source Node divided by the configuration value and is limited to between [1, DOP*numBEs].
@@ -1725,6 +1728,15 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static double tablet_sched_num_based_balance_threshold_ratio = 0.5;
 
+    /**
+     * Persistent index rebuild is triggered only when the partition has new ingestion recently after clone finish.
+     * currentTime - partition VisibleVersionTime < tablet_sched_pk_index_rebuild_threshold_seconds
+     *
+     * the default value is 2 days for T+1 ingestion.
+     */
+    @ConfField(mutable = true)
+    public static int tablet_sched_pk_index_rebuild_threshold_seconds = 172800;
+
     @ConfField(mutable = true, comment = "How much time we should wait before dropping the tablet from BE on tablet report")
     public static long tablet_report_drop_tablet_delay_sec = 120;
 
@@ -1960,6 +1972,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "The max depth that scalar operator optimization can be applied")
     public static int max_scalar_operator_optimize_depth = 256;
+
+    @ConfField(mutable = true, comment = "scalar operator maximum number of flat children.")
+    public static int max_scalar_operator_flat_children = 10000;
 
     /**
      * statistic collect flag
@@ -2711,6 +2726,16 @@ public class Config extends ConfigBase {
     public static String azure_adls2_shared_key = "";
     @ConfField
     public static String azure_adls2_sas_token = "";
+    @ConfField
+    public static boolean azure_adls2_oauth2_use_managed_identity = false;
+    @ConfField
+    public static String azure_adls2_oauth2_tenant_id = "";
+    @ConfField
+    public static String azure_adls2_oauth2_client_id = "";
+    @ConfField
+    public static String azure_adls2_oauth2_client_secret = "";
+    @ConfField
+    public static String azure_adls2_oauth2_oauth2_client_endpoint = "";
 
     @ConfField(mutable = true)
     public static int starmgr_grpc_timeout_seconds = 5;

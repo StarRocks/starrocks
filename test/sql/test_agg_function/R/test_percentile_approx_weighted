@@ -239,11 +239,11 @@ select percentile_approx_weighted(c13.b, 1, 0.5) from t1;
 -- !result
 with tt as (select @v1 as v1, c1, c2 from t1) select /*+ set_user_variable(@v1 = 0.5) */ percentile_approx_weighted(c2, c1, v1) from tt;
 -- result:
-[REGEX]35355.93
+[REGEX]35355.93.*
 -- !result
 with tt as (select @v1 as v1, @v2 as v2, c1, c2 from t1) select /*+ set_user_variable(@v1= 0.5, @v2 = 4096) */ percentile_approx_weighted(c2, c1, v1, v2 + 1) from tt;
 -- result:
-[REGEX]35355.93
+[REGEX]35355.93.*
 -- !result
 set pipeline_dop=1;
 -- result:

@@ -154,6 +154,7 @@ import com.starrocks.persist.DropPartitionsInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.ListPartitionPersistInfo;
+import com.starrocks.persist.ModifyColumnCommentLog;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
@@ -4175,6 +4176,23 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             table.setNewFullSchema(columns);
         } finally {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
+        }
+    }
+
+    public void replayModifyColumnComment(short opCode, ModifyColumnCommentLog info) {
+        OlapTable table = (OlapTable) getTable(info.getDbId(), info.getTableId());
+        if (table == null) {
+            return;
+        }
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(info.getDbId(), info.getTableId(), LockType.WRITE);
+        try {
+            Column olapColumn = table.getColumn(info.getColumnName());
+            if (olapColumn != null) {
+                olapColumn.setComment(info.getComment());
+            }
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(info.getDbId(), info.getTableId(), LockType.WRITE);
         }
     }
 

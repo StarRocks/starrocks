@@ -39,7 +39,6 @@
 #include "util/stopwatch.hpp"
 
 namespace starrocks {
-class BlockCompressionCodec;
 class NullableColumn;
 
 namespace io {
@@ -62,8 +61,6 @@ public:
     Status load_header();
 
     Status load_page();
-
-    Status skip_page();
 
     Status skip_values(size_t num) {
         if (num == 0) {
@@ -146,9 +143,6 @@ private:
     Status _parse_dict_page();
     Status _try_load_dictionary();
 
-    Status _read_and_decompress_page_data(uint32_t compressed_size, uint32_t uncompressed_size, bool is_compressed,
-                                          uint32_t bytes_level_size = 0);
-
 private:
     enum PageParseState {
         INITIALIZED,
@@ -165,7 +159,6 @@ private:
     const tparquet::ColumnChunk* _chunk_metadata = nullptr;
     const ColumnReaderOptions& _opts;
     std::unique_ptr<PageReader> _page_reader;
-    const BlockCompressionCodec* _compress_codec = nullptr;
     io::SeekableInputStream* _stream;
 
     LevelDecoder _def_level_decoder;
@@ -174,11 +167,7 @@ private:
     int _chunk_size = 0;
     size_t _num_values = 0;
 
-    std::vector<uint8_t> _compressed_buf;
-    std::vector<uint8_t> _uncompressed_buf;
-
     PageParseState _page_parse_state = INITIALIZED;
-    Slice _data;
 
     bool _dict_page_parsed = false;
     Decoder* _cur_decoder = nullptr;

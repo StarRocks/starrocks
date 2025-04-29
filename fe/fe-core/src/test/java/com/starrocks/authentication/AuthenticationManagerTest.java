@@ -124,7 +124,7 @@ public class AuthenticationManagerTest {
                 masterManager.getBestMatchedUserIdentity(testUser.getUser(), "10.1.1.2");
         PlainPasswordAuthenticationProvider provider = new PlainPasswordAuthenticationProvider(entry.getValue().getPassword());
         Assert.assertThrows(AuthenticationException.class, () ->
-                provider.authenticate(ctx, entry.getKey().getUser(), entry.getKey().getHost(), scramble));
+                provider.authenticate(ctx, entry.getKey(), scramble));
 
         // start to replay
         AuthenticationMgr followerManager = new AuthenticationMgr();
@@ -168,7 +168,7 @@ public class AuthenticationManagerTest {
         Map.Entry<UserIdentity, UserAuthenticationInfo> entry1 =
                 followerManager.getBestMatchedUserIdentity(testUser.getUser(), "10.1.1.2");
         Assert.assertThrows(AuthenticationException.class, () ->
-                provider.authenticate(ctx, entry1.getKey().getUser(), entry1.getKey().getHost(), scramble));
+                provider.authenticate(ctx, entry1.getKey(), scramble));
 
         // purely loaded from image
         AuthenticationMgr imageManager = new AuthenticationMgr();
@@ -181,7 +181,7 @@ public class AuthenticationManagerTest {
         Map.Entry<UserIdentity, UserAuthenticationInfo> entry2 =
                 followerManager.getBestMatchedUserIdentity(testUser.getUser(), "10.1.1.2");
         Assert.assertThrows(AuthenticationException.class, () ->
-                provider.authenticate(ctx, entry2.getKey().getUser(), entry2.getKey().getHost(), scramble));
+                provider.authenticate(ctx, entry2.getKey(), scramble));
     }
 
     @Test

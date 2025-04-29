@@ -51,6 +51,7 @@ public class AndRangePredicate extends RangePredicate {
         }
     }
 
+
     @Override
     public ScalarOperator toScalarOperator() {
         List<ScalarOperator> children = Lists.newArrayList();

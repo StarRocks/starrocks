@@ -67,7 +67,6 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.persist.EditLog;
-import com.starrocks.persist.ImageFormatVersion;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
@@ -800,7 +799,7 @@ public class GlobalTransactionMgrTest {
         File tempFile = File.createTempFile("GlobalTransactionMgrTest", ".image");
         System.err.println("write image " + tempFile.getAbsolutePath());
         DataOutputStream dos = new DataOutputStream(new FileOutputStream(tempFile));
-        ImageWriter imageWriter = new ImageWriter("", ImageFormatVersion.v2, 0);
+        ImageWriter imageWriter = new ImageWriter("", 0);
         imageWriter.setOutputStream(dos);
         masterTransMgr.saveTransactionStateV2(imageWriter);
         dos.close();

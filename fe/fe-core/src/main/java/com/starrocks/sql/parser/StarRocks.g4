@@ -866,9 +866,9 @@ setDefaultStorageVolumeStatement
 // ------------------------------------------- FailPoint Statement -----------------------------------------------------
 
 updateFailPointStatusStatement
-    : ADMIN DISABLE FAILPOINT string (ON BACKEND string)?
-    | ADMIN ENABLE FAILPOINT string (WITH INTEGER_VALUE TIMES)? (ON BACKEND string)?
-    | ADMIN ENABLE FAILPOINT string (WITH DECIMAL_VALUE PROBABILITY)? (ON BACKEND string)?
+    : ADMIN (DISABLE | ENABLE) FAILPOINT string
+      (WITH (times=INTEGER_VALUE TIMES | prob=DECIMAL_VALUE PROBABILITY))?
+      (ON (BACKEND string | FRONTEND))?
     ;
 
 showFailPointStatement
@@ -938,6 +938,7 @@ alterClause
     | addColumnClause
     | addColumnsClause
     | dropColumnClause
+    | modifyColumnCommentClause
     | modifyColumnClause
     | columnRenameClause
     | reorderColumnsClause
@@ -1090,6 +1091,10 @@ dropColumnClause
 
 modifyColumnClause
     : MODIFY COLUMN columnDesc (FIRST | AFTER identifier)? (FROM rollupName=identifier)? properties?
+    ;
+
+modifyColumnCommentClause
+    : MODIFY COLUMN identifier comment
     ;
 
 columnRenameClause
