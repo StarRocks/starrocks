@@ -269,8 +269,8 @@ std::string DataDir::get_root_path_from_schema_hash_path_in_trash(const std::str
             .string();
 }
 
-// TODO(ygl): deal with rowsets and tablets when load failed
-Status DataDir::load() {
+// [NOTICE] we must ensure that all tablets are either properly loaded or handled within load().
+void DataDir::load() {
     // load tablet
     // create tablet from tablet meta and add it to tablet mgr
     int64_t load_tablet_start = MonotonicMillis();
@@ -302,17 +302,18 @@ Status DataDir::load() {
         LOG(WARNING) << "load tablets from rocksdb timeout, try to compact meta and retry. path: " << _path;
         Status s = _kv_store->compact();
         if (!s.ok()) {
+            // We don't need to make sure compact MUST success. Just ignore the error.
             LOG(ERROR) << "data dir " << _path << " compact meta before load failed";
-            return s;
+        } else {
+            LOG(WARNING) << "compact meta finished, retry load tablets from rocksdb. path: " << _path;
         }
         for (auto tablet_id : tablet_ids) {
             Status s = _tablet_manager->drop_tablet(tablet_id, kKeepMetaAndFiles);
             if (!s.ok()) {
+                // Only print log, do not return error. Later load tablet from rocksdb can handle this.
                 LOG(ERROR) << "data dir " << _path << " drop_tablet failed: " << s.message();
-                return s;
             }
         }
-        LOG(WARNING) << "compact meta finished, retry load tablets from rocksdb. path: " << _path;
         tablet_ids.clear();
         failed_tablet_ids.clear();
         load_tablet_status = TabletMetaManager::walk(_kv_store, load_tablet_func);
@@ -352,8 +353,8 @@ Status DataDir::load() {
             tablet->tablet_meta()->to_meta_pb(&tablet_meta_pb);
             Status s = TabletMetaManager::save(this, tablet_meta_pb);
             if (!s.ok()) {
+                // Only print log, do not return error. We can handle it later.
                 LOG(ERROR) << "data dir " << _path << " save tablet meta failed: " << s.message();
-                return s;
             }
         }
     }
@@ -468,8 +469,6 @@ Status DataDir::load() {
             LOG(WARNING) << "Fail to finish loading rowsets, tablet id=" << tablet_id << ", status: " << st.to_string();
         }
     }
-
-    return Status::OK();
 }
 
 // gc unused tablet schemahash dir
