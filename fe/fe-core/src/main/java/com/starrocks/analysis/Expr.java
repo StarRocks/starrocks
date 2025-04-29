@@ -45,6 +45,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.TreeNode;
 import com.starrocks.common.io.Writable;
 import com.starrocks.planner.FragmentNormalizer;
@@ -82,7 +83,13 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.Optional;
+import java.util.Queue;
+>>>>>>> 5c12ec80c4 ([BugFix] LargeStringLiterals in filters of JDBCScanNode/MySQLScanNode is truncated and appended to ellipsis (#58484))
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
  * Root of the expr node hierarchy.
@@ -277,6 +284,32 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
             return type;
         }
         return originType;
+    }
+
+    private Optional<Expr> replaceLargeStringLiteralImpl() {
+        if (this instanceof LargeStringLiteral) {
+            return Optional.of(new StringLiteral(((LargeStringLiteral) this).getValue()));
+        }
+        if (children == null || children.isEmpty()) {
+            return Optional.empty();
+        }
+        List<Pair<Expr, Optional<Expr>>> childAndNewChildPairList = children.stream()
+                .map(child -> Pair.create(child, child.replaceLargeStringLiteralImpl()))
+                .collect(Collectors.toList());
+        if (childAndNewChildPairList.stream().noneMatch(p -> p.second.isPresent())) {
+            return Optional.empty();
+        }
+
+        for (int i = 0; i < this.children.size(); ++i) {
+            Pair<Expr, Optional<Expr>> childPair = childAndNewChildPairList.get(i);
+            Expr newChild = childPair.second.orElse(childPair.first);
+            setChild(i, newChild);
+        }
+        return Optional.of(this);
+    }
+
+    public Expr replaceLargeStringLiteral() {
+        return this.replaceLargeStringLiteralImpl().orElse(this);
     }
 
     // Used to differ from getOriginType(), return originType directly.
