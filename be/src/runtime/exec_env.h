@@ -253,6 +253,7 @@ public:
 
     BlockCache* block_cache() const { return _block_cache.get(); }
     ObjectCache* external_table_meta_cache() const { return _starcache_based_object_cache.get(); }
+    ObjectCache* external_table_page_cache() const { return _starcache_based_object_cache.get(); }
     StoragePageCache* page_cache() const { return _page_cache.get(); }
 
 private:
