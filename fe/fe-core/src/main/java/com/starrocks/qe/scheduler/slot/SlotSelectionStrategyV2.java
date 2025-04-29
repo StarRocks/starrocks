@@ -19,7 +19,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.thrift.TUniqueId;
@@ -234,10 +233,11 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
 
     private boolean isQueryConcurrencyLimitAvailable(BaseSlotTracker slotTracker) {
         // if the query queue limit is not set(by default), return true
-        if (!GlobalVariable.isQueryQueueConcurrencyLimitEffective()) {
+        int queryQueueConcurrencyLimit = slotManager.getQueryQueueConcurrencyLimit(warehouseId);
+        if (queryQueueConcurrencyLimit <= 0) {
             return true;
         }
-        return slotTracker.getNumAllocatedSlots() <= GlobalVariable.getQueryQueueConcurrencyLimit();
+        return slotTracker.getCurrentCurrency() <= queryQueueConcurrencyLimit;
     }
 
     private static boolean isSmallSlot(LogicalSlot slot) {

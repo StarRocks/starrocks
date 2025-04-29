@@ -69,7 +69,7 @@ public class WarehouseMetrics {
         long maxSlots = tracker.getMaxSlots().map(s -> QueryQueueOptions.correctSlotNum(s)).orElse(0);
         final Optional<BaseSlotTracker.ExtraMessage> extraMessage = tracker.getExtraMessage();
         return new WarehouseMetrics(tracker.getWarehouseId(), tracker.getWarehouseName(),
-                tracker.getQueuePendingLength(), tracker.getNumAllocatedSlots(), tracker.getMaxQueueQueueLength(),
+                tracker.getQueuePendingLength(), tracker.getCurrentCurrency(), tracker.getMaxQueueQueueLength(),
                 tracker.getEarliestQueryWaitTimeSecond(), tracker.getMaxQueuePendingTimeSecond(),
                 maxRequestSlots, sumRequestSlots, remainSlots, maxSlots, extraMessage);
     }
