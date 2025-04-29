@@ -71,6 +71,7 @@ import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
+import com.starrocks.persist.OperationType;
 import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -594,6 +595,25 @@ public class AlterJobMgr {
             LOG.info("replay modify view[{}] definition to {}", viewName, inlineViewDef);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(view.getId()), LockType.WRITE);
+        }
+    }
+
+    public void setViewSecurity(AlterViewInfo alterViewInfo, boolean isReplay) {
+        long dbId = alterViewInfo.getDbId();
+        long tableId = alterViewInfo.getTableId();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        View view = (View) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(view.getId()), LockType.WRITE);
+        try {
+            view.setSecurity(alterViewInfo.getSecurity());
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(view.getId()), LockType.WRITE);
+        }
+
+        if (!isReplay) {
+            GlobalStateMgr.getCurrentState().getEditLog().logEdit(OperationType.OP_SET_VIEW_SECURITY_LOG, alterViewInfo);
         }
     }
 
