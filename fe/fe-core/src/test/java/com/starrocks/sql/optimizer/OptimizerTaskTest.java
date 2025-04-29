@@ -98,7 +98,6 @@ public class OptimizerTaskTest {
         ctx.getSessionVariable().setEnableReplicationJoin(false);
         ctx.getSessionVariable().setJoinImplementationMode("auto");
         ctx.getSessionVariable().setCboPushDownAggregateMode(-1);
-        FeConstants.enableJoinReorderInLogicalPhase = false;
         ctx.setDumpInfo(new MockDumpInfo());
         call = new CallOperator(FunctionSet.SUM, Type.BIGINT, Lists.newArrayList(ConstantOperator.createBigint(1)));
         new Expectations(call) {

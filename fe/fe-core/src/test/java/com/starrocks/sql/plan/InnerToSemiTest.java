@@ -14,7 +14,6 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
@@ -26,7 +25,7 @@ import org.junit.Test;
 public class InnerToSemiTest extends PlanWithCostTestBase {
     @Before
     public void before() throws Exception {
-        FeConstants.enableJoinReorderInLogicalPhase = true;
+        connectContext.getSessionVariable().setEnableJoinReorderBeforeDeduplicate(true);
         long t0Rows = 1000_000_000L;
         long t1Rows = 1000L;
         long t2Rows = 10_000_000L;
@@ -74,7 +73,7 @@ public class InnerToSemiTest extends PlanWithCostTestBase {
 
     @After
     public void after() {
-        FeConstants.enableJoinReorderInLogicalPhase = false;
+        connectContext.getSessionVariable().setEnableJoinReorderBeforeDeduplicate(false);
     }
 
     @Test

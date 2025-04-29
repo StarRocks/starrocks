@@ -895,6 +895,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SEMI_JOIN_DEDUPLICATE_MODE = "semi_join_deduplicat_mode";
     public static final String ENABLE_INNER_JOIN_TO_SEMI = "enable_inner_join_to_semi";
+    public static final String ENABLE_JOIN_REORDER_BEFORE_DEDUPLICATE = "enable_join_reorder_before_deduplicate";
     public static final String JOIN_REORDER_DRIVING_TABLE_MAX_ELEMENT = "join_reorder_driving_table_max_element";
 
     public static final String CBO_PUSH_DOWN_DISTINCT = "cbo_push_down_distinct";
@@ -1794,6 +1795,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = JOIN_REORDER_DRIVING_TABLE_MAX_ELEMENT)
     private int joinReorderDrivingTableMaxElement = 5;
+
+    @VarAttr(name = ENABLE_JOIN_REORDER_BEFORE_DEDUPLICATE)
+    private boolean enableJoinReorderBeforeDeduplicate = false;
 
     // when enable distinct agg below semi-join optimization
     // this sv controls create a global agg or local agg
@@ -4899,6 +4903,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getJoinReorderDrivingTableMaxElement() {
         return joinReorderDrivingTableMaxElement;
+    }
+
+    public boolean isEnableJoinReorderBeforeDeduplicate() {
+        return enableJoinReorderBeforeDeduplicate;
+    }
+
+    public void setEnableJoinReorderBeforeDeduplicate(boolean enableJoinReorderBeforeDeduplicate) {
+        this.enableJoinReorderBeforeDeduplicate = enableJoinReorderBeforeDeduplicate;
     }
 
     // Serialize to thrift object

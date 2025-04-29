@@ -71,7 +71,6 @@ public class ReplayFromDumpTestBase {
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.showJoinLocalShuffleInExplain = false;
         FeConstants.setLengthForVarchar = false;
-        FeConstants.enableJoinReorderInLogicalPhase = false;
         new MockUp<EditLog>() {
             @Mock
             protected void logEdit(short op, Writable writable) {
@@ -179,6 +178,7 @@ public class ReplayFromDumpTestBase {
         }
         queryDumpInfo.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         queryDumpInfo.getSessionVariable().setCboPushDownAggregateMode(-1);
+        queryDumpInfo.getSessionVariable().setEnableInnerJoinToSemi(false);
         return new Pair<>(queryDumpInfo,
                 UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext, queryDumpInfo).second.
                         getExplainString(level));

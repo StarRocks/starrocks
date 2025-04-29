@@ -45,11 +45,13 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         DistributedEnvPlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
         Config.tablet_sched_disable_colocate_overall_balance = true;
+        connectContext.getSessionVariable().setSemiJoinDeduplicateMode(-1);
     }
 
     @After
     public void after() {
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
+        connectContext.getSessionVariable().setSemiJoinDeduplicateMode(0);
     }
 
     //  agg

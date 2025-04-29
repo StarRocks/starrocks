@@ -990,7 +990,6 @@ public class PlanTestBase extends PlanTestNoneDBBase {
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
         connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
-        FeConstants.enableJoinReorderInLogicalPhase = true;
     }
 
     // NOTE: for JUnit 5

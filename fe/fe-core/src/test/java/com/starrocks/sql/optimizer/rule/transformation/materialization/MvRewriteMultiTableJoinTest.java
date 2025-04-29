@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
-import com.starrocks.common.FeConstants;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -26,7 +25,6 @@ public class MvRewriteMultiTableJoinTest extends MVTestBase {
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
         prepareDatas();
-        FeConstants.enableJoinReorderInLogicalPhase = false;
     }
 
     @AfterClass

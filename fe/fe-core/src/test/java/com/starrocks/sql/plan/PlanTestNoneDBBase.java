@@ -95,7 +95,6 @@ public class PlanTestNoneDBBase {
         FeConstants.showJoinLocalShuffleInExplain = false;
         FeConstants.showFragmentCost = false;
         FeConstants.setLengthForVarchar = false;
-        FeConstants.enableJoinReorderInLogicalPhase = false;
     }
 
     @Before

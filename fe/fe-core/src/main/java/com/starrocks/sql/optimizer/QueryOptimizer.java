@@ -20,7 +20,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
@@ -818,7 +817,7 @@ public class QueryOptimizer extends Optimizer {
                 deriveLogicalProperty(tree);
             }
             // if join reorder is not done, we need to do it here, because we need the join's shape to better decide where to push down distinct.
-            if (!joinReorder && FeConstants.enableJoinReorderInLogicalPhase) {
+            if (!joinReorder && context.getSessionVariable().isEnableJoinReorderBeforeDeduplicate()) {
                 logicalJoinReorder(tree, rootTaskContext);
             }
             SemiJoinDeduplicateRule rule = new SemiJoinDeduplicateRule();

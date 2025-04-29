@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.common.FeConstants;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -24,12 +23,12 @@ public class DeduplicateSemiInputTest extends TPCDS1TTestBase {
     public static void beforeClass() throws Exception {
         TPCDS1TTestBase.beforeClass();
         connectContext.getSessionVariable().disableJoinReorder();
-        FeConstants.enableJoinReorderInLogicalPhase = true;
+        connectContext.getSessionVariable().setEnableJoinReorderBeforeDeduplicate(true);
     }
 
     @AfterClass
     public static void afterClass() {
-        FeConstants.enableJoinReorderInLogicalPhase = false;
+        connectContext.getSessionVariable().setEnableJoinReorderBeforeDeduplicate(false);
         connectContext.getSessionVariable().enableJoinReorder();
         TPCDS1TTestBase.afterClass();
     }
