@@ -36,20 +36,6 @@
 
 // cachemgr thread pool size
 DECLARE_int32(cachemgr_threadpool_size);
-// cache backend check interval (in seconds), for async write sync check and ttl clean, e.t.c.
-DECLARE_int32(cachemgr_check_interval);
-// cache backend cache evictor interval (in seconds)
-DECLARE_int32(cachemgr_evict_interval);
-// cache will start evict cache files if free space belows this value(percentage)
-DECLARE_double(cachemgr_evict_low_water);
-// cache will stop evict cache files if free space is above this value(percentage)
-DECLARE_double(cachemgr_evict_high_water);
-// cache will evict file cache at this percent if star cache is turned on
-DECLARE_double(cachemgr_evict_percent);
-// cache will evict file cache at this speed if star cache is turned on
-DECLARE_int32(cachemgr_evict_throughput_mb);
-// type:Integer. CacheManager cache directory allocation policy. (0:default, 1:random, 2:round-robin)
-DECLARE_int32(cachemgr_dir_allocate_policy);
 // buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
 DECLARE_int32(fs_stream_buffer_size_bytes);
 // domain allow list to force starlet using s3 virtual address style
@@ -475,21 +461,13 @@ void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache)
 
     staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_threadpool_size",
                                                           std::to_string(config::starlet_cache_thread_num));
-    staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_low_water",
-                                                          std::to_string(config::starlet_cache_evict_low_water));
-    staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_high_water",
-                                                          std::to_string(config::starlet_cache_evict_high_water));
     staros::starlet::common::GFlagsUtils::UpdateFlagValue("fs_stream_buffer_size_bytes",
                                                           std::to_string(config::starlet_fs_stream_buffer_size_bytes));
     staros::starlet::common::GFlagsUtils::UpdateFlagValue("fs_enable_buffer_prefetch",
                                                           std::to_string(config::starlet_fs_read_prefetch_enable));
     staros::starlet::common::GFlagsUtils::UpdateFlagValue(
             "fs_buffer_prefetch_threadpool_size", std::to_string(config::starlet_fs_read_prefetch_threadpool_size));
-    staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_interval",
-                                                          std::to_string(config::starlet_cache_evict_interval));
 
-    FLAGS_cachemgr_check_interval = config::starlet_cache_check_interval;
-    FLAGS_cachemgr_dir_allocate_policy = config::starlet_cache_dir_allocate_policy;
     FLAGS_fslib_s3_virtual_address_domainlist = config::starlet_s3_virtual_address_domainlist;
     // use the same configuration as the external query
     FLAGS_fslib_s3client_max_connections = config::object_storage_max_connection;
