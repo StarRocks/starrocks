@@ -5435,4 +5435,66 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     "please use str2date partition expression."));
         }
     }
+
+    @Test
+    public void testCreateMaterializedViewOnListPartitionTablesActive() throws Exception {
+        String createSQL = "CREATE TABLE test.list_partition_tbl1 (\n" +
+                "      id BIGINT,\n" +
+                "      age SMALLINT,\n" +
+                "      dt VARCHAR(10),\n" +
+                "      province VARCHAR(64) not null\n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY LIST (province) (\n" +
+                "     PARTITION p1 VALUES IN (\"beijing\",\"chongqing\") ,\n" +
+                "     PARTITION p2 VALUES IN (\"guangdong\") \n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")";
+        starRocksAssert.withTable(createSQL);
+
+        String sql = "create materialized view list_partition_mv1 " +
+                "partition by province " +
+                "distributed by hash(dt, province) buckets 10 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select dt, province, avg(age) from list_partition_tbl1 group by dt, province;";
+        try {
+            starRocksAssert.withMaterializedView(sql);
+            MaterializedView mv = (MaterializedView) starRocksAssert.getTable("test", "list_partition_mv1");
+
+            String result = mv.getMaterializedViewDdlStmt(false, false);
+            String expect = "CREATE MATERIALIZED VIEW `list_partition_mv1` (`dt`, `province`, `avg(age)`)\n" +
+                    "PARTITION BY (`province`)\n" +
+                    "DISTRIBUTED BY HASH(`dt`, `province`) BUCKETS 10 \n" +
+                    "REFRESH MANUAL\n" +
+                    "PROPERTIES (\n" +
+                    "\"replicated_storage\" = \"true\",\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"storage_medium\" = \"HDD\"\n" +
+                    ")\n" +
+                    "AS SELECT `test`.`list_partition_tbl1`.`dt`, `test`.`list_partition_tbl1`.`province`, " +
+                    "avg(`test`.`list_partition_tbl1`.`age`) AS `avg(age)`\n" +
+                    "FROM `test`.`list_partition_tbl1`\n" +
+                    "GROUP BY `test`.`list_partition_tbl1`.`dt`, `test`.`list_partition_tbl1`.`province`;";
+            Assert.assertTrue(expect.equals(result));
+
+            sql = "alter materialized view list_partition_mv1 inactive";
+            starRocksAssert.alterMvProperties(sql);
+
+            sql = "alter materialized view list_partition_mv1 active";
+            starRocksAssert.alterMvProperties(sql);
+
+            mv = (MaterializedView) starRocksAssert.getTable("test", "list_partition_mv1");
+            result = mv.getMaterializedViewDdlStmt(false, false);
+            Assert.assertTrue(expect.equals(result));
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
+        starRocksAssert.dropTable("list_partition_tbl1");
+    }
 }

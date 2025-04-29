@@ -3135,7 +3135,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         newPartitionColumns.add(mvPartitionColumn);
                     }
                 }
-                return new ListPartitionInfo(PartitionType.LIST, newPartitionColumns);
+                ListPartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST, newPartitionColumns);
+                listPartitionInfo.setAutomaticPartition(true);
+                return listPartitionInfo;
             } else {
                 if (partitionByExprs.size() > 1) {
                     throw new DdlException("Only support one partition column for range partition");
