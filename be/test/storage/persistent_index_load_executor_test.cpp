@@ -190,7 +190,7 @@ TEST_F(PersistentIndexLoadExecutorTest, test_submit_task) {
     ASSERT_TRUE(index_entry->value().is_loaded());
 }
 
-TEST_F(PersistentIndexLoadExecutorTest, test_submit_task_twice) {
+TEST_F(PersistentIndexLoadExecutorTest, test_submit_task_many_times) {
     const int64_t key_start = 0;
     const int num_row = 100000;
     const size_t num_segment = 10;
@@ -221,12 +221,18 @@ TEST_F(PersistentIndexLoadExecutorTest, test_submit_task_twice) {
     Status st = _tablet->data_dir()->get_meta()->remove(starrocks::META_COLUMN_FAMILY_INDEX, key);
     CHECK_OK(st);
 
-    // submit task to rebuild persistent index and not wait
+    // submit task to rebuild persistent index and not wait, many times
     auto* pindex_load_executor = manager->get_pindex_load_executor();
     st = pindex_load_executor->submit_task_and_wait_for(_tablet, 0);
     ASSERT_TRUE(st.is_time_out());
 
-    // submit task again, wait to finish
+    st = pindex_load_executor->submit_task_and_wait_for(_tablet, 0);
+    ASSERT_TRUE(st.is_time_out());
+
+    st = pindex_load_executor->submit_task_and_wait_for(_tablet, 0);
+    ASSERT_TRUE(st.is_time_out());
+
+    // submit task and wait to finish
     st = pindex_load_executor->submit_task_and_wait_for(_tablet, 60);
     CHECK_OK(st);
     index_entry = index_cache.get_or_create(tablet_id);
