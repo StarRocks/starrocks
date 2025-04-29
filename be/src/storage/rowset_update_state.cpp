@@ -50,12 +50,12 @@ Status RowsetUpdateState::load(Tablet* tablet, Rowset* rowset) {
     std::call_once(_load_once_flag, [&] {
         _tablet_id = tablet->tablet_id();
         _status = _do_load(tablet, rowset);
-        if (!_status.ok()) {
+        if (!_status.ok() && !_status.is_mem_limit_exceeded() && !_status.is_time_out()) {
             LOG(WARNING) << "load RowsetUpdateState error: " << _status << " tablet:" << _tablet_id << " stack:\n"
                          << get_stack_trace();
-            if (_status.is_mem_limit_exceeded()) {
-                LOG(WARNING) << CurrentThread::mem_tracker()->debug_string();
-            }
+        }
+        if (_status.is_mem_limit_exceeded()) {
+            LOG(WARNING) << CurrentThread::mem_tracker()->debug_string();
         }
     });
     return _status;
@@ -413,9 +413,9 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
 
     int64_t t_read_index = MonotonicMillis();
     if (need_lock) {
-        RETURN_IF_ERROR(tablet->updates()->get_rss_rowids_by_pk(tablet, *_upserts[idx],
-                                                                &(_partial_update_states[idx].read_version),
-                                                                &(_partial_update_states[idx].src_rss_rowids)));
+        RETURN_IF_ERROR(tablet->updates()->get_rss_rowids_by_pk(
+                tablet, *_upserts[idx], &(_partial_update_states[idx].read_version),
+                &(_partial_update_states[idx].src_rss_rowids), 3000 /* timeout_ms */));
     } else {
         RETURN_IF_ERROR(tablet->updates()->get_rss_rowids_by_pk_unlock(tablet, *_upserts[idx],
                                                                        &(_partial_update_states[idx].read_version),
