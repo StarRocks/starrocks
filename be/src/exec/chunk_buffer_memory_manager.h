@@ -45,7 +45,7 @@ public:
         size_t prev_memusage = _memory_usage.fetch_add(memory_usage);
         size_t prev_num_rows = _buffered_num_rows.fetch_add(num_rows);
         bool is_full =
-                prev_memusage + memory_usage >= _max_memory_usage || prev_num_rows + num_rows >= _max_buffered_rows;
+                prev_memusage + memory_usage >= _max_memory_usage || prev_num_rows + num_rows > _max_buffered_rows;
         bool expect = false;
         bool full_changed = prev_full != is_full;
         if (!full_changed) {
