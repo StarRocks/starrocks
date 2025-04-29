@@ -16,6 +16,7 @@
 package com.starrocks.connector.hive.glue.util;
 
 import com.google.common.collect.Maps;
+import com.starrocks.connector.hive.glue.metastore.AWSGlueMetastore;
 import com.starrocks.connector.hive.glue.metastore.GlueMetastoreClientDelegate;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import org.apache.commons.lang3.StringUtils;
@@ -84,11 +85,12 @@ public final class MetastoreClientUtils {
      *
      * @param table
      */
-    public static void validateGlueTable(software.amazon.awssdk.services.glue.model.Table table) {
+    public static void validateGlueTable(software.amazon.awssdk.services.glue.model.Table table, AWSGlueMetastore metastore)
+            throws InvalidObjectException {
         checkNotNull(table, "table cannot be null");
 
         for (HiveTableValidator validator : HiveTableValidator.values()) {
-            validator.validate(table);
+            validator.validate(table, metastore);
         }
     }
 
