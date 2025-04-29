@@ -177,6 +177,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             // 1. ScanNodes is empty.
             DefaultCoordinator coordinator = getSchedulerWithQueryId("select 1");
             Assert.assertFalse(coordinator.getJobSpec().isNeedQueued());
+            Assert.assertFalse(coordinator.getJobSpec().isJobNeedCheckQueue());
         }
 
         {
@@ -184,6 +185,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             DefaultCoordinator coordinator =
                     getSchedulerWithQueryId("select TABLE_CATALOG from information_schema.tables");
             Assert.assertFalse(coordinator.getJobSpec().isNeedQueued());
+            Assert.assertFalse(coordinator.getJobSpec().isJobNeedCheckQueue());
         }
 
         {
@@ -191,6 +193,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             DefaultCoordinator coordinator = getSchedulerWithQueryId(
                     "select TABLE_CATALOG from information_schema.tables UNION ALL select count(1) from lineitem");
             Assert.assertTrue(coordinator.getJobSpec().isNeedQueued());
+            Assert.assertTrue(coordinator.getJobSpec().isJobNeedCheckQueue());
         }
 
         {

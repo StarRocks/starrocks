@@ -33,6 +33,11 @@ SchemaScanner::ColumnDesc WarehouseQueriesScanner::_s_columns[] = {
         {"EST_COSTS_SLOTS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
         {"ALLOCATE_SLOTS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
         {"QUEUED_WAIT_SECONDS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"QUERY", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"QUERY_START_TIME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"QUERY_END_TIME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"QUERY_DURATION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"EXTRA_MESSAGE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
 };
 
 WarehouseQueriesScanner::WarehouseQueriesScanner()
@@ -82,9 +87,18 @@ Status WarehouseQueriesScanner::get_next(ChunkPtr* chunk, bool* eos) {
 Status WarehouseQueriesScanner::fill_chunk(ChunkPtr* chunk) {
     auto& slot_id_map = (*chunk)->get_slot_id_to_index_map();
     const TGetWarehouseQueriesResponseItem& item = _response.queries[_idx++];
-    DatumArray datum_array{
-            Slice(item.warehouse_id),    Slice(item.warehouse_name), Slice(item.query_id),           Slice(item.state),
-            Slice(item.est_costs_slots), Slice(item.allocate_slots), Slice(item.queued_wait_seconds)};
+    DatumArray datum_array{Slice(item.warehouse_id),
+                           Slice(item.warehouse_name),
+                           Slice(item.query_id),
+                           Slice(item.state),
+                           Slice(item.est_costs_slots),
+                           Slice(item.allocate_slots),
+                           Slice(item.queued_wait_seconds),
+                           Slice(item.query),
+                           Slice(item.query_start_time),
+                           Slice(item.query_end_time),
+                           Slice(item.query_duration),
+                           Slice(item.extra_message)};
     for (const auto& [slot_id, index] : slot_id_map) {
         Column* column = (*chunk)->get_column_by_slot_id(slot_id).get();
         column->append_datum(datum_array[slot_id - 1]);
