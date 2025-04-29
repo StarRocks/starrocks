@@ -16,6 +16,7 @@
 
 #include <filesystem>
 
+#include "common/config.h"
 #include "connector/hive_chunk_sink.h"
 #include "exec/cache_select_scanner.h"
 #include "exec/exec_node.h"
@@ -161,10 +162,23 @@ Status HiveDataSource::open(RuntimeState* state) {
         _scan_range.datacache_options.priority == -1) {
         _datacache_options.enable_datacache = false;
     }
+<<<<<<< HEAD
     _use_file_metacache = config::datacache_enable && BlockCache::instance()->has_mem_cache();
+=======
+
+    // Only support file metacache in starcache engine
+#ifdef WITH_STARCACHE
+>>>>>>> 71412e83ff ([Enhancement]support decompressed page cache for parquet (#58197))
     if (state->query_options().__isset.enable_file_metacache) {
-        _use_file_metacache &= state->query_options().enable_file_metacache;
+        _use_file_metacache = state->query_options().enable_file_metacache;
     }
+    _use_file_metacache &= BlockCache::instance()->mem_cache_available();
+
+    if (state->query_options().__isset.enable_file_pagecache) {
+        _use_file_pagecache = state->query_options().enable_file_pagecache;
+    }
+    _use_file_pagecache &= BlockCache::instance()->mem_cache_available();
+#endif
 
     if (state->query_options().__isset.enable_dynamic_prune_scan_range) {
         _enable_dynamic_prune_scan_range = state->query_options().enable_dynamic_prune_scan_range;
@@ -703,6 +717,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     // setup options for datacache
     scanner_params.datacache_options = _datacache_options;
     scanner_params.use_file_metacache = _use_file_metacache;
+    scanner_params.use_file_pagecache = _use_file_pagecache;
 
     scanner_params.can_use_any_column = _can_use_any_column;
     scanner_params.can_use_min_max_count_opt = _can_use_min_max_count_opt;

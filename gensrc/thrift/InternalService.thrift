@@ -318,6 +318,11 @@ struct TQueryOptions {
   134: optional i32 datacache_priority;
   135: optional i64 datacache_ttl_seconds;
   136: optional bool enable_cache_select;
+<<<<<<< HEAD
+=======
+  137: optional i64 datacache_sharing_work_period;
+  138: optional bool enable_file_pagecache;
+>>>>>>> 71412e83ff ([Enhancement]support decompressed page cache for parquet (#58197))
 
   140: optional string catalog;
 
