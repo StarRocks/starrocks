@@ -14,13 +14,13 @@
 
 package com.starrocks.journal;
 
-import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.leader.CheckpointController;
-import com.starrocks.persist.ImageLoader;
+import com.starrocks.leader.MetaHelper;
 import com.starrocks.persist.MetaCleaner;
+import com.starrocks.persist.Storage;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -33,23 +33,19 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
 import java.io.IOException;
-import java.util.List;
 
 public abstract class CheckpointWorker extends FrontendDaemon {
     public static final Logger LOG = LogManager.getLogger(CheckpointWorker.class);
 
-    protected String imageDir;
     protected final Journal journal;
 
     // the next checkpoint task(epoch, journalId) to do
     private NextPoint nextPoint;
     protected GlobalStateMgr servingGlobalState;
-    private String subDir;
 
-    public CheckpointWorker(String name, Journal journal, String subDir) {
+    public CheckpointWorker(String name, Journal journal) {
         super(name, FeConstants.checkpoint_interval_second * 1000L);
         this.journal = journal;
-        this.subDir = subDir;
     }
 
     abstract void doCheckpoint(long epoch, long journalId) throws Exception;
@@ -94,7 +90,6 @@ public abstract class CheckpointWorker extends FrontendDaemon {
 
     private void init() {
         this.servingGlobalState = GlobalStateMgr.getServingState();
-        this.imageDir = servingGlobalState.getImageDir() + subDir;
     }
 
     private void createImage(long epoch, long journalId) {
@@ -112,17 +107,12 @@ public abstract class CheckpointWorker extends FrontendDaemon {
     }
 
     private void cleanOldImages() {
-        List<String> dirsToClean = Lists.newArrayList(imageDir);
-        if (isBelongToGlobalStateMgr()) {
-            dirsToClean.add(imageDir + "/v2");
-        }
-        for (String dirToClean : dirsToClean) {
-            MetaCleaner cleaner = new MetaCleaner(dirToClean);
-            try {
-                cleaner.clean();
-            } catch (IOException e) {
-                LOG.error("Delete old image file from dir {} fail.", dirToClean, e);
-            }
+        String dirToClean = MetaHelper.getImageFileDir(isBelongToGlobalStateMgr());
+        MetaCleaner cleaner = new MetaCleaner(dirToClean);
+        try {
+            cleaner.clean();
+        } catch (IOException e) {
+            LOG.error("Delete old image file from dir {} fail.", dirToClean, e);
         }
     }
 
@@ -174,8 +164,8 @@ public abstract class CheckpointWorker extends FrontendDaemon {
 
     private long getImageJournalId() {
         try {
-            ImageLoader imageLoader = new ImageLoader(imageDir);
-            return imageLoader.getImageJournalId();
+            Storage storage = new Storage(MetaHelper.getImageFileDir(isBelongToGlobalStateMgr()));
+            return storage.getImageJournalId();
         } catch (IOException e) {
             LOG.warn("get image journal id failed", e);
             return 0;

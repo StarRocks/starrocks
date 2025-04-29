@@ -154,8 +154,7 @@ public class StarRocksFE {
                 Journal journal = GlobalStateMgr.getCurrentState().getJournal();
                 if (journal instanceof BDBJEJournal) {
                     BDBEnvironment bdbEnvironment = ((BDBJEJournal) journal).getBdbEnvironment();
-                    StarMgrServer.getCurrentState().initialize(bdbEnvironment,
-                            GlobalStateMgr.getCurrentState().getImageDir());
+                    StarMgrServer.getCurrentState().initialize(bdbEnvironment, GlobalStateMgr.getImageDirPath());
                 } else {
                     LOG.error("journal type should be BDBJE for star mgr!");
                     System.exit(-1);

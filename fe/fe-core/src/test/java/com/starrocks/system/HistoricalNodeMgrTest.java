@@ -15,7 +15,6 @@
 package com.starrocks.system;
 
 import com.google.gson.stream.JsonReader;
-import com.starrocks.persist.ImageFormatVersion;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
@@ -96,7 +95,7 @@ public class HistoricalNodeMgrTest {
 
         // save image
         DataOutputStream dos = new DataOutputStream(new FileOutputStream(tempFile));
-        ImageWriter imageWriter = new ImageWriter("", ImageFormatVersion.v2, 0);
+        ImageWriter imageWriter = new ImageWriter("", 0);
         imageWriter.setOutputStream(dos);
         historicalNodeMgr.save(imageWriter);
         dos.close();
