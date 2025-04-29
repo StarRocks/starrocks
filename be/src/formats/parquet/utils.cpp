@@ -16,6 +16,8 @@
 
 #include <glog/logging.h>
 
+#include <cstring>
+
 #include "util/hash_util.hpp"
 
 namespace starrocks::parquet {
@@ -124,6 +126,29 @@ int64_t ParquetUtils::get_row_group_end_offset(const tparquet::RowGroup& row_gro
     // }
     const tparquet::ColumnMetaData& last_column = row_group.columns.back().meta_data;
     return get_column_start_offset(last_column) + last_column.total_compressed_size;
+}
+
+std::string ParquetUtils::get_file_cache_key(CacheType type, const std::string& filename, int64_t modification_time,
+                                             uint64_t file_size) {
+    std::string key;
+    key.resize(14);
+    char* data = key.data();
+    uint64_t hash_value = HashUtil::hash64(filename.data(), filename.size(), 0);
+    memcpy(data, &hash_value, sizeof(hash_value));
+    const std::string& prefix = cache_key_prefix[type];
+    memcpy(data + 8, prefix.data(), prefix.size());
+    // The modification time is more appropriate to indicate the different file versions.
+    // While some data source, such as Hudi, have no modification time because their files
+    // cannot be overwritten. So, if the modification time is unsupported, we use file size instead.
+    // Also, to reduce memory usage, we only use the high four bytes to represent the second timestamp.
+    if (modification_time > 0) {
+        uint32_t mtime_s = (modification_time >> 9) & 0x00000000FFFFFFFF;
+        memcpy(data + 10, &mtime_s, sizeof(mtime_s));
+    } else {
+        uint32_t size = file_size;
+        memcpy(data + 10, &size, sizeof(size));
+    }
+    return key;
 }
 
 } // namespace starrocks::parquet

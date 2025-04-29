@@ -68,12 +68,10 @@ FileReader::~FileReader() = default;
 
 Status FileReader::init(HdfsScannerContext* ctx) {
     _scanner_ctx = ctx;
-#ifdef WITH_STARCACHE
-    // Only support file metacache in starcache engine
-    if (ctx->use_file_metacache && BlockCache::instance()->mem_cache_available()) {
+    if (ctx->use_file_metacache) {
         _cache = CacheEnv::GetInstance()->external_table_meta_cache();
     }
-#endif
+
     // parse FileMetadata
     FileMetaDataParser file_metadata_parser{_file, ctx, _cache, &_datacache_options, _file_size};
     ASSIGN_OR_RETURN(_file_metadata, file_metadata_parser.get_file_metadata());
@@ -282,6 +280,7 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.file = _file;
     _group_reader_param.file_metadata = _file_metadata.get();
     _group_reader_param.case_sensitive = fd_scanner_ctx.case_sensitive;
+    _group_reader_param.use_file_pagecache = fd_scanner_ctx.use_file_pagecache;
     _group_reader_param.lazy_column_coalesce_counter = fd_scanner_ctx.lazy_column_coalesce_counter;
     _group_reader_param.partition_columns = &fd_scanner_ctx.partition_columns;
     _group_reader_param.partition_values = &fd_scanner_ctx.partition_values;
@@ -290,6 +289,9 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.min_max_conjunct_ctxs = fd_scanner_ctx.min_max_conjunct_ctxs;
     _group_reader_param.predicate_tree = &fd_scanner_ctx.predicate_tree;
     _group_reader_param.global_dictmaps = fd_scanner_ctx.global_dictmaps;
+    _group_reader_param.modification_time = _datacache_options.modification_time;
+    _group_reader_param.file_size = _file_size;
+    _group_reader_param.datacache_options = &_datacache_options;
 
     int64_t row_group_first_row = 0;
     // select and create row group readers.
@@ -347,7 +349,13 @@ Status FileReader::get_next(ChunkPtr* chunk) {
 
     if (_cur_row_group_idx < _row_group_size) {
         size_t row_count = _chunk_size;
-        Status status = _row_group_readers[_cur_row_group_idx]->get_next(chunk, &row_count);
+        Status status;
+        try {
+            status = _row_group_readers[_cur_row_group_idx]->get_next(chunk, &row_count);
+        } catch (std::exception& e) {
+            return Status::InternalError(
+                    strings::Substitute("Encountered Exception while reading. reason = $0", e.what()));
+        }
         if (status.ok() || status.is_end_of_file()) {
             if (row_count > 0) {
                 RETURN_IF_ERROR(_scanner_ctx->append_or_update_not_existed_columns_to_chunk(chunk, row_count));

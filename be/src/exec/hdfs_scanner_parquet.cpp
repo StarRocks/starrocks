@@ -76,6 +76,11 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     RuntimeProfile::Counter* level_decode_timer = nullptr;
     RuntimeProfile::Counter* value_decode_timer = nullptr;
     RuntimeProfile::Counter* page_read_timer = nullptr;
+    RuntimeProfile::Counter* page_read_counter = nullptr;
+    RuntimeProfile::Counter* page_cache_read_counter = nullptr;
+    RuntimeProfile::Counter* page_cache_write_counter = nullptr;
+    RuntimeProfile::Counter* page_cache_read_decompressed_counter = nullptr;
+    RuntimeProfile::Counter* page_cache_read_compressed_counter = nullptr;
 
     // reader init
     RuntimeProfile::Counter* footer_read_timer = nullptr;
@@ -135,6 +140,15 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     value_decode_timer = ADD_CHILD_TIMER(root, "ValueDecodeTime", kParquetProfileSectionPrefix);
 
     page_read_timer = ADD_CHILD_TIMER(root, "PageReadTime", kParquetProfileSectionPrefix);
+    page_read_counter = ADD_CHILD_COUNTER(root, "PageReaderCounter", TUnit::UNIT, kParquetProfileSectionPrefix);
+    page_cache_read_counter =
+            ADD_CHILD_COUNTER(root, "PageCacheReadCounter", TUnit::UNIT, kParquetProfileSectionPrefix);
+    page_cache_write_counter =
+            ADD_CHILD_COUNTER(root, "PageCacheWriteCounter", TUnit::UNIT, kParquetProfileSectionPrefix);
+    page_cache_read_decompressed_counter =
+            ADD_CHILD_COUNTER(root, "PageCacheReadDecompressedCounter", TUnit::UNIT, kParquetProfileSectionPrefix);
+    page_cache_read_compressed_counter =
+            ADD_CHILD_COUNTER(root, "PageCacheReadCompressedCounter", TUnit::UNIT, kParquetProfileSectionPrefix);
     footer_read_timer = ADD_CHILD_TIMER(root, "ReaderInitFooterRead", kParquetProfileSectionPrefix);
     column_reader_init_timer = ADD_CHILD_TIMER(root, "ReaderInitColumnReaderInit", kParquetProfileSectionPrefix);
 
@@ -173,6 +187,11 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     COUNTER_UPDATE(value_decode_timer, _app_stats.value_decode_ns);
     COUNTER_UPDATE(level_decode_timer, _app_stats.level_decode_ns);
     COUNTER_UPDATE(page_read_timer, _app_stats.page_read_ns);
+    COUNTER_UPDATE(page_read_counter, _app_stats.page_read_counter);
+    COUNTER_UPDATE(page_cache_read_counter, _app_stats.page_cache_read_counter);
+    COUNTER_UPDATE(page_cache_write_counter, _app_stats.page_cache_write_counter);
+    COUNTER_UPDATE(page_cache_read_decompressed_counter, _app_stats.page_cache_read_decompressed_counter);
+    COUNTER_UPDATE(page_cache_read_compressed_counter, _app_stats.page_cache_read_compressed_counter);
     COUNTER_UPDATE(footer_read_timer, _app_stats.footer_read_ns);
     COUNTER_UPDATE(footer_cache_write_counter, _app_stats.footer_cache_write_count);
     COUNTER_UPDATE(footer_cache_write_bytes, _app_stats.footer_cache_write_bytes);
