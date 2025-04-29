@@ -41,6 +41,9 @@ public:
             std::memset(out, 0, sizeof(OutType) * num_values);
             return std::make_pair(in, num_values);
         }
+        if (PREDICT_FALSE(bit_width > sizeof(OutType) * 8)) {
+            return std::make_pair(in, 0);
+        }
         if (config::enable_bit_unpack_simd) {
             // First unpack as many full batches as possible.
             const int64_t values_to_read = BitPacking::NumValuesToUnpack(bit_width, in_bytes, num_values);

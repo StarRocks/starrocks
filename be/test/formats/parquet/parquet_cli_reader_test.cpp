@@ -120,26 +120,8 @@ TEST_F(ParquetCLIReaderTest, ReadArrowFuzzingParquetFiles) {
                                        "./be/test/formats/parquet/arrow_fuzzing_data/generated_simple_numerics/");
         read_paths.emplace_back("./be/test/formats/parquet/arrow_fuzzing_data/ARROW-17100.parquet");
     }
-    std::set<std::string> ignore_dcheck_paths;
-#ifndef NDEBUG
-    {
-        // ignore below files in DEBUG mode, because below code will consume lots of memory and face failed with DCHECK,
-        // so we only run below two files in Release mode(It will not occur be crashed).
-        ignore_dcheck_paths.emplace(
-                "./be/test/formats/parquet/arrow_fuzzing_data/fuzzing/"
-                "clusterfuzz-testcase-minimized-parquet-arrow-fuzz-4819270771146752");
-        ignore_dcheck_paths.emplace(
-                "./be/test/formats/parquet/arrow_fuzzing_data/fuzzing/"
-                "clusterfuzz-testcase-minimized-parquet-arrow-fuzz-5667493425446912");
-        ignore_dcheck_paths.emplace(
-                "./be/test/formats/parquet/arrow_fuzzing_data/fuzzing/"
-                "clusterfuzz-testcase-minimized-parquet-arrow-fuzz-5106889906585600");
-    }
-#endif
+
     for (const std::string& path : read_paths) {
-        if (ignore_dcheck_paths.find(path) != ignore_dcheck_paths.end()) {
-            continue;
-        }
         LOG(INFO) << "Testing file: " << path;
         ParquetCLIReader reader{path};
         auto st = reader.init();
