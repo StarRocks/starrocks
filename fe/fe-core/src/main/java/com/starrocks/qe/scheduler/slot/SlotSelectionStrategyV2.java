@@ -234,10 +234,11 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
 
     private boolean isQueryConcurrencyLimitAvailable(BaseSlotTracker slotTracker) {
         // if the query queue limit is not set(by default), return true
-        if (!GlobalVariable.isQueryQueueConcurrencyLimitEffective()) {
+        int queryQueueConcurrencyLimit = slotManager.getQueryQueueConcurrencyLimit(warehouseId);
+        if (queryQueueConcurrencyLimit <= 0) {
             return true;
         }
-        return slotTracker.getNumAllocatedSlots() <= GlobalVariable.getQueryQueueConcurrencyLimit();
+        return slotTracker.getCurrentCurrency() <= queryQueueConcurrencyLimit;
     }
 
     private static boolean isSmallSlot(LogicalSlot slot) {
