@@ -12,7 +12,7 @@ It is also recommended to **evaluate the impact of generated columns on loading 
 
 However, note that when data is loaded into tables with a generated column, the time and overhead may increase because StarRocks needs to perform additional computation to calculate the results based on the expression and writes the results into the generated column.
 
-Currently, StarRocks's shared-data mode does not support generated columns.
+From v3.5.0, StarRocks shared-data clusters support generated columns.
 
 ## Basic operations
 
