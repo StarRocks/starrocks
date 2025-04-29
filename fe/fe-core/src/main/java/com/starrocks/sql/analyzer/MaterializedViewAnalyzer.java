@@ -246,6 +246,7 @@ public class MaterializedViewAnalyzer {
         }
         return false;
     }
+
     private static void processViews(QueryStatement queryStatement, Set<BaseTableInfo> baseTableInfos,
                                      boolean withCheck) {
         List<ViewRelation> viewRelations = AnalyzerUtils.collectViewRelations(queryStatement);
@@ -956,7 +957,7 @@ public class MaterializedViewAnalyzer {
                     throw new SemanticException("Materialized view partition expression %s could only ref to base table",
                             slotRef.toSql());
                 }
-                if (isExternalTableFromResource(table)) {
+                if (!FeConstants.isReplayFromQueryDump && isExternalTableFromResource(table)) {
                     throw new SemanticException("Materialized view partition expression %s could not ref to external table",
                             slotRef.toSql());
                 }
