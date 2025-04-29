@@ -446,7 +446,7 @@ public class GlobalStateMgr {
     private final TaskManager taskManager;
     private final InsertOverwriteJobMgr insertOverwriteJobMgr;
 
-    private final LocalMetastore localMetastore;
+    private LocalMetastore localMetastore;
     private final GlobalFunctionMgr globalFunctionMgr;
 
     @Deprecated
@@ -579,6 +579,10 @@ public class GlobalStateMgr {
 
     public LocalMetastore getLocalMetastore() {
         return localMetastore;
+    }
+
+    public void setLocalMetastore(LocalMetastore localMetastore) {
+        this.localMetastore = localMetastore;
     }
 
     public TemporaryTableMgr getTemporaryTableMgr() {

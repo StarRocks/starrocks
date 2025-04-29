@@ -35,7 +35,6 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.catalog.View;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
@@ -216,7 +215,8 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         this.table = table;
 
         if (statement.getAlterClause() == null) {
-            ((View) table).setSecurity(statement.isSecurity());
+            AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), table.getId(), statement.isSecurity());
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().setViewSecurity(alterViewInfo, false);
             return null;
         }
 
