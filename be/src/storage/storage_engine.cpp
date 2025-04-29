@@ -168,12 +168,7 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
     std::vector<std::thread> threads;
     threads.reserve(data_dirs.size());
     for (auto data_dir : data_dirs) {
-        threads.emplace_back([data_dir] {
-            auto res = data_dir->load();
-            if (!res.ok()) {
-                LOG(WARNING) << "Fail to load data dir=" << data_dir->path() << ", res=" << res.to_string();
-            }
-        });
+        threads.emplace_back([data_dir] { (void)data_dir->load(); });
         Thread::set_thread_name(threads.back(), "load_data_dir");
 
         threads.emplace_back([data_dir] {
