@@ -249,9 +249,6 @@ public interface IcebergCatalog extends MemoryTrackable {
         // using partition metadata table scan is more  efficient than doing file scan, but limitation is
         // it only supports the latest snapshot id.
         if (snapshotId != -1) {
-            Preconditions.checkArgument(nativeTable.currentSnapshot().snapshotId() == snapshotId,
-                    "Ignore this error if snapshot id does not match. Iceberg partition metadata table only supports latest " +
-                            "snapshot. current = " + nativeTable.currentSnapshot().snapshotId() + ", expect = " + snapshotId);
             tableScan = tableScan.useSnapshot(snapshotId);
         }
         if (executorService != null) {
