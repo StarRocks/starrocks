@@ -126,6 +126,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_PARTITION_PRUNED;
 import static com.starrocks.sql.optimizer.operator.Operator.OP_PARTITION_PRUNE_BIT;
 import static com.starrocks.sql.optimizer.rule.RuleType.TF_MATERIALIZED_VIEW;
 
@@ -471,6 +472,16 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
         // do rule based mv rewrite
         doRuleBasedMaterializedViewRewrite(tree, rootTaskContext);
+
+        // `RuleSet.PARTITION_PRUNE_RULES` should be used very carefully, since it contains bitset to mark
+        // whether it has been applied, so this action will prevent partition pruning later.
+        // reset partition prune bit to do partition prune again because:
+        // 1. partition prune is not done well since some predicates have not been pushed down.
+        // 2. it may generate bad plans if we do not do partition prune again.
+        MvUtils.getScanOperator(tree).forEach(scan -> {
+            scan.resetOpRuleMask(OP_PARTITION_PRUNED);
+        });
+
         new SeparateProjectRule().rewrite(tree, rootTaskContext);
         deriveLogicalProperty(tree);
     }
