@@ -27,27 +27,33 @@ namespace starrocks::parquet {
 
 inline int kTestChunkSize = 4096;
 
-enum DataDistribution {
+enum TestMode {
+    DECOMPRESS = -2,
+    SKIP = -1,
     RANDOM = 0,
     SERIES = 1,
     PREFIX = 2,
 };
 
-std::string to_string(DataDistribution dist) {
-    switch (dist) {
+std::string to_string(TestMode mode) {
+    switch (mode) {
     case RANDOM:
         return "RANDOM";
     case SERIES:
         return "SERIES";
     case PREFIX:
         return "PREFIX";
+    case SKIP:
+        return "SKIP";
+    case DECOMPRESS:
+        return "DECOMPRESS";
     default:
         return "UNKNOWN";
     }
 }
 
-template <tparquet::Type::type PT, DataDistribution data_dist>
-static void BMTestInt(benchmark::State& state) {
+template <tparquet::Type::type PT, TestMode test_mode>
+static void BMTestValue(benchmark::State& state) {
     auto f = [&]() {
         using T = typename PhysicalTypeTraits<PT>::CppType;
         tparquet::Encoding::type encoding_type = (tparquet::Encoding::type)state.range(0);
@@ -56,14 +62,17 @@ static void BMTestInt(benchmark::State& state) {
 
         int64_t num_rows = state.range(1);
         std::vector<T> elements;
-        if constexpr (data_dist == RANDOM) {
+        if constexpr (test_mode == RANDOM) {
             int64_t min_value = state.range(2);
-            int64_t range_value = state.range(3);
-            elements = BenchUtil::create_random_values<T>(num_rows, min_value, min_value + range_value);
-        } else if constexpr (data_dist == SERIES) {
+            int64_t max_value = state.range(3);
+            elements = BenchUtil::create_random_values<T>(num_rows, min_value, max_value);
+        } else if constexpr (test_mode == SERIES) {
             int64_t init_value = state.range(2);
             int64_t delta_value = state.range(3);
             elements = BenchUtil::create_series_values<T>(num_rows, init_value, delta_value);
+        } else if constexpr (test_mode == SKIP || test_mode == DECOMPRESS) {
+            elements = BenchUtil::create_random_values<T>(num_rows, std::numeric_limits<T>::lowest(),
+                                                          std::numeric_limits<T>::max());
         }
 
         std::unique_ptr<Encoder> encoder;
@@ -71,25 +80,35 @@ static void BMTestInt(benchmark::State& state) {
         RETURN_IF_ERROR(encoder->append((const uint8_t*)elements.data(), num_rows));
         Slice encoded_data = encoder->build();
 
-        {
-            // see compressed size using zstd
-            std::vector<char> compressed_buffer(encoded_data.size * 2 + 20);
-            const BlockCompressionCodec* codec = nullptr;
-            RETURN_IF_ERROR(get_block_compression_codec(CompressionTypePB::ZSTD, &codec));
-            Slice compressed_slice(compressed_buffer.data(), compressed_buffer.size());
-            RETURN_IF_ERROR(codec->compress(encoded_data, &compressed_slice));
+        // see compressed size using zstd
+        std::vector<char> compressed_buffer(encoded_data.size * 2 + 20);
+        const BlockCompressionCodec* codec = nullptr;
+        RETURN_IF_ERROR(get_block_compression_codec(CompressionTypePB::ZSTD, &codec));
+        Slice compressed_slice(compressed_buffer.data(), compressed_buffer.size());
+        RETURN_IF_ERROR(codec->compress(encoded_data, &compressed_slice));
 
-            std::string label = fmt::format("enc={},rows={},sz={},cpsz={}", to_string(encoding_type), num_rows,
-                                            encoded_data.size, compressed_slice.size);
-            state.SetLabel(label);
-        }
+        std::string label = fmt::format("enc={},mode={},rows={},sz={},cpsz={}", to_string(encoding_type),
+                                        to_string(test_mode), num_rows, encoded_data.size, compressed_slice.size);
+        state.SetLabel(label);
 
-        std::unique_ptr<Decoder> decoder;
-        std::vector<T> output(num_rows);
-        RETURN_IF_ERROR(encoding_info->create_decoder(&decoder));
-        for (auto _ : state) {
-            RETURN_IF_ERROR(decoder->set_data(encoded_data));
-            RETURN_IF_ERROR(decoder->next_batch(num_rows, (uint8_t*)output.data()));
+        if constexpr (test_mode != DECOMPRESS) {
+            std::unique_ptr<Decoder> decoder;
+            std::vector<T> output(num_rows);
+            RETURN_IF_ERROR(encoding_info->create_decoder(&decoder));
+            for (auto _ : state) {
+                RETURN_IF_ERROR(decoder->set_data(encoded_data));
+                if constexpr (test_mode == SKIP) {
+                    RETURN_IF_ERROR(decoder->skip(num_rows));
+                } else {
+                    RETURN_IF_ERROR(decoder->next_batch(num_rows, (uint8_t*)output.data()));
+                }
+            }
+        } else {
+            std::vector<char> decompressed_buffer(encoded_data.size);
+            for (auto _ : state) {
+                Slice output(decompressed_buffer.data(), decompressed_buffer.size());
+                RETURN_IF_ERROR(codec->decompress(compressed_slice, &output));
+            }
         }
         return Status::OK();
     };
@@ -104,15 +123,11 @@ static void CustomArgsRandomInt(benchmark::internal::Benchmark* b) {
     std::vector<int64_t> encodings = {(int64_t)tparquet::Encoding::PLAIN,
                                       (int64_t)tparquet::Encoding::DELTA_BINARY_PACKED,
                                       (int64_t)tparquet::Encoding::BYTE_STREAM_SPLIT};
-    std::vector<int64_t> min_values = {std::numeric_limits<T>::min() + 1000000, 0,
-                                       std::numeric_limits<T>::max() - 1000000};
-    std::vector<int64_t> ranges = {100, 10000, 1000000};
+    std::vector<pair<int64_t, int64_t>> ranges = {{std::numeric_limits<T>::lowest(), std::numeric_limits<T>::max()}};
 
     for (auto encoding : encodings) {
-        for (auto min_value : min_values) {
-            for (auto range : ranges) {
-                b->Args({encoding, kTestChunkSize, min_value, range});
-            }
+        for (auto range : ranges) {
+            b->Args({encoding, kTestChunkSize, range.first, range.second});
         }
     }
 }
@@ -122,7 +137,7 @@ static void CustomArgsSeriesInt(benchmark::internal::Benchmark* b) {
     std::vector<int64_t> encodings = {(int64_t)tparquet::Encoding::PLAIN,
                                       (int64_t)tparquet::Encoding::DELTA_BINARY_PACKED,
                                       (int64_t)tparquet::Encoding::BYTE_STREAM_SPLIT};
-    std::vector<int64_t> delta_values = {-1000000, -1000, -10, 0, 10, 1000, 1000000};
+    std::vector<int64_t> delta_values = {127};
 
     for (auto encoding : encodings) {
         for (auto delta_value : delta_values) {
@@ -131,10 +146,55 @@ static void CustomArgsSeriesInt(benchmark::internal::Benchmark* b) {
     }
 }
 
-BENCHMARK_TEMPLATE(BMTestInt, tparquet::Type::INT32, RANDOM)->Apply(CustomArgsRandomInt);
-BENCHMARK_TEMPLATE(BMTestInt, tparquet::Type::INT64, RANDOM)->Apply(CustomArgsRandomInt);
-BENCHMARK_TEMPLATE(BMTestInt, tparquet::Type::INT32, SERIES)->Apply(CustomArgsSeriesInt);
-BENCHMARK_TEMPLATE(BMTestInt, tparquet::Type::INT64, SERIES)->Apply(CustomArgsSeriesInt);
+static void CustomArgsSkipInt(benchmark::internal::Benchmark* b) {
+    using T = int32_t;
+    std::vector<int64_t> encodings = {(int64_t)tparquet::Encoding::PLAIN,
+                                      (int64_t)tparquet::Encoding::DELTA_BINARY_PACKED,
+                                      (int64_t)tparquet::Encoding::BYTE_STREAM_SPLIT};
+    for (auto encoding : encodings) {
+        b->Args({encoding, kTestChunkSize});
+    }
+}
+
+static void CustomArgsRandomFloat(benchmark::internal::Benchmark* b) {
+    using T = int32_t;
+    std::vector<int64_t> encodings = {(int64_t)tparquet::Encoding::PLAIN,
+                                      (int64_t)tparquet::Encoding::BYTE_STREAM_SPLIT};
+    std::vector<pair<int64_t, int64_t>> ranges = {{std::numeric_limits<T>::lowest(), std::numeric_limits<T>::max()}};
+
+    for (auto encoding : encodings) {
+        for (auto range : ranges) {
+            b->Args({encoding, kTestChunkSize, range.first, range.second});
+        }
+    }
+}
+
+static void CustomArgsSkipFloat(benchmark::internal::Benchmark* b) {
+    using T = int32_t;
+    std::vector<int64_t> encodings = {(int64_t)tparquet::Encoding::PLAIN,
+                                      (int64_t)tparquet::Encoding::BYTE_STREAM_SPLIT};
+    for (auto encoding : encodings) {
+        b->Args({encoding, kTestChunkSize});
+    }
+}
+
+BENCHMARK_TEMPLATE(BMTestValue, tparquet::Type::INT32, DECOMPRESS)->Apply(CustomArgsSkipInt);
+BENCHMARK_TEMPLATE(BMTestValue, tparquet::Type::INT32, SKIP)->Apply(CustomArgsSkipInt);
+BENCHMARK_TEMPLATE(BMTestValue, tparquet::Type::INT32, RANDOM)->Apply(CustomArgsRandomInt);
+BENCHMARK_TEMPLATE(BMTestValue, tparquet::Type::INT32, SERIES)->Apply(CustomArgsSeriesInt);
+
+BENCHMARK_TEMPLATE(BMTestValue, tparquet::Type::INT64, DECOMPRESS)->Apply(CustomArgsSkipInt);
+BENCHMARK_TEMPLATE(BMTestValue, tparquet::Type::INT64, SKIP)->Apply(CustomArgsSkipInt);
+BENCHMARK_TEMPLATE(BMTestValue, tparquet::Type::INT64, RANDOM)->Apply(CustomArgsRandomInt);
+BENCHMARK_TEMPLATE(BMTestValue, tparquet::Type::INT64, SERIES)->Apply(CustomArgsSeriesInt);
+
+BENCHMARK_TEMPLATE(BMTestValue, tparquet::Type::FLOAT, DECOMPRESS)->Apply(CustomArgsSkipFloat);
+BENCHMARK_TEMPLATE(BMTestValue, tparquet::Type::FLOAT, SKIP)->Apply(CustomArgsSkipFloat);
+BENCHMARK_TEMPLATE(BMTestValue, tparquet::Type::FLOAT, RANDOM)->Apply(CustomArgsRandomFloat);
+
+BENCHMARK_TEMPLATE(BMTestValue, tparquet::Type::DOUBLE, DECOMPRESS)->Apply(CustomArgsSkipFloat);
+BENCHMARK_TEMPLATE(BMTestValue, tparquet::Type::DOUBLE, SKIP)->Apply(CustomArgsSkipFloat);
+BENCHMARK_TEMPLATE(BMTestValue, tparquet::Type::DOUBLE, RANDOM)->Apply(CustomArgsRandomFloat);
 
 } // namespace starrocks::parquet
 
