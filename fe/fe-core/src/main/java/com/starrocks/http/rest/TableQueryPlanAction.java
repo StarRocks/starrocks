@@ -148,8 +148,16 @@ public class TableQueryPlanAction extends RestBaseAction {
             String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
             if (request.getRequest().headers().contains(WAREHOUSE_KEY)) {
                 warehouseName = request.getRequest().headers().get(WAREHOUSE_KEY);
-                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
-                ConnectContext.get().setCurrentWarehouseId(warehouse.getId());
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseName);
+                long warehouseId;
+                if (warehouse != null) {
+                    warehouseId = warehouse.getId();
+                } else {
+                    LOG.warn("The warehouse parameter [{}] is invalid, use default warehouse instead", warehouseName);
+                    warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+                    warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+                }
+                ConnectContext.get().setCurrentWarehouseId(warehouseId);
             }
 
             LOG.info("receive SQL statement [{}] from external service [ user [{}]] for database [{}] table [{}] warehouse [{}] ",
