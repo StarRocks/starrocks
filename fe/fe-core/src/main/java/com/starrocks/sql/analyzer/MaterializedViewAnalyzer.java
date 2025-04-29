@@ -36,12 +36,7 @@ import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
 import com.starrocks.catalog.ExternalOlapTable;
-import com.starrocks.catalog.Function;
->>>>>>> ad719f55b8 ([BugFix] Fix mv refresh failed with external tables (#58506))
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
@@ -810,14 +805,19 @@ public class MaterializedViewAnalyzer {
 
         private void checkPartitionColumnWithBaseTable(CreateMaterializedViewStatement statement,
                                                        Map<TableName, Table> tableNameTableMap) {
-<<<<<<< HEAD
             SlotRef slotRef = getSlotRef(statement.getPartitionRefTableExpr());
             Table table = tableNameTableMap.get(slotRef.getTblNameWithoutAnalyzed());
 
             if (table == null) {
                 throw new SemanticException("Materialized view partition expression %s could only ref to base table",
                         slotRef.toSql());
-            } else if (table.isNativeTableOrMaterializedView()) {
+            }
+            if (!FeConstants.isReplayFromQueryDump && isExternalTableFromResource(table)) {
+                throw new SemanticException("Materialized view partition expression %s could not ref to external table",
+                        slotRef.toSql());
+
+            }
+            if (table.isNativeTableOrMaterializedView()) {
                 checkPartitionColumnWithBaseOlapTable(slotRef, (OlapTable) table);
             } else if (table.isHiveTable() || table.isHudiTable() || table.isOdpsTable()) {
                 checkPartitionColumnWithBaseHMSTable(slotRef, (HiveMetaStoreTable) table);
@@ -830,47 +830,6 @@ public class MaterializedViewAnalyzer {
             } else {
                 throw new SemanticException("Materialized view with partition does not support base table type : %s",
                         table.getType());
-=======
-            List<Expr> partitionRefTableExprs = statement.getPartitionRefTableExpr();
-            for (int i = 0; i < partitionRefTableExprs.size(); i++) {
-                Expr expr = partitionRefTableExprs.get(i);
-                SlotRef slotRef = getSlotRef(expr);
-                TableName tableName = slotRef.getTblNameWithoutAnalyzed();
-                Table table = tableNameTableMap.get(tableName);
-                if (table == null) {
-                    throw new SemanticException("Materialized view partition expression %s could only ref to base table",
-                            slotRef.toSql());
-                }
-                if (!FeConstants.isReplayFromQueryDump && isExternalTableFromResource(table)) {
-                    throw new SemanticException("Materialized view partition expression %s could not ref to external table",
-                            slotRef.toSql());
-                }
-                if (table.isNativeTableOrMaterializedView()) {
-                    OlapTable olapTable = (OlapTable) table;
-                    if (changedPartitionByExprs.containsKey(i)) {
-                        // if generated column has changed partition by expr, use the new partition by expr
-                        Expr newPartitionByExpr = changedPartitionByExprs.get(i);
-                        if (!(newPartitionByExpr instanceof SlotRef)) {
-                            throw new SemanticException("Materialized view partition expression %s could only ref base table's " +
-                                    "partition expression without any change", slotRef.toSql());
-                        }
-                        slotRef = (SlotRef) newPartitionByExpr;
-                    }
-                    checkPartitionColumnWithBaseOlapTable(slotRef, olapTable);
-                } else if (table.isHiveTable() || table.isHudiTable() || table.isOdpsTable()) {
-                    checkPartitionColumnWithBaseHMSTable(slotRef, table);
-                } else if (table.isIcebergTable()) {
-                    checkPartitionColumnWithBaseIcebergTable(expr, slotRef, (IcebergTable) table);
-                } else if (table.isJDBCTable()) {
-                    checkPartitionColumnWithBaseJDBCTable(slotRef, (JDBCTable) table);
-                } else if (table.isPaimonTable()) {
-                    checkPartitionColumnWithBasePaimonTable(slotRef, (PaimonTable) table);
-                } else {
-                    throw new SemanticException("Materialized view with partition does not support base table type : %s",
-                            table.getType());
-                }
-                replaceTableAlias(slotRef, statement, tableNameTableMap);
->>>>>>> ad719f55b8 ([BugFix] Fix mv refresh failed with external tables (#58506))
             }
             replaceTableAlias(slotRef, statement, tableNameTableMap);
         }
