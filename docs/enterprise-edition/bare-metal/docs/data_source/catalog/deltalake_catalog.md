@@ -159,21 +159,7 @@ For information about how to choose an authentication method for accessing AWS G
 
 ##### Databricks Unity Catalog
 
-If you choose Databricks Unity Catalog as the metastore of your data source, configure `MetastoreParams` as follows:
-
-```SQL
-"hive.metastore.type" = "unity",
-"databricks.host"= "https://<host>.cloud.databricks.com",
-"databricks.token" = "<token>",
-"databricks.catalog.name" = "<catalog_name>",
-```
-
-| Parameter               | Required | Description                                                  |
-| :---------------------- | :------- | :----------------------------------------------------------- |
-| hive.metastore.type     | Yes      | The type of metastore that you use for your Delta Lake cluster. Set the value to `unity`. |
-| databricks.host         | Yes      | The host of your Databricks cluster, for example, `https://abcd1234.cloud.databricks.com`. For more instructions, see [Databricks personal access token authentication](https://docs.databricks.com/en/dev-tools/auth/pat.html). |
-| databricks.token        | Yes      | The token used to access your Unity Catalog metastore. For more instructions, see [Databricks personal access token authentication](https://docs.databricks.com/en/dev-tools/auth/pat.html). |
-| databricks.catalog.name | Yes      | The name of your Unity Catalog.                              |
+For detailed instructions, see [Databricks Unity Catalog](./databricks_unity_catalog.md)
 
 #### StorageCredentialParams
 
