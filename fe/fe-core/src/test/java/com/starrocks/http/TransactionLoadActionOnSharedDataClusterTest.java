@@ -28,6 +28,10 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.runners.Parameterized;
+
+import java.util.Collection;
+import java.util.Collections;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -39,8 +43,13 @@ public class TransactionLoadActionOnSharedDataClusterTest extends TransactionLoa
     private static HttpServer beServer;
     private static int TEST_HTTP_PORT = 0;
 
-    public TransactionLoadActionOnSharedDataClusterTest() {
-        super(RunMode.SHARED_DATA.getName());
+    public TransactionLoadActionOnSharedDataClusterTest(String mode) {
+        super(mode);
+    }
+
+    @Parameterized.Parameters(name = "run mode = {0}")
+    public static Collection<String> parameters() {
+        return Collections.singletonList(RunMode.SHARED_DATA.getName());
     }
 
     @Override
