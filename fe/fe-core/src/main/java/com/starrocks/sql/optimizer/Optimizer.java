@@ -126,7 +126,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_PARTITION_PRUNED;
 import static com.starrocks.sql.optimizer.operator.Operator.OP_PARTITION_PRUNE_BIT;
 import static com.starrocks.sql.optimizer.rule.RuleType.TF_MATERIALIZED_VIEW;
 
@@ -479,7 +478,7 @@ public class Optimizer {
         // 1. partition prune is not done well since some predicates have not been pushed down.
         // 2. it may generate bad plans if we do not do partition prune again.
         MvUtils.getScanOperator(tree).forEach(scan -> {
-            scan.resetOpRuleMask(OP_PARTITION_PRUNED);
+            scan.resetOpRuleMask(OP_PARTITION_PRUNE_BIT);
         });
 
         new SeparateProjectRule().rewrite(tree, rootTaskContext);
