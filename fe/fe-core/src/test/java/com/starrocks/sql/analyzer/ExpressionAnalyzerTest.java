@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.UserVariableExpr;
@@ -225,5 +226,17 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
         userVariableExpr.setValue(expr);
         UserVariableExpr copy = (UserVariableExpr) userVariableExpr.clone();
         Assert.assertEquals(userVariableExpr, copy);
+    }
+
+    @Test
+    public void testLikePatternSyntaxException() {
+        StringLiteral e1 = new StringLiteral("a");
+        e1.setType(Type.VARCHAR);
+        StringLiteral e2 = new StringLiteral("([A-Za-z0-9]+[\\u4e00-\\u9fa5]{2}[A-Za-z0-9]+)");
+        e2.setType(Type.VARCHAR);
+        LikePredicate likePredicate = new LikePredicate(LikePredicate.Operator.REGEXP, e1, e2);
+        ExpressionAnalyzer.Visitor visitor = new ExpressionAnalyzer.Visitor(new AnalyzeState(), new ConnectContext());
+        Assert.assertThrows(SemanticException.class, () -> visitor.visitLikePredicate(likePredicate,
+                new Scope(RelationId.anonymous(), new RelationFields())));
     }
 }
