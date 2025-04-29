@@ -1,4 +1,4 @@
--- name: test_query_history
+-- name: test_query_history @sequential
 create table t1 (
     k1 int,
     k2 int,
