@@ -111,7 +111,7 @@ StatusOr<std::shared_ptr<CountDownLatch>> PersistentIndexLoadExecutor::submit_ta
     std::lock_guard<std::mutex> lock(_lock);
     auto it = _running_tablets.find(tablet_id);
     if (it != _running_tablets.end()) {
-        return std::move(it->second);
+        return it->second;
     }
 
     auto latch = std::make_shared<CountDownLatch>(1);
