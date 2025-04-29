@@ -287,7 +287,7 @@ inline void neon_select_if_common_implement(uint8_t*& selector, T*& dst, const T
     };
     using VecType = decltype(get_const_vec(nullptr));
     VecType vec_a = left_const ? get_const_vec(a) : VecType{};
-    VecType vec_b = left_const ? get_const_vec(b) : VecType{};
+    VecType vec_b = right_const ? get_const_vec(b) : VecType{};
 
     // Process 16 bytes of data at a time
     while (dst + neon_width < dst_end) {
