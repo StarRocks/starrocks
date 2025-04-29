@@ -23,6 +23,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorViewDefinition;
+import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.sql.ast.AlterViewStmt;
@@ -40,7 +41,6 @@ import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.io.CloseableIterable;
-import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.util.StructProjection;
 import org.apache.iceberg.view.SQLViewRepresentation;
 import org.apache.iceberg.view.View;
@@ -59,7 +59,6 @@ import java.util.concurrent.ExecutorService;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.starrocks.catalog.IcebergView.STARROCKS_DIALECT;
-import static com.starrocks.connector.PartitionUtil.convertIcebergPartitionToPartitionName;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.buildViewProperties;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.convertDbNameToNamespace;
 import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
@@ -239,46 +238,20 @@ public interface IcebergCatalog extends MemoryTrackable {
         return new ArrayList<>();
     }
 
-    default Map<String, Partition> getPartitionsByDataFiles(String dbName, String tableName, ExecutorService executorService,  Map<String, Partition> partitionMap) {
-        org.apache.iceberg.Table icebergTable = getTable(dbName, tableName);
-
-        if (icebergTable.specs().values().stream().allMatch(PartitionSpec::isUnpartitioned)) {
-            return partitionMap;
-        }
-
-        TableScan tableScan = icebergTable.newScan().planWith(executorService);
-        try (CloseableIterable<FileScanTask> fileScanTaskIterable = tableScan.planFiles();
-                CloseableIterator<FileScanTask> fileScanTaskIterator = fileScanTaskIterable.iterator()) {
-
-            while (fileScanTaskIterator.hasNext()) {
-                FileScanTask scanTask = fileScanTaskIterator.next();
-                StructLike partition = scanTask.file().partition();
-                String partitionName = convertIcebergPartitionToPartitionName(scanTask.spec(), partition);
-                long lastUpdated = -1;
-                Partition partitionData = new Partition(lastUpdated);
-                partitionMap.put(partitionName, partitionData);
-            }
-        } catch (IOException e) {
-            throw new StarRocksConnectorException(String.format("Failed to list iceberg partition names %s.%s",
-                    dbName, tableName), e);
-        }
-        return partitionMap;
-    }
-
     // --------------- partition APIs ---------------
     default Map<String, Partition> getPartitions(IcebergTable icebergTable, long snapshotId, ExecutorService executorService) {
         Table nativeTable = icebergTable.getNativeTable();
         Map<String, Partition> partitionMap = Maps.newHashMap();
         PartitionsTable partitionsTable = (PartitionsTable) MetadataTableUtils.
                 createMetadataTableInstance(nativeTable, MetadataTableType.PARTITIONS);
-
-        if (snapshotId != -1 && nativeTable.currentSnapshot().snapshotId() != snapshotId) {
-            return getPartitionsByDataFiles(icebergTable.getCatalogDBName(), icebergTable.getName(), executorService, partitionMap);
-        }
-
         TableScan tableScan = partitionsTable.newScan();
-
+        // NOTE: if there is an exception raise because of snapshot id is not the latest one, it's expected
+        // using partition metadata table scan is more  efficient than doing file scan, but limitation is
+        // it only supports the latest snapshot id.
         if (snapshotId != -1) {
+            Preconditions.checkArgument(nativeTable.currentSnapshot().snapshotId() == snapshotId,
+                    "Ignore this error if snapshot id does not match. Iceberg partition metadata table only supports latest " +
+                            "snapshot. current = " + nativeTable.currentSnapshot().snapshotId() + ", expect = " + snapshotId);
             tableScan = tableScan.useSnapshot(snapshotId);
         }
         if (executorService != null) {
@@ -349,7 +322,7 @@ public interface IcebergCatalog extends MemoryTrackable {
                         PartitionSpec spec = nativeTable.specs().get(specId);
 
                         String partitionName =
-                                convertIcebergPartitionToPartitionName(spec, partitionData);
+                                PartitionUtil.convertIcebergPartitionToPartitionName(spec, partitionData);
 
                         long lastUpdated = -1;
                         try {
