@@ -289,7 +289,7 @@ inline void neon_select_if_common_implement(uint8_t*& selector, T*& dst, const T
     VecType vec_a = left_const ? get_const_vec(a) : VecType{};
     VecType vec_b = right_const ? get_const_vec(b) : VecType{};
 
-    // Process 16 bytes of data at a time
+    // Process 16 rows of data at a time
     while (dst + neon_width < dst_end) {
         // Load 16 selector masks
         uint8x16_t select_lhs_mask = vld1q_u8(selector);
@@ -441,14 +441,29 @@ inline void neon_select_if_common_implement(uint8_t*& selector, T*& dst, const T
             }
         }
 
-        dst += 16;
-        selector += 16;
+        dst += neon_width;
+        selector += neon_width;
         if constexpr (!left_const) {
-            a += 16;
+            a += neon_width;
         }
         if constexpr (!right_const) {
-            b += 16;
+            b += neon_width;
         }
+    }
+    while (dst < dst_end) {
+        uint8_t select_byte = *selector;
+
+        const T value_a = *a;
+        const T value_b = *b;
+
+        *dst = (select_byte != 0) ? value_a : value_b;
+
+        // Advance all pointers to the next element
+        dst++;
+        selector++;
+        // Only advance a and b if they are not constants (pointers to variables)
+        if constexpr (!left_const) { a++; }
+        if constexpr (!right_const) { b++; }
     }
 }
 
