@@ -1619,8 +1619,6 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 } catch (Exception e) {
                     row.add(e.getMessage());
                 }
-            } else {
-                row.add("");
             }
             row.add(getSourceProgressString());
             row.add(getSourceLagString(progressJsonStr));
