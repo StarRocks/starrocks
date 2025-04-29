@@ -2882,8 +2882,9 @@ public class AggregateTest extends PlanTestBase {
     public void testCountIfTypeCheck() throws Exception {
         String sql = "select count_if(v1 is null) from t0";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "aggregate: count[(if[([4: expr, BOOLEAN, false], 1, NULL); " +
-                "args: BOOLEAN,BIGINT,BIGINT; result: BIGINT; args nullable: true; result nullable: true]);");
+        System.out.println(plan);
+        assertContains(plan, "aggregate: count_if[(1, [4: expr, BOOLEAN, false]); " +
+                "args: TINYINT,BOOLEAN; result: BIGINT; args nullable: false; result nullable: false]");
     }
 
     @Test
