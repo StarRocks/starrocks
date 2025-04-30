@@ -36,6 +36,7 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     int64_t total_num_rows = 0;
     for (auto& rowset : _input_rowsets) {
         total_num_rows += rowset->num_rows();
+        _context->stats->read_segment_count += rowset->num_segments();
     }
 
     ASSIGN_OR_RETURN(auto chunk_size, calculate_chunk_size());
@@ -111,6 +112,7 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     // 2. If the "total_num_rows" is 0, the progress will not be updated above
     _context->progress.update(100);
     _context->stats->collect(reader.stats());
+    _context->stats->collect(writer->stats());
 
     auto txn_log = std::make_shared<TxnLog>();
     auto op_compaction = txn_log->mutable_op_compaction();

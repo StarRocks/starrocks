@@ -108,7 +108,10 @@ public class CompactionJobTest {
                 stat.readBytesRemote = 3L;
                 stat.readTimeLocal = 4L;
                 stat.readBytesLocal = 5L;
-                stat.inQueueTimeSec = 6;
+                stat.readSegmentCount = 6L;
+                stat.writeSegmentCount = 7L;
+                stat.writeSegmentBytes = 8L;
+                stat.inQueueTimeSec = 9;
                 list.add(stat);
                 return list;
             }

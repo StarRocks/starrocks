@@ -31,6 +31,12 @@ class CompactionProfile {
     private long readRemoteSec;
     @SerializedName(value = "read_remote_mb")
     private long readRemoteMb;
+    @SerializedName(value = "read_segment_count")
+    private long readSegmentCount;
+    @SerializedName(value = "write_segment_count")
+    private long writeSegmentCount;
+    @SerializedName(value = "write_segment_mb")
+    private long writeSegmentMb;
     @SerializedName(value = "in_queue_sec")
     private int inQueueSec;
 
@@ -41,6 +47,9 @@ class CompactionProfile {
         readLocalMb = stat.readBytesLocal / 1048576;
         readRemoteSec = stat.readTimeRemote / 1000000000L;
         readRemoteMb = stat.readBytesRemote / 1048576;
+        readSegmentCount = stat.readSegmentCount;
+        writeSegmentCount = stat.writeSegmentCount;
+        writeSegmentMb = stat.writeSegmentBytes / 1048576;
         inQueueSec = stat.inQueueTimeSec;
     }
 
