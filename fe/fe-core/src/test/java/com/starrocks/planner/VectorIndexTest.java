@@ -379,6 +379,20 @@ public class VectorIndexTest extends PlanTestBase {
                 "from test_cosine " +
                 "order by approx_cosine_similarity([1.1,2.2,3.3,4.4,5.5], c1) desc limit 10";
         plan = getVerboseExplain(sql);
+        assertContains(plan, "  4:Project\n" +
+                "  |  output columns:\n" +
+                "  |  2 <-> [2: c1, ARRAY<FLOAT>, false]\n" +
+                "  |  5 <-> [12: cast, DOUBLE, true] + 1.0\n" +
+                "  |  6 <-> [12: cast, DOUBLE, true] + 2.0\n" +
+                "  |  7 <-> cast([11: approx_cosine_similarity, FLOAT, true] as VARCHAR(65533))\n" +
+                "  |  8 <-> cast(approx_cosine_similarity[(cast([1.1,2.2,3.3,4.4,5.5] as ARRAY<FLOAT>), [3: c2, ARRAY<FLOAT>, true]); args: INVALID_TYPE,INVALID_TYPE; result: FLOAT; args nullable: true; result nullable: true] as DOUBLE) + 2.0\n" +
+                "  |  common expressions:\n" +
+                "  |  11 <-> approx_cosine_similarity[(cast([1.1,2.2,3.3,4.4,5.5] as ARRAY<FLOAT>), [2: c1, ARRAY<FLOAT>, false]); args: INVALID_TYPE,INVALID_TYPE; result: FLOAT; args nullable: true; result nullable: true]\n" +
+                "  |  12 <-> cast([11: approx_cosine_similarity, FLOAT, true] as DOUBLE)\n" +
+                "  |  limit: 10\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  3:MERGING-EXCHANGE");
         assertContains(plan, "  2:TOP-N\n" +
                 "  |  order by: [9, FLOAT, false] DESC\n" +
                 "  |  build runtime filters:\n" +
@@ -390,13 +404,8 @@ public class VectorIndexTest extends PlanTestBase {
                 "  1:Project\n" +
                 "  |  output columns:\n" +
                 "  |  2 <-> [2: c1, ARRAY<FLOAT>, false]\n" +
-                "  |  5 <-> [11: cast, DOUBLE, true] + 1.0\n" +
-                "  |  6 <-> [11: cast, DOUBLE, true] + 2.0\n" +
-                "  |  7 <-> cast([10: __vector_approx_cosine_similarity, FLOAT, false] as VARCHAR(65533))\n" +
-                "  |  8 <-> cast(approx_cosine_similarity[(cast([1.1,2.2,3.3,4.4,5.5] as ARRAY<FLOAT>), [3: c2, ARRAY<FLOAT>, true]); args: INVALID_TYPE,INVALID_TYPE; result: FLOAT; args nullable: true; result nullable: true] as DOUBLE) + 2.0\n" +
+                "  |  3 <-> [3: c2, ARRAY<FLOAT>, true]\n" +
                 "  |  9 <-> [10: __vector_approx_cosine_similarity, FLOAT, false]\n" +
-                "  |  common expressions:\n" +
-                "  |  11 <-> cast([10: __vector_approx_cosine_similarity, FLOAT, false] as DOUBLE)\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
@@ -406,7 +415,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "     preAggregation: on\n" +
                 "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
                 "     tabletList=\n" +
-                "     actualRows=0, avgRowSize=8.0\n" +
+                "     actualRows=0, avgRowSize=4.0\n" +
                 "     Pruned type: 2 <-> [ARRAY<FLOAT>]\n" +
                 "     Pruned type: 3 <-> [ARRAY<FLOAT>]\n" +
                 "     cardinality: 1\n" +
