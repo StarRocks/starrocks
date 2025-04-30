@@ -24,27 +24,27 @@ sidebar_position: 60
 
 :::
 
-您可以通过组提供者从外部用户系统获取组信息，在 StarRocks 中创建用户组。组信息是独立的，可以灵活地集成到认证、授权或其他流程中，而不需要与任何特定工作流紧密耦合。
+您可以通过 Group Provider 从外部用户系统获取组信息，在 StarRocks 中创建用户组。组信息是独立的，可以灵活地集成到认证、授权或其他流程中，而不需要与任何特定工作流紧密耦合。
 
-组提供者本质上是用户与组之间的映射。任何需要组信息的过程都可以根据需要查询此映射。
+Group Provider 本质上是用户与组之间的映射。任何需要组信息的过程都可以根据需要查询此映射。
 
 ### 工作流程
 
-以下流程图以 LDAP 和 Apache Ranger 为例，解释了组提供者的工作流程。
+以下流程图以 LDAP 和 Apache Ranger 为例，解释了 Group Provider 的工作流程。
 
 ![Group Provider](../../../_assets/group_provider.png)
 
-## 创建组提供者
+## 创建 Group Provider
 
-StarRocks 支持三种类型的组提供者：
-- **LDAP 组提供者**：在您的 LDAP 服务中搜索并匹配用户与组
-- **Unix 组提供者**：在您的操作系统中搜索并匹配用户与组
-- **文件组提供者**：通过文件指定的用户与组进行搜索和匹配
+StarRocks 支持三种类型的 Group Provider：
+- **LDAP  Group Provider**：在您的 LDAP 服务中搜索并匹配用户与组
+- **Unix  Group Provider**：在您的操作系统中搜索并匹配用户与组
+- **File Group Provider**：通过文件指定的用户与组进行搜索和匹配
 
 ### 语法
 
 ```SQL
--- LDAP 组提供者
+-- LDAP  Group Provider
 CREATE GROUP PROVIDER <group_provider_name> 
 PROPERTIES (
     "type" = "ldap",
@@ -74,13 +74,13 @@ ldap_search_user_arg ::=
 ldap_cache_arg ::= 
     "ldap_cache_refresh_interval" = ""
 
--- Unix 组提供者
+-- Unix Group Provider
 CREATE GROUP PROVIDER <group_provider_name> 
 PROPERTIES (
     "type" = "unix"
 )
 
--- 文件组提供者
+-- File Group Provider 
 CREATE GROUP PROVIDER <group_provider_name> 
 PROPERTIES (
     "type" = "file",
@@ -92,10 +92,10 @@ PROPERTIES (
 
 #### `type`
 
-要创建的组提供者类型。有效值：
-- `ldap`：创建一个 LDAP 组提供者。当设置此值时，需要指定 `ldap_info`、`ldap_search_group_arg`、`ldap_search_user_arg`，以及可选的 `ldap_cache_arg`。
-- `unix`：创建一个 Unix 组提供者。
-- `file`：创建一个文件组提供者。当设置此值时，需要指定 `group_file_url`。
+要创建的 Group Provider 类型。有效值：
+- `ldap`：创建一个 LDAP Group Provider。当设置此值时，需要指定 `ldap_info`、`ldap_search_group_arg`、`ldap_search_user_arg`，以及可选的 `ldap_cache_arg`。
+- `unix`：创建一个 Unix Group Provider。
+- `file`：创建一个File Group Provider。当设置此值时，需要指定 `group_file_url`。
 
 #### `ldap_info`
 
@@ -198,7 +198,7 @@ sn: FTE
 userPassword:: 
 ```
 
-为 `testgroup` 中的成员创建一个组提供者 `ldap_group_provider`：
+为 `testgroup` 中的成员创建一个 Group Provider `ldap_group_provider`：
 
 ```SQL
 CREATE GROUP PROVIDER ldap_group_provider 
@@ -217,9 +217,9 @@ PROPERTIES(
 
 上述示例使用 `ldap_group_filter` 搜索具有 `groupOfNames` objectClass 和 `cn` 为 `testgroup` 的组。因此，在 `ldap_group_identifier_attr` 中指定 `cn` 以标识组。`ldap_group_member_attr` 设置为 `member`，以便在 `groupOfNames` objectClass 中使用 `member` 属性标识成员。`ldap_user_search_attr` 设置为表达式 `uid=([^,]+)`，用于在 `member` 属性中识别用户。
 
-## 将组提供者与安全集成结合
+## 将 Group Provider 与安全集成结合
 
-创建组提供者后，您可以将其与安全集成结合，以允许组提供者指定的用户登录 StarRocks。有关创建安全集成的更多信息，请参见 [Authenticate with Security Integration](./security_integration.md)。
+创建 Group Provider 后，您可以将其与安全集成结合，以允许 Group Provider 指定的用户登录 StarRocks。有关创建安全集成的更多信息，请参见 [Authenticate with Security Integration](./security_integration.md)。
 
 ### 语法
 
@@ -235,11 +235,11 @@ PROPERTIES(
 
 #### `group_provider`
 
-要与安全集成结合的组提供者名称。多个组提供者用逗号分隔。设置后，StarRocks 将在用户登录时记录每个指定提供者下的用户组信息。
+要与安全集成结合的 Group Provider 名称。多个 Group Provider 用逗号分隔。设置后，StarRocks 将在用户登录时记录每个指定提供者下的用户组信息。
 
 #### `authenticated_group_list`
 
-可选。允许其成员登录 StarRocks 的组名称。多个组用逗号分隔。确保指定的组可以通过结合的组提供者检索到。
+可选。允许其成员登录 StarRocks 的组名称。多个组用逗号分隔。确保指定的组可以通过结合的 Group Provider 检索到。
 
 ### 示例
 
@@ -251,8 +251,8 @@ PROPERTIES(
 );
 ```
 
-## 将组提供者与外部授权系统（Apache Ranger）结合
+## 将 Group Provider 与外部授权系统（Apache Ranger）结合
 
-一旦在安全集成中配置了相关的组提供者，StarRocks 将在用户登录时记录用户的组信息。此组信息将自动包含在与 Ranger 的授权过程中，无需额外配置。
+一旦在安全集成中配置了相关的 Group Provider ，StarRocks 将在用户登录时记录用户的组信息。此组信息将自动包含在与 Ranger 的授权过程中，无需额外配置。
 
 有关将 StarRocks 与 Ranger 集成的更多说明，请参见 [Manage permissions with Apache Ranger](../ranger_plugin.md)。

@@ -57,11 +57,11 @@ PROPERTIES (
 | ldap_bind_root_dn           | 是       | LDAP服务的管理员DN。                                         |
 | ldap_bind_root_pwd          | 是       | LDAP服务的管理员密码。                                       |
 | ldap_cache_refresh_interval | 否       | 集群自动刷新缓存的LDAP组信息的间隔。单位：秒。默认值：`900`。 |
-| ldap_ssl_conn_allow_insecure | 否      | 是否使用非SSL连接到LDAP服务器。默认值：`true`。将此值设置为`false`表示启用LDAP over SSL。有关启用SSL的详细说明，请参阅[SSL Authentication](./ssl_authentication.md)。 |
+| ldap_ssl_conn_allow_insecure | 否      | 是否使用非SSL连接到LDAP服务器。默认值：`true`。将此值设置为`false`表示启用LDAP over SSL。有关启用SSL的详细说明，请参阅[SSL 认证](./ssl_authentication.md)。 |
 | ldap_ssl_conn_trust_store_path | 否    | 存储LDAP SSL证书的本地路径。                                 |
 | ldap_ssl_conn_trust_store_pwd | 否     | 访问本地存储的LDAP SSL证书的密码。                           |
-| group_provider              | 否       | 要与安全集成结合使用的组提供者名称。多个组提供者用逗号分隔。设置后，StarRocks将在用户登录时记录每个指定提供者下的用户组信息。从v3.5开始支持。有关启用组提供者的详细说明，请参阅[Authenticate User Groups](./group_provider.md)。 |
-| authenticated_group_list    | 否       | 允许其成员登录StarRocks的组名称。多个组用逗号分隔。确保指定的组可以通过组合的组提供者检索。从v3.5开始支持。 |
+| group_provider              | 否       | 要与安全集成结合使用的 Group Provider 名称。多个 Group Provider 用逗号分隔。设置后，StarRocks将在用户登录时记录每个指定提供者下的用户组信息。从v3.5开始支持。有关启用 Group Provider 的详细说明，请参阅[认证用户组](./group_provider.md)。 |
+| authenticated_group_list    | 否       | 允许其成员登录StarRocks的组名称。多个组用逗号分隔。确保指定的组可以通过组合的 Group Provider 检索。从v3.5开始支持。 |
 | comment                     | 否       | 安全集成的描述。                                             |
 
 ### 使用OIDC创建安全集成

@@ -57,10 +57,10 @@ PROPERTIES (
 | ldap_bind_root_dn           | Yes          | LDAP サービスの管理者 DN。                                   |
 | ldap_bind_root_pwd          | Yes          | LDAP サービスの管理者パスワード。                             |
 | ldap_cache_refresh_interval | No           | クラスターがキャッシュされた LDAP グループ情報を自動的に更新する間隔。単位: 秒。デフォルト: `900`。 |
-| ldap_ssl_conn_allow_insecure | No          | LDAP サーバーへの非 SSL 接続を使用するかどうか。デフォルト: `true`。この値を `false` に設定すると、LDAP over SSL が有効になります。SSL を有効にする詳細な手順については、[SSL Authentication](./ssl_authentication.md) を参照してください。 |
+| ldap_ssl_conn_allow_insecure | No          | LDAP サーバーへの非 SSL 接続を使用するかどうか。デフォルト: `true`。この値を `false` に設定すると、LDAP over SSL が有効になります。SSL を有効にする詳細な手順については、[SSL 認証](./ssl_authentication.md) を参照してください。 |
 | ldap_ssl_conn_trust_store_path | No        | LDAP SSL 証明書を保存するローカルパス。                       |
 | ldap_ssl_conn_trust_store_pwd | No         | ローカルに保存された LDAP SSL 証明書にアクセスするために使用されるパスワード。 |
-| group_provider              | No           | セキュリティ統合と組み合わせるグループプロバイダーの名前。複数のグループプロバイダーはカンマで区切られます。設定されると、StarRocks はログイン時に各指定されたプロバイダーの下でユーザーのグループ情報を記録します。v3.5 以降でサポートされています。Group Provider を有効にする詳細な手順については、[Authenticate User Groups](./group_provider.md) を参照してください。 |
+| group_provider              | No           | セキュリティ統合と組み合わせるグループプロバイダーの名前。複数のグループプロバイダーはカンマで区切られます。設定されると、StarRocks はログイン時に各指定されたプロバイダーの下でユーザーのグループ情報を記録します。v3.5 以降でサポートされています。グループプロバイダーを有効にする詳細な手順については、[ユーザーグループの認証](./group_provider.md) を参照してください。 |
 | authenticated_group_list    | No           | StarRocks にログインを許可されているグループの名前。複数のグループはカンマで区切られます。指定されたグループが組み合わせたグループプロバイダーによって取得できることを確認してください。v3.5 以降でサポートされています。 |
 | comment                     | No           | セキュリティ統合の説明。                                     |
 
