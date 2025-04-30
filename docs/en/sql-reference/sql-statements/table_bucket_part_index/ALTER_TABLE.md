@@ -629,7 +629,7 @@ For more usage instructions, see [Example - Column -14](#column).
 
 - Currently, this feature is only supported in shared-nothing clusters.
 - The table must have the `fast_schema_evolution` property enabled.
-- Adding or dropping fields in the STRUCT type within a MAP type is not supported.
+- Modifying the Value type of a MAP subfield in a STRUCT type is not supported, regardless of whether the Value type is ARRAY, STRUCT, or MAP.
 - Newly added fields cannot have default values or attributes such as Nullable specified. They default to being Nullable, with a default value of null.
 - After this feature is used, downgrading the cluster directly to a version that does not support this feature is not allowed.
 
