@@ -42,7 +42,7 @@ public class StarRocksLoggerFactory {
             return LogManager.getLogger(clazz);
         } else {
             final LoggerContext loggerContext = LogManager.getContext(LogManager.class.getClassLoader(), false);
-            // factory is used only when creating a logger, subsequent use does not change
+            // The message factory is used only when creating a logger, subsequent use does not change
             // the logger but will log a warning if mismatched.
             // For more details see {@code LoggerContext#getLogger}
             final PrefixedMessageFactory messageFactory = new PrefixedMessageFactory(prefix);
