@@ -222,20 +222,20 @@ multi_range_partitions ::=
     | START ("<start_integer_value>") END ("<end_integer_value>") EVERY ( <granularity> ) } -- The partition column values still need to be enclosed in double quotes even if the partition column values are integers. However, the interval values in the EVERY clause do not need to be enclosed in double quotes.
 ```
 
-Notes for `multi_range_partitions`:
+  Notes for `multi_range_partitions`:
 
-- It only applies to Range Partitioning.
-- The parameters involved is consistent with those in [ADD PARTITION(S)](#add-partitions).
-- It only supports partitions with a single Partition Key.
+  - It only applies to Range Partitioning.
+  - The parameters involved is consistent with those in [ADD PARTITION(S)](#add-partitions).
+  - It only supports partitions with a single Partition Key.
 
-- Drop partitions with Common Partition Expression (Supported from v3.4.1):
+- Drop partitions with Common Partition Expression (Supported from v3.5.0):
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
 DROP PARTITIONS WHERE <expr>
 ```
 
-From v3.4.1 onwards, StarRocks supports dropping partitions using Common Partition Expression. You can specify a WHERE clause with an expression to filter the partitions to drop.
+From v3.5.0 onwards, StarRocks supports dropping partitions using Common Partition Expression. You can specify a WHERE clause with an expression to filter the partitions to drop.
 - The expression declares the partitions to be dropped. Partitions that meet the condition in the expression will be dropped in batch. Be cautious when proceeding.
 - The expression can only contain partition columns and constants. Non-partition columns are not supported.
 - Common Partition Expression applies to List partitions and Range partitions differently:
