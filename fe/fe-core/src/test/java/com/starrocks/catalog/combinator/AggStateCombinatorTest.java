@@ -525,8 +525,6 @@ public class AggStateCombinatorTest extends MVTestBase {
                 });
     }
 
-
-
     @Test
     public void testCreateAggStateTableWithAllFunctions() {
         var builtInAggregateFunctions = getBuiltInAggFunctions();
@@ -574,6 +572,9 @@ public class AggStateCombinatorTest extends MVTestBase {
                                 Joiner.on(",").join(unionColumns) + " from test_agg_state_table group by k1";
                         String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql1);
                         PlanTestBase.assertContains(plan, "  0:OlapScanNode\n" +
+                                "     table: test_agg_state_table, rollup: test_agg_state_table\n" +
+                                "     preAggregation: on");
+                        PlanTestBase.assertContains(plan, "  0:OlapScanNode\n" +
                                 "     table: test_agg_state_table, rollup: test_agg_state_table");
                     }
 
@@ -586,6 +587,9 @@ public class AggStateCombinatorTest extends MVTestBase {
                         String sql1 = "select k1, " +
                                 Joiner.on(",").join(mergeColumns) + " from test_agg_state_table group by k1";
                         String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql1);
+                        PlanTestBase.assertContains(plan, "  0:OlapScanNode\n" +
+                                "     table: test_agg_state_table, rollup: test_agg_state_table\n" +
+                                "     preAggregation: on");
                         PlanTestBase.assertContains(plan, "  0:OlapScanNode\n" +
                                 "     table: test_agg_state_table, rollup: test_agg_state_table");
                     }
