@@ -61,6 +61,7 @@ import com.starrocks.sql.optimizer.rule.transformation.CastToEmptyRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEConsumeRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.CombinationRule;
+import com.starrocks.sql.optimizer.rule.transformation.DeferProjectAfterTopNRule;
 import com.starrocks.sql.optimizer.rule.transformation.DistributionPruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateGroupByConstantRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateJoinWithConstantRule;
@@ -331,7 +332,8 @@ public class RuleSet {
             new PruneProjectRule(),
             new PruneProjectEmptyRule(),
             new MergeTwoProjectRule(),
-            new PushDownProjectToCTEAnchorRule()
+            new PushDownProjectToCTEAnchorRule(),
+            new DeferProjectAfterTopNRule()
     ));
 
     public static final Rule COLLECT_CTE_RULES = new CombinationRule(RuleType.GP_COLLECT_CTE, ImmutableList.of(
