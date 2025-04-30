@@ -36,13 +36,12 @@ public class MVMetaVersionRepairer {
     /**
      * Repair base table version changes for all related materialized views when table has no data changed but only version
      * changes which happens in cloud-native environment for background compaction.
-     * @param db table's database
      * @param table changed table
      * @param partitionRepairInfos table's changed partition infos
      */
-    public static void repairBaseTableVersionChanges(Database db, Table table,
+    public static void repairBaseTableVersionChanges(Table table,
                                                      List<MVRepairHandler.PartitionRepairInfo> partitionRepairInfos) {
-        if (db == null || table == null) {
+        if (table == null) {
             return;
         }
         if (!table.isNativeTableOrMaterializedView()) {
@@ -63,14 +62,24 @@ public class MVMetaVersionRepairer {
                 continue;
             }
 
+<<<<<<< HEAD
             // acquire db write lock to modify meta of mv
             if (!db.writeLockAndCheckExist()) {
+=======
+            // acquire mvDb + mv write lock to modify meta of mv
+            Locker locker = new Locker();
+            if (!locker.lockDatabaseAndCheckExist(mvDb, mv, LockType.WRITE)) {
+>>>>>>> 9e87bef937 ([BugFix] Use mv's db rather than base table's db to aquire write lock (#58615))
                 continue;
             }
             try {
                 repairBaseTableTableVersionChange(mv, table, partitionRepairInfos);
             } finally {
+<<<<<<< HEAD
                 db.writeUnlock();
+=======
+                locker.unLockTableWithIntensiveDbLock(mvDb.getId(), mv.getId(), LockType.WRITE);
+>>>>>>> 9e87bef937 ([BugFix] Use mv's db rather than base table's db to aquire write lock (#58615))
             }
         }
     }
