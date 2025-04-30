@@ -23,7 +23,7 @@ However, in some special scenarios, such as partitioning historical data into pa
 ```sql
 PARTITION BY expression
 ...
-[ PROPERTIES( { 'partition_live_number' = 'xxx' | 'partition_retention_condition' = 'expr' } ) ]
+[ PROPERTIES( 'partition_live_number' = 'xxx' ) ]
 
 expression ::=
     { date_trunc ( <time_unit> , <partition_column> ) |
