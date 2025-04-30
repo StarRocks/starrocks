@@ -65,7 +65,7 @@ public class WarehouseMetricEntity {
                 "current warehouse query running length") {
             @Override
             public Long getValue() {
-                return tracker.getAllocatedLength();
+                return (long) tracker.getCurrentCurrency();
             }
         };
         queueRunningLength.addLabel(new MetricLabel("field", "query_running_length"));

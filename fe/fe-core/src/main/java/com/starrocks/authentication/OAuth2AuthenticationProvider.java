@@ -17,6 +17,7 @@ package com.starrocks.authentication;
 import com.starrocks.mysql.MysqlCodec;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.UserIdentity;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
@@ -40,7 +41,7 @@ public class OAuth2AuthenticationProvider implements AuthenticationProvider {
     }
 
     @Override
-    public void authenticate(ConnectContext context, String user, String host, byte[] authResponse)
+    public void authenticate(ConnectContext context, UserIdentity userIdentity, byte[] authResponse)
             throws AuthenticationException {
         /*
           If the auth plugin used by the client for this authentication is not AUTHENTICATION_OAUTH2_CLIENT,

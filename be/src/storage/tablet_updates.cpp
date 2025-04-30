@@ -44,6 +44,7 @@
 #include "storage/local_primary_key_recover.h"
 #include "storage/merge_iterator.h"
 #include "storage/persistent_index.h"
+#include "storage/persistent_index_load_executor.h"
 #include "storage/primary_key_dump.h"
 #include "storage/rows_mapper.h"
 #include "storage/rowset/base_rowset.h"
@@ -4907,7 +4908,8 @@ void TabletUpdates::_to_updates_pb_unlocked(TabletUpdatesPB* updates_pb) const {
 }
 
 Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool restore_from_backup,
-                                    bool save_source_schema) {
+                                    bool save_source_schema, bool need_rebuild_pk_index,
+                                    int32_t rebuild_pk_index_wait_seconds) {
 #define CHECK_FAIL(status)                                                                       \
     do {                                                                                         \
         Status st = (status);                                                                    \
@@ -5159,6 +5161,13 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
         index_entry->update_expire_time(MonotonicMillis() + manager->get_index_cache_expire_ms(_tablet));
         index_entry->value().unload();
         index_cache.release(index_entry);
+
+        if (need_rebuild_pk_index) {
+            // rebuild primary index
+            auto* pindex_load_executor = manager->get_pindex_load_executor();
+            (void)pindex_load_executor->submit_task_and_wait_for(
+                    std::static_pointer_cast<Tablet>(_tablet.shared_from_this()), rebuild_pk_index_wait_seconds);
+        }
 
         LOG(INFO) << "load full snapshot done " << _debug_string(false) << ss.str();
 
@@ -5485,6 +5494,7 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
 
 Status TabletUpdates::get_rss_rowids_by_pk(Tablet* tablet, const Column& keys, EditVersion* read_version,
                                            std::vector<uint64_t>* rss_rowids, int64_t timeout_ms) {
+    TEST_ERROR_POINT("TabletUpdates::get_rss_rowids_by_pk");
     if (timeout_ms <= 0) {
         _index_lock.lock();
     } else {
@@ -5930,6 +5940,24 @@ void TabletUpdates::rewrite_rs_meta(bool is_fatal) {
     LOG_IF(WARNING, !is_fatal && !st.ok())
             << "fail to rewrite rowset meta: " << st << ". tablet_id=" << _tablet.tablet_id()
             << ", pending rowset num=" << pending_rs << ", published rowset num=" << published_rs;
+}
+
+bool TabletUpdates::rowset_check_file_existence() const {
+    vector<RowsetSharedPtr> all_rowsets;
+    {
+        // 1. fetch rowsets
+        std::lock_guard<std::mutex> lg(_rowsets_lock);
+        for (auto& [rowset_id, rowset] : _rowsets) {
+            all_rowsets.push_back(rowset);
+        }
+    }
+    // 2. check rowset file
+    for (auto& rowset : all_rowsets) {
+        if (!rowset->check_file_existence()) {
+            return false;
+        }
+    }
+    return true;
 }
 
 } // namespace starrocks

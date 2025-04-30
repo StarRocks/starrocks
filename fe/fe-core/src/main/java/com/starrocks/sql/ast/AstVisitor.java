@@ -1229,6 +1229,10 @@ public interface AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    default R visitModifyColumnCommentClause(ModifyColumnCommentClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     default R visitColumnRenameClause(ColumnRenameClause clause, C context) {
         return visitNode(clause, context);
     }

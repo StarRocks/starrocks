@@ -354,6 +354,11 @@ public class EditLog {
                     globalStateMgr.getAlterJobMgr().alterView(info, true);
                     break;
                 }
+                case OperationType.OP_SET_VIEW_SECURITY_LOG: {
+                    AlterViewInfo info = (AlterViewInfo) journal.data();
+                    globalStateMgr.getAlterJobMgr().setViewSecurity(info, true);
+                    break;
+                }
                 case OperationType.OP_RENAME_PARTITION_V2: {
                     TableInfo info = (TableInfo) journal.data();
                     globalStateMgr.getLocalMetastore().replayRenamePartition(info);
@@ -871,6 +876,10 @@ public class EditLog {
                 case OperationType.OP_REMOVE_BASIC_STATS_META: {
                     BasicStatsMeta basicStatsMeta = (BasicStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayRemoveBasicStatsMeta(basicStatsMeta);
+                    if (!GlobalStateMgr.isCheckpointThread()) {
+                        globalStateMgr.getAnalyzeMgr().expireTableAndColumnStatistics(basicStatsMeta.getDbId(),
+                                basicStatsMeta.getTableId(), basicStatsMeta.getColumns());
+                    }
                     break;
                 }
                 case OperationType.OP_ADD_HISTOGRAM_STATS_META: {
@@ -889,16 +898,27 @@ public class EditLog {
                 case OperationType.OP_REMOVE_HISTOGRAM_STATS_META: {
                     HistogramStatsMeta histogramStatsMeta = (HistogramStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayRemoveHistogramStatsMeta(histogramStatsMeta);
+                    if (!GlobalStateMgr.isCheckpointThread()) {
+                        globalStateMgr.getStatisticStorage().expireHistogramStatistics(
+                                histogramStatsMeta.getTableId(), Lists.newArrayList(histogramStatsMeta.getColumn()));
+                    }
                     break;
                 }
                 case OperationType.OP_ADD_MULTI_COLUMN_STATS_META: {
                     MultiColumnStatsMeta multiColumnStatsMeta = (MultiColumnStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayAddMultiColumnStatsMeta(multiColumnStatsMeta);
+                    if (!GlobalStateMgr.isCheckpointThread()) {
+                        globalStateMgr.getStatisticStorage().refreshMultiColumnStatistics(
+                                multiColumnStatsMeta.getTableId(), false);
+                    }
                     break;
                 }
                 case OperationType.OP_REMOVE_MULTI_COLUMN_STATS_META: {
                     MultiColumnStatsMeta multiColumnStatsMeta = (MultiColumnStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayRemoveMultiColumnStatsMeta(multiColumnStatsMeta);
+                    if (!GlobalStateMgr.isCheckpointThread()) {
+                        globalStateMgr.getStatisticStorage().expireMultiColumnStatistics(multiColumnStatsMeta.getTableId());
+                    }
                     break;
                 }
                 case OperationType.OP_ADD_EXTERNAL_BASIC_STATS_META: {
@@ -918,6 +938,12 @@ public class EditLog {
                 case OperationType.OP_REMOVE_EXTERNAL_BASIC_STATS_META: {
                     ExternalBasicStatsMeta basicStatsMeta = (ExternalBasicStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayRemoveExternalBasicStatsMeta(basicStatsMeta);
+                    if (!GlobalStateMgr.isCheckpointThread()) {
+                        globalStateMgr.getAnalyzeMgr().expireConnectorTableAndColumnStatistics(
+                                basicStatsMeta.getCatalogName(),
+                                basicStatsMeta.getDbName(), basicStatsMeta.getTableName(),
+                                basicStatsMeta.getColumns());
+                    }
                     break;
                 }
                 case OperationType.OP_ADD_EXTERNAL_HISTOGRAM_STATS_META: {
@@ -937,12 +963,23 @@ public class EditLog {
                 case OperationType.OP_REMOVE_EXTERNAL_HISTOGRAM_STATS_META: {
                     ExternalHistogramStatsMeta histogramStatsMeta = (ExternalHistogramStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayRemoveExternalHistogramStatsMeta(histogramStatsMeta);
+                    if (!GlobalStateMgr.isCheckpointThread()) {
+                        globalStateMgr.getAnalyzeMgr().expireConnectorTableHistogramStatisticsCache(
+                                histogramStatsMeta.getCatalogName(), histogramStatsMeta.getDbName(),
+                                histogramStatsMeta.getTableName(),
+                                Lists.newArrayList(histogramStatsMeta.getColumn()));
+                    }
                     break;
                 }
                 case OperationType.OP_MODIFY_HIVE_TABLE_COLUMN: {
                     ModifyTableColumnOperationLog modifyTableColumnOperationLog =
                             (ModifyTableColumnOperationLog) journal.data();
                     globalStateMgr.getLocalMetastore().replayModifyHiveTableColumn(opCode, modifyTableColumnOperationLog);
+                    break;
+                }
+                case OperationType.OP_MODIFY_COLUMN_COMMENT: {
+                    ModifyColumnCommentLog modifyColumnCommentLog = (ModifyColumnCommentLog) journal.data();
+                    globalStateMgr.getLocalMetastore().replayModifyColumnComment(opCode, modifyColumnCommentLog);
                     break;
                 }
                 case OperationType.OP_CREATE_CATALOG: {
@@ -1860,6 +1897,10 @@ public class EditLog {
 
     public void logModifyTableColumn(ModifyTableColumnOperationLog log) {
         logEdit(OperationType.OP_MODIFY_HIVE_TABLE_COLUMN, log);
+    }
+
+    public void logModifyColumnComment(ModifyColumnCommentLog log) {
+        logEdit(OperationType.OP_MODIFY_COLUMN_COMMENT, log);
     }
 
     public void logCreateCatalog(Catalog log) {

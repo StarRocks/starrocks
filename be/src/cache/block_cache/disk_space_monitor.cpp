@@ -17,6 +17,7 @@
 #include "cache/block_cache/block_cache.h"
 #include "cache/block_cache/datacache_utils.h"
 #include "common/config.h"
+#include "common/statusor.h"
 #include "util/await.h"
 #include "util/thread.h"
 
@@ -37,7 +38,7 @@ Status DiskSpace::init_spaces(const std::vector<DirSpace>& dir_spaces) {
         LOG(ERROR) << "fail to init disk space, reason: " << st.message();
         return st;
     }
-    _update_disk_options();
+    RETURN_IF_ERROR(_update_disk_options());
 
     // We check this switch after some information are initialized, because even if it is off now,
     // we still need this information once the switch is turn on online.
@@ -56,7 +57,11 @@ bool DiskSpace::adjust_spaces(const AdjustContext& ctx) {
         LOG(ERROR) << "fail to check and adjust cache disk spaces, reason: " << st.message();
         return false;
     }
-    _update_disk_options();
+    st = _update_disk_options();
+    if (!st.ok()) {
+        LOG(ERROR) << "Failed to update disk options, reason: " << st;
+        return false;
+    }
 
     if (_disk_stats.used_bytes() < _disk_opts.low_level_size) {
         _disk_free_period += _disk_opts.adjust_interval_s;
@@ -112,15 +117,18 @@ size_t DiskSpace::_cache_file_space_usage() {
     return size;
 }
 
-void DiskSpace::_update_disk_options() {
+Status DiskSpace::_update_disk_options() {
     _disk_opts.cache_lower_limit = config::datacache_min_disk_quota_for_adjustment;
-    _disk_opts.cache_upper_limit = DataCacheUtils::parse_conf_datacache_disk_size(_path, config::datacache_disk_size,
-                                                                                  _disk_stats.capacity_bytes);
+    ASSIGN_OR_RETURN(_disk_opts.cache_upper_limit,
+                     DataCacheUtils::parse_conf_datacache_disk_size(_path, config::datacache_disk_size,
+                                                                    _disk_stats.capacity_bytes));
     _disk_opts.low_level_size = _disk_stats.capacity_bytes * 0.01 * config::datacache_disk_low_level;
     _disk_opts.safe_level_size = _disk_stats.capacity_bytes * 0.01 * config::datacache_disk_safe_level;
     _disk_opts.high_level_size = _disk_stats.capacity_bytes * 0.01 * config::datacache_disk_high_level;
     _disk_opts.adjust_interval_s = config::datacache_disk_adjust_interval_seconds;
     _disk_opts.idle_for_expansion_s = config::datacache_disk_idle_seconds_for_expansion;
+
+    return Status::OK();
 }
 
 void DiskSpace::_update_spaces_by_cache_quota(size_t cache_avail_bytes) {
@@ -282,7 +290,7 @@ bool DiskSpaceMonitor::is_stopped() {
 void DiskSpaceMonitor::_adjust_datacache_callback() {
     while (!is_stopped()) {
         std::unique_lock<std::mutex> lck(_mutex);
-        if (config::datacache_enable && config::datacache_auto_adjust_enable &&
+        if (_cache->is_initialized() && config::datacache_auto_adjust_enable &&
             !_updating.load(std::memory_order_acquire)) {
             if (_adjust_spaces_by_disk_usage()) {
                 auto dir_spaces = all_dir_spaces();

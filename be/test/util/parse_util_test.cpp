@@ -38,12 +38,14 @@
 
 #include <string>
 
+#include "testutil/assert.h"
+
 namespace starrocks {
 
 const static int64_t test_memory_limit = 10000;
 
 static void test_parse_mem_spec(const std::string& mem_spec_str, int64_t result) {
-    int64_t bytes = ParseUtil::parse_mem_spec(mem_spec_str, test_memory_limit);
+    ASSIGN_OR_ASSERT_FAIL(int64_t bytes, ParseUtil::parse_mem_spec(mem_spec_str, test_memory_limit));
     ASSERT_EQ(result, bytes);
 }
 
@@ -65,28 +67,16 @@ TEST(TestParseMemSpec, Normal) {
     test_parse_mem_spec("8t", 8L * 1024 * 1024 * 1024 * 1024L);
     test_parse_mem_spec("128T", 128L * 1024 * 1024 * 1024 * 1024L);
 
-    int64_t bytes = ParseUtil::parse_mem_spec("20%", test_memory_limit);
-    ASSERT_EQ(bytes, test_memory_limit * 0.2);
+    test_parse_mem_spec("20%", test_memory_limit * 0.2);
+    test_parse_mem_spec("-1", -1);
+    test_parse_mem_spec("", 0);
 }
 
 TEST(TestParseMemSpec, Bad) {
-    std::vector<std::string> bad_values;
-    bad_values.emplace_back("1gib");
-    bad_values.emplace_back("1%b");
-    bad_values.emplace_back("1b%");
-    bad_values.emplace_back("gb");
-    bad_values.emplace_back("1GMb");
-    bad_values.emplace_back("1b1Mb");
-    bad_values.emplace_back("1kib");
-    bad_values.emplace_back("1Bb");
-    bad_values.emplace_back("1%%");
-    bad_values.emplace_back("1.1");
-    bad_values.emplace_back("1pb");
-    bad_values.emplace_back("1eb");
-    bad_values.emplace_back("%");
+    std::vector<std::string> bad_values{{"1gib"}, {"1%b"}, {"1b%"}, {"gb"},  {"1GMb"}, {"1b1Mb"}, {"1kib"},
+                                        {"1Bb"},  {"1%%"}, {"1.1"}, {"1pb"}, {"1eb"},  {"%"}};
     for (const auto& value : bad_values) {
-        int64_t bytes = ParseUtil::parse_mem_spec(value, test_memory_limit);
-        ASSERT_EQ(-1, bytes);
+        ASSERT_ERROR(ParseUtil::parse_mem_spec(value, test_memory_limit));
     }
 }
 

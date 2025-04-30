@@ -28,6 +28,8 @@ import com.starrocks.sql.optimizer.cost.feature.CostPredictor;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import org.apache.commons.lang3.EnumUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Arrays;
 import java.util.List;
@@ -37,6 +39,8 @@ import java.util.stream.Collectors;
 import static com.starrocks.sql.optimizer.Utils.computeMinGEPower2;
 
 public class SlotEstimatorFactory {
+    private static final Logger LOG = LogManager.getLogger(SlotEstimatorFactory.class);
+
     public enum EstimatorPolicy {
         MBE, // memory-based slots estimator
         PBE, // parallel-based slots estimator
@@ -90,9 +94,14 @@ public class SlotEstimatorFactory {
         @Override
         public int estimateSlots(QueryQueueOptions opts, ConnectContext context, DefaultCoordinator coord) {
             long memCost;
-            if (CostPredictor.getServiceBasedCostPredictor().isAvailable() && coord.getPredictedCost() > 0) {
+            boolean isCostPredictorAvailable = CostPredictor.getServiceBasedCostPredictor().isAvailable();
+            if (isCostPredictorAvailable && coord.getPredictedCost() > 0) {
                 memCost = coord.getPredictedCost();
             } else {
+                if (isCostPredictorAvailable) {
+                    LOG.warn("Cost predictor is available, but predicted cost is not set. " +
+                            "Using planCpuCosts as the fallback.");
+                }
                 // The estimate of planMemCosts is typically an underestimation, often several orders of magnitude smaller than
                 // the actual memory usage, whereas planCpuCosts tends to be relatively larger.
                 // Therefore, the maximum value between the two is used as the estimate for memory.

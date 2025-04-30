@@ -897,7 +897,7 @@ CONF_mInt32(max_hdfs_file_handle, "1000");
 
 CONF_Int64(max_segment_file_size, "1073741824");
 
-// Rewrite partial semgent or not.
+// Rewrite partial segment or not.
 // if true, partial segment will be rewrite into new segment file first and append other column data
 // if false, the data of other column will be append into partial segment file and rebuild segment footer
 // we may need the both implementations for perf test for now, so use it to decide which implementations to use
@@ -955,7 +955,7 @@ CONF_mBool(orc_coalesce_read_enable, "true");
 // Default is 8MB for tiny stripe threshold size
 CONF_Int32(orc_tiny_stripe_threshold_size, "8388608");
 
-// When the ORC file file size is smaller than orc_loading_buffer_size,
+// When the ORC file size is smaller than orc_loading_buffer_size,
 // we'll read the whole file at once instead of reading a footer first.
 CONF_Int32(orc_loading_buffer_size, "8388608");
 
@@ -975,6 +975,7 @@ CONF_mBool(parquet_push_down_filter_to_decoder_enable, "true");
 CONF_mBool(parquet_cache_aware_dict_decoder_enable, "true");
 
 CONF_mBool(parquet_reader_enable_adpative_bloom_filter, "true");
+CONF_Double(parquet_page_cache_decompress_threshold, "2.0");
 
 CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
 CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
@@ -1038,7 +1039,7 @@ CONF_Int64(send_rpc_runtime_filter_timeout_ms, "1000");
 // this is a default value, maybe changed by global_runtime_filter_rpc_http_min_size in session variable.
 CONF_Int64(send_runtime_filter_via_http_rpc_min_size, "67108864");
 
-// -1: ulimited, 0: limit by memory use, >0: limit by queue_size
+// -1: unlimited, 0: limit by memory use, >0: limit by queue_size
 CONF_mInt64(runtime_filter_queue_limit, "-1");
 
 CONF_Int64(rpc_connect_timeout_ms, "30000");
@@ -1148,7 +1149,7 @@ CONF_String(dependency_librdkafka_debug, "all");
 // DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3, WARN by default
 CONF_mInt16(pulsar_client_log_level, "2");
 
-// max loop count when be waiting its fragments finish. It has no effect if the var is configured with value <= 0.
+// max loop count when be waiting its fragments to finish. It has no effect if the var is configured with value <= 0.
 CONF_mInt64(loop_count_wait_fragments_finish, "2");
 
 // the maximum number of connections in the connection pool for a single jdbc url
@@ -1217,8 +1218,8 @@ CONF_Bool(datacache_direct_io_enable, "false");
 // 0 means unlimited.
 CONF_Int64(datacache_max_concurrent_inserts, "1500000");
 // Total memory limit for in-flight cache jobs.
-// Once this is reached, cache populcation will be rejected until the flying memory usage gets under the limit.
-// If zero, the datacache module will automatically calculate a resonable default value based on block size.
+// Once this is reached, cache population will be rejected until the flying memory usage gets under the limit.
+// If zero, the datacache module will automatically calculate a reasonable default value based on block size.
 CONF_Int64(datacache_max_flying_memory_mb, "2");
 // An io adaptor factor to control the io traffic between cache and network.
 // The larger this parameter, the more requests will be sent to the network.
@@ -1336,6 +1337,14 @@ CONF_mBool(enable_pindex_read_by_page, "true");
 
 // check need to rebuild pindex or not
 CONF_mBool(enable_rebuild_pindex_check, "true");
+
+// Number of max persistent index load threads
+CONF_mInt32(pindex_load_thread_pool_num_max, "8");
+// Max wait time to rebuild persistent index in full clone
+CONF_mInt32(pindex_rebuild_clone_wait_seconds, "120");
+// Max wait time to rebuild persistent index in load (preload update state)
+CONF_mInt32(pindex_rebuild_load_wait_seconds, "20");
+
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");
 
@@ -1443,7 +1452,7 @@ CONF_mInt32(desc_hint_split_range, "10");
 // it may be evicted if the disk is full
 CONF_mInt64(lake_local_pk_index_unused_threshold_seconds, "86400"); // 1 day
 
-CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "false");
+CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "true");
 
 CONF_mInt32(dictionary_cache_refresh_timeout_ms, "60000"); // 1 min
 CONF_mInt32(dictionary_cache_refresh_threadpool_size, "8");
@@ -1455,6 +1464,9 @@ CONF_mBool(enable_compaction_flat_json, "true");
 
 // direct read flat json
 CONF_mBool(enable_lazy_dynamic_flat_json, "true");
+
+// enable flat json remain filter
+CONF_mBool(enable_json_flat_remain_filter, "true");
 
 // enable flat complex type (/array/object/hyper type), diables for save storage
 CONF_mBool(enable_json_flat_complex_type, "false");
@@ -1620,6 +1632,8 @@ CONF_mInt64(pk_column_lazy_load_threshold_bytes, "314572800");
 
 // ignore union type tag in avro kafka routine load
 CONF_mBool(avro_ignore_union_type_tag, "true");
+// larger buffer size means fewer reads, but higher memory usage
+CONF_mInt32(avro_reader_buffer_size_bytes, "8388608");
 
 // default batch size for simdjson lib
 CONF_mInt32(json_parse_many_batch_size, "1000000");

@@ -50,6 +50,7 @@
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
 #include "storage/olap_common.h"
+#include "storage/persistent_index_load_executor.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -112,11 +113,22 @@ Status TabletManager::_add_tablet_unlocked(const TabletSharedPtr& new_tablet, bo
         int64_t new_time = 0;
         int64_t old_version = 0;
         int64_t new_version = 0;
+        bool old_file_existence = true;
+        bool new_file_existence = true;
         if (new_tablet->updates() != nullptr) {
             old_time = old_tablet->updates()->max_rowset_creation_time();
             new_time = new_tablet->updates()->max_rowset_creation_time();
             old_version = old_tablet->updates()->max_version();
             new_version = new_tablet->updates()->max_version();
+            // Currently, we only perform file existence checks on Primary Key tables
+            // to determine tablet priority. This is because prior to version 3.2,
+            // the tablet priority evaluation logic was unstable and could lead to
+            // accidental garbage collection (GC) of data files during multiple BE restarts.
+            // Therefore, we've implemented file existence checks here specifically to bypass
+            // tablets whose data files might have been incorrectly GC'd. As for non-PK tables,
+            // since they don't carry this risk, we can safely ignore them for now.
+            old_file_existence = old_tablet->updates()->rowset_check_file_existence();
+            new_file_existence = new_tablet->updates()->rowset_check_file_existence();
         } else {
             old_tablet->obtain_header_rdlock();
             auto old_rowset = old_tablet->rowset_with_max_version();
@@ -127,11 +139,21 @@ Status TabletManager::_add_tablet_unlocked(const TabletSharedPtr& new_tablet, bo
             new_version = (new_rowset == nullptr) ? -1 : new_rowset->end_version();
             old_tablet->release_header_lock();
         }
-        bool replace_old = (new_version > old_version) || (new_version == old_version && new_time > old_time) ||
-                           // use for migration of primary key empty tablet
-                           (new_tablet->updates() != nullptr && old_version == 1 && new_version == 1);
 
-        if (replace_old) {
+        auto replace_old_fn = [&]() {
+            // Tablet with guaranteed data file existence is prioritized for adoption.
+            if (old_file_existence && !new_file_existence) {
+                return false;
+            } else if (!old_file_existence && new_file_existence) {
+                return true;
+            } else {
+                return (new_version > old_version) || (new_version == old_version && new_time > old_time) ||
+                       // use for migration of primary key empty tablet
+                       (new_tablet->updates() != nullptr && old_version == 1 && new_version == 1);
+            }
+        };
+
+        if (replace_old_fn()) {
             RETURN_IF_ERROR(_drop_tablet_unlocked(old_tablet->tablet_id(), kMoveFilesToTrash));
             RETURN_IF_ERROR(_update_tablet_map_and_partition_info(new_tablet));
             LOG(INFO) << "Added duplicated tablet. tablet_id=" << new_tablet->tablet_id()
@@ -1671,7 +1693,9 @@ std::vector<TabletSharedPtr> TabletManager::_get_all_tablets_from_shard(const Ta
 }
 
 Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId tablet_id, SchemaHash schema_hash,
-                                                       const string& schema_hash_path, bool restore) {
+                                                       const string& schema_hash_path, bool restore,
+                                                       bool need_rebuild_pk_index,
+                                                       int32_t rebuild_pk_index_wait_seconds) {
     auto meta_path = strings::Substitute("$0/meta", schema_hash_path);
     auto shard_path = path_util::dir_name(path_util::dir_name(path_util::dir_name(meta_path)));
     auto shard_str = shard_path.substr(shard_path.find_last_of('/') + 1);
@@ -1761,24 +1785,33 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
         return Status::NotFound("tablet path not exists");
     }
 
-    std::unique_lock l(_get_tablets_shard_lock(tablet_id));
-    RETURN_IF_ERROR(meta_store->write_batch(&wb));
+    Status add_tablet_st;
+    {
+        std::unique_lock l(_get_tablets_shard_lock(tablet_id));
+        RETURN_IF_ERROR(meta_store->write_batch(&wb));
 
-    if (!tablet->init().ok()) {
-        LOG(WARNING) << "Fail to init cloned tablet " << tablet_id << ", try to clear meta store";
-        wb.Clear();
-        RETURN_IF_ERROR(TabletMetaManager::clear_del_vector(store, &wb, tablet_id));
-        RETURN_IF_ERROR(TabletMetaManager::clear_delta_column_group(store, &wb, tablet_id));
-        RETURN_IF_ERROR(TabletMetaManager::clear_rowset(store, &wb, tablet_id));
-        RETURN_IF_ERROR(TabletMetaManager::clear_log(store, &wb, tablet_id));
-        RETURN_IF_ERROR(TabletMetaManager::remove_tablet_meta(store, &wb, tablet_id, schema_hash));
-        auto st = meta_store->write_batch(&wb);
-        LOG_IF(WARNING, !st.ok()) << "Fail to clear meta store: " << st;
-        return Status::InternalError("tablet init failed");
+        if (!tablet->init().ok()) {
+            LOG(WARNING) << "Fail to init cloned tablet " << tablet_id << ", try to clear meta store";
+            wb.Clear();
+            RETURN_IF_ERROR(TabletMetaManager::clear_del_vector(store, &wb, tablet_id));
+            RETURN_IF_ERROR(TabletMetaManager::clear_delta_column_group(store, &wb, tablet_id));
+            RETURN_IF_ERROR(TabletMetaManager::clear_rowset(store, &wb, tablet_id));
+            RETURN_IF_ERROR(TabletMetaManager::clear_log(store, &wb, tablet_id));
+            RETURN_IF_ERROR(TabletMetaManager::remove_tablet_meta(store, &wb, tablet_id, schema_hash));
+            auto st = meta_store->write_batch(&wb);
+            LOG_IF(WARNING, !st.ok()) << "Fail to clear meta store: " << st;
+            return Status::InternalError("tablet init failed");
+        }
+        add_tablet_st = _add_tablet_unlocked(tablet, true, false);
+        LOG_IF(WARNING, !add_tablet_st.ok()) << "Fail to add cloned tablet " << tablet_id << ": " << add_tablet_st;
     }
-    auto st = _add_tablet_unlocked(tablet, true, false);
-    LOG_IF(WARNING, !st.ok()) << "Fail to add cloned tablet " << tablet_id << ": " << st;
-    return st;
+
+    if (add_tablet_st.ok() && need_rebuild_pk_index && tablet->updates() != nullptr) {
+        // rebuild primary index
+        auto* pindex_load_executor = StorageEngine::instance()->update_manager()->get_pindex_load_executor();
+        (void)pindex_load_executor->submit_task_and_wait_for(tablet, rebuild_pk_index_wait_seconds);
+    }
+    return add_tablet_st;
 }
 
 Status TabletManager::_remove_tablet_meta(const TabletSharedPtr& tablet) {

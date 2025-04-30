@@ -15,7 +15,6 @@
 package com.starrocks.sql.optimizer.cost.feature;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -46,8 +45,8 @@ public class FeatureExtractor {
         List<OperatorFeatures.ScanOperatorFeatures> scanNodes = Lists.newArrayList();
         root.collect(OperatorFeatures.ScanOperatorFeatures.class, scanNodes);
         if (CollectionUtils.isNotEmpty(scanNodes)) {
-            Set<Table> tables = scanNodes.stream()
-                    .map(OperatorFeatures.ScanOperatorFeatures::getTable)
+            Set<OperatorFeatures.TableFeature> tables = scanNodes.stream()
+                    .map(OperatorFeatures.ScanOperatorFeatures::getTableFeature)
                     .collect(Collectors.toSet());
             planFeatures.addTableFeatures(tables);
         }

@@ -475,9 +475,10 @@ public class TransactionState implements Writable, GsonPreProcessable {
             }
             return true;
         }
-        if (state != ReplicaState.NORMAL) {
-            // Skip check when replica is CLONE, ALTER or SCHEMA CHANGE
-            // We handle version missing in finishTask when change state to NORMAL
+        if (state != ReplicaState.NORMAL && state != ReplicaState.CLONE) {
+            // Skip check when replica is ALTER or SCHEMA CHANGE.
+            // Should not return true if the state is CLONE, because lastSuccessVersion will be updated incorrectly
+            // in 'OlapTableTxnLogApplier.applyVisibleLog'.
             if (LOG.isDebugEnabled()) {
                 Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId);
                 LOG.debug("skip tabletCommitInfos check because tablet {} backend {} is in state {}",
@@ -559,10 +560,10 @@ public class TransactionState implements Writable, GsonPreProcessable {
     }
 
     public List<Long> getCallbackId() {
-        if (callbackId != -1) {
+        if (this.callbackIdList == null || this.callbackIdList.isEmpty()) {
             return Lists.newArrayList(callbackId);
         } else {
-            return new ArrayList<>(callbackIdList);
+            return Lists.newArrayList(this.callbackIdList);
         }
     }
 

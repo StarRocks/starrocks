@@ -24,6 +24,7 @@
 namespace starrocks {
 
 struct ScannerCounter;
+class AdaptiveNullableColumn;
 class RandomAccessFile;
 class RuntimeState;
 class SlotDescriptor;
@@ -76,17 +77,24 @@ public:
     Status get_schema(std::vector<SlotDescriptor>* schema);
 
 private:
-    Status read_row(ChunkPtr& chunk, const avro::GenericRecord& record);
+    Status read_row(const avro::GenericRecord& record, const std::vector<AdaptiveNullableColumn*>& column_raw_ptrs);
 
     std::unique_ptr<avro::DataFileReader<avro::GenericDatum>> _file_reader = nullptr;
+    bool _is_inited = false;
 
-    // only used in read data
+    // all belows are only used in read data
     std::string _filename = "";
-    RuntimeState* _state = nullptr;
-    ScannerCounter* _counter = nullptr;
     const std::vector<SlotDescriptor*>* _slot_descs = nullptr;
     const std::vector<avrocpp::ColumnReaderUniquePtr>* _column_readers = nullptr;
+    size_t _num_of_columns_from_file = 0;
     bool _col_not_found_as_null = false;
+
+    // reuse generic datum and field indexes for better performance
+    std::unique_ptr<avro::GenericDatum> _datum = nullptr;
+    std::vector<int64_t> _field_indexes;
+
+    RuntimeState* _state = nullptr;
+    ScannerCounter* _counter = nullptr;
 };
 
 using AvroReaderUniquePtr = std::unique_ptr<AvroReader>;

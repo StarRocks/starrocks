@@ -54,11 +54,8 @@ public class MetaBaseAction extends WebBaseAction {
     public static final String TOKEN = "token";
     public static final String RUN_MODE = "run_mode";
 
-    protected File imageDir;
-
-    public MetaBaseAction(ActionController controller, File imageDir) {
+    public MetaBaseAction(ActionController controller) {
         super(controller);
-        this.imageDir = imageDir;
     }
 
     @Override
