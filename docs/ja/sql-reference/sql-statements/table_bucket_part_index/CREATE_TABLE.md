@@ -711,6 +711,62 @@ crontab ::= * <hour> <day-of-the-month> <month> <day-of-the-week>
 'base_compaction_forbidden_time_ranges' = '* 8-20 * * 2-6'
 ```
 
+#### 共通パーティション式 TTL の指定
+
+v3.5.0以降、StarRocksのネイティブ・テーブルは共通パーティション式のTTLをサポートしています。
+
+`partition_retention_condition`： パーティションを動的に保持することを宣言する式。式の条件を満たさないパーティションは定期的に削除されます。
+- 式にはパーティション列と定数のみを含めることができます。パーティション以外のカラムはサポートされていません。
+- 共通パーティション式は、リスト・パーティションとレンジ・パーティションで適用方法が異なります：
+  - リストパーティションを持つテーブルの場合、StarRocks は Common Partition Expression によってフィルタリングされたパーティションの削除をサポートします。
+  - StarRocks では、FE のパーティション刈り込み機能を使用してのみ、パーティションをフィルターして削除できます。パーティションのプルーニングがサポートしない述語に対応するパーティションは、フィルタリングおよび削除できません。
+
+
+#### Specify Common Partition Expression TTL
+
+From v3.5.0 onwards, StarRocks native tables support Common Partition Expression TTL.
+
+`partition_retention_condition`: The expression that declares the partitions to be retained dynamically. Partitions that do not meet the condition in the expression will be dropped regularly.
+- The expression can only contain partition columns and constants. Non-partition columns are not supported.
+- Common Partition Expression applies to List partitions and Range partitions differently:
+  - For tables with List partitions, StarRocks supports deleting partitions filtered by the Common Partition Expression.
+  - For tables with Range partitions, StarRocks can only filter and delete partitions using the partition pruning capability of FE. Partitions correspond to predicates that are not supported by partition pruning cannot be filtered and deleted.
+
+例
+
+```SQL
+-- 過去3ヶ月のデータを保持する。dt`列はテーブルのパーティション列である。
+"partition_retention_condition" = "dt >= CURRENT_DATE() - INTERVAL 3 MONTH"
+```
+
+この機能を無効にするには、ALTER TABLEステートメントでこのプロパティを空文字列に設定します：
+
+```SQL
+ALTER TABLE tbl SET('partition_retention_condition' = '');
+```
+
+#### フラットjsonコンフィグを設定する（現在は共有なしクラスタでのみサポート）
+
+フラットjson属性を使いたい場合は、プロパティで指定してください。詳細は [Flat JSON](../../../using_starrocks/Flat_json.md) を参照。
+
+```SQL
+PROPERTIES (
+    "flat_json.enable" = "true|false",
+    "flat_json.null.factor" = "0-1",
+    "flat_json.sparsity.factor" = "0-1",
+    "flat_json.column.max" = "${integer_value}"
+)
+```
+
+**`PROPERTIES`**
+
+| パラメータ                    | 必須     | 説明                                                                                                                                                                                                                                                       |
+| --------------------------- |----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `flat_json.enable`    | いいえ     | フラットJSON機能を有効にするかどうか。この機能を有効にすると、新しく読み込まれたJSONデータは自動的に平坦化され、JSONクエリのパフォーマンスが向上します。                                                                                                 |
+| `flat_json.null.factor` | いいえ    | フラットJSON用に抽出するカラムのNULL値の割合。NULL値の割合がこのしきい値より高いカラムは抽出されません。このパラメータは `flat_json.enable` が true に設定されている場合にのみ有効である。 デフォルト値: 0.3。 |
+| `flat_json.sparsity.factor`     | いいえ    | フラットJSONの同名のカラムの割合。同じ名前のカラムの割合がこの値より小さい場合は、抽出は行われません。このパラメータは `flat_json.enable` が true に設定されている場合のみ有効である。デフォルト値: 0.9。    |
+| `flat_json.column.max`       | いいえ    | フラットJSONで抽出できるサブフィールドの最大数。このパラメータは `flat_json.enable` が true に設定されている場合のみ有効である。 デフォルト値: 100。                                                                                               |
+
 ## 例
 
 ### ハッシュバケット法と列指向（カラムナ）ストレージを使用する集計テーブルを作成する
