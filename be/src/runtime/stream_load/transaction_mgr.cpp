@@ -177,7 +177,7 @@ Status TransactionMgr::begin_transaction(const HttpRequest* req, std::string* re
     Status st;
     auto ctx = _exec_env->stream_context_mgr()->get(label);
     if (ctx == nullptr) {
-        ctx = new StreamLoadContext(_exec_env);
+        ctx = new StreamLoadContext(_exec_env, &transaction_streaming_load_current_processing);
         ctx->ref();
         std::lock_guard<std::mutex> l(ctx->lock);
         st = _begin_transaction(req, ctx);
@@ -316,7 +316,6 @@ Status TransactionMgr::_begin_transaction(const HttpRequest* req, StreamLoadCont
     // 4. put load stream context
     RETURN_IF_ERROR(_exec_env->stream_context_mgr()->put(ctx->label, ctx));
 
-    transaction_streaming_load_current_processing.increment(1);
     transaction_streaming_load_requests_total.increment(1);
 
     return Status::OK();
@@ -359,7 +358,6 @@ Status TransactionMgr::_commit_transaction(StreamLoadContext* ctx, bool prepare)
     ctx->load_cost_nanos = MonotonicNanos() - ctx->start_nanos;
     transaction_streaming_load_duration_ms.increment(ctx->load_cost_nanos / 1000000);
     transaction_streaming_load_bytes.increment(ctx->receive_bytes);
-    transaction_streaming_load_current_processing.increment(-1);
 
     return Status::OK();
 }
@@ -384,8 +382,6 @@ Status TransactionMgr::_rollback_transaction(StreamLoadContext* ctx) {
     // 4. remove stream load context
     //    By remove context at the end, we can retry when the rollback FE fails
     _exec_env->stream_context_mgr()->remove(ctx->label);
-
-    transaction_streaming_load_current_processing.increment(-1);
 
     return Status::OK();
 }
