@@ -80,9 +80,11 @@ public:
             std::string tmpl("/tmp/sr_starlet_ut_XXXXXX");
             EXPECT_TRUE(::mkdtemp(tmpl.data()) != nullptr);
             config::starlet_cache_dir = tmpl;
-            setenv(staros::starlet::fslib::kFslibCacheDir.c_str(), config::starlet_cache_dir.c_str(), 1);
+            setenv(staros::starlet::fslib::kFslibCacheDir.c_str(), config::starlet_cache_dir.c_str(),
+                   1 /* overwrite */);
         }
 
+        staros::starlet::StarletConfig starlet_config;
         starlet_config.rpc_port = config::starlet_port;
         g_worker = std::make_shared<starrocks::StarOSWorker>();
         g_starlet = std::make_unique<staros::starlet::Starlet>(g_worker);
