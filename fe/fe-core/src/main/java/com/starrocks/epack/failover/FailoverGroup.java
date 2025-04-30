@@ -22,6 +22,7 @@ import com.starrocks.epack.thrift.TFailoverGroupHandshakeRequest;
 import com.starrocks.epack.thrift.TFailoverGroupHandshakeResponse;
 import com.starrocks.epack.thrift.TFailoverGroupRequestMetaRequest;
 import com.starrocks.epack.thrift.TFailoverGroupRequestMetaResponse;
+import com.starrocks.leader.MetaHelper;
 import com.starrocks.persist.Storage;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
@@ -491,7 +492,7 @@ public class FailoverGroup implements Writable {
             }
         }
 
-        long imageVersion = new Storage(GlobalStateMgr.getServingState().getImageDir()).getImageJournalId();
+        long imageVersion = new Storage(MetaHelper.getImageFileDir(true)).getImageJournalId();
         if (imageVersion <= request.getLast_meta_version()) {
             triggerNewImage();
             TFailoverGroupRequestMetaResponse response = new TFailoverGroupRequestMetaResponse();
@@ -801,7 +802,7 @@ public class FailoverGroup implements Writable {
     }
 
     private String getFailoverImageDir() {
-        return GlobalStateMgr.getServingState().getImageDir() + getFailoverImageSubDir();
+        return GlobalStateMgr.getImageDirPath() + getFailoverImageSubDir();
     }
 
     public byte[] toByteArray() {

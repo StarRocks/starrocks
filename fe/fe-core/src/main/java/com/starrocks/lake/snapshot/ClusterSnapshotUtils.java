@@ -33,7 +33,7 @@ public class ClusterSnapshotUtils {
 
         StorageVolume sv = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshotStorageVolume();
         String snapshotImagePath = getSnapshotImagePath(sv, snapshotName);
-        String localImagePath = GlobalStateMgr.getServingState().getImageDir();
+        String localImagePath = GlobalStateMgr.getImageDirPath();
 
         HdfsUtil.copyFromLocal(localImagePath, snapshotImagePath, sv.getProperties());
     }

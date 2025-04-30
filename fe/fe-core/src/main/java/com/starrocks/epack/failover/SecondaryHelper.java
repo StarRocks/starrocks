@@ -87,7 +87,7 @@ public class SecondaryHelper {
         String url = "http://" + NetUtils.getHostPortInAccessibleFormat(httpHost, httpPort) +
                 "/image?version=" + imageVersion + "&token=" + token;
         String filename = Storage.IMAGE + "." + imageVersion;
-        String realDir = GlobalStateMgr.getCurrentState().getImageDir() + imageSubDir;
+        String realDir = GlobalStateMgr.getImageDirPath() + imageSubDir;
         File dir = new File(realDir);
         try {
             OutputStream out = MetaHelper.getOutputStream(filename, dir);

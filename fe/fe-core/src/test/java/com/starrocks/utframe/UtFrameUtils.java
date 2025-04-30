@@ -86,7 +86,6 @@ import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLogDeserializer;
-import com.starrocks.persist.ImageFormatVersion;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -1144,7 +1143,7 @@ public class UtFrameUtils {
 
         public PseudoImage() throws IOException {
             buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
-            imageWriter = new ImageWriter("", ImageFormatVersion.v2, 0);
+            imageWriter = new ImageWriter("", 0);
             imageWriter.setOutputStream(buffer);
         }
 
