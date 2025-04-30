@@ -649,7 +649,7 @@ field_desc ::= <field_type> [ AFTER <prior_field_name> | FIRST ]
 
 - 目前，此功能仅在存算一体集群中支持。
 - 表必须启用`fast_schema_evolution`属性。
-- 不支持在MAP类型中的STRUCT类型中添加或删除字段。
+- 不支持在 STRUCT 类型中修改一个 MAP 子字段的 Value 类型，不管该 Value 类型是 ARRAY、STRUCT 还是 MAP。
 - 新添加的字段不能有默认值或可空等属性。它们默认为可空，默认值为null。
 - 使用此功能后，不允许直接降级集群到不支持此功能的版本。
 
