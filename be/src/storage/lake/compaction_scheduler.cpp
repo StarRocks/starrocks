@@ -117,6 +117,9 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
     compact_stat->set_read_bytes_remote(context->stats->io_bytes_read_remote);
     compact_stat->set_read_time_local(context->stats->io_ns_local_disk);
     compact_stat->set_read_bytes_local(context->stats->io_bytes_read_local_disk);
+    compact_stat->set_read_segment_count(context->stats->read_segment_count);
+    compact_stat->set_write_segment_count(context->stats->write_segment_count);
+    compact_stat->set_write_segment_bytes(context->stats->write_segment_bytes);
     compact_stat->set_in_queue_time_sec(context->stats->in_queue_time_sec);
     compact_stat->set_sub_task_count(_request->tablet_ids_size());
 

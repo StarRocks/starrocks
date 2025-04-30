@@ -34,9 +34,17 @@ void CompactionTaskStats::collect(const OlapReaderStatistics& reader_stats) {
     column_iterator_init_ns = reader_stats.column_iterator_init_ns;
     io_count_local_disk = reader_stats.io_count_local_disk;
     io_count_remote = reader_stats.io_count_remote;
+    // read segment count is managed else where
+    // read_segment_count = reader_stats.segments_read_count;
+}
+
+void CompactionTaskStats::collect(const OlapWriterStatistics& writer_stats) {
+    write_segment_count = writer_stats.segment_count;
+    write_segment_bytes = writer_stats.bytes_write;
 }
 
 CompactionTaskStats CompactionTaskStats::operator+(const CompactionTaskStats& that) const {
+<<<<<<< HEAD
     CompactionTaskStats diff;
     diff.io_ns_remote = io_ns_remote + that.io_ns_remote;
     diff.io_ns_local_disk = io_ns_local_disk + that.io_ns_local_disk;
@@ -48,10 +56,29 @@ CompactionTaskStats CompactionTaskStats::operator+(const CompactionTaskStats& th
     diff.io_count_remote = io_count_remote + that.io_count_remote;
     diff.in_queue_time_sec = in_queue_time_sec + that.in_queue_time_sec;
     diff.pk_sst_merge_ns = pk_sst_merge_ns + that.pk_sst_merge_ns;
+=======
+    CompactionTaskStats diff = *this;
+    diff.io_ns_remote += that.io_ns_remote;
+    diff.io_ns_local_disk += that.io_ns_local_disk;
+    diff.io_bytes_read_remote += that.io_bytes_read_remote;
+    diff.io_bytes_read_local_disk += that.io_bytes_read_local_disk;
+    diff.segment_init_ns += that.segment_init_ns;
+    diff.column_iterator_init_ns += that.column_iterator_init_ns;
+    diff.io_count_local_disk += that.io_count_local_disk;
+    diff.io_count_remote += that.io_count_remote;
+    // read segment count is managed else where
+    // diff.read_segment_count += that.read_segment_count;
+    diff.write_segment_count += that.write_segment_count;
+    diff.write_segment_bytes += that.write_segment_bytes;
+    diff.in_queue_time_sec += that.in_queue_time_sec;
+    diff.pk_sst_merge_ns += that.pk_sst_merge_ns;
+    diff.input_file_size += that.input_file_size;
+>>>>>>> d95f9cd1c8 ([Enhancement] add more stats for lake compaction profile (#56769))
     return diff;
 }
 
 CompactionTaskStats CompactionTaskStats::operator-(const CompactionTaskStats& that) const {
+<<<<<<< HEAD
     CompactionTaskStats diff;
     diff.io_ns_remote = io_ns_remote - that.io_ns_remote;
     diff.io_ns_local_disk = io_ns_local_disk - that.io_ns_local_disk;
@@ -63,6 +90,24 @@ CompactionTaskStats CompactionTaskStats::operator-(const CompactionTaskStats& th
     diff.io_count_remote = io_count_remote - that.io_count_remote;
     diff.in_queue_time_sec = in_queue_time_sec - that.in_queue_time_sec;
     diff.pk_sst_merge_ns = pk_sst_merge_ns - that.pk_sst_merge_ns;
+=======
+    CompactionTaskStats diff = *this;
+    diff.io_ns_remote -= that.io_ns_remote;
+    diff.io_ns_local_disk -= that.io_ns_local_disk;
+    diff.io_bytes_read_remote -= that.io_bytes_read_remote;
+    diff.io_bytes_read_local_disk -= that.io_bytes_read_local_disk;
+    diff.segment_init_ns -= that.segment_init_ns;
+    diff.column_iterator_init_ns -= that.column_iterator_init_ns;
+    diff.io_count_local_disk -= that.io_count_local_disk;
+    diff.io_count_remote -= that.io_count_remote;
+    // read segment count is managed else where
+    // diff.read_segment_count -= that.read_segment_count;
+    diff.write_segment_count -= that.write_segment_count;
+    diff.write_segment_bytes -= that.write_segment_bytes;
+    diff.in_queue_time_sec -= that.in_queue_time_sec;
+    diff.pk_sst_merge_ns -= that.pk_sst_merge_ns;
+    diff.input_file_size -= that.input_file_size;
+>>>>>>> d95f9cd1c8 ([Enhancement] add more stats for lake compaction profile (#56769))
     return diff;
 }
 
@@ -80,6 +125,9 @@ std::string CompactionTaskStats::to_json_stats() {
     root.AddMember("segment_init_sec", rapidjson::Value(segment_init_ns / TIME_UNIT_NS_PER_SECOND), allocator);
     root.AddMember("column_iterator_init_sec", rapidjson::Value(column_iterator_init_ns / TIME_UNIT_NS_PER_SECOND),
                    allocator);
+    root.AddMember("read_segment_count", rapidjson::Value(read_segment_count), allocator);
+    root.AddMember("write_segment_count", rapidjson::Value(write_segment_count), allocator);
+    root.AddMember("write_segment_mb", rapidjson::Value(write_segment_bytes / BYTES_UNIT_MB), allocator);
     root.AddMember("in_queue_sec", rapidjson::Value(in_queue_time_sec), allocator);
     root.AddMember("pk_sst_merge_sec", rapidjson::Value(pk_sst_merge_ns / TIME_UNIT_NS_PER_SECOND), allocator);
 

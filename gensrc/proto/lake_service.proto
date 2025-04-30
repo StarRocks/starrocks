@@ -102,9 +102,15 @@ message CompactStat {
     optional int64 read_bytes_remote = 12;
     optional int64 read_time_local = 13; // ns
     optional int64 read_bytes_local = 14;
+<<<<<<< HEAD
+=======
+    optional int64 total_compact_input_file_size = 15;
+    optional int64 read_segment_count = 16;
+>>>>>>> d95f9cd1c8 ([Enhancement] add more stats for lake compaction profile (#56769))
 
     // write
-    // TODO
+    optional int64 write_segment_count = 31;
+    optional int64 write_segment_bytes = 32;
 
     // other
     optional int32 sub_task_count = 51; // tablet count in this compaction request
