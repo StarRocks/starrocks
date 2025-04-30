@@ -45,13 +45,11 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         DistributedEnvPlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
         Config.tablet_sched_disable_colocate_overall_balance = true;
-        connectContext.getSessionVariable().setSemiJoinDeduplicateMode(-1);
     }
 
     @After
     public void after() {
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
-        connectContext.getSessionVariable().setSemiJoinDeduplicateMode(0);
     }
 
     //  agg
@@ -459,7 +457,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
     @Test
     public void testAggregateCompatPartition() throws Exception {
-        connectContext.getSessionVariable().disableJoinReorder();
 
         // Left outer join
         String sql = "select distinct join1.id from join1 left join join2 on join1.id = join2.id;";
@@ -477,7 +474,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         // Right outer join
         sql = "select distinct join2.id from join1 right join join2 on join1.id = join2.id;";
         plan = getFragmentPlan(sql);
-        checkTwoPhaseAgg(plan);
+        checkOnePhaseAgg(plan);
 
         sql = "select distinct join1.id from join1 right join join2 on join1.id = join2.id;";
         plan = getFragmentPlan(sql);
@@ -505,8 +502,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         sql = "select distinct join2.id from join1 join join2 on join1.id = join2.id, baseall;";
         plan = getFragmentPlan(sql);
         checkOnePhaseAgg(plan);
-
-        connectContext.getSessionVariable().enableJoinReorder();
     }
 
     @Test
