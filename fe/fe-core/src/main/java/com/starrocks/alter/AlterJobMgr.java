@@ -82,12 +82,8 @@ import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
-<<<<<<< HEAD
-=======
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRunManager;
-import com.starrocks.scheduler.mv.MVTimelinessMgr;
->>>>>>> 0c2997e776 ([BugFix] Fix mv active/inactive bug with list partition mv (#58575))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
