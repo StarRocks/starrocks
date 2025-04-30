@@ -82,11 +82,13 @@ int init_test_env(int argc, char** argv) {
     auto st = global_env->init();
     CHECK(st.ok()) << st;
 
+    auto compaction_mem_tracker = std::make_unique<MemTracker>();
+    auto update_mem_tracker = std::make_unique<MemTracker>();
     StorageEngine* engine = nullptr;
     EngineOptions options;
     options.store_paths = paths;
-    options.compaction_mem_tracker = global_env->compaction_mem_tracker();
-    options.update_mem_tracker = global_env->update_mem_tracker();
+    options.compaction_mem_tracker = compaction_mem_tracker.get();
+    options.update_mem_tracker = update_mem_tracker.get();
     Status s = StorageEngine::open(options, &engine);
     if (!s.ok()) {
         butil::DeleteFile(storage_root, true);
