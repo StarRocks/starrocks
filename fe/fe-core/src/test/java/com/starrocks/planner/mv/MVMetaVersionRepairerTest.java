@@ -104,7 +104,7 @@ public class MVMetaVersionRepairerTest extends MVTestBase {
 
                         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
                         Table baseTable = getTable("test", "m1");
-                        MVMetaVersionRepairer.repairBaseTableVersionChanges(db, baseTable, ImmutableList.of(partitionRepairInfo));
+                        MVMetaVersionRepairer.repairBaseTableVersionChanges(baseTable, ImmutableList.of(partitionRepairInfo));
 
                         // check mv version map after
                         baseTableVisibleVersionMap = asyncRefreshContext.getBaseTableVisibleVersionMap();
@@ -158,7 +158,7 @@ public class MVMetaVersionRepairerTest extends MVTestBase {
 
                         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
                         Table baseTable = getTable("test", "m1");
-                        MVMetaVersionRepairer.repairBaseTableVersionChanges(db, baseTable, ImmutableList.of(partitionRepairInfo));
+                        MVMetaVersionRepairer.repairBaseTableVersionChanges(baseTable, ImmutableList.of(partitionRepairInfo));
 
                         // Since mv has not refreshed, not repair it since mv's version map has not contained the old version
                         baseTableVisibleVersionMap = asyncRefreshContext.getBaseTableVisibleVersionMap();
@@ -218,7 +218,7 @@ public class MVMetaVersionRepairerTest extends MVTestBase {
 
                         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
                         Table baseTable = getTable("test", "m1");
-                        MVMetaVersionRepairer.repairBaseTableVersionChanges(db, baseTable, ImmutableList.of(partitionRepairInfo));
+                        MVMetaVersionRepairer.repairBaseTableVersionChanges(baseTable, ImmutableList.of(partitionRepairInfo));
 
                         baseTableVisibleVersionMap = asyncRefreshContext.getBaseTableVisibleVersionMap();
                         Assert.assertEquals(1, baseTableVisibleVersionMap.size());
@@ -286,7 +286,7 @@ public class MVMetaVersionRepairerTest extends MVTestBase {
 
                         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
                         Table baseTable = getTable("test", "m1");
-                        MVMetaVersionRepairer.repairBaseTableVersionChanges(db, baseTable, ImmutableList.of(partitionRepairInfo));
+                        MVMetaVersionRepairer.repairBaseTableVersionChanges(baseTable, ImmutableList.of(partitionRepairInfo));
 
                         baseTableVisibleVersionMap = asyncRefreshContext.getBaseTableVisibleVersionMap();
                         Assert.assertEquals(1, baseTableVisibleVersionMap.size());
