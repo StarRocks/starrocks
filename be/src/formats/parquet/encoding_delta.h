@@ -439,15 +439,11 @@ private:
             //     last_value_ = buffer[i + j];
             // }
 
-#ifdef __AVX2__
             if constexpr (sizeof(T) == 4) {
-                delta_decode_chain_avx2_int32(buffer + i, values_decode, min_delta_, last_value_);
+                delta_decode_chain_int32(buffer + i, values_decode, min_delta_, last_value_);
             } else if constexpr (sizeof(T) == 8) {
-                delta_decode_chain_avx2_int64(buffer + i, values_decode, min_delta_, last_value_);
+                delta_decode_chain_int64(buffer + i, values_decode, min_delta_, last_value_);
             }
-#else
-            delta_decode_chain_scalar<T>(buffer + i, values_decode, min_delta_, last_value_);
-#endif
             values_remaining_current_mini_block_ -= values_decode;
             i += values_decode;
         }
