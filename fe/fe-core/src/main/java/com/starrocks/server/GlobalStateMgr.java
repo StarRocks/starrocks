@@ -192,6 +192,7 @@ import com.starrocks.qe.JournalObservable;
 import com.starrocks.qe.QueryStatisticsInfo;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.GlobalSlotProvider;
@@ -1486,6 +1487,7 @@ public class GlobalStateMgr {
         connectorTableTriggerAnalyzeMgr.start();
 
         PredicateColumnsMgr.getInstance().startDaemon();
+        SimpleScheduler.startAutoUpdate();
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {
