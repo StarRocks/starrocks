@@ -37,6 +37,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -282,9 +283,17 @@ public class Utils {
 
         try {
             PublishVersionResponse response = future.get();
-            if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
-                throw new RpcException("Fail to publish version for tablets " + response.failedTablets + ": " +
-                        response.status.errorMsgs.get(0));
+            
+            if (response != null) {
+                TStatusCode code = TStatusCode.findByValue(response.status.statusCode);
+                if (code != TStatusCode.OK) {
+                    String errorMsg = "Fail to publish version for tablets:[";
+                    if (response.failedTablets != null && !response.failedTablets.isEmpty()) {
+                        errorMsg += response.failedTablets;
+                    }
+                    errorMsg += "], error msg: " + response.status.errorMsgs.get(0);
+                    throw new RpcException(errorMsg);
+                }
             }
             if (compactionScores != null && response != null && response.compactionScores != null) {
                 compactionScores.putAll(response.compactionScores);

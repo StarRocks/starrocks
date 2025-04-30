@@ -344,9 +344,8 @@ static void aggregate_publish_cb(brpc::Controller* cntl, PublishVersionResponse*
             msg += str;
         }
         ctx->handle_failure(msg);
-    } else {
-        ctx->aggregate_response(resp);
     }
+    ctx->aggregate_response(resp);
 }
 
 void LakeServiceImpl::aggregate_publish_version(::google::protobuf::RpcController* controller,
