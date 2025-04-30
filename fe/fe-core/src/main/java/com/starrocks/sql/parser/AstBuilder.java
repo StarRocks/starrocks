@@ -8442,8 +8442,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (ctx.INTEGER_VALUE() == null) {
             throw new ParsingException("Invalid number of statement arguments");
         }
-        long id = Long.parseLong(ctx.INTEGER_VALUE().getText());
-        return new DropBaselinePlanStmt(id, createPos(ctx));
+        List<Long> ids = ctx.INTEGER_VALUE().stream()
+                .map(ParseTree::getText)
+                .map(Long::parseLong).toList();
+
+        return new DropBaselinePlanStmt(ids, createPos(ctx));
     }
 
     @Override
