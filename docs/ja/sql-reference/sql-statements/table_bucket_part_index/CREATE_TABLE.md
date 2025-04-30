@@ -721,17 +721,6 @@ v3.5.0以降、StarRocksのネイティブ・テーブルは共通パーティ�
   - リストパーティションを持つテーブルの場合、StarRocks は Common Partition Expression によってフィルタリングされたパーティションの削除をサポートします。
   - StarRocks では、FE のパーティション刈り込み機能を使用してのみ、パーティションをフィルターして削除できます。パーティションのプルーニングがサポートしない述語に対応するパーティションは、フィルタリングおよび削除できません。
 
-
-#### Specify Common Partition Expression TTL
-
-From v3.5.0 onwards, StarRocks native tables support Common Partition Expression TTL.
-
-`partition_retention_condition`: The expression that declares the partitions to be retained dynamically. Partitions that do not meet the condition in the expression will be dropped regularly.
-- The expression can only contain partition columns and constants. Non-partition columns are not supported.
-- Common Partition Expression applies to List partitions and Range partitions differently:
-  - For tables with List partitions, StarRocks supports deleting partitions filtered by the Common Partition Expression.
-  - For tables with Range partitions, StarRocks can only filter and delete partitions using the partition pruning capability of FE. Partitions correspond to predicates that are not supported by partition pruning cannot be filtered and deleted.
-
 例
 
 ```SQL
