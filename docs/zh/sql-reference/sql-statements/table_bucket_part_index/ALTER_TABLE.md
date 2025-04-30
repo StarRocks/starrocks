@@ -228,27 +228,6 @@ multi_range_partitions ::=
   - 涉及的参数与[添加分区](#add-partitions)中的参数一致。
   - 仅支持具有单个分区键的分区。
 
-- 使用通用分区表达式删除分区（从v3.5.0起支持）：
-
-```sql
-ALTER TABLE [<db_name>.]<tbl_name>
-DROP PARTITIONS WHERE <expr>
-```
-
-从v3.5.0起，StarRocks支持使用通用分区表达式删除分区。可以使用带有表达式的WHERE子句来过滤要删除的分区。
-- 表达式声明要删除的分区。符合表达式条件的分区将被批量删除。操作时请谨慎。
-- 表达式只能包含分区列和常量。不支持非分区列。
-- 通用分区表达式在List分区和Range分区中的应用不同：
-  - 对于List分区的表，StarRocks支持通过通用分区表达式删除分区。
-  - 对于Range分区的表，StarRocks只能使用FE的分区裁剪功能来过滤和删除分区。对于不支持分区裁剪的谓词对应的分区无法被过滤和删除。
-
-示例：
-
-```sql
--- 删除早于最近三个月的数据。列`dt`是表的分区列。
-ALTER TABLE t1 DROP PARTITIONS WHERE dt < CURRENT_DATE() - INTERVAL 3 MONTH;
-```
-
 :::note
 
 - 对于分区表，至少保留一个分区。
