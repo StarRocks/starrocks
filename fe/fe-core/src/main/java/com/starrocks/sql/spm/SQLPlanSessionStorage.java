@@ -26,9 +26,12 @@ class SQLPlanSessionStorage implements SQLPlanStorage {
         return baselinePlans;
     }
 
-    public void storeBaselinePlan(BaselinePlan plan) {
-        plan.setId(GlobalStateMgr.getCurrentState().getNextId());
-        baselinePlans.add(plan);
+    @Override
+    public void storeBaselinePlan(List<BaselinePlan> plans) {
+        for (BaselinePlan plan : plans) {
+            plan.setId(GlobalStateMgr.getCurrentState().getNextId());
+            baselinePlans.add(plan);
+        }
     }
 
     public List<BaselinePlan> findBaselinePlan(String sqlDigest, long hash) {
@@ -36,8 +39,8 @@ class SQLPlanSessionStorage implements SQLPlanStorage {
                 .collect(Collectors.toList());
     }
 
-    public void dropBaselinePlan(long baseLineId) {
-        baselinePlans.removeIf(p -> p.getId() == baseLineId);
+    public void dropBaselinePlan(List<Long> baseLineIds) {
+        baselinePlans.removeIf(p -> baseLineIds.contains(p.getId()));
     }
 
     public void dropAllBaselinePlans() {

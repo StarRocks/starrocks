@@ -26,11 +26,14 @@ public class ShowBaselinePlanStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA = ShowResultSetMetaData.builder()
             .addColumn(new Column("Id", ScalarType.createVarchar(60)))
             .addColumn(new Column("global", ScalarType.createVarchar(10)))
+            .addColumn(new Column("enable", ScalarType.createVarchar(10)))
             .addColumn(new Column("bindSQLDigest", ScalarType.createVarchar(65535)))
             .addColumn(new Column("bindSQLHash", ScalarType.createVarchar(60)))
             .addColumn(new Column("bindSQL", ScalarType.createVarchar(65535)))
             .addColumn(new Column("planSQL", ScalarType.createVarchar(65535)))
             .addColumn(new Column("costs", ScalarType.createVarchar(60)))
+            .addColumn(new Column("queryMs", ScalarType.createVarchar(60)))
+            .addColumn(new Column("source", ScalarType.createVarchar(60)))
             .addColumn(new Column("updateTime", ScalarType.createVarchar(60)))
             .build();
 

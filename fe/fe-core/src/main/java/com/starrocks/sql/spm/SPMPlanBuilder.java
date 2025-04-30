@@ -40,13 +40,14 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.TransformerContext;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 // to build plan for bind sql
 public class SPMPlanBuilder {
     private final ConnectContext session;
-    private final CreateBaselinePlanStmt stmt;
+    private final QueryRelation bindStmt;
+    private final QueryRelation planStmt;
+    private final List<HintNode> planHints;
 
     private String bindSqlDigest;
     private long bindSqlHash;
@@ -68,25 +69,32 @@ public class SPMPlanBuilder {
 
     public SPMPlanBuilder(ConnectContext session, CreateBaselinePlanStmt stmt) {
         this.session = session;
-        this.stmt = stmt;
+        this.bindStmt = stmt.getBindStmt();
+        this.planStmt = stmt.getPlanStmt();
+        this.planHints = stmt.getAllQueryScopeHints();
+    }
+
+    public SPMPlanBuilder(ConnectContext session, QueryStatement planStmt) {
+        this.session = session;
+        this.planHints = planStmt.getAllQueryScopeHints();
+        this.planStmt = planStmt.getQueryRelation();
+        this.bindStmt = null;
     }
 
     public BaselinePlan execute() {
         analyze();
         parameterizedStmt();
         generatePlan();
-        return new BaselinePlan(stmt.isGlobal(), bindSql, bindSqlDigest, bindSqlHash,
-                planStmtSQL, costs, LocalDateTime.now());
+        return new BaselinePlan(bindSql, bindSqlDigest, bindSqlHash, planStmtSQL, costs);
     }
 
     // don't need lock, because we don't need to modify table stats
     public void generatePlan() {
-        List<HintNode> hints = this.stmt.getAllQueryScopeHints();
         SessionVariable backupVariable = session.getSessionVariable();
         SessionVariable cloneVariable = null;
-        if (hints != null && !hints.isEmpty()) {
+        if (planHints != null && !planHints.isEmpty()) {
             cloneVariable = (SessionVariable) backupVariable.clone();
-            for (HintNode hint : hints) {
+            for (HintNode hint : planHints) {
                 if (!(hint instanceof SetVarHint)) {
                     UnsupportedException.unsupportedException(
                             "sql pLan manager only supported session variables: " + hint.toSql());
@@ -105,11 +113,11 @@ public class SPMPlanBuilder {
             session.setSessionVariable(cloneVariable);
         }
 
-        QueryRelation query = this.stmt.getPlanStmt();
         try {
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
             TransformerContext transformerContext = new TransformerContext(columnRefFactory, session, null);
-            LogicalPlan logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
+            LogicalPlan logicalPlan =
+                    new RelationTransformer(transformerContext).transformWithSelectLimit(this.planStmt);
 
             OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);
             optimizerContext.setOptimizerOptions(
@@ -121,7 +129,7 @@ public class SPMPlanBuilder {
                     new ColumnRefSet(logicalPlan.getOutputColumn()));
 
             SPMPlan2SQLBuilder sqlBuilder = new SPMPlan2SQLBuilder();
-            planStmtSQL = sqlBuilder.toSQL(hints, optimizedPlan, logicalPlan.getOutputColumn());
+            planStmtSQL = sqlBuilder.toSQL(planHints, optimizedPlan, logicalPlan.getOutputColumn());
             costs = optimizedPlan.getCost();
         } finally {
             if (cloneVariable != null) {
@@ -133,14 +141,14 @@ public class SPMPlanBuilder {
     protected void parameterizedStmt() {
         QueryRelation bind;
         SPMPlaceholderBuilder builder = new SPMPlaceholderBuilder(false);
-        if (this.stmt.getBindStmt() != null) {
+        if (this.bindStmt != null) {
             // has bind and plan
-            builder.findPlaceholder(this.stmt.getBindStmt());
-            bind = builder.insertPlaceholder(this.stmt.getBindStmt());
-            builder.bindPlaceholder(this.stmt.getPlanStmt());
+            builder.findPlaceholder(this.bindStmt);
+            bind = builder.insertPlaceholder(this.bindStmt);
+            builder.bindPlaceholder(this.planStmt);
         } else {
             // only plan
-            bind = builder.insertPlaceholder(this.stmt.getPlanStmt());
+            bind = builder.insertPlaceholder(this.planStmt);
         }
         SPMAst2SQLBuilder digestBuilder = new SPMAst2SQLBuilder(false, true);
         SPMAst2SQLBuilder sqlBuilder = new SPMAst2SQLBuilder(false, false);
@@ -150,15 +158,13 @@ public class SPMPlanBuilder {
     }
 
     protected void analyze() {
-        PlannerMetaLocker locker = new PlannerMetaLocker(session, stmt);
-        try {
+        QueryStatement p = new QueryStatement(this.planStmt);
+        try (PlannerMetaLocker locker = new PlannerMetaLocker(session, p)) {
             locker.lock();
-            Analyzer.analyze(new QueryStatement(stmt.getPlanStmt()), session);
-            if (stmt.getBindStmt() != null) {
-                Analyzer.analyze(new QueryStatement(stmt.getBindStmt()), session);
+            Analyzer.analyze(p, session);
+            if (this.bindStmt != null) {
+                Analyzer.analyze(new QueryStatement(this.bindStmt), session);
             }
-        } finally {
-            locker.unlock();
         }
     }
 }
