@@ -900,6 +900,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String COLUMN_VIEW_CONCAT_ROWS_LIMIT = "column_view_concat_rows_limit";
     public static final String COLUMN_VIEW_CONCAT_BYTES_LIMIT = "column_view_concat_bytes_limit";
+    public static final String ENABLE_DEFER_PROJECT_AFTER_TOPN = "enable_defer_project_after_topn";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1800,6 +1801,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = COLUMN_VIEW_CONCAT_BYTES_LIMIT)
     private long columnViewConcatBytesLimit = 4294967296L;
+
+    @VarAttr(name = ENABLE_DEFER_PROJECT_AFTER_TOPN)
+    private boolean enableDeferProjectAfterTopN = true;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -4882,6 +4886,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setColumnViewConcatBytesLimit(long value) {
         this.columnViewConcatBytesLimit = value;
     }
+
+    public void setEnableDeferProjectAfterTopN(boolean enableDeferProjectAfterTopN) {
+        this.enableDeferProjectAfterTopN = enableDeferProjectAfterTopN;
+    }
+
+    public boolean isEnableDeferProjectAfterTopN() {
+        return enableDeferProjectAfterTopN;
+    }
+
     public boolean isEnableSPMRewrite() {
         return enableSPMRewrite;
     }
