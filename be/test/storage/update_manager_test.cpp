@@ -260,7 +260,6 @@ TEST_F(UpdateManagerTest, testEraseDelVectorCacheByTablet) {
 
     _update_manager->clear_cached_del_vec_by_tablet_id(1);
     ASSERT_EQ(0, _root_mem_tracker->consumption());
-
 }
 
 TEST_F(UpdateManagerTest, testEraseDCGCacheByTablet) {
