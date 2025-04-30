@@ -17,12 +17,11 @@
 namespace starrocks {
 
 std::string byte_buffer_meta_type_name(ByteBufferMetaType type) {
-    switch (type) {
-    case ByteBufferMetaType::NONE:
+    if (type == ByteBufferMetaType::NONE) {
         return "NONE";
-    case ByteBufferMetaType::KAFKA:
+    } else if (type == ByteBufferMetaType::KAFKA) {
         return "KAFKA";
-    default:
+    } else {
         return "UNKNOWN";
     }
 }
@@ -35,6 +34,27 @@ StatusOr<ByteBufferMeta*> ByteBufferMeta::create(ByteBufferMetaType meta_type) {
         return new KafkaByteBufferMeta();
     }
     return Status::NotSupported(fmt::format("unknown byte buffer meta type {}", byte_buffer_meta_type_name(meta_type)));
+}
+
+Status NoneByteBufferMeta::copy_from(ByteBufferMeta* source) {
+    if (source != this) {
+        return Status::NotSupported(fmt::format("can't copy byte buffer {} meta to {} meta",
+                                                byte_buffer_meta_type_name(source->type()),
+                                                byte_buffer_meta_type_name(type())));
+    }
+    return Status::OK();
+}
+
+Status KafkaByteBufferMeta::copy_from(ByteBufferMeta* source) {
+    if (source->type() != ByteBufferMetaType::KAFKA) {
+        return Status::NotSupported(fmt::format("can't copy byte buffer {} meta to {} meta",
+                                                byte_buffer_meta_type_name(source->type()),
+                                                byte_buffer_meta_type_name(type())));
+    }
+    auto kafka_meta = static_cast<KafkaByteBufferMeta*>(source);
+    _partition = kafka_meta->_partition;
+    _offset = kafka_meta->_offset;
+    return Status::OK();
 }
 
 } // namespace starrocks

@@ -86,14 +86,7 @@ public:
 
     ByteBufferMetaType type() override { return ByteBufferMetaType::NONE; }
 
-    Status copy_from(ByteBufferMeta* source) override {
-        if (source != this) {
-            return Status::NotSupported(fmt::format("can't copy byte buffer {} meta to {} meta",
-                                                    byte_buffer_meta_type_name(source->type()),
-                                                    byte_buffer_meta_type_name(type())));
-        }
-        return Status::OK();
-    }
+    Status copy_from(ByteBufferMeta* source) override;
     std::string to_string() override { return "none"; }
 
     static NoneByteBufferMeta* instance() {
@@ -116,17 +109,7 @@ public:
     void set_offset(int64_t offset) { _offset = offset; }
     int64_t offset() { return _offset; }
 
-    Status copy_from(ByteBufferMeta* source) override {
-        if (source->type() != ByteBufferMetaType::KAFKA) {
-            return Status::NotSupported(fmt::format("can't copy byte buffer {} meta to {} meta",
-                                                    byte_buffer_meta_type_name(source->type()),
-                                                    byte_buffer_meta_type_name(type())));
-        }
-        auto kafka_meta = static_cast<KafkaByteBufferMeta*>(source);
-        _partition = kafka_meta->_partition;
-        _offset = kafka_meta->_offset;
-        return Status::OK();
-    }
+    Status copy_from(ByteBufferMeta* source) override;
 
     std::string to_string() override { return fmt::format("kafka partition: {}, offset: {}", _partition, _offset); }
 
