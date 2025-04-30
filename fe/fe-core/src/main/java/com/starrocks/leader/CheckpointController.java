@@ -202,7 +202,12 @@ public class CheckpointController extends FrontendDaemon {
         }
 
         try {
-            Pair<Boolean, String> ret = result.poll(Config.checkpoint_timeout_seconds, TimeUnit.SECONDS);
+            long startNs = System.nanoTime();
+            Pair<Boolean, String> ret = null;
+            while (ret == null
+                    && System.nanoTime() - startNs < TimeUnit.SECONDS.toNanos(Config.checkpoint_timeout_seconds)) {
+                ret = result.poll(1, TimeUnit.SECONDS);
+            }
             if (ret == null) {
                 LOG.warn("do checkpoint timeout on node: {}", workerNodeName);
                 return Pair.create(false, workerNodeName);

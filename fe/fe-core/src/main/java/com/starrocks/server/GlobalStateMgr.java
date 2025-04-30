@@ -192,6 +192,7 @@ import com.starrocks.qe.JournalObservable;
 import com.starrocks.qe.QueryStatisticsInfo;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.GlobalSlotProvider;
@@ -1501,6 +1502,7 @@ public class GlobalStateMgr {
         connectorTableTriggerAnalyzeMgr.start();
 
         PredicateColumnsMgr.getInstance().startDaemon();
+        SimpleScheduler.startAutoUpdate();
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {
@@ -1683,16 +1685,27 @@ public class GlobalStateMgr {
         }
     }
 
-    private void processMvRelatedMeta() {
+    @VisibleForTesting
+    public void processMvRelatedMeta() {
         long startMillis = System.currentTimeMillis();
         for (Database db : localMetastore.getIdToDb().values()) {
             for (MaterializedView mv : db.getMaterializedViews()) {
-                mv.onReload();
+                // set `postLoadImage` flag to true to indicate that this is called after image loading
+                mv.onReload(true);
+            }
+        }
+
+        // we should reset reloaded flags after each round of reloading for all materializedViews
+        int count = 0;
+        for (Database db : localMetastore.getIdToDb().values()) {
+            for (MaterializedView mv : db.getMaterializedViews()) {
+                count++;
+                mv.setReloaded(false);
             }
         }
 
         long duration = System.currentTimeMillis() - startMillis;
-        LOG.info("finish processing all tables' related materialized views in {}ms", duration);
+        LOG.info("finish processing all tables' related materialized views in {}ms, total mv count: {}", duration, count);
     }
 
     public void loadHeader(DataInputStream dis) throws IOException {

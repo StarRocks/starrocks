@@ -193,7 +193,6 @@ public class StatisticUtils {
             return true;
         }
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(StatsConstants.STATISTICS_DB_NAME);
-
         // check database
         if (db == null) {
             return false;

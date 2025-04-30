@@ -4,6 +4,26 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
+## 3.4.3
+
+发布日期：2025 年 4 月 30 日
+
+### 功能优化
+
+- Routine Load 以及 Stream Load 支持在 `columns` 参数中使用 Lambda 表达式以实现复杂的列数据提取。用户可以使用 `array_filter`/`map_filter` 过滤提取 ARRAY / MAP 数据。通过结合 `cast` 函数将 JSON Array / JSON Object 转为 ARRAY 和 MAP 类型，可以实现对 JSON 数据的复杂过滤提取。例如通过 `COLUMNS (js, col=array_filter(i -> json_query(i, '$.type')=='t1' , cast(js as Array<JSON>))[1] )` 可以提取 `js` 这个 JSON Array 中 `type` 为 `t1` 的第一个 JSON Object。[#58149](https://github.com/StarRocks/starrocks/pull/58149)
+- 支持将 JSON Object 通过 `cast` 函数转为 MAP 类型的数据，并结合 `map_filter` 提取 JSON Object 中满足条件子项。例如通过 `map_filter((k, v) -> json_query(v, '$.type') == 't1', cast(js AS MAP<String, JSON>))` 可以提取 `js` 这个 JSON Object 中 `type` 为 `t1` 的 JSON Object。[#58045](https://github.com/StarRocks/starrocks/pull/58045)
+- 查询 `information_schema.task_runs` 视图时支持 LIMIT。[#57404](https://github.com/StarRocks/starrocks/pull/57404)
+
+### 问题修复
+
+修复了如下问题：
+
+- 查询 ORC 格式的 Hive 表时报错 `OrcChunkReader::lazy_seek_to failed. reason = bad read in RleDecoderV2: :readByte`。[#57454](https://github.com/StarRocks/starrocks/pull/57454)
+- 查询包含 Equality Delete 文件的 Iceberg 表时，上层的 RuntimeFilter 无法下推。[#57651](https://github.com/StarRocks/starrocks/pull/57651)
+- 启用大算子落盘预聚合策略导致查询 Crash。[#58022](https://github.com/StarRocks/starrocks/pull/58022)
+- 查询报错 `ConstantRef-cmp-ConstantRef not supported here, null != 111 should be eliminated earlier`。[#57735](https://github.com/StarRocks/starrocks/pull/57735)
+- 在查询队列功能未启用状态下，查询触发 `query_queue_pending_timeout_second` 超时。[#57719](https://github.com/StarRocks/starrocks/pull/57719)
+
 ## 3.4.2
 
 发布日期：2025 年 4 月 10 日
