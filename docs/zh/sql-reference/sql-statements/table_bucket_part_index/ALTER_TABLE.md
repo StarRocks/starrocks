@@ -596,11 +596,19 @@ field_desc ::= <field_type> [ AFTER <prior_field_name> | FIRST ]
 
 :::note
 
+<<<<<<< HEAD
 - 目前仅支持存算一体集群。
 - 对应表必须开启 `fast_schema_evolution`。
 - 不支持向 MAP 类型中的 STRUCT 增删字段。
 - 新增字段不支持指定默认值，Nullable 等属性。默认为 Nullable，默认值为 null。
 - 使用该功能后，不支持直接将集群降级至不具备该功能的版本。
+=======
+- 目前，此功能仅在存算一体集群中支持。
+- 表必须启用`fast_schema_evolution`属性。
+- 不支持在 STRUCT 类型中修改一个 MAP 子字段的 Value 类型，不管该 Value 类型是 ARRAY、STRUCT 还是 MAP。
+- 新添加的字段不能有默认值或可空等属性。它们默认为可空，默认值为null。
+- 使用此功能后，不允许直接降级集群到不支持此功能的版本。
+>>>>>>> ccf3c934df ([Doc] Fix ALTER STRUCT column desc (#58604))
 
 :::
 
@@ -1245,3 +1253,7 @@ ALTER TABLE compaction_test BASE COMPACT (p202302,p203303);
 - [SHOW TABLES](SHOW_TABLES.md)
 - [SHOW ALTER TABLE](SHOW_ALTER.md)
 - [DROP TABLE](DROP_TABLE.md)
+<<<<<<< HEAD
+=======
+```
+>>>>>>> ccf3c934df ([Doc] Fix ALTER STRUCT column desc (#58604))
