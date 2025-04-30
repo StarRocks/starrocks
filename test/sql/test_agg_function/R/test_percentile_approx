@@ -15,9 +15,9 @@ insert into t1 select generate_series, generate_series from table(generate_serie
 set pipeline_dop=1;
 -- result:
 -- !result
-select percentile_approx(c2, 0.5) from t1;
+select cast(percentile_approx(c2, 0.5) as int) from t1;
 -- result:
-25000.0
+25000
 -- !result
 select percentile_approx(c2, 0.9) from t1;
 -- result:
@@ -35,11 +35,15 @@ select percentile_approx(c2, 0.9, 10000) from t1;
 -- result:
 45000.3984375
 -- !result
-with tt as (select @v1 as v1, c1, c2 from t1) select /*+ set_user_variable(@v1 = 0.5) */ percentile_approx(c2, v1) from tt;
+with tt as (select @v1 as v1, c1, c2 from t1) select /*+ set_user_variable(@v1 = 0.5) */ cast(percentile_approx(c2, v1) as int) from tt;
 -- result:
-25000.0
+25000
 -- !result
-with tt as (select @v1 as v1, @v2 as v2, c1, c2 from t1) select /*+ set_user_variable(@v1= 0.5, @v2 = 4096) */ percentile_approx(c2, v1, v2 + 1) from tt;
+with tt as (select @v1 as v1, @v2 as v2, c1, c2 from t1) select /*+ set_user_variable(@v1= 0.5, @v2 = 4096) */ cast(percentile_approx(c2, v1, v2 + 1) as int) from tt;
 -- result:
+<<<<<<< HEAD
 25000.0
+=======
+25000
+>>>>>>> 100cc62c50 ([UT] Fix unstable cases: test_percentile_approx/test_percentile_approx_weighted (#58635))
 -- !result
