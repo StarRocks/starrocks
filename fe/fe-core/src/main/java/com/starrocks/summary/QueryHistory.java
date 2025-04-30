@@ -108,7 +108,7 @@ public class QueryHistory {
     String toJSON() {
         Map<String, Object> jsonMaps = Maps.newHashMap();
         jsonMaps.put("dt", DateUtils.formatDateTimeUnix(datetime));
-        jsonMaps.put("frontend", GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getHost() + ":" +
+        jsonMaps.put("frontend", GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName() + ":" +
                 GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getQueryPort());
         jsonMaps.put("db", db);
         jsonMaps.put("sql", originSQL);
