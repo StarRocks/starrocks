@@ -33,11 +33,8 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
 import java.io.IOException;
-<<<<<<< HEAD
 import java.util.List;
-=======
 import java.util.concurrent.atomic.AtomicReference;
->>>>>>> c4d5b8d5c0 ([BugFix] Fix finishCheckpoint bug when checkpoint is failed on worker node (#58507))
 
 public abstract class CheckpointWorker extends FrontendDaemon {
     public static final Logger LOG = LogManager.getLogger(CheckpointWorker.class);
