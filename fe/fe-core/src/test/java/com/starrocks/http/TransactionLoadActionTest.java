@@ -130,7 +130,10 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
             }
 
         };
+<<<<<<< HEAD
 
+=======
+>>>>>>> 70a22bf409 ([UT] Fix unstable LoadActionTest and TransactionLoadActionTest (#58597))
     }
 
     /**
