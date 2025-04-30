@@ -190,6 +190,7 @@ import com.starrocks.qe.JournalObservable;
 import com.starrocks.qe.QueryStatisticsInfo;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.qe.scheduler.slot.GlobalSlotProvider;
 import com.starrocks.qe.scheduler.slot.LocalSlotProvider;
@@ -1476,6 +1477,14 @@ public class GlobalStateMgr {
 
         // The memory tracker should be placed at the end
         memoryUsageTracker.start();
+<<<<<<< HEAD
+=======
+
+        connectorTableTriggerAnalyzeMgr.start();
+
+        PredicateColumnsMgr.getInstance().startDaemon();
+        SimpleScheduler.startAutoUpdate();
+>>>>>>> 70a22bf409 ([UT] Fix unstable LoadActionTest and TransactionLoadActionTest (#58597))
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {
