@@ -504,6 +504,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     protected volatile ParseNode defineQueryParseNode = null;
 
+    // Use a flag to prevent MV reload too many times while recursively reloading every mv at FE start time
+    // and in each round of checkpoint
+    private boolean reloaded = false;
+
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
         this.tableProperty = null;
@@ -707,6 +711,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     public void setQueryOutputIndices(List<Integer> queryOutputIndices) {
         this.queryOutputIndices = queryOutputIndices;
+    }
+
+    public boolean isReloaded() {
+        return reloaded;
+    }
+
+    public void setReloaded(boolean reloaded) {
+        this.reloaded = reloaded;
     }
 
     /**
@@ -1009,10 +1021,22 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     @Override
     public void onReload() {
+        onReload(false);
+    }
+
+    /**
+     * `postLoadImage` is used to distinct wether it's called after FE's image loading process,
+     * such as FE startup or checkpointing.
+     *
+     * Note!! The `onReload` method is called in some other scenarios such as - schema change of a materialize view.
+     * The reloaded flag was introduced only to increase the speed of FE startup and checkpointing.
+     * It shouldn't affect the behavior of other operations which might indeed need to do a reload process.
+     */
+    public void onReload(boolean postLoadImage) {
         try {
             boolean desiredActive = active;
             active = false;
-            boolean reloadActive = onReloadImpl();
+            boolean reloadActive = onReloadImpl(postLoadImage);
             if (desiredActive && reloadActive) {
                 setActive();
             }
@@ -1024,6 +1048,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             LOG.error("reload mv failed: {}", this, e);
             setInactiveAndReason("reload failed: " + e.getMessage());
         }
+        if (postLoadImage) {
+            reloaded = true;
+        }
     }
 
     /**
@@ -1033,15 +1060,21 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * NOTE: caller need to hold the db lock
      */
     public void fixRelationship() {
-        onReloadImpl();
+        onReloadImpl(false);
     }
 
     /**
      * @return active or not
      */
+<<<<<<< HEAD
     private boolean onReloadImpl() {
         long startTime = System.currentTimeMillis();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+    private boolean onReloadImpl(boolean postLoadImage) {
+        long startMillis = System.currentTimeMillis();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> fc6e999e9c ([Enhancement] Prevent MV reload too many times to reduce FE's startup time (#58479))
         if (db == null) {
             LOG.warn("db:{} do not exist. materialized view id:{} name:{} should not exist", dbId, id, name);
             setInactiveAndReason(MaterializedViewExceptions.inactiveReasonForDbNotExists(dbId));
@@ -1100,8 +1133,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 continue;
             } else if (table.isMaterializedView()) {
                 MaterializedView baseMV = (MaterializedView) table;
+                // skip reloading only when postLoadImage is true
+                if (postLoadImage && baseMV.isReloaded()) {
+                    continue;
+                }
                 // recursive reload MV, to guarantee the order of hierarchical MV
-                baseMV.onReload();
+                baseMV.onReload(postLoadImage);
                 if (!baseMV.isActive()) {
                     LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
                             baseTableInfo.getTableName(), id);
@@ -1126,7 +1163,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         // analyze partition info
         analyzePartitionInfo();
 
-        LOG.info("finish to reload mv:{} cost:{}(ms)", getName(), System.currentTimeMillis() - startTime);
+        long duration = System.currentTimeMillis() - startMillis;
+        LOG.info("finish reloading mv {} in {}ms, total base table count: {}", getName(), duration, baseTableInfos.size());
         return res;
     }
 
