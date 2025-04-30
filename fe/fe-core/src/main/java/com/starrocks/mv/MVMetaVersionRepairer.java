@@ -72,11 +72,7 @@ public class MVMetaVersionRepairer {
             try {
                 repairBaseTableTableVersionChange(mv, table, partitionRepairInfos);
             } finally {
-<<<<<<< HEAD
-                locker.unLockTableWithIntensiveDbLock(db, mv, LockType.WRITE);
-=======
-                locker.unLockTableWithIntensiveDbLock(mvDb.getId(), mv.getId(), LockType.WRITE);
->>>>>>> 9e87bef937 ([BugFix] Use mv's db rather than base table's db to aquire write lock (#58615))
+                locker.unLockTableWithIntensiveDbLock(mvDb, mv, LockType.WRITE);
             }
         }
     }
