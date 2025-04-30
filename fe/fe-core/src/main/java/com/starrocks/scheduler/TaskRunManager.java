@@ -28,6 +28,7 @@ import com.starrocks.scheduler.history.TaskRunHistory;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -100,6 +101,14 @@ public class TaskRunManager implements MemoryTrackable {
                 LOG.warn("failed to complete future for task run: {}", taskRun);
             }
 
+            // mark pending tasks as failed
+            Set<TaskRun> pendingTaskRuns = taskRunScheduler.getPendingTaskRunsByTaskId(taskId);
+            if (CollectionUtils.isNotEmpty(pendingTaskRuns)) {
+                for (TaskRun pendingTaskRun : pendingTaskRuns) {
+                    taskRunScheduler.removePendingTaskRun(pendingTaskRun, Constants.TaskRunState.FAILED);
+                }
+            }
+
             // kill the task run
             ConnectContext runCtx = taskRun.getRunCtx();
             if (runCtx != null) {
@@ -110,6 +119,7 @@ public class TaskRunManager implements MemoryTrackable {
         } finally {
             // if it's force, remove it from running TaskRun map no matter it's killed or not
             if (force) {
+                // remove it from running TaskRun map
                 taskRunScheduler.removeRunningTask(taskRun.getTaskId());
             }
         }
