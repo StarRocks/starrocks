@@ -61,9 +61,10 @@ public:
     }
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
-        for (auto& hll_bucket : this->data(state).hlls) {
-            hll_bucket.clear();
-        }
+        auto& state_impl = this->data(state);
+        state_impl.initialized = false;
+        state_impl.buckets.clear();
+        state_impl.hlls.clear();
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
