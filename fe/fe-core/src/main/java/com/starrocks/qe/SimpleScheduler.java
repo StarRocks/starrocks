@@ -60,12 +60,12 @@ public class SimpleScheduler {
 
     private static final HostBlacklist HOST_BLACKLIST = new HostBlacklist();
 
-    static {
-        HOST_BLACKLIST.startAutoUpdate();
-    }
-
     public static HostBlacklist getHostBlacklist() {
         return HOST_BLACKLIST;
+    }
+
+    public static void startAutoUpdate() {
+        HOST_BLACKLIST.startAutoUpdate();
     }
 
     @Nullable
