@@ -4,6 +4,26 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
+## 3.4.3
+
+リリース日： 2025 年 4 月 30 日
+
+### 改善点
+
+- Routine Load および Stream Load は、`columns` パラメータで Lambda 式を使用して、複雑な列データの抽出をサポートします。ユーザーは、`array_filter` / `map_filter` を使用して ARRAY / MAP データをフィルタリングおよび抽出できます。`cast` 関数を組み合わせて JSON Array / JSON Object を ARRAY および MAP 型に変換することで、JSON データの複雑なフィルタリングと抽出が可能になります。例えば、`COLUMNS (js, col=array_filter(i -> json_query(i, '$.type')=='t1', cast(js as Array<JSON>))[1])` を使用すると、`js` という JSON Array から `type` が `t1` の最初の JSON Object を抽出できます。 [#58149](https://github.com/StarRocks/starrocks/pull/58149)
+- `cast` 関数を使用して JSON Object を MAP 型に変換し、`map_filter` と組み合わせて、特定の条件を満たす JSON Object 内の項目を抽出することができます。例えば、`map_filter((k, v) -> json_query(v, '$.type') == 't1', cast(js AS MAP<String, JSON>))` を使用すると、`js` という JSON Object から `type` が `t1` の JSON Object を抽出できます。 [#58045](https://github.com/StarRocks/starrocks/pull/58045)
+- `information_schema.task_runs` ビューのクエリ時に LIMIT がサポートされるようになりました。 [#57404](https://github.com/StarRocks/starrocks/pull/57404)
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- ORC フォーマットの Hive テーブルをクエリする際に、エラー `OrcChunkReader::lazy_seek_to failed. reason = bad read in RleDecoderV2: :readByte` が発生する問題。 [#57454](https://github.com/StarRocks/starrocks/pull/57454)
+- Equality Delete ファイルを含む Iceberg テーブルをクエリする際に、上位の RuntimeFilter がプッシュダウンできない問題。 [#57651](https://github.com/StarRocks/starrocks/pull/57651)
+- ディスクスピルの事前集計戦略を有効にすると、クエリがクラッシュする問題。 [#58022](https://github.com/StarRocks/starrocks/pull/58022)
+- クエリがエラー `ConstantRef-cmp-ConstantRef not supported here, null != 111 should be eliminated earlier` で返される。 [#57735](https://github.com/StarRocks/starrocks/pull/57735)
+- クエリキュー機能が有効でない状態で、`query_queue_pending_timeout_second` パラメータでタイムアウトが発生する問題。 [#57719](https://github.com/StarRocks/starrocks/pull/57719)
+
 ## 3.4.2
 
 リリース日： 2025 年 4 月 10 日
