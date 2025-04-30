@@ -222,32 +222,11 @@ multi_range_partitions ::=
     | START ("<start_integer_value>") END ("<end_integer_value>") EVERY ( <granularity> ) } -- The partition column values still need to be enclosed in double quotes even if the partition column values are integers. However, the interval values in the EVERY clause do not need to be enclosed in double quotes.
 ```
 
-Notes for `multi_range_partitions`:
+  Notes for `multi_range_partitions`:
 
-- It only applies to Range Partitioning.
-- The parameters involved is consistent with those in [ADD PARTITION(S)](#add-partitions).
-- It only supports partitions with a single Partition Key.
-
-- Drop partitions with Common Partition Expression (Supported from v3.4.1):
-
-```sql
-ALTER TABLE [<db_name>.]<tbl_name>
-DROP PARTITIONS WHERE <expr>
-```
-
-From v3.4.1 onwards, StarRocks supports dropping partitions using Common Partition Expression. You can specify a WHERE clause with an expression to filter the partitions to drop.
-- The expression declares the partitions to be dropped. Partitions that meet the condition in the expression will be dropped in batch. Be cautious when proceeding.
-- The expression can only contain partition columns and constants. Non-partition columns are not supported.
-- Common Partition Expression applies to List partitions and Range partitions differently:
-  - For tables with List partitions, StarRocks supports deleting partitions filtered by the Common Partition Expression.
-  - For tables with Range partitions, StarRocks can only filter and delete partitions using the partition pruning capability of FE. Partitions correspond to predicates that are not supported by partition pruning cannot be filtered and deleted.
-
-Example:
-
-```sql
--- Drop the data earlier than the last three months. Column `dt` is the partition column of the table.
-ALTER TABLE t1 DROP PARTITIONS WHERE dt < CURRENT_DATE() - INTERVAL 3 MONTH;
-```
+  - It only applies to Range Partitioning.
+  - The parameters involved is consistent with those in [ADD PARTITION(S)](#add-partitions).
+  - It only supports partitions with a single Partition Key.
 
 :::note
 
