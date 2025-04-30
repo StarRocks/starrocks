@@ -62,7 +62,7 @@ public class Bucket {
             long rowCount = count - previousBucketCount - upperRepeats;
 
             if (distinctCount.isPresent()) {
-                distinctValuesCount = distinctCount.get() - 1;
+                distinctValuesCount = (double) distinctCount.get() - 1;
             } else if (useFixedPointEstimation) {
                 distinctValuesCount = upper - lower;
             }
