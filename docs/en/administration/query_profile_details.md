@@ -8,14 +8,31 @@ displayed_sidebar: docs
 
 A Query Profile is a detailed report that provides insights into the execution of a SQL query within StarRocks. It offers a comprehensive view of the query's performance, including the time spent on each operation, the amount of data processed, and other relevant metrics. This information is invaluable for optimizing query performance, identifying bottlenecks, and troubleshooting issues.
 
+:::tip Why this matters
+80% of real-world slow queries are solved by spotting one of three red-flag metrics. This cheat-sheet gets you there before you drown in numbers.
+:::
+
 ## Quick-Start
 
-> **Why this matters:** 80 % of real-world slow queries are solved by spotting one of three red-flag metrics. This cheat-sheet gets you there before you drown in numbers.
+Profile a recent query:
 
-### 1 Open the profile side-by-side with your SQL
-Run `ANALYZE PROFILE FOR <query_id>\G` or click **Profile** in the CelerData Web UI.  
+### 1. List recent query IDs
 
-### 2 Skim the “Execution Overview” banner
+A query ID is needed to analyze a query profile. Use `SHOW PROFILELIST;`:
+
+```sql
+SHOW PROFILELIST;
+```
+
+:::tip
+`SHOW PROFILELIST` is detailed in [Text-based Query Profile Visualized Analysis](./query_profile_text_based_analysis.md). See that page if you are getting started.
+:::
+
+### 2. Open the profile side-by-side with your SQL
+
+Run `ANALYZE PROFILE FOR <query_id>\G` or click **Profile** in the CelerData Web UI.
+
+### 3. Skim the “Execution Overview” banner
 
 Examine key metrics for overall execution performance:
 - QueryExecutionWallTime: Total wall clock time for query execution
@@ -24,7 +41,7 @@ Examine key metrics for overall execution performance:
 
 If none fire, your query is usually fine—stop here.
 
-### 3 Drill one level deeper
+### 4. Drill one level deeper
 
 Identify the operators that consume the most time or the most memory, analyze their metrics, and determine the underlying cause to pinpoint performance bottlenecks.
 
@@ -640,50 +657,50 @@ StarRocks relies on a vectorized, pipeline-friendly hash-join core that can be w
 
 | Metric | Description |
 |--------|-------------|
-| DistributionMode | Distribution type, including: BROADCAST, PARTITIONED, COLOCATE, etc. |
-| JoinPredicates | Join predicates. |
-| JoinType | Join type. |
-| BuildBuckets | Number of buckets in the Hash Table. |
-| BuildKeysPerBucket | Number of keys per bucket in the Hash Table. |
-| BuildConjunctEvaluateTime | Time taken for conjunct evaluation during build phase. |
-| BuildHashTableTime | Time taken to build the Hash Table. |
-| ProbeConjunctEvaluateTime | Time taken for conjunct evaluation during probe phase. |
-| SearchHashTableTimer | Time taken to search the Hash Table. |
-| CopyRightTableChunkTime | Time taken to copy chunks from the right table. |
-| OutputBuildColumnTime | Time taken to output the column of build side. |
-| OutputProbeColumnTime | Time taken to output the column of probe side. |
-| HashTableMemoryUsage | Memory usage of the Hash Table. |
-| RuntimeFilterBuildTime | Time taken to build runtime filters. |
-| RuntimeFilterNum | Number of runtime filters. |
+| `DistributionMode` | Distribution type, including: BROADCAST, PARTITIONED, COLOCATE, etc. |
+| `JoinPredicates` | Join predicates. |
+| `JoinType` | Join type. |
+| `BuildBuckets` | Number of buckets in the Hash Table. |
+| `BuildKeysPerBucket` | Number of keys per bucket in the Hash Table. |
+| `BuildConjunctEvaluateTime` | Time taken for conjunct evaluation during build phase. |
+| `BuildHashTableTime` | Time taken to build the Hash Table. |
+| `ProbeConjunctEvaluateTime` | Time taken for conjunct evaluation during probe phase. |
+| `SearchHashTableTimer` | Time taken to search the Hash Table. |
+| `CopyRightTableChunkTime` | Time taken to copy chunks from the right table. |
+| `OutputBuildColumnTime` | Time taken to output the column of build side. |
+| `OutputProbeColumnTime` | Time taken to output the column of probe side. |
+| `HashTableMemoryUsage` | Memory usage of the Hash Table. |
+| `RuntimeFilterBuildTime` | Time taken to build runtime filters. |
+| `RuntimeFilterNum` | Number of runtime filters. |
 
 ### Window Function Operator
 
 | Metric | Description |
 |--------|-------------|
-| ProcessMode | Execution mode, including two parts: the first part includes Materializing and Streaming; the second part includes Cumulative, RemovableCumulative, ByDefinition. |
-| ComputeTime | Time taken for window function calculations. |
-| PartitionKeys | Partition columns. |
-| AggregateFunctions | Aggregate functions. |
-| ColumnResizeTime | Time taken for column resizing. |
-| PartitionSearchTime | Time taken to search partition boundaries. |
-| PeerGroupSearchTime | Time taken to search Peer Group boundaries. Meaningful only when the window type is `RANGE`. |
-| PeakBufferedRows | Peak number of rows in the buffer. |
-| RemoveUnusedRowsCount | Number of times unused buffers are removed. |
-| RemoveUnusedTotalRows | Total number of rows removed from unused buffers. |
+| `ProcessMode` | Execution mode, including two parts: the first part includes Materializing and Streaming; the second part includes Cumulative, RemovableCumulative, ByDefinition. |
+| `ComputeTime` | Time taken for window function calculations. |
+| `PartitionKeys` | Partition columns. |
+| `AggregateFunctions` | Aggregate functions. |
+| `ColumnResizeTime` | Time taken for column resizing. |
+| `PartitionSearchTime` | Time taken to search partition boundaries. |
+| `PeerGroupSearchTime` | Time taken to search Peer Group boundaries. Meaningful only when the window type is `RANGE`. |
+| `PeakBufferedRows` | Peak number of rows in the buffer. |
+| `RemoveUnusedRowsCount` | Number of times unused buffers are removed. |
+| `RemoveUnusedTotalRows` | Total number of rows removed from unused buffers. |
 
 ### Sort Operator
 
 | Metric | Description |
 |--------|-------------|
-| SortKeys | Sorting keys. |
-| SortType | Query result sorting method: full sorting or sorting the top N results. |
-| MaxBufferedBytes | Peak size of buffered data. |
-| MaxBufferedRows | Peak number of buffered rows. |
-| NumSortedRuns | Number of sorted runs. |
-| BuildingTime | Time taken to maintain internal data structures during sorting. |
-| MergingTime | Time taken to merge sorted runs during sorting. |
-| SortingTime | Time taken for sorting. |
-| OutputTime | Time taken to build the output sorted sequence. |
+| `SortKeys` | Sorting keys. |
+| `SortType` | Query result sorting method: full sorting or sorting the top N results. |
+| `MaxBufferedBytes` | Peak size of buffered data. |
+| `MaxBufferedRows` | Peak number of buffered rows. |
+| `NumSortedRuns` | Number of sorted runs. |
+| `BuildingTime` | Time taken to maintain internal data structures during sorting. |
+| `MergingTime` | Time taken to merge sorted runs during sorting. |
+| `SortingTime` | Time taken for sorting. |
+| `OutputTime` | Time taken to build the output sorted sequence. |
 
 ### Merge Operator
 
@@ -708,35 +725,35 @@ For ease of understanding various metrics, Merge can be represented as the follo
 
 | Metric | Description | Level |
 |--------|-------------|-------|
-| Limit | Limit. | Primary |
-| Offset | Offset. | Primary |
-| StreamingBatchSize | Size of data processed per Merge operation when Merge is performed in Streaming mode | Primary |
-| LateMaterializationMaxBufferChunkNum | Maximum number of chunks in the buffer when late materialization is enabled. | Primary |
-| OverallStageCount | Total execution count of all stages. | Primary |
-| OverallStageTime | Total execution time for each stage. | Primary |
-| 1-InitStageCount | Execution count of the Init stage. | Secondary |
-| 2-PrepareStageCount | Execution count of the Prepare stage. | Secondary |
-| 3-ProcessStageCount | Execution count of the Process stage. | Secondary |
-| 4-SplitChunkStageCount | Execution count of the SplitChunk stage. | Secondary |
-| 5-FetchChunkStageCount | Execution count of the FetchChunk stage. | Secondary |
-| 6-PendingStageCount | Execution count of the Pending stage. | Secondary |
-| 7-FinishedStageCount | Execution count of the Finished stage. | Secondary |
-| 1-InitStageTime | Execution time for the Init stage. | Secondary |
-| 2-PrepareStageTime | Execution time for the Prepare stage. | Secondary |
-| 3-ProcessStageTime | Execution time for the Process stage. | Secondary |
-| 4-SplitChunkStageTime | Time taken for the Split stage. | Secondary |
-| 5-FetchChunkStageTime | Time taken for the Fetch stage. | Secondary |
-| 6-PendingStageTime | Time taken for the Pending stage. | Secondary |
-| 7-FinishedStageTime | Time taken for the Finished stage. | Secondary |
-| LateMaterializationGenerateOrdinalTime | Time taken for generating ordinal columns during late materialization. | Tertiary |
-| SortedRunProviderTime | Time taken to retrieve data from the provider during the Process stage. | Tertiary |
+| `Limit` | Limit. | Primary |
+| `Offset` | Offset. | Primary |
+| `StreamingBatchSize` | Size of data processed per Merge operation when Merge is performed in Streaming mode | Primary |
+| `LateMaterializationMaxBufferChunkNum` | Maximum number of chunks in the buffer when late materialization is enabled. | Primary |
+| `OverallStageCount` | Total execution count of all stages. | Primary |
+| `OverallStageTime` | Total execution time for each stage. | Primary |
+| `1-InitStageCount` | Execution count of the Init stage. | Secondary |
+| `2-PrepareStageCount` | Execution count of the Prepare stage. | Secondary |
+| `3-ProcessStageCount` | Execution count of the Process stage. | Secondary |
+| `4-SplitChunkStageCount` | Execution count of the SplitChunk stage. | Secondary |
+| `5-FetchChunkStageCount` | Execution count of the FetchChunk stage. | Secondary |
+| `6-PendingStageCount` | Execution count of the Pending stage. | Secondary |
+| `7-FinishedStageCount` | Execution count of the Finished stage. | Secondary |
+| `1-InitStageTime` | Execution time for the Init stage. | Secondary |
+| `2-PrepareStageTime` | Execution time for the Prepare stage. | Secondary |
+| `3-ProcessStageTime` | Execution time for the Process stage. | Secondary |
+| `4-SplitChunkStageTime` | Time taken for the Split stage. | Secondary |
+| `5-FetchChunkStageTime` | Time taken for the Fetch stage. | Secondary |
+| `6-PendingStageTime` | Time taken for the Pending stage. | Secondary |
+| `7-FinishedStageTime` | Time taken for the Finished stage. | Secondary |
+| `LateMaterializationGenerateOrdinalTime` | Time taken for generating ordinal columns during late materialization. | Tertiary |
+| `SortedRunProviderTime` | Time taken to retrieve data from the provider during the Process stage. | Tertiary |
 
 ### TableFunction Operator
 
 | Metric | Description |
 |--------|-------------|
-| TableFunctionExecTime | Computation time for the Table Function. |
-| TableFunctionExecCount | Number of executions for the Table Function. |
+| `TableFunctionExecTime` | Computation time for the Table Function. |
+| `TableFunctionExecCount` | Number of executions for the Table Function. |
 
 ### Project Operator
 
@@ -745,44 +762,44 @@ Project Operator is responsible for performing `SELECT <expr>`. If there're some
 
 | Metric | Description |
 |--------|-------------|
-| ExprComputeTime | Computation time for expressions. |
-| CommonSubExprComputeTime | Computation time for common sub-expressions. |
+| `ExprComputeTime` | Computation time for expressions. |
+| `CommonSubExprComputeTime` | Computation time for common sub-expressions. |
 
 ### LocalExchange Operator
 
 | Metric | Description |
 |--------|-------------|
 | Type | Type of Local Exchange, including: `Passthrough`, `Partition`, and `Broadcast`. |
-| ShuffleNum | Number of shuffles. This metric is only valid when `Type` is `Partition`. |
-| LocalExchangePeakMemoryUsage | Peak memory usage. |
-| LocalExchangePeakBufferSize | Peak size of the buffer. |
-| LocalExchangePeakBufferMemoryUsage | Peak memory usage of the buffer. |
-| LocalExchangePeakBufferChunkNum | Peak number of chunks in the buffer. |
-| LocalExchangePeakBufferRowNum | Peak number of rows in the buffer. |
-| LocalExchangePeakBufferBytes | Peak size of data in the buffer. |
-| LocalExchangePeakBufferChunkSize | Peak size of chunks in the buffer. |
-| LocalExchangePeakBufferChunkRowNum | Peak number of rows per chunk in the buffer. |
-| LocalExchangePeakBufferChunkBytes | Peak size of data per chunk in the buffer. |
+| `ShuffleNum` | Number of shuffles. This metric is only valid when `Type` is `Partition`. |
+| `LocalExchangePeakMemoryUsage` | Peak memory usage. |
+| `LocalExchangePeakBufferSize` | Peak size of the buffer. |
+| `LocalExchangePeakBufferMemoryUsage` | Peak memory usage of the buffer. |
+| `LocalExchangePeakBufferChunkNum` | Peak number of chunks in the buffer. |
+| `LocalExchangePeakBufferRowNum` | Peak number of rows in the buffer. |
+| `LocalExchangePeakBufferBytes` | Peak size of data in the buffer. |
+| `LocalExchangePeakBufferChunkSize` | Peak size of chunks in the buffer. |
+| `LocalExchangePeakBufferChunkRowNum` | Peak number of rows per chunk in the buffer. |
+| `LocalExchangePeakBufferChunkBytes` | Peak size of data per chunk in the buffer. |
 
 ### OlapTableSink Operator
 
 OlapTableSink Operator is responsible for performing the `INSERT INTO <table>` operation.
 
 :::tip
-- An excessive difference between the Max and Min values of the PushChunkNum metric of OlapTableSink indicates data skew in the upstream operators, which may lead to a bottleneck in loading performance.
-- RpcClientSideTime equals RpcServerSideTime plus network transmission time plus RPC framework processing time. If there is a significant difference between RpcClientSideTime and RpcServerSideTime, consider enabling compression to reduce transmission time.
+- An excessive difference between the Max and Min values of the `PushChunkNum` metric of `OlapTableSink` indicates data skew in the upstream operators, which may lead to a bottleneck in loading performance.
+- `RpcClientSideTime` equals `RpcServerSideTime` plus network transmission time plus RPC framework processing time. If there is a significant difference between `RpcClientSideTime` and `RpcServerSideTime`, consider enabling compression to reduce transmission time.
 :::
 
 | Metric | Description |
 |--------|-------------|
-| IndexNum | Number of the synchronous materialized views created for the destination table. |
-| ReplicatedStorage | Whether Single Leader Replication is enabled. |
-| TxnID | ID of the loading transaction. |
-| RowsRead | Number of rows read from upstream operators. |
-| RowsFiltered | Number of rows filtered out due to inadequate data quality. |
-| RowsReturned | Number of rows written to the destination table. |
-| RpcClientSideTime | Total RPC time consumption for loading recorded by the client side. |
-| RpcServerSideTime | Total RPC time consumption for loading recorded by the server side. |
-| PrepareDataTime | Total time consumption for the data preparation phase, including data format conversion and data quality check. |
-| SendDataTime | Local time consumption for sending the data, including time for serializing and compressing data, and for submitting tasks to the sender queue. |
+| `IndexNum` | Number of the synchronous materialized views created for the destination table. |
+| `ReplicatedStorage` | Whether Single Leader Replication is enabled. |
+| `TxnID` | ID of the loading transaction. |
+| `RowsRead` | Number of rows read from upstream operators. |
+| `RowsFiltered` | Number of rows filtered out due to inadequate data quality. |
+| `RowsReturned` | Number of rows written to the destination table. |
+| `RpcClientSideTime` | Total RPC time consumption for loading recorded by the client side. |
+| `RpcServerSideTime` | Total RPC time consumption for loading recorded by the server side. |
+| `PrepareDataTime` | Total time consumption for the data preparation phase, including data format conversion and data quality check. |
+| `SendDataTime` | Local time consumption for sending the data, including time for serializing and compressing data, and for submitting tasks to the sender queue. |
 
