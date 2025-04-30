@@ -106,7 +106,7 @@ public class AggregatePushDownTest extends PlanTestBase {
                 "  |  group by: [1: region, VARCHAR, true], [2: order_date, DATE, false]\n"));
 
         Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
-                "     table: trans, rollup: trans\n" +
+                "     TABLE: trans, rollup: trans\n" +
                 "     preAggregation: on\n" +
                 "     Predicates: month[([2: order_date, DATE, false]); args: DATE; result: TINYINT; " +
                 "args nullable: false; result nullable: false] = 1\n" +

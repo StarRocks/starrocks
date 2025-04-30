@@ -87,7 +87,7 @@ OutPut Exchange Id: 24
 |  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 7.29413E7] ESTIMATE
 |
 0:OlapScanNode
-table: orders, rollup: orders
+TABLE: orders, rollup: orders
 preAggregation: on
 Predicates: [28: O_ORDERSTATUS, CHAR, false] = 'F'
 partitionsRatio=1/1, tabletsRatio=10/10
@@ -193,7 +193,7 @@ OutPut Exchange Id: 20
 |    |    |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |    |    |
 |    |    5:OlapScanNode
-|    |       table: lineitem, rollup: lineitem
+|    |       TABLE: lineitem, rollup: lineitem
 |    |       preAggregation: on
 |    |       Predicates: [21: L_RECEIPTDATE, DATE, false] > [20: L_COMMITDATE, DATE, false]
 |    |       partitionsRatio=1/1, tabletsRatio=20/20
@@ -217,7 +217,7 @@ OutPut Exchange Id: 20
 |    |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |    |
 |    3:OlapScanNode
-|       table: lineitem, rollup: lineitem
+|       TABLE: lineitem, rollup: lineitem
 |       preAggregation: on
 |       Predicates: [71: L_RECEIPTDATE, DATE, false] > [70: L_COMMITDATE, DATE, false]
 |       partitionsRatio=1/1, tabletsRatio=20/20
@@ -232,7 +232,7 @@ OutPut Exchange Id: 20
 |       * L_RECEIPTDATE-->[6.94368E8, 9.150336E8, 0.0, 4.0, 2554.0] MCV: [[1995-10-08:269400][1997-08-08:266100][1997-06-05:266000][1998-07-26:265100][1994-12-03:264500]] ESTIMATE
 |
 2:OlapScanNode
-table: lineitem, rollup: lineitem
+TABLE: lineitem, rollup: lineitem
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=20/20
 actualRows=0, avgRowSize=12.0
@@ -276,7 +276,7 @@ OutPut Exchange Id: 13
 |       cardinality: 1
 |
 7:OlapScanNode
-table: supplier, rollup: supplier
+TABLE: supplier, rollup: supplier
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=1/1
 actualRows=0, avgRowSize=33.0
@@ -302,7 +302,7 @@ OutPut Exchange Id: 10
 |  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
 |
 8:OlapScanNode
-table: nation, rollup: nation
+TABLE: nation, rollup: nation
 preAggregation: on
 Predicates: [37: N_NAME, CHAR, false] = 'CANADA'
 partitionsRatio=1/1, tabletsRatio=1/1

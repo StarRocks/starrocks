@@ -705,7 +705,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
                 "     - filter_id = 3, probe_expr = (62: mock_004)"));
 
-        // table: tbl_mock_001, rollup: tbl_mock_001
+        // TABLE: tbl_mock_001, rollup: tbl_mock_001
         Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
                 "     - filter_id = 1, probe_expr = (116: mock_004)"));
         Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
@@ -737,7 +737,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  STREAMING"));
 
         Assert.assertTrue(replayPair.second, replayPair.second.contains("0:OlapScanNode\n" +
-                "     table: lineorder_2, rollup: lineorder_2"));
+                "     TABLE: lineorder_2, rollup: lineorder_2"));
     }
 
     @Test
@@ -859,7 +859,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         // partitions should not be pruned
         Assert.assertTrue(replayPair.second, !replayPair.second.contains("partitionsRatio=2/3, tabletsRatio=20/20"));
         Assert.assertTrue(replayPair.second, replayPair.second.contains("0:OlapScanNode\n" +
-                "     table: partitions2_keys311, rollup: partitions2_keys311\n" +
+                "     TABLE: partitions2_keys311, rollup: partitions2_keys311\n" +
                 "     preAggregation: on\n" +
                 "     Predicates: [7: undef_signed_not_null, VARCHAR, false] != 'j'\n" +
                 "     partitionsRatio=3/3, tabletsRatio=30/30"));
