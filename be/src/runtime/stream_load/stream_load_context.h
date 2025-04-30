@@ -143,12 +143,15 @@ const std::string TXN_LIST = "list";
 
 class StreamLoadContext {
 public:
-    explicit StreamLoadContext(ExecEnv* exec_env) : id(UniqueId::gen_uid()), _exec_env(exec_env), _refs(0) {
-        start_nanos = MonotonicNanos();
-    }
+    explicit StreamLoadContext(ExecEnv* exec_env, IntGauge* running_loads = nullptr)
+            : StreamLoadContext(exec_env, UniqueId::gen_uid(), running_loads) {}
 
-    explicit StreamLoadContext(ExecEnv* exec_env, UniqueId id) : id(id), _exec_env(exec_env), _refs(0) {
+    explicit StreamLoadContext(ExecEnv* exec_env, UniqueId id, IntGauge* running_loads = nullptr)
+            : id(id), _exec_env(exec_env), _refs(0), _running_loads(running_loads) {
         start_nanos = MonotonicNanos();
+        if (_running_loads != nullptr) {
+            _running_loads->increment(1);
+        }
     }
 
     ~StreamLoadContext() noexcept {
@@ -158,6 +161,9 @@ public:
         }
 
         _exec_env->load_stream_mgr()->remove(id);
+        if (_running_loads != nullptr) {
+            _running_loads->increment(-1);
+        }
     }
 
     std::string to_json() const;
@@ -328,6 +334,7 @@ public:
 private:
     ExecEnv* _exec_env;
     std::atomic<int> _refs;
+    IntGauge* _running_loads;
 };
 
 } // namespace starrocks
