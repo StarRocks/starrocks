@@ -107,11 +107,13 @@ public class MVTraceUtils {
         return selectedPartitionNames;
     }
 
-    private static String getLogPrefix(MaterializedView mv) {
+    public static String getLogPrefix(MaterializedView mv) {
         if (mv == null || Strings.isNullOrEmpty(mv.getName())) {
             return "";
         } else {
-            return mv.getName();
+            StringBuilder sb = new StringBuilder();
+            sb.append(" [").append(mv.getName()).append("] ");
+            return sb.toString();
         }
     }
 
@@ -119,6 +121,6 @@ public class MVTraceUtils {
      * Get logger with mv name prefix.
      */
     public static Logger getLogger(MaterializedView mv, Class<?> clazz) {
-        return new StarRocksLoggerFactory(getLogPrefix(mv)).getLogger(clazz);
+        return StarRocksLoggerFactory.INSTANCE.getLogger(clazz, getLogPrefix(mv));
     }
 }
