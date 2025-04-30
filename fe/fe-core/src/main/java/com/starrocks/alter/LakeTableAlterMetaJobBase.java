@@ -71,6 +71,10 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     private Table<Long, Long, MaterializedIndex> physicalPartitionIndexMap = HashBasedTable.create();
     @SerializedName(value = "commitVersionMap")
     private Map<Long, Long> commitVersionMap = new HashMap<>();
+    @SerializedName(value = "aggregateTabletMetadata")
+    private boolean aggregateTabletMetadata = false;
+    @SerializedName(value = "splitTabletMetadata")
+    private boolean splitTabletMetadata = false;
     private AgentBatchTask batchTask = null;
     private boolean enablePartitionAggregation = false;
 
@@ -80,7 +84,16 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
 
     public LakeTableAlterMetaJobBase(long jobId, JobType jobType, long dbId, long tableId,
                                      String tableName, long timeoutMs) {
+        this(jobId, jobType, dbId, tableId, tableName, timeoutMs, false, false);
+    }
+
+    public LakeTableAlterMetaJobBase(long jobId, JobType jobType, long dbId, long tableId,
+                                     String tableName, long timeoutMs,
+                                     boolean aggregateTabletMetadata,
+                                     boolean splitTabletMetadata) {
         super(jobId, jobType, dbId, tableId, tableName, timeoutMs);
+        this.aggregateTabletMetadata = aggregateTabletMetadata;
+        this.splitTabletMetadata = splitTabletMetadata;
     }
 
     @Override
@@ -113,7 +126,8 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             this.watershedGtid = globalStateMgr.getGtidGenerator().nextGtid();
             GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this.getShadowCopy());
         }
-
+        // TODO(zhangqiang)
+        // if update partition aggregation, can we skip write txn log?
         try {
             for (Partition partition : partitions) {
                 updatePartitionTabletMeta(db, table, partition);
@@ -269,6 +283,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                 long commitVersion = commitVersionMap.get(partitionId);
                 tablets.clear();
                 Map<Long, MaterializedIndex> dirtyIndexMap = physicalPartitionIndexMap.row(partitionId);
+                List<Tablet> tablets = new ArrayList<>();
                 for (MaterializedIndex index : dirtyIndexMap.values()) {
                     if (!enablePartitionAggregation) {
                         Utils.publishVersion(index.getTablets(), txnInfo, commitVersion - 1, commitVersion,
@@ -417,6 +432,12 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             Preconditions.checkState(partition.getVisibleVersion() == commitVersion - 1,
                     "partitionVisitionVersion=" + partition.getVisibleVersion() + " commitVersion=" + commitVersion);
             partition.updateVisibleVersion(commitVersion, finishedTimeMs);
+            if (aggregateTabletMetadata) {
+                partition.setSplitMetadataVersion(commitVersion - 1);
+            }
+            if (splitTabletMetadata) {
+                partition.setAggregateMetadataVersion(commitVersion - 1);
+            }
             LOG.info("partitionVisibleVersion=" + partition.getVisibleVersion() + " commitVersion=" + commitVersion);
             LOG.info("LakeTableAlterMetaJob id: {} update visible version of partition: {}, visible Version: {}",
                     jobId, partition.getId(), commitVersion);
@@ -495,6 +516,8 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             this.watershedTxnId = other.watershedTxnId;
             this.watershedGtid = other.watershedGtid;
             this.commitVersionMap = other.commitVersionMap;
+            this.aggregateTabletMetadata = other.aggregateTabletMetadata;
+            this.splitTabletMetadata = other.splitTabletMetadata;
 
             restoreState(other);
         }
@@ -598,5 +621,9 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
 
         GlobalStateMgr.getCurrentState().getLocalMetastore().handleMVRepair(db, table, partitionRepairInfos);
+    }
+
+    public boolean getAggregateTabletMetadata() {
+        return aggregateTabletMetadata;
     }
 }

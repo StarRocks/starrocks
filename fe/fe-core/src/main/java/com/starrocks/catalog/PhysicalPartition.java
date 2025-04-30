@@ -103,6 +103,18 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     @SerializedName(value = "versionTxnType")
     private TransactionType versionTxnType;
     /**
+     * if splitMetadataVersion is not 0, it means the tablet data before splitMetadataVersion will keep its own
+     * metadata
+     */
+    @SerializedName(value = "splitMetadataVersion")
+    private long splitMetadataVersion;
+    /**
+     * if aggregateMetadataVersion is not 0, it means the tablet data before aggregateMetadataVersion will keep a
+     * shared metadata
+     */
+    @SerializedName(value = "aggregateMetadataVersion")
+    private long aggregateMetadataVersion;
+    /**
      * ID of the transaction that has committed current visible version.
      * Just for tracing the txn log, no need to persist.
      */
@@ -342,6 +354,14 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     public void setVersionTxnType(TransactionType versionTxnType) {
         this.versionTxnType = versionTxnType;
+    }
+
+    public void setSplitMetadataVersion(long splitMetadataVersion) {
+        this.splitMetadataVersion = splitMetadataVersion;
+    }
+
+    public void setAggregateMetadataVersion(long aggregateMetadataVersion) {
+        this.aggregateMetadataVersion = aggregateMetadataVersion;
     }
 
     public MaterializedIndex getIndex(long indexId) {
