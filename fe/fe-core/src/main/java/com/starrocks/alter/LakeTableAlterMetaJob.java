@@ -48,7 +48,16 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
     public LakeTableAlterMetaJob(long jobId, long dbId, long tableId, String tableName,
                                  long timeoutMs, TTabletMetaType metaType, boolean metaValue,
                                  String persistentIndexType) {
-        super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
+        this(jobId, dbId, tableId, tableName, timeoutMs, metaType, metaValue, persistentIndexType,
+                false, false);
+    }
+
+    public LakeTableAlterMetaJob(long jobId, long dbId, long tableId, String tableName,
+                                 long timeoutMs, TTabletMetaType metaType, boolean metaValue,
+                                 String persistentIndexType,
+                                 boolean aggregateTabletMetadata, boolean splitTabletMetadata) {
+        super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs, 
+                aggregateTabletMetadata, splitTabletMetadata);
         this.metaType = metaType;
         this.metaValue = metaValue;
         this.persistentIndexType = persistentIndexType;
@@ -57,8 +66,15 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
     @Override
     protected TabletMetadataUpdateAgentTask createTask(PhysicalPartition partition,
             MaterializedIndex index, long nodeId, Set<Long> tablets) {
-        return TabletMetadataUpdateAgentTaskFactory.createLakePersistentIndexUpdateTask(nodeId, tablets,
-                metaValue, persistentIndexType);
+        if (metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
+            return TabletMetadataUpdateAgentTaskFactory.createLakePersistentIndexUpdateTask(nodeId, tablets,
+                        metaValue, persistentIndexType);
+        }
+        if (metaType == TTabletMetaType.ENABLE_PARTITION_AGGREGATION) {
+            return TabletMetadataUpdateAgentTaskFactory.createUpdatePartitionAggregationTask(nodeId, tablets,
+                        getAggregateTabletMetadata());
+        }
+        return null;
     }
 
     @Override
@@ -76,6 +92,9 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
             table.getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE,
                     String.valueOf(persistentIndexType));
             table.getTableProperty().buildPersistentIndexType();
+        }
+        if (metaType == TTabletMetaType.ENABLE_PARTITION_AGGREGATION) {
+            table.setEnablePartitionAggregation(getAggregateTabletMetadata());
         }
     }
 
