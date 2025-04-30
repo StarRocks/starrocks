@@ -59,7 +59,7 @@ expression ::=
 
 #### `partition_retention_condition`
 
-从 v3.4.1 开始，StarRocks 内表支持通用分区表达式（Common Partition Expression）TTL。
+从 v3.5.0 开始，StarRocks 内表支持通用分区表达式（Common Partition Expression）TTL。
 
 - 必填：否
 - 说明：用于声明动态保留分区的表达式。不符合表达式中条件的分区将被定期删除。示例：`"partition_retention_condition" = "dt >= CURRENT_DATE() - INTERVAL 3 MONTH"`。
