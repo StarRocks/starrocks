@@ -1410,7 +1410,7 @@ createBaselinePlanStatement
     ;
 
 dropBaselinePlanStatement
-    : DROP BASELINE INTEGER_VALUE
+    : DROP BASELINE INTEGER_VALUE (',' INTEGER_VALUE)*
     ;
 
 showBaselinePlanStatement

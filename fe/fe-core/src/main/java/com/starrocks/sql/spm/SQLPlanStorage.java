@@ -22,11 +22,11 @@ public interface SQLPlanStorage {
 
     List<BaselinePlan> getAllBaselines();
 
-    void storeBaselinePlan(BaselinePlan plan);
+    void storeBaselinePlan(List<BaselinePlan> plan);
 
     List<BaselinePlan> findBaselinePlan(String sqlDigest, long hash);
 
-    void dropBaselinePlan(long baseLineId);
+    void dropBaselinePlan(List<Long> baseLineIds);
 
     // for ut test use
     void dropAllBaselinePlans();

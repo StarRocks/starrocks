@@ -29,10 +29,13 @@ public class SPMStmtExecutor {
     public static void execute(ConnectContext context, CreateBaselinePlanStmt stmt) {
         SPMPlanBuilder builder = new SPMPlanBuilder(context, stmt);
         BaselinePlan plan = builder.execute();
+        plan.setEnable(true);
+        plan.setGlobal(stmt.isGlobal());
+        plan.setSource(BaselinePlan.SOURCE_USER);
         if (stmt.isGlobal()) {
-            context.getGlobalStateMgr().getSqlPlanStorage().storeBaselinePlan(plan);
+            context.getGlobalStateMgr().getSqlPlanStorage().storeBaselinePlan(List.of(plan));
         } else {
-            context.getSqlPlanStorage().storeBaselinePlan(plan);
+            context.getSqlPlanStorage().storeBaselinePlan(List.of(plan));
         }
     }
 
@@ -49,11 +52,14 @@ public class SPMStmtExecutor {
             List<String> row = Lists.newArrayList();
             row.add(String.valueOf(baseline.getId()));
             row.add(baseline.isGlobal() ? "Y" : "N");
+            row.add(baseline.isEnable() ? "Y" : "N");
             row.add(baseline.getBindSqlDigest());
             row.add(String.valueOf(baseline.getBindSqlHash()));
             row.add(baseline.getBindSql());
             row.add(baseline.getPlanSql());
             row.add(String.valueOf(baseline.getCosts()));
+            row.add(String.valueOf(baseline.getQueryMs()));
+            row.add(baseline.getSource());
             row.add(baseline.getUpdateTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
             rows.add(row);
         });

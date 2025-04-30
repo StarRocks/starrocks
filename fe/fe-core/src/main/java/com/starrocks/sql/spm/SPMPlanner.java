@@ -103,12 +103,9 @@ public class SPMPlanner {
     }
 
     private void analyze(StatementBase query) {
-        PlannerMetaLocker locker = new PlannerMetaLocker(session, query);
-        try {
+        try (PlannerMetaLocker locker = new PlannerMetaLocker(session, query)) {
             locker.lock();
             Analyzer.analyze(query, session);
-        } finally {
-            locker.unlock();
         }
     }
 
