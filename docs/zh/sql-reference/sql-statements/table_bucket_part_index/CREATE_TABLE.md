@@ -822,7 +822,7 @@ crontab ::= * <hour> <day-of-the-month> <month> <day-of-the-week>
 
 #### 指定通用分区表达式 TTL
 
-从 v3.4.1 开始，StarRocks 内表支持通用分区表达式（Common Partition Expression）TTL。
+从 v3.5.0 开始，StarRocks 内表支持通用分区表达式（Common Partition Expression）TTL。
 
 `partition_retention_condition`：用于声明动态保留分区的表达式。不符合表达式中条件的分区将被定期删除。
 - 表达式只能包含分区列和常量。不支持非分区列。
