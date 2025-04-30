@@ -359,7 +359,7 @@ public class StreamLoadKvParams implements StreamLoadParams {
 
     @Override
     public String toString() {
-        return "params=" + params + '}';
+        return "params={" + params + '}';
     }
 
     public static StreamLoadKvParams fromHttpHeaders(HttpHeaders httpHeaders) {
