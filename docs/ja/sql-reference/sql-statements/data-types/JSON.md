@@ -1,0 +1,185 @@
+---
+displayed_sidebar: docs
+---
+
+# JSON
+
+StarRocks は v2.2.0 から JSON データ型をサポートしています。このトピックでは、JSON の基本概念について説明します。また、JSON カラムの作成方法、JSON データのロード方法、JSON データのクエリ方法、および JSON 関数と演算子を使用して JSON データを構築および処理する方法についても説明します。
+
+## JSON とは
+
+JSON は、半構造化データ用に設計された軽量のデータ交換フォーマットです。JSON はデータを階層的なツリー構造で表現し、さまざまなデータストレージおよび分析シナリオで柔軟かつ読み書きが容易です。JSON は `NULL` 値と次のデータ型をサポートします: NUMBER、STRING、BOOLEAN、ARRAY、および OBJECT。
+
+JSON についての詳細は [JSON website](http://www.json.org/?spm=a2c63.p38356.0.0.50756b9fVEfwCd) をご覧ください。JSON の入力および出力構文については、[RFC 7159](https://tools.ietf.org/html/rfc7159?spm=a2c63.p38356.0.0.14d26b9fcp7fcf#page-4) の JSON 仕様を参照してください。
+
+StarRocks は JSON データのストレージと効率的なクエリおよび分析の両方をサポートしています。StarRocks は入力テキストを直接保存するのではなく、JSON データをバイナリ形式で保存して解析コストを削減し、クエリ効率を向上させます。
+
+## JSON データの使用
+
+### JSON カラムの作成
+
+テーブルを作成する際に、`JSON` キーワードを使用して `j` カラムを JSON カラムとして指定できます。
+
+```sql
+CREATE TABLE `tj` (
+    `id` INT(11) NOT NULL COMMENT "",
+    `j`  JSON NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "3",
+    "storage_format" = "DEFAULT"
+);
+```
+
+### データをロードし、JSON データとして保存する
+
+StarRocks は、データをロードし、JSON データとして保存するための次の方法を提供します。
+
+- 方法 1: `INSERT INTO` を使用してデータをテーブルの JSON カラムに書き込みます。次の例では、`tj` という名前のテーブルが使用されており、テーブルの `j` カラムは JSON カラムです。
+
+```plaintext
+INSERT INTO tj (id, j) VALUES (1, parse_json('{"a": 1, "b": true}'));
+INSERT INTO tj (id, j) VALUES (2, parse_json('{"a": 2, "b": false}'));
+INSERT INTO tj (id, j) VALUES (3, parse_json('{"a": 3, "b": true}'));
+INSERT INTO tj (id, j) VALUES (4, json_object('a', 4, 'b', false)); 
+```
+
+> parse_json 関数は STRING データを JSON データとして解釈できます。json_object 関数は JSON オブジェクトを構築したり、既存のテーブルを JSON ファイルに変換したりできます。詳細については、[parse_json](../../sql-functions/json-functions/json-constructor-functions/parse_json.md) および [json_object](../../sql-functions/json-functions/json-constructor-functions/json_object.md) を参照してください。
+
+- 方法 2: Stream Load を使用して JSON ファイルをロードし、ファイルを JSON データとして保存します。詳細については、[Load JSON data](../../../loading/StreamLoad.md#load-json-data) を参照してください。
+
+  - ルート JSON オブジェクトをロードする場合は、`jsonpaths` を `$` に設定します。
+  - JSON オブジェクトの特定の値をロードする場合は、`jsonpaths` を `$.a` に設定し、`a` がキーを指定します。StarRocks でサポートされている JSON パス式の詳細については、[JSON path](../../sql-functions/json-functions/overview-of-json-functions-and-operators.md#json-path-expressions) を参照してください。
+
+- 方法 3: Broker Load を使用して Parquet ファイルをロードし、ファイルを JSON データとして保存します。詳細については、[Broker Load](../../../loading/BrokerLoad.md) を参照してください。
+
+StarRocks は Parquet ファイルのロード時に次のデータ型変換をサポートしています。
+
+| Parquet ファイルのデータ型                                    | JSON データ型 |
+| ------------------------------------------------------------ | -------------- |
+| INTEGER (INT8, INT16, INT32, INT64, UINT8, UINT16, UINT32, and UINT64) | NUMBER         |
+| FLOAT and DOUBLE                                             | NUMBER         |
+| BOOLEAN                                                      | BOOLEAN        |
+| STRING                                                       | STRING         |
+| MAP                                                          | OBJECT         |
+| STRUCT                                                       | OBJECT         |
+| LIST                                                         | ARRAY          |
+| その他のデータ型 (UNION や TIMESTAMP など)                   | サポートされていません  |
+
+- 方法 4: [Routine](../../../loading/RoutineLoad.md) ロードを使用して、Kafka から StarRocks に JSON データを継続的にロードします。
+
+### JSON データのクエリと処理
+
+StarRocks は JSON データのクエリと処理、および JSON 関数と演算子の使用をサポートしています。
+
+次の例では、`tj` という名前のテーブルが使用されており、テーブルの `j` カラムが JSON カラムとして指定されています。
+
+```plaintext
+mysql> select * from tj;
++------+----------------------+
+| id   |          j           |
++------+----------------------+
+| 1    | {"a": 1, "b": true}  |
+| 2    | {"a": 2, "b": false} |
+| 3    | {"a": 3, "b": true}  |
+| 4    | {"a": 4, "b": false} |
++------+----------------------+
+```
+
+例 1: JSON カラムのデータをフィルタリングして、`id=1` の条件を満たすデータを取得します。
+
+```plaintext
+mysql> select * from tj where id = 1;
++------+---------------------+
+| id   |           j         |
++------+---------------------+
+| 1    | {"a": 1, "b": true} |
++------+---------------------+
+```
+
+例 2: JSON カラム `j` のデータをフィルタリングして、指定されたフィルター条件を満たすデータを取得します。
+
+> `j->'a'` は JSON データを返します。最初の例を使用してデータを比較できます（この例では暗黙の型変換が行われることに注意してください）。または、CAST 関数を使用して JSON データを INT に変換し、データを比較することもできます。
+
+```plaintext
+mysql> select * from tj where j->'a' = 1;
++------+---------------------+
+| id   | j                   |
++------+---------------------+
+|    1 | {"a": 1, "b": true} |
+
+
+mysql> select * from tj where cast(j->'a' as INT) = 1;
++------+---------------------+
+| id   | j                   |
++------+---------------------+
+|    1 | {"a": 1, "b": true} |
++------+---------------------+
+```
+
+例 3: CAST 関数を使用して、テーブルの JSON カラムの値を BOOLEAN 値に変換します。その後、JSON カラムのデータをフィルタリングして、指定されたフィルター条件を満たすデータを取得します。
+
+```plaintext
+mysql> select * from tj where cast(j->'b' as boolean);
++------+---------------------+
+|  id  |          j          |
++------+---------------------+
+| 1    | {"a": 1, "b": true} |
+| 3    | {"a": 3, "b": true} |
++------+---------------------+
+```
+
+例 4: CAST 関数を使用して、テーブルの JSON カラムの値を BOOLEAN 値に変換します。その後、JSON カラムのデータをフィルタリングして、指定されたフィルター条件を満たすデータを取得し、データに対して算術演算を行います。
+
+```plaintext
+mysql> select cast(j->'a' as int) from tj where cast(j->'b' as boolean);
++-----------------------+
+|  CAST(j->'a' AS INT)  |
++-----------------------+
+|          3            |
+|          1            |
++-----------------------+
+
+mysql> select sum(cast(j->'a' as int)) from tj where cast(j->'b' as boolean);
++----------------------------+
+| sum(CAST(j->'a' AS INT))  |
++----------------------------+
+|              4             |
++----------------------------+
+```
+
+例 5: JSON カラムをソートキーとして使用して、テーブルのデータをソートします。
+
+```plaintext
+mysql> select * from tj
+    ->        where j->'a' <= parse_json('3')
+    ->        order by cast(j->'a' as int);
++------+----------------------+
+| id   | j                    |
++------+----------------------+
+|    1 | {"a": 1, "b": true}  |
+|    2 | {"a": 2, "b": false} |
+|    3 | {"a": 3, "b": true}  |
+|    4 | {"a": 4, "b": false} |
++------+----------------------+
+4 rows in set (0.05 sec)
+```
+
+## JSON 関数と演算子
+
+JSON 関数と演算子を使用して、JSON データを構築および処理できます。詳細については、[Overview of JSON functions and operators](../../sql-functions/json-functions/overview-of-json-functions-and-operators.md) を参照してください。
+
+## 制限事項と使用上の注意
+
+- JSON 値の最大長は 16 MB です。
+
+- ORDER BY、GROUP BY、および JOIN 句は JSON カラムへの参照をサポートしていません。JSON カラムへの参照を作成する場合は、CAST 関数を使用して JSON カラムを SQL カラムに変換してから参照を作成してください。詳細については、[cast](../../sql-functions/json-functions/json-query-and-processing-functions/cast.md) を参照してください。
+
+- JSON カラムは Duplicate Key、Primary Key、および Unique Key テーブルでサポートされています。集計テーブルではサポートされていません。
+
+- JSON カラムはパーティションキー、バケッティングキー、または次元カラム（DUPLICATE KEY、PRIMARY KEY、UNIQUE KEY）として使用できません。また、ORDER BY、GROUP BY、および JOIN 句で使用することもできません。
+
+- StarRocks は、JSON データをクエリするために次の JSON 比較演算子を使用することを許可しています: `<`, `<=`, `>`, `>=`, `=`, および `!=`。`IN` を使用して JSON データをクエリすることは許可されていません。
