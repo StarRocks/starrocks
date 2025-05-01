@@ -23,14 +23,13 @@ public:
     void TearDown() override {}
 };
 
-#ifdef __AVX2__
-
 TEST_F(DeltaDecodeTest, test_int32) {
     std::vector<int32_t> values(233);
     for (int i = 0; i < values.size(); i++) {
         values[i] = 1;
     }
     std::vector<int32_t> avx2_values(values);
+    std::vector<int32_t> avx2x_values(values);
     std::vector<int32_t> avx512_values(values);
     {
         int32_t last_value = 10;
@@ -45,6 +44,11 @@ TEST_F(DeltaDecodeTest, test_int32) {
     ASSERT_EQ(avx2_values, values);
     {
         int32_t last_value = 10;
+        delta_decode_chain_int32_avx2x(avx2x_values.data(), avx2x_values.size(), 10, last_value);
+        ASSERT_EQ(avx2x_values.back(), last_value);
+    }
+    {
+        int32_t last_value = 10;
         delta_decode_chain_int32_avx512(avx512_values.data(), avx512_values.size(), 10, last_value);
         ASSERT_EQ(avx512_values.back(), last_value);
     }
@@ -56,7 +60,7 @@ TEST_F(DeltaDecodeTest, test_int64) {
     for (int i = 0; i < values.size(); i++) {
         values[i] = 1;
     }
-    std::vector<int64_t> avx2_values(values);
+    std::vector<int64_t> avx512_values(values);
     {
         int64_t last_value = 10;
         delta_decode_chain_scalar_prefetch<int64_t>(values.data(), values.size(), 10, last_value);
@@ -64,12 +68,10 @@ TEST_F(DeltaDecodeTest, test_int64) {
     }
     {
         int64_t last_value = 10;
-        delta_decode_chain_scalar_prefetch<int64_t>(avx2_values.data(), avx2_values.size(), 10, last_value);
-        ASSERT_EQ(avx2_values.back(), last_value);
+        delta_decode_chain_int64_avx512(avx512_values.data(), avx512_values.size(), 10, last_value);
+        ASSERT_EQ(avx512_values.back(), last_value);
     }
-    ASSERT_EQ(avx2_values, values);
+    ASSERT_EQ(avx512_values, values);
 }
-
-#endif
 
 } // namespace starrocks

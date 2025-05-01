@@ -18,7 +18,7 @@
 
 namespace starrocks {
 
-static void BM_avx512_prefix_sum(benchmark::State& state) {
+static void BM_int32_avx512_prefix_sum(benchmark::State& state) {
     int64_t size = state.range(0);
     std::vector<int32_t> elements(size);
     int32_t last_value = 0;
@@ -27,7 +27,7 @@ static void BM_avx512_prefix_sum(benchmark::State& state) {
     }
 }
 
-static void BM_avx2_prefix_sum(benchmark::State& state) {
+static void BM_int32_avx2_prefix_sum(benchmark::State& state) {
     int64_t size = state.range(0);
     std::vector<int32_t> elements(size);
     int32_t last_value = 0;
@@ -36,7 +36,16 @@ static void BM_avx2_prefix_sum(benchmark::State& state) {
     }
 }
 
-static void BM_native_prefix_sum(benchmark::State& state) {
+static void BM_int32_avx2x_prefix_sum(benchmark::State& state) {
+    int64_t size = state.range(0);
+    std::vector<int32_t> elements(size);
+    int32_t last_value = 0;
+    for (auto _ : state) {
+        delta_decode_chain_int32_avx2x(elements.data(), size, 0, last_value);
+    }
+}
+
+static void BM_int32_native_prefix_sum(benchmark::State& state) {
     int64_t size = state.range(0);
     std::vector<int32_t> elements(size);
     int32_t last_value = 0;
@@ -45,9 +54,31 @@ static void BM_native_prefix_sum(benchmark::State& state) {
     }
 }
 
-BENCHMARK(BM_avx512_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
-BENCHMARK(BM_avx2_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
-BENCHMARK(BM_native_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
+static void BM_int64_avx512_prefix_sum(benchmark::State& state) {
+    int64_t size = state.range(0);
+    std::vector<int64_t> elements(size);
+    int64_t last_value = 0;
+    for (auto _ : state) {
+        delta_decode_chain_int64_avx512(elements.data(), size, 0, last_value);
+    }
+}
+
+static void BM_int64_native_prefix_sum(benchmark::State& state) {
+    int64_t size = state.range(0);
+    std::vector<int64_t> elements(size);
+    int64_t last_value = 0;
+    for (auto _ : state) {
+        delta_decode_chain_scalar_prefetch<int64_t>(elements.data(), size, 0, last_value);
+    }
+}
+
+BENCHMARK(BM_int32_avx512_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
+BENCHMARK(BM_int32_avx2_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
+BENCHMARK(BM_int32_avx2x_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
+BENCHMARK(BM_int32_native_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
+
+BENCHMARK(BM_int64_avx512_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
+BENCHMARK(BM_int64_native_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
 
 } // namespace starrocks
 
