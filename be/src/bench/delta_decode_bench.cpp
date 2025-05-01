@@ -18,6 +18,15 @@
 
 namespace starrocks {
 
+static void BM_avx512_prefix_sum(benchmark::State& state) {
+    int64_t size = state.range(0);
+    std::vector<int32_t> elements(size);
+    int32_t last_value = 0;
+    for (auto _ : state) {
+        delta_decode_chain_int32_avx512(elements.data(), size, 0, last_value);
+    }
+}
+
 static void BM_avx2_prefix_sum(benchmark::State& state) {
     int64_t size = state.range(0);
     std::vector<int32_t> elements(size);
@@ -36,6 +45,7 @@ static void BM_native_prefix_sum(benchmark::State& state) {
     }
 }
 
+BENCHMARK(BM_avx512_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
 BENCHMARK(BM_avx2_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
 BENCHMARK(BM_native_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
 

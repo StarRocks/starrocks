@@ -31,6 +31,7 @@ TEST_F(DeltaDecodeTest, test_int32) {
         values[i] = 1;
     }
     std::vector<int32_t> avx2_values(values);
+    std::vector<int32_t> avx512_values(values);
     {
         int32_t last_value = 10;
         delta_decode_chain_scalar_prefetch<int32_t>(values.data(), values.size(), 10, last_value);
@@ -42,6 +43,12 @@ TEST_F(DeltaDecodeTest, test_int32) {
         ASSERT_EQ(avx2_values.back(), last_value);
     }
     ASSERT_EQ(avx2_values, values);
+    {
+        int32_t last_value = 10;
+        delta_decode_chain_int32_avx512(avx512_values.data(), avx512_values.size(), 10, last_value);
+        ASSERT_EQ(avx512_values.back(), last_value);
+    }
+    ASSERT_EQ(avx512_values, values);
 }
 
 TEST_F(DeltaDecodeTest, test_int64) {
