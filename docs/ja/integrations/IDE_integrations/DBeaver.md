@@ -14,7 +14,7 @@ DBeaver Community エディションは [https://dbeaver.io](https://dbeaver.io/
 
 ## 統合
 
-データベースに接続するために次の手順に従ってください。
+データベースに接続するために、次の手順に従ってください。
 
 1. DBeaver を起動します。
 
@@ -26,17 +26,17 @@ DBeaver Community エディションは [https://dbeaver.io](https://dbeaver.io/
 
 3. MySQL ドライバーを選択します。
 
-   **Select your database** ステップでは、利用可能なドライバーのリストが表示されます。左側のペインで **Analytical** をクリックして MySQL ドライバーをすばやく見つけます。その後、**MySQL** アイコンをダブルクリックします。
+   **Select your database** ステップでは、利用可能なドライバーのリストが表示されます。左側のペインで **Analytical** をクリックして MySQL ドライバーをすばやく見つけます。次に、**MySQL** アイコンをダブルクリックします。
 
    ![DBeaver - Select your database](../../_assets/IDE_dbeaver_3.png)
 
-4. データベースへの接続を設定します。
+4. データベースへの接続を構成します。
 
-   **Connection Settings** ステップで、**Main** タブに移動し、以下の基本的な接続設定を構成します。
+   **Connection Settings** ステップでは、**Main** タブに移動し、次の重要な接続設定を構成します。
 
    - **Server Host**: StarRocks クラスターの FE ホスト IP アドレス。
    - **Port**: StarRocks クラスターの FE クエリポート、例: `9030`。
-   - **Database**: StarRocks クラスター内のターゲットデータベース。内部データベースと external catalog の両方がサポートされていますが、external catalog の機能は不完全な場合があります。
+   - **Database**: StarRocks クラスター内のターゲットデータベース。内部データベースと外部データベースの両方がサポートされていますが、外部データベースの機能は不完全な場合があります。
    - **Username**: StarRocks クラスターにログインするために使用されるユーザー名、例: `admin`。
    - **Password**: StarRocks クラスターにログインするために使用されるパスワード。
 

@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # split
 
+## 説明
+
 この関数は、指定された文字列をセパレータに従って分割し、分割された部分を ARRAY で返します。
 
 ## 構文

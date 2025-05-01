@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # pi
 
+## 説明
+
 円周率の値を返します。
 
 ## 構文

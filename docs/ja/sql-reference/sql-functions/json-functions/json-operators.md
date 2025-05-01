@@ -2,24 +2,24 @@
 displayed_sidebar: docs
 ---
 
-# JSON 演算子
+# JSON operators
 
 StarRocks は、次の JSON 比較演算子をサポートしています: `<`, `<=`, `>`, `>=`, `=`, および `!=`。これらの演算子を使用して JSON データをクエリできます。ただし、StarRocks では `IN` を使用して JSON データをクエリすることはできません。
 
 - > 演算子のオペランドは両方とも JSON 値でなければなりません。
 
-- > 演算子のオペランドの一方が JSON 値で、もう一方が JSON 値でない場合、JSON 値でないオペランドは算術演算中に JSON 値に変換されます。変換ルールの詳細については、[CAST](./json-query-and-processing-functions/cast.md) を参照してください。
+- > 演算子のオペランドの一方が JSON 値で、もう一方がそうでない場合、JSON 値でないオペランドは算術演算中に JSON 値に変換されます。変換ルールの詳細については、 [CAST](./json-query-and-processing-functions/cast.md) を参照してください。
 
 ## 算術ルール
 
-JSON 演算子は次の算術ルールに従います:
+JSON 演算子は、次の算術ルールに従います:
 
 - 演算子のオペランドが同じデータ型の JSON 値である場合:
   - 両方のオペランドが NUMBER、STRING、BOOLEAN などの基本データ型の JSON 値である場合、演算子は基本データ型の算術ルールに従って算術演算を行います。
 
-> 注意: 両方のオペランドが数値であるが、一方が DOUBLE 値で他方が INT 値である場合、演算子は INT 値を DOUBLE 値に変換します。
+> 注: 両方のオペランドが数値であるが、一方が DOUBLE 値で他方が INT 値である場合、演算子は INT 値を DOUBLE 値に変換します。
 
-- 両方のオペランドが OBJECT や ARRAY などの複合データ型の JSON 値である場合、演算子は最初のオペランドのキーの順序に基づいて辞書順にオペランドのキーをソートし、オペランド間のキーの値を比較します。
+- 両方のオペランドが OBJECT や ARRAY などの複合データ型の JSON 値である場合、演算子は最初のオペランドのキーの順序に基づいてオペランド内のキーを辞書順に並べ替え、オペランド間のキーの値を比較します。
 
 例 1:
 
@@ -41,7 +41,7 @@ mysql> SELECT PARSE_JSON('{"a": 1, "c": 2}') < PARSE_JSON('{"b": 1, "a": 1}');
        -> 0
 ```
 
-- 演算子のオペランドが異なるデータ型の JSON 値である場合、演算子は次の算術ルールに従ってオペランドを比較します: NULL < BOOLEAN < ARRAY < OBJECT < DOUBLE < INT < STRING。
+- 演算子のオペランドが異なるデータ型の JSON 値である場合、演算子は次の算術ルールに従ってオペランドを比較します: NULL < BOOLEAN < ARRAY < OBJECT < DOUBLE < INT < STRING.
 
 ```plaintext
 mysql> SELECT PARSE_JSON('"a"') < PARSE_JSON('{"a": 1, "c": 2}');

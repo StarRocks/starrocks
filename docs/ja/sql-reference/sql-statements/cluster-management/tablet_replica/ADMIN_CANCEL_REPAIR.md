@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 :::tip
 
-この操作には、SYSTEM レベルの OPERATE 権限が必要です。この権限を付与するには、[GRANT](../../account-management/GRANT.md) の指示に従ってください。
+この操作には、SYSTEM レベルの OPERATE 権限が必要です。この権限を付与するには、 [GRANT](../../account-management/GRANT.md) の指示に従ってください。
 
 :::
 
@@ -22,11 +22,11 @@ ADMIN CANCEL REPAIR TABLE table_name[ PARTITION (p1,...)]
 
 Note
 >
-> このステートメントは、指定されたテーブルまたはパーティションのシャーディングレプリカを高優先度で修復しないことを示すだけです。これらのコピーは、デフォルトのスケジューリングによって修復され続けます。
+> このステートメントは、指定されたテーブルまたはパーティションのシャーディングレプリカを高優先度で修復しないことを示すだけです。これらのコピーは、デフォルトのスケジューリングによって引き続き修復されます。
 
 ## 例
 
-1. 高優先度の修復をキャンセル
+1. 高優先度修復のキャンセル
 
     ```sql
     ADMIN CANCEL REPAIR TABLE tbl PARTITION(p1);

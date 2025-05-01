@@ -4,7 +4,9 @@ displayed_sidebar: docs
 
 # dayofmonth
 
-日付から日部分を取得し、1 から 31 の範囲の値を返します。
+## Description
+
+日付の中の日の部分を取得し、1 から 31 の範囲の値を返します。
 
 `date` パラメータは DATE または DATETIME 型でなければなりません。
 

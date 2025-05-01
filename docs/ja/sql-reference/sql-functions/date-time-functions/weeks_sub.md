@@ -4,27 +4,29 @@ displayed_sidebar: docs
 
 # weeks_sub
 
-指定された週数を datetime または date 値から減算します。
+## 説明
 
-## Syntax
+指定された週数を日時または日付の値から減算します。
+
+## 構文
 
 ```Haskell
 DATETIME weeks_sub(DATETIME expr1, INT expr2);
 ```
 
-## Parameters
+## パラメータ
 
-- `expr1`: 元の日付です。`DATETIME` 型である必要があります。
+- `expr1`: 元の日付です。`DATETIME` 型でなければなりません。
 
-- `expr2`: 週の数です。`INT` 型である必要があります。
+- `expr2`: 週数です。`INT` 型でなければなりません。
 
-## Return value
+## 戻り値
 
 `DATETIME` 値を返します。
 
-日付が存在しない場合は `NULL` が返されます。
+日付が存在しない場合は `NULL` を返します。
 
-## Examples
+## 例
 
 ```Plain
 select weeks_sub('2022-12-22',2);

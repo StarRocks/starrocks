@@ -1,10 +1,10 @@
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-これらの3つのクライアントはこのチュートリアルでテストされていますが、1つだけ使用すれば大丈夫です。
+これらの3つのクライアントはこのチュートリアルでテストされています。1つだけ必要です。
 
-- mysql CLI: Docker 環境またはあなたのマシンから実行できます。
-- [DBeaver](https://dbeaver.io/download/) は、コミュニティ版と Pro 版があります。
+- mysql CLI: Docker環境またはあなたのマシンから実行できます。
+- [DBeaver](https://dbeaver.io/download/) はコミュニティバージョンとProバージョンがあります。
 - [MySQL Workbench](https://dev.mysql.com/downloads/workbench/)
 
 #### クライアントの設定
@@ -12,7 +12,7 @@ import TabItem from '@theme/TabItem';
 <Tabs groupId="client">
 <TabItem value="mysqlCLI" label="mysql CLI" default>
 
-mysql CLI を使用する最も簡単な方法は、StarRocks コンテナ `starrocks-fe` から実行することです。
+mysql CLIを使用する最も簡単な方法は、StarRocksコンテナ `starrocks-fe` から実行することです。
 
 ```bash
 docker compose exec starrocks-fe \
@@ -23,15 +23,15 @@ mysql -P 9030 -h 127.0.0.1 -u root --prompt="StarRocks > "
 すべての `docker compose` コマンドは、`docker-compose.yml` ファイルを含むディレクトリから実行する必要があります。
 :::
 
-mysql CLI をインストールしたい場合は、以下の **mysql client install** を展開してください。
+mysql CLIをインストールしたい場合は、以下の **mysql client install** を展開してください。
 
 <details>
 
 <summary>mysql client install</summary>
 
-- macOS: Homebrew を使用していて MySQL Server が不要な場合、`brew install mysql` を実行して CLI をインストールします。
-- Linux: `mysql` クライアントをリポジトリシステムで確認します。例えば、`yum install mariadb`。
-- Microsoft Windows: [MySQL Community Server](https://dev.mysql.com/downloads/mysql/) をインストールして提供されたクライアントを実行するか、WSL から `mysql` を実行します。
+- macOS: Homebrewを使用していてMySQL Serverが不要な場合は、`brew install mysql` を実行してCLIをインストールします。
+- Linux: `mysql` クライアントのためにリポジトリシステムを確認してください。例えば、`yum install mariadb`。
+- Microsoft Windows: [MySQL Community Server](https://dev.mysql.com/downloads/mysql/) をインストールし、提供されたクライアントを実行するか、WSLから `mysql` を実行します。
 
 </details>
 
@@ -41,7 +41,7 @@ mysql CLI をインストールしたい場合は、以下の **mysql client ins
 
 - [DBeaver](https://dbeaver.io/download/) をインストールし、接続を追加します。
 ![Add a connection](./DBeaver-1.png)
-- ポート、IP、ユーザー名を設定します。接続をテストし、テストが成功したら Finish をクリックします。
+- ポート、IP、ユーザー名を設定します。接続をテストし、テストが成功したらFinishをクリックします。
 ![Configure and test](./DBeaver-2.png)
 
 </TabItem>
@@ -50,7 +50,7 @@ mysql CLI をインストールしたい場合は、以下の **mysql client ins
 - [MySQL Workbench](https://dev.mysql.com/downloads/workbench/) をインストールし、接続を追加します。
 - ポート、IP、ユーザー名を設定し、接続をテストします。
 ![Connection settings](./Workbench-1.png)
-- Workbench は特定の MySQL バージョンをチェックするため、警告が表示されます。警告を無視し、プロンプトが表示されたら、Workbench が警告を表示しないように設定できます。
+- Workbenchは特定のMySQLバージョンをチェックするため、警告が表示されます。警告を無視し、プロンプトが表示されたら、Workbenchが警告を表示しないように設定できます。
 ![Ignore warning](./Workbench-2.png)
 </TabItem>
 

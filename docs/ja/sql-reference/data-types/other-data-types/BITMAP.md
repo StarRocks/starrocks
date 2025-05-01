@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 BITMAP は、count distinct を高速化するためによく使用されます。HyperLogLog (HLL) に似ていますが、count distinct においてより正確です。BITMAP は、より多くのメモリとディスクリソースを消費します。INT データの集計のみをサポートします。文字列データに bitmap を適用したい場合は、低カーディナリティの辞書を使用してデータをマッピングする必要があります。
 
-このトピックでは、BITMAP カラムを作成し、そのカラムのデータを集計するために bitmap 関数を使用する簡単な例を提供します。関数の詳細な定義やその他の Bitmap 関数については、「Bitmap functions」を参照してください。
+このトピックでは、BITMAP カラムを作成し、そのカラムのデータを集計するために bitmap 関数を使用する簡単な例を提供します。関数の詳細な定義や他の Bitmap 関数については、「Bitmap functions」を参照してください。
 
 ## テーブルを作成する
 
@@ -38,4 +38,4 @@ BITMAP は、count distinct を高速化するためによく使用されます�
 
 BITMAP カラムにデータを挿入する前に、まず to_bitmap() 関数を使用してデータを変換する必要があります。
 
-BITMAP の使用方法、たとえばテーブルに BITMAP データをロードする方法の詳細については、[bitmap](../../sql-functions/aggregate-functions/bitmap.md) を参照してください。
+BITMAP の使用方法、例えばテーブルに BITMAP データをロードする方法については、 [bitmap](../../sql-functions/aggregate-functions/bitmap.md) を参照してください。

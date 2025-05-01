@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # Apache Superset
 
-Apache Superset は、StarRocks の内部データと外部データの両方をクエリし、可視化することをサポートしています。
+Apache Superset は、StarRocks 内部データと外部データの両方のクエリと可視化をサポートしています。
 
 ## 前提条件
 
@@ -20,7 +20,7 @@ Apache Superset は、StarRocks の内部データと外部データの両方を
 
 ## 統合
 
-Apache Superset でデータベースを作成します。
+Apache Superset にデータベースを作成します。
 
 ![Apache Superset - 1](../../_assets/BI_superset_1.png)
 
@@ -35,11 +35,11 @@ Apache Superset でデータベースを作成します。
   starrocks://<User>:<Password>@<Host>:<Port>/<Catalog>.<Database>
   ```
 
-  URI のパラメータは次の通りです。
+  URI のパラメータは次のように説明されています。
 
-  - `User`: StarRocks クラスターにログインするためのユーザー名、例: `admin`
-  - `Password`: StarRocks クラスターにログインするためのパスワード
-  - `Host`: StarRocks クラスターの FE ホスト IP アドレス
-  - `Port`: StarRocks クラスターの FE クエリポート、例: `9030`
-  - `Catalog`: StarRocks クラスター内のターゲット catalog。内部および external catalog の両方がサポートされています。
-  - `Database`: StarRocks クラスター内のターゲットデータベース。内部および外部データベースの両方がサポートされています。
+  - `User`: StarRocks クラスターにログインするためのユーザー名、例: `admin`。
+  - `Password`: StarRocks クラスターにログインするためのパスワード。
+  - `Host`: StarRocks クラスターの FE ホスト IP アドレス。
+  - `Port`: StarRocks クラスターの FE クエリポート、例: `9030`。
+  - `Catalog`: StarRocks クラスター内の対象カタログ。内部カタログと外部カタログの両方がサポートされています。
+  - `Database`: StarRocks クラスター内の対象データベース。内部データベースと外部データベースの両方がサポートされています。

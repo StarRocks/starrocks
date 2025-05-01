@@ -4,23 +4,25 @@ displayed_sidebar: docs
 
 # ifnull
 
+## 説明
+
 `expr1` が NULL の場合、`expr2` を返します。`expr1` が NULL でない場合、`expr1` を返します。
 
-## Syntax
+## 構文
 
 ```Haskell
 ifnull(expr1,expr2);
 ```
 
-## Parameters
+## パラメータ
 
 `expr1` と `expr2` はデータ型が互換性がある必要があります。
 
-## Return value
+## 戻り値
 
-返り値は `expr1` と同じ型になります。
+戻り値は `expr1` と同じ型になります。
 
-## Examples
+## 例
 
 ```Plain Text
 mysql> select ifnull(2,4);

@@ -6,13 +6,13 @@ displayed_sidebar: docs
 
 :::note
 
-このビューは、StarRocks の利用可能な機能には適用されません。
+このビューは StarRocks の利用可能な機能には適用されません。
 
 :::
 
 `routines` には、すべてのストアドルーチン（ストアドプロシージャおよびストアドファンクション）が含まれています。
 
-`routine` で提供されるフィールドは次のとおりです:
+`routine` には以下のフィールドが提供されています:
 
 | **Field**            | **Description**                                              |
 | -------------------- | ------------------------------------------------------------ |
@@ -22,13 +22,13 @@ displayed_sidebar: docs
 | ROUTINE_NAME         | ルーチンの名前。                                             |
 | ROUTINE_TYPE         | ストアドプロシージャの場合は `PROCEDURE`、ストアドファンクションの場合は `FUNCTION`。 |
 | DTD_IDENTIFIER       | ルーチンがストアドファンクションの場合、戻り値のデータ型。ルーチンがストアドプロシージャの場合、この値は空です。 |
-| ROUTINE_BODY         | ルーチン定義に使用される言語。この値は常に `SQL` です。     |
+| ROUTINE_BODY         | ルーチン定義に使用される言語。この値は常に `SQL` です。      |
 | ROUTINE_DEFINITION   | ルーチンによって実行される SQL 文のテキスト。               |
 | EXTERNAL_NAME        | この値は常に `NULL` です。                                   |
 | EXTERNAL_LANGUAGE    | ストアドルーチンの言語。                                     |
 | PARAMETER_STYLE      | この値は常に `SQL` です。                                    |
 | IS_DETERMINISTIC     | ルーチンが `DETERMINISTIC` 特性で定義されているかどうかに応じて `YES` または `NO`。 |
-| SQL_DATA_ACCESS      | ルーチンのデータアクセス特性。この値は `CONTAINS SQL`、`NO SQL`、`READS SQL DATA`、または `MODIFIES SQL DATA` のいずれかです。 |
+| SQL_DATA_ACCESS      | ルーチンのデータアクセス特性。この値は `CONTAINS SQL`、`NO SQL`、`READS SQL DATA`、`MODIFIES SQL DATA` のいずれかです。 |
 | SQL_PATH             | この値は常に `NULL` です。                                   |
 | SECURITY_TYPE        | ルーチンの `SQL SECURITY` 特性。この値は `DEFINER` または `INVOKER` のいずれかです。 |
 | CREATED              | ルーチンが作成された日時。これは `DATETIME` 値です。         |

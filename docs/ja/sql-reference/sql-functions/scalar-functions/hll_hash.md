@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # hll_hash
 
+## 説明
+
 値を hll 型に変換します。通常、インポート時にソースデータの値を StarRocks テーブルの HLL 列型にマッピングするために使用されます。
 
 ## 構文

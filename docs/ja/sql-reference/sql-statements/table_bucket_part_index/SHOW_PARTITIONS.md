@@ -17,7 +17,7 @@ SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
 > NOTE
 >
 > この構文は StarRocks テーブル (`"ENGINE" = "OLAP"`) のみをサポートします。
-> バージョン 3.0 以降、この操作には指定されたテーブルに対する SELECT 権限が必要です。バージョン 2.5 以前では、この操作には指定されたテーブルに対する SELECT__PRIV 権限が必要です。
+> v3.0以降、この操作には指定されたテーブルに対する SELECT 権限が必要です。v2.5以前のバージョンでは、この操作には指定されたテーブルに対する SELECT__PRIV 権限が必要です。
 
 ## 戻りフィールドの説明
 
@@ -31,17 +31,17 @@ SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
 | ------------------------ | ------------------------------------------------------------ |
 | PartitionId              | パーティションのIDです。                                      |
 | PartitionName            | パーティションの名前です。                                    |
-| VisibleVersion           | 最後に成功したロードトランザクションのバージョン番号です。成功するたびにバージョン番号は1ずつ増加します。 |
-| VisibleVersionTime       | 最後に成功したロードトランザクションのタイムスタンプです。   |
+| VisibleVersion           | 最後に成功したロードトランザクションのバージョン番号です。バージョン番号は、成功したロードトランザクションごとに1ずつ増加します。 |
+| VisibleVersionTime       | 最後に成功したロードトランザクションのタイムスタンプです。    |
 | VisibleVersionHash       | 最後に成功したロードトランザクションのバージョン番号のハッシュ値です。 |
-| State                    | パーティションの状態です。固定値: `Normal`。                  |
+| State                    | パーティションのステータスです。固定値: `Normal`。            |
 | PartitionKey             | 1つ以上のパーティション列からなるパーティションキーです。     |
 | Range                    | パーティションの範囲で、右半開区間です。                      |
 | DistributionKey          | ハッシュバケッティングのバケットキーです。                    |
 | Buckets                  | パーティションのバケット数です。                              |
 | ReplicationNum           | パーティション内の各タブレットのレプリカ数です。              |
 | StorageMedium            | パーティション内のデータを保存する記憶媒体です。値 `HHD` はハードディスクドライブを示し、値 `SSD` はソリッドステートドライブを示します。 |
-| CooldownTime             | パーティション内のデータのクールダウン時間です。初期記憶媒体が SSD の場合、このパラメータで指定された時間後に記憶媒体は SSD から HDD に切り替わります。フォーマット: "yyyy-MM-dd HH:mm:ss"。 |
+| CooldownTime             | パーティション内のデータのクールダウン時間です。初期記憶媒体がSSDの場合、このパラメータで指定された時間後に記憶媒体がSSDからHDDに切り替わります。フォーマット: "yyyy-MM-dd HH:mm:ss"。 |
 | LastConsistencyCheckTime | 最後の整合性チェックの時間です。`NULL` は整合性チェックが行われなかったことを示します。 |
 | DataSize                 | パーティション内のデータサイズです。                          |
 | IsInMemory               | パーティション内のすべてのデータがメモリに保存されているかどうかです。 |
@@ -84,17 +84,17 @@ SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
 3. 指定されたデータベース `test` の指定されたテーブル `site_access` の指定されたパーティション `p1` の情報を表示します。
 
     ```sql
-    -- 通常のパーティション
+    -- Regular partition
     SHOW PARTITIONS FROM test.site_access WHERE PartitionName = "p1";
-    -- 一時パーティション
+    -- Temporary partition
     SHOW TEMPORARY PARTITIONS FROM test.site_access WHERE PartitionName = "p1";
     ```
 
 4. 指定されたデータベース `test` の指定されたテーブル `site_access` の最新のパーティション情報を表示します。
 
     ```sql
-    -- 通常のパーティション
+    -- Regular partition
     SHOW PARTITIONS FROM test.site_access ORDER BY PartitionId DESC LIMIT 1;
-    -- 一時パーティション
+    -- Temporary partition
     SHOW TEMPORARY PARTITIONS FROM test.site_access ORDER BY PartitionId DESC LIMIT 1;
     ```

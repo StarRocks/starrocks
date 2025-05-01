@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # array_distinct
 
+## 説明
+
 配列から重複する要素を削除します。
 
 ## 構文

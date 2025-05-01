@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 `views` は、すべてのユーザー定義ビューに関する情報を提供します。
 
-`views` には次のフィールドが含まれています:
+`views` には以下のフィールドが含まれます。
 
 | **Field**            | **Description**                                              |
 | -------------------- | ------------------------------------------------------------ |
@@ -15,7 +15,7 @@ displayed_sidebar: docs
 | TABLE_NAME           | ビューの名前。                                               |
 | VIEW_DEFINITION      | ビューの定義を提供する `SELECT` 文。                         |
 | CHECK_OPTION         | `CHECK_OPTION` 属性の値。この値は `NONE`、`CASCADE`、`LOCAL` のいずれかです。 |
-| IS_UPDATABLE         | ビューが更新可能かどうか。`UPDATE` や `DELETE`（および類似の操作）がビューに対して合法である場合、フラグは `YES`（真）に設定されます。それ以外の場合、フラグは `NO`（偽）に設定されます。ビューが更新不可能な場合、`UPDATE`、`DELETE`、`INSERT` などの文は違法であり、拒否されます。 |
+| IS_UPDATABLE         | ビューが更新可能かどうか。`UPDATE` や `DELETE`（および類似の操作）がビューに対して合法である場合、フラグは `YES`（true）に設定されます。それ以外の場合、フラグは `NO`（false）に設定されます。ビューが更新不可能な場合、`UPDATE`、`DELETE`、`INSERT` などの文は違法とされ、拒否されます。 |
 | DEFINER              | ビューを作成したユーザーのユーザー名。                       |
 | SECURITY_TYPE        | ビューの `SQL SECURITY` 特性。この値は `DEFINER` または `INVOKER` のいずれかです。 |
 | CHARACTER_SET_CLIENT |                                                              |

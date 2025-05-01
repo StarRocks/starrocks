@@ -4,27 +4,29 @@ displayed_sidebar: docs
 
 # catalog
 
-現在の catalog の名前を返します。catalog は StarRocks の内部 catalog か、外部データソースにマッピングされた external catalog である可能性があります。catalog についての詳細は、[Catalog overview](../../../data_source/catalog/catalog_overview.md) を参照してください。
+## 説明
+
+現在の catalog の名前を返します。catalog は StarRocks の内部 catalog または外部データソースにマッピングされた external catalog である可能性があります。catalog についての詳細は、 [Catalog overview](../../../data_source/catalog/catalog_overview.md) を参照してください。
 
 catalog が選択されていない場合、StarRocks の内部 catalog `default_catalog` が返されます。
 
-## Syntax
+## 構文
 
 ```Haskell
 catalog()
 ```
 
-## Parameters
+## パラメータ
 
 この関数はパラメータを必要としません。
 
-## Return value
+## 戻り値
 
 現在の catalog の名前を文字列として返します。
 
-## Examples
+## 例
 
-Example 1: 現在の catalog は StarRocks の内部 catalog `default_catalog` です。
+例 1: 現在の catalog は StarRocks の内部 catalog `default_catalog` です。
 
 ```plaintext
 select catalog();
@@ -36,7 +38,7 @@ select catalog();
 1 row in set (0.01 sec)
 ```
 
-Example 2: 現在の catalog は external catalog `hudi_catalog` です。
+例 2: 現在の catalog は external catalog `hudi_catalog` です。
 
 ```sql
 -- 外部 catalog に切り替えます。
@@ -51,6 +53,6 @@ select catalog();
 +--------------+
 ```
 
-## See also
+## 関連項目
 
 [SET CATALOG](../../sql-statements/Catalog/SET_CATALOG.md): 目的の catalog に切り替えます。

@@ -4,17 +4,19 @@ displayed_sidebar: docs
 
 # curtime,current_time
 
+## Description
+
 現在の時刻を取得し、TIME 型の値を返します。
 
-この関数は、異なるタイムゾーンで異なる結果を返すことがあります。詳細については、[タイムゾーンの設定](../../../administration/management/timezone.md)を参照してください。
+この関数は、異なるタイムゾーンで異なる結果を返すことがあります。詳細については、 [Configure a time zone](../../../administration/management/timezone.md) を参照してください。
 
-## 構文
+## Syntax
 
 ```Haskell
 TIME CURTIME()
 ```
 
-## 例
+## Examples
 
 ```Plain Text
 MySQL > select current_time();
@@ -25,6 +27,6 @@ MySQL > select current_time();
 +----------------+
 ```
 
-## キーワード
+## keyword
 
 CURTIME,CURRENT_TIME

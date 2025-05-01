@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 ## 説明
 
-external catalog を削除します。internal catalog は削除できません。StarRocks クラスターには `default_catalog` という名前の internal catalog が 1 つだけあります。
+external catalog を削除します。internal catalog は削除できません。StarRocks クラスターには `default_catalog` という名前の internal catalog が1つだけあります。
 
 ## 構文
 
@@ -14,7 +14,7 @@ external catalog を削除します。internal catalog は削除できません�
 DROP CATALOG [IF EXISTS] <catalog_name>
 ```
 
-## パラメーター
+## パラメータ
 
 `catalog_name`: external catalog の名前。
 

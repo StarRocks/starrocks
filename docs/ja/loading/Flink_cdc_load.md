@@ -6,9 +6,9 @@ displayed_sidebar: docs
 
 import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
-StarRocks は、MySQL から StarRocks へのデータをリアルタイムで同期する複数の方法をサポートしており、大量データの低遅延リアルタイム分析を実現します。
+StarRocks は、MySQL から StarRocks へのデータをリアルタイムで同期するための複数の方法をサポートしており、大量データの低遅延リアルタイム分析を実現します。
 
-このトピックでは、Apache Flink® を通じて MySQL から StarRocks へデータをリアルタイム（数秒以内）で同期する方法を説明します。
+このトピックでは、Apache Flink® を通じて MySQL から StarRocks へのデータをリアルタイム（数秒以内）で同期する方法について説明します。
 
 <InsertPrivNote />
 
@@ -16,7 +16,7 @@ StarRocks は、MySQL から StarRocks へのデータをリアルタイムで�
 
 :::tip
 
-Flink CDC は MySQL から Flink への同期に使用されます。このトピックでは、バージョン 3.0 未満の Flink CDC を使用しているため、SMT を使用してテーブルスキーマを同期します。ただし、Flink CDC 3.0 を使用する場合、StarRocks へのテーブルスキーマの同期に SMT を使用する必要はありません。Flink CDC 3.0 は、MySQL データベース全体のスキーマ、シャード化されたデータベースとテーブルのスキーマを同期することもでき、スキーマ変更の同期もサポートしています。詳細な使用方法については、[Streaming ELT from MySQL to StarRocks](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/get-started/quickstart/mysql-to-starrocks) を参照してください。
+Flink CDC は MySQL から Flink への同期に使用されます。このトピックでは、Flink CDC のバージョンが 3.0 未満のものを使用しているため、SMT を使用してテーブルスキーマを同期します。ただし、Flink CDC 3.0 を使用する場合、StarRocks へのテーブルスキーマの同期に SMT を使用する必要はありません。Flink CDC 3.0 は、MySQL データベース全体のスキーマ、シャード化されたデータベースとテーブルのスキーマを同期することもでき、スキーマ変更の同期もサポートしています。詳細な使用方法については、[Streaming ELT from MySQL to StarRocks](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/get-started/quickstart/mysql-to-starrocks) を参照してください。
 
 :::
 
@@ -24,7 +24,7 @@ Flink CDC は MySQL から Flink への同期に使用されます。このト�
 
 ![img](../_assets/4.9.2.png)
 
-MySQL から Flink を通じて StarRocks へのリアルタイム同期は、データベース & テーブルスキーマの同期とデータの同期の 2 段階で実装されます。まず、SMT が MySQL データベース & テーブルスキーマを StarRocks のテーブル作成文に変換します。その後、Flink クラスターが Flink ジョブを実行して、MySQL のフルデータと増分データを StarRocks に同期します。
+MySQL から Flink を通じて StarRocks へのリアルタイム同期は、データベース & テーブルスキーマの同期とデータの同期の 2 段階で実装されます。まず、SMT が MySQL のデータベース & テーブルスキーマを StarRocks のテーブル作成文に変換します。次に、Flink クラスターが Flink ジョブを実行して、MySQL のフルデータと増分データを StarRocks に同期します。
 
 :::info
 
@@ -36,27 +36,27 @@ MySQL から Flink を通じて StarRocks へのリアルタイム同期は、�
 
 1. データベース & テーブルスキーマの同期。
 
-   SMT は、同期対象の MySQL データベース & テーブルのスキーマを読み取り、StarRocks に宛先データベース & テーブルを作成するための SQL ファイルを生成します。この操作は、SMT の設定ファイルに基づいて MySQL と StarRocks の情報を使用して行われます。
+   SMT は、同期対象の MySQL データベース & テーブルのスキーマを読み取り、StarRocks にデスティネーションデータベース & テーブルを作成するための SQL ファイルを生成します。この操作は、SMT の設定ファイルに基づいて MySQL と StarRocks の情報を使用して行われます。
 
 2. データの同期。
 
-   a. Flink SQL クライアントがデータロード文 `INSERT INTO SELECT` を実行し、Flink クラスターに 1 つ以上の Flink ジョブを送信します。
+   a. Flink SQL クライアントがデータロード文 `INSERT INTO SELECT` を実行して、1 つ以上の Flink ジョブを Flink クラスターに送信します。
 
-   b. Flink クラスターが Flink ジョブを実行してデータを取得します。Flink CDC コネクタは、最初にソースデータベースから完全な履歴データを読み取り、シームレスに増分読み取りに切り替えて、データを flink-connector-starrocks に送信します。
+   b. Flink クラスターが Flink ジョブを実行してデータを取得します。Flink CDC コネクタは、最初にソースデータベースからフルの履歴データを読み取り、その後シームレスに増分読み取りに切り替え、データを flink-connector-starrocks に送信します。
 
    c. flink-connector-starrocks はデータをミニバッチで蓄積し、各バッチのデータを StarRocks に同期します。
 
     :::info
 
-    MySQL のデータ操作言語 (DML) 操作のみが StarRocks に同期されます。データ定義言語 (DDL) 操作は同期されません。
+    MySQL のデータ操作言語 (DML) 操作のみが StarRocks に同期できます。データ定義言語 (DDL) 操作は同期できません。
 
     :::
 
 ## シナリオ
 
-MySQL からのリアルタイム同期は、データが常に変化する幅広いユースケースに対応しています。実際のユースケースとして「商品の売上ランキングのリアルタイム表示」を例にとります。
+MySQL からのリアルタイム同期は、データが常に変更される幅広いユースケースに対応しています。実際のユースケース「商品の売上ランキングのリアルタイム化」を例にとります。
 
-Flink は MySQL の元の注文テーブルに基づいて商品の売上ランキングをリアルタイムで計算し、そのランキングを StarRocks の主キーテーブルにリアルタイムで同期します。ユーザーは StarRocks にビジュアライゼーションツールを接続して、ランキングをリアルタイムで確認し、オンデマンドで運用上の洞察を得ることができます。
+Flink は、MySQL の元の注文テーブルに基づいて商品の売上ランキングをリアルタイムで計算し、そのランキングを StarRocks の主キーテーブルにリアルタイムで同期します。ユーザーは StarRocks に接続された可視化ツールを使用して、リアルタイムでランキングを確認し、オンデマンドで運用の洞察を得ることができます。
 
 ## 準備
 
@@ -72,13 +72,13 @@ MySQL からデータを同期するには、以下のツールをインスト�
         # Java のバージョンを表示します。
         java -version
         
-        # 以下の出力が返された場合、Java 8 がインストールされています。
+        # 次の出力が返された場合、Java 8 がインストールされています。
         java version "1.8.0_301"
         Java(TM) SE Runtime Environment (build 1.8.0_301-b09)
         Java HotSpot(TM) 64-Bit Server VM (build 25.301-b09, mixed mode)
     ```
 
-   b. [Flink インストールパッケージ](https://flink.apache.org/downloads.html) をダウンロードして解凍します。Flink 1.14 以降を使用することをお勧めします。最小許可バージョンは Flink 1.11 です。このトピックでは Flink 1.14.5 を使用します。
+   b. [Flink インストールパッケージ](https://flink.apache.org/downloads.html) をダウンロードして解凍します。Flink 1.14 以降を使用することをお勧めします。最小許容バージョンは Flink 1.11 です。このトピックでは Flink 1.14.5 を使用します。
 
    ```Bash
       # Flink をダウンロードします。
@@ -95,27 +95,27 @@ MySQL からデータを同期するには、以下のツールをインスト�
       # Flink クラスターを起動します。
       ./bin/start-cluster.sh
       
-      # 以下の出力が返された場合、Flink クラスターが起動されています。
+      # 次の出力が返された場合、Flink クラスターが起動しています。
       Starting cluster.
       Starting standalonesession daemon on host.
       Starting taskexecutor daemon on host.
     ```
 
-2. [Flink CDC コネクタ](https://github.com/ververica/flink-cdc-connectors/releases) をダウンロードします。このトピックではデータソースとして MySQL を使用しているため、`flink-sql-connector-mysql-cdc-x.x.x.jar` をダウンロードします。コネクタのバージョンは [Flink](https://github.com/ververica/flink-cdc-connectors/releases) バージョンと一致している必要があります。このトピックでは Flink 1.14.5 を使用し、`flink-sql-connector-mysql-cdc-2.2.0.jar` をダウンロードできます。
+2. [Flink CDC コネクタ](https://github.com/ververica/flink-cdc-connectors/releases) をダウンロードします。このトピックでは MySQL をデータソースとして使用するため、`flink-sql-connector-mysql-cdc-x.x.x.jar` をダウンロードします。コネクタのバージョンは [Flink](https://github.com/ververica/flink-cdc-connectors/releases) のバージョンと一致している必要があります。このトピックでは Flink 1.14.5 を使用し、`flink-sql-connector-mysql-cdc-2.2.0.jar` をダウンロードできます。
 
     ```Bash
     wget https://repo1.maven.org/maven2/com/ververica/flink-sql-connector-mysql-cdc/2.1.1/flink-sql-connector-mysql-cdc-2.2.0.jar
     ```
 
-3. [flink-connector-starrocks](https://search.maven.org/artifact/com.starrocks/flink-connector-starrocks) をダウンロードします。バージョンは Flink バージョンと一致している必要があります。
+3. [flink-connector-starrocks](https://search.maven.org/artifact/com.starrocks/flink-connector-starrocks) をダウンロードします。バージョンは Flink のバージョンと一致している必要があります。
 
     > flink-connector-starrocks パッケージ `x.x.x_flink-y.yy _ z.zz.jar` には 3 つのバージョン番号が含まれています:
     >
     > - `x.x.x` は flink-connector-starrocks のバージョン番号です。
-    > - `y.yy` はサポートされている Flink バージョンです。
-    > - `z.zz` は Flink がサポートする Scala バージョンです。Flink バージョンが 1.14.x 以前の場合、Scala バージョンを持つパッケージをダウンロードする必要があります。
+    > - `y.yy` はサポートされている Flink のバージョンです。
+    > - `z.zz` は Flink がサポートする Scala のバージョンです。Flink のバージョンが 1.14.x 以前の場合、Scala のバージョンを持つパッケージをダウンロードする必要があります。
     >
-    > このトピックでは Flink 1.14.5 と Scala 2.11 を使用しています。そのため、以下のパッケージをダウンロードできます: `1.2.3_flink-14_2.11.jar`。
+    > このトピックでは Flink 1.14.5 と Scala 2.11 を使用します。したがって、次のパッケージをダウンロードできます: `1.2.3_flink-14_2.11.jar`。
 
 4. Flink CDC コネクタ (`flink-sql-connector-mysql-cdc-2.2.0.jar`) と flink-connector-starrocks (`1.2.3_flink-1.14_2.11.jar`) の JAR パッケージを Flink の `lib` ディレクトリに移動します。
 
@@ -128,7 +128,7 @@ MySQL からデータを同期するには、以下のツールをインスト�
     > $ ./bin/start-cluster.sh
     > ```
 
-5. [SMT パッケージ](https://www.starrocks.io/download/community) をダウンロードして解凍し、`flink-1.14.5` ディレクトリに配置します。StarRocks は Linux x86 と macOS ARM64 用の SMT パッケージを提供しています。オペレーティングシステムと CPU に基づいて選択できます。
+5. [SMT パッケージ](https://www.starrocks.io/download/community) をダウンロードして解凍し、`flink-1.14.5` ディレクトリに配置します。StarRocks は Linux x86 および macOS ARM64 用の SMT パッケージを提供しています。オペレーティングシステムと CPU に基づいて選択できます。
 
     ```Bash
     # Linux x86 用
@@ -139,9 +139,9 @@ MySQL からデータを同期するには、以下のツールをインスト�
 
 ### MySQL バイナリログを有効にする
 
-MySQL からリアルタイムでデータを同期するには、システムが MySQL バイナリログ (binlog) からデータを読み取り、データを解析して StarRocks に同期する必要があります。MySQL バイナリログが有効になっていることを確認してください。
+MySQL からデータをリアルタイムで同期するには、システムが MySQL バイナリログ (binlog) からデータを読み取り、データを解析してから StarRocks に同期する必要があります。MySQL バイナリログが有効になっていることを確認してください。
 
-1. MySQL バイナリログを有効にするために、MySQL 設定ファイル `my.cnf`（デフォルトパス: `/etc/my.cnf`）を編集します。
+1. MySQL バイナリログを有効にするために、MySQL 設定ファイル `my.cnf` (デフォルトパス: `/etc/my.cnf`) を編集します。
 
     ```Bash
     # MySQL Binlog を有効にします。
@@ -151,9 +151,9 @@ MySQL からリアルタイムでデータを同期するには、システム�
     # server_id を設定します。
     # MySQL 5.7.3 以降で server_id が設定されていない場合、MySQL サービスを使用できません。
     server_id = 1
-    # Binlog フォーマットを ROW に設定します。
+    # Binlog の形式を ROW に設定します。
     binlog_format = ROW
-    # Binlog ファイルのベース名。各 Binlog ファイルを識別するための識別子が追加されます。
+    # Binlog ファイルの基本名。各 Binlog ファイルを識別するための識別子が追加されます。
     log_bin_basename =/var/lib/mysql/mysql-bin
     # Binlog ファイルのインデックスファイル。すべての Binlog ファイルのディレクトリを管理します。
     log_bin_index =/var/lib/mysql/mysql-bin.index
@@ -162,7 +162,7 @@ MySQL からリアルタイムでデータを同期するには、システム�
 2. 修正された設定ファイルを有効にするために、次のいずれかのコマンドを実行して MySQL を再起動します。
 
     ```Bash
-    # service を使用して MySQL を再起動します。
+    # サービスを使用して MySQL を再起動します。
     service mysqld restart
     # mysqld スクリプトを使用して MySQL を再起動します。
     /etc/init.d/mysqld restart
@@ -206,9 +206,9 @@ MySQL からリアルタイムでデータを同期するには、システム�
     output_dir = ./result
 
     [table-rule.1]
-    # プロパティを設定するためのデータベースのパターン
+    # プロパティを設定するためのデータベースをマッチングするパターン
     database = ^demo.*$
-    # プロパティを設定するためのテーブルのパターン
+    # プロパティを設定するためのテーブルをマッチングするパターン
     table = ^.*$
 
     ############################################
@@ -225,7 +225,7 @@ MySQL からリアルタイムでデータを同期するには、システム�
     flink.starrocks.sink.buffer-flush.interval-ms=15000
     ```
 
-    - `[db]`: ソースデータベースにアクセスするための情報。
+    - `[db]`: ソースデータベースにアクセスするために使用される情報。
        - `type`: ソースデータベースのタイプ。このトピックでは、ソースデータベースは `mysql` です。
        - `host`: MySQL サーバーの IP アドレス。
        - `port`: MySQL データベースのポート番号。デフォルトは `3306`。
@@ -237,7 +237,7 @@ MySQL からリアルタイムでデータを同期するには、システム�
        - `Database`, `table`: MySQL のデータベース & テーブルの名前。正規表現がサポートされています。
        - `flink.starrocks.*`: flink-connector-starrocks の設定情報。詳細な設定と情報については、[flink-connector-starrocks](../loading/Flink-connector-starrocks.md) を参照してください。
 
-       > 異なるテーブルに対して異なる flink-connector-starrocks 設定を使用する必要がある場合。たとえば、一部のテーブルが頻繁に更新され、データロードを加速する必要がある場合は、[異なるテーブルに対して異なる flink-connector-starrocks 設定を使用する](#use-different-flink-connector-starrocks-configurations-for-different-tables) を参照してください。MySQL シャーディングから取得した複数のテーブルを同じ StarRocks テーブルにロードする必要がある場合は、[MySQL シャーディング後の複数のテーブルを StarRocks の 1 つのテーブルに同期する](#synchronize-multiple-tables-after-mysql-sharding-to-one-table-in-starrocks) を参照してください。
+       > 異なるテーブルに対して異なる flink-connector-starrocks の設定を使用する必要がある場合。例えば、いくつかのテーブルが頻繁に更新され、データロードを加速する必要がある場合は、[異なるテーブルに対して異なる flink-connector-starrocks の設定を使用する](#use-different-flink-connector-starrocks-configurations-for-different-tables) を参照してください。MySQL シャーディングから取得した複数のテーブルを同じ StarRocks テーブルにロードする必要がある場合は、[MySQL シャーディング後の複数のテーブルを StarRocks の 1 つのテーブルに同期する](#synchronize-multiple-tables-after-mysql-sharding-to-one-table-in-starrocks) を参照してください。
 
     - `[other]`: その他の情報
        - `be_num`: StarRocks クラスター内の BEs の数（このパラメータは、後続の StarRocks テーブル作成で合理的なタブレット数を設定するために使用されます）。
@@ -261,13 +261,13 @@ MySQL からリアルタイムでデータを同期するには、システム�
 
     > **Note**
     >
-    > ビジネスニーズに基づいてテーブル作成文を変更し、主キーテーブルを使用しないテーブルを作成することもできます。ただし、ソース MySQL データベースの DELETE 操作は、非主キーテーブルに同期されません。このようなテーブルを作成する際は注意が必要です。
+    > ビジネスニーズに基づいてテーブル作成文を変更し、主キーテーブルを使用しないテーブルを作成することもできます。ただし、ソース MySQL データベースの DELETE 操作は非主キーテーブルに同期できません。このようなテーブルを作成する際は注意が必要です。
 
     ```Bash
     mysql -h <fe_host> -P <fe_query_port> -u user2 -pxxxxxx < starrocks-create.all.sql
     ```
 
-    データが宛先 StarRocks テーブルに書き込まれる前に Flink によって処理される必要がある場合、ソーステーブルと宛先テーブルのスキーマは異なります。この場合、テーブル作成文を変更する必要があります。この例では、宛先テーブルには `product_id` と `product_name` 列、および商品の売上ランキングのみが必要です。次のテーブル作成文を使用できます。
+    データがデスティネーション StarRocks テーブルに書き込まれる前に Flink によって処理される必要がある場合、ソースとデスティネーションのテーブル間でテーブルスキーマが異なります。この場合、テーブル作成文を変更する必要があります。この例では、デスティネーションテーブルには `product_id` と `product_name` の列と商品の売上ランキングのみが必要です。次のテーブル作成文を使用できます。
 
     ```Bash
     CREATE DATABASE IF NOT EXISTS `demo`;
@@ -286,7 +286,7 @@ MySQL からリアルタイムでデータを同期するには、システム�
 
     > **NOTICE**
     >
-    > バージョン 2.5.7 以降、StarRocks はテーブルを作成する際やパーティションを追加する際にバケット数 (BUCKETS) を自動的に設定できます。バケット数を手動で設定する必要はありません。詳細情報については、[バケット数の設定](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets) を参照してください。
+    > v2.5.7 以降、StarRocks はテーブルを作成する際やパーティションを追加する際にバケット数 (BUCKETS) を自動的に設定できます。手動でバケット数を設定する必要はありません。詳細情報については、[バケット数を設定する](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets) を参照してください。
 
 ## データの同期
 
@@ -298,12 +298,12 @@ Flink クラスターを実行し、Flink ジョブを送信して MySQL から 
     ./bin/sql-client.sh -f flink-create.all.sql
     ```
 
-    この SQL ファイルは、動的テーブル `source table` と `sink table`、クエリ文 `INSERT INTO SELECT` を定義し、コネクタ、ソースデータベース、および宛先データベースを指定します。このファイルが実行されると、Flink ジョブが Flink クラスターに送信され、データ同期が開始されます。
+    この SQL ファイルは、動的テーブル `source table` と `sink table`、クエリ文 `INSERT INTO SELECT` を定義し、コネクタ、ソースデータベース、デスティネーションデータベースを指定します。このファイルが実行されると、Flink ジョブが Flink クラスターに送信され、データ同期が開始されます。
 
     > **Note**
     >
     > - Flink クラスターが起動していることを確認してください。`flink/bin/start-cluster.sh` を実行して Flink クラスターを起動できます。
-    > - Flink バージョンが 1.13 より前の場合、SQL ファイル `flink-create.all.sql` を直接実行できない場合があります。このファイル内の SQL 文を SQL クライアントのコマンドラインインターフェース (CLI) で 1 つずつ実行する必要があります。また、`\` 文字をエスケープする必要があります。
+    > - Flink のバージョンが 1.13 より前の場合、SQL ファイル `flink-create.all.sql` を直接実行できない場合があります。このファイル内の SQL 文を SQL クライアントのコマンドラインインターフェース (CLI) で 1 つずつ実行する必要があります。また、`\` 文字をエスケープする必要があります。
     >
     > ```Bash
     > 'sink.properties.column_separator' = '\\x01'
@@ -312,7 +312,7 @@ Flink クラスターを実行し、Flink ジョブを送信して MySQL から 
 
     **同期中のデータ処理**:
 
-    同期中にデータを処理する必要がある場合、たとえばデータに対して GROUP BY や JOIN を実行する場合、`flink-create.all.sql` ファイルを変更できます。次の例では、COUNT (*) と GROUP BY を実行して商品の売上ランキングをリアルタイムで計算します。
+    同期中にデータを処理する必要がある場合、例えばデータに対して GROUP BY や JOIN を実行する場合、`flink-create.all.sql` ファイルを修正できます。次の例では、COUNT (*) と GROUP BY を実行して商品の売上ランキングをリアルタイムで計算します。
 
     ```Bash
         $ ./bin/sql-client.sh -f flink-create.all.sql
@@ -364,7 +364,7 @@ Flink クラスターを実行し、Flink ジョブを送信して MySQL から 
         );
         [INFO] Execute statement succeed.
 
-        -- 商品の売上ランキングをリアルタイムで実装し、`sink table` は `source table` のデータ変更を反映するように動的に更新されます。
+        -- 商品の売上ランキングをリアルタイムで実装し、`sink table` が `source table` のデータ変更を反映するように動的に更新されます。
         Flink SQL> 
         INSERT INTO `default_catalog`.`demo`.`orders_sink` select product_id,product_name, count(*) as cnt from `default_catalog`.`demo`.`orders_src` group by product_id,product_name;
         [INFO] Submitting SQL update statement to the cluster...
@@ -372,7 +372,7 @@ Flink クラスターを実行し、Flink ジョブを送信して MySQL から 
         Job ID: 5ae005c4b3425d8bb13fe660260a35da
     ```
 
-    データの一部のみを同期する必要がある場合、たとえば支払い時間が 2021 年 12 月 21 日以降のデータのみを同期する場合、`INSERT INTO SELECT` の `WHERE` 句を使用してフィルター条件を設定できます。たとえば、`WHERE pay_dt > '2021-12-21'` です。この条件を満たさないデータは StarRocks に同期されません。
+    データの一部のみを同期する必要がある場合、例えば支払い時間が 2021 年 12 月 21 日以降のデータのみを同期する場合、`INSERT INTO SELECT` 内で `WHERE` 句を使用してフィルタ条件を設定できます。例えば `WHERE pay_dt > '2021-12-21'` のようにします。この条件を満たさないデータは StarRocks に同期されません。
 
     次の結果が返された場合、Flink ジョブがフルデータと増分データの同期のために送信されています。
 
@@ -399,19 +399,19 @@ Flink クラスターを実行し、Flink ジョブを送信して MySQL から 
 
     > **Note**
     >
-    > ジョブが異常な場合、Flink WebUI を使用するか、Flink 1.14.5 の `/log` ディレクトリ内のログファイルを確認してトラブルシューティングを行うことができます。
+    > ジョブが異常な場合、Flink WebUI を使用してトラブルシューティングを行うか、Flink 1.14.5 の `/log` ディレクトリ内のログファイルを確認してトラブルシューティングを行うことができます。
 
 ## FAQ
 
-### 異なるテーブルに対して異なる flink-connector-starrocks 設定を使用する
+### 異なるテーブルに対して異なる flink-connector-starrocks の設定を使用する
 
-データソース内の一部のテーブルが頻繁に更新され、flink-connector-starrocks のロード速度を加速したい場合、SMT 設定ファイル `config_prod.conf` 内の各テーブルに対して個別の flink-connector-starrocks 設定を設定する必要があります。
+データソース内の一部のテーブルが頻繁に更新され、flink-connector-starrocks のロード速度を加速したい場合、SMT 設定ファイル `config_prod.conf` に各テーブルに対して個別の flink-connector-starrocks 設定を設定する必要があります。
 
 ```Bash
 [table-rule.1]
-# プロパティを設定するためのデータベースのパターン
+# プロパティを設定するためのデータベースをマッチングするパターン
 database = ^order.*$
-# プロパティを設定するためのテーブルのパターン
+# プロパティを設定するためのテーブルをマッチングするパターン
 table = ^.*$
 
 ############################################
@@ -426,9 +426,9 @@ flink.starrocks.sink.properties.format=csv
 flink.starrocks.sink.properties.column_separator=\x01
 flink.starrocks.sink.properties.row_delimiter=\x02
 flink.starrocks.sink.buffer-flush.interval-ms=15000[table-rule.2]
-# プロパティを設定するためのデータベースのパターン
+# プロパティを設定するためのデータベースをマッチングするパターン
 database = ^order2.*$
-# プロパティを設定するためのテーブルのパターン
+# プロパティを設定するためのテーブルをマッチングするパターン
 table = ^.*$
 
 ############################################
@@ -447,17 +447,17 @@ flink.starrocks.sink.buffer-flush.interval-ms=10000
 
 ### MySQL シャーディング後の複数のテーブルを StarRocks の 1 つのテーブルに同期する
 
-シャーディングが行われた後、1 つの MySQL テーブルのデータが複数のテーブルに分割されることがあります。すべてのテーブルは同じスキーマを持っています。この場合、`[table-rule]` を設定してこれらのテーブルを 1 つの StarRocks テーブルに同期できます。たとえば、MySQL には `edu_db_1` と `edu_db_2` の 2 つのデータベースがあり、それぞれに `course_1` と `course_2` の 2 つのテーブルがあり、すべてのテーブルのスキーマは同じです。次の `[table-rule]` 設定を使用して、すべてのテーブルを 1 つの StarRocks テーブルに同期できます。
+シャーディングが行われた後、1 つの MySQL テーブルのデータが複数のテーブルに分割される場合や、複数のデータベースに分散される場合があります。すべてのテーブルは同じスキーマを持っています。この場合、`[table-rule]` を設定してこれらのテーブルを 1 つの StarRocks テーブルに同期できます。例えば、MySQL には `edu_db_1` と `edu_db_2` の 2 つのデータベースがあり、それぞれに `course_1` と `course_2` の 2 つのテーブルがあり、すべてのテーブルのスキーマは同じです。次の `[table-rule]` 設定を使用して、すべてのテーブルを 1 つの StarRocks テーブルに同期できます。
 
 > **Note**
 >
-> StarRocks テーブルの名前はデフォルトで `course__auto_shard` になります。異なる名前を使用する必要がある場合は、SQL ファイル `starrocks-create.all.sql` と `flink-create.all.sql` で変更できます。
+> StarRocks テーブルの名前はデフォルトで `course__auto_shard` になります。異なる名前を使用する必要がある場合は、SQL ファイル `starrocks-create.all.sql` および `flink-create.all.sql` で変更できます。
 
 ```Bash
 [table-rule.1]
-# プロパティを設定するためのデータベースのパターン
+# プロパティを設定するためのデータベースをマッチングするパターン
 database = ^edu_db_[0-9]*$
-# プロパティを設定するためのテーブルのパターン
+# プロパティを設定するためのテーブルをマッチングするパターン
 table = ^course_[0-9]*$
 
 ############################################
@@ -476,7 +476,7 @@ flink.starrocks.sink.buffer-flush.interval-ms = 5000
 
 ### JSON 形式でデータをインポートする
 
-前述の例では、データは CSV 形式でインポートされます。適切な区切り文字を選択できない場合、`[table-rule]` 内の `flink.starrocks.*` の次のパラメータを置き換える必要があります。
+前述の例では、データは CSV 形式でインポートされています。適切な区切り文字を選択できない場合、`[table-rule]` 内の `flink.starrocks.*` の次のパラメータを置き換える必要があります。
 
 ```Plain
 flink.starrocks.sink.properties.format=csv
@@ -501,11 +501,11 @@ flink.starrocks.sink.properties.strip_outer_array=true
 
 > **Note**
 >
-> Flink はバージョン 1.13 以降で STATEMENT SET 構文をサポートしています。
+> Flink は 1.13 以降で STATEMENT SET 構文をサポートしています。
 
 1. `result/flink-create.all.sql` ファイルを開きます。
 
-2. ファイル内の SQL 文を変更します。すべての INSERT INTO 文をファイルの末尾に移動します。最初の INSERT INTO 文の前に `EXECUTE STATEMENT SET BEGIN` を配置し、最後の INSERT INTO 文の後に `END;` を配置します。
+2. ファイル内の SQL 文を修正します。すべての INSERT INTO 文をファイルの末尾に移動します。最初の INSERT INTO 文の前に `EXECUTE STATEMENT SET BEGIN` を配置し、最後の INSERT INTO 文の後に `END;` を配置します。
 
 > **Note**
 >

@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # str2date
 
+## 説明
+
 指定されたフォーマットに従って、文字列を DATE 値に変換します。変換に失敗した場合は、NULL が返されます。
 
 フォーマットは [date_format](./date_format.md) で説明されているものと一致している必要があります。

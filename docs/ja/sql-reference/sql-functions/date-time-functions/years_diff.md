@@ -4,7 +4,9 @@ displayed_sidebar: docs
 
 # years_diff
 
-2 つの日付式の年差 (`expr1` − `expr2`) を返します。年単位で正確です。
+## Description
+
+2 つの日付式（`expr1` − `expr2`）の年の差を返します。年単位で正確です。
 
 ## Syntax
 

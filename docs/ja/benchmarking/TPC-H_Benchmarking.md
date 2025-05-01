@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # TPC-H ベンチマーク
 
-TPC-H は、トランザクション処理性能評議会 (TPC) によって開発された意思決定支援ベンチマークです。ビジネス指向のアドホッククエリと同時データ修正のスイートで構成されています。TPC-H は、実際の生産環境に基づいたモデルを構築し、販売システムのデータウェアハウスをシミュレートするために使用できます。このテストでは、データサイズが 1 GB から 3 TB の 8 つのテーブルを使用します。合計 22 のクエリがテストされ、主な性能指標は各クエリの応答時間であり、クエリが送信されてから結果が返されるまでの時間です。
+TPC-H は、Transaction Processing Performance Council (TPC) によって開発された意思決定支援ベンチマークです。ビジネス指向のアドホッククエリと同時データ変更のスイートで構成されています。TPC-H は、実際の生産環境に基づいてモデルを構築し、販売システムのデータウェアハウスをシミュレートするために使用できます。このテストでは、データサイズが 1 GB から 3 TB の 8 つのテーブルを使用します。合計 22 のクエリがテストされ、主なパフォーマンス指標は各クエリの応答時間であり、クエリが送信されてから結果が返されるまでの時間です。
 
 ## 1. テスト結論
 
@@ -12,9 +12,9 @@ TPC-H 100G スケールデータセットで合計 22 のクエリを使用し�
 
 ![TPCH 100G results](../_assets/tpch.png)
 
-StarRocks はローカルストレージと Hive テーブルクエリの 2 つの方法をテストしました。StarRocks Hive テーブルと Trino は同じデータをクエリします。データは ORC 形式で保存され、zlib 形式で圧縮されています。
+StarRocks は、ローカルストレージと Hive テーブルクエリの 2 つの方法をテストしました。StarRocks Hive テーブルと Trino は同じデータをクエリします。データは ORC 形式で保存され、zlib 形式で圧縮されています。
 
-StarRocks がネイティブストレージからデータをクエリするレイテンシーは 21 秒、StarRocks が Hive 外部テーブルをクエリするレイテンシーは 92 秒、Trino が Hive 外部テーブルをクエリするレイテンシーは 187 秒でした。
+StarRocks がそのネイティブストレージからデータをクエリするのにかかる時間は 21 秒、StarRocks が Hive 外部テーブルをクエリするのにかかる時間は 92 秒、Trino が Hive 外部テーブルをクエリするのにかかった時間は 187 秒でした。
 
 ## 2. テスト準備
 
@@ -29,7 +29,7 @@ StarRocks がネイティブストレージからデータをクエリするレ�
 
 ### 2.2 ソフトウェア環境
 
-StarRocks と Trino は同じ構成のマシンにデプロイされています。StarRocks には 1 FE と 3 BEs がデプロイされています。Trino には 1 コーディネーターと 3 ワーカーがデプロイされています。
+StarRocks と Trino は同じ構成のマシンにデプロイされています。StarRocks には 1 FE と 3 BEs がデプロイされ、Trino には 1 コーディネーターと 3 ワーカーがデプロイされています。
 
 - カーネルバージョン: Linux 3.10.0-1127.13.1.el7.x86_64
 
@@ -56,7 +56,7 @@ StarRocks と Trino は同じ構成のマシンにデプロイされています
 
 :::note
 クエリ結果の単位は ms です。低い方が良いです。
-すべてのクエリは 1 回ウォームアップされ、その後 3 回実行して平均値を結果として取ります。
+すべてのクエリは 1 回ウォームアップされ、その後 3 回実行して平均値を結果として取得します。
 :::
 
 | クエリ | StarRocks-native-3.0 | StarRocks-3.0-Hive external | Trino-419 |
@@ -103,7 +103,7 @@ sh bin/gen_data/gen-tpch.sh 100 data_100
 
 #### 4.1.2 テーブル構造の作成
 
-設定ファイル `conf/starrocks.conf` を修正し、クラスタのアドレス (ホストとポート) を指定してから、テーブル作成操作を行います。
+設定ファイル `conf/starrocks.conf` を修正し、クラスタのアドレス（ホストとポート）を指定してから、テーブル作成操作を実行します。
 
 ```SQL
 sh bin/create_db_table.sh ddl_100
@@ -121,7 +121,7 @@ sh bin/stream_load.sh data_100
 sh bin/benchmark.sh
 ```
 
-### 4.2 StarRocks での Hive 外部テーブルのクエリ
+### 4.2 StarRocks で Hive 外部テーブルをクエリ
 
 #### 4.2.1 テーブル構造の作成
 
@@ -131,9 +131,9 @@ http://localhost:3000/docs/benchmarking/TPC-H_Benchmarking/
 
 #### 4.2.2 データのインポート
 
-ステップ 4.1.1 で生成された TPC-H CSV オリジナルデータを HDFS の指定パス (この記事では `/user/tmp/csv/` を使用) にアップロードし、Hive に外部テーブルを作成します。詳細なテーブル作成文は [5.4](#54-hive-external-table-creation-csv-storage-format) を参照してください。この Hive 外部テーブルのストレージ形式は CSV で、ストレージパスは `/user/tmp/csv/` です。CSV オリジナルデータがアップロードされるパスです。
+ステップ 4.1.1 で生成された TPC-H CSV オリジナルデータを HDFS の指定パス（この記事では `/user/tmp/csv/` を使用）にアップロードし、Hive に外部テーブルを作成します。詳細なテーブル作成文は [5.4](#54-hive-external-table-creation-csv-storage-format) を参照してください。この Hive 外部テーブルのストレージ形式は CSV で、ストレージパスは `/user/tmp/csv/` です。CSV オリジナルデータがアップロードされるパスです。
 
-CSV 形式の外部テーブルのデータを ORC 形式の外部テーブルに `INSERT INTO` を使用してインポートし、データを ORC のストレージ形式と zlib の圧縮形式で取得します。インポートコマンドは以下の通りです。
+CSV 形式の外部テーブルのデータを ORC 形式の外部テーブルに `INSERT INTO` を使用してインポートし、データが ORC のストレージ形式と zlib の圧縮形式で取得されるようにします。インポートコマンドは以下の通りです。
 
 ```SQL
 use tpch_hive_csv;
@@ -818,7 +818,7 @@ order by
   cntrycode;
 ```
 
-### 5.2 StarRocks ネイティブテーブルの作成
+### 5.2 StarRocks ネイティブテーブル作成
 
 ```SQL
 #Create table customer
@@ -989,7 +989,7 @@ group by
     l_suppkey;
 ```
 
-### 5.3 Hive 外部テーブルの作成 (ORC ストレージ形式)
+### 5.3 Hive 外部テーブル作成 (ORC ストレージ形式)
 
 ```SQL
 create database tpch_hive_orc;
@@ -1169,7 +1169,7 @@ LOCATION
   'hdfs://emr-header-1.cluster-49146:9000/user/hive/warehouse/tpch_hive_orc.db/supplier';
 ```
 
-### 5.4 Hive 外部テーブルの作成 (CSV ストレージ形式)
+### 5.4 Hive 外部テーブル作成 (CSV ストレージ形式)
 
 ```SQL
 create database tpch_hive_csv;

@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # percentile_union
 
+## 説明
+
 PERCENTILE データを集計します。
 
 ## 構文
@@ -22,7 +24,7 @@ PERCENTILE 値を返します。
 
 ## 例
 
-例 1: マテリアライズドビューで PERCENTILE データを使用する。
+例 1: マテリアライズドビューで PERCENTILE データを使用します。
 
 テーブルを作成します。
 
@@ -46,7 +48,7 @@ from sales_records
 group by store_id;
 ```
 
-例 2: PERCENTILE データをロードする。
+例 2: PERCENTILE データをロードします。
 
 PERCENTILE 列 `sale_amt_per` を含む集計テーブルを作成します。
 

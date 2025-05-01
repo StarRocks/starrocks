@@ -6,17 +6,17 @@ displayed_sidebar: docs
 
 このトピックでは、INSERT INTO FILES を使用して StarRocks からリモートストレージにデータをアンロードする方法について説明します。
 
-バージョン 3.2 以降、StarRocks はテーブル関数 FILES() を使用してリモートストレージに書き込み可能なファイルを定義することをサポートしています。その後、FILES() を INSERT 文と組み合わせて、StarRocks からリモートストレージにデータをアンロードできます。
+バージョン 3.2 以降、StarRocks はテーブル関数 FILES() を使用してリモートストレージに書き込み可能なファイルを定義することをサポートしています。その後、FILES() と INSERT 文を組み合わせて、StarRocks からリモートストレージにデータをアンロードできます。
 
-StarRocks がサポートする他のデータエクスポート方法と比較して、INSERT INTO FILES を使用したデータのアンロードは、より統一された使いやすいインターフェースを提供します。データをロードする際に使用したのと同じ構文を使用して、リモートストレージに直接データをアンロードできます。さらに、この方法は、指定された列の値を抽出することによって、異なるストレージパスにデータファイルを保存することをサポートしており、エクスポートされたデータをパーティション化されたレイアウトで管理することができます。
+StarRocks がサポートする他のデータエクスポート方法と比較して、INSERT INTO FILES を使用したデータのアンロードは、より統一された使いやすいインターフェースを提供します。リモートストレージからデータをロードする際に使用したのと同じ構文を使用して、データを直接リモートストレージにアンロードできます。さらに、この方法では、指定された列の値を抽出することで、異なるストレージパスにデータファイルを保存することができ、エクスポートされたデータをパーティション化されたレイアウトで管理することができます。
 
-> **NOTE**
+> **注意**
 >
-> INSERT INTO FILES を使用したデータのアンロードは、ローカルファイルシステムへの直接エクスポートをサポートしていません。ただし、NFS を使用してローカルファイルにデータをエクスポートすることができます。詳細は [Unload to local files using NFS](#unload-to-local-files-using-nfs) を参照してください。
+> INSERT INTO FILES を使用したデータのアンロードは、ローカルファイルシステムへの直接エクスポートをサポートしていません。ただし、NFS を使用してローカルファイルにデータをエクスポートすることは可能です。[NFS を使用したローカルファイルへのアンロード](#unload-to-local-files-using-nfs) を参照してください。
 
 ## 準備
 
-次の例では、データベース `unload` とテーブル `sales_records` を作成し、以下のチュートリアルで使用できるデータオブジェクトとして使用します。ご自身のデータを使用することもできます。
+次の例では、データオブジェクトとして使用できるデータベース `unload` とテーブル `sales_records` を作成します。ご自身のデータを使用することもできます。
 
 ```SQL
 CREATE DATABASE unload;
@@ -42,30 +42,30 @@ VALUES
     (220317006,"Bob",2,"2022-03-17 12:00:00",9515.88);
 ```
 
-テーブル `sales_records` には、各トランザクションのトランザクション ID `record_id`、販売員 `seller`、店舗 ID `store_id`、時間 `sales_time`、販売額 `sales_amt` が含まれています。これは `sales_time` に基づいて日次でパーティション化されています。
+テーブル `sales_records` には、各トランザクションのトランザクション ID `record_id`、販売員 `seller`、店舗 ID `store_id`、時間 `sales_time`、販売額 `sales_amt` が含まれています。`sales_time` に基づいて日単位でパーティション化されています。
 
-また、書き込みアクセス権を持つリモートストレージシステムを準備する必要があります。以下の例では、次のリモートストレージにデータをエクスポートします。
+また、書き込みアクセス権を持つリモートストレージシステムを準備する必要があります。次の例では、以下のリモートストレージにデータをエクスポートします。
 
-- シンプル認証方式が有効な HDFS クラスター。
+- シンプルな認証方法が有効な HDFS クラスター。
 - IAM ユーザー資格情報を使用した AWS S3 バケット。
 
-FILES() がサポートするリモートストレージシステムと資格情報方法の詳細については、[SQL reference - FILES()](../sql-reference/sql-functions/table-functions/files.md) を参照してください。
+FILES() がサポートするリモートストレージシステムと資格情報方法について詳しくは、[SQL リファレンス - FILES()](../sql-reference/sql-functions/table-functions/files.md) を参照してください。
 
 ## データのアンロード
 
-INSERT INTO FILES は、単一ファイルまたは複数ファイルへのデータのアンロードをサポートしています。これらのデータファイルを別々のストレージパスに指定することで、さらにパーティション化することができます。
+INSERT INTO FILES は、単一ファイルまたは複数のファイルにデータをアンロードすることをサポートしています。これらのデータファイルを別々のストレージパスに指定することで、さらにパーティション化することができます。
 
 INSERT INTO FILES を使用してデータをアンロードする際には、プロパティ `compression` を使用して圧縮アルゴリズムを手動で設定する必要があります。FILES がサポートするデータ圧縮アルゴリズムの詳細については、[unload_data_param](../sql-reference/sql-functions/table-functions/files.md#unload_data_param) を参照してください。
 
-### 複数ファイルへのデータのアンロード
+### 複数のファイルにデータをアンロード
 
-デフォルトでは、INSERT INTO FILES はデータを複数のデータファイルにアンロードし、各ファイルのサイズは 1 GB です。プロパティ `target_max_file_size` を使用してファイルサイズを設定できます（単位: バイト）。
+デフォルトでは、INSERT INTO FILES はデータを複数のデータファイルにアンロードし、各ファイルのサイズは 1 GB です。ファイルサイズはプロパティ `target_max_file_size` (単位: バイト) を使用して設定できます。
 
-次の例では、`sales_records` のすべてのデータ行を `data1` というプレフィックスの付いた複数の Parquet ファイルとしてアンロードします。各ファイルのサイズは 1 KB です。
+次の例では、`sales_records` のすべてのデータ行を `data1` というプレフィックスが付いた複数の Parquet ファイルとしてアンロードします。各ファイルのサイズは 1 KB です。
 
 :::note
 
-ここで `target_max_file_size` を 1 KB に設定しているのは、小さなデータセットで複数ファイルにアンロードすることを示すためです。本番環境では、この値を数百 MB から数 GB の範囲内に設定することを強くお勧めします。
+ここで `target_max_file_size` を 1 KB に設定するのは、小さなデータセットで複数のファイルにアンロードすることを示すためです。実運用環境では、この値を数百 MB から数 GB の範囲内に設定することを強くお勧めします。
 
 :::
 
@@ -101,7 +101,7 @@ FILES(
 SELECT * FROM sales_records;
 ```
 
-### 異なるパスの下に複数ファイルへのデータのアンロード
+### 異なるパスに複数のファイルとしてデータをアンロード
 
 プロパティ `partition_by` を使用して、指定された列の値を抽出することで、異なるストレージパスにデータファイルをパーティション化することもできます。
 
@@ -139,11 +139,11 @@ FILES(
 SELECT * FROM sales_records;
 ```
 
-### 単一ファイルへのデータのアンロード
+### 単一ファイルにデータをアンロード
 
-データを単一のデータファイルにアンロードするには、プロパティ `single` を `true` に指定する必要があります。
+単一のデータファイルにデータをアンロードするには、プロパティ `single` を `true` に指定する必要があります。
 
-次の例では、`sales_records` のすべてのデータ行を `data2` というプレフィックスの付いた単一の Parquet ファイルとしてアンロードします。
+次の例では、`sales_records` のすべてのデータ行を `data2` というプレフィックスが付いた単一の Parquet ファイルとしてアンロードします。
 
 - **S3 へのアンロード**:
 
@@ -208,7 +208,7 @@ SELECT * FROM sales_records;
 例:
 
 ```SQL
--- CSV ファイルへのデータのアンロード。
+-- CSV ファイルにデータをアンロードします。
 INSERT INTO FILES(
   'path' = 'file:///home/ubuntu/csvfile/', 
   'format' = 'csv', 
@@ -217,7 +217,7 @@ INSERT INTO FILES(
 )
 SELECT * FROM sales_records;
 
--- Parquet ファイルへのデータのアンロード。
+-- Parquet ファイルにデータをアンロードします。
 INSERT INTO FILES(
   'path' = 'file:///home/ubuntu/parquetfile/',
    'format' = 'parquet'
@@ -227,5 +227,5 @@ SELECT * FROM sales_records;
 
 ## 参照
 
-- INSERT の使用方法の詳細については、[SQL reference - INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md) を参照してください。
-- FILES() の使用方法の詳細については、[SQL reference - FILES()](../sql-reference/sql-functions/table-functions/files.md) を参照してください。
+- INSERT の使用方法についての詳細は、[SQL リファレンス - INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md) を参照してください。
+- FILES() の使用方法についての詳細は、[SQL リファレンス - FILES()](../sql-reference/sql-functions/table-functions/files.md) を参照してください。

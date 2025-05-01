@@ -4,35 +4,37 @@ displayed_sidebar: docs
 
 # time_slice
 
-指定された時間の粒度に基づいて、指定された時間を時間間隔の始まりまたは終わりに変換します。
+## 説明
+
+指定された時間の粒度に基づいて、与えられた時間を時間間隔の始まりまたは終わりに変換します。
 
 この関数は v2.3 からサポートされています。
 
-v2.5 では、指定された時間を時間間隔の終わりに変換することがサポートされています。
+v2.5 では、与えられた時間を時間間隔の終わりに変換することがサポートされています。
 
-## Syntax
+## 構文
 
 ```Haskell
 DATETIME time_slice(DATETIME dt, INTERVAL N type[, boundary])
 ```
 
-## Parameters
+## パラメータ
 
 - `dt`: 変換する時間、DATETIME 型。
 - `INTERVAL N type`: 時間の粒度。例えば、`interval 5 second`。
   - `N` は時間間隔の長さで、INT 値でなければなりません。
-  - `type` は単位で、YEAR、QUARTER、MONTH、WEEK、DAY、HOUR、MINUTE、SECOND、MILLISECOND (3.1.7 以降)、MICROSECOND (3.1.7 以降) のいずれかです。
-- `boundary`: オプションです。時間間隔の始まり (`FLOOR`) または終わり (`CEIL`) を返すかどうかを指定するために使用します。有効な値は FLOOR、CEIL です。このパラメータが指定されていない場合、デフォルトは `FLOOR` です。このパラメータは v2.5 からサポートされています。
+  - `type` は単位で、YEAR, QUARTER, MONTH, WEEK, DAY, HOUR, MINUTE, SECOND, MILLISECOND (3.1.7 以降), MICROSECOND (3.1.7 以降) が使用できます。
+- `boundary`: オプションです。時間間隔の始まり (`FLOOR`) または終わり (`CEIL`) を返すかどうかを指定するために使用されます。有効な値は FLOOR, CEIL です。このパラメータが指定されていない場合、デフォルトは `FLOOR` です。このパラメータは v2.5 からサポートされています。
 
-## Return value
+## 戻り値
 
 DATETIME 型の値を返します。
 
-## Usage notes
+## 使用上の注意
 
 時間間隔は西暦 `0001-01-01 00:00:00` から始まります。
 
-## Examples
+## 例
 
 以下の例は `test_all_type_select` テーブルに基づいて提供されています。
 
@@ -50,7 +52,7 @@ select * from test_all_type_select order by id_int;
 5 rows in set (0.06 sec)
 ```
 
-例 1: 指定された DATETIME 値を `boundary` パラメータを指定せずに 5 秒の時間間隔の始まりに変換します。
+例 1: `boundary` パラメータを指定せずに、与えられた DATETIME 値を 5 秒間隔の始まりに変換します。
 
 ```Plaintext
 select time_slice(id_datetime, interval 5 second)
@@ -68,7 +70,7 @@ order by id_int;
 5 rows in set (0.16 sec)
 ```
 
-例 2: 指定された DATETIME 値を `boundary` を `FLOOR` に設定して 5 日間の時間間隔の始まりに変換します。
+例 2: `boundary` を `FLOOR` に設定して、与えられた DATETIME 値を 5 日間隔の始まりに変換します。
 
 ```Plaintext
 select time_slice(id_datetime, interval 5 day, FLOOR)
@@ -86,7 +88,7 @@ order by id_int;
 5 rows in set (0.15 sec)
 ```
 
-例 3: 指定された DATETIME 値を 5 日間の時間間隔の終わりに変換します。
+例 3: 与えられた DATETIME 値を 5 日間隔の終わりに変換します。
 
 ```Plaintext
 select time_slice(id_datetime, interval 5 day, CEIL)
@@ -103,7 +105,7 @@ order by id_int;
 +-----------------------------------------------+
 ```
 
-例 4: 指定された DATETIME 値を 1 ミリ秒の時間間隔の終わりに変換します。
+例 4: 与えられた DATETIME 値を 1 ミリ秒間隔の終わりに変換します。
 
 ```Plaintext
 select id_datetime, time_slice(id_datetime, interval 1 millisecond, CEIL)
@@ -120,7 +122,7 @@ order by id_int;
 +---------------------+-------------------------------------------------------+
 ```
 
-例 5: 指定された DATETIME 値を 1 マイクロ秒の時間間隔の終わりに変換します。
+例 5: 与えられた DATETIME 値を 1 マイクロ秒間隔の終わりに変換します。
 
 ```Plaintext
 select id_datetime, time_slice(id_datetime, interval 1 microsecond, CEIL)

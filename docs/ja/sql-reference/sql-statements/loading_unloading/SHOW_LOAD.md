@@ -6,9 +6,9 @@ displayed_sidebar: docs
 
 ## 説明
 
-データベース内のすべてのロードジョブまたは指定されたロードジョブの情報を表示します。このステートメントは、Broker Load、INSERT、および SPARK_LOAD を使用して作成されたロードジョブのみを表示できます。`curl` コマンドを使用してロードジョブ情報を表示することもできます。v3.1以降、`information_schema` データベースの `loads` テーブルから Broker Load または Insert ジョブの結果をクエリするために SELECT ステートメントを使用することをお勧めします。詳細については、[Loading](../../../loading/Loading_intro.md)を参照してください。
+データベース内のすべてのロードジョブまたは特定のロードジョブの情報を表示します。このステートメントは、Broker Load、INSERT、および SPARK_LOAD を使用して作成されたロードジョブのみを表示できます。`curl` コマンドを使用してロードジョブ情報を表示することもできます。v3.1以降、`information_schema` データベースの `loads` テーブルから Broker Load または Insert ジョブの結果をクエリするために SELECT ステートメントを使用することをお勧めします。詳細については、[Loading](../../../loading/Loading_intro.md) を参照してください。
 
-前述のロード方法に加えて、StarRocks は Stream Load および Routine Load を使用してデータをロードすることをサポートしています。Stream Load は同期操作であり、Stream Load ジョブの情報を直接返します。Routine Load は非同期操作であり、[SHOW ROUTINE LOAD](routine_load/SHOW_ROUTINE_LOAD.md) ステートメントを使用して Routine Load ジョブの情報を表示できます。
+前述のロード方法に加えて、StarRocks は Stream Load および Routine Load を使用したデータロードをサポートしています。Stream Load は同期操作であり、Stream Load ジョブの情報を直接返します。Routine Load は非同期操作であり、[SHOW ROUTINE LOAD](routine_load/SHOW_ROUTINE_LOAD.md) ステートメントを使用して Routine Load ジョブの情報を表示できます。
 
 ## 構文
 
@@ -22,22 +22,22 @@ SHOW LOAD [ FROM db_name ]
 [ LIMIT { [offset, ] limit | limit OFFSET offset } ]
 ```
 
-> **Note**
+> **注意**
 >
-> ステートメントに `\G` オプションを追加することで、通常の横方向のテーブル形式ではなく、縦方向に出力を表示できます（例: `SHOW LOAD WHERE LABEL = "label1"\G;`）。詳細については、[Example 1](#examples)を参照してください。
+> ステートメントに `\G` オプションを追加することで、通常の横方向のテーブル形式ではなく、縦方向に出力を表示できます（例: `SHOW LOAD WHERE LABEL = "label1"\G;`）。詳細については、[Example 1](#examples) を参照してください。
 
 ## パラメータ
 
 | **パラメータ**                     | **必須** | **説明**                                              |
 | --------------------------------- | ------------ | ------------------------------------------------------------ |
-| db_name                           | No           | データベース名。このパラメータが指定されていない場合、デフォルトで現在のデータベースが使用されます。 |
-| LABEL = "label_name"              | No           | ロードジョブのラベル。                                     |
-| LABEL LIKE "label_matcher"        | No           | このパラメータが指定されている場合、ラベルに `label_matcher` を含むロードジョブの情報が返されます。 |
-| AND                               | No           | <ul><li>WHERE 句でフィルタ条件を1つだけ指定する場合、このキーワードを指定しないでください。例: `WHERE STATE = "PENDING"`。</li><li>WHERE 句で2つまたは3つのフィルタ条件を指定する場合、このキーワードを指定する必要があります。例: `WHERE LABEL = "label_name" AND STATE = "PENDING"`。</li></ul>|
-| STATE                             | No           | ロードジョブの状態。状態はロード方法に応じて異なります。<ul><li>Broker Load<ul><li>`PENDING`: ロードジョブが作成されました。</li><li>`QUEUEING`: ロードジョブがスケジュール待ちのキューにあります。</li><li>`LOADING`: ロードジョブが実行中です。</li><li>`PREPARED`: トランザクションがコミットされました。</li><li>`FINISHED`: ロードジョブが成功しました。</li><li>`CANCELLED`: ロードジョブが失敗しました。</li></ul></li><li>Spark Load<ul><li>`PENDING`: StarRocks クラスターが ETL に関連する設定を準備し、Apache Spark™ クラスターに ETL ジョブを送信します。</li><li>`ETL`: Spark クラスターが ETL ジョブを実行し、対応する HDFS クラスターにデータを書き込みます。</li><li>`LOADING`: HDFS クラスターのデータが StarRocks クラスターにロードされており、ロードジョブが実行中であることを意味します。</li><li>`PREPARED`: トランザクションがコミットされました。</li><li>`FINISHED`: ロードジョブが成功しました。</li><li>`CANCELLED`: ロードジョブが失敗しました。</li></ul></li><li>INSERT<ul><li>`FINISHED`: ロードジョブが成功しました。</li><li>`CANCELLED`: ロードジョブが失敗しました。</li></ul></li></ul> `STATE` パラメータが指定されていない場合、デフォルトで全ての状態のロードジョブの情報が返されます。`STATE` パラメータが指定されている場合、指定された状態のロードジョブの情報のみが返されます。例えば、`STATE = "PENDING"` は `PENDING` 状態のロードジョブの情報を返します。 |
-| ORDER BY field_name [ASC \| DESC] | No           | このパラメータが指定されている場合、フィールドに基づいて昇順または降順で出力がソートされます。サポートされているフィールドは次のとおりです: `JobId`, `Label`, `State`, `Progress`, `Type`, `EtlInfo`, `TaskInfo`, `ErrorMsg`, `CreateTime`, `EtlStartTime`, `EtlFinishTime`, `LoadStartTime`, `LoadFinishTime`, `URL`, および `JobDetails`。<ul><li>出力を昇順でソートするには、`ORDER BY field_name ASC` を指定します。</li><li>出力を降順でソートするには、`ORDER BY field_name DESC` を指定します。</li></ul>フィールドとソート順を指定しない場合、デフォルトで `JobId` の昇順で出力がソートされます。 |
-| LIMIT limit                       | No           | 表示されるロードジョブの数。このパラメータが指定されていない場合、フィルタ条件に一致するすべてのロードジョブの情報が表示されます。このパラメータが指定されている場合、例えば `LIMIT 10` の場合、フィルタ条件に一致する10個のロードジョブの情報のみが返されます。 |
-| OFFSET offset                     | No           | `offset` パラメータはスキップされるロードジョブの数を定義します。例えば、`OFFSET 5` は最初の5つのロードジョブをスキップし、残りを返します。`offset` パラメータの値はデフォルトで `0` です。 |
+| db_name                           | いいえ           | データベース名。このパラメータが指定されていない場合、デフォルトで現在のデータベースが使用されます。 |
+| LABEL = "label_name"              | いいえ           | ロードジョブのラベル。                                     |
+| LABEL LIKE "label_matcher"        | いいえ           | このパラメータが指定されている場合、ラベルに `label_matcher` を含むロードジョブの情報が返されます。 |
+| AND                               | いいえ           | <ul><li>WHERE句で1つのフィルター条件のみを指定する場合、このキーワードを指定しないでください。例: `WHERE STATE = "PENDING"`。</li><li>WHERE句で2つまたは3つのフィルター条件を指定する場合、このキーワードを指定する必要があります。例: `WHERE LABEL = "label_name" AND STATE = "PENDING"`。</li></ul>|
+| STATE                             | いいえ           | ロードジョブの状態。状態はロード方法に基づいて異なります。<ul><li>Broker Load<ul><li>`PENDING`: ロードジョブが作成されました。</li><li>`QUEUEING`: ロードジョブがスケジュール待ちのキューにあります。</li><li>`LOADING`: ロードジョブが実行中です。</li><li>`PREPARED`: トランザクションがコミットされました。</li><li>`FINISHED`: ロードジョブが成功しました。</li><li>`CANCELLED`: ロードジョブが失敗しました。</li></ul></li><li>Spark Load<ul><li>`PENDING`: StarRocks クラスターが ETL に関連する設定を準備し、Apache Spark™ クラスターに ETL ジョブを送信します。</li><li>`ETL`: Spark クラスターが ETL ジョブを実行し、対応する HDFS クラスターにデータを書き込みます。</li><li>`LOADING`: HDFS クラスターのデータが StarRocks クラスターにロードされており、ロードジョブが実行中です。</li><li>`PREPARED`: トランザクションがコミットされました。</li><li>`FINISHED`: ロードジョブが成功しました。</li><li>`CANCELLED`: ロードジョブが失敗しました。</li></ul></li><li>INSERT<ul><li>`FINISHED`: ロードジョブが成功しました。</li><li>`CANCELLED`: ロードジョブが失敗しました。</li></ul></li></ul> `STATE` パラメータが指定されていない場合、すべての状態のロードジョブの情報がデフォルトで返されます。`STATE` パラメータが指定されている場合、指定された状態のロードジョブの情報のみが返されます。例えば、`STATE = "PENDING"` は `PENDING` 状態のロードジョブの情報を返します。 |
+| ORDER BY field_name [ASC \| DESC] | いいえ           | このパラメータが指定されている場合、出力はフィールドに基づいて昇順または降順にソートされます。サポートされているフィールドは次のとおりです: `JobId`, `Label`, `State`, `Progress`, `Type`, `EtlInfo`, `TaskInfo`, `ErrorMsg`, `CreateTime`, `EtlStartTime`, `EtlFinishTime`, `LoadStartTime`, `LoadFinishTime`, `URL`, および `JobDetails`。<ul><li>出力を昇順にソートするには、`ORDER BY field_name ASC` を指定します。</li><li>出力を降順にソートするには、`ORDER BY field_name DESC` を指定します。</li></ul>フィールドとソート順を指定しない場合、出力はデフォルトで `JobId` の昇順にソートされます。 |
+| LIMIT limit                       | いいえ           | 表示が許可されるロードジョブの数。このパラメータが指定されていない場合、フィルター条件に一致するすべてのロードジョブの情報が表示されます。このパラメータが指定されている場合、例えば `LIMIT 10` の場合、フィルター条件に一致する10件のロードジョブの情報のみが返されます。 |
+| OFFSET offset                     | いいえ           | `offset` パラメータはスキップされるロードジョブの数を定義します。例えば、`OFFSET 5` は最初の5件のロードジョブをスキップし、残りを返します。`offset` パラメータのデフォルト値は `0` です。 |
 
 ## 出力
 
@@ -47,38 +47,38 @@ SHOW LOAD [ FROM db_name ]
 +-------+-------+-------+----------+------+---------+----------+----------+------------+--------------+---------------+---------------+----------------+-----+------------+
 ```
 
-このステートメントの出力は、ロード方法に応じて異なります。
+このステートメントの出力は、ロード方法に基づいて異なります。
 
 | **フィールド**      | **Broker Load**                                              | **Spark Load**                                               | **INSERT**                                                   |
 | -------------- | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
 | JobId          | StarRocks が StarRocks クラスター内のロードジョブを識別するために割り当てた一意の ID。 | Spark Load ジョブでは、Broker Load ジョブと同じ意味を持ちます。 | INSERT ジョブでは、Broker Load ジョブと同じ意味を持ちます。 |
 | Label          | ロードジョブのラベル。ロードジョブのラベルはデータベース内で一意ですが、異なるデータベース間で重複することがあります。 | Spark Load ジョブでは、Broker Load ジョブと同じ意味を持ちます。 | INSERT ジョブでは、Broker Load ジョブと同じ意味を持ちます。 |
-| State          | ロードジョブの状態。<ul><li>`PENDING`: ロードジョブが作成されました。</li><li>`QUEUEING`: ロードジョブがスケジュール待ちのキューにあります。</li><li>`LOADING`: ロードジョブが実行中です。</li><li>`PREPARED`: トランザクションがコミットされました。</li><li>`FINISHED`: ロードジョブが成功しました。</li><li>`CANCELLED`: ロードジョブが失敗しました。</li></ul> | ロードジョブの状態。<ul><li>`PENDING`: StarRocks クラスターが ETL に関連する設定を準備し、Spark クラスターに ETL ジョブを送信します。</li><li>`ETL`: Spark クラスターが ETL ジョブを実行し、対応する HDFS クラスターにデータを書き込みます。</li><li>`LOADING`: HDFS クラスターのデータが StarRocks クラスターにロードされており、ロードジョブが実行中であることを意味します。</li><li>`PREPARED`: トランザクションがコミットされました。</li><li>`FINISHED`: ロードジョブが成功しました。</li><li>`CANCELLED`: ロードジョブが失敗しました。</li></ul> | ロードジョブの状態。<ul><li>`FINISHED`: ロードジョブが成功しました。</li><li>`CANCELLED`: ロードジョブが失敗しました。</li></ul> |
-| Progress       | ロードジョブのステージ。Broker Load ジョブは `LOAD` ステージのみを持ち、このステージの進捗を 0% から 100% で表します。ロードジョブが `LOAD` ステージに入ると、`State` パラメータには `LOADING` が返されます。Broker Load ジョブには `ETL` ステージはありません。`ETL` パラメータは Spark Load ジョブにのみ有効です。<br />**Note**<ul><li>`LOAD` ステージの進捗を計算する式: データロードを完了した StarRocks テーブルの数 / データをロードする予定の StarRocks テーブルの数 * 100%。</li><li>すべてのデータが StarRocks にロードされると、`LOAD` パラメータには `99%` が返されます。その後、ロードされたデータが StarRocks で有効になります。データが有効になると、`LOAD` パラメータには `100%` が返されます。</li><li>`LOAD` ステージの進捗は線形ではありません。したがって、データロードが進行中であっても、`LOAD` パラメータの値が一定期間変化しない場合があります。</li></ul> | ロードジョブのステージ。Spark Load ジョブには 2 つのステージがあります:<ul><li>`ETL`: `ETL` ステージの進捗を 0% から 100% で表します。</li><li>`LOAD`: `Load` ステージの進捗を 0% から 100% で表します。</li></ul>ロードジョブが `ETL` ステージに入ると、`State` パラメータには `ETL` が返されます。ロードジョブが `LOAD` ステージに移行すると、`State` パラメータには `LOADING` が返されます。<br />**Note** は Broker Load と同じです。 | ロードジョブのステージ。INSERT ジョブは `LOAD` ステージのみを持ち、このステージの進捗を 0% から 100% で表します。ロードジョブが `LOAD` ステージに入ると、`State` パラメータには `LOADING` が返されます。INSERT ジョブには `ETL` ステージはありません。`ETL` パラメータは Spark Load ジョブにのみ有効です。<br />**Note** は Broker Load と同じです。 |
-| Type           | ロードジョブの方法。このパラメータの値はデフォルトで `BROKER` です。 | ロードジョブの方法。このパラメータの値はデフォルトで `SPARK` です。 | ロードジョブの方法。このパラメータの値はデフォルトで `INSERT` です。 |
-| Priority       | ロードジョブの優先度。有効な値: LOWEST, LOW, NORMAL, HIGH, および HIGHEST。 | - | - |
-| EtlInfo        | ETL に関連するメトリクス。<ul><li>`unselected.rows`: WHERE 句によってフィルタリングされた行数。</li><li>`dpp.abnorm.ALL`: データ品質の問題によりフィルタリングされた行数。これは、ソーステーブルと StarRocks テーブルの間のデータ型や列数の不一致を指します。</li><li>`dpp.norm.ALL`: StarRocks クラスターにロードされた行数。</li></ul>これらのメトリクスの合計が生データの総行数です。次の式を使用して、不適格データの割合が `max-filter-ratio` パラメータの値を超えているかどうかを計算できます: `dpp.abnorm.ALL`/(`unselected.rows` + `dpp.abnorm.ALL` + `dpp.norm.ALL`)。 | Spark Load ジョブでは、Broker Load ジョブと同じ意味を持ちます。 | ETL に関連するメトリクス。INSERT ジョブには `ETL` ステージがありません。したがって、`NULL` が返されます。 |
-| TaskInfo       | ロードジョブを作成する際に指定されたパラメータ。<ul><li>`resource`: このパラメータは Spark Load ジョブにのみ有効です。</li><li>`timeout`: ロードジョブが実行を許可される時間。単位: 秒。</li><li>`max-filter-ratio`: データ品質の問題によりフィルタリングされた行の最大割合。</li></ul>詳細については、[BROKER LOAD](BROKER_LOAD.md)を参照してください。 | ロードジョブを作成する際に指定されたパラメータ。<ul><li>`resource`: リソース名。</li><li>`timeout`: ロードジョブが実行を許可される時間。単位: 秒。</li><li>`max-filter-ratio`: データ品質の問題によりフィルタリングされた行の最大割合。</li></ul>詳細については、[SPARK LOAD](SPARK_LOAD.md)を参照してください。 | ロードジョブを作成する際に指定されたパラメータ。<ul><li>`resource`: このパラメータは Spark Load ジョブにのみ有効です。</li><li>`timeout`: ロードジョブが実行を許可される時間。単位: 秒。</li><li>`max-filter-ratio`: データ品質の問題によりフィルタリングされた行の最大割合。</li></ul>詳細については、[INSERT](./INSERT.md)を参照してください。 |
-| ErrorMsg       | ロードジョブが失敗したときに返されるエラーメッセージ。ロードジョブの状態が `PENDING`、`LOADING`、または `FINISHED` の場合、`ErrorMsg` フィールドには `NULL` が返されます。ロードジョブの状態が `CANCELLED` の場合、`ErrorMsg` フィールドに返される値は `type` と `msg` の2つの部分で構成されます。<ul><li>`type` 部分は次のいずれかの値を取ることができます:<ul><li>`USER_CANCEL`: ロードジョブが手動でキャンセルされました。</li><li>`ETL_SUBMIT_FAIL`: ロードジョブの送信に失敗しました。</li><li>`ETL-QUALITY-UNSATISFIED`: 不適格データの割合が `max-filter-ratio` パラメータの値を超えたため、ロードジョブが失敗しました。</li><li>`LOAD-RUN-FAIL`: `LOAD` ステージでロードジョブが失敗しました。</li><li>`TIMEOUT`: 指定されたタイムアウト期間内にロードジョブが完了しませんでした。</li><li>`UNKNOWN`: 不明なエラーのため、ロードジョブが失敗しました。</li></ul></li><li>`msg` 部分はロード失敗の詳細な原因を提供します。</li></ul> | ロードジョブが失敗したときに返されるエラーメッセージ。ロードジョブの状態が `PENDING`、`LOADING`、または `FINISHED` の場合、`ErrorMsg` フィールドには `NULL` が返されます。ロードジョブの状態が `CANCELLED` の場合、`ErrorMsg` フィールドに返される値は `type` と `msg` の2つの部分で構成されます。<ul><li>`type` 部分は次のいずれかの値を取ることができます:<ul><li>`USER_CANCEL`: ロードジョブが手動でキャンセルされました。</li><li>`ETL_SUBMIT_FAIL`: StarRocks が Spark に ETL ジョブを送信するのに失敗しました。</li><li>`ETL-RUN-FAIL`: Spark が ETL ジョブの実行に失敗しました。</li><li>`ETL-QUALITY-UNSATISFIED`: 不適格データの割合が `max-filter-ratio` パラメータの値を超えたため、ロードジョブが失敗しました。</li><li>`LOAD-RUN-FAIL`: `LOAD` ステージでロードジョブが失敗しました。</li><li>`TIMEOUT`: 指定されたタイムアウト期間内にロードジョブが完了しませんでした。</li><li>`UNKNOWN`: 不明なエラーのため、ロードジョブが失敗しました。</li></ul></li><li>`msg` 部分はロード失敗の詳細な原因を提供します。</li></ul> | ロードジョブが失敗したときに返されるエラーメッセージ。ロードジョブの状態が `FINISHED` の場合、`ErrorMsg` フィールドには `NULL` が返されます。ロードジョブの状態が `CANCELLED` の場合、`ErrorMsg` フィールドに返される値は `type` と `msg` の2つの部分で構成されます。<ul><li>`type` 部分は次のいずれかの値を取ることができます:<ul><li>`USER_CANCEL`: ロードジョブが手動でキャンセルされました。</li><li>`ETL_SUBMIT_FAIL`: ロードジョブの送信に失敗しました。</li><li>`ETL_RUN_FAIL`: ロードジョブの実行に失敗しました。</li><li>`ETL_QUALITY_UNSATISFIED`: 生データの品質問題のため、ロードジョブが失敗しました。</li><li>`LOAD-RUN-FAIL`: `LOAD` ステージでロードジョブが失敗しました。</li><li>`TIMEOUT`: 指定されたタイムアウト期間内にロードジョブが完了しませんでした。</li><li>`UNKNOWN`: 不明なエラーのため、ロードジョブが失敗しました。</li><li>`TXN_UNKNOWN`: ロードジョブのトランザクションの状態が不明なため、ロードジョブが失敗しました。</li></ul></li><li>`msg` 部分はロード失敗の詳細な原因を提供します。</li></ul> |
+| State          | ロードジョブの状態。<ul><li>`PENDING`: ロードジョブが作成されました。</li><li>`QUEUEING`: ロードジョブがスケジュール待ちのキューにあります。</li><li>`LOADING`: ロードジョブが実行中です。</li><li>`PREPARED`: トランザクションがコミットされました。</li><li>`FINISHED`: ロードジョブが成功しました。</li><li>`CANCELLED`: ロードジョブが失敗しました。</li></ul> | ロードジョブの状態。<ul><li>`PENDING`: StarRocks クラスターが ETL に関連する設定を準備し、Spark クラスターに ETL ジョブを送信します。</li><li>`ETL`: Spark クラスターが ETL ジョブを実行し、対応する HDFS クラスターにデータを書き込みます。</li><li>`LOADING`: HDFS クラスターのデータが StarRocks クラスターにロードされており、ロードジョブが実行中です。</li><li>`PREPARED`: トランザクションがコミットされました。</li><li>`FINISHED`: ロードジョブが成功しました。</li><li>`CANCELLED`: ロードジョブが失敗しました。</li></ul> | ロードジョブの状態。<ul><li>`FINISHED`: ロードジョブが成功しました。</li><li>`CANCELLED`: ロードジョブが失敗しました。</li></ul> |
+| Progress       | ロードジョブのステージ。Broker Load ジョブは `LOAD` ステージのみを持ち、このステージの進捗を 0% から 100% で表します。ロードジョブが `LOAD` ステージに入ると、`State` パラメータには `LOADING` が返されます。Broker Load ジョブには `ETL` ステージはありません。`ETL` パラメータは Spark Load ジョブにのみ有効です。<br />**注意**<ul><li>`LOAD` ステージの進捗を計算するための式: データロードを完了した StarRocks テーブルの数/データをロードする予定の StarRocks テーブルの数 * 100%。</li><li>すべてのデータが StarRocks にロードされると、`LOAD` パラメータには `99%` が返されます。その後、ロードされたデータが StarRocks で有効になります。データが有効になると、`LOAD` パラメータには `100%` が返されます。</li><li>`LOAD` ステージの進捗は線形ではありません。そのため、データロードが進行中であっても、`LOAD` パラメータの値が一定期間変化しない場合があります。</li></ul> | ロードジョブのステージ。Spark Load ジョブには 2 つのステージがあります:<ul><li>`ETL`: `ETL` ステージの進捗を 0% から 100% で表します。</li><li>`LOAD`: `Load` ステージの進捗を 0% から 100% で表します。</li></ul>ロードジョブが `ETL` ステージに入ると、`State` パラメータには `ETL` が返されます。ロードジョブが `LOAD` ステージに移行すると、`State` パラメータには `LOADING` が返されます。<br />**注意** は Broker Load と同じです。 | ロードジョブのステージ。INSERT ジョブは `LOAD` ステージのみを持ち、このステージの進捗を 0% から 100% で表します。ロードジョブが `LOAD` ステージに入ると、`State` パラメータには `LOADING` が返されます。INSERT ジョブには `ETL` ステージはありません。`ETL` パラメータは Spark Load ジョブにのみ有効です。<br />**注意** は Broker Load と同じです。 |
+| Type           | ロードジョブの方法。このパラメータのデフォルト値は `BROKER` です。 | ロードジョブの方法。このパラメータのデフォルト値は `SPARK` です。 | ロードジョブの方法。このパラメータのデフォルト値は `INSERT` です。 |
+| Priority       | ロードジョブの優先度。有効な値: LOWEST, LOW, NORMAL, HIGH, HIGHEST。 | - | - |
+| EtlInfo        | ETL に関連するメトリクス。<ul><li>`unselected.rows`: WHERE 句によってフィルタリングされた行の数。</li><li>`dpp.abnorm.ALL`: データ品質の問題によりフィルタリングされた行の数。これは、ソーステーブルと StarRocks テーブルのデータ型や列数の不一致を指します。</li><li>`dpp.norm.ALL`: StarRocks クラスターにロードされた行の数。</li></ul>これらのメトリクスの合計が生データの総行数です。次の式を使用して、不適格データの割合が `max-filter-ratio` パラメータの値を超えているかどうかを計算できます: `dpp.abnorm.ALL`/(`unselected.rows` + `dpp.abnorm.ALL` + `dpp.norm.ALL`)。 | Spark Load ジョブでは、Broker Load ジョブと同じ意味を持ちます。 | ETL に関連するメトリクス。INSERT ジョブには `ETL` ステージがありません。そのため、`NULL` が返されます。 |
+| TaskInfo       | ロードジョブを作成する際に指定されたパラメータ。<ul><li>`resource`: このパラメータは Spark Load ジョブにのみ有効です。</li><li>`timeout`: ロードジョブが実行を許可される時間。単位: 秒。</li><li>`max-filter-ratio`: データ品質の問題によりフィルタリングされた行の最大割合。</li></ul>詳細については、[BROKER LOAD](BROKER_LOAD.md) を参照してください。 | ロードジョブを作成する際に指定されたパラメータ。<ul><li>`resource`: リソース名。</li><li>`timeout`: ロードジョブが実行を許可される時間。単位: 秒。</li><li>`max-filter-ratio`: データ品質の問題によりフィルタリングされた行の最大割合。</li></ul>詳細については、[SPARK LOAD](SPARK_LOAD.md) を参照してください。 | ロードジョブを作成する際に指定されたパラメータ。<ul><li>`resource`: このパラメータは Spark Load ジョブにのみ有効です。</li><li>`timeout`: ロードジョブが実行を許可される時間。単位: 秒。</li><li>`max-filter-ratio`: データ品質の問題によりフィルタリングされた行の最大割合。</li></ul>詳細については、[INSERT](./INSERT.md) を参照してください。 |
+| ErrorMsg       | ロードジョブが失敗したときに返されるエラーメッセージ。ロードジョブの状態が `PENDING`、`LOADING`、または `FINISHED` の場合、`ErrorMsg` フィールドには `NULL` が返されます。ロードジョブの状態が `CANCELLED` の場合、`ErrorMsg` フィールドに返される値は `type` と `msg` の2つの部分で構成されます。<ul><li>`type` 部分は次のいずれかの値を取ることができます:<ul><li>`USER_CANCEL`: ロードジョブが手動でキャンセルされました。</li><li>`ETL_SUBMIT_FAIL`: ロードジョブの送信に失敗しました。</li><li>`ETL-QUALITY-UNSATISFIED`: 不適格データの割合が `max-filter-ratio` パラメータの値を超えたため、ロードジョブが失敗しました。</li><li>`LOAD-RUN-FAIL`: ロードジョブが `LOAD` ステージで失敗しました。</li><li>`TIMEOUT`: 指定されたタイムアウト期間内にロードジョブが完了しませんでした。</li><li>`UNKNOWN`: 不明なエラーによりロードジョブが失敗しました。</li></ul></li><li>`msg` 部分はロード失敗の詳細な原因を提供します。</li></ul> | ロードジョブが失敗したときに返されるエラーメッセージ。ロードジョブの状態が `PENDING`、`LOADING`、または `FINISHED` の場合、`ErrorMsg` フィールドには `NULL` が返されます。ロードジョブの状態が `CANCELLED` の場合、`ErrorMsg` フィールドに返される値は `type` と `msg` の2つの部分で構成されます。<ul><li>`type` 部分は次のいずれかの値を取ることができます:<ul><li>`USER_CANCEL`: ロードジョブが手動でキャンセルされました。</li><li>`ETL_SUBMIT_FAIL`: StarRocks が Spark に ETL ジョブを送信するのに失敗しました。</li><li>`ETL-RUN-FAIL`: Spark が ETL ジョブの実行に失敗しました。</li><li>`ETL-QUALITY-UNSATISFIED`: 不適格データの割合が `max-filter-ratio` パラメータの値を超えたため、ロードジョブが失敗しました。</li><li>`LOAD-RUN-FAIL`: ロードジョブが `LOAD` ステージで失敗しました。</li><li>`TIMEOUT`: 指定されたタイムアウト期間内にロードジョブが完了しませんでした。</li><li>`UNKNOWN`: 不明なエラーによりロードジョブが失敗しました。</li></ul></li><li>`msg` 部分はロード失敗の詳細な原因を提供します。</li></ul> | ロードジョブが失敗したときに返されるエラーメッセージ。ロードジョブの状態が `FINISHED` の場合、`ErrorMsg` フィールドには `NULL` が返されます。ロードジョブの状態が `CANCELLED` の場合、`ErrorMsg` フィールドに返される値は `type` と `msg` の2つの部分で構成されます。<ul><li>`type` 部分は次のいずれかの値を取ることができます:<ul><li>`USER_CANCEL`: ロードジョブが手動でキャンセルされました。</li><li>`ETL_SUBMIT_FAIL`: ロードジョブの送信に失敗しました。</li><li>`ETL_RUN_FAIL`: ロードジョブの実行に失敗しました。</li><li>`ETL_QUALITY_UNSATISFIED`: 生データの品質問題によりロードジョブが失敗しました。</li><li>`LOAD-RUN-FAIL`: ロードジョブが `LOAD` ステージで失敗しました。</li><li>`TIMEOUT`: 指定されたタイムアウト期間内にロードジョブが完了しませんでした。</li><li>`UNKNOWN`: 不明なエラーによりロードジョブが失敗しました。</li><li>`TXN_UNKNOWN`: ロードジョブのトランザクションの状態が不明なため、ロードジョブが失敗しました。</li></ul></li><li>`msg` 部分はロード失敗の詳細な原因を提供します。</li></ul> |
 | CreateTime     | ロードジョブが作成された時間。                  | Spark Load ジョブでは、Broker Load ジョブと同じ意味を持ちます。 | INSERT ジョブでは、Broker Load ジョブと同じ意味を持ちます。 |
-| EtlStartTime   | Broker Load ジョブには `ETL` ステージがありません。したがって、このフィールドの値は `LoadStartTime` フィールドの値と同じです。 | `ETL` ステージが開始された時間。                    | INSERT ジョブには `ETL` ステージがありません。したがって、このフィールドの値は `LoadStartTime` フィールドの値と同じです。 |
-| EtlFinishTime  | Broker Load ジョブには `ETL` ステージがありません。したがって、このフィールドの値は `LoadStartTime` フィールドの値と同じです。 | `ETL` ステージが終了した時間。                  | INSERT ジョブには `ETL` ステージがありません。したがって、このフィールドの値は `LoadStartTime` フィールドの値と同じです。 |
+| EtlStartTime   | Broker Load ジョブには `ETL` ステージがありません。そのため、このフィールドの値は `LoadStartTime` フィールドの値と同じです。 | `ETL` ステージが開始された時間。                    | INSERT ジョブには `ETL` ステージがありません。そのため、このフィールドの値は `LoadStartTime` フィールドの値と同じです。 |
+| EtlFinishTime  | Broker Load ジョブには `ETL` ステージがありません。そのため、このフィールドの値は `LoadStartTime` フィールドの値と同じです。 | `ETL` ステージが終了した時間。                  | INSERT ジョブには `ETL` ステージがありません。そのため、このフィールドの値は `LoadStartTime` フィールドの値と同じです。 |
 | LoadStartTime  | `LOAD` ステージが開始された時間。                   | Spark Load ジョブでは、Broker Load ジョブと同じ意味を持ちます。 | INSERT ジョブでは、Broker Load ジョブと同じ意味を持ちます。 |
 | LoadFinishTime | ロードジョブが終了した時間。                     | Spark Load ジョブでは、Broker Load ジョブと同じ意味を持ちます。 | INSERT ジョブでは、Broker Load ジョブと同じ意味を持ちます。 |
 | URL            | ロードジョブで検出された不適格データにアクセスするために使用される URL。`curl` または `wget` コマンドを使用して URL にアクセスし、不適格データを取得できます。不適格データが検出されない場合、`NULL` が返されます。 | Spark Load ジョブでは、Broker Load ジョブと同じ意味を持ちます。 | INSERT ジョブでは、Broker Load ジョブと同じ意味を持ちます。 |
-| JobDetails     | ロードジョブに関連するその他の情報。<ul><li>`Unfinished backends`: データロードを完了していない BE の ID。</li><li>`ScannedRows`: StarRocks にロードされた行の総数とフィルタリングされた行の数。</li><li>`TaskNumber`: ロードジョブは1つ以上のタスクに分割され、並行して実行されることがあります。このフィールドはロードタスクの数を示します。</li><li>`All backends`: データロードを実行している BE の ID。</li><li>`FileNumber`: ソースデータファイルの数。</li><li>`FileSize`: ソースデータファイルのデータ量。単位: バイト。</li></ul> | Spark Load ジョブでは、Broker Load ジョブと同じ意味を持ちます。 | INSERT ジョブでは、Broker Load ジョブと同じ意味を持ちます。 |
+| JobDetails     | ロードジョブに関連するその他の情報。<ul><li>`Unfinished backends`: データロードを完了していない BE の ID。</li><li>`ScannedRows`: StarRocks にロードされた行の総数とフィルタリングされた行の数。</li><li>`TaskNumber`: ロードジョブは1つ以上のタスクに分割され、同時に実行されます。このフィールドはロードタスクの数を示します。</li><li>`All backends`: データロードを実行している BE の ID。</li><li>`FileNumber`: ソースデータファイルの数。</li><li>`FileSize`: ソースデータファイルのデータ量。単位: バイト。</li></ul> | Spark Load ジョブでは、Broker Load ジョブと同じ意味を持ちます。 | INSERT ジョブでは、Broker Load ジョブと同じ意味を持ちます。 |
 
 ## 使用上の注意
 
-- SHOW LOAD ステートメントによって返される情報は、ロードジョブの `LoadFinishTime` から3日間有効です。3日後、この情報は表示できなくなります。`label_keep_max_second` パラメータを使用して、デフォルトの有効期間を変更できます。
+- SHOW LOAD ステートメントによって返される情報は、ロードジョブの `LoadFinishTime` から3日間有効です。3日後、情報は表示できなくなります。`label_keep_max_second` パラメータを使用してデフォルトの有効期間を変更できます。
 
     ```SQL
     ADMIN SET FRONTEND CONFIG ("label_keep_max_second" = "value");
     ```
 
 - `LoadStartTime` フィールドの値が長時間 `N/A` の場合、ロードジョブが大量に積み重なっていることを意味します。ロードジョブの作成頻度を減らすことをお勧めします。
-- ロードジョブに消費された総時間 = `LoadFinishTime` - `CreateTime`。
-- `LOAD` ステージでロードジョブに消費された総時間 = `LoadFinishTime` - `LoadStartTime`。
+- ロードジョブに消費される総時間 = `LoadFinishTime` - `CreateTime`。
+- `LOAD` ステージでロードジョブに消費される総時間 = `LoadFinishTime` - `LoadStartTime`。
 
 ## 例
 
@@ -120,7 +120,7 @@ LIMIT 2;
 +-------+---------------------------+----------+---------------------+--------+---------------------------------------------------------+---------------------------------------------------------------------------------------------------------+----------+---------------------+---------------------+---------------------+---------------------+---------------------+--------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ```
 
-例 3: `example_db` 内でラベルに文字列 `table` を含むロードジョブを表示します。さらに、返されるロードジョブは `LoadStartTime` フィールドの降順で表示されます。
+例 3: `example_db` 内でラベルに文字列 `table` を含むロードジョブを表示します。さらに、返されたロードジョブは `LoadStartTime` フィールドの降順で表示されます。
 
 ```plaintext
 SHOW LOAD FROM example_db 
@@ -148,7 +148,7 @@ WHERE LABEL = "duplicate_table_with_null" AND STATE = "FINISHED";
 +-------+---------------------------+----------+---------------------+--------+---------------------------------------------------------+----------------------------------------------------+----------+---------------------+---------------------+---------------------+---------------------+---------------------+------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ```
 
-例 5: 最初のロードジョブをスキップし、次の2つのロードジョブを表示します。さらに、これらの2つのロードジョブは昇順でソートされます。
+例 5: 最初のロードジョブをスキップし、次の2つのロードジョブを表示します。さらに、これらの2つのロードジョブは昇順にソートされます。
 
 ```plaintext
 SHOW LOAD FROM example_db 
@@ -164,7 +164,7 @@ ORDER BY CreateTime ASC
 LIMIT 1,2;
 ```
 
-上記のステートメントの出力は次のとおりです。
+前述のステートメントの出力は次のとおりです。
 
 ```plaintext
 +-------+---------------------------------------------+----------+---------------------+--------+---------------------------------------------------------+---------------------------------------------------------------------------------------------------------+----------+---------------------+---------------------+---------------------+---------------------+---------------------+--------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+

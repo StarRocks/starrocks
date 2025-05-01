@@ -27,7 +27,7 @@ ALTER RESOURCE GROUP resource_group_name
 
 ## パラメータ
 
-| **パラメータ**      | **説明**                                                     |
+| **パラメータ**      | **説明**                                                      |
 | ------------------- | ------------------------------------------------------------ |
 | resource_group_name | 変更するリソースグループの名前。                             |
 | ADD                 | リソースグループにクラシファイア（分類器）を追加します。クラシファイアの定義方法については、[CREATE RESOURCE GROUP - Parameters](CREATE_RESOURCE_GROUP.md) を参照してください。 |
@@ -37,13 +37,13 @@ ALTER RESOURCE GROUP resource_group_name
 
 ## 例
 
-例 1: 新しいクラシファイアをリソースグループ `rg1` に追加します。
+例 1: リソースグループ `rg1` に新しいクラシファイアを追加します。
 
 ```SQL
 ALTER RESOURCE GROUP rg1 ADD (user='root', query_type in ('select'));
 ```
 
-例 2: ID `300040`、`300041`、`300041` のクラシファイアをリソースグループ `rg1` から削除します。
+例 2: リソースグループ `rg1` から ID `300040`、`300041`、`300041` のクラシファイアを削除します。
 
 ```SQL
 ALTER RESOURCE GROUP rg1 DROP (300040, 300041, 300041);

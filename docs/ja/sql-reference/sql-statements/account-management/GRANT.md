@@ -14,22 +14,22 @@ import MultiServiceAccess from '../../../_assets/commonMarkdown/multi-service-ac
 
 ロールをユーザーまたは他のロールに付与します。
 
-付与可能な権限の詳細については、[Privilege items](../../../administration/user_privs/privilege_overview.md) を参照してください。
+付与可能な権限の詳細については、 [Privilege items](../../../administration/user_privs/privilege_overview.md) を参照してください。
 
-GRANT 操作が実行された後、[SHOW GRANTS](./SHOW_GRANTS.md) を実行して詳細な権限情報を表示するか、[REVOKE](REVOKE.md) を実行して権限またはロールを取り消すことができます。
+GRANT 操作が実行された後、 [SHOW GRANTS](./SHOW_GRANTS.md) を実行して詳細な権限情報を表示したり、 [REVOKE](REVOKE.md) を実行して権限やロールを取り消すことができます。
 
-GRANT 操作を実行する前に、関連するユーザーまたはロールが作成されていることを確認してください。詳細については、[CREATE USER](./CREATE_USER.md) および [CREATE ROLE](./CREATE_ROLE.md) を参照してください。
+GRANT 操作を実行する前に、関連するユーザーまたはロールが作成されていることを確認してください。詳細については、 [CREATE USER](./CREATE_USER.md) および [CREATE ROLE](./CREATE_ROLE.md) を参照してください。
 
 :::tip
 
 - `user_admin` ロールを持つユーザーのみが、他のユーザーやロールに任意の権限を付与できます。
-- ロールがユーザーに付与された後、このロールとして操作を実行する前に [SET ROLE](SET_ROLE.md) を実行してこのロールを有効化する必要があります。すべてのデフォルトロールをログイン時に有効化したい場合は、[ALTER USER](ALTER_USER.md) または [SET DEFAULT ROLE](SET_DEFAULT_ROLE.md) を実行してください。システム内のすべての権限をすべてのユーザーにログイン時に有効化したい場合は、グローバル変数 `SET GLOBAL activate_all_roles_on_login = TRUE;` を設定してください。
+- ロールがユーザーに付与された後、このロールとして操作を行う前に [SET ROLE](SET_ROLE.md) を実行してこのロールを有効化する必要があります。すべてのデフォルトロールをログイン時に有効化したい場合は、 [ALTER USER](ALTER_USER.md) または [SET DEFAULT ROLE](SET_DEFAULT_ROLE.md) を実行してください。システム内のすべての権限をすべてのユーザーに対してログイン時に有効化したい場合は、グローバル変数 `SET GLOBAL activate_all_roles_on_login = TRUE;` を設定してください。
 - 一般ユーザーは、`WITH GRANT OPTION` キーワードを持つ権限のみを他のユーザーやロールに付与できます。
 :::
 
 ## 構文
 
-### ロールまたはユーザーに権限を付与
+### ロールまたはユーザーに権限を付与する
 
 #### システム
 
@@ -118,7 +118,7 @@ GRANT
 
 * このコマンドを実行する前に SET CATALOG を実行する必要があります。
 * `<db_name>.<table_name>` を使用してテーブルを表すこともできます。
-* Internal および External Catalogs 内のすべてのテーブルに対して SELECT 権限を付与して、これらのテーブルからデータを読み取ることができます。Hive および Iceberg Catalogs 内のテーブルに対しては、INSERT 権限を付与してデータを書き込むことができます (Iceberg は v3.1以降、Hive は v3.2以降でサポート)。
+* Internal および External Catalog 内のすべてのテーブルに対して SELECT 権限を付与して、これらのテーブルからデータを読み取ることができます。Hive および Iceberg Catalog のテーブルに対しては、INSERT 権限を付与してデータを書き込むことができます (Iceberg は v3.1以降、Hive は v3.2以降でサポート)。
 
   ```SQL
   GRANT <priv> ON TABLE <db_name>.<table_name> TO {ROLE <role_name> | USER <user_name>}
@@ -137,7 +137,7 @@ GRANT
 
 * このコマンドを実行する前に SET CATALOG を実行する必要があります。
 * `<db_name>.<view_name>` を使用してビューを表すこともできます。
-* External Catalog 内のテーブルに対しては、Hive テーブルビューにのみ SELECT 権限を付与できます (v3.1以降)。
+* External Catalog のテーブルに対しては、Hive テーブルビューにのみ SELECT 権限を付与できます (v3.1以降)。
 
   ```SQL
   GRANT <priv> ON VIEW <db_name>.<view_name> TO {ROLE <role_name> | USER <user_name>}
@@ -196,7 +196,7 @@ GRANT
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
 
-### ロールをロールまたはユーザーに付与
+### ロールをロールまたはユーザーに付与する
 
 ```SQL
 GRANT <role_name> [,<role_name>, ...] TO ROLE <role_name>
@@ -205,7 +205,7 @@ GRANT <role_name> [,<role_name>, ...] TO USER <user_identity>
 
 ## 例
 
-例 1: すべてのデータベース内のすべてのテーブルからデータを読み取る権限をユーザー `jack` に付与します。
+例 1: すべてのデータベースのすべてのテーブルからデータを読み取る権限をユーザー `jack` に付与します。
 
 ```SQL
 GRANT SELECT ON *.* TO 'jack'@'%';
@@ -241,7 +241,7 @@ GRANT USAGE ON RESOURCE 'spark_resource' TO 'jack'@'%';
 GRANT USAGE ON RESOURCE 'spark_resource' TO ROLE 'my_role';
 ```
 
-例 7: テーブル `sr_member` からデータを読み取る権限をユーザー `jack` に付与し、この権限を他のユーザーやロールに付与できるようにします (WITH GRANT OPTION を指定)。
+例 7: テーブル `sr_member` からデータを読み取る権限をユーザー `jack` に付与し、ユーザー `jack` がこの権限を他のユーザーやロールに付与できるようにします (WITH GRANT OPTION を指定)。
 
 ```SQL
 GRANT SELECT ON TABLE sr_member TO USER jack@'172.10.1.10' WITH GRANT OPTION;
@@ -253,7 +253,7 @@ GRANT SELECT ON TABLE sr_member TO USER jack@'172.10.1.10' WITH GRANT OPTION;
 GRANT db_admin, user_admin, cluster_admin TO USER user_platform;
 ```
 
-例 9: ユーザー `jack` がユーザー `rose` として操作を実行できるようにします。
+例 9: ユーザー `jack` がユーザー `rose` として操作を行えるようにします。
 
 ```SQL
 GRANT IMPERSONATE ON USER 'rose'@'%' TO USER 'jack'@'%';
@@ -261,7 +261,7 @@ GRANT IMPERSONATE ON USER 'rose'@'%' TO USER 'jack'@'%';
 
 ## ベストプラクティス
 
-### シナリオに基づいてロールをカスタマイズ
+### シナリオに基づいてロールをカスタマイズする
 
 <UserPrivilegeCase />
 

@@ -4,25 +4,27 @@ displayed_sidebar: docs
 
 # date_sub,subdate
 
-指定された時間間隔を日付から減算します。
+## 説明
 
-## Syntax
+指定された時間間隔を日付から引きます。
+
+## 構文
 
 ```Haskell
 DATETIME DATE_SUB(DATETIME|DATE date,INTERVAL expr type)
 ```
 
-## Parameters
+## パラメータ
 
-- `date`: 有効な DATE または DATETIME 式でなければなりません。
-- `expr`: 減算したい時間間隔です。INT 型でなければなりません。
-- `type`: 時間間隔の単位です。以下のいずれかの値にのみ設定できます: YEAR, QUARTER, MONTH, DAY, HOUR, MINUTE, SECOND, MILLISECOND (3.1.7 以降), MICROSECOND (3.1.7 以降)。
+- `date`: 有効な DATE または DATETIME 式である必要があります。
+- `expr`: 引きたい時間間隔です。INT 型である必要があります。
+- `type`: 時間間隔の単位です。以下のいずれかの値に設定できます: YEAR, QUARTER, MONTH, DAY, HOUR, MINUTE, SECOND, MILLISECOND (3.1.7以降), MICROSECOND (3.1.7以降)。
 
-## Return value
+## 戻り値
 
-DATETIME 値を返します。日付が存在しない場合、例えば `2020-02-30`、または日付が DATE または DATETIME 値でない場合、NULL が返されます。
+DATETIME 値を返します。日付が存在しない場合、例えば `2020-02-30` の場合や、日付が DATE または DATETIME 値でない場合、NULL が返されます。
 
-## Examples
+## 例
 
 ```Plain Text
 select date_sub('2010-11-30 23:59:59', INTERVAL 2 DAY);

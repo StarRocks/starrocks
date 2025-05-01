@@ -30,11 +30,11 @@ SET PROPERTY
 
 ### PROPERTIES
 
-パイプの設定を変更したいプロパティ。フォーマット: `"key" = "value"`。サポートされているプロパティの詳細については、[CREATE PIPE](CREATE_PIPE.md) を参照してください。
+パイプの設定を変更したいプロパティ。形式: `"key" = "value"`。サポートされているプロパティの詳細については、 [CREATE PIPE](CREATE_PIPE.md) を参照してください。
 
 ## 例
 
-データベース `mydatabase` にあるパイプ `user_behavior_replica` の `AUTO_INGEST` プロパティを `FALSE` に変更します。
+データベース `mydatabase` にあるパイプ `user_behavior_replica` の `AUTO_INGEST` プロパティの設定を `FALSE` に変更します。
 
 ```SQL
 USE mydatabase;
@@ -45,7 +45,7 @@ SET
 );
 ```
 
-## 参考
+## 参考文献
 
 - [CREATE PIPE](CREATE_PIPE.md)
 - [DROP PIPE](DROP_PIPE.md)

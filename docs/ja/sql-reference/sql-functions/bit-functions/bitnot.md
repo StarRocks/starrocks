@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # bitnot
 
+## 説明
+
 数値式のビット単位の否定を返します。
 
 ## 構文
@@ -14,7 +16,7 @@ BITNOT(x);
 
 ## パラメータ
 
-`x`: この式は、TINYINT、SMALLINT、INT、BIGINT、LARGEINT のいずれかのデータ型に評価される必要があります。
+`x`: この式は、次のいずれかのデータ型に評価される必要があります: TINYINT, SMALLINT, INT, BIGINT, LARGEINT。
 
 ## 戻り値
 

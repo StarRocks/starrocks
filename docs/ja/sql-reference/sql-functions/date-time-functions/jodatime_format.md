@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # jodatime_format
 
+## 説明
+
 指定された日付を、指定された Joda DateTimeFormat パターン形式の文字列に変換します。
 
 ## 構文
@@ -15,11 +17,11 @@ VARCHAR JODATIME_FORMAT(DATETIME | DATE date, VARCHAR format)
 ## パラメータ
 
 - `date`: 変換したい日付です。有効な日付または日付式である必要があります。
-- `format`: 返される日付と時刻の形式です。利用可能な形式については、[Joda-Time format](https://joda-time.sourceforge.net/apidocs/org/joda/time/format/DateTimeFormat.html) を参照してください。
+- `format`: 返される日付と時刻の形式です。利用可能な形式については [Joda-Time format](https://joda-time.sourceforge.net/apidocs/org/joda/time/format/DateTimeFormat.html) を参照してください。
 
 ## 戻り値
 
-現在、戻り値は最大 128 バイトの長さの文字列です。指定された日付から変換された文字列の長さが 128 バイトを超える場合、`NULL` が返されます。
+現在、戻り値は最大128バイトの長さの文字列です。指定された日付から変換された文字列の長さが128バイトを超える場合、`NULL` が返されます。
 
 ## 例
 

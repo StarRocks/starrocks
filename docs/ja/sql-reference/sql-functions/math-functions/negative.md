@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # negative
 
+## 説明
+
 入力 `arg` の負の値を返します。
 
 ## 構文

@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # hours_sub
 
+## Description
+
 指定された日時から指定された時間数を減算します。
 
 ## Syntax
@@ -16,7 +18,7 @@ DATETIME hours_sub(DATETIME|DATE date, INT hours);
 
 * `date`: 有効な DATE または DATETIME 式である必要があります。
 
-* `hours`: 減算する時間数。サポートされているデータ型は INT です。
+* `hours`: 減算する時間数です。サポートされているデータ型は INT です。
 
 ## Return value
 

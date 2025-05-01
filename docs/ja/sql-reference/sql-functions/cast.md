@@ -5,28 +5,30 @@ sidebar_position: 0.9
 
 # CAST
 
+## Description
+
 入力を指定された型に変換します。例えば、`cast (input as BIGINT)` は入力を BIGINT 値に変換します。
 
-バージョン 2.4 から、StarRocks は ARRAY 型への変換をサポートしています。
+v2.4 から、StarRocks は ARRAY 型への変換をサポートしています。
 
-## 構文
+## Syntax
 
 ```Haskell
 cast (input as type)
 ```
 
-## パラメータ
+## Parameters
 
 `input`: 変換したいデータ。
 `type`: 変換先のデータ型。
 
-## 戻り値
+## Return value
 
-データ型が `type` と同じ値を返します。
+`type` と同じデータ型の値を返します。
 
-## 例
+## Examples
 
-例 1: 一般的なデータ変換
+Example 1: 一般的なデータ変換
 
 ```Plain Text
     select cast('9.5' as DECIMAL(10,2));
@@ -58,7 +60,7 @@ cast (input as type)
     +-------------------+
 ```
 
-例 2: 入力を ARRAY に変換
+Example 2: 入力を ARRAY に変換
 
 ```Plain Text
     -- 文字列を ARRAY<ANY> に変換
@@ -115,7 +117,7 @@ cast (input as type)
     +--------------------------------------------------------------+
 ```
 
-例 3: ロード中のデータ変換
+Example 3: ロード中のデータ変換
 
 ```bash
     curl --location-trusted -u <username>:<password> -T ~/user_data/bigint \
@@ -125,7 +127,7 @@ cast (input as type)
 
 > **Note**
 >
-> 元の値が浮動小数点値（例えば 12.0）の場合、NULL に変換されます。この型を強制的に BIGINT に変換したい場合は、以下の例を参照してください:
+> 元の値が浮動小数点値（例えば 12.0）の場合、NULL に変換されます。この型を強制的に BIGINT に変換したい場合、以下の例を参照してください:
 
 ```bash
     curl --location-trusted -u <username>:<password> -T ~/user_data/bigint \

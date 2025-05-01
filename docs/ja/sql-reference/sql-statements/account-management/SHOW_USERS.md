@@ -8,9 +8,9 @@ import UserManagementPriv from '../../../_assets/commonMarkdown/userManagementPr
 
 ## 説明
 
-システム内のすべてのユーザーを表示します。ここで言及されているユーザーはユーザーアイデンティティであり、ユーザー名ではありません。ユーザーアイデンティティの詳細については、[CREATE USER](CREATE_USER.md) を参照してください。このコマンドは v3.0 からサポートされています。
+システム内のすべてのユーザーを表示します。ここで言及されているユーザーはユーザーアイデンティティであり、ユーザー名ではありません。ユーザーアイデンティティの詳細については、 [CREATE USER](CREATE_USER.md) を参照してください。このコマンドは v3.0 からサポートされています。
 
-特定のユーザーの権限を表示するには、`SHOW GRANTS FOR <user_identity>;` を使用します。詳細については、[SHOW GRANTS](SHOW_GRANTS.md) を参照してください。
+特定のユーザーの権限を表示するには、 `SHOW GRANTS FOR <user_identity>;` を使用します。詳細については、 [SHOW GRANTS](SHOW_GRANTS.md) を参照してください。
 
 <UserManagementPriv />
 
@@ -20,7 +20,7 @@ import UserManagementPriv from '../../../_assets/commonMarkdown/userManagementPr
 SHOW USERS
 ```
 
-返されるフィールド:
+戻りフィールド:
 
 | **Field** | **Description**    |
 | --------- | ------------------ |
@@ -46,6 +46,6 @@ mysql> SHOW USERS;
 +-----------------+
 ```
 
-## 参照
+## 参考
 
 [CREATE USER](CREATE_USER.md), [ALTER USER](ALTER_USER.md), [DROP USER](DROP_USER.md)

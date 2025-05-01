@@ -4,34 +4,36 @@ displayed_sidebar: docs
 
 # array_slice
 
-配列のスライスを返します。この関数は、`offset` で指定された位置から `input` から `length` 要素を切り取ります。
+## Description
 
-## 構文
+配列のスライスを返します。この関数は、`offset` で指定された位置から `input` から `length` 個の要素を切り取ります。
+
+## Syntax
 
 ```Haskell
 array_slice(input, offset, length)
 ```
 
-## パラメータ
+## Parameters
 
-- `input`: スライスしたい配列。この関数は、次のタイプの配列要素をサポートします: BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, VARCHAR, DECIMALV2, DATETIME, DATE, および JSON。**JSON はバージョン 2.5 からサポートされています。**
+- `input`: スライスを切り取りたい配列。この関数は、次のタイプの配列要素をサポートします: BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, VARCHAR, DECIMALV2, DATETIME, DATE, および JSON。**JSON は 2.5 からサポートされています。**
 
-- `offset`: 要素を切り取る開始位置。有効な値は `1` から始まります。BIGINT 値である必要があります。
+- `offset`: 要素を切り取る開始位置。有効な値は `1` から始まります。BIGINT 値でなければなりません。
 
-- `length`: 切り取りたいスライスの長さ。BIGINT 値である必要があります。
+- `length`: 切り取りたいスライスの長さ。BIGINT 値でなければなりません。
 
-## 戻り値
+## Return value
 
-`input` パラメータで指定された配列と同じデータ型の配列を返します。
+`input` パラメータで指定された配列と同じデータ型を持つ配列を返します。
 
-## 使用上の注意
+## Usage notes
 
-- offset は 1 から始まります。
-- 指定された長さが実際に切り取れる要素数を超える場合、一致するすべての要素が返されます。例 4 を参照してください。
+- オフセットは 1 から始まります。
+- 指定された長さが実際に切り取れる要素数を超える場合、すべての一致する要素が返されます。例 4 を参照してください。
 
-## 例
+## Examples
 
-例 1: 3 番目の要素から 2 つの要素を切り取ります。
+Example 1: 3 番目の要素から始めて 2 つの要素を切り取ります。
 
 ```Plain
 mysql> select array_slice([1,2,4,5,6], 3, 2) as res;
@@ -42,7 +44,7 @@ mysql> select array_slice([1,2,4,5,6], 3, 2) as res;
 +-------+
 ```
 
-例 2: 最初の要素から 2 つの要素を切り取ります。
+Example 2: 最初の要素から始めて 2 つの要素を切り取ります。
 
 ```Plain
 mysql> select array_slice(["sql","storage","query","execute"], 1, 2) as res;
@@ -53,7 +55,7 @@ mysql> select array_slice(["sql","storage","query","execute"], 1, 2) as res;
 +-------------------+
 ```
 
-例 3: Null 要素は通常の値として扱われます。
+Example 3: Null 要素は通常の値として扱われます。
 
 ```Plain
 mysql> select array_slice([57.73,97.32,128.55,null,324.2], 3, 3) as res;
@@ -64,7 +66,7 @@ mysql> select array_slice([57.73,97.32,128.55,null,324.2], 3, 3) as res;
 +---------------------+
 ```
 
-例 4: 3 番目の要素から 5 つの要素を切り取ります。
+Example 4: 3 番目の要素から始めて 5 つの要素を切り取ります。
 
 この関数は 5 つの要素を切り取ることを意図していますが、3 番目の要素からは 3 つの要素しかありません。その結果、これらの 3 つの要素がすべて返されます。
 

@@ -23,7 +23,7 @@ SHOW [ALL] ROUTINE LOAD [ FOR [<db_name>.]<job_name> | FROM <db_name> ]
 
 :::tip
 
-ステートメントに `\G` オプションを追加することで、通常の横向きのテーブル形式ではなく、縦向きに結果を表示できます（例: `SHOW ROUTINE LOAD FOR <job_name>\G`）。
+通常の横向きのテーブル形式ではなく、縦向きに結果を表示するには、ステートメントに `\G` オプションを追加できます（例: `SHOW ROUTINE LOAD FOR <job_name>\G`）。
 
 :::
 
@@ -31,26 +31,26 @@ SHOW [ALL] ROUTINE LOAD [ FOR [<db_name>.]<job_name> | FROM <db_name> ]
 
 | **パラメータ**                     | **必須** | **説明**                                              |
 | --------------------------------- | ------------ | ------------------------------------------------------------ |
-| db_name                           | いいえ           | ロードジョブが属するデータベースの名前。このパラメータは `FROM` 句が使用される場合に必要です。 |
-| job_name                          | いいえ           | ロードジョブの名前。このパラメータは `FOR` 句が使用される場合に必要です。         |
+| db_name                           | いいえ           | ロードジョブが属するデータベースの名前。このパラメータは `FROM` 句が使用される場合に必須です。 |
+| job_name                          | いいえ           | ロードジョブの名前。このパラメータは `FOR` 句が使用される場合に必須です。         |
 | ALL                               | いいえ           | `STOPPED` または `CANCELLED` 状態のものを含むすべてのロードジョブを表示します。 |
 | STATE                             | いいえ           |  ロードジョブのステータス。                                       |
-| ORDER BY field_name [ASC \| DESC] | いいえ           | 指定されたフィールドに基づいて結果を昇順または降順にソートします。サポートされているフィールドは次のとおりです: `Id`, `Name`, `CreateTime`, `PauseTime`, `EndTime`, `TableName`, `State`, `CurrentTaskNum`。<ul><li>結果を昇順にソートするには、`ORDER BY field_name ASC` を指定します。</li><li>結果を降順にソートするには、`ORDER BY field_name DESC` を指定します。</li></ul>フィールドまたはソート順を指定しない場合、結果はデフォルトで `Id` の昇順にソートされます。 |
-| LIMIT limit                       | いいえ           | 返されるロードジョブの数。例えば、`LIMIT 10` を指定すると、フィルター条件に一致する10個のロードジョブの情報のみが返されます。このパラメータを指定しない場合、フィルター条件に一致するすべてのロードジョブの情報が表示されます。  |
-| OFFSET offset                     | いいえ           | `offset` パラメータはスキップされるロードジョブの数を定義します。例えば、`OFFSET 5` は最初の5つのロードジョブをスキップし、残りを返します。`offset` パラメータのデフォルト値は `0` です。 |
+| ORDER BY field_name [ASC \| DESC] | いいえ           | 指定されたフィールドに基づいて結果を昇順または降順でソートします。サポートされるフィールドは次のとおりです: `Id`, `Name`, `CreateTime`, `PauseTime`, `EndTime`, `TableName`, `State`, および `CurrentTaskNum`。<ul><li>結果を昇順でソートするには、`ORDER BY field_name ASC` を指定します。</li><li>結果を降順でソートするには、`ORDER BY field_name DESC` を指定します。</li></ul>フィールドまたはソート順を指定しない場合、結果はデフォルトで `Id` の昇順でソートされます。 |
+| LIMIT limit                       | いいえ           | 返されるロードジョブの数。例えば、`LIMIT 10` を指定すると、フィルター条件に一致するロードジョブの情報が10件のみ返されます。このパラメータが指定されていない場合、フィルター条件に一致するすべてのロードジョブの情報が表示されます。  |
+| OFFSET offset                     | いいえ           | `offset` パラメータはスキップされるロードジョブの数を定義します。例えば、`OFFSET 5` は最初の5つのロードジョブをスキップし、残りを返します。`offset` パラメータの値はデフォルトで `0` です。 |
 
 ## 出力
 
 | **パラメータ**        | **説明**                                              |
 | -------------------- | ------------------------------------------------------------ |
-| Id                   | StarRocks によって自動生成されるロードジョブのグローバルに一意の ID。 |
+| Id                   | StarRocks によって自動生成されるロードジョブのグローバルに一意な ID。 |
 | Name                 | ロードジョブの名前。                                        |
 | CreateTime           | ロードジョブが作成された日時。             |
 | PauseTime            | ロードジョブが `PAUSED` 状態になった日時。  |
 | EndTime              | ロードジョブが `STOPPED` 状態になった日時。 |
 | DbName               | ロードジョブのターゲットテーブルが属するデータベース。  |
 | TableName            | ロードジョブのターゲットテーブル。                                |
-| State                | ロードジョブのステータス。含まれる状態:<ul><li>`NEED_SCHEDULE`: ロードジョブはスケジュール待ちです。CREATE ROUTINE LOAD または RESUME ROUTINE LOAD を使用して Routine Load ジョブを作成または再開すると、ロードジョブは最初に `NEED_SCHEDULE` 状態になります。</li><li>`RUNNING`: ロードジョブは実行中です。`Statistic` と `Progress` を通じて Routine Load ジョブの消費進捗を確認できます。</li><li>`PAUSED`: ロードジョブは一時停止中です。`ReasonOfStateChanged` と `ErrorLogUrls` を参照してトラブルシューティングを行えます。エラーを修正した後、RESUME ROUTINE LOAD を使用して Routine Load ジョブを再開できます。</li><li>`CANCELLED`: ロードジョブはキャンセルされました。`ReasonOfStateChanged` と `ErrorLogUrls` を参照してトラブルシューティングを行えます。ただし、エラーを修正した後、この状態のロードジョブを復元することはできません。</li><li>`STOPPED`: ロードジョブは停止しました。この状態のロードジョブを復元することはできません。</li><li>`UNSTABLE`: ロードジョブは不安定です。Routine Load ジョブ内のタスクが遅延している場合（つまり、消費されているメッセージのタイムスタンプと現在の時間の差がこの FE パラメータ [`routine_load_unstable_threshold_second`](../../../../administration/management/FE_configuration.md#routine_load_unstable_threshold_second) を超え、データソースに未消費のメッセージが存在する場合）、Routine Load ジョブは `UNSTABLE` 状態に設定されます。</li></ul> |
+| State                | ロードジョブのステータス。含まれる状態:<ul><li>`NEED_SCHEDULE`: ロードジョブはスケジュール待ちです。CREATE ROUTINE LOAD または RESUME ROUTINE LOAD を使用して Routine Load ジョブを作成または再開すると、ロードジョブは最初に `NEED_SCHEDULE` 状態になります。</li><li>`RUNNING`: ロードジョブは実行中です。`Statistic` および `Progress` を通じて Routine Load ジョブの消費進捗を確認できます。</li><li>`PAUSED`: ロードジョブは一時停止されています。トラブルシューティングには `ReasonOfStateChanged` および `ErrorLogUrls` を参照してください。エラーを修正した後、RESUME ROUTINE LOAD を使用して Routine Load ジョブを再開できます。</li><li>`CANCELLED`: ロードジョブはキャンセルされています。トラブルシューティングには `ReasonOfStateChanged` および `ErrorLogUrls` を参照してください。ただし、エラーを修正した後、この状態のロードジョブを復旧することはできません。</li><li>`STOPPED`: ロードジョブは停止されています。この状態のロードジョブを復旧することはできません。</li><li>`UNSTABLE`: ロードジョブは不安定です。Routine Load ジョブ内のタスクが遅延している場合（すなわち、消費されているメッセージのタイムスタンプと現在の時間の差がこの FE パラメータ [`routine_load_unstable_threshold_second`](../../../../administration/management/FE_configuration.md#routine_load_unstable_threshold_second) を超え、データソースに未消費のメッセージが存在する場合）、Routine Load ジョブは `UNSTABLE` 状態に設定されます。</li></ul> |
 | DataSourceType       | データソースのタイプ。固定値: `KAFKA`。           |
 | CurrentTaskNum       | ロードジョブ内の現在のタスク数。                     |
 | JobProperties        | ロードジョブのプロパティ。消費されるパーティションやカラムマッピングなど。 |
@@ -61,7 +61,7 @@ SHOW [ALL] ROUTINE LOAD [ FOR [<db_name>.]<job_name> | FROM <db_name> ]
 | TimestampProgress    | トピックのパーティション内のメッセージ消費の進捗（タイムスタンプで測定）。 |
 | ReasonOfStateChanged | ロードジョブが `CANCELLED` または `PAUSED` 状態になった理由。 |
 | ErrorLogUrls         | エラーログの URL。`curl` または `wget` コマンドを使用して URL にアクセスできます。 |
-| TrackingSQL          | `information_schema` データベースに記録されたエラーログ情報を直接クエリするための SQL コマンド。 |
+| TrackingSQL          | `information_schema` データベースに記録されたエラーログ情報を直接クエリするために実行できる SQL コマンド。 |
 | OtherMsg             | Routine Load ジョブのすべての失敗したロードタスクに関する情報。 |
 | LatestSourcePosition | トピックの各パーティション内の最新メッセージの位置。データロードの遅延を確認するのに役立ちます。 |
 
@@ -96,7 +96,7 @@ LatestSourcePosition: {"0":"6"}
 1 row in set (0.01 sec)
 ```
 
-ロードジョブが例外により `PAUSED` または `CANCELLED` 状態にある場合、返される結果の `ReasonOfStateChanged`、`ErrorLogUrls`、`TrackingSQL`、`OtherMsg` フィールドに基づいてトラブルシューティングを行うことができます。
+ロードジョブが例外により `PAUSED` または `CANCELLED` 状態にある場合、返される結果の `ReasonOfStateChanged`、`ErrorLogUrls`、`TrackingSQL`、および `OtherMsg` フィールドに基づいてトラブルシューティングを行うことができます。
 
 ```SQL
 MySQL [example_db]> SHOW ROUTINE LOAD FOR example_tbl_ordertest2\G

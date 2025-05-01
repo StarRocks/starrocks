@@ -28,41 +28,41 @@ WHERE NAME { = "mv_name" | LIKE "mv_name_matcher"}
 
 :::note
 
-バージョン 3.3 以降、`SHOW MATERIALIZED VIEWS` コマンドは、リフレッシュタスクが複数のパーティション/タスクランで構成されている場合、すべてのタスクランの状態を追跡します。すべてのタスクランが成功した場合にのみ、`last_refresh_state` は `SUCCESS` を返します。
+バージョン 3.3 以降、`SHOW MATERIALIZED VIEWS` コマンドは、リフレッシュタスクが複数のパーティション/タスクランから構成されている場合、すべてのタスクランの状態を追跡します。すべてのタスクランが成功した場合にのみ、`last_refresh_state` は `SUCCESS` を返します。
 
 :::
 
 ## パラメータ
 
 | **パラメータ**   | **必須** | **説明**                                              |
-| --------------- | ------------ | ------------------------------------------------------------ |
-| db_name         | いいえ           | マテリアライズドビューが存在するデータベースの名前。このパラメータが指定されていない場合、デフォルトで現在のデータベースが使用されます。 |
-| mv_name         | いいえ           | 表示するマテリアライズドビューの名前。                   |
-| mv_name_matcher | いいえ           | マテリアライズドビューをフィルタリングするために使用されるマッチャー。               |
+| --------------- | -------- | ----------------------------------------------------- |
+| db_name         | いいえ   | マテリアライズドビューが存在するデータベースの名前。このパラメータが指定されていない場合、デフォルトで現在のデータベースが使用されます。 |
+| mv_name         | いいえ   | 表示するマテリアライズドビューの名前。                   |
+| mv_name_matcher | いいえ   | マテリアライズドビューをフィルタリングするために使用されるマッチャー。               |
 
 ## 戻り値
 
 | **戻り値**                 | **説明**                                              |
-| -------------------------- | ------------------------------------------------------------ |
+| -------------------------- | ----------------------------------------------------- |
 | id                         | マテリアライズドビューのID。                             |
 | database_name              | マテリアライズドビューが存在するデータベースの名前。 |
 | name                       | マテリアライズドビューの名前。                           |
-| refresh_type               | マテリアライズドビューのリフレッシュタイプ。ROLLUP、MANUAL、ASYNC、INCREMENTAL などがあります。 |
+| refresh_type               | マテリアライズドビューのリフレッシュタイプ。ROLLUP、MANUAL、ASYNC、INCREMENTALを含む。 |
 | is_active                  | マテリアライズドビューの状態がアクティブかどうか。 有効な値: `true` と `false`。 |
-| partition_type             | マテリアライズドビューのパーティションタイプ。RANGE と UNPARTITIONED があります。                |
+| partition_type             | マテリアライズドビューのパーティションタイプ。RANGE と UNPARTITIONED を含む。                |
 | task_id                    | マテリアライズドビューのリフレッシュタスクのID。                  |
 | task_name                  | マテリアライズドビューのリフレッシュタスクの名前。                |
 | last_refresh_start_time    | マテリアライズドビューの最後のリフレッシュの開始時間。 |
 | last_refresh_finished_time | マテリアライズドビューの最後のリフレッシュの終了時間。   |
 | last_refresh_duration      | 最後のリフレッシュにかかった時間。単位: 秒。           |
-| last_refresh_state         | 最後のリフレッシュのステータス。PENDING、RUNNING、FAILED、SUCCESS があります。 |
+| last_refresh_state         | 最後のリフレッシュのステータス。PENDING、RUNNING、FAILED、SUCCESSを含む。 |
 | last_refresh_force_refresh | 最後のリフレッシュがFORCEリフレッシュかどうか。                 |
 | last_refresh_start_partition | マテリアライズドビューの最後のリフレッシュの開始パーティション。 |
 | last_refresh_end_partition | マテリアライズドビューの最後のリフレッシュの終了パーティション。 |
-| last_refresh_base_refresh_partitions | 最後のリフレッシュで更新されたベーステーブルのパーティション。 |
-| last_refresh_mv_refresh_partitions | 最後のリフレッシュで更新されたマテリアライズドビューパーティション。 |
+| last_refresh_base_refresh_partitions | 最後のリフレッシュでリフレッシュされたベーステーブルのパーティション。 |
+| last_refresh_mv_refresh_partitions | 最後のリフレッシュでリフレッシュされたマテリアライズドビューのパーティション。 |
 | last_refresh_error_code    | マテリアライズドビューの最後の失敗したリフレッシュのエラーコード（マテリアライズドビューの状態がアクティブでない場合）。 |
-| last_refresh_error_message | マテリアライズドビューの最後のリフレッシュが失敗した理由（マテリアライズドビューの状態がアクティブでない場合）。 |
+| last_refresh_error_message | 最後のリフレッシュが失敗した理由（マテリアライズドビューの状態がアクティブでない場合）。 |
 | rows                       | マテリアライズドビューのデータ行数。            |
 | text                       | マテリアライズドビューを作成するために使用されたステートメント。          |
 
@@ -138,7 +138,7 @@ GROUP BY `customer`.`c_custkey`, `customer`.`c_phone`, `customer`.`c_acctbal`;
 1 row in set (0.11 sec)
 ```
 
-例 2: 名前をマッチングしてマテリアライズドビューを表示します。
+例 2: 名前に一致するマテリアライズドビューを表示します。
 
 ```Plain
 mysql> SHOW MATERIALIZED VIEWS WHERE NAME LIKE 'customer_mv'\G

@@ -4,25 +4,27 @@ displayed_sidebar: docs
 
 # multi_distinct_count
 
+## 説明
+
 `expr` の行数の合計を返します。これは count(distinct expr) と同等です。
 
-## Syntax
+## 構文
 
 ```Haskell
 multi_distinct_count(expr)
 ```
 
-## Parameters
+## パラメータ
 
-`expr`: `multi_distinct_count()` が実行される基準となる列または式です。`expr` が列名の場合、その列は任意のデータ型でかまいません。
+`expr`: `multi_distinct_count()` が実行される基準となる列または式。`expr` が列名の場合、その列は任意のデータ型で構いません。
 
-## Return value
+## 戻り値
 
 数値を返します。行が見つからない場合は 0 が返されます。この関数は NULL 値を無視します。
 
-## Examples
+## 例
 
-`test` という名前のテーブルがあるとします。`id` で各注文のカテゴリとサプライヤーをクエリします。
+`test` という名前のテーブルがあると仮定します。`id` で各注文のカテゴリとサプライヤーを照会します。
 
 ```Plain
 select * from test order by id;
@@ -39,7 +41,7 @@ select * from test order by id;
 +------+----------+----------+------------+
 ```
 
-Example 1: `category` 列の異なる値の数を数えます。
+例 1: `category` 列の異なる値の数をカウントします。
 
 ```Plain
 select multi_distinct_count(category) from test;
@@ -50,7 +52,7 @@ select multi_distinct_count(category) from test;
 +--------------------------------+
 ```
 
-Example 2: `supplier` 列の異なる値の数を数えます。
+例 2: `supplier` 列の異なる値の数をカウントします。
 
 ```Plain
 select multi_distinct_count(supplier) from test;

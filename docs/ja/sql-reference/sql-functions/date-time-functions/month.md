@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # month
 
+## Description
+
 指定された日付の月を返します。戻り値は1から12の範囲です。
 
 `date` パラメータは DATE または DATETIME 型でなければなりません。

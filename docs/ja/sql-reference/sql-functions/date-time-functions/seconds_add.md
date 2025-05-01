@@ -4,9 +4,9 @@ displayed_sidebar: docs
 
 # seconds_add
 
-## 説明
+## description
 
-### 構文
+### Syntax
 
 ```Haskell
 DATETIME SECONDS_ADD(DATETIME expr1,INT expr2)
@@ -18,7 +18,7 @@ expr1 パラメータは有効な日時式です。
 
 expr2 パラメータは追加したい秒数です。
 
-## 例
+## example
 
 ```Plain Text
 select seconds_add('2010-11-30 23:50:50', 2);
@@ -36,6 +36,6 @@ select seconds_add('2010-11-30', 2);
 +------------------------------+
 ```
 
-## キーワード
+## keyword
 
-SECONDS_ADD, ADD
+SECONDS_ADD,ADD

@@ -4,9 +4,11 @@ displayed_sidebar: docs
 
 # approx_count_distinct
 
+## Description
+
 集計関数の近似値を返します。これは COUNT(DISTINCT col) の結果に似ています。
 
-COUNT と DISTINCT の組み合わせよりも高速で、固定サイズのメモリを使用するため、高いカーディナリティを持つ列に対してメモリ使用量が少なくなります。
+COUNT と DISTINCT の組み合わせよりも高速で、固定サイズのメモリを使用するため、高いカーディナリティの列に対してメモリ使用量が少なくなります。
 
 ## Syntax
 

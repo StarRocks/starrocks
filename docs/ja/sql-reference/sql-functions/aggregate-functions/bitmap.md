@@ -4,9 +4,9 @@ displayed_sidebar: docs
 
 # bitmap
 
-ここでは、Bitmap でのいくつかの集計関数の使用例を示します。関数の詳細な定義や他の Bitmap 関数については、bitmap-functions を参照してください。
+ここでは、Bitmap におけるいくつかの集計関数の使用法を示す簡単な例を紹介します。関数の詳細な定義や他の Bitmap 関数については、bitmap-functions を参照してください。
 
-## テーブルの作成
+## テーブル作成
 
 テーブルを作成する際には、集計モデルが必要です。データ型は bitmap で、集計関数は bitmap_union です。
 
@@ -29,15 +29,15 @@ ALTER TABLE pv_bitmap ADD ROLLUP pv (page, user_id);
 
 ## データロード
 
-`TO_BITMAP (expr)`: 0 ~ 18446744073709551615 の符号なし bigint を bitmap に変換
+`TO_BITMAP (expr)`: 0 ~ 18446744073709551615 の符号なし bigint を bitmap に変換します
 
-`BITMAP_EMPTY ()`: 空の bitmap 列を生成し、挿入または入力時に埋めるデフォルト値として使用
+`BITMAP_EMPTY ()`: 空の bitmap 列を生成し、挿入または入力時に埋めるデフォルト値として使用します
 
-`BITMAP_HASH (expr)`: 任意の型の列をハッシュ化して bitmap に変換
+`BITMAP_HASH (expr)`: 任意の型の列をハッシュ化して bitmap に変換します
 
 ### Stream Load
 
-Stream Load を使用してデータを入力する際、データを Bitmap フィールドに変換することができます。
+Stream Load を使用してデータを入力する際、データを Bitmap フィールドに変換することができます。以下のようにします。
 
 ``` bash
 cat data | curl --location-trusted -u user:passwd -T - \
@@ -101,19 +101,19 @@ select id, bitmap_hash(id2) from table;
 
 ### 構文
 
-`BITMAP_UNION (expr)`: 入力された Bitmap の和集合を計算し、新しい Bitmap を返します。
+`BITMAP_UNION (expr)`: 入力された Bitmaps の和集合を計算し、新しい Bitmap を返します。
 
-`BITMAP_UNION_COUNT (expr)`: 入力された Bitmap の和集合を計算し、その基数を返します。これは BITMAP_COUNT (BITMAP_UNION (expr)) に相当します。BITMAP_UNION_COUNT 関数を優先して使用することをお勧めします。これは BITMAP_COUNT (BITMAP_UNION (expr)) よりもパフォーマンスが優れているためです。
+`BITMAP_UNION_COUNT (expr)`: 入力された Bitmaps の和集合を計算し、その基数を返します。これは BITMAP_COUNT (BITMAP_UNION (expr)) と同等です。パフォーマンスが BITMAP_COUNT (BITMAP_UNION (expr)) よりも優れているため、まず BITMAP_UNION_COUNT 関数を使用することをお勧めします。
 
-`BITMAP_UNION_INT (expr)`: TINYINT、SMALLINT、INT 型の列における異なる値の数を計算し、COUNT (DISTINCT expr) と同じ値を返します。
+`BITMAP_UNION_INT (expr)`: TINYINT、SMALLINT、INT 型の列の異なる値の数を計算し、COUNT (DISTINCT expr) と同じ値を返します。
 
-`INTERSECT_COUNT (bitmap_column_to_count, filter_column, filter_values ...)`: filter_column 条件を満たす複数の bitmap の交差の基数を計算します。bitmap_column_to_count は bitmap 型の列であり、filter_column は異なる次元の列であり、filter_values は次元値のリストです。
+`INTERSECT_COUNT (bitmap_column_to_count, filter_column, filter_values ...)`: filter_column 条件を満たす複数の bitmap の交差の基数を計算します。bitmap_column_to_count は bitmap 型の列であり、filter_column はさまざまな次元の列であり、filter_values は次元値のリストです。
 
-`BITMAP_INTERSECT(expr)`: このグループの bitmap 値の交差を計算し、新しい bitmap を返します。
+`BITMAP_INTERSECT(expr)`: このビットマップ値のグループの交差を計算し、新しいビットマップを返します。
 
 ### 例
 
-以下の SQL は、上記の `pv_bitmap` テーブルを例として使用しています。
+以下の SQL は、上記の `pv_bitmap` テーブルを例として使用します。
 
 `user_id` の重複を排除した値を計算します。
 
@@ -137,7 +137,7 @@ from pv_bitmap;
 ```SQL
 select intersect_count(user_id, page, 'game') as game_uv,
     intersect_count(user_id, page, 'shopping') as shopping_uv,
-    intersect_count(user_id, page, 'game', 'shopping') as retention -- 'game' と 'shopping' ページの両方にアクセスしたユーザーの数
+    intersect_count(user_id, page, 'game', 'shopping') as retention -- 'game' と 'shopping' ページの両方にアクセスしたユーザー数
 from pv_bitmap
 where page in ('game', 'shopping');
 ```

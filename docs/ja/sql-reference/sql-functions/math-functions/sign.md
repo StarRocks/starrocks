@@ -4,23 +4,25 @@ displayed_sidebar: docs
 
 # sign
 
-`x` の符号を返します。入力が負の数、0、または正の数の場合、それぞれ `-1`、`0`、または `1` が出力されます。
+## 説明
 
-## Syntax
+`x` の符号を返します。入力が負の数、0、または正の数の場合、それぞれ `-1`、`0`、または `1` を出力します。
+
+## 構文
 
 ```Haskell
 SIGN(x);
 ```
 
-## Parameters
+## パラメータ
 
 `x`: DOUBLE データ型をサポートします。
 
-## Return value
+## 戻り値
 
 FLOAT データ型の値を返します。
 
-## Examples
+## 例
 
 ```Plain
 mysql> select sign(3.14159);

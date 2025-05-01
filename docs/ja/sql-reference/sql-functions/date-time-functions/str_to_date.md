@@ -4,11 +4,13 @@ displayed_sidebar: docs
 
 # str_to_date
 
+## 説明
+
 指定されたフォーマットに従って、文字列を DATETIME 値に変換します。変換に失敗した場合は、NULL が返されます。
 
 フォーマットは [date_format](./date_format.md) で説明されているものと一致している必要があります。
 
-この関数は [date_format](./date_format.md) の逆です。
+この関数は [date_format](./date_format.md) の逆関数です。
 
 ## 構文
 
@@ -65,4 +67,4 @@ MySQL > select str_to_date('200442 Monday', '%X%V %W');
 
 ## キーワード
 
-STR_TO_DATE,STR,TO,DATE
+STR_TO_DATE, STR, TO, DATE

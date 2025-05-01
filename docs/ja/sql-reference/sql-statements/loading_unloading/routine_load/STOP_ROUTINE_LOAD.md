@@ -14,7 +14,7 @@ Routine Load ジョブを停止します。
 
 :::warning
 
-- 停止した Routine Load ジョブは再開できません。そのため、このステートメントを実行する際は慎重に進めてください。
+- 停止された Routine Load ジョブは再開できません。そのため、このステートメントを実行する際は慎重に進めてください。
 - Routine Load ジョブを一時停止するだけでよい場合は、[PAUSE ROUTINE LOAD](PAUSE_ROUTINE_LOAD.md) を実行できます。
 
 :::
@@ -25,16 +25,16 @@ Routine Load ジョブを停止します。
 STOP ROUTINE LOAD FOR [db_name.]<job_name>
 ```
 
-## パラメータ
+## パラメーター
 
-| **パラメータ** | **必須** | **説明**                                              |
-| ------------- | -------- | ----------------------------------------------------- |
-| db_name       |          | Routine Load ジョブが属するデータベースの名前。        |
-| job_name      | ✅        | Routine Load ジョブの名前。                           |
+| **パラメーター** | **必須** | **説明**                                              |
+| ------------- | ------------ | ------------------------------------------------------------ |
+| db_name       |              | Routine Load ジョブが属するデータベースの名前。 |
+| job_name      | ✅            | Routine Load ジョブの名前。                            |
 
 ## 例
 
-データベース `example_db` 内の Routine Load ジョブ `example_tbl1_ordertest1` を停止します。
+データベース `example_db` の Routine Load ジョブ `example_tbl1_ordertest1` を停止します。
 
 ```SQL
 STOP ROUTINE LOAD FOR example_db.example_tbl1_ordertest1;

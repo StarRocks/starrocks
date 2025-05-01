@@ -4,20 +4,22 @@ displayed_sidebar: docs
 
 # from_unixtime
 
-UNIX タイムスタンプを必要な時間形式に変換します。デフォルトの形式は `yyyy-MM-dd HH:mm:ss` です。また、[date_format](./date_format.md) の形式もサポートしています。
+## 説明
+
+UNIXタイムスタンプを必要な時間形式に変換します。デフォルトの形式は `yyyy-MM-dd HH:mm:ss` です。[date_format](./date_format.md) での形式もサポートしています。
 
 現在、`string_format` は以下の形式をサポートしています:
 
 ```plain text
-%Y: 年  例: 2014, 1900
-%m: 月  例: 12, 09
-%d: 日  例: 11, 01
-%H: 時  例: 23, 01, 12
-%i: 分  例: 05, 11
-%s: 秒  例: 59, 01
+%Y: 年 例: 2014, 1900
+%m: 月 例: 12, 09
+%d: 日 例: 11, 01
+%H: 時 例: 23, 01, 12
+%i: 分 例: 05, 11
+%s: 秒 例: 59, 01
 ```
 
-その他の形式は無効であり、NULL が返されます。
+その他の形式は無効であり、NULLが返されます。
 
 ## 構文
 
@@ -27,15 +29,15 @@ VARCHAR from_unixtime(BIGINT unix_timestamp[, VARCHAR string_format])
 
 ## パラメータ
 
-- `unix_timestamp`: 変換したい UNIX タイムスタンプです。BIGINT 型でなければなりません。指定されたタイムスタンプが 0 未満または 253402243199 より大きい場合、NULL が返されます。つまり、タイムスタンプの範囲は `1970-01-01 00:00:00` から `9999-12-30 11:59:59` までです（タイムゾーンによって異なります）。
+- `unix_timestamp`: 変換したいUNIXタイムスタンプ。BIGINT型でなければなりません。指定されたタイムスタンプが0未満または253402243199より大きい場合、NULLが返されます。つまり、タイムスタンプの範囲は `1970-01-01 00:00:00` から `9999-12-30 11:59:59` までです（タイムゾーンによって異なります）。
 
-- `string_format`: 必要な時間形式です。
+- `string_format`: 必要な時間形式。
 
 ## 戻り値
 
-VARCHAR 型の DATETIME または DATE 値を返します。`string_format` が DATE 形式を指定している場合、VARCHAR 型の DATE 値が返されます。
+VARCHAR型のDATETIMEまたはDATE値を返します。`string_format` がDATE形式を指定している場合、VARCHAR型のDATE値が返されます。
 
-タイムスタンプが値の範囲を超えている場合や、`string_format` が無効な場合、NULL が返されます。
+タイムスタンプが値の範囲を超えている場合や、`string_format` が無効な場合、NULLが返されます。
 
 ## 例
 

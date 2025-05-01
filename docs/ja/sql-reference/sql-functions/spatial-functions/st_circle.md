@@ -4,23 +4,25 @@ displayed_sidebar: docs
 
 # ST_Circle
 
+## Description
+
 WKT (Well Known Text) を地球の球面上の円に変換します。
 
-## 構文
+## Syntax
 
 ```Haskell
 GEOMETRY ST_Circle(DOUBLE center_lng, DOUBLE center_lat, DOUBLE radius)
 ```
 
-## パラメータ
+## Parameters
 
 `center_lng` は円の中心の経度を示します。
 
 `center_lat` は円の中心の緯度を示します。
 
-`radius` は円の半径をメートル単位で示します。最大で 9999999 の半径がサポートされています。
+`radius` は円の半径をメートル単位で示します。最大 9999999 の半径がサポートされています。
 
-## 例
+## Examples
 
 ```Plain Text
 MySQL > SELECT ST_AsText(ST_Circle(111, 64, 10000));
@@ -31,6 +33,6 @@ MySQL > SELECT ST_AsText(ST_Circle(111, 64, 10000));
 +--------------------------------------------+
 ```
 
-## キーワード
+## keyword
 
-ST_CIRCLE,ST,CIRCLE
+ST_CIRCLE, ST, CIRCLE

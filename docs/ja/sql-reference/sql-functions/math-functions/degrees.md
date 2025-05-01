@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # degrees
 
+## 説明
+
 ラジアン `x` を度に変換します。
 
 ## 構文

@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 ## 説明
 
-このステートメントは、データベース内で動的パーティション化プロパティが設定されているすべてのパーティションテーブルのステータスを表示するために使用されます。
+このステートメントは、データベース内で動的パーティション化プロパティが設定されているすべてのパーティション化されたテーブルのステータスを表示するために使用されます。
 
 ## 構文
 
@@ -22,9 +22,9 @@ SHOW DYNAMIC PARTITION TABLES FROM <db_name>
 - Start: 動的パーティション化の開始オフセット。
 - End: 動的パーティション化の終了オフセット。
 - Prefix: パーティション名のプレフィックス。
-- Buckets: 各パーティションのバケット数。
+- Buckets: パーティションごとのバケット数。
 - ReplicationNum: テーブルのレプリカ数。
-- StartOf: 指定された TimeUnit に応じた各週/月の最初の日。
+- StartOf
 - LastUpdateTime: テーブルが最後に更新された時間。
 - LastSchedulerTime: テーブル内のデータが最後にスケジュールされた時間。
 - State: テーブルのステータス。
@@ -33,7 +33,7 @@ SHOW DYNAMIC PARTITION TABLES FROM <db_name>
 
 ## 例
 
-`db_test` で動的パーティション化プロパティが設定されているすべてのパーティションテーブルのステータスを表示します。
+`db_test` で動的パーティション化プロパティが設定されているすべてのパーティション化されたテーブルのステータスを表示します。
 
 ```sql
 SHOW DYNAMIC PARTITION TABLES FROM db_test;

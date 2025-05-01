@@ -4,15 +4,17 @@ displayed_sidebar: docs
 
 # concat
 
-この関数は複数の文字列を結合します。パラメータの値が NULL の場合、NULL を返します。
+## 説明
 
-## Syntax
+この関数は複数の文字列を結合します。パラメータの値のいずれかが NULL の場合、NULL を返します。
+
+## 構文
 
 ```Haskell
 VARCHAR concat(VARCHAR,...)
 ```
 
-## Examples
+## 例
 
 ```Plain Text
 MySQL > select concat("a", "b");
@@ -37,6 +39,6 @@ MySQL > select concat("a", null, "c");
 +------------------------+
 ```
 
-## keyword
+## キーワード
 
 CONCAT

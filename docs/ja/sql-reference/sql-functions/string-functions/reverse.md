@@ -4,25 +4,27 @@ displayed_sidebar: docs
 
 # reverse
 
+## 説明
+
 文字列または配列を逆にします。文字列内の文字や配列要素を逆順にした文字列または配列を返します。
 
-## Syntax
+## 構文
 
 ```Haskell
 reverse(param)
 ```
 
-## Parameters
+## パラメータ
 
 `param`: 逆にする文字列または配列。VARCHAR、CHAR、または ARRAY 型である必要があります。
 
-現在、この関数は一次元配列のみをサポートしており、配列要素は DECIMAL 型であってはなりません。この関数は次のタイプの配列要素をサポートします: BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、VARCHAR、DECIMALV2、DATETIME、DATE、および JSON。**JSON はバージョン 2.5 からサポートされています。**
+現在、この関数は一次元配列のみをサポートしており、配列要素は DECIMAL 型であってはなりません。この関数は次のタイプの配列要素をサポートしています: BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、VARCHAR、DECIMALV2、DATETIME、DATE、および JSON。**JSON はバージョン 2.5 からサポートされています。**
 
-## Return value
+## 戻り値
 
 戻り値の型は `param` と同じです。
 
-## Examples
+## 例
 
 例 1: 文字列を逆にする。
 

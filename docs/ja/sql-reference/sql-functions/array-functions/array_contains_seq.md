@@ -4,7 +4,9 @@ displayed_sidebar: docs
 
 # array_contains_seq
 
-array2 のすべての要素が、同じ順序で array1 に現れるかどうかを確認します。したがって、この関数は、`array1 = prefix + array2 + suffix` の場合にのみ 1 を返します。
+## 説明
+
+array2 のすべての要素が array1 に同じ順序で現れるかどうかを確認します。したがって、`array1 = prefix + array2 + suffix` の場合に限り、この関数は 1 を返します。
 
 例えば:
 
@@ -21,18 +23,18 @@ BOOLEAN array_contains_seq(arr1, arr2)
 
 ## パラメータ
 
-`arr`: 比較する 2 つの配列。この構文は、`arr2` が `arr1` の部分集合であり、同じ順序であるかどうかを確認します。
+`arr`: 比較する2つの配列。この構文は、`arr2` が `arr1` の部分集合であり、同じ順序であるかどうかを確認します。
 
-2 つの配列内の要素のデータ型は同じでなければなりません。StarRocks がサポートする配列要素のデータ型については、[ARRAY](../../../sql-reference/data-types/semi_structured/Array.md) を参照してください。
+2つの配列の要素のデータ型は同じでなければなりません。StarRocks がサポートする配列要素のデータ型については、 [ARRAY](../../../sql-reference/data-types/semi_structured/Array.md) を参照してください。
 
 ## 戻り値
 
 BOOLEAN 型の値を返します。
 
-- `arr2` が `arr1` の部分集合であり、`arr2` の要素が `arr1` の要素と同じ順序である場合、`1` を返します。それ以外の場合は `0` を返します。
-- 空の配列は任意の配列の部分集合です。したがって、`arr2` が空であっても `arr1` が有効な配列であれば、`1` を返します。
-- 入力配列のいずれかが NULL の場合、NULL を返します。
-- 配列内の NULL は通常の値として処理されます。例えば、`SELECT array_contains_seq([1, 2, NULL, 3, 4], [2,3])` は 0 を返します。しかし、`SELECT array_contains_seq([1, 2, NULL, 3, 4], [2,NULL,3])` は 1 を返します。
+- `arr2` が `arr1` の部分集合であり、`arr2` の要素が `arr1` の要素と同じ順序である場合、`1` が返されます。それ以外の場合は `0` が返されます。
+- 空の配列は任意の配列の部分集合です。したがって、`arr2` が空で `arr1` が有効な配列である場合、`1` が返されます。
+- 任意の入力配列が NULL の場合、NULL が返されます。
+- 配列内の NULL は通常の値として処理されます。例えば、`SELECT array_contains_seq([1, 2, NULL, 3, 4], [2,3])` は 0 を返しますが、`SELECT array_contains_seq([1, 2, NULL, 3, 4], [2,NULL,3])` は 1 を返します。
 
 ## 例
 

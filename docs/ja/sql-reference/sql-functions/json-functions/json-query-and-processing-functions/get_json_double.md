@@ -4,23 +4,25 @@ displayed_sidebar: docs
 
 # get_json_double
 
-この関数は、指定されたパスから JSON 文字列内の浮動小数点値を解析して取得します。json_path は `$` で始まり、パスの区切りとして `.` を使用する必要があります。
+## Description
 
-パスに `.` が含まれる場合は、`"` で囲むことができます。
+この関数は、指定されたパスから JSON 文字列内の浮動小数点値を解析して取得します。json_path は `$` で始まり、`.` をパスの区切りとして使用します。
+
+パスに `.` が含まれる場合、`"` で囲むことができます。
 
 `[ ]` は配列の添字として使用され、0 から始まります。
 
-パスの内容には `"` 、`[` 、および `]` を含めてはいけません。
+パスの内容には `"` 、`[` 、`]` を含めてはいけません。
 
 json_string または json_path の形式が間違っている場合、この関数は NULL を返します。
 
-## 構文
+## Syntax
 
 ```Haskell
 DOUBLE get_json_double(VARCHAR json_str, VARCHAR json_path)
 ```
 
-## 例
+## Examples
 
 1. キーが "k1" の値を取得する
 
@@ -55,6 +57,6 @@ DOUBLE get_json_double(VARCHAR json_str, VARCHAR json_path)
     +---------------------------------------------------------------------+
     ```
 
-## キーワード
+## keyword
 
 GET_JSON_DOUBLE,GET,JSON,DOUBLE

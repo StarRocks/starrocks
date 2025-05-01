@@ -4,28 +4,30 @@ displayed_sidebar: docs
 
 # sqrt, dsqrt
 
+## 説明
+
 値の平方根を計算します。dsqrt は sqrt と同じです。
 
-## Syntax
+## 構文
 
 ```Haskell
 DOUBLE SQRT(DOUBLE x);
 DOUBLE DSQRT(DOUBLE x);
 ```
 
-## Parameters
+## パラメータ
 
 `x`: 数値のみを指定できます。この関数は、計算前に数値を DOUBLE 値に変換します。
 
-## Return value
+## 戻り値
 
 DOUBLE データ型の値を返します。
 
-## Usage notes
+## 使用上の注意
 
-数値以外の値を指定した場合、この関数は `NULL` を返します。
+非数値を指定した場合、この関数は `NULL` を返します。
 
-## Examples
+## 例
 
 ```Plain
 mysql> select sqrt(3.14);

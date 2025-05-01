@@ -4,23 +4,25 @@ displayed_sidebar: docs
 
 # variance,var_pop,variance_pop
 
-式の母分散を返します。バージョン 2.5.10 以降、この関数はウィンドウ関数としても使用できます。
+## 説明
 
-## Syntax
+式の母分散を返します。バージョン v2.5.10 以降、この関数はウィンドウ関数としても使用できます。
+
+## 構文
 
 ```Haskell
 VARIANCE(expr)
 ```
 
-## Parameters
+## パラメータ
 
 `expr`: 式です。テーブルのカラムである場合、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、または DECIMAL に評価される必要があります。
 
-## Return value
+## 戻り値
 
 DOUBLE 値を返します。
 
-## Examples
+## 例
 
 ```plaintext
 MySQL > select var_pop(i_current_price), i_rec_start_date from item group by i_rec_start_date;
@@ -46,6 +48,6 @@ MySQL > select variance(i_current_price), i_rec_start_date from item group by i_
 +---------------------------+------------------+
 ```
 
-## keyword
+## キーワード
 
 VARIANCE,VAR_POP,VARIANCE_POP

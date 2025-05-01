@@ -9,7 +9,7 @@ displayed_sidebar: docs
 パイプを一時停止または再開します:
 
 - ロードジョブが進行中（つまり、`RUNNING` 状態）の場合、ジョブのパイプを一時停止（`SUSPEND`）すると、ジョブが中断されます。
-- ロードジョブでエラーが発生した場合、ジョブのパイプを再開（`RESUME`）すると、エラーのあるジョブが続行されます。
+- ロードジョブがエラーに遭遇した場合、ジョブのパイプを再開（`RESUME`）すると、エラーのあるジョブが再開されます。
 
 このコマンドは v3.2 以降でサポートされています。
 
@@ -29,7 +29,7 @@ ALTER PIPE <pipe_name> { SUSPEND | RESUME [ IF SUSPENDED ] }
 
 ### パイプを一時停止する
 
-データベース `mydatabase` にある `user_behavior_replica` という名前のパイプ（`RUNNING` 状態）を一時停止します:
+データベース `mydatabase` 内で `RUNNING` 状態にある `user_behavior_replica` という名前のパイプを一時停止します:
 
 ```SQL
 USE mydatabase;
@@ -40,7 +40,7 @@ ALTER PIPE user_behavior_replica SUSPEND;
 
 ### パイプを再開する
 
-データベース `mydatabase` にある `user_behavior_replica` という名前のパイプを再開します:
+データベース `mydatabase` 内で `user_behavior_replica` という名前のパイプを再開します:
 
 ```SQL
 USE mydatabase;
@@ -49,7 +49,7 @@ ALTER PIPE user_behavior_replica RESUME;
 
 [SHOW PIPES](SHOW_PIPES.md) を使用してパイプをクエリすると、その状態が `RUNNING` に変わったことが確認できます。
 
-## 参考
+## 参考文献
 
 - [CREATE PIPE](CREATE_PIPE.md)
 - [ALTER PIPE](ALTER_PIPE.md)

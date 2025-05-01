@@ -4,7 +4,9 @@ displayed_sidebar: docs
 
 # ends_with
 
-文字列が指定されたサフィックスで終わる場合、`true` を返します。それ以外の場合は、`false` を返します。引数が NULL の場合、結果は NULL です。
+## Description
+
+文字列が指定されたサフィックスで終わる場合、`true` を返します。それ以外の場合は `false` を返します。引数が NULL の場合、結果は NULL です。
 
 ## Syntax
 
