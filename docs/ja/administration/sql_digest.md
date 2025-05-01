@@ -8,22 +8,22 @@ displayed_sidebar: docs
 
 ## 概要
 
-SQL Digest は、パラメータを削除した履歴 SQL ステートメントから生成されるフィンガープリントです。同じ構造で異なるパラメータを持つ SQL ステートメントをクラスタリングするのに役立ちます。
+SQL Digest は、パラメータを除去した履歴 SQL ステートメントから生成されるフィンガープリントです。これにより、同じ構造を持つが異なるパラメータを持つ SQL ステートメントをクラスタリングすることができます。
 
-SQL Digest の一般的な使用例には以下があります:
+SQL Digest の一般的な使用例には以下があります：
 
 - クエリ履歴で同じ構造だが異なるパラメータを持つ他の SQL ステートメントを見つける
-- 同じ構造の SQL の実行頻度、累積時間、その他の統計を追跡する
+- 同じ構造を持つ SQL の実行頻度、累積時間、その他の統計を追跡する
 - システム内で最も時間のかかる SQL パターンを特定する
 
-StarRocks では、SQL Digest は主に監査ログ **fe.audit.log** を通じて記録されます。例えば、次の 2 つの SQL ステートメントを実行します:
+StarRocks では、SQL Digest は主に監査ログ **fe.audit.log** を通じて記録されます。例えば、次の 2 つの SQL ステートメントを実行します：
 
 ```SQL
 SELECT count(*) FROM lineorder WHERE lo_orderdate > '19920101';
 SELECT count(*) FROM lineorder WHERE lo_orderdate > '19920202';
 ```
 
-2 つの同じ Digest が **fe.audit.log** に生成されます:
+**fe.audit.log** には同じ Digest が 2 つ生成されます：
 
 ```SQL
 Digest=f58bb71850d112014f773717830e7f77
@@ -36,15 +36,15 @@ Digest=f58bb71850d112014f773717830e7f77
 
 この機能を有効にするには、FE の設定項目 `enable_sql_digest` を `true` に設定する必要があります。
 
-次のステートメントを実行して動的に有効にします:
+次のステートメントを実行して動的に有効化します：
 
 ```SQL
 ADMIN SET FRONTEND CONFIG ('enable_sql_digest'='true');
 ```
 
-永続的に有効にするには、FE 設定ファイル `fe.conf` に `enable_sql_digest = true` を追加し、FE を再起動する必要があります。
+永続的に有効化するには、FE 設定ファイル `fe.conf` に `enable_sql_digest = true` を追加し、FE を再起動する必要があります。
 
-この機能を有効にした後、[AuditLoader](./management/audit_loader.md) プラグインをインストールして、SQL ステートメントの統計分析を行うことができます。
+この機能を有効にした後、[AuditLoader](./management/audit_loader.md) プラグインをインストールして SQL ステートメントの統計分析を行うことができます。
 
 ### 類似 SQL を見つける
 
@@ -95,6 +95,6 @@ WHERE digest IN (SELECT digest FROM top_sql);
 
 ## パラメータ正規化ルール
 
-- SQL 内の定数値は正規化されます。例えば、`WHERE a = 1` と `WHERE a = 2` を持つ類似の SQL ステートメントは同じ Digest を持ちます。
-- IN 述語は正規化されます。例えば、`IN (1,2,3)` と `IN (1,2)` を持つ類似の SQL ステートメントは同じ Digest を持ちます。
-- `LIMIT N` 句は正規化されます。例えば、`LIMIT 10` と `LIMIT 30` を持つ類似の SQL ステートメントは同じ Digest を持ちます。
+- SQL 内の定数値は正規化されます。例えば、`WHERE a = 1` と `WHERE a = 2` を含む類似の SQL ステートメントは同じ Digest を持ちます。
+- IN 述語は正規化されます。例えば、`IN (1,2,3)` と `IN (1,2)` を含む類似の SQL ステートメントは同じ Digest を持ちます。
+- `LIMIT N` 句は正規化されます。例えば、`LIMIT 10` と `LIMIT 30` を含む類似の SQL ステートメントは同じ Digest を持ちます。

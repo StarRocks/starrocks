@@ -4,27 +4,29 @@ displayed_sidebar: docs
 
 # months_add
 
+## 説明
+
 指定された月数を日付に加え、月単位で正確に計算します。
 
-[add_months](./add_months.md) 関数は同様の機能を提供します。
+[add_months](./add_months.md) 関数も同様の機能を提供します。
 
-## Syntax
+## 構文
 
 ```Haskell
 DATETIME months_add(DATETIME expr1, INT expr2);
 ```
 
-## Parameters
+## パラメータ
 
-- `expr1`: 開始時間。DATETIME または DATE 型である必要があります。
+- `expr1`: 開始時間。DATETIME または DATE 型でなければなりません。
 
-- `expr2`: 加算する月数。INT 型である必要があります。0 以上、0 以下、または 0 と等しい値を取ることができます。負の値は `date` から月を減算します。
+- `expr2`: 加える月数。INT 型でなければなりません。ゼロ以上、ゼロ、またはゼロ以下の値を取ることができます。負の値は `date` から月を引きます。
 
-## Return value
+## 戻り値
 
 DATETIME 値を返します。
 
-## Examples
+## 例
 
 ```Plain
 select months_add('2019-08-01 13:21:03', 8);

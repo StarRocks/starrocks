@@ -4,38 +4,40 @@ displayed_sidebar: docs
 
 # date_diff
 
+## Description
+
 指定された単位で2つの日付値の差を返します。この関数は、`expr1 - expr2` の値を `unit` の単位で表現して返します。
 
 例えば、`date_diff('second', '2010-11-30 23:59:59', '2010-11-30 20:58:59')` は、2つの DATETIME 値の差を秒単位で返します。
 
 この関数は v3.1 からサポートされています。
 
-date_diff と [datediff](./datediff.md) の違いは、datediff() が `unit` パラメータをサポートしていない点です。
+date_diff と [datediff](./datediff.md) の違いは、datediff() が `unit` パラメータをサポートしない点です。
 
-## 構文
+## Syntax
 
 ```Haskell
 BIGINT DATE_DIFF(VARCHAR unit, DATETIME expr1, DATETIME expr2)
 ```
 
-## パラメータ
+## Parameters
 
-- `expr1` と `expr2`: 比較したい2つの datetime 値。必須です。サポートされているデータ型は DATETIME と DATE です。
+- `expr1` と `expr2`: 比較したい2つの datetime 値。必須です。サポートされるデータ型は DATETIME と DATE です。
 
-- `unit`: 時間差を表現するための単位。必須です。サポートされている `unit` の値は、year, quarter, month, week, day, hour, minute, second, millisecond です。
+- `unit`: 時間差を表現するために使用する単位。必須です。サポートされる `unit` の値は、year, quarter, month, week, day, hour, minute, second, millisecond です。
 
-## 戻り値
+## Return value
 
 BIGINT 値を返します。
 
-## 使用上の注意
+## Usage notes
 
 - `expr1` が `expr2` よりも前の場合、負の値が返されます。
 - `unit` が無効な場合、エラーが返されます。
 - 入力値が NULL の場合、NULL が返されます。
 - 指定された日付が存在しない場合、例えば `2022-11-31`、NULL が返されます。
 
-## 例
+## Examples
 
 ```Plain Text
 mysql> select date_diff('second', '2010-11-30 23:59:59', '2010-11-30 20:58:59');
@@ -67,6 +69,6 @@ mysql> select date_diff('millisecond', '2010-11-30 23:59:59', '2010-11-30 20:58:
 +------------------------------------------------------------------------+
 ```
 
-## 参考
+## References
 
 [datediff](./datediff.md)

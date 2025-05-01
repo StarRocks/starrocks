@@ -4,7 +4,9 @@ displayed_sidebar: docs
 
 # to_bitmap
 
-入力は 0 から 18446744073709551615 までの値を持つ符号なし bigint であり、出力はこの要素を含む bitmap です。この関数は主に StarRocks テーブルの bitmap フィールドに整数フィールドをインポートするための stream load タスクで使用されます。例えば:
+## Description
+
+入力は 0 から 18446744073709551615 の範囲の符号なし bigint で、出力はこの要素を含む bitmap です。この関数は主に、StarRocks テーブルの bitmap フィールドに整数フィールドをインポートするための stream ロード タスクに使用されます。例えば:
 
 ```bash
 cat data | curl --location-trusted -u user:passwd -T - \
@@ -12,13 +14,13 @@ cat data | curl --location-trusted -u user:passwd -T - \
     http://host:8410/api/test/testDb/_stream_load
 ```
 
-## 構文
+## Syntax
 
 ```Haskell
 BITMAP TO_BITMAP(expr)
 ```
 
-## 例
+## Examples
 
 ```Plain Text
 MySQL > select bitmap_count(to_bitmap(10));
@@ -50,6 +52,6 @@ select bitmap_to_string(to_bitmap(null));
 +-----------------------------------+
 ```
 
-## キーワード
+## keyword
 
 TO_BITMAP,BITMAP

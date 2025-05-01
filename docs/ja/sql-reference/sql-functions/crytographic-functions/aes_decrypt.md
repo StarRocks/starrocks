@@ -4,27 +4,29 @@ displayed_sidebar: docs
 
 # aes_decrypt
 
+## 説明
+
 AES_128_ECB アルゴリズムを使用して文字列を復号し、バイナリ文字列を返します。
 
-AES は advanced encryption standard の略で、ECB は electronic code book の略です。文字列を暗号化するために使用されるキーは 128 ビットの文字列です。
+AES は advanced encryption standard（高度暗号化標準）の略で、ECB は electronic code book（電子コードブック）の略です。文字列を暗号化するために使用されるキーは 128 ビットの文字列です。
 
-## Syntax
+## 構文
 
 ```Haskell
 aes_decrypt(str,key_str);
 ```
 
-## Parameters
+## パラメータ
 
 `str`: 復号する文字列。VARCHAR 型でなければなりません。
 
 `key_str`: `str` を暗号化するために使用されるキー。VARCHAR 型でなければなりません。
 
-## Return value
+## 戻り値
 
 VARCHAR 型の値を返します。入力が無効な場合は、NULL が返されます。
 
-## Examples
+## 例
 
 Base64 文字列をデコードし、この関数を使用してデコードされた文字列を元の文字列に復号します。
 

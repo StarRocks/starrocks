@@ -4,17 +4,19 @@ displayed_sidebar: docs
 
 # timediff
 
+## 説明
+
 2 つの DATETIME 式の差を返します。
 
 戻り値は TIME 型でなければなりません。
 
-## Syntax
+## 構文
 
 ```Haskell
 TIME TIMEDIFF(DATETIME expr1, DATETIME expr2)`
 ```
 
-## Examples
+## 例
 
 ```Plain Text
 MySQL > SELECT TIMEDIFF(now(),utc_timestamp());
@@ -39,6 +41,6 @@ MySQL > SELECT TIMEDIFF('2019-01-01 00:00:00', NULL);
 +---------------------------------------+
 ```
 
-## keyword
+## キーワード
 
 TIMEDIFF

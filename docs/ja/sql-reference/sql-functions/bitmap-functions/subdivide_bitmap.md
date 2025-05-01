@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # subdivide_bitmap
 
+## 説明
+
 大きなビットマップを複数のサブビットマップに分割します。
 
 この関数は主にビットマップをエクスポートするために使用されます。ビットマップが大きすぎると、MySQL プロトコルで許可されている最大パケットサイズを超えてしまいます。
@@ -18,7 +20,7 @@ BITMAP subdivide_bitmap(bitmap, length)
 
 ## パラメータ
 
-`bitmap`: 分割する必要があるビットマップ。必須です。
+`bitmap`: 分割が必要なビットマップ。必須です。
 `length`: 各サブビットマップの最大長。必須です。この値より大きいビットマップは複数の小さなビットマップに分割されます。
 
 ## 戻り値
@@ -27,10 +29,10 @@ BITMAP subdivide_bitmap(bitmap, length)
 
 ## 例
 
-テーブル `t1` があり、`c2` 列が BITMAP 列であるとします。
+テーブル `t1` があり、その中の `c2` 列が BITMAP 列であるとします。
 
 ```Plain
--- `c2` の値を文字列に変換するために bitmap_to_string() を使用します。
+-- bitmap_to_string() を使用して `c2` の値を文字列に変換します。
 mysql> select c1, bitmap_to_string(c2) from t1;
 +------+----------------------+
 | c1   | bitmap_to_string(c2) |

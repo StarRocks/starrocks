@@ -10,11 +10,11 @@ tablet に関連する情報を表示します。
 
 > **注意**
 >
-> バージョン 3.0 以降、この操作には SYSTEM レベルの OPERATE 権限と TABLE レベルの SELECT 権限が必要です。バージョン 2.5 以前では、この操作には ADMIN_PRIV 権限が必要です。
+> バージョン 3.0 以降では、この操作には SYSTEM レベルの OPERATE 権限と TABLE レベルの SELECT 権限が必要です。バージョン 2.5 以前では、この操作には ADMIN_PRIV 権限が必要です。
 
 ## 構文
 
-### テーブルまたはパーティション内の tablets の情報をクエリする
+### テーブルまたはパーティション内の tablet 情報をクエリする
 
 ```sql
 SHOW TABLET
@@ -32,14 +32,14 @@ WHERE [version = <version_number>]
 | **パラメータ**       | **必須** | **説明**                                                     |
 | -------------- | -------- | ------------------------------------------------------------ |
 | db_name        | いいえ       | データベース名。このパラメータを指定しない場合、デフォルトで現在のデータベースが使用されます。                     |
-| table_name     | はい       | tablet 情報をクエリするテーブルの名前。このパラメータを指定しないとエラーが返されます。                                                     |
+| table_name     | はい       | tablet 情報をクエリするテーブルの名前。このパラメータを指定する必要があります。指定しないとエラーが返されます。                                                     |
 | partition_name | いいえ       | tablet 情報をクエリするパーティションの名前。                                                     |
-| version_number | いいえ       | データのバージョン番号。                                                   |
+| version_number | いいえ       | データバージョン番号。                                                   |
 | backend_id     | いいえ       | tablet のレプリカが配置されている BE の ID。                                 |
-| STATE          | いいえ       | tablet レプリカのステータス。 <ul><li>`NORMAL`: レプリカは正常です。</li><li>`ALTER`: レプリカに Rollup または schema change が実行されています。</li><li>`CLONE`: レプリカがクローンされています。（この状態のレプリカは使用できません）。</li><li>`DECOMMISSION`: レプリカが廃止されています。</li></ul> |
+| STATE          | いいえ       | tablet レプリカの状態。 <ul><li>`NORMAL`: レプリカは正常です。</li><li>`ALTER`: レプリカに Rollup または schema change が実行されています。</li><li>`CLONE`: レプリカがクローンされています。（この状態のレプリカは使用できません）。</li><li>`DECOMMISSION`: レプリカが廃止されています。</li></ul> |
 | field_name     | いいえ       | 結果をソートするフィールド。`SHOW TABLET FROM <table_name>` で返されるすべてのフィールドはソート可能です。<ul><li>結果を昇順で表示する場合は、`ORDER BY field_name ASC` を使用します。</li><li>結果を降順で表示する場合は、`ORDER BY field_name DESC` を使用します。</li></ul> |
-| offset         | いいえ       | 結果からスキップする tablets の数。例えば、`OFFSET 5` は最初の 5 つの tablets をスキップすることを意味します。デフォルト値: 0。 |
-| limit          | いいえ       | 返す tablets の数。例えば、`LIMIT 10` は 10 個の tablets のみを返すことを意味します。このパラメータが指定されていない場合、フィルター条件を満たすすべての tablets が返されます。 |
+| offset         | いいえ       | 結果からスキップする tablet の数。例えば、`OFFSET 5` は最初の 5 つの tablet をスキップすることを意味します。デフォルト値: 0。 |
+| limit          | いいえ       | 返す tablet の数。例えば、`LIMIT 10` は 10 個の tablet のみを返すことを意味します。このパラメータが指定されていない場合、フィルター条件を満たすすべての tablet が返されます。 |
 
 ### 単一の tablet の情報をクエリする
 
@@ -55,7 +55,7 @@ SHOW TABLET <tablet_id>
 
 ## 返されるフィールドの説明
 
-### テーブルまたはパーティション内の tablets の情報をクエリする
+### テーブルまたはパーティション内の tablet 情報をクエリする
 
 ```plain
 +----------+-----------+-----------+------------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+----------+----------+--------+-------------------------+--------------+------------------+--------------+----------+----------+-------------------+---------------+
@@ -69,23 +69,23 @@ SHOW TABLET <tablet_id>
 | ReplicaId               | レプリカ ID。                      |
 | BackendId               | レプリカが配置されている BE の ID。  |
 | SchemaHash              | スキーマハッシュ（ランダムに生成される）。        |
-| Version                 | データのバージョン番号。                     |
+| Version                 | データバージョン番号。                     |
 | VersionHash             | データバージョン番号のハッシュ。              |
 | LstSuccessVersion       | 最後に正常にロードされたバージョン。        |
 | LstSuccessVersionHash   | 最後に正常にロードされたバージョンのハッシュ。 |
-| LstFailedVersion        | 最後にロードに失敗したバージョン。`-1` は失敗したバージョンがないことを示します。 |
+| LstFailedVersion        | 最後にロードに失敗したバージョン。`-1` はロードに失敗したバージョンがないことを示します。 |
 | LstFailedVersionHash    | 最後に失敗したバージョンのハッシュ。 |
 | LstFailedTime           | 最後にロードに失敗した時間。`NULL` はロード失敗がないことを示します。       |
 | DataSize                | tablet のデータサイズ。          |
 | RowCount                | tablet のデータ行数。            |
-| State                   | tablet のレプリカステータス。           |
-| LstConsistencyCheckTime | 最後の整合性チェックの時間。`NULL` は整合性チェックが行われていないことを示します。 |
-| CheckVersion            | 整合性チェックが行われたデータバージョン。`-1` はチェックされたバージョンがないことを示します。    |
-| CheckVersionHash        | 整合性チェックが行われたバージョンのハッシュ。         |
+| State                   | tablet のレプリカ状態。           |
+| LstConsistencyCheckTime | 最後の整合性チェックの時間。`NULL` は整合性チェックが実行されていないことを示します。 |
+| CheckVersion            | 整合性チェックが実行されたデータバージョン。`-1` はチェックされたバージョンがないことを示します。    |
+| CheckVersionHash        | 整合性チェックが実行されたバージョンのハッシュ。         |
 | VersionCount            | データバージョンの総数。                      |
 | PathHash                | tablet が保存されているディレクトリのハッシュ。        |
 | MetaUrl                 | より多くのメタ情報をクエリするために使用される URL。     |
-| CompactionStatus        | データバージョンの Compaction ステータスをクエリするために使用される URL。    |
+| CompactionStatus        | データバージョンの Compaction 状態をクエリするために使用される URL。    |
 | DiskRootPath            | レプリカが配置されているディスク。    |
 
 ### 特定の tablet の情報をクエリする
@@ -144,7 +144,7 @@ PARTITION p20210109 VALUES [("2021-01-09"), ("2021-01-10")))
 DISTRIBUTED BY HASH(`k1`, `k2`, `k3`);
 ```
 
-- 例 1: 指定されたテーブル内のすべての tablets の情報をクエリします。以下の例は、返された情報から 1 つの tablet の情報のみを抜粋しています。
+- 例 1: 指定されたテーブル内のすべての tablet の情報をクエリします。以下の例では、返される情報から 1 つの tablet の情報のみを抜粋しています。
 
     ```plain
         mysql> show tablet from example_db.test_show_tablet\G
@@ -190,38 +190,38 @@ DISTRIBUTED BY HASH(`k1`, `k2`, `k3`);
         DetailCmd: SHOW PROC '/dbs/11145/9588953/partitions/9588946/9588954/9588955';
     ```
 
-- 例 3: パーティション `p20210103` 内の tablets の情報をクエリします。
+- 例 3: パーティション `p20210103` 内の tablet の情報をクエリします。
 
     ```sql
     SHOW TABLET FROM test_show_tablet partition(p20210103);
     ```
 
-- 例 4: 10 個の tablets の情報を返します。
+- 例 4: 10 個の tablet の情報を返します。
 
     ```sql
         SHOW TABLET FROM test_show_tablet limit 10;
     ```
 
-- 例 5: オフセット 5 で 10 個の tablets の情報を返します。
+- 例 5: オフセット 5 で 10 個の tablet の情報を返します。
 
     ```sql
     SHOW TABLET FROM test_show_tablet limit 5,10;
     ```
 
-- 例 6: `backendid`、`version`、および `state` で tablets をフィルタリングします。
+- 例 6: `backendid`、`version`、および `state` で tablet をフィルタリングします。
 
     ```sql
         SHOW TABLET FROM test_show_tablet
         WHERE backendid = 10004 and version = 1 and state = "NORMAL";
     ```
 
-- 例 7: `version` で tablets をソートします。
+- 例 7: `version` で tablet をソートします。
 
     ```sql
         SHOW TABLET FROM table_name where backendid = 10004 order by version;
     ```
 
-- 例 8: インデックス名が `test_show_tablet` の tablets の情報を返します。
+- 例 8: インデックス名が `test_show_tablet` の tablet の情報を返します。
 
     ```sql
     SHOW TABLET FROM test_show_tablet where indexname = "test_show_tablet";

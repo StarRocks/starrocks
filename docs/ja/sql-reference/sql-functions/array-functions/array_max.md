@@ -4,15 +4,17 @@ displayed_sidebar: docs
 
 # array_max
 
+## 説明
+
 ARRAY 内のすべてのデータの最大値を取得し、この結果を返します。
 
-## Syntax
+## 構文
 
 ```Haskell
 array_max(array(type))
 ```
 
-## Examples
+## 例
 
 ```plain text
 mysql> select array_max([113, 11, 12]);
@@ -37,6 +39,6 @@ mysql> select array_max([cast('2020-02-25 11:35:17' as datetime), cast('2019-08-
 +--------------------------------------------------------------------------------------------------------------------------------------+
 ```
 
-## keyword
+## キーワード
 
-ARRAY_MAX,ARRAY
+ARRAY_MAX, ARRAY

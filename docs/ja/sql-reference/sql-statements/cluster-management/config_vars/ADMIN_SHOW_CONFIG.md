@@ -6,13 +6,13 @@ displayed_sidebar: docs
 
 ## 説明
 
-現在のクラスターの設定を表示します（現在は FE の設定項目のみ表示可能です）。これらの設定項目の詳細については、[Configuration](../../../../administration/management/FE_configuration.md) を参照してください。
+現在のクラスターの設定を表示します（現在、表示できるのは FE の設定項目のみです）。これらの設定項目の詳細な説明については、 [Configuration](../../../../administration/management/FE_configuration.md) を参照してください。
 
-設定項目を設定または変更したい場合は、[ADMIN SET CONFIG](ADMIN_SET_CONFIG.md) を使用してください。
+設定項目を設定または変更したい場合は、 [ADMIN SET CONFIG](ADMIN_SET_CONFIG.md) を使用してください。
 
 :::tip
 
-この操作には SYSTEM レベルの OPERATE 権限が必要です。この権限を付与するには、[GRANT](../../account-management/GRANT.md) の指示に従ってください。
+この操作には SYSTEM レベルの OPERATE 権限が必要です。この権限を付与するには、 [GRANT](../../account-management/GRANT.md) の指示に従ってください。
 
 :::
 

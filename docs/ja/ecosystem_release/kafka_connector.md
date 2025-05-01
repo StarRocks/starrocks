@@ -6,15 +6,15 @@ displayed_sidebar: docs
 
 ## Notifications
 
-**User guide:** [Load data using Kafka connector](https://docs.starrocks.io/docs/loading/Kafka-connector-starrocks/)
+**ユーザーガイド:** [Load data using Kafka connector](../loading/Kafka-connector-starrocks.md)
 
-**Source codes:** [starrocks-connector-for-kafka](https://github.com/StarRocks/starrocks-connector-for-kafka)
+**ソースコード:** [starrocks-connector-for-kafka](https://github.com/StarRocks/starrocks-connector-for-kafka)
 
-**Naming format of the compressed file:** `starrocks-kafka-connector-${connector_version}.tar.gz`
+**圧縮ファイルの命名形式:** `starrocks-kafka-connector-${connector_version}.tar.gz`
 
-**Download link of the compressed file:** [starrocks-kafka-connector](https://github.com/StarRocks/starrocks-connector-for-kafka/releases)
+**圧縮ファイルのダウンロードリンク:** [starrocks-kafka-connector](https://github.com/StarRocks/starrocks-connector-for-kafka/releases)
 
-**Version requirements:**
+**バージョン要件:**
 
 | Kafka Connector | StarRocks | Java |
 | --------------- | --------- | ---- |
@@ -23,7 +23,7 @@ displayed_sidebar: docs
 | 1.0.1           | 2.1 and later | 8    |
 | 1.0.0           | 2.1 and later | 8    |
 
-## Release notes
+## リリースノート
 
 ### 1.0
 
@@ -33,7 +33,7 @@ displayed_sidebar: docs
 
 **機能**
 
-オープンソースソフトウェアライセンスとしてApache Licenseを追加しました。 [#9](https://github.com/StarRocks/starrocks-connector-for-kafka/pull/9)
+Apache License をオープンソースソフトウェアライセンスとして追加しました。 [#9](https://github.com/StarRocks/starrocks-connector-for-kafka/pull/9)
 
 #### 1.0.2
 
@@ -41,7 +41,7 @@ displayed_sidebar: docs
 
 **機能**
 
-ソースデータがDECIMAL型であることをサポートします。 [#7](https://github.com/StarRocks/starrocks-connector-for-kafka/pull/7)
+ソースデータが DECIMAL 型であることをサポートします。 [#7](https://github.com/StarRocks/starrocks-connector-for-kafka/pull/7)
 
 #### 1.0.1
 
@@ -49,8 +49,8 @@ displayed_sidebar: docs
 
 **機能**
 
-- Debeziumデータを主キーテーブルにロードすることをサポートします。 [#4](https://github.com/StarRocks/starrocks-connector-for-kafka/pull/4)
-- スキーマレジストリなしでJSONデータを解析することをサポートします。 [#6](https://github.com/StarRocks/starrocks-connector-for-kafka/pull/6)
+- Debezium データを主キーテーブルにロードすることをサポートします。 [#4](https://github.com/StarRocks/starrocks-connector-for-kafka/pull/4)
+- スキーマレジストリなしで JSON データを解析することをサポートします。 [#6](https://github.com/StarRocks/starrocks-connector-for-kafka/pull/6)
 
 #### 1.0.0
 
@@ -58,5 +58,5 @@ displayed_sidebar: docs
 
 **機能**
 
-- CSV、JSON、Avro、Protobufデータのロードをサポートします。
-- 自己管理のApache KafkaクラスターまたはConfluentクラウドからのデータロードをサポートします。
+- CSV、JSON、Avro、Protobuf データのロードをサポートします。
+- 自己管理の Apache Kafka クラスターまたは Confluent クラウドからのデータロードをサポートします。

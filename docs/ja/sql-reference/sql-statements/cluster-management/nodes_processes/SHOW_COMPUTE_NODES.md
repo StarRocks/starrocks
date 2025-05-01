@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 :::tip
 
-SYSTEM レベルの OPERATE 権限を持つユーザーまたは `cluster_admin` ロールを持つユーザーのみがこの操作を実行できます。
+この操作を実行できるのは、SYSTEM レベルの OPERATE 権限を持つユーザーまたは `cluster_admin` ロールを持つユーザーのみです。
 
 :::
 
@@ -23,38 +23,37 @@ SHOW COMPUTE NODES
 ## 戻り値
 
 ```SQL
-+---------------+--------------+---------------+--------+----------+----------+---------------------+---------------------+-------+----------------------+-----------------------+--------+--------------------+----------+-------------------+------------+------------+----------------+-------------+----------+-------------------+-----------+------------+
-| ComputeNodeId | IP           | HeartbeatPort | BePort | HttpPort | BrpcPort | LastStartTime       | LastHeartbeat       | Alive | SystemDecommissioned | ClusterDecommissioned | ErrMsg | Version            | CpuCores | NumRunningQueries | MemUsedPct | CpuUsedPct | HasStoragePath | StarletPort | WorkerId | WarehouseName     | TabletNum | StatusCode |
-+---------------+--------------+---------------+--------+----------+----------+---------------------+---------------------+-------+----------------------+-----------------------+--------+--------------------+----------+-------------------+------------+------------+----------------+-------------+----------+-------------------+-----------+------------+
++---------------+--------------+---------------+--------+----------+----------+---------------------+---------------------+-------+----------------------+-----------------------+--------+--------------------+----------+-------------------+------------+------------+----------------+-------------+----------+-------------------+-----------+
+| ComputeNodeId | IP           | HeartbeatPort | BePort | HttpPort | BrpcPort | LastStartTime       | LastHeartbeat       | Alive | SystemDecommissioned | ClusterDecommissioned | ErrMsg | Version            | CpuCores | NumRunningQueries | MemUsedPct | CpuUsedPct | HasStoragePath | StarletPort | WorkerId | WarehouseName     | TabletNum |
++---------------+--------------+---------------+--------+----------+----------+---------------------+---------------------+-------+----------------------+-----------------------+--------+--------------------+----------+-------------------+------------+------------+----------------+-------------+----------+-------------------+-----------+
 ```
 
-このステートメントによって返されるパラメータを以下の表で説明します。
+このステートメントによって返されるパラメータを次の表に示します。
 
-| **Parameter**        | **Description**                                                   |
+| **パラメータ**         | **説明**                                                             |
 | -------------------- | ----------------------------------------------------------------- |
-| ComputeNodeId        | CN ノードの ID。                                                  |
-| IP                   | CN ノードの IP アドレス。                                         |
+| ComputeNodeId        | CN ノードの ID。                                                   |
+| IP                   | CN ノードの IP アドレス。                                          |
 | HeartbeatPort        | CN ノードのハートビートポート。FE ノードからのハートビートを受信するために使用されます。 |
 | BePort               | CN ノードの Thrift サーバーポート。FE ノードからのリクエストを受信するために使用されます。 |
 | HttpPort             | CN ノードの HTTP サーバーポート。ウェブページを介して CN ノードにアクセスするために使用されます。 |
-| BrpcPort             | CN ノードの bRPC ポート。CN ノード間の通信に使用されます。         |
-| LastStartTime        | CN ノードが最後に起動した時刻。                                   |
-| LastHeartbeat        | CN ノードが最後にハートビートを送信した時刻。                     |
+| BrpcPort             | CN ノードの bRPC ポート。CN ノード間の通信に使用されます。          |
+| LastStartTime        | CN ノードが最後に起動した時刻。                                     |
+| LastHeartbeat        | CN ノードが最後にハートビートを送信した時刻。                       |
 | Alive                | CN ノードが生存しているかどうか。<ul><li>`true`: CN ノードは生存しています。</li><li>`false`: CN ノードは生存していません。</li></ul> |
 | SystemDecommissioned | パラメータの値が `true` の場合、CN ノードは StarRocks クラスタから削除されます。 |
-| ClusterDecommissioned | このパラメータはシステム互換性のために使用されます。             |
-| ErrMsg               | CN ノードがハートビートを送信できなかった場合のエラーメッセージ。 |
-| Version              | CN ノードの StarRocks バージョン。                                |
-| CpuCores             | CN ノードの CPU コア数。                                          |
-| NumRunningQueries    | CN ノードで実行中のクエリ数。                                     |
-| MemUsedPct           | 使用されたメモリの割合。                                           |
-| CpuUsedPct           | 使用された CPU コアの割合。                                        |
-| HasStoragePath       | CN ノードにストレージパスが設定されているかどうか。                |
-| StarletPort          | CN ノードの `starlet_port`。追加のエージェントサービスポートです。 |
-| WorkerId             | 内部スケジューリング用の CN ノードの ID。                          |
+| ClusterDecommissioned | このパラメータはシステムの互換性のために使用されます。              |
+| ErrMsg               | CN ノードがハートビートの送信に失敗した場合のエラーメッセージ。      |
+| Version              | CN ノードの StarRocks バージョン。                                  |
+| CpuCores             | CN ノードの CPU コア数。                                            |
+| NumRunningQueries    | CN ノードで実行中のクエリの数。                                     |
+| MemUsedPct           | 使用されているメモリの割合。                                        |
+| CpuUsedPct           | 使用されている CPU コアの割合。                                     |
+| HasStoragePath       | CN ノードにストレージパスが設定されているかどうか。                  |
+| StarletPort          | CN ノードの `starlet_port`。これは追加のエージェントサービスポートです。 |
+| WorkerId             | 内部スケジューリング用の CN ノードの ID。                            |
 | WarehouseName        | CN ノードが属するウェアハウスの名前。値は常に `default_warehouse` です。 |
-| TabletNum            | CN ノード上のタブレット（キャッシュされたデータ）の数。             |
-| StatusCode           | CN ステータスコード。有効な値:<ul><li>`CONNECTING`: CN ノードが初めてクラスタに追加されています。</li><li>`OK`: CN ノードは稼働中です。</li><li>`SHUTDOWN`: CN ノードは正常にシャットダウンされています。</li><li>`DISCONNECTED`: CN ノードは切断されています。</li></ul> |
+| TabletNum            | CN ノード上のタブレット（キャッシュされたデータ）の数。               |
 
 ## 例
 

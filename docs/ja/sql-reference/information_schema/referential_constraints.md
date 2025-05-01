@@ -22,8 +22,8 @@ displayed_sidebar: docs
 | UNIQUE_CONSTRAINT_CATALOG | 制約が参照する一意の制約を含む catalog の名前。この値は常に `def` です。 |
 | UNIQUE_CONSTRAINT_SCHEMA  | 制約が参照する一意の制約を含むスキーマの名前。 |
 | UNIQUE_CONSTRAINT_NAME    | 制約が参照する一意の制約の名前。 |
-| MATCH_OPTION              | 制約の `MATCH` 属性の値。現在有効な値は `NONE` のみです。 |
-| UPDATE_RULE               | 制約の `ON UPDATE` 属性の値。有効な値: `CASCADE`、`SET NULL`、`SET DEFAULT`、`RESTRICT`、`NO ACTION`。 |
-| DELETE_RULE               | 制約の `ON DELETE` 属性の値。有効な値: `CASCADE`、`SET NULL`、`SET DEFAULT`、`RESTRICT`、`NO ACTION`。 |
+| MATCH_OPTION              | 制約の `MATCH` 属性の値。現時点で有効な値は `NONE` のみです。 |
+| UPDATE_RULE               | 制約の `ON UPDATE` 属性の値。有効な値: `CASCADE`、`SET NULL`、`SET DEFAULT`、`RESTRICT`、および `NO ACTION`。 |
+| DELETE_RULE               | 制約の `ON DELETE` 属性の値。有効な値: `CASCADE`、`SET NULL`、`SET DEFAULT`、`RESTRICT`、および `NO ACTION`。 |
 | TABLE_NAME                | テーブルの名前。この値は `TABLE_CONSTRAINTS` テーブルと同じです。 |
-| REFERENCED_TABLE_NAME     | 制約によって参照されるテーブルの名前。          |
+| REFERENCED_TABLE_NAME     | 制約が参照するテーブルの名前。          |

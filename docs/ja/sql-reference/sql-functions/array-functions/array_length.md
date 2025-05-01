@@ -4,25 +4,27 @@ displayed_sidebar: docs
 
 # array_length
 
+## 説明
+
 配列内の要素数を返します。結果の型は INT です。入力パラメータが NULL の場合、結果も NULL になります。NULL 要素も長さに含まれます。
 
-[cardinality()](cardinality.md) という別名があります。
+エイリアスとして [cardinality()](cardinality.md) があります。
 
-## Syntax
+## 構文
 
 ```Haskell
 INT array_length(any_array)
 ```
 
-## Parameters
+## パラメータ
 
 `any_array`: 要素数を取得したい ARRAY 値。
 
-## Return value
+## 戻り値
 
 INT 値を返します。
 
-## Examples
+## 例
 
 ```plain text
 mysql> select array_length([1,2,3]);
@@ -49,6 +51,6 @@ mysql> select array_length([[1,2], [3,4]]);
 1 row in set (0.01 sec)
 ```
 
-## keywords
+## キーワード
 
 ARRAY_LENGTH, ARRAY, CARDINALITY

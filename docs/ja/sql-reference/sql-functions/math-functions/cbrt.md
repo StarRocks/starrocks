@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # cbrt
 
+## 説明
+
 引数の立方根を計算します。
 
 この関数は v3.3 以降でサポートされています。
@@ -16,7 +18,7 @@ DOUBLE cbrt(DOUBLE arg)
 
 ## パラメータ
 
-`arg`: 数値のみを指定できます。この関数は、数値を立方根を計算する前に DOUBLE 値に変換します。
+`arg`: 数値のみを指定できます。この関数は数値を立方根を計算する前に DOUBLE 値に変換します。
 
 ## 戻り値
 
@@ -56,4 +58,4 @@ mysql> select cbrt("");
 
 ## キーワード
 
-cbrt, 立方根
+cbrt, cube root

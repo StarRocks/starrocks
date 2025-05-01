@@ -4,15 +4,17 @@ displayed_sidebar: docs
 
 # instr
 
-この関数は、`str` が `substr` に最初に現れた位置を返します（1から数え始め、文字数で測定します）。`str` が `substr` に見つからない場合、この関数は 0 を返します。
+## 説明
 
-## Syntax
+この関数は、`str` が `substr` に最初に現れる位置を返します（1 から数え始め、文字単位で測定します）。`str` が `substr` に見つからない場合、この関数は 0 を返します。
+
+## 構文
 
 ```Haskell
 INT instr(VARCHAR str, VARCHAR substr)
 ```
 
-## Examples
+## 例
 
 ```Plain Text
 MySQL > select instr("abc", "b");
@@ -30,6 +32,6 @@ MySQL > select instr("abc", "d");
 +-------------------+
 ```
 
-## keyword
+## キーワード
 
 INSTR

@@ -4,15 +4,17 @@ displayed_sidebar: docs
 
 # bitmap_and
 
+## 説明
+
 2 つの入力ビットマップの交差を計算し、新しいビットマップを返します。
 
-## Syntax
+## 構文
 
 ```Haskell
 BITMAP BITMAP_AND(BITMAP lhs, BITMAP rhs)
 ```
 
-## Examples
+## 例
 
 ```plain text
 MySQL > select bitmap_count(bitmap_and(to_bitmap(1), to_bitmap(2))) cnt;
@@ -30,6 +32,6 @@ MySQL > select bitmap_count(bitmap_and(to_bitmap(1), to_bitmap(1))) cnt;
 +------+
 ```
 
-## keyword
+## キーワード
 
 BITMAP_AND,BITMAP

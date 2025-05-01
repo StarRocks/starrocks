@@ -2,22 +2,22 @@
 displayed_sidebar: docs
 ---
 
-# Spark Load を使用してデータを一括ロードする
+# Spark Load を使用したデータの一括ロード
 
-このロードは、外部の Apache Spark™ リソースを使用してインポートデータを事前処理し、インポートのパフォーマンスを向上させ、計算リソースを節約します。主に **初期移行** や **大規模データインポート** に使用され、StarRocks へのデータ量は TB レベルまで対応します。
+このロードは、外部の Apache Spark™ リソースを使用してインポートデータを事前処理し、インポートのパフォーマンスを向上させ、計算リソースを節約します。主に **初期移行** や **大規模データのインポート** に使用されます (データ量は TB レベルまで)。
 
-Spark load は **非同期** のインポート方法であり、ユーザーは MySQL プロトコルを介して Spark タイプのインポートジョブを作成し、`SHOW LOAD` を使用してインポート結果を確認します。
+Spark load は **非同期** のインポート方法であり、ユーザーは MySQL プロトコルを介して Spark タイプのインポートジョブを作成し、`SHOW LOAD` を使用してインポート結果を確認する必要があります。
 
 > **注意**
 >
-> - StarRocks テーブルに対して INSERT 権限を持つユーザーのみがこのテーブルにデータをロードできます。[GRANT](../sql-reference/sql-statements/account-management/GRANT.md) に従って必要な権限を付与できます。
+> - StarRocks テーブルに対する INSERT 権限を持つユーザーのみが、このテーブルにデータをロードできます。[GRANT](../sql-reference/sql-statements/account-management/GRANT.md) に従って必要な権限を付与できます。
 > - Spark Load は、主キーテーブルにデータをロードするためには使用できません。
 
 ## 用語の説明
 
-- **Spark ETL**: インポートプロセスでのデータの ETL を主に担当し、グローバル辞書の構築（BITMAP タイプ）、パーティショニング、ソート、集計などを含みます。
+- **Spark ETL**: インポートプロセスでのデータの ETL を主に担当し、グローバル辞書の構築 (BITMAP 型)、パーティショニング、ソート、集約などを含みます。
 - **Broker**: Broker は独立したステートレスプロセスです。ファイルシステムインターフェースをカプセル化し、StarRocks にリモートストレージシステムからファイルを読み取る機能を提供します。
-- **Global Dictionary**: 元の値からエンコードされた値へのデータ構造を保存します。元の値は任意のデータ型であり、エンコードされた値は整数です。グローバル辞書は、正確なカウントディスティンクトが事前計算されるシナリオで主に使用されます。
+- **Global Dictionary**: 元の値からエンコードされた値へのデータ構造を保存します。元の値は任意のデータ型であり、エンコードされた値は整数です。グローバル辞書は、正確なカウントディスティンクトを事前計算するシナリオで主に使用されます。
 
 ## 基本原理
 
@@ -26,12 +26,12 @@ Spark load は **非同期** のインポート方法であり、ユーザーは
 spark load タスクの実行は、以下の主要なフェーズに分かれます。
 
 1. ユーザーが spark load ジョブを FE に提出します。
-2. FE は ETL タスクを Apache Spark™ クラスターに提出して実行するようスケジュールします。
-3. Apache Spark™ クラスターは、グローバル辞書の構築（BITMAP タイプ）、パーティショニング、ソート、集計などを含む ETL タスクを実行します。
-4. ETL タスクが完了すると、FE は各事前処理済みスライスのデータパスを取得し、関連する BE に Push タスクを実行するようスケジュールします。
+2. FE が ETL タスクを Apache Spark™ クラスターに提出して実行をスケジュールします。
+3. Apache Spark™ クラスターが ETL タスクを実行し、グローバル辞書の構築 (BITMAP 型)、パーティショニング、ソート、集約などを含みます。
+4. ETL タスクが完了した後、FE は各事前処理されたスライスのデータパスを取得し、関連する BE に Push タスクを実行するようスケジュールします。
 5. BE は Broker プロセスを通じて HDFS からデータを読み取り、StarRocks ストレージ形式に変換します。
     > Broker プロセスを使用しない場合、BE は HDFS から直接データを読み取ります。
-6. FE は有効なバージョンをスケジュールし、インポートジョブを完了します。
+6. FE が有効なバージョンをスケジュールし、インポートジョブを完了します。
 
 以下の図は、spark load の主なフローを示しています。
 
@@ -43,7 +43,7 @@ spark load タスクの実行は、以下の主要なフェーズに分かれま
 
 ### 適用シナリオ
 
-現在、StarRocks の BITMAP カラムは Roaringbitmap を使用して実装されており、入力データ型は整数のみです。そのため、インポートプロセスで BITMAP カラムの事前計算を実装する場合、入力データ型を整数に変換する必要があります。
+現在、StarRocks の BITMAP 列は Roaringbitmap を使用して実装されており、入力データ型は整数のみです。そのため、インポートプロセスで BITMAP 列の事前計算を実装する場合、入力データ型を整数に変換する必要があります。
 
 StarRocks の既存のインポートプロセスでは、グローバル辞書のデータ構造は Hive テーブルに基づいて実装されており、元の値からエンコードされた値へのマッピングを保存します。
 
@@ -51,8 +51,8 @@ StarRocks の既存のインポートプロセスでは、グローバル辞書�
 
 1. 上流のデータソースからデータを読み取り、一時的な Hive テーブル `hive-table` を生成します。
 2. `hive-table` の強調されていないフィールドの値を抽出し、新しい Hive テーブル `distinct-value-table` を生成します。
-3. 元の値とエンコードされた値の 1 列を持つ新しいグローバル辞書テーブル `dict-table` を作成します。
-4. `distinct-value-table` と `dict-table` の間で左ジョインを行い、ウィンドウ関数を使用してこのセットをエンコードします。最終的に、重複除去されたカラムの元の値とエンコードされた値を `dict-table` に書き戻します。
+3. 元の値とエンコードされた値の列を持つ新しいグローバル辞書テーブル `dict-table` を作成します。
+4. `distinct-value-table` と `dict-table` の間で左ジョインを行い、ウィンドウ関数を使用してこのセットをエンコードします。最後に、重複排除された列の元の値とエンコードされた値を `dict-table` に書き戻します。
 5. `dict-table` と `hive-table` の間でジョインを行い、`hive-table` の元の値を整数のエンコード値に置き換える作業を完了します。
 6. `hive-table` は次回のデータ事前処理で読み取られ、計算後に StarRocks にインポートされます。
 
@@ -60,23 +60,23 @@ StarRocks の既存のインポートプロセスでは、グローバル辞書�
 
 データ事前処理の基本プロセスは次のとおりです。
 
-1. 上流のデータソース（HDFS ファイルまたは Hive テーブル）からデータを読み取ります。
+1. 上流のデータソース (HDFS ファイルまたは Hive テーブル) からデータを読み取ります。
 2. 読み取ったデータに対してフィールドマッピングと計算を完了し、パーティション情報に基づいて `bucket-id` を生成します。
 3. StarRocks テーブルの Rollup メタデータに基づいて RollupTree を生成します。
-4. RollupTree を反復処理し、階層的な集計操作を実行します。次の階層の Rollup は、前の階層の Rollup から計算できます。
-5. 集計計算が完了するたびに、データは `bucket-id` に基づいてバケット化され、その後 HDFS に書き込まれます。
-6. 後続の Broker プロセスは HDFS からファイルを取得し、StarRocks BE ノードにインポートします。
+4. RollupTree を反復処理し、階層的な集約操作を実行します。次の階層の Rollup は、前の階層の Rollup から計算できます。
+5. 集約計算が完了するたびに、データは `bucket-id` に基づいてバケット化され、その後 HDFS に書き込まれます。
+6. 後続の Broker プロセスが HDFS からファイルを取得し、StarRocks BE ノードにインポートします。
 
 ## 基本操作
 
 ### ETL クラスターの設定
 
-Apache Spark™ は StarRocks で ETL 作業を行うための外部計算リソースとして使用されます。StarRocks に追加される他の外部リソースとしては、クエリ用の Spark/GPU、外部ストレージ用の HDFS/S3、ETL 用の MapReduce などがあります。したがって、StarRocks で使用されるこれらの外部リソースを管理するために `Resource Management` を導入します。
+Apache Spark™ は StarRocks で ETL 作業のための外部計算リソースとして使用されます。StarRocks に追加される他の外部リソース (クエリ用の Spark/GPU、外部ストレージ用の HDFS/S3、ETL 用の MapReduce など) もあるかもしれません。したがって、StarRocks が使用するこれらの外部リソースを管理するために `Resource Management` を導入します。
 
 Apache Spark™ インポートジョブを提出する前に、ETL タスクを実行するための Apache Spark™ クラスターを設定します。操作の構文は次のとおりです。
 
 ```sql
--- Apache Spark™ リソースを作成
+-- Apache Spark™ リソースの作成
 CREATE EXTERNAL RESOURCE resource_name
 PROPERTIES
 (
@@ -87,10 +87,10 @@ PROPERTIES
  broker.property_key = property_value
 );
 
--- Apache Spark™ リソースを削除
+-- Apache Spark™ リソースの削除
 DROP RESOURCE resource_name;
 
--- リソースを表示
+-- リソースの表示
 SHOW RESOURCES
 SHOW PROC "/resources";
 
@@ -104,7 +104,7 @@ REVOKE USAGE_PRIV ON RESOURCE resource_name FROM user_identityREVOKE USAGE_PRIV 
 **例**:
 
 ```sql
--- yarn クラスター モード
+-- yarn クラスターモード
 CREATE EXTERNAL RESOURCE "spark0"
 PROPERTIES
 (
@@ -123,7 +123,7 @@ PROPERTIES
     "broker.password" = "password0"
 );
 
--- yarn HA クラスター モード
+-- yarn HA クラスターモード
 CREATE EXTERNAL RESOURCE "spark1"
 PROPERTIES
 (
@@ -142,21 +142,21 @@ PROPERTIES
 
 `resource-name` は StarRocks に設定された Apache Spark™ リソースの名前です。
 
-`PROPERTIES` には Apache Spark™ リソースに関連するパラメータが含まれます。次のとおりです。
+`PROPERTIES` には Apache Spark™ リソースに関連するパラメータが含まれます。以下の通りです。
 > **注意**
 >
-> Apache Spark™ リソースの詳細な説明については、[CREATE RESOURCE](../sql-reference/sql-statements/Resource/CREATE_RESOURCE.md) を参照してください。
+> Apache Spark™ リソースの詳細な説明については、 [CREATE RESOURCE](../sql-reference/sql-statements/Resource/CREATE_RESOURCE.md) を参照してください。
 
-- Spark 関連パラメータ:
-  - `type`: リソースタイプ、必須、現在は `spark` のみをサポート。
-  - `spark.master`: 必須、現在は `yarn` のみをサポート。
-    - `spark.submit.deployMode`: Apache Spark™ プログラムのデプロイメントモード、必須、現在は `cluster` と `client` の両方をサポート。
-    - `spark.hadoop.fs.defaultFS`: マスターが yarn の場合に必須。
+- Spark 関連のパラメータ:
+  - `type`: リソースタイプ、必須、現在は `spark` のみサポート。
+  - `spark.master`: 必須、現在は `yarn` のみサポート。
+    - `spark.submit.deployMode`: Apache Spark™ プログラムのデプロイモード、必須、現在は `cluster` と `client` の両方をサポート。
+    - `spark.hadoop.fs.defaultFS`: master が yarn の場合に必須。
     - yarn リソースマネージャーに関連するパラメータ、必須。
-      - 単一ノードの ResourceManager
+      - 単一ノード上の1つの ResourceManager
         `spark.hadoop.yarn.resourcemanager.address`: 単一ポイントリソースマネージャーのアドレス。
       - ResourceManager HA
-        > ResourceManager のホスト名またはアドレスを指定できます。
+        > ResourceManager のホスト名またはアドレスを指定することができます。
         - `spark.hadoop.yarn.resourcemanager.ha.enabled`: リソースマネージャー HA を有効にし、`true` に設定。
         - `spark.hadoop.yarn.resourcemanager.ha.rm-ids`: リソースマネージャーの論理 ID のリスト。
         - `spark.hadoop.yarn.resourcemanager.hostname.rm-id`: 各 rm-id に対して、リソースマネージャーに対応するホスト名を指定。
@@ -164,16 +164,16 @@ PROPERTIES
 
 - `*working_dir`: ETL に使用されるディレクトリ。Apache Spark™ が ETL リソースとして使用される場合に必須。例: `hdfs://host:port/tmp/starrocks`。
 
-- Broker 関連パラメータ:
-  - `broker`: Broker の名前。Apache Spark™ が ETL リソースとして使用される場合に必須。`ALTER SYSTEM ADD BROKER` コマンドを使用して事前に設定を完了する必要があります。
-  - `broker.property_key`: Broker プロセスが ETL によって生成された中間ファイルを読み取る際に指定する情報（例: 認証情報）。
+- Broker 関連のパラメータ:
+  - `broker`: Broker 名。Apache Spark™ が ETL リソースとして使用される場合に必須。`ALTER SYSTEM ADD BROKER` コマンドを使用して事前に設定を完了する必要があります。
+  - `broker.property_key`: Broker プロセスが ETL によって生成された中間ファイルを読み取る際に指定する情報 (例: 認証情報)。
 
 **注意事項**:
 
-上記は Broker プロセスを介したロードのパラメータの説明です。Broker プロセスを使用せずにデータをロードする場合、以下に注意してください。
+上記は Broker プロセスを通じてロードするためのパラメータの説明です。Broker プロセスを使用せずにデータをロードする場合、以下に注意してください。
 
 - `broker` を指定する必要はありません。
-- ユーザー認証や NameNode ノードの HA を設定する必要がある場合、HDFS クラスターの hdfs-site.xml ファイルでパラメータを設定する必要があります。パラメータの説明については [broker_properties](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md#hdfs) を参照してください。また、各 FE の **$FE_HOME/conf** および各 BE の **$BE_HOME/conf** に **hdfs-site.xml** ファイルを移動する必要があります。
+- ユーザー認証や NameNode ノードの HA を設定する必要がある場合、HDFS クラスターの hdfs-site.xml ファイルにパラメータを設定する必要があります。パラメータの説明については [broker_properties](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md#hdfs) を参照してください。また、各 FE の **$FE_HOME/conf** と各 BE の **$BE_HOME/conf** に **hdfs-site.xml** ファイルを移動する必要があります。
 
 > 注意
 >
@@ -188,16 +188,16 @@ PROPERTIES
 リソース権限は `GRANT REVOKE` を通じて管理され、現在は `USAGE-PRIV` 権限のみをサポートしています。ユーザーまたはロールに `USAGE-PRIV` 権限を付与できます。
 
 ```sql
--- user0 に spark0 リソースへのアクセスを許可
+-- user0 に spark0 リソースへのアクセスを付与
 GRANT USAGE_PRIV ON RESOURCE "spark0" TO "user0"@"%";
 
--- role0 に spark0 リソースへのアクセスを許可
+-- role0 に spark0 リソースへのアクセスを付与
 GRANT USAGE_PRIV ON RESOURCE "spark0" TO ROLE "role0";
 
--- user0 にすべてのリソースへのアクセスを許可
+-- user0 にすべてのリソースへのアクセスを付与
 GRANT USAGE_PRIV ON RESOURCE* TO "user0"@"%";
 
--- role0 にすべてのリソースへのアクセスを許可
+-- role0 にすべてのリソースへのアクセスを付与
 GRANT USAGE_PRIV ON RESOURCE* TO ROLE "role0";
 
 -- user user0 から spark0 リソースの使用権限を取り消す
@@ -206,7 +206,7 @@ REVOKE USAGE_PRIV ON RESOURCE "spark0" FROM "user0"@"%";
 
 ### Spark クライアントの設定
 
-FE が `spark-submit` コマンドを実行して Spark タスクを送信できるように Spark クライアントを設定します。公式バージョンの Spark2 2.4.5 以上を使用することをお勧めします [spark ダウンロードアドレス](https://archive.apache.org/dist/spark/)。ダウンロード後、次の手順を使用して設定を完了してください。
+FE が `spark-submit` コマンドを実行して Spark タスクを送信できるように Spark クライアントを設定します。公式バージョンの Spark2 2.4.5 以上を使用することをお勧めします [spark ダウンロードアドレス](https://archive.apache.org/dist/spark/)。ダウンロード後、次の手順で設定を完了してください。
 
 - `SPARK-HOME` の設定
   
@@ -214,9 +214,9 @@ Spark クライアントを FE と同じマシンのディレクトリに配置�
 
 - **SPARK 依存パッケージの設定**
   
-依存パッケージを設定するには、Spark クライアントの jars フォルダー内のすべての jar ファイルを zip 圧縮し、FE 設定の `spark_resource_path` 項目にこの zip ファイルを設定します。この設定が空の場合、FE は FE ルートディレクトリの `lib/spark2x/jars/spark-2x.zip` ファイルを探します。FE が見つけられない場合、エラーが報告されます。
+依存パッケージを設定するには、Spark クライアントの jars フォルダ内のすべての jar ファイルを zip 圧縮し、FE 設定の `spark_resource_path` 項目にこの zip ファイルを設定します。この設定が空の場合、FE は FE ルートディレクトリの `lib/spark2x/jars/spark-2x.zip` ファイルを探します。FE が見つけられない場合、エラーが報告されます。
 
-spark load ジョブが送信されると、アーカイブされた依存ファイルがリモートリポジトリにアップロードされます。デフォルトのリポジトリパスは `working_dir/{cluster_id}` ディレクトリの `--spark-repository--{resource-name}` という名前で、クラスター内のリソースがリモートリポジトリに対応します。ディレクトリ構造は次のように参照されます。
+spark load ジョブが送信されると、アーカイブされた依存ファイルがリモートリポジトリにアップロードされます。デフォルトのリポジトリパスは `working_dir/{cluster_id}` ディレクトリの `--spark-repository--{resource-name}` という名前で、クラスター内のリソースがリモートリポジトリに対応します。ディレクトリ構造は以下を参照してください。
 
 ```bash
 ---spark-repository--spark0/
@@ -239,19 +239,19 @@ spark load ジョブが送信されると、アーカイブされた依存ファ
 
 ```
 
-spark の依存関係（デフォルトで `spark-2x.zip` と命名）に加えて、FE は DPP の依存関係もリモートリポジトリにアップロードします。spark load によって送信されたすべての依存関係がリモートリポジトリに既に存在する場合、依存関係を再度アップロードする必要はなく、毎回大量のファイルを繰り返しアップロードする時間を節約できます。
+spark の依存関係 (デフォルトで `spark-2x.zip` と命名) に加えて、FE は DPP の依存関係もリモートリポジトリにアップロードします。spark load によって送信されたすべての依存関係がリモートリポジトリに既に存在する場合、依存関係を再度アップロードする必要はなく、毎回大量のファイルを繰り返しアップロードする時間を節約できます。
 
 ### YARN クライアントの設定
 
-FE が yarn コマンドを実行して、実行中のアプリケーションのステータスを取得したり、アプリケーションを終了したりできるように、yarn クライアントを設定します。公式バージョンの Hadoop2 2.5.2 以上を使用することをお勧めします（[hadoop ダウンロードアドレス](https://archive.apache.org/dist/hadoop/common/)）。ダウンロード後、次の手順を使用して設定を完了してください。
+FE が yarn コマンドを実行して実行中のアプリケーションのステータスを取得したり、アプリケーションを終了させたりできるように yarn クライアントを設定します。公式バージョンの Hadoop2 2.5.2 以上を使用することをお勧めします ([hadoop ダウンロードアドレス](https://archive.apache.org/dist/hadoop/common/))。ダウンロード後、次の手順で設定を完了してください。
 
 - **YARN 実行可能パスの設定**
   
 ダウンロードした yarn クライアントを FE と同じマシンのディレクトリに配置し、FE 設定ファイルの `yarn_client_path` 項目を yarn のバイナリ実行ファイルに設定します。デフォルトでは FE ルートディレクトリの `lib/yarn-client/hadoop/bin/yarn` パスです。
 
-- **YARN を生成するために必要な設定ファイルのパスを設定（オプション）**
+- **YARN を生成するために必要な設定ファイルのパスを設定 (オプション)**
   
-FE が yarn クライアントを通じてアプリケーションのステータスを取得したり、アプリケーションを終了したりする際、デフォルトで StarRocks は FE ルートディレクトリの `lib/yarn-config` パスに yarn コマンドを実行するために必要な設定ファイルを生成します。このパスは FE 設定ファイルの `yarn_config_dir` エントリを設定することで変更できます。現在は `core-site.xml` と `yarn-site.xml` を含みます。
+FE が yarn クライアントを通じてアプリケーションのステータスを取得したり、アプリケーションを終了させたりする際、デフォルトで StarRocks は FE ルートディレクトリの `lib/yarn-config` パスに yarn コマンドを実行するために必要な設定ファイルを生成します。このパスは FE 設定ファイルの `yarn_config_dir` 項目を設定することで変更できます。現在は `core-site.xml` と `yarn-site.xml` が含まれています。
 
 ### インポートジョブの作成
 
@@ -289,7 +289,7 @@ WITH RESOURCE resource_name
  (key2=value2, ...)
 ```
 
-**例 1**: 上流データソースが HDFS の場合
+**例 1**: 上流のデータソースが HDFS の場合
 
 ```sql
 LOAD LABEL db1.label1
@@ -320,7 +320,7 @@ PROPERTIES
 );
 ```
 
-**例 2**: 上流データソースが Hive の場合。
+**例 2**: 上流のデータソースが Hive の場合。
 
 - ステップ 1: 新しい hive リソースを作成
 
@@ -352,7 +352,7 @@ PROPERTIES
 );
 ```
 
-- ステップ 3: ロードコマンドを送信し、インポートされる StarRocks テーブルのカラムが hive 外部テーブルに存在することを要求します。
+- ステップ 3: ロードコマンドを送信し、インポートされる StarRocks テーブルの列が hive 外部テーブルに存在することを要求します。
 
 ```sql
 LOAD LABEL db1.label1
@@ -377,13 +377,13 @@ PROPERTIES
 
 Spark load のパラメータの紹介:
 
-- **ラベル**
+- **Label**
   
-インポートジョブのラベル。各インポートジョブにはデータベース内で一意のラベルがあり、broker load と同じルールに従います。
+インポートジョブのラベル。各インポートジョブにはデータベース内で一意のラベルがあります。broker load と同じルールに従います。
 
 - **データ記述クラスのパラメータ**
   
-現在サポートされているデータソースは CSV と Hive テーブルです。他のルールは broker load と同じです。
+現在、サポートされているデータソースは CSV と Hive テーブルです。他のルールは broker load と同じです。
 
 - **インポートジョブのパラメータ**
   
@@ -391,8 +391,8 @@ Spark load のパラメータの紹介:
 
 - **Spark リソースパラメータ**
   
-Spark リソースは事前に StarRocks に設定され、ユーザーに USAGE-PRIV 権限が付与されてから Spark load にリソースを適用できます。
-ユーザーが一時的なニーズを持っている場合、Spark リソースパラメータを設定できます。たとえば、ジョブのためにリソースを追加したり、Spark の設定を変更したりします。この設定はこのジョブにのみ有効であり、StarRocks クラスター内の既存の設定には影響しません。
+Spark リソースは事前に StarRocks に設定する必要があり、ユーザーに USAGE-PRIV 権限を付与する必要があります。その後、ユーザーは Spark load にリソースを適用できます。
+Spark リソースパラメータは、ジョブにリソースを追加したり Spark 設定を変更したりする一時的なニーズがある場合に設定できます。この設定はこのジョブにのみ有効であり、StarRocks クラスターの既存の設定には影響しません。
 
 ```sql
 WITH RESOURCE 'spark0'
@@ -408,17 +408,17 @@ WITH RESOURCE 'spark0'
 
 - **グローバル辞書を構築するためのインポートプロセス**
   
-ロードコマンドで、グローバル辞書を構築するために必要なフィールドを次の形式で指定できます: `StarRocks フィールド名=bitmap_dict(hive テーブルフィールド名)` 現在、**グローバル辞書は上流データソースが Hive テーブルの場合のみサポートされています**。
+ロードコマンドで、グローバル辞書を構築するために必要なフィールドを次の形式で指定できます: `StarRocks フィールド名=bitmap_dict(hive テーブルフィールド名)` 現在、**グローバル辞書は上流のデータソースが Hive テーブルの場合にのみサポートされています**。
 
-- **バイナリタイプデータのロード**
+- **バイナリ型データのロード**
 
-バージョン v2.5.17 以降、Spark Load は bitmap_from_binary 関数をサポートしており、バイナリデータをビットマップデータに変換できます。Hive テーブルまたは HDFS ファイルのカラムタイプがバイナリであり、StarRocks テーブルの対応するカラムがビットマップタイプの集計カラムである場合、ロードコマンドで次の形式でフィールドを指定できます: `StarRocks フィールド名=bitmap_from_binary(Hive テーブルフィールド名)`。これにより、グローバル辞書を構築する必要がなくなります。
+v2.5.17 以降、Spark Load は bitmap_from_binary 関数をサポートしており、バイナリデータをビットマップデータに変換できます。Hive テーブルまたは HDFS ファイルの列タイプがバイナリで、対応する StarRocks テーブルの列がビットマップ型の集約列である場合、ロードコマンドで次の形式でフィールドを指定できます: `StarRocks フィールド名=bitmap_from_binary(Hive テーブルフィールド名)`。これにより、グローバル辞書を構築する必要がなくなります。
 
 ## インポートジョブの表示
 
-Spark load インポートは非同期であり、broker load も同様です。ユーザーはインポートジョブのラベルを記録し、`SHOW LOAD` コマンドでインポート結果を表示するために使用する必要があります。インポートを表示するコマンドはすべてのインポート方法に共通です。例は次のとおりです。
+Spark load インポートは非同期であり、broker load も同様です。ユーザーはインポートジョブのラベルを記録し、`SHOW LOAD` コマンドでインポート結果を表示するために使用する必要があります。インポートを表示するコマンドはすべてのインポート方法に共通です。例は以下の通りです。
 
-Broker Load の返されたパラメータの詳細な説明については、参照してください。違いは次のとおりです。
+返されるパラメータの詳細な説明については Broker Load を参照してください。違いは以下の通りです。
 
 ```sql
 mysql> show load order by createtime desc limit 1\G
@@ -448,19 +448,19 @@ ETL: Spark ETL がコミットされました。
 LOADING: FE が BE にプッシュ操作を実行するようスケジュールします。
 FINISHED: プッシュが完了し、バージョンが有効になりました。
 
-インポートジョブの最終ステージは `CANCELLED` と `FINISHED` の 2 つであり、どちらもロードジョブが完了したことを示します。`CANCELLED` はインポートの失敗を示し、`FINISHED` はインポートの成功を示します。
+インポートジョブの最終ステージは `CANCELLED` と `FINISHED` の2つであり、どちらもロードジョブが完了したことを示します。`CANCELLED` はインポート失敗を示し、`FINISHED` はインポート成功を示します。
 
 - **Progress**
   
-インポートジョブの進捗状況の説明。進捗には ETL と LOAD の 2 種類があり、インポートプロセスの 2 つのフェーズ、ETL と LOADING に対応します。
+インポートジョブの進捗状況の説明。進捗には ETL と LOAD の2種類があり、インポートプロセスの ETL と LOADING の2つのフェーズに対応しています。
 
-- LOAD の進捗範囲は 0〜100% です。
+- LOAD の進捗範囲は 0~100% です。
   
 `LOAD 進捗 = すべてのレプリカインポートの現在完了したタブレットの数 / このインポートジョブのタブレットの総数 * 100%`。
 
 - すべてのテーブルがインポートされた場合、LOAD の進捗は 99% であり、インポートが最終検証フェーズに入ると 100% に変わります。
 
-- インポートの進捗は線形ではありません。進捗に変化がない期間があっても、インポートが実行されていないことを意味するわけではありません。
+- インポートの進捗は線形ではありません。進捗が一定期間変化しない場合でも、インポートが実行されていないわけではありません。
 
 - **Type**
 
@@ -472,7 +472,7 @@ FINISHED: プッシュが完了し、バージョンが有効になりました�
 
 - **JobDetails**
 
-ジョブの詳細な実行状況を表示し、インポートされたファイルの数、合計サイズ（バイト単位）、サブタスクの数、処理される生データ行の数などを含みます。例:
+ジョブの詳細な実行状況を表示し、インポートされたファイルの数、総サイズ (バイト単位)、サブタスクの数、処理されている生データ行の数などを含みます。例:
 
 ```json
  {"ScannedRows":139264,"TaskNumber":1,"FileNumber":1,"FileSize":940754064}
@@ -480,11 +480,11 @@ FINISHED: プッシュが完了し、バージョンが有効になりました�
 
 - **URL**
 
-対応するアプリケーションの Web インターフェースにアクセスするために、ブラウザに入力をコピーできます。
+対応するアプリケーションの Web インターフェースにアクセスするために、入力をブラウザにコピーできます。
 
 ### Apache Spark™ Launcher コミットログの表示
 
-ユーザーが Apache Spark™ ジョブのコミット中に生成された詳細なログを表示する必要がある場合があります。デフォルトでは、ログは FE ルートディレクトリの `log/spark_launcher_log` パスに `spark-launcher-{load-job-id}-{label}.log` という名前で保存されます。ログはこのディレクトリに一定期間保存され、FE メタデータのインポート情報がクリーンアップされると削除されます。デフォルトの保持期間は 3 日です。
+時々、ユーザーは Apache Spark™ ジョブのコミット中に生成された詳細なログを表示する必要があります。デフォルトでは、ログは FE ルートディレクトリの `log/spark_launcher_log` パスに `spark-launcher-{load-job-id}-{label}.log` という名前で保存されます。ログはこのディレクトリに一定期間保存され、FE メタデータのインポート情報がクリーンアップされると消去されます。デフォルトの保持期間は3日です。
 
 ### インポートのキャンセル
 
@@ -494,21 +494,21 @@ Spark load ジョブのステータスが `CANCELLED` または `FINISHED` で�
 
 ## 関連するシステム設定
 
-**FE 設定:** 次の設定は Spark load のシステムレベルの設定であり、すべての Spark load インポートジョブに適用されます。設定値は主に `fe.conf` を変更することで調整できます。
+**FE 設定:** 以下の設定は Spark load のシステムレベルの設定であり、すべての Spark load インポートジョブに適用されます。設定値は主に `fe.conf` を変更することで調整できます。
 
 - enable-spark-load: Spark load とリソース作成を有効にし、デフォルト値は false。
-- spark-load-default-timeout-second: ジョブのデフォルトのタイムアウトは 259200 秒（3 日）。
-- spark-home-default-dir: Spark クライアントパス（`fe/lib/spark2x`）。
-- spark-resource-path: パッケージ化された Spark 依存ファイルのパス（デフォルトでは空）。
-- spark-launcher-log-dir: Spark クライアントのコミットログが保存されるディレクトリ（`fe/log/spark-launcher-log`）。
-- yarn-client-path: yarn バイナリ実行ファイルのパス（`fe/lib/yarn-client/hadoop/bin/yarn`）。
-- yarn-config-dir: Yarn の設定ファイルパス（`fe/lib/yarn-config`）。
+- spark-load-default-timeout-second: ジョブのデフォルトタイムアウトは 259200 秒 (3 日)。
+- spark-home-default-dir: Spark クライアントパス (`fe/lib/spark2x`)。
+- spark-resource-path: パッケージ化された Spark 依存ファイルのパス (デフォルトでは空)。
+- spark-launcher-log-dir: Spark クライアントのコミットログが保存されるディレクトリ (`fe/log/spark-launcher-log`)。
+- yarn-client-path: yarn バイナリ実行ファイルのパス (`fe/lib/yarn-client/hadoop/bin/yarn`)。
+- yarn-config-dir: Yarn の設定ファイルパス (`fe/lib/yarn-config`)。
 
 ---
 
 ## ベストプラクティス
 
-Spark load を使用する最も適したシナリオは、生データがファイルシステム（HDFS）にあり、データ量が数十 GB から TB レベルの場合です。データ量が少ない場合は、Stream Load または Broker Load を使用してください。
+Spark load を使用する最も適したシナリオは、生データがファイルシステム (HDFS) にあり、データ量が数十 GB から TB レベルの場合です。データ量が小さい場合は Stream Load または Broker Load を使用してください。
 
 完全な spark load インポートの例については、github のデモを参照してください: [https://github.com/StarRocks/demo/blob/master/docs/03_sparkLoad2StarRocks.md](https://github.com/StarRocks/demo/blob/master/docs/03_sparkLoad2StarRocks.md)
 
@@ -528,10 +528,10 @@ Spark load を使用する最も適したシナリオは、生データがファ
 
 - `Error: yarn client does not exist in path: xxx/yarn-client/hadoop/bin/yarn`
 
- Spark load を使用する際に、yarn-client-path 設定項目が yarn 実行ファイルを指定していない。
+ Spark load を使用する際に、yarn-client-path 設定項目が yarn 実行可能ファイルを指定していない。
 
 - `ERROR: Cannot execute hadoop-yarn/bin/... /libexec/yarn-config.sh`
 
  CDH を使用して Hadoop を使用する場合、`HADOOP_LIBEXEC_DIR` 環境変数を設定する必要があります。
- `hadoop-yarn` と hadoop ディレクトリが異なるため、デフォルトの `libexec` ディレクトリは `hadoop-yarn/bin/... /libexec` を探しますが、`libexec` は hadoop ディレクトリにあります。
+ `hadoop-yarn` と hadoop のディレクトリが異なるため、デフォルトの `libexec` ディレクトリは `hadoop-yarn/bin/... /libexec` を探しますが、`libexec` は hadoop ディレクトリにあります。
  Spark タスクのステータスを取得するための ```yarn application status``` コマンドがエラーを報告し、インポートジョブが失敗しました。

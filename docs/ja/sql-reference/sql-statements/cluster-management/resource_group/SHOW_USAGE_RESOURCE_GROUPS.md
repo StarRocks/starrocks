@@ -32,7 +32,7 @@ SHOW USAGE RESOURCE GROUPS
 ## 使用上の注意
 
 - BEs は `report_resource_usage_interval_ms` で指定された間隔で、このリソース使用情報を Leader FE に定期的に報告します。デフォルトでは 1 秒に設定されています。
-- 結果には、`BEInUseCpuCores`/`BEInUseMemBytes`/`BERunningQueries` のいずれかが正の数である行のみが表示されます。つまり、リソースグループが BE で何らかのリソースを積極的に使用している場合にのみ情報が表示されます。
+- 結果は、`BEInUseCpuCores`/`BEInUseMemBytes`/`BERunningQueries` のいずれかが正の数である行のみを表示します。つまり、リソースグループが BE 上でリソースを積極的に使用している場合にのみ情報が表示されます。
 
 ## 例
 

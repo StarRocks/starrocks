@@ -4,19 +4,21 @@ displayed_sidebar: docs
 
 # sum
 
-`expr` の非 NULL 値の合計を返します。DISTINCT キーワードを使用して、異なる非 NULL 値の合計を計算することができます。
+## 説明
 
-## Syntax
+`expr` の非 null 値の合計を返します。DISTINCT キーワードを使用して、異なる非 null 値の合計を計算することができます。
+
+## 構文
 
 ```Haskell
 SUM([DISTINCT] expr)
 ```
 
-## Parameters
+## パラメータ
 
 `expr`: 数値に評価される式。サポートされているデータ型は TINYINT、SMALLINT、INT、FLOAT、DOUBLE、または DECIMAL です。
 
-## Return value
+## 戻り値
 
 入力値と戻り値のデータ型のマッピング:
 
@@ -27,13 +29,13 @@ SUM([DISTINCT] expr)
 - DOUBLE -> DOUBLE
 - DECIMAL -> DECIMAL
 
-## Usage notes
+## 使用上の注意
 
-- この関数は NULL を無視します。
+- この関数は null を無視します。
 - `expr` が存在しない場合、エラーが返されます。
 - VARCHAR 式が渡された場合、この関数は入力を DOUBLE 値に暗黙的にキャストします。キャストが失敗すると、エラーが返されます。
 
-## Examples
+## 例
 
 1. `employees` という名前のテーブルを作成します。
 
@@ -94,7 +96,7 @@ SUM([DISTINCT] expr)
     4 rows in set (0.01 sec)
     ```
 
-    例 2: 各地域の従業員の総収入を計算します。この関数は NULL を無視し、従業員 ID `777326` の収入はカウントされません。
+    例 2: 各地域の従業員の総収入を計算します。この関数は null を無視し、従業員 ID `777326` の収入はカウントされません。
 
     ```Plain Text
     MySQL > select region_num, sum(income) from employees
@@ -111,7 +113,7 @@ SUM([DISTINCT] expr)
     4 rows in set (0.01 sec)
     ```
 
-    例 3: 趣味の総数を計算します。`hobby` 列は STRING 型で、計算中に DOUBLE に暗黙的に変換されます。
+    例 3: 趣味の総数を計算します。`hobby` 列は STRING 型であり、計算中に DOUBLE に暗黙的に変換されます。
 
     ```Plain Text
     MySQL > select sum(DISTINCT hobby) from employees;
@@ -138,6 +140,6 @@ SUM([DISTINCT] expr)
     1 row in set (0.00 sec)
     ```
 
-## keyword
+## キーワード
 
 SUM, sum

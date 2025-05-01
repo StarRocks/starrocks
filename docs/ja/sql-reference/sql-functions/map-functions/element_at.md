@@ -4,9 +4,11 @@ displayed_sidebar: docs
 
 # element_at
 
-指定されたキーに対応するマップのキーと値のペアから値を返します。入力パラメータが NULL の場合や、キーがマップに存在しない場合、結果は NULL になります。
+## 説明
 
-配列から要素を取得したい場合は、[element_at](../array-functions/element_at.md) を参照してください。
+マップのキーと値のペアから指定されたキーの値を返します。入力パラメータが NULL であるか、キーがマップに存在しない場合、結果は NULL です。
+
+配列から要素を取得したい場合は、 [element_at](../array-functions/element_at.md) を参照してください。
 
 この関数は v3.0 以降でサポートされています。
 
@@ -23,7 +25,7 @@ element_at(any_map, any_key)
 
 ## 戻り値
 
-`any_key` が `any_map` に存在する場合、そのキーに対応する値が返されます。それ以外の場合は NULL が返されます。
+`any_key` が `any_map` に存在する場合、そのキーに対応する値が返されます。存在しない場合は、NULL が返されます。
 
 ## 例
 

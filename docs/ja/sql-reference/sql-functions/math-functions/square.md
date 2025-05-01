@@ -4,27 +4,29 @@ displayed_sidebar: docs
 
 # square
 
+## 説明
+
 値の平方を計算します。
 
-## Syntax
+## 構文
 
 ```Haskell
 square(arg)
 ```
 
-### Parameters
+### パラメータ
 
-`arg`: 平方を計算したい値を指定します。数値のみを指定できます。この関数は、数値を平方計算する前に DOUBLE 値に変換します。
+`arg`: 平方を計算したい値を指定します。数値のみを指定できます。この関数は、値の平方を計算する前に数値を DOUBLE 値に変換します。
 
-## Return value
+## 戻り値
 
 DOUBLE データ型の値を返します。
 
-## Usage notes
+## 使用上の注意
 
 非数値を指定した場合、この関数は `NULL` を返します。
 
-## Examples
+## 例
 
 例 1: 数値の平方を計算します。
 
@@ -37,7 +39,7 @@ mysql>  select square(11);
 +------------+
 ```
 
-例 2: 非数値の平方を計算します。返される値は `NULL` です。
+例 2: 非数値の平方を計算します。戻り値は `NULL` です。
 
 ```Plain
 mysql>  select square('2021-01-01');

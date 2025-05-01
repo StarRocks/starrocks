@@ -4,23 +4,25 @@ displayed_sidebar: docs
 
 # uuid
 
-VARCHAR 型のランダムな UUID を返します。この関数を2回呼び出すと、異なる番号を生成することがあります。UUID は 36 文字の長さで、5 つの 16 進数が aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee 形式で4つのハイフンで接続されています。
+## 説明
 
-## Syntax
+VARCHAR 型のランダムな UUID を返します。この関数を2回呼び出すと、異なる2つの番号を生成できます。UUID は36文字の長さで、5つの16進数が4つのハイフンで接続された aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee 形式です。
+
+## 構文
 
 ```Haskell
 uuid();
 ```
 
-## Parameters
+## パラメータ
 
 なし
 
-## Return value
+## 戻り値
 
 VARCHAR 型の値を返します。
 
-## Examples
+## 例
 
 ```Plain Text
 mysql> select uuid();

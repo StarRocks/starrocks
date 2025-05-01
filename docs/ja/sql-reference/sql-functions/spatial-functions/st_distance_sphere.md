@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # ST_Distance_Sphere
 
+## Description
+
 地球上の2点間の球面距離を「メートル」で計算します。入力されるパラメータは、Xの経度、Xの緯度、Yの経度、Yの緯度です。
 
 ## Syntax
@@ -12,7 +14,7 @@ displayed_sidebar: docs
 DOUBLE ST_Distance_Sphere(DOUBLE x_lng, DOUBLE x_lat, DOUBLE y_lng, DOUBLE x_lat)
 ```
 
-## 例
+## Examples
 
 ```Plain Text
 MySQL > select st_distance_sphere(116.35620117, 39.939093, 116.4274406433, 39.9020987219);
@@ -23,6 +25,6 @@ MySQL > select st_distance_sphere(116.35620117, 39.939093, 116.4274406433, 39.90
 +----------------------------------------------------------------------------+
 ```
 
-## キーワード
+## keyword
 
 ST_DISTANCE_SPHERE,ST,DISTANCE,SPHERE

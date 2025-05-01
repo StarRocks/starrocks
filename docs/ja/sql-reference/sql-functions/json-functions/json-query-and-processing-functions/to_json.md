@@ -4,9 +4,11 @@ displayed_sidebar: docs
 
 # to_json
 
-Map または Struct 値を JSON 文字列に変換します。入力値が NULL の場合、NULL が返されます。
+## 説明
 
-他のデータ型の値をキャストしたい場合は、[cast](./cast.md) を参照してください。
+Map または Struct の値を JSON 文字列に変換します。入力値が NULL の場合、NULL が返されます。
+
+他のデータ型の値をキャストしたい場合は、 [cast](./cast.md) を参照してください。
 
 この関数は v3.1 以降でサポートされています。
 
@@ -18,7 +20,7 @@ to_json(any_value)
 
 ## パラメータ
 
-`any_value`: 変換したい Map または Struct 式です。入力値が無効な場合、エラーが返されます。Map または Struct 値の各キーと値のペアの値は nullable です。最後の例を参照してください。
+`any_value`: 変換したい Map または Struct の式です。入力値が無効な場合、エラーが返されます。Map または Struct の各キーと値のペアの値は nullable です。最後の例を参照してください。
 
 ## 戻り値
 
@@ -56,7 +58,7 @@ select to_json(named_struct("k1", cast(null as string), "k2", "v2"));
 +-----------------------------------------------------------------------+
 ```
 
-## 関連項目
+## 参照
 
 - [Map data type](../../../data-types/semi_structured/Map.md)
 - [Struct data type](../../../data-types/semi_structured/STRUCT.md)

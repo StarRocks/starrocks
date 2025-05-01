@@ -4,9 +4,11 @@ displayed_sidebar: docs
 
 # array_sum
 
+## 説明
+
 配列内のすべての要素を合計します。
 
-StarRocks 2.5 から、array_sum() はラムダ式を引数として取ることができます。ただし、ラムダ式と直接連携することはできません。[array_map()](./array_map.md) から変換された結果で動作する必要があります。
+StarRocks 2.5から、array_sum() はラムダ式を引数として取ることができます。ただし、ラムダ式と直接連携することはできません。[array_map()](./array_map.md) から変換された結果で動作する必要があります。
 
 ## 構文
 
@@ -18,7 +20,7 @@ array_sum(lambda_function, arr1,arr2...) = array_sum(array_map(lambda_function, 
 ## パラメータ
 
 - `array(type)`: 合計を計算したい配列。配列要素は次のデータ型をサポートします: BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, および DECIMALV2。
-- `lambda_function`: array_sum() の対象配列を計算するために使用されるラムダ式。
+- `lambda_function`: array_sum() の対象となる配列を計算するために使用されるラムダ式。
 
 ## 戻り値
 

@@ -4,27 +4,29 @@ displayed_sidebar: docs
 
 # get_json_bool
 
-指定された JSON パスから JSON 文字列のブール値を解析して取得します。
+## 説明
+
+指定された JSON パスからブール値を解析して取得します。
 
 `json_str` または `json_path` の形式が無効である場合、または一致する内容が見つからない場合、この関数は NULL を返します。
 
 この関数は v3.3 からサポートされています。
 
-## Syntax
+## 構文
 
 ```Haskell
 BOOLEAN get_json_bool(VARCHAR json_str, VARCHAR json_path)
 ```
 
-## Parameters
+## パラメータ
 
 - `json_str`: JSON 文字列。サポートされているデータ型は VARCHAR です。
 - `json_path`: JSON パス。サポートされているデータ型は VARCHAR です。
    
-  - `json_path` は `$` で始まり、パスの区切りとして `.` を使用する必要があります。パスに `.` が含まれる場合は、`"` で囲むことができます。
+  - `json_path` は `$` で始まり、パス区切りとして `.` を使用する必要があります。パスに `.` が含まれる場合は、`"` で囲むことができます。
   - `[ ]` は配列の添字として使用され、0 から始まります。
 
-## Examples
+## 例
 
 1. キーが "k1" の値を取得します。値は `true` で、`1` が返されます。
 
@@ -59,6 +61,6 @@ BOOLEAN get_json_bool(VARCHAR json_str, VARCHAR json_path)
    +----------------------------------------------------------------------+
     ```
 
-## keyword
+## キーワード
 
-GET_JSON_BOOL,GET,JSON,BOOL
+GET_JSON_BOOL, GET, JSON, BOOL

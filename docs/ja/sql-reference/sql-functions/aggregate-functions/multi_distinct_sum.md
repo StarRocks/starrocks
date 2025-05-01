@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # multi_distinct_sum
 
+## 説明
+
 `expr` 内の異なる値の合計を返します。これは sum(distinct expr) と同等です。
 
 ## 構文
@@ -18,7 +20,7 @@ multi_distinct_sum(expr)
 
 ## 戻り値
 
-カラム値と戻り値の型の対応は次のとおりです:
+カラムの値と戻り値の型の対応は以下の通りです:
 
 - BOOLEAN -> BIGINT
 - TINYINT -> BIGINT
@@ -56,7 +58,7 @@ multi_distinct_sum(expr)
     INSERT INTO tabl VALUES ('0'), ('1'), ('1'), ('1'), ('2'), ('2');
     ```
 
-3. multi_distinct_sum() を使用して `k0` カラム内の異なる値の合計を計算します。
+3. `k0` カラムの異なる値の合計を計算するために multi_distinct_sum() を使用します。
 
     ```plain text
     MySQL > select multi_distinct_sum(k0) from tabl;

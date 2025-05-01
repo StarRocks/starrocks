@@ -4,7 +4,9 @@ displayed_sidebar: docs
 
 # json_string
 
-JSON オブジェクトを JSON 文字列に変換する
+## 説明
+
+JSON オブジェクトを JSON 文字列に変換します
 
 ## 構文
 
@@ -14,7 +16,7 @@ json_string(json_object_expr)
 
 ## パラメータ
 
-- `json_object_expr`: JSON オブジェクトを表す式です。オブジェクトは、JSON カラムや PARSE_JSON などの JSON コンストラクタ関数によって生成された JSON オブジェクトである可能性があります。
+- `json_object_expr`: JSON オブジェクトを表す式です。このオブジェクトは JSON カラム、または PARSE_JSON のような JSON コンストラクタ関数によって生成された JSON オブジェクトであることができます。
 
 ## 戻り値
 

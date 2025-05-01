@@ -4,17 +4,19 @@ displayed_sidebar: docs
 
 # dayname
 
-日付に対応する曜日を返します。
+## 説明
 
-`date` パラメータは DATE または DATETIME 型でなければなりません。
+指定した日付に対応する曜日を返します。
 
-## Syntax
+`date` パラメータは DATE または DATETIME 型である必要があります。
+
+## 構文
 
 ```Haskell
 VARCHAR DAYNAME(date)
 ```
 
-## Examples
+## 例
 
 ```Plain Text
 MySQL > select dayname('2007-02-03 00:00:00');
@@ -25,6 +27,6 @@ MySQL > select dayname('2007-02-03 00:00:00');
 +--------------------------------+
 ```
 
-## keyword
+## キーワード
 
 DAYNAME

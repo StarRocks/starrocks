@@ -4,25 +4,27 @@ displayed_sidebar: docs
 
 # date_add, adddate
 
+## 説明
+
 指定された時間間隔を日付に追加します。
 
-## Syntax
+## 構文
 
 ```Haskell
-DATETIME DATE_ADD(DATETIME|DATE date,INTERVAL expr type)
+DATETIME DATE_ADD(DATETIME|DATE date, INTERVAL expr type)
 ```
 
-## Parameters
+## パラメータ
 
-- `date`: 有効な日付または日時の式である必要があります。
-- `expr`: 追加したい時間間隔です。INT 型である必要があります。
-- `type`: 時間間隔の単位です。以下のいずれかの値にのみ設定できます: YEAR, QUARTER, MONTH, DAY, HOUR, MINUTE, SECOND, MILLISECOND (3.1.7以降), MICROSECOND (3.1.7以降)。
+- `date`: 有効な日付または日時の式でなければなりません。
+- `expr`: 追加したい時間間隔。INT 型でなければなりません。
+- `type`: 時間間隔の単位。以下のいずれかの値にのみ設定できます: YEAR, QUARTER, MONTH, DAY, HOUR, MINUTE, SECOND, MILLISECOND (3.1.7以降), MICROSECOND (3.1.7以降)。
 
-## Return value
+## 戻り値
 
-DATETIME 値を返します。日付が存在しない場合、例えば `2020-02-30` の場合は、NULL が返されます。日付が DATE 値の場合、それは DATETIME 値に変換されます。
+DATETIME 値を返します。例えば、`2020-02-30` のように日付が存在しない場合、NULL が返されます。日付が DATE 値の場合、DATETIME 値に変換されます。
 
-## Examples
+## 例
 
 ```Plain Text
 select date_add('2010-11-30 23:59:59', INTERVAL 2 DAY);

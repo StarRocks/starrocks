@@ -4,13 +4,15 @@ displayed_sidebar: docs
 
 # case
 
-CASE は条件式です。WHEN 節の条件が真と評価されると、THEN 節の結果を返します。どの条件も真と評価されない場合、ELSE 節の結果を返します。ELSE が存在しない場合は、NULL が返されます。
+## Description
 
-## 構文
+CASE は条件式です。WHEN 節の条件が真と評価されると、THEN 節の結果を返します。どの条件も真と評価されない場合、オプションの ELSE 節の結果を返します。ELSE が存在しない場合は、NULL が返されます。
+
+## Syntax
 
 CASE 式には 2 つの形式があります。
 
-- シンプル CASE
+- Simple CASE
 
 ```SQL
 CASE expression
@@ -22,9 +24,9 @@ CASE expression
 END
 ```
 
-この構文では、`expression` は WHEN 節の各式と比較されます。等しい式が見つかると、THEN 節の結果が返されます。等しい式が見つからない場合、ELSE 節が存在すれば ELSE 節の結果が返されます。
+この構文では、`expression` は WHEN 節の各式と比較されます。等しい式が見つかれば、THEN 節の結果が返されます。等しい式が見つからない場合、ELSE が存在すれば ELSE 節の結果が返されます。
 
-- 検索 CASE
+- Searched CASE
 
 ```SQL
 CASE WHEN condition1 THEN result1
@@ -35,7 +37,7 @@ CASE WHEN condition1 THEN result1
 END
 ```
 
-この構文では、WHEN 節の各条件が評価され、真となる条件が見つかると、対応する THEN 節の結果が返されます。どの条件も真と評価されない場合、ELSE 節が存在すれば ELSE 節の結果が返されます。
+この構文では、WHEN 節の各条件が評価され、真である場合、その条件に対応する THEN 節の結果が返されます。どの条件も真と評価されない場合、ELSE が存在すれば ELSE 節の結果が返されます。
 
 最初の CASE は次のように 2 番目の CASE と等しいです。
 
@@ -48,7 +50,7 @@ CASE WHEN expression = expression1 THEN result1
 END
 ```
 
-## パラメータ
+## Parameters
 
 - `expressionN`: 比較する式。複数の式はデータ型が互換性がある必要があります。
 
@@ -56,11 +58,11 @@ END
 
 - `resultN` はデータ型が互換性がある必要があります。
 
-## 戻り値
+## Return value
 
-戻り値は THEN 節内のすべての型の共通の型です。
+戻り値は THEN 節のすべての型の共通型です。
 
-## 例
+## Examples
 
 テーブル `test_case` に次のデータがあるとします。
 
@@ -87,9 +89,9 @@ SELECT * FROM test_case;
 +-------+--------+-------+
 ```
 
-### シンプル CASE の使用
+### Use simple CASE
 
-- ELSE が指定されており、等しい式が見つからない場合に ELSE の結果が返されます。
+- ELSE が指定されており、等しい式が見つからない場合は ELSE の結果が返されます。
 
 ```plain
 mysql> select gender, case gender 
@@ -126,7 +128,7 @@ from test_case;
 +--------+------------+
 ```
 
-### ELSE が指定されていない検索 CASE の使用
+### Use searched CASE with no ELSE specified
 
 ```plain
 mysql> select gender, case when gender = 1 then 'male'
@@ -143,6 +145,6 @@ from test_case;
 +--------+------------+
 ```
 
-## キーワード
+## Keywords
 
 case when, case, case_when, case...when

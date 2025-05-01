@@ -8,13 +8,13 @@ import Tabs from '@theme/Tabs';
 
 import TabItem from '@theme/TabItem';
 
-このトピックでは、FE ノードがさまざまな例外に遭遇した場合に、StarRocks クラスター内のメタデータをリカバリーする方法について説明します。
+このトピックでは、FE ノードが異なる例外に遭遇した場合に、StarRocks クラスターのメタデータをリカバリーする方法を説明します。
 
-一般的に、次のいずれかの問題が発生した場合にのみ、メタデータのリカバリーを行う必要があります。
+一般的に、次のいずれかの問題が発生した場合にのみ、メタデータのリカバリーが必要になることがあります。
 
 - [FE が再起動に失敗する](#fe-fails-to-restart)
 - [FE がサービスを提供できない](#fe-fails-to-provide-services)
-- [メタデータバックアップを使用して新しい FE ノードでメタデータをリカバリーする](#recover-metadata-on-a-new-fe-node-with-metadata-backup)。
+- [新しい FE ノードでメタデータバックアップを使用してメタデータをリカバリーする](#recover-metadata-on-a-new-fe-node-with-metadata-backup)
 
 遭遇した問題を確認し、対応するセクションで提供されている解決策に従い、推奨されるアクションを実行してください。
 
@@ -24,7 +24,7 @@ FE ノードは、メタデータが破損しているか、ロールバック�
 
 ### ロールバック後のメタデータの非互換性
 
-StarRocks クラスターをダウングレードする際、メタデータがダウングレード前と互換性がない場合、FEs は再起動に失敗することがあります。
+StarRocks クラスターをダウングレードする際、メタデータがダウングレード前と互換性がない場合、FEs が再起動に失敗することがあります。
 
 クラスターをダウングレードする際に次の例外が発生した場合、この問題を特定できます。
 
@@ -37,8 +37,8 @@ UNKNOWN Operation Type xxx
 1. すべての FE ノードを停止します。
 2. すべての FE ノードのメタデータディレクトリ `meta_dir` をバックアップします。
 3. すべての FE ノードの設定ファイル **fe.conf** に設定 `metadata_ignore_unknown_operation_type = true` を追加します。
-4. すべての FE ノードを起動し、データとメタデータが完全であるか確認します。
-5. データとメタデータが完全である場合、次のステートメントを実行してメタデータのイメージファイルを作成します。
+4. すべての FE ノードを起動し、データとメタデータが無事かどうかを確認します。
+5. データとメタデータが無事であれば、次のステートメントを実行してメタデータのイメージファイルを作成します。
 
    ```SQL
    ALTER SYSTEM CREATE IMAGE;
@@ -62,7 +62,7 @@ recoveryTracker should overlap or follow on disk last VLSN of 6,684,650 recovery
 
 次の手順に従ってこの問題を修正できます。
 
-1. この例外を投げる FE ノードのメタデータディレクトリ `meta_dir` をクリアします。
+1. この例外をスローする FE ノードのメタデータディレクトリ `meta_dir` をクリアします。
 2. Leader FE ノードをヘルパーとして使用して FE ノードを再起動します。
 
    ```Bash
@@ -73,7 +73,7 @@ recoveryTracker should overlap or follow on disk last VLSN of 6,684,650 recovery
 
 :::tip
 
-- このバグは StarRocks v3.1 で修正されています。この問題を回避するには、クラスターを v3.1 以降にアップグレードしてください。
+- このバグは StarRocks v3.1 で修正されています。クラスターを v3.1 以降にアップグレードすることで、この問題を回避できます。
 - この解決策は、FE ノードの半数以上がこの問題に遭遇した場合には適用できません。[最後の手段](#7-measure-of-the-last-resort) に従って問題を修正する必要があります。
 
 :::
@@ -146,7 +146,7 @@ Caused by: com.sleepycat.je.rep.ReplicaWriteException: (JE 18.3.16) Problem clos
    ./fe/bin/start_fe.sh --helper <leader_ip>:<leader_edit_log_port> --daemon
    ```
 
-5. 失敗したノードが正常な状態に回復した後、クラスター内の BDBJE パッケージを **starrocks-bdb-je-18.3.16.jar** にアップグレードする必要があります (または StarRocks クラスターを v3.0 以降にアップグレードします)。この際、まず Follower を、次に Leader をアップグレードします。
+5. 失敗したノードが正常な状態に回復した後、クラスター内の BDBJE パッケージを **starrocks-bdb-je-18.3.16.jar** にアップグレードするか、StarRocks クラスターを v3.0 以降にアップグレードする必要があります。アップグレードの順序は、まず Follower を行い、その後 Leader を行います。
 
 ##### InsufficientLogException
 
@@ -158,8 +158,8 @@ xxx INSUFFICIENT_LOG: Log files at this node are obsolete. Environment is invali
 
 この問題は、Follower ノードが完全なメタデータ同期を必要とする場合に発生します。次のいずれかの状況が発生した場合に発生する可能性があります。
 
-- Follower ノードのメタデータが Leader ノードのメタデータよりも遅れており、Leader ノードがすでにメタデータのチェックポイントを実行している場合。Follower ノードはメタデータの増分更新を実行できず、完全なメタデータ同期が必要です。
-- 元の Leader ノードがメタデータを書き込み、チェックポイントを実行しますが、ハングする前に Follower FE ノードに同期できません。再起動後、Follower ノードになります。不正なメタデータがチェックポイントされているため、Follower ノードはメタデータの増分削除を実行できず、完全なメタデータ同期が必要です。
+- Follower ノードのメタデータが Leader ノードのメタデータよりも遅れており、Leader ノードがすでにメタデータの CheckPoint を実行している場合。Follower ノードはメタデータの増分更新を実行できず、完全なメタデータ同期が必要です。
+- 元の Leader ノードがメタデータを書き込み、チェックポイントを行いますが、ハングする前に Follower FE ノードに同期できない場合。再起動後、Follower ノードになります。不正なメタデータがチェックポイントされているため、Follower ノードはメタデータの増分削除を実行できず、完全なメタデータ同期が必要です。
 
 この例外は、新しい Follower ノードがクラスターに追加されたときにスローされます。この場合、何もアクションを取る必要はありません。この例外が既存の Follower ノードまたは Leader ノードに対してスローされた場合、ノードを再起動するだけで問題を解決できます。
 
@@ -189,7 +189,7 @@ Caused by: com.sleepycat.je.EnvironmentFailureException: Environment invalid bec
         at com.sleepycat.je.rep.impl.node.RepNode.run(RepNode.java:1869) ~[starrocks-bdb-je-18.3.16.jar:?]
 ```
 
-この問題は、元の Leader ノードがハングし、再びアクティブになるときに、存続している Follower ノードが新しい Leader ノードを選出しようとしている場合に発生します。Follower ノードは元の Leader ノードと新しい接続を確立しようとします。しかし、Leader ノードは古い接続がまだ存在するため、接続要求を拒否します。要求が拒否されると、Follower ノードは環境を無効として設定し、この例外をスローします。
+この問題は、元の Leader ノードがハングし、生き返る間に、存続している Follower ノードが新しい Leader ノードを選出しようとしているときに発生します。Follower ノードは元の Leader ノードと新しい接続を確立しようとします。しかし、Leader ノードは古い接続がまだ存在するため、接続要求を拒否します。要求が拒否されると、Follower ノードは環境を無効として設定し、この例外をスローします。
 
 この問題を解決するには、JVM ヒープサイズを増やすか、G1 GC アルゴリズムを使用することができます。
 
@@ -223,7 +223,7 @@ com.sleepycat.je.DatabaseNotFoundException: (JE 18.3.16) _jeRepGroupDB
         at com.starrocks.StarRocksFE.main(StarRocksFE.java:83) ~[starrocks-fe.jar:?]
 ```
 
-この問題は、FE 設定ファイル **fe.conf** に `metadata_failure_recovery = true` を追加した場合に発生します。
+この問題は、FE 設定ファイル **fe.conf** に設定 `metadata_failure_recovery = true` を追加した場合に発生します。
 
 この問題を解決するには、設定を削除してノードを再起動する必要があります。
 
@@ -243,58 +243,58 @@ catch exception when replaying
 
 :::warning
 
-以下の解決策に従ってメタデータをリカバリーする前に、StarRocks コミュニティの技術専門家に支援を求めることを強くお勧めします。この解決策は **データ損失** を引き起こす可能性があります。
+以下の解決策に従ってメタデータをリカバリーする前に、StarRocks コミュニティの技術専門家からの支援を求めることを強くお勧めします。この解決策は **データ損失** を引き起こす可能性があります。
 
 :::
 
 次の手順に従ってこの問題を修正できます。
 
-##### エラージャーナル ID を無視する（推奨）
+##### エラージャーナル ID を無視する (推奨)
 
-1. すべての FE ノードを停止します。
-2. すべての FE ノードのメタデータディレクトリ `meta_dir` をバックアップします。
-3. ログから誤ったジャーナル ID を見つけます。以下のログの `xxx` は、誤ったジャーナル ID を表します。
+1. すべての FE ノードをシャットダウンします。
+2. すべての FE ノードのメタデータディレクトリをバックアップします。
+3. ログからエラーのあるジャーナル ID を特定します。次のログの `xxx` はエラーのあるジャーナル ID を表します。
 
    ```Plain
    got interrupt exception or inconsistent exception when replay journal xxx, will exit
    ```
 
-4. すべての **fe.conf** ファイルに以下の設定を追加し、FE ノードを起動します。
+4. 次の設定をすべての **fe.conf** ファイルに追加し、FE ノードを起動します。
 
    ```Plain
    metadata_journal_skip_bad_journal_ids=xxx
    ```
 
-5. それでも起動しない場合は、ステップ 3 で新しい失敗したジャーナル ID を特定し、**fe.conf** に追加してから、以前の設定を変更せずにノードを再起動します。
+5. 起動が再び失敗した場合、ステップ 3 を通じて新しい失敗したジャーナル ID を特定し、それを **fe.conf** に追加し、以前の設定を変更せずにノードを再起動します。
 
    ```Plain
    metadata_journal_skip_bad_journal_ids=xxx,yyy
    ```
 
-6. 上記の手順を実行してもシステムが起動しない場合、または失敗したジャーナル ID が多すぎる場合は、リカバリモードに進みます。
+6. 上記の手順を実行してもシステムが起動しない場合、または失敗したジャーナル ID が多すぎる場合は、リカバリーモードに進みます。
 
-##### リカバリモード
+##### リカバリーモード
 
 1. すべての FE ノードを停止します。
 2. すべての FE ノードのメタデータディレクトリ `meta_dir` をバックアップします。
-3. すべての FE ノードの設定ファイル **fe.conf** に設定 `metadata_enable_recovery_mode = true` を追加します。このモードではデータロードが禁止されています。
-4. すべての FE ノードを起動し、クラスター内のテーブルをクエリしてデータが完全であるか確認します。
+3. すべての FE ノードの設定ファイル **fe.conf** に設定 `metadata_enable_recovery_mode = true` を追加します。このモードではデータロードは禁止されています。
+4. すべての FE ノードを起動し、クラスター内のテーブルをクエリしてデータが無事かどうかを確認します。
 
-   テーブルをクエリしたときに次のエラーが返された場合、メタデータのリカバリーが完了するまで待機する必要があります。
+   テーブルをクエリしたときに次のエラーが返された場合、メタデータのリカバリーが完了するまで待つ必要があります。
 
    ```Plain
    ERROR 1064 (HY000): capture_consistent_versions error: version already been compacted.
    ```
 
-   メタデータリカバリーの進行状況を確認するために、Leader FE ノードから次のステートメントを実行できます。
+   次のステートメントを Leader FE ノードから実行して、メタデータリカバリーの進行状況を確認できます。
 
    ```SQL
    SHOW PROC '/meta_recovery';
    ```
 
-   このステートメントは、リカバリーに失敗したパーティションを表示します。返されたアドバイスに従ってパーティションをリカバリーできます。何も返されない場合、リカバリーが成功したことを示します。
+   このステートメントは、リカバリーに失敗したパーティションを表示します。返されたアドバイスに従ってパーティションをリカバリーできます。何も返されない場合は、リカバリーが成功したことを示します。
 
-5. データとメタデータが完全である場合、次のステートメントを実行してメタデータのイメージファイルを作成します。
+5. データとメタデータが無事であれば、次のステートメントを実行してメタデータのイメージファイルを作成します。
 
    ```SQL
    ALTER SYSTEM CREATE IMAGE;
@@ -304,19 +304,19 @@ catch exception when replaying
 
 ## FE がサービスを提供できない
 
-Follower FE ノードが Leader 選出を行えない場合、FE はサービスを提供しません。この問題が発生した場合、次のログ記録が繰り返されることがあります。
+Follower FE ノードが Leader 選出を実行できない場合、FE はサービスを提供しません。この問題が発生した場合、次のログ記録が繰り返されることがあります。
 
 ```Plain
 wait globalStateMgr to be ready. FE type: INIT. is ready: false
 ```
 
-さまざまな例外がこの問題を引き起こす可能性があります。問題を段階的にトラブルシューティングするために、以下のセクションに従うことを強くお勧めします。不適切な解決策を適用すると、問題が悪化し、データ損失を引き起こす可能性があります。
+さまざまな例外がこの問題を引き起こす可能性があります。問題を段階的にトラブルシューティングするために、以下のセクションに従うことを強くお勧めします。不適切な解決策を適用すると、問題が悪化し、データ損失につながる可能性があります。
 
 ### 1. Follower ノードの過半数が稼働していない
 
-Follower ノードの過半数が稼働していない場合、FE グループはサービスを提供しません。ここで「過半数」とは `1 + (Follower ノード数/2)` を示します。Leader FE ノード自体は Follower ですが、Observer ノードは Follower ではありません。
+Follower ノードの過半数が稼働していない場合、FE グループはサービスを提供しません。ここで、「過半数」とは `1 + (Follower ノード数/2)` を示します。Leader FE ノード自体は Follower ですが、Observer ノードは Follower ではありません。
 
-- 各 FE ノードの役割は **fe/meta/image/ROLE** ファイルから確認できます。
+- 各 FE ノードの役割を **fe/meta/image/ROLE** ファイルから確認できます。
 
   ```Bash
   cat fe/meta/image/ROLE
@@ -336,13 +336,13 @@ Follower ノードの過半数が稼働していない場合、FE グループ�
   2024-01-24 08:21:44.754 UTC INFO [172.26.92.139_29917_1698226672727] Current group size: 3
   ```
 
-この問題を解決するには、クラスター内のすべての Follower ノードを起動する必要があります。再起動できない場合は、[最後の手段](#10-最後の手段) を参照してください。
+この問題を解決するには、クラスター内のすべての Follower ノードを起動する必要があります。再起動できない場合は、[最後の手段](#10-measure-of-the-last-resort) を参照してください。
 
 ### 2. ノードの IP が変更された
 
-ノードの `priority_networks` が設定されていない場合、FE ノードは再起動時に利用可能な IP アドレスをランダムに選択します。BDBJE メタデータに記録された IP アドレスがノードの起動に使用されたものと異なる場合、FE はサービスを提供しません。
+ノードの `priority_networks` が設定されていない場合、FE ノードは再起動時に利用可能な IP アドレスをランダムに選択します。BDBJE メタデータに記録された IP アドレスがノードの起動に使用されるものと異なる場合、FE はサービスを提供しません。
 
-- BDBJE メタデータに記録された IP アドレスは **fe/meta/image/ROLE** ファイルから確認できます。
+- BDBJE メタデータから記録された IP アドレスを **fe/meta/image/ROLE** ファイルから確認できます。
 
   ```Bash
   cat fe/meta/image/ROLE
@@ -355,7 +355,7 @@ Follower ノードの過半数が稼働していない場合、FE グループ�
 
   最初のアンダースコアの前の値 `172.26.92.154` が BDBJE メタデータに記録された IP アドレスです。
 
-- ノードの起動に使用された IP アドレスは FE ログから確認できます。
+- FE ログからノードの起動に使用された IP アドレスを確認できます。
 
   ```Bash
   grep "IP:" fe/log/fe.log
@@ -366,9 +366,9 @@ Follower ノードの過半数が稼働していない場合、FE グループ�
 
 この問題を解決するには、FE 設定ファイル **fe.conf** のノードの `priority_networks` を **fe/meta/image/ROLE** に記録された IP アドレスに設定し、ノードを再起動する必要があります。
 
-### 3. ノード間のシステムクロックが同期していない
+### 3. ノード間のシステムクロックが同期されていない
 
-次のエラーメッセージに基づいてこの問題を特定できます。**fe.out**、**fe.log** または **fe/meta//bdb/je.info.0** から確認できます。
+**fe.out**、**fe.log** または **fe/meta//bdb/je.info.0** から次のエラーメッセージに基づいてこの問題を特定できます。
 
 ```Plain
 com.sleepycat.je.EnvironmentFailureException: (JE 7.3.7) Environment must be closed, caused by: com.sleepycat.je.EnvironmentFailureException: Environment invalid because of previous exception: (JE 7.3.7) 172.26.92.139_29917_1631006307557(2180):xxx Clock delta: 11020 ms. between Feeder: 172.26.92.154_29917_1641969377236 and this Replica exceeds max permissible delta: 5000 ms. HANDSHAKE_ERROR: Error during the handshake between two nodes. Some validity or compatibility check failed, preventing further communication between the nodes. Environment is invalid and must be closed. fetchRoot of 0x1278/0x1fcbb8 state=0 expires=never
@@ -376,19 +376,19 @@ com.sleepycat.je.EnvironmentFailureException: (JE 7.3.7) Environment must be clo
 
 すべてのノード間でシステムクロックを同期する必要があります。
 
-### 4. 利用可能なディスクスペースが不足している
+### 4. 利用可能なディスク容量が不足している
 
-StarRocks を v3.0 以降にアップグレードするか、BDBJE を v18 以降にアップグレードした後、`meta_dir` を格納するディスクの空き容量が 5 GB 未満の場合、ノードが再起動に失敗することがあります。
+StarRocks を v3.0 以降にアップグレードするか、BDBJE を v18 以降にアップグレードした後、`meta_dir` を格納するディスクの利用可能なスペースが 5 GB 未満の場合、ノードが再起動に失敗することがあります。
 
-BDBJE バージョンは **.jar** パッケージから確認できます。ディレクトリ **fe/lib** にあります。
+BDBJE バージョンは **fe/lib** ディレクトリの **.jar** パッケージから確認できます。
 
-この問題を解決するには、ディスクを拡張するか、FE メタデータ用により大容量の専用ディスクを割り当てることができます。
+この問題を解決するには、ディスクをスケールアップするか、FE メタデータ用により大容量の専用ディスクを割り当てることができます。
 
 ### 5. `edit_log_port` が変更された
 
 BDBJE メタデータに記録された `edit_log_port` が **fe.conf** に設定されたものと異なる場合、FE はサービスを提供しません。
 
-BDBJE メタデータに記録された `edit_log_port` は **fe/meta/image/ROLE** ファイルから確認できます。
+BDBJE メタデータから記録された `edit_log_port` を **fe/meta/image/ROLE** ファイルから確認できます。
 
 ```Bash
 cat fe/meta/image/ROLE
@@ -424,7 +424,7 @@ jstat -gcutil pid 1000 1000
   0.00 100.00  73.68  98.88  97.80  94.45     25    0.231     1    0.065    0.297
 ```
 
-フィールド `O` に表示されるパーセンテージが高いままである場合、JVM ヒープサイズが不足していることを示しています。
+フィールド `O` に示されるパーセンテージが高いままである場合、JVM ヒープサイズが不足していることを示しています。
 
 この問題を解決するには、JVM ヒープサイズを増やす必要があります。
 
@@ -445,7 +445,7 @@ Environment invalid because of previous exception: xxx Latch timeout. com.sleepy
         at java.util.TimerThread.run(Timer.java:505)
 ```
 
-この問題は、FE ノードのローカルディスクに過剰な負荷がかかっている場合に発生します。
+この問題は、FE ノードのローカルディスクに過度の負荷がかかっている場合に発生します。
 
 この問題を解決するには、FE メタデータ用に専用のディスクを割り当てるか、高性能なディスクに交換することができます。
 
@@ -457,7 +457,7 @@ Environment invalid because of previous exception: xxx Latch timeout. com.sleepy
 com.sleepycat.je.rep.InsufficientReplicasException: (JE 7.3.7) Commit policy: SIMPLE_MAJORITY required 1 replica. But none were active with this master.
 ```
 
-この問題は、Leader ノードまたは Follower ノードが過剰なメモリリソースを使用し、Full GC が発生する場合に発生します。
+この問題は、Leader FE ノードまたは Follower FE ノードが過剰なメモリリソースを使用し、Full GC を引き起こす場合に発生します。
 
 この問題を解決するには、JVM ヒープサイズを増やすか、G1 GC アルゴリズムを使用することができます。
 
@@ -488,38 +488,38 @@ com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine ma
         at java.lang.Thread.run(Thread.java:829) ~[?:?]
 ```
 
-`SHOW FRONTENDS` を実行する際、リーダー FE ノードが見つからない場合、いくつかの理由が考えられる：
+`SHOW FRONTENDS` を実行したときに Leader FE ノードが見つからない場合、いくつかの理由が考えられます。
 
-- FE ノードの半分以上がフル GC 中であり、その時間が著しく長い場合。
+- FE ノードの半数以上が Full GC を行っており、その期間が非常に長い場合。
 - または、ログに `java.lang.OutOfMemoryError: Java heap space` というキーワードが含まれている場合。
 
-これはメモリが不足しているためである。JVM のメモリ割り当てを増やす必要がある。
+これはメモリが不足しているためです。JVM メモリの割り当てを増やす必要があります。
 
 ### 10. 最後の手段
 
 :::warning
 
-以下の解決策は、前述の解決策がすべて機能しない場合にのみ最後の手段として試すことができます。
+以下の解決策は、前述の解決策がすべて機能しない場合にのみ、最後の手段として試すことができます。
 
 :::
 
 この解決策は、次のような極端なケースのみに設計されています。
 
 - Follower ノードの過半数が再起動できない。
-- Follower ノードが BDBJE のバグにより Leader 選出を行えない。
+- Follower ノードが BDBJE のバグにより Leader 選出を実行できない。
 - 前述のセクションで言及されていない例外。
 
 次の手順に従ってメタデータをリカバリーします。
 
 1. すべての FE ノードを停止します。
 2. すべての FE ノードのメタデータディレクトリ `meta_dir` をバックアップします。
-3. **FE ノードをホストするすべてのサーバー** で次のコマンドを実行して、最新のメタデータを持つノードを特定します。
+3. **FE ノードをホストしているすべてのサーバー** で次のコマンドを実行して、最新のメタデータを持つノードを特定します。
 
-   ```Bash
-   # ノードが使用する正確な .jar パッケージをコマンドで指定する必要があります。
-   # パッケージは StarRocks バージョンによって異なります。
-   java -jar fe/lib/starrocks-bdb-je-18.3.16.jar DbPrintLog -h meta/bdb/ -vd
-   ```
+    ```Bash
+    # ノードが使用する正確な .jar パッケージをコマンドで指定する必要があります。
+    # パッケージは StarRocks バージョンによって異なります。
+    java -jar fe/lib/starrocks-bdb-je-18.3.16.jar DbPrintLog -h meta/bdb/ -vd
+    ```
 
    例の出力:
 
@@ -551,7 +551,7 @@ com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine ma
    name=172.26.92.154_9312_1705568349984
    ```
 
-   複数のノードが最新のメタデータを持っている場合、Follower ノードで進めることをお勧めします。複数の Follower ノードが最新のメタデータを持っている場合、どのノードでも進めることができます。
+   複数のノードが最新のメタデータを持っている場合、Follower ノードで進めることをお勧めします。複数の Follower ノードが最新のメタデータを持っている場合は、どれでも進めることができます。
 
 5. 前のステップで選択した FE ノードの役割に基づいて対応する操作を実行します。
 
@@ -567,17 +567,17 @@ com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine ma
       bdbje_reset_election_group = true
       ```
 
-   2. ノードを再起動し、データとメタデータが完全であるか確認します。
-   3. 現在の FE ノードが Leader FE ノードであるか確認します。
+   2. ノードを再起動し、データとメタデータが無事かどうかを確認します。
+   3. 現在の FE ノードが Leader FE ノードであるかどうかを確認します。
 
       ```SQL
       SHOW FRONTENDS;
       ```
 
-      - フィールド `Alive` が `true` の場合、この FE ノードは正常に起動され、クラスターに追加されています。
+      - フィールド `Alive` が `true` の場合、この FE ノードは正常に起動し、クラスターに追加されています。
       - フィールド `Role` が `LEADER` の場合、この FE ノードは Leader FE ノードです。
 
-   4. データとメタデータが完全であり、ノードの役割が Leader である場合、以前に追加した設定を削除し、ノードを再起動できます。
+   4. データとメタデータが無事であり、ノードの役割が Leader である場合、以前に追加した設定を削除し、ノードを再起動できます。
 
     </TabItem>
 
@@ -592,24 +592,24 @@ com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine ma
       bdbje_reset_election_group = true
       ```
 
-   3. ノードを再起動し、データとメタデータが完全であるか確認します。
-   4. 現在の FE ノードが Leader FE ノードであるか確認します。
+   3. ノードを再起動し、データとメタデータが無事かどうかを確認します。
+   4. 現在の FE ノードが Leader FE ノードであるかどうかを確認します。
 
       ```SQL
       SHOW FRONTENDS;
       ```
 
-      - フィールド `Alive` が `true` の場合、この FE ノードは正常に起動され、クラスターに追加されています。
+      - フィールド `Alive` が `true` の場合、この FE ノードは正常に起動し、クラスターに追加されています。
       - フィールド `Role` が `LEADER` の場合、この FE ノードは Leader FE ノードです。
 
-   5. データとメタデータが完全であり、ノードの役割が Leader である場合、以前に追加した設定を削除します。ただし、**ノードを再起動しないでください**。
+   5. データとメタデータが無事であり、ノードの役割が Leader である場合、以前に追加した設定を削除します。ただし、**ノードを再起動しないでください**。
    6. クラスターに新しい Follower ノード (新しいサーバー上) を追加します。
 
       ```SQL
       ALTER SYSTEM ADD FOLLOWER "<new_follower_host>:<new_follower_edit_log_port>";
       ```
 
-   7. 一時的な Leader FE ノードをヘルパーとして使用して、新しいサーバー上で新しい FE ノードを起動します。
+   7. 新しいサーバー上で新しい FE ノードを起動し、一時的な Leader FE ノードをヘルパーとして使用します。
 
       ```Bash
       # <leader_ip> を Leader FE ノードの IP アドレス (priority_networks) に置き換え、
@@ -617,48 +617,48 @@ com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine ma
       ./fe/bin/start_fe.sh --helper <leader_ip>:<leader_edit_log_port> --daemon
       ```
 
-   8. 新しい FE ノードが正常に起動したら、両方の FE ノードの状態と役割を確認します。
+   8. 新しい FE ノードが正常に起動したら、両方の FE ノードのステータスと役割を確認します。
 
       ```SQL
       SHOW FRONTENDS;
       ```
 
-      - フィールド `Alive` が `true` の場合、この FE ノードは正常に起動され、クラスターに追加されています。
+      - フィールド `Alive` が `true` の場合、この FE ノードは正常に起動し、クラスターに追加されています。
       - フィールド `Role` が `FOLLOWER` の場合、この FE ノードは Follower FE ノードです。
       - フィールド `Role` が `LEADER` の場合、この FE ノードは Leader FE ノードです。
 
-   9. 新しい Follower がクラスター内で正常に動作している場合、すべてのノードを停止できます。
+   9. 新しい Follower がクラスター内で正常に稼働している場合、すべてのノードを停止できます。
    10. **新しい Follower のみの fe.conf** に次の設定を追加します。
 
-       - StarRocks v2.5、v3.0、v3.1.9 以前のパッチバージョン、および v3.2.4 以前のパッチバージョンの場合:
+       - StarRocks v2.5、v3.0、v3.1.9 およびそれ以前のパッチバージョン、v3.2.4 およびそれ以前のパッチバージョンの場合:
 
          ```Properties
          metadata_failure_recovery = true
          ```
 
-       - StarRocks v3.1.10 以降のパッチバージョン、v3.2.5 以降のパッチバージョン、および v3.3 以降の場合:
+       - StarRocks v3.1.10 およびそれ以降のパッチバージョン、v3.2.5 およびそれ以降のパッチバージョン、v3.3 およびそれ以降の場合:
 
          ```Properties
          bdbje_reset_election_group = true
          ```
 
-   11. 新しい Follower ノードを再起動し、データとメタデータが完全であるか確認します。
-   12. 現在の FE ノードが Leader FE ノードであるか確認します。
+   11. 新しい Follower ノードを再起動し、データとメタデータが無事かどうかを確認します。
+   12. 現在の FE ノードが Leader FE ノードであるかどうかを確認します。
 
        ```SQL
        SHOW FRONTENDS;
        ```
 
-       - フィールド `Alive` が `true` の場合、この FE ノードは正常に起動され、クラスターに追加されています。
+       - フィールド `Alive` が `true` の場合、この FE ノードは正常に起動し、クラスターに追加されています。
        - フィールド `Role` が `LEADER` の場合、この FE ノードは Leader FE ノードです。
 
-   13. データとメタデータが完全であり、ノードの役割が Leader である場合、以前に追加した設定を削除し、ノードを再起動できます。
+   13. データとメタデータが無事であり、ノードの役割が Leader である場合、以前に追加した設定を削除し、ノードを再起動できます。
 
     </TabItem>
 
   </Tabs>
 
-5. クラスターに再追加する FE ノードのメタデータディレクトリ `meta_dir` をクリアします。
+5. クラスターに再追加したい FE ノードのメタデータディレクトリ `meta_dir` をクリアします。
 6. 新しい Leader FE ノードをヘルパーとして使用して、新しい Follower ノードを起動します。
 
    ```Bash
@@ -673,11 +673,11 @@ com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine ma
    ALTER SYSTEM ADD FOLLOWER "<new_follower_host>:<new_follower_edit_log_port>";
    ```
 
-すべてのノードがクラスターに再追加された後、メタデータは正常にリカバリーされます。
+すべてのノードがクラスターに再追加された後、メタデータが正常にリカバリーされます。
 
 ## メタデータバックアップを使用して新しい FE ノードでメタデータをリカバリーする
 
-メタデータバックアップを使用して新しい FE ノードを起動したい場合、次の手順に従ってください。
+メタデータバックアップを使用して新しい FE ノードを起動したい場合は、次の手順に従います。
 
 1. バックアップされたメタデータディレクトリ `meta_dir` を新しい FE ノードにコピーします。
 2. FE ノードの設定ファイルで `bdbje_reset_election_group` を `true` に設定します。
@@ -692,7 +692,7 @@ com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine ma
    ./fe/bin/start_fe.sh
    ```
 
-4. 現在の FE ノードが Leader FE ノードであるか確認します。
+4. 現在の FE ノードが Leader FE ノードであるかどうかを確認します。
 
    ```SQL
    SHOW FRONTENDS;
@@ -700,8 +700,8 @@ com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine ma
 
    フィールド `Role` が `LEADER` の場合、この FE ノードは Leader FE ノードです。IP アドレスが現在の FE ノードのものであることを確認してください。
 
-5. データとメタデータが完全であり、ノードの役割が Leader である場合、設定 `bdbje_reset_election_group` を削除し、ノードを再起動する必要があります。
-6. これで、メタデータバックアップを使用して新しい Leader FE ノードを正常に起動しました。新しい Leader FE ノードをヘルパーとして使用して、新しい Follower ノードを追加できます。
+5. データとメタデータが無事であり、ノードの役割が Leader である場合、設定 `bdbje_reset_election_group` を削除し、ノードを再起動する必要があります。
+6. メタデータバックアップを使用して新しい Leader FE ノードを正常に起動しました。新しい Leader FE ノードをヘルパーとして使用して、新しい Follower ノードを追加できます。
 
    ```Bash
    # <leader_ip> を Leader FE ノードの IP アドレス (priority_networks) に置き換え、
@@ -713,7 +713,7 @@ com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine ma
 
 :::tip
 
-メタデータのリカバリーが完了したら、次の設定を削除する必要があります。
+メタデータリカバリーが完了したら、次の設定を削除する必要があります。
 
 :::
 

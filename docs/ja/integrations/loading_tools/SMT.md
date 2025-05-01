@@ -4,25 +4,25 @@ displayed_sidebar: docs
 
 # StarRocks Migration Tool (SMT)
 
-StarRocks Migration Tool (SMT) は、StarRocks が提供するデータ移行ツールで、Flink を通じてソースデータベースから StarRocks にデータをロードします。SMT の主な機能は次のとおりです:
+StarRocks Migration Tool (SMT) は、StarRocks が提供するデータ移行ツールで、Flink を通じてソースデータベースから StarRocks にデータをロードします。SMT は主に以下のことができます：
 - ソースデータベースとターゲットの StarRocks クラスターの情報に基づいて、StarRocks にテーブルを作成するためのステートメントを生成します。
-- Flink の SQL クライアントで実行可能な SQL ステートメントを生成し、データ同期のための Flink ジョブを送信します。これにより、パイプラインでのフルまたは増分データ同期が簡素化されます。現在、SMT は以下のソースデータベースをサポートしています:
+- Flink の SQL クライアントで実行可能な SQL ステートメントを生成し、Flink ジョブを送信してデータを同期します。これにより、パイプラインでのフルまたはインクリメンタルなデータ同期が簡素化されます。現在、SMT は以下のソースデータベースをサポートしています：
 
-| ソースデータベース | StarRocks にテーブルを作成するためのステートメントを生成 | フルデータ同期 | 増分データ同期 |
-| ----------------- | ----------------------------------------------------- | ------------- | -------------- |
-| MySQL             | サポート                                               | サポート       | サポート       |
-| PostgreSQL        | サポート                                               | サポート       | サポート       |
-| Oracle            | サポート                                               | サポート       | サポート       |
-| Hive              | サポート                                               | サポート       | サポートされていない |
-| ClickHouse        | サポート                                               | サポート       | サポートされていない |
-| SQL Server        | サポート                                               | サポート       | サポート       |
-| TiDB              | サポート                                               | サポート       | サポート       |
+| ソースデータベース | StarRocks にテーブルを作成するためのステートメントを生成 | フルデータ同期 | インクリメンタルデータ同期 |
+| ----------------- | ----------------------------------------------------- | ------------- | ------------------------ |
+| MySQL             | サポート                                               | サポート       | サポート                  |
+| PostgreSQL        | サポート                                               | サポート       | サポート                  |
+| Oracle            | サポート                                               | サポート       | サポート                  |
+| Hive              | サポート                                               | サポート       | サポートされていない      |
+| ClickHouse        | サポート                                               | サポート       | サポートされていない      |
+| SQL Server        | サポート                                               | サポート       | サポート                  |
+| TiDB              | サポート                                               | サポート       | サポート                  |
 
 ダウンロードリンク: https://cdn-thirdparty.starrocks.com/smt.tar.gz?r=2
 
 ## SMT の使用手順
 
-一般的な手順は次のとおりです:
+一般的に関与する手順は以下の通りです：
 
 1. **conf/config_prod.conf** ファイルを設定します。
 
@@ -30,7 +30,7 @@ StarRocks Migration Tool (SMT) は、StarRocks が提供するデータ移行ツ
 
 3. 実行後、SQL スクリプトがデフォルトで **result** ディレクトリに生成されます。
 
-   その後、**result** ディレクトリ内の SQL スクリプトを使用して、メタデータまたはデータの同期を行うことができます。
+   その後、**result** ディレクトリの SQL スクリプトを使用してメタデータまたはデータの同期を行うことができます。
 
 ## SMT の設定
 
@@ -40,23 +40,23 @@ StarRocks Migration Tool (SMT) は、StarRocks が提供するデータ移行ツ
 
 - `flink.starrocks.sink.*`: flink-connector-starrocks の設定。詳細な設定と説明については、[configuration description](https://github.com/StarRocks/flink-connector-starrocks#sink-options) を参照してください。
 
-- `[table-rule.1]`: データソース内のテーブルをマッチングするためのルール。このルールで設定された正規表現に基づいて CREATE TABLE ステートメントが生成され、データソース内のデータベースとテーブルの名前にマッチします。複数のルールを設定でき、各ルールは対応する結果ファイルを生成します。例えば:
+- `[table-rule.1]`: データソース内のテーブルをマッチさせるためのルール。データソース内のデータベースとテーブルの名前をマッチさせるために設定された正規表現に基づいて CREATE TABLE ステートメントが生成されます。複数のルールを設定でき、各ルールは対応する結果ファイルを生成します。例えば：
 
   - `[table-rule.1]` -> `result/starrocks-create.1.sql`
   - `[table-rule.2]` -> `result/starrocks-create.2.sql`
 
-  各ルールには、データベース、テーブル、および flink-connector-starrocks の設定が含まれている必要があります。
+  各ルールにはデータベース、テーブル、および flink-connector-starrocks の設定が含まれている必要があります。
 
    ```Bash
    [table-rule.1]
-   # プロパティを設定するためのデータベースをマッチングするパターン
+   # プロパティを設定するためのデータベースをマッチさせるパターン
    database = ^database1.*$
-   # プロパティを設定するためのテーブルをマッチングするパターン
+   # プロパティを設定するためのテーブルをマッチさせるパターン
    table = ^.*$
    schema = ^.*$
    ############################################
-   ### flink sink の設定
-   ### `connector`、`table-name`、`database-name` は設定しないでください。自動生成されます。
+   ### flink sink 設定
+   ### `connector`, `table-name`, `database-name` は設定しないでください。自動生成されます。
    ############################################
    flink.starrocks.jdbc-url=jdbc:mysql://192.168.1.1:9030
    flink.starrocks.load-url=192.168.1.1:8030
@@ -68,14 +68,14 @@ StarRocks Migration Tool (SMT) は、StarRocks が提供するデータ移行ツ
    flink.starrocks.sink.properties.strip_outer_array=true
   
    [table-rule.2]
-   # プロパティを設定するためのデータベースをマッチングするパターン
+   # プロパティを設定するためのデータベースをマッチさせるパターン
    database = ^database2.*$
-   # プロパティを設定するためのテーブルをマッチングするパターン
+   # プロパティを設定するためのテーブルをマッチさせるパターン
    table = ^.*$
    schema = ^.*$
    ############################################
-   ### flink sink の設定
-   ### `connector`、`table-name`、`database-name` は設定しないでください。自動生成されます。
+   ### flink sink 設定
+   ### `connector`, `table-name`, `database-name` は設定しないでください。自動生成されます。
    ############################################
    flink.starrocks.jdbc-url=jdbc:mysql://192.168.1.1:9030
    flink.starrocks.load-url=192.168.1.1:8030
@@ -87,28 +87,28 @@ StarRocks Migration Tool (SMT) は、StarRocks が提供するデータ移行ツ
    flink.starrocks.sink.properties.strip_outer_array=true
    ```
 
-- データベース内でシャードに分割された大きなテーブルに対して、別のルールを設定することができます。例えば、`edu_db_1` と `edu_db_2` の 2 つのデータベースにそれぞれ `course_1` と `course_2` というテーブルが含まれており、これらのテーブルが同じ構造を持っているとします。これら 2 つのテーブルから 1 つの StarRocks テーブルにデータをロードして分析するために、次のルールを使用できます。
+- データベース内でシャードに分割された大きなテーブルには、別のルールを設定できます。例えば、`edu_db_1` と `edu_db_2` の 2 つのデータベースにそれぞれ `course_1` と `course_2` のテーブルが含まれており、これらの 2 つのテーブルが同じ構造を持っているとします。これらの 2 つのテーブルから 1 つの StarRocks テーブルにデータをロードして分析するために、以下のルールを使用できます。
 
   ```Bash
   [table-rule.3]
-  # プロパティを設定するためのデータベースをマッチングするパターン
+  # プロパティを設定するためのデータベースをマッチさせるパターン
   database = ^edu_db_[0-9]*$
-  # プロパティを設定するためのテーブルをマッチングするパターン
+  # プロパティを設定するためのテーブルをマッチさせるパターン
   table = ^course_[0-9]*$
   schema = ^.*$
   ```
 
-  このルールは自動的に多対一のロード関係を形成します。StarRocks に生成されるテーブルのデフォルト名は `course__auto_shard` であり、関連する SOL スクリプトでテーブル名を変更することもできます。例えば `result/starrocks-create.3.sql` です。
+  このルールは自動的に多対一のロード関係を形成します。StarRocks に生成されるテーブルのデフォルト名は `course__auto_shard` であり、関連する SQL スクリプトでテーブル名を変更することもできます。例えば `result/starrocks-create.3.sql` です。
 
 ## MySQL から StarRocks への同期
 
 ### 概要
 
-Flink CDC コネクタと SMT を使用すると、MySQL からサブセカンドでデータを同期できます。
+Flink CDC コネクタと SMT は、MySQL からサブセカンドでデータを同期できます。
 
 ![img](../../_assets/load_tools.png)
 
-画像に示されているように、SMT は MySQL と StarRocks のクラスター情報とテーブル構造に基づいて、Flink のソーステーブルとシンクテーブルの CREATE TABLE ステートメントを自動生成します。Flink CDC コネクタは MySQL Binlog を読み取り、Flink-connector-starrocks はデータを StarRocks に書き込みます。
+画像に示されているように、SMT は MySQL と StarRocks のクラスター情報とテーブル構造に基づいて、Flink のソースおよびシンクテーブルの CREATE TABLE ステートメントを自動生成できます。Flink CDC コネクタは MySQL Binlog を読み取り、Flink-connector-starrocks はデータを StarRocks に書き込みます。
 
 ### 手順
 
@@ -122,7 +122,7 @@ Flink CDC コネクタと SMT を使用すると、MySQL からサブセカン�
 
 5. [smt.tar.gz](https://cdn-thirdparty.starrocks.com/smt.tar.gz?r=2) をダウンロードします。
 
-6. SMT の設定ファイルを抽出して修正します。
+6. SMT の設定ファイルを抽出して変更します。
 
    ```Bash
    [db]
@@ -141,15 +141,15 @@ Flink CDC コネクタと SMT を使用すると、MySQL からサブセカン�
    output_dir = ./result
    
    [table-rule.1]
-   # プロパティを設定するためのデータベースをマッチングするパターン
+   # プロパティを設定するためのデータベースをマッチさせるパターン
    database = ^db$
-   # プロパティを設定するためのテーブルをマッチングするパターン
+   # プロパティを設定するためのテーブルをマッチさせるパターン
    table = ^table$
    schema = ^.*$
    
    ############################################
-   ### flink sink の設定
-   ### `connector`、`table-name`、`database-name` は設定しないでください。自動生成されます。
+   ### flink sink 設定
+   ### `connector`, `table-name`, `database-name` は設定しないでください。自動生成されます。
    ############################################
    flink.starrocks.jdbc-url=jdbc:mysql://192.168.1.1:9030
    flink.starrocks.load-url=192.168.1.1:8030
@@ -176,7 +176,7 @@ Flink CDC コネクタと SMT を使用すると、MySQL からサブセカン�
    mysql -hxx.xx.xx.x -P9030 -uroot -p < starrocks-create.all.sql
    ```
 
-9. プレフィックスが **flink-create** の SQL スクリプトを使用して、Flink のソーステーブルとシンクテーブルを生成し、データを同期するための Flink ジョブを開始します。
+9. プレフィックスが **flink-create** の SQL スクリプトを使用して、Flink のソースおよびシンクテーブルを生成し、Flink ジョブを開始してデータを同期します。
 
    ```Bash
    bin/sql-client.sh embedded < flink-create.all.sql
@@ -190,13 +190,13 @@ Flink CDC コネクタと SMT を使用すると、MySQL からサブセカン�
     bin/flink list 
     ```
 
-    ジョブの実行中にエラーが発生した場合は、Flink のログで詳細なエラー情報を確認できます。また、**conf/flink-conf.yaml** ファイルで Flink の設定を変更することもできます。例えば、メモリやスロットなどです。
+    ジョブの実行中にエラーが発生した場合、Flink ログで詳細なエラー情報を確認できます。また、**conf/flink-conf.yaml** ファイルで Flink の設定を変更することもできます（メモリやスロットなど）。
 
 ### 注意事項
 
-- MySQL binlog を有効にする方法
+- MySQL binlog を有効にする方法：
 
-  1. /etc/my.cnf を修正します:
+  1. /etc/my.cnf を変更します：
 
      ```plaintext
      # binlog を有効にする
@@ -212,15 +212,15 @@ Flink CDC コネクタと SMT を使用すると、MySQL からサブセカン�
      binlog_format = row
      ```
 
-  2. mysqld を再起動します。`SHOW VARIABLES LIKE 'log_bin';` を実行して、MySQL binlog が有効かどうかを確認できます。
+  2. mysqld を再起動します。`SHOW VARIABLES LIKE 'log_bin';` を実行して、MySQL binlog が有効になっているかどうかを確認できます。
 
 ## PostgreSQL から StarRocks への同期
 
 ### 概要
 
-Flink CDC コネクタと SMT を使用すると、PostgreSQL からサブセカンドでデータを同期できます。
+Flink CDC コネクタと SMT は、PostgreSQL からサブセカンドでデータを同期できます。
 
-SMT は PostgreSQL と StarRocks のクラスター情報とテーブル構造に基づいて、Flink のソーステーブルとシンクテーブルの CREATE TABLE ステートメントを自動生成します。
+SMT は PostgreSQL と StarRocks のクラスター情報とテーブル構造に基づいて、Flink のソースおよびシンクテーブルの CREATE TABLE ステートメントを自動生成できます。
 
 Flink CDC コネクタは PostgreSQL の WAL を読み取り、Flink-connector-starrocks はデータを StarRocks に書き込みます。
 
@@ -230,13 +230,13 @@ Flink CDC コネクタは PostgreSQL の WAL を読み取り、Flink-connector-s
 
 2. [Flink CDC コネクタ](https://github.com/ververica/flink-cdc-connectors/releases) をダウンロードします。Flink のバージョンに対応する `flink-sql-connector-postgres-cdc-xxx.jar` をダウンロードしてください。
 
-3. [Flink StarRocks コネクタ](https://github.com/StarRocks/flink-connector-starrocks) をダウンロードします。
+3. [Flink StarRocks connector](https://github.com/StarRocks/flink-connector-starrocks) をダウンロードします。
 
 4. **flink-sql-connector-postgres-cdc-xxx.jar** と **flink-connector-starrocks-xxx.jar** を **flink-xxx/lib/** にコピーします。
 
 5. [smt.tar.gz](https://cdn-thirdparty.starrocks.com/smt.tar.gz?r=2) をダウンロードします。
 
-6. SMT の設定ファイルを抽出して修正します。
+6. SMT の設定ファイルを抽出して変更します。
 
    ```Bash
    [db]
@@ -255,16 +255,16 @@ Flink CDC コネクタは PostgreSQL の WAL を読み取り、Flink-connector-s
    output_dir = ./result
    
    [table-rule.1]
-   # プロパティを設定するためのデータベースをマッチングするパターン
+   # プロパティを設定するためのデータベースをマッチさせるパターン
    database = ^db$
-   # プロパティを設定するためのテーブルをマッチングするパターン
+   # プロパティを設定するためのテーブルをマッチさせるパターン
    table = ^table$
-   # プロパティを設定するためのスキーマをマッチングするパターン
+   # プロパティを設定するためのスキーマをマッチさせるパターン
    schema = ^.*$
    
    ############################################
-   ### flink sink の設定
-   ### `connector`、`table-name`、`database-name` は設定しないでください。自動生成されます。
+   ### flink sink 設定
+   ### `connector`, `table-name`, `database-name` は設定しないでください。自動生成されます。
    ############################################
    flink.starrocks.jdbc-url=jdbc:mysql://192.168.1.1:9030
    flink.starrocks.load-url=192.168.1.1:8030
@@ -291,7 +291,7 @@ Flink CDC コネクタは PostgreSQL の WAL を読み取り、Flink-connector-s
    mysql -hxx.xx.xx.x -P9030 -uroot -p < starrocks-create.all.sql
    ```
 
-9. プレフィックスが **flink-create** の SQL スクリプトを使用して、Flink のソーステーブルとシンクテーブルを生成し、データを同期するための Flink ジョブを開始します。
+9. プレフィックスが **flink-create** の SQL スクリプトを使用して、Flink のソースおよびシンクテーブルを生成し、Flink ジョブを開始してデータを同期します。
 
    ```Bash
    bin/sql-client.sh embedded < flink-create.all.sql
@@ -305,24 +305,24 @@ Flink CDC コネクタは PostgreSQL の WAL を読み取り、Flink-connector-s
     bin/flink list 
     ```
 
-    ジョブの実行中にエラーが発生した場合は、Flink のログで詳細なエラー情報を確認できます。また、**conf/flink-conf.yaml** ファイルで Flink の設定を変更することもできます。例えば、メモリやスロットなどです。
+    ジョブの実行中にエラーが発生した場合、Flink ログで詳細なエラー情報を確認できます。また、**conf/flink-conf.yaml** ファイルで Flink の設定を変更することもできます（メモリやスロットなど）。
 
 ### 注意事項
 
-- PostgreSQL `v9.*` の場合、以下のような特別な flink-cdc 設定が必要です（PostgreSQL `v10.*` 以降を使用することをお勧めします。そうでない場合は、WAL デコードプラグインをインストールする必要があります）:
+- PostgreSQL `v9.*` の場合、以下のような特別な flink-cdc 設定が必要です（PostgreSQL `v10.*` 以降を使用することをお勧めします。それ以外の場合は、WAL デコードプラグインをインストールする必要があります）：
 
 ```Bash
    ############################################
    ############################################
-   ### `postgresql` 用の flink-cdc プラグイン設定
+   ### flink-cdc plugin configuration for `postgresql`
    ############################################
-   ### `9.*` 用 decoderbufs, wal2json, wal2json_rds, wal2json_streaming, wal2json_rds_streaming
-   ### https://ververica.github.io/flink-cdc-connectors/master/content/connectors/postgres-cdc.html 
-   ### および https://debezium.io/documentation/reference/postgres-plugins.html を参照
+   ### for `9.*` decoderbufs, wal2json, wal2json_rds, wal2json_streaming, wal2json_rds_streaming
+   ### refer to https://ververica.github.io/flink-cdc-connectors/master/content/connectors/postgres-cdc.html 
+   ### and https://debezium.io/documentation/reference/postgres-plugins.html
    ### flink.cdc.decoding.plugin.name = decoderbufs
    ```
 
-- PostgreSQL WAL を有効にする方法
+- PostgreSQL WAL を有効にする方法：
 
    ```Bash
    # 接続権限を開く
@@ -334,7 +334,7 @@ Flink CDC コネクタは PostgreSQL の WAL を読み取り、Flink-connector-s
    echo "max_replication_slots = 8" >> postgresql.conf
    ```
 
-   同期が必要なテーブルに対してレプリカアイデンティティ FULL を指定します。
+   同期が必要なテーブルには FULL のレプリカアイデンティティを指定します。
 
     ```SQL
     ALTER TABLE schema_name.table_name REPLICA IDENTITY FULL
@@ -346,9 +346,9 @@ Flink CDC コネクタは PostgreSQL の WAL を読み取り、Flink-connector-s
 
 ### 概要
 
-Flink CDC コネクタと SMT を使用すると、Oracle からサブセカンドでデータを同期できます。
+Flink CDC コネクタと SMT は、Oracle からサブセカンドでデータを同期できます。
 
-SMT は Oracle と StarRocks のクラスター情報とテーブル構造に基づいて、Flink のソーステーブルとシンクテーブルの CREATE TABLE ステートメントを自動生成します。
+SMT は Oracle と StarRocks のクラスター情報とテーブル構造に基づいて、Flink のソースおよびシンクテーブルの CREATE TABLE ステートメントを自動生成できます。
 
 Flink CDC コネクタは Oracle の logminer を読み取り、Flink-connector-starrocks はデータを StarRocks に書き込みます。
 
@@ -358,13 +358,13 @@ Flink CDC コネクタは Oracle の logminer を読み取り、Flink-connector-
 
 2. [Flink CDC コネクタ](https://github.com/ververica/flink-cdc-connectors/releases) をダウンロードします。Flink のバージョンに対応する `flink-sql-connector-oracle-cdc-xxx.jar` をダウンロードしてください。
 
-3. [Flink StarRocks コネクタ](https://github.com/StarRocks/flink-connector-starrocks) をダウンロードします。
+3. [Flink StarRocks connector](https://github.com/StarRocks/flink-connector-starrocks) をダウンロードします。
 
 4. `flink-sql-connector-oracle-cdc-xxx.jar` と `flink-connector-starrocks-xxx.jar` を `flink-xxx/lib/` にコピーします。
 
 5. [smt.tar.gz](https://cdn-thirdparty.starrocks.com/smt.tar.gz?r=2) をダウンロードします。
 
-6. SMT の設定ファイルを抽出して修正します。
+6. SMT の設定ファイルを抽出して変更します。
 
    ```Bash
    [db]
@@ -383,16 +383,16 @@ Flink CDC コネクタは Oracle の logminer を読み取り、Flink-connector-
    output_dir = ./result
    
    [table-rule.1]
-   # プロパティを設定するためのデータベースをマッチングするパターン
+   # プロパティを設定するためのデータベースをマッチさせるパターン
    database = ^db$
-   # プロパティを設定するためのテーブルをマッチングするパターン
+   # プロパティを設定するためのテーブルをマッチさせるパターン
    table = ^table$
-   # プロパティを設定するためのスキーマをマッチングするパターン
+   # プロパティを設定するためのスキーマをマッチさせるパターン
    schema = ^.*$
    
    ############################################
-   ### flink sink の設定
-   ### `connector`、`table-name`、`database-name` は設定しないでください。自動生成されます。
+   ### flink sink 設定
+   ### `connector`, `table-name`, `database-name` は設定しないでください。自動生成されます。
    ############################################
    flink.starrocks.jdbc-url=jdbc:mysql://192.168.1.1:9030
    flink.starrocks.load-url=192.168.1.1:8030
@@ -419,7 +419,7 @@ Flink CDC コネクタは Oracle の logminer を読み取り、Flink-connector-
    mysql -hxx.xx.xx.x -P9030 -uroot -p < starrocks-create.all.sql
    ```
 
-9. プレフィックスが flink-create の SQL スクリプトを使用して、Flink のソーステーブルとシンクテーブルを生成し、データを同期するための Flink ジョブを開始します。
+9. プレフィックスが flink-create の SQL スクリプトを使用して、Flink のソースおよびシンクテーブルを生成し、Flink ジョブを開始してデータを同期します。
 
    ```Bash
    bin/sql-client.sh embedded < flink-create.all.sql
@@ -433,11 +433,11 @@ Flink CDC コネクタは Oracle の logminer を読み取り、Flink-connector-
     bin/flink list 
     ```
 
- 	ジョブの実行中にエラーが発生した場合は、Flink のログで詳細なエラー情報を確認できます。また、**conf/flink-conf.yaml** ファイルで Flink の設定を変更することもできます。例えば、メモリやスロットなどです。
+ 	ジョブの実行中にエラーが発生した場合、Flink ログで詳細なエラー情報を確認できます。また、**conf/flink-conf.yaml** ファイルで Flink の設定を変更することもできます（メモリやスロットなど）。
 
 ### 注意事項
 
-- logminer を使用して Oracle を同期する方法:
+- logminer を使用して Oracle を同期する：
 
   ```SQL
   # ロギングを有効にする
@@ -478,7 +478,7 @@ Flink CDC コネクタは Oracle の logminer を読み取り、Flink-connector-
   ```
 
 - [table-rule.1] のデータベース設定は正規表現をサポートしていないため、完全なデータベース名を指定する必要があります。
-- Oracle12c は CDB モードをサポートしているため、SMT は内部的に CDB が有効かどうかを自動的に判断し、flink-cdc の設定を変更します。ただし、ユーザーは `[db].user` の設定に c## プレフィックスを追加する必要があるかどうかに注意を払う必要があります。権限不足の問題を避けるためです。
+- Oracle12c は CDB モードをサポートしているため、SMT は内部的に CDB が有効かどうかを自動的に判断し、flink-cdc の設定を対応して変更します。ただし、ユーザーは `[db].user` の設定に c## プレフィックスを追加する必要があるかどうかに注意を払う必要があります。権限不足の問題を避けるためです。
 
 ## Hive から StarRocks への同期
 
@@ -499,18 +499,18 @@ port = 10000
 user = hive/emr-header-1.cluster-49148
 password = 
 type = hive
-# `type = hive` の場合にのみ有効です。
+# `type = hive` の場合のみ有効です。
 # 利用可能な値: kerberos, none, nosasl, kerberos_http, none_http, zk, ldap
 authentication = kerberos
 ```
 
- サポートされている認証方法は次のとおりです:
+ サポートされている認証方法は以下の通りです：
 
 - nosasl, zk: `user` と `password` を指定する必要はありません。
 - none, none_http, ldap: `user` と `password` を指定します。
-- kerberos, kerberos_http: 次の手順を実行します:
+- kerberos, kerberos_http: 以下の手順を実行します：
   - Hive クラスターで `kadmin.local` を実行し、`list_principals` を確認して対応するプリンシパル名を見つけます。例えば、プリンシパル名が `hive/emr-header-1.cluster-49148@EMR.49148.COM` の場合、ユーザーは `hive/emr-header-1.cluster-49148` に設定し、パスワードは空のままにします。
-  - SMT を実行するマシンで `kinit -kt /path/to/keytab principal` を実行し、`klist` を実行して正しいトークンが生成されているか確認します。
+  - SMT が実行されるマシンで `kinit -kt /path/to/keytab principal` を実行し、`klist` を実行して正しいトークンが生成されているか確認します。
 
 #### データ同期
 
@@ -521,7 +521,7 @@ authentication = kerberos
    mysql -hxx.xx.xx.x -P9030 -uroot -p < starrocks-create.all.sql
    ```
 
-3. **flink/conf/** に **sql-client-defaults.yaml** ファイルを作成して編集します:
+3. **flink/conf/** に **sql-client-defaults.yaml** ファイルを作成して編集します：
 
     ```YAML
     execution:
@@ -534,27 +534,27 @@ authentication = kerberos
     hive-conf-dir: /path/to/apache-hive-xxxx-bin/conf
     ```
 
-4. Flink の対応するバージョンの Hive ページから [依存パッケージ](https://nightlies.apache.org/flink/flink-docs-release-1.13/zh/docs/connectors/table/hive/overview/) (flink-sql-connector-hive-xxxx) をダウンロードし、`flink/lib` ディレクトリに配置します。
+4. Flink の対応するバージョンの Hive ページから [依存パッケージ](https://nightlies.apache.org/flink/flink-docs-release-1.13/zh/docs/connectors/table/hive/overview/)（flink-sql-connector-hive-xxxx）をダウンロードし、`flink/lib` ディレクトリに配置します。
 5. Flink クラスターを起動し、`flink/bin/sql-client.sh embedded < result/flink-create.all.sql` を実行してデータ同期を開始します。
 
 ## SQL Server から StarRocks への同期
 
 ### 概要
 
-Flink CDC コネクタと SMT を使用すると、SQL Server からサブセカンドでデータを同期できます。
+Flink CDC コネクタと SMT は、SQL Server からサブセカンドでデータを同期できます。
 
-SMT は SQL Server と StarRocks のクラスター情報とテーブル構造に基づいて、Flink のソーステーブルとシンクテーブルの CREATE TABLE ステートメントを自動生成します。
+SMT は SQL Server と StarRocks のクラスター情報とテーブル構造に基づいて、Flink のソースおよびシンクテーブルの CREATE TABLE ステートメントを自動生成できます。
 
-Flink CDC コネクタは、SQL Server データベースサーバーで発生する行レベルの変更をキャプチャして記録します。原理は、SQL Server 自体が提供する CDC 機能を使用することです。SQL Server 自体の CDC 機能は、データベース内の指定された変更を指定された変更テーブルにアーカイブできます。SQL Server CDC コネクタは、JDBC を使用してテーブルから履歴データを最初に読み取り、次に変更テーブルから増分変更を取得し、フル増分同期を実現します。その後、Flink-connector-starrocks はデータを StarRocks に書き込みます。
+Flink CDC コネクタは、SQL Server データベースサーバーで発生する行レベルの変更をキャプチャして記録します。原理は、SQL Server 自体が提供する CDC 機能を使用することです。SQL Server 自体の CDC 機能は、データベース内の指定された変更を指定された変更テーブルにアーカイブできます。SQL Server CDC コネクタは、まず JDBC を使用してテーブルから履歴データを読み取り、次に変更テーブルからインクリメンタルな変更を取得することで、フルインクリメンタル同期を実現します。その後、Flink-connector-starrocks はデータを StarRocks に書き込みます。
 
 ### 手順
 
 1. [Flink](https://flink.apache.org/downloads.html) をダウンロードします。Flink のバージョンは 1.11 以降がサポートされています。
 2. [Flink CDC コネクタ](https://github.com/ververica/flink-cdc-connectors/releases) をダウンロードします。Flink のバージョンに対応する **flink-sql-connector-sqlserver-cdc-xxx.jar** をダウンロードしてください。
-3. [Flink StarRocks コネクタ](https://github.com/StarRocks/flink-connector-starrocks) をダウンロードします。
+3. [Flink StarRocks connector](https://github.com/StarRocks/flink-connector-starrocks) をダウンロードします。
 4. **flink-sql-connector-sqlserver-cdc-xxx.jar**、**flink-connector-starrocks-xxx.jar** を **flink-xxx/lib/** にコピーします。
 5. [smt.tar.gz](https://cdn-thirdparty.starrocks.com/smt.tar.gz?r=2) をダウンロードします。
-6. SMT の設定ファイルを抽出して修正します。
+6. SMT の設定ファイルを抽出して変更します。
 
     ```Bash
     [db]
@@ -575,15 +575,15 @@ Flink CDC コネクタは、SQL Server データベースサーバーで発生�
     output_dir = ./result
 
     [table-rule.1]
-    # プロパティを設定するためのデータベースをマッチングするパターン
+    # プロパティを設定するためのデータベースをマッチさせるパターン
     database = ^db$
-    # プロパティを設定するためのテーブルをマッチングするパターン
+    # プロパティを設定するためのテーブルをマッチさせるパターン
     table = ^table$
     schema = ^.*$
 
     ############################################
-    ### flink sink の設定
-    ### `connector`、`table-name`、`database-name` は設定しないでください。自動生成されます。
+    ### flink sink 設定
+    ### `connector`, `table-name`, `database-name` は設定しないでください。自動生成されます。
     ############################################
     flink.starrocks.jdbc-url=jdbc:mysql://192.168.1.1:9030
     flink.starrocks.load-url=192.168.1.1:8030
@@ -610,7 +610,7 @@ Flink CDC コネクタは、SQL Server データベースサーバーで発生�
     mysql -hxx.xx.xx.x -P9030 -uroot -p < starrocks-create.all.sql
     ```
 
-9. プレフィックスが `flink-create` の SQL スクリプトを使用して、Flink のソーステーブルとシンクテーブルを生成し、データを同期するための Flink ジョブを開始します。
+9. プレフィックスが `flink-create` の SQL スクリプトを使用して、Flink のソースおよびシンクテーブルを生成し、Flink ジョブを開始してデータを同期します。
 
     ```Bash
     bin/sql-client.sh embedded < flink-create.all.sql     
@@ -623,7 +623,7 @@ Flink CDC コネクタは、SQL Server データベースサーバーで発生�
     ```Bash
     bin/flink list 
     ```
-    ジョブの実行中にエラーが発生した場合は、Flink のログで詳細なエラー情報を確認できます。また、**conf/flink-conf.yaml** ファイルで Flink の設定を変更することもできます。例えば、メモリやスロットなどです。
+    ジョブの実行中にエラーが発生した場合、Flink ログで詳細なエラー情報を確認できます。また、**conf/flink-conf.yaml** ファイルで Flink の設定を変更することもできます（メモリやスロットなど）。
 
 ### 注意事項
 
@@ -651,50 +651,50 @@ Flink CDC コネクタは、SQL Server データベースサーバーで発生�
     GO
     ```
 
-CDC を有効にします。
+    CDC を有効にします。
 
-:::note
+    :::note
 
-このコマンドを実行する際は、ユーザー `serverRole` が `sysadmin` であることを確認してください。
+    このコマンドを実行する際は、ユーザー `serverRole` が `sysadmin` であることを確認してください。
 
-:::
+    :::
 
-```SQL
-USE XXX_databases
-GO
-EXEC sys.sp_cdc_enable_db
-GO
-```
+    ```SQL
+    USE XXX_databases
+    GO
+    EXEC sys.sp_cdc_enable_db
+    GO
+    ```
 
 3. 対応するテーブルの CDC が有効になっていることを確認します。
 
-```SQL
-EXEC sys.sp_cdc_enable_table 
-@source_schema = 'XXX_schema', 
-@source_name = 'XXX_table', 
-@role_name = NULL, 
-@supports_net_changes = 0;
-GO
-```
+    ```SQL
+    EXEC sys.sp_cdc_enable_table 
+    @source_schema = 'XXX_schema', 
+    @source_name = 'XXX_table', 
+    @role_name = NULL, 
+    @supports_net_changes = 0;
+    GO
+    ```
 
 ## TiDB から StarRocks への同期
 
 ### 概要
 
-Flink CDC コネクタと SMT を使用すると、TiDB からサブセカンドでデータを同期できます。
+Flink CDC コネクタと SMT は、TiDB からサブセカンドでデータを同期できます。
 
-SMT は TiDB と StarRocks のクラスター情報とテーブル構造に基づいて、Flink のソーステーブルとシンクテーブルの DDL ステートメントを自動生成します。
+SMT は TiDB と StarRocks のクラスター情報とテーブル構造に基づいて、Flink のソーステーブルとシンクテーブルの DDL ステートメントを自動生成できます。
 
-Flink CDC コネクタは、TiKV ストレージの基盤からフルおよび増分データを直接読み取ることでデータをキャプチャします。フルデータはキーに基づいてパーティション化された範囲から取得され、増分データは TiDB が提供する CDC クライアントを使用して取得されます。その後、データは Flink-connector-starrocks を通じて StarRocks に書き込まれます。
+Flink CDC コネクタは、TiKV ストレージの基盤から直接フルおよびインクリメンタルデータを読み取ることでデータをキャプチャします。フルデータはキーに基づいてパーティション化された範囲から取得され、インクリメンタルデータは TiDB が提供する CDC クライアントを使用して取得されます。その後、データは Flink-connector-starrocks を通じて StarRocks に書き込まれます。
 
 ### 手順
 
 1. [Flink](https://flink.apache.org/downloads.html) をダウンロードします。Flink のバージョンは 1.11 以降がサポートされています。
 2. [Flink CDC コネクタ](https://github.com/ververica/flink-cdc-connectors/releases) をダウンロードします。Flink のバージョンに対応する **flink-sql-connector-tidb-cdc-xxx.jar** をダウンロードしてください。
-3. [Flink StarRocks コネクタ](https://github.com/StarRocks/flink-connector-starrocks) をダウンロードします。
+3. [Flink StarRocks connector](https://github.com/StarRocks/flink-connector-starrocks) をダウンロードします。
 4. **flink-sql-connector-tidb-cdc-xxx.jar**、**flink-connector-starrocks-xxx.jar** を **flink-xxx/lib/** にコピーします。
 5. [smt.tar.gz](https://cdn-thirdparty.starrocks.com/smt.tar.gz?r=2) をダウンロードします。
-6. SMT の設定ファイルを抽出して修正します。
+6. SMT の設定ファイルを抽出して変更します。
 
     ```Bash
     [db]
@@ -704,7 +704,7 @@ Flink CDC コネクタは、TiKV ストレージの基盤からフルおよび�
     password = 
     # 現在利用可能なタイプ: `mysql`, `pgsql`, `oracle`, `hive`, `clickhouse`, `sqlserver`, `tidb`
     type = tidb 
-    # # `type == hive` の場合にのみ有効です。 
+    # # `type == hive` の場合のみ有効です。 
     # # 利用可能な値: kerberos, none, nosasl, kerberos_http, none_http, zk, ldap
     # authentication = kerberos
 
@@ -717,15 +717,15 @@ Flink CDC コネクタは、TiKV ストレージの基盤からフルおよび�
     output_dir = ./result
 
     [table-rule.1]
-    # プロパティを設定するためのデータベースをマッチングするパターン
+    # プロパティを設定するためのデータベースをマッチさせるパターン
     database = ^db$
-    # プロパティを設定するためのテーブルをマッチングするパターン
+    # プロパティを設定するためのテーブルをマッチさせるパターン
     table = ^table$
     schema = ^.*$
 
     ############################################
-    ### flink sink の設定
-    ### `connector`、`table-name`、`database-name` は設定しないでください。自動生成されます。
+    ### flink sink 設定
+    ### `connector`, `table-name`, `database-name` は設定しないでください。自動生成されます。
     ############################################
     flink.starrocks.jdbc-url=jdbc:mysql://192.168.1.1:9030
     flink.starrocks.load-url=192.168.1.1:8030
@@ -737,9 +737,9 @@ Flink CDC コネクタは、TiKV ストレージの基盤からフルおよび�
     flink.starrocks.sink.properties.strip_outer_array=true
 
     ############################################
-    ### `tidb` 用の flink-cdc 設定
+    ### flink-cdc 設定 for `tidb`
     ############################################
-    # # TiDB v4.0.0 以前にのみ有効です。 
+    # # TiDB v4.0.0 より前のバージョンでのみ有効です。 
     # # TiKV クラスターの PD アドレス。
     # flink.cdc.pd-addresses = 127.0.0.1:2379
     ```
@@ -759,7 +759,7 @@ Flink CDC コネクタは、TiKV ストレージの基盤からフルおよび�
     mysql -hxx.xx.xx.x -P9030 -uroot -p < starrocks-create.all.sql
     ```
 
-9. プレフィックスが `flink-create` の SQL スクリプトを使用して、Flink のソーステーブルとシンクテーブルを生成し、データを同期するための Flink ジョブを開始します。
+9. プレフィックスが `flink-create` の SQL スクリプトを使用して、Flink のソースおよびシンクテーブルを生成し、Flink ジョブを開始してデータを同期します。
 
     ```Bash
     bin/sql-client.sh embedded < flink-create.all.sql     
@@ -772,7 +772,7 @@ Flink CDC コネクタは、TiKV ストレージの基盤からフルおよび�
     bin/flink list 
     ```
 
-    ジョブの実行中にエラーが発生した場合は、Flink のログで詳細なエラー情報を確認できます。また、**conf/flink-conf.yaml** ファイルで Flink の設定を変更することもできます。例えば、メモリやスロットなどです。
+    ジョブの実行中にエラーが発生した場合、Flink ログで詳細なエラー情報を確認できます。また、**conf/flink-conf.yaml** ファイルで Flink の設定を変更することもできます（メモリやスロットなど）。
 
 ### 注意事項
 
@@ -780,9 +780,9 @@ TiDB のバージョンが v4.0.0 より前の場合、`flink.cdc.pd-addresses` 
 
 ```Bash
 ############################################
-### `tidb` 用の flink-cdc 設定
+### flink-cdc 設定 for `tidb`
 ############################################
-# # TiDB v4.0.0 以前にのみ有効です。 
+# # TiDB v4.0.0 より前のバージョンでのみ有効です。 
 # # TiKV クラスターの PD アドレス。
 # flink.cdc.pd-addresses = 127.0.0.1:2379
 ```

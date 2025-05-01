@@ -4,34 +4,36 @@ displayed_sidebar: docs
 
 # max_by
 
+## 説明
+
 `y` の最大値に関連付けられた `x` の値を返します。
 
 例えば、`SELECT max_by(subject, exam_result) FROM exam;` は、最高の試験スコアを持つ科目を返します。
 
 この関数は v2.5 からサポートされています。
 
-## Syntax
+## 構文
 
 ```Haskell
 max_by(x,y)
 ```
 
-## Parameters
+## パラメータ
 
 - `x`: 任意のタイプの式。
 - `y`: 順序付け可能なタイプの式。
 
-## Return value
+## 戻り値
 
 `x` と同じタイプの値を返します。
 
-## Usage notes
+## 使用上の注意
 
 - `y` はソート可能なタイプでなければなりません。`bitmap` や `hll` のようなソート不可能なタイプの `y` を使用すると、エラーが返されます。
 - `y` に null 値が含まれている場合、その null 値に対応する行は無視されます。
-- 複数の `x` の値が同じ最大値の `y` を持つ場合、この関数は最初に見つかった `x` の値を返します。
+- 複数の `x` の値が同じ最大の `y` の値を持つ場合、この関数は最初に見つかった `x` の値を返します。
 
-## Examples
+## 例
 
 1. テーブル `exam` を作成します。
 
@@ -69,7 +71,7 @@ max_by(x,y)
     ```
 
 3. 最高スコアを持つ科目を取得します。
-   `physics` と `music` の 2 つの科目が同じ最高スコア `95` を持ち、最初に見つかった科目 (`physics`) が返されます。
+   `physics` と `music` の2つの科目が同じ最高スコア `95` を持ち、最初に見つかった科目 (`physics`) が返されます。
 
     ```Plain
     SELECT max_by(subject, exam_result) FROM exam;

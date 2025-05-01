@@ -1,12 +1,12 @@
-For more information on how to create a ストレージボリューム for other オブジェクトストレージ and set the default ストレージボリューム, see [CREATE STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md) and [SET DEFAULT STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/SET_DEFAULT_STORAGE_VOLUME.md).
+他のオブジェクトストレージ用のストレージボリュームを作成し、デフォルトのストレージボリュームを設定する方法については、 [CREATE STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md) および [SET DEFAULT STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/SET_DEFAULT_STORAGE_VOLUME.md) を参照してください。
 
-### データベースとクラウドネイティブテーブルの作成
+### データベースとクラウドネイティブテーブルを作成する
 
 デフォルトのストレージボリュームを作成した後、このストレージボリュームを使用してデータベースとクラウドネイティブテーブルを作成できます。
 
-共有データ StarRocks クラスターは、すべての [StarRocks テーブルタイプ](../../table_design/table_types/table_types.md)をサポートしています。
+共有データ StarRocks クラスターは、すべての [StarRocks table types](../../table_design/table_types/table_types.md) をサポートしています。
 
-次の例では、データベース `cloud_db` とテーブル `detail_demo` を重複キーテーブルタイプに基づいて作成し、ローカルディスクキャッシュを有効にし、ホットデータの有効期間を1か月に設定し、オブジェクトストレージへの非同期データ取り込みを無効にしています。
+次の例では、データベース `cloud_db` と重複キーテーブルタイプに基づいたテーブル `detail_demo` を作成し、ローカルディスクキャッシュを有効にし、ホットデータの有効期間を1か月に設定し、オブジェクトストレージへの非同期データ取り込みを無効にしています。
 
 ```SQL
 CREATE DATABASE cloud_db;
@@ -32,9 +32,9 @@ PROPERTIES (
 
 > **NOTE**
 >
-> デフォルトのストレージボリュームは、共有データ StarRocks クラスターでデータベースまたはクラウドネイティブテーブルを作成する際に、ストレージボリュームが指定されていない場合に使用されます。
+> 共有データ StarRocks クラスターでデータベースまたはクラウドネイティブテーブルを作成する際にストレージボリュームが指定されていない場合、デフォルトのストレージボリュームが使用されます。
 
-通常のテーブル `PROPERTIES` に加えて、共有データ StarRocks クラスター用のテーブルを作成する際には、以下の `PROPERTIES` を指定する必要があります。
+通常のテーブル `PROPERTIES` に加えて、共有データ StarRocks クラスター用のテーブルを作成する際には、次の `PROPERTIES` を指定する必要があります。
 
 #### datacache.enable
 
@@ -51,15 +51,15 @@ PROPERTIES (
 
 #### datacache.partition_duration
 
-ホットデータの有効期間。ローカルディスクキャッシュが有効になっている場合、すべてのデータがキャッシュにロードされます。キャッシュがいっぱいになると、StarRocks はキャッシュから最近使用されていないデータを削除します。クエリが削除されたデータをスキャンする必要がある場合、StarRocks はデータが現在の時点からの有効期間内にあるかどうかを確認します。データが有効期間内にある場合、StarRocks はデータを再度キャッシュにロードします。データが有効期間内にない場合、StarRocks はそれをキャッシュにロードしません。このプロパティは文字列値で、次の単位で指定できます: `YEAR`、`MONTH`、`DAY`、および `HOUR`。例えば、`7 DAY` や `12 HOUR` です。指定されていない場合、すべてのデータがホットデータとしてキャッシュされます。
+ホットデータの有効期間。ローカルディスクキャッシュが有効になっている場合、すべてのデータがキャッシュにロードされます。キャッシュがいっぱいになると、StarRocks はキャッシュから最近使用されていないデータを削除します。クエリが削除されたデータをスキャンする必要がある場合、StarRocks は現在の時点からの有効期間内かどうかを確認します。データが有効期間内であれば、StarRocks はデータを再度キャッシュにロードします。データが有効期間外であれば、StarRocks はそれをキャッシュにロードしません。このプロパティは文字列値で、次の単位で指定できます: `YEAR`、`MONTH`、`DAY`、および `HOUR`。例えば、`7 DAY` や `12 HOUR` です。指定されていない場合、すべてのデータがホットデータとしてキャッシュされます。
 
 > **NOTE**
 >
 > バージョン 3.0 では、このプロパティは `storage_cache_ttl` と呼ばれていました。
 >
-> このプロパティは、`datacache.enable` が `true` に設定されている場合にのみ利用可能です。
+> このプロパティは `datacache.enable` が `true` に設定されている場合にのみ利用可能です。
 
-### テーブル情報の表示
+### テーブル情報を表示する
 
 特定のデータベース内のテーブル情報を `SHOW PROC "/dbs/<db_id>"` を使用して表示できます。詳細は [SHOW PROC](../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROC.md) を参照してください。
 
@@ -74,9 +74,9 @@ mysql> SHOW PROC "/dbs/xxxxx";
 +---------+-------------+----------+---------------------+--------------+--------+--------------+--------------------------+--------------+---------------+------------------------------+
 ```
 
-共有データ StarRocks クラスター内のテーブルの `Type` は `CLOUD_NATIVE` です。`StoragePath` フィールドでは、StarRocks はテーブルが格納されているオブジェクトストレージのディレクトリを返します。
+共有データ StarRocks クラスター内のテーブルの `Type` は `CLOUD_NATIVE` です。`StoragePath` フィールドには、テーブルが保存されているオブジェクトストレージのディレクトリが返されます。
 
-### 共有データ StarRocks クラスターへのデータロード
+### 共有データ StarRocks クラスターにデータをロードする
 
 共有データ StarRocks クラスターは、StarRocks が提供するすべてのロード方法をサポートしています。詳細は [Loading options](../../loading/Loading_intro.md) を参照してください。
 
@@ -86,4 +86,4 @@ mysql> SHOW PROC "/dbs/xxxxx";
 
 > **NOTE**
 >
-> 共有データ StarRocks クラスターは、v3.4.0 から [同期マテリアライズドビュー](../../using_starrocks/Materialized_view-single_table.md) をサポートしています。
+> 共有データ StarRocks クラスターは [synchronous materialized views](../../using_starrocks/Materialized_view-single_table.md) をサポートしていません。

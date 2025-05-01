@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # find_in_set
 
+## Description
+
 この関数は、strlist 内で最初に出現する str の位置を返します（1 からカウント開始）。strlist はカンマで区切られた文字列です。str が見つからない場合は 0 を返します。引数が NULL の場合、結果は NULL です。
 
 ## Syntax

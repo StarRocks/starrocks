@@ -4,22 +4,44 @@ displayed_sidebar: docs
 
 # 共有データクラスタの Compaction
 
-このトピックでは、StarRocks 共有データクラスタでの compaction の管理方法について説明します。
+このトピックでは、StarRocks 共有データクラスタにおける Compaction の管理方法について説明します。
 
 ## 概要
 
-StarRocks における compaction とは、データファイルの異なるバージョンを大きなファイルにマージするプロセスを指し、小さなファイルの数を減らし、クエリ効率を向上させます。共有なしクラスタと比較して、共有データクラスタは新しい compaction スケジューリングメカニズムを導入しており、以下の特徴があります：
+StarRocks の各データロード操作は、新しいバージョンのデータファイルを生成します。Compaction は、異なるバージョンのデータファイルをより大きなファイルにマージし、小さなファイルの数を減らし、クエリ効率を向上させます。
 
-- Compaction は FE によってスケジュールされ、CN によって実行されます。FE はパーティション単位で compaction タスクを開始します。
-- 各 compaction は、データロードの完全なトランザクションプロセス（書き込み、コミット、公開）に従って新しいデータバージョンを生成します。
+## Compaction スコア
+
+### 概要
+
+*Compaction スコア* は、パーティション内のデータファイルのマージ状況を反映します。スコアが高いほどマージの進捗が低いことを示し、パーティションには未マージのデータファイルバージョンが多くなります。FE は各パーティションの Compaction スコア情報を保持しており、Max Compaction スコア（パーティション内のすべてのタブレットの中で最も高いスコア）を含みます。
+
+パーティションの Max Compaction スコアが FE パラメータ `lake_compaction_score_selector_min_score`（デフォルト: 10）を下回る場合、そのパーティションの Compaction は完了と見なされます。Max Compaction スコアが 100 を超えると、Compaction 状態が不健康であることを示します。スコアが FE パラメータ `lake_ingest_slowdown_threshold`（デフォルト: 100）を超えると、システムはそのパーティションのデータロードトランザクションのコミットを遅らせます。`lake_compaction_score_upper_bound`（デフォルト: 2000）を超えると、システムはそのパーティションのインポートトランザクションのロードを停止します。
+
+### 計算ルール
+
+通常、各データファイルは Compaction スコアに 1 を寄与します。例えば、1 つのタブレットと最初のロード操作から生成された 10 個のデータファイルを持つパーティションの場合、そのパーティションの Max Compaction スコアは 10 です。タブレット内のトランザクションによって生成されたすべてのデータファイルは Rowset としてグループ化されます。
+
+スコア計算中、タブレットの Rowset はサイズごとにグループ化され、ファイル数が最も多いグループがタブレットの Compaction スコアを決定します。
+
+例えば、タブレットが 7 回のロード操作を受け、Rowset のサイズが 100 MB, 100 MB, 100 MB, 10 MB, 10 MB, 10 MB, 10 MB である場合、システムは 3 つの 100 MB Rowset を 1 つのグループにし、4 つの 10 MB Rowset を別のグループにします。Compaction スコアは、ファイル数が多いグループに基づいて計算されます。この場合、2 番目のグループがより大きな Compaction スコアを持ちます。Compaction はスコアの高いグループを優先するため、最初の Compaction 後の Rowset の分布は 100 MB, 100 MB, 100 MB, 40 MB となります。
+
+## Compaction ワークフロー
+
+共有データクラスタでは、StarRocks は新しい FE 制御の Compaction メカニズムを導入しています。
+
+1. スコア計算: Leader FE ノードがトランザクションの公開結果に基づいてパーティションの Compaction スコアを計算し、保存します。
+2. 候補選択: FE は Max Compaction スコアが最も高いパーティションを Compaction 候補として選択します。
+3. タスク生成: FE は選択されたパーティションの Compaction トランザクションを開始し、タブレットレベルのサブタスクを生成し、FE パラメータ `lake_compaction_max_tasks` で設定された制限に達するまで Compute Nodes (CN) に配信します。
+4. サブタスク実行: CN はバックグラウンドで Compaction サブタスクを実行します。CN ごとの同時サブタスク数は CN パラメータ `compact_threads` によって制御されます。
+5. 結果収集: FE はサブタスクの結果を集約し、Compaction トランザクションをコミットします。
+6. 公開: FE は正常にコミットされた Compaction トランザクションを公開します。
 
 ## Compaction の管理
 
-### Compaction スコアの確認
+### Compaction スコアの表示
 
-システムは各パーティションに対して compaction スコアを維持します。compaction スコアは、対応するパーティションのデータファイルのマージ状況を反映します。スコアが高いほど、パーティションのマージレベルが低く、マージ待ちのデータファイルのバージョンが多いことを意味します。FE は compaction タスクをトリガーするための参考として compaction スコアを使用し、あなたはパーティション内のデータバージョンが多すぎるかどうかの指標として compaction スコアを使用できます。
-
-- SHOW PROC ステートメントを使用して、特定のテーブルのパーティションの compaction スコアを確認できます。
+- 特定のテーブル内のパーティションの Compaction スコアを表示するには、SHOW PROC ステートメントを使用します。
 
   ```Plain
   SHOW PROC '/dbs/<database_name>/<table_name>/partitions'
@@ -37,7 +59,7 @@ StarRocks における compaction とは、データファイルの異なるバ�
   1 row in set (0.20 sec)
   ```
 
-- v3.1.9 および v3.2.4 以降、`information_schema.partitions_meta` というシステム定義ビューをクエリすることで、パーティションの compaction スコアを確認することもできます。
+- システム定義ビュー `information_schema.partitions_meta` をクエリすることで、パーティションの Compaction スコアを表示することもできます。
 
   例:
 
@@ -59,18 +81,18 @@ StarRocks における compaction とは、データファイルの異なるバ�
   +--------------+----------------------------+----------------------------+--------------+-----------------+-----------------+----------------------+--------------+---------------+-----------------+-----------------------------------------+---------+-----------------+----------------+---------------------+-----------------------------+--------------+---------+-----------+------------+------------------+----------+--------+--------+-------------------------------------------------------------------+
   ```
 
-次の2つのメトリクスに注目する必要があります：
+次の 2 つのメトリクスに注目してください。
 
-- `AvgCS`: パーティション内のすべての tablet の平均 compaction スコア。
-- `MaxCS`: パーティション内のすべての tablet の中で最大の compaction スコア。
+- `AvgCS`: パーティション内のすべてのタブレットの平均 Compaction スコア。
+- `MaxCS`: パーティション内のすべてのタブレットの中で最大の Compaction スコア。
 
-### Compaction タスクの確認
+### Compaction タスクの表示
 
-新しいデータがシステムにロードされると、FE は異なる CN ノードで実行される compaction タスクを常にスケジュールします。まず、FE 上の compaction タスクの一般的なステータスを確認し、次に CN 上の各タスクの実行詳細を確認できます。
+新しいデータがシステムにロードされると、FE は異なる CN ノードで実行される Compaction タスクを常にスケジュールします。まず、FE 上の Compaction タスクの一般的なステータスを表示し、次に CN 上の各タスクの実行詳細を表示します。
 
-#### Compaction タスクの一般的なステータスの確認
+#### Compaction タスクの一般的なステータスの表示
 
-SHOW PROC ステートメントを使用して、compaction タスクの一般的なステータスを確認できます。
+SHOW PROC ステートメントを使用して、Compaction タスクの一般的なステータスを表示できます。
 
 ```SQL
 SHOW PROC '/compactions';
@@ -92,25 +114,25 @@ mysql> SHOW PROC '/compactions';
 +---------------------+-------+---------------------+---------------------+---------------------+-------+--------------------------------------------------------------------------------------------------------------------+
 ```
 
-以下のフィールドが返されます：
+次のフィールドが返されます。
 
 - `Partition`: Compaction タスクが属するパーティション。
 - `TxnID`: Compaction タスクに割り当てられたトランザクション ID。
-- `StartTime`: Compaction タスクが開始する時間。`NULL` はタスクがまだ開始されていないことを示します。
-- `CommitTime`: Compaction タスクがデータをコミットする時間。`NULL` はデータがまだコミットされていないことを示します。
-- `FinishTime`: Compaction タスクがデータを公開する時間。`NULL` はデータがまだ公開されていないことを示します。
+- `StartTime`: Compaction タスクが開始された時間。`NULL` はタスクがまだ開始されていないことを示します。
+- `CommitTime`: Compaction タスクがデータをコミットした時間。`NULL` はデータがまだコミットされていないことを示します。
+- `FinishTime`: Compaction タスクがデータを公開した時間。`NULL` はデータがまだ公開されていないことを示します。
 - `Error`: Compaction タスクのエラーメッセージ（ある場合）。
-- `Profile`: (v3.2.12 および v3.3.4 からサポート) Compaction タスクが完了した後のプロファイル。
-  - `sub_task_count`: パーティション内のサブタスク（tablet に相当）の数。
+- `Profile`: (v3.2.12 および v3.3.4 からサポート) Compaction タスクの完了後のプロファイル。
+  - `sub_task_count`: パーティション内のサブタスク（タブレットに相当）の数。
   - `read_local_sec`: ローカルキャッシュからデータを読み取るすべてのサブタスクの合計時間。単位: 秒。
-  - `read_local_mb`: ローカルキャッシュからすべてのサブタスクが読み取ったデータの合計サイズ。単位: MB。
+  - `read_local_mb`: ローカルキャッシュからすべてのサブタスクによって読み取られたデータの合計サイズ。単位: MB。
   - `read_remote_sec`: リモートストレージからデータを読み取るすべてのサブタスクの合計時間。単位: 秒。
-  - `read_remote_mb`: リモートストレージからすべてのサブタスクが読み取ったデータの合計サイズ。単位: MB。
-  - `in_queue_sec`: すべてのサブタスクがキューに滞在する合計時間。単位: 秒。
+  - `read_remote_mb`: リモートストレージからすべてのサブタスクによって読み取られたデータの合計サイズ。単位: MB。
+  - `in_queue_sec`: キューに滞在するすべてのサブタスクの合計時間。単位: 秒。
 
-#### Compaction タスクの実行詳細の確認
+#### Compaction タスクの実行詳細の表示
 
-各 compaction タスクは複数のサブタスクに分割され、それぞれが tablet に対応します。`information_schema.be_cloud_native_compactions` というシステム定義ビューをクエリすることで、各サブタスクの実行詳細を確認できます。
+各 Compaction タスクは複数のサブタスクに分割され、それぞれがタブレットに対応します。システム定義ビュー `information_schema.be_cloud_native_compactions` をクエリすることで、各サブタスクの実行詳細を表示できます。
 
 例:
 
@@ -128,21 +150,21 @@ mysql> SELECT * FROM information_schema.be_cloud_native_compactions;
 +-------+--------+-----------+---------+---------+------+---------------------+-------------+----------+--------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ```
 
-以下のフィールドが返されます：
+次のフィールドが返されます。
 
 - `BE_ID`: CN の ID。
 - `TXN_ID`: サブタスクが属するトランザクションの ID。
-- `TABLET_ID`: サブタスクが属する tablet の ID。
-- `VERSION`: tablet のバージョン。
+- `TABLET_ID`: サブタスクが属するタブレットの ID。
+- `VERSION`: タブレットのバージョン。
 - `RUNS`: サブタスクが実行された回数。
-- `START_TIME`: サブタスクが開始する時間。
-- `FINISH_TIME`: サブタスクが終了する時間。
-- `PROGRESS`: tablet の compaction 進捗状況（パーセンテージ）。
-- `STATUS`: サブタスクのステータス。エラーメッセージがある場合、このフィールドに返されます。
+- `START_TIME`: サブタスクが開始された時間。
+- `FINISH_TIME`: サブタスクが終了した時間。
+- `PROGRESS`: タブレットの Compaction 進捗率。
+- `STATUS`: サブタスクのステータス。エラーがある場合、このフィールドにエラーメッセージが返されます。
 - `PROFILE`: (v3.2.12 および v3.3.4 からサポート) サブタスクの実行時プロファイル。
-  - `read_local_sec`: サブタスクがローカルキャッシュからデータを読み取る時間。単位: 秒。
+  - `read_local_sec`: サブタスクがローカルキャッシュからデータを読み取るのにかかる時間。単位: 秒。
   - `read_local_mb`: サブタスクがローカルキャッシュから読み取ったデータのサイズ。単位: MB。
-  - `read_remote_sec`: サブタスクがリモートストレージからデータを読み取る時間。単位: 秒。
+  - `read_remote_sec`: サブタスクがリモートストレージからデータを読み取るのにかかる時間。単位: 秒。
   - `read_remote_mb`: サブタスクがリモートストレージから読み取ったデータのサイズ。単位: MB。
   - `read_local_count`: サブタスクがローカルキャッシュからデータを読み取った回数。
   - `read_remote_count`: サブタスクがリモートストレージからデータを読み取った回数。
@@ -150,13 +172,11 @@ mysql> SELECT * FROM information_schema.be_cloud_native_compactions;
 
 ### Compaction タスクの設定
 
-これらの FE および CN (BE) パラメータを使用して compaction タスクを設定できます。
+これらの FE および CN (BE) パラメータを使用して Compaction タスクを設定できます。
 
 #### FE パラメータ
 
 次の FE パラメータを動的に設定できます。
-
-例:
 
 ```SQL
 ADMIN SET FRONTEND CONFIG ("lake_compaction_max_tasks" = "-1");
@@ -168,14 +188,25 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_max_tasks" = "-1");
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データクラスタで許可される同時 Compaction タスクの最大数。この項目を `-1` に設定すると、同時タスク数を適応的に計算します。つまり、生存している CN ノードの数に 16 を掛けた数です。この値を `0` に設定すると、compaction が無効になります。
+- 説明: 共有データクラスタで許可される同時 Compaction タスクの最大数。この項目を `-1` に設定すると、同時タスク数を適応的に計算します。つまり、生存している CN ノードの数に 16 を掛けた数です。この値を `0` に設定すると Compaction が無効になります。
 - 導入バージョン: v3.1.0
+
+```SQL
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_tables" = "11111;22222");
+```
+
+##### lake_compaction_disable_tables
+
+- デフォルト：""
+- タイプ：String
+- 単位：-
+- 変更可能：はい
+- 説明：特定のテーブルの Compaction を無効にします。これにより、開始された Compaction には影響しません。この項目の値はテーブル ID です。複数の値は ';' で区切られます。
+- 導入バージョン：v3.2.7
 
 #### CN パラメータ
 
 次の CN パラメータを動的に設定できます。
-
-例:
 
 ```SQL
 UPDATE information_schema.be_configs SET VALUE = 8 
@@ -188,7 +219,7 @@ WHERE name = "compact_threads";
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: 同時 compaction タスクに使用されるスレッドの最大数。この設定は v3.1.7 および v3.2.2 以降で動的に変更可能になりました。
+- 説明: 同時 Compaction タスクに使用されるスレッドの最大数。この設定は v3.1.7 および v3.2.2 以降で動的に変更可能になりました。
 - 導入バージョン: v3.0.0
 
 > **NOTE**
@@ -201,12 +232,12 @@ WHERE name = "compact_threads";
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: 単一の Cumulative Compaction でマージできるセグメントの最大数。compaction 中に OOM が発生した場合、この値を減らすことができます。
+- 説明: 単一の Cumulative Compaction でマージできるセグメントの最大数。Compaction 中に OOM が発生した場合、この値を減らすことができます。
 - 導入バージョン: -
 
 > **NOTE**
 >
-> 本番環境では、compaction タスクを加速し、リソース消費を減らすために `max_cumulative_compaction_num_singleton_deltas` を `100` に設定することをお勧めします。
+> 本番環境では、Compaction タスクを加速し、リソース消費を削減するために `max_cumulative_compaction_num_singleton_deltas` を `100` に設定することをお勧めします。
 
 ##### lake_pk_compaction_max_input_rowsets
 
@@ -214,25 +245,23 @@ WHERE name = "compact_threads";
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データクラスタ内の主キーテーブルの compaction タスクで許可される入力 rowset の最大数。このパラメータのデフォルト値は、v3.2.4 および v3.1.10 以降で `5` から `1000` に、v3.3.1 および v3.2.9 以降で `500` に変更されました。主キーテーブルに対して Sized-tiered Compaction ポリシーが有効になった後（`enable_pk_size_tiered_compaction_strategy` を `true` に設定することで）、StarRocks は各 compaction の rowset 数を制限して書き込み増幅を減らす必要がなくなります。したがって、このパラメータのデフォルト値が増加しました。
+- 説明: 共有データクラスタ内の主キーテーブルの Compaction タスクで許可される入力 Rowset の最大数。このパラメータのデフォルト値は、v3.2.4 および v3.1.10 から `5` から `1000` に、v3.3.1 および v3.2.9 から `500` に変更されました。主キーテーブルに対して Sized-tiered Compaction ポリシーが有効になった後（`enable_pk_size_tiered_compaction_strategy` を `true` に設定することで）、StarRocks は各 Compaction の Rowset 数を制限して書き込み増幅を削減する必要がなくなります。したがって、このパラメータのデフォルト値が増加しました。
 - 導入バージョン: v3.1.8, v3.2.3
 
 ### Compaction タスクの手動トリガー
 
-v3.2.5 以降、テーブルまたは特定のパーティションに対して手動で compaction をトリガーできます。
-
 ```SQL
--- テーブル全体に対して compaction をトリガーします。
+-- テーブル全体の Compaction をトリガーします。
 ALTER TABLE <table_name> COMPACT;
--- 特定のパーティションに対して compaction をトリガーします。
+-- 特定のパーティションの Compaction をトリガーします。
 ALTER TABLE <table_name> COMPACT <partition_name>;
--- 複数のパーティションに対して compaction をトリガーします。
+-- 複数のパーティションの Compaction をトリガーします。
 ALTER TABLE <table_name> COMPACT (<partition_name>, <partition_name>, ...);
 ```
 
 ### Compaction タスクのキャンセル
 
-タスクのトランザクション ID を使用して compaction タスクを手動でキャンセルできます。
+タスクのトランザクション ID を使用して Compaction タスクを手動でキャンセルできます。
 
 ```SQL
 CANCEL COMPACTION WHERE TXN_ID = <TXN_ID>;
@@ -240,14 +269,17 @@ CANCEL COMPACTION WHERE TXN_ID = <TXN_ID>;
 
 > **NOTE**
 >
-> - CANCEL COMPACTION ステートメントは Leader FE ノードから提出する必要があります。
-> - CANCEL COMPACTION は非同期プロセスです。タスクがキャンセルされたかどうかを確認するには、`SHOW PROC '/compactions'` を実行してください。
+> - CANCEL COMPACTION ステートメントは Leader FE ノードから送信する必要があります。
+> - CANCEL COMPACTION ステートメントは、コミットされていないトランザクションにのみ適用されます。つまり、`SHOW PROC '/compactions'` の戻り値で `CommitTime` が NULL であるトランザクションです。
+> - CANCEL COMPACTION は非同期プロセスです。`SHOW PROC '/compactions'` を実行して、タスクがキャンセルされたかどうかを確認できます。
 
 ## ベストプラクティス
 
-Compaction はクエリパフォーマンスにとって重要であるため、テーブルおよびパーティションのデータマージング状況を定期的に監視することをお勧めします。以下はベストプラクティスとガイドラインです：
+Compaction はクエリパフォーマンスにとって重要であるため、テーブルとパーティションのデータマージ状況を定期的に監視することをお勧めします。以下はベストプラクティスとガイドラインです。
 
+- ロード間の時間間隔を増やし（10 秒未満の間隔を避ける）、ロードごとのバッチサイズを増やします（100 行未満のデータバッチサイズを避ける）。
+- CN 上の並列 Compaction ワーカースレッドの数を調整してタスクの実行を加速します。本番環境では、`compact_threads` を BE/CN CPU コア数の 25% に設定することをお勧めします。クラスタがアイドル状態（例えば、Compaction のみを実行し、クエリを処理していない場合）では、この値を一時的に 50% に増やし、タスク完了後に 25% に戻すことができます。
+- `show proc '/compactions'` および `select * from information_schema.be_cloud_native_compactions;` を使用して Compaction タスクのステータスを監視します。
 - Compaction スコアを監視し、それに基づいてアラートを設定します。StarRocks の組み込み Grafana 監視テンプレートにはこのメトリクスが含まれています。
 - Compaction 中のリソース消費、特にメモリ使用量に注意を払います。Grafana 監視テンプレートにもこのメトリクスが含まれています。
-- CN 上の並列 compaction ワーカースレッドの数を調整してタスクの実行を加速します。`compact_threads` を BE/CN CPU コア数の 25% に設定することをお勧めします。クラスタがアイドル状態（例えば、compaction のみを実行し、クエリを処理していない場合）では、一時的にこの値を 50% に増やし、タスク完了後に 25% に戻すことができます。
 ```

@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # corr
 
+## Description
+
 2 つの式間のピアソン相関係数を返します。この関数は v2.5.10 からサポートされています。ウィンドウ関数としても使用できます。
 
 ## Syntax
@@ -14,23 +16,23 @@ CORR(expr1, expr2)
 
 ## Parameters
 
-`expr1` と `expr2` は、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、または DECIMAL に評価される必要があります。
+`expr1` と `expr2` は TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、または DECIMAL に評価される必要があります。
 
 `expr1` と `expr2` がテーブルの列である場合、この関数はこれら 2 つの列の相関係数を計算します。
 
 ## Return value
 
-DOUBLE 値を返します。式は以下の通りで、`n` はテーブルの行数を表します。
+DOUBLE 値を返します。式は次の通りで、`n` はテーブルの行数を表します。
 
 ![corr formula](../../../_assets/corr_formula.png)
 
 ## Usage notes
 
-- データ行は、この行の 2 つの列が非 NULL 値である場合にのみカウントされます。それ以外の場合、このデータ行は結果から除外されます。
+- データ行は、この行の 2 つの列が非 NULL 値の場合にのみカウントされます。それ以外の場合、このデータ行は結果から除外されます。
 
-- `n` が 1 の場合、0 が返されます。
+- `n` が 1 の場合は 0 が返されます。
 
-- 任意の入力が NULL の場合、NULL が返されます。
+- 入力が NULL の場合は NULL が返されます。
 
 ## Examples
 
@@ -49,7 +51,7 @@ mysql> select * from agg;
 +------+-------+-------+
 ```
 
-`k` 列と `v` 列の相関係数を計算します:
+`k` と `v` 列の相関係数を計算します:
 
 ```plaintext
 mysql> select no,CORR(k,v) from agg group by no;

@@ -6,17 +6,17 @@ displayed_sidebar: docs
 
 辞書オブジェクトを手動でリフレッシュします。内部的には、システムが元のオブジェクトから最新のデータをクエリし、それを辞書オブジェクトに書き込みます。
 
-## 構文
+## Syntax
 
 ```SQL
 REFRESH DICTIONARY <dictionary_object_name>
 ```
 
-## パラメータ
+## Parameters
 
 - **dictionary_object_name**: 辞書オブジェクトの名前。
 
-## 例
+## Examples
 
 辞書オブジェクト `dict_obj` を手動でリフレッシュします。
 

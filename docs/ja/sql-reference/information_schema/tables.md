@@ -6,15 +6,15 @@ displayed_sidebar: docs
 
 `tables` はテーブルに関する情報を提供します。
 
-`tables` には以下のフィールドが含まれています:
+`tables` で提供されるフィールドは以下の通りです。
 
 | **Field**       | **Description**                                              |
 | --------------- | ------------------------------------------------------------ |
 | TABLE_CATALOG   | テーブルを格納する catalog の名前。                          |
 | TABLE_SCHEMA    | テーブルを格納するデータベースの名前。                       |
 | TABLE_NAME      | テーブルの名前。                                             |
-| TABLE_TYPE      | テーブルのタイプ。 有効な値: `BASE TABLE` または `VIEW`。   |
-| ENGINE          | テーブルのエンジンタイプ。 有効な値: `StarRocks`, `MySQL`, `MEMORY` または空文字列。 |
+| TABLE_TYPE      | テーブルのタイプ。有効な値は `BASE TABLE` または `VIEW`。   |
+| ENGINE          | テーブルのエンジンタイプ。有効な値は `StarRocks`、`MySQL`、`MEMORY` または空文字列。 |
 | VERSION         | StarRocks で利用できない機能に適用されます。                 |
 | ROW_FORMAT      | StarRocks で利用できない機能に適用されます。                 |
 | TABLE_ROWS      | テーブルの行数。                                             |
@@ -24,10 +24,10 @@ displayed_sidebar: docs
 | INDEX_LENGTH    | StarRocks で利用できない機能に適用されます。                 |
 | DATA_FREE       | StarRocks で利用できない機能に適用されます。                 |
 | AUTO_INCREMENT  | StarRocks で利用できない機能に適用されます。                 |
-| CREATE_TIME     | テーブルが作成された時間。                                   |
-| UPDATE_TIME     | テーブルが最後に更新された時間。                             |
-| CHECK_TIME      | テーブルに対して整合性チェックが最後に行われた時間。         |
+| CREATE_TIME     | テーブルが作成された時刻。                                   |
+| UPDATE_TIME     | テーブルが最後に更新された時刻。                             |
+| CHECK_TIME      | テーブルに対して整合性チェックが最後に実行された時刻。       |
 | TABLE_COLLATION | テーブルのデフォルトの照合順序。                             |
 | CHECKSUM        | StarRocks で利用できない機能に適用されます。                 |
 | CREATE_OPTIONS  | StarRocks で利用できない機能に適用されます。                 |
-| TABLE_COMMENT   | テーブルに関するコメント。                                   |
+| TABLE_COMMENT   | テーブルに対するコメント。                                   |

@@ -10,13 +10,13 @@ BINARY(M)
 
 VARBINARY(M)
 
-バージョン 3.0 以降、StarRocks は BINARY/VARBINARY データ型をサポートしており、バイナリデータを格納するために使用されます。サポートされる最大長は VARCHAR と同じで、[1, 1048576] です。単位: バイト。`M` が指定されていない場合、デフォルトで 1048576 が使用されます。バイナリデータ型はバイト文字列を含み、文字データ型は文字列を含みます。
+バージョン v3.0 以降、StarRocks は BINARY/VARBINARY データ型をサポートしており、バイナリデータを格納するために使用されます。サポートされる最大長は VARCHAR と同じで、[1, 1048576] です。単位はバイトです。`M` が指定されていない場合、デフォルトで 1048576 が使用されます。バイナリデータ型はバイト文字列を含み、文字データ型は文字列を含みます。
 
-BINARY は VARBINARY のエイリアスです。使用方法は VARBINARY と同じです。
+BINARY は VARBINARY のエイリアスです。使用法は VARBINARY と同じです。
 
 ## 制限と使用上の注意
 
-- VARBINARY カラムは、Duplicate Key、Primary Key、ユニークキーテーブルでサポートされています。集計テーブルではサポートされていません。
+- VARBINARY カラムは Duplicate Key、Primary Key、ユニークキーテーブルでサポートされています。集計テーブルではサポートされていません。
 
 - VARBINARY カラムは、Duplicate Key、Primary Key、ユニークキーテーブルのパーティションキー、バケッティングキー、またはディメンションカラムとして使用できません。また、ORDER BY、GROUP BY、JOIN 句でも使用できません。
 
@@ -56,7 +56,7 @@ mysql> DESC test_binary;
 
 StarRocks は、データをロードして BINARY 型として保存する以下の方法をサポートしています。
 
-- 方法 1: `x''` をプレフィックスとして持つ定数カラム（例えばカラム `j`）にデータを書き込むために INSERT INTO を使用します。
+- 方法 1: `x''` で始まる定数カラムにデータを書き込むために INSERT INTO を使用します。例えばカラム `j` です。
 
     ```SQL
     INSERT INTO test_binary (id, j) VALUES (1, x'abab');
@@ -115,7 +115,7 @@ StarRocks は、データをロードして BINARY 型として保存する以�
     1 rows in set (0.11 sec)
     ```
 
-### BINARY データをクエリして処理する
+### BINARY データのクエリと処理
 
 StarRocks は BINARY データのクエリと処理をサポートしており、BINARY 関数と演算子の使用をサポートしています。この例ではテーブル `test_binary` を使用します。
 

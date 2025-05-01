@@ -4,15 +4,17 @@ displayed_sidebar: docs
 
 # ST_Contains
 
+## 説明
+
 図形 shape1 が shape2 を完全に含むことができるかどうかを確認します。
 
-## Syntax
+## 構文
 
 ```Haskell
 BOOL ST_Contains(GEOMETRY shape1, GEOMETRY shape2)
 ```
 
-## Examples
+## 例
 
 ```Plain Text
 MySQL > SELECT ST_Contains(ST_Polygon("POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))"), ST_Point(5, 5));
@@ -30,6 +32,6 @@ MySQL > SELECT ST_Contains(ST_Polygon("POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))")
 +------------------------------------------------------------------------------------------+
 ```
 
-## keyword
+## キーワード
 
-ST_CONTAINS,ST,CONTAINS
+ST_CONTAINS, ST, CONTAINS

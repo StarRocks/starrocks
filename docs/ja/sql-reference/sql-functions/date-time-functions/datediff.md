@@ -4,26 +4,28 @@ displayed_sidebar: docs
 
 # datediff
 
+## 説明
+
 2 つの日付値 (`expr1 - expr2`) の差を計算し、日数で結果を返します。`expr1` と `expr2` は有効な DATE または DATETIME 式です。
 
 注意: 計算には値の日付部分のみが使用されます。
 
 datediff と [days_diff](./days_diff.md) の違い:
 
-|Function|Behavior|Example|
+|Function|動作|例|
 |---|---|---|
 |datediff|日単位で正確| '2020-12-25 23:00:00' と '2020-12-24 23:00:01' の差は 1 です。|
 |days_diff|秒単位で正確で、最も近い下位の整数に切り捨て| '2020-12-25 23:00:00' と '2020-12-24 23:00:01' の差は 0 です。|
 
 datediff と [date_diff](./date_diff.md) の違いは、date_diff が `unit` パラメータをサポートしており、指定された単位で 2 つの日付値の差を返すことができる点です。
 
-## Syntax
+## 構文
 
 ```Haskell
 INT DATEDIFF(DATETIME expr1,DATETIME expr2)
 ```
 
-## Examples
+## 例
 
 ```Plain Text
 MySQL > select datediff(CAST('2007-12-31 23:59:59' AS DATETIME), CAST('2007-12-30' AS DATETIME));
@@ -41,6 +43,6 @@ MySQL > select datediff(CAST('2010-11-30 23:59:59' AS DATETIME), CAST('2010-12-3
 +-----------------------------------------------------------------------------------+
 ```
 
-## References
+## 参照
 
 [date_diff](./date_diff.md)

@@ -4,33 +4,35 @@ displayed_sidebar: docs
 
 # log
 
-数値の対数を指定された基数（または基底）で計算します。基数が指定されていない場合、この関数は [ln](../math-functions/ln.md) と同等です。
+## 説明
 
-## Syntax
+指定された基数（または基底）で数値の対数を計算します。基数が指定されていない場合、この関数は [ln](../math-functions/ln.md) と同等です。
+
+## 構文
 
 ```SQL
 log([base,] arg)
 ```
 
-## Parameters
+## パラメータ
 
-- `base`: 任意。基数です。DOUBLE データ型のみサポートされています。このパラメータが指定されていない場合、この関数は [ln](../math-functions/ln.md) と同等です。
+- `base`: 任意。基数。DOUBLE データ型のみサポートされます。このパラメータが指定されていない場合、この関数は [ln](../math-functions/ln.md) と同等です。
 
-> **NOTE**
+> **注意**
 >
-> StarRocks は、`base` が負の数、0、または 1 に指定された場合、NULL を返します。
+> StarRocks は、`base` が負数、0、または 1 に指定された場合、NULL を返します。
 
-- `arg`: 対数を計算したい値です。DOUBLE データ型のみサポートされています。
+- `arg`: 対数を計算したい値。DOUBLE データ型のみサポートされます。
 
-> **NOTE**
+> **注意**
 >
-> StarRocks は、`arg` が負の数または 0 に指定された場合、NULL を返します。
+> StarRocks は、`arg` が負数または 0 に指定された場合、NULL を返します。
 
-## Return value
+## 戻り値
 
 DOUBLE データ型の値を返します。
 
-## Example
+## 例
 
 例 1: 8 の対数を基数 2 で計算します。
 
@@ -44,7 +46,7 @@ mysql> select log(2,8);
 1 row in set (0.01 sec)
 ```
 
-例 2: 10 の対数を基数 *e* で計算します（基数は指定されていません）。
+例 2: 10 の対数を基数 *e* で計算します（基数が指定されていない場合）。
 
 ```Plain
 mysql> select log(10);

@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 > **注意**
 >
-> SHOW CATALOGS は、特定の external catalog に対して USAGE 権限を持つユーザーに対して external catalog を返します。ユーザーまたはロールがどの external catalog にもこの権限を持たない場合、このコマンドは default_catalog のみを返します。
+> SHOW CATALOGS は、特定の external catalog に USAGE 権限を持つユーザーに対して external catalog を返します。ユーザーまたはロールがいずれの external catalog にもこの権限を持たない場合、このコマンドは default_catalog のみを返します。
 
 ## 構文
 
@@ -31,7 +31,7 @@ SHOW CATALOGS
 | **フィールド** | **説明**                                              |
 | ------------- | ------------------------------------------------------------ |
 | Catalog       | catalog 名。                                            |
-| Type          | catalog のタイプ。catalog が `default_catalog` の場合は `Internal` が返されます。catalog が external catalog の場合、例えば `Hive`、`Hudi`、`Iceberg` などの対応する catalog タイプが返されます。 |
+| Type          | catalog のタイプ。catalog が `default_catalog` の場合は `Internal` が返されます。catalog が external catalog の場合、例えば `Hive`、`Hudi`、または `Iceberg` など、対応する catalog タイプが返されます。 |
 | Comment       | catalog のコメント。StarRocks は external catalog にコメントを追加することをサポートしていません。そのため、external catalog の場合、値は `NULL` です。catalog が `default_catalog` の場合、コメントはデフォルトで `An internal catalog contains this cluster's self-managed tables.` です。`default_catalog` は StarRocks クラスター内で唯一の内部 catalog です。 |
 
 ## 例

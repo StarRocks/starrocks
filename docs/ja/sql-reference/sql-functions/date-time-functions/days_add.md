@@ -4,21 +4,23 @@ displayed_sidebar: docs
 
 # days_add
 
-指定された日数を、与えられた日付または日時に加算します。
+## 説明
 
-## Syntax
+指定された日数を、与えられた日付または日時に追加します。
+
+## 構文
 
 ```Haskell
 DATETIME days_add(DATETIME|DATE date, INT n);
 ```
 
-## Parameters
+## パラメータ
 
 `date`: DATE または DATETIME 式。
 
-`n`: 加算する日数。
+`n`: 追加する日数。
 
-## Return value
+## 戻り値
 
 DATETIME 値を返します。
 
@@ -26,7 +28,7 @@ DATETIME 値を返します。
 
 出力日付が [0000-01-01 00:00:00, 9999-12-31 00:00:00] の範囲を超える場合、NULL が返されます。
 
-## Examples
+## 例
 
 ```Plain Text
 select days_add('2023-10-31 23:59:59', 1);
@@ -51,6 +53,6 @@ select days_add('2023-10-31', 1);
 +---------------------------+
 ```
 
-## Keywords
+## キーワード
 
 DAY, day

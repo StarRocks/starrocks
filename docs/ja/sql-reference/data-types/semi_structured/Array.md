@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # ARRAY
 
-ARRAY はデータベースの拡張型として、PostgreSQL、ClickHouse、Snowflake などのさまざまなデータベースシステムでサポートされています。ARRAY は、A/B テスト、ユーザータグ分析、ユーザープロファイリングなどのシナリオで広く使用されています。StarRocks は多次元配列のネスト、配列のスライス、比較、フィルタリングをサポートしています。
+ARRAY はデータベースの拡張型として、PostgreSQL、ClickHouse、Snowflake などのさまざまなデータベースシステムでサポートされています。ARRAY は A/B テスト、ユーザータグ分析、ユーザープロファイリングなどのシナリオで広く使用されています。StarRocks は多次元配列のネスト、配列のスライス、比較、フィルタリングをサポートしています。
 
 ## ARRAY カラムの定義
 
@@ -23,7 +23,7 @@ ARRAY<type> NOT NULL
 
 `type` は配列内の要素のデータ型を指定します。StarRocks は次の要素型をサポートしています: BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, VARCHAR, CHAR, DATETIME, DATE, JSON, ARRAY (v3.1 以降), MAP (v3.1 以降), STRUCT (v3.1 以降)。
 
-配列内の要素はデフォルトで NULL 可能です。例えば、`[null, 1 ,2]` のように指定できます。配列内の要素を NOT NULL として指定することはできませんが、テーブルを作成する際に ARRAY カラムを NOT NULL として指定することは可能です。以下のコードスニペットの 3 番目の例を参照してください。
+配列内の要素はデフォルトで NULL 可能です。例えば、`[null, 1 ,2]` のように。配列内の要素を NOT NULL として指定することはできませんが、テーブル作成時に ARRAY カラムを NOT NULL として指定することは可能です。以下のコードスニペットの3番目の例を参照してください。
 
 例:
 
@@ -55,17 +55,17 @@ distributed by hash(c0);
 
 ## 制限事項
 
-StarRocks テーブルで ARRAY カラムを作成する際には、次の制限が適用されます:
+StarRocks テーブルで ARRAY カラムを作成する際には、以下の制限があります:
 
-- v2.1 より前のバージョンでは、ARRAY カラムは重複キーテーブルでのみ作成できます。v2.1 以降では、他のタイプのテーブル（Primary Key、Unique Key、Aggregate）でも ARRAY カラムを作成できます。ただし、集計テーブルでは、そのカラムでデータを集計するために使用される関数が replace() または replace_if_not_null() の場合にのみ ARRAY カラムを作成できます。詳細は [集計テーブル](../../../table_design/table_types/aggregate_table.md) を参照してください。
-- ARRAY カラムはキー カラムとして使用できません。
-- ARRAY カラムはパーティションキー（PARTITION BY に含まれる）またはバケッティングキー（DISTRIBUTED BY に含まれる）として使用できません。
+- v2.1 より前のバージョンでは、ARRAY カラムは重複キーテーブルでのみ作成できます。v2.1 以降では、他のタイプのテーブル（Primary Key、Unique Key、集計）でも ARRAY カラムを作成できます。ただし、集計テーブルでは、そのカラムでデータを集計するために使用される関数が replace() または replace_if_not_null() の場合にのみ ARRAY カラムを作成できます。詳細は [Aggregate table](../../../table_design/table_types/aggregate_table.md) を参照してください。
+- ARRAY カラムはキー列として使用できません。
+- ARRAY カラムはパーティションキー（PARTITION BY に含まれる）やバケッティングキー（DISTRIBUTED BY に含まれる）として使用できません。
 - DECIMAL V3 は ARRAY でサポートされていません。
-- 配列は最大 14 レベルのネストが可能です。
+- 配列は最大14レベルのネストが可能です。
 
-## SQL での配列の構築
+## SQL で配列を構築する
 
-配列は、角括弧 `[]` を使用して SQL で構築でき、各配列要素はカンマ（`,`）で区切られます。
+配列は、SQL で角括弧 `[]` を使用して構築でき、各配列要素はカンマ（`,`）で区切られます。
 
 ~~~Plain Text
 mysql> select [1, 2, 3] as numbers;
@@ -93,7 +93,7 @@ mysql> select [true, false] as booleans;
 +----------+
 ~~~
 
-StarRocks は、配列が複数の型の要素で構成されている場合、データ型を自動的に推論します。
+StarRocks は、配列が複数の型の要素で構成されている場合、自動的にデータ型を推論します:
 
 ~~~Plain Text
 mysql> select [1, 1.2] as floats;
@@ -112,7 +112,7 @@ mysql> select [12, "100"];
 +--------------+
 ~~~
 
-尖括弧（`<>`）を使用して宣言された配列型を示すことができます。
+宣言された配列型を示すために、尖括弧 (`<>`) を使用できます。
 
 ~~~Plain Text
 mysql> select ARRAY<float>[1, 2];
@@ -144,7 +144,7 @@ mysql> select [1, NULL];
 +----------+
 ~~~
 
-空の配列の場合、尖括弧を使用して宣言された型を示すことができます。または、StarRocks がコンテキストに基づいて型を推論するために `[]` を直接記述することもできます。StarRocks が型を推論できない場合、エラーが報告されます。
+空の配列の場合、宣言された型を示すために尖括弧を使用することも、StarRocks がコンテキストに基づいて型を推論するために直接 `[]` と書くこともできます。StarRocks が型を推論できない場合、エラーが報告されます。
 
 ~~~Plain Text
 mysql> select [];
@@ -174,11 +174,11 @@ mysql> select array_append([], 10);
 
 ## 配列データのロード
 
-StarRocks は、配列データのロードを 3 つの方法でサポートしています:
+StarRocks は、配列データのロードを3つの方法でサポートしています:
 
-- INSERT INTO は、小規模データのテスト用のロードに適しています。
-- Broker Load は、大規模データの ORC または Parquet ファイルのロードに適しています。
-- Stream Load と Routine Load は、大規模データの CSV ファイルのロードに適しています。
+- INSERT INTO は小規模データのテストロードに適しています。
+- Broker Load は大規模データの ORC または Parquet ファイルのロードに適しています。
+- Stream Load と Routine Load は大規模データの CSV ファイルのロードに適しています。
 
 ### INSERT INTO を使用して配列をロードする
 
@@ -197,13 +197,13 @@ INSERT INTO t0 VALUES(1, [1,2,3]);
 
 ### Broker Load を使用して ORC または Parquet ファイルから配列をロードする
 
-  StarRocks の配列型は、ORC および Parquet ファイルのリスト構造に対応しており、StarRocks で異なるデータ型を指定する必要がありません。データロードの詳細については、[Broker load](../../sql-statements/loading_unloading/BROKER_LOAD.md) を参照してください。
+  StarRocks の配列型は ORC および Parquet ファイルのリスト構造に対応しており、StarRocks で異なるデータ型を指定する必要がありません。データロードの詳細については、[Broker load](../../sql-statements/loading_unloading/BROKER_LOAD.md) を参照してください。
 
 ### Stream Load または Routine Load を使用して CSV 形式の配列をロードする
 
-  CSV ファイル内の配列はデフォルトでカンマで区切られています。[Stream Load または Routine Load](../../../loading/Loading_intro.md) を使用して、CSV テキストファイルまたは Kafka 内の CSV データをロードできます。
+  CSV ファイル内の配列はデフォルトでカンマで区切られています。[Stream Load または Routine Load](../../../loading/Loading_intro.md) を使用して、CSV テキストファイルや Kafka 内の CSV データをロードできます。
 
-## 配列データのクエリ
+## ARRAY データのクエリ
 
 配列内の要素には、`[]` と添字を使用してアクセスできます。添字は `1` から始まります。
 

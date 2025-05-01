@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # log10, dlog10
 
+## Description
+
 数値の常用対数を計算します。
 
 ## Syntax
@@ -26,7 +28,7 @@ DOUBLE データ型の値を返します。
 
 ## Example
 
-例 1: 100 の常用対数を計算します。
+Example 1: 100 の常用対数を計算します。
 
 ```Plain
 select log10(100);

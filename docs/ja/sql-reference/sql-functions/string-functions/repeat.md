@@ -4,7 +4,9 @@ displayed_sidebar: docs
 
 # repeat
 
-この関数は、`str` を `count` の回数だけ繰り返します。`count` が 1 未満の場合、空の文字列を返します。`str` または `count` が NULL の場合、NULL を返します。
+## Description
+
+この関数は、`count` に従って `str` を繰り返します。`count` が 1 未満の場合、空の文字列を返します。`str` または `count` が NULL の場合、NULL を返します。
 
 ## Syntax
 

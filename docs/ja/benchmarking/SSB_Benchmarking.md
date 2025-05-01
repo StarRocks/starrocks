@@ -4,14 +4,14 @@ displayed_sidebar: docs
 
 # SSB フラットテーブルベンチマーク
 
-スタースキーマベンチマーク (SSB) は、OLAP データベース製品の基本的なパフォーマンス指標をテストするために設計されています。SSB は、学術界や産業界で広く適用されているスタースキーマのテストセットを使用します。詳細については、論文 [Star Schema Benchmark](https://www.cs.umb.edu/~poneil/StarSchemaB.PDF) を参照してください。
-ClickHouse はスタースキーマを広いフラットテーブルに変換し、SSB を単一テーブルのベンチマークに書き換えます。詳細については、[Star schema benchmark of ClickHouse](https://clickhouse.com/docs/en/getting-started/example-datasets/star-schema) を参照してください。
+スタースキーマベンチマーク (SSB) は、OLAP データベース製品の基本的なパフォーマンス指標をテストするために設計されています。SSB は、学術界や業界で広く適用されているスタースキーマのテストセットを使用しています。詳細については、論文 [Star Schema Benchmark](https://www.cs.umb.edu/~poneil/StarSchemaB.PDF) を参照してください。
+ClickHouse はスタースキーマを広いフラットテーブルにフラット化し、SSB を単一テーブルのベンチマークに書き換えます。詳細については、[Star schema benchmark of ClickHouse](https://clickhouse.com/docs/en/getting-started/example-datasets/star-schema) を参照してください。
 このテストでは、StarRocks、Apache Druid、および ClickHouse の SSB 単一テーブルデータセットに対するパフォーマンスを比較します。
 
 ## テスト結論
 
-- SSB 標準データセットで実行された 13 のクエリのうち、StarRocks は全体的なクエリパフォーマンスが **ClickHouse の 2.1 倍、Apache Druid の 8.7 倍** です。
-- StarRocks のビットマップインデックスが有効化されると、無効化時と比較してパフォーマンスが 1.3 倍になります。StarRocks の全体的なパフォーマンスは **ClickHouse の 2.8 倍、Apache Druid の 11.4 倍** です。
+- SSB 標準データセットに対して実行された 13 のクエリのうち、StarRocks は ClickHouse の **2.1 倍、Apache Druid の 8.7 倍** のクエリパフォーマンスを持っています。
+- StarRocks のビットマップインデックスが有効化されると、無効化された場合と比較してパフォーマンスが 1.3 倍になります。StarRocks の全体的なパフォーマンスは、ClickHouse の **2.8 倍、Apache Druid の 11.4 倍** です。
 
 ![overall comparison](../_assets/7.1-1.png)
 
@@ -30,9 +30,9 @@ ClickHouse はスタースキーマを広いフラットテーブルに変換し
 
 StarRocks、Apache Druid、および ClickHouse は同じ構成のホストにデプロイされています。
 
-- StarRocks: 1 つの FE と 3 つの BEs。FE は BEs と別々またはハイブリッドでデプロイできます。
-- ClickHouse: 分散テーブルを持つ 3 つのノード
-- Apache Druid: 3 つのノード。1 つはマスターサーバーとデータサーバーでデプロイされ、1 つはクエリサーバーとデータサーバーでデプロイされ、3 つ目はデータサーバーのみでデプロイされます。
+- StarRocks: 1 つの FE と 3 つの BE。FE は BE と分離またはハイブリッドでデプロイできます。
+- ClickHouse: 分散テーブルを持つ 3 ノード
+- Apache Druid: 3 ノード。1 つは Master Servers と Data Servers でデプロイされ、1 つは Query Servers と Data Servers でデプロイされ、3 つ目は Data Servers のみでデプロイされます。
 
 カーネルバージョン: Linux 3.10.0-1160.59.1.el7.x86_64
 
@@ -55,7 +55,7 @@ OS バージョン: CentOS Linux リリース 7.9.2009
 
 ### テスト結果
 
-以下の表は、13 のクエリに対するパフォーマンステスト結果を示しています。クエリの遅延の単位は ms です。すべてのクエリは 1 回ウォームアップされ、その後 3 回実行され、平均値が結果として取られます。表のヘッダーにある `ClickHouse vs StarRocks` は、ClickHouse のクエリ応答時間を StarRocks のクエリ応答時間で割った値を意味します。値が大きいほど、StarRocks のパフォーマンスが優れていることを示します。
+以下の表は、13 のクエリに対するパフォーマンステスト結果を示しています。クエリの遅延の単位は ms です。すべてのクエリは 1 回ウォームアップされ、その後 3 回実行され、平均値が結果として取られます。表のヘッダーの `ClickHouse vs StarRocks` は、ClickHouse のクエリ応答時間を StarRocks のクエリ応答時間で割った値を意味します。値が大きいほど、StarRocks のパフォーマンスが優れていることを示します。
 
 |      | StarRocks-3.0 | StarRocks-3.0-index | ClickHouse-23.3 | ClickHouse vs StarRocks | Druid-25.0.0 | Druid vs StarRocks |
 | ---- | ------------- | ------------------- | ------------------- | ----------------------- | ---------------- | ------------------ |
@@ -72,11 +72,11 @@ OS バージョン: CentOS Linux リリース 7.9.2009
 | Q4.1 | 203           | 196                 | 469                 | 2.31                    | 1230             | 6.06               |
 | Q4.2 | 73            | 76                  | 160                 | 2.19                    | 1020             | 13.97              |
 | Q4.3 | 50            | 36                  | 148                 | 2.96                    | 820              | 16.40              |
-| sum  | 1236          | 939                 | 2645                | 2.14                    | 10750            | 8.70               |
+| 合計  | 1236          | 939                 | 2645                | 2.14                    | 10750            | 8.70               |
 
 ## テスト手順
 
-ClickHouse のテーブルを作成し、テーブルにデータをロードする方法の詳細については、[ClickHouse official doc](https://clickhouse.com/docs/en/getting-started/example-datasets/star-schema) を参照してください。以下のセクションでは、StarRocks のデータ生成とデータロードについて説明します。
+ClickHouse テーブルの作成方法やテーブルへのデータロードについては、[ClickHouse official doc](https://clickhouse.com/docs/en/getting-started/example-datasets/star-schema) を参照してください。以下のセクションでは、StarRocks のデータ生成とデータロードについて説明します。
 
 ### データ生成
 
@@ -90,7 +90,7 @@ make && make install
 cd output/
 ```
 
-コンパイル後、関連するすべてのツールが `output` ディレクトリにインストールされ、以下の操作はすべてこのディレクトリで実行されます。
+コンパイル後、関連するすべてのツールが `output` ディレクトリにインストールされ、以下の操作はすべてこのディレクトリで行われます。
 
 まず、SSB 標準データセット `scale factor=100` のデータを生成します。
 
@@ -100,9 +100,9 @@ sh bin/gen-ssb.sh 100 data_dir
 
 ### テーブルスキーマの作成
 
-1. 設定ファイル `conf/starrocks.conf` を変更し、クラスタのアドレスを指定します。特に `mysql_host` と `mysql_port` に注意してください。
+1. 設定ファイル `conf/starrocks.conf` を修正し、クラスターアドレスを指定します。特に `mysql_host` と `mysql_port` に注意してください。
 
-2. テーブルを作成するために、以下のコマンドを実行します。
+2. 次のコマンドを実行してテーブルを作成します。
 
     ```SQL
     sh bin/create_db_table.sh ddl_100
@@ -116,7 +116,7 @@ sh bin/benchmark.sh ssb-flat
 
 ### ビットマップインデックスの有効化
 
-StarRocks はビットマップインデックスが有効化されるとより良いパフォーマンスを発揮します。特に Q2.2、Q2.3、および Q3.3 でビットマップインデックスが有効化された StarRocks のパフォーマンスをテストしたい場合は、すべての STRING 列にビットマップインデックスを作成できます。
+StarRocks はビットマップインデックスが有効化されているときにより良いパフォーマンスを発揮します。特に Q2.2、Q2.3、Q3.3 でビットマップインデックスが有効化された StarRocks のパフォーマンスをテストしたい場合は、すべての STRING 列にビットマップインデックスを作成できます。
 
 1. 別の `lineorder_flat` テーブルを作成し、ビットマップインデックスを作成します。
 
@@ -124,7 +124,7 @@ StarRocks はビットマップインデックスが有効化されるとより�
     sh bin/create_db_table.sh ddl_100_bitmap_index
     ```
 
-2. すべての BEs の `be.conf` ファイルに以下の設定を追加し、設定が有効になるように BEs を再起動します。
+2. すべての BEs の `be.conf` ファイルに次の設定を追加し、設定が有効になるように BEs を再起動します。
 
     ```SQL
     bitmap_max_filter_ratio=1000
@@ -136,9 +136,9 @@ StarRocks はビットマップインデックスが有効化されるとより�
     sh bin/flat_insert.sh data_dir
     ```
 
-データがロードされた後、データバージョンのコンパクションが完了するのを待ち、ビットマップインデックスが有効化された後にデータをクエリするために再度 [4.4](#query-data) を実行します。
+データがロードされた後、データバージョンのコンパクションが完了するのを待ち、ビットマップインデックスが有効化された後に [4.4](#query-data) を再度実行してデータをクエリします。
 
-データバージョンのコンパクションの進行状況を確認するには、`select CANDIDATES_NUM from information_schema.be_compactions` を実行します。3 つの BE ノードの結果が以下のように表示されると、コンパクションが完了したことを示します。
+データバージョンのコンパクションの進行状況は、`select CANDIDATES_NUM from information_schema.be_compactions` を実行して確認できます。3 つの BE ノードに対して、以下の結果が表示されればコンパクションが完了しています。
 
 ```SQL
 mysql> select CANDIDATES_NUM from information_schema.be_compactions;
@@ -264,7 +264,7 @@ ORDER BY year ASC, s_city ASC, p_brand ASC;
 
 #### デフォルトの `lineorder_flat` テーブル
 
-以下のステートメントは、現在のクラスタサイズとデータサイズ (3 つの BEs、スケールファクター = 100) に一致します。クラスタにより多くの BE ノードがある場合や、データサイズが大きい場合は、バケットの数を調整し、テーブルを再作成し、データを再ロードすることで、より良いテスト結果を得ることができます。
+以下のステートメントは、現在のクラスターサイズとデータサイズ (3 つの BEs、スケールファクター = 100) に一致しています。クラスターにより多くの BE ノードがある場合やデータサイズが大きい場合は、バケット数を調整し、再度テーブルを作成してデータをロードすることで、より良いテスト結果を得ることができます。
 
 ```SQL
 CREATE TABLE `lineorder_flat` (
@@ -314,7 +314,7 @@ DISTRIBUTED BY HASH(`LO_ORDERKEY`) BUCKETS 48
 PROPERTIES ("replication_num" = "1");
 ```
 
-#### ビットマップインデックス付きの `lineorder_flat` テーブル
+#### ビットマップインデックス付き `lineorder_flat` テーブル
 
 ```SQL
 CREATE TABLE `lineorder_flat` (

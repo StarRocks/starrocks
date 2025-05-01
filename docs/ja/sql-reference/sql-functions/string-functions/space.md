@@ -4,23 +4,25 @@ displayed_sidebar: docs
 
 # space
 
-指定された数のスペースを含む文字列を返します。
+## 説明
 
-## Syntax
+指定された数のスペースを持つ文字列を返します。
+
+## 構文
 
 ```Haskell
 space(x);
 ```
 
-## Parameters
+## パラメータ
 
 `x`: 返すスペースの数。サポートされているデータ型は INT です。
 
-## Return value
+## 戻り値
 
 VARCHAR 型の値を返します。
 
-## Examples
+## 例
 
 ```Plain Text
 mysql> select space(6);
@@ -32,6 +34,6 @@ mysql> select space(6);
 1 row in set (0.00 sec)
 ```
 
-## Keywords
+## キーワード
 
 SPACE

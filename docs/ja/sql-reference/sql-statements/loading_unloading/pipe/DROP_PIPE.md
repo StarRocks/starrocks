@@ -26,7 +26,7 @@ DROP PIPE [IF EXISTS] [db_name.]<pipe_name>
 
 ## Examples
 
-データベース `mydatabase` にある `user_behavior_replica` という名前のパイプを削除します。
+`mydatabase` という名前のデータベースにある `user_behavior_replica` という名前のパイプを削除します。
 
 ```SQL
 USE mydatabase;

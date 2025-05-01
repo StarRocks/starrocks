@@ -16,9 +16,9 @@ displayed_sidebar: docs
 
 ユーザーは、自分に割り当てられたロールのみをアクティブにできます。
 
-ユーザーのロールを照会するには、[SHOW GRANTS](./SHOW_GRANTS.md) を使用します。
+ユーザーのロールを照会するには、 [SHOW GRANTS](./SHOW_GRANTS.md) を使用できます。
 
-現在のユーザーのアクティブなロールを照会するには、`SELECT CURRENT_ROLE()` を使用します。詳細については、[current_role](../../sql-functions/utility-functions/current_role.md) を参照してください。
+現在のユーザーのアクティブなロールを照会するには、`SELECT CURRENT_ROLE()` を使用します。詳細については、 [current_role](../../sql-functions/utility-functions/current_role.md) を参照してください。
 
 ## 構文
 
@@ -65,7 +65,7 @@ SELECT CURRENT_ROLE();
 +--------------------+
 ```
 
-## 参考
+## 参考文献
 
 - [CREATE ROLE](CREATE_ROLE.md): ロールを作成します。
 - [GRANT](GRANT.md): ユーザーまたは他のロールにロールを割り当てます。

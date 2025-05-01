@@ -10,6 +10,6 @@ import DateTip from '../../../_assets/commonMarkdown/dateTimeTip.mdx'
 
 <DateTip />
 
-出力形式は `YYYY-MM-DD HH:MM:SS` です。
+表示形式は `YYYY-MM-DD HH:MM:SS` です。
 
-バージョン v3.3.5 から、DATETIME はミリ秒およびマイクロ秒の精度をサポートしています。出力形式は `YYYY-MM-DD HH:MM:SS.ffffff` です。
+バージョン v3.3.5 から、DATETIME はミリ秒およびマイクロ秒の精度をサポートしています。表示形式は `YYYY-MM-DD HH:MM:SS.ffffff` です。

@@ -4,15 +4,17 @@ displayed_sidebar: docs
 
 # lcase
 
-この関数は文字列を小文字に変換します。lower 関数と同様です。
+## 説明
 
-## Syntax
+この関数は文字列を小文字に変換します。関数 lower と同様です。
+
+## 構文
 
 ```Haskell
 VARCHAR lcase(VARCHAR str)
 ```
 
-## Examples
+## 例
 
 ```Plain Text
 mysql> SELECT lcase("AbC123");
@@ -23,6 +25,6 @@ mysql> SELECT lcase("AbC123");
 +-----------------+
 ```
 
-## keyword
+## キーワード
 
 LCASE

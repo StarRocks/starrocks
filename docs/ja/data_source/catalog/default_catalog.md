@@ -4,9 +4,9 @@ displayed_sidebar: docs
 
 # Default catalog
 
-このトピックでは、default catalog とは何か、そして default catalog を使用して StarRocks の内部データをどのようにクエリするかについて説明します。
+このトピックでは、default catalog とは何か、そして default catalog を使用して StarRocks の内部データをクエリする方法について説明します。
 
-StarRocks 2.3以降では、StarRocks の内部データを管理するための internal catalog を提供しています。各 StarRocks クラスターには `default_catalog` という名前の internal catalog が1つだけあります。現在、internal catalog の名前を変更したり、新しい internal catalog を作成したりすることはできません。
+StarRocks 2.3以降では、StarRocks の内部データを管理するための internal catalog を提供しています。各 StarRocks クラスターには `default_catalog` という名前の internal catalog が1つだけあります。現在、internal catalog の名前を変更したり、新しい internal catalog を作成することはできません。
 
 ## 内部データのクエリ
 
@@ -14,7 +14,7 @@ StarRocks 2.3以降では、StarRocks の内部データを管理するための
    - MySQL クライアントを使用して StarRocks クラスターに接続する場合、接続後にデフォルトで `default_catalog` に移動します。
    - JDBC を使用して StarRocks クラスターに接続する場合、接続時に `default_catalog.db_name` を指定することで、default catalog の目的のデータベースに直接移動できます。
 
-2. （オプション）[SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) を使用してデータベースを表示します:
+2. (オプション) [SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) を使用してデータベースを表示します:
 
       ```SQL
       SHOW DATABASES;
@@ -26,7 +26,7 @@ StarRocks 2.3以降では、StarRocks の内部データを管理するための
       SHOW DATABASES FROM <catalog_name>;
       ```
 
-3. （オプション）[SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) を使用して、現在のセッションで目的の catalog に切り替えます:
+3. (オプション) [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) を使用して、現在のセッションで目的の catalog に切り替えます:
 
     ```SQL
     SET CATALOG <catalog_name>;
@@ -38,7 +38,7 @@ StarRocks 2.3以降では、StarRocks の内部データを管理するための
     USE <db_name>;
     ```
 
-    または、[USE](../../sql-reference/sql-statements/Database/USE.md) を使用して、目的の catalog のアクティブなデータベースに直接移動することもできます:
+    または、[USE](../../sql-reference/sql-statements/Database/USE.md) を使用して、目的の catalog のアクティブなデータベースに直接移動できます:
 
     ```SQL
     USE <catalog_name>.<db_name>;
@@ -83,6 +83,6 @@ SELECT * FROM olap_db.olap_table limit 1;
 SELECT * FROM default_catalog.olap_db.olap_table limit 1;      
 ```
 
-## 参考文献
+## 参考
 
 外部データソースからデータをクエリするには、[Query external data](../catalog/query_external_data.md) を参照してください。

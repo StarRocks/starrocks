@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # minutes_sub
 
+## Description
+
 指定された分を日付から引きます。分単位で正確です。
 
 ## Syntax
@@ -14,9 +16,9 @@ DATETIME minutes_sub(DATETIME|DATE date, INT minutes);
 
 ## Parameters
 
-- `date`: 基準となる日付。DATETIME または DATE 型である必要があります。
+- `date`: 基準となる日付。DATETIME または DATE 型でなければなりません。
 
-- `minutes`: 減らす分数。INT 型である必要があり、0 より大きい、等しい、または小さい可能性があります。
+- `minutes`: 減少させる分数。INT 型でなければならず、0 より大きい、等しい、または小さい可能性があります。
 
 ## Return value
 

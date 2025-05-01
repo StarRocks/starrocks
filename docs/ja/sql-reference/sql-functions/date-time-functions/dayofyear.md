@@ -4,9 +4,11 @@ displayed_sidebar: docs
 
 # dayofyear
 
-指定された日付の年の日数を返します。
+## 説明
 
-`date` パラメータは DATE または DATETIME 型である必要があります。
+指定された日付の年の通算日を返します。
+
+`date` パラメータは DATE または DATETIME 型でなければなりません。
 
 ## 構文
 

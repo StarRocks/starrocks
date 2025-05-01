@@ -4,11 +4,13 @@ displayed_sidebar: docs
 
 # bitmap_to_binary
 
-Bitmap 値を Binary 文字列に変換します。
+## 説明
 
-bitmap_to_binary は主に Bitmap データをエクスポートするために使用されます。圧縮効果は [bitmap_to_base64](./bitmap_to_base64.md) よりも優れています。
+Bitmap 値をバイナリ文字列に変換します。
 
-データを Parquet などのバイナリファイルに直接エクスポートする場合、この関数を推奨します。
+bitmap_to_binary は主に Bitmap データのエクスポートに使用されます。圧縮効果は [bitmap_to_base64](./bitmap_to_base64.md) よりも優れています。
+
+データを Parquet などのバイナリファイルに直接エクスポートする予定がある場合、この関数を推奨します。
 
 この関数は v3.0 からサポートされています。
 
@@ -20,7 +22,7 @@ VARBINARY bitmap_to_binary(BITMAP bitmap)
 
 ## パラメータ
 
-`bitmap`: 変換する Bitmap。必須です。入力値が無効な場合、エラーが返されます。
+`bitmap`: 変換する Bitmap、必須です。入力値が無効な場合、エラーが返されます。
 
 ## 戻り値
 
@@ -28,7 +30,7 @@ VARBINARY 型の値を返します。
 
 ## 例
 
-例 1: 他の bitmap 関数と一緒にこの関数を使用します。
+例 1: この関数を他の bitmap 関数と一緒に使用します。
 
 ```Plain
 mysql> select hex(bitmap_to_binary(bitmap_from_string("0, 1, 2, 3")));
@@ -56,9 +58,9 @@ mysql> select hex(bitmap_to_binary(bitmap_empty()));
 1 row in set (0.01 sec)
 ```
 
-例 2: BITMAP カラム内の各値をバイナリ文字列に変換します。
+例 2: BITMAP 列の各値をバイナリ文字列に変換します。
 
-1. `AGGREGATE KEY` が (`page_id`, `visit_date`) の集計テーブル `page_uv` を作成します。このテーブルには、値が集計される BITMAP カラム `visit_users` が含まれています。
+1. `AGGREGATE KEY` が (`page_id`, `visit_date`) の集計テーブル `page_uv` を作成します。このテーブルには、値が集計される BITMAP 列 `visit_users` が含まれています。
 
     ```SQL
         CREATE TABLE `page_uv`
@@ -94,7 +96,7 @@ mysql> select hex(bitmap_to_binary(bitmap_empty()));
       +---------+---------------------+-------------+
     ```
 
-3. `visit_users` カラム内の各値をバイナリエンコードされた文字列に変換します。
+3. `visit_users` 列の各値をバイナリエンコードされた文字列に変換します。
 
     ```Plain
        mysql> select page_id, hex(bitmap_to_binary(visit_users)) from page_uv;

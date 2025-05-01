@@ -4,21 +4,23 @@ displayed_sidebar: docs
 
 # bitmap_from_string
 
-文字列を BITMAP に変換します。この文字列は、カンマで区切られた一連の UINT64 数字で構成されています。例えば、「0, 1, 2」という文字列は、ビット 0, 1, 2 がセットされた Bitmap に変換されます。入力フィールドが無効な場合、NULL が返されます。
+## Description
 
-この関数は変換中に入力文字列を重複排除します。他の関数、例えば [bitmap_to_string](bitmap_to_string.md) と組み合わせて、ターミナル上で結果を返す必要があります。
+文字列を BITMAP に変換します。この文字列はカンマで区切られた一連の UINT64 数字で構成されています。例えば、"0, 1, 2" という文字列は、ビット 0, 1, 2 がセットされた Bitmap に変換されます。入力フィールドが無効な場合、NULL が返されます。
 
-## 構文
+この関数は変換中に入力文字列を重複排除します。他の関数、例えば [bitmap_to_string](bitmap_to_string.md) と組み合わせて使用し、ターミナルで結果を返す必要があります。
+
+## Syntax
 
 ```Haskell
 BITMAP BITMAP_FROM_STRING(VARCHAR input)
 ```
 
-## 戻り値
+## Return value
 
 BITMAP 値を返します。入力文字列が無効な場合、NULL が返されます。入力文字列が空の場合、空の値が返されます。
 
-## 例
+## Examples
 
 ```Plain Text
 -- 入力が空で、空の値が返されます。
@@ -38,6 +40,7 @@ MySQL > select bitmap_to_string(bitmap_from_string("0, 1, 2"));
 +-------------------------------------------------+
 
 -- `-1` は無効な入力で、NULL が返されます。
+
 MySQL > select bitmap_to_string(bitmap_from_string("-1, 0, 1, 2"));
 +-----------------------------------+
 | bitmap_from_string('-1, 0, 1, 2') |
@@ -54,6 +57,7 @@ MySQL > select bitmap_to_string(bitmap_from_string("0, 18446744073709551616"));
 +-----------------------------------------------------------------+
 
 -- 入力文字列は重複排除されます。
+
 MySQL > select bitmap_to_string(bitmap_from_string("0, 1, 1"));
 +-------------------------------------------------+
 | bitmap_to_string(bitmap_from_string('0, 1, 1')) |
@@ -62,6 +66,6 @@ MySQL > select bitmap_to_string(bitmap_from_string("0, 1, 1"));
 +-------------------------------------------------+
 ```
 
-## キーワード
+## keywords
 
 BITMAP_FROM_STRING,BITMAP

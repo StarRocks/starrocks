@@ -4,7 +4,9 @@ displayed_sidebar: docs
 
 # stddev,stddev_pop,std
 
-expr 式の母集団標準偏差を返します。バージョン 2.5.10 以降、この関数はウィンドウ関数としても使用できます。
+## Description
+
+`expr` 式の母集団標準偏差を返します。バージョン v2.5.10 以降、この関数はウィンドウ関数としても使用できます。
 
 ## Syntax
 
@@ -35,7 +37,7 @@ mysql> SELECT stddev(lo_quantity), stddev_pop(lo_quantity) from lineorder;
 
 ## See also
 
-[stddev_samp](./stddev_samp.md)
+ [stddev_samp](./stddev_samp.md)
 
 ## keyword
 

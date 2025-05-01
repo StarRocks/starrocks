@@ -17,9 +17,9 @@ displayed_sidebar: docs
 
 ## 構文
 
-### 権限を取り消す
+### 権限の取り消し
 
-取り消せる権限はオブジェクトに依存します。以下はオブジェクトに基づく構文の説明です。
+取り消すことができる権限はオブジェクトに依存します。以下の部分では、オブジェクトに基づく構文を説明します。
 
 #### システム
 
@@ -64,7 +64,7 @@ REVOKE
     FROM { ROLE | USER} {<role_name>|<user_identity>}
 ```
 
-#### 内部カタログ
+#### 内部 catalog
 
 ```SQL
 REVOKE 
@@ -73,7 +73,7 @@ REVOKE
     FROM { ROLE | USER} {<role_name>|<user_identity>}
 ```
 
-#### 外部カタログ
+#### 外部 catalog
 
 ```SQL
 REVOKE  
@@ -91,7 +91,7 @@ REVOKE
     FROM { ROLE | USER} {<role_name>|<user_identity>}
 ```
 
-* このコマンドを実行する前に、SET CATALOG を実行する必要があります。
+* このコマンドを実行する前に SET CATALOG を実行する必要があります。
 
 #### テーブル
 
@@ -104,8 +104,8 @@ REVOKE
     FROM { ROLE | USER} {<role_name>|<user_identity>}
 ```
 
-* このコマンドを実行する前に、SET CATALOG を実行する必要があります。
-* db.tbl を使用してテーブルを表すこともできます。
+* このコマンドを実行する前に SET CATALOG を実行する必要があります。
+* テーブルを表すために db.tbl を使用することもできます。
 
   ```SQL
   REVOKE <priv> ON TABLE db.tbl FROM {ROLE <role_name> | USER <user_identity>}
@@ -122,8 +122,8 @@ REVOKE
     FROM { ROLE | USER} {<role_name>|<user_identity>}
 ```
 
-* このコマンドを実行する前に、SET CATALOG を実行する必要があります。
-* db.view を使用してビューを表すこともできます。
+* このコマンドを実行する前に SET CATALOG を実行する必要があります。
+* ビューを表すために db.view を使用することもできます。
 
   ```SQL
   REVOKE <priv> ON VIEW db.view FROM {ROLE <role_name> | USER <user_identity>}
@@ -140,8 +140,8 @@ REVOKE
     FROM { ROLE | USER} {<role_name>|<user_identity>}
 ```
 
-* このコマンドを実行する前に、SET CATALOG を実行する必要があります。
-* db.mv を使用して mv を表すこともできます。
+* このコマンドを実行する前に SET CATALOG を実行する必要があります。
+* マテリアライズドビューを表すために db.mv を使用することもできます。
 
   ```SQL
   REVOKE <priv> ON MATERIALIZED VIEW db.mv FROM {ROLE <role_name> | USER <user_identity>}
@@ -158,8 +158,8 @@ REVOKE
     FROM { ROLE | USER} {<role_name>|<user_identity>}
 ```
 
-* このコマンドを実行する前に、SET CATALOG を実行する必要があります。
-* db.function を使用して関数を表すこともできます。
+* このコマンドを実行する前に SET CATALOG を実行する必要があります。
+* 関数を表すために db.function を使用することもできます。
 
   ```SQL
   REVOKE <priv> ON FUNCTION <db_name>.<function_name>(input_data_type) FROM {ROLE <role_name> | USER <user_identity>}
@@ -179,7 +179,7 @@ REVOKE
     FROM { ROLE | USER} {<role_name>|<user_identity>}
 ```
 
-### ロールを取り消す
+### ロールの取り消し
 
 ```SQL
 REVOKE <role_name> [,<role_name>, ...] FROM ROLE <role_name>
@@ -195,7 +195,7 @@ REVOKE <role_name> [,<role_name>, ...] FROM USER <user_identity>
 | resourcegroup_name | リソースグループ名。                            |
 | resource_name      | リソース名。                                    |
 | function_name      | 関数名。                                        |
-| catalog_name       | 外部カタログの名前。                            |
+| catalog_name       | 外部 catalog の名前。                           |
 | database_name      | データベース名。                                |
 | table_name         | テーブル名。                                    |
 | view_name          | ビュー名。                                      |
@@ -203,34 +203,34 @@ REVOKE <role_name> [,<role_name>, ...] FROM USER <user_identity>
 
 ## 例
 
-### 権限を取り消す
+### 権限の取り消し
 
-ユーザー `jack` からテーブル `sr_member` の SELECT 権限を取り消します:
+ユーザー `jack` からテーブル `sr_member` の SELECT 権限を取り消します。
 
 ```SQL
 REVOKE SELECT ON TABLE sr_member FROM USER 'jack'@'192.%'
 ```
 
-ロール `test_role` からリソース `spark_resource` の USAGE 権限を取り消します:
+ロール `test_role` からリソース `spark_resource` の USAGE 権限を取り消します。
 
 ```SQL
 REVOKE USAGE ON RESOURCE 'spark_resource' FROM ROLE 'test_role';
 ```
 
-### ロールを取り消す
+### ロールの取り消し
 
-ユーザー `jack` からロール `example_role` を取り消します:
+ユーザー `jack` からロール `example_role` を取り消します。
 
 ```SQL
 REVOKE example_role FROM 'jack'@'%';
 ```
 
-ロール `test_role` からロール `example_role` を取り消します:
+ロール `test_role` からロール `example_role` を取り消します。
 
 ```SQL
 REVOKE example_role FROM ROLE 'test_role';
 ```
 
-## 参照
+## 参考
 
 [GRANT](GRANT.md)

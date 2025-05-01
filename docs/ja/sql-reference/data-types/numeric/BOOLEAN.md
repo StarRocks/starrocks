@@ -8,4 +8,4 @@ displayed_sidebar: docs
 
 BOOL, BOOLEAN
 
-TINYINT と同様に、0 は false を表し、1 は true を表します。
+TINYINT と同様に、0 は false、1 は true を表します。

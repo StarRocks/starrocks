@@ -12,7 +12,7 @@ displayed_sidebar: docs
 
 - すべてのユーザーは自分のパスワードをリセットできます。
 - `user_admin` ロールを持つユーザーのみが他のユーザーのパスワードを変更できます。
-- `root` ユーザー自身のみがそのパスワードを変更できます。詳細については、[権限の概要](../../../administration/user_privs/privilege_overview.md)を参照してください。
+- `root` ユーザー自身のみがそのパスワードを変更できます。詳細については [the priviege overview](../../../administration/user_privs/privilege_overview.md) を参照してください。
 
 :::
 
@@ -23,7 +23,7 @@ SET PASSWORD [FOR user_identity] =
 [PASSWORD('plain password')]|['hashed password']
 ```
 
-`user_identity` は、CREATE USER を使用してユーザーを作成する際に指定した `user_identity` と正確に一致している必要があります。そうでない場合、ユーザーは存在しないと報告されます。`user_identity` が指定されていない場合、現在のユーザーのパスワードが変更されます。現在のユーザーは [SHOW GRANTS](./SHOW_GRANTS.md) を通じて確認できます。
+`user_identity` は、CREATE USER を使用してユーザーを作成する際に指定した `user_identity` と正確に一致する必要があります。そうでない場合、ユーザーは存在しないと報告されます。`user_identity` が指定されていない場合、現在のユーザーのパスワードが変更されます。現在のユーザーは [SHOW GRANTS](./SHOW_GRANTS.md) で確認できます。
 
 `PASSWORD()` はプレーンテキストのパスワードを入力します。`PASSWORD()` を使用せずに文字列を直接入力する場合、その文字列は暗号化されている必要があります。
 

@@ -4,7 +4,9 @@ displayed_sidebar: docs
 
 # url_decode
 
-[application/x-www-form-urlencoded](https://www.w3.org/TR/html4/interact/forms.html#h-17.13.4.1) 形式から文字列を元に戻します。この関数は [url_encode](./url_encode.md) の逆の機能を持ちます。
+## 説明
+
+文字列を [application/x-www-form-urlencoded](https://www.w3.org/TR/html4/interact/forms.html#h-17.13.4.1) 形式から元に戻します。この関数は [url_encode](./url_encode.md) の逆の機能を持ちます。
 
 この関数は v3.2 からサポートされています。
 
@@ -16,7 +18,7 @@ VARCHAR url_decode(VARCHAR str)
 
 ## パラメータ
 
-- `str`: デコードする文字列。`str` が文字列でない場合、システムはまず暗黙的なキャストを試みます。
+- `str`: デコードする文字列。`str` が文字列でない場合、システムは最初に暗黙のキャストを試みます。
 
 ## 戻り値
 

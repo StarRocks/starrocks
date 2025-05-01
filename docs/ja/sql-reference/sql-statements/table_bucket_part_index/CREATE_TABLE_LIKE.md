@@ -8,22 +8,22 @@ displayed_sidebar: docs
 
 他のテーブルの定義に基づいて、同一の空のテーブルを作成します。定義には、カラム定義、パーティション、およびテーブルプロパティが含まれます。MySQLのような外部テーブルをコピーすることができます。
 
-v3.2では、新しいテーブルに対して、元のテーブルとは異なるパーティション化の手法、バケッティングの手法、およびプロパティを指定することができます。
+v3.2では、新しいテーブルに対して、ソーステーブルとは異なるパーティション化の手法、バケッティングの手法、およびプロパティを指定することができます。
 
 :::tip
-この操作を行うには、テーブルを作成したいデータベースに対する CREATE TABLE 権限と、テーブルを作成する元となるテーブルに対する `SELECT` 権限が必要です。
+この操作を行うには、テーブルを作成したいデータベースに対するCREATE TABLE権限と、テーブルを作成するための基となるソーステーブルに対する`SELECT`権限が必要です。
 :::
 
 ## 構文
 
-- v3.2より前のバージョンでサポートされている構文。
+- v3.2以前のバージョンでサポートされている構文。
 
 ```sql
 CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]<table_name>
 LIKE [database.]<source_table_name>
 ```
 
-- v3.2では、新しいテーブルに対してプロパティを指定することができます。
+- v3.2では、新しいテーブルに対するプロパティの指定をサポートしています。
 
 ```sql
 CREATE [TEMPORARY] [EXTERNAL] TABLE [IF NOT EXISTS] [database.]<table_name>
@@ -35,17 +35,17 @@ LIKE [database.]<source_table_name>
 
 ## パラメータ
 
-- `TEMPORARY`: 一時テーブルを作成します。v3.3.1から、StarRocksは Default Catalog での一時テーブルの作成をサポートしています。詳細は [Temporary Table](../../../table_design/StarRocks_table_design.md#temporary-table) を参照してください。
+- `TEMPORARY`: 一時テーブルを作成します。v3.3.1から、StarRocksはDefault Catalogでの一時テーブルの作成をサポートしています。詳細は[Temporary Table](../../../table_design/StarRocks_table_design.md#temporary-table)を参照してください。
 - `database`: データベース。
-- `table_name`: 作成したいテーブルの名前。命名規則については、[System limits](../../System_limit.md) を参照してください。
-- `source_table_name`: コピーしたい元のテーブルの名前。
-- `partition_desc`: パーティション化の手法。詳細は [CREATE TABLE](./CREATE_TABLE.md#partition_desc) を参照してください。
-- `distribution_desc`: バケッティングの手法。詳細は [CREATE TABLE](./CREATE_TABLE.md#distribution_desc) を参照してください。
-- `PROPERTIES`: テーブルのプロパティ。すべてのテーブルプロパティがサポートされています。詳細は [ALTER TABLE](ALTER_TABLE.md#modify-table-properties) を参照してください。
+- `table_name`: 作成したいテーブルの名前。命名規則については、[System limits](../../System_limit.md)を参照してください。
+- `source_table_name`: コピーしたいソーステーブルの名前。
+- `partition_desc`: パーティション化の手法。詳細は[CREATE TABLE](./CREATE_TABLE.md#partition_desc)を参照してください。
+- `distribution_desc`: バケッティングの手法。詳細は[CREATE TABLE](./CREATE_TABLE.md#distribution_desc)を参照してください。
+- `PROPERTIES`: テーブルのプロパティ。すべてのテーブルプロパティがサポートされています。詳細は[ALTER TABLE](ALTER_TABLE.md#modify-table-properties)を参照してください。
 
 ## 例
 
-データベース `test1` にテーブル `orders` があるとします。
+データベース`test1`にテーブル`orders`があるとします。
 
 ```sql
 create table orders (
@@ -72,7 +72,7 @@ PROPERTIES (
 );
 ```
 
-例1: データベース `test1` において、`orders` と同じテーブル構造を持つ空のテーブル `order_1` を作成します。
+例1: データベース`test1`に、`orders`と同じテーブル構造を持つ空のテーブル`order_1`を作成します。
 
 ```sql
 CREATE TABLE test1.order_1 LIKE test1.orders;
@@ -110,7 +110,7 @@ PROPERTIES (
 );
 ```
 
-例2: `orders` に基づいて空のテーブル `order_2` を作成し、`order_2` にプロパティを指定します。
+例2: `orders`に基づいて空のテーブル`order_2`を作成し、`order_2`のプロパティを指定します。
 
 ```sql
 CREATE TABLE order_2
@@ -149,7 +149,7 @@ PROPERTIES (
 );
 ```
 
-例3: MySQL 外部テーブル `table1` と同じテーブル構造を持つ空のテーブル `table2` を作成します。
+例3: MySQL外部テーブル`table1`と同じテーブル構造を持つ空のテーブル`table2`を作成します。
 
 ```sql
 CREATE TABLE test1.table2 LIKE test1.table1

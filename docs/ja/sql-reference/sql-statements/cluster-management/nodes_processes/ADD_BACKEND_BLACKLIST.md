@@ -6,9 +6,9 @@ displayed_sidebar: docs
 
 ## 説明
 
-BE ノードを BE ブラックリストに追加します。クエリ実行時にノードの使用を禁止するために、手動で BE ノードをブラックリストに追加することができます。これにより、BE ノードへの接続失敗による頻繁なクエリ失敗やその他の予期しない動作を回避できます。
+BE ノードを BE ブラックリストに追加します。クエリ実行時にノードの使用を禁止するために、手動で BE ノードをブラックリストに追加することができます。これにより、BE ノードへの接続が失敗することによって引き起こされる頻繁なクエリの失敗やその他の予期しない動作を回避できます。
 
-この機能は v3.3.0 以降でサポートされています。詳細については、[Manage BE Blacklist](../../../../administration/management/BE_blacklist.md) を参照してください。
+この機能は v3.3.0 以降でサポートされています。詳細については、 [Manage BE Blacklist](../../../../administration/management/BE_blacklist.md) を参照してください。
 
 :::note
 
@@ -16,7 +16,7 @@ BE ノードを BE ブラックリストに追加します。クエリ実行時�
 
 :::
 
-デフォルトでは、StarRocks は BE ブラックリストを自動的に管理し、接続が失われた BE ノードをブラックリストに追加し、接続が再確立されたときにブラックリストから削除します。ただし、手動でブラックリストに追加された BE ノードは、StarRocks によってブラックリストから削除されません。
+デフォルトでは、StarRocks は BE ブラックリストを自動的に管理できます。接続が失われた BE ノードをブラックリストに追加し、接続が再確立されたときにブラックリストから削除します。ただし、手動でブラックリストに追加された BE ノードは、StarRocks によってブラックリストから削除されません。
 
 ## 構文
 
@@ -41,7 +41,7 @@ SHOW BACKENDS\G
 ADD BACKEND BLACKLIST 10001;
 ```
 
-## 関連する SQL
+## 関連 SQL
 
 - [DELETE BACKEND BLACKLIST](./DELETE_BACKEND_BLACKLIST.md)
 - [SHOW BACKEND BLACKLIST](./SHOW_BACKEND_BLACKLIST.md)

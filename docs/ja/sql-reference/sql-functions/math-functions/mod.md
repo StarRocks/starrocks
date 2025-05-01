@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # mod
 
+## 説明
+
 `dividend` を `divisor` で割った余りを返す剰余関数です。
 
 ## 構文
@@ -12,7 +14,7 @@ displayed_sidebar: docs
 mod(dividend, divisor)
 ```
 
-## パラメータ
+## パラメーター
 
 - `dividend`: 割られる数。
 - `divisor`: 割る数。
@@ -33,7 +35,7 @@ mod(dividend, divisor)
 
 > **注意**
 >
-> `dividend` と `divisor` はデータ型が一致している必要があります。StarRocks はデータ型が一致しない場合、暗黙的な変換を行います。
+> `dividend` と `divisor` はデータ型が一致している必要があります。StarRocks はデータ型が一致しない場合に暗黙の型変換を行います。
 
 ## 戻り値
 

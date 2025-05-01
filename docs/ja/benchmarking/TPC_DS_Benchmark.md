@@ -6,18 +6,18 @@ displayed_sidebar: docs
 
 TPC-DS は、トランザクション処理性能評議会 (TPC) によって開発された意思決定支援ベンチマークです。これは、TPC-H よりも包括的なテストデータセットと複雑な SQL クエリを使用します。
 
-TPC-DS は、意思決定支援システムの一般的に適用可能な側面をいくつかモデル化しており、クエリやデータメンテナンスを含みます。TPC-DS の目的は、小売環境におけるデータベースシステムの性能をテストおよび評価するための包括的で現実的なワークロードを提供することです。TPC-DS ベンチマークは、小売企業の 3 つの販売チャネル（店舗、インターネット、カタログ）の販売および返品データをシミュレートします。販売および返品データモデルのテーブルを作成することに加えて、簡単な在庫システムとプロモーションシステムも含まれています。
+TPC-DS は、意思決定支援システムの一般的に適用可能な側面をいくつかモデル化しており、クエリやデータメンテナンスを含みます。TPC-DS は、小売環境におけるデータベースシステムの性能をテストおよび評価するための包括的で現実的なワークロードを提供することを目的としています。TPC-DS ベンチマークは、小売企業の 3 つの販売チャネル（店舗、インターネット、およびカタログ）の販売および返品データをシミュレートします。販売および返品データモデルのテーブルを作成するだけでなく、簡単な在庫システムとプロモーションシステムも含まれています。
 
 このベンチマークは、データサイズが 1 GB から 3 GB の 24 のテーブルに対して合計 99 の複雑な SQL クエリをテストします。主な性能指標は各クエリの応答時間であり、クエリが送信されてから結果が返されるまでの時間です。
 
 ## 1. テスト結論
 
-99 のクエリに対して TPC-DS 100 GB データセットでテストを行いました。以下の図はテスト結果を示しています。
+99 のクエリに対して TPC-DS 100 GB データセットでテストを実施しました。以下の図はテスト結果を示しています。
 ![tpc-ds](../_assets/tpc-ds.png)
 
-テストでは、StarRocks はその内部ストレージと Hive 外部テーブルの両方からデータをクエリします。StarRocks と Trino は同じ Hive 外部テーブルからデータをクエリします。データは LZ4 圧縮され、Parquet 形式で保存されています。
+テストでは、StarRocks は内部ストレージと Hive external tables の両方からデータをクエリします。StarRocks と Trino は、同じ Hive external tables からデータをクエリします。データは LZ4 圧縮され、Parquet 形式で保存されています。
 
-StarRocks がその内部ストレージからデータをクエリするレイテンシは **174s**、Hive 外部テーブルをクエリするレイテンシは **239s**、Data Cache 機能を有効にした Hive 外部テーブルをクエリするレイテンシは **176s**、Trino が Hive 外部テーブルをクエリするレイテンシは **892s** です。
+StarRocks が内部ストレージからデータをクエリする場合のレイテンシは **174s**、Hive external tables をクエリする場合は **239s**、Data Cache 機能を有効にして Hive external tables をクエリする場合は **176s**、Trino が Hive external tables をクエリする場合は **892s** です。
 
 ## 2. テスト準備
 
@@ -28,17 +28,17 @@ StarRocks がその内部ストレージからデータをクエリするレイ�
 | CPU               | 8core Intel(R) Xeon(R) Platinum 8269CY CPU @ 2.50GHz |
 | メモリ            | 32 GB                                          |
 | ネットワーク帯域幅 | 5 Gbit/s                                       |
-| ディスク          | ESSD                                           |
+| ディスク              | ESSD                                           |
 
 ### 2.2 ソフトウェア環境
 
-StarRocks と Trino は同じ構成のマシンにデプロイされています。StarRocks には 1 FE と 3 BEs がデプロイされており、Trino には 1 コーディネーターと 3 ワーカーがデプロイされています。
+StarRocks と Trino は、同じ構成のマシンにデプロイされています。StarRocks は 1 FE と 3 BEs がデプロイされ、Trino は 1 Coordinator と 3 Workers がデプロイされています。
 
 - カーネルバージョン: Linux 3.10.0-1127.13.1.el7.x86_64
 - OS バージョン: CentOS Linux リリース 7.8.2003
 - ソフトウェアバージョン: StarRocks Community Edition 3.1, Trino-419, Hive-3.1.2
 
-> StarRocks FE は、BEs と別々にデプロイすることも、ハイブリッドデプロイすることも可能であり、テスト結果には影響しません。
+> StarRocks FE は、BEs と別にデプロイすることも、ハイブリッドデプロイすることも可能で、テスト結果には影響しません。
 
 ## 3. テストデータと結果
 
@@ -75,10 +75,10 @@ StarRocks と Trino は同じ構成のマシンにデプロイされています
 
 > **注意**
 >
-> - 以下のテーブルのクエリレイテンシの単位は ms です。
-> - すべてのクエリは 1 回ウォームアップされ、その後 3 回実行して平均値を結果とします。
-> - `StarRocks-3.0.5-native` は StarRocks の内部ストレージを示し、`StarRocks-3.0-Hive external` は StarRocks が Hive Catalog を通じて Hive 外部テーブルをクエリすることを示し、`StarRocks-3.0-Hive external-Cache` は Data Cache を有効にして Hive Catalog を通じて Hive 外部テーブルをクエリすることを示します。
-> - StarRocks では集約プッシュダウンが有効になっています (`SET global cbo_push_down_aggregate_mode = 0`)。
+> - 以下の表におけるクエリレイテンシの単位は ms です。
+> - すべてのクエリは 1 回ウォームアップされ、その後 3 回実行して平均値を結果として取ります。
+> - `StarRocks-3.0.5-native` は StarRocks の内部ストレージを示し、`StarRocks-3.0-Hive external` は StarRocks が Hive Catalog を通じて Hive external tables をクエリすることを示し、`StarRocks-3.0-Hive external-Cache` は Data Cache を有効にして Hive Catalog を通じて Hive external tables をクエリすることを示します。
+> - StarRocks では集約プッシュダウンが有効です (`SET global cbo_push_down_aggregate_mode = 0`)。
 
 | **クエリ** | **StarRocks-3.0.5-native** | **StarRocks-3.0-Hive external** | **StarRocks-3.0-Hive external-Cache** | **Trino-419** |
 | --------- | -------------------------- | ------------------------------- | ------------------------------------- | ------------- |
@@ -185,9 +185,9 @@ StarRocks と Trino は同じ構成のマシンにデプロイされています
 
 ## 4. テスト手順
 
-### 4.1 StarRocks 内部テーブルのクエリ
+### 4.1 StarRocks 内部テーブルをクエリする
 
-#### 4.1.1 データの生成
+#### 4.1.1 データを生成する
 
 tpcds-poc ツールキットをダウンロードし、標準の TPC-DS テストデータセット `scale factor=100` を生成します。
 
@@ -199,35 +199,35 @@ cd tpcds-poc-1.0
 sh bin/gen_data/gen-tpcds.sh 100 data_100
 ```
 
-#### 4.1.2 テーブルスキーマの作成
+#### 4.1.2 テーブルスキーマを作成する
 
-設定ファイル `conf/starrocks.conf` を修正し、クラスタのアドレスを指定します。`mysql_host` と `mysql_port` に注意してください。
+設定ファイル `conf/starrocks.conf` を変更し、クラスタのアドレスを指定します。`mysql_host` と `mysql_port` に注意してください。
 
 ```Bash
 sh bin/create_db_table.sh ddl_100
 ```
 
-#### 4.1.3 データのロード
+#### 4.1.3 データをロードする
 
 ```Bash
 sh bin/stream_load.sh data_100
 ```
 
-#### 4.1.4 データのクエリ
+#### 4.1.4 データをクエリする
 
 ```Bash
 sh bin/benchmark.sh -p -d tpcds
 ```
 
-### 4.2 Hive 外部テーブルのクエリ
+### 4.2 Hive external tables をクエリする
 
-#### 4.2.1 テーブルスキーマの作成
+#### 4.2.1 テーブルスキーマを作成する
 
-Hive に外部テーブルを作成します。ストレージ形式は Parquet で、圧縮形式は LZ4 です。詳細な CREATE TABLE ステートメントについては、[Create Parquet Hive external tables](#53-create-hive-external-tables-parquet) を参照してください。StarRocks と Trino はこれらの外部テーブルからデータをクエリします。
+Hive に外部テーブルを作成します。ストレージ形式は Parquet、圧縮形式は LZ4 です。CREATE TABLE ステートメントの詳細については、 [Create Parquet Hive external tables](#53-create-hive-external-tables-parquet) を参照してください。StarRocks と Trino はこれらの外部テーブルからデータをクエリします。
 
-#### 4.2.2 データのロード
+#### 4.2.2 データをロードする
 
-[4.1.1](#411-generate-data) で生成した CSV データを Hive の指定された HDFS パスにロードします。この例では `/user/tmp/csv/` を HDFS パスとして使用します。Hive に CSV 外部テーブルを作成し、テーブルを `/user/tmp/csv/` に保存します。詳細な CREATE TABLE ステートメントについては、[Create CSV Hive external tables](#54-create-hive-external-tables-csv) を参照してください。
+[4.1.1](#411-generate-data) で生成した CSV データを Hive の指定された HDFS パスにロードします。この例では、HDFS パスとして `/user/tmp/csv/` を使用します。Hive に CSV Hive external tables を作成し、テーブルを `/user/tmp/csv/` に保存します。CREATE TABLE ステートメントの詳細については、 [Create CSV Hive external tables](#54-create-hive-external-tables-csv) を参照してください。
 
 INSERT INTO を使用して、CSV 外部テーブルから Parquet 外部テーブルにデータをロードします。これにより、LZ4 圧縮された Parquet データが生成されます。
 
@@ -260,9 +260,9 @@ insert into store_returns select * from tpcds_100g_csv.store_returns order by SR
 insert into store_sales select * from tpcds_100g_csv.store_sales order by SS_SOLD_DATE_SK, SS_ITEM_SK;
 ```
 
-#### 4.2.3 統計の収集
+#### 4.2.3 統計を収集する
 
-StarRocks v3.0 は外部テーブルからの統計の収集をサポートしていません。したがって、Hive を使用して列レベルの統計を収集します。
+StarRocks v3.0 は外部テーブルからの統計収集をサポートしていません。そのため、Hive を使用して列レベルの統計を収集します。
 
 ```SQL
 use tpcds_100g_parquet_lz4;
@@ -293,11 +293,11 @@ analyze table web_sales compute statistics FOR COLUMNS;
 analyze table web_site compute statistics FOR COLUMNS;
 ```
 
-#### 4.2.4 データのクエリ
+#### 4.2.4 データをクエリする
 
-StarRocks は [Hive catalog](../data_source/catalog/hive_catalog.md) を使用して Hive 外部テーブルをクエリします。
+StarRocks は [Hive catalog](../data_source/catalog/hive_catalog.md) を使用して Hive external tables をクエリします。
 
-テスト中に StarRocks の [Data Cache](../data_source/data_cache.md) が有効になっている場合、Data Cache 機能のために以下の設定を推奨します。
+テスト中に StarRocks に対して [Data Cache](../data_source/data_cache.md) が有効になっている場合、Data Cache 機能のために以下の設定を推奨します。
 
 ```SQL
 block_cache_mem_size = 5368709120
@@ -308,9 +308,9 @@ block_cache_disk_size = 193273528320
 
 ### 5.1 TPC-DS SQL クエリ
 
-99 の SQL クエリの詳細については、[TPC-DS SQL](./tpc_ds_99_sql.md) を参照してください。
+99 の SQL クエリの詳細については、 [TPC-DS SQL](./tpc_ds_99_sql.md) を参照してください。
 
-### 5.2 StarRocks 内部テーブルの作成
+### 5.2 StarRocks 内部テーブルを作成する
 
 ```SQL
 create table call_center
@@ -955,7 +955,7 @@ properties(
 );
 ```
 
-### 5.3 Hive 外部テーブルの作成 (Parquet)
+### 5.3 Hive external tables を作成する (Parquet)
 
 ```SQL
 use tpcds_100g_parquet_lz4;
@@ -1554,7 +1554,7 @@ LOCATION '/user/tmp/parquet/store_sales/'
 tblproperties("parquet.compression"="Lz4");
 ```
 
-### 5.4 Hive 外部テーブルの作成 (CSV)
+### 5.4 Hive external tables を作成する (CSV)
 
 ```SQL
 use tpcds_100g_csv;

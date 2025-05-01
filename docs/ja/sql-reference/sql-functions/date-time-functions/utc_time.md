@@ -4,7 +4,9 @@ displayed_sidebar: docs
 
 # utc_time
 
-現在の UTC 時刻を 'HH:MM:SS' の形式で返します。
+## 説明
+
+現在の UTC 時間を 'HH:MM:SS' の形式で返します。
 
 ## 構文
 
@@ -25,4 +27,4 @@ MySQL > select utc_time();
 
 ## キーワード
 
-UTC_TIME,UTC,TIME
+UTC_TIME, UTC, TIME

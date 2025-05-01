@@ -6,11 +6,11 @@ displayed_sidebar: docs
 
 ## 説明
 
-このステートメントは、インストールされているプラグインを表示するために使用します。
+このステートメントは、インストールされているプラグインを表示するために使用されます。
 
 :::tip
 
-この操作には、SYSTEM レベルの PLUGIN 権限が必要です。この権限を付与するには、[GRANT](../../account-management/GRANT.md) の指示に従ってください。
+この操作には、SYSTEM レベルの PLUGIN 権限が必要です。この権限を付与するには、 [GRANT](../../account-management/GRANT.md) の指示に従ってください。
 
 :::
 
