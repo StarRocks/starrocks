@@ -261,6 +261,11 @@ Description: The type of metastore that you use for your Iceberg cluster. Set th
 Required: Yes
 Description: The URI of the REST service endpoint. Example: `https://api.tabular.io/ws`. 
 
+###### iceberg.catalog.view-endpoints-supported
+
+Required: No
+Description: Enables support for View-related operations. Default: `false`
+
 ###### iceberg.catalog.security
 
 Required: No
