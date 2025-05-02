@@ -1322,7 +1322,16 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         // partition
         PartitionInfo partitionInfo = this.getPartitionInfo();
         if (!partitionInfo.isUnPartitioned()) {
-            sb.append("\n").append(partitionInfo.toSql(this, null));
+            // NOTE: This part of the code is mainly for compatibility with existing materialized views, explicitly by using
+            // isAutomaticPartition.
+            // If isAutoMaticPartition is false, it may generate bad partition sql which will cause error in replay.
+            if (partitionInfo instanceof ListPartitionInfo) {
+                ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+                String sql = listPartitionInfo.toSql(this, true);
+                sb.append("\n").append(sql);
+            } else {
+                sb.append("\n").append(partitionInfo.toSql(this, null));
+            }
         }
 
         // distribution

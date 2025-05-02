@@ -361,6 +361,17 @@ public class ListPartitionInfo extends PartitionInfo {
 
     @Override
     public String toSql(OlapTable table, List<Long> partitionId) {
+        return toSql(table, automaticPartition);
+    }
+
+    /**
+     * Generate the SQL statement for creating a list partition
+     * @param table : table
+     * @param isAutomaticPartition : whether the partition type is automatic or by values. If true, only generate partition-by
+     *                             columns without partition values.
+     * @return : SQL statement for the list partition
+     */
+    public String toSql(OlapTable table, boolean isAutomaticPartition) {
         String replicationNumStr = table.getTableProperty()
                 .getProperties().get(PROPERTIES_REPLICATION_NUM);
         short tableReplicationNum = replicationNumStr == null ?
@@ -368,7 +379,7 @@ public class ListPartitionInfo extends PartitionInfo {
 
         StringBuilder sb = new StringBuilder();
         sb.append("PARTITION BY ");
-        if (!automaticPartition) {
+        if (!isAutomaticPartition) {
             sb.append("LIST");
         }
         sb.append("(");
@@ -376,7 +387,7 @@ public class ListPartitionInfo extends PartitionInfo {
                 .map(item -> "`" + item.getName() + "`")
                 .collect(Collectors.joining(",")));
         sb.append(")");
-        if (!automaticPartition) {
+        if (!isAutomaticPartition) {
             List<Long> partitionIds = getPartitionIds(false);
             sb.append("(\n");
             if (!idToValues.isEmpty()) {
