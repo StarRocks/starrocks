@@ -215,7 +215,7 @@ LastConsistencyCheckTime: NULL
 
 データロード中、StarRocksはロードされたデータとパーティション式で定義されたパーティションルールに基づいて自動的にパーティションを作成します。
 
-テーブル作成時に式に基づくパーティション化を使用し、特定のパーティションのデータを上書きするために [INSERT OVERWRITE](../../loading/InsertInto.md#overwrite-data-via-insert-overwrite-select) を使用する必要がある場合、パーティションが作成されているかどうかにかかわらず、現在は `PARTITION()` で明示的にパーティション範囲を提供する必要があります。これは、[レンジパーティション化](../Data_distribution.mdmd#range-partitioning) や [リストパーティション化](../list_partitioning.mdmd) とは異なり、`PARTITION (<partition_name>)` でパーティション名のみを提供することができます。
+テーブル作成時に式に基づくパーティション化を使用し、特定のパーティションのデータを上書きするために [INSERT OVERWRITE](../../loading/InsertInto.md#overwrite-data-via-insert-overwrite-select) を使用する必要がある場合、パーティションが作成されているかどうかにかかわらず、現在は `PARTITION()` で明示的にパーティション範囲を提供する必要があります。これは、[レンジパーティション化](./Data_distribution.md#range-partitioning) や [リストパーティション化](./list_partitioning.md) とは異なり、`PARTITION (<partition_name>)` でパーティション名のみを提供することができます。
 
 テーブル作成時に時間関数式を使用し、特定のパーティションのデータを上書きしたい場合、そのパーティションの開始日または日時（テーブル作成時に設定されたパーティショングラニュラリティ）を提供する必要があります。パーティションが存在しない場合、データロード中に自動的に作成されることがあります。
 
