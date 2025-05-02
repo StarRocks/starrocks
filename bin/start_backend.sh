@@ -101,8 +101,6 @@ if [[ -z "$JEMALLOC_CONF" ]]; then
     fi
 fi
 
-echo "JEMALLOC_CONF: '$JEMALLOC_CONF'"
-
 # enable coredump when BE build with ASAN
 export ASAN_OPTIONS="abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1:detect_stack_use_after_return=1"
 export LSAN_OPTIONS=suppressions=${STARROCKS_HOME}/conf/asan_suppressions.conf
@@ -225,6 +223,8 @@ else
 fi
 
 echo "start time: $(date), server uptime: $(uptime)"
+echo "Run with JEMALLOC_CONF: '$JEMALLOC_CONF'"
+
 if [ ${RUN_DAEMON} -eq 1 ]; then
     nohup ${START_BE_CMD} "$@" </dev/null &
 else
