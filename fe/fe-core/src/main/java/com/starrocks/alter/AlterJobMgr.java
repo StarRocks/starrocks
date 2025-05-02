@@ -82,6 +82,8 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.scheduler.mv.MVTimelinessMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -214,10 +216,13 @@ public class AlterJobMgr {
             QueryStatement mvQueryStatement = null;
             try {
                 mvQueryStatement = recreateMVQuery(materializedView, context, createMvSql);
-            } catch (SemanticException e) {
+            } catch (Exception e) {
+                LOG.warn("Can not active materialized view [%s]" +
+                        " because analyze materialized view define sql: \n\n%s" +
+                        "\n\nCause an error: %s", materializedView.getName(), createMvSql, e);
                 throw new SemanticException("Can not active materialized view [%s]" +
                         " because analyze materialized view define sql: \n\n%s" +
-                        "\n\nCause an error: %s", materializedView.getName(), createMvSql, e.getDetailMsg());
+                        "\n\nCause an error: %s", materializedView.getName(), createMvSql, e.getMessage());
             }
 
             // Skip checks to maintain eventual consistency when replay
@@ -229,6 +234,13 @@ public class AlterJobMgr {
             materializedView.setActive();
         } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
             materializedView.setInactiveAndReason(reason);
+            // clear running & pending task runs since the mv has been inactive
+            final TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            Task currentTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
+            if (currentTask != null) {
+                TaskRunManager taskRunManager = taskManager.getTaskRunManager();
+                taskRunManager.killTaskRun(currentTask.getId(), true);
+            }
         }
     }
 
