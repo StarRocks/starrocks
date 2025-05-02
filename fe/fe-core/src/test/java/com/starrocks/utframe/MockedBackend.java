@@ -106,6 +106,8 @@ import com.starrocks.thrift.TExportTaskRequest;
 import com.starrocks.thrift.TFetchDataParams;
 import com.starrocks.thrift.TFetchDataResult;
 import com.starrocks.thrift.TFinishTaskRequest;
+import com.starrocks.thrift.TGetTabletsInfoRequest;
+import com.starrocks.thrift.TGetTabletsInfoResult;
 import com.starrocks.thrift.THeartbeatResult;
 import com.starrocks.thrift.TMasterInfo;
 import com.starrocks.thrift.TMiniLoadEtlStatusRequest;
@@ -390,6 +392,11 @@ public class MockedBackend {
                 }
             }
             //            return new TTabletStatResult(Maps.newHashMap());
+        }
+
+        @Override
+        public TGetTabletsInfoResult get_tablets_info(TGetTabletsInfoRequest request) {
+            return new TGetTabletsInfoResult(new TStatus(TStatusCode.OK));
         }
 
         @Override
