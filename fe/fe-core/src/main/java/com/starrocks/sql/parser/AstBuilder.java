@@ -1160,7 +1160,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 if (defaultDescContext.INTEGER_VALUE() != null) {
                     expr.add(new IntLiteral(Long.parseLong(defaultDescContext.INTEGER_VALUE().getText()), Type.INT));
                 }
-                defaultValueDef = new ColumnDef.DefaultValueDef(true, new FunctionCallExpr("now", expr));
+                defaultValueDef = new ColumnDef.DefaultValueDef(true, (expr.size() == 1),
+                        new FunctionCallExpr("current_timestamp", expr));
             } else if (defaultDescContext.qualifiedName() != null) {
                 String functionName = defaultDescContext.qualifiedName().getText().toLowerCase();
                 defaultValueDef = new ColumnDef.DefaultValueDef(true,

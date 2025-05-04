@@ -94,10 +94,16 @@ public class ColumnDef implements ParseNode {
      */
     public static class DefaultValueDef {
         public boolean isSet;
+        public boolean hasArguments;
         public Expr expr;
 
         public DefaultValueDef(boolean isSet, Expr expr) {
+            this(isSet, false, expr);
+        }
+
+        public DefaultValueDef(boolean isSet, boolean hasArgs, Expr expr) {
             this.isSet = isSet;
+            this.hasArguments = hasArgs;
             // make expr always not null
             if (expr != null) {
                 this.expr = expr;
