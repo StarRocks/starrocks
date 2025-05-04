@@ -140,6 +140,10 @@ public class FileSystemManager {
     // This property is used like 'fs.hdfs.impl.disable.cache'
     private static final String FS_OBS_IMPL_DISABLE_CACHE = "fs.obs.impl.disable.cache";
     private static final String FS_OBS_IMPL = "fs.obs.impl";
+    private static final String AUTHENTICATION_TBDS = "tbds";
+    private static final String TBDS_SECUREID = "hadoop_security_authentication_tbds_secureid";
+    private static final String TBDS_SECUREKEY = "hadoop_security_authentication_tbds_securekey";
+    private static final String TBDS_USERNAME = "hadoop_security_authentication_tbds_username";
 
     private ScheduledExecutorService handleManagementPool = Executors.newScheduledThreadPool(2);
 
@@ -251,7 +255,7 @@ public class FileSystemManager {
                 AUTHENTICATION_SIMPLE);
         String disableCache = properties.getOrDefault(FS_HDFS_IMPL_DISABLE_CACHE, "true");
         if (Strings.isNullOrEmpty(authentication) || (!authentication.equals(AUTHENTICATION_SIMPLE)
-                && !authentication.equals(AUTHENTICATION_KERBEROS))) {
+                && !authentication.equals(AUTHENTICATION_KERBEROS) && !authentication.equals(AUTHENTICATION_TBDS))) {
             logger.warn("invalid authentication: " + authentication);
             throw new BrokerException(TBrokerOperationStatusCode.INVALID_ARGUMENT,
                     "invalid authentication: " + authentication);
@@ -265,10 +269,8 @@ public class FileSystemManager {
         String hdfsUgi = username + "," + password;
         FileSystemIdentity fileSystemIdentity = null;
         BrokerFileSystem fileSystem = null;
-        if (authentication.equals(AUTHENTICATION_SIMPLE)) {
-            fileSystemIdentity = new FileSystemIdentity(host, hdfsUgi);
-        } else {
-            // for kerberos, use host + principal + keytab as filesystemindentity
+        if (authentication.equals(AUTHENTICATION_KERBEROS)) {
+            // for kerberos, use host + principal + keytab as filesystem identity
             String kerberosContent = "";
             if (properties.containsKey(KERBEROS_KEYTAB)) {
                 kerberosContent = properties.get(KERBEROS_KEYTAB);
@@ -293,6 +295,26 @@ public class FileSystemManager {
                 throw new BrokerException(TBrokerOperationStatusCode.INVALID_ARGUMENT,
                         e.getMessage());
             }
+        } else if (authentication.equals(AUTHENTICATION_TBDS)) {
+            // for tbds, use host + usename + secureid + securekey as filesystem identity
+            if (!properties.containsKey(TBDS_USERNAME)) {
+                throw new BrokerException(TBrokerOperationStatusCode.INVALID_ARGUMENT,
+                        TBDS_USERNAME + " is required for tbds authentication");
+            }
+            if (!properties.containsKey(TBDS_SECUREID)) {
+                throw new BrokerException(TBrokerOperationStatusCode.INVALID_ARGUMENT,
+                        TBDS_SECUREID + " is required for tbds authentication");
+            }
+            if (!properties.containsKey(TBDS_SECUREKEY)) {
+                throw new BrokerException(TBrokerOperationStatusCode.INVALID_ARGUMENT,
+                        TBDS_SECUREKEY + " is required for tbds authentication");
+            }
+            String tdbsUgi = String.format("%s,%s,%s", properties.get(TBDS_USERNAME), properties.get(TBDS_SECUREID),
+                    properties.get(TBDS_SECUREKEY));
+            fileSystemIdentity = new FileSystemIdentity(host, tdbsUgi);
+        } else {
+            // for simple, use host + username + password as filesystem identity
+            fileSystemIdentity = new FileSystemIdentity(host, hdfsUgi);
         }
         cachedFileSystem.putIfAbsent(fileSystemIdentity, new BrokerFileSystem(fileSystemIdentity));
         fileSystem = cachedFileSystem.get(fileSystemIdentity);
@@ -318,8 +340,6 @@ public class FileSystemManager {
                 if (authentication.equals(AUTHENTICATION_KERBEROS)) {
                     conf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION,
                             AUTHENTICATION_KERBEROS);
-                    conf.set(CommonConfigurationKeysPublic.HADOOP_KERBEROS_KEYTAB_LOGIN_AUTORENEWAL_ENABLED,
-                            "true");
 
                     String principal = preparePrincipal(properties.get(KERBEROS_PRINCIPAL));
                     String keytab = "";
@@ -362,6 +382,13 @@ public class FileSystemManager {
                                     e.getMessage());
                         }
                     }
+                } else if (authentication.equals(AUTHENTICATION_TBDS)) {
+                    conf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION, AUTHENTICATION_TBDS);
+                    conf.set(TBDS_SECUREID, properties.get(TBDS_SECUREID));
+                    conf.set(TBDS_SECUREKEY, properties.get(TBDS_SECUREKEY));
+                    conf.set(TBDS_USERNAME, properties.get(TBDS_USERNAME));
+                    UserGroupInformation.setConfiguration(conf);
+                    UserGroupInformation.loginUserFromSubject(null);
                 }
                 if (!Strings.isNullOrEmpty(dfsNameServices)) {
                     conf.set(DFS_NAMESERVICES_KEY, dfsNameServices);
@@ -991,7 +1018,14 @@ public class FileSystemManager {
     public void pwrite(TBrokerFD fd, long offset, byte[] data) {
         FSDataOutputStream fsDataOutputStream = clientContextManager.getFsDataOutputStream(fd);
         synchronized (fsDataOutputStream) {
-            long currentStreamOffset = fsDataOutputStream.getPos();
+            long currentStreamOffset;
+            try {
+                currentStreamOffset = fsDataOutputStream.getPos();
+            } catch (IOException e) {
+                logger.error("errors while get file pos from output stream", e);
+                throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR,
+                        "errors while get file pos from output stream");
+            }
             if (currentStreamOffset != offset) {
                 throw new BrokerException(TBrokerOperationStatusCode.INVALID_INPUT_OFFSET,
                         "current outputstream offset is {} not equal to request {}",

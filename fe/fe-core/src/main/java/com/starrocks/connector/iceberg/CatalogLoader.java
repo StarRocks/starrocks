@@ -2,7 +2,6 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.starrocks.connector.iceberg.glue.IcebergGlueCatalog;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.CatalogUtil;
@@ -58,8 +57,7 @@ public interface CatalogLoader {
 
         @Override
         public Catalog loadCatalog() {
-            return CatalogUtil.loadCatalog(IcebergGlueCatalog.class.getName(), catalogName, properties,
-                    hadoopConf.get());
+            return null;
         }
 
         @Override

@@ -15,8 +15,9 @@
 
     <dependencies>
         <dependency>
-            <groupId>io.trino.hive</groupId>
-            <artifactId>hive-apache</artifactId>
+            <groupId>org.apache.hive</groupId>
+            <artifactId>hive-metastore</artifactId>
+            <version>${hive-apache.version}</version>
         </dependency>
         <dependency>
             <groupId>com.starrocks</groupId>
@@ -26,6 +27,12 @@
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-client</artifactId>
             <scope>compile</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.hive</groupId>
+            <artifactId>hive-exec</artifactId>
+            <version>${hive-apache.version}</version>
         </dependency>
     </dependencies>
 
