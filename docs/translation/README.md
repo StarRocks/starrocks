@@ -29,6 +29,7 @@ OPENAI_API_KEY=sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 WANDB_API_KEY=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 GIT_PYTHON_REFRESH=quiet
 ```
+
 ## 3. Identify the files to translate
 
 Provide the paths of the files to translate in the file `starrocks/docs/translation/files.txt`
@@ -43,7 +44,7 @@ The entries in the file should be relative to the `starrocks/docs/translation/` 
 <tr>
 <td>
 
-#### From English to Chinese or Japanese
+### From English to Chinese or Japanese
 
 `starrocks/docs/translation/files.txt`
 
@@ -55,7 +56,7 @@ The entries in the file should be relative to the `starrocks/docs/translation/` 
 </td>
 <td>
 
-#### From Chinese to English
+### Chinese to English
 
 `starrocks/docs/translation/files.txt`
 
@@ -183,5 +184,5 @@ $ git status
 Changes not staged for commit:
   (use "git add <file>..." to update what will be committed)
   (use "git restore <file>..." to discard changes in working directory)
-	modified:   docs/zh/developers/trace-tools/Trace.md
+  modified:   docs/zh/developers/trace-tools/Trace.md
 ```
