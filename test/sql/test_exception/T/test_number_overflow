@@ -1,0 +1,7 @@
+-- name: test_number_overflow
+set sql_mode="ERROR_IF_OVERFLOW";
+
+-- exception in evaluate
+select cast(abs(1234567890123456789) as decimal(4,3));
+-- exception in open
+select 1 in (cast(abs(1234567890123456789) as decimal(4,3)), cast(abs(1234567890123456789) as decimal(4,3)));
