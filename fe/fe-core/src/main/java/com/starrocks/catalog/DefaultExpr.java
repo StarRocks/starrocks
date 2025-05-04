@@ -29,9 +29,11 @@ import java.util.regex.Pattern;
 public class DefaultExpr {
     @SerializedName("expr")
     private String expr;
+    private boolean hasArguments;
 
-    public DefaultExpr(String expr) {
+    public DefaultExpr(String expr, boolean hasArguments) {
         this.expr = expr;
+        this.hasArguments = hasArguments;
     }
 
     public String getExpr() {
@@ -42,8 +44,13 @@ public class DefaultExpr {
         this.expr = expr;
     }
 
+    public boolean hasArgs() {
+        return hasArguments;
+    }
+
     public static boolean isValidDefaultFunction(String expr) {
         String[] defaultfunctions = {
+            "current_timestamp\\([0-6]?\\)",
             "now\\([0-6]?\\)",
             "uuid\\(\\)",
             "uuid_numeric\\(\\)"
@@ -54,6 +61,10 @@ public class DefaultExpr {
 
         Matcher matcher = pattern.matcher(expr.trim());
         return matcher.matches();
+    }
+
+    public static boolean isEmptyDefaultFunction(DefaultExpr expr) {
+        return isValidDefaultFunction(expr.getExpr()) && !expr.hasArgs();
     }
 
     public Expr obtainExpr() {
