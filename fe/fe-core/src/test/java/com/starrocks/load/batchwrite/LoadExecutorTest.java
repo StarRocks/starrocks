@@ -16,9 +16,12 @@ package com.starrocks.load.batchwrite;
 
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.Config;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.streamload.StreamLoadHttpHeader;
 import com.starrocks.load.streamload.StreamLoadInfo;
@@ -136,6 +139,7 @@ public class LoadExecutorTest extends BatchWriteTestBase {
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                         .getLabelStatus(DATABASE_1.getId(), label).getStatus();
         assertEquals(TransactionStatus.VISIBLE, txnStatus);
+        assertNull(ProfileManager.getInstance().getProfile(DebugUtil.printId(loadId)));
     }
 
     @Test
@@ -310,6 +314,47 @@ public class LoadExecutorTest extends BatchWriteTestBase {
         );
         assertFalse(executor.containCoordinatorBackend(10001L));
         assertTrue(executor.containCoordinatorBackend(10002L));
+    }
+
+    @Test
+    public void testProfile() throws Exception {
+        starRocksAssert.alterTableProperties(
+                String.format("alter table %s.%s set('enable_load_profile'='true');", DB_NAME_1, TABLE_NAME_1_1));
+        long oldIntervalSecond = Config.load_profile_collect_interval_second;
+        Config.load_profile_collect_interval_second = 1;
+        try {
+            LoadExecutor executor = new LoadExecutor(
+                    new TableId(DB_NAME_1, TABLE_NAME_1_1),
+                    label,
+                    loadId,
+                    streamLoadInfo,
+                    1000,
+                    kvParams,
+                    new HashSet<>(Arrays.asList(10002L, 10003L)),
+                    coordinatorFactory,
+                    loadExecuteCallback
+            );
+
+            new Expectations() {
+                {
+                    coordinator.join((anyInt));
+                    result = true;
+                    coordinator.getExecStatus();
+                    result = new Status();
+                    coordinator.getCommitInfos();
+                    result = buildCommitInfos();
+                    coordinator.buildQueryProfile(true);
+                    result = new RuntimeProfile("Execution");
+                }
+            };
+
+            executor.run();
+            assertNotNull(ProfileManager.getInstance().getProfile(DebugUtil.printId(loadId)));
+        } finally {
+            Config.load_profile_collect_interval_second = oldIntervalSecond;
+            starRocksAssert.alterTableProperties(
+                    String.format("alter table %s.%s set('enable_load_profile'='false');", DB_NAME_1, TABLE_NAME_1_1));
+        }
     }
 
     private static class TestLoadExecuteCallback implements LoadExecuteCallback {
