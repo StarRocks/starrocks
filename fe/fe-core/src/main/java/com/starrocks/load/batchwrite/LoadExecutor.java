@@ -31,7 +31,6 @@ import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.EtlStatus;
-import com.starrocks.load.loadv2.LoadErrorUtils;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.streamload.StreamLoadInfo;
@@ -321,7 +320,7 @@ public class LoadExecutor implements Runnable {
     }
 
     private boolean isProfileEnabled() {
-        return (context != null && context.isProfileEnabled()) || LoadErrorUtils.enableProfileAfterError(coordinator);
+        return context != null && context.isProfileEnabled();
     }
 
     private void reportProfile() {
