@@ -168,6 +168,66 @@ public:
         return Status::OK();
     }
 
+    Status next_batch_with_nulls(size_t count, const NullInfos& null_infos, ColumnContentType content_type, Column* dst,
+                                 const FilterData* filter) override {
+        const uint8_t* __restrict is_nulls = null_infos.nulls_data();
+        CHECK(dst->is_nullable());
+        size_t null_cnt = null_infos.num_nulls;
+        FixedLengthColumn<T>* data_column /* = nullptr */;
+        if (dst->is_nullable()) {
+            NullColumn* null_column = down_cast<NullableColumn*>(dst)->mutable_null_column();
+            auto& null_data = null_column->get_data();
+            size_t prev_num_rows = null_data.size();
+            raw::stl_vector_resize_uninitialized(&null_data, count + prev_num_rows);
+            uint8_t* __restrict__ dst_nulls = null_data.data() + prev_num_rows;
+            memcpy(dst_nulls, is_nulls, count);
+            down_cast<NullableColumn*>(dst)->set_has_null(null_cnt > 0);
+            data_column = down_cast<FixedLengthColumn<T>*>(down_cast<NullableColumn*>(dst)->data_column().get());
+        }
+        size_t cur_size = data_column->size();
+        data_column->resize_uninitialized(cur_size + count);
+        T* __restrict__ data = data_column->get_data().data() + cur_size;
+
+        size_t read_count = count - null_cnt;
+        T read_data[read_count];
+
+        if (read_count == 0) {
+            return Status::OK();
+        }
+        auto ret = _rle_batch_reader.GetBatchWithDict(_dict.data(), _dict.size(), read_data, read_count);
+        if (UNLIKELY(ret <= 0)) {
+            return Status::InternalError("DictDecoder GetBatchWithDict failed");
+        }
+
+        if (read_count < count / 10) {
+            size_t cnt = 0;
+            size_t i = 0;
+            for (i = 0; i + 32 <= count; i += 32) {
+                // Load the next 32 elements of is_nulls into a mask
+                __m256i loaded = _mm256_loadu_si256((__m256i*)&is_nulls[i]);
+                int mask = _mm256_movemask_epi8(_mm256_cmpeq_epi8(loaded, _mm256_setzero_si256()));
+                phmap::priv::BitMask<uint32_t, 32> bitmask(mask);
+                for (auto idx : bitmask) {
+                    data[i + idx] = read_data[cnt++];
+                }
+            }
+            for (; i < count; ++i) {
+                data[i] = read_data[cnt];
+                cnt += !is_nulls[i];
+            }
+            CHECK_EQ(cnt, read_count) << "count:" << count << " null_cnt:" << null_cnt;
+        } else {
+            size_t cnt = 0;
+            for (size_t i = 0; i < count; ++i) {
+                data[i] = read_data[cnt];
+                cnt += !is_nulls[i];
+            }
+            CHECK_EQ(cnt, read_count) << "count:" << count << " null_cnt:" << null_cnt;
+        }
+
+        return Status::OK();
+    }
+
 private:
     size_t _get_dict_size() const override { return _dict.size() * SIZE_OF_TYPE; }
 
@@ -229,8 +289,9 @@ public:
     ~DictDecoder() override = default;
 
     Status set_dict(int chunk_size, size_t num_values, Decoder* decoder) override {
-        std::vector<Slice> slices(num_values);
-        RETURN_IF_ERROR(decoder->next_batch(num_values, (uint8_t*)&slices[0]));
+        auto slices_data = std::make_unique_for_overwrite<uint8_t[]>(num_values * sizeof(Slice));
+        Slice* slices = reinterpret_cast<Slice*>(slices_data.get());
+        RETURN_IF_ERROR(decoder->next_batch(num_values, (uint8_t*)slices));
 
         size_t total_length = 0;
         for (int i = 0; i < num_values; ++i) {
@@ -240,7 +301,8 @@ public:
         _dict.resize(num_values);
 
         // reserve enough memory to use append_strings_overflow
-        _dict_data.resize(total_length + Column::APPEND_OVERFLOW_MAX_SIZE);
+        raw::stl_vector_resize_uninitialized(&_dict_data, total_length + Column::APPEND_OVERFLOW_MAX_SIZE);
+
         size_t offset = 0;
         _max_value_length = 0;
         for (int i = 0; i < num_values; ++i) {

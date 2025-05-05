@@ -45,4 +45,19 @@ private:
     inline static const std::vector<std::string> cache_key_prefix{"ft", "pg"};
 };
 
+struct NullInfos {
+    std::vector<uint8_t> is_nulls;
+    size_t num_nulls{};
+    size_t num_ranges{};
+
+    uint8_t* nulls_data() { return is_nulls.data(); }
+    const uint8_t* nulls_data() const { return is_nulls.data(); }
+
+    void resize(size_t num_rows) {
+        is_nulls.resize(num_rows);
+        num_nulls = 0;
+        num_ranges = 0;
+    }
+};
+
 } // namespace starrocks::parquet
