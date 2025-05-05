@@ -23,58 +23,58 @@
 namespace starrocks {
 
 // Just return default bearer token.
-    class NoOpHeaderAuthServerMiddleware : public arrow::flight::ServerMiddleware {
-    public:
-        void SendingHeaders(arrow::flight::AddCallHeaders* outgoing_headers) override;
+class NoOpHeaderAuthServerMiddleware : public arrow::flight::ServerMiddleware {
+public:
+    void SendingHeaders(arrow::flight::AddCallHeaders* outgoing_headers) override;
 
-        void CallCompleted(const arrow::Status& status) override {}
+    void CallCompleted(const arrow::Status& status) override {}
 
-        [[nodiscard]] std::string name() const override { return "NoOpHeaderAuthServerMiddleware"; }
-    };
+    [[nodiscard]] std::string name() const override { return "NoOpHeaderAuthServerMiddleware"; }
+};
 
 // Factory for base64 header authentication.
 // No actual authentication.
-    class NoOpHeaderAuthServerMiddlewareFactory : public arrow::flight::ServerMiddlewareFactory {
-    public:
-        NoOpHeaderAuthServerMiddlewareFactory() = default;
+class NoOpHeaderAuthServerMiddlewareFactory : public arrow::flight::ServerMiddlewareFactory {
+public:
+    NoOpHeaderAuthServerMiddlewareFactory() = default;
 
-        arrow::Status StartCall(const arrow::flight::CallInfo& info, const arrow::flight::ServerCallContext& context,
-                                std::shared_ptr<arrow::flight::ServerMiddleware>* middleware) override;
-    };
+    arrow::Status StartCall(const arrow::flight::CallInfo& info, const arrow::flight::ServerCallContext& context,
+                            std::shared_ptr<arrow::flight::ServerMiddleware>* middleware) override;
+};
 
 // A server middleware for validating incoming bearer header authentication.
 // Just compare with default bearer token.
-    class NoOpBearerAuthServerMiddleware : public arrow::flight::ServerMiddleware {
-    public:
-        explicit NoOpBearerAuthServerMiddleware(const arrow::flight::CallHeaders& incoming_headers, bool* isValid)
-                : _is_valid(isValid) {
-            _incoming_headers = incoming_headers;
-        }
+class NoOpBearerAuthServerMiddleware : public arrow::flight::ServerMiddleware {
+public:
+    explicit NoOpBearerAuthServerMiddleware(const arrow::flight::CallHeaders& incoming_headers, bool* isValid)
+            : _is_valid(isValid) {
+        _incoming_headers = incoming_headers;
+    }
 
-        void SendingHeaders(arrow::flight::AddCallHeaders* outgoing_headers) override;
+    void SendingHeaders(arrow::flight::AddCallHeaders* outgoing_headers) override;
 
-        void CallCompleted(const arrow::Status& status) override {}
+    void CallCompleted(const arrow::Status& status) override {}
 
-        [[nodiscard]] std::string name() const override { return "NoOpBearerAuthServerMiddleware"; }
+    [[nodiscard]] std::string name() const override { return "NoOpBearerAuthServerMiddleware"; }
 
-    private:
-        arrow::flight::CallHeaders _incoming_headers;
-        bool* _is_valid;
-    };
+private:
+    arrow::flight::CallHeaders _incoming_headers;
+    bool* _is_valid;
+};
 
 // Factory for base64 header authentication.
 // No actual authentication.
-    class NoOpBearerAuthServerMiddlewareFactory : public arrow::flight::ServerMiddlewareFactory {
-    public:
-        NoOpBearerAuthServerMiddlewareFactory() : _is_valid(false) {}
+class NoOpBearerAuthServerMiddlewareFactory : public arrow::flight::ServerMiddlewareFactory {
+public:
+    NoOpBearerAuthServerMiddlewareFactory() : _is_valid(false) {}
 
-        arrow::Status StartCall(const arrow::flight::CallInfo& info, const arrow::flight::ServerCallContext& context,
-                                std::shared_ptr<arrow::flight::ServerMiddleware>* middleware) override;
+    arrow::Status StartCall(const arrow::flight::CallInfo& info, const arrow::flight::ServerCallContext& context,
+                            std::shared_ptr<arrow::flight::ServerMiddleware>* middleware) override;
 
-        [[nodiscard]] bool GetIsValid() const { return _is_valid; }
+    [[nodiscard]] bool GetIsValid() const { return _is_valid; }
 
-    private:
-        bool _is_valid;
-    };
+private:
+    bool _is_valid;
+};
 
 } // namespace starrocks

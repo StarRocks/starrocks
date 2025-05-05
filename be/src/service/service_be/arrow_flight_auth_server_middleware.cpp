@@ -18,29 +18,29 @@
 
 namespace starrocks {
 
-    void NoOpHeaderAuthServerMiddleware::SendingHeaders(arrow::flight::AddCallHeaders* outgoing_headers) {
-        outgoing_headers->AddHeader(kAuthHeader, std::string(kBearerPrefix) + kBearerDefaultToken);
-    }
+void NoOpHeaderAuthServerMiddleware::SendingHeaders(arrow::flight::AddCallHeaders* outgoing_headers) {
+    outgoing_headers->AddHeader(kAuthHeader, std::string(kBearerPrefix) + kBearerDefaultToken);
+}
 
-    arrow::Status NoOpHeaderAuthServerMiddlewareFactory::StartCall(
-            const arrow::flight::CallInfo& info, const arrow::flight::ServerCallContext& context,
-            std::shared_ptr<arrow::flight::ServerMiddleware>* middleware) {
-        std::string username, password;
-        ParseBasicHeader(context.incoming_headers(), username, password);
-        *middleware = std::make_shared<NoOpHeaderAuthServerMiddleware>();
-        return arrow::Status::OK();
-    }
+arrow::Status NoOpHeaderAuthServerMiddlewareFactory::StartCall(
+        const arrow::flight::CallInfo& info, const arrow::flight::ServerCallContext& context,
+        std::shared_ptr<arrow::flight::ServerMiddleware>* middleware) {
+    std::string username, password;
+    ParseBasicHeader(context.incoming_headers(), username, password);
+    *middleware = std::make_shared<NoOpHeaderAuthServerMiddleware>();
+    return arrow::Status::OK();
+}
 
-    void NoOpBearerAuthServerMiddleware::SendingHeaders(arrow::flight::AddCallHeaders* outgoing_headers) {
-        std::string bearer_token = FindKeyValPrefixInCallHeaders(_incoming_headers, kAuthHeader, kBearerPrefix);
-        *_is_valid = (bearer_token == std::string(kBearerDefaultToken));
-    }
+void NoOpBearerAuthServerMiddleware::SendingHeaders(arrow::flight::AddCallHeaders* outgoing_headers) {
+    std::string bearer_token = FindKeyValPrefixInCallHeaders(_incoming_headers, kAuthHeader, kBearerPrefix);
+    *_is_valid = (bearer_token == std::string(kBearerDefaultToken));
+}
 
-    arrow::Status NoOpBearerAuthServerMiddlewareFactory::StartCall(
-            const arrow::flight::CallInfo& info, const arrow::flight::ServerCallContext& context,
-            std::shared_ptr<arrow::flight::ServerMiddleware>* middleware) {
-        *middleware = std::make_shared<NoOpBearerAuthServerMiddleware>(context.incoming_headers(), &_is_valid);
-        return arrow::Status::OK();
-    }
+arrow::Status NoOpBearerAuthServerMiddlewareFactory::StartCall(
+        const arrow::flight::CallInfo& info, const arrow::flight::ServerCallContext& context,
+        std::shared_ptr<arrow::flight::ServerMiddleware>* middleware) {
+    *middleware = std::make_shared<NoOpBearerAuthServerMiddleware>(context.incoming_headers(), &_is_valid);
+    return arrow::Status::OK();
+}
 
 } // namespace starrocks
