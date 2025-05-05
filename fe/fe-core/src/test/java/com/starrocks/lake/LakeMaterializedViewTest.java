@@ -344,7 +344,7 @@ public class LakeMaterializedViewTest {
             starRocksAssert.dropTable("base_table4");
             Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "base_table4"));
         } catch (Exception e) {
-            System.out.println(e);
+            System.out.println("xxx: " + e);
             Assert.fail();
         }
     }
