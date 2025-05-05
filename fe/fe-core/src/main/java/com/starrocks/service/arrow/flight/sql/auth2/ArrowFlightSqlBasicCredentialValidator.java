@@ -14,11 +14,18 @@
 
 package com.starrocks.service.arrow.flight.sql.auth2;
 
+import com.starrocks.authentication.AuthenticationException;
+import com.starrocks.authentication.AuthenticationHandler;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
 import com.starrocks.sql.ast.UserIdentity;
+import org.apache.arrow.flight.CallHeaders;
 import org.apache.arrow.flight.CallStatus;
+import org.apache.arrow.flight.auth2.Auth2Constants;
 import org.apache.arrow.flight.auth2.BasicCallHeaderAuthenticator;
 import org.apache.arrow.flight.auth2.CallHeaderAuthenticator;
+
+import java.nio.charset.StandardCharsets;
 
 public class ArrowFlightSqlBasicCredentialValidator implements BasicCallHeaderAuthenticator.CredentialValidator {
 
@@ -30,14 +37,28 @@ public class ArrowFlightSqlBasicCredentialValidator implements BasicCallHeaderAu
 
     @Override
     public CallHeaderAuthenticator.AuthResult validate(String username, String password) throws Exception {
-        // TODO: validate remoteHost.
-        UserIdentity user = null;
-        //        GlobalStateMgr.getCurrentState().getAuthenticationMgr().checkPlainPassword(username, "0.0.0.0", password);
-        if (user == null) {
-            throw CallStatus.UNAUTHENTICATED.withDescription("Access denied for " + username).toRuntimeException();
+        UserIdentity user;
+        try {
+            user = AuthenticationHandler.authenticate(
+                    new ConnectContext(), username, "0.0.0.0", password.getBytes(StandardCharsets.UTF_8));
+        } catch (AuthenticationException e) {
+            throw CallStatus.UNAUTHENTICATED
+                    .withDescription("Access denied for user: " + username)
+                    .withCause(e)
+                    .toRuntimeException();
         }
 
         String bearerToken = sessionManager.initializeSession(user);
-        return () -> bearerToken;
+        return new CallHeaderAuthenticator.AuthResult() {
+            @Override
+            public String getPeerIdentity() {
+                return bearerToken;
+            }
+
+            @Override
+            public void appendToOutgoingHeaders(CallHeaders outgoingHeaders) {
+                outgoingHeaders.insert(Auth2Constants.AUTHORIZATION_HEADER, Auth2Constants.BEARER_PREFIX + bearerToken);
+            }
+        };
     }
 }

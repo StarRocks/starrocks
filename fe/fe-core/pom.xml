@@ -67,8 +67,13 @@ under the License.
         </profile>
         <profile>
             <id>thirdparty</id>
+            <activation>
+                <file>
+                    <exists>${env.STARROCKS_THIRDPARTY}/installed/bin/thrift</exists>
+                </file>
+            </activation>
             <properties>
-                <starrocks.thrift>thrift</starrocks.thrift>
+                <starrocks.thrift>${env.STARROCKS_THIRDPARTY}/installed/bin/thrift</starrocks.thrift>
             </properties>
         </profile>
         <profile>
@@ -357,6 +362,11 @@ under the License.
         <dependency>
             <groupId>com.google.protobuf</groupId>
             <artifactId>protobuf-java</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java-util</artifactId>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.fasterxml.jackson.core/jackson-annotations -->
@@ -859,6 +869,27 @@ under the License.
         <dependency>
             <groupId>org.apache.arrow</groupId>
             <artifactId>arrow-jdbc</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.arrow.adbc</groupId>
+            <artifactId>adbc-driver-jdbc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.arrow.adbc</groupId>
+            <artifactId>adbc-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.arrow.adbc</groupId>
+            <artifactId>adbc-driver-manager</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.arrow.adbc</groupId>
+            <artifactId>adbc-sql</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.arrow.adbc</groupId>
+            <artifactId>adbc-driver-flight-sql</artifactId>
         </dependency>
 
         <dependency>

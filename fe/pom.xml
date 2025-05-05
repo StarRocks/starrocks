@@ -41,7 +41,7 @@ under the License.
     <properties>
         <starrocks.home>${basedir}/../</starrocks.home>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <jprotobuf.version>2.4.23</jprotobuf.version>
+        <jprotobuf.version>2.4.21</jprotobuf.version>
         <log4j.version>2.19.0</log4j.version>
         <jackson.version>2.15.2</jackson.version>
         <spark.version>3.5.5</spark.version>
@@ -60,6 +60,7 @@ under the License.
         <hikaricp.version>3.4.5</hikaricp.version>
         <kafka-clients.version>3.4.0</kafka-clients.version>
         <arrow.version>18.0.0</arrow.version>
+        <adbc.version>0.15.0</adbc.version>
         <grpc.version>1.63.0</grpc.version>
         <io.netty.version>4.1.118.Final</io.netty.version>
         <puppycrawl.version>10.21.1</puppycrawl.version>
@@ -509,6 +510,12 @@ under the License.
             <dependency>
                 <groupId>com.google.protobuf</groupId>
                 <artifactId>protobuf-java</artifactId>
+                <version>${protobuf-java.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.google.protobuf</groupId>
+                <artifactId>protobuf-java-util</artifactId>
                 <version>${protobuf-java.version}</version>
             </dependency>
 
@@ -1158,12 +1165,6 @@ under the License.
 
             <dependency>
                 <groupId>org.apache.arrow</groupId>
-                <artifactId>arrow-memory-core</artifactId>
-                <version>${arrow.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>org.apache.arrow</groupId>
                 <artifactId>flight-sql</artifactId>
                 <version>${arrow.version}</version>
             </dependency>
@@ -1182,6 +1183,32 @@ under the License.
                 <groupId>org.apache.arrow</groupId>
                 <artifactId>arrow-jdbc</artifactId>
                 <version>${arrow.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.arrow.adbc</groupId>
+                <artifactId>adbc-driver-jdbc</artifactId>
+                <version>${adbc.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.arrow.adbc</groupId>
+                <artifactId>adbc-core</artifactId>
+                <version>${adbc.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.arrow.adbc</groupId>
+                <artifactId>adbc-driver-manager</artifactId>
+                <version>${adbc.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.arrow.adbc</groupId>
+                <artifactId>adbc-sql</artifactId>
+                <version>${adbc.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.arrow.adbc</groupId>
+                <artifactId>adbc-driver-flight-sql</artifactId>
+                <version>${adbc.version}</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.owasp.encoder/encoder -->

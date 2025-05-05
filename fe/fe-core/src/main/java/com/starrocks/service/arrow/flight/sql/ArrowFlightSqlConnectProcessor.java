@@ -92,11 +92,11 @@ public class ArrowFlightSqlConnectProcessor extends ConnectProcessor {
 
     @Override
     public void processOnce() {
-        // set status of query to OK.
+        // Set status of query to OK.
         ctx.getState().reset();
         executor = null;
 
-        // only handle query，so no need to dispatch
+        // Only handle query，so no need to dispatch
         ctx.setCommand(MysqlCommand.COM_QUERY);
         ctx.setStartTime();
         ctx.setResourceGroup(null);

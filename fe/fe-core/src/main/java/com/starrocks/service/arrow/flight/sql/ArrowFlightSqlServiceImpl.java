@@ -30,6 +30,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.rpc.BackendServiceClient;
@@ -91,7 +92,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     private final SqlInfoBuilder sqlInfoBuilder;
 
     private final ExecutorService executor = ThreadPoolManager
-            .newDaemonCacheThreadPool(Config.max_mysql_service_task_threads_num, "arrow-flight-pool", true);
+            .newDaemonCacheThreadPool(Config.arrow_max_service_task_threads_num, "arrow-flight-executor", true);
 
     public ArrowFlightSqlServiceImpl(final ArrowFlightSqlSessionManager sessionManager, final Location feEndpoint) {
         this.sessionManager = sessionManager;
@@ -108,17 +109,17 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
                 .withSqlQuotedIdentifierCase(FlightSql.SqlSupportedCaseSensitivity.SQL_CASE_SENSITIVITY_CASE_INSENSITIVE);
     }
 
-    @Override
-    public void close() throws Exception {
-        AutoCloseables.close(rootAllocator);
-    }
-
     /**
      * Since Arrow Flight SQL V17.0.0, the client will send a closeSession RPC to the server.
      * - JDBC: The connection URL includes `?catalog=xxx` and call Connection::close().
      * - ADBC: Connection::close().
      * - Native Java FlightSqlClient: FlightSqlClient::closeSession().
      */
+    @Override
+    public void close() throws Exception {
+        AutoCloseables.close(rootAllocator);
+    }
+
     @Override
     public void closeSession(CloseSessionRequest request, CallContext context, StreamListener<CloseSessionResult> listener) {
         ArrowFlightSqlConnectContext ctx = sessionManager.validateAndGetConnectContext(context.peerIdentity());
@@ -207,6 +208,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         String token = context.peerIdentity();
         ArrowFlightSqlConnectContext ctx = sessionManager.validateAndGetConnectContext(token);
         ctx.reset(command.getQuery());
+        ctx.setThreadLocalInfo();
         return getFlightInfoFromQuery(ctx, descriptor);
     }
 
@@ -435,8 +437,9 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         VectorSchemaRoot vectorSchemaRoot = ctx.getResult(queryId);
         if (vectorSchemaRoot == null) {
             throw CallStatus.NOT_FOUND.withDescription("cannot find result of the query [" + queryId + "]").toRuntimeException();
-
         }
+
+        listener.setOnCancelHandler(ctx::cancelQuery);
 
         listener.start(vectorSchemaRoot);
         listener.putNext();
@@ -449,29 +452,37 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         try {
             CompletableFuture<Void> processorFinished = new CompletableFuture<>();
             executor.submit(() -> {
-                StatementBase parsedStmt = parse(ctx.getQuery(), ctx.getSessionVariable());
-                ctx.setStatement(parsedStmt);
-                ctx.setThreadLocalInfo();
+                try {
+                    StatementBase parsedStmt = parse(ctx.getQuery(), ctx.getSessionVariable());
+                    ctx.setStatement(parsedStmt);
+                    ctx.setThreadLocalInfo();
 
-                ArrowFlightSqlConnectProcessor processor = new ArrowFlightSqlConnectProcessor(ctx);
-                processor.processOnce();
+                    ArrowFlightSqlConnectProcessor processor = new ArrowFlightSqlConnectProcessor(ctx);
+                    processor.processOnce();
 
-                ctx.setDeploymentFinished(null);
-                processorFinished.complete(null);
+                    ctx.setDeploymentFinished(null);
+                    processorFinished.complete(null);
+                } catch (Exception e) {
+                    processorFinished.completeExceptionally(e);
+                } catch (Throwable t) {
+                    processorFinished.completeExceptionally(t);
+                }
             });
 
+            processorFinished.get();
             // ------------------------------------------------------------------------------------
-            // DML task will wait until the task is finished and return FE as endpoint.
+            // FE task will return FE as endpoint.
             // ------------------------------------------------------------------------------------
-            if (ctx.returnFromFE()) {
-                processorFinished.wait();
+            if (ctx.returnFromFE() || ctx.isFromFECoordinator()) {
                 if (ctx.getState().isError()) {
                     throw new RuntimeException(String.format("failed to process query [queryID=%s] [error=%s]",
                             DebugUtil.printId(ctx.getExecutionId()),
                             ctx.getState().getErrorMessage()));
                 }
                 String queryId = DebugUtil.printId(ctx.getExecutionId());
-                ctx.setEmptyResultIfNotExist(queryId);
+                if (ctx.getResult(queryId) == null) {
+                    ctx.setEmptyResultIfNotExist(queryId);
+                }
                 final ByteString handle = buildFETicket(ctx);
 
                 FlightSql.TicketStatementQuery ticketStatement =
@@ -483,14 +494,19 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             // Query task will wait until deployment to BE is finished and return BE as endpoint.
             // ------------------------------------------------------------------------------------
             SessionVariable sv = ctx.getSessionVariable();
-            DefaultCoordinator coordinator = (DefaultCoordinator) ctx.waitForDeploymentFinished(sv.getQueryTimeoutS() * 1000L);
+            Coordinator coordinator = ctx.waitForDeploymentFinished(sv.getQueryTimeoutS() * 1000L);
             if (coordinator == null || ctx.getState().isError()) {
                 throw new RuntimeException(String.format("failed to process query [queryID=%s] [error=%s]",
                         DebugUtil.printId(ctx.getExecutionId()),
                         ctx.getState().getErrorMessage()));
             }
 
-            ExecutionFragment rootFragment = coordinator.getExecutionDAG().getRootFragment();
+            if (!(coordinator instanceof DefaultCoordinator)) {
+                throw new RuntimeException("Coordinator is not DefaultCoordinator, cannot proceed with BE execution.");
+            }
+            DefaultCoordinator defaultCoordinator = (DefaultCoordinator) coordinator;
+
+            ExecutionFragment rootFragment = defaultCoordinator.getExecutionDAG().getRootFragment();
             FragmentInstance rootFragmentInstance = rootFragment.getInstances().get(0);
             ComputeNode worker = rootFragmentInstance.getWorker();
             TUniqueId rootFragmentInstanceId = rootFragmentInstance.getInstanceId();
@@ -503,7 +519,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             Schema schema = fetchArrowSchema(ctx, worker.getBrpcAddress(), pInstanceId, timeoutMs);
 
             // Build BE ticket.
-            final ByteString handle = buildBETicket(ctx, rootFragmentInstanceId);
+            final ByteString handle = buildBETicket(defaultCoordinator.getQueryId(), rootFragmentInstanceId);
             FlightSql.TicketStatementQuery ticketStatement =
                     FlightSql.TicketStatementQuery.newBuilder().setStatementHandle(handle).build();
             Location endpoint = Location.forGrpcInsecure(worker.getHost(), worker.getArrowFlightPort());
@@ -519,9 +535,9 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         return ByteString.copyFromUtf8(ctx.getToken() + ":" + DebugUtil.printId(ctx.getExecutionId()));
     }
 
-    private static ByteString buildBETicket(ArrowFlightSqlConnectContext ctx, TUniqueId rootFragmentInstanceId) {
+    private static ByteString buildBETicket(TUniqueId queryId, TUniqueId rootFragmentInstanceId) {
         // BETicket: <QueryId> : <FragmentInstanceId>
-        return ByteString.copyFromUtf8(DebugUtil.printId(ctx.getExecutionId()) + ":" + DebugUtil.printId(rootFragmentInstanceId));
+        return ByteString.copyFromUtf8(hexStringFromUniqueId(queryId) + ":" + hexStringFromUniqueId(rootFragmentInstanceId));
     }
 
     private <T extends Message> FlightInfo buildFlightInfoFromFE(T request, FlightDescriptor descriptor,
@@ -544,10 +560,9 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             Future<PFetchArrowSchemaResult> resFuture = BackendServiceClient.getInstance().fetchArrowSchema(brpcAddress, request);
             PFetchArrowSchemaResult res = resFuture.get(timeoutMs, TimeUnit.MILLISECONDS);
 
-            RootAllocator rootAllocator = new RootAllocator(Integer.MAX_VALUE);
-            try (ArrowStreamReader reader = new ArrowStreamReader(new ByteArrayInputStream(res.getSchema()), rootAllocator)) {
-                VectorSchemaRoot vectorSchemaRoot = reader.getVectorSchemaRoot();
-                return vectorSchemaRoot.getSchema();
+            try (RootAllocator rootAllocator = new RootAllocator(Integer.MAX_VALUE);
+                    ArrowStreamReader reader = new ArrowStreamReader(new ByteArrayInputStream(res.getSchema()), rootAllocator)) {
+                return reader.getVectorSchemaRoot().getSchema();
             }
         } catch (Exception e) {
             String errorMsg = String.format(
@@ -571,5 +586,14 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         StatementBase parsedStmt = stmts.get(0);
         parsedStmt.setOrigStmt(new OriginStatement(sql));
         return parsedStmt;
+    }
+
+    private static String hexStringFromUniqueId(final TUniqueId id) {
+        if (id == null) {
+            return "";
+        }
+        StringBuilder builder = new StringBuilder();
+        builder.append(Long.toHexString(id.hi)).append("-").append(Long.toHexString(id.lo));
+        return builder.toString();
     }
 }

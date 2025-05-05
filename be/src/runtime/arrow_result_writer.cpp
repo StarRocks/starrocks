@@ -90,7 +90,7 @@ StatusOr<TFetchDataResultPtrs> ArrowResultWriter::process_chunk(Chunk* chunk) {
     RETURN_IF_ERROR(convert_chunk_to_arrow_batch(chunk, _output_expr_ctxs, _arrow_schema, arrow::default_memory_pool(),
                                                  &result));
     RETURN_IF_ERROR(_sinker->add_arrow_batch(result));
-    return TFetchDataResultPtrs{}
+    return TFetchDataResultPtrs{};
 }
 
 // ┌────────────────────────────────────────────────────────────┐

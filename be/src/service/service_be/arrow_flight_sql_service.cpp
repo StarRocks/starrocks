@@ -41,6 +41,16 @@ Status ArrowFlightSqlServer::start(int port) {
     RETURN_STATUS_IF_ERROR(arrow::flight::Location::ForGrpcTcp(BackendOptions::get_service_bind_address(), port)
                                    .Value(&bind_location));
     arrow::flight::FlightServerOptions flight_options(bind_location);
+
+    // Not authenticated in BE flight server.
+    // After the authentication between the ADBC Client and the FE flight server is completed,
+    // the FE flight server will put the query id in the Ticket and send it back to the Client.
+    // When the Client uses the Ticket to fetch data from the BE flight server, the BE flight
+    // server will verify the query id, this step is equivalent to authentication.
+    _bearer_middleware = std::make_shared<NoOpBearerAuthServerMiddlewareFactory>();
+    flight_options.auth_handler = std::make_shared<arrow::flight::NoOpAuthHandler>();
+    flight_options.middleware.emplace_back({"bearer-auth-server", _bearer_middleware});
+
     RETURN_STATUS_IF_ERROR(Init(flight_options));
 
     return Status::OK();

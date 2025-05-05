@@ -55,8 +55,7 @@ public class ArrowFlightSqlAuthenticator implements CallHeaderAuthenticator {
     }
 
     AuthResult validateBasicAuth(CallHeaders headers) {
-        AuthResult res = basicAuthenticator.authenticate(headers);
-        return createAuthResult(res.getPeerIdentity());
+        return this.basicAuthenticator.authenticate(headers);
     }
 
     AuthResult validateBearerToken(String token) {

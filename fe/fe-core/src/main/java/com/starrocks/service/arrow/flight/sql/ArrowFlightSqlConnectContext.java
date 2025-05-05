@@ -20,7 +20,9 @@ import com.google.common.cache.RemovalNotification;
 import com.starrocks.catalog.Column;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.ArrowUtil;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.qe.StmtExecutor;
@@ -38,6 +40,7 @@ import org.apache.arrow.vector.types.pojo.FieldType;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -48,6 +51,8 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
     private final BufferAllocator allocator;
 
     private final String token;
+
+    private StmtExecutor stmtExecutor;
 
     private StatementBase statement;
 
@@ -61,13 +66,13 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
     // - When the result of a query is taken away, the result will be cleared.
     // - When the result is not taken away for 10 minutes, the result will be cleared.
     // - When a new query arrives, the previous result will be cleared.
-    private final Cache<String, VectorSchemaRoot> resultCache = CacheBuilder.newBuilder()
+    private final Cache<String, ArrowSchemaRootWrapper> resultCache = CacheBuilder.newBuilder()
             .maximumSize(128)
             .expireAfterAccess(10, TimeUnit.MINUTES)
-            .removalListener((RemovalNotification<String, VectorSchemaRoot> notification) -> {
-                VectorSchemaRoot root = notification.getValue();
-                if (root != null) {
-                    root.close();
+            .removalListener((RemovalNotification<String, ArrowSchemaRootWrapper> notification) -> {
+                ArrowSchemaRootWrapper wrapper = notification.getValue();
+                if (wrapper != null) {
+                    wrapper.close();
                 }
             })
             .build();
@@ -89,6 +94,8 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
         coordinatorFuture = new CompletableFuture<>();
         returnResultFromFE = true;
         this.query = query;
+        this.setQueryId(UUIDUtil.genUUID());
+        this.setExecutionId(UUIDUtil.toTUniqueId(this.getQueryId()));
     }
 
     public StatementBase getStatement() {
@@ -100,7 +107,7 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
     }
 
     public Coordinator waitForDeploymentFinished(long timeoutMs)
-            throws ExecutionException, InterruptedException, TimeoutException {
+            throws ExecutionException, InterruptedException, TimeoutException, CancellationException {
         return coordinatorFuture.get(timeoutMs, TimeUnit.MILLISECONDS);
     }
 
@@ -109,7 +116,8 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
     }
 
     public VectorSchemaRoot getResult(String queryId) {
-        return resultCache.getIfPresent(queryId);
+        ArrowSchemaRootWrapper wrapper = resultCache.getIfPresent(queryId);
+        return wrapper != null ? wrapper.getSchemaRoot() : null;
     }
 
     public String getQuery() {
@@ -136,9 +144,20 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
         resultCache.invalidate(queryId);
     }
 
+    public void setStmtExecutor(StmtExecutor stmtExecutor) {
+        this.stmtExecutor = stmtExecutor;
+    }
+
+    public void cancelQuery() {
+        if (stmtExecutor != null) {
+            stmtExecutor.cancel("Arrow Flight SQL client disconnected");
+        }
+    }
+
     public void setEmptyResultIfNotExist(String queryId) {
-        if (resultCache.size() == 0) {
-            resultCache.put(queryId, ArrowUtil.createSingleSchemaRoot("StatusResult", "0"));
+        if (resultCache.getIfPresent(queryId) == null) {
+            VectorSchemaRoot schemaRoot = ArrowUtil.createSingleSchemaRoot("StatusResult", "0");
+            resultCache.put(queryId, new ArrowSchemaRootWrapper(schemaRoot));
         }
     }
 
@@ -148,11 +167,29 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
         if (executorRef != null) {
             executorRef.cancel(cancelledMessage);
         }
+
+        if (coordinatorFuture != null && coordinatorFuture.isDone()) {
+            try {
+                Coordinator coordinator = coordinatorFuture.getNow(null);
+                if (coordinator != null) {
+                    coordinator.cancel(cancelledMessage);
+                }
+            } catch (Exception e) {
+                // Do nothing.
+            }
+        }
+
         if (isKillConnection) {
             isKilled = true;
+            this.cleanup();
             ExecuteEnv.getInstance().getScheduler().unregisterConnection(this);
         }
+
         removeAllResults();
+
+        if (allocator != null) {
+            allocator.close();
+        }
     }
 
 
@@ -183,11 +220,16 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
             }
         }
 
-        resultCache.put(queryId, new VectorSchemaRoot(schemaFields, dataFields));
+        resultCache.put(queryId, new ArrowSchemaRootWrapper(new VectorSchemaRoot(schemaFields, dataFields)));
     }
 
     @Override
     public boolean isArrowFlightSQL() {
         return true;
+    }
+
+    public boolean isFromFECoordinator() {
+        Coordinator coordinator = coordinatorFuture.getNow(null);
+        return !(coordinator instanceof DefaultCoordinator);
     }
 }

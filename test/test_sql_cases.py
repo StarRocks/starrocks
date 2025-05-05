@@ -46,6 +46,7 @@ from lib import *
 #    - t: run sql and save result into r dir
 #    - r: run sql and compare result with r
 record_mode = os.environ.get("record_mode", "false") == "true"
+arrow_mode = os.environ.get("arrow_mode", "false") == "true"
 
 case_list = choose_cases.choose_cases(record_mode).case_list
 
@@ -353,6 +354,15 @@ Start to run: %s
             self.res_log.append(case_info.info)
 
         for sql_id, sql in enumerate(sql_list):
+            if arrow_mode and isinstance(sql, str):
+                sql = sql.strip()
+                if sql.startswith(("mysql:", "shell:", "--", "function:", "CHECK:", "PROPERTY:", "LOOP", "END LOOP",
+                                   "CONCURRENCY", "END CONCURRENCY")):
+                    self_print(f"[arrow_mode] Skip non-arrow SQL: {sql}", ColorEnum.YELLOW)
+                    continue
+                if not sql.startswith("arrow:"):
+                    sql = "arrow: " + sql
+
             uncheck = False
             ori_sql = sql
             var = None

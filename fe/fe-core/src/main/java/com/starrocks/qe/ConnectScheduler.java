@@ -68,7 +68,7 @@ public class ConnectScheduler {
     private final AtomicInteger numberConnection;
     private final ConnectionIdGenerator connectionIdGenerator;
 
-    // mysql connectContext/ http connectContext/ arrowFlight connextContext all stored in connectionMap
+    // mysql connectContext/ http connectContext/ arrowFlight connectContext all stored in connectionMap
     private final Map<Long, ConnectContext> connectionMap = Maps.newConcurrentMap();
     private final Map<String, ArrowFlightSqlConnectContext> arrowFlightSqlConnectContextMap = Maps.newConcurrentMap();
 
