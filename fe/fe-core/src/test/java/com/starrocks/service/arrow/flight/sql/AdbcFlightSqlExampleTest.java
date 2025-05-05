@@ -48,7 +48,7 @@ public class AdbcFlightSqlExampleTest {
                     AdbcConnection connection = database.connect();
                     AdbcStatement statement = connection.createStatement()) {
 
-                statement.setSqlQuery("SELECT * FROM INFORMATION_SCHEMA.tables;");
+                statement.setSqlQuery("SHOW DATABASES;");
 
                 try (AdbcStatement.QueryResult result = statement.executeQuery();
                         ArrowReader reader = result.getReader()) {
