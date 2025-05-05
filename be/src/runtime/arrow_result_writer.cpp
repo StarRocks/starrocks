@@ -31,10 +31,27 @@
 
 namespace starrocks {
 
+// Constructor for ArrowResultWriter
+// This class is responsible for converting StarRocks' internal Chunk
+// into Arrow RecordBatch format and writing it into a result sink.
+//
+// Parameters:
+// - sinker: the result sink (BufferControlBlock) to which Arrow batches will be written
+// - output_expr_ctxs: a list of output expression contexts to be evaluated on the Chunk
+// - parent_profile: the parent runtime profile for performance tracking
+// - row_desc: the row descriptor (schema) of the output
 ArrowResultWriter::ArrowResultWriter(BufferControlBlock* sinker, std::vector<ExprContext*>& output_expr_ctxs,
                                      RuntimeProfile* parent_profile, const RowDescriptor& row_desc)
         : BufferControlResultWriter(sinker, parent_profile), _output_expr_ctxs(output_expr_ctxs), _row_desc(row_desc) {}
 
+// ┌────────────────────────────────────────────────────────────┐
+// │ init(): Initialize ArrowResultWriter                       │
+// └────────────────────────────────────────────────────────────┘
+// [1] Init performance timer
+// [2] Check sinker is not null
+// [3] Build column ID → name map
+// [4] Convert RowDescriptor → Arrow Schema
+// [5] Register Arrow Schema to ResultMgr
 Status ArrowResultWriter::init(RuntimeState* state) {
     _init_profile();
     if (nullptr == _sinker) {
@@ -61,15 +78,27 @@ Status ArrowResultWriter::close() {
     return Status::OK();
 }
 
+// ┌────────────────────────────────────────────────────────────┐
+// │ process_chunk(): Convert Chunk → Arrow → Write to sinker   │
+// └────────────────────────────────────────────────────────────┘
+// [1] Start timer
+// [2] Convert Chunk → Arrow::RecordBatch
+// [3] Write Arrow batch to sinker (BufferControlBlock)
 StatusOr<TFetchDataResultPtrs> ArrowResultWriter::process_chunk(Chunk* chunk) {
     SCOPED_TIMER(_append_chunk_timer);
     std::shared_ptr<arrow::RecordBatch> result;
     RETURN_IF_ERROR(convert_chunk_to_arrow_batch(chunk, _output_expr_ctxs, _arrow_schema, arrow::default_memory_pool(),
                                                  &result));
     RETURN_IF_ERROR(_sinker->add_arrow_batch(result));
-    return TFetchDataResultPtrs{};
+    return TFetchDataResultPtrs{}
 }
 
+// ┌────────────────────────────────────────────────────────────┐
+// │ _prepare_id_to_col_name_map(): Build ID → name map         │
+// └────────────────────────────────────────────────────────────┘
+// For each (tuple_id, slot_id):
+//   → column_id = (tuple_id << 32) | slot_id
+//   → map to slot->col_name()
 void ArrowResultWriter::_prepare_id_to_col_name_map() {
     for (auto* tuple_desc : _row_desc.tuple_descriptors()) {
         auto& slots = tuple_desc->slots();

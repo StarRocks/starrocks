@@ -15,9 +15,8 @@
 package com.starrocks.service.arrow.flight.sql;
 
 import com.starrocks.service.FrontendOptions;
-import com.starrocks.service.arrow.flight.sql.auth.ArrowFlightSqlAuthenticator;
+import com.starrocks.service.arrow.flight.sql.auth2.ArrowFlightSqlAuthenticator;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
-import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlTokenManager;
 import org.apache.arrow.flight.FlightServer;
 import org.apache.arrow.flight.Location;
 import org.apache.arrow.memory.BufferAllocator;
@@ -32,52 +31,60 @@ public class ArrowFlightSqlService {
     private static final Logger LOG = LogManager.getLogger(ArrowFlightSqlService.class);
 
     private final Location location;
+
+    // Arrow Flight server encapsulation class, based on gRPC implementation
     private final FlightServer flightServer;
 
-    protected volatile boolean running = false;
+    private final Location feEndpoint;
+
+    protected volatile boolean running;
 
     public ArrowFlightSqlService(int port) {
         // Disable Arrow Flight SQL feature if port is not set to a positive value.
         if (port <= 0) {
             this.location = null;
             this.flightServer = null;
+            this.feEndpoint = null;
             return;
         }
 
+        // Memory allocator: A memory allocator is needed to manage memory.
         BufferAllocator allocator = new RootAllocator();
         this.location = Location.forGrpcInsecure("0.0.0.0", port);
+        this.feEndpoint = Location.forGrpcInsecure(FrontendOptions.getLocalHostAddress(), port);
 
-        ArrowFlightSqlTokenManager arrowFlightSqlTokenManager = new ArrowFlightSqlTokenManager();
-        ArrowFlightSqlSessionManager arrowFlightSqlSessionManager =
-                new ArrowFlightSqlSessionManager(arrowFlightSqlTokenManager);
+        ArrowFlightSqlSessionManager sessionManager = new ArrowFlightSqlSessionManager();
+        ArrowFlightSqlAuthenticator authenticator = new ArrowFlightSqlAuthenticator(sessionManager);
 
-        ArrowFlightSqlServiceImpl producer =
-                new ArrowFlightSqlServiceImpl(arrowFlightSqlSessionManager,
-                        Location.forGrpcInsecure(FrontendOptions.getLocalHostAddress(), port));
-        ArrowFlightSqlAuthenticator arrowFlightSqlAuthenticator =
-                new ArrowFlightSqlAuthenticator(arrowFlightSqlTokenManager);
+        // Request handler: Processing client SQL requests.
+        ArrowFlightSqlServiceImpl producer = new ArrowFlightSqlServiceImpl(sessionManager, feEndpoint);
 
+        // Constructs the server object of the Arrow Flight SQL.
         this.flightServer = FlightServer.builder(allocator, location, producer)
-                .headerAuthenticator(arrowFlightSqlAuthenticator)
+                .headerAuthenticator(authenticator)
                 .build();
     }
 
     public void start() {
+        if (running) {
+            return;
+        }
+
         if (location == null) {
             LOG.info("[ARROW] Arrow Flight SQL server is disabled. You can modify `arrow_flight_port` in `fe.conf` " +
                     "to a positive value to enable it.");
             return;
         }
 
-        if (running) {
-            return;
-        }
-
         try {
             flightServer.start();
             running = true;
-            LOG.info("[ARROW] Arrow Flight SQL server starts on {}:{}.",
-                    location.getUri().getHost(), location.getUri().getPort());
+            LOG.info("[ARROW] Arrow Flight SQL server start [location={}] [feEndpoint={}].", location, feEndpoint);
+            flightServer.awaitTermination();
+        } catch (InterruptedException e) {
+            LOG.warn("[ARROW] Interrupted while stopping Arrow Flight SQL server", e);
+            Thread.currentThread().interrupt();
+            System.exit(-1);
         } catch (Exception e) {
             LOG.error("[ARROW] Failed to start Arrow Flight SQL server on {}:{}. Its port might be occupied. You can " +
                             "modify `arrow_flight_port` in `fe.conf` to an unused port or set it to -1 to disable it.",

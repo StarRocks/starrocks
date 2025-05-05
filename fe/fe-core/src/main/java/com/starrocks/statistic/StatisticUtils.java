@@ -52,7 +52,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.ErrorType;
@@ -103,9 +102,6 @@ public class StatisticUtils {
                 break;
             case HTTP_PROTOCAL:
                 context = new HttpConnectContext();
-                break;
-            case ARROW_FLIGHT_PROTOCAL:
-                context = new ArrowFlightSqlConnectContext();
                 break;
             default:
                 throw new IllegalStateException("Unexpected value: " + connectType);

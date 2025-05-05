@@ -3528,13 +3528,16 @@ public class Config extends ConfigBase {
      * Enable Arrow Flight SQL server only when the port is set to positive value.
      */
     @ConfField
-    public static int arrow_flight_port = -1;
+    public static int arrow_flight_port = 9408;
 
     @ConfField(mutable = true)
     public static int arrow_token_cache_size = 1024;
 
     @ConfField(mutable = true)
-    public static int arrow_token_cache_expire = 3600;
+    public static int arrow_token_cache_expire_second = 3600 * 24 * 3;
+
+    @ConfField(mutable = true)
+    public static int arrow_max_service_task_threads_num = 4096;
 
     @ConfField(mutable = false)
     public static int query_deploy_threadpool_size = max(50, getRuntime().availableProcessors() * 10);
