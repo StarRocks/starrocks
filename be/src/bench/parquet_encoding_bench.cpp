@@ -32,7 +32,8 @@ enum TestMode {
     SKIP = -1,
     RANDOM = 0,
     SERIES = 1,
-    PREFIX = 2,
+    REPEAT = 2,
+    PREFIX = 3,
 };
 
 std::string to_string(TestMode mode) {
@@ -47,6 +48,8 @@ std::string to_string(TestMode mode) {
         return "SKIP";
     case DECOMPRESS:
         return "DECOMPRESS";
+    case REPEAT:
+        return "REPEAT";
     default:
         return "UNKNOWN";
     }
@@ -73,6 +76,8 @@ static void BMTestValue(benchmark::State& state) {
         } else if constexpr (test_mode == SKIP || test_mode == DECOMPRESS) {
             elements = BenchUtil::create_random_values<T>(num_rows, std::numeric_limits<T>::lowest(),
                                                           std::numeric_limits<T>::max());
+        } else if constexpr (test_mode == REPEAT) {
+            elements = BenchUtil::create_series_values<T>(num_rows, 100, 0);
         }
 
         std::unique_ptr<Encoder> encoder;
@@ -180,11 +185,13 @@ static void CustomArgsSkipFloat(benchmark::internal::Benchmark* b) {
 
 BENCHMARK_TEMPLATE(BMTestValue, tparquet::Type::INT32, DECOMPRESS)->Apply(CustomArgsSkipInt);
 BENCHMARK_TEMPLATE(BMTestValue, tparquet::Type::INT32, SKIP)->Apply(CustomArgsSkipInt);
+BENCHMARK_TEMPLATE(BMTestValue, tparquet::Type::INT32, REPEAT)->Apply(CustomArgsSkipInt);
 BENCHMARK_TEMPLATE(BMTestValue, tparquet::Type::INT32, RANDOM)->Apply(CustomArgsRandomInt);
 BENCHMARK_TEMPLATE(BMTestValue, tparquet::Type::INT32, SERIES)->Apply(CustomArgsSeriesInt);
 
 BENCHMARK_TEMPLATE(BMTestValue, tparquet::Type::INT64, DECOMPRESS)->Apply(CustomArgsSkipInt);
 BENCHMARK_TEMPLATE(BMTestValue, tparquet::Type::INT64, SKIP)->Apply(CustomArgsSkipInt);
+BENCHMARK_TEMPLATE(BMTestValue, tparquet::Type::INT64, REPEAT)->Apply(CustomArgsSkipInt);
 BENCHMARK_TEMPLATE(BMTestValue, tparquet::Type::INT64, RANDOM)->Apply(CustomArgsRandomInt);
 BENCHMARK_TEMPLATE(BMTestValue, tparquet::Type::INT64, SERIES)->Apply(CustomArgsSeriesInt);
 

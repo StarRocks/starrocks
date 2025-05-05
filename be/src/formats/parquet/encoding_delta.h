@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 
 #include "column/column.h"
@@ -308,6 +309,7 @@ private:
     uint32_t mini_block_idx_;
     std::string delta_bit_widths_;
     int delta_bit_width_;
+    bool fixed_values_ = true;
 
     T last_value_;
 
@@ -348,6 +350,7 @@ private:
         delta_bit_widths_.resize(mini_blocks_per_block_);
         first_block_initialized_ = false;
         values_remaining_current_mini_block_ = 0;
+        fixed_values_ = true;
         return Status::OK();
     }
 
@@ -359,6 +362,8 @@ private:
             return Status::Corruption("InitBlock EOF");
         }
 
+        fixed_values_ &= (min_delta_ == 0);
+
         // read the bitwidth of each miniblock
         uint8_t* bit_width_data = (uint8_t*)delta_bit_widths_.data();
         for (uint32_t i = 0; i < mini_blocks_per_block_; ++i) {
@@ -368,9 +373,11 @@ private:
             // Note that non-conformant bitwidth entries are allowed by the Parquet spec
             // for extraneous miniblocks in the last block (GH-14923), so we check
             // the bitwidths when actually using them (see InitMiniBlock()).
+            fixed_values_ &= (bit_width_data[i] == 0);
         }
-        mini_block_idx_ = 0;
+
         first_block_initialized_ = true;
+        mini_block_idx_ = 0;
         RETURN_IF_ERROR(InitMiniBlock(bit_width_data[0]));
         return Status::OK();
     }
@@ -413,8 +420,14 @@ private:
             }
             RETURN_IF_ERROR(InitBlock());
         }
-
         DCHECK(first_block_initialized_);
+
+        if (fixed_values_) {
+            std::fill(buffer, buffer + max_values, last_value_);
+            total_values_remaining_ -= max_values;
+            return Status::OK();
+        }
+
         while (i < max_values) {
             // Ensure we have an initialized mini-block
             if (PREDICT_FALSE(values_remaining_current_mini_block_ == 0)) {
@@ -439,7 +452,13 @@ private:
             //     last_value_ = buffer[i + j];
             // }
 
-            if constexpr (sizeof(T) == 4) {
+            // fprintf(stderr, "delta_bit_width_ = %d, values_decode = %d, mini_delta = %d, last_value = %d\n",
+            //         delta_bit_width_, values_decode, min_delta_, last_value_);
+
+            // fixed values.
+            if (PREDICT_FALSE(min_delta_ == 0 && delta_bit_width_ == 0)) {
+                std::fill(buffer + i, buffer + i + values_decode, last_value_);
+            } else if constexpr (sizeof(T) == 4) {
                 delta_decode_chain_int32(buffer + i, values_decode, min_delta_, last_value_);
             } else if constexpr (sizeof(T) == 8) {
                 delta_decode_chain_int64(buffer + i, values_decode, min_delta_, last_value_);
