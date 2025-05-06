@@ -170,6 +170,22 @@ PROPERTIES
 ```
 
 ```SQL
+SHOW CATALOGS\G
+```
+
+```SQL
+*************************** 1. row ***************************
+Catalog: default_catalog
+   Type: Internal
+Comment: An internal catalog contains this cluster's self-managed tables.
+*************************** 2. row ***************************
+Catalog: demo
+   Type: Iceberg
+Comment: External catalog to Apache Iceberg on MinIO
+2 rows in set (0.00 sec)
+```
+
+```SQL
 SET CATALOG demo;
 ```
 
