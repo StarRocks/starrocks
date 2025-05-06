@@ -80,6 +80,13 @@ public:
 
     Status put_tablet_metadata(const TabletMetadataPtr& metadata);
 
+<<<<<<< HEAD
+=======
+    Status cache_tablet_metadata(const TabletMetadataPtr& metadata);
+
+    Status put_aggregate_tablet_metadata(std::map<int64_t, TabletMetadataPB>& tablet_metas);
+
+>>>>>>> 75e032c6d8 ([Feature] Support aggregate publish for shared data (#58289))
     // When using get_tablet_metadata to determine whether a new version exists in publish version,
     // a valid expected_gtid must be passed in.
     StatusOr<TabletMetadataPtr> get_tablet_metadata(int64_t tablet_id, int64_t version, bool fill_cache = true,
@@ -91,6 +98,13 @@ public:
                                                     int64_t expected_gtid = 0,
                                                     const std::shared_ptr<FileSystem>& fs = nullptr);
 
+<<<<<<< HEAD
+=======
+    StatusOr<TabletMetadataPtr> get_single_tablet_metadata(int64_t tablet_id, int64_t version, bool fill_cache = true,
+                                                           int64_t expected_gtid = 0,
+                                                           const std::shared_ptr<FileSystem>& fs = nullptr);
+
+>>>>>>> 75e032c6d8 ([Feature] Support aggregate publish for shared data (#58289))
     TabletMetadataPtr get_latest_cached_tablet_metadata(int64_t tablet_id);
 
     StatusOr<TabletMetadataIter> list_tablet_metadata(int64_t tablet_id);
