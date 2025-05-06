@@ -31,7 +31,7 @@ public class MergeCommitMetricRegistry {
     private static final MergeCommitMetricRegistry INSTANCE = new MergeCommitMetricRegistry();
 
     private final GaugeMetricImpl<Integer> jobNum = new GaugeMetricImpl<>("merge_commit_job_num",
-            Metric.MetricUnit.NOUNIT, "the number of merge commit jobs");
+            Metric.MetricUnit.NOUNIT, "the number of merge commit jobs", 0);
     private final LongCounterMetric taskSuccessNum = new LongCounterMetric("merge_commit_task_success_num",
             Metric.MetricUnit.NOUNIT, "the number of merge commit success tasks");
     private final LongCounterMetric taskFailNum = new LongCounterMetric("merge_commit_task_fail_num",
@@ -55,13 +55,13 @@ public class MergeCommitMetricRegistry {
     private final Histogram txnDispatchLatencyUs;
 
     private final GaugeMetricImpl<Integer> warehouseNum = new GaugeMetricImpl<>("merge_commit_warehouse_num",
-            Metric.MetricUnit.NOUNIT, "the number of warehouses used for merge commit");
+            Metric.MetricUnit.NOUNIT, "the number of warehouses used for merge commit", 0);
     private final GaugeMetricImpl<Integer> computeNodeNum = new GaugeMetricImpl<>("merge_commit_cn_num",
-            Metric.MetricUnit.NOUNIT, "the number of compute nodes used for merge commit");
+            Metric.MetricUnit.NOUNIT, "the number of compute nodes used for merge commit", 0);
     private final GaugeMetricImpl<Integer> totalExpectParallel = new GaugeMetricImpl<>("merge_commit_total_expect_parallel",
-            Metric.MetricUnit.NOUNIT, "the total expected parallelisms of all merge commit jobs");
+            Metric.MetricUnit.NOUNIT, "the total expected parallelisms of all merge commit jobs", 0);
     private final GaugeMetricImpl<Integer> totalActualParallel = new GaugeMetricImpl<>("merge_commit_total_actual_parallel",
-            Metric.MetricUnit.NOUNIT, "the total actual parallelisms of all merge commit jobs");
+            Metric.MetricUnit.NOUNIT, "the total actual parallelisms of all merge commit jobs", 0);
 
     private final Map<String, GaugeMetric<?>> gaugeMetrics = new ConcurrentHashMap<>();
     private final Map<String, CounterMetric<?>> counterMetrics = new ConcurrentHashMap<>();
