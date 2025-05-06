@@ -494,6 +494,7 @@ class DeleteFileIndex {
                         } else {
                             add(posDeletesByPath, posDeletesByPartition, file);
                         }
+                        break;
                     case EQUALITY_DELETES:
                         add(globalDeletes, eqDeletesByPartition, file);
                         break;
