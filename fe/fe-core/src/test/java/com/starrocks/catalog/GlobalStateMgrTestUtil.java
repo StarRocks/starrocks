@@ -62,6 +62,7 @@ public class GlobalStateMgrTestUtil {
     public static String testDb1 = "testDb1";
     public static long testDbId1 = 1;
     public static String testTable1 = "testTable1";
+    public static String testTable2 = "testTable2";
     public static String testTable7 = "testTable7";
     public static long testTableId1 = 2;
     public static String testPartition1 = "testPartition1";
