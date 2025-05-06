@@ -17,22 +17,25 @@
 #include <gtest/gtest.h>
 
 #include <avrocpp/NodeImpl.hh>
-#include <chrono>
-#include <sstream>
 
 #include "column/column_helper.h"
+#include "formats/avro/cpp/test_avro_utils.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "testutil/assert.h"
 #include "util/timezone_utils.h"
 
 namespace starrocks::avrocpp {
 
-class DateColumnReaderTest : public ::testing::Test {
-public:
+class DateColumnReaderTest : public ColumnReaderTest, public ::testing::Test {
+protected:
+    using ColumnReaderTest::get_column_reader;
+
+private:
     ColumnReaderUniquePtr get_column_reader(const TypeDescriptor& type_desc, const cctz::time_zone& timezone,
                                             bool invalid_as_null) {
         return ColumnReader::get_nullable_column_reader(_col_name, type_desc, timezone, invalid_as_null);
     }
+<<<<<<< HEAD
 
     avrocpp::ColumnReaderUniquePtr get_column_reader(const TypeDescriptor& type_desc, bool invalid_as_null) {
         return get_column_reader(type_desc, _timezone, invalid_as_null);
@@ -89,6 +92,8 @@ public:
 private:
     std::string _col_name = "k1";
     cctz::time_zone _timezone = cctz::utc_time_zone();
+=======
+>>>>>>> e76efb1d05 ([UT] Add avro column reader UT (#58669))
 };
 
 TEST_F(DateColumnReaderTest, test_date) {

@@ -19,11 +19,13 @@
 #include <avrocpp/NodeImpl.hh>
 
 #include "column/column_helper.h"
+#include "formats/avro/cpp/test_avro_utils.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "testutil/assert.h"
 
 namespace starrocks::avrocpp {
 
+<<<<<<< HEAD
 class NumericColumnReaderTest : public ::testing::Test {
 public:
     ColumnReaderUniquePtr get_column_reader(const TypeDescriptor& type_desc, bool invalid_as_null) {
@@ -68,6 +70,9 @@ private:
     std::string _col_name = "k1";
     cctz::time_zone _timezone = cctz::utc_time_zone();
 };
+=======
+class NumericColumnReaderTest : public ColumnReaderTest, public ::testing::Test {};
+>>>>>>> e76efb1d05 ([UT] Add avro column reader UT (#58669))
 
 TEST_F(NumericColumnReaderTest, test_bool) {
     auto type_desc = TypeDescriptor::from_logical_type(TYPE_BOOLEAN);
@@ -148,8 +153,69 @@ TEST_F(NumericColumnReaderTest, test_numeric) {
             CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
         }
 
-        ASSERT_EQ(4, column->size());
-        ASSERT_EQ("[1, 10, -11, 12]", column->debug_string());
+        {
+            float float_v = 13.1;
+            avro::GenericDatum datum(float_v);
+            CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+        }
+
+        {
+            double double_v = -14.2;
+            avro::GenericDatum datum(double_v);
+            CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+        }
+
+        ASSERT_EQ(6, column->size());
+        ASSERT_EQ("[1, 10, -11, 12, 13, -14]", column->debug_string());
+    }
+}
+
+TEST_F(NumericColumnReaderTest, test_float) {
+    std::vector<TypeDescriptor> type_descs{TypeDescriptor::from_logical_type(TYPE_FLOAT),
+                                           TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
+
+    for (const auto& type_desc : type_descs) {
+        auto column = create_adaptive_nullable_column(type_desc);
+        auto reader = get_column_reader(type_desc, false);
+
+        {
+            bool bool_v = true;
+            avro::GenericDatum datum(bool_v);
+            CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+        }
+
+        {
+            int32_t int_v = 10;
+            avro::GenericDatum datum(int_v);
+            CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+        }
+
+        {
+            int64_t long_v = -11;
+            avro::GenericDatum datum(long_v);
+            CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+        }
+
+        {
+            std::string string_v = "12";
+            avro::GenericDatum datum(string_v);
+            CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+        }
+
+        {
+            float float_v = 13.1;
+            avro::GenericDatum datum(float_v);
+            CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+        }
+
+        {
+            double double_v = -14.2;
+            avro::GenericDatum datum(double_v);
+            CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+        }
+
+        ASSERT_EQ(6, column->size());
+        ASSERT_EQ("[1, 10, -11, 12, 13.1, -14.2]", column->debug_string());
     }
 }
 
