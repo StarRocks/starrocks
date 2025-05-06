@@ -77,7 +77,7 @@ struct TypeEncodingTraits<type, tparquet::Encoding::DELTA_BINARY_PACKED> {
 template <tparquet::Type::type type>
 struct TypeEncodingTraits<type, tparquet::Encoding::DELTA_LENGTH_BYTE_ARRAY> {
     static Status create_decoder(std::unique_ptr<Decoder>* decoder) {
-        *decoder = std::make_unique<DeltaLengthByteArrayDecoder>();
+        *decoder = std::make_unique<DeltaLengthByteArrayDecoder<type>>();
         return Status::OK();
     }
     static Status create_encoder(std::unique_ptr<Encoder>* encoder) {

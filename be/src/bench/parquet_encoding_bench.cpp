@@ -265,6 +265,10 @@ static void BMTestString(benchmark::State& state) {
             std::unique_ptr<Decoder> decoder;
             std::vector<T> output(num_rows);
             RETURN_IF_ERROR(encoding_info->create_decoder(&decoder));
+            // all strings are in the same length
+            if constexpr (PT == tparquet::Type::FIXED_LEN_BYTE_ARRAY) {
+                RETURN_IF_ERROR(decoder->set_type_length(slices[0].size));
+            }
             for (auto _ : state) {
                 RETURN_IF_ERROR(decoder->set_data(encoded_data));
                 if constexpr (test_mode == SKIP) {
