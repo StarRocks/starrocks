@@ -4080,6 +4080,24 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The maximum memory that the Query Pool can use. It is expressed as a percentage of the Process memory limit.
 - Introduced in: v3.1.0
 
+##### rocksdb_write_buffer_memory_percent
+
+- Default: 5
+- Type: Int64
+- Unit: -
+- Is mutable: No
+- Description: It is the memory percent of write buffer for meta in rocksdb. default is 5% of system memory. However, aside from this, the final calculated size of the write buffer memory will not be less than 64MB nor exceed 1G (rocksdb_max_write_buffer_memory_bytes)
+- Introduced in: v3.5.0
+
+##### rocksdb_max_write_buffer_memory_bytes
+
+- Default: 1073741824
+- Type: Int64
+- Unit: -
+- Is mutable: No
+- Description: It is the max size of the write buffer for meta in rocksdb. Default is 1GB.
+- Introduced in: v3.5.0
+
 <!--
 ##### datacache_block_size
 
