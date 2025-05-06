@@ -16,9 +16,13 @@
 
     </Appenders>
     <Loggers>
-        <Root level="DEBUG">
+        <Root level="WARN">
             <AppenderRef ref="Console" />
             <AppenderRef ref="RollingFile" />
         </Root>
+        <Logger name='com.starrocks.alter' level='DEBUG' />
+        <Logger name='com.starrocks.catalog' level='DEBUG' />
+        <Logger name='com.starrocks.journal' level='DEBUG' />
+        <Logger name='com.starrocks.scheduler' level='DEBUG' />
     </Loggers>
 </Configuration>
