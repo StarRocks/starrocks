@@ -152,8 +152,7 @@ mysql -P 9030 -h 127.0.0.1 -u root --prompt="StarRocks > "
 ### Adding and Using a Catalog
 
 ```SQL
-CREATE
-EXTERNAL CATALOG 'demo'
+CREATE EXTERNAL CATALOG 'demo'
 COMMENT "External catalog to Apache Iceberg on MinIO"
 PROPERTIES
 (
