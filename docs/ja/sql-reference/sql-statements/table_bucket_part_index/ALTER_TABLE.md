@@ -593,13 +593,8 @@ MODIFY COLUMN <column_name> DROP FIELD <field_name>
 :::note
 
 - 現在、この機能は共有なしクラスタでのみサポートされています。
-<<<<<<< HEAD
-- テーブルには `fast_schema_evolution` プロパティが有効になっている必要があります。
-- MAP型内のSTRUCT型でフィールドを追加または削除することはサポートされていません。
-=======
 - テーブルには `fast_schema_evolution` プロパティが有効である必要があります。
 - STRUCT型のMAPサブフィールドのValue型を変更することは、Value型がARRAY、STRUCT、MAPのいずれであってもサポートされない。
->>>>>>> ccf3c934df ([Doc] Fix ALTER STRUCT column desc (#58604))
 - 新しく追加されたフィールドにはデフォルト値やNullableなどの属性を指定することはできません。デフォルトでNullableであり、デフォルト値はnullです。
 - この機能を使用した後、この機能をサポートしていないバージョンにクラスタを直接ダウングレードすることはできません。
 
