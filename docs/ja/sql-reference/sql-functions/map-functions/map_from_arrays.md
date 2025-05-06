@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # map_from_arrays
 
+## Description
+
 指定されたキーアイテム配列と値アイテム配列から MAP 値を作成します。
 
 この関数は v3.1 以降でサポートされています。

@@ -4,9 +4,11 @@ displayed_sidebar: docs
 
 # sub_bitmap
 
-BITMAP 値 `src` から、指定された位置 `offset` から始まる `len` 個の要素を抽出します。出力される要素は `src` の部分集合です。
+## 説明
 
-この関数は、主にページネーションされたクエリのようなシナリオで使用されます。v2.5 からサポートされています。
+BITMAP 値 `src` から、指定された `offset` 位置から始まる `len` 個の要素を抽出します。出力される要素は `src` の部分集合です。
+
+この関数は主にページネーションされたクエリなどのシナリオで使用されます。v2.5 からサポートされています。
 
 この関数は [bitmap_subset_limit](./bitmap_subset_limit.md) に似ています。違いは、この関数がオフセットから要素を抽出するのに対し、bitmap_subset_limit は要素の値 (`start_range`) から抽出する点です。
 
@@ -19,7 +21,7 @@ BITMAP sub_bitmap(BITMAP src, BIGINT offset, BIGINT len)
 ## パラメータ
 
 - `src`: 要素を取得したい BITMAP 値。
-- `offset`: 開始位置。BIGINT 値でなければなりません。`offset` を使用する際の注意点は以下の通りです:
+- `offset`: 開始位置。BIGINT 値でなければなりません。`offset` を使用する際の注意点は以下の通りです。
   - オフセットは 0 から始まります。
   - 負のオフセットは右から左に数えます。例 3 と 4 を参照してください。
   - `offset` で指定された開始位置が BITMAP 値の実際の長さを超える場合、NULL が返されます。例 6 を参照してください。

@@ -4,15 +4,17 @@ displayed_sidebar: docs
 
 # split_part
 
-この関数は、指定された文字列をセパレーターに従って分割し、要求された部分を返します。（最初から数え始めます）
+## 説明
 
-## Syntax
+この関数は、指定された文字列をセパレータに従って分割し、要求された部分を返します。（最初から数え始めます）
+
+## 構文
 
 ```Haskell
 VARCHAR split_part(VARCHAR content, VARCHAR delimiter, INT field)
 ```
 
-## Examples
+## 例
 
 ```Plain Text
 MySQL > select split_part("hello world", " ", 1);
@@ -65,6 +67,6 @@ select split_part("abca", "a", -2);
 +-----------------------------+
 ```
 
-## keyword
+## キーワード
 
-SPLIT_PART,SPLIT,PART
+SPLIT_PART, SPLIT, PART

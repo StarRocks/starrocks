@@ -4,19 +4,21 @@ displayed_sidebar: docs
 
 # hll_empty
 
-データを挿入またはロードする際に、デフォルト値を補完するための空の HLL カラムを生成します。
+## Description
 
-## 構文
+データを挿入またはロードする際に、デフォルト値を補完するための空の HLL 列を生成します。
+
+## Syntax
 
 ```Haskell
 HLL_EMPTY()
 ```
 
-## 戻り値
+## Return value
 
 空の HLL を返します。
 
-## 例
+## Examples
 
 データを挿入する際にデフォルト値を補完します。
 

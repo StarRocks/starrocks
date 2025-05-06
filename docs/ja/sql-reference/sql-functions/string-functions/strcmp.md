@@ -4,15 +4,17 @@ displayed_sidebar: docs
 
 # strcmp
 
-この関数は2つの文字列を比較します。lhs と rhs が等しい場合は 0 を返します。lhs が辞書式順序で rhs より前に現れる場合は -1 を返します。lhs が辞書式順序で rhs より後に現れる場合は 1 を返します。引数が NULL の場合、結果は NULL です。
+## 説明
 
-## Syntax
+この関数は2つの文字列を比較します。lhs と rhs が等しい場合は 0 を返します。lhs が辞書順で rhs より前にある場合は -1 を返します。lhs が辞書順で rhs より後にある場合は 1 を返します。引数が NULL の場合、結果は NULL です。
+
+## 構文
 
 ```Haskell
 INT strcmp(VARCHAR lhs, VARCHAR rhs)
 ```
 
-## Examples
+## 例
 
 ```Plain Text
 mysql> select strcmp("test1", "test1");
@@ -44,6 +46,6 @@ mysql> select strcmp("test1", NULL);
 +-----------------------+
 ```
 
-## keyword
+## キーワード
 
 STRCMP

@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # years_sub
 
+## Description
+
 指定された年数を、指定された日時または日付から引きます。
 
 ## Syntax
@@ -16,7 +18,7 @@ DATETIME YEARS_SUB(DATETIME date, INT years)
 
 `date`: 元の日付時刻。DATETIME または DATE 型。
 
-`years`: 引く年数。この値は負の値も可能ですが、date の年から years を引いた結果が 10000 を超えてはいけません。例えば、date の年が 2022 の場合、years は -7979 より小さくできません。同時に、years は date の年の値を超えてはいけません。例えば、date の年の値が 2022 の場合、years は 2022 より大きくできません。
+`years`: 引く年数。この値は負の値も可能ですが、日付の年から years を引いた結果が 10000 を超えることはできません。例えば、日付の年が 2022 の場合、years は -7979 より小さくできません。同時に、years は日付の年の値を超えることもできません。例えば、日付の年の値が 2022 の場合、years は 2022 より大きくできません。
 
 ## Return value
 

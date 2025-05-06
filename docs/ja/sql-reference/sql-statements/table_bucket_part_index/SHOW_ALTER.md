@@ -6,15 +6,15 @@ displayed_sidebar: docs
 
 ## 説明
 
-進行中の ALTER TABLE 操作の実行を表示します。これには以下が含まれます。
+進行中の ALTER TABLE 操作の実行状況を表示します。これには以下が含まれます。
 
 - カラムの変更。
-- テーブルスキーマの最適化 (v3.2 から)、バケット方式やバケット数の変更を含む。
+- テーブルスキーマの最適化 (v3.2 以降)、バケット方式やバケット数の変更を含む。
 - ロールアップインデックスの作成と削除。
 
 ## 構文
 
-- カラムの変更やテーブルスキーマの最適化操作の実行を表示します。
+- カラムの変更またはテーブルスキーマの最適化操作の実行を表示します。
 
     ```sql
     SHOW ALTER TABLE { COLUMN | OPTIMIZE } [FROM db_name] [WHERE TableName|CreateTime|FinishTime|State] [ORDER BY] [LIMIT]
@@ -61,9 +61,9 @@ displayed_sidebar: docs
     SHOW ALTER TABLE OPTIMIZE WHERE TableName = "table1" ORDER BY CreateTime DESC LIMIT 1; 
     ```
 
-## 参照
+## 参考文献
 
-- [CREATE TABLE](CREATE_TABLE.md)
-- [ALTER TABLE](ALTER_TABLE.md)
-- [SHOW TABLES](SHOW_TABLES.md)
-- [SHOW CREATE TABLE](SHOW_CREATE_TABLE.md)
+- [CREATE TABLE](CREATE_TABLE.md) 
+- [ALTER TABLE](ALTER_TABLE.md) 
+- [SHOW TABLES](SHOW_TABLES.md) 
+- [SHOW CREATE TABLE](SHOW_CREATE_TABLE.md) 

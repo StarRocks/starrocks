@@ -4,26 +4,28 @@ displayed_sidebar: docs
 
 # truncate
 
-指定された小数点以下の桁数で、入力をそれ以下の最も近い値に切り捨てます。
+## 説明
 
-## Syntax
+入力を指定された小数点以下の桁数で、最も近い同等または小さい値に切り捨てます。
+
+## 構文
 
 ```Shell
 truncate(arg1,arg2);
 ```
 
-## Parameter
+## パラメータ
 
-- `arg1`: 切り捨てる対象の入力。以下のデータ型をサポートします:
+- `arg1`: 切り捨てる入力。以下のデータ型をサポートします:
   - DOUBLE
   - DECIMAL128
-- `arg2`: 小数点以下の桁数を指定します。INT データ型をサポートします。
+- `arg2`: 小数点以下に保持する桁数。INT データ型をサポートします。
 
-## Return value
+## 戻り値
 
 `arg1` と同じデータ型の値を返します。
 
-## Examples
+## 例
 
 ```Plain
 mysql> select truncate(3.14,1);

@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # bitmap_andnot
 
+## 説明
+
 `lhs` に存在し、`rhs` に存在しない bitmap 値を返し、新しい bitmap を返します。
 
 ## 構文

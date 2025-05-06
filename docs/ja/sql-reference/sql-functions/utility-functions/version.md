@@ -4,25 +4,27 @@ displayed_sidebar: docs
 
 # version
 
-MySQL データベースの現在のバージョンを返します。
+## 説明
 
-StarRocks のバージョンを照会するには、[current_version](current_version.md) を使用できます。
+現在の MySQL データベースのバージョンを返します。
 
-## Syntax
+StarRocks のバージョンを照会するには、 [current_version](current_version.md) を使用できます。
+
+## 構文
 
 ```Haskell
 VARCHAR version();
 ```
 
-## Parameters
+## パラメータ
 
 なし
 
-## Return value
+## 戻り値
 
 VARCHAR 型の値を返します。
 
-## Examples
+## 例
 
 ```Plain Text
 mysql> select version();
@@ -34,6 +36,6 @@ mysql> select version();
 1 row in set (0.00 sec)
 ```
 
-## References
+## 参照
 
 [current_version](../utility-functions/current_version.md)

@@ -8,7 +8,7 @@ keywords: ['analytic']
 
 ## 背景
 
-ウィンドウ関数は、特別なクラスの組み込み関数です。集計関数と同様に、複数の入力行に対して計算を行い、単一のデータ値を取得します。違いは、ウィンドウ関数が特定のウィンドウ内で入力データを処理することであり、「group by」メソッドを使用するのではありません。各ウィンドウ内のデータは、over()句を使用してソートおよびグループ化できます。ウィンドウ関数は、各行に対して個別の値を計算するため、グループごとに1つの値を計算するのではありません。この柔軟性により、ユーザーはselect句に追加の列を追加し、結果セットをさらにフィルタリングすることができます。ウィンドウ関数は、selectリストと句の最外部の位置にのみ表示されることができます。クエリの最後に効果を発揮し、つまり、`join`、`where`、および`group by`操作が実行された後に適用されます。ウィンドウ関数は、トレンドの分析、外れ値の計算、大規模データのバケッティング分析にしばしば使用されます。
+ウィンドウ関数は、特別なクラスの組み込み関数です。集計関数と同様に、複数の入力行に対して計算を行い、単一のデータ値を取得します。違いは、ウィンドウ関数が特定のウィンドウ内で入力データを処理することで、「group by」メソッドを使用しないことです。各ウィンドウ内のデータは、over()句を使用してソートおよびグループ化できます。ウィンドウ関数は、**各行に対して個別の値を計算**するため、グループごとに1つの値を計算するのではありません。この柔軟性により、ユーザーはselect句に追加の列を追加し、結果セットをさらにフィルタリングできます。ウィンドウ関数は、selectリストと句の最外部の位置にのみ現れることができます。クエリの最後に効果を発揮し、つまり、`join`、`where`、および `group by` 操作が実行された後に効果を発揮します。ウィンドウ関数は、トレンドの分析、外れ値の計算、大規模データのバケッティング分析にしばしば使用されます。
 
 ## 使用法
 
@@ -26,7 +26,7 @@ Partition By句はGroup Byに似ています。指定された1つ以上の列�
 
 ### ORDER BY句
 
-`Order By`句は基本的に外部の`Order By`と同じです。入力行の順序を定義します。`Partition By`が指定されている場合、`Order By`は各Partitionグループ内の順序を定義します。唯一の違いは、`OVER`句の`Order By n`（nは正の整数）が操作なしに等しいのに対し、外部の`Order By`の`n`はn番目の列でのソートを示すことです。
+`Order By`句は基本的に外部の`Order By`と同じです。入力行の順序を定義します。`Partition By`が指定されている場合、`Order By`は各Partitionグループ内の順序を定義します。唯一の違いは、`OVER`句の`Order By n`（nは正の整数）が操作なしと同等であるのに対し、外部の`Order By`の`n`はn番目の列でのソートを示すことです。
 
 例:
 
@@ -40,7 +40,7 @@ FROM events;
 
 ### ウィンドウ句
 
-ウィンドウ句は、操作のための行の範囲を指定するために使用されます（現在の行に基づく前後の行）。次の構文をサポートしています: AVG(), COUNT(), FIRST_VALUE(), LAST_VALUE(), および SUM()。MAX() および MIN() の場合、ウィンドウ句は `UNBOUNDED PRECEDING` までの開始を指定できます。
+ウィンドウ句は、操作のための行の範囲（現在の行に基づく前後の行）を指定するために使用されます。次の構文をサポートしています: AVG(), COUNT(), FIRST_VALUE(), LAST_VALUE(), および SUM()。MAX()およびMIN()の場合、ウィンドウ句は`UNBOUNDED PRECEDING`からの開始を指定できます。
 
 **構文:**
 
@@ -48,7 +48,7 @@ FROM events;
 ROWS BETWEEN [ { m | UNBOUNDED } PRECEDING | CURRENT ROW] [ AND [CURRENT ROW | { UNBOUNDED | n } FOLLOWING] ]
 ```
 
-## ウィンドウ関数のサンプルテーブル
+## ウィンドウ関数サンプルテーブル
 
 このセクションでは、サンプルテーブル`scores`を作成します。このテーブルを使用して、以下の多くのウィンドウ関数をテストできます。
 
@@ -121,7 +121,7 @@ INSERT INTO stock_ticker VALUES
 ;
 ```
 
-現在の行とその前後の行の平均終値を計算します。
+現在の行とその前後の各行の平均終値を計算します。
 
 ```SQL
 select stock_symbol, closing_date, closing_price,
@@ -153,7 +153,7 @@ from stock_ticker;
 
 ### COUNT()
 
-指定されたウィンドウ内で条件を満たす行の総数を計算します。
+指定された条件を満たす行の総数を、指定されたウィンドウ内で計算します。
 
 **構文:**
 
@@ -163,7 +163,7 @@ COUNT(expr) [OVER (analytic_clause)]
 
 **例:**
 
-mathパーティション内で、現在の行から最初の行までのmathスコアが90を超える出現回数をカウントします。この例では、[サンプルテーブル](#window-function-sample-table) `scores`のデータを使用します。
+mathパーティション内の現在の行から最初の行までの間で、90を超えるmathスコアの出現回数をカウントします。この例では、[サンプルテーブル](#window-function-sample-table) `scores` のデータを使用します。
 
 ```SQL
 select *,
@@ -187,7 +187,7 @@ from scores where subject in ('math') and score > 90;
 
 ### CUME_DIST()
 
-CUME_DIST()関数は、パーティションまたはウィンドウ内での値の累積分布を計算し、その相対的な位置をパーティション内のパーセンテージとして示します。グループ内の最高値または最低値の分布を計算するために使用されます。
+CUME_DIST()関数は、パーティションまたはウィンドウ内の値の累積分布を計算し、パーティション内での相対的な位置をパーセンテージで示します。グループ内の最高値または最低値の分布を計算するためによく使用されます。
 
 - データが昇順にソートされている場合、この関数は現在の行の値以下の値のパーセンテージを計算します。
 - データが降順にソートされている場合、この関数は現在の行の値以上の値のパーセンテージを計算します。
@@ -202,14 +202,14 @@ CUME_DIST()関数は、パーティションまたはウィンドウ内での値
 CUME_DIST() OVER (partition_by_clause order_by_clause)
 ```
 
-- `partition_by_clause`: 任意。指定しない場合、結果セット全体が単一のパーティションとして処理されます。
-- `order_by_clause`: **この関数は、パーティション行を希望の順序にソートするためにORDER BYと一緒に使用する必要があります。**
+- `partition_by_clause`: オプション。この句が指定されていない場合、結果セット全体が単一のパーティションとして処理されます。
+- `order_by_clause`: **この関数は、パーティション行を目的の順序にソートするためにORDER BYと一緒に使用する必要があります。**
 
 CUME_DIST()はNULL値を含み、これらを最低値として扱います。
 
 **例:**
 
-次の例では、各`subject`グループ内の各スコアの累積分布を示します。この例では、[サンプルテーブル](#window-function-sample-table) `scores`のデータを使用します。
+次の例は、各`subject`グループ内の各スコアの累積分布を示しています。この例では、[サンプルテーブル](#window-function-sample-table) `scores` のデータを使用します。
 
 ```plaintext
 SELECT *, 
@@ -243,13 +243,13 @@ FROM scores;
 +------+-------+---------+-------+---------------------+
 ```
 
-- 最初の行の`cume_dist`について、`NULL`グループには1行しかなく、この行自体のみが「現在の行以下」の条件を満たしています。累積分布は1です。
+- 最初の行の`cume_dist`について、`NULL`グループにはこの行しかなく、この行自体のみが「現在の行以下」の条件を満たしています。累積分布は1です。
 - 2行目の`cume_dist`について、`english`グループには5行あり、この行自体（NULL）のみが「現在の行以下」の条件を満たしています。累積分布は0.2です。
 - 3行目の`cume_dist`について、`english`グループには5行あり、2行（85とNULL）が「現在の行以下」の条件を満たしています。累積分布は0.4です。
 
 ### DENSE_RANK()
 
-DENSE_RANK()関数はランキングを表現するために使用されます。RANK()とは異なり、DENSE_RANK()は**空白のない**番号を持ちます。例えば、1が2つある場合、DENSE_RANK()の3番目の番号は2のままですが、RANK()の3番目の番号は3になります。
+DENSE_RANK()関数はランキングを表すために使用されます。RANK()とは異なり、DENSE_RANK()は**空白の**番号を持ちません。例えば、1が2つある場合、DENSE_RANK()の3番目の番号は2のままですが、RANK()の3番目の番号は3です。
 
 **構文:**
 
@@ -259,7 +259,7 @@ DENSE_RANK() OVER(partition_by_clause order_by_clause)
 
 **例:**
 
-次の例では、mathスコアのランキング（降順）を示します。この例では、[サンプルテーブル](#window-function-sample-table) `scores`のデータを使用します。
+次の例は、mathスコアのランキング（降順）を示しています。この例では、[サンプルテーブル](#window-function-sample-table) `scores` のデータを使用します。
 
 ```SQL
 select *,
@@ -284,7 +284,7 @@ from scores where subject in ('math');
 +------+-------+---------+-------+------+
 ```
 
-結果データには、スコアが80の行が2つあります。これらはすべて3位です。次のスコア70のランクは4です。これにより、DENSE_RANK()が**空白のない**番号を持つことが示されています。
+結果データにはスコアが80の行が2つあります。これらはすべてランク3です。次のスコア70のランクは4です。これにより、DENSE_RANK()は**空白の**番号を持たないことが示されています。
 
 ### FIRST_VALUE()
 
@@ -300,7 +300,7 @@ FIRST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [windo
 
 **例:**
 
-各グループ（降順）で、`subject`でグループ化された各メンバーの最初の`score`値を返します。この例では、[サンプルテーブル](#window-function-sample-table) `scores`のデータを使用します。
+`subject`でグループ化し、各グループ内の各メンバーの最初の`score`値を返します（降順）。この例では、[サンプルテーブル](#window-function-sample-table) `scores` のデータを使用します。
 
 ```SQL
 select *,
@@ -349,11 +349,11 @@ LAST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [window
 
 `IGNORE NULLS`はv2.5.0からサポートされています。これは、`expr`のNULL値を計算から除外するかどうかを決定するために使用されます。デフォルトでは、NULL値が含まれており、フィルタリングされた結果の最後の値がNULLの場合、NULLが返されます。IGNORE NULLSを指定すると、フィルタリングされた結果の最後の非NULL値が返されます。すべての値がNULLの場合、IGNORE NULLSを指定してもNULLが返されます。
 
-デフォルトでは、LAST_VALUE()は`rows between unbounded preceding and current row`を計算し、現在の行とその前のすべての行を比較します。各パーティションに1つの値のみを表示する場合は、ORDER BYの後に`rows between unbounded preceding and unbounded following`を使用します。
+デフォルトでは、LAST_VALUE()は`rows between unbounded preceding and current row`を計算し、現在の行とその前のすべての行を比較します。各パーティションに1つの値のみを表示したい場合は、ORDER BYの後に`rows between unbounded preceding and unbounded following`を使用します。
 
 **例:**
 
-各グループ（降順）で、`subject`でグループ化された各メンバーの最後の`score`を返します。この例では、[サンプルテーブル](#window-function-sample-table) `scores`のデータを使用します。
+`subject`でグループ化し、各グループ内の各メンバーの最後の`score`を返します（降順）。この例では、[サンプルテーブル](#window-function-sample-table) `scores` のデータを使用します。
 
 ```SQL
 select *,
@@ -412,9 +412,9 @@ OVER([<partition_by_clause>] [<order_by_clause>])
 **パラメータ:**
 
 - `expr`: 計算したいフィールド。
-- `offset`: オフセット。**正の整数**でなければなりません。このパラメータが指定されない場合、デフォルトは1です。
-- `default`: 一致する行が見つからない場合に返されるデフォルト値。このパラメータが指定されない場合、デフォルトはNULLです。`default`は`expr`と互換性のあるタイプの任意の式をサポートします。
-- `IGNORE NULLS`はv3.0からサポートされています。これは、`expr`のNULL値が結果に含まれるかどうかを決定するために使用されます。デフォルトでは、`offset`行がカウントされるときにNULL値が含まれており、目的の行の値がNULLの場合、NULLが返されます。例1を参照してください。IGNORE NULLSを指定すると、`offset`行がカウントされるときにNULL値が無視され、システムは`offset`の非NULL値を探し続けます。`offset`の非NULL値が見つからない場合、NULLまたは`default`（指定されている場合）が返されます。例2を参照してください。
+- `offset`: オフセット。**正の整数**でなければなりません。このパラメータが指定されていない場合、デフォルトは1です。
+- `default`: 一致する行が見つからない場合に返されるデフォルト値。このパラメータが指定されていない場合、デフォルトはNULLです。`default`は`expr`と互換性のあるタイプの任意の式をサポートします。
+- `IGNORE NULLS`はv3.0からサポートされています。これは、`expr`のNULL値が結果に含まれるかどうかを決定するために使用されます。デフォルトでは、`offset`行がカウントされるときにNULL値が含まれ、宛先行の値がNULLの場合、NULLが返されます。例1を参照してください。IGNORE NULLSを指定すると、`offset`行がカウントされるときにNULL値が無視され、システムは`offset`非NULL値を検索し続けます。`offset`非NULL値が見つからない場合、NULLまたは`default`（指定されている場合）が返されます。例2を参照してください。
 
 **例1: IGNORE NULLSが指定されていない場合**
 
@@ -437,7 +437,7 @@ INSERT INTO test_tbl VALUES
     (10, NULL);
 ```
 
-このテーブルからデータをクエリし、`offset`は2で、これは前の2行をトラバースすることを意味します。`default`は0で、一致する行が見つからない場合に0が返されます。
+このテーブルからデータをクエリし、`offset`は2で、これは前の2行をたどることを意味します。`default`は0で、一致する行が見つからない場合は0が返されます。
 
 出力:
 
@@ -460,9 +460,9 @@ FROM test_tbl ORDER BY col_1;
 +-------+-------+---------------------------------------------+
 ```
 
-最初の2行には、前の2行が存在せず、デフォルト値0が返されます。
+最初の2行については、前の2行が存在せず、デフォルト値0が返されます。
 
-3行目のNULLについては、2行前の値がNULLであり、NULLが返されます。なぜなら、NULL値が許可されているからです。
+3行目のNULLについては、2行前の値がNULLであり、NULLが返されます。
 
 **例2: IGNORE NULLSが指定されている場合**
 
@@ -487,15 +487,15 @@ FROM test_tbl ORDER BY col_1;
 +-------+-------+---------------------------------------------+
 ```
 
-1行目から4行目まで、システムは前の行で2つの非NULL値を見つけることができず、デフォルト値0が返されます。
+1行目から4行目については、前の行で2つの非NULL値を見つけることができず、デフォルト値0が返されます。
 
-7行目の値6については、2行前の値がNULLであり、IGNORE NULLSが指定されているため、NULLが無視されます。システムは非NULL値を探し続け、4行目の2が返されます。
+7行目の値6については、2行前の値がNULLであり、IGNORE NULLSが指定されているためNULLが無視されます。システムは非NULL値を検索し続け、4行目の2が返されます。
 
 ### LEAD()
 
 現在の行から`offset`行進んだ行の値を返します。この関数は、行間の値を比較し、データをフィルタリングするためによく使用されます。
 
-`LEAD()`でクエリできるデータ型は、[LAG()](#lag)でサポートされているものと同じです。
+`LEAD()`でクエリできるデータタイプは、[LAG()](#lag)でサポートされているものと同じです。
 
 **構文:**
 
@@ -507,9 +507,9 @@ OVER([<partition_by_clause>] [<order_by_clause>])
 **パラメータ:**
 
 - `expr`: 計算したいフィールド。
-- `offset`: オフセット。正の整数でなければなりません。このパラメータが指定されない場合、デフォルトは1です。
-- `default`: 一致する行が見つからない場合に返されるデフォルト値。このパラメータが指定されない場合、デフォルトはNULLです。`default`は`expr`と互換性のあるタイプの任意の式をサポートします。
-- `IGNORE NULLS`はv3.0からサポートされています。これは、`expr`のNULL値が結果に含まれるかどうかを決定するために使用されます。デフォルトでは、`offset`行がカウントされるときにNULL値が含まれており、目的の行の値がNULLの場合、NULLが返されます。例1を参照してください。IGNORE NULLSを指定すると、`offset`行がカウントされるときにNULL値が無視され、システムは`offset`の非NULL値を探し続けます。`offset`の非NULL値が見つからない場合、NULLまたは`default`（指定されている場合）が返されます。例2を参照してください。
+- `offset`: オフセット。正の整数でなければなりません。このパラメータが指定されていない場合、デフォルトは1です。
+- `default`: 一致する行が見つからない場合に返されるデフォルト値。このパラメータが指定されていない場合、デフォルトはNULLです。`default`は`expr`と互換性のあるタイプの任意の式をサポートします。
+- `IGNORE NULLS`はv3.0からサポートされています。これは、`expr`のNULL値が結果に含まれるかどうかを決定するために使用されます。デフォルトでは、`offset`行がカウントされるときにNULL値が含まれ、宛先行の値がNULLの場合、NULLが返されます。例1を参照してください。IGNORE NULLSを指定すると、`offset`行がカウントされるときにNULL値が無視され、システムは`offset`非NULL値を検索し続けます。`offset`非NULL値が見つからない場合、NULLまたは`default`（指定されている場合）が返されます。例2を参照してください。
 
 **例1: IGNORE NULLSが指定されていない場合**
 
@@ -532,7 +532,7 @@ INSERT INTO test_tbl VALUES
     (10, NULL);
 ```
 
-このテーブルからデータをクエリし、`offset`は2で、これは次の2行をトラバースすることを意味します。`default`は0で、一致する行が見つからない場合に0が返されます。
+このテーブルからデータをクエリし、`offset`は2で、これは次の2行をたどることを意味します。`default`は0で、一致する行が見つからない場合は0が返されます。
 
 出力:
 
@@ -555,7 +555,7 @@ FROM test_tbl ORDER BY col_1;
 +-------+-------+----------------------------------------------+
 ```
 
-最初の行については、2行先の値がNULLであり、NULLが返されます。なぜなら、NULL値が許可されているからです。
+最初の行については、2行先の値がNULLであり、NULLが返されます。
 
 最後の2行については、次の2行が存在せず、デフォルト値0が返されます。
 
@@ -582,9 +582,9 @@ FROM test_tbl ORDER BY col_1;
 +-------+-------+----------------------------------------------+
 ```
 
-7行目から10行目まで、システムは次の行で2つの非NULL値を見つけることができず、デフォルト値0が返されます。
+7行目から10行目については、次の行で2つの非NULL値を見つけることができず、デフォルト値0が返されます。
 
-最初の行については、2行先の値がNULLであり、IGNORE NULLSが指定されているため、NULLが無視されます。システムは2番目の非NULL値を探し続け、4行目の2が返されます。
+最初の行については、2行先の値がNULLであり、IGNORE NULLSが指定されているためNULLが無視されます。システムは2番目の非NULL値を検索し続け、4行目の2が返されます。
 
 ### MAX()
 
@@ -598,7 +598,7 @@ MAX(expr) [OVER (analytic_clause)]
 
 **例:**
 
-現在の行から次の行までの行の最大値を計算します。この例では、[サンプルテーブル](#window-function-sample-table) `scores`のデータを使用します。
+現在の行の前後の行を含む最初の行からの最大値を計算します。この例では、[サンプルテーブル](#window-function-sample-table) `scores` のデータを使用します。
 
 ```SQL
 select *,
@@ -639,7 +639,7 @@ from scores
 where subject in ('math');
 ```
 
-StarRocks 2.4以降では、行範囲を`rows between n preceding and n following`として指定でき、これは現在の行の前の`n`行と後の`n`行をキャプチャできることを意味します。
+StarRocks 2.4以降、行範囲を`rows between n preceding and n following`として指定でき、現在の行の前の`n`行と後の`n`行をキャプチャできます。
 
 例文:
 
@@ -666,7 +666,7 @@ MIN(expr) [OVER (analytic_clause)]
 
 **例:**
 
-math科目のすべての行の最低スコアを計算します。この例では、[サンプルテーブル](#window-function-sample-table) `scores`のデータを使用します。
+math科目のすべての行の最低スコアを計算します。この例では、[サンプルテーブル](#window-function-sample-table) `scores` のデータを使用します。
 
 ```SQL
 select *, 
@@ -693,7 +693,7 @@ where subject in ('math');
 +------+-------+---------+-------+------+
 ```
 
-StarRocks 2.4以降では、行範囲を`rows between n preceding and n following`として指定でき、これは現在の行の前の`n`行と後の`n`行をキャプチャできることを意味します。
+StarRocks 2.4以降、行範囲を`rows between n preceding and n following`として指定でき、現在の行の前の`n`行と後の`n`行をキャプチャできます。
 
 例文:
 
@@ -710,12 +710,12 @@ where subject in ('math');
 
 ### NTILE()
 
-NTILE()関数は、パーティション内のソートされた行を指定された`num_buckets`の数でできるだけ均等に分割し、それぞれのバケットに分割された行を1から始まる番号`[1, 2, ..., num_buckets]`に格納し、各行が属するバケット番号を返します。
+NTILE()関数は、パーティション内のソートされた行を指定された`num_buckets`の数でできるだけ均等に分割し、分割された行をそれぞれのバケットに格納し、1から始まる`[1, 2, ..., num_buckets]`のバケット番号を返します。
 
 バケットのサイズについて:
 
-- 行数が指定された`num_buckets`の数で正確に割り切れる場合、すべてのバケットは同じサイズになります。
-- 行数が指定された`num_buckets`の数で正確に割り切れない場合、2つの異なるサイズのバケットが存在します。サイズの差は1です。より多くの行を持つバケットは、より少ない行を持つバケットの前にリストされます。
+- 行数が指定された`num_buckets`の数で正確に分割できる場合、すべてのバケットは同じサイズになります。
+- 行数が指定された`num_buckets`の数で正確に分割できない場合、2つの異なるサイズのバケットが存在します。サイズの差は1です。より多くの行を持つバケットは、より少ない行を持つバケットよりも前にリストされます。
 
 **構文:**
 
@@ -723,7 +723,7 @@ NTILE()関数は、パーティション内のソートされた行を指定さ�
 NTILE (num_buckets) OVER (partition_by_clause order_by_clause)
 ```
 
-`num_buckets`: 作成されるバケットの数。値は定数の正の整数で、最大は`2^63 - 1`です。
+`num_buckets`: 作成されるバケットの数。値は`2^63 - 1`を最大とする定数の正の整数でなければなりません。
 
 NTILE()関数ではウィンドウ句は許可されていません。
 
@@ -731,7 +731,7 @@ NTILE()関数はBIGINT型のデータを返します。
 
 **例:**
 
-次の例では、パーティション内のすべての行を2つのバケットに分割します。この例では、[サンプルテーブル](#window-function-sample-table) `scores`のデータを使用します。
+次の例では、パーティション内のすべての行を2つのバケットに分割します。この例では、[サンプルテーブル](#window-function-sample-table) `scores` のデータを使用します。
 
 ```sql
 select *,
@@ -770,22 +770,22 @@ from scores;
 +------+-------+---------+-------+-----------+
 ```
 
-上記の例のように、`num_buckets`が`2`の場合:
+上記の例で示されているように、`num_buckets`が`2`の場合:
 
 - 最初の行について、このパーティションにはこのレコードしかなく、1つのバケットに割り当てられます。
-- 2行目から7行目について、このパーティションには6つのレコードがあり、最初の3つのレコードがバケット1に割り当てられ、他の3つのレコードがバケット2に割り当てられます。
+- 2行目から7行目について、このパーティションには6つのレコードがあり、最初の3つのレコードはバケット1に割り当てられ、他の3つのレコードはバケット2に割り当てられます。
 
 ### PERCENT_RANK()
 
 結果セット内の行の相対ランクをパーセンテージとして計算します。
 
-PERCENT_RANK()は次の式を使用して計算されます。ここで、`Rank`はパーティション内の現在の行のランクを表します。
+PERCENT_RANK()は、次の式を使用して計算されます。ここで、`Rank`はパーティション内の現在の行のランクを表します。
 
 ```plaintext
 (Rank - 1)/(Rows in partition - 1)
 ```
 
-返される値は0から1の範囲です。この関数はパーセンタイル計算やデータ分布の分析に役立ちます。v3.2からサポートされています。
+戻り値は0から1の範囲です。この関数はパーセンタイル計算やデータ分布の分析に役立ちます。v3.2からサポートされています。
 
 **構文:**
 
@@ -793,11 +793,11 @@ PERCENT_RANK()は次の式を使用して計算されます。ここで、`Rank`
 PERCENT_RANK() OVER (partition_by_clause order_by_clause)
 ```
 
-**この関数は、パーティション行を希望の順序にソートするためにORDER BYと一緒に使用する必要があります。**
+**この関数は、パーティション行を目的の順序にソートするためにORDER BYと一緒に使用する必要があります。**
 
 **例:**
 
-次の例では、`math`グループ内の各`score`の相対ランクを示します。この例では、[サンプルテーブル](#window-function-sample-table) `scores`のデータを使用します。
+次の例は、`math`グループ内の各`score`の相対ランクを示しています。この例では、[サンプルテーブル](#window-function-sample-table) `scores` のデータを使用します。
 
 ```SQL
 SELECT *,
@@ -824,7 +824,7 @@ FROM scores where subject in ('math');
 
 ### RANK()
 
-RANK()関数はランキングを表現するために使用されます。DENSE_RANK()とは異なり、RANK()は**空白のある**番号が現れます。例えば、1が2つある場合、RANK()の3番目の番号は2ではなく3になります。
+RANK()関数はランキングを表すために使用されます。DENSE_RANK()とは異なり、RANK()は**空白の**番号が現れます。例えば、1が2つある場合、RANK()の3番目の番号は3であり、2ではありません。
 
 **構文:**
 
@@ -834,7 +834,7 @@ RANK() OVER(partition_by_clause order_by_clause)
 
 **例:**
 
-グループ内のmathスコアをランク付けします。この例では、[サンプルテーブル](#window-function-sample-table) `scores`のデータを使用します。
+グループ内のmathスコアをランク付けします。この例では、[サンプルテーブル](#window-function-sample-table) `scores` のデータを使用します。
 
 ```SQL
 select *, 
@@ -858,11 +858,11 @@ from scores where subject in ('math');
 +------+-------+---------+-------+------+
 ```
 
-結果データには、スコアが80の行が2つあります。これらはすべて3位です。次のスコア70のランクは5です。
+結果データにはスコアが80の行が2つあります。これらはすべてランク3です。次のスコア70のランクは5です。
 
 ### ROW_NUMBER()
 
-パーティションの各行に対して1から始まる連続的に増加する整数を返します。RANK()やDENSE_RANK()とは異なり、ROW_NUMBER()が返す値は**繰り返しやギャップがなく**、**連続して増加します**。
+パーティションの各行に対して1から始まる連続的に増加する整数を返します。RANK()やDENSE_RANK()とは異なり、ROW_NUMBER()によって返される値は**繰り返しやギャップがなく**、**連続的に増加**します。
 
 **構文:**
 
@@ -872,7 +872,7 @@ ROW_NUMBER() OVER(partition_by_clause order_by_clause)
 
 **例:**
 
-グループ内のmathスコアをランク付けします。この例では、[サンプルテーブル](#window-function-sample-table) `scores`のデータを使用します。
+グループ内のmathスコアをランク付けします。この例では、[サンプルテーブル](#window-function-sample-table) `scores` のデータを使用します。
 
 ```SQL
 select *, row_number() over(
@@ -896,7 +896,7 @@ from scores where subject in ('math');
 
 ### QUALIFY()
 
-QUALIFY句はウィンドウ関数の結果をフィルタリングします。SELECT文で、QUALIFY句を使用して列に条件を適用し、結果をフィルタリングできます。QUALIFYは集計関数のHAVING句に類似しています。この関数はv2.5からサポートされています。
+QUALIFY句はウィンドウ関数の結果をフィルタリングします。SELECT文では、QUALIFY句を使用して列に条件を適用し、結果をフィルタリングできます。QUALIFYは集計関数のHAVING句に類似しています。この関数はv2.5からサポートされています。
 
 QUALIFYはSELECT文の記述を簡素化します。
 
@@ -939,7 +939,7 @@ QUALIFY <window_function>
 
 `<data_source>`: データソースは一般的にテーブルです。
 
-`<window_function>`: `QUALIFY`句の後にはウィンドウ関数のみが続きます。ROW_NUMBER(), RANK(), および DENSE_RANK()を含みます。
+`<window_function>`: `QUALIFY`句の後にはウィンドウ関数のみが続くことができます。ROW_NUMBER(), RANK(), および DENSE_RANK()を含みます。
 
 **例:**
 
@@ -1001,7 +1001,7 @@ ORDER BY city_id;
 2 rows in set (0.01 sec)
 ```
 
-例3: テーブルの各パーティションから売上が1位のレコードを取得します。テーブルは`item`で2つのパーティションに分割され、各パーティションで最も高い売上の行が返されます。
+例3: テーブルの各パーティションから売上が1位のレコードを取得します。テーブルは`item`で2つのパーティションに分割され、各パーティションの最高売上の行が返されます。
 
 ```SQL
 SELECT city_id, item, sales
@@ -1044,7 +1044,7 @@ SUM(expr) [OVER (analytic_clause)]
 
 **例:**
 
-`subject`でデータをグループ化し、グループ内のすべての行のスコアの合計を計算します。この例では、[サンプルテーブル](#window-function-sample-table) `scores`のデータを使用します。
+`subject`でデータをグループ化し、グループ内のすべての行のスコアの合計を計算します。この例では、[サンプルテーブル](#window-function-sample-table) `scores` のデータを使用します。
 
 ```SQL
 select *,
@@ -1102,7 +1102,7 @@ VARIANCE(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause win
 
 **例:**
 
-この例では、[サンプルテーブル](#window-function-sample-table) `scores`のデータを使用します。
+この例では、[サンプルテーブル](#window-function-sample-table) `scores` のデータを使用します。
 
 ```plaintext
 select *,
@@ -1144,7 +1144,7 @@ VAR_SAMP(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause win
 
 **例:**
 
-この例では、[サンプルテーブル](#window-function-sample-table) `scores`のデータを使用します。
+この例では、[サンプルテーブル](#window-function-sample-table) `scores` のデータを使用します。
 
 ```plaintext
 select *,
@@ -1184,7 +1184,7 @@ STD(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_c
 
 **例:**
 
-この例では、[サンプルテーブル](#window-function-sample-table) `scores`のデータを使用します。
+この例では、[サンプルテーブル](#window-function-sample-table) `scores` のデータを使用します。
 
 ```plaintext
 select *, STD(score)
@@ -1224,7 +1224,7 @@ STDDEV_SAMP(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause 
 
 **例:**
 
-この例では、[サンプルテーブル](#window-function-sample-table) `scores`のデータを使用します。
+この例では、[サンプルテーブル](#window-function-sample-table) `scores` のデータを使用します。
 
 ```plaintext
 select *, STDDEV_SAMP(score)
@@ -1282,7 +1282,7 @@ COVAR_SAMP(expr1,expr2) OVER([partition_by_clause] [order_by_clause] [order_by_c
 
 **例:**
 
-この例では、[サンプルテーブル](#window-function-sample-table) `scores`のデータを使用します。
+この例では、[サンプルテーブル](#window-function-sample-table) `scores` のデータを使用します。
 
 ```plaintext
 select *, COVAR_SAMP(id, score) 
@@ -1338,7 +1338,7 @@ COVAR_POP(expr1, expr2) OVER([partition_by_clause] [order_by_clause] [order_by_c
 
 **例:**
 
-この例では、[サンプルテーブル](#window-function-sample-table) `scores`のデータを使用します。
+この例では、[サンプルテーブル](#window-function-sample-table) `scores` のデータを使用します。
 
 ```plaintext
 select *, COVAR_POP(id, score)
@@ -1378,7 +1378,7 @@ CORR(expr1, expr2) OVER([partition_by_clause] [order_by_clause] [order_by_clause
 
 **例:**
 
-この例では、[サンプルテーブル](#window-function-sample-table) `scores`のデータを使用します。
+この例では、[サンプルテーブル](#window-function-sample-table) `scores` のデータを使用します。
 
 ```plaintext
 select *, CORR(id, score)

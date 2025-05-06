@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 > **注意**
 >
-> 新しくデプロイされた StarRocks v3.1 クラスターでは、目的の external catalog に切り替えるために SET CATALOG を実行する場合、その catalog に対する USAGE 権限が必要です。[GRANT](../account-management/GRANT.md) を使用して必要な権限を付与できます。以前のバージョンからアップグレードされた v3.1 クラスターでは、継承された権限で SET CATALOG を実行できます。
+> 新しくデプロイされた StarRocks v3.1 クラスターでは、目的の external catalog に切り替えるために SET CATALOG を実行する場合、その external catalog に対する USAGE 権限が必要です。必要な権限を付与するには [GRANT](../account-management/GRANT.md) を使用できます。以前のバージョンからアップグレードされた v3.1 クラスターでは、継承された権限で SET CATALOG を実行できます。
 
 ## 構文
 

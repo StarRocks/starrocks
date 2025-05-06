@@ -185,4 +185,3 @@ Changes not staged for commit:
   (use "git restore <file>..." to discard changes in working directory)
 	modified:   docs/zh/developers/trace-tools/Trace.md
 ```
-

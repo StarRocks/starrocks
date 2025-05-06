@@ -4,23 +4,25 @@ displayed_sidebar: docs
 
 # positive
 
-`x` をそのままの値として返します。
+## 説明
 
-## Syntax
+`x` を値として返します。
+
+## 構文
 
 ```Haskell
 POSITIVE(x);
 ```
 
-## Parameters
+## パラメータ
 
 `x`: BIGINT、DOUBLE、DECIMALV2、DECIMAL32、DECIMAL64、および DECIMAL128 データ型をサポートします。
 
-## Return value
+## 戻り値
 
 `x` のデータ型と同じデータ型の値を返します。
 
-## Examples
+## 例
 
 ```Plain
 mysql> select positive(3);

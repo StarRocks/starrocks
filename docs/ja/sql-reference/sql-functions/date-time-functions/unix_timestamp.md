@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # unix_timestamp
 
+## Description
+
 DATE または DATETIME 値を UNIX タイムスタンプに変換します。
 
 パラメータが指定されていない場合、この関数は現在の時刻を UNIX タイムスタンプに変換します。
@@ -12,11 +14,11 @@ DATE または DATETIME 値を UNIX タイムスタンプに変換します。
 
 1970-01-01 00:00:00 より前または 2038-01-19 11:14:07 より後の時間に対しては、この関数は 0 を返します。
 
-日付形式の詳細については、[date_format](./date_format.md) を参照してください。
+日付形式の詳細については、 [date_format](./date_format.md) を参照してください。
 
-この関数は、異なるタイムゾーンに対して異なる結果を返す場合があります。詳細については、[タイムゾーンの設定](../../../administration/management/timezone.md) を参照してください。
+この関数は異なるタイムゾーンで異なる結果を返すことがあります。詳細については、 [Configure a time zone](../../../administration/management/timezone.md) を参照してください。
 
-## 構文
+## Syntax
 
 ```Haskell
 BIGINT UNIX_TIMESTAMP()
@@ -24,7 +26,7 @@ BIGINT UNIX_TIMESTAMP(DATETIME date)
 BIGINT UNIX_TIMESTAMP(DATETIME date, STRING fmt)
 ```
 
-## 例
+## Examples
 
 ```Plain Text
 MySQL > select unix_timestamp();
@@ -63,6 +65,6 @@ MySQL > select unix_timestamp('1969-01-01 00:00:00');
 +---------------------------------------+
 ```
 
-## キーワード
+## keyword
 
 UNIX_TIMESTAMP, UNIX, TIMESTAMP

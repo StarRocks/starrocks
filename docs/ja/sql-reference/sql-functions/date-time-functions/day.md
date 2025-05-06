@@ -4,17 +4,19 @@ displayed_sidebar: docs
 
 # day
 
+## 説明
+
 日付または日時式の日の部分を抽出し、1から31の範囲の値を返します。
 
 `date` パラメータは DATE または DATETIME 型でなければなりません。
 
-## Syntax
+## 構文
 
 ```Haskell
 INT DAY(DATETIME|DATE date)
 ```
 
-## Examples
+## 例
 
 ```Plain Text
 MySQL > select day('1987-01-31');
@@ -32,6 +34,6 @@ MySQL > select day('1987-01-31 20:10:59');
 +----------------------------+
 ```
 
-## keywords
+## キーワード
 
 DAY, day

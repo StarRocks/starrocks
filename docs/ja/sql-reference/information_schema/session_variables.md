@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 `session_variables` はセッション変数に関する情報を提供します。
 
-`session_variables` には以下のフィールドが含まれています:
+`session_variables` には次のフィールドが含まれています:
 
 | **Field**      | **Description**        |
 | -------------- | ---------------------- |

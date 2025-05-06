@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # array_sort
 
+## 説明
+
 配列の要素を昇順にソートします。
 
 ## 構文
@@ -14,7 +16,7 @@ array_sort(array)
 
 ## パラメータ
 
-`array`: ソートしたい配列。ARRAY データ型のみがサポートされます。
+`array`: ソートしたい配列。ARRAY データ型のみサポートされます。
 
 ## 戻り値
 
@@ -32,7 +34,7 @@ array_sort(array)
 
 ## 例
 
-次のテーブルを例として使用します:
+以下のテーブルを例として使用します。
 
 ```plaintext
 mysql> select * from test;

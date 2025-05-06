@@ -4,7 +4,9 @@ displayed_sidebar: docs
 
 # hll_raw_agg
 
-この関数は、HLL フィールドを集計するための集計関数です。HLL 値を返します。
+## Description
+
+この関数は、HLL フィールドを集計するために使用される集計関数です。HLL 値を返します。
 
 ## Syntax
 
@@ -14,7 +16,7 @@ hll_raw_agg(hll)
 
 ## Parameters
 
-`hll`: 他のカラムによって生成されるか、ロードされたデータに基づく HLL カラム。
+`hll`: 他の列によって生成されるか、ロードされたデータに基づく HLL 列。
 
 ## Return value
 

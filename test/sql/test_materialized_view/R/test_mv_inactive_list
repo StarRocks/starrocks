@@ -1,0 +1,79 @@
+-- name: test_mv_inactive_list
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t1 (
+    k1 date,
+    k2 int,
+    k3 int
+)
+DUPLICATE KEY(k1)
+COMMENT "OLAP"
+PARTITION BY (k1, k2)
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t1 VALUES ('2020-06-02',1,1),('2020-06-02',2,2),('2020-07-02',3,3);
+-- result:
+-- !result
+CREATE VIEW v1 AS SELECT k1,min(k2) as k2,min(k3) as k3 FROM t1 GROUP BY k1;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv1 REFRESH MANUAL AS select k1, k2 from v1;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv1 with sync mode;
+SELECT k1,min(k2) as k2 FROM t1 GROUP BY k1 order by 1;
+-- result:
+2020-06-02	1
+2020-07-02	3
+-- !result
+function: print_hit_materialized_view("SELECT k1,min(k2) as k2 FROM t1 GROUP BY k1 order by 1;", "mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT k1,min(k2) as k2 FROM t1 GROUP BY k1 order by 1;", "mv1")
+-- result:
+True
+-- !result
+[UC]ALTER MATERIALIZED VIEW mv1 inactive;
+-- result:
+-- !result
+function: print_hit_materialized_view("SELECT k1,min(k2) as k2 FROM t1 GROUP BY k1 order by 1;", "mv1")
+-- result:
+False
+-- !result
+function: print_hit_materialized_view("SELECT k1,min(k2) as k2 FROM t1 GROUP BY k1 order by 1;", "mv1")
+-- result:
+False
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv1 with sync mode;
+[UC]ALTER MATERIALIZED VIEW mv1 active;
+-- result:
+-- !result
+function: print_hit_materialized_view("SELECT k1,min(k2) as k2 FROM t1 GROUP BY k1 order by 1;", "mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT k1,min(k2) as k2 FROM t1 GROUP BY k1 order by 1;", "mv1")
+-- result:
+True
+-- !result
+SELECT k1,min(k2) as k2 FROM t1 GROUP BY k1 order by 1;
+-- result:
+2020-06-02	1
+2020-07-02	3
+-- !result
+SELECT k1,max(k2) FROM t1 GROUP BY k1 order by 1;
+-- result:
+2020-06-02	2
+2020-07-02	3
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result

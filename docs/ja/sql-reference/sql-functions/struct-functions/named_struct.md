@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # named_struct
 
+## 説明
+
 指定されたフィールド名と値を持つ struct を作成します。
 
 この関数は v3.1 以降でサポートされています。
@@ -14,13 +16,13 @@ displayed_sidebar: docs
 STRUCT named_struct({STRING name1, ANY val1} [, ...] )
 ```
 
-## パラメーター
+## パラメータ
 
 - `nameN`: STRING フィールド。
 
-- `valN`: フィールド N の値を指定する任意の型の式。値は nullable です。
+- `valN`: 任意の型の式で、フィールド N の値を指定します。値は null 可能です。
 
-名前と値の式はペアでなければなりません。そうでない場合、struct を作成することはできません。少なくとも 1 組のフィールド名と値をカンマ（`,`）で区切って渡す必要があります。
+名前と値の式はペアでなければなりません。そうでない場合、struct を作成することはできません。フィールド名と値のペアを少なくとも1組、カンマ（`,`）で区切って渡す必要があります。
 
 ## 戻り値
 
@@ -44,7 +46,7 @@ SELECT named_struct('a', null, 'b', 2, 'c', 3);
 +-----------------------------------------+
 ```
 
-## 参考文献
+## 参照
 
 - [STRUCT data type](../../data-types/semi_structured/STRUCT.md)
 - [row/struct](row.md)

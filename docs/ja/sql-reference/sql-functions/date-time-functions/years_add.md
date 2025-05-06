@@ -14,7 +14,7 @@ DATETIME YEARS_ADD(DATETIME expr1,INT expr2)
 
 指定された時間間隔を日付に追加します。単位は年です。
 
-expr1 パラメータは有効な datetime 式です。
+expr1 パラメータは有効な日時式です。
 
 expr2 パラメータは追加したい年数です。
 
@@ -38,4 +38,4 @@ select years_add('2010-11-30', 2);
 
 ## keyword
 
-YEARS_ADD,ADD
+YEARS_ADD, ADD

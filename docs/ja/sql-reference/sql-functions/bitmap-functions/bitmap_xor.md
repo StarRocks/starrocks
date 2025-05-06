@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # bitmap_xor
 
+## 説明
+
 `lhs` と `rhs` に固有の要素からなる集合を計算します。これは論理的には `bitmap_andnot(bitmap_or(lhs, rhs), bitmap_and(lhs, rhs))`（補集合）と同等です。
 
 ## 構文
@@ -25,4 +27,4 @@ mysql> select bitmap_to_string(bitmap_xor(bitmap_from_string('1, 3'), bitmap_fro
 
 ## キーワード
 
-BITMAP_XOR,  BITMAP
+BITMAP_XOR, BITMAP

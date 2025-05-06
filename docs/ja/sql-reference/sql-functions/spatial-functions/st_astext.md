@@ -4,15 +4,17 @@ displayed_sidebar: docs
 
 # ST_AsText,ST_AsWKT
 
-ジオメトリ図形を WKT (Well Known Text) 形式に変換します。
+## Description
 
-## 構文
+幾何図形を WKT (Well Known Text) 形式に変換します。
+
+## Syntax
 
 ```Haskell
 VARCHAR ST_AsText(GEOMETRY geo)
 ```
 
-## 例
+## Examples
 
 ```Plain Text
 MySQL > SELECT ST_AsText(ST_Point(24.7, 56.7));
@@ -23,6 +25,6 @@ MySQL > SELECT ST_AsText(ST_Point(24.7, 56.7));
 +---------------------------------+
 ```
 
-## キーワード
+## keyword
 
 ST_ASTEXT,ST_ASWKT,ST,ASTEXT,ASWKT

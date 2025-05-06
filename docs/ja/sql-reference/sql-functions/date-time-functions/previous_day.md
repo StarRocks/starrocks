@@ -4,9 +4,11 @@ displayed_sidebar: docs
 
 # previous_day
 
-指定された曜日 (DOW) のうち、入力された日付 (DATE または DATETIME) より前に発生した最初の日付を返します。例えば、`previous_day('2023-04-06', 'Monday')` は '2023-04-06' より前に発生した直近の月曜日の日付を返します。
+## 説明
 
-この関数は v3.1 からサポートされています。[next_day](./next_day.md) の反対です。
+指定された曜日 (DOW) のうち、入力された日付 (DATE または DATETIME) より前に発生する最初の日付を返します。例えば、`previous_day('2023-04-06', 'Monday')` は '2023-04-06' より前に発生した直近の月曜日の日付を返します。
+
+この関数は v3.1 からサポートされています。[next_day](./next_day.md) の逆の機能です。
 
 ## 構文
 
@@ -17,7 +19,7 @@ DATE previous_day(DATETIME|DATE date_expr, VARCHAR dow)
 ## パラメータ
 
 - `date_expr`: 入力日付。これは有効な DATE または DATETIME 式でなければなりません。
-- `dow`: 曜日。大文字小文字を区別するいくつかの省略形が有効です:
+- `dow`: 曜日。大文字小文字を区別するいくつかの省略形が有効です。
 
   | DOW_FULL  | DOW_2 | DOW_3 |
   | --------- | ----- |:-----:|

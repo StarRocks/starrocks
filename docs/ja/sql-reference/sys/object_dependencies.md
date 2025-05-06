@@ -10,15 +10,15 @@ displayed_sidebar: docs
 
 | **Field**           | **Description**                                              |
 | ------------------- | ------------------------------------------------------------ |
-| object_id           | オブジェクトの ID。                                          |
+| object_id           | オブジェクトのID。                                           |
 | object_name         | オブジェクトの名前。                                         |
-| object_database     | オブジェクトが存在するデータベース。                         |
-| object_catalog      | オブジェクトが存在するカタログ。このフィールドは常に `default_catalog` です。 |
+| object_database     | オブジェクトが所在するデータベース。                         |
+| object_catalog      | オブジェクトが所在するカタログ。このフィールドは常に `default_catalog` です。 |
 | object_type         | オブジェクトのタイプ。このフィールドは常に `MATERIALIZED_VIEW` です。 |
-| ref_object_id       | 参照されるオブジェクトの ID。                                |
+| ref_object_id       | 参照されるオブジェクトのID。                                 |
 | ref_object_name     | 参照されるオブジェクトの名前。                               |
-| ref_object_database | 参照されるオブジェクトが存在するデータベース。               |
-| ref_object_catalog  | 参照されるオブジェクトが存在するカタログ。                   |
+| ref_object_database | 参照されるオブジェクトが所在するデータベース。               |
+| ref_object_catalog  | 参照されるオブジェクトが所在するカタログ。                   |
 | ref_object_type     | 参照されるオブジェクトのタイプ。                             |
 
 例:

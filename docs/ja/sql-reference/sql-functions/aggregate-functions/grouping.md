@@ -4,19 +4,21 @@ displayed_sidebar: docs
 
 # grouping
 
-列が集計列であるかどうかを示します。集計列である場合は 0 が返され、それ以外の場合は 1 が返されます。
+## 説明
 
-## Syntax
+列が集計列であるかどうかを示します。集計列である場合は0が返され、それ以外の場合は1が返されます。
+
+## 構文
 
 ```Haskell
 GROUPING(col_expr)
 ```
 
-## Parameters
+## パラメータ
 
-`col_expr`: GROUP BY 句の ROLLUP、CUBE、または GROUPING SETS の展開で指定された次元列の式。
+`col_expr`: GROUP BY句のROLLUP、CUBE、またはGROUPING SETS展開のexpression-listで指定されたディメンション列の式。
 
-## Examples
+## 例
 
 ```plain text
 MySQL > select * from t;

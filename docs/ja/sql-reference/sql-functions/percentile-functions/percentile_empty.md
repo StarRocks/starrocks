@@ -4,23 +4,25 @@ displayed_sidebar: docs
 
 # percentile_empty
 
-PERCENTILE 値を構築します。これは、[Stream Load](../../../loading/StreamLoad.md) または [INSERT INTO](../../../loading/InsertInto.md) を使用してデータロードのために null 値を埋めるために使用されます。
+## 説明
 
-## Syntax
+PERCENTILE 値を構築します。これは、[Stream Load](../../../loading/StreamLoad.md) または [INSERT INTO](../../../loading/InsertInto.md) を使用してデータロード時に null 値を埋めるために使用されます。
+
+## 構文
 
 ```Haskell
 PERCENTILE_EMPTY();
 ```
 
-## Parameters
+## パラメータ
 
 なし
 
-## Return value
+## 戻り値
 
 PERCENTILE 値を返します。
 
-## Examples
+## 例
 
 テーブルを作成します。`percent` 列は PERCENTILE 列です。
 

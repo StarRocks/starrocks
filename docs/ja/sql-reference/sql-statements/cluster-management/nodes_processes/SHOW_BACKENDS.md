@@ -23,43 +23,41 @@ SHOW BACKENDS
 ## 戻り値
 
 ```SQL
-+-----------+--------------+---------------+--------+----------+----------+---------------------+---------------------+-------+----------------------+-----------------------+-----------+------------------+---------------+---------------+---------+----------------+--------+--------------+--------------------------------------------------------+-------------------+-------------+----------+----------+-------------------+------------+------------+--------------------------------------------------------+----------+------------+
-| BackendId | IP           | HeartbeatPort | BePort | HttpPort | BrpcPort | LastStartTime       | LastHeartbeat       | Alive | SystemDecommissioned | ClusterDecommissioned | TabletNum | DataUsedCapacity | AvailCapacity | TotalCapacity | UsedPct | MaxDiskUsedPct | ErrMsg | Version      | Status                                                 | DataTotalCapacity | DataUsedPct | CpuCores | MemLimit | NumRunningQueries | MemUsedPct | CpuUsedPct | DataCacheMetrics                                       | Location | StatusCode |
-+-----------+--------------+---------------+--------+----------+----------+---------------------+---------------------+-------+----------------------+-----------------------+-----------+------------------+---------------+---------------+---------+----------------+--------+--------------+--------------------------------------------------------+-------------------+-------------+----------+----------+-------------------+------------+------------+--------------------------------------------------------+----------+------------+
++-----------+-----------+---------------+--------+----------+----------+---------------------+---------------------+-------+----------------------+-----------------------+-----------+------------------+---------------+---------------+---------+----------------+--------+--------------------+--------------------------------------------------------+-------------------+-------------+----------+-------------------+------------+------------+------------------+----------+
+| BackendId | IP        | HeartbeatPort | BePort | HttpPort | BrpcPort | LastStartTime       | LastHeartbeat       | Alive | SystemDecommissioned | ClusterDecommissioned | TabletNum | DataUsedCapacity | AvailCapacity | TotalCapacity | UsedPct | MaxDiskUsedPct | ErrMsg | Version            | Status                                                 | DataTotalCapacity | DataUsedPct | CpuCores | NumRunningQueries | MemUsedPct | CpuUsedPct | DataCacheMetrics | Location |
++-----------+-----------+---------------+--------+----------+----------+---------------------+---------------------+-------+----------------------+-----------------------+-----------+------------------+---------------+---------------+---------+----------------+--------+--------------------+--------------------------------------------------------+-------------------+-------------+----------+-------------------+------------+------------+------------------+----------+
 ```
 
-| **戻り値**            | **説明**                                                      |
+| **戻り値**             | **説明**                                                      |
 | --------------------- | ------------------------------------------------------------ |
-| BackendId             | BE ノードの ID。                                             |
-| IP                    | BE ノードの IP アドレス。                                    |
+| BackendId             | BE ノードの ID。                                              |
+| IP                    | BE ノードの IP アドレス。                                     |
 | HeartbeatPort         | BE ノードのハートビートポート。FE ノードからのハートビートを受信するために使用されます。 |
 | BePort                | BE ノードの Thrift サーバーポート。FE ノードからのリクエストを受信するために使用されます。 |
 | HttpPort              | BE ノードの HTTP サーバーポート。ウェブページを介して BE ノードにアクセスするために使用されます。 |
-| BrpcPort              | BE ノード間の通信に使用される bRPC ポート。                  |
-| LastStartTime         | BE ノードが最後に起動された時刻。                            |
-| LastHeartbeat         | FE ノードがハートビートを送信し、BE が応答した最後の時刻。   |
+| BrpcPort              | BE ノードの bRPC ポート。BE ノード間の通信に使用されます。     |
+| LastStartTime         | BE ノードが最後に起動された時間。                             |
+| LastHeartbeat         | FE ノードがハートビートを送信し、BE が応答した最後の時間。    |
 | Alive                 | BE ノードが生存しているかどうか。<ul><li>`true`: BE ノードは生存しています。</li><li>`false`: BE ノードは生存していません。</li></ul> |
-| SystemDecommissioned  | BE ノードが退役しているかどうか。退役する前に、BE ノードはデータを他の BE ノードに移行します。移行中もデータロードやクエリには影響しません。<ul><li>`true`: クラスタは BE ノードを退役としてマークしています。データは正常に移行されたか、移行中です。</li><li>`false`: BE ノードは稼働中です。</li></ul> |
-| ClusterDecommissioned | システム互換性のために使用されるパラメータです。              |
-| TabletNum             | BE ノード上の tablet の数。                                  |
-| DataUsedCapacity      | データファイルが占有するストレージ容量。                     |
-| AvailCapacity         | BE ノードの利用可能なストレージ容量。                        |
-| TotalCapacity         | 総ストレージ容量。`DataUsedCapacity` + `AvailCapacity` + 非データファイルが占有するストレージ容量に相当します。 |
-| UsedPct               | 使用されたストレージ容量の割合。                             |
+| SystemDecommissioned  | BE ノードが退役しているかどうか。退役する前に、BE ノードはデータを他の BE ノードに移行します。データロードとクエリは移行中も影響を受けません。<ul><li>`true`: クラスタは BE ノードを退役としてマークしました。データは正常に移行されたか、移行中です。</li><li>`false`: BE ノードは稼働中です。</li></ul> |
+| ClusterDecommissioned | このパラメータはシステム互換性のために使用されます。          |
+| TabletNum             | BE ノード上のタブレットの数。                                 |
+| DataUsedCapacity      | データファイルによって占有されているストレージ容量。           |
+| AvailCapacity         | BE ノード内の利用可能なストレージ容量。                       |
+| TotalCapacity         | 総ストレージ容量。`DataUsedCapacity` + `AvailCapacity` + データ以外のファイルによって占有されているストレージ容量に相当します。 |
+| UsedPct               | 使用されたストレージ容量の割合。                              |
 | MaxDiskUsedPct        | BE ノードがデータを保存するための複数のディレクトリを持つ場合、このパラメータはすべてのディレクトリの中で使用されたストレージ容量の最大割合を示します。 |
-| ErrMsg                | FE ノードからのハートビートを受信できなかった場合に返されるエラーメッセージ。 |
-| Version               | クラスタの StarRocks バージョン。                            |
-| Status                | BE ノードが tablet 数を FE ノードに報告した最後の時刻。JSON 形式で表示されます。 |
-| DataTotalCapacity     | `DataUsedCapacity` + `AvailCapacity` に相当します。BE ノード内のデータファイルが占有するストレージ容量と利用可能なストレージ容量の合計を示します。 |
-| DataUsedPct           | `DataUsedCapacity`/`DataTotalCapacity` に相当します。データファイルが占有するストレージ容量の割合を、データが占有するストレージ容量と利用可能なストレージ容量の合計に対して示します。 |
-| CpuCores              | BE ノードの CPU コア数。                                     |
-| MemLimit              | BE ノードのメモリ制限。                                      |
+| ErrMsg                | BE ノードが FE ノードからのハートビートを受信できなかったときに返されるエラーメッセージ。 |
+| Version               | クラスタの StarRocks バージョン。                             |
+| Status                | BE ノードがタブレット数を FE ノードに報告した最後の時間。JSON 形式で表示されます。 |
+| DataTotalCapacity     | `DataUsedCapacity` + `AvailCapacity` に相当します。BE ノード内のデータファイルによって占有されているストレージ容量と利用可能なストレージ容量の合計を示します。 |
+| DataUsedPct           | `DataUsedCapacity`/`DataTotalCapacity` に相当します。データファイルによって占有されているストレージ容量の割合を、データ占有ストレージ容量と利用可能なストレージ容量の合計に対する割合として示します。 |
+| CpuCores              | BE ノードの CPU コア数。                                      |
 | NumRunningQueries     | BE ノード上で実行中のクエリの数。                            |
-| MemUsedPct            | 使用されたメモリの割合。                                     |
-| CpuUsedPct            | 使用された CPU コアの割合。                                  |
-| DataCacheMetrics      | Data Cache の状態:<ul><li>`Disabled`: 無効</li><li>`Normal`: 正常</li><li>`Abnormal`: 異常</li><li>`Updating`: Data Cache が更新中、例えばスケーリング中。</li></ul> |
-| Location              | BE ノードのラベル。                                          |
-| StatusCode            | BE ステータスコード。 有効な値: <ul><li>`CONNECTING`: BE ノードが初めてクラスタに追加されています。</li><li>`OK`: BE ノードは稼働中です。</li><li>`SHUTDOWN`: BE ノードが正常にシャットダウンされています。</li><li>`DISCONNECTED`: BE ノードが切断されています。</li></ul> |
+| MemUsedPct            | 使用されたメモリの割合。                                      |
+| CpuUsedPct            | 使用された CPU コアの割合。                                   |
+| DataCacheMetrics      | Data Cache のステータス:<ul><li>`Disabled`: 無効</li><li>`Normal`: 正常</li><li>`Abnormal`: 異常</li><li>`Updating`: Data Cache が更新中、例えばスケーリング中。</li></ul> |
+| Location              | BE ノードのラベル。                                           |
 
 ## 例
 

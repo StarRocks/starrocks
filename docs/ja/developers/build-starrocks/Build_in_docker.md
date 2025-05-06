@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## 概要
 
-StarRocks は、Ubuntu 22.04 と CentOS 7.9 の両方に対応した開発環境イメージを提供しています。このイメージを使用すると、Docker コンテナを起動して、その中で StarRocks をコンパイルできます。
+StarRocks は、Ubuntu 22.04 と CentOS 7.9 の両方に対応した開発環境イメージを提供しています。このイメージを使用すると、Docker コンテナを起動し、その中で StarRocks をコンパイルできます。
 
 ### StarRocks のバージョンと DEV ENV イメージ
 
@@ -16,23 +16,23 @@ StarRocks の異なるブランチは、[StarRocks Docker Hub](https://hub.docke
 
 - Ubuntu 22.04 の場合:
 
-  | **ブランチ名** | **イメージ名**                        |
-  | -------------- | ------------------------------------- |
-  | main           | starrocks/dev-env-ubuntu:latest       |
-  | branch-3.2     | starrocks/dev-env-ubuntu:3.2-latest   |
-  | branch-3.1     | starrocks/dev-env-ubuntu:3.1-latest   |
-  | branch-3.0     | starrocks/dev-env-ubuntu:3.0-latest   |
-  | branch-2.5     | starrocks/dev-env-ubuntu:2.5-latest   |
+  | **ブランチ名** | **イメージ名**                      |
+  | --------------- | ----------------------------------- |
+  | main            | starrocks/dev-env-ubuntu:latest     |
+  | branch-3.2      | starrocks/dev-env-ubuntu:3.2-latest |
+  | branch-3.1      | starrocks/dev-env-ubuntu:3.1-latest |
+  | branch-3.0      | starrocks/dev-env-ubuntu:3.0-latest |
+  | branch-2.5      | starrocks/dev-env-ubuntu:2.5-latest |
 
 - CentOS 7.9 の場合:
 
   | **ブランチ名** | **イメージ名**                         |
-  | -------------- | -------------------------------------- |
-  | main           | starrocks/dev-env-centos7:latest       |
-  | branch-3.2     | starrocks/dev-env-centos7:3.2-latest   |
-  | branch-3.1     | starrocks/dev-env-centos7:3.1-latest   |
-  | branch-3.0     | starrocks/dev-env-centos7:3.0-latest   |
-  | branch-2.5     | starrocks/dev-env-centos7:2.5-latest   |
+  | --------------- | ------------------------------------ |
+  | main            | starrocks/dev-env-centos7:latest     |
+  | branch-3.2      | starrocks/dev-env-centos7:3.2-latest |
+  | branch-3.1      | starrocks/dev-env-centos7:3.1-latest |
+  | branch-3.0      | starrocks/dev-env-centos7:3.0-latest |
+  | branch-2.5      | starrocks/dev-env-centos7:2.5-latest |
 
 ## 前提条件
 
@@ -44,8 +44,8 @@ StarRocks をコンパイルする前に、以下の要件を満たしている�
 
 - **ソフトウェア**
 
-  - マシンは Ubuntu 22.04 または CentOS 7.9 で動作している必要があります。
-  - Docker がマシンにインストールされており、バージョンは少なくとも v20.10.10 である必要があります。
+  - マシンは Ubuntu 22.04 または CentOS 7.9 上で動作している必要があります。
+  - マシンに Docker がインストールされており、バージョン v20.10.10 以上である必要があります。
 
 ## ステップ 1: イメージをダウンロードする
 
@@ -53,16 +53,16 @@ StarRocks をコンパイルする前に、以下の要件を満たしている�
 
 ```Bash
 # <image_name> をダウンロードしたいイメージの名前に置き換えてください。
-# 例えば、`starrocks/dev-env-ubuntu:latest` です。
-# OS に適したイメージを選択してください。
+# 例えば、`starrocks/dev-env-ubuntu:latest`。
+# OS に適したイメージを選択したことを確認してください。
 docker pull <image_name>
 ```
 
-Docker は自動的にマシンの CPU アーキテクチャを識別し、それに適したイメージをプルします。`linux/amd64` イメージは x86 ベースの CPU 用で、`linux/arm64` イメージは ARM ベースの CPU 用です。
+Docker は自動的にマシンの CPU アーキテクチャを識別し、マシンに適した対応するイメージをプルします。`linux/amd64` イメージは x86 ベースの CPU 用で、`linux/arm64` イメージは ARM ベースの CPU 用です。
 
 ## ステップ 2: Docker コンテナ内で StarRocks をコンパイルする
 
-ローカルホストパスをマウントするかしないかで、開発環境 Docker コンテナを起動できます。次回のコンパイル時に Java の依存関係を再ダウンロードするのを避けるため、ローカルホストパスをマウントしてコンテナを起動することをお勧めします。また、コンテナからローカルホストにバイナリファイルを手動でコピーする必要もありません。
+ローカルホストパスをマウントするかしないかで、開発環境 Docker コンテナを起動できます。次回のコンパイル時に Java の依存関係を再ダウンロードするのを避けるために、ローカルホストパスをマウントしてコンテナを起動することをお勧めします。また、バイナリファイルをコンテナからローカルホストに手動でコピーする必要もありません。
 
 - **ローカルホストパスをマウントしてコンテナを起動する**:
 

@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 > **注意**
 >
-> この操作を実行する権限を持つのは `cluster_admin` ロールのみです。
+> この操作を実行する権限は `cluster_admin` ロールのみにあります。
 
 ## 構文とパラメータ
 
@@ -63,7 +63,7 @@ displayed_sidebar: docs
 
   > **注意**
   >
-  > 単一レプリカテーブルのタブレットを格納している BE ノードは削除できません。
+  > 単一レプリカテーブルのタブレットを保存している BE ノードは削除できません。
 
   ```SQL
   ALTER SYSTEM DROP BACKEND "<be_host>:<heartbeat_service_port>"[, ...]
@@ -75,7 +75,7 @@ displayed_sidebar: docs
   ALTER SYSTEM DECOMMISSION BACKEND "<be_host>:<heartbeat_service_port>"[, ...]
   ```
 
-  BE ノードを削除するのとは異なり、退役は安全に削除することを意味します。これは非同期操作です。BE が退役されると、BE 上のデータはまず他の BE に移行され、その後クラスタから削除されます。データ移行中にデータロードやクエリは影響を受けません。操作が成功したかどうかは [SHOW BACKENDS](SHOW_BACKENDS.md) を使用して確認できます。操作が成功した場合、退役された BE は返されません。操作が失敗した場合、BE はまだオンラインのままです。[CANCEL DECOMMISSION](CANCEL_DECOMMISSION.md) を使用して手動で操作をキャンセルできます。
+  BE ノードを削除することは、クラスタから強制的に削除することを意味しますが、BE ノードを退役させることは安全に削除することを意味します。これは非同期操作です。BE が退役されると、BE 上のデータは最初に他の BEs に移行され、その後クラスタから削除されます。データ移行中にデータロードやクエリは影響を受けません。操作が成功したかどうかは [SHOW BACKENDS](SHOW_BACKENDS.md) を使用して確認できます。操作が成功した場合、退役した BE は返されません。操作が失敗した場合、BE はオンラインのままです。[CANCEL DECOMMISSION](CANCEL_DECOMMISSION.md) を使用して手動で操作をキャンセルできます。
 
 | **パラメータ**          | **必須** | **説明**                                                                            |
 | ---------------------- | ------------ | ------------------------------------------------------------------------------------------ |
@@ -109,7 +109,7 @@ displayed_sidebar: docs
 
 ### Broker
 
-- Broker ノードを追加します。Broker ノードを使用して、HDFS やクラウドストレージから StarRocks にデータをロードできます。詳細は [Loading](../../../../loading/Loading_intro.md) を参照してください。
+- Broker ノードを追加します。Broker ノードを使用して、HDFS やクラウドストレージから StarRocks へデータをロードできます。詳細は [Loading](../../../../loading/Loading_intro.md) を参照してください。
 
   ```SQL
   ALTER SYSTEM ADD BROKER <broker_name> "<broker_host>:<broker_ipc_port>"[, ...]
@@ -149,15 +149,15 @@ displayed_sidebar: docs
 ALTER SYSTEM CREATE IMAGE
 ```
 
-イメージの作成は Leader FE 上での非同期操作です。操作の開始時刻と終了時刻は FE ログファイル **fe.log** で確認できます。`triggering a new checkpoint manually...` のようなログはイメージ作成が開始されたことを示し、`finished save image...` のようなログはイメージが作成されたことを示します。
+イメージの作成は Leader FE 上での非同期操作です。操作の開始時間と終了時間は FE ログファイル **fe.log** で確認できます。`triggering a new checkpoint manually...` というログはイメージの作成が開始されたことを示し、`finished save image...` というログはイメージが作成されたことを示します。
 
 ## 使用上の注意
 
 - FE、BE、CN、または Broker ノードの追加と削除は同期操作です。ノード削除操作をキャンセルすることはできません。
 - 単一 FE クラスタでは FE ノードを削除することはできません。
-- 複数 FE クラスタでは Leader FE ノードを直接削除することはできません。削除するには、まず再起動する必要があります。StarRocks が新しい Leader FE を選出した後、以前のものを削除できます。
+- 複数 FE クラスタでは、Leader FE ノードを直接削除することはできません。削除するには、まず再起動する必要があります。StarRocks が新しい Leader FE を選出した後、以前のものを削除できます。
 - 残りの BE ノードの数がデータレプリカの数より少ない場合、BE ノードを削除することはできません。たとえば、クラスタに 3 つの BE ノードがあり、データを 3 つのレプリカで保存している場合、BE ノードを削除することはできません。また、4 つの BE ノードと 3 つのレプリカがある場合、1 つの BE ノードを削除できます。
-- BE ノードを削除することと退役させることの違いは、BE ノードを削除する場合、StarRocks はそれをクラスタから強制的に削除し、削除後にタブレットを補完しますが、BE ノードを退役させる場合、StarRocks はまず退役された BE ノード上のタブレットを他のノードに移行し、その後ノードを削除します。
+- BE ノードの削除と退役の違いは、BE ノードを削除すると、StarRocks はそれをクラスタから強制的に削除し、削除後にタブレットを補充しますが、BE ノードを退役させると、StarRocks は最初に退役した BE ノードのタブレットを他のノードに移行し、その後ノードを削除します。
 
 ## 例
 

@@ -4,7 +4,9 @@ displayed_sidebar: docs
 
 # bitmap_agg
 
-列内の値（NULLを除く）をビットマップに集約します（複数の行を1つの行にまとめます）。
+## 説明
+
+カラム内の値（NULLを除く）を集約してビットマップにします（複数行を1行にまとめます）。
 
 ## 構文
 
@@ -14,15 +16,15 @@ BITMAP_AGG(col)
 
 ## パラメータ
 
-`col`: 集約したい列の値。BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINTに評価される必要があります。
+`col`: 集約したいカラムの値。BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT に評価される必要があります。
 
 ## 戻り値
 
-BITMAP型の値を返します。
+BITMAP 型の値を返します。
 
 ## 使用上の注意
 
-行の値が0未満または18446744073709551615を超える場合、その値は無視され、ビットマップに追加されません（例3を参照）。
+行の値が0未満または18446744073709551615より大きい場合、その値は無視され、ビットマップに追加されません（例3を参照）。
 
 ## 例
 
@@ -63,7 +65,7 @@ select * from t1_test order by c1;
 +------+------+------+------+-------+----------------------+
 ```
 
-例1: 列 `c1` の値を1つのビットマップに集約します。
+例1: カラム `c1` の値を1つのビットマップに集約します。
 
 ```PlainText
 mysql> select bitmap_to_string(bitmap_agg(c1)) from t1_test;
@@ -74,7 +76,7 @@ mysql> select bitmap_to_string(bitmap_agg(c1)) from t1_test;
 +----------------------------------+
 ```
 
-例2: 列 `c2` の値を1つのビットマップに集約します（NULLは無視されます）。
+例2: カラム `c2` の値を1つのビットマップに集約します（NULLは無視されます）。
 
 ```PlainText
 mysql> SELECT BITMAP_TO_STRING(BITMAP_AGG(c2)) FROM t1_test;
@@ -85,7 +87,7 @@ mysql> SELECT BITMAP_TO_STRING(BITMAP_AGG(c2)) FROM t1_test;
 +----------------------------------+
 ```
 
-例3: 列 `c6` の値を1つのビットマップに集約します（値の範囲を超える最後の2つの値は無視されます）。
+例3: カラム `c6` の値を1つのビットマップに集約します（値の範囲を超える最後の2つの値は無視されます）。
 
 ```PlainText
 mysql> select bitmap_to_string(bitmap_agg(c6)) from t1_test;

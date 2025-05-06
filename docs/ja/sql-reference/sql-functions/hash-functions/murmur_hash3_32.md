@@ -4,15 +4,17 @@ displayed_sidebar: docs
 
 # murmur_hash3_32
 
+## 説明
+
 入力文字列の32ビットの murmur3 ハッシュ値を返します。
 
-## Syntax
+## 構文
 
 ```Haskell
 INT MURMUR_HASH3_32(VARCHAR input, ...)
 ```
 
-## Examples
+## 例
 
 ```Plain Text
 MySQL > select murmur_hash3_32(null);
@@ -37,6 +39,6 @@ MySQL > select murmur_hash3_32("hello", "world");
 +-----------------------------------+
 ```
 
-## keyword
+## キーワード
 
 MURMUR_HASH3_32,HASH

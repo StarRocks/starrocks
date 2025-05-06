@@ -4,15 +4,17 @@ displayed_sidebar: docs
 
 # get_json_int
 
+## 説明
+
 この関数は、指定されたパスから JSON 文字列の整数値を解析して取得します。
 
-json_path は `$` で始まり、パスの区切りとして `.` を使用する必要があります。
+json_path は `$` で始まり、パスの区切りとして `.` を使用します。
 
-パスに `.` が含まれる場合は、`"` で囲むことができます。
+パスに `.` が含まれる場合、`"` で囲むことができます。
 
 `[ ]` は配列の添字として使用され、0 から始まります。
 
-パスの内容には `"` 、`[` 、および `]` を含めないでください。
+パスの内容には `"` 、`[` および `]` を含めることはできません。
 
 json_string または json_path の形式が間違っている場合、この関数は NULL を返します。
 
@@ -59,4 +61,4 @@ BIGINT get_json_int(VARCHAR json_str, VARCHAR json_path)
 
 ## キーワード
 
-GET_JSON_INT,GET,JSON,INT
+GET_JSON_INT, GET, JSON, INT

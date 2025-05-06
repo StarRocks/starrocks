@@ -6,19 +6,19 @@ displayed_sidebar: docs
 
 ## 説明
 
-既存のテーブルを変更します。以下を含みます:
+既存のテーブルを修正します。以下を含みます：
 
 - [テーブル、パーティション、インデックス、または列の名前変更](#rename)
-- [テーブルコメントの変更](#alter-table-comment-from-v31)
-- [パーティションの変更（パーティションの追加/削除およびパーティション属性の変更）](#modify-partition)
-- [バケット法とバケット数の変更](#modify-the-bucketing-method-and-number-of-buckets-from-v32)
-- [列の変更（列の追加/削除および列の順序変更）](#modify-columns-adddelete-columns-change-the-order-of-columns)
+- [テーブルコメントの修正](#alter-table-comment-from-v31)
+- [パーティションの修正（パーティションの追加/削除とパーティション属性の修正）](#modify-partition)
+- [バケット法とバケット数の修正](#modify-the-bucketing-method-and-number-of-buckets-from-v32)
+- [列の修正（列の追加/削除と列の順序変更）](#modify-columns-adddelete-columns-change-the-order-of-columns)
 - [ロールアップインデックスの作成/削除](#modify-rollup-index)
-- [ビットマップインデックスの変更](#modify-bitmap-indexes)
-- [テーブルプロパティの変更](#modify-table-properties)
+- [ビットマップインデックスの修正](#modify-bitmap-indexes)
+- [テーブルプロパティの修正](#modify-table-properties)
 - [アトミックスワップ](#swap)
-- [手動データバージョンコンパクション](#manual-compaction-from-31)
-- [主キー永続インデックスの削除](#主キー永続インデックスの削除-339-より)
+- [手動データバージョンのコンパクション](#manual-compaction-from-31)
+- [主キー永続性インデックスの削除](#drop-primary-key-persistent-index-from-339)
 
 :::tip
 この操作には、対象テーブルに対する ALTER 権限が必要です。
@@ -31,52 +31,52 @@ ALTER TABLE [<db_name>.]<tbl_name>
 alter_clause1[, alter_clause2, ...]
 ```
 
-`alter_clause` には次の操作を含めることができます: 名前変更、コメント、パーティション、バケット、列、ロールアップインデックス、ビットマップインデックス、テーブルプロパティ、スワップ、およびコンパクション。
+`alter_clause` には以下の操作が含まれます：名前変更、コメント、パーティション、バケット、列、ロールアップインデックス、ビットマップインデックス、テーブルプロパティ、スワップ、およびコンパクション。
 
 - 名前変更: テーブル、ロールアップインデックス、パーティション、または列の名前を変更します（**v3.3.2以降**でサポート）。
-- コメント: テーブルコメントを変更します（**v3.1以降**でサポート）。
-- パーティション: パーティションプロパティを変更し、パーティションを削除または追加します。
-- バケット: バケット法とバケット数を変更します。
-- 列: 列を追加、削除、再配置、または列の型を変更します。
+- コメント: テーブルコメントを修正します（**v3.1以降**でサポート）。
+- パーティション: パーティションプロパティを修正、パーティションを削除、またはパーティションを追加します。
+- バケット: バケット法とバケット数を修正します。
+- 列: 列を追加、削除、または再配置、または列タイプを修正します。
 - ロールアップインデックス: ロールアップインデックスを作成または削除します。
-- ビットマップインデックス: インデックスを変更します（ビットマップインデックスのみ変更可能）。
+- ビットマップインデックス: インデックスを修正します（ビットマップインデックスのみ修正可能）。
 - スワップ: 2つのテーブルをアトミックに交換します。
-- コンパクション: ロードされたデータのバージョンをマージするために手動でコンパクションを実行します（**v3.1以降**でサポート）。
-- 永続インデックスの削除: 共有データクラスタの主キーテーブルの永続インデックスを削除します (**v3.3.9以降でサポートされています**)。
+- コンパクション: ロードされたデータのバージョンをマージするための手動コンパクションを実行します（**v3.1以降**でサポート）。
+- 永続性インデックスの削除: 共有データクラスタの主キーテーブルの永続性インデックスを削除します。**v3.3.9以降でサポート**。
 
 ## 制限と使用上の注意
 
-- パーティション、列、およびロールアップインデックスの操作は、1つの ALTER TABLE ステートメントで実行できません。
-- 列コメントは変更できません。
-- 1つのテーブルには、同時に1つのスキーマ変更操作しか行えません。1つのテーブルで2つのスキーマ変更コマンドを同時に実行することはできません。
-- バケット、列、およびロールアップインデックスの操作は非同期操作です。タスクが送信されるとすぐに成功メッセージが返されます。[SHOW ALTER TABLE](SHOW_ALTER.md) コマンドを実行して進行状況を確認し、[CANCEL ALTER TABLE](CANCEL_ALTER_TABLE.md) コマンドを実行して操作をキャンセルできます。
-- 名前変更、コメント、パーティション、ビットマップインデックス、およびスワップの操作は同期操作であり、コマンドの返り値は実行が完了したことを示します。
+- パーティション、列、およびロールアップインデックスに対する操作は、1つの ALTER TABLE ステートメントで実行できません。
+- 列コメントは修正できません。
+- 1つのテーブルには、同時に1つのスキーマ変更操作しか実行できません。同時に2つのスキーマ変更コマンドを実行することはできません。
+- バケット、列、およびロールアップインデックスに対する操作は非同期操作です。タスクが送信された後、成功メッセージが即座に返されます。[SHOW ALTER TABLE](SHOW_ALTER.md) コマンドを実行して進行状況を確認し、[CANCEL ALTER TABLE](CANCEL_ALTER_TABLE.md) コマンドを実行して操作をキャンセルできます。
+- 名前変更、コメント、パーティション、ビットマップインデックス、およびスワップに対する操作は同期操作であり、コマンドの返り値は実行が完了したことを示します。
 
 ### 名前変更
 
-名前変更は、テーブル名、ロールアップインデックス、およびパーティション名の変更をサポートします。
+名前変更は、テーブル名、ロールアップインデックス、およびパーティション名の修正をサポートします。
 
-#### テーブルの名前を変更する
+#### テーブルの名前変更
 
 ```sql
 ALTER TABLE <tbl_name> RENAME <new_tbl_name>
 ```
 
-#### ロールアップインデックスの名前を変更する
+#### ロールアップインデックスの名前変更
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
 RENAME ROLLUP <old_rollup_name> <new_rollup_name>
 ```
 
-#### パーティションの名前を変更する
+#### パーティションの名前変更
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
 RENAME PARTITION <old_partition_name> <new_partition_name>
 ```
 
-#### 列の名前を変更する
+#### 列の名前変更
 
 v3.3.2以降、StarRocksは列の名前変更をサポートしています。
 
@@ -87,12 +87,12 @@ RENAME COLUMN <old_col_name> [ TO ] <new_col_name>
 
 :::note
 
-- 列AをBに名前変更した後、新しい列Aを追加することはサポートされていません。
+- 列をAからBに名前変更した後、新しい列名Aを持つ列を追加することはサポートされていません。
 - 名前変更された列に基づいて構築されたマテリアライズドビューは効果を持ちません。新しい名前の列に基づいて再構築する必要があります。
 
 :::
 
-### テーブルコメントの変更 (v3.1以降)
+### テーブルコメントの修正 (v3.1以降)
 
 構文:
 
@@ -101,18 +101,18 @@ ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 ```
 
 :::tip
-現在、列コメントは変更できません。
+現在、列コメントは修正できません。
 :::
 
-### パーティションの変更
+### パーティションの修正
 
 #### パーティションの追加
 
-レンジパーティションまたはリストパーティションを追加できます。式パーティションの追加はサポートされていません。
+範囲パーティションまたはリストパーティションを追加できます。式パーティションの追加はサポートされていません。
 
 構文：
 
-- レンジパーティション
+- 範囲パーティション
 
     ```SQL
     ALTER TABLE
@@ -130,7 +130,7 @@ ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 
     multi_range_partitions ::=
         { PARTITIONS START ("<start_date_value>") END ("<end_date_value>") EVERY ( INTERVAL <N> <time_unit> )
-        | PARTITIONS START ("<start_integer_value>") END ("<end_integer_value>") EVERY ( <granularity> ) } -- START および END で指定されたパーティション列の値が整数であっても、パーティション列の値はダブルクォートで囲む必要があります。ただし、EVERY句の間隔値はダブルクォートで囲む必要はありません。
+        | PARTITIONS START ("<start_integer_value>") END ("<end_integer_value>") EVERY ( <granularity> ) } -- STARTとENDで指定されたパーティション列の値が整数であっても、パーティション列の値はダブルクォートで囲む必要があります。ただし、EVERY句の間隔値はダブルクォートで囲む必要はありません。
     ```
 
 - リストパーティション
@@ -150,7 +150,7 @@ ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 
 - パーティション関連のパラメータ:
 
-  - レンジパーティションの場合、単一のレンジパーティション (`single_range_partition`) またはバッチで複数のレンジパーティション (`multi_range_partitions`) を追加できます。
+  - 範囲パーティションの場合、単一の範囲パーティション（`single_range_partition`）またはバッチで複数の範囲パーティション（`multi_range_partitions`）を追加できます。
   - リストパーティションの場合、単一のリストパーティションのみ追加できます。
 
 - `distribution_desc`:
@@ -163,15 +163,15 @@ ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 
 例:
 
-- レンジパーティション
+- 範囲パーティション
 
-  - テーブル作成時にパーティション列が `event_day` と指定されている場合、例えば `PARTITION BY RANGE(event_day)`、テーブル作成後に新しいパーティションを追加する必要がある場合、次のように実行できます:
+  - テーブル作成時にパーティション列が `event_day` と指定されている場合、例えば `PARTITION BY RANGE(event_day)`、テーブル作成後に新しいパーティションを追加する必要がある場合、以下を実行できます：
 
     ```sql
     ALTER TABLE site_access ADD PARTITION p4 VALUES LESS THAN ("2020-04-30");
     ```
 
-  - テーブル作成時にパーティション列が `datekey` と指定されている場合、例えば `PARTITION BY RANGE (datekey)`、テーブル作成後にバッチで複数のパーティションを追加する必要がある場合、次のように実行できます:
+  - テーブル作成時にパーティション列が `datekey` と指定されている場合、例えば `PARTITION BY RANGE (datekey)`、テーブル作成後にバッチで複数のパーティションを追加する必要がある場合、以下を実行できます：
 
     ```sql
     ALTER TABLE site_access
@@ -180,14 +180,14 @@ ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 
 - リストパーティション
 
-  - テーブル作成時に単一のパーティション列が指定されている場合、例えば `PARTITION BY LIST (city)`、テーブル作成後に新しいパーティションを追加する必要がある場合、次のように実行できます:
+  - テーブル作成時に単一のパーティション列が指定されている場合、例えば `PARTITION BY LIST (city)`、テーブル作成後に新しいパーティションを追加する必要がある場合、以下を実行できます：
 
     ```sql
     ALTER TABLE t_recharge_detail2
     ADD PARTITION pCalifornia VALUES IN ("Los Angeles","San Francisco","San Diego");
     ```
 
-  - テーブル作成時に複数のパーティション列が指定されている場合、例えば `PARTITION BY LIST (dt,city)`、テーブル作成後に新しいパーティションを追加する必要がある場合、次のように実行できます:
+  - テーブル作成時に複数のパーティション列が指定されている場合、例えば `PARTITION BY LIST (dt,city)`、テーブル作成後に新しいパーティションを追加する必要がある場合、以下を実行できます：
 
     ```sql
     ALTER TABLE t_recharge_detail4 
@@ -202,37 +202,22 @@ ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 
 #### パーティションの削除
 
-- 単一のパーティションを削除する:
+構文:
 
 ```sql
+-- 2.0以前
 ALTER TABLE [<db_name>.]<tbl_name>
-DROP PARTITION [ IF EXISTS ] <partition_name> [ FORCE ]
-```
-
-- バッチでパーティションを削除する (v3.3.1以降でサポート):
-
-```sql
+DROP PARTITION [IF EXISTS | FORCE] <partition_name>
+-- 2.0以降
 ALTER TABLE [<db_name>.]<tbl_name>
-DROP PARTITIONS [ IF EXISTS ]  { partition_name_list | multi_range_partitions } [ FORCE ]
-
-partion_name_list ::= ( <partition_name> [, ... ] )
-
-multi_range_partitions ::=
-    { START ("<start_date_value>") END ("<end_date_value>") EVERY ( INTERVAL <N> <time_unit> )
-    | START ("<start_integer_value>") END ("<end_integer_value>") EVERY ( <granularity> ) } -- パーティション列の値が整数であっても、ダブルクォートで囲む必要があります。ただし、EVERY句の間隔値はダブルクォートで囲む必要はありません。
+DROP PARTITION [IF EXISTS] <partition_name> [FORCE]
 ```
-
-`multi_range_partitions` の注意点:
-
-- レンジパーティション化にのみ適用されます。
-- 関連するパラメータは [ADD PARTITION(S)](#add-partitions) と一致しています。
-- 単一のパーティションキーを持つパーティションのみをサポートします。
 
 :::note
 
 - パーティション化されたテーブルには少なくとも1つのパーティションを保持してください。
-- FORCE が指定されていない場合、指定された期間内（デフォルトで1日）に [RECOVER](../backup_restore/RECOVER.md) コマンドを使用して削除されたパーティションを復元できます。
-- FORCE が指定されている場合、パーティションは未完了の操作があるかどうかに関係なく直接削除され、復元できません。したがって、一般的にこの操作は推奨されません。
+- FORCEが指定されていない場合、[RECOVER](../backup_restore/RECOVER.md) コマンドを使用して指定された期間内（デフォルトで1日）に削除されたパーティションを復元できます。
+- FORCEが指定されている場合、パーティションは未完了の操作があっても直接削除され、復元できません。したがって、一般的にこの操作は推奨されません。
 
 :::
 
@@ -269,7 +254,7 @@ ALTER TABLE [<db_name>.]<tbl_name>
 DROP TEMPORARY PARTITION <partition_name>
 ```
 
-#### パーティションプロパティの変更
+#### パーティションプロパティの修正
 
 **構文**
 
@@ -281,17 +266,17 @@ SET ("key" = "value", ...);
 
 **使用法**
 
-- パーティションの次のプロパティを変更できます:
+- パーティションの以下のプロパティを修正できます：
 
   - 記憶媒体
   - storage_cooldown_ttl または storage_cooldown_time
   - replication_num
 
-- パーティションが1つしかないテーブルの場合、パーティション名はテーブル名と同じです。複数のパーティションに分割されている場合、`(*)` を使用してすべてのパーティションのプロパティを変更することができ、より便利です。
+- テーブルに1つのパーティションしかない場合、パーティション名はテーブル名と同じです。複数のパーティションに分割されている場合、`(*)` を使用してすべてのパーティションのプロパティを修正できます。これにより、より便利です。
 
-- `SHOW PARTITIONS FROM <tbl_name>` を実行して、変更後のパーティションプロパティを確認します。
+- 修正後のパーティションプロパティを表示するには、`SHOW PARTITIONS FROM <tbl_name>` を実行します。
 
-### バケット法とバケット数の変更 (v3.2以降)
+### バケット法とバケット数の修正 (v3.2以降)
 
 構文:
 
@@ -324,54 +309,54 @@ DUPLICATE KEY(event_time, event_type)
 PARTITION BY date_trunc('day', event_time)
 DISTRIBUTED BY HASH(user_id);
 
--- Insert data of several days
+-- 数日分のデータを挿入
 INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALUES
--- Data of November 26th
+-- 11月26日のデータ
 ('2023-11-26 08:00:00', 1, 101, 12345, 2),
 ('2023-11-26 09:15:00', 2, 102, 54321, 3),
 ('2023-11-26 10:30:00', 1, 103, 98765, 1),
--- Data of November 27th
+-- 11月27日のデータ
 ('2023-11-27 08:30:00', 1, 104, 11111, 2),
 ('2023-11-27 09:45:00', 2, 105, 22222, 3),
 ('2023-11-27 11:00:00', 1, 106, 33333, 1),
--- Data of November 28th
+-- 11月28日のデータ
 ('2023-11-28 08:00:00', 1, 107, 44444, 2),
 ('2023-11-28 09:15:00', 2, 108, 55555, 3),
 ('2023-11-28 10:30:00', 1, 109, 66666, 1);
 ```
 
-#### バケット法のみを変更する
+#### バケット法のみの修正
 
 > **注意**
 >
-> - 変更はテーブル内のすべてのパーティションに適用され、特定のパーティションのみに適用することはできません。
-> - バケット法のみを変更する場合でも、コマンドで `BUCKETS <num>` を使用してバケット数を指定する必要があります。`BUCKETS <num>` が指定されていない場合、バケット数は StarRocks によって自動的に決定されます。
+> - 修正はテーブル内のすべてのパーティションに適用され、特定のパーティションのみに適用することはできません。
+> - バケット法のみを修正する必要がある場合でも、`BUCKETS <num>` を使用してコマンドでバケット数を指定する必要があります。`BUCKETS <num>` が指定されていない場合、バケット数は StarRocks によって自動的に決定されます。
 
-- バケット法をハッシュバケット法からランダムバケット法に変更し、バケット数は StarRocks によって自動的に設定されます。
+- バケット法をハッシュバケット法からランダムバケット法に修正し、バケット数は StarRocks によって自動的に設定されます。
 
   ```SQL
   ALTER TABLE details DISTRIBUTED BY RANDOM;
   ```
 
-- ハッシュバケット法のキーを `user_id, event_time` に変更し、バケット数は StarRocks によって自動的に設定されます。
+- ハッシュバケット法のキーを `user_id, event_time` に修正し、バケット数は StarRocks によって自動的に設定されます。
 
   ```SQL
   ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time);
   ```
 
-#### バケット数のみを変更する
+#### バケット数のみの修正
 
 > **注意**
 >
-> バケット数のみを変更する場合でも、バケット法をコマンドで指定する必要があります。例えば、`HASH(user_id)`。
+> バケット数のみを修正する必要がある場合でも、バケット法をコマンドで指定する必要があります。例えば、`HASH(user_id)`。
 
-- すべてのパーティションのバケット数を StarRocks によって自動的に設定される状態から10に変更します。
+- すべてのパーティションのバケット数を StarRocks によって自動的に設定されるものから10に修正します。
 
   ```SQL
   ALTER TABLE details DISTRIBUTED BY HASH(user_id) BUCKETS 10;
   ```
 
-- 指定されたパーティションのバケット数を StarRocks によって自動的に設定される状態から15に変更します。
+- 指定されたパーティションのバケット数を StarRocks によって自動的に設定されるものから15に修正します。
 
   ```SQL
   ALTER TABLE details PARTITIONS (p20231127, p20231128) DISTRIBUTED BY HASH(user_id) BUCKETS 15 ;
@@ -381,27 +366,27 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
   >
   > パーティション名は `SHOW PARTITIONS FROM <table_name>;` を実行して確認できます。
 
-#### バケット法とバケット数の両方を変更する
+#### バケット法とバケット数の両方の修正
 
 > **注意**
 >
-> 変更はテーブル内のすべてのパーティションに適用され、特定のパーティションのみに適用することはできません。
+> 修正はテーブル内のすべてのパーティションに適用され、特定のパーティションのみに適用することはできません。
 
-- バケット法をハッシュバケット法からランダムバケット法に変更し、バケット数を StarRocks によって自動的に設定される状態から10に変更します。
+- バケット法をハッシュバケット法からランダムバケット法に修正し、バケット数を StarRocks によって自動的に設定されるものから10に変更します。
 
    ```SQL
    ALTER TABLE details DISTRIBUTED BY RANDOM BUCKETS 10;
    ```
 
-- ハッシュバケット法のキーを変更し、バケット数を StarRocks によって自動的に設定される状態から10に変更します。ハッシュバケット法に使用するキーを元の `event_time, event_type` から `user_id, event_time` に変更します。バケット数を StarRocks によって自動的に設定される状態から10に変更します。
+- ハッシュバケット法のキーを修正し、バケット数を StarRocks によって自動的に設定されるものから10に変更します。ハッシュバケット法に使用されるキーは、元の `event_time, event_type` から `user_id, event_time` に修正されます。バケット数は StarRocks によって自動的に設定されるものから10に修正されます。
 
   ```SQL
   ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time) BUCKETS 10;
   ```
 
-### 列の変更（列の追加/削除、列の順序変更）
+### 列の修正（列の追加/削除、列の順序変更）
 
-#### 指定されたインデックスの指定された位置に列を追加する
+#### 指定したインデックスの指定した位置に列を追加
 
 構文:
 
@@ -416,14 +401,14 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 注意:
 
 1. 集計テーブルに値の列を追加する場合、agg_type を指定する必要があります。
-2. 非集計テーブル（例えば重複キーテーブル）にキー列を追加する場合、KEY キーワードを指定する必要があります。
+2. 非集計テーブル（重複キーテーブルなど）にキー列を追加する場合、KEY キーワードを指定する必要があります。
 3. 基本インデックスに既に存在する列をロールアップインデックスに追加することはできません。（必要に応じてロールアップインデックスを再作成できます。）
 
-#### 指定されたインデックスに複数の列を追加する
+#### 指定したインデックスに複数の列を追加
 
 構文:
 
-- 複数の列を追加する
+- 複数の列を追加
 
   ```sql
   ALTER TABLE [<db_name>.]<tbl_name>
@@ -432,7 +417,7 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
   [PROPERTIES ("key"="value", ...)]
   ```
 
-- 複数の列を追加し、AFTER を使用して追加された列の位置を指定する
+- 複数の列を追加し、AFTER を使用して追加された列の位置を指定
 
   ```sql
   ALTER TABLE [<db_name>.]<tbl_name>
@@ -451,7 +436,7 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 
 3. 基本インデックスに既に存在する列をロールアップインデックスに追加することはできません。（必要に応じて別のロールアップインデックスを作成できます。）
 
-#### 生成列を追加する (v3.1以降)
+#### 生成列の追加 (v3.1以降)
 
 構文:
 
@@ -460,9 +445,9 @@ ALTER TABLE [<db_name>.]<tbl_name>
 ADD COLUMN col_name data_type [NULL] AS generation_expr [COMMENT 'string']
 ```
 
-生成列を追加し、その式を指定できます。[生成列](../generated_columns.md) は、式の結果を事前に計算して保存するために使用でき、同じ複雑な式を含むクエリを大幅に高速化します。v3.1以降、StarRocksは生成列をサポートしています。
+生成列を追加し、その式を指定できます。[生成列](../generated_columns.md) は、式の結果を事前に計算して保存するために使用でき、同じ複雑な式を持つクエリを大幅に高速化します。v3.1以降、StarRocksは生成列をサポートしています。
 
-#### 指定されたインデックスから列を削除する
+#### 指定したインデックスから列を削除
 
 構文:
 
@@ -475,9 +460,9 @@ DROP COLUMN column_name
 注意:
 
 1. パーティション列を削除することはできません。
-2. 基本インデックスから列が削除されると、ロールアップインデックスに含まれている場合も削除されます。
+2. 基本インデックスから列を削除すると、ロールアップインデックスに含まれている場合も削除されます。
 
-#### 指定されたインデックスの列タイプと列位置を変更する
+#### 指定したインデックスの列タイプと列位置の修正
 
 構文:
 
@@ -491,24 +476,24 @@ MODIFY COLUMN column_name column_type [KEY | agg_type] [NULL | NOT NULL] [DEFAUL
 
 注意:
 
-1. 集計モデルで値の列を変更する場合、agg_type を指定する必要があります。
-2. 非集計モデルでキー列を変更する場合、KEY キーワードを指定する必要があります。
-3. 列のタイプのみを変更できます。列の他のプロパティは現在のままです。（他のプロパティは、元のプロパティに従ってステートメントに明示的に記述する必要があります。例8を参照してください。）
-4. パーティション列は変更できません。
-5. 現在サポートされている変換の種類（精度の損失はユーザーが保証します）:
+1. 集計モデルで値の列を修正する場合、agg_type を指定する必要があります。
+2. 非集計モデルでキー列を修正する場合、KEY キーワードを指定する必要があります。
+3. 現在、列のタイプのみを修正できます。列の他のプロパティは現在のままです。（つまり、他のプロパティは元のプロパティに従ってステートメントに明示的に記述する必要があります。例8を参照してください。）
+4. パーティション列は修正できません。
+5. 現在サポートされている変換の種類（精度の損失はユーザーが保証します）。
 
-   - TINYINT/SMALLINT/INT/BIGINT を TINYINT/SMALLINT/INT/BIGINT/DOUBLE に変換します。
-   - TINYINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE/DECIMAL を VARCHAR に変換します。VARCHAR は最大長の変更をサポートします。
-   - VARCHAR を TINYINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE に変換します。
-   - VARCHAR を DATE に変換します（現在6つの形式をサポート: "%Y-%m-%d", "%y-%m-%d", "%Y%m%d", "%y%m%d", "%Y/%m/%d, "%y/%m/%d"）
-   - DATETIME を DATE に変換します（年-月-日情報のみが保持されます。例: `2019-12-09 21:47:05` `<-->` `2019-12-09`）
-   - DATE を DATETIME に変換します（時、分、秒をゼロに設定します。例: `2019-12-09` `<-->` `2019-12-09 00:00:00`）
-   - FLOAT を DOUBLE に変換します。
-   - INT を DATE に変換します（INT データの変換に失敗した場合、元のデータはそのままです）
+   - TINYINT/SMALLINT/INT/BIGINT を TINYINT/SMALLINT/INT/BIGINT/DOUBLE に変換。
+   - TINYINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE/DECIMAL を VARCHAR に変換。VARCHAR は最大長の修正をサポートします。
+   - VARCHAR を TINYINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE に変換。
+   - VARCHAR を DATE に変換（現在、6つの形式をサポート："%Y-%m-%d", "%y-%m-%d", "%Y%m%d", "%y%m%d", "%Y/%m/%d, "%y/%m/%d"）
+   - DATETIME を DATE に変換（年-月-日の情報のみが保持されます。例：`2019-12-09 21:47:05` `<-->` `2019-12-09`）
+   - DATE を DATETIME に変換（時、分、秒をゼロに設定します。例：`2019-12-09` `<-->` `2019-12-09 00:00:00`）
+   - FLOAT を DOUBLE に変換
+   - INT を DATE に変換（INT データの変換に失敗した場合、元のデータはそのままです）
 
 6. NULL から NOT NULL への変換はサポートされていません。
 
-#### 指定されたインデックスの列を再配置する
+#### 指定したインデックスの列を再配置
 
 構文:
 
@@ -524,9 +509,9 @@ ORDER BY (column_name1, column_name2, ...)
 - インデックス内のすべての列を記述する必要があります。
 - 値の列はキー列の後にリストされます。
 
-#### ソートキーの変更
+#### ソートキーの修正
 
-v3.0以降、主キーテーブルのソートキーを変更できます。v3.3では、このサポートが重複キーテーブル、集計テーブル、およびユニークキーテーブルに拡張されました。
+v3.0以降、主キーテーブルのソートキーを修正できます。v3.3では、このサポートが重複キーテーブル、集計テーブル、およびユニークキーテーブルに拡張されました。
 
 重複キーテーブルおよび主キーテーブルのソートキーは、任意のソート列の組み合わせにすることができます。集計テーブルおよびユニークキーテーブルのソートキーには、すべてのキー列を含める必要がありますが、列の順序はキー列と同じである必要はありません。
 
@@ -540,9 +525,9 @@ order_desc ::=
     ORDER BY <column_name> [, <column_name> ...]
 ```
 
-例: 主キーテーブルのソートキーを変更します。
+例: 主キーテーブルのソートキーを修正します。
 
-例えば、元のテーブルは主キーテーブルで、ソートキーと主キーが結合されており、`dt, order_id` です。
+例えば、元のテーブルは主キーテーブルであり、ソートキーと主キーが結合されています。それは `dt, order_id` です。
 
 ```SQL
 create table orders (
@@ -561,32 +546,62 @@ PARTITION BY date_trunc('day', dt)
 DISTRIBUTED BY HASH(order_id);
 ```
 
-ソートキーを主キーから分離し、ソートキーを `dt, revenue, state` に変更します。
+ソートキーを主キーから分離し、ソートキーを `dt, revenue, state` に修正します。
 
 ```SQL
 ALTER TABLE orders ORDER BY (dt, revenue, state);
 ```
 
-#### STRUCT列を変更してフィールドを追加または削除する
+#### STRUCT列を修正してフィールドを追加または削除
 
-v3.2.10およびv3.3.2以降、StarRocksはSTRUCT列を変更してフィールドを追加または削除することをサポートしています。これは、ネストされたフィールドやARRAY型内のフィールドに適用できます。
+v3.2.10およびv3.3.2以降、StarRocksはSTRUCT列を修正してフィールドを追加または削除することをサポートしています。これはネストされたフィールドやARRAYタイプ内のフィールドにも適用されます。
 
 構文:
 
 ```sql
--- フィールドを追加する
-ALTER TABLE [<db_name>.]<tbl_name>
-MODIFY COLUMN <column_name> ADD FIELD <field_name> <field_type> [AFTER <prior_field_name> |FIRST]
+-- フィールドを追加
+ALTER TABLE [<db_name>.]<tbl_name> MODIFY COLUMN <column_name>
+ADD FIELD field_path field_desc
 
--- フィールドを削除する
-ALTER TABLE [<db_name>.]<tbl_name>
-MODIFY COLUMN <column_name> DROP FIELD <field_name>
+-- フィールドを削除
+ALTER TABLE [<db_name>.]<tbl_name> MODIFY COLUMN <column_name>
+DROP FIELD field_path
+
+field_path ::= [ { <field_name>. | [*]. } [ ... ] ]<field_name>
+
+  -- ここで `[*]` は全体として事前定義されたシンボルであり、ARRAYタイプ内にネストされたSTRUCTタイプのフィールドを追加または削除する際にARRAYフィールド内のすべての要素を表します。
+  -- 詳細な情報については、`field_path` のパラメータ説明と例を参照してください。
+
+field_desc ::= <field_type> [ AFTER <prior_field_name> | FIRST ]
 ```
 
 パラメータ:
 
-- `field_name`: 追加または削除するフィールドの名前。これは単純なフィールド名で、トップディメンションフィールドを示します。例えば、`new_field_name`。または、ネストされたフィールドを表すカラムアクセスパスで、例えば、`lv1_k1.lv2_k2.new_field_name`。
-- `prior_field_name`: 新しく追加されたフィールドの前にあるフィールド。AFTERキーワードと組み合わせて新しいフィールドの順序を指定するために使用されます。FIRSTキーワードが使用されている場合、このパラメータを指定する必要はありません。新しいフィールドが最初のフィールドであることを示します。`prior_field_name` のディメンションは `field_name` によって決定され、明示的に指定する必要はありません。
+- `field_path`: 追加または削除するフィールド。これは単純なフィールド名であり、トップディメンションのフィールドを示します。例えば、`new_field_name`。または、ネストされたフィールドを表すカラムアクセスパスであり、例えば、`lv1_k1.lv2_k2.[*].new_field_name`。
+- `[*]`: STRUCTタイプがARRAYタイプ内にネストされている場合、`[*]` はARRAYフィールド内のすべての要素を表します。これは、ARRAYフィールドの下にネストされたすべてのSTRUCT要素にフィールドを追加または削除するために使用されます。
+- `prior_field_name`: 新しく追加されるフィールドの前にあるフィールド。AFTERキーワードと組み合わせて新しいフィールドの順序を指定するために使用されます。FIRSTキーワードが使用されている場合、このパラメータを指定する必要はありません。新しいフィールドが最初のフィールドであることを示します。`prior_field_name` の次元は `field_path`（具体的には、`new_field_name` の前の部分、つまり `level1_k1.level2_k2.[*]`）によって決定され、明示的に指定する必要はありません。
+
+`field_path` の例:
+
+- STRUCTフィールド内にネストされたSTRUCTフィールドのサブフィールドを追加または削除します。
+
+  例えば、`fx stuct<c1 int, c2 struct <v1 int, v2 int>>` というカラムがあるとします。`c2` の下に `v3` フィールドを追加する構文は次のとおりです：
+
+  ```SQL
+  ALTER TABLE tbl MODIFY COLUMN fx ADD FIELD c2.v3 INT
+  ```
+
+  操作後、カラムは `fx stuct<c1 int, c2 struct <v1 int, v2 int, v3 int>>` になります。
+
+- ARRAYフィールド内にネストされたSTRUCTフィールドのサブフィールドを追加または削除します。
+
+  例えば、`fx struct<c1 int, c2 array<struct <v1 int, v2 int>>>` というカラムがあるとします。フィールド `c2` はARRAYタイプであり、2つのフィールド `v1` と `v2` を持つSTRUCTを含んでいます。ネストされたSTRUCTに `v3` フィールドを追加する構文は次のとおりです：
+
+  ```SQL
+  ALTER TABLE tbl MODIFY COLUMN fx ADD FIELD c2.[*].v3 INT
+  ```
+
+  操作後、カラムは `fx struct<c1 int, c2 array<struct <v1 int, v2 int, v3 int>>>` になります。
 
 詳細な使用方法については、[Example - Column -14](#column) を参照してください。
 
@@ -600,7 +615,7 @@ MODIFY COLUMN <column_name> DROP FIELD <field_name>
 
 :::
 
-### ロールアップインデックスの変更
+### ロールアップインデックスの修正
 
 #### ロールアップインデックスの作成
 
@@ -613,7 +628,7 @@ ADD ROLLUP rollup_name (column_name1, column_name2, ...)
 [PROPERTIES ("key"="value", ...)]
 ```
 
-PROPERTIES: タイムアウト時間を設定することができ、デフォルトのタイムアウト時間は1日です。
+PROPERTIES: タイムアウト時間の設定をサポートし、デフォルトのタイムアウト時間は1日です。
 
 例:
 
@@ -622,7 +637,7 @@ ALTER TABLE [<db_name>.]<tbl_name>
 ADD ROLLUP r1(col1,col2) from r0;
 ```
 
-#### バッチでロールアップインデックスを作成する
+#### バッチでロールアップインデックスを作成
 
 構文:
 
@@ -642,7 +657,7 @@ ADD ROLLUP r1(col1,col2) from r0, r2(col3,col4) from r0;
 
 注意:
 
-1. from_index_name が指定されていない場合、デフォルトで基本インデックスから作成されます。
+1. from_index_name が指定されていない場合、デフォルトでベースインデックスから作成されます。
 2. ロールアップテーブルの列は、from_index に存在する列でなければなりません。
 3. プロパティでは、ストレージ形式を指定できます。詳細は CREATE TABLE を参照してください。
 
@@ -661,7 +676,7 @@ DROP ROLLUP rollup_name [PROPERTIES ("key"="value", ...)];
 ALTER TABLE [<db_name>.]<tbl_name> DROP ROLLUP r1;
 ```
 
-#### バッチでロールアップインデックスを削除する
+#### バッチでロールアップインデックスを削除
 
 構文:
 
@@ -676,11 +691,11 @@ DROP ROLLUP [rollup_name [PROPERTIES ("key"="value", ...)],...];
 ALTER TABLE [<db_name>.]<tbl_name> DROP ROLLUP r1, r2;
 ```
 
-注意: 基本インデックスを削除することはできません。
+注意: ベースインデックスを削除することはできません。
 
-### ビットマップインデックスの変更
+### ビットマップインデックスの修正
 
-ビットマップインデックスは次の変更をサポートしています:
+ビットマップインデックスは以下の修正をサポートしています：
 
 #### ビットマップインデックスの作成
 
@@ -694,7 +709,7 @@ ADD INDEX index_name (column [, ...],) [USING BITMAP] [COMMENT 'balabala'];
 注意:
 
 ```plain text
-1. ビットマップインデックスは現在のバージョンでのみサポートされています。
+1. 現在のバージョンではビットマップインデックスのみがサポートされています。
 2. ビットマップインデックスは単一の列にのみ作成されます。
 ```
 
@@ -706,7 +721,7 @@ ADD INDEX index_name (column [, ...],) [USING BITMAP] [COMMENT 'balabala'];
 DROP INDEX index_name;
 ```
 
-### テーブルプロパティの変更
+### テーブルプロパティの修正
 
 構文:
 
@@ -715,13 +730,13 @@ ALTER TABLE [<db_name>.]<tbl_name>
 SET ("key" = "value")
 ```
 
-現在、StarRocksは次のテーブルプロパティの変更をサポートしています:
+現在、StarRocksは以下のテーブルプロパティの修正をサポートしています：
 
 - `replication_num`
 - `default.replication_num`
 - `storage_cooldown_ttl`
 - `storage_cooldown_time`
-- 動的パーティション化関連のプロパティ
+- 動的パーティション化関連プロパティ
 - `enable_persistent_index`
 - `bloom_filter_columns`
 - `colocate_with`
@@ -730,8 +745,8 @@ SET ("key" = "value")
 
 :::note
 
-- ほとんどの場合、一度に変更できるプロパティは 1 つだけです。一度に複数のプロパティを変更できるのは、これらのプロパティが同じ接頭辞を持つ場合だけです。現在のところ、`dynamic_partition.` と `binlog.` だけがサポートされている。
-- 上記の操作にマージすることでプロパティを変更することもできます。詳細は[以下の例](#examples)を参照してください。
+- ほとんどの場合、一度に1つのプロパティのみを修正できます。これらのプロパティが同じプレフィックスを持つ場合にのみ、一度に複数のプロパティを修正できます。現在、`dynamic_partition.` および `binlog.` のみがサポートされています。
+- 上記の列に対する操作にマージすることによってもプロパティを修正できます。詳細は[以下の例](#examples)を参照してください。
 
 :::
 
@@ -748,16 +763,16 @@ SWAP WITH <tbl_name>;
 
 ### 手動コンパクション (v3.1以降)
 
-StarRocksは、ロードされたデータの異なるバージョンをマージするためにコンパクションメカニズムを使用します。この機能は、小さなファイルを大きなファイルに結合することができ、クエリパフォーマンスを効果的に向上させます。
+StarRocksはコンパクションメカニズムを使用して、ロードされたデータの異なるバージョンをマージします。この機能は、小さなファイルを大きなファイルに結合することができ、クエリパフォーマンスを効果的に向上させます。
 
-v3.1以前は、コンパクションは2つの方法で実行されていました:
+v3.1以前は、コンパクションは2つの方法で実行されていました：
 
-- システムによる自動コンパクション: コンパクションはBEレベルでバックグラウンドで実行されます。ユーザーはコンパクションのためにデータベースやテーブルを指定できません。
+- システムによる自動コンパクション：コンパクションはバックグラウンドでBEレベルで実行されます。ユーザーはコンパクションのためにデータベースやテーブルを指定することはできません。
 - ユーザーはHTTPインターフェースを呼び出してコンパクションを実行できます。
 
-v3.1以降、StarRocksはユーザーがSQLコマンドを実行して手動でコンパクションを実行できるSQLインターフェースを提供します。特定のテーブルまたはパーティションを選択してコンパクションを実行できます。これにより、コンパクションプロセスに対する柔軟性と制御が向上します。
+v3.1以降、StarRocksはユーザーがSQLコマンドを実行して手動でコンパクションを実行できるSQLインターフェースを提供しています。特定のテーブルやパーティションを選択してコンパクションを実行できます。これにより、コンパクションプロセスに対する柔軟性と制御が向上します。
 
-共有データクラスタはv3.3.0以降でこの機能をサポートしています。
+共有データクラスタはv3.3.0以降、この機能をサポートしています。
 
 > **注意**
 >
@@ -769,7 +784,7 @@ v3.1以降、StarRocksはユーザーがSQLコマンドを実行して手動で�
 ALTER TABLE <tbl_name> [ BASE | CUMULATIVE ] COMPACT [ <partition_name> | ( <partition1_name> [, <partition2_name> ...] ) ]
 ```
 
-つまり:
+つまり：
 
 ```SQL
 -- テーブル全体でコンパクションを実行します。
@@ -788,13 +803,11 @@ ALTER TABLE <tbl_name> CUMULATIVE COMPACT (<partition1_name>[,<partition2_name>,
 ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
 ```
 
-`information_schema` データベースの `be_compactions` テーブルにはコンパクション結果が記録されます。`SELECT * FROM information_schema.be_compactions;` を実行して、コンパクション後のデータバージョンをクエリできます。
+`information_schema` データベースの `be_compactions` テーブルにはコンパクション結果が記録されます。コンパクション後のデータバージョンをクエリするには、`SELECT * FROM information_schema.be_compactions;` を実行できます。
 
-### 主キー永続インデックスの削除(3.3.9 より)
+### 主キー永続性インデックスの削除 (v3.3.9以降)
 
 構文:
-
-Syntax:
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
@@ -802,34 +815,34 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
 ```
 > **注意**
 >
-> StarRocks は、 共有データクラスタ内のクラウドネイティブ主キーテーブルの永続インデックスの削除にのみをサポートします。
+> StarRocksは、クラウドネイティブの主キーテーブルに対する永続性インデックスの削除を共有データクラスタでのみサポートしています。
 
 ## 例
 
 ### テーブル
 
-1. テーブルのデフォルトのレプリカ数を変更します。これは、新しく追加されたパーティションのデフォルトのレプリカ数として使用されます。
+1. テーブルのデフォルトのレプリカ数を修正します。これは新しく追加されたパーティションのデフォルトのレプリカ数として使用されます。
 
     ```sql
     ALTER TABLE example_db.my_table
     SET ("default.replication_num" = "2");
     ```
 
-2. 単一パーティションテーブルの実際のレプリカ数を変更します。
+2. 単一パーティションテーブルの実際のレプリカ数を修正します。
 
     ```sql
     ALTER TABLE example_db.my_table
     SET ("replication_num" = "3");
     ```
 
-3. レプリカ間のデータ書き込みとレプリケーションモードを変更します。
+3. レプリカ間のデータ書き込みとレプリケーションモードを修正します。
 
     ```sql
     ALTER TABLE example_db.my_table
     SET ("replicated_storage" = "false");
     ```
 
-   この例では、レプリカ間のデータ書き込みとレプリケーションモードを「リーダーレスレプリケーション」に設定します。これは、データがプライマリとセカンダリのレプリカを区別せずに同時に複数のレプリカに書き込まれることを意味します。詳細は、[CREATE TABLE](CREATE_TABLE.md) の `replicated_storage` パラメータを参照してください。
+   この例では、レプリカ間のデータ書き込みとレプリケーションモードを「リーダーレスレプリケーション」に設定します。これは、データがプライマリおよびセカンダリレプリカを区別せずに同時に複数のレプリカに書き込まれることを意味します。詳細については、[CREATE TABLE](CREATE_TABLE.md) の `replicated_storage` パラメータを参照してください。
 
 ### パーティション
 
@@ -856,21 +869,21 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
     ("replication_num"="1");
     ```
 
-4. パーティションのレプリカ数を変更します。
+4. パーティションのレプリカ数を修正します。
 
     ```sql
     ALTER TABLE example_db.my_table
     MODIFY PARTITION p1 SET("replication_num"="1");
     ```
 
-5. 指定されたパーティションのレプリカ数をバッチで変更します。
+5. 指定されたパーティションのレプリカ数をバッチで修正します。
 
     ```sql
     ALTER TABLE example_db.my_table
     MODIFY PARTITION (p1, p2, p4) SET("replication_num"="1");
     ```
 
-6. すべてのパーティションの記憶媒体をバッチで変更します。
+6. すべてのパーティションの記憶媒体をバッチで修正します。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -893,7 +906,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
 
 ### ロールアップインデックス
 
-1. 基本インデックス (k1,k2,k3,v1,v2) に基づいてロールアップインデックス `example_rollup_index` を作成します。カラムベースのストレージが使用されます。
+1. ベースインデックス (k1,k2,k3,v1,v2) に基づいて `example_rollup_index` ロールアップインデックスを作成します。カラムベースのストレージが使用されます。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -909,7 +922,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
     FROM example_rollup_index;
     ```
 
-3. 基本インデックス (k1, k2, k3, v1) に基づいてインデックス `example_rollup_index3` を作成します。ロールアップのタイムアウト時間は1時間に設定されています。
+3. ベースインデックス (k1, k2, k3, v1) に基づいてインデックス `example_rollup_index3` を作成します。ロールアップのタイムアウト時間は1時間に設定されます。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -958,7 +971,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
     TO example_rollup_index;
     ```
 
-5. `example_rollup_index`（集計）に複数の列を追加します。
+5. `example_rollup_index` に複数の列を追加します（集計）。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -966,7 +979,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
     TO example_rollup_index;
     ```
 
-6. `example_rollup_index`（集計）に複数の列を追加し、AFTER を使用して追加された列の位置を指定します。
+6. `example_rollup_index` に複数の列を追加し、`AFTER` を使用して追加された列の位置を指定します。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -983,14 +996,14 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
     FROM example_rollup_index;
     ```
 
-8. 基本インデックスの col1 の列タイプを BIGINT に変更し、`col2` の後に配置します。
+8. ベースインデックスの `col1` の列タイプを BIGINT に修正し、`col2` の後に配置します。
 
     ```sql
     ALTER TABLE example_db.my_table
     MODIFY COLUMN col1 BIGINT DEFAULT "1" AFTER col2;
     ```
 
-9. 基本インデックスの `val1` 列の最大長を32から64に変更します。
+9. ベースインデックスの `val1` 列の最大長を32から64に修正します。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -1013,14 +1026,14 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
     ORDER BY (k3,k1,k2,v2,v1) FROM example_rollup_index;
     ```
 
-12. テーブルのブルームフィルター列を変更します。
+12. テーブルのブルームフィルター列を修正します。
 
      ```sql
      ALTER TABLE example_db.my_table
      SET ("bloom_filter_columns"="k1,k2,k3");
      ```
 
-     この操作は、上記の列操作にマージすることもできます（複数の句の構文が若干異なることに注意してください）。
+     この操作は、上記の列操作にマージすることもできます（複数の句の構文がわずかに異なることに注意してください）。
 
      ```sql
      ALTER TABLE example_db.my_table
@@ -1028,7 +1041,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
      PROPERTIES ("bloom_filter_columns"="k1,k2,k3");
      ```
 
-13. 単一のステートメントで複数の列のデータ型を変更します。
+13. 単一のステートメントで複数の列のデータタイプを修正します。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -1036,9 +1049,9 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
     MODIFY COLUMN v2 DOUBLE DEFAULT "1" AFTER v1;
     ```
 
-14. STRUCT型データにフィールドを追加および削除します。
+14. STRUCTタイプのデータにフィールドを追加および削除します。
 
-    **前提条件**: テーブルを作成し、データを1行挿入します。
+    **前提条件**: テーブルを作成し、1行のデータを挿入します。
 
     ```sql
     CREATE TABLE struct_test(
@@ -1066,7 +1079,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
     c2: {"v1":5,"v2":[{"v3":6,"v4":{"v5":7,"v6":8}},{"v3":9,"v4":{"v5":10,"v6":11}}]}
     ```
 
-    - STRUCT型の列に新しいフィールドを追加します。
+    - STRUCTタイプの列に新しいフィールドを追加します。
 
     ```sql
     ALTER TABLE struct_test MODIFY COLUMN c1 ADD FIELD v4 INT AFTER v2;
@@ -1080,7 +1093,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
     c2: {"v1":5,"v2":[{"v3":6,"v4":{"v5":7,"v6":8}},{"v3":9,"v4":{"v5":10,"v6":11}}]}
     ```
 
-    - ネストされたSTRUCT型に新しいフィールドを追加します。
+    - ネストされたSTRUCTタイプに新しいフィールドを追加します。
 
     ```sql
     ALTER TABLE struct_test MODIFY COLUMN c1 ADD FIELD v2.v6 INT FIRST;
@@ -1094,7 +1107,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
     c2: {"v1":5,"v2":[{"v3":6,"v4":{"v5":7,"v6":8}},{"v3":9,"v4":{"v5":10,"v6":11}}]}
     ```
 
-    - 配列内のSTRUCT型に新しいフィールドを追加します。
+    - 配列内のSTRUCTタイプに新しいフィールドを追加します。
 
     ```sql
     ALTER TABLE struct_test MODIFY COLUMN c2 ADD FIELD v2.[*].v7 INT AFTER v3;
@@ -1108,7 +1121,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
     c2: {"v1":5,"v2":[{"v3":6,"v7":null,"v4":{"v5":7,"v6":8}},{"v3":9,"v7":null,"v4":{"v5":10,"v6":11}}]}
     ```
 
-    - STRUCT型の列からフィールドを削除します。
+    - STRUCTタイプの列からフィールドを削除します。
 
     ```sql
     ALTER TABLE struct_test MODIFY COLUMN c1 DROP FIELD v3;
@@ -1118,11 +1131,11 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
     mysql> SELECT * FROM struct_test\G
     *************************** 1. row ***************************
     c0: 1
-    c1: {"v1":1,"v2":{"v6":null,"v5":3},"v4":null}
+    c1: {"v1":1,"v2":{"v6":null,"v4":2,"v5":3},"v4":null}
     c2: {"v1":5,"v2":[{"v3":6,"v7":null,"v4":{"v5":7,"v6":8}},{"v3":9,"v7":null,"v4":{"v5":10,"v6":11}}]}
     ```
 
-    - ネストされたSTRUCT型からフィールドを削除します。
+    - ネストされたSTRUCTタイプからフィールドを削除します。
 
     ```sql
     ALTER TABLE struct_test MODIFY COLUMN c1 DROP FIELD v2.v4;
@@ -1136,7 +1149,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
     c2: {"v1":5,"v2":[{"v3":6,"v7":null,"v4":{"v5":7,"v6":8}},{"v3":9,"v7":null,"v4":{"v5":10,"v6":11}}]}
     ```
 
-    - 配列内のSTRUCT型からフィールドを削除します。
+    - 配列内のSTRUCTタイプからフィールドを削除します。
 
     ```sql
     ALTER TABLE struct_test MODIFY COLUMN c2 DROP FIELD v2.[*].v3;
@@ -1152,21 +1165,21 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
 
 ### テーブルプロパティ
 
-1. テーブルのコロケートプロパティを変更します。
+1. テーブルのColocateプロパティを修正します。
 
      ```sql
      ALTER TABLE example_db.my_table
      SET ("colocate_with" = "t1");
      ```
 
-2. テーブルの動的パーティションプロパティを変更します。
+2. テーブルの動的パーティションプロパティを修正します。
 
-     ```sql
+```sql
      ALTER TABLE example_db.my_table
      SET ("dynamic_partition.enable" = "false");
      ```
 
-     動的パーティションプロパティが設定されていないテーブルに動的パーティションプロパティを追加する必要がある場合、すべての動的パーティションプロパティを指定する必要があります。
+     動的パーティションプロパティが構成されていないテーブルに動的パーティションプロパティを追加する必要がある場合、すべての動的パーティションプロパティを指定する必要があります。
 
      ```sql
      ALTER TABLE example_db.my_table
@@ -1201,14 +1214,14 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
 
 ### ビットマップインデックス
 
-1. `table1` の列 `siteid` にビットマップインデックスを作成します。
+1. `table1` の `siteid` 列にビットマップインデックスを作成します。
 
     ```sql
     ALTER TABLE table1
     ADD INDEX index_1 (siteid) [USING BITMAP] COMMENT 'balabala';
     ```
 
-2. `table1` の列 `siteid` のビットマップインデックスを削除します。
+2. `table1` の `siteid` 列のビットマップインデックスを削除します。
 
     ```sql
     ALTER TABLE table1
@@ -1254,18 +1267,19 @@ ALTER TABLE compaction_test CUMULATIVE COMPACT (p202302,p203303);
 ALTER TABLE compaction_test BASE COMPACT (p202302,p203303);
 ```
 
-### プライマリキーの永続インデックスの削除
+### 主キー永続性インデックスの削除
 
-共有データクラスタの主キーテーブル `db1.test_tbl` のタブレット `100` と `101` の永続インデックスを削除します。
+共有データクラスタの主キーテーブル `db1.test_tbl` のタブレット `100` および `101` に対する永続性インデックスを削除します。
 
 ```sql
 ALTER TABLE db1.test_tbl DROP PERSISTENT INDEX ON TABLETS (100, 101);
 ```
 
-## 参考文献
+## 参考資料
 
 - [CREATE TABLE](CREATE_TABLE.md)
 - [SHOW CREATE TABLE](SHOW_CREATE_TABLE.md)
 - [SHOW TABLES](SHOW_TABLES.md)
 - [SHOW ALTER TABLE](SHOW_ALTER.md)
 - [DROP TABLE](DROP_TABLE.md)
+```

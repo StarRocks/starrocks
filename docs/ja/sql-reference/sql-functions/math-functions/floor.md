@@ -4,23 +4,25 @@ displayed_sidebar: docs
 
 # floor, dfloor
 
+## 説明
+
 `x` 以下の最大の整数を返します。
 
-## Syntax
+## 構文
 
 ```SQL
 FLOOR(x);
 ```
 
-## Parameters
+## パラメータ
 
 `x`: DOUBLE がサポートされています。
 
-## Return value
+## 戻り値
 
 BIGINT データ型の値を返します。
 
-## Examples
+## 例
 
 ```Plaintext
 mysql> select floor(3.14);

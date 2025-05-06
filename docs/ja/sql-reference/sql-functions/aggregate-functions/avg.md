@@ -4,9 +4,11 @@ displayed_sidebar: docs
 
 # avg
 
+## Description
+
 選択されたフィールドの平均値を返します。
 
-オプションのフィールド DISTINCT パラメータを使用すると、加重平均を返すことができます。
+オプションのフィールド DISTINCT パラメータを使用して、加重平均を返すことができます。
 
 ## Syntax
 

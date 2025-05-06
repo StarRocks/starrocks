@@ -4,26 +4,28 @@ displayed_sidebar: docs
 
 # array_position
 
+## Description
+
 配列内の要素の位置を取得します。
 
-## 構文
+## Syntax
 
 ```Haskell
 array_position(any_array, any_element)
 ```
 
-## パラメータ
+## Parameters
 
 - `any_array`: 検索対象の配列。
 - `any_element`: 配列内の要素に一致する式。
 
-## 戻り値
+## Return value
 
 指定された配列内で要素が見つかればその位置を返し、見つからなければ0を返します。
 
-## 例
+## Examples
 
-- 例 1: 配列内の要素の位置を取得します。
+- Example 1: 配列内の要素の位置を取得します。
 
 ```plaintext
 mysql> select array_position(["apple","orange","pear"], "orange");
@@ -41,7 +43,7 @@ mysql> select array_position(["apple","orange","pear"], "orange");
 1 row in set (0.01 sec)
 ```
 
-- 例 2: 配列内の `NULL` の位置を取得します。
+- Example 2: 配列内の `NULL` の位置を取得します。
 
 ```sql
 mysql> select array_position([1, NULL], NULL);
@@ -61,7 +63,7 @@ mysql> select array_position([1, NULL], NULL);
 1 row in set (0.00 sec)
 ```
 
-- 例 3: 多次元配列内のサブ配列の位置を取得します。指定されたサブ配列と同じ要素が同じ順序で存在する場合にのみ、位置が返されます。
+- Example 3: 多次元配列内のサブ配列の位置を取得します。指定されたサブ配列と同じ要素が同じ順序で存在する場合にのみ、位置が返されます。
 
 ```Lua
 mysql> select array_position([[1,2,3], [4,5,6]], [4,5,6]);
@@ -95,6 +97,6 @@ mysql> select array_position([[1,2,3], [4,5,6]], [4,6,5]);
 1 row in set (0.00 sec)
 ```
 
-## キーワード
+## Keywords
 
 ARRAY_POSITION, ARRAY

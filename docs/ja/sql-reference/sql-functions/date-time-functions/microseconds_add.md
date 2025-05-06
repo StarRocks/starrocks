@@ -4,25 +4,27 @@ displayed_sidebar: docs
 
 # microseconds_add
 
+## 説明
+
 日付値に時間間隔を追加します。時間間隔はマイクロ秒単位です。
 
-## Syntax
+## 構文
 
 ```Haskell
 DATETIME microseconds_add(DATETIME expr1,INT expr2);
 ```
 
-## Parameters
+## パラメータ
 
-`expr1`: 時間の式。DATETIME 型である必要があります。
+`expr1`: 時間の式です。DATETIME 型である必要があります。
 
 `expr2`: 追加したい時間間隔をマイクロ秒単位で指定します。INT 型である必要があります。
 
-## Return value
+## 戻り値
 
 DATETIME 型の値を返します。入力値が DATE 型の場合、時、分、秒の部分は `00:00:00` として処理されます。
 
-## Examples
+## 例
 
 ```Plain Text
 select microseconds_add('2010-11-30 23:50:50', 2);

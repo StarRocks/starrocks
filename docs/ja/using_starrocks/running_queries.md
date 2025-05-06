@@ -52,7 +52,7 @@ ResourceGroup | rg1
 
 ## global_current_queries
 
-`current_queries` と同様に、`show proc '/global_current_queries'` はすべての FE ノードで実行中のクエリ情報を表示します。このコマンドはバージョン 3.4 からサポートされています。
+`current_queries` と同様に、`show proc '/global_current_queries'` はすべての FE ノードで実行中のクエリに関する情報を表示します。このコマンドはバージョン 3.4 からサポートされています。
 
 **例**:
 ```sql
@@ -77,7 +77,7 @@ ResourceGroup | rg1
 
 ## 実行中のクエリ
 
-`SHOW RUNNING QUERIES` は主にクエリキューの状態を表示するために使用されます。クエリがキューにある場合、その状態は `PENDING` になります。
+`SHOW RUNNING QUERIES` は主にクエリキューの状態を表示するために使用されます。クエリがキューにある場合、それは `PENDING` 状態になります。
 
 | フィールド名 | 説明 |
 |---|---|
@@ -86,9 +86,9 @@ ResourceGroup | rg1
 | StartTime | クエリの開始時間 |
 | PendingTimeout | 待機タイムアウト |
 | QueryTimeout | クエリタイムアウト |
-| State | クエリの状態、PENDING と RUNNING を含む |
+| State | クエリの状態、PENDING および RUNNING を含む |
 | Slots | 占有しているスロット数 |
-| Fragments | クエリプラン内のフラグメント数 |
+| Fragments | クエリプランのフラグメント数 |
 | DOP | 並行性の度合い |
 | Frontend | FE ノード情報 |
 | FeStartTime | FE の開始時間 |

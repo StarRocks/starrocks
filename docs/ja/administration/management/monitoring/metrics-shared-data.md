@@ -6,12 +6,12 @@ displayed_sidebar: docs
 
 StarRocks は、共有データクラスタ用に 2 つのダッシュボードテンプレートを提供しています。
 
-- [Shared-data Dashboard](#shared-data-dashboard)
-- [Starlet Dashboard](#starlet-dashboard)
+- [共有データダッシュボード](#shared-data-dashboard)
+- [Starlet ダッシュボード](#starlet-dashboard)
 
-## Shared-data Dashboard
+## 共有データダッシュボード
 
-Shared-data Dashboard には、次のカテゴリの監視メトリクスが含まれています。
+共有データダッシュボードには、以下のカテゴリの監視メトリクスが含まれています。
 
 - [Publish Version](#publish-version)
 - [Metadata](#metadata)
@@ -21,11 +21,11 @@ Shared-data Dashboard には、次のカテゴリの監視メトリクスが含�
 
 ### Publish Version
 
-#### Latency / QPS
+#### レイテンシ / QPS
 
-- 説明: Public Version タスクの分位数レイテンシー、平均レイテンシー、および QPS。
+- 説明: Public Version タスクの分位レイテンシ、平均レイテンシ、および QPS。
 
-#### Queued Tasks
+#### キューに入ったタスク
 
 - 説明: キュー内の Public Version タスクの数。
 
@@ -33,61 +33,61 @@ Shared-data Dashboard には、次のカテゴリの監視メトリクスが含�
 
 #### Get Tablet Metadata
 
-- 説明: Get Tablet Metadata タスクの分位数レイテンシー、平均レイテンシー、および QPS。
+- 説明: Get Tablet Metadata タスクの分位レイテンシ、平均レイテンシ、および QPS。
 
 #### Put Tablet Metadata
 
-- 説明: Put Tablet Metadata タスクの分位数レイテンシー、平均レイテンシー、および QPS。
+- 説明: Put Tablet Metadata タスクの分位レイテンシ、平均レイテンシ、および QPS。
 
 #### Get Txn Log
 
-- 説明: Get Txn Log タスクの分位数レイテンシー、平均レイテンシー、および QPS。
+- 説明: Get Txn Log タスクの分位レイテンシ、平均レイテンシ、および QPS。
 
 #### Put Txn Log
 
-- 説明: Put Txn Log タスクの分位数レイテンシー、平均レイテンシー、および QPS。
+- 説明: Put Txn Log タスクの分位レイテンシ、平均レイテンシ、および QPS。
 
 ### Metacache
 
-#### Metacache Usage
+#### Metacache 使用率
 
 - 説明: Metacache の利用率。
 
-#### Delvec Cache Miss Per Minute
+#### Delvec Cache ミス/分
 
-- 説明: Delvec Cache における 1 分あたりのキャッシュミスの数。
+- 説明: 1 分あたりの Delvec Cache のキャッシュミスの数。
 
-#### Metadata Cache Miss Per Minute
+#### Metadata Cache ミス/分
 
-- 説明: Metadata Cache における 1 分あたりのキャッシュミスの数。
+- 説明: 1 分あたりの Metadata Cache のキャッシュミスの数。
 
-#### Txn Log Cache Miss Per Minute
+#### Txn Log Cache ミス/分
 
-- 説明: Txn Log Cache における 1 分あたりのキャッシュミスの数。
+- 説明: 1 分あたりの Txn Log Cache のキャッシュミスの数。
 
-#### Segment Cache Miss Per Minute
+#### Segment Cache ミス/分
 
-- 説明: Segment Cache における 1 分あたりのキャッシュミスの数。
+- 説明: 1 分あたりの Segment Cache のキャッシュミスの数。
 
 ### Vacuum
 
 #### Vacuum Deletes
 
-- 説明: Vacuum Deletes タスクの分位数レイテンシー、平均レイテンシー、および QPS。
+- 説明: Vacuum Deletes タスクの分位レイテンシ、平均レイテンシ、および QPS。
 
-#### Errors
+#### エラー
 
 - 説明: 失敗した Vacuum Deletes 操作の数。
 
 ### Loading
 
-#### Queue Size
+#### キューサイズ
 
 - 説明: BE Async Delta Writer のキューサイズ。
 
-## Starlet Dashboard
+## Starlet ダッシュボード
 
-Starlet Dashboard には、次のカテゴリの監視メトリクスが含まれています。
+Starlet ダッシュボードには、以下のカテゴリの監視メトリクスが含まれています。
 
 - [FSLIB READ IO METRICS](#fslib-read-io-metrics)
 - [FSLIB WRITE IO METRICS](#fslib-write-io-metrics)
@@ -100,22 +100,22 @@ Starlet Dashboard には、次のカテゴリの監視メトリクスが含ま�
 #### fslib read io_latency (quantile)
 
 - タイプ: ヒストグラム
-- 説明: S3 読み取りの分位数レイテンシー。
+- 説明: S3 読み取りの分位レイテンシ。
 
 #### fslib read io_latency (average)
 
 - タイプ: カウンター
-- 説明: S3 読み取りの平均レイテンシー。
+- 説明: S3 読み取りの平均レイテンシ。
 
 #### fslib total read data
 
 - タイプ: カウンター
-- 説明: S3 読み取りのデータ総サイズ。
+- 説明: S3 読み取りの総データサイズ。
 
 #### fslib read iosize (quantile)
 
 - タイプ: ヒストグラム
-- 説明: S3 読み取りの分位数 I/O サイズ。
+- 説明: S3 読み取りの分位 I/O サイズ。
 
 #### fslib read iosize (average)
 
@@ -125,34 +125,34 @@ Starlet Dashboard には、次のカテゴリの監視メトリクスが含ま�
 #### fslib read throughput
 
 - タイプ: カウンター
-- 説明: S3 読み取りの 1 秒あたりの I/O スループット。
+- 説明: S3 読み取りの毎秒 I/O スループット。
 
 #### fslib read iops
 
 - タイプ: カウンター
-- 説明: S3 読み取りの 1 秒あたりの I/O 操作数。
+- 説明: S3 読み取りの毎秒 I/O 操作数。
 
 ### FSLIB WRITE IO METRICS
 
 #### fslib write io_latency (quantile)
 
 - タイプ: ヒストグラム
-- 説明: アプリケーション書き込みの分位数レイテンシー。この値は、バッファに書き込まれたデータのみを監視するため、低く見える場合があります。
+- 説明: アプリケーション書き込みの分位レイテンシ。この値は、バッファに書き込まれたデータのみを監視するため、低く見える場合があります。
 
 #### fslib write io_latency (average)
 
 - タイプ: カウンター
-- 説明: アプリケーション書き込みの平均レイテンシー。この値は、バッファに書き込まれたデータのみを監視するため、低く見える場合があります。
+- 説明: アプリケーション書き込みの平均レイテンシ。この値は、バッファに書き込まれたデータのみを監視するため、低く見える場合があります。
 
 #### fslib total write data
 
 - タイプ: カウンター
-- 説明: アプリケーション書き込みのデータ総サイズ。
+- 説明: アプリケーション書き込みの総データサイズ。
 
 #### fslib write iosize (quantile)
 
 - タイプ: ヒストグラム
-- 説明: アプリケーション書き込みの分位数 I/O サイズ。
+- 説明: アプリケーション書き込みの分位 I/O サイズ。
 
 #### fslib write iosize (average)
 
@@ -162,44 +162,44 @@ Starlet Dashboard には、次のカテゴリの監視メトリクスが含ま�
 #### fslib write throughput
 
 - タイプ: カウンター
-- 説明: アプリケーション書き込みの 1 秒あたりの I/O スループット。
+- 説明: アプリケーション書き込みの毎秒 I/O スループット。
 
 ### S3 IO METRICS
 
 #### fslib s3 single upload iops
 
 - タイプ: カウンター
-- 説明: S3 Put Object の 1 秒あたりの呼び出し回数。
+- 説明: S3 Put Object の毎秒呼び出し数。
 
 #### fslib s3 single upload iosize (quantile)
 
 - タイプ: ヒストグラム
-- 説明: S3 Put Object の分位数 I/O サイズ。
+- 説明: S3 Put Object の分位 I/O サイズ。
 
 #### fslib s3 single upload latency (quantile)
 
 - タイプ: ヒストグラム
-- 説明: S3 Put Object の分位数レイテンシー。
+- 説明: S3 Put Object の分位レイテンシ。
 
 #### fslib s3 multi upload iops
 
 - タイプ: カウンター
-- 説明: S3 Multi Upload Object の 1 秒あたりの呼び出し回数。
+- 説明: S3 Multi Upload Object の毎秒呼び出し数。
 
 #### fslib s3 multi upload iosize (quantile)
 
 - タイプ: ヒストグラム
-- 説明: S3 Multi Upload Object の分位数 I/O サイズ。
+- 説明: S3 Multi Upload Object の分位 I/O サイズ。
 
 #### fslib s3 multi upload latency (quantile)
 
 - タイプ: ヒストグラム
-- 説明: S3 Multi Upload Object の分位数レイテンシー。
+- 説明: S3 Multi Upload Object の分位レイテンシ。
 
 #### fslib s3 complete multi upload latency (quantile)
 
 - タイプ: ヒストグラム
-- 説明: S3 Complete Multi Upload Object の分位数レイテンシー。
+- 説明: S3 Complete Multi Upload Object の分位レイテンシ。
 
 ### FSLIB CACHE METRICS
 
@@ -211,14 +211,14 @@ Starlet Dashboard には、次のカテゴリの監視メトリクスが含ま�
 #### fslib cache hits/misses
 
 - タイプ: カウンター
-- 説明: 1 秒あたりのキャッシュヒット/ミスの数。
+- 説明: 毎秒のキャッシュヒット/ミスの数。
 
 ### FSLIB FS METRICS
 
 #### fslib alive fs instances count
 
 - タイプ: ゲージ
-- 説明: 稼働中のファイルシステムインスタンスの数。
+- 説明: アクティブなファイルシステムインスタンスの数。
 
 #### fslib open files
 
@@ -228,12 +228,12 @@ Starlet Dashboard には、次のカテゴリの監視メトリクスが含ま�
 #### fslib create files
 
 - タイプ: カウンター
-- 説明: 1 秒あたりに作成されるファイルの平均数。
+- 説明: 毎秒作成されるファイルの平均数。
 
 #### filesystem meta operations
 
 - タイプ: カウンター
-- 説明: 1 秒あたりのディレクトリリスト操作の平均数。
+- 説明: 毎秒のディレクトリリスト操作の平均数。
 
 #### fslib async caches
 

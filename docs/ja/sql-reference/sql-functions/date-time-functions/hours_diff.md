@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # hours_diff
 
+## Description
+
 2 つの日付式（`expr1` − `expr2`）の時間差を返します。時間単位で正確です。
 
 ## Syntax

@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 ## 説明
 
-[external catalog](../../../data_source/catalog/catalog_overview.md) の作成ステートメントを照会します。
+[ external catalog](../../../data_source/catalog/catalog_overview.md) の作成ステートメントを照会します。
 
 返される結果の認証関連情報は匿名化されます。
 
@@ -18,9 +18,9 @@ displayed_sidebar: docs
 SHOW CREATE CATALOG <catalog_name>;
 ```
 
-## パラメーター
+## パラメータ
 
-| **パラメーター** | **必須** | **説明**                                              |
+| **パラメータ** | **必須** | **説明**                                              |
 | ------------- | ------------ | ------------------------------------------------------------ |
 | catalog_name  | はい          | 作成ステートメントを表示したい catalog の名前。 |
 
@@ -39,7 +39,7 @@ SHOW CREATE CATALOG <catalog_name>;
 
 ## 例
 
-次の例は、`hive_catalog_hms` という名前の Hive catalog の作成ステートメントを照会します。
+次の例では、`hive_catalog_hms` という名前の Hive catalog の作成ステートメントを照会します。
 
 ```SQL
 SHOW CREATE CATALOG hive_catalog_hms;

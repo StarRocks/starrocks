@@ -4,23 +4,25 @@ displayed_sidebar: docs
 
 # tan
 
-`x` の正接を返します。ここで、`x` はラジアンで指定します。
+## 説明
 
-## Syntax
+`x` の正接を返します。ここで、`x` はラジアンで指定されます。
+
+## 構文
 
 ```Haskell
 TAN(x);
 ```
 
-## Parameters
+## パラメータ
 
 `x`: DOUBLE データ型をサポートします。
 
-## Return value
+## 戻り値
 
 DOUBLE データ型の値を返します。
 
-## Examples
+## 例
 
 ```Plain
 mysql> select tan(3.14);

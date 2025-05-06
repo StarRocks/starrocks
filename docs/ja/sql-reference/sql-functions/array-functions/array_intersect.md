@@ -4,25 +4,27 @@ displayed_sidebar: docs
 
 # array_intersect
 
-1 つ以上の配列の共通部分にある要素の配列を返します。
+## 説明
 
-## Syntax
+1つ以上の配列の共通部分にある要素を含む配列を返します。
+
+## 構文
 
 ```Haskell
 array_intersect(input0, input1, ...)
 ```
 
-## Parameters
+## パラメータ
 
-`input`: 共通部分を取得したい 1 つ以上の配列。`(input0, input1, ...)` の形式で配列を指定し、指定する配列が同じデータ型であることを確認してください。
+`input`: 共通部分を取得したい1つ以上の配列を指定します。配列は `(input0, input1, ...)` の形式で指定し、指定する配列が同じデータ型であることを確認してください。
 
-## Return value
+## 戻り値
 
 指定した配列と同じデータ型の配列を返します。
 
-## Examples
+## 例
 
-Example 1:
+例 1:
 
 ```Plain
 mysql> SELECT array_intersect(["SQL", "storage"], ["mysql", "query", "SQL"], ["SQL"])
@@ -34,7 +36,7 @@ AS no_intersect ;
 +--------------+
 ```
 
-Example 2:
+例 2:
 
 ```Plain
 mysql> SELECT array_intersect(["SQL", "storage"], ["mysql", null], [null]) AS no_intersect ;
@@ -45,7 +47,7 @@ mysql> SELECT array_intersect(["SQL", "storage"], ["mysql", null], [null]) AS no
 +--------------+
 ```
 
-Example 3:
+例 3:
 
 ```Plain
 mysql> SELECT array_intersect(["SQL", null, "storage"], ["mysql", null], [null]) AS no_intersect ;

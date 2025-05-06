@@ -4,7 +4,9 @@ displayed_sidebar: docs
 
 # months_sub
 
-指定された月を日付から減算します。
+## 説明
+
+指定された月を日付から引きます。
 
 ## 構文
 
@@ -16,7 +18,7 @@ DATETIME months_sub(DATETIME expr1, INT expr2);
 
 - `expr1`: 指定された日付。DATETIME または DATE 型でなければなりません。
 
-- `expr2`: 減算する月。INT 型でなければなりません。
+- `expr2`: 引く月。INT 型でなければなりません。
 
 ## 戻り値
 

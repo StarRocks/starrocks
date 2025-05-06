@@ -4,7 +4,9 @@ displayed_sidebar: docs
 
 # uuid_numeric
 
-ランダムな LARGEINT 型の UUID を返します。この関数は `uuid` 関数に比べて 2 桁優れた実行性能を持っています。
+## 説明
+
+LARGEINT 型のランダムな UUID を返します。この関数は `uuid` 関数よりも 2 桁優れた実行性能を持っています。
 
 ## 構文
 
