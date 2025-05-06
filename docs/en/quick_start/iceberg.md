@@ -12,8 +12,7 @@ import Clients from '../_assets/quick-start/_clientsCompose.mdx'
 # Apache Iceberg Lakehouse
 
 This guide will get you up and running with Apache Iceberg™ using StarRocks™, including sample code to highlight some
-powerful features. You can learn more about Iceberg's StarRocks runtime by checking out
-the [StarRocks](../data_source/catalog/iceberg/iceberg_catalog.md) section.
+powerful features.
 
 ### Docker-Compose
 
