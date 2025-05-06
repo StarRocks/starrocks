@@ -391,6 +391,8 @@ public:
     Status breakpoint_check();
     Status compaction_random(MemTracker* mem_tracker);
 
+    bool rowset_check_file_existence() const;
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
