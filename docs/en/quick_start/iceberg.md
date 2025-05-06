@@ -145,9 +145,7 @@ docker compose up --detach --wait --wait-timeout 400
 You can then run any of the following commands to start a StarRocks session.
 
 ```bash
-docker
-exec starrocks-fe
-\
+docker exec starrocks-fe \
 mysql -P 9030 -h 127.0.0.1 -u root --prompt="StarRocks > "
 ```
 
