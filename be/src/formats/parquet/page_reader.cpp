@@ -254,8 +254,9 @@ StatusOr<Slice> PageReader::read_and_decompress_page_data() {
 }
 
 bool PageReader::_cache_decompressed_data() {
-    return _cur_header.uncompressed_page_size <=
-           config::parquet_page_cache_decompress_threshold * _cur_header.compressed_page_size;
+    return _codec == tparquet::CompressionCodec::UNCOMPRESSED ||
+           _cur_header.uncompressed_page_size <=
+                   config::parquet_page_cache_decompress_threshold * _cur_header.compressed_page_size;
 }
 
 Status PageReader::_decompress_page(starrocks::Slice& input, starrocks::Slice* output) {
