@@ -62,12 +62,6 @@ message AggregatePublishVersionRequest {
     repeated PublishVersionRequest publish_reqs = 2;
 }
 
-message ComputeNodePB {
-    optional string host = 1;
-    optional int32 brpc_port = 2;
-    optional int64 id = 3;
-}
-
 message AbortTxnRequest {
     repeated int64 tablet_ids = 1;
     repeated int64 txn_ids = 2; // deprecated
