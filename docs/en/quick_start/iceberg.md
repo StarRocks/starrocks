@@ -235,12 +235,12 @@ When you added and used the external catalog, Starrocks started using MinIO as t
 table. If you navigate to http://localhost:9001 and then navigate through the Object Browser menu to
 `warehouse/nyc/taxis/` you can confirm that StarRocks is using MinIO for the storage.
 
-Tip
+:::tip
 
-The username and password for MinIO are in the docker-compose.yml file. You will be prompted to change the password to
-something better, just ignore this advice for the tutorial.
+The username and password for MinIO are in the docker-compose.yml file. You will be prompted to change the password to something better, just ignore this advice for the tutorial.
 
 ![img](../_assets/quick-start/MinIO-Iceberg-data.png)
+:::
 
 ### Next Steps
 
