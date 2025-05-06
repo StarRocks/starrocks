@@ -49,7 +49,7 @@ Status ArrowFlightSqlServer::start(int port) {
     // server will verify the query id, this step is equivalent to authentication.
     _bearer_middleware = std::make_shared<NoOpBearerAuthServerMiddlewareFactory>();
     flight_options.auth_handler = std::make_shared<arrow::flight::NoOpAuthHandler>();
-    flight_options.middleware.emplace_back({"bearer-auth-server", _bearer_middleware});
+    flight_options.middleware.emplace_back("bearer-auth-server", _bearer_middleware);
 
     RETURN_STATUS_IF_ERROR(Init(flight_options));
 
