@@ -195,6 +195,8 @@ public:
             _tablet.update_mgr()->index_cache().update_object_size(_index_entry, _index_entry->value().memory_usage());
         }
         _metadata->GetReflection()->MutableUnknownFields(_metadata.get())->Clear();
+        // TODO(zhangqiang)
+        // pk does not support aggregate publish yet, `_skip_write_tablet_metadata` is not work right now
         RETURN_IF_ERROR(_builder.finalize(_max_txn_id));
         _has_finalized = true;
         return Status::OK();
@@ -398,8 +400,12 @@ private:
 
 class NonPrimaryKeyTxnLogApplier : public TxnLogApplier {
 public:
-    NonPrimaryKeyTxnLogApplier(const Tablet& tablet, MutableTabletMetadataPtr metadata, int64_t new_version)
-            : _tablet(tablet), _metadata(std::move(metadata)), _new_version(new_version) {}
+    NonPrimaryKeyTxnLogApplier(const Tablet& tablet, MutableTabletMetadataPtr metadata, int64_t new_version,
+                               bool skip_write_tablet_metadata)
+            : _tablet(tablet),
+              _metadata(std::move(metadata)),
+              _new_version(new_version),
+              _skip_write_tablet_metadata(skip_write_tablet_metadata) {}
 
     Status apply(const TxnLogPB& log) override {
         if (log.has_op_write()) {
@@ -423,6 +429,9 @@ public:
     Status finish() override {
         _metadata->GetReflection()->MutableUnknownFields(_metadata.get())->Clear();
         _metadata->set_version(_new_version);
+        if (_skip_write_tablet_metadata) {
+            return ExecEnv::GetInstance()->lake_tablet_manager()->cache_tablet_metadata(_metadata);
+        }
         return _tablet.put_metadata(_metadata);
     }
 
@@ -650,14 +659,19 @@ private:
     Tablet _tablet;
     MutableTabletMetadataPtr _metadata;
     int64_t _new_version;
+    bool _skip_write_tablet_metadata;
 };
 
 std::unique_ptr<TxnLogApplier> new_txn_log_applier(const Tablet& tablet, MutableTabletMetadataPtr metadata,
-                                                   int64_t new_version, bool rebuild_pindex) {
+                                                   int64_t new_version, bool rebuild_pindex,
+                                                   bool skip_write_tablet_metadata) {
+    // TODO(zhangqiang)
+    // pk does not support aggregate publish yet, `_skip_write_tablet_metadata` is not work right now
     if (metadata->schema().keys_type() == PRIMARY_KEYS) {
         return std::make_unique<PrimaryKeyTxnLogApplier>(tablet, std::move(metadata), new_version, rebuild_pindex);
     }
-    return std::make_unique<NonPrimaryKeyTxnLogApplier>(tablet, std::move(metadata), new_version);
+    return std::make_unique<NonPrimaryKeyTxnLogApplier>(tablet, std::move(metadata), new_version,
+                                                        skip_write_tablet_metadata);
 }
 
 } // namespace starrocks::lake

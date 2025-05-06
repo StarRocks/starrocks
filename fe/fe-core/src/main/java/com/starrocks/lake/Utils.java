@@ -22,6 +22,9 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.lake.LakeAggregator;
+import com.starrocks.proto.AggregatePublishVersionRequest;
+import com.starrocks.proto.ComputeNodePB;
 import com.starrocks.proto.PublishLogVersionBatchRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
 import com.starrocks.proto.PublishVersionRequest;
@@ -34,6 +37,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -185,6 +189,121 @@ public class Utils {
             throws NoAliveBackendException, RpcException {
         List<TxnInfoPB> txnInfos = Lists.newArrayList(txnInfo);
         publishVersionBatch(tablets, txnInfos, baseVersion, newVersion, compactionScores, null, warehouseId, tabletRowNums);
+    }
+
+    public static boolean processTablets(List<Tablet> tablets, long warehouseId,
+                                         WarehouseManager warehouseManager,
+                                         Map<ComputeNode, List<Long>> nodeToTablets,
+                                         List<Long> rebuildPindexTabletIds, long baseVersion) {
+        for (Tablet tablet : tablets) {
+            ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
+            if (computeNode == null) {
+                LOG.warn("No alive node in warehouse for handle publish version request, try to use background warehouse");
+                return false;
+            }
+        
+            nodeToTablets.computeIfAbsent(computeNode, k -> Lists.newArrayList()).add(tablet.getId());
+        
+            if (baseVersion == ((LakeTablet) tablet).rebuildPindexVersion() && baseVersion != 0) {
+                rebuildPindexTabletIds.add(tablet.getId());
+                LOG.info("lake tablet {} publish rebuild pindex version {}", tablet.getId(), baseVersion);
+            }
+        }
+        return true;
+    }
+
+    public static void aggregatePublishVersion(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
+                                               long baseVersion, long newVersion,
+                                               Map<Long, Double> compactionScores,
+                                               Map<ComputeNode, List<Long>> nodeToTablets,
+                                               long warehouseId,
+                                               Map<Long, Long> tabletRowNum) 
+            throws NoAliveBackendException, RpcException {
+        if (nodeToTablets == null) {
+            nodeToTablets = new HashMap<>();
+        }
+
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        if (!warehouseManager.warehouseExists(warehouseId)) {
+            LOG.warn("publish version operation should be successful even if the warehouse is not exist, " +
+                    "and switch the warehouse id from {} to {}[{}]", warehouseId, 
+                    warehouseManager.getBackgroundWarehouse().getId(),
+                    warehouseManager.getBackgroundWarehouse().getName());
+            warehouseId = warehouseManager.getBackgroundWarehouse().getId();
+        }
+
+        List<Long> rebuildPindexTabletIds = new ArrayList<>();
+        boolean success = 
+                processTablets(tablets, warehouseId, warehouseManager, nodeToTablets, rebuildPindexTabletIds, baseVersion);
+        if (!success && warehouseId != warehouseManager.getBackgroundWarehouse().getId()) {
+            warehouseId = warehouseManager.getBackgroundWarehouse().getId();
+            rebuildPindexTabletIds.clear();
+            nodeToTablets.clear();
+            success = 
+                    processTablets(tablets, warehouseId, warehouseManager, nodeToTablets, rebuildPindexTabletIds, baseVersion);
+        }
+        if (!success) {
+            throw new NoAliveBackendException("No alive node for handle publish version request in background warehouse");
+        }
+
+        // choose one aggregator
+        LakeAggregator lakeAggregator = new LakeAggregator();
+        ComputeNode aggregatorNode = lakeAggregator.chooseAggregatorNode(warehouseId);
+        if (aggregatorNode == null) {
+            throw new NoAliveBackendException("No alive compute node for handle aggregate publish version");
+        }
+        AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
+        List<ComputeNodePB> computeNodes = new ArrayList<>();
+        List<PublishVersionRequest> publishReqs = new ArrayList<>();
+        for (Map.Entry<ComputeNode, List<Long>> entry : nodeToTablets.entrySet()) {
+            PublishVersionRequest singleReq = new PublishVersionRequest();
+            singleReq.setBaseVersion(baseVersion);
+            singleReq.setNewVersion(newVersion);
+            singleReq.setTabletIds(entry.getValue());
+            singleReq.setTimeoutMs(LakeService.TIMEOUT_PUBLISH_VERSION);
+            singleReq.setTxnInfos(txnInfos);
+            singleReq.setEnableAggregatePublish(true);
+
+            if (!rebuildPindexTabletIds.isEmpty()) {
+                singleReq.setRebuildPindexTabletIds(rebuildPindexTabletIds);
+            }
+    
+            ComputeNodePB computeNodePB = new ComputeNodePB();
+            computeNodePB.setHost(entry.getKey().getHost());
+            computeNodePB.setBrpcPort(entry.getKey().getBrpcPort());
+    
+            computeNodes.add(computeNodePB);
+            publishReqs.add(singleReq);
+        }
+        request.setComputeNodes(computeNodes);
+        request.setPublishReqs(publishReqs);
+
+        LakeService lakeService = BrpcProxy.getLakeService(aggregatorNode.getHost(), aggregatorNode.getBrpcPort());
+        Future<PublishVersionResponse> future = lakeService.aggregatePublishVersion(request);
+
+        try {
+            PublishVersionResponse response = future.get();
+            
+            if (response != null) {
+                TStatusCode code = TStatusCode.findByValue(response.status.statusCode);
+                if (code != TStatusCode.OK) {
+                    String errorMsg = "Fail to publish version for tablets:[";
+                    if (response.failedTablets != null && !response.failedTablets.isEmpty()) {
+                        errorMsg += response.failedTablets;
+                    }
+                    errorMsg += "], error msg: " + response.status.errorMsgs.get(0);
+                    throw new RpcException(errorMsg);
+                }
+            }
+            if (compactionScores != null && response != null && response.compactionScores != null) {
+                compactionScores.putAll(response.compactionScores);
+            }
+            if (baseVersion == 1 && tabletRowNum != null && response != null && response.tabletRowNums != null) {
+                tabletRowNum.putAll(response.tabletRowNums);
+            }
+        } catch (Exception e) {
+            throw new RpcException(aggregatorNode.getHost(), e.getMessage());
+        }
     }
 
     public static void publishLogVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long version, long warehouseId)

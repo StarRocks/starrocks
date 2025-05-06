@@ -645,12 +645,24 @@ TEST_F(LakeTabletManagerTest, put_aggregate_tablet_metadata) {
     metadatas.emplace(2, metadata2);
     EXPECT_OK(_tablet_manager->put_aggregate_tablet_metadata(metadatas));
 
-    auto res = _tablet_manager->get_single_tablet_metadata(1, 2);
+    auto res = _tablet_manager->get_tablet_metadata(1, 2);
     ASSERT_TRUE(res.ok());
     TabletMetadataPtr metadata3 = std::move(res).value();
     ASSERT_EQ(metadata3->schema().id(), 10);
     ASSERT_EQ(metadata3->historical_schemas_size(), 2);
 }
+
+TEST_F(LakeTabletManagerTest, cache_tablet_metadata) {
+    auto metadata = std::make_shared<TabletMetadata>();
+    auto tablet_id = next_id();
+    metadata->set_id(tablet_id);
+    metadata->set_version(2);
+    ASSERT_TRUE(_tablet_manager->cache_tablet_metadata(metadata).ok());
+    auto path = _tablet_manager->tablet_metadata_location(tablet_id, 2);
+    ASSERT_TRUE(_tablet_manager->metacache()->lookup_tablet_metadata(path) != nullptr);
+}
+
+TEST_F(LakeTabletManagerTest, get_tablet_metadata) {}
 
 namespace {
 class PartitionedLocationProvider : public lake::LocationProvider {

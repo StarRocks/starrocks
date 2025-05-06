@@ -35,6 +35,11 @@ public:
                          const ::starrocks::PublishVersionRequest* request,
                          ::starrocks::PublishVersionResponse* response, ::google::protobuf::Closure* done) override;
 
+    void aggregate_publish_version(::google::protobuf::RpcController* controller,
+                                   const ::starrocks::AggregatePublishVersionRequest* request,
+                                   ::starrocks::PublishVersionResponse* response,
+                                   ::google::protobuf::Closure* done) override;
+
     void abort_txn(::google::protobuf::RpcController* controller, const ::starrocks::AbortTxnRequest* request,
                    ::starrocks::AbortTxnResponse* response, ::google::protobuf::Closure* done) override;
 
