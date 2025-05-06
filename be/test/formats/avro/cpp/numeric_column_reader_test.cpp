@@ -25,54 +25,7 @@
 
 namespace starrocks::avrocpp {
 
-<<<<<<< HEAD
-class NumericColumnReaderTest : public ::testing::Test {
-public:
-    ColumnReaderUniquePtr get_column_reader(const TypeDescriptor& type_desc, bool invalid_as_null) {
-        return ColumnReader::get_nullable_column_reader(_col_name, type_desc, _timezone, invalid_as_null);
-    }
-
-    ColumnPtr create_adaptive_nullable_column(const TypeDescriptor& type_desc) {
-        return ColumnHelper::create_column(type_desc, true, false, 0, true);
-    }
-
-    std::vector<uint8_t> encode_decimal_bytes(int64_t unscaled_value, size_t fixed_size = 0) {
-        bool is_negative = unscaled_value < 0;
-
-        size_t bytes_size = fixed_size == 0 ? 8 : fixed_size;
-        std::vector<uint8_t> result(bytes_size);
-
-        for (size_t i = 0; i < bytes_size; ++i) {
-            result[bytes_size - 1 - i] = static_cast<uint8_t>(unscaled_value & 0xFF);
-            unscaled_value >>= 8;
-        }
-
-        if (fixed_size == 0) {
-            // remove 0x00 or oxFF prefix
-            size_t i = 0;
-            while (i + 1 < result.size()) {
-                if (is_negative && result[i] == 0xFF && (result[i + 1] & 0x80)) {
-                    ++i;
-                } else if (!is_negative && result[i] == 0x00 && !(result[i + 1] & 0x80)) {
-                    ++i;
-                } else {
-                    break;
-                }
-            }
-
-            return std::vector<uint8_t>(result.begin() + i, result.end());
-        } else {
-            return result;
-        }
-    }
-
-private:
-    std::string _col_name = "k1";
-    cctz::time_zone _timezone = cctz::utc_time_zone();
-};
-=======
 class NumericColumnReaderTest : public ColumnReaderTest, public ::testing::Test {};
->>>>>>> e76efb1d05 ([UT] Add avro column reader UT (#58669))
 
 TEST_F(NumericColumnReaderTest, test_bool) {
     auto type_desc = TypeDescriptor::from_logical_type(TYPE_BOOLEAN);

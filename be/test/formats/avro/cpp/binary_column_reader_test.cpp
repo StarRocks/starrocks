@@ -25,24 +25,7 @@
 
 namespace starrocks::avrocpp {
 
-<<<<<<< HEAD
-class BinaryColumnReaderTest : public ::testing::Test {
-public:
-    ColumnReaderUniquePtr get_column_reader(const TypeDescriptor& type_desc, bool invalid_as_null) {
-        return ColumnReader::get_nullable_column_reader(_col_name, type_desc, _timezone, invalid_as_null);
-    }
-
-    ColumnPtr create_adaptive_nullable_column(const TypeDescriptor& type_desc) {
-        return ColumnHelper::create_column(type_desc, true, false, 0, true);
-    }
-
-private:
-    std::string _col_name = "k1";
-    cctz::time_zone _timezone = cctz::utc_time_zone();
-};
-=======
 class BinaryColumnReaderTest : public ColumnReaderTest, public ::testing::Test {};
->>>>>>> e76efb1d05 ([UT] Add avro column reader UT (#58669))
 
 TEST_F(BinaryColumnReaderTest, test_normal) {
     auto type_desc = TypeDescriptor::create_varchar_type(1024);
