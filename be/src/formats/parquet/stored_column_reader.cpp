@@ -467,7 +467,7 @@ Status OptionalStoredColumnReader::_read_values_on_levels(size_t num_values,
         size_t level_parsed = 0;
         RETURN_IF_ERROR(_decode_levels(&num_values, &level_parsed, &def_levels));
         DCHECK_EQ(num_values, level_parsed);
-        _null_infos.resize(num_values);
+        _null_infos.reset_with_capacity(num_values);
         size_t num_ranges = 1;
         size_t num_nulls{};
         // decode def levels
@@ -484,7 +484,7 @@ Status RepeatedStoredColumnReader::_read_values_on_levels(size_t num_values,
                                                           starrocks::parquet::ColumnContentType content_type,
                                                           starrocks::Column* dst, bool append_default,
                                                           const FilterData* filter) {
-    _null_infos.resize(num_values);
+    _null_infos.reset_with_capacity(num_values);
 
     int null_pos = 0;
     level_t* def_levels = _reader->def_level_decoder().get_forward_levels(num_values);

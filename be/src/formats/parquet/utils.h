@@ -16,6 +16,7 @@
 
 #include "gen_cpp/parquet_types.h"
 #include "gen_cpp/types.pb.h"
+#include "util/raw_container.h"
 
 namespace starrocks::parquet {
 
@@ -46,18 +47,23 @@ private:
 };
 
 struct NullInfos {
-    std::vector<uint8_t> is_nulls;
+    // The number of nulls contained in the null vector.
     size_t num_nulls{};
+    // The number of Runs in null info. (null[i] ! = null[i + 1]) This is an estimated value.
     size_t num_ranges{};
 
-    uint8_t* nulls_data() { return is_nulls.data(); }
-    const uint8_t* nulls_data() const { return is_nulls.data(); }
+    uint8_t* nulls_data() { return _is_nulls.data(); }
+    const uint8_t* nulls_data() const { return _is_nulls.data(); }
 
-    void resize(size_t num_rows) {
-        is_nulls.resize(num_rows);
+    // This function only reserves space but does no actual initialization.
+    void reset_with_capacity(size_t num_rows) {
+        _is_nulls.resize(num_rows);
         num_nulls = 0;
         num_ranges = 0;
     }
+
+private:
+    raw::RawVector<uint8_t> _is_nulls;
 };
 
 } // namespace starrocks::parquet
