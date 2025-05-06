@@ -191,6 +191,7 @@ set(EXEC_FILES
         ./formats/avro/nullable_column_test.cpp
         ./formats/avro/cpp/avro_reader_test.cpp
         ./formats/avro/cpp/binary_column_reader_test.cpp
+        ./formats/avro/cpp/complex_column_reader_test.cpp
         ./formats/avro/cpp/date_column_reader_test.cpp
         ./formats/avro/cpp/numeric_column_reader_test.cpp
         ./formats/avro/cpp/utils_test.cpp
