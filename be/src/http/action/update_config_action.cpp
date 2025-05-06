@@ -321,10 +321,11 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                     config::load_channel_rpc_thread_pool_num);
         });
         _config_callback.emplace("number_tablet_writer_threads", [&]() -> Status {
-            LOG(INFO) << "set number_tablet_writer_threads:" << config::number_tablet_writer_threads;
+            int max_delta_writer_thread_num = caculate_delta_writer_thread_num(config::number_tablet_writer_threads);
+            LOG(INFO) << "set max delta writer thread num: " << max_delta_writer_thread_num;
             bthreads::ThreadPoolExecutor* executor = static_cast<bthreads::ThreadPoolExecutor*>(
                     StorageEngine::instance()->async_delta_writer_executor());
-            return executor->get_thread_pool()->update_max_threads(config::number_tablet_writer_threads);
+            return executor->get_thread_pool()->update_max_threads(max_delta_writer_thread_num);
         });
         _config_callback.emplace("compact_threads", [&]() -> Status {
             auto tablet_manager = _exec_env->lake_tablet_manager();

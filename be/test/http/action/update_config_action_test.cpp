@@ -24,6 +24,7 @@
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
 #include "testutil/scoped_updater.h"
+#include "util/bthreads/executor.h"
 
 namespace starrocks {
 
@@ -78,6 +79,25 @@ TEST_F(UpdateConfigActionTest, test_update_pindex_load_thread_pool_num_max) {
 
     auto* load_pool = StorageEngine::instance()->update_manager()->get_pindex_load_executor()->TEST_get_load_pool();
     ASSERT_EQ(16, load_pool->max_threads());
+}
+
+TEST_F(UpdateConfigActionTest, test_update_number_tablet_writer_threads) {
+    UpdateConfigAction action(ExecEnv::GetInstance());
+    auto* executor =
+            static_cast<bthreads::ThreadPoolExecutor*>(StorageEngine::instance()->async_delta_writer_executor());
+    auto* pool = executor->get_thread_pool();
+
+    {
+        auto st = action.update_config("number_tablet_writer_threads", "8");
+        CHECK_OK(st);
+        ASSERT_EQ(8, pool->max_threads());
+    }
+
+    {
+        auto st = action.update_config("number_tablet_writer_threads", "0");
+        CHECK_OK(st);
+        ASSERT_EQ(CpuInfo::num_cores() / 2, pool->max_threads());
+    }
 }
 
 } // namespace starrocks
