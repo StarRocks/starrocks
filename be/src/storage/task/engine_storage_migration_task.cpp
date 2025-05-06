@@ -492,7 +492,7 @@ Status EngineStorageMigrationTask::_finish_migration(const TabletSharedPtr& tabl
     2. snapshot the meta data
     3. create a NEW tablet using meta data in step 2 with the same tablet id. And FORCE REPLACE
        the old one. This is the same as non Primary Key tablet.
-    4. clear primary index cache
+    4. clear primary index cache and clear delvector and dcg cache
 */
 Status EngineStorageMigrationTask::_finish_primary_key_migration(const TabletSharedPtr& tablet, int64_t end_version,
                                                                  uint64_t shard,
@@ -542,6 +542,11 @@ Status EngineStorageMigrationTask::_finish_primary_key_migration(const TabletSha
         auto tablet_manager = StorageEngine::instance()->tablet_manager();
         // don't wait rebuild pk index to finish because migration task does not support increment migration
         // and needs to be completed as soon as possible
+
+        // create_tablet_from_meta_snapshot does not reset rowset_seg_id in snapshot_meta. The GC progress for
+        // the old tablet maybe conflict in rowset_seg_id with the new one. But it is safe because the rowset_seg_id
+        // conflict in GC progress will only affect the delvector/dcg cache (delete the cache) for the new tablet but
+        // not the metadata because the store path is different between the old one and the new one.
         res = tablet_manager->create_tablet_from_meta_snapshot(_dest_store, _tablet_id, tablet->schema_hash(),
                                                                schema_hash_path, false, _need_rebuild_pk_index, 0);
         if (!res.ok()) {
@@ -565,6 +570,10 @@ Status EngineStorageMigrationTask::_finish_primary_key_migration(const TabletSha
         index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
         index_entry->value().unload();
         index_cache.release(index_entry);
+
+        // clear delvector and dcg cache
+        manager->clear_cached_del_vec_by_tablet_id(tablet->tablet_id());
+        manager->clear_cached_delta_column_group_by_tablet_id(tablet->tablet_id());
 
         // if old tablet finished schema change, then the schema change status of the new tablet is DONE
         // else the schema change status of the new tablet is FAILED

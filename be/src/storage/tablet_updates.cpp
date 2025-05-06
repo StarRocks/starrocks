@@ -369,7 +369,7 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
     l2.unlock(); // _rowsets_lock
 
     std::vector<TabletSegmentId> tsids_vec;
-    tsids_vec.resize(tsids.size());
+    tsids_vec.reserve(tsids.size());
     for (const auto& tsid : tsids) {
         tsids_vec.emplace_back(tsid);
     }
