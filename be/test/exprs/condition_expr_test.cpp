@@ -261,11 +261,7 @@ private:
             }
         }
     }
-<<<<<<< HEAD
     std::shared_ptr<RunTimeColumnType<Type>> col;
-=======
-    typename RunTimeColumnType<Type>::Ptr col;
->>>>>>> 04eeef86e3 ([UT] fix unstable be ut (#56979))
     std::default_random_engine& _re;
 };
 
