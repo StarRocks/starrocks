@@ -90,8 +90,8 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             return Status::OK();
         });
         _config_callback.emplace("storage_page_cache_limit", [&]() -> Status {
-            ASSIGN_OR_RETURN(int64_t cache_limit, GlobalEnv::GetInstance()->get_storage_page_cache_size());
-            cache_limit = GlobalEnv::GetInstance()->check_storage_page_cache_size(cache_limit);
+            ASSIGN_OR_RETURN(int64_t cache_limit, CacheEnv::GetInstance()->get_storage_page_cache_limit());
+            cache_limit = CacheEnv::GetInstance()->check_storage_page_cache_limit(cache_limit);
             StoragePageCache::instance()->set_capacity(cache_limit);
             return Status::OK();
         });
@@ -99,20 +99,16 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             if (config::disable_storage_page_cache) {
                 StoragePageCache::instance()->set_capacity(0);
             } else {
-                ASSIGN_OR_RETURN(int64_t cache_limit, GlobalEnv::GetInstance()->get_storage_page_cache_size());
-                cache_limit = GlobalEnv::GetInstance()->check_storage_page_cache_size(cache_limit);
+                ASSIGN_OR_RETURN(int64_t cache_limit, CacheEnv::GetInstance()->get_storage_page_cache_limit());
+                cache_limit = CacheEnv::GetInstance()->check_storage_page_cache_limit(cache_limit);
                 StoragePageCache::instance()->set_capacity(cache_limit);
             }
             return Status::OK();
         });
         _config_callback.emplace("datacache_mem_size", [&]() -> Status {
-            int64_t mem_limit = MemInfo::physical_mem();
-            if (GlobalEnv::GetInstance()->process_mem_tracker()->has_limit()) {
-                mem_limit = GlobalEnv::GetInstance()->process_mem_tracker()->limit();
-            }
-
             size_t mem_size = 0;
-            Status st = DataCacheUtils::parse_conf_datacache_mem_size(config::datacache_mem_size, mem_limit, &mem_size);
+            Status st = DataCacheUtils::parse_conf_datacache_mem_size(
+                    config::datacache_mem_size, GlobalEnv::GetInstance()->process_mem_limit(), &mem_size);
             if (!st.ok()) {
                 LOG(WARNING) << "Failed to update datacache mem size";
                 return st;

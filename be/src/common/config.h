@@ -1287,14 +1287,12 @@ CONF_String(datacache_eviction_policy, "slru");
 // the old configuration files.
 CONF_Bool(block_cache_enable, "false");
 CONF_Int64(block_cache_disk_size, "0");
-CONF_String(block_cache_disk_path, "${STARROCKS_HOME}/block_cache/");
-CONF_String(block_cache_meta_path, "${STARROCKS_HOME}/block_cache/");
-CONF_Int64(block_cache_block_size, "262144");   // 256K
 CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
-CONF_Int64(block_cache_max_concurrent_inserts, "1500000");
-CONF_Bool(block_cache_checksum_enable, "false");
-CONF_Bool(block_cache_direct_io_enable, "false");
-CONF_String(block_cache_engine, "");
+CONF_Alias(datacache_block_size, block_cache_block_size);
+CONF_Alias(datacache_max_concurrent_inserts, block_cache_max_concurrent_inserts);
+CONF_Alias(datacache_checksum_enable, block_cache_checksum_enable);
+CONF_Alias(datacache_direct_io_enable, block_cache_direct_io_enable);
+CONF_Alias(datacache_engine, block_cache_engine);
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 // max wal file size in l0
