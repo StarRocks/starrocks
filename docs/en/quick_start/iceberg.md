@@ -192,13 +192,11 @@ SET CATALOG demo;
 ### Creating and using a database
 
 ```SQL
-create
-database nyc;
+CREATE DATABASE nyc;
 ```
 
 ```SQL
-use
-nyc;
+USE nyc;
 ```
 
 ### Creating a table
