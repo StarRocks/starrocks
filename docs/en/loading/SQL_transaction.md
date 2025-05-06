@@ -34,7 +34,7 @@ A transaction is associated with a single session. Multiple sessions cannot shar
 
 2. After starting the transaction, you can define multiple INSERT statements in the transaction. For detailed information, see [Usage notes](#usage-notes).
 
-3. A transaction must be ended explicitly by executing COMMIT or ROLLBACK.
+3. A transaction must be ended explicitly by executing `COMMIT` or `ROLLBACK`.
 
    - To apply (commit) the transaction, use the following syntax:
 
