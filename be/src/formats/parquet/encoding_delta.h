@@ -309,7 +309,9 @@ private:
     uint32_t mini_block_idx_;
     std::string delta_bit_widths_;
     int delta_bit_width_;
+
     bool fixed_values_ = true;
+    int values_remaining_current_block_ = 0;
 
     T last_value_;
 
@@ -362,6 +364,7 @@ private:
             return Status::Corruption("InitBlock EOF");
         }
 
+        fixed_values_ = true;
         fixed_values_ &= (min_delta_ == 0);
 
         // read the bitwidth of each miniblock
@@ -375,7 +378,7 @@ private:
             // the bitwidths when actually using them (see InitMiniBlock()).
             fixed_values_ &= (bit_width_data[i] == 0);
         }
-
+        values_remaining_current_block_ = values_per_block_;
         first_block_initialized_ = true;
         mini_block_idx_ = 0;
         RETURN_IF_ERROR(InitMiniBlock(bit_width_data[0]));
@@ -422,13 +425,21 @@ private:
         }
         DCHECK(first_block_initialized_);
 
-        if (fixed_values_) {
-            std::fill(buffer, buffer + max_values, last_value_);
-            total_values_remaining_ -= max_values;
-            return Status::OK();
-        }
-
         while (i < max_values) {
+            // optimization for fixed values. Remember `fixed_values` only applies in a single block.
+            // if current block is fixed values and we can fill more values
+            if (fixed_values_ && values_remaining_current_block_ > 0) {
+                int values_decode = std::min(values_remaining_current_block_, max_values - i);
+                std::fill(buffer + i, buffer + i + values_decode, last_value_);
+                i += values_decode;
+                values_remaining_current_block_ -= values_decode;
+
+                int values_used_current_block = (values_per_block_ - values_remaining_current_block_);
+                mini_block_idx_ = values_used_current_block / values_per_mini_block_;
+                values_remaining_current_mini_block_ = values_used_current_block % values_per_mini_block_;
+                continue;
+            }
+
             // Ensure we have an initialized mini-block
             if (PREDICT_FALSE(values_remaining_current_mini_block_ == 0)) {
                 ++mini_block_idx_;
@@ -436,6 +447,9 @@ private:
                     RETURN_IF_ERROR(InitMiniBlock(delta_bit_widths_.data()[mini_block_idx_]));
                 } else {
                     RETURN_IF_ERROR(InitBlock());
+                    if (fixed_values_) {
+                        continue;
+                    }
                 }
             }
 
