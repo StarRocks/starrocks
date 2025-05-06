@@ -233,7 +233,7 @@ Status JsonScanner::parse_json_paths(const std::string& jsonpath, std::vector<st
     } catch (simdjson::simdjson_error& e) {
         auto err_msg =
                 strings::Substitute("Invalid json path: $0, error: $1", jsonpath, simdjson::error_message(e.error()));
-        return json_parse_error(err_msg);
+        return status_from_json_parse_error(err_msg);
     }
 }
 
@@ -373,7 +373,7 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read) {
     } catch (simdjson::simdjson_error& e) {
         auto err_msg = fmt::format("Unrecognized json format, error: {}", simdjson::error_message(e.error()));
         _append_error_msg("", err_msg);
-        return json_parse_error(err_msg);
+        return status_from_json_parse_error(err_msg);
     }
 }
 
@@ -797,7 +797,7 @@ Status JsonReader::_check_ndjson() {
         } else {
             std::string error_msg = fmt::format("illegal json started with [{}]", c);
             LOG(WARNING) << error_msg;
-            return json_parse_error(error_msg);
+            return status_from_json_parse_error(error_msg);
         }
     }
     return Status::OK();
