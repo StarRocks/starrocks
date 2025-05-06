@@ -74,101 +74,101 @@ The Query Profile includes a multitude of metrics providing detailed information
 
 ### Summary Metrics
 
-##### Total
+- Total
 
-Description: The total time consumed by the query, including Planning, Executing, and Profiling phase durations.
+   Description: The total time consumed by the query, including Planning, Executing, and Profiling phase durations.
 
-##### Query State
+- Query State
 
-Description: Query state, possible states include Finished, Error, and Running.
+  - Description: Query state, possible states include Finished, Error, and Running.
 
 ### Execution Overview Metrics
 
-##### FrontendProfileMergeTime
+- FrontendProfileMergeTime
 
-Description: Query Profile processing time on the Frontend (FE) side.
+  - Description: Query Profile processing time on the Frontend (FE) side.
 
-##### QueryAllocatedMemoryUsage
+- QueryAllocatedMemoryUsage
 
-Description: Cumulative allocated memory across all compute nodes.
+  - Description: Cumulative allocated memory across all compute nodes.
 
-##### QueryDeallocatedMemoryUsage
+- QueryDeallocatedMemoryUsage
 
-Description: Cumulative deallocated memory across all compute nodes.
+  - Description: Cumulative deallocated memory across all compute nodes.
 
-##### QueryPeakMemoryUsagePerNode
+- QueryPeakMemoryUsagePerNode
 
-Description: Maximum peak memory across all compute nodes.
+  - Description: Maximum peak memory across all compute nodes.
 
-##### QuerySumMemoryUsage
+- QuerySumMemoryUsage
 
-Description: Summary of peak memory across all compute nodes.
+  - Description: Summary of peak memory across all compute nodes.
 
-##### QueryExecutionWallTime
+- QueryExecutionWallTime
 
-Description: Wall time of the execution.
+  - Description: Wall time of the execution.
 
-##### QueryCumulativeCpuTime
+- QueryCumulativeCpuTime
 
-Description: Cumulative CPU time across all compute nodes.
+  - Description: Cumulative CPU time across all compute nodes.
 
-##### QueryCumulativeOperatorTime
+- QueryCumulativeOperatorTime
 
-Description: Cumulative time across all nodes. This is a simple linear accumulation, but in reality, execution times of different operators may overlap. This parameter serves as the denominator for calculating the percentage of time spent on each operator.
+  - Description: Cumulative time across all nodes. This is a simple linear accumulation, but in reality, execution times of different operators may overlap. This parameter serves as the denominator for calculating the percentage of time spent on each operator.
 
-##### QueryCumulativeNetworkTime
+- QueryCumulativeNetworkTime
 
-Description: Cumulative network time of all Exchange nodes. Similar to cumulative operator time, actual execution times of different Exchanges may overlap.
+  - Description: Cumulative network time of all Exchange nodes. Similar to cumulative operator time, actual execution times of different Exchanges may overlap.
 
-##### QueryCumulativeScanTime
+- QueryCumulativeScanTime
 
-Description: Cumulative IO time of all Scan nodes. Similar to cumulative operator time, actual execution times of different Scan operations may overlap.
+  - Description: Cumulative IO time of all Scan nodes. Similar to cumulative operator time, actual execution times of different Scan operations may overlap.
 
-##### QueryPeakScheduleTime
+- QueryPeakScheduleTime
 
-Description: Maximum ScheduleTime metric across all Pipelines.
+  - Description: Maximum ScheduleTime metric across all Pipelines.
 
-##### QuerySpillBytes
+- QuerySpillBytes
 
-Description: Size of data spilled to local disks.
+  - Description: Size of data spilled to local disks.
 
-##### ResultDeliverTime
+- ResultDeliverTime
 
-Description: Additional time to transfer results. For query statements, this parameter refers to the time it takes to send data back to the client; for insert statements, it refers to the time it takes to write data to the storage layer.
+  - Description: Additional time to transfer results. For query statements, this parameter refers to the time it takes to send data back to the client; for insert statements, it refers to the time it takes to write data to the storage layer.
 
 ### Fragment Metrics
 
-##### InstanceNum
+- InstanceNum
 
-Description: Number of all FragmentInstances for this Fragment.
+  - Description: Number of all FragmentInstances for this Fragment.
 
-##### InstanceIds
+- InstanceIds
 
-Description: IDs of all FragmentInstances for this Fragment.
+  - Description: IDs of all FragmentInstances for this Fragment.
 
-##### BackendNum
+- BackendNum
 
-Description: Number of BEs participating in the execution of this Fragment.
+  - Description: Number of BEs participating in the execution of this Fragment.
 
-##### BackendAddresses
+- BackendAddresses
 
-Description: Addresses of all BEs participating in the execution of this Fragment.
+  - Description: Addresses of all BEs participating in the execution of this Fragment.
 
-##### FragmentInstancePrepareTime
+- FragmentInstancePrepareTime
 
-Description: Time spent in the Fragment Prepare phase.
+  - Description: Time spent in the Fragment Prepare phase.
 
-##### InstanceAllocatedMemoryUsage
+- InstanceAllocatedMemoryUsage
 
-Description: Cumulative allocated memory for all FragmentInstances under this Fragment.
+  - Description: Cumulative allocated memory for all FragmentInstances under this Fragment.
 
-##### InstanceDeallocatedMemoryUsage
+- InstanceDeallocatedMemoryUsage
 
-Description: Cumulative deallocated memory for all FragmentInstances under this Fragment.
+  - Description: Cumulative deallocated memory for all FragmentInstances under this Fragment.
 
-##### InstancePeakMemoryUsage
+- InstancePeakMemoryUsage
 
-Description: The peak memory usage across all FragmentInstances under this Fragment.
+  - Description: The peak memory usage across all FragmentInstances under this Fragment.
 
 ### Pipeline Metrics
 
@@ -181,123 +181,123 @@ The relationship between core metrics is illustrated in the following diagram:
 
 ![profile_pipeline_time_relationship](../_assets/Profile/profile_pipeline_time_relationship.jpeg)
 
-##### DegreeOfParallelism
+- DegreeOfParallelism
 
-Description: Degree of pipeline execution parallelism.
+  - Description: Degree of pipeline execution parallelism.
 
-##### TotalDegreeOfParallelism
+- TotalDegreeOfParallelism
 
-Description: Sum of degrees of parallelism. Since the same Pipeline may execute on multiple machines, this item aggregates all values.
+  - Description: Sum of degrees of parallelism. Since the same Pipeline may execute on multiple machines, this item aggregates all values.
 
-##### DriverPrepareTime
+- DriverPrepareTime
 
-Description: Time taken by the Prepare phase. This metric is not included in DriverTotalTime.
+  - Description: Time taken by the Prepare phase. This metric is not included in DriverTotalTime.
 
-##### DriverTotalTime
+- DriverTotalTime
 
-Description: Total execution time of the Pipeline, excluding the time spent in the Prepare phase.
+  - Description: Total execution time of the Pipeline, excluding the time spent in the Prepare phase.
 
-##### ActiveTime
+- ActiveTime
 
-Description: Execution time of the Pipeline, including the execution time of each operator and the overall framework overhead, such as time spent in invoking methods like has_output, need_input, etc.
+  - Description: Execution time of the Pipeline, including the execution time of each operator and the overall framework overhead, such as time spent in invoking methods like has_output, need_input, etc.
 
-##### PendingTime
+- PendingTime
 
-Description: Time the Pipeline is blocked from being scheduled for various reasons.
+  - Description: Time the Pipeline is blocked from being scheduled for various reasons.
 
-##### InputEmptyTime
+- InputEmptyTime
 
-Description: Time the Pipeline is blocked due to an empty input queue.
+  - Description: Time the Pipeline is blocked due to an empty input queue.
 
-##### FirstInputEmptyTime
+- FirstInputEmptyTime
 
-Description: Time the Pipeline is first blocked due to an empty input queue. The first blocking time is separately calculated because the first blocking is mainly caused by Pipeline dependencies.
+  - Description: Time the Pipeline is first blocked due to an empty input queue. The first blocking time is separately calculated because the first blocking is mainly caused by Pipeline dependencies.
 
-##### FollowupInputEmptyTime
+- FollowupInputEmptyTime
 
-Description: Time the Pipeline is subsequently blocked due to an empty input queue.
+  - Description: Time the Pipeline is subsequently blocked due to an empty input queue.
 
-##### OutputFullTime
+- OutputFullTime
 
-Description: Time the Pipeline is blocked due to a full output queue.
+  - Description: Time the Pipeline is blocked due to a full output queue.
 
-##### PreconditionBlockTime
+- PreconditionBlockTime
 
-Description: Time the Pipeline is blocked due to unmet dependencies.
+  - Description: Time the Pipeline is blocked due to unmet dependencies.
 
-##### PendingFinishTime
+- PendingFinishTime
 
-Description: Time the Pipeline is blocked waiting for asynchronous tasks to finish.
+  - Description: Time the Pipeline is blocked waiting for asynchronous tasks to finish.
 
-##### ScheduleTime
+- ScheduleTime
 
-Description: Scheduling time of the Pipeline, from entering the ready queue to being scheduled for execution.
+  - Description: Scheduling time of the Pipeline, from entering the ready queue to being scheduled for execution.
 
-##### BlockByInputEmpty
+- BlockByInputEmpty
 
-Description: Number of times the pipeline is blocked due to InputEmpty.
+  - Description: Number of times the pipeline is blocked due to InputEmpty.
 
-##### BlockByOutputFull
+- BlockByOutputFull
 
-Description: Number of times the pipeline is blocked due to OutputFull.
+  - Description: Number of times the pipeline is blocked due to OutputFull.
 
-##### BlockByPrecondition
+- BlockByPrecondition
 
-Description: Number of times the pipeline is blocked due to unmet preconditions.
+  - Description: Number of times the pipeline is blocked due to unmet preconditions.
 
 ### Operator General Metrics
 
-##### PrepareTime
+- PrepareTime
 
-Description: Time spent on preparation.
+  - Description: Time spent on preparation.
 
-##### OperatorTotalTime
+- OperatorTotalTime
 
-Description: Total time consumed by the Operator. It satisfies the equation: OperatorTotalTime = PullTotalTime + PushTotalTime + SetFinishingTime + SetFinishedTime + CloseTime. It excludes time spent on preparation.
+  - Description: Total time consumed by the Operator. It satisfies the equation: OperatorTotalTime = PullTotalTime + PushTotalTime + SetFinishingTime + SetFinishedTime + CloseTime. It excludes time spent on preparation.
 
-##### PullTotalTime
+- PullTotalTime
 
-Description: Total time the Operator spends executing push_chunk.
+  - Description: Total time the Operator spends executing push_chunk.
 
-##### PushTotalTime
+- PushTotalTime
 
-Description: Total time the Operator spends executing pull_chunk.
+  - Description: Total time the Operator spends executing pull_chunk.
 
-##### SetFinishingTime
+- SetFinishingTime
 
-Description: Total time the Operator spends executing set_finishing.
+  - Description: Total time the Operator spends executing set_finishing.
 
-##### SetFinishedTime
+- SetFinishedTime
 
-Description: Total time the Operator spends executing set_finished.
+  - Description: Total time the Operator spends executing set_finished.
 
-##### PushRowNum
+- PushRowNum
 
-Description: Cumulative number of input rows for the Operator.
+  - Description: Cumulative number of input rows for the Operator.
 
-##### PullRowNum
+- PullRowNum
 
-Description: Cumulative number of output rows for the Operator.
+  - Description: Cumulative number of output rows for the Operator.
 
-##### JoinRuntimeFilterEvaluate
+- JoinRuntimeFilterEvaluate
 
-Description: Number of times Join Runtime Filter is evaluated.
+  - Description: Number of times Join Runtime Filter is evaluated.
 
-##### JoinRuntimeFilterHashTime
+- JoinRuntimeFilterHashTime
 
-Description: Time spent computing hash for Join Runtime Filter.
+  - Description: Time spent computing hash for Join Runtime Filter.
 
-##### JoinRuntimeFilterInputRows
+- JoinRuntimeFilterInputRows
 
-Description: Number of input rows for Join Runtime Filter.
+  - Description: Number of input rows for Join Runtime Filter.
 
-##### JoinRuntimeFilterOutputRows
+- JoinRuntimeFilterOutputRows
 
-Description: Number of output rows for Join Runtime Filter.
+  - Description: Number of output rows for Join Runtime Filter.
 
-##### JoinRuntimeFilterTime
+- JoinRuntimeFilterTime
 
-Description: Time spent on Join Runtime Filter.
+  - Description: Time spent on Join Runtime Filter.
 
 ### Unique Metrics
 
@@ -313,880 +313,880 @@ To facilitate a better understanding of the various metrics within the Scan Oper
 
 ![profile_scan_relationship](../_assets/Profile/profile_scan_relationship.jpeg)
 
-##### Table
+- Table
 
-- Description: Table name.
-- Level: Primary metric
+  - Description: Table name.
+  - Level: Primary metric
 
-##### Rollup
+- Rollup
 
-- Description: Materialized view name. If no materialized view is hit, it is equivalent to the table name.
-- Level: Primary metric
+  - Description: Materialized view name. If no materialized view is hit, it is equivalent to the table name.
+  - Level: Primary metric
 
-##### SharedScan
+- SharedScan
 
-- Description: Whether the enable_shared_scan session variable is enabled.
-- Level: Primary metric
+  - Description: Whether the enable_shared_scan session variable is enabled.
+  - Level: Primary metric
 
-##### TabletCount
+- TabletCount
 
-- Description: Number of tablets.
-- Level:
+  - Description: Number of tablets.
+  - Level:
 
  Primary metric
 
-##### MorselsCount
+- MorselsCount
 
-- Description: Number of morsels.
-- Level: Primary metric
+  - Description: Number of morsels.
+  - Level: Primary metric
 
-##### PushdownPredicates
+- PushdownPredicates
 
-- Description: Number of pushdown predicates.
-- Level: Primary metric
+  - Description: Number of pushdown predicates.
+  - Level: Primary metric
 
-##### Predicates
+- Predicates
 
-- Description: Predicate expressions.
-- Level: Primary metric
+  - Description: Predicate expressions.
+  - Level: Primary metric
 
-##### BytesRead
+- BytesRead
 
-- Description: Size of data read.
-- Level: Primary metric
+  - Description: Size of data read.
+  - Level: Primary metric
 
-##### CompressedBytesRead
+- CompressedBytesRead
 
-- Description: Size of compressed data read from disk.
-- Level: Primary metric
+  - Description: Size of compressed data read from disk.
+  - Level: Primary metric
 
-##### UncompressedBytesRead
+- UncompressedBytesRead
 
-- Description: Size of uncompressed data read from disk.
-- Level: Primary metric
+  - Description: Size of uncompressed data read from disk.
+  - Level: Primary metric
 
-##### RowsRead
+- RowsRead
 
-- Description: Number of rows read (after predicate filtering).
-- Level: Primary metric
+  - Description: Number of rows read (after predicate filtering).
+  - Level: Primary metric
 
-##### RawRowsRead
+- RawRowsRead
 
-- Description: Number of raw rows read (before predicate filtering).
-- Level: Primary metric
+  - Description: Number of raw rows read (before predicate filtering).
+  - Level: Primary metric
 
-##### ReadPagesNum
+- ReadPagesNum
 
-- Description: Number of pages read.
-- Level: Primary metric
+  - Description: Number of pages read.
+  - Level: Primary metric
 
-##### CachedPagesNum
+- CachedPagesNum
 
-- Description: Number of cached pages.
-- Level: Primary metric
+  - Description: Number of cached pages.
+  - Level: Primary metric
 
-##### ChunkBufferCapacity
+- ChunkBufferCapacity
 
-- Description: Capacity of the Chunk Buffer.
-- Level: Primary metric
+  - Description: Capacity of the Chunk Buffer.
+  - Level: Primary metric
 
-##### DefaultChunkBufferCapacity
+- DefaultChunkBufferCapacity
 
-- Description: Default capacity of the Chunk Buffer.
-- Level: Primary metric
+  - Description: Default capacity of the Chunk Buffer.
+  - Level: Primary metric
 
-##### PeakChunkBufferMemoryUsage
+- PeakChunkBufferMemoryUsage
 
-- Description: Peak memory usage of the Chunk Buffer.
-- Level: Primary metric
+  - Description: Peak memory usage of the Chunk Buffer.
+  - Level: Primary metric
 
-##### PeakChunkBufferSize
+- PeakChunkBufferSize
 
-- Description: Peak size of the Chunk Buffer.
-- Level: Primary metric
+  - Description: Peak size of the Chunk Buffer.
+  - Level: Primary metric
 
-##### PrepareChunkSourceTime
+- PrepareChunkSourceTime
 
-- Description: Time spent preparing the Chunk Source.
-- Level: Primary metric
+  - Description: Time spent preparing the Chunk Source.
+  - Level: Primary metric
 
-##### ScanTime
+- ScanTime
 
-- Description: Cumulative scan time. Scan operations are completed in an asynchronous I/O thread pool.
-- Level: Primary metric
+  - Description: Cumulative scan time. Scan operations are completed in an asynchronous I/O thread pool.
+  - Level: Primary metric
 
-##### IOTaskExecTime
+- IOTaskExecTime
 
-- Description: Execution time of IO tasks.
-- Level: Primary metric
-- Sub-metrics: CreateSegmentIter, DictDecode, GetDelVec, GetDeltaColumnGroup, GetRowsets, IOTime, LateMaterialize, ReadPKIndex, SegmentInit, SegmentRead
+  - Description: Execution time of IO tasks.
+  - Level: Primary metric
+  - Sub-metrics: CreateSegmentIter, DictDecode, GetDelVec, GetDeltaColumnGroup, GetRowsets, IOTime, LateMaterialize, ReadPKIndex, SegmentInit, SegmentRead
 
-##### CreateSegmentIter
+- CreateSegmentIter
 
-- Description: Time spent creating the Segment Iterator.
-- Level: Secondary metric
+  - Description: Time spent creating the Segment Iterator.
+  - Level: Secondary metric
 
-##### DictDecode
+- DictDecode
 
-- Description: Time spent on decoding dictionary for low cardinality optimization.
-- Level: Secondary metric
+  - Description: Time spent on decoding dictionary for low cardinality optimization.
+  - Level: Secondary metric
 
-##### GetDelVec
+- GetDelVec
 
-- Description: Time spent loading DelVec (delete vector).
-- Level: Secondary metric
+  - Description: Time spent loading DelVec (delete vector).
+  - Level: Secondary metric
 
-##### GetDeltaColumnGroup
+- GetDeltaColumnGroup
 
-- Description: Time spent loading DelVecColumnGroup.
-- Level: Secondary metric
+  - Description: Time spent loading DelVecColumnGroup.
+  - Level: Secondary metric
 
-##### GetRowsets
+- GetRowsets
 
-- Description: Time spent loading RowSet.
-- Level: Secondary metric
+  - Description: Time spent loading RowSet.
+  - Level: Secondary metric
 
-##### IOTime
+- IOTime
 
-- Description: Time spent on file I/O.
-- Level: Secondary metric
+  - Description: Time spent on file I/O.
+  - Level: Secondary metric
 
-##### LateMaterialize
+- LateMaterialize
 
-- Description: Time spent on late materialization.
-- Level: Secondary metric
+  - Description: Time spent on late materialization.
+  - Level: Secondary metric
 
-##### ReadPKIndex
+- ReadPKIndex
 
-- Description: Time spent reading Primary Key index.
-- Level: Secondary metric
+  - Description: Time spent reading Primary Key index.
+  - Level: Secondary metric
 
-##### SegmentInit
+- SegmentInit
 
-- Description: Time spent initializing the Segment.
-- Level: Secondary metric
-- Sub-metrics: BitmapIndexFilter, BitmapIndexFilterRows, BloomFilterFilter, BloomFilterFilterRows, ColumnIteratorInit, ShortKeyFilter, ShortKeyFilterRows, ShortKeyRangeNumber, RemainingRowsAfterShortKeyFilter, ZoneMapIndexFilter, ZoneMapIndexFilterRows, SegmentZoneMapFilterRows, SegmentRuntimeZoneMapFilterRows
+  - Description: Time spent initializing the Segment.
+  - Level: Secondary metric
+  - Sub-metrics: BitmapIndexFilter, BitmapIndexFilterRows, BloomFilterFilter, BloomFilterFilterRows, ColumnIteratorInit, ShortKeyFilter, ShortKeyFilterRows, ShortKeyRangeNumber, RemainingRowsAfterShortKeyFilter, ZoneMapIndexFilter, ZoneMapIndexFilterRows, SegmentZoneMapFilterRows, SegmentRuntimeZoneMapFilterRows
 
-##### BitmapIndexFilter
+- BitmapIndexFilter
 
-- Description: Time spent on Bitmap index filtering.
-- Level: Tertiary metric
+  - Description: Time spent on Bitmap index filtering.
+  - Level: Tertiary metric
 
-##### BitmapIndexFilterRows
+- BitmapIndexFilterRows
 
-- Description: Number of rows filtered by Bitmap index.
-- Level: Tertiary metric
+  - Description: Number of rows filtered by Bitmap index.
+  - Level: Tertiary metric
 
-##### BloomFilterFilter
+- BloomFilterFilter
 
-- Description: Time spent on Bloom filter indexing.
-- Level: Tertiary metric
+  - Description: Time spent on Bloom filter indexing.
+  - Level: Tertiary metric
 
-##### BloomFilterFilterRows
+- BloomFilterFilterRows
 
-- Description: Number of rows filtered by Bloom filter.
-- Level: Tertiary metric
+  - Description: Number of rows filtered by Bloom filter.
+  - Level: Tertiary metric
 
-##### ColumnIteratorInit
+- ColumnIteratorInit
 
-- Description: Time spent initializing the Column Iterator.
-- Level: Tertiary metric
+  - Description: Time spent initializing the Column Iterator.
+  - Level: Tertiary metric
 
-##### ShortKeyFilter
+- ShortKeyFilter
 
-- Description: Time spent on ShortKey index filtering.
-- Level: Tertiary metric
+  - Description: Time spent on ShortKey index filtering.
+  - Level: Tertiary metric
 
-##### ShortKeyFilterRows
+- ShortKeyFilterRows
 
-- Description: Number of rows filtered by ShortKey index.
-- Level: Tertiary metric
+  - Description: Number of rows filtered by ShortKey index.
+  - Level: Tertiary metric
 
-##### ShortKeyRangeNumber
+- ShortKeyRangeNumber
 
-- Description: Number of ShortKey ranges.
-- Level: Tertiary metric
+  - Description: Number of ShortKey ranges.
+  - Level: Tertiary metric
 
-##### RemainingRowsAfterShortKeyFilter
+- RemainingRowsAfterShortKeyFilter
 
-- Description: Number of rows remaining after ShortKey index filtering.
-- Level: Tertiary metric
+  - Description: Number of rows remaining after ShortKey index filtering.
+  - Level: Tertiary metric
 
-##### ZoneMapIndexFiter
+- ZoneMapIndexFiter
 
-- Description: Time spent on ZoneMap index filtering.
-- Level: Tertiary metric
+  - Description: Time spent on ZoneMap index filtering.
+  - Level: Tertiary metric
 
-##### ZoneMapIndexFilterRows
+- ZoneMapIndexFilterRows
 
-- Description: Number of rows filtered by ZoneMap index.
-- Level: Tertiary metric
+  - Description: Number of rows filtered by ZoneMap index.
+  - Level: Tertiary metric
 
-##### SegmentZoneMapFilterRows
+- SegmentZoneMapFilterRows
 
-- Description: Number of rows filtered by Segment ZoneMap index.
-- Level: Tertiary metric
+  - Description: Number of rows filtered by Segment ZoneMap index.
+  - Level: Tertiary metric
 
-##### SegmentRuntimeZoneMapFilterRows
+- SegmentRuntimeZoneMapFilterRows
 
-- Description: Number of rows filtered by Segment Runtime ZoneMap index.
-- Level: Tertiary metric
+  - Description: Number of rows filtered by Segment Runtime ZoneMap index.
+  - Level: Tertiary metric
 
-##### SegmentRead
+- SegmentRead
 
-- Description: Time spent reading the Segment.
-- Level: Secondary metric
-- Sub-metrics: BlockFetch, BlockFetchCount, BlockSeek, BlockSeekCount, ChunkCopy, DecompressT, DelVecFilterRows, PredFilter, PredFilterRows, RowsetsReadCount, SegmentsReadCount, TotalColumnsDataPageCount
+  - Description: Time spent reading the Segment.
+  - Level: Secondary metric
+  - Sub-metrics: BlockFetch, BlockFetchCount, BlockSeek, BlockSeekCount, ChunkCopy, DecompressT, DelVecFilterRows, PredFilter, PredFilterRows, RowsetsReadCount, SegmentsReadCount, TotalColumnsDataPageCount
 
-##### BlockFetch
+- BlockFetch
 
-- Description: Time spent on Block fetch.
-- Level: Tertiary metric
+  - Description: Time spent on Block fetch.
+  - Level: Tertiary metric
 
-##### BlockFetchCount
+- BlockFetchCount
 
-- Description: Number of Block fetches.
-- Level: Tertiary metric
+  - Description: Number of Block fetches.
+  - Level: Tertiary metric
 
-##### BlockSeek
+- BlockSeek
 
-- Description: Time spent on Block seek.
-- Level: Tertiary metric
+  - Description: Time spent on Block seek.
+  - Level: Tertiary metric
 
-##### BlockSeekCount
+- BlockSeekCount
 
-- Description: Number of Block seeks.
-- Level: Tertiary metric
+  - Description: Number of Block seeks.
+  - Level: Tertiary metric
 
-##### ChunkCopy
+- ChunkCopy
 
-- Description: Time spent on Chunk copy.
-- Level: Tertiary metric
+  - Description: Time spent on Chunk copy.
+  - Level: Tertiary metric
 
-##### DecompressT
+- DecompressT
 
-- Description: Time spent on decompression.
-- Level: Tertiary metric
+  - Description: Time spent on decompression.
+  - Level: Tertiary metric
 
-##### DelVecFilterRows
+- DelVecFilterRows
 
-- Description: Number of rows filtered by DELETE vector.
-- Level: Tertiary metric
+  - Description: Number of rows filtered by DELETE vector.
+  - Level: Tertiary metric
 
-##### PredFilter
+- PredFilter
 
-- Description: Time spent on predicate filtering.
-- Level: Tertiary metric
+  - Description: Time spent on predicate filtering.
+  - Level: Tertiary metric
 
-##### PredFilterRows
+- PredFilterRows
 
-- Description: Number of rows filtered by predicate.
-- Level: Tertiary metric
+  - Description: Number of rows filtered by predicate.
+  - Level: Tertiary metric
 
-##### RowsetsReadCount
+- RowsetsReadCount
 
-- Description: Number of Rowsets reads.
-- Level: Tertiary metric
+  - Description: Number of Rowsets reads.
+  - Level: Tertiary metric
 
-##### SegmentsReadCount
+- SegmentsReadCount
 
-- Description: Number of Segments reads.
-- Level: Tertiary metric
+  - Description: Number of Segments reads.
+  - Level: Tertiary metric
 
-##### TotalColumnsDataPageCount
+- TotalColumnsDataPageCount
 
-- Description: Number of Column Data Pages.
-- Level: Tertiary metric
+  - Description: Number of Column Data Pages.
+  - Level: Tertiary metric
 
-##### IOTaskWaitTime
+- IOTaskWaitTime
 
-- Description: Waiting time from successful submission to scheduled execution of IO tasks.
-- Level: Primary metric
+  - Description: Waiting time from successful submission to scheduled execution of IO tasks.
+  - Level: Primary metric
 
-##### SubmitTaskCount
+- SubmitTaskCount
 
-- Description: Number of times IO tasks are submitted.
-- Level: Primary metric
+  - Description: Number of times IO tasks are submitted.
+  - Level: Primary metric
 
-##### SubmitTaskTime
+- SubmitTaskTime
 
-- Description: Time spent on task submission.
-- Level: Primary metric
+  - Description: Time spent on task submission.
+  - Level: Primary metric
 
-##### PeakIOTasks
+- PeakIOTasks
 
-- Description: Peak number of IO tasks.
-- Level: Primary metric
+  - Description: Peak number of IO tasks.
+  - Level: Primary metric
 
-##### PeakScanTaskQueueSize
+- PeakScanTaskQueueSize
 
-- Description: Peak size of the IO task queue.
-- Level: Primary metric
+  - Description: Peak size of the IO task queue.
+  - Level: Primary metric
 
 #### Connector Scan Operator
 
-##### DataSourceType
+- DataSourceType
 
-- Description: Data source type, can be HiveDataSource, ESDataSource, and so on.
-- Level: Primary Metric
+  - Description: Data source type, can be HiveDataSource, ESDataSource, and so on.
+  - Level: Primary Metric
 
-##### Table
+- Table
 
-- Description: Table name.
-- Level: Primary Metric
+  - Description: Table name.
+  - Level: Primary Metric
 
-##### TabletCount
+- TabletCount
 
-- Description: Number of tablets.
-- Level: Primary Metric
+  - Description: Number of tablets.
+  - Level: Primary Metric
 
-##### MorselsCount
+- MorselsCount
 
-- Description: Number of morsels.
-- Level: Primary Metric
+  - Description: Number of morsels.
+  - Level: Primary Metric
 
-##### Predicates
+- Predicates
 
-- Description: Predicate expression.
-- Level: Primary Metric
+  - Description: Predicate expression.
+  - Level: Primary Metric
 
-##### PredicatesPartition
+- PredicatesPartition
 
-- Description: Predicate expression applied to partitions.
-- Level: Primary Metric
+  - Description: Predicate expression applied to partitions.
+  - Level: Primary Metric
 
-##### SharedScan
+- SharedScan
 
-- Description: Whether the `enable_shared_scan` Session variable is enabled.
-- Level: Primary Metric
+  - Description: Whether the `enable_shared_scan` Session variable is enabled.
+  - Level: Primary Metric
 
-##### ChunkBufferCapacity
+- ChunkBufferCapacity
 
-- Description: Capacity of the Chunk Buffer.
-- Level: Primary Metric
+  - Description: Capacity of the Chunk Buffer.
+  - Level: Primary Metric
 
-##### DefaultChunkBufferCapacity
+- DefaultChunkBufferCapacity
 
-- Description: Default capacity of the Chunk Buffer.
-- Level: Primary Metric
+  - Description: Default capacity of the Chunk Buffer.
+  - Level: Primary Metric
 
-##### PeakChunkBufferMemoryUsage
+- PeakChunkBufferMemoryUsage
 
-- Description: Peak memory usage of the Chunk Buffer.
-- Level: Primary Metric
+  - Description: Peak memory usage of the Chunk Buffer.
+  - Level: Primary Metric
 
-##### PeakChunkBufferSize
+- PeakChunkBufferSize
 
-- Description: Peak size of the Chunk Buffer.
-- Level: Primary Metric
+  - Description: Peak size of the Chunk Buffer.
+  - Level: Primary Metric
 
-##### PrepareChunkSourceTime
+- PrepareChunkSourceTime
 
-- Description: Time taken to prepare the Chunk Source.
-- Level: Primary Metric
+  - Description: Time taken to prepare the Chunk Source.
+  - Level: Primary Metric
 
-##### ScanTime
+- ScanTime
 
-- Description: Cumulative time for scanning. Scan operation is completed in the asynchronous I/O thread pool.
-- Level: Primary Metric
+  - Description: Cumulative time for scanning. Scan operation is completed in the asynchronous I/O thread pool.
+  - Level: Primary Metric
 
-##### IOTaskExecTime
+- IOTaskExecTime
 
-- Description: Execution time of I/O tasks.
-- Level: Primary Metric
-- Sub-metrics: ColumnConvertTime, ColumnReadTime, ExprFilterTime, InputStream, ORC, OpenFile, ReaderInit, RowsRead, RowsSkip, ScanRanges, SharedBuffered
+  - Description: Execution time of I/O tasks.
+  - Level: Primary Metric
+  - Sub-metrics: ColumnConvertTime, ColumnReadTime, ExprFilterTime, InputStream, ORC, OpenFile, ReaderInit, RowsRead, RowsSkip, ScanRanges, SharedBuffered
 
-##### ColumnConvertTime
+- ColumnConvertTime
 
-- Description: Time taken for column conversion.
-- Level: Secondary Metric
+  - Description: Time taken for column conversion.
+  - Level: Secondary Metric
 
-##### ColumnReadTime
+- ColumnReadTime
 
-- Description: Time taken for reading and parsing data by the reader.
-- Level: Secondary Metric
+  - Description: Time taken for reading and parsing data by the reader.
+  - Level: Secondary Metric
 
-##### ExprFilterTime
+- ExprFilterTime
 
-- Description: Time taken for expression filtering.
-- Level: Secondary Metric
+  - Description: Time taken for expression filtering.
+  - Level: Secondary Metric
 
-##### InputStream
+- InputStream
 
-- Description: Used for classification purposes. It has no specific meaning.
-- Level: Secondary Metric
-- Sub-metrics: AppIOBytesRead, AppIOCounter, AppIOTime, FSIOBytesRead, FSIOCounter, FSIOTime
+  - Description: Used for classification purposes. It has no specific meaning.
+  - Level: Secondary Metric
+  - Sub-metrics: AppIOBytesRead, AppIOCounter, AppIOTime, FSIOBytesRead, FSIOCounter, FSIOTime
 
-##### AppIOBytesRead
+- AppIOBytesRead
 
-- Description: Amount of data read at the application layer.
-- Level: Tertiary Metric
+  - Description: Amount of data read at the application layer.
+  - Level: Tertiary Metric
 
-##### AppIOCounter
+- AppIOCounter
 
-- Description: Number of I/O operations read at the application layer.
-- Level: Tertiary Metric
+  - Description: Number of I/O operations read at the application layer.
+  - Level: Tertiary Metric
 
-##### AppIOTime
+- AppIOTime
 
-- Description: Cumulative reading time at the application layer.
-- Level: Tertiary Metric
+  - Description: Cumulative reading time at the application layer.
+  - Level: Tertiary Metric
 
-##### FSIOBytesRead
+- FSIOBytesRead
 
-- Description: Amount of data read by the storage system.
-- Level: Tertiary Metric
+  - Description: Amount of data read by the storage system.
+  - Level: Tertiary Metric
 
-##### FSIOCounter
+- FSIOCounter
 
-- Description: Number of I/O operations read by the storage layer.
-- Level: Tertiary Metric
+  - Description: Number of I/O operations read by the storage layer.
+  - Level: Tertiary Metric
 
-##### FSIOTime
+- FSIOTime
 
-- Description: Cumulative reading time by the storage layer.
-- Level: Tertiary Metric
+  - Description: Cumulative reading time by the storage layer.
+  - Level: Tertiary Metric
 
-##### ORC
+- ORC
 
-- Description: Used for classification purposes. It has no specific meaning.
-- Level: Secondary Metric
-- Sub-metrics: IcebergV2FormatTimer, StripeNumber, StripeSizes
+  - Description: Used for classification purposes. It has no specific meaning.
+  - Level: Secondary Metric
+  - Sub-metrics: IcebergV2FormatTimer, StripeNumber, StripeSizes
 
-##### IcebergV2FormatTimer
+- IcebergV2FormatTimer
 
-- Description: Time taken for format conversion.
-- Level: Tertiary Metric
+  - Description: Time taken for format conversion.
+  - Level: Tertiary Metric
 
-##### StripeNumber
+- StripeNumber
 
-- Description: Number of ORC files.
-- Level: Tertiary Metric
+  - Description: Number of ORC files.
+  - Level: Tertiary Metric
 
-##### StripeSizes
+- StripeSizes
 
-- Description: Average size of each stripe in ORC files.
-- Level: Tertiary Metric
+  - Description: Average size of each stripe in ORC files.
+  - Level: Tertiary Metric
 
-##### OpenFile
+- OpenFile
 
-- Description: Time taken to open files.
-- Level: Secondary Metric
+  - Description: Time taken to open files.
+  - Level: Secondary Metric
 
-##### ReaderInit
+- ReaderInit
 
-- Description: Time taken to initialize the reader.
-- Level: Secondary Metric
+  - Description: Time taken to initialize the reader.
+  - Level: Secondary Metric
 
-##### RowsRead
+- RowsRead
 
-- Description: Number of rows read.
-- Level: Secondary Metric
+  - Description: Number of rows read.
+  - Level: Secondary Metric
 
-##### RowsSkip
+- RowsSkip
 
-- Description: Number of rows skipped.
-- Level: Secondary Metric
+  - Description: Number of rows skipped.
+  - Level: Secondary Metric
 
-##### ScanRanges
+- ScanRanges
 
-- Description: Total number of data ranges scanned.
-- Level: Secondary Metric
+  - Description: Total number of data ranges scanned.
+  - Level: Secondary Metric
 
-##### SharedBuffered
+- SharedBuffered
 
-- Description: Used for classification purposes. It has no specific meaning.
-- Level: Secondary Metric
-- Sub-metrics: DirectIOBytes, DirectIOCount, DirectIOTime, SharedIOBytes, SharedIOCount, SharedIOTime
+  - Description: Used for classification purposes. It has no specific meaning.
+  - Level: Secondary Metric
+  - Sub-metrics: DirectIOBytes, DirectIOCount, DirectIOTime, SharedIOBytes, SharedIOCount, SharedIOTime
 
-##### DirectIOBytes
+- DirectIOBytes
 
-- Description: Amount of data directly read by IO.
-- Level: Tertiary Metric
+  - Description: Amount of data directly read by IO.
+  - Level: Tertiary Metric
 
-##### DirectIOCount
+- DirectIOCount
 
-- Description: Number of times direct IO is performed.
-- Level: Tertiary Metric
+  - Description: Number of times direct IO is performed.
+  - Level: Tertiary Metric
 
-##### DirectIOTime
+- DirectIOTime
 
-- Description: Time taken for direct IO.
-- Level: Tertiary Metric
+  - Description: Time taken for direct IO.
+  - Level: Tertiary Metric
 
-##### SharedIOBytes
+- SharedIOBytes
 
-- Description: Amount of data read by shared IO.
-- Level: Tertiary Metric
+  - Description: Amount of data read by shared IO.
+  - Level: Tertiary Metric
 
-##### SharedIOCount
+- SharedIOCount
 
-- Description: Number of times shared IO is performed.
-- Level: Tertiary Metric
+  - Description: Number of times shared IO is performed.
+  - Level: Tertiary Metric
 
-##### SharedIOTime
+- SharedIOTime
 
-- Description: Time taken for shared IO.
-- Level: Tertiary Metric
+  - Description: Time taken for shared IO.
+  - Level: Tertiary Metric
 
-##### IOTaskWaitTime
+- IOTaskWaitTime
 
-- Description: Waiting time from successful submission to scheduled execution of IO tasks.
-- Level: Primary Metric
+  - Description: Waiting time from successful submission to scheduled execution of IO tasks.
+  - Level: Primary Metric
 
-##### SubmitTaskCount
+- SubmitTaskCount
 
-- Description: Number of times IO tasks are submitted.
-- Level: Primary Metric
+  - Description: Number of times IO tasks are submitted.
+  - Level: Primary Metric
 
-##### SubmitTaskTime
+- SubmitTaskTime
 
-- Description: Time taken to submit tasks.
-- Level: Primary Metric
+  - Description: Time taken to submit tasks.
+  - Level: Primary Metric
 
-##### PeakIOTasks
+- PeakIOTasks
 
-- Description: Peak number of IO tasks.
-- Level: Primary Metric
+  - Description: Peak number of IO tasks.
+  - Level: Primary Metric
 
-##### PeakScanTaskQueueSize
+- PeakScanTaskQueueSize
 
-- Description: Peak size of the IO task queue.
-- Level: Primary Metric
+  - Description: Peak size of the IO task queue.
+  - Level: Primary Metric
 
 ### Exchange Operator
 
 #### Exchange Sink Operator
 
-##### ChannelNum
+- ChannelNum
 
-Description: Number of channels. Generally, the number of channels is equal to the number of receivers.
+  - Description: Number of channels. Generally, the number of channels is equal to the number of receivers.
 
-##### DestFragments
+- DestFragments
 
-Description: List of destination FragmentInstance IDs.
+  - Description: List of destination FragmentInstance IDs.
 
-##### DestID
+- DestID
 
-Description: Destination node ID.
+  - Description: Destination node ID.
 
-##### PartType
+- PartType
 
-Description: Data distribution mode, including: UNPARTITIONED, RANDOM, HASH_PARTITIONED, and BUCKET_SHUFFLE_HASH_PARTITIONED.
+  - Description: Data distribution mode, including: UNPARTITIONED, RANDOM, HASH_PARTITIONED, and BUCKET_SHUFFLE_HASH_PARTITIONED.
 
-##### SerializeChunkTime
+- SerializeChunkTime
 
-Description: Time taken to serialize chunks.
+  - Description: Time taken to serialize chunks.
 
-##### SerializedBytes
+- SerializedBytes
 
-Description: Size of serialized data.
+  - Description: Size of serialized data.
 
-##### ShuffleChunkAppendCounter
+- ShuffleChunkAppendCounter
 
-Description: Number of Chunk Append operations when PartType is HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED.
+  - Description: Number of Chunk Append operations when PartType is HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED.
 
-##### ShuffleChunkAppendTime
+- ShuffleChunkAppendTime
 
-Description: Time taken for Chunk Append operations when PartType is HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED.
+  - Description: Time taken for Chunk Append operations when PartType is HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED.
 
-##### ShuffleHashTime
+- ShuffleHashTime
 
-Description: Time taken to calculate hash when PartType is HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED.
+  - Description: Time taken to calculate hash when PartType is HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED.
 
-##### RequestSent
+- RequestSent
 
-Description: Number of data packets sent.
+  - Description: Number of data packets sent.
 
-##### RequestUnsent
+- RequestUnsent
 
-Description: Number of unsent data packets. This metric is non-zero when there is a short-circuit logic; otherwise, it is zero.
+  - Description: Number of unsent data packets. This metric is non-zero when there is a short-circuit logic; otherwise, it is zero.
 
-##### BytesSent
+- BytesSent
 
-Description: Size of sent data.
+  - Description: Size of sent data.
 
-##### BytesUnsent
+- BytesUnsent
 
-Description: Size of unsent data. This metric is non-zero when there is a short-circuit logic; otherwise, it is zero.
+  - Description: Size of unsent data. This metric is non-zero when there is a short-circuit logic; otherwise, it is zero.
 
-##### BytesPassThrough
+- BytesPassThrough
 
-Description: If the destination node is the current node, data will not be transmitted over the network, which is called passthrough data. This metric indicates the size of such passthrough data. Passthrough is controlled by `enable_exchange_pass_through`.
+  - Description: If the destination node is the current node, data will not be transmitted over the network, which is called passthrough data. This metric indicates the size of such passthrough data. Passthrough is controlled by `enable_exchange_pass_through`.
 
-##### PassThroughBufferPeakMemoryUsage
+- PassThroughBufferPeakMemoryUsage
 
-Description: Peak memory usage of the PassThrough Buffer.
+  - Description: Peak memory usage of the PassThrough Buffer.
 
-##### CompressTime
+- CompressTime
 
-Description: Compression time.
+  - Description: Compression time.
 
-##### CompressedBytes
+- CompressedBytes
 
-Description: Size of compressed data.
+  - Description: Size of compressed data.
 
-##### OverallThroughput
+- OverallThroughput
 
-Description: Throughput rate.
+  - Description: Throughput rate.
 
-##### NetworkTime
+- NetworkTime
 
-Description: Time taken for data packet transmission (excluding post-reception processing time).
+  - Description: Time taken for data packet transmission (excluding post-reception processing time).
 
-##### NetworkBandwidth
+- NetworkBandwidth
 
-Description: Estimated network bandwidth.
+  - Description: Estimated network bandwidth.
 
-##### WaitTime
+- WaitTime
 
-Description: Waiting time due to a full sender queue.
+  - Description: Waiting time due to a full sender queue.
 
-##### OverallTime
+- OverallTime
 
-Description: Total time for the entire transmission process, i.e., from sending the first data packet to confirming the correct reception of the last data packet.
+  - Description: Total time for the entire transmission process, i.e., from sending the first data packet to confirming the correct reception of the last data packet.
 
-##### RpcAvgTime
+- RpcAvgTime
 
-Description: Average time for RPC.
+  - Description: Average time for RPC.
 
-##### RpcCount
+- RpcCount
 
-Description: Total number of RPCs.
+  - Description: Total number of RPCs.
 
 #### Exchange Source Operator
 
-##### RequestReceived
+- RequestReceived
 
-Description: Size of received data packets.
+  - Description: Size of received data packets.
 
-##### BytesReceived
+- BytesReceived
 
-Description: Size of received data.
+  - Description: Size of received data.
 
-##### DecompressChunkTime
+- DecompressChunkTime
 
-Description: Time taken to decompress chunks.
+  - Description: Time taken to decompress chunks.
 
-##### DeserializeChunkTime
+- DeserializeChunkTime
 
-Description: Time taken to deserialize chunks.
+  - Description: Time taken to deserialize chunks.
 
-##### ClosureBlockCount
+- ClosureBlockCount
 
-Description: Number of blocked Closures.
+  - Description: Number of blocked Closures.
 
-##### ClosureBlockTime
+- ClosureBlockTime
 
-Description: Blocked time for Closures.
+  - Description: Blocked time for Closures.
 
-##### ReceiverProcessTotalTime
+- ReceiverProcessTotalTime
 
-Description: Total time taken for receiver-side processing.
+  - Description: Total time taken for receiver-side processing.
 
-##### WaitLockTime
+- WaitLockTime
 
-Description: Lock waiting time.
+  - Description: Lock waiting time.
 
 ### Aggregate Operator
 
-##### GroupingKeys
+- GroupingKeys
 
-Description: GROUP BY columns.
+  - Description: GROUP BY columns.
 
-##### AggregateFunctions
+- AggregateFunctions
 
-Description: Time taken for aggregate function calculations.
+  - Description: Time taken for aggregate function calculations.
 
-##### AggComputeTime
+- AggComputeTime
 
-Description: Time for AggregateFunctions + Group By.
+  - Description: Time for AggregateFunctions + Group By.
 
-##### ChunkBufferPeakMem
+- ChunkBufferPeakMem
 
-Description: Peak memory usage of the Chunk Buffer.
+  - Description: Peak memory usage of the Chunk Buffer.
 
-##### ChunkBufferPeakSize
+- ChunkBufferPeakSize
 
-Description: Peak size of the Chunk Buffer.
+  - Description: Peak size of the Chunk Buffer.
 
-##### ExprComputeTime
+- ExprComputeTime
 
-Description: Time for expression computation.
+  - Description: Time for expression computation.
 
-##### ExprReleaseTime
+- ExprReleaseTime
 
-Description: Time for expression release.
+  - Description: Time for expression release.
 
-##### GetResultsTime
+- GetResultsTime
 
-Description: Time to extract aggregate results.
+  - Description: Time to extract aggregate results.
 
-##### HashTableSize
+- HashTableSize
 
-Description: Size of the Hash Table.
+  - Description: Size of the Hash Table.
 
-##### HashTableMemoryUsage
+- HashTableMemoryUsage
 
-Description: Memory size of the Hash Table.
+  - Description: Memory size of the Hash Table.
 
-##### InputRowCount
+- InputRowCount
 
-Description: Number of input rows.
+  - Description: Number of input rows.
 
-##### PassThroughRowCount
+- PassThroughRowCount
 
-Description: In Auto mode, the number of data rows processed in streaming mode after low aggregation leads to degradation to streaming mode.
+  - Description: In Auto mode, the number of data rows processed in streaming mode after low aggregation leads to degradation to streaming mode.
 
-##### ResultAggAppendTime
+- ResultAggAppendTime
 
-Description: Time taken to append aggregate result columns.
+  - Description: Time taken to append aggregate result columns.
 
-##### ResultGroupByAppendTime
+- ResultGroupByAppendTime
 
-Description: Time taken to append Group By columns.
+  - Description: Time taken to append Group By columns.
 
-##### ResultIteratorTime
+- ResultIteratorTime
 
-Description: Time to iterate over the Hash Table.
+  - Description: Time to iterate over the Hash Table.
 
-##### StreamingTime
+- StreamingTime
 
-Description: Processing time in streaming mode.
+  - Description: Processing time in streaming mode.
 
 ### Join Operator
 
-##### DistributionMode
+- DistributionMode
 
-Description: Distribution type, including: BROADCAST, PARTITIONED, COLOCATE, etc.
+  - Description: Distribution type, including: BROADCAST, PARTITIONED, COLOCATE, etc.
 
-##### JoinPredicates
+- JoinPredicates
 
-Description: Join predicates.
+  - Description: Join predicates.
 
-##### JoinType
+- JoinType
 
-Description: Join type.
+  - Description: Join type.
 
-##### BuildBuckets
+- BuildBuckets
 
-Description: Number of buckets in the Hash Table.
+  - Description: Number of buckets in the Hash Table.
 
-##### BuildKeysPerBucket
+- BuildKeysPerBucket
 
-Description: Number of keys per bucket in the Hash Table.
+  - Description: Number of keys per bucket in the Hash Table.
 
-##### BuildConjunctEvaluateTime
+- BuildConjunctEvaluateTime
 
-Description: Time taken for conjunct evaluation during build phase.
+  - Description: Time taken for conjunct evaluation during build phase.
 
-##### BuildHashTableTime
+- BuildHashTableTime
 
-Description: Time taken to build the Hash Table.
+  - Description: Time taken to build the Hash Table.
 
-##### ProbeConjunctEvaluateTime
+- ProbeConjunctEvaluateTime
 
-Description: Time taken for conjunct evaluation during probe phase.
+  - Description: Time taken for conjunct evaluation during probe phase.
 
-##### SearchHashTableTimer
+- SearchHashTableTimer
 
-Description: Time taken to search the Hash Table.
+  - Description: Time taken to search the Hash Table.
 
-##### CopyRightTableChunkTime
+- CopyRightTableChunkTime
 
-Description: Time taken to copy chunks from the right table.
+  - Description: Time taken to copy chunks from the right table.
 
-##### HashTableMemoryUsage
+- HashTableMemoryUsage
 
-Description: Memory usage of the Hash Table.
+  - Description: Memory usage of the Hash Table.
 
-##### RuntimeFilterBuildTime
+- RuntimeFilterBuildTime
 
-Description: Time taken to build runtime filters.
+  - Description: Time taken to build runtime filters.
 
-##### RuntimeFilterNum
+- RuntimeFilterNum
 
-Description: Number of runtime filters.
+  - Description: Number of runtime filters.
 
 ### Window Function Operator
 
-##### ProcessMode
+- ProcessMode
 
-Description: Execution mode, including two parts: the first part includes Materializing and Streaming; the second part includes Cumulative, RemovableCumulative, ByDefinition.
+  - Description: Execution mode, including two parts: the first part includes Materializing and Streaming; the second part includes Cumulative, RemovableCumulative, ByDefinition.
 
-##### ComputeTime
+- ComputeTime
 
-Description: Time taken for window function calculations.
+  - Description: Time taken for window function calculations.
 
-##### PartitionKeys
+- PartitionKeys
 
-Description: Partition columns.
+  - Description: Partition columns.
 
-##### AggregateFunctions
+- AggregateFunctions
 
-Description: Aggregate functions.
+  - Description: Aggregate functions.
 
-##### ColumnResizeTime
+- ColumnResizeTime
 
-Description: Time taken for column resizing.
+  - Description: Time taken for column resizing.
 
-##### PartitionSearchTime
+- PartitionSearchTime
 
-Description: Time taken to search partition boundaries.
+  - Description: Time taken to search partition boundaries.
 
-##### PeerGroupSearchTime
+- PeerGroupSearchTime
 
-Description: Time taken to search Peer Group boundaries. Meaningful only when the window type is RANGE.
+  - Description: Time taken to search Peer Group boundaries. Meaningful only when the window type is RANGE.
 
-##### PeakBufferedRows
+- PeakBufferedRows
 
-Description: Peak number of rows in the buffer.
+  - Description: Peak number of rows in the buffer.
 
-##### RemoveUnusedRowsCount
+- RemoveUnusedRowsCount
 
-Description: Number of times unused buffers are removed.
+  - Description: Number of times unused buffers are removed.
 
-##### RemoveUnusedTotalRows
+- RemoveUnusedTotalRows
 
-Description: Total number of rows removed from unused buffers.
+  - Description: Total number of rows removed from unused buffers.
 
 ### Sort Operator
 
-##### SortKeys
+- SortKeys
 
-Description: Sorting keys.
+  - Description: Sorting keys.
 
-##### SortType
+- SortType
 
-Description: Query result sorting method: full sorting or sorting the top N results.
+  - Description: Query result sorting method: full sorting or sorting the top N results.
 
-##### MaxBufferedBytes
+- MaxBufferedBytes
 
-Description: Peak size of buffered data.
+  - Description: Peak size of buffered data.
 
-##### MaxBufferedRows
+- MaxBufferedRows
 
-Description: Peak number of buffered rows.
+  - Description: Peak number of buffered rows.
 
-##### NumSortedRuns
+- NumSortedRuns
 
-Description: Number of sorted runs.
+  - Description: Number of sorted runs.
 
-##### BuildingTime
+- BuildingTime
 
-Description: Time taken to maintain internal data structures during sorting.
+  - Description: Time taken to maintain internal data structures during sorting.
 
-##### MergingTime
+- MergingTime
 
-Description: Time taken to merge sorted runs during sorting.
+  - Description: Time taken to merge sorted runs during sorting.
 
-##### SortingTime
+- SortingTime
 
-Description: Time taken for sorting.
+  - Description: Time taken for sorting.
 
-##### OutputTime
+- OutputTime
 
-Description: Time taken to build the output sorted sequence.
+  - Description: Time taken to build the output sorted sequence.
 
 ### Merge Operator
 
@@ -1208,152 +1208,152 @@ For ease of understanding various metrics, Merge can be represented as the follo
             PROCESS
 ```
 
-##### Limit
+- Limit
 
-- Description: Limit.
-- Level: Primary Metric
+  - Description: Limit.
+  - Level: Primary Metric
 
-##### Offset
+- Offset
 
-- Description: Offset.
-- Level: Primary Metric
+  - Description: Offset.
+  - Level: Primary Metric
 
-##### StreamingBatchSize
+- StreamingBatchSize
 
-- Description: Size of data processed per Merge operation when Merge is performed in Streaming mode
-- Level: Primary Metric
+  - Description: Size of data processed per Merge operation when Merge is performed in Streaming mode
+  - Level: Primary Metric
 
-##### LateMaterializationMaxBufferChunkNum
+- LateMaterializationMaxBufferChunkNum
 
-- Description: Maximum number of chunks in the buffer when late materialization is enabled.
-- Level: Primary Metric
+  - Description: Maximum number of chunks in the buffer when late materialization is enabled.
+  - Level: Primary Metric
 
-##### OverallStageCount
+- OverallStageCount
 
-- Description: Total execution count of all stages.
-- Level: Primary Metric
-- Sub-metrics: 1-InitStageCount, 2-PrepareStageCount, 3-ProcessStageCount, 4-SplitChunkStageCount, 5-FetchChunkStageCount, 6-PendingStageCount, 7-FinishedStageCount
+  - Description: Total execution count of all stages.
+  - Level: Primary Metric
+  - Sub-metrics: 1-InitStageCount, 2-PrepareStageCount, 3-ProcessStageCount, 4-SplitChunkStageCount, 5-FetchChunkStageCount, 6-PendingStageCount, 7-FinishedStageCount
 
-##### 1-InitStageCount
+- 1-InitStageCount
 
-- Description: Execution count of the Init stage.
-- Level: Secondary Metric
+  - Description: Execution count of the Init stage.
+  - Level: Secondary Metric
 
-##### 2-PrepareStageCount
+- 2-PrepareStageCount
 
-- Description: Execution count of the Prepare stage.
-- Level: Secondary Metric
+  - Description: Execution count of the Prepare stage.
+  - Level: Secondary Metric
 
-##### 3-ProcessStageCount
+- 3-ProcessStageCount
 
-- Description: Execution count of the Process stage.
-- Level: Secondary Metric
+  - Description: Execution count of the Process stage.
+  - Level: Secondary Metric
 
-##### 4-SplitChunkStageCount
+- 4-SplitChunkStageCount
 
-- Description: Execution count of the SplitChunk stage.
-- Level: Secondary Metric
+  - Description: Execution count of the SplitChunk stage.
+  - Level: Secondary Metric
 
-##### 5-FetchChunkStageCount
+- 5-FetchChunkStageCount
 
-- Description: Execution count of the FetchChunk stage.
-- Level: Secondary Metric
+  - Description: Execution count of the FetchChunk stage.
+  - Level: Secondary Metric
 
-##### 6-PendingStageCount
+- 6-PendingStageCount
 
-- Description: Execution count of the Pending stage.
-- Level: Secondary Metric
+  - Description: Execution count of the Pending stage.
+  - Level: Secondary Metric
 
-##### 7-FinishedStageCount
+- 7-FinishedStageCount
 
-- Description: Execution count of the Finished stage.
-- Level: Secondary Metric
+  - Description: Execution count of the Finished stage.
+  - Level: Secondary Metric
 
-##### OverallStageTime
+- OverallStageTime
 
-- Description: Total execution time for each stage.
-- Level: Primary metric
-- Sub-metrics: 1-InitStageTime, 2-PrepareStageTime, 3-ProcessStageTime, 4-SplitChunkStageTime, 5-FetchChunkStageTime, 6-PendingStageTime, 7-FinishedStageTime
+  - Description: Total execution time for each stage.
+  - Level: Primary metric
+  - Sub-metrics: 1-InitStageTime, 2-PrepareStageTime, 3-ProcessStageTime, 4-SplitChunkStageTime, 5-FetchChunkStageTime, 6-PendingStageTime, 7-FinishedStageTime
 
-##### 1-InitStageTime
+- 1-InitStageTime
 
-- Description: Execution time for the Init stage.
-- Level: Secondary metric
+  - Description: Execution time for the Init stage.
+  - Level: Secondary metric
 
-##### 2-PrepareStageTime
+- 2-PrepareStageTime
 
-- Description: Execution time for the Prepare stage.
-- Level: Secondary metric
+  - Description: Execution time for the Prepare stage.
+  - Level: Secondary metric
 
-##### 3-ProcessStageTime
+- 3-ProcessStageTime
 
-- Description: Execution time for the Process stage.
-- Level: Secondary metric
-- Sub-metrics: LateMaterializationGenerateOrdinalTime, SortedRunProviderTime
+  - Description: Execution time for the Process stage.
+  - Level: Secondary metric
+  - Sub-metrics: LateMaterializationGenerateOrdinalTime, SortedRunProviderTime
 
-##### LateMaterializationGenerateOrdinalTime
+- LateMaterializationGenerateOrdinalTime
 
-- Description: Time taken for generating ordinal columns during late materialization.
-- Level: Tertiary Metric
+  - Description: Time taken for generating ordinal columns during late materialization.
+  - Level: Tertiary Metric
 
-##### SortedRunProviderTime
+- SortedRunProviderTime
 
-- Description: Time taken to retrieve data from the provider during the Process stage.
-- Level: Tertiary Metric
+  - Description: Time taken to retrieve data from the provider during the Process stage.
+  - Level: Tertiary Metric
 
-##### 4-SplitChunkStageTime
+- 4-SplitChunkStageTime
 
-- Description: Time taken for the Split stage.
-- Level: Secondary metric
+  - Description: Time taken for the Split stage.
+  - Level: Secondary metric
 
-##### 5-FetchChunkStageTime
+- 5-FetchChunkStageTime
 
-- Description: Time taken for the Fetch stage.
-- Level: Secondary metric
+  - Description: Time taken for the Fetch stage.
+  - Level: Secondary metric
 
-##### 6-PendingStageTime
+- 6-PendingStageTime
 
-- Description: Time taken for the Pending stage.
-- Level: Secondary metric
+  - Description: Time taken for the Pending stage.
+  - Level: Secondary metric
 
-##### 7-FinishedStageTime
+- 7-FinishedStageTime
 
-- Description: Time taken for the Finished stage.
-- Level: Secondary metric
+  - Description: Time taken for the Finished stage.
+  - Level: Secondary metric
 
 #### TableFunction Operator
 
-##### TableFunctionExecTime
+- TableFunctionExecTime
 
-Description: Computation time for the Table Function.
+  - Description: Computation time for the Table Function.
 
-##### TableFunctionExecCount
+- TableFunctionExecCount
 
-Description: Number of executions for the Table Function.
+  - Description: Number of executions for the Table Function.
 
 #### Project Operator
 
-##### ExprComputeTime
+- ExprComputeTime
 
-Description: Computation time for expressions.
+  - Description: Computation time for expressions.
 
-##### CommonSubExprComputeTime
+- CommonSubExprComputeTime
 
-Description: Computation time for common sub-expressions.
+  - Description: Computation time for common sub-expressions.
 
 #### LocalExchange Operator
 
-##### Type
+- Type
 
-Description: Type of Local Exchange, including: `Passthrough`, `Partition`, and `Broadcast`.
+  - Description: Type of Local Exchange, including: `Passthrough`, `Partition`, and `Broadcast`.
 
-##### ShuffleNum
+- ShuffleNum
 
-Description: Number of shuffles. This metric is only valid when `Type` is `Partition`.
+  - Description: Number of shuffles. This metric is only valid when `Type` is `Partition`.
 
-##### LocalExchangePeakMemoryUsage
+- LocalExchangePeakMemoryUsage
 
-Description: Peak memory usage.
+  - Description: Peak memory usage.
 
 #### OlapTableSink Operator
 
@@ -1364,42 +1364,42 @@ OlapTableSink is the operator that profiles data loading with INSERT INTO FILES(
 - RpcClientSideTime equals RpcServerSideTime plus network transmission time plus RPC framework processing time. If there is a significant difference between RpcClientSideTime and RpcServerSideTime, consider enabling compression to reduce transmission time.
 :::
 
-##### IndexNum
+- IndexNum
 
-Description: Number of the synchronous materialized views created for the destination table.
+  - Description: Number of the synchronous materialized views created for the destination table.
 
-##### ReplicatedStorage
+- ReplicatedStorage
 
-Description: Whether Single Leader Replication is enabled.
+  - Description: Whether Single Leader Replication is enabled.
 
-##### TxnID
+- TxnID
 
-Description: ID of the loading transaction.
+  - Description: ID of the loading transaction.
 
-##### RowsRead
+- RowsRead
 
-Description: Number of rows read from upstream operators.
+  - Description: Number of rows read from upstream operators.
 
-##### RowsFiltered
+- RowsFiltered
 
-Description: Number of rows filtered out due to inadequate data quality.
+  - Description: Number of rows filtered out due to inadequate data quality.
 
-##### RowsReturned
+- RowsReturned
 
-Description: Number of rows written to the destination table.
+  - Description: Number of rows written to the destination table.
 
-##### RpcClientSideTime
+- RpcClientSideTime
 
-Description: Total RPC time consumption for loading recorded by the client side.
+  - Description: Total RPC time consumption for loading recorded by the client side.
 
-##### RpcServerSideTime
+- RpcServerSideTime
 
-Description: Total RPC time consumption for loading recorded by the server side.
+  - Description: Total RPC time consumption for loading recorded by the server side.
 
-##### PrepareDataTime
+- PrepareDataTime
 
-Description: Total time consumption for the data preparation phase, including data format conversion and data quality check.
+  - Description: Total time consumption for the data preparation phase, including data format conversion and data quality check.
 
-##### SendDataTime
+- SendDataTime
 
-Description: Local time consumption for sending the data, including time for serializing and compressing data, and for submitting tasks to the sender queue.
+  - Description: Local time consumption for sending the data, including time for serializing and compressing data, and for submitting tasks to the sender queue.
