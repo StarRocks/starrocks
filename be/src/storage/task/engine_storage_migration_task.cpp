@@ -537,16 +537,11 @@ Status EngineStorageMigrationTask::_finish_primary_key_migration(const TabletSha
         }
 
         auto tablet_manager = StorageEngine::instance()->tablet_manager();
-<<<<<<< HEAD
-=======
-        // don't wait rebuild pk index to finish because migration task does not support increment migration
-        // and needs to be completed as soon as possible
 
         // create_tablet_from_meta_snapshot does not reset rowset_seg_id in snapshot_meta. The GC progress for
         // the old tablet maybe conflict in rowset_seg_id with the new one. But it is safe because the rowset_seg_id
         // conflict in GC progress will only affect the delvector/dcg cache (delete the cache) for the new tablet but
         // not the metadata because the store path is different between the old one and the new one.
->>>>>>> dac6bb16b1 ([BugFix] Fix inconsistent delvector/dcg cache for migration (#58593))
         res = tablet_manager->create_tablet_from_meta_snapshot(_dest_store, _tablet_id, tablet->schema_hash(),
                                                                schema_hash_path, false);
         if (!res.ok()) {
