@@ -36,7 +36,7 @@ const config = {
 
   i18n: {
     defaultLocale: 'en',
-    locales: ['en', 'zh'],
+    locales: ['en', 'zh', 'ja'],
     localeConfigs: {
       en: {
         htmlLang: 'en-US',
@@ -87,9 +87,9 @@ const config = {
                 return { current: { label: 'current' } };
               } else {
                 return {
-                  '3.1': { label: 'Latest-3.1' },
+                  '3.1': { label: 'Stable-3.1' },
                   '3.0': { label: '3.0', banner: 'none' },
-                  '2.5': { label: 'Stable-2.5', banner: 'none' },
+                  '2.5': { label: '2.5', banner: 'none' },
                   '2.3': { label: '2.3', banner: 'none' },
                   '2.2': { label: '2.2', banner: 'none' },
                   '2.1': { label: '2.1', banner: 'none' },

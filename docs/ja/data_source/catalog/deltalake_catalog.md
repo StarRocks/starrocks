@@ -1,0 +1,843 @@
+---
+displayed_sidebar: docs
+toc_max_heading_level: 5
+---
+
+# Delta Lake catalog
+
+Delta Lake catalog は、Delta Lake からデータをインジェストせずにクエリを実行できる外部 catalog の一種です。
+
+また、Delta Lake catalog を基に [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) を使用して、Delta Lake からデータを直接変換してロードすることもできます。StarRocks はバージョン 2.5 以降で Delta Lake catalog をサポートしています。
+
+Delta Lake クラスターでの SQL ワークロードを成功させるためには、StarRocks クラスターが Delta Lake クラスターのストレージシステムとメタストアにアクセスできる必要があります。StarRocks は以下のストレージシステムとメタストアをサポートしています。
+
+- 分散ファイルシステム (HDFS) または AWS S3、Microsoft Azure Storage、Google GCS、その他の S3 互換ストレージシステム (例: MinIO) のようなオブジェクトストレージ
+
+- Hive メタストアや AWS Glue のようなメタストア
+
+  > **NOTE**
+  >
+  > ストレージとして AWS S3 を選択した場合、メタストアとして HMS または AWS Glue を使用できます。他のストレージシステムを選択した場合、メタストアとしては HMS のみを使用できます。
+
+## 使用上の注意
+
+- StarRocks がサポートする Delta Lake のファイル形式は Parquet です。Parquet ファイルは以下の圧縮形式をサポートしています: SNAPPY、LZ4、ZSTD、GZIP、NO_COMPRESSION。
+- StarRocks がサポートしていない Delta Lake のデータ型は MAP と STRUCT です。
+
+## 統合準備
+
+Delta Lake catalog を作成する前に、StarRocks クラスターが Delta Lake クラスターのストレージシステムとメタストアと統合できることを確認してください。
+
+### AWS IAM
+
+Delta Lake クラスターが AWS S3 をストレージとして使用する場合、または AWS Glue をメタストアとして使用する場合、適切な認証方法を選択し、StarRocks クラスターが関連する AWS クラウドリソースにアクセスできるように必要な準備を行ってください。
+
+以下の認証方法が推奨されます。
+
+- インスタンスプロファイル
+- アサインされたロール
+- IAM ユーザー
+
+上記の 3 つの認証方法の中で、インスタンスプロファイルが最も広く使用されています。
+
+詳細については、[AWS IAM での認証準備](../../integrations/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication) を参照してください。
+
+### HDFS
+
+ストレージとして HDFS を選択した場合、StarRocks クラスターを以下のように設定してください。
+
+- (オプション) HDFS クラスターと Hive メタストアにアクセスするために使用するユーザー名を設定します。デフォルトでは、StarRocks は HDFS クラスターと Hive メタストアにアクセスするために FE と BE または CN プロセスのユーザー名を使用します。また、各 FE の **fe/conf/hadoop_env.sh** ファイルの先頭と各 BE または CN の **be/conf/hadoop_env.sh** ファイルの先頭に `export HADOOP_USER_NAME="<user_name>"` を追加することでユーザー名を設定することもできます。これらのファイルでユーザー名を設定した後、各 FE と各 BE または CN を再起動してパラメーター設定を有効にします。StarRocks クラスターごとに 1 つのユーザー名のみを設定できます。
+- Delta Lake データをクエリする際、StarRocks クラスターの FEs と BEs または CNs は HDFS クライアントを使用して HDFS クラスターにアクセスします。ほとんどの場合、その目的を達成するために StarRocks クラスターを設定する必要はなく、StarRocks はデフォルトの設定を使用して HDFS クライアントを起動します。以下の状況でのみ StarRocks クラスターを設定する必要があります。
+
+  - HDFS クラスターで高可用性 (HA) が有効になっている場合: HDFS クラスターの **hdfs-site.xml** ファイルを各 FE の **$FE_HOME/conf** パスと各 BE または CN の **$BE_HOME/conf** パスに追加します。
+  - HDFS クラスターで View File System (ViewFs) が有効になっている場合: HDFS クラスターの **core-site.xml** ファイルを各 FE の **$FE_HOME/conf** パスと各 BE または CN の **$BE_HOME/conf** パスに追加します。
+
+> **NOTE**
+>
+> クエリを送信した際に不明なホストを示すエラーが返された場合、HDFS クラスターのノードのホスト名と IP アドレスのマッピングを **/etc/hosts** パスに追加する必要があります。
+
+### Kerberos 認証
+
+HDFS クラスターまたは Hive メタストアで Kerberos 認証が有効になっている場合、StarRocks クラスターを以下のように設定してください。
+
+- 各 FE と各 BE または CN で `kinit -kt keytab_path principal` コマンドを実行して、Key Distribution Center (KDC) から Ticket Granting Ticket (TGT) を取得します。このコマンドを実行するには、HDFS クラスターと Hive メタストアにアクセスする権限が必要です。このコマンドを使用して KDC にアクセスすることは時間に依存するため、cron を使用してこのコマンドを定期的に実行する必要があります。
+- 各 FE の **$FE_HOME/conf/fe.conf** ファイルと各 BE または CN の **$BE_HOME/conf/be.conf** ファイルに `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"` を追加します。この例では、`/etc/krb5.conf` は **krb5.conf** ファイルの保存パスです。必要に応じてパスを変更できます。
+
+## Delta Lake catalog の作成
+
+### 構文
+
+```SQL
+CREATE EXTERNAL CATALOG <catalog_name>
+[COMMENT <comment>]
+PROPERTIES
+(
+    "type" = "deltalake",
+    MetastoreParams,
+    StorageCredentialParams,
+    MetadataUpdateParams
+)
+```
+
+### パラメーター
+
+#### catalog_name
+
+Delta Lake catalog の名前です。命名規則は以下の通りです。
+
+- 名前には文字、数字 (0-9)、およびアンダースコア (_) を含めることができます。文字で始める必要があります。
+- 名前は大文字と小文字を区別し、長さは 1023 文字を超えてはなりません。
+
+#### comment
+
+Delta Lake catalog の説明です。このパラメーターはオプションです。
+
+#### type
+
+データソースのタイプです。値を `deltalake` に設定します。
+
+#### MetastoreParams
+
+StarRocks がデータソースのメタストアと統合する方法に関する一連のパラメーターです。
+
+##### Hive メタストア
+
+データソースのメタストアとして Hive メタストアを選択した場合、`MetastoreParams` を以下のように設定します。
+
+```SQL
+"hive.metastore.type" = "hive",
+"hive.metastore.uris" = "<hive_metastore_uri>"
+```
+
+> **NOTE**
+>
+> Delta Lake データをクエリする前に、Hive メタストアノードのホスト名と IP アドレスのマッピングを `/etc/hosts` パスに追加する必要があります。そうしないと、クエリを開始する際に StarRocks が Hive メタストアにアクセスできない可能性があります。
+
+以下の表は、`MetastoreParams` で設定する必要があるパラメーターを説明しています。
+
+| Parameter           | Required | Description                                                  |
+| ------------------- | -------- | ------------------------------------------------------------ |
+| hive.metastore.type | Yes      | Delta Lake クラスターで使用するメタストアのタイプです。値を `hive` に設定します。 |
+| hive.metastore.uris | Yes      | Hive メタストアの URI です。形式: `thrift://<metastore_IP_address>:<metastore_port>`。<br />Hive メタストアで高可用性 (HA) が有効になっている場合、複数のメタストア URI を指定し、カンマ (`,`) で区切ることができます。例: `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`。 |
+
+##### AWS Glue
+
+データソースのメタストアとして AWS Glue を選択した場合、これは AWS S3 をストレージとして選択した場合にのみサポートされます。以下のいずれかの操作を行います。
+
+- インスタンスプロファイルベースの認証方法を選択する場合、`MetastoreParams` を以下のように設定します。
+
+  ```SQL
+  "hive.metastore.type" = "glue",
+  "aws.glue.use_instance_profile" = "true",
+  "aws.glue.region" = "<aws_glue_region>"
+  ```
+
+- アサインされたロールベースの認証方法を選択する場合、`MetastoreParams` を以下のように設定します。
+
+  ```SQL
+  "hive.metastore.type" = "glue",
+  "aws.glue.use_instance_profile" = "true",
+  "aws.glue.iam_role_arn" = "<iam_role_arn>",
+  "aws.glue.region" = "<aws_glue_region>"
+  ```
+
+- IAM ユーザーベースの認証方法を選択する場合、`MetastoreParams` を以下のように設定します。
+
+  ```SQL
+  "hive.metastore.type" = "glue",
+  "aws.glue.use_instance_profile" = "false",
+  "aws.glue.access_key" = "<iam_user_access_key>",
+  "aws.glue.secret_key" = "<iam_user_secret_key>",
+  "aws.glue.region" = "<aws_s3_region>"
+  ```
+
+以下の表は、`MetastoreParams` で設定する必要があるパラメーターを説明しています。
+
+| Parameter                     | Required | Description                                                  |
+| ----------------------------- | -------- | ------------------------------------------------------------ |
+| hive.metastore.type           | Yes      | Delta Lake クラスターで使用するメタストアのタイプです。値を `glue` に設定します。 |
+| aws.glue.use_instance_profile | Yes      | インスタンスプロファイルベースの認証方法とアサインされたロールベースの認証方法を有効にするかどうかを指定します。有効な値: `true` および `false`。デフォルト値: `false`。 |
+| aws.glue.iam_role_arn         | No       | AWS Glue Data Catalog に対する権限を持つ IAM ロールの ARN です。AWS Glue にアクセスするためにアサインされたロールベースの認証方法を使用する場合、このパラメーターを指定する必要があります。 |
+| aws.glue.region               | Yes      | AWS Glue Data Catalog が存在するリージョンです。例: `us-west-1`。 |
+| aws.glue.access_key           | No       | AWS IAM ユーザーのアクセスキーです。IAM ユーザーベースの認証方法を使用して AWS Glue にアクセスする場合、このパラメーターを指定する必要があります。 |
+| aws.glue.secret_key           | No       | AWS IAM ユーザーのシークレットキーです。IAM ユーザーベースの認証方法を使用して AWS Glue にアクセスする場合、このパラメーターを指定する必要があります。 |
+
+AWS Glue にアクセスするための認証方法の選択方法や AWS IAM コンソールでのアクセス制御ポリシーの設定方法については、[AWS Glue にアクセスするための認証パラメーター](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue) を参照してください。
+
+#### StorageCredentialParams
+
+StarRocks がストレージシステムと統合する方法に関する一連のパラメーターです。このパラメーターセットはオプションです。
+
+ストレージとして HDFS を使用する場合、`StorageCredentialParams` を設定する必要はありません。
+
+AWS S3、その他の S3 互換ストレージシステム、Microsoft Azure Storage、または Google GCS をストレージとして使用する場合、`StorageCredentialParams` を設定する必要があります。
+
+##### AWS S3
+
+Delta Lake クラスターのストレージとして AWS S3 を選択した場合、以下のいずれかの操作を行います。
+
+- インスタンスプロファイルベースの認証方法を選択する場合、`StorageCredentialParams` を以下のように設定します。
+
+  ```SQL
+  "aws.s3.use_instance_profile" = "true",
+  "aws.s3.region" = "<aws_s3_region>"
+  ```
+
+- アサインされたロールベースの認証方法を選択する場合、`StorageCredentialParams` を以下のように設定します。
+
+  ```SQL
+  "aws.s3.use_instance_profile" = "true",
+  "aws.s3.iam_role_arn" = "<iam_role_arn>",
+  "aws.s3.region" = "<aws_s3_region>"
+  ```
+
+- IAM ユーザーベースの認証方法を選択する場合、`StorageCredentialParams` を以下のように設定します。
+
+  ```SQL
+  "aws.s3.use_instance_profile" = "false",
+  "aws.s3.access_key" = "<iam_user_access_key>",
+  "aws.s3.secret_key" = "<iam_user_secret_key>",
+  "aws.s3.region" = "<aws_s3_region>"
+  ```
+
+以下の表は、`StorageCredentialParams` で設定する必要があるパラメーターを説明しています。
+
+| Parameter                   | Required | Description                                                  |
+| --------------------------- | -------- | ------------------------------------------------------------ |
+| aws.s3.use_instance_profile | Yes      | インスタンスプロファイルベースの認証方法とアサインされたロールベースの認証方法を有効にするかどうかを指定します。有効な値: `true` および `false`。デフォルト値: `false`。 |
+| aws.s3.iam_role_arn         | No       | AWS S3 バケットに対する権限を持つ IAM ロールの ARN です。AWS S3 にアクセスするためにアサインされたロールベースの認証方法を使用する場合、このパラメーターを指定する必要があります。 |
+| aws.s3.region               | Yes      | AWS S3 バケットが存在するリージョンです。例: `us-west-1`。 |
+| aws.s3.access_key           | No       | IAM ユーザーのアクセスキーです。IAM ユーザーベースの認証方法を使用して AWS S3 にアクセスする場合、このパラメーターを指定する必要があります。 |
+| aws.s3.secret_key           | No       | IAM ユーザーのシークレットキーです。IAM ユーザーベースの認証方法を使用して AWS S3 にアクセスする場合、このパラメーターを指定する必要があります。 |
+
+AWS S3 にアクセスするための認証方法の選択方法や AWS IAM コンソールでのアクセス制御ポリシーの設定方法については、[AWS S3 にアクセスするための認証パラメーター](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3) を参照してください。
+
+##### S3 互換ストレージシステム
+
+Delta Lake catalog はバージョン 2.5 以降で S3 互換ストレージシステムをサポートしています。
+
+S3 互換ストレージシステム (例: MinIO) を Delta Lake クラスターのストレージとして選択した場合、`StorageCredentialParams` を以下のように設定して、統合を成功させます。
+
+```SQL
+"aws.s3.enable_ssl" = "false",
+"aws.s3.enable_path_style_access" = "true",
+"aws.s3.endpoint" = "<s3_endpoint>",
+"aws.s3.access_key" = "<iam_user_access_key>",
+"aws.s3.secret_key" = "<iam_user_secret_key>"
+```
+
+以下の表は、`StorageCredentialParams` で設定する必要があるパラメーターを説明しています。
+
+| Parameter                        | Required | Description                                                  |
+| -------------------------------- | -------- | ------------------------------------------------------------ |
+| aws.s3.enable_ssl                | Yes      | SSL 接続を有効にするかどうかを指定します。<br />有効な値: `true` および `false`。デフォルト値: `true`。 |
+| aws.s3.enable_path_style_access  | Yes      | パススタイルアクセスを有効にするかどうかを指定します。<br />有効な値: `true` および `false`。デフォルト値: `false`。MinIO の場合、値を `true` に設定する必要があります。<br />パススタイル URL は次の形式を使用します: `https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`。たとえば、US West (オレゴン) リージョンに `DOC-EXAMPLE-BUCKET1` というバケットを作成し、そのバケット内の `alice.jpg` オブジェクトにアクセスしたい場合、次のパススタイル URL を使用できます: `https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`。 |
+| aws.s3.endpoint                  | Yes      | AWS S3 の代わりに S3 互換ストレージシステムに接続するために使用されるエンドポイントです。 |
+| aws.s3.access_key                | Yes      | IAM ユーザーのアクセスキーです。 |
+| aws.s3.secret_key                | Yes      | IAM ユーザーのシークレットキーです。 |
+
+##### Microsoft Azure Storage
+
+Delta Lake catalog はバージョン 3.0 以降で Microsoft Azure Storage をサポートしています。
+
+###### Azure Blob Storage
+
+Delta Lake クラスターのストレージとして Blob Storage を選択した場合、以下のいずれかの操作を行います。
+
+- 共有キー認証方法を選択する場合、`StorageCredentialParams` を以下のように設定します。
+
+  ```SQL
+  "azure.blob.storage_account" = "<storage_account_name>",
+  "azure.blob.shared_key" = "<storage_account_shared_key>"
+  ```
+
+  以下の表は、`StorageCredentialParams` で設定する必要があるパラメーターを説明しています。
+
+  | **Parameter**              | **Required** | **Description**                              |
+  | -------------------------- | ------------ | -------------------------------------------- |
+  | azure.blob.storage_account | Yes          | Blob Storage アカウントのユーザー名です。   |
+  | azure.blob.shared_key      | Yes          | Blob Storage アカウントの共有キーです。 |
+
+- SAS トークン認証方法を選択する場合、`StorageCredentialParams` を以下のように設定します。
+
+  ```SQL
+  "azure.blob.storage_account" = "<storage_account_name>",
+  "azure.blob.container" = "<container_name>",
+  "azure.blob.sas_token" = "<storage_account_SAS_token>"
+  ```
+
+  以下の表は、`StorageCredentialParams` で設定する必要があるパラメーターを説明しています。
+
+  | **Parameter**             | **Required** | **Description**                                              |
+  | ------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.blob.storage_account| Yes          | Blob Storage アカウントのユーザー名です。                   |
+  | azure.blob.container      | Yes          | データを格納する blob コンテナの名前です。        |
+  | azure.blob.sas_token      | Yes          | Blob Storage アカウントにアクセスするために使用される SAS トークンです。 |
+
+###### Azure Data Lake Storage Gen2
+
+Delta Lake クラスターのストレージとして Data Lake Storage Gen2 を選択した場合、以下のいずれかの操作を行います。
+
+- マネージド ID 認証方法を選択する場合、`StorageCredentialParams` を以下のように設定します。
+
+  ```SQL
+  "azure.adls2.oauth2_use_managed_identity" = "true",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  以下の表は、`StorageCredentialParams` で設定する必要があるパラメーターを説明しています。
+
+  | **Parameter**                           | **Required** | **Description**                                              |
+  | --------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_use_managed_identity | Yes          | マネージド ID 認証方法を有効にするかどうかを指定します。値を `true` に設定します。 |
+  | azure.adls2.oauth2_tenant_id            | Yes          | アクセスしたいデータのテナント ID です。          |
+  | azure.adls2.oauth2_client_id            | Yes          | マネージド ID のクライアント (アプリケーション) ID です。         |
+
+- 共有キー認証方法を選択する場合、`StorageCredentialParams` を以下のように設定します。
+
+  ```SQL
+  "azure.adls2.storage_account" = "<storage_account_name>",
+  "azure.adls2.shared_key" = "<storage_account_shared_key>"
+  ```
+
+  以下の表は、`StorageCredentialParams` で設定する必要があるパラメーターを説明しています。
+
+  | **Parameter**               | **Required** | **Description**                                              |
+  | --------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.storage_account | Yes          | Data Lake Storage Gen2 ストレージアカウントのユーザー名です。 |
+  | azure.adls2.shared_key      | Yes          | Data Lake Storage Gen2 ストレージアカウントの共有キーです。 |
+
+- サービスプリンシパル認証方法を選択する場合、`StorageCredentialParams` を以下のように設定します。
+
+  ```SQL
+  "azure.adls2.oauth2_client_id" = "<service_client_id>",
+  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
+  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
+  ```
+
+  以下の表は、`StorageCredentialParams` で設定する必要があるパラメーターを説明しています。
+
+  | **Parameter**                      | **Required** | **Description**                                              |
+  | ---------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_client_id       | Yes          | サービスプリンシパルのクライアント (アプリケーション) ID です。        |
+  | azure.adls2.oauth2_client_secret   | Yes          | 作成された新しいクライアント (アプリケーション) シークレットの値です。    |
+  | azure.adls2.oauth2_client_endpoint | Yes          | サービスプリンシパルまたはアプリケーションの OAuth 2.0 トークンエンドポイント (v1) です。 |
+
+###### Azure Data Lake Storage Gen1
+
+Delta Lake クラスターのストレージとして Data Lake Storage Gen1 を選択した場合、以下のいずれかの操作を行います。
+
+- マネージドサービス ID 認証方法を選択する場合、`StorageCredentialParams` を以下のように設定します。
+
+  ```SQL
+  "azure.adls1.use_managed_service_identity" = "true"
+  ```
+
+  以下の表は、`StorageCredentialParams` で設定する必要があるパラメーターを説明しています。
+
+  | **Parameter**                            | **Required** | **Description**                                              |
+  | ---------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls1.use_managed_service_identity | Yes          | マネージドサービス ID 認証方法を有効にするかどうかを指定します。値を `true` に設定します。 |
+
+- サービスプリンシパル認証方法を選択する場合、`StorageCredentialParams` を以下のように設定します。
+
+  ```SQL
+  "azure.adls1.oauth2_client_id" = "<application_client_id>",
+  "azure.adls1.oauth2_credential" = "<application_client_credential>",
+  "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
+  ```
+
+  以下の表は、`StorageCredentialParams` で設定する必要があるパラメーターを説明しています。
+
+  | **Parameter**                 | **Required** | **Description**                                              |
+  | ----------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls1.oauth2_client_id  | Yes          | サービスプリンシパルのクライアント (アプリケーション) ID です。        |
+  | azure.adls1.oauth2_credential | Yes          | 作成された新しいクライアント (アプリケーション) シークレットの値です。    |
+  | azure.adls1.oauth2_endpoint   | Yes          | サービスプリンシパルまたはアプリケーションの OAuth 2.0 トークンエンドポイント (v1) です。 |
+
+##### Google GCS
+
+Delta Lake catalog はバージョン 3.0 以降で Google GCS をサポートしています。
+
+Delta Lake クラスターのストレージとして Google GCS を選択した場合、以下のいずれかの操作を行います。
+
+- VM ベースの認証方法を選択する場合、`StorageCredentialParams` を以下のように設定します。
+
+  ```SQL
+  "gcp.gcs.use_compute_engine_service_account" = "true"
+  ```
+
+  以下の表は、`StorageCredentialParams` で設定する必要があるパラメーターを説明しています。
+
+  | **Parameter**                              | **Default value** | **Value** **example** | **Description**                                              |
+  | ------------------------------------------ | ----------------- | --------------------- | ------------------------------------------------------------ |
+  | gcp.gcs.use_compute_engine_service_account | false             | true                  | コンピュートエンジンにバインドされたサービスアカウントを直接使用するかどうかを指定します。 |
+
+- サービスアカウントベースの認証方法を選択する場合、`StorageCredentialParams` を以下のように設定します。
+
+  ```SQL
+  "gcp.gcs.service_account_email" = "<google_service_account_email>",
+  "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
+  "gcp.gcs.service_account_private_key" = "<google_service_private_key>",
+  ```
+
+  以下の表は、`StorageCredentialParams` で設定する必要があるパラメーターを説明しています。
+
+  | **Parameter**                          | **Default value** | **Value** **example**                                        | **Description**                                              |
+  | -------------------------------------- | ----------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+  | gcp.gcs.service_account_email          | ""                | "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)" | サービスアカウントの作成時に生成された JSON ファイル内のメールアドレスです。 |
+  | gcp.gcs.service_account_private_key_id | ""                | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | サービスアカウントの作成時に生成された JSON ファイル内のプライベートキー ID です。 |
+  | gcp.gcs.service_account_private_key    | ""                | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | サービスアカウントの作成時に生成された JSON ファイル内のプライベートキーです。 |
+
+- インパーソネーションベースの認証方法を選択する場合、`StorageCredentialParams` を以下のように設定します。
+
+  - VM インスタンスにサービスアカウントをインパーソネートさせる場合:
+
+    ```SQL
+    "gcp.gcs.use_compute_engine_service_account" = "true",
+    "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"
+    ```
+
+    以下の表は、`StorageCredentialParams` で設定する必要があるパラメーターを説明しています。
+
+    | **Parameter**                              | **Default value** | **Value** **example** | **Description**                                              |
+    | ------------------------------------------ | ----------------- | --------------------- | ------------------------------------------------------------ |
+    | gcp.gcs.use_compute_engine_service_account | false             | true                  | コンピュートエンジンにバインドされたサービスアカウントを直接使用するかどうかを指定します。 |
+    | gcp.gcs.impersonation_service_account      | ""                | "hello"               | インパーソネートしたいサービスアカウントです。            |
+
+  - サービスアカウント (一時的にメタサービスアカウントと呼ばれる) に別のサービスアカウント (一時的にデータサービスアカウントと呼ばれる) をインパーソネートさせる場合:
+
+    ```SQL
+    "gcp.gcs.service_account_email" = "<google_service_account_email>",
+    "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
+    "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
+    "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
+    ```
+
+    以下の表は、`StorageCredentialParams` で設定する必要があるパラメーターを説明しています。
+
+    | **Parameter**                          | **Default value** | **Value** **example**                                        | **Description**                                              |
+    | -------------------------------------- | ----------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+    | gcp.gcs.service_account_email          | ""                | "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)" | メタサービスアカウントの作成時に生成された JSON ファイル内のメールアドレスです。 |
+    | gcp.gcs.service_account_private_key_id | ""                | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | メタサービスアカウントの作成時に生成された JSON ファイル内のプライベートキー ID です。 |
+    | gcp.gcs.service_account_private_key    | ""                | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | メタサービスアカウントの作成時に生成された JSON ファイル内のプライベートキーです。 |
+    | gcp.gcs.impersonation_service_account  | ""                | "hello"                                                      | インパーソネートしたいデータサービスアカウントです。       |
+
+#### MetadataUpdateParams
+
+StarRocks が Delta Lake のキャッシュされたメタデータを更新する方法に関する一連のパラメーターです。このパラメーターセットはオプションです。
+
+StarRocks はデフォルトで [自動非同期更新ポリシー](#appendix-understand-metadata-automatic-asynchronous-update) を実装しています。
+
+ほとんどの場合、`MetadataUpdateParams` を無視して、ポリシーパラメーターを調整する必要はありません。これらのパラメーターのデフォルト値は、すぐに使用できるパフォーマンスを提供します。
+
+ただし、Delta Lake のデータ更新頻度が高い場合、これらのパラメーターを調整して自動非同期更新のパフォーマンスをさらに最適化できます。
+
+> **NOTE**
+>
+> ほとんどの場合、Delta Lake データが 1 時間以下の粒度で更新される場合、データ更新頻度は高いと見なされます。
+
+| Parameter                              | Required | Description                                                  |
+|----------------------------------------| -------- | ------------------------------------------------------------ |
+| enable_metastore_cache                 | No       | StarRocks が Delta Lake テーブルのメタデータをキャッシュするかどうかを指定します。有効な値: `true` および `false`。デフォルト値: `true`。値 `true` はキャッシュを有効にし、値 `false` はキャッシュを無効にします。 |
+| enable_remote_file_cache               | No       | StarRocks が Delta Lake テーブルまたはパーティションの基礎データファイルのメタデータをキャッシュするかどうかを指定します。有効な値: `true` および `false`。デフォルト値: `true`。値 `true` はキャッシュを有効にし、値 `false` はキャッシュを無効にします。 |
+| metastore_cache_refresh_interval_sec   | No       | StarRocks が自身にキャッシュされた Delta Lake テーブルまたはパーティションのメタデータを非同期で更新する時間間隔です。単位: 秒。デフォルト値: `7200`、つまり 2 時間です。 |
+| remote_file_cache_refresh_interval_sec | No       | StarRocks が自身にキャッシュされた Delta Lake テーブルまたはパーティションの基礎データファイルのメタデータを非同期で更新する時間間隔です。単位: 秒。デフォルト値: `60`。 |
+| metastore_cache_ttl_sec                | No       | StarRocks が自身にキャッシュされた Delta Lake テーブルまたはパーティションのメタデータを自動的に破棄する時間間隔です。単位: 秒。デフォルト値: `86400`、つまり 24 時間です。 |
+| remote_file_cache_ttl_sec              | No       | StarRocks が自身にキャッシュされた Delta Lake テーブルまたはパーティションの基礎データファイルのメタデータを自動的に破棄する時間間隔です。単位: 秒。デフォルト値: `129600`、つまり 36 時間です。 |
+
+### 例
+
+以下の例は、Delta Lake クラスターからデータをクエリするために使用するメタストアのタイプに応じて、`deltalake_catalog_hms` または `deltalake_catalog_glue` という名前の Delta Lake catalog を作成します。
+
+#### HDFS
+
+ストレージとして HDFS を使用する場合、以下のようなコマンドを実行します。
+
+```SQL
+CREATE EXTERNAL CATALOG deltalake_catalog_hms
+PROPERTIES
+(
+    "type" = "deltalake",
+    "hive.metastore.type" = "hive",
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
+);
+```
+
+#### AWS S3
+
+##### インスタンスプロファイルベースのクレデンシャルを選択した場合
+
+- Delta Lake クラスターで Hive メタストアを使用する場合、以下のようなコマンドを実行します。
+
+  ```SQL
+  CREATE EXTERNAL CATALOG deltalake_catalog_hms
+  PROPERTIES
+  (
+      "type" = "deltalake",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "aws.s3.use_instance_profile" = "true",
+      "aws.s3.region" = "us-west-2"
+  );
+  ```
+
+- Amazon EMR Delta Lake クラスターで AWS Glue を使用する場合、以下のようなコマンドを実行します。
+
+  ```SQL
+  CREATE EXTERNAL CATALOG deltalake_catalog_glue
+  PROPERTIES
+  (
+      "type" = "deltalake",
+      "hive.metastore.type" = "glue",
+      "aws.glue.use_instance_profile" = "true",
+      "aws.glue.region" = "us-west-2",
+      "aws.s3.use_instance_profile" = "true",
+      "aws.s3.region" = "us-west-2"
+  );
+  ```
+
+##### アサインされたロールベースのクレデンシャルを選択した場合
+
+- Delta Lake クラスターで Hive メタストアを使用する場合、以下のようなコマンドを実行します。
+
+  ```SQL
+  CREATE EXTERNAL CATALOG deltalake_catalog_hms
+  PROPERTIES
+  (
+      "type" = "deltalake",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "aws.s3.use_instance_profile" = "true",
+      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
+      "aws.s3.region" = "us-west-2"
+  );
+  ```
+
+- Amazon EMR Delta Lake クラスターで AWS Glue を使用する場合、以下のようなコマンドを実行します。
+
+  ```SQL
+  CREATE EXTERNAL CATALOG deltalake_catalog_glue
+  PROPERTIES
+  (
+      "type" = "deltalake",
+      "hive.metastore.type" = "glue",
+      "aws.glue.use_instance_profile" = "true",
+      "aws.glue.iam_role_arn" = "arn:aws:iam::081976408565:role/test_glue_role",
+      "aws.glue.region" = "us-west-2",
+      "aws.s3.use_instance_profile" = "true",
+      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
+      "aws.s3.region" = "us-west-2"
+  );
+  ```
+
+##### IAM ユーザーベースのクレデンシャルを選択した場合
+
+- Delta Lake クラスターで Hive メタストアを使用する場合、以下のようなコマンドを実行します。
+
+  ```SQL
+  CREATE EXTERNAL CATALOG deltalake_catalog_hms
+  PROPERTIES
+  (
+      "type" = "deltalake",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "aws.s3.use_instance_profile" = "false",
+      "aws.s3.access_key" = "<iam_user_access_key>",
+      "aws.s3.secret_key" = "<iam_user_access_key>",
+      "aws.s3.region" = "us-west-2"
+  );
+  ```
+
+- Amazon EMR Delta Lake クラスターで AWS Glue を使用する場合、以下のようなコマンドを実行します。
+
+  ```SQL
+  CREATE EXTERNAL CATALOG deltalake_catalog_glue
+  PROPERTIES
+  (
+      "type" = "deltalake",
+      "hive.metastore.type" = "glue",
+      "aws.glue.use_instance_profile" = "false",
+      "aws.glue.access_key" = "<iam_user_access_key>",
+      "aws.glue.secret_key" = "<iam_user_secret_key>",
+      "aws.glue.region" = "us-west-2",
+      "aws.s3.use_instance_profile" = "false",
+      "aws.s3.access_key" = "<iam_user_access_key>",
+      "aws.s3.secret_key" = "<iam_user_secret_key>",
+      "aws.s3.region" = "us-west-2"
+  );
+  ```
+
+#### S3 互換ストレージシステム
+
+MinIO を例として使用します。以下のようなコマンドを実行します。
+
+```SQL
+CREATE EXTERNAL CATALOG deltalake_catalog_hms
+PROPERTIES
+(
+    "type" = "deltalake",
+    "hive.metastore.type" = "hive",
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+    "aws.s3.enable_ssl" = "true",
+    "aws.s3.enable_path_style_access" = "true",
+    "aws.s3.endpoint" = "<s3_endpoint>",
+    "aws.s3.access_key" = "<iam_user_access_key>",
+    "aws.s3.secret_key" = "<iam_user_secret_key>"
+);
+```
+
+#### Microsoft Azure Storage
+
+##### Azure Blob Storage
+
+- 共有キー認証方法を選択する場合、以下のようなコマンドを実行します。
+
+  ```SQL
+  CREATE EXTERNAL CATALOG deltalake_catalog_hms
+  PROPERTIES
+  (
+      "type" = "deltalake",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "azure.blob.storage_account" = "<blob_storage_account_name>",
+      "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
+  );
+  ```
+
+- SAS トークン認証方法を選択する場合、以下のようなコマンドを実行します。
+
+  ```SQL
+  CREATE EXTERNAL CATALOG deltalake_catalog_hms
+  PROPERTIES
+  (
+      "type" = "deltalake",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "azure.blob.storage_account" = "<blob_storage_account_name>",
+      "azure.blob.container" = "<blob_container_name>",
+      "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
+  );
+  ```
+
+##### Azure Data Lake Storage Gen1
+
+- マネージドサービス ID 認証方法を選択する場合、以下のようなコマンドを実行します。
+
+  ```SQL
+  CREATE EXTERNAL CATALOG deltalake_catalog_hms
+  PROPERTIES
+  (
+      "type" = "deltalake",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "azure.adls1.use_managed_service_identity" = "true"    
+  );
+  ```
+
+- サービスプリンシパル認証方法を選択する場合、以下のようなコマンドを実行します。
+
+  ```SQL
+  CREATE EXTERNAL CATALOG deltalake_catalog_hms
+  PROPERTIES
+  (
+      "type" = "deltalake",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "azure.adls1.oauth2_client_id" = "<application_client_id>",
+      "azure.adls1.oauth2_credential" = "<application_client_credential>",
+      "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
+  );
+  ```
+
+##### Azure Data Lake Storage Gen2
+
+- マネージド ID 認証方法を選択する場合、以下のようなコマンドを実行します。
+
+  ```SQL
+  CREATE EXTERNAL CATALOG deltalake_catalog_hms
+  PROPERTIES
+  (
+      "type" = "deltalake",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "azure.adls2.oauth2_use_managed_identity" = "true",
+      "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  );
+  ```
+
+- 共有キー認証方法を選択する場合、以下のようなコマンドを実行します。
+
+  ```SQL
+  CREATE EXTERNAL CATALOG deltalake_catalog_hms
+  PROPERTIES
+  (
+      "type" = "deltalake",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "azure.adls2.storage_account" = "<storage_account_name>",
+      "azure.adls2.shared_key" = "<shared_key>"     
+  );
+  ```
+
+- サービスプリンシパル認証方法を選択する場合、以下のようなコマンドを実行します。
+
+  ```SQL
+  CREATE EXTERNAL CATALOG deltalake_catalog_hms
+  PROPERTIES
+  (
+      "type" = "deltalake",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>",
+      "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
+      "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
+  );
+  ```
+
+#### Google GCS
+
+- VM ベースの認証方法を選択する場合、以下のようなコマンドを実行します。
+
+  ```SQL
+  CREATE EXTERNAL CATALOG deltalake_catalog_hms
+  PROPERTIES
+  (
+      "type" = "deltalake",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "gcp.gcs.use_compute_engine_service_account" = "true"    
+  );
+  ```
+
+- サービスアカウントベースの認証方法を選択する場合、以下のようなコマンドを実行します。
+
+  ```SQL
+  CREATE EXTERNAL CATALOG deltalake_catalog_hms
+  PROPERTIES
+  (
+      "type" = "deltalake",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "gcp.gcs.service_account_email" = "<google_service_account_email>",
+      "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
+      "gcp.gcs.service_account_private_key" = "<google_service_private_key>"    
+  );
+  ```
+
+- インパーソネーションベースの認証方法を選択する場合:
+
+  - VM インスタンスにサービスアカウントをインパーソネートさせる場合、以下のようなコマンドを実行します。
+
+    ```SQL
+    CREATE EXTERNAL CATALOG deltalake_catalog_hms
+    PROPERTIES
+    (
+        "type" = "deltalake",
+        "hive.metastore.type" = "hive",
+        "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+        "gcp.gcs.use_compute_engine_service_account" = "true",
+        "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"    
+    );
+    ```
+
+  - サービスアカウントに別のサービスアカウントをインパーソネートさせる場合、以下のようなコマンドを実行します。
+
+    ```SQL
+    CREATE EXTERNAL CATALOG deltalake_catalog_hms
+    PROPERTIES
+    (
+        "type" = "deltalake",
+        "hive.metastore.type" = "hive",
+        "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+        "gcp.gcs.service_account_email" = "<google_service_account_email>",
+        "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
+        "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
+        "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"    
+    );
+    ```
+
+## Delta Lake catalog の表示
+
+現在の StarRocks クラスター内のすべての catalog をクエリするには、[SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) を使用できます。
+
+```SQL
+SHOW CATALOGS;
+```
+
+外部 catalog の作成ステートメントをクエリするには、[SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) を使用できます。以下の例では、`deltalake_catalog_glue` という名前の Delta Lake catalog の作成ステートメントをクエリします。
+
+```SQL
+SHOW CREATE CATALOG deltalake_catalog_glue;
+```
+
+## Delta Lake Catalog とその中のデータベースに切り替える
+
+Delta Lake catalog とその中のデータベースに切り替えるには、以下のいずれかの方法を使用できます。
+
+- 現在のセッションで Delta Lake catalog を指定するには、[SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) を使用し、その後 [USE](../../sql-reference/sql-statements/Database/USE.md) を使用してアクティブなデータベースを指定します。
+
+  ```SQL
+  -- 現在のセッションで指定された catalog に切り替える:
+  SET CATALOG <catalog_name>
+  -- 現在のセッションでアクティブなデータベースを指定する:
+  USE <db_name>
+  ```
+
+- [USE](../../sql-reference/sql-statements/Database/USE.md) を直接使用して、Delta Lake catalog とその中のデータベースに切り替えます。
+
+  ```SQL
+  USE <catalog_name>.<db_name>
+  ```
+
+## Delta Lake catalog の削除
+
+外部 catalog を削除するには、[DROP CATALOG](../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) を使用できます。
+
+以下の例では、`deltalake_catalog_glue` という名前の Delta Lake catalog を削除します。
+
+```SQL
+DROP Catalog deltalake_catalog_glue;
+```
+
+## Delta Lake テーブルのスキーマを表示する
+
+Delta Lake テーブルのスキーマを表示するには、以下のいずれかの構文を使用できます。
+
+- スキーマを表示
+
+  ```SQL
+  DESC[RIBE] <catalog_name>.<database_name>.<table_name>
+  ```
+
+- CREATE ステートメントからスキーマとロケーションを表示
+
+  ```SQL
+  SHOW CREATE TABLE <catalog_name>.<database_name>.<table_name>
+  ```
+
+## Delta Lake テーブルをクエリする
+
+1. Delta Lake クラスター内のデータベースを表示するには、[SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) を使用します。
+
+   ```SQL
+   SHOW DATABASES FROM <catalog_name>
+   ```
+
+2. [Delta Lake Catalog とその中のデータベースに切り替える](#switch-to-a-delta-lake-catalog-and-a-database-in-it)。
+
+3. 指定されたデータベース内の目的のテーブルをクエリするには、[SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) を使用します。
+
+   ```SQL
+   SELECT count(*) FROM <table_name> LIMIT 10
+   ```
+
+## Delta Lake からデータをロードする
+
+`olap_tbl` という名前の OLAP テーブルがあると仮定すると、以下のようにデータを変換してロードできます。
+
+```SQL
+INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM deltalake_table
+```

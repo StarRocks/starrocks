@@ -604,6 +604,7 @@ ALTER TABLE [<db_name>.]<tbl_name> MODIFY COLUMN <column_name>
 ADD FIELD field_path field_desc
 
 -- フィールドを削除する
+
 ALTER TABLE [<db_name>.]<tbl_name> MODIFY COLUMN <column_name>
 DROP FIELD field_path
 
@@ -839,6 +840,7 @@ ALTER TABLE <tbl_name> COMPACT
 ALTER TABLE <tbl_name> COMPACT <partition_name>
 
 -- 複数のパーティションでコンパクションを実行します。
+
 ALTER TABLE <tbl_name> COMPACT (<partition1_name>[,<partition2_name>,...])
 
 -- 累積コンパクションを実行します。
