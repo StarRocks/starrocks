@@ -46,8 +46,10 @@
 #include "rocksdb/options.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/slice_transform.h"
+#include "runtime/exec_env.h"
 #include "storage/olap_define.h"
 #include "storage/rocksdb_status_adapter.h"
+#include "util/mem_info.h"
 #include "util/runtime_profile.h"
 #include "util/starrocks_metrics.h"
 
@@ -80,6 +82,28 @@ KVStore::~KVStore() {
     }
 }
 
+int64_t KVStore::calc_rocksdb_write_buffer_size() {
+    // 1. Get the number of disks
+    std::vector<starrocks::StorePath> paths;
+    parse_conf_store_paths(config::storage_root_path, &paths);
+    int64_t disk_cnt = paths.size();
+    // 2. Get the total memory bytes of BE
+    int64_t total_mem_bytes = MemInfo::physical_mem();
+    // 3. Calculate the write buffer memory bytes
+    int64_t write_buffer_mem_bytes =
+            total_mem_bytes * std::max(std::min(100L, config::rocksdb_write_buffer_memory_percent), 0L) / 100L;
+    // 4. Calculate the write buffer size for each disk
+    int64_t write_buffer_mem_bytes_per_disk = write_buffer_mem_bytes / disk_cnt;
+
+    // should be around 64MB ~ rocksdb_max_write_buffer_memory_bytes
+    int64_t res = std::min(std::max(67108864L, write_buffer_mem_bytes_per_disk),
+                           config::rocksdb_max_write_buffer_memory_bytes);
+
+    LOG(INFO) << "rocksdb write buffer size: " << res << ", total memory: " << total_mem_bytes
+              << ", disk count: " << disk_cnt;
+    return res;
+}
+
 Status KVStore::init(bool read_only) {
     DBOptions options;
     options.IncreaseParallelism();
@@ -101,6 +125,7 @@ Status KVStore::init(bool read_only) {
     cf_descs[2].options = meta_cf_options;
     cf_descs[2].options.prefix_extractor.reset(NewFixedPrefixTransform(PREFIX_LENGTH));
     cf_descs[2].options.compression = rocksdb::kSnappyCompression;
+    cf_descs[2].options.write_buffer_size = calc_rocksdb_write_buffer_size();
     static_assert(NUM_COLUMN_FAMILY_INDEX == 3);
 
     rocksdb::Status s;

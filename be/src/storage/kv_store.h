@@ -102,6 +102,9 @@ public:
                           const std::string& end_key, WriteBatch* batch);
 
 private:
+    static int64_t calc_rocksdb_write_buffer_size();
+
+private:
     std::string _root_path;
     rocksdb::DB* _db;
     std::vector<rocksdb::ColumnFamilyHandle*> _handles;

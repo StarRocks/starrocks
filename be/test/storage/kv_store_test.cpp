@@ -42,6 +42,7 @@
 
 #include "fs/fs_util.h"
 #include "storage/olap_define.h"
+#include "util/mem_info.h"
 
 #ifndef BE_TEST
 #define BE_TEST
@@ -153,6 +154,23 @@ TEST_F(KVStoreTest, TestOpDeleteRange) {
         std::string value_get;
         ASSERT_TRUE(_kv_store->get(META_COLUMN_FAMILY_INDEX, key, &value_get).is_not_found());
     }
+}
+
+TEST_F(KVStoreTest, calc_rocksdb_write_buffer_size_test) {
+    int64_t old_val = config::rocksdb_max_write_buffer_memory_bytes;
+    config::rocksdb_max_write_buffer_memory_bytes = MemInfo::physical_mem();
+
+    // case1: only one path
+    auto size = KVStore::calc_rocksdb_write_buffer_size();
+    ASSERT_EQ(size, MemInfo::physical_mem() * config::rocksdb_write_buffer_memory_percent / 100);
+
+    // case2: two paths
+    std::string old_val2 = config::storage_root_path;
+    config::storage_root_path = "/storage;/storage2";
+    auto size2 = KVStore::calc_rocksdb_write_buffer_size();
+    ASSERT_EQ(size2, MemInfo::physical_mem() * config::rocksdb_write_buffer_memory_percent / 100 / 2);
+    config::rocksdb_max_write_buffer_memory_bytes = old_val;
+    config::storage_root_path = old_val2;
 }
 
 } // namespace starrocks
