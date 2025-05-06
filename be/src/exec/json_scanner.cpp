@@ -854,14 +854,13 @@ Status JsonReader::_construct_column(simdjson::ondemand::value& value, Column* c
     return add_adaptive_nullable_column(column, type_desc, col_name, &value, !_strict_mode);
 }
 
-void JsonReader::_append_error_msg(std::string&& row, const std::string& error_msg) {
-    std::string row_with_meta;
+void JsonReader::_append_error_msg(const std::string& row, const std::string& error_msg) {
     if (_file_stream_buffer == nullptr || _file_stream_buffer->meta()->type() == ByteBufferMetaType::NONE) {
-        row_with_meta = std::move(row);
+        _state->append_error_msg_to_file(row, error_msg);
     } else {
-        row_with_meta = fmt::format("{} [meta: {}]", row, _file_stream_buffer->meta()->to_string());
+        std::string row_with_meta = fmt::format("{} [meta: {}]", row, _file_stream_buffer->meta()->to_string());
+        _state->append_error_msg_to_file(row_with_meta, error_msg);
     }
-    _state->append_error_msg_to_file(row_with_meta, error_msg);
 }
 
 } // namespace starrocks

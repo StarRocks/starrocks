@@ -244,6 +244,6 @@ private:
     bool _curr_ready = false;
 };
 
-Status json_parse_error(const std::string& error_msg);
+Status status_from_json_parse_error(const std::string& error_msg);
 
 } // namespace starrocks

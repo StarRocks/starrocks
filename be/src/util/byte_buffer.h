@@ -105,9 +105,9 @@ public:
     ByteBufferMetaType type() override { return ByteBufferMetaType::KAFKA; }
 
     void set_partition(int32_t partition) { _partition = partition; }
-    int32_t partition() { return _partition; }
+    int32_t partition() const { return _partition; }
     void set_offset(int64_t offset) { _offset = offset; }
-    int64_t offset() { return _offset; }
+    int64_t offset() const { return _offset; }
 
     Status copy_from(ByteBufferMeta* source) override;
 
