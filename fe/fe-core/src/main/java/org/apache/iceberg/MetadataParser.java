@@ -240,8 +240,10 @@ public class MetadataParser {
         // build key metadata
         ByteBuffer keyMetadata = thrift.isSetKey_metadata() ? ByteBuffer.wrap(thrift.getKey_metadata()) : null;
 
+        // build first row id
+        Long firstRowId = thrift.isSetFirst_row_id() ? thrift.getFirst_row_id() : null;
+
         BaseFile<?> baseFile;
-        // TODO(stephen): add keyMetadata field
         if (content == FileContent.DATA) {
             baseFile = new GenericDataFile(
                     specId,
@@ -252,7 +254,8 @@ public class MetadataParser {
                     metrics,
                     keyMetadata,
                     splitOffsets,
-                    null);
+                    null,
+                    firstRowId);
         } else {
             baseFile = new GenericDeleteFile(
                     specId,
@@ -265,7 +268,10 @@ public class MetadataParser {
                     equalityFieldIds,
                     sortId,
                     splitOffsets,
-                    keyMetadata
+                    keyMetadata,
+                    null,
+                    null,
+                    null
             );
         }
 

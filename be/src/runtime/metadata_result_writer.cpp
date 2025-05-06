@@ -119,6 +119,7 @@ StatusOr<TFetchDataResultPtr> MetadataResultWriter::_process_chunk(Chunk* chunk)
 // 11 -> "data_sequence_number"
 // 12 -> "column_stats"
 // 13 -> "key_metadata"
+// 14 -> "first_row_id"
 Status MetadataResultWriter::_fill_iceberg_metadata(const Columns& columns, const Chunk* chunk,
                                                     TFetchDataResult* result) const {
     SCOPED_TIMER(_convert_tuple_timer);
@@ -138,6 +139,7 @@ Status MetadataResultWriter::_fill_iceberg_metadata(const Columns& columns, cons
     const auto* data_sequence_number = down_cast<const Int64Column*>(ColumnHelper::get_data_column(columns[11].get()));
     const auto* iceberg_metrics = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(columns[12].get()));
     const auto* key_metadata = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(columns[13].get()));
+    const auto* first_row_id = down_cast<const Int64Column*>(ColumnHelper::get_data_column(columns[14].get()));
 
     std::vector<TMetadataEntry> meta_entries;
     int num_rows = chunk->num_rows();
@@ -189,6 +191,9 @@ Status MetadataResultWriter::_fill_iceberg_metadata(const Columns& columns, cons
         }
         if (!columns[13]->is_null(i)) {
             iceberg_meta.__set_key_metadata(key_metadata->get_slice(i).to_string());
+        }
+        if (!columns[14]->is_null(i)) {
+            iceberg_meta.__set_first_row_id(first_row_id->get(i).get_int64());
         }
     }
 
