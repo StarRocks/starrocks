@@ -13,19 +13,18 @@ import Clients from '../_assets/quick-start/_clientsCompose.mdx'
 
 This guide will get you up and running with Apache Iceberg™ using StarRocks™, including sample code to highlight some
 powerful features. You can learn more about Iceberg's StarRocks runtime by checking out
-the [StarRocks](https://docs.starrocks.io/en-us/latest/data_source/catalog/iceberg_catalog) section.
+the [StarRocks](../data_source/catalog/iceberg/iceberg_catalog.md) section.
 
 ### Docker-Compose
 
-The fastest way to get started is to use a docker-compose file that uses the starrocks/fe-ubuntu and starrocks/be-ubuntu
+The fastest way to get started is to use a docker-compose file that uses the `starrocks/fe-ubuntu` and `starrocks/be-ubuntu`
 images which contain a local StarRocks cluster with a configured Iceberg catalog. To use this, you'll need to install
 the Docker CLI.
 
 Once you have Docker installed, save the yaml below into a file named docker-compose.yml:
 
-```SQL
-services
-:
+```yml
+services:
 
   starrocks-fe:
     image: starrocks/fe-ubuntu:3.3.5
@@ -56,11 +55,8 @@ services
       - /bin/bash
       - -c
       - |
-        ulimit -u 65535;
-        ulimit
--n 65535;
-        echo
-"# Enable data cache"  >> /opt/starrocks/be/conf/be.conf
+        ulimit -n 65535;
+        echo "# Enable data cache"  >> /opt/starrocks/be/conf/be.conf
         echo "block_cache_enable = true"  >> /opt/starrocks/be/conf/be.conf
         echo "block_cache_mem_size = 536870912" >> /opt/starrocks/be/conf/be.conf
         echo "block_cache_disk_size = 1073741824" >> /opt/starrocks/be/conf/be.conf
@@ -148,7 +144,7 @@ docker compose up --detach --wait --wait-timeout 400
 
 You can then run any of the following commands to start a StarRocks session.
 
-```SQL
+```bash
 docker
 exec starrocks-fe
 \
@@ -244,4 +240,4 @@ downloads or jars are needed.
 #### Learn More
 
 Now that you're up and running with Iceberg and StarRocks, check out
-the [StarRocks-Iceberg docs](https://docs.starrocks.io/en-us/latest/data_source/catalog/iceberg_catalog) to learn more!
+the [StarRocks-Iceberg docs](../data_source/catalog/iceberg/iceberg_catalog.md) to learn more!
