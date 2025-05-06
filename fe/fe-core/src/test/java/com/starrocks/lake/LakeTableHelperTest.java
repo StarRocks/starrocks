@@ -94,6 +94,12 @@ public class LakeTableHelperTest {
     }
 
     @Test
+    public void testEnablePartitionAggregation() throws Exception {
+        List<Long> tableIdList = Lists.newArrayList(1L, 2L, 3L);
+        Assert.assertFalse(LakeTableHelper.enablePartitionAggregation(1L, tableIdList));
+    }
+
+    @Test
     public void testDeleteShardGroupMeta(@Mocked StarOSAgent starOSAgent) {
 
         new MockUp<GlobalStateMgr>() {

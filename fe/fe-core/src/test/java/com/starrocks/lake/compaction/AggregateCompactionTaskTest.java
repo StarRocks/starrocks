@@ -15,13 +15,18 @@
 package com.starrocks.lake.compaction;
 
 import com.google.common.collect.Lists;
+import com.starrocks.lake.compaction.CompactionTask;
+import com.starrocks.proto.AbortCompactionRequest;
 import com.starrocks.proto.AggregateCompactRequest;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.CompactResponse;
 import com.starrocks.proto.ComputeNodePB;
+import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.transaction.TabletCommitInfo;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
@@ -50,6 +55,39 @@ public class AggregateCompactionTaskTest {
         aggregateRequest.computeNodes.add(nodePB);
 
         CompactionTask task = new AggregateCompactionTask(10043, lakeService, aggregateRequest);
+        task.abort();
+    }
+
+    @Test
+    public void testAbort2(@Mocked LakeService lakeService) throws Exception {
+        CompactRequest request = new CompactRequest();
+        request.tabletIds = Arrays.asList(1L);
+        request.txnId = 1000L;
+        request.version = 10L;
+        ComputeNodePB nodePB = new ComputeNodePB();
+        nodePB.setHost("127.0.0.1");
+        nodePB.setBrpcPort(9030);
+        nodePB.setId(1L);
+        AggregateCompactRequest aggregateRequest = new AggregateCompactRequest();
+        aggregateRequest.requests = Lists.newArrayList();
+        aggregateRequest.computeNodes = Lists.newArrayList();
+        aggregateRequest.requests.add(request);
+        aggregateRequest.computeNodes.add(nodePB);
+
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(String host, int port) {
+                return lakeService;
+            }
+        };
+
+        CompactionTask task = new AggregateCompactionTask(10043, lakeService, aggregateRequest);
+        new Expectations() {
+            {
+                lakeService.abortCompaction((AbortCompactionRequest) any);
+                result = new RuntimeException("channel inactive error");
+            }
+        };
         task.abort();
     }
 
@@ -93,5 +131,72 @@ public class AggregateCompactionTaskTest {
         };
 
         Assert.assertEquals(100L, task.getSuccessCompactInputFileSize());
+    }
+
+    @Test
+    public void testGetResult(@Mocked LakeService lakeService, @Mocked Future<CompactResponse> mockFuture) 
+            throws Exception {
+        CompactRequest request = new CompactRequest();
+        request.tabletIds = Arrays.asList(1L);
+        request.txnId = 1000L;
+        request.version = 10L;
+        ComputeNodePB nodePB = new ComputeNodePB();
+        nodePB.setHost("127.0.0.1");
+        nodePB.setBrpcPort(9030);
+        nodePB.setId(1L);
+        AggregateCompactRequest aggregateRequest = new AggregateCompactRequest();
+        aggregateRequest.requests = Lists.newArrayList();
+        aggregateRequest.computeNodes = Lists.newArrayList();
+        aggregateRequest.requests.add(request);
+        aggregateRequest.computeNodes.add(nodePB);
+        CompactResponse mockResponse = new CompactResponse();
+
+        CompactionTask task = new AggregateCompactionTask(10043, lakeService, aggregateRequest);
+        Field field = task.getClass().getSuperclass().getDeclaredField("responseFuture");
+        field.setAccessible(true);
+        field.set(task, mockFuture);
+        
+        new Expectations() {
+            {
+                mockFuture.get(); 
+                result = mockResponse;
+                mockFuture.isDone();
+                result = true;
+            }
+        };
+        Assert.assertEquals(CompactionTask.TaskResult.ALL_SUCCESS, task.getResult());
+
+        mockResponse.failedTablets = Lists.newArrayList(1L);
+        new Expectations() {
+            {
+                mockFuture.get(); 
+                result = mockResponse;
+                mockFuture.isDone();
+                result = true;
+            }
+        };
+        Assert.assertEquals(CompactionTask.TaskResult.NONE_SUCCESS, task.getResult());
+    }
+
+    @Test
+    public void testSendRequest(@Mocked LakeService lakeService, @Mocked Future<CompactResponse> mockFuture)
+            throws Exception {
+        CompactRequest request = new CompactRequest();
+        request.tabletIds = Arrays.asList(1L);
+        request.txnId = 1000L;
+        request.version = 10L;
+        ComputeNodePB nodePB = new ComputeNodePB();
+        nodePB.setHost("127.0.0.1");
+        nodePB.setBrpcPort(9030);
+        nodePB.setId(1L);
+        AggregateCompactRequest aggregateRequest = new AggregateCompactRequest();
+        aggregateRequest.requests = Lists.newArrayList();
+        aggregateRequest.computeNodes = Lists.newArrayList();
+        aggregateRequest.requests.add(request);
+        aggregateRequest.computeNodes.add(nodePB);
+        CompactResponse mockResponse = new CompactResponse();
+
+        CompactionTask task = new AggregateCompactionTask(10043, lakeService, aggregateRequest);
+        task.sendRequest();
     }
 }
