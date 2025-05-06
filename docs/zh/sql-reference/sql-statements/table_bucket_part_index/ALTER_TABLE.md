@@ -1272,7 +1272,3 @@ ALTER TABLE db1.test_tbl DROP PERSISTENT INDEX ON TABLETS (100, 101);
 - [SHOW TABLES](SHOW_TABLES.md)
 - [SHOW ALTER TABLE](SHOW_ALTER.md)
 - [DROP TABLE](DROP_TABLE.md)
-<<<<<<< HEAD
-=======
-```
->>>>>>> ccf3c934df ([Doc] Fix ALTER STRUCT column desc (#58604))
