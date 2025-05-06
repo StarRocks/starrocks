@@ -35,7 +35,7 @@ public class MergeCommitMetricRegistry {
     private final LongCounterMetric taskSuccessNum = new LongCounterMetric("merge_commit_task_success_num",
             Metric.MetricUnit.NOUNIT, "the number of merge commit success tasks");
     private final LongCounterMetric taskFailNum = new LongCounterMetric("merge_commit_task_fail_num",
-            Metric.MetricUnit.NOUNIT, "the number of merge commit success tasks");
+            Metric.MetricUnit.NOUNIT, "the number of merge commit fail tasks");
     private final LongCounterMetric taskRunningNum = new LongCounterMetric("merge_commit_task_running_num",
             Metric.MetricUnit.NOUNIT, "the number of merge commit running tasks");
     private final LongCounterMetric loadRows = new LongCounterMetric("merge_commit_load_rows",
