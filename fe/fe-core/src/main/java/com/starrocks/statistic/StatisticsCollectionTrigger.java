@@ -232,7 +232,7 @@ public class StatisticsCollectionTrigger {
     }
 
     private void waitFinish() {
-        if (sync) {
+        if (sync && Config.enable_sync_statistic_collection) {
             // wait a short-time for the task getting executed, if too many jobs in the queue we just give up
             // waiting, otherwise it may block the data loading for a long period
             try {

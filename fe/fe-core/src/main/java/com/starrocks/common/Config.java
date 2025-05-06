@@ -2078,6 +2078,12 @@ public class Config extends ConfigBase {
     public static int max_scalar_operator_flat_children = 10000;
 
     /**
+     * Control whether to wait statistics collection or not.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_sync_statistic_collection = false;
+
+    /**
      * statistic collect flag
      */
     @ConfField(mutable = true, comment = "Whether to enable periodic analyze job, " +
