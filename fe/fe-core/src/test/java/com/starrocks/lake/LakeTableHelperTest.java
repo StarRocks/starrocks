@@ -95,7 +95,7 @@ public class LakeTableHelperTest {
 
     @Test
     public void testEnablePartitionAggregation() throws Exception {
-        List<Long> tableIdList = Lists.newArrayList(1L, 2L, 3L);
+        List<Long> tableIdList = Lists.newArrayList(1001L, 1002L, 1003L);
         Assert.assertFalse(LakeTableHelper.enablePartitionAggregation(1L, tableIdList));
     }
 
