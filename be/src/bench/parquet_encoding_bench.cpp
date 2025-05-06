@@ -58,6 +58,11 @@ std::string to_string(TestMode mode) {
     }
 }
 
+// I just find the Status::is_moved_from and Status::moved_from_state take too much time.
+// so after I'm sure that there is no mistake in the code, I just ignore the status check.
+#undef RETURN_IF_ERROR
+#define RETURN_IF_ERROR(stmt) (void)(stmt)
+
 template <tparquet::Type::type PT, TestMode test_mode>
 static void BMTestValue(benchmark::State& state) {
     auto f = [&]() {

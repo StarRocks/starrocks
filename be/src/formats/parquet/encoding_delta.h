@@ -422,11 +422,11 @@ private:
         }
         DCHECK(first_block_initialized_);
 
-        if (fixed_values_) {
-            std::fill(buffer, buffer + max_values, last_value_);
-            total_values_remaining_ -= max_values;
-            return Status::OK();
-        }
+        // if (fixed_values_) {
+        //     std::fill(buffer, buffer + max_values, last_value_);
+        //     total_values_remaining_ -= max_values;
+        //     return Status::OK();
+        // }
 
         while (i < max_values) {
             // Ensure we have an initialized mini-block
@@ -616,7 +616,6 @@ private:
         // get the number of encoded lengths
         int num_length = len_decoder_.total_values_count();
         buffered_length_.resize(num_length);
-
         // call len_decoder_.Decode to decode all the lengths.
         // all the lengths are buffered in buffered_length_.
         RETURN_IF_ERROR(len_decoder_.next_batch(num_length, reinterpret_cast<uint8_t*>(buffered_length_.data())));
@@ -660,6 +659,7 @@ private:
         }
 
         int32_t data_size = 0;
+        const uint8_t* data_ptr = data_ + bytes_offset_;
         const int32_t* length_ptr = buffered_length_.data() + length_idx_;
         for (int i = 0; i < max_values; ++i) {
             int32_t len = length_ptr[i];
@@ -672,12 +672,11 @@ private:
                 return Status::Corruption("data size overflow in DELTA_LENGTH_BYTE_ARRAY");
             }
         }
-        length_idx_ += max_values;
-        const uint8_t* data_ptr = data_ + bytes_offset_;
         for (int i = 0; i < max_values; ++i) {
             buffer[i].data = (char*)data_ptr;
             data_ptr += buffer[i].size;
         }
+        length_idx_ += max_values;
         num_valid_values_ -= max_values;
         bytes_offset_ += data_size;
         if (PREDICT_FALSE(bytes_offset_ > len_)) {
@@ -785,7 +784,6 @@ private:
 
 // ----------------------------------------------------------------------
 // DELTA_BYTE_ARRAY decoder
-
 class DeltaByteArrayDecoder : public Decoder {
 public:
     DeltaByteArrayDecoder() = default;
@@ -880,7 +878,7 @@ protected:
 
         DCHECK_EQ(is_first_run, i == 0);
         if constexpr (!is_first_run) {
-            if (buffer[i].size == 0) {
+            if (PREDICT_FALSE(buffer[i].size == 0)) {
                 // suffix is empty: buffer[i] can simply point to the prefix.
                 // This is not possible for the first run since the prefix
                 // would point to the mutable `last_value_`.
