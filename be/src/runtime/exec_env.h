@@ -38,6 +38,8 @@
 #include <memory>
 #include <unordered_map>
 
+#include "cache/block_cache/disk_space_monitor.h"
+#include "cache/block_cache/local_cache.h"
 #include "common/status.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/schedule/pipeline_timer.h"
@@ -48,8 +50,8 @@
 #include "storage/options.h"
 #include "util/threadpool.h"
 // NOTE: Be careful about adding includes here. This file is included by many files.
-// Unnecssary includes will cause compilatio very slow.
-// So please consider use forward declaraion as much as possible.
+// Unnecessary includes will cause compilation very slow.
+// So please consider use forward declaration as much as possible.
 
 namespace starrocks {
 class AgentServer;
@@ -82,6 +84,7 @@ class ProfileReportWorker;
 class QuerySpillManager;
 class BlockCache;
 class ObjectCache;
+class RemoteCache;
 class StoragePageCache;
 struct RfTracePoint;
 
@@ -251,6 +254,8 @@ public:
 
     void try_release_resource_before_core_dump();
 
+    LocalCache* local_cache() const { return _local_cache.get(); }
+    std::shared_ptr<LocalCache> local_cache_ptr() { return _local_cache; }
     BlockCache* block_cache() const { return _block_cache.get(); }
     ObjectCache* external_table_meta_cache() const { return _starcache_based_object_cache.get(); }
     ObjectCache* external_table_page_cache() const { return _starcache_based_object_cache.get(); }
@@ -267,6 +272,10 @@ private:
 
     GlobalEnv* _global_env;
     std::vector<StorePath> _store_paths;
+
+    std::shared_ptr<LocalCache> _local_cache;
+    std::shared_ptr<RemoteCache> _remote_cache;
+    std::shared_ptr<DiskSpaceMonitor> _disk_space_monitor;
 
     std::shared_ptr<BlockCache> _block_cache;
     std::shared_ptr<ObjectCache> _starcache_based_object_cache;

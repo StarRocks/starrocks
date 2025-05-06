@@ -87,14 +87,17 @@ void HdfsScannerTest::_create_runtime_state(const std::string& timezone) {
 }
 
 Status HdfsScannerTest::_init_datacache(size_t mem_size, const std::string& engine) {
-    BlockCache* cache = BlockCache::instance();
+    auto local_cache = CacheEnv::GetInstance()->local_cache_ptr();
     CacheOptions cache_options;
     cache_options.mem_space_size = mem_size;
     cache_options.block_size = starrocks::config::datacache_block_size;
     cache_options.enable_checksum = starrocks::config::datacache_checksum_enable;
     cache_options.max_concurrent_inserts = 1500000;
     cache_options.engine = engine;
-    return cache->init(cache_options);
+    RETURN_IF_ERROR(local_cache->init(cache_options));
+
+    BlockCache* cache = BlockCache::instance();
+    return cache->init(cache_options, local_cache, nullptr);
 }
 
 THdfsScanRange* HdfsScannerTest::_create_scan_range(const std::string& file, uint64_t offset, uint64_t length) {

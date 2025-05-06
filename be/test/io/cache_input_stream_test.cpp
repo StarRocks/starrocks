@@ -17,6 +17,8 @@
 #include <gtest/gtest.h>
 
 #include "cache/block_cache/block_cache.h"
+#include "cache/block_cache/starcache_wrapper.h"
+#include "runtime/exec_env.h"
 #include "fs/fs_util.h"
 #include "testutil/assert.h"
 
@@ -113,7 +115,9 @@ const int64_t CacheInputStreamTest::block_size = 256 * 1024;
 
 TEST_F(CacheInputStreamTest, test_aligned_read) {
     CacheOptions options = cache_options();
-    ASSERT_OK(BlockCache::instance()->init(options));
+    auto local_cache = CacheEnv::GetInstance()->local_cache_ptr();
+    ASSERT_OK(local_cache->init(options));
+    ASSERT_OK(BlockCache::instance()->init(options, local_cache, nullptr));
 
     const int64_t block_count = 3;
 
@@ -149,7 +153,9 @@ TEST_F(CacheInputStreamTest, test_aligned_read) {
 
 TEST_F(CacheInputStreamTest, test_random_read) {
     CacheOptions options = cache_options();
-    ASSERT_OK(BlockCache::instance()->init(options));
+    auto local_cache = CacheEnv::GetInstance()->local_cache_ptr();
+    ASSERT_OK(local_cache->init(options));
+    ASSERT_OK(BlockCache::instance()->init(options, local_cache, nullptr));
 
     const int64_t block_count = 3;
 
@@ -191,7 +197,9 @@ TEST_F(CacheInputStreamTest, test_random_read) {
 
 TEST_F(CacheInputStreamTest, test_file_overwrite) {
     CacheOptions options = cache_options();
-    ASSERT_OK(BlockCache::instance()->init(options));
+    auto local_cache = CacheEnv::GetInstance()->local_cache_ptr();
+    ASSERT_OK(local_cache->init(options));
+    ASSERT_OK(BlockCache::instance()->init(options, local_cache, nullptr));
 
     const int64_t block_count = 3;
 
@@ -238,7 +246,9 @@ TEST_F(CacheInputStreamTest, test_file_overwrite) {
 
 TEST_F(CacheInputStreamTest, test_read_from_io_buffer) {
     CacheOptions options = cache_options();
-    ASSERT_OK(BlockCache::instance()->init(options));
+    auto local_cache = CacheEnv::GetInstance()->local_cache_ptr();
+    ASSERT_OK(local_cache->init(options));
+    ASSERT_OK(BlockCache::instance()->init(options, local_cache, nullptr));
 
     const int64_t block_count = 1;
 
@@ -275,7 +285,9 @@ TEST_F(CacheInputStreamTest, test_read_from_io_buffer) {
 
 TEST_F(CacheInputStreamTest, test_read_zero_copy) {
     CacheOptions options = cache_options();
-    ASSERT_OK(BlockCache::instance()->init(options));
+    auto local_cache = CacheEnv::GetInstance()->local_cache_ptr();
+    ASSERT_OK(local_cache->init(options));
+    ASSERT_OK(BlockCache::instance()->init(options, local_cache, nullptr));
 
     int64_t data_size = block_size + 1024;
     char data[data_size + 1];
@@ -299,7 +311,9 @@ TEST_F(CacheInputStreamTest, test_read_zero_copy) {
 
 TEST_F(CacheInputStreamTest, test_read_with_zero_range) {
     CacheOptions options = cache_options();
-    ASSERT_OK(BlockCache::instance()->init(options));
+    auto local_cache = CacheEnv::GetInstance()->local_cache_ptr();
+    ASSERT_OK(local_cache->init(options));
+    ASSERT_OK(BlockCache::instance()->init(options, local_cache, nullptr));
 
     const int64_t block_count = 1;
     int64_t data_size = block_size * block_count;
@@ -335,7 +349,9 @@ TEST_F(CacheInputStreamTest, test_read_with_adaptor) {
     // Because the cache adaptor only work for disk cache.
     options.disk_spaces.push_back({.path = cache_dir, .size = 300 * 1024 * 1024});
     options.enable_tiered_cache = false;
-    ASSERT_OK(BlockCache::instance()->init(options));
+    auto local_cache = CacheEnv::GetInstance()->local_cache_ptr();
+    ASSERT_OK(local_cache->init(options));
+    ASSERT_OK(BlockCache::instance()->init(options, local_cache, nullptr));
 
     const int64_t block_count = 2;
 
@@ -401,7 +417,9 @@ TEST_F(CacheInputStreamTest, test_read_with_adaptor) {
 
 TEST_F(CacheInputStreamTest, test_read_with_shared_buffer) {
     CacheOptions options = cache_options();
-    ASSERT_OK(BlockCache::instance()->init(options));
+    auto local_cache = CacheEnv::GetInstance()->local_cache_ptr();
+    ASSERT_OK(local_cache->init(options));
+    ASSERT_OK(BlockCache::instance()->init(options, local_cache, nullptr));
 
     const int64_t block_count = 2;
 
@@ -446,7 +464,9 @@ TEST_F(CacheInputStreamTest, test_read_with_shared_buffer) {
 
 TEST_F(CacheInputStreamTest, test_peek) {
     CacheOptions options = cache_options();
-    ASSERT_OK(BlockCache::instance()->init(options));
+    auto local_cache = CacheEnv::GetInstance()->local_cache_ptr();
+    ASSERT_OK(local_cache->init(options));
+    ASSERT_OK(BlockCache::instance()->init(options, local_cache, nullptr));
 
     const int64_t block_count = 2;
 
@@ -488,7 +508,9 @@ TEST_F(CacheInputStreamTest, test_peek) {
 
 TEST_F(CacheInputStreamTest, test_try_peer_cache) {
     CacheOptions options = cache_options();
-    ASSERT_OK(BlockCache::instance()->init(options));
+    auto local_cache = CacheEnv::GetInstance()->local_cache_ptr();
+    ASSERT_OK(local_cache->init(options));
+    ASSERT_OK(BlockCache::instance()->init(options, local_cache, nullptr));
 
     const int64_t block_count = 3;
 

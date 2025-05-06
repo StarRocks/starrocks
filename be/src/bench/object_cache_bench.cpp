@@ -71,7 +71,7 @@ private:
     size_t _capacity = 100L * 1024 * 1024 * 1024;
     size_t _page_size = 1024;
 
-    std::shared_ptr<BlockCache> _block_cache;
+    std::shared_ptr<StarCacheWrapper> _local_cache;
     std::shared_ptr<LRUCacheModule> _lru_cache;
     std::shared_ptr<StarCacheModule> _star_cache;
 };
@@ -131,13 +131,13 @@ void ObjectCacheBench::init_cache(CacheType cache_type) {
         opt.engine = "starcache";
         opt.eviction_policy = config::datacache_eviction_policy;
 
-        _block_cache = std::make_shared<BlockCache>();
-        Status st = _block_cache->init(opt);
+        _local_cache = std::make_shared<StarCacheWrapper>();
+        Status st = _local_cache->init(opt);
         if (!st.ok()) {
             LOG(FATAL) << "init star cache failed: " << st;
         }
 
-        _star_cache = std::make_shared<StarCacheModule>(_block_cache->starcache_instance());
+        _star_cache = std::make_shared<StarCacheModule>(_local_cache->starcache_instance());
         LOG(INFO) << "init star cache succ";
     }
 }

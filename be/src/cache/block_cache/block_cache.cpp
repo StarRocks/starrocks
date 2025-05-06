@@ -16,21 +16,17 @@
 
 #include <fmt/format.h>
 
-#include "runtime/exec_env.h"
-
-#ifdef WITH_STARCACHE
-#include "cache/block_cache/starcache_wrapper.h"
-#endif
 #include "cache/block_cache/peer_cache_wrapper.h"
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/exec_env.h"
 #include "util/hash_util.hpp"
 
 namespace starrocks {
 
 namespace fs = std::filesystem;
 
-// For starcache, in theory we doesn't have a hard limitation for block size, but a very large
+// For starcache, in theory we don't have a hard limitation for block size, but a very large
 // block_size may cause heavy read amplification. So, we also limit it to 2 MB as an empirical value.
 const size_t BlockCache::MAX_BLOCK_SIZE = 2 * 1024 * 1024;
 
@@ -42,32 +38,13 @@ BlockCache::~BlockCache() {
     (void)shutdown();
 }
 
-Status BlockCache::init(const CacheOptions& options) {
+Status BlockCache::init(const CacheOptions& options, std::shared_ptr<LocalCache> local_cache,
+                        std::shared_ptr<RemoteCache> remote_cache) {
     _block_size = std::min(options.block_size, MAX_BLOCK_SIZE);
-    auto cache_options = options;
-#ifdef WITH_STARCACHE
-    if (cache_options.engine == "starcache") {
-        _local_cache = std::make_unique<StarCacheWrapper>();
-        _disk_space_monitor = std::make_unique<DiskSpaceMonitor>(this);
-        RETURN_IF_ERROR(_disk_space_monitor->init(&cache_options.disk_spaces));
-        LOG(INFO) << "init starcache engine, block_size: " << _block_size
-                  << ", disk_spaces: " << _disk_space_monitor->to_string(cache_options.disk_spaces);
-    }
-#endif
-    if (!_local_cache) {
-        LOG(ERROR) << "unsupported block cache engine: " << cache_options.engine;
-        return Status::NotSupported("unsupported block cache engine");
-    }
-    RETURN_IF_ERROR(_local_cache->init(cache_options));
+    _local_cache = std::move(local_cache);
+    _remote_cache = std::move(remote_cache);
 
-    _remote_cache = std::make_shared<PeerCacheWrapper>();
-    RETURN_IF_ERROR(_remote_cache->init(cache_options));
-
-    _refresh_quota();
     _initialized.store(true, std::memory_order_relaxed);
-    if (_disk_space_monitor) {
-        _disk_space_monitor->start();
-    }
     return Status::OK();
 }
 
@@ -142,22 +119,6 @@ Status BlockCache::remove(const CacheKey& cache_key, off_t offset, size_t size) 
     return _local_cache->remove(block_key);
 }
 
-Status BlockCache::update_mem_quota(size_t quota_bytes, bool flush_to_disk) {
-    Status st = _local_cache->update_mem_quota(quota_bytes, flush_to_disk);
-    _refresh_quota();
-    return st;
-}
-
-Status BlockCache::update_disk_spaces(const std::vector<DirSpace>& spaces) {
-    Status st = _local_cache->update_disk_spaces(spaces);
-    _refresh_quota();
-    return st;
-}
-
-const DataCacheMetrics BlockCache::cache_metrics(int level) const {
-    return _local_cache->cache_metrics(level);
-}
-
 Status BlockCache::read_buffer_from_remote_cache(const std::string& cache_key, size_t offset, size_t size,
                                                  IOBuffer* buffer, ReadCacheOptions* options) {
     if (size == 0) {
@@ -188,33 +149,10 @@ Status BlockCache::shutdown() {
     }
     _initialized.store(false, std::memory_order_relaxed);
 
-    if (_disk_space_monitor) {
-        _disk_space_monitor->stop();
-    }
-    Status local_st = _local_cache->shutdown();
-    Status remote_st = _remote_cache->shutdown();
     _local_cache.reset();
     _remote_cache.reset();
 
-    return local_st.ok() ? remote_st : local_st;
-}
-
-void BlockCache::disk_spaces(std::vector<DirSpace>* spaces) {
-    spaces->clear();
-    auto metrics = _local_cache->cache_metrics(0);
-    for (auto& dir : metrics.disk_dir_spaces) {
-        spaces->push_back({.path = dir.path, .size = dir.quota_bytes});
-    }
-}
-
-DataCacheEngineType BlockCache::engine_type() {
-    return _local_cache->engine_type();
-}
-
-void BlockCache::_refresh_quota() {
-    auto metrics = _local_cache->cache_metrics(0);
-    _mem_quota.store(metrics.mem_quota_bytes, std::memory_order_relaxed);
-    _disk_quota.store(metrics.disk_quota_bytes, std::memory_order_relaxed);
+    return Status::OK();
 }
 
 } // namespace starrocks

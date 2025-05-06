@@ -34,7 +34,8 @@ public:
     ~BlockCache();
 
     // Init the block cache instance
-    Status init(const CacheOptions& options);
+    Status init(const CacheOptions& options, std::shared_ptr<LocalCache> local_cache,
+                std::shared_ptr<RemoteCache> remote_cache);
 
     // Write data buffer to cache, the `offset` must be aligned by block size
     Status write(const CacheKey& cache_key, off_t offset, const IOBuffer& buffer, WriteCacheOptions* options = nullptr);
@@ -55,25 +56,15 @@ public:
     // Remove data from cache. The offset and size must be aligned by block size
     Status remove(const CacheKey& cache_key, off_t offset, size_t size);
 
-    // Update the datacache memory quota.
-    Status update_mem_quota(size_t quota_bytes, bool flush_to_disk);
-
-    // Update the datacache disk space infomation, such as disk quota or disk path.
-    Status update_disk_spaces(const std::vector<DirSpace>& spaces);
-
-    // Get datacache metrics.
-    // The level can be: 0, 1, 2. The higher the level, more detailed metrics will be returned.
-    const DataCacheMetrics cache_metrics(int level = 0) const;
-
     // Read data from remote cache
     Status read_buffer_from_remote_cache(const std::string& cache_key, size_t offset, size_t size, IOBuffer* buffer,
                                          ReadCacheOptions* options);
 
-    void record_read_local_cache(size_t size, int64_t lateny_us);
+    void record_read_local_cache(size_t size, int64_t latency_us);
 
-    void record_read_remote_cache(size_t size, int64_t lateny_us);
+    void record_read_remote_cache(size_t size, int64_t latency_us);
 
-    void record_read_remote_storage(size_t size, int64_t lateny_us, bool local_only);
+    void record_read_remote_storage(size_t size, int64_t latency_us, bool local_only);
 
     // Shutdown the cache instance to save some state meta
     Status shutdown();
@@ -82,34 +73,17 @@ public:
 
     bool is_initialized() const { return _initialized.load(std::memory_order_relaxed); }
 
-    bool has_mem_cache() const { return _mem_quota.load(std::memory_order_relaxed) > 0; }
-
-    bool has_disk_cache() const { return _disk_quota.load(std::memory_order_relaxed) > 0; }
-
-    bool available() const { return is_initialized() && (has_mem_cache() || has_disk_cache()); }
-    bool mem_cache_available() const { return is_initialized() && has_mem_cache(); }
-
-    void disk_spaces(std::vector<DirSpace>* spaces);
-
-    DataCacheEngineType engine_type();
-
-#ifdef WITH_STARCACHE
-    std::shared_ptr<starcache::StarCache> starcache_instance() { return _local_cache->starcache_instance(); }
-#endif
+    bool available() const { return is_initialized() && _local_cache->available(); }
+    bool mem_cache_available() const { return is_initialized() && _local_cache->mem_cache_available(); }
+    LocalCache* local_cache() const { return _local_cache.get(); }
 
     static const size_t MAX_BLOCK_SIZE;
 
 private:
-    void _refresh_quota();
-
     size_t _block_size = 0;
     std::shared_ptr<LocalCache> _local_cache;
     std::shared_ptr<RemoteCache> _remote_cache;
-    std::unique_ptr<DiskSpaceMonitor> _disk_space_monitor;
-    std::vector<std::string> _disk_paths;
     std::atomic<bool> _initialized = false;
-    std::atomic<size_t> _mem_quota = 0;
-    std::atomic<size_t> _disk_quota = 0;
 };
 
 } // namespace starrocks

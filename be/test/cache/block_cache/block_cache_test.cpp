@@ -14,7 +14,6 @@
 
 #include "cache/block_cache/block_cache.h"
 
-#include <fmt/format.h>
 #include <gtest/gtest.h>
 
 #include <cstring>
@@ -24,7 +23,7 @@
 #include "common/logging.h"
 #include "common/statusor.h"
 #include "fs/fs_util.h"
-#include "storage/options.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -71,11 +70,11 @@ TEST_F(BlockCacheTest, copy_to_iobuf) {
     ASSERT_EQ(memcmp(result, expect, size), 0);
 }
 
-#ifdef WITH_STARCACHE
 TEST_F(BlockCacheTest, hybrid_cache) {
     const std::string cache_dir = "./block_disk_cache3";
     ASSERT_TRUE(fs::create_directories(cache_dir).ok());
 
+    auto local_cache = std::make_shared<StarCacheWrapper>();
     std::unique_ptr<BlockCache> cache(new BlockCache);
     const size_t block_size = 256 * 1024;
 
@@ -88,8 +87,8 @@ TEST_F(BlockCacheTest, hybrid_cache) {
     options.max_flying_memory_mb = 100;
     options.enable_direct_io = false;
     options.engine = "starcache";
-    Status status = cache->init(options);
-    ASSERT_TRUE(status.ok());
+    ASSERT_OK(local_cache->init(options));
+    ASSERT_OK(cache->init(options, local_cache, nullptr));
 
     const size_t batch_size = block_size;
     const size_t rounds = 10;
@@ -115,8 +114,7 @@ TEST_F(BlockCacheTest, hybrid_cache) {
 
     // remove cache
     char value[1024] = {0};
-    status = cache->remove(cache_key, 0, batch_size);
-    ASSERT_TRUE(status.ok());
+    ASSERT_OK(cache->remove(cache_key, 0, batch_size));
 
     auto res = cache->read(cache_key, 0, batch_size, value);
     ASSERT_TRUE(res.status().is_not_found());
@@ -130,6 +128,7 @@ TEST_F(BlockCacheTest, hybrid_cache) {
 }
 
 TEST_F(BlockCacheTest, write_with_overwrite_option) {
+    auto local_cache = std::make_shared<StarCacheWrapper>();
     std::unique_ptr<BlockCache> cache(new BlockCache);
     const size_t block_size = 1024 * 1024;
 
@@ -140,24 +139,22 @@ TEST_F(BlockCacheTest, write_with_overwrite_option) {
     options.max_flying_memory_mb = 100;
     options.engine = "starcache";
     options.inline_item_count_limit = 1000;
-    Status status = cache->init(options);
-    ASSERT_TRUE(status.ok());
+    ASSERT_OK(local_cache->init(options));
+    ASSERT_OK(cache->init(options, local_cache, nullptr));
 
     const size_t cache_size = 1024;
     const std::string cache_key = "test_file";
 
     std::string value(cache_size, 'a');
-    Status st = cache->write(cache_key, 0, cache_size, value.c_str());
-    ASSERT_TRUE(st.ok());
+    ASSERT_OK(cache->write(cache_key, 0, cache_size, value.c_str()));
 
     WriteCacheOptions write_options;
     std::string value2(cache_size, 'b');
-    st = cache->write(cache_key, 0, cache_size, value2.c_str(), &write_options);
+    Status st = cache->write(cache_key, 0, cache_size, value2.c_str(), &write_options);
     ASSERT_TRUE(st.is_already_exist());
 
     write_options.overwrite = true;
-    st = cache->write(cache_key, 0, cache_size, value2.c_str(), &write_options);
-    ASSERT_TRUE(st.ok());
+    ASSERT_OK(cache->write(cache_key, 0, cache_size, value2.c_str(), &write_options));
 
     char rvalue[cache_size] = {0};
     auto res = cache->read(cache_key, 0, cache_size, rvalue);
@@ -177,6 +174,7 @@ TEST_F(BlockCacheTest, read_cache_with_adaptor) {
     const std::string cache_dir = "./block_disk_cache4";
     ASSERT_TRUE(fs::create_directories(cache_dir).ok());
 
+    auto local_cache = std::make_shared<StarCacheWrapper>();
     std::unique_ptr<BlockCache> cache(new BlockCache);
     const size_t block_size = 1024 * 1024;
 
@@ -189,8 +187,8 @@ TEST_F(BlockCacheTest, read_cache_with_adaptor) {
     options.max_flying_memory_mb = 100;
     options.engine = "starcache";
     options.skip_read_factor = 1;
-    Status status = cache->init(options);
-    ASSERT_TRUE(status.ok());
+    ASSERT_OK(local_cache->init(options));
+    ASSERT_OK(cache->init(options, local_cache, nullptr));
 
     const size_t batch_size = block_size - 1234;
     const size_t rounds = 20;
@@ -248,6 +246,7 @@ TEST_F(BlockCacheTest, update_cache_quota) {
     const std::string cache_dir = "./block_disk_cache5";
     ASSERT_TRUE(fs::create_directories(cache_dir).ok());
 
+    auto local_cache = std::make_shared<StarCacheWrapper>();
     std::unique_ptr<BlockCache> cache(new BlockCache);
     const size_t block_size = 256 * 1024;
 
@@ -260,19 +259,19 @@ TEST_F(BlockCacheTest, update_cache_quota) {
     options.max_flying_memory_mb = 100;
     options.enable_direct_io = false;
     options.engine = "starcache";
-    Status status = cache->init(options);
-    ASSERT_TRUE(status.ok());
+    ASSERT_OK(local_cache->init(options));
+    ASSERT_OK(cache->init(options, local_cache, nullptr));
 
     {
-        auto metrics = cache->cache_metrics();
+        auto metrics = local_cache->cache_metrics(0);
         ASSERT_EQ(metrics.mem_quota_bytes, options.mem_space_size);
         ASSERT_EQ(metrics.disk_quota_bytes, quota);
     }
 
     {
         size_t new_mem_quota = 2 * 1024 * 1024;
-        ASSERT_TRUE(cache->update_mem_quota(new_mem_quota, false).ok());
-        auto metrics = cache->cache_metrics();
+        ASSERT_OK(local_cache->update_mem_quota(new_mem_quota, false));
+        auto metrics = local_cache->cache_metrics(0);
         ASSERT_EQ(metrics.mem_quota_bytes, new_mem_quota);
     }
 
@@ -280,8 +279,8 @@ TEST_F(BlockCacheTest, update_cache_quota) {
         size_t new_disk_quota = 100 * 1024 * 1024;
         std::vector<DirSpace> dir_spaces;
         dir_spaces.push_back({.path = cache_dir, .size = new_disk_quota});
-        ASSERT_TRUE(cache->update_disk_spaces(dir_spaces).ok());
-        auto metrics = cache->cache_metrics();
+        ASSERT_OK(local_cache->update_disk_spaces(dir_spaces));
+        auto metrics = local_cache->cache_metrics(0);
         ASSERT_EQ(metrics.disk_quota_bytes, new_disk_quota);
     }
 
@@ -293,6 +292,7 @@ TEST_F(BlockCacheTest, clear_residual_blockfiles) {
     const std::string cache_dir = "./block_disk_cache6";
     ASSERT_TRUE(fs::create_directories(cache_dir).ok());
 
+    auto local_cache = std::make_shared<StarCacheWrapper>();
     std::unique_ptr<BlockCache> cache(new BlockCache);
     const size_t block_size = 256 * 1024;
 
@@ -305,8 +305,8 @@ TEST_F(BlockCacheTest, clear_residual_blockfiles) {
     options.max_flying_memory_mb = 100;
     options.enable_direct_io = false;
     options.engine = "starcache";
-    Status status = cache->init(options);
-    ASSERT_TRUE(status.ok());
+    ASSERT_OK(local_cache->init(options));
+    ASSERT_OK(cache->init(options, local_cache, nullptr));
 
     // write cache
     {
@@ -341,23 +341,21 @@ TEST_F(BlockCacheTest, clear_residual_blockfiles) {
 }
 
 TEST_F(BlockCacheTest, read_peer_cache) {
+    auto local_cache = std::make_shared<StarCacheWrapper>();
     std::unique_ptr<BlockCache> cache(new BlockCache);
     CacheOptions options;
     options.mem_space_size = 1024 * 1024;
     options.engine = "starcache";
-    Status status = cache->init(options);
-    ASSERT_TRUE(status.ok());
+    ASSERT_OK(local_cache->init(options));
+    ASSERT_OK(cache->init(options, local_cache, nullptr));
 
     IOBuffer iobuf;
     ReadCacheOptions read_options;
     read_options.remote_host = "127.0.0.1";
     read_options.remote_port = 0;
-    auto st = cache->read_buffer_from_remote_cache("test_key", 0, 100, &iobuf, &read_options);
-    ASSERT_FALSE(st.ok());
+    ASSERT_OK(cache->read_buffer_from_remote_cache("test_key", 0, 100, &iobuf, &read_options));
 
     cache->shutdown();
 }
-
-#endif
 
 } // namespace starrocks

@@ -20,11 +20,10 @@
 #include <rapidjson/document.h>
 
 #include "cache/block_cache/block_cache.h"
+#include "cache/block_cache/local_cache.h"
 #include "cache/block_cache/block_cache_hit_rate_counter.hpp"
-#include "gen_cpp/HeartbeatService_types.h"
 #include "http/http_channel.h"
 #include "http/http_request.h"
-#include "runtime/exec_env.h"
 #include "util/brpc_stub_cache.h"
 
 namespace starrocks {
@@ -38,7 +37,7 @@ static void inject_send_reply(HttpRequest* request, HttpStatus status, std::stri
 }
 } // namespace
 
-Status init_datacache_instance(const std::string& engine, BlockCache* cache) {
+Status init_datacache_instance(const std::string& engine, LocalCache* cache) {
     if (cache->is_initialized()) {
         return Status::OK();
     }
@@ -73,7 +72,7 @@ protected:
 };
 
 TEST_F(DataCacheActionTest, stat_success) {
-    auto cache = std::make_shared<BlockCache>();
+    auto cache = std::make_shared<StarCacheWrapper>();
     ASSERT_TRUE(init_datacache_instance("starcache", cache.get()).ok());
 
     DataCacheAction action(cache.get());
@@ -91,7 +90,7 @@ TEST_F(DataCacheActionTest, stat_success) {
 }
 
 TEST_F(DataCacheActionTest, app_stat_success) {
-    auto cache = std::make_shared<BlockCache>();
+    auto cache = std::make_shared<StarCacheWrapper>();
     BlockCacheHitRateCounter* counter = BlockCacheHitRateCounter::instance();
     counter->reset();
     ASSERT_TRUE(init_datacache_instance("starcache", cache.get()).ok());
@@ -135,7 +134,7 @@ TEST_F(DataCacheActionTest, app_stat_success) {
 }
 
 TEST_F(DataCacheActionTest, stat_with_uninitialized_cache) {
-    auto cache = std::make_shared<BlockCache>();
+    auto cache = std::make_shared<StarCacheWrapper>();
     DataCacheAction action(cache.get());
 
     HttpRequest request(_evhttp_req);

@@ -56,7 +56,9 @@ Status StarCacheWrapper::init(const CacheOptions& options) {
     _enable_tiered_cache = options.enable_tiered_cache;
     _enable_datacache_persistence = options.enable_datacache_persistence;
     _cache = std::make_shared<starcache::StarCache>();
-    return to_status(_cache->init(opt));
+    RETURN_IF_ERROR(to_status(_cache->init(opt)));
+    _refresh_quota();
+    return Status::OK();
 }
 
 Status StarCacheWrapper::write(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) {
@@ -119,8 +121,18 @@ Status StarCacheWrapper::remove(const std::string& key) {
     return Status::OK();
 }
 
+void StarCacheWrapper::disk_spaces(std::vector<DirSpace>* spaces) {
+    spaces->clear();
+    auto metrics = cache_metrics(0);
+    for (auto& dir : metrics.disk_dir_spaces) {
+        spaces->push_back({.path = dir.path, .size = dir.quota_bytes});
+    }
+}
+
 Status StarCacheWrapper::update_mem_quota(size_t quota_bytes, bool flush_to_disk) {
-    return to_status(_cache->update_mem_quota(quota_bytes, flush_to_disk));
+    RETURN_IF_ERROR(to_status(_cache->update_mem_quota(quota_bytes, flush_to_disk)));
+    _refresh_quota();
+    return Status::OK();
 }
 
 Status StarCacheWrapper::update_disk_spaces(const std::vector<DirSpace>& spaces) {
@@ -129,14 +141,16 @@ Status StarCacheWrapper::update_disk_spaces(const std::vector<DirSpace>& spaces)
     for (auto& dir : spaces) {
         disk_spaces.push_back({.path = dir.path, .quota_bytes = dir.size});
     }
-    return to_status(_cache->update_disk_spaces(disk_spaces));
+    RETURN_IF_ERROR(to_status(_cache->update_disk_spaces(disk_spaces)));
+    _refresh_quota();
+    return Status::OK();
 }
 
-const DataCacheMetrics StarCacheWrapper::cache_metrics(int level) {
+const DataCacheMetrics StarCacheWrapper::cache_metrics(int level) const {
     auto metrics = _cache->metrics(level);
-    // Now the EEXIST is treated as an failed status in starcache, which will cause the write_fail_count too large
+    // Now the EEXIST is treated as a failed status in starcache, which will cause the write_fail_count too large
     // in many cases because we write cache with `overwrite=false` now. It makes users confused.
-    // As real writing failure rarely occursso currently, so we temporarily adjust it here.
+    // As real writing failure rarely occur currently, so we temporarily adjust it here.
     // Once the starcache library is update, the following lines will be removed.
     if (metrics.detail_l2) {
         metrics.detail_l2->write_success_count += metrics.detail_l2->write_fail_count;
@@ -145,21 +159,27 @@ const DataCacheMetrics StarCacheWrapper::cache_metrics(int level) {
     return metrics;
 }
 
-void StarCacheWrapper::record_read_remote(size_t size, int64_t lateny_us) {
+void StarCacheWrapper::record_read_remote(size_t size, int64_t latency_us) {
     if (_cache_adaptor) {
-        return _cache_adaptor->record_read_remote(size, lateny_us);
+        return _cache_adaptor->record_read_remote(size, latency_us);
     }
 }
 
-void StarCacheWrapper::record_read_cache(size_t size, int64_t lateny_us) {
+void StarCacheWrapper::record_read_cache(size_t size, int64_t latency_us) {
     if (_cache_adaptor) {
-        return _cache_adaptor->record_read_cache(size, lateny_us);
+        return _cache_adaptor->record_read_cache(size, latency_us);
     }
 }
 
 Status StarCacheWrapper::shutdown() {
     // TODO: starcache implement shutdown to release memory
     return Status::OK();
+}
+
+void StarCacheWrapper::_refresh_quota() {
+    auto metrics = cache_metrics(0);
+    _mem_quota.store(metrics.mem_quota_bytes, std::memory_order_relaxed);
+    _disk_quota.store(metrics.disk_quota_bytes, std::memory_order_relaxed);
 }
 
 } // namespace starrocks

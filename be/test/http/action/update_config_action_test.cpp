@@ -24,6 +24,7 @@
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
 #include "testutil/scoped_updater.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks {
 
@@ -43,7 +44,7 @@ TEST_F(UpdateConfigActionTest, update_datacache_disk_size) {
     const std::string cache_dir = "./block_cache_for_update_config";
     ASSERT_TRUE(fs::create_directories(cache_dir).ok());
 
-    auto cache = BlockCache::instance();
+    auto* cache = CacheEnv::GetInstance()->local_cache();
     CacheOptions options;
     options.mem_space_size = 0;
     options.disk_spaces.push_back({.path = cache_dir, .size = 50 * 1024 * 1024});
@@ -51,16 +52,13 @@ TEST_F(UpdateConfigActionTest, update_datacache_disk_size) {
     options.block_size = 256 * 1024;
     options.enable_checksum = false;
     options.engine = "starcache";
-    Status st = BlockCache::instance()->init(options);
-    ASSERT_TRUE(st.ok());
+    ASSERT_OK(cache->init(options));
 
     UpdateConfigAction action(ExecEnv::GetInstance());
 
-    st = action.update_config("datacache_disk_size", "-200");
-    ASSERT_TRUE(!st.ok());
+    ASSERT_ERROR(action.update_config("datacache_disk_size", "-200"));
 
-    st = action.update_config("datacache_disk_size", "100000000");
-    ASSERT_TRUE(st.ok());
+    ASSERT_ERROR(action.update_config("datacache_disk_size", "100000000"));
 
     std::vector<DirSpace> spaces;
     cache->disk_spaces(&spaces);
@@ -73,8 +71,7 @@ TEST_F(UpdateConfigActionTest, update_datacache_disk_size) {
 TEST_F(UpdateConfigActionTest, test_update_pindex_load_thread_pool_num_max) {
     UpdateConfigAction action(ExecEnv::GetInstance());
 
-    auto st = action.update_config("pindex_load_thread_pool_num_max", "16");
-    CHECK_OK(st);
+    ASSERT_OK(action.update_config("pindex_load_thread_pool_num_max", "16"));
 
     auto* load_pool = StorageEngine::instance()->update_manager()->get_pindex_load_executor()->TEST_get_load_pool();
     ASSERT_EQ(16, load_pool->max_threads());

@@ -106,6 +106,11 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             return Status::OK();
         });
         _config_callback.emplace("datacache_mem_size", [&]() -> Status {
+            LocalCache* cache = CacheEnv::GetInstance()->local_cache();
+            if (cache == nullptr || !cache->is_initialized()) {
+                return Status::InternalError("Loacl cache is not initialized");
+            }
+
             size_t mem_size = 0;
             Status st = DataCacheUtils::parse_conf_datacache_mem_size(
                     config::datacache_mem_size, GlobalEnv::GetInstance()->process_mem_limit(), &mem_size);
@@ -113,11 +118,15 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 LOG(WARNING) << "Failed to update datacache mem size";
                 return st;
             }
-            return BlockCache::instance()->update_mem_quota(mem_size, true);
+            return cache->update_mem_quota(mem_size, true);
         });
         _config_callback.emplace("datacache_disk_size", [&]() -> Status {
+            LocalCache* cache = CacheEnv::GetInstance()->local_cache();
+            if (cache == nullptr || !cache->is_initialized()) {
+                return Status::InternalError("Local cache is not initialized");
+            }
             std::vector<DirSpace> spaces;
-            BlockCache::instance()->disk_spaces(&spaces);
+            cache->disk_spaces(&spaces);
             for (auto& space : spaces) {
                 ASSIGN_OR_RETURN(int64_t disk_size, DataCacheUtils::parse_conf_datacache_disk_size(
                                                             space.path, config::datacache_disk_size, -1));
@@ -127,7 +136,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 }
                 space.size = disk_size;
             }
-            return BlockCache::instance()->update_disk_spaces(spaces);
+            return cache->update_disk_spaces(spaces);
         });
         _config_callback.emplace("max_compaction_concurrency", [&]() -> Status {
             if (!config::enable_event_based_compaction_framework) {

@@ -26,16 +26,16 @@ protected:
     void SetUp() override {
         ASSERT_OK(fs::create_directories(cache_dir));
 
-        _init_block_cache();
-        _cache = std::make_shared<StarCacheModule>(_block_cache->starcache_instance());
+        _init_local_cache();
+        _cache = std::make_shared<StarCacheModule>(_local_cache->starcache_instance());
     }
     void TearDown() override {
-        ASSERT_OK(_block_cache->shutdown());
+        ASSERT_OK(_local_cache->shutdown());
         ASSERT_OK(fs::remove_all(cache_dir));
     }
 
     static void Deleter(const CacheKey& k, void* v) { free(v); }
-    void _init_block_cache();
+    void _init_local_cache();
 
     static std::string int_to_string(size_t length, int num) {
         std::ostringstream oss;
@@ -61,15 +61,15 @@ protected:
     void insert_value(int i);
 
     std::string cache_dir = "./starcache_module_test";
-    std::shared_ptr<BlockCache> _block_cache;
+    std::shared_ptr<StarCacheWrapper> _local_cache;
     std::shared_ptr<ObjectCache> _cache;
     ObjectCacheWriteOptions _write_opt;
     size_t _value_size = 256 * 1024;
     int64_t _mem_quota = 64 * 1024 * 1024;
 };
 
-void StarCacheModuleTest::_init_block_cache() {
-    _block_cache = std::make_shared<BlockCache>();
+void StarCacheModuleTest::_init_local_cache() {
+    _local_cache = std::make_shared<StarCacheWrapper>();
 
     CacheOptions options;
     options.mem_space_size = _mem_quota;
@@ -79,7 +79,7 @@ void StarCacheModuleTest::_init_block_cache() {
     options.max_concurrent_inserts = 100000;
     options.max_flying_memory_mb = 100;
     options.engine = "starcache";
-    ASSERT_OK(_block_cache->init(options));
+    ASSERT_OK(_local_cache->init(options));
 }
 
 void StarCacheModuleTest::insert_value(int i) {

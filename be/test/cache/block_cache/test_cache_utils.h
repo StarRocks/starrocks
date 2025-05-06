@@ -16,6 +16,8 @@
 
 #include "cache/block_cache/block_cache.h"
 #include "common/logging.h"
+#include "testutil/assert.h"
+#include <gtest/gtest.h>
 
 namespace starrocks {
 
@@ -41,10 +43,11 @@ CacheOptions create_simple_options(size_t block_size, size_t mem_quota, ssize_t 
 }
 
 std::shared_ptr<BlockCache> create_cache(const CacheOptions& options) {
-    std::shared_ptr<BlockCache> cache(new BlockCache);
-    Status status = cache->init(options);
-    EXPECT_TRUE(status.ok());
-    return cache;
+    auto local_cache = std::make_shared<StarCacheWrapper>();
+    auto block_cache = std::make_shared<BlockCache>();
+    EXPECT_OK(local_cache->init(options));
+    EXPECT_OK(block_cache->init(options, local_cache, nullptr));
+    return block_cache;
 }
 
 } // namespace starrocks

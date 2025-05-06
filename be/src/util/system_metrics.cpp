@@ -302,9 +302,9 @@ void SystemMetrics::_update_datacache_mem_tracker() {
     int64_t datacache_mem_bytes = 0;
     auto* datacache_mem_tracker = GlobalEnv::GetInstance()->datacache_mem_tracker();
     if (datacache_mem_tracker) {
-        BlockCache* block_cache = BlockCache::instance();
-        if (block_cache != nullptr && block_cache->is_initialized()) {
-            auto datacache_metrics = block_cache->cache_metrics();
+        LocalCache* local_cache = CacheEnv::GetInstance()->local_cache();
+        if (local_cache != nullptr && local_cache->is_initialized()) {
+            auto datacache_metrics = local_cache->cache_metrics(0);
             datacache_mem_bytes = datacache_metrics.mem_used_bytes + datacache_metrics.meta_used_bytes;
         }
 #ifdef USE_STAROS

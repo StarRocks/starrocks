@@ -839,9 +839,9 @@ void* ReportDataCacheMetricsTaskWorkerPool::_worker_thread_callback(void* arg_th
         request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
 
         TDataCacheMetrics t_metrics{};
-        const BlockCache* cache = BlockCache::instance();
-        if (cache->is_initialized()) {
-            const DataCacheMetrics& metrics = cache->cache_metrics();
+        const LocalCache* cache = CacheEnv::GetInstance()->local_cache();
+        if (cache != nullptr && cache->is_initialized()) {
+            const DataCacheMetrics& metrics = cache->cache_metrics(0);
             DataCacheUtils::set_metrics_from_thrift(t_metrics, metrics);
         } else {
             t_metrics.__set_status(TDataCacheStatus::DISABLED);
