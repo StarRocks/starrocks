@@ -3528,7 +3528,7 @@ public class Config extends ConfigBase {
      * Enable Arrow Flight SQL server only when the port is set to positive value.
      */
     @ConfField
-    public static int arrow_flight_port = -1;
+    public static int arrow_flight_port = 9408;
 
     @ConfField(mutable = true)
     public static int arrow_token_cache_size = 1024;
