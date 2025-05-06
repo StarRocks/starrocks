@@ -131,6 +131,8 @@ public:
 
     MemTracker* mem_tracker() const { return _update_mem_tracker; }
 
+    MemTracker* update_state_mem_tracker() const { return _update_state_mem_tracker.get(); }
+
     string memory_stats();
 
     string detail_memory_stats();
