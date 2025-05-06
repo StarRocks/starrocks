@@ -215,6 +215,8 @@ While StarRocks executes queries against an Iceberg view, it will try to parse t
 | Feature                                                      | Supported Version(s) |
 | :----------------------------------------------------------- | :------------------- |
 | Supports reading TIMESTAMP-type partition formats `yyyy-MM-ddTHH:mm` and `yyyy-MM-dd HH:mm`. | v2.5.19+<br />v3.1.9+<br />v3.2.3+ |
+| Supports Iceberg metadata table                              | v3.4.1+              |
+| Supports Iceberg TimeTravel                                  | v3.4.0+              |
 
 ## Hudi Catalog
 
