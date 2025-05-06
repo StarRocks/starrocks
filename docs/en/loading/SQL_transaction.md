@@ -8,7 +8,7 @@ import Beta from '../_assets/commonMarkdown/_beta.mdx'
 
 <Beta />
 
-This topic describes how to start a simple SQL transaction to commit multiple INSERT statements in a batch.
+Start a simple SQL transaction to commit multiple INSERT statements in a batch.
 
 ## Overview
 
