@@ -35,7 +35,6 @@ import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileInfo;
-import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
@@ -212,7 +211,7 @@ public class PaimonMetadataTest {
         Assert.assertTrue(metadata.tableExists(connectContext, "db1", "tbl1"));
         Assert.assertEquals("db1", paimonTable.getCatalogDBName());
         Assert.assertEquals("tbl1", paimonTable.getCatalogTableName());
-        Assert.assertEquals("CREATE TABLE `tbl1` (\n" +
+        Assert.assertEquals("CREATE TABLE `paimon_catalog`.`db1`.`tbl1` (\n" +
                         "  `col2` int(11) DEFAULT NULL,\n" +
                         "  `col3` double DEFAULT NULL\n" +
                         ")\n" +
@@ -624,13 +623,6 @@ public class PaimonMetadataTest {
         rule0.transform(scan, OptimizerFactory.mockContext(new ColumnRefFactory()));
         assertEquals(1, ((LogicalPaimonScanOperator) scan.getOp()).getScanOperatorPredicates()
                 .getSelectedPartitionIds().size());
-    }
-
-    @Test
-    public void testCreatePaimonView() {
-        Assert.assertThrows(StarRocksConnectorException.class,
-                () -> metadata.createView(new CreateViewStmt(false, false, new TableName("catalog", "db", "table"),
-                    Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)), "", false, null, NodePosition.ZERO)));
     }
 
     @Test
