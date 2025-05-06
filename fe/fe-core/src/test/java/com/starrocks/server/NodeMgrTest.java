@@ -14,6 +14,7 @@
 
 package com.starrocks.server;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.system.Frontend;
@@ -65,7 +66,7 @@ public class NodeMgrTest {
     @Test
     public void testRemoveClusterIdAndRoleFile() throws Exception {
         NodeMgr nodeMgr = new NodeMgr();
-        nodeMgr.initialize(new String[0]);
+        nodeMgr.initialize(null);
         File imageDir = new File("/tmp/starrocks_nodemgr_test_" + UUID.randomUUID());
         imageDir.deleteOnExit();
 
@@ -73,7 +74,12 @@ public class NodeMgrTest {
             return;
         }
 
-        nodeMgr.setImageDir(imageDir.getAbsolutePath());
+        File metaDir = new File(imageDir, "image");
+        if (!metaDir.mkdirs()) {
+            return;
+        }
+
+        Config.meta_dir = imageDir.getAbsolutePath();
         Assert.assertTrue(nodeMgr.isVersionAndRoleFilesNotExist());
         nodeMgr.getClusterIdAndRoleOnStartup();
         Assert.assertFalse(nodeMgr.isVersionAndRoleFilesNotExist());

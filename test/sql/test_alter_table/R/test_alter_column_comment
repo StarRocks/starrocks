@@ -1,0 +1,83 @@
+-- name: test_alter_table_column_comment
+create table t(k int, v int) primary key(k);
+-- result:
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NOT NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`)
+PROPERTIES (
+"compression" = "LZ4",
+"enable_persistent_index" = "true",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result
+alter table t modify column k comment 'k';
+-- result:
+-- !result
+alter table t modify column v comment 'v';
+-- result:
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NOT NULL COMMENT "k",
+  `v` int(11) NULL COMMENT "v"
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`)
+PROPERTIES (
+"compression" = "LZ4",
+"enable_persistent_index" = "true",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result
+create table d(k int, v int) duplicate key(k);
+-- result:
+-- !result
+show create table d;
+-- result:
+d	CREATE TABLE `d` (
+  `k` int(11) NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"bucket_size" = "4294967296",
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result
+alter table d modify column k comment 'k';
+-- result:
+-- !result
+alter table d modify column v comment 'v';
+-- result:
+-- !result
+show create table d;
+-- result:
+d	CREATE TABLE `d` (
+  `k` int(11) NULL COMMENT "k",
+  `v` int(11) NULL COMMENT "v"
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"bucket_size" = "4294967296",
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result

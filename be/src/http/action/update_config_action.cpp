@@ -63,6 +63,7 @@
 #include "storage/memtable_flush_executor.h"
 #include "storage/page_cache.h"
 #include "storage/persistent_index_compaction_manager.h"
+#include "storage/persistent_index_load_executor.h"
 #include "storage/segment_flush_executor.h"
 #include "storage/segment_replicate_executor.h"
 #include "storage/storage_engine.h"
@@ -89,8 +90,8 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             return Status::OK();
         });
         _config_callback.emplace("storage_page_cache_limit", [&]() -> Status {
-            int64_t cache_limit = GlobalEnv::GetInstance()->get_storage_page_cache_size();
-            cache_limit = GlobalEnv::GetInstance()->check_storage_page_cache_size(cache_limit);
+            ASSIGN_OR_RETURN(int64_t cache_limit, CacheEnv::GetInstance()->get_storage_page_cache_limit());
+            cache_limit = CacheEnv::GetInstance()->check_storage_page_cache_limit(cache_limit);
             StoragePageCache::instance()->set_capacity(cache_limit);
             return Status::OK();
         });
@@ -98,20 +99,16 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             if (config::disable_storage_page_cache) {
                 StoragePageCache::instance()->set_capacity(0);
             } else {
-                int64_t cache_limit = GlobalEnv::GetInstance()->get_storage_page_cache_size();
-                cache_limit = GlobalEnv::GetInstance()->check_storage_page_cache_size(cache_limit);
+                ASSIGN_OR_RETURN(int64_t cache_limit, CacheEnv::GetInstance()->get_storage_page_cache_limit());
+                cache_limit = CacheEnv::GetInstance()->check_storage_page_cache_limit(cache_limit);
                 StoragePageCache::instance()->set_capacity(cache_limit);
             }
             return Status::OK();
         });
         _config_callback.emplace("datacache_mem_size", [&]() -> Status {
-            int64_t mem_limit = MemInfo::physical_mem();
-            if (GlobalEnv::GetInstance()->process_mem_tracker()->has_limit()) {
-                mem_limit = GlobalEnv::GetInstance()->process_mem_tracker()->limit();
-            }
-
             size_t mem_size = 0;
-            Status st = DataCacheUtils::parse_conf_datacache_mem_size(config::datacache_mem_size, mem_limit, &mem_size);
+            Status st = DataCacheUtils::parse_conf_datacache_mem_size(
+                    config::datacache_mem_size, GlobalEnv::GetInstance()->process_mem_limit(), &mem_size);
             if (!st.ok()) {
                 LOG(WARNING) << "Failed to update datacache mem size";
                 return st;
@@ -122,8 +119,8 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             std::vector<DirSpace> spaces;
             BlockCache::instance()->disk_spaces(&spaces);
             for (auto& space : spaces) {
-                int64_t disk_size =
-                        DataCacheUtils::parse_conf_datacache_disk_size(space.path, config::datacache_disk_size, -1);
+                ASSIGN_OR_RETURN(int64_t disk_size, DataCacheUtils::parse_conf_datacache_disk_size(
+                                                            space.path, config::datacache_disk_size, -1));
                 if (disk_size < 0) {
                     LOG(WARNING) << "Failed to update datacache disk spaces for the invalid disk_size: " << disk_size;
                     return Status::InternalError("Fail to update datacache disk spaces");
@@ -170,6 +167,10 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 return mgr->update_max_threads(max_pk_index_compaction_thread_cnt);
             }
             return Status::OK();
+        });
+        _config_callback.emplace("pindex_load_thread_pool_num_max", [&]() -> Status {
+            LOG(INFO) << "Set pindex_load_thread_pool_num_max: " << config::pindex_load_thread_pool_num_max;
+            return StorageEngine::instance()->update_manager()->get_pindex_load_executor()->refresh_max_thread_num();
         });
         _config_callback.emplace("update_memory_limit_percent", [&]() -> Status {
             Status st = StorageEngine::instance()->update_manager()->update_primary_index_memory_limit(

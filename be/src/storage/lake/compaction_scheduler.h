@@ -99,6 +99,7 @@ private:
     // use lock to protect _last_check_time and prevent multiple rpc called
     mutable std::mutex _txn_valid_check_mutex;
     std::vector<std::unique_ptr<CompactionTaskContext>> _contexts;
+    int64_t _success_compaction_input_file_size = 0;
 };
 
 struct CompactionTaskInfo {

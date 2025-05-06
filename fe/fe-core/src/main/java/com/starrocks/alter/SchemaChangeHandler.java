@@ -53,6 +53,7 @@ import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
@@ -92,6 +93,7 @@ import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.persist.ModifyColumnCommentLog;
 import com.starrocks.persist.TableAddOrDropColumnsInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -114,6 +116,7 @@ import com.starrocks.sql.ast.DropPersistentIndexClause;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.ModifyColumnClause;
+import com.starrocks.sql.ast.ModifyColumnCommentClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.ReorderColumnsClause;
@@ -905,6 +908,28 @@ public class SchemaChangeHandler extends AlterHandler {
 
         return fastSchemaEvolution;
     }
+
+    private void processModifyColumnComment(ModifyColumnCommentClause alterClause, Database db, OlapTable olapTable,
+                                        Map<Long, LinkedList<Column>> indexSchemaMap) throws DdlException {
+        String modifyColumnName = alterClause.getColumnName();
+        String comment = alterClause.getComment();
+        if (comment == null) {
+            throw new DdlException("Comment is null");
+        }
+        // find modified column
+        long baseIndexId = olapTable.getBaseIndexId();
+        List<Column> modIndexSchema = indexSchemaMap.get(baseIndexId);
+        // update column comment from schemaForFinding
+        Optional<Column> oneCol = modIndexSchema.stream().filter(c -> c.nameEquals(modifyColumnName, true)).findFirst();
+        if (!oneCol.isPresent()) {
+            throw new DdlException("Column[" + modifyColumnName + "] does not exists");
+        } else {
+            oneCol.get().setComment(comment);
+            ModifyColumnCommentLog log = new ModifyColumnCommentLog(db.getId(), olapTable.getId(), modifyColumnName, comment);
+            GlobalStateMgr.getCurrentState().getEditLog().logModifyColumnComment(log);
+        }
+    }
+
 
     // Because modifying the sort key columns and reordering table schema use the same syntax(Alter table xxx ORDER BY(...))
     // And reordering table schema need to provide all columns, so we use the number of columns in the alterClause to determine
@@ -1905,6 +1930,9 @@ public class SchemaChangeHandler extends AlterHandler {
 
                 // modify column
                 fastSchemaEvolution &= processModifyColumn(modifyColumnClause, olapTable, indexSchemaMap);
+            } else if (alterClause instanceof ModifyColumnCommentClause) {
+                processModifyColumnComment((ModifyColumnCommentClause) alterClause, db, olapTable, indexSchemaMap);
+                return null;
             } else if (alterClause instanceof AddFieldClause) {
                 if (RunMode.isSharedDataMode() && !Config.enable_alter_struct_column) {
                     throw new DdlException("Add field for struct column is disable in shared-data mode, " +
@@ -2262,6 +2290,72 @@ public class SchemaChangeHandler extends AlterHandler {
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }
+    }
+
+    public boolean updateFlatJsonConfigMeta(Database db, Long tableId, Map<String, String> properties,
+                                            TTabletMetaType metaType) {
+        FlatJsonConfig newFlatJsonConfig;
+        boolean hasChanged = false;
+        boolean isModifiedSuccess = true;
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        if (olapTable == null) {
+            return false;
+        }
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
+        try {
+            if (!olapTable.containsFlatJsonConfig()) {
+                newFlatJsonConfig = new FlatJsonConfig();
+                hasChanged = true;
+            } else {
+                newFlatJsonConfig = new FlatJsonConfig(olapTable.getFlatJsonConfig());
+            }
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE)) {
+            boolean flatJsonEnabled = PropertyAnalyzer.analyzeFlatJsonEnabled(properties);
+            if (flatJsonEnabled != newFlatJsonConfig.getFlatJsonEnable()) {
+                newFlatJsonConfig.setFlatJsonEnable(flatJsonEnabled);
+                hasChanged = true;
+            }
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR)) {
+            double flatJsonNullFactor = PropertyAnalyzer.analyzeFlatJsonNullFactor(properties);
+            if (flatJsonNullFactor != newFlatJsonConfig.getFlatJsonNullFactor()) {
+                newFlatJsonConfig.setFlatJsonNullFactor(flatJsonNullFactor);
+                hasChanged = true;
+            }
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR)) {
+            double flatJsonSparsity = PropertyAnalyzer.analyzeFlatJsonSparsityFactor(properties);
+            if (flatJsonSparsity != newFlatJsonConfig.getFlatJsonSparsityFactor()) {
+                newFlatJsonConfig.setFlatJsonSparsityFactor(flatJsonSparsity);
+                hasChanged = true;
+            }
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX)) {
+            int flatJsonColumnMax = PropertyAnalyzer.analyzeFlatJsonColumnMax(properties);
+            if (flatJsonColumnMax != newFlatJsonConfig.getFlatJsonColumnMax()) {
+                newFlatJsonConfig.setFlatJsonColumnMax(flatJsonColumnMax);
+                hasChanged = true;
+            }
+        }
+        if (!hasChanged) {
+            LOG.info("table {} flat json config is same as the previous config, so nothing need to do", olapTable.getName());
+            return true;
+        }
+
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
+        try {
+            GlobalStateMgr.getCurrentState().getLocalMetastore().modifyFlatJsonMeta(db, olapTable, newFlatJsonConfig);
+        } catch (Exception e) {
+            isModifiedSuccess = false;
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
+        }
+
+        return isModifiedSuccess;
     }
 
     // return true means that the modification of FEMeta is successful,

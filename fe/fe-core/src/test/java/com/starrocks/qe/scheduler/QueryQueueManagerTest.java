@@ -74,6 +74,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class QueryQueueManagerTest extends SchedulerTestBase {
 
@@ -176,6 +177,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             // 1. ScanNodes is empty.
             DefaultCoordinator coordinator = getSchedulerWithQueryId("select 1");
             Assert.assertFalse(coordinator.getJobSpec().isNeedQueued());
+            Assert.assertFalse(coordinator.getJobSpec().isJobNeedCheckQueue());
         }
 
         {
@@ -183,6 +185,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             DefaultCoordinator coordinator =
                     getSchedulerWithQueryId("select TABLE_CATALOG from information_schema.tables");
             Assert.assertFalse(coordinator.getJobSpec().isNeedQueued());
+            Assert.assertFalse(coordinator.getJobSpec().isJobNeedCheckQueue());
         }
 
         {
@@ -190,6 +193,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             DefaultCoordinator coordinator = getSchedulerWithQueryId(
                     "select TABLE_CATALOG from information_schema.tables UNION ALL select count(1) from lineitem");
             Assert.assertTrue(coordinator.getJobSpec().isNeedQueued());
+            Assert.assertTrue(coordinator.getJobSpec().isJobNeedCheckQueue());
         }
 
         {
@@ -589,15 +593,13 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         }
 
         {
-            // 2.2 The coming query pending timeout, query_timeout (2) < pending_timeout (300).
+            // 2.2 The coming query query_timeout (2) < pending_timeout (300).
             GlobalVariable.setQueryQueuePendingTimeoutSecond(300);
             DefaultCoordinator coord =
                     getSchedulerWithQueryId("select /*+SET_VAR(query_timeout=2)*/ count(1) from lineitem");
-            Assert.assertThrows("pending timeout", StarRocksException.class,
-                    () -> manager.maybeWait(connectContext, coord));
-            ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
-                    "query/insert timeout",
-                    () -> manager.maybeWait(connectContext, coord));
+            // query should not be timeout even query_timeout is small because pending time is not in the query_timeout.
+            manager.maybeWait(connectContext, coord);
+            runningCoords.add(coord);
         }
 
         {
@@ -609,7 +611,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                     throw new TException("mocked-release-slot-exception");
                 }
             });
-            GlobalVariable.setQueryQueuePendingTimeoutSecond(300);
+            GlobalVariable.setQueryQueuePendingTimeoutSecond(2);
             DefaultCoordinator coord =
                     getSchedulerWithQueryId("select /*+SET_VAR(query_timeout=2)*/ count(1) from lineitem");
             Assert.assertThrows("pending timeout", StarRocksException.class,
@@ -618,7 +620,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         }
         {
             // 2.4 timeout by CheckTimer
-            Instant fakeStart = Instant.now().minusSeconds(3);
+            Instant fakeStart = Instant.now().minusSeconds(2);
             connectContext.setStartTime(fakeStart);
             DefaultCoordinator coord =
                     getSchedulerWithQueryId("select /*+SET_VAR(query_timeout=5)*/ count(1) from lineitem");
@@ -658,8 +660,10 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         GlobalVariable.setEnableQueryQueueSelect(true);
         GlobalVariable.setQueryQueueConcurrencyLimit(concurrencyLimit);
 
-        // 1. Run `concurrencyLimit` queries first, and they shouldn't be queued.
+        // 1. Run `concurrencyLimit` queries first, and they shouldn't be queued. And they will be pending time-out and then
+        // required slots are released.
         List<DefaultCoordinator> runningCoords = new ArrayList<>();
+        GlobalVariable.setQueryQueuePendingTimeoutSecond(2);
         for (int i = 0; i < concurrencyLimit; i++) {
             DefaultCoordinator coord =
                     getSchedulerWithQueryId("select /*+SET_VAR(query_timeout=2)*/ count(1) from lineitem");
@@ -669,6 +673,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
             runningCoords.add(coord);
         }
+        GlobalVariable.setQueryQueuePendingTimeoutSecond(300);
 
         // 2. The coming query is allocated slots, after the previous queries with allocated slot is expired.
         DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
@@ -1594,6 +1599,54 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                     "wg1|11|be0-host|0.2|0|0\n" +
                     "wg2|12|be1-host|1.22|27|26\n" +
                     "wg3|13|be1-host|0.23|0|0");
+        }
+    }
+
+    @Test
+    public void testTimeoutCheck() throws Exception {
+        GlobalVariable.setQueryQueuePendingTimeoutSecond(1);
+        Thread.sleep(2000L);
+
+        {
+            GlobalVariable.setEnableQueryQueueSelect(true);
+            DefaultCoordinator coordinator = getSchedulerWithQueryId("select count(1) from lineitem");
+            assertThatThrownBy(() -> manager.maybeWait(connectContext, coordinator))
+                    .isInstanceOf(StarRocksException.class)
+                    .hasMessageContaining("Failed to allocate resource to query: pending timeout");
+        }
+
+        {
+            GlobalVariable.setEnableQueryQueueSelect(false);
+            DefaultCoordinator coordinator = getSchedulerWithQueryId("select count(1) from lineitem");
+            manager.maybeWait(connectContext, coordinator);
+        }
+    }
+
+    @Test
+    public void testSlotPendingTimeout() throws Exception {
+        GlobalVariable.setQueryQueuePendingTimeoutSecond(1);
+        GlobalVariable.setEnableQueryQueueSelect(true);
+        Thread.sleep(2000L);
+
+        {
+            DefaultCoordinator coordinator = getSchedulerWithQueryId("select count(1) from lineitem");
+            assertThatThrownBy(() -> manager.maybeWait(connectContext, coordinator))
+                    .isInstanceOf(StarRocksException.class)
+                    .hasMessageContaining("Failed to allocate resource to query: pending timeout");
+            assertThat(connectContext.getPendingTimeSecond() == 1);
+        }
+
+
+        {
+            GlobalVariable.setQueryQueuePendingTimeoutSecond(300);
+            // 2. The coming query is allocated slots, after the previous queries with allocated slot is expired.
+            DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
+            manager.maybeWait(connectContext, coord);
+            ConnectContext context = coord.getConnectContext();
+            Assert.assertTrue(context.getExecTimeout() == context.getPendingTimeSecond()
+                    + context.getSessionVariable().getQueryTimeoutS());
+
+            coord.onFinished();
         }
     }
 }

@@ -36,7 +36,7 @@ namespace starrocks::lake {
 
 using CacheValue = std::variant<std::shared_ptr<const TabletMetadataPB>, std::shared_ptr<const TxnLogPB>,
                                 std::shared_ptr<const TabletSchema>, std::shared_ptr<const DelVector>,
-                                std::shared_ptr<Segment>, std::shared_ptr<const CombinedTxnLogPB>>;
+                                std::shared_ptr<Segment>, std::shared_ptr<const CombinedTxnLogPB>, bool>;
 
 class Metacache {
 public:
@@ -58,6 +58,8 @@ public:
 
     std::shared_ptr<const DelVector> lookup_delvec(std::string_view key);
 
+    bool lookup_aggregation_partition(std::string_view key);
+
     void cache_tablet_metadata(std::string_view key, std::shared_ptr<const TabletMetadataPB> metadata);
 
     void cache_tablet_schema(std::string_view key, std::shared_ptr<const TabletSchema> schema, size_t size);
@@ -72,6 +74,8 @@ public:
     std::shared_ptr<Segment> cache_segment_if_absent(std::string_view key, std::shared_ptr<Segment> segment);
 
     void cache_delvec(std::string_view key, std::shared_ptr<const DelVector> delvec);
+
+    void cache_aggregation_partition(std::string_view key, bool is_aggregation);
 
     void erase(std::string_view key);
 

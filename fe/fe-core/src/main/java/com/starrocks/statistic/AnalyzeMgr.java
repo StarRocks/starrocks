@@ -68,6 +68,7 @@ public class AnalyzeMgr implements Writable {
     private static final Logger LOG = LogManager.getLogger(AnalyzeMgr.class);
     private static final Pair<Long, Long> CHECK_ALL_TABLES =
             new Pair<>(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID);
+    public static final String IS_MULTI_COLUMN_STATS = "is_multi_column_stats";
 
     private final Map<Long, AnalyzeJob> analyzeJobMap;
     private final Map<Long, AnalyzeStatus> analyzeStatusMap;
@@ -289,16 +290,20 @@ public class AnalyzeMgr implements Writable {
     }
 
     public void addMultiColumnStatsMeta(MultiColumnStatsMeta meta) {
-        multiColumnStatsMetaMap.put(new MultiColumnStatsKey(meta.getTableId(), meta.getColumnIds(), meta.getStatsType()), meta);
+        multiColumnStatsMetaMap.put(new MultiColumnStatsKey(meta.getTableId(), meta.getColumnIds(), meta.getStatsTypes()), meta);
         GlobalStateMgr.getCurrentState().getEditLog().logAddMultiColumnStatsMeta(meta);
     }
 
     public void replayAddMultiColumnStatsMeta(MultiColumnStatsMeta meta) {
-        multiColumnStatsMetaMap.put(new MultiColumnStatsKey(meta.getTableId(), meta.getColumnIds(), meta.getStatsType()), meta);
+        multiColumnStatsMetaMap.put(new MultiColumnStatsKey(meta.getTableId(), meta.getColumnIds(), meta.getStatsTypes()), meta);
     }
 
     public void replayRemoveMultiColumnStatsMeta(MultiColumnStatsMeta meta) {
-        multiColumnStatsMetaMap.remove(new MultiColumnStatsKey(meta.getTableId(), meta.getColumnIds(), meta.getStatsType()));
+        multiColumnStatsMetaMap.remove(new MultiColumnStatsKey(meta.getTableId(), meta.getColumnIds(), meta.getStatsTypes()));
+    }
+
+    public Map<MultiColumnStatsKey, MultiColumnStatsMeta> getMultiColumnStatsMetaMap() {
+        return multiColumnStatsMetaMap;
     }
 
     public void refreshBasicStatisticsCache(Long dbId, Long tableId, List<String> columns, boolean async) {
@@ -316,6 +321,25 @@ public class AnalyzeMgr implements Writable {
         }
     }
 
+    public void expireTableAndColumnStatistics(Long dbId, Long tableId, List<String> columns) {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        if (table == null) {
+            return;
+        }
+        GlobalStateMgr.getCurrentState().getStatisticStorage().expireTableAndColumnStatistics(table, columns);
+    }
+
+    public void expireConnectorTableAndColumnStatistics(String catalogName, String dbName,
+                                                        String tableName, List<String> columns) {
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(new ConnectContext(), catalogName, dbName, tableName);
+        if (table == null) {
+            return;
+        }
+
+        GlobalStateMgr.getCurrentState().getStatisticStorage().expireConnectorTableColumnStatistics(table, columns);
+    }
+
     public void refreshConnectorTableBasicStatisticsCache(String catalogName, String dbName, String tableName,
                                                           List<String> columns, boolean async) {
         Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
@@ -327,8 +351,8 @@ public class AnalyzeMgr implements Writable {
                 .refreshConnectorTableColumnStatistics(table, columns, !async);
     }
 
-    public void refreshMultiColumnStatisticsCache(long tableId) {
-        GlobalStateMgr.getCurrentState().getStatisticStorage().refreshMultiColumnStatistics(tableId);
+    public void refreshMultiColumnStatisticsCache(long tableId, boolean isSync) {
+        GlobalStateMgr.getCurrentState().getStatisticStorage().refreshMultiColumnStatistics(tableId, isSync);
     }
 
     public void replayRemoveBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
@@ -354,10 +378,6 @@ public class AnalyzeMgr implements Writable {
 
     public ExternalBasicStatsMeta getExternalTableBasicStatsMeta(String catalogName, String dbName, String tableName) {
         return externalBasicStatsMetaMap.get(new StatsMetaKey(catalogName, dbName, tableName));
-    }
-
-    public HistogramStatsMeta getHistogramMeta(long tableId, String column) {
-        return histogramStatsMetaMap.get(Pair.create(tableId, column));
     }
 
     public List<HistogramStatsMeta> getHistogramMetaByTable(long tableId) {
@@ -435,6 +455,16 @@ public class AnalyzeMgr implements Writable {
         } else {
             GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorHistogramStatisticsSync(table, columns);
         }
+    }
+
+    public void expireConnectorTableHistogramStatisticsCache(String catalogName, String dbName, String tableName,
+                                                              List<String> columns) {
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(new ConnectContext(), catalogName, dbName, tableName);
+        if (table == null) {
+            return;
+        }
+        GlobalStateMgr.getCurrentState().getStatisticStorage().expireConnectorHistogramStatistics(table, columns);
     }
 
     public void clearStatisticFromDroppedTable() {
@@ -883,7 +913,7 @@ public class AnalyzeMgr implements Writable {
                 map(status -> (NativeAnalyzeStatus) status).collect(Collectors.toSet()));
         data.basicStatsMeta = new ArrayList<>(getBasicStatsMetaMap().values());
         data.histogramStatsMeta = new ArrayList<>(getHistogramStatsMetaMap().values());
-        data.multiColumnStatsMeta = new ArrayList<>(multiColumnStatsMetaMap.values());
+        data.multiColumnStatsMeta = new ArrayList<>(getMultiColumnStatsMetaMap().values());
 
         String s = GsonUtils.GSON.toJson(data);
         Text.writeString(out, s);
@@ -932,6 +962,7 @@ public class AnalyzeMgr implements Writable {
         for (ExternalHistogramStatsMeta histogramStatsMeta : externalHistogramStatsMetaMap.values()) {
             writer.writeJson(histogramStatsMeta);
         }
+
 
         writer.writeInt(multiColumnStatsMetaMap.size());
         for (MultiColumnStatsMeta multiColumnStatsMeta : multiColumnStatsMetaMap.values()) {
@@ -1069,12 +1100,12 @@ public class AnalyzeMgr implements Writable {
     public static class MultiColumnStatsKey {
         private final long tableId;
         private final Set<Integer> columnIds;
-        private final StatsConstants.StatisticsType statisticsType;
+        private final List<StatsConstants.StatisticsType> statisticsTypes;
 
-        public MultiColumnStatsKey(long tableId, Set<Integer> columnIds, StatsConstants.StatisticsType statisticsType) {
+        public MultiColumnStatsKey(long tableId, Set<Integer> columnIds, List<StatsConstants.StatisticsType> statisticsTypes) {
             this.tableId = tableId;
             this.columnIds = columnIds;
-            this.statisticsType = statisticsType;
+            this.statisticsTypes = statisticsTypes;
         }
 
         public long getTableId() {
@@ -1085,8 +1116,8 @@ public class AnalyzeMgr implements Writable {
             return columnIds;
         }
 
-        public StatsConstants.StatisticsType getStatisticsType() {
-            return statisticsType;
+        public List<StatsConstants.StatisticsType> getStatisticsTypes() {
+            return statisticsTypes;
         }
 
         @Override
@@ -1096,12 +1127,12 @@ public class AnalyzeMgr implements Writable {
             }
             MultiColumnStatsKey that = (MultiColumnStatsKey) o;
             return tableId == that.tableId && java.util.Objects.equals(columnIds, that.columnIds) &&
-                    statisticsType == that.statisticsType;
+                    java.util.Objects.equals(statisticsTypes, that.statisticsTypes);
         }
 
         @Override
         public int hashCode() {
-            return java.util.Objects.hash(tableId, columnIds, statisticsType);
+            return java.util.Objects.hash(tableId, columnIds, statisticsTypes);
         }
     }
 }

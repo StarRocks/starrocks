@@ -238,14 +238,6 @@ public class AstToStringBuilder {
                 return sb;
             }
 
-            if (!Strings.isNullOrEmpty(authOption.getPassword())) {
-                if (authOption.isPasswordPlain()) {
-                    sb.append(" IDENTIFIED BY '").append("*XXX").append("'");
-                } else {
-                    sb.append(" IDENTIFIED BY PASSWORD '").append(authOption.getPassword()).append("'");
-                }
-            }
-
             if (!Strings.isNullOrEmpty(authOption.getAuthPlugin())) {
                 sb.append(" IDENTIFIED WITH ").append(authOption.getAuthPlugin());
                 if (!Strings.isNullOrEmpty(authOption.getAuthString())) {
@@ -255,6 +247,14 @@ public class AstToStringBuilder {
                         sb.append(" AS '");
                     }
                     sb.append(authOption.getAuthString()).append("'");
+                }
+            } else {
+                if (!Strings.isNullOrEmpty(authOption.getAuthString())) {
+                    if (authOption.isPasswordPlain()) {
+                        sb.append(" IDENTIFIED BY '").append("*XXX").append("'");
+                    } else {
+                        sb.append(" IDENTIFIED BY PASSWORD '").append(authOption.getAuthString()).append("'");
+                    }
                 }
             }
             return sb;
@@ -608,8 +608,17 @@ public class AstToStringBuilder {
                 } else {
                     selectItemLabel = "*";
                 }
-
                 sqlBuilder.append(selectItemLabel);
+
+                if (item.isStar() && !item.getExcludedColumns().isEmpty()) {
+                    sqlBuilder.append(" EXCLUDE ( ");
+                    sqlBuilder.append(
+                            item.getExcludedColumns().stream()
+                            .map(col -> "`" + col + "`")
+                            .collect(Collectors.joining(","))
+                    );
+                    sqlBuilder.append(" ) ");
+                }
             }
 
             String fromClause = visit(stmt.getRelation());
@@ -863,7 +872,7 @@ public class AstToStringBuilder {
                     sb.append(" AS ").append(aggregation.getAlias());
                 }
             }
-            sb.append("\n");
+            sb.append(" ");
 
             sb.append("FOR ");
             if (node.getPivotColumns().size() == 1) {
@@ -901,7 +910,7 @@ public class AstToStringBuilder {
                     sb.append(" AS ").append(pivotValue.getAlias());
                 }
             }
-            sb.append(")\n)");
+            sb.append("))");
 
             return sb.toString();
         }
@@ -1951,7 +1960,8 @@ public class AstToStringBuilder {
         String location = null;
         try {
             location = table.getTableLocation();
-            if (!Strings.isNullOrEmpty(location)) {
+            // Paimon table has a `path` property instead of location
+            if (!Strings.isNullOrEmpty(location) && !table.isPaimonTable()) {
                 properties.put("location", location);
             }
         } catch (NotImplementedException e) {

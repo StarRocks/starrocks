@@ -131,12 +131,16 @@ TEST_F(ParquetCLIReaderTest, ReadArrowFuzzingParquetFiles) {
         ignore_dcheck_paths.emplace(
                 "./be/test/formats/parquet/arrow_fuzzing_data/fuzzing/"
                 "clusterfuzz-testcase-minimized-parquet-arrow-fuzz-5667493425446912");
+        ignore_dcheck_paths.emplace(
+                "./be/test/formats/parquet/arrow_fuzzing_data/fuzzing/"
+                "clusterfuzz-testcase-minimized-parquet-arrow-fuzz-5106889906585600");
     }
 #endif
     for (const std::string& path : read_paths) {
         if (ignore_dcheck_paths.find(path) != ignore_dcheck_paths.end()) {
             continue;
         }
+        LOG(INFO) << "Testing file: " << path;
         ParquetCLIReader reader{path};
         auto st = reader.init();
         if (st.ok()) {

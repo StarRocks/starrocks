@@ -347,6 +347,8 @@ Status DeltaWriter::_init() {
     writer_context.segments_overlap = OVERLAPPING;
     writer_context.global_dicts = _opt.global_dicts;
     writer_context.miss_auto_increment_column = _opt.miss_auto_increment_column;
+    writer_context.flat_json_config = _tablet->flat_json_config();
+
     Status st = RowsetFactory::create_rowset_writer(writer_context, &_rowset_writer);
     if (!st.ok()) {
         auto msg = strings::Substitute("Fail to create rowset writer. tablet_id: $0, error: $1", _opt.tablet_id,
@@ -746,9 +748,10 @@ Status DeltaWriter::commit() {
     auto rowset_build_ts = watch.elapsed_time();
 
     if (_tablet->keys_type() == KeysType::PRIMARY_KEYS && !config::skip_pk_preload &&
-        !_storage_engine->update_manager()->mem_tracker()->limit_exceeded_by_ratio(config::memory_high_level)) {
+        !_storage_engine->update_manager()->mem_tracker()->limit_exceeded_by_ratio(config::memory_high_level) &&
+        !_storage_engine->update_manager()->update_state_mem_tracker()->any_limit_exceeded()) {
         auto st = _storage_engine->update_manager()->on_rowset_finished(_tablet.get(), _cur_rowset.get());
-        if (!st.ok()) {
+        if (!st.ok() && !st.is_uninitialized()) {
             _set_state(kAborted, st);
             return st;
         }
@@ -902,7 +905,7 @@ Status DeltaWriter::_fill_auto_increment_id(const Chunk& chunk) {
 
     // 3. fill the non-existing rows
     std::vector<int64_t> ids(gen_num);
-    int64_t table_id = _tablet->tablet_meta()->table_id();
+    int64_t table_id = _tablet->belonged_table_id();
     RETURN_IF_ERROR(StorageEngine::instance()->get_next_increment_id_interval(table_id, gen_num, ids));
 
     for (int i = 0; i < _vectorized_schema.num_fields(); i++) {

@@ -642,14 +642,16 @@ public class AuthenticationMgr {
     }
 
     public void dropGroupProviderStatement(DropGroupProviderStmt stmt, ConnectContext context) {
-        this.nameToGroupProviderMap.remove(stmt.getName());
+        GroupProvider groupProvider = this.nameToGroupProviderMap.remove(stmt.getName());
+        groupProvider.destory();
 
         GlobalStateMgr.getCurrentState().getEditLog().logEdit(OperationType.OP_DROP_GROUP_PROVIDER,
                 new GroupProviderLog(stmt.getName(), null));
     }
 
     public void replayDropGroupProvider(String name) {
-        this.nameToGroupProviderMap.remove(name);
+        GroupProvider groupProvider = this.nameToGroupProviderMap.remove(name);
+        groupProvider.destory();
     }
 
     public List<GroupProvider> getAllGroupProviders() {

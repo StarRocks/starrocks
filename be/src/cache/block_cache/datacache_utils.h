@@ -26,8 +26,8 @@ public:
     static Status parse_conf_datacache_mem_size(const std::string& conf_mem_size_str, int64_t mem_limit,
                                                 size_t* mem_size);
 
-    static int64_t parse_conf_datacache_disk_size(const std::string& disk_path, const std::string& disk_size_str,
-                                                  int64_t disk_limit);
+    static StatusOr<int64_t> parse_conf_datacache_disk_size(const std::string& disk_path,
+                                                            const std::string& disk_size_str, int64_t disk_limit);
 
     static Status parse_conf_datacache_disk_paths(const std::string& config_path, std::vector<std::string>* paths,
                                                   bool ignore_broken_disk);
@@ -35,6 +35,8 @@ public:
     static void clean_residual_datacache(const std::string& disk_path);
 
     static Status change_disk_path(const std::string& old_disk_path, const std::string& new_disk_path);
+
+    static dev_t disk_device_id(const std::string& disk_path);
 };
 
 } // namespace starrocks

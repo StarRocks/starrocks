@@ -165,9 +165,9 @@ public:
     std::shared_ptr<MemTracker> get_mem_tracker_by_type(MemTrackerType type);
     std::vector<std::shared_ptr<MemTracker>> mem_trackers() const;
 
-    int64_t get_storage_page_cache_size();
-    int64_t check_storage_page_cache_size(int64_t storage_cache_limit);
     static int64_t calc_max_query_memory(int64_t process_mem_limit, int64_t percent);
+
+    int64_t process_mem_limit() const { return _process_mem_tracker->limit(); }
 
 private:
     static bool _is_init;
@@ -253,7 +253,11 @@ public:
 
     BlockCache* block_cache() const { return _block_cache.get(); }
     ObjectCache* external_table_meta_cache() const { return _starcache_based_object_cache.get(); }
+    ObjectCache* external_table_page_cache() const { return _starcache_based_object_cache.get(); }
     StoragePageCache* page_cache() const { return _page_cache.get(); }
+
+    StatusOr<int64_t> get_storage_page_cache_limit();
+    int64_t check_storage_page_cache_limit(int64_t storage_cache_limit);
 
 private:
     Status _init_datacache();

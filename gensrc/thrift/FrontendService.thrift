@@ -477,6 +477,12 @@ struct TListMaterializedViewStatusResult {
     1: optional list<TMaterializedViewStatus> materialized_views
 }
 
+// Pagination cursor for request segmentation
+struct TRequestPagination {
+    1: optional i64 offset
+    2: optional i64 limit
+}
+
 // Arguments to showTasks/ShowTaskRuns
 struct TGetTasksParams {
     1: optional string db
@@ -487,6 +493,8 @@ struct TGetTasksParams {
     4: optional string query_id
     // task's state
     5: optional string state
+
+    6: optional TRequestPagination pagination
 }
 
 struct TTaskInfo {
@@ -1935,6 +1943,30 @@ struct TListSessionsResponse {
     2: optional list<TSessionInfo> sessions;
 }
 
+struct TListConnectionRequest {
+    1: optional TAuthInfo auth_info;
+    2: optional string for_user;
+    3: optional bool show_full;
+}
+
+struct TConnectionInfo {
+    1: optional string connection_id;
+    2: optional string user;
+    3: optional string host;
+    4: optional string db;
+    5: optional string command;
+    6: optional string connection_start_time;
+    7: optional string time;
+    8: optional string state;
+    9: optional string info;
+    10: optional string isPending;
+}
+
+struct TListConnectionResponse {
+    1: optional Status.TStatus status;
+    2: optional list<TConnectionInfo> connections;
+}
+
 struct TGetKeysRequest {
 }
 
@@ -1957,6 +1989,7 @@ struct TGetWarehouseMetricsResponeItem {
     9: optional string sum_required_slots;
     10: optional string remain_slots;
     11: optional string max_slots;
+    12: optional string extra_message;
 }
 struct TGetWarehouseMetricsRespone {
     1:optional list<TGetWarehouseMetricsResponeItem> metrics;
@@ -1973,6 +2006,11 @@ struct TGetWarehouseQueriesResponseItem {
     5: optional string est_costs_slots;
     6: optional string allocate_slots;
     7: optional string queued_wait_seconds;
+    8: optional string query;
+    9: optional string query_start_time;
+    10: optional string query_end_time;
+    11: optional string query_duration;
+    12: optional string extra_message;
 }
 struct TGetWarehouseQueriesResponse {
     1: optional list<TGetWarehouseQueriesResponseItem> queries;
@@ -2070,6 +2108,17 @@ struct TGetApplicableRolesRequest {
 struct TGetApplicableRolesResponse {
     1: optional list<TApplicableRolesInfo> roles;
     2: optional i64 next_table_id_offset;
+}
+
+struct TUpdateFailPointRequest {
+    1: optional string name;
+    2: optional bool is_enable;
+    3: optional i32 times;
+    4: optional double probability;
+}
+
+struct TUpdateFailPointResponse {
+    1: optional Status.TStatus status;
 }
 
 service FrontendService {
@@ -2191,6 +2240,8 @@ service FrontendService {
     TListSessionsResponse listSessions(1: TListSessionsRequest request)
     TGetTemporaryTablesInfoResponse getTemporaryTablesInfo(1: TGetTemporaryTablesInfoRequest request)
 
+    TListConnectionResponse listConnections(1: TListConnectionRequest request)
+
     TReportFragmentFinishResponse reportFragmentFinish(TReportFragmentFinishParams request)
 
     TStartCheckpointResponse startCheckpoint(1: TStartCheckpointRequest request)
@@ -2209,5 +2260,7 @@ service FrontendService {
     TGetWarehouseMetricsRespone getWarehouseMetrics(1: TGetWarehouseMetricsRequest request)
 
     TGetWarehouseQueriesResponse getWarehouseQueries(1: TGetWarehouseQueriesRequest request)
+
+    TUpdateFailPointResponse updateFailPointStatus(1: TUpdateFailPointRequest request)
 }
 

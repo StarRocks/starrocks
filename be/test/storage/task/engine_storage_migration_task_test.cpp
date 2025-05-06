@@ -345,11 +345,11 @@ public:
         } else {
             dest_path = data_dir_1;
         }
-        EngineStorageMigrationTask migration_task(tablet_id, schema_hash, dest_path);
+        EngineStorageMigrationTask migration_task(tablet_id, schema_hash, dest_path, false);
         ASSERT_OK(migration_task.execute());
         // sleep 2 second for add latency for load
         sleep(2);
-        EngineStorageMigrationTask migration_task_2(tablet_id, schema_hash, source_path);
+        EngineStorageMigrationTask migration_task_2(tablet_id, schema_hash, source_path, false);
         ASSERT_OK(migration_task_2.execute());
     }
 
@@ -368,17 +368,17 @@ public:
             }
         }
 
-        EngineStorageMigrationTask migration_task_1(tablet_id, schema_hash, dest_dir[0]);
+        EngineStorageMigrationTask migration_task_1(tablet_id, schema_hash, dest_dir[0], false);
         ASSERT_OK(migration_task_1.execute());
 
         // sleep 2 second for add latency for load
         sleep(2);
-        EngineStorageMigrationTask migration_task_2(tablet_id, schema_hash, dest_dir[1]);
+        EngineStorageMigrationTask migration_task_2(tablet_id, schema_hash, dest_dir[1], false);
         ASSERT_OK(migration_task_2.execute());
 
         // sleep 2 second for add latency for load
         sleep(2);
-        EngineStorageMigrationTask migration_task_3(tablet_id, schema_hash, dest_dir[0]);
+        EngineStorageMigrationTask migration_task_3(tablet_id, schema_hash, dest_dir[0], false);
         ASSERT_OK(migration_task_3.execute());
     }
 
@@ -397,7 +397,7 @@ public:
         } else {
             dest_path = data_dir_1;
         }
-        EngineStorageMigrationTask migration_task(tablet_id, schema_hash, dest_path);
+        EngineStorageMigrationTask migration_task(tablet_id, schema_hash, dest_path, false);
         auto st = migration_task.execute();
         ASSERT_FALSE(st.ok());
     }
@@ -598,11 +598,11 @@ TEST_F(EngineStorageMigrationTaskTest, test_migrate_empty_pk_tablet) {
         dest_path = data_dir_1;
     }
     tablet->set_tablet_state(TabletState::TABLET_NOTREADY);
-    EngineStorageMigrationTask migration_task_not_ready(empty_tablet_id, empty_schema_hash, dest_path);
+    EngineStorageMigrationTask migration_task_not_ready(empty_tablet_id, empty_schema_hash, dest_path, false);
     ASSERT_ERROR(migration_task_not_ready.execute());
     tablet->set_tablet_state(TabletState::TABLET_RUNNING);
     tablet.reset();
-    EngineStorageMigrationTask migration_task(empty_tablet_id, empty_schema_hash, dest_path);
+    EngineStorageMigrationTask migration_task(empty_tablet_id, empty_schema_hash, dest_path, false);
     ASSERT_OK(migration_task.execute());
 }
 
@@ -654,13 +654,13 @@ int main(int argc, char** argv) {
         exit(-1);
     }
 
-    std::unique_ptr<starrocks::MemTracker> compaction_mem_tracker = std::make_unique<starrocks::MemTracker>();
-    std::unique_ptr<starrocks::MemTracker> update_mem_tracker = std::make_unique<starrocks::MemTracker>();
+    auto* global_env = starrocks::GlobalEnv::GetInstance();
+    (void)global_env->init();
     starrocks::StorageEngine* engine = nullptr;
     starrocks::EngineOptions options;
     options.store_paths = paths;
-    options.compaction_mem_tracker = compaction_mem_tracker.get();
-    options.update_mem_tracker = update_mem_tracker.get();
+    options.compaction_mem_tracker = global_env->process_mem_tracker();
+    options.update_mem_tracker = global_env->update_mem_tracker();
     starrocks::Status s = starrocks::StorageEngine::open(options, &engine);
     if (!s.ok()) {
         starrocks::fs::remove_all(root_path_1);
@@ -669,8 +669,6 @@ int main(int argc, char** argv) {
                 s.to_string().c_str());
         return -1;
     }
-    auto* global_env = starrocks::GlobalEnv::GetInstance();
-    (void)global_env->init();
     auto* exec_env = starrocks::ExecEnv::GetInstance();
     (void)exec_env->init(paths);
     int r = RUN_ALL_TESTS();

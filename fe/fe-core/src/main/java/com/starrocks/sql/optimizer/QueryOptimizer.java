@@ -464,11 +464,22 @@ public class QueryOptimizer extends Optimizer {
         }
         context.getQueryMaterializationContext().setCurrentRewriteStage(MvRewriteStrategy.MVRewriteStage.PHASE1);
 
-        scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PARTITION_PRUNE_RULES);
+        scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PARTITION_PRUNE_RULES);
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
+
         // do rule based mv rewrite
         doRuleBasedMaterializedViewRewrite(tree, rootTaskContext);
+
+        // `RuleSet.PARTITION_PRUNE_RULES` should be used very carefully, since it contains bitset to mark
+        // whether it has been applied, so this action will prevent partition pruning later.
+        // reset partition prune bit to do partition prune again because:
+        // 1. partition prune is not done well since some predicates have not been pushed down.
+        // 2. it may generate bad plans if we do not do partition prune again.
+        MvUtils.getScanOperator(tree).forEach(scan -> {
+            scan.resetOpRuleBit(OP_PARTITION_PRUNED);
+        });
+
         new SeparateProjectRule().rewrite(tree, rootTaskContext);
         deriveLogicalProperty(tree);
     }
@@ -506,7 +517,7 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteOnce(tree, rootTaskContext, new IcebergPartitionsTableRewriteRule());
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.AGGREGATE_REWRITE_RULES);
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PUSH_DOWN_SUBQUERY_RULES);
-        scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.SUBQUERY_REWRITE_COMMON_RULES);
+        scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.SUBQUERY_EXTRACT_CORRELATION_PREDICATE_RULES);
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.SUBQUERY_REWRITE_TO_WINDOW_RULES);
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.SUBQUERY_REWRITE_TO_JOIN_RULES);
         scheduler.rewriteOnce(tree, rootTaskContext, new ApplyExceptionRule());

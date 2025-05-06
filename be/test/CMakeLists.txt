@@ -3,6 +3,7 @@ set(EXEC_FILES
         ./agent/heartbeat_server_test.cpp
         ./agent/master_info_test.cpp
         ./column/array_column_test.cpp
+        ./column/column_view_test.cpp
         ./column/array_view_column_test.cpp
         ./column/binary_column_test.cpp
         ./column/chunk_test.cpp
@@ -92,6 +93,7 @@ set(EXEC_FILES
         ./exec/lake_meta_scanner_test.cpp
         ./exec/multi_olap_table_sink_test.cpp
         ./exec/avro_scanner_test.cpp
+        ./exec/avro_cpp_scanner_test.cpp
         ./exec/parquet_scanner_test.cpp
         ./exec/repeat_node_test.cpp
         ./exec/sorting_test.cpp
@@ -187,6 +189,12 @@ set(EXEC_FILES
         ./formats/avro/binary_column_test.cpp
         ./formats/avro/numeric_column_test.cpp
         ./formats/avro/nullable_column_test.cpp
+        ./formats/avro/cpp/avro_reader_test.cpp
+        ./formats/avro/cpp/binary_column_reader_test.cpp
+        ./formats/avro/cpp/complex_column_reader_test.cpp
+        ./formats/avro/cpp/date_column_reader_test.cpp
+        ./formats/avro/cpp/numeric_column_reader_test.cpp
+        ./formats/avro/cpp/utils_test.cpp
         ./formats/orc/orc_chunk_reader_test.cpp
         ./formats/orc/orc_column_reader_test.cpp
         ./formats/orc/orc_file_writer_test.cpp
@@ -247,6 +255,7 @@ set(EXEC_FILES
         ./storage/protobuf_file_test.cpp
         ./storage/page_cache_test.cpp
         ./storage/persistent_index_test.cpp
+        ./storage/persistent_index_load_executor_test.cpp
         ./storage/primary_index_test.cpp
         ./storage/primary_key_encoder_test.cpp
         ./storage/roaring2range_test.cpp
@@ -324,6 +333,7 @@ set(EXEC_FILES
         ./storage/table_reader_remote_test.cpp
         ./storage/table_reader_test.cpp
         ./storage/tablet_schema_test.cpp
+        ./storage/tablet_test.cpp
         ./storage/tablet_updates_test.cpp
         ./storage/tablet_updates_schema_change_test.cpp
         ./storage/update_manager_test.cpp
@@ -485,6 +495,7 @@ set(EXEC_FILES
         ./util/gc_helper_test.cpp
         ./util/lru_cache_test.cpp
         ./util/arrow/starrocks_column_to_arrow_test.cpp
+        ./util/simdjson_util_test.cpp
         ./util/starrocks_metrics_test.cpp
         ./util/system_metrics_test.cpp
         ./util/ratelimit_test.cpp
@@ -495,6 +506,7 @@ set(EXEC_FILES
         ./util/download_util_test.cpp
         ./util/numeric_types_test.cpp
         ./util/stack_util_test.cpp
+        ./util/byte_stream_split_test.cpp
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp

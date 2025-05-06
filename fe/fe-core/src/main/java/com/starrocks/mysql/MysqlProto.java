@@ -96,6 +96,8 @@ public class MysqlProto {
         serializer.reset();
 
         byte[] randomString = MysqlPassword.createRandomString();
+        context.setAuthDataSalt(randomString);
+
         MysqlHandshakePacket handshakePacket = new MysqlHandshakePacket(context.getConnectionId(),
                 SSLContextLoader.getSslContext() != null, randomString);
         handshakePacket.writeTo(serializer);
@@ -142,7 +144,6 @@ public class MysqlProto {
             return new NegotiateResult(authPacket, NegotiateState.NOT_SUPPORTED_AUTH_MODE);
         }
 
-        authPacket.setRandomString(randomString);
         // StarRocks support the Protocol::AuthSwitchRequest to tell client which auth plugin is using
         try {
             switchAuthPlugin(authPacket, context);
@@ -154,6 +155,7 @@ public class MysqlProto {
 
         // Set the real user used for this connection.
         context.setQualifiedUser(authPacket.getUser());
+        context.setAuthPlugin(authPacket.getPluginName());
         // change the capability of serializer
         context.setCapability(context.getServerCapability());
         serializer.setCapability(context.getCapability());
@@ -164,8 +166,16 @@ public class MysqlProto {
     public static NegotiateResult authenticate(ConnectContext context, MysqlAuthPacket authPacket) throws IOException {
         try {
             AuthenticationHandler.authenticate(context, authPacket.getUser(), context.getMysqlChannel().getRemoteIp(),
-                    authPacket.getAuthResponse(), authPacket.getRandomString());
+                    authPacket.getAuthResponse());
         } catch (AuthenticationException e) {
+            if (e.getErrorCode() == null) {
+                context.getState().setErrorCode(ErrorCode.ERR_AUTHENTICATION_FAIL);
+                context.getState().setError(e.getMessage());
+            } else {
+                context.getState().setErrorCode(e.getErrorCode());
+                context.getState().setError(e.getMessage());
+            }
+
             sendResponsePacket(context);
             return new NegotiateResult(authPacket, NegotiateState.AUTHENTICATION_FAILED);
         }
@@ -224,7 +234,7 @@ public class MysqlProto {
 
         try {
             AuthenticationHandler.authenticate(context, changeUserPacket.getUser(), context.getMysqlChannel().getRemoteIp(),
-                    changeUserPacket.getAuthResponse(), context.getAuthDataSalt());
+                    changeUserPacket.getAuthResponse());
         } catch (AuthenticationException e) {
             LOG.warn("Command `Change user` failed, from [{}] to [{}]. ", previousQualifiedUser,
                     changeUserPacket.getUser());
@@ -314,21 +324,24 @@ public class MysqlProto {
             MysqlCodec.writeInt1(outputStream, (byte) 0xfe);
             MysqlCodec.writeNulTerminateString(outputStream, switchAuthPlugin);
 
-            byte[] authSwitchRequestPacket = provider
-                    .authSwitchRequestPacket(user, context.getMysqlChannel().getRemoteIp(), mysqlAuthPacket.getRandomString());
+            byte[] authSwitchRequestPacket =
+                    provider.authSwitchRequestPacket(context, user, context.getMysqlChannel().getRemoteIp());
             if (authSwitchRequestPacket != null) {
                 MysqlCodec.writeBytes(outputStream, authSwitchRequestPacket);
             }
             MysqlCodec.writeInt1(outputStream, 0);
-
-            mysqlAuthPacket.setPluginName(switchAuthPlugin);
         } else {
             // AuthMoreData Packet
-            byte[] authMoreDataPacket = provider.authMoreDataPacket(user, context.getMysqlChannel().getRemoteIp());
+            byte[] authMoreDataPacket = provider.authMoreDataPacket(context, user, context.getMysqlChannel().getRemoteIp());
             if (authMoreDataPacket != null) {
                 MysqlCodec.writeInt1(outputStream, (byte) 0x01);
                 MysqlCodec.writeBytes(outputStream, authMoreDataPacket);
             }
+        }
+
+        // mysql client may not support starrocks custom plugin, so it does not send a switch packet.
+        if (!authPluginName.equalsIgnoreCase(switchAuthPlugin) && AuthPlugin.isStarRocksCustomAuthPlugin(switchAuthPlugin)) {
+            return;
         }
 
         if (outputStream.size() > 0) {
@@ -338,6 +351,7 @@ public class MysqlProto {
             if (authSwitchResponse == null) {
                 throw new AuthenticationException("read auth switch response failed for user " + user);
             }
+            mysqlAuthPacket.setPluginName(switchAuthPlugin);
             mysqlAuthPacket.setAuthResponse(MysqlCodec.readEofString(authSwitchResponse));
         }
     }

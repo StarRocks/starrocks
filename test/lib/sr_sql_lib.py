@@ -1762,11 +1762,19 @@ class StarrocksSQLApiLib(object):
         show_sql = "show routine load for %s" % routine_load_task_name
         return self.execute_sql(show_sql, True)
 
-    def check_routine_load_progress(self, sum_data_count, task_name):
+    def running_load_count(self, db_name, table_name, load_type):
+        load_sql = "select count(*) from information_schema.loads where db_name='%s' and table_name='%s' and type='%s' and state not in ('FINISHED','CANCELLED')" % (
+            db_name, table_name, load_type)
+        res = self.execute_sql(load_sql, True)
+        tools.assert_true(res["status"])
+        return int(res["result"][0][0])
+
+    def check_routine_load_progress(self, sum_data_count, task_name, db_name, table_name):
         load_finished = False
         count = 0
         while count < 60:
             res = self.show_routine_load(task_name)
+            log.info("show routine load, %s" % res)
             tools.assert_true(res["status"])
             progress_dict = eval(res["result"][0][14])
             if "OFFSET_BEGINNING" in list(progress_dict.values()):
@@ -1782,10 +1790,13 @@ class StarrocksSQLApiLib(object):
             if current_data_count != sum_data_count:
                 time.sleep(5)
             else:
-                # Sleep for a little while to await the publishing finished.
-                time.sleep(10)
-                load_finished = True
-                break
+                running_load_count = self.running_load_count(db_name, table_name, "ROUTINE_LOAD")
+                if running_load_count == 0:
+                    load_finished = True
+                    break
+                log.info("routine load running loads %d, db: %s, table: %s, job: %s" % (
+                    running_load_count, db_name, table_name, task_name))
+                time.sleep(3)
             count += 1
         tools.assert_true(load_finished)
 
@@ -1827,6 +1838,25 @@ class StarrocksSQLApiLib(object):
                 time.sleep(10)
             count += 1
         tools.assert_true(load_finished, "show bitmap_index timeout")
+
+    def wait_table_rollup_finish(self, check_count=60):
+        """
+        wait materialized view job finish and return status
+        """
+        status = ""
+        show_sql = "SHOW ALTER TABLE ROLLUP "
+        count = 0
+        while count < check_count:
+            res = self.execute_sql(show_sql, True)
+            status = res["result"][-1][8]
+            if status != "FINISHED":
+                time.sleep(1)
+            else:
+                # sleep another 5s to avoid FE's async action.
+                time.sleep(1)
+                break
+            count += 1
+        tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
     def wait_materialized_view_finish(self, check_count=60):
         """
@@ -2434,7 +2464,6 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         tools.assert_equal(200, res.status_code, f"failed to post http request [res={res}] [url={exec_url}]")
         return res.content.decode("utf-8")
 
-
     def manual_compact(self, database_name, table_name):
         sql = "show tablet from " + database_name + "." + table_name
         res = self.execute_sql(sql, True)
@@ -2670,7 +2699,8 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         for expect in expects:
             plan_string = "\n".join(item[0] for item in res["result"])
             tools.assert_true(plan_string.find(expect) > 0,
-                              "assert expect %s is not found in plan: %s" % (expect, plan_string))
+                              "verbose plan of sql (%s) assert expect %s is not found in plan: %s" % (
+                                  query, expect, plan_string))
 
     def assert_explain_costs_contains(self, query, *expects):
         """
@@ -2790,7 +2820,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         tools.assert_true(read_cache_size + write_cache_size > 0,
                           "cache select is failed, read_cache_size + write_cache_size must larger than 0 bytes")
 
-    def show_stats_meta(self, sql=None):
+    def assert_show_stats_meta(self, sql=None, exp=None):
         if sql is None:
             sql = "show stats meta"
 
@@ -2806,15 +2836,21 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             if col_name in skip_columns:
                 time_related_columns.append(i)
 
-        processed_results = []
+        act = []
         for row in res["result"]:
             processed_row = []
             for i, value in enumerate(row):
                 if i not in time_related_columns:
                     processed_row.append(value)
-            processed_results.append(processed_row)
+            act.append(processed_row)
 
-        return processed_results
+        log.info("[check regex]: %s" % exp[len(REGEX_FLAG):])
+        tools.assert_regexp_matches(
+            r"%s" % str(act),
+            exp[len(REGEX_FLAG):],
+            "sql result not match regex:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---"
+            % (self_print(sql, need_print=True), exp[len(REGEX_FLAG):], act),
+        )
 
     @staticmethod
     def regex_match(check_str: str, pattern: str):

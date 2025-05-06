@@ -480,13 +480,13 @@ public class InformationSchemaDataSourceTest {
         req.setAuth_info(authInfo);
 
         TGetWarehouseMetricsRespone response = impl.getWarehouseMetrics(req);
-        Assert.assertNull(response.getMetrics());
+        Assert.assertNotNull(response.getMetrics());
 
         starRocksAssert.query("select * from information_schema.warehouse_metrics;")
-                .explainContains(" OUTPUT EXPRS:1: WAREHOUSE_ID | 2: WAREHOUSE_NAME " +
-                        "| 3: QUEUE_PENDING_LENGTH | 4: QUEUE_RUNNING_LENGTH | 5: MAX_PENDING_LENGTH " +
-                        "| 6: MAX_PENDING_TIME_SECOND | 7: EARLIEST_QUERY_WAIT_TIME | 8: MAX_REQUIRED_SLOTS " +
-                        "| 9: SUM_REQUIRED_SLOTS | 10: REMAIN_SLOTS | 11: MAX_SLOTS\n");
+                .explainContains(" OUTPUT EXPRS:1: WAREHOUSE_ID | 2: WAREHOUSE_NAME | 3: QUEUE_PENDING_LENGTH " +
+                        "| 4: QUEUE_RUNNING_LENGTH | 5: MAX_PENDING_LENGTH | 6: MAX_PENDING_TIME_SECOND " +
+                        "| 7: EARLIEST_QUERY_WAIT_TIME | 8: MAX_REQUIRED_SLOTS | 9: SUM_REQUIRED_SLOTS | 10: REMAIN_SLOTS " +
+                        "| 11: MAX_SLOTS | 12: EXTRA_MESSAGE\n");
     }
 
     @Test
@@ -504,7 +504,8 @@ public class InformationSchemaDataSourceTest {
         Assert.assertTrue(response.getQueries().isEmpty());
 
         starRocksAssert.query("select * from information_schema.warehouse_queries;")
-                .explainContains(" OUTPUT EXPRS:1: WAREHOUSE_ID | 2: WAREHOUSE_NAME | 3: QUERY_ID " +
-                        "| 4: STATE | 5: EST_COSTS_SLOTS | 6: ALLOCATE_SLOTS | 7: QUEUED_WAIT_SECONDS");
+                .explainContains(" OUTPUT EXPRS:1: WAREHOUSE_ID | 2: WAREHOUSE_NAME | 3: QUERY_ID | 4: STATE " +
+                        "| 5: EST_COSTS_SLOTS | 6: ALLOCATE_SLOTS | 7: QUEUED_WAIT_SECONDS " +
+                        "| 8: QUERY | 9: QUERY_START_TIME | 10: QUERY_END_TIME | 11: QUERY_DURATION | 12: EXTRA_MESSAGE\n");
     }
 }

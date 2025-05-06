@@ -69,6 +69,7 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -91,7 +92,9 @@ import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.statistic.AnalyzeMgr;
@@ -310,7 +313,7 @@ public class PrivilegeCheckerTest {
         authenticationManager.createUser(createUserStmt);
         testUser = createUserStmt.getUserIdentity();
 
-        createUserSql = "CREATE USER 'test2' IDENTIFIED BY ''";
+        createUserSql = "CREATE USER 'test2' identified with mysql_native_password by '12345'";
         createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, starRocksAssert.getCtx());
         authenticationManager.createUser(createUserStmt);
 
@@ -1351,7 +1354,7 @@ public class PrivilegeCheckerTest {
 
         // Without operate privilege on system, test can only see its own process list
         ctxToTestUser();
-        List<ConnectContext.ThreadInfo> results = connectScheduler.listConnection(starRocksAssert.getCtx(), "test");
+        List<ConnectContext.ThreadInfo> results = connectScheduler.listConnection(connectContext, null);
         long nowMs = System.currentTimeMillis();
         for (ConnectContext.ThreadInfo threadInfo : results) {
             System.out.println(threadInfo.toRow(nowMs, true));
@@ -1361,7 +1364,7 @@ public class PrivilegeCheckerTest {
 
         // With operate privilege on system, test can only see all the process list
         grantRevokeSqlAsRoot("grant operate on system to test");
-        results = connectScheduler.listConnection(starRocksAssert.getCtx(), "test");
+        results = connectScheduler.listConnection(connectContext, null);
         for (ConnectContext.ThreadInfo threadInfo : results) {
             System.out.println(threadInfo.toRow(nowMs, true));
         }
@@ -2027,10 +2030,15 @@ public class PrivilegeCheckerTest {
         connectScheduler.registerConnection(ctx1);
         connectScheduler.registerConnection(ctx2);
 
+        new MockUp<ExecuteEnv>() {
+            @Mock
+            public ConnectScheduler getScheduler() {
+                return connectScheduler;
+            }
+        };
+
         ConnectContext ctx = starRocksAssert.getCtx();
         ctx.getState().setOk();
-        ConnectScheduler origConnectScheduler = ctx.getConnectScheduler();
-        ctx.setConnectScheduler(connectScheduler);
         ctxToTestUser();
 
         // can kill self without privilege check
@@ -2056,9 +2064,6 @@ public class PrivilegeCheckerTest {
         stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), killStatement);
         stmtExecutor.execute();
         grantRevokeSqlAsRoot("revoke OPERATE on system from test");
-
-        // reset state
-        ctx.setConnectScheduler(origConnectScheduler);
     }
 
     @Test
@@ -2071,23 +2076,7 @@ public class PrivilegeCheckerTest {
                 "Access denied;");
     }
 
-    @Test
-    public void testSetStmt() throws Exception {
-        String sql = "SET PASSWORD FOR 'jack'@'192.%' = PASSWORD('123456');";
-        String expectError =
-                "Access denied; you need (at least one of) the GRANT privilege(s) on SYSTEM for this operation";
-        verifyNODEAndGRANT(sql, expectError);
 
-        ctxToTestUser();
-        // user 'test' not has GRANT/NODE privilege
-        sql = "set password = PASSWORD('123456')";
-        StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Authorizer.check(statement, starRocksAssert.getCtx());
-
-        sql = "set password for test = PASSWORD('123456')";
-        statement = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Authorizer.check(statement, starRocksAssert.getCtx());
-    }
 
     @Test
     public void testRoutineLoadStmt() throws Exception {
@@ -3036,8 +3025,7 @@ public class PrivilegeCheckerTest {
     }
 
     @Test
-    public void testShowAuthentication()
-            throws com.starrocks.common.AnalysisException, DdlException, PrivilegeException {
+    public void testShowAuthentication() throws PrivilegeException {
         ctxToTestUser();
         ShowAuthenticationStmt stmt = new ShowAuthenticationStmt(testUser, false);
         ShowResultSet resultSet = ShowExecutor.execute(stmt, starRocksAssert.getCtx());
@@ -3053,8 +3041,8 @@ public class PrivilegeCheckerTest {
         stmt = new ShowAuthenticationStmt(null, true);
         resultSet = ShowExecutor.execute(stmt, starRocksAssert.getCtx());
         Assert.assertEquals("[['root'@'%', No, MYSQL_NATIVE_PASSWORD, null], " +
-                        "['test2'@'%', No, " +
-                        "MYSQL_NATIVE_PASSWORD, null], ['test'@'%', No, MYSQL_NATIVE_PASSWORD, null]]",
+                        "['test2'@'%', Yes, MYSQL_NATIVE_PASSWORD, null], " +
+                        "['test'@'%', No, MYSQL_NATIVE_PASSWORD, null]]",
                 resultSet.getResultRows().toString());
 
         stmt = new ShowAuthenticationStmt(UserIdentity.ROOT, false);
@@ -3895,9 +3883,10 @@ public class PrivilegeCheckerTest {
                 starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationMgr();
         authenticationManager.createUser(createUserStmt);
         UserIdentity testNonNativeUser = createUserStmt.getUserIdentity();
-        SetPassVar setPassVar = new SetPassVar(testNonNativeUser, "01234");
+        UserAuthOption userAuthOption = new UserAuthOption(null, "01234", true, NodePosition.ZERO);
+        SetPassVar setPassVar = new SetPassVar(testNonNativeUser, userAuthOption, NodePosition.ZERO);
         SetStmt setStmt = new SetStmt(Arrays.asList(setPassVar));
-        SetExecutor executor = new SetExecutor(null, setStmt);
+        SetExecutor executor = new SetExecutor(starRocksAssert.getCtx(), setStmt);
         try {
             executor.execute();
         } catch (DdlException e) {

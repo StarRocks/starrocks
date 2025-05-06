@@ -168,6 +168,10 @@ public interface AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    default R visitShowDataDistributionStatement(ShowDataDistributionStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     // ---------------------------------------- Table Statement --------------------------------------------------------
 
     default R visitCreateTableStatement(CreateTableStmt statement, C context) {
@@ -491,6 +495,10 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitShowHistogramStatsMetaStatement(ShowHistogramStatsMetaStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowMultiColumnsStatsMetaStatement(ShowMultiColumnStatsMetaStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
@@ -1218,6 +1226,10 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitModifyColumnClause(ModifyColumnClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitModifyColumnCommentClause(ModifyColumnCommentClause clause, C context) {
         return visitNode(clause, context);
     }
 

@@ -41,6 +41,8 @@ import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
+import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.IcebergTable;
@@ -197,7 +199,7 @@ public class MaterializedViewAnalyzer {
                 continue;
             }
 
-            if (!FeConstants.isReplayFromQueryDump && isExternalTableFromResource(table)) {
+            if (!FeConstants.isReplayFromQueryDump && !isSupportedExternalTables(table)) {
                 throw new SemanticException(
                         "Only supports creating materialized views based on the external table " +
                                 "which created by catalog", tableNameInfo.getPos());
@@ -211,14 +213,38 @@ public class MaterializedViewAnalyzer {
         return SUPPORTED_TABLE_TYPE.contains(table.getType()) || table instanceof OlapTable;
     }
 
-    private static boolean isExternalTableFromResource(Table table) {
+    /**
+     * Check if the table is external table from resource.
+     */
+    public static boolean isExternalTableFromResource(Table table) {
+        // external olap table is not supported to use for creating materialized view.
+        if (table instanceof ExternalOlapTable) {
+            return true;
+        }
+        // olap table is not external table
         if (table instanceof OlapTable) {
-            return false;
-        } else if (table instanceof JDBCTable || table instanceof MysqlTable) {
             return false;
         }
         String catalog = table.getCatalogName();
         return Strings.isNullOrEmpty(catalog) || isResourceMappingCatalog(catalog);
+    }
+
+    /**
+     * We can support some external tables for creating materialized view.
+     * For more details see: https://github.com/StarRocks/starrocks/issues/19581
+     * @param table : table to check
+     * @return true if the external table is supported for materialized view
+     */
+    public static boolean isSupportedExternalTables(Table table) {
+        // if the table is not external table, return true directly
+        if (!isExternalTableFromResource(table)) {
+            return true;
+        }
+        // only jdbc external table can be used for creating mv
+        if (table instanceof JDBCTable || table instanceof MysqlTable) {
+            return true;
+        }
+        return false;
     }
 
     private static void processViews(QueryStatement queryStatement, Set<BaseTableInfo> baseTableInfos,
@@ -931,6 +957,10 @@ public class MaterializedViewAnalyzer {
                     throw new SemanticException("Materialized view partition expression %s could only ref to base table",
                             slotRef.toSql());
                 }
+                if (!FeConstants.isReplayFromQueryDump && isExternalTableFromResource(table)) {
+                    throw new SemanticException("Materialized view partition expression %s could not ref to external table",
+                            slotRef.toSql());
+                }
                 if (table.isNativeTableOrMaterializedView()) {
                     OlapTable olapTable = (OlapTable) table;
                     if (changedPartitionByExprs.containsKey(i)) {
@@ -1165,6 +1195,16 @@ public class MaterializedViewAnalyzer {
                             "must be base table partition column");
                 }
                 partitionColumns.forEach(partitionColumn1 -> checkPartitionColumnType(partitionColumn1));
+                // disable from_unix_time/cast for creating materialized view
+                if (rangePartitionInfo instanceof ExpressionRangePartitionInfoV2) {
+                    ExpressionRangePartitionInfoV2 rangePartitionInfoV2 = (ExpressionRangePartitionInfoV2) rangePartitionInfo;
+                    if (rangePartitionInfoV2.getPartitionColumnIdExprs().size() != 1) {
+                        throw new SemanticException("Materialized view related base table partition columns " +
+                                "only supports single column");
+                    }
+                    Expr partitionColumnExpr = rangePartitionInfoV2.getPartitionColumnIdExprs().get(0).getExpr();
+                    checkBaseTableSupportedPartitionFunc(partitionColumnExpr, table);
+                }
             } else if (partitionInfo.isListPartition()) {
                 ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
                 Set<String> partitionColumns = listPartitionInfo.getPartitionColumns(table.getIdToColumn()).stream()
@@ -1178,6 +1218,30 @@ public class MaterializedViewAnalyzer {
             } else {
                 throw new SemanticException("Materialized view related base table partition type: " +
                         partitionInfo.getType().name() + " not supports");
+            }
+        }
+
+        /**
+         * Check if the partition function of base table is supported.
+         * @param partitionByExpr : base table's partition function
+         * @param table : base table
+         */
+        private void checkBaseTableSupportedPartitionFunc(Expr partitionByExpr,
+                                                          OlapTable table) {
+            if (partitionByExpr instanceof SlotRef) {
+                // do nothing
+            } else if (partitionByExpr instanceof FunctionCallExpr) {
+                FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionByExpr;
+                String functionName = functionCallExpr.getFnName().getFunction();
+                if (!PartitionFunctionChecker.FN_NAME_TO_PATTERN.containsKey(functionName)) {
+                    throw new SemanticException(String.format("Materialized view partition function derived from " +
+                            functionName + " of base table %s is not supported yet", table.getName()),
+                            functionCallExpr.getPos());
+                }
+            } else {
+                throw new SemanticException(String.format("Materialized view partition function derived from " +
+                        partitionByExpr.toSql() + " of base table %s is not supported yet", table.getName()),
+                        partitionByExpr.getPos());
             }
         }
 
@@ -1364,22 +1428,15 @@ public class MaterializedViewAnalyzer {
                     }
                 } else if (table.isPaimonTable()) {
                     PaimonTable paimonTable = (PaimonTable) table;
-                    if (replacePaimonTableAlias(slotRef, paimonTable, baseTableInfo)) {
+                    if (paimonTable.getCatalogName().equals(baseTableInfo.getCatalogName()) &&
+                            paimonTable.getCatalogDBName().equals(baseTableInfo.getDbName()) &&
+                            paimonTable.getTableIdentifier().equals(baseTableInfo.getTableIdentifier())) {
+                        slotRef.setTblName(new TableName(baseTableInfo.getCatalogName(),
+                                baseTableInfo.getDbName(), paimonTable.getName()));
                         break;
                     }
                 }
             }
-        }
-
-        boolean replacePaimonTableAlias(SlotRef slotRef, PaimonTable paimonTable, BaseTableInfo baseTableInfo) {
-            if (paimonTable.getCatalogName().equals(baseTableInfo.getCatalogName()) &&
-                    paimonTable.getCatalogDBName().equals(baseTableInfo.getDbName()) &&
-                    paimonTable.getTableIdentifier().equals(baseTableInfo.getTableIdentifier())) {
-                slotRef.setTblName(new TableName(baseTableInfo.getCatalogName(),
-                        baseTableInfo.getDbName(), paimonTable.getName()));
-                return true;
-            }
-            return false;
         }
 
         private void checkPartitionColumnType(Column partitionColumn) {

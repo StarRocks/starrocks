@@ -109,6 +109,8 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
 
     if (!context->status.ok()) {
         _response->add_failed_tablets(context->tablet_id);
+    } else {
+        _success_compaction_input_file_size += context->stats->input_file_size;
     }
 
     // process compact stat
@@ -118,8 +120,12 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
     compact_stat->set_read_bytes_remote(context->stats->io_bytes_read_remote);
     compact_stat->set_read_time_local(context->stats->io_ns_local_disk);
     compact_stat->set_read_bytes_local(context->stats->io_bytes_read_local_disk);
+    compact_stat->set_read_segment_count(context->stats->read_segment_count);
+    compact_stat->set_write_segment_count(context->stats->write_segment_count);
+    compact_stat->set_write_segment_bytes(context->stats->write_segment_bytes);
     compact_stat->set_in_queue_time_sec(context->stats->in_queue_time_sec);
     compact_stat->set_sub_task_count(_request->tablet_ids_size());
+    compact_stat->set_total_compact_input_file_size(context->stats->input_file_size);
 
     DCHECK(_request != nullptr);
     _status.update(context->status);
@@ -131,6 +137,7 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
 
     if (_contexts.size() == _request->tablet_ids_size()) { // All tasks finished, send RPC response to FE
         _status.to_protobuf(_response->mutable_status());
+        _response->set_success_compaction_input_file_size(_success_compaction_input_file_size);
         if (_done != nullptr) {
             _done->Run();
             _done = nullptr;

@@ -143,16 +143,20 @@ import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.PListFailPointRequest;
 import com.starrocks.rpc.RpcException;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.InformationSchemaDataSource;
 import com.starrocks.sql.ShowTemporaryTableStmt;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -191,6 +195,7 @@ import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
+import com.starrocks.sql.ast.ShowDataDistributionStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowDeleteStmt;
@@ -206,6 +211,7 @@ import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowIndexStmt;
 import com.starrocks.sql.ast.ShowLoadStmt;
 import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
+import com.starrocks.sql.ast.ShowMultiColumnStatsMetaStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowPluginsStmt;
 import com.starrocks.sql.ast.ShowProcStmt;
@@ -241,18 +247,27 @@ import com.starrocks.sql.ast.integration.ShowSecurityIntegrationStatement;
 import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+import com.starrocks.sql.ast.spm.ShowBaselinePlanStmt;
 import com.starrocks.sql.ast.warehouse.ShowNodesStmt;
 import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.sql.spm.SPMStmtExecutor;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.ExternalHistogramStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
+import com.starrocks.statistic.MultiColumnStatsMeta;
 import com.starrocks.system.Backend;
+import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TAuthInfo;
+import com.starrocks.thrift.TConnectionInfo;
+import com.starrocks.thrift.TListConnectionRequest;
+import com.starrocks.thrift.TListConnectionResponse;
+import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableInfo;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -260,6 +275,7 @@ import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.thrift.TException;
 
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -815,13 +831,56 @@ public class ShowExecutor {
         public ShowResultSet visitShowProcesslistStatement(ShowProcesslistStmt statement, ConnectContext context) {
             List<List<String>> rowSet = Lists.newArrayList();
 
-            List<ConnectContext.ThreadInfo> threadInfos = context.getConnectScheduler()
-                    .listConnection(context.getQualifiedUser(), statement.getForUser());
-            long nowMs = System.currentTimeMillis();
-            for (ConnectContext.ThreadInfo info : threadInfos) {
-                List<String> row = info.toRow(nowMs, statement.showFull());
-                if (row != null) {
-                    rowSet.add(row);
+            NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
+            List<Frontend> frontends = nodeMgr.getFrontends(null);
+            for (Frontend frontend : frontends) {
+                if (nodeMgr.getMySelf().getHost().equals(frontend.getHost())) {
+                    List<ConnectContext.ThreadInfo> threadInfos = ExecuteEnv.getInstance().getScheduler()
+                            .listConnection(context, statement.getForUser());
+                    long nowMs = System.currentTimeMillis();
+                    for (ConnectContext.ThreadInfo info : threadInfos) {
+                        List<String> row = Lists.newArrayList();
+                        row.add(frontend.getNodeName());
+                        row.addAll(info.toRow(nowMs, statement.showFull()));
+
+                        rowSet.add(row);
+                    }
+                } else {
+                    try {
+                        TListConnectionRequest request = new TListConnectionRequest();
+                        TAuthInfo tAuthInfo = new TAuthInfo();
+                        tAuthInfo.setCurrent_user_ident(context.getCurrentUserIdentity().toThrift());
+                        request.setAuth_info(tAuthInfo);
+                        request.setFor_user(statement.getForUser());
+                        request.setShow_full(statement.showFull());
+
+                        TNetworkAddress thriftAddress = new TNetworkAddress(frontend.getHost(), frontend.getRpcPort());
+                        TListConnectionResponse response = ThriftRPCRequestExecutor.call(
+                                ThriftConnectionPool.frontendPool,
+                                thriftAddress,
+                                client -> client.listConnections(request));
+
+                        for (int i = 0; i < response.getConnectionsSize(); ++i) {
+                            TConnectionInfo tConnectionInfo = response.getConnections().get(i);
+                            List<String> row = new ArrayList<>();
+                            row.add(frontend.getNodeName());
+                            row.add(tConnectionInfo.getConnection_id());
+                            row.add(tConnectionInfo.getUser());
+                            row.add(tConnectionInfo.getHost());
+                            row.add(tConnectionInfo.getDb());
+                            row.add(tConnectionInfo.getCommand());
+                            row.add(tConnectionInfo.getConnection_start_time());
+                            row.add(tConnectionInfo.getTime());
+                            row.add(tConnectionInfo.getState());
+                            row.add(tConnectionInfo.getInfo());
+                            row.add(tConnectionInfo.getIsPending());
+
+                            rowSet.add(row);
+                        }
+                    } catch (TException e) {
+                        //ignore error
+                        LOG.warn("show processlist exception", e);
+                    }
                 }
             }
 
@@ -1134,7 +1193,7 @@ public class ShowExecutor {
                     try {
                         try {
                             Authorizer.checkAnyActionOnTable(context, new TableName(routineLoadJob.getDbFullName(),
-                                            routineLoadJob.getTableName()));
+                                    routineLoadJob.getTableName()));
                         } catch (AccessDeniedException e) {
                             iterator.remove();
                         }
@@ -1355,6 +1414,28 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowUserPropertyStatement(ShowUserPropertyStmt statement, ConnectContext context) {
             return new ShowResultSet(statement.getMetaData(), statement.getRows(context));
+        }
+
+        @Override
+        public ShowResultSet visitShowDataDistributionStatement(ShowDataDistributionStmt statement, ConnectContext context) {
+            //check privilege
+            try {
+                Authorizer.checkAnyActionOnTable(context, new TableName(statement.getDbName(), statement.getTblName()));
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        context.getCurrentUserIdentity(),
+                        context.getCurrentRoleIds(),
+                        PrivilegeType.ANY.name(), ObjectType.TABLE.name(), statement.getTblName());
+            }
+
+            List<List<String>> results;
+            try {
+                results = MetadataViewer.getDataDistribution(statement);
+            } catch (DdlException e) {
+                throw new SemanticException(e.getMessage());
+            }
+            return new ShowResultSet(statement.getMetaData(), results);
+
         }
 
         @Override
@@ -2462,6 +2543,33 @@ public class ShowExecutor {
         }
 
         @Override
+        public ShowResultSet visitShowMultiColumnsStatsMetaStatement(ShowMultiColumnStatsMetaStmt stmt, ConnectContext context) {
+            List<MultiColumnStatsMeta> metas = new ArrayList<>(context.getGlobalStateMgr().getAnalyzeMgr()
+                    .getMultiColumnStatsMetaMap().values());
+            List<List<String>> rows = Lists.newArrayList();
+            for (MultiColumnStatsMeta meta : metas) {
+                try {
+                    List<String> result = ShowMultiColumnStatsMetaStmt.showMultiColumnStatsMeta(context, meta);
+                    if (result != null) {
+                        rows.add(result);
+                    }
+                } catch (MetaNotFoundException e) {
+                    // pass
+                }
+            }
+
+            rows = doPredicate(stmt, stmt.getMetaData(), rows);
+            rows = doOrderBy(rows, stmt.getOrderByPairs());
+            rows = doLimit(rows, stmt.getLimitElement());
+            return new ShowResultSet(stmt.getMetaData(), rows);
+        }
+
+        @Override
+        public ShowResultSet visitShowBaselinePlanStatement(ShowBaselinePlanStmt statement, ConnectContext context) {
+            return SPMStmtExecutor.execute(context, statement);
+        }
+
+        @Override
         public ShowResultSet visitShowResourceGroupStatement(ShowResourceGroupStmt statement, ConnectContext context) {
             List<List<String>> rows = GlobalStateMgr.getCurrentState().getResourceGroupMgr().showResourceGroup(statement);
             return new ShowResultSet(statement.getMetaData(), rows);
@@ -2620,13 +2728,13 @@ public class ShowExecutor {
             storageVolumeNames = storageVolumeNames.stream()
                     .filter(storageVolumeName -> finalMatcher == null || finalMatcher.match(storageVolumeName))
                     .filter(storageVolumeName -> {
-                                    try {
-                                        Authorizer.checkAnyActionOnStorageVolume(context, storageVolumeName);
-                                    } catch (AccessDeniedException e) {
-                                        return false;
-                                    }
-                                    return true;
+                                try {
+                                    Authorizer.checkAnyActionOnStorageVolume(context, storageVolumeName);
+                                } catch (AccessDeniedException e) {
+                                    return false;
                                 }
+                                return true;
+                    }
                     ).collect(Collectors.toList());
             for (String storageVolumeName : storageVolumeNames) {
                 rows.add(Lists.newArrayList(storageVolumeName));
@@ -2948,7 +3056,6 @@ public class ShowExecutor {
 
             return filteredRows;
         }
-
 
         private List<List<String>> doOrderBy(List<List<String>> rows, List<OrderByPair> orderByPairs) {
             if (rows.isEmpty() || CollectionUtils.isEmpty(orderByPairs)) {

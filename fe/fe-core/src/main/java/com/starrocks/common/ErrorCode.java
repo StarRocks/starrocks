@@ -258,6 +258,10 @@ public enum ErrorCode {
             "Connections using insecure transport are prohibited"),
     ERR_GROUP_ACCESS_DENY(5206, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied; User %s's group[%s] is not in the group_allowed_login_list"),
+    ERR_OAUTH2_NOT_AUTHENTICATED(5207, new byte[] {'4', '2', '0', '0', '0'},
+            "Access denied; Need to access the URL [%s] to complete the OAuth2 authentication operation"),
+    ERR_AUTHENTICATION_FAIL_IN_AUTH_CHAIN(5208, new byte[] {'4', '2', '0', '0', '0'},
+            "Access denied; No authentication was successful in the authentication chain : [%s]"),
 
     /**
      * 5300 - 5399: Lock and Transaction
@@ -269,6 +273,8 @@ public enum ErrorCode {
             "NOT allowed to read or write tables that have been subjected to DML operations before"),
     ERR_TXN_FORBID_CROSS_DB(5304, new byte[] {'2', '5', 'P', '0', '1'},
             "Cannot execute cross-database transactions. All DML target tables must belong to the same db"),
+    ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT(5305, new byte[] {'2', '5', 'P', '0', '1'},
+            "Explicit transaction only support insert statement"),
 
     /**
      * 5400 - 5499: Internal error

@@ -10,7 +10,7 @@ drop view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_${uuid0};
 
 create view if not exists iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} as select k1, k2 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
 
-select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0};
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} order by k1;
 
 alter view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} add dialect select k1, k2, k3 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
 
@@ -18,10 +18,25 @@ alter view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uui
 
 alter view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} modify dialect starrocks select k1, k2, k3 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
 
-select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0};
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} order by k1;
 
 alter view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} set properties ('k1'='v1');
 
 drop view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0};
+
+-- test iceberg view with CTE
+create view if not exists iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_cte_${uuid0} as
+with cte as (select 1 as col1) select * from cte;
+
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_cte_${uuid0};
+
+drop view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_cte_${uuid0};
+
+create view if not exists iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_cte_${uuid0} as
+with cte as (select k1, k2 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table) select * from cte;
+
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_cte_${uuid0} order by k1;
+
+drop view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_cte_${uuid0};
 
 drop catalog iceberg_sql_test_${uuid0};

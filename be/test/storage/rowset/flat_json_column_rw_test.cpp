@@ -52,9 +52,13 @@ public:
     ~FlatJsonColumnRWTest() override = default;
 
 protected:
-    void SetUp() override { _meta.reset(new ColumnMetaPB()); }
+    void SetUp() override {
+        config::enable_json_flat_complex_type = true;
+        _meta.reset(new ColumnMetaPB());
+    }
 
     void TearDown() override {
+        config::enable_json_flat_complex_type = false;
         config::json_flat_sparsity_factor = 0.9;
         config::json_flat_null_factor = 0.3;
     }
@@ -433,6 +437,46 @@ TEST_F(FlatJsonColumnRWTest, testMergeRemainFlatJson) {
     EXPECT_EQ(R"({"a": 5, "b": 25})", read_col->debug_item(4));
 }
 
+TEST_F(FlatJsonColumnRWTest, testMergeRemainFlatJsonWithConfig) {
+    ColumnPtr write_col = JsonColumn::create();
+    auto* json_col = down_cast<JsonColumn*>(write_col.get());
+
+    ASSIGN_OR_ABORT(auto jv1, JsonValue::parse(R"({"a": 1, "b": 21, "c": 31})"));
+    ASSIGN_OR_ABORT(auto jv2, JsonValue::parse(R"({"a": 2, "b": 22, "d": 32})"));
+    ASSIGN_OR_ABORT(auto jv3, JsonValue::parse(R"({"a": 3, "b": 23, "e": [1,2,3]})"));
+    ASSIGN_OR_ABORT(auto jv4, JsonValue::parse(R"({"a": 4, "b": 24, "g": {"x": 1}})"));
+    ASSIGN_OR_ABORT(auto jv5, JsonValue::parse(R"({"a": 5, "b": 25})"));
+
+    json_col->append(&jv1);
+    json_col->append(&jv2);
+    json_col->append(&jv3);
+    json_col->append(&jv4);
+    json_col->append(&jv5);
+
+    ColumnPtr read_col = JsonColumn::create();
+    ColumnWriterOptions writer_opts;
+    FlatJsonConfig config;
+    writer_opts.need_flat = true;
+    writer_opts.flat_json_config = &config;
+    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, nullptr);
+
+    EXPECT_EQ(3, writer_opts.meta->children_columns_size());
+    EXPECT_TRUE(writer_opts.meta->json_meta().is_flat());
+    EXPECT_TRUE(writer_opts.meta->json_meta().has_remain());
+    EXPECT_EQ("a", writer_opts.meta->children_columns(0).name());
+    EXPECT_EQ("b", writer_opts.meta->children_columns(1).name());
+    EXPECT_EQ("remain", writer_opts.meta->children_columns(2).name());
+
+    auto* read_json = down_cast<JsonColumn*>(read_col.get());
+    EXPECT_FALSE(read_json->is_flat_json());
+    EXPECT_EQ(5, read_col->size());
+    EXPECT_EQ(R"({"a": 1, "b": 21, "c": 31})", read_col->debug_item(0));
+    EXPECT_EQ(R"({"a": 2, "b": 22, "d": 32})", read_col->debug_item(1));
+    EXPECT_EQ(R"({"a": 3, "b": 23, "e": [1, 2, 3]})", read_col->debug_item(2));
+    EXPECT_EQ(R"({"a": 4, "b": 24, "g": {"x": 1}})", read_col->debug_item(3));
+    EXPECT_EQ(R"({"a": 5, "b": 25})", read_col->debug_item(4));
+}
+
 TEST_F(FlatJsonColumnRWTest, testMergeRemainFlatJson2) {
     ColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
@@ -554,6 +598,46 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainFlatJson2) {
     }
 }
 
+TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainFlatJson2WithConfig) {
+    FlatJsonConfig config;
+    config.set_flat_json_null_factor(0.4);
+    ColumnPtr write_col = JsonColumn::create();
+    auto* json_col = down_cast<JsonColumn*>(write_col.get());
+    std::vector<std::string> json = {
+            R"({"a": 1, "b": {"b1": 22, "b2": {"b3": "abc"}, "b4": 1}, "c": 31})",
+            R"({"a": 2, "b": {"b1": 23, "b2": {"b3": "efg"}, "b4": [1, 2, 3]}, "d": 32})",
+            R"({"a": 3, "b": {"b1": 24, "b2": {"b3": "xyz"}, "b4": {"b5": 1}}, "e": [1, 2, 3]})",
+            R"({"a": 4, "b": {"b1": 25, "b2": {"b3": "qwe"}, "b4": {"b7": 2}}, "g": {"x": 1}})",
+            R"({"a": 5, "b": {"b1": 26, "b2": {"b3": "sdf"}, "b4": 23}})"};
+
+    for (auto& x : json) {
+        ASSIGN_OR_ABORT(auto jv, JsonValue::parse(x));
+        json_col->append(jv);
+    }
+
+    ColumnPtr read_col = JsonColumn::create();
+    ColumnWriterOptions writer_opts;
+    writer_opts.need_flat = true;
+    writer_opts.flat_json_config = &config;
+    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, nullptr);
+
+    EXPECT_EQ(5, writer_opts.meta->children_columns_size());
+    EXPECT_TRUE(writer_opts.meta->json_meta().is_flat());
+    EXPECT_TRUE(writer_opts.meta->json_meta().has_remain());
+    EXPECT_EQ("a", writer_opts.meta->children_columns(0).name());
+    EXPECT_EQ("b.b1", writer_opts.meta->children_columns(1).name());
+    EXPECT_EQ("b.b2.b3", writer_opts.meta->children_columns(2).name());
+    EXPECT_EQ("b.b4", writer_opts.meta->children_columns(3).name());
+    EXPECT_EQ("remain", writer_opts.meta->children_columns(4).name());
+
+    auto* read_json = down_cast<JsonColumn*>(read_col.get());
+    EXPECT_FALSE(read_json->is_flat_json());
+    EXPECT_EQ(5, read_col->size());
+    for (size_t i = 0; i < json.size(); i++) {
+        EXPECT_EQ(json[i], read_col->debug_item(i));
+    }
+}
+
 TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainFlatJson3) {
     config::json_flat_null_factor = 0.4;
     ColumnPtr write_col = JsonColumn::create();
@@ -580,6 +664,56 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainFlatJson3) {
     ColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
+    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root_path.get());
+
+    EXPECT_EQ(6, writer_opts.meta->children_columns_size());
+    EXPECT_TRUE(writer_opts.meta->json_meta().is_flat());
+    EXPECT_TRUE(writer_opts.meta->json_meta().has_remain());
+    EXPECT_EQ("a", writer_opts.meta->children_columns(0).name());
+    EXPECT_EQ("b.b1", writer_opts.meta->children_columns(1).name());
+    EXPECT_EQ("b.b2.b3", writer_opts.meta->children_columns(2).name());
+    EXPECT_EQ("b.b2.c1.c2", writer_opts.meta->children_columns(3).name());
+    EXPECT_EQ("b.b4", writer_opts.meta->children_columns(4).name());
+    EXPECT_EQ("remain", writer_opts.meta->children_columns(5).name());
+
+    auto* read_json = down_cast<JsonColumn*>(read_col.get());
+    EXPECT_TRUE(read_json->is_flat_json());
+    EXPECT_EQ(5, read_col->size());
+    EXPECT_EQ(R"({b.b2: {"b3": "abc", "bc": 1, "c1": {"c2": "a", "ce": 1}}})", read_col->debug_item(0));
+    EXPECT_EQ(R"({b.b2: {"b3": "efg", "bd": 2, "c1": {"c2": "b", "cd": 2}}})", read_col->debug_item(1));
+    EXPECT_EQ(R"({b.b2: {"b3": "xyz", "be": 3, "c1": {"c2": "c", "cf": 3}}})", read_col->debug_item(2));
+    EXPECT_EQ(R"({b.b2: {"b3": "qwe", "bf": 4, "c1": {"c2": "d", "cg": 4}}})", read_col->debug_item(3));
+    EXPECT_EQ(R"({b.b2: {"b3": "sdf", "bg": 5, "c1": {"c2": "e", "ch": 5}}})", read_col->debug_item(4));
+}
+
+TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainFlatJson3WithConfig) {
+    FlatJsonConfig config;
+    config.set_flat_json_null_factor(0.4);
+    ColumnPtr write_col = JsonColumn::create();
+    auto* json_col = down_cast<JsonColumn*>(write_col.get());
+    std::vector<std::string> json = {
+            R"({"a": 1, "b": {"b1": 22, "b2": {"b3": "abc", "c1": {"c2": "a", "ce": 1},"bc": 1}, "b4": 1}})",
+            R"({"a": 2, "b": {"b1": 23, "b2": {"b3": "efg", "c1": {"c2": "b", "cd": 2},"bd": 2}, "b4": [1, 2, 3]}})",
+            R"({"a": 3, "b": {"b1": 24, "b2": {"b3": "xyz", "c1": {"c2": "c", "cf": 3},"be": 3}, "b4": {"b5": 1}}})",
+            R"({"a": 4, "b": {"b1": 25, "b2": {"b3": "qwe", "c1": {"c2": "d", "cg": 4},"bf": 4}, "b4": {"b7": 2}}})",
+            R"({"a": 5, "b": {"b1": 26, "b2": {"b3": "sdf", "c1": {"c2": "e", "ch": 5},"bg": 5}, "b4": 23}})"};
+
+    for (auto& x : json) {
+        ASSIGN_OR_ABORT(auto jv, JsonValue::parse(x));
+        json_col->append(jv);
+    }
+
+    ASSIGN_OR_ABORT(auto root_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
+    ASSIGN_OR_ABORT(auto b_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.b", 0));
+    ASSIGN_OR_ABORT(auto b2_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.b.b2", 0));
+
+    b_path->children().emplace_back(std::move(b2_path));
+    root_path->children().emplace_back(std::move(b_path));
+
+    ColumnPtr read_col = JsonColumn::create();
+    ColumnWriterOptions writer_opts;
+    writer_opts.need_flat = true;
+    writer_opts.flat_json_config = &config;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root_path.get());
 
     EXPECT_EQ(6, writer_opts.meta->children_columns_size());
@@ -673,6 +807,60 @@ TEST_F(FlatJsonColumnRWTest, testHyperFlatJson) {
     ColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
+    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
+
+    int index = 0;
+    EXPECT_EQ(8, writer_opts.meta->children_columns_size());
+    EXPECT_TRUE(writer_opts.meta->json_meta().is_flat());
+    EXPECT_TRUE(writer_opts.meta->json_meta().has_remain());
+    EXPECT_EQ("a", writer_opts.meta->children_columns(index++).name());
+    EXPECT_EQ("b.b1", writer_opts.meta->children_columns(index++).name());
+    EXPECT_EQ("b.b2.b3", writer_opts.meta->children_columns(index++).name());
+    EXPECT_EQ("b.b2.c1.c2", writer_opts.meta->children_columns(index++).name());
+    EXPECT_EQ("b.b4", writer_opts.meta->children_columns(index++).name());
+    EXPECT_EQ("ff.f1", writer_opts.meta->children_columns(index++).name());
+    EXPECT_EQ("gg", writer_opts.meta->children_columns(index++).name());
+    EXPECT_EQ("remain", writer_opts.meta->children_columns(index++).name());
+
+    auto* read_json = down_cast<JsonColumn*>(read_col.get());
+    EXPECT_TRUE(read_json->is_flat_json());
+    EXPECT_EQ(5, read_col->size());
+    EXPECT_EQ(R"({b.b4.b5: NULL, b.b2.b3: "abc", a: 1, ff.f1: "985", gg.g1: NULL})", read_col->debug_item(0));
+    EXPECT_EQ(R"({b.b4.b5: NULL, b.b2.b3: "efg", a: 2, ff.f1: "984", gg.g1: NULL})", read_col->debug_item(1));
+    EXPECT_EQ(R"({b.b4.b5: 1, b.b2.b3: "xyz", a: 3, ff.f1: "983", gg.g1: NULL})", read_col->debug_item(2));
+    EXPECT_EQ(R"({b.b4.b5: NULL, b.b2.b3: "qwe", a: 4, ff.f1: NULL, gg.g1: NULL})", read_col->debug_item(3));
+    EXPECT_EQ(R"({b.b4.b5: NULL, b.b2.b3: "sdf", a: 5, ff.f1: NULL, gg.g1: NULL})", read_col->debug_item(4));
+}
+
+TEST_F(FlatJsonColumnRWTest, testHyperFlatJsonWithConfig) {
+    FlatJsonConfig config;
+    config.set_flat_json_null_factor(0.4);
+    config.set_flat_json_sparsity_factor(0.5);
+    ColumnPtr write_col = JsonColumn::create();
+    auto* json_col = down_cast<JsonColumn*>(write_col.get());
+    std::vector<std::string> json = {
+            R"({"a": 1, "gg": "te1", "ff": {"f1": "985"}, "b": {"b1": 22, "b2": {"b3": "abc", "c1": {"c2": "a", "ce": 1},"bc": 1}, "b4": 1}})",
+            R"({"a": 2, "gg": "te2", "ff": {"f1": "984"}, "b": {"b1": 23, "b2": {"b3": "efg", "c1": {"c2": "b", "cd": 2},"bd": 2}, "b4": [1, 2, 3]}})",
+            R"({"a": 3, "gg": "te3", "ff": {"f1": "983"}, "b": {"b1": 24, "b2": {"b3": "xyz", "c1": {"c2": "c", "cf": 3},"be": 3}, "b4": {"b5": 1}}})",
+            R"({"a": 4, "gg": "te4", "ff": 781, "b": {"b1": 25, "b2": {"b3": "qwe", "c1": {"c2": "d", "cg": 4},"bf": 4}, "b4": {"b7": 2}}})",
+            R"({"a": 5, "gg": "te5", "ff": 782, "b": {"b1": 26, "b2": {"b3": "sdf", "c1": {"c2": "e", "ch": 5},"bg": 5}, "b4": 23}})"};
+
+    for (auto& x : json) {
+        ASSIGN_OR_ABORT(auto jv, JsonValue::parse(x));
+        json_col->append(jv);
+    }
+
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "b.b4.b5");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "b.b2.b3");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "a");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "ff.f1");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "gg.g1");
+
+    ColumnPtr read_col = JsonColumn::create();
+    ColumnWriterOptions writer_opts;
+    writer_opts.need_flat = true;
+    writer_opts.flat_json_config = &config;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
 
     int index = 0;
@@ -817,6 +1005,49 @@ TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainJson2) {
     EXPECT_EQ(R"({b.b2: {"b3": "sdf", "bg": 5, "c1": {"c2": "e", "ch": 5}}})", read_col->debug_item(4));
 }
 
+TEST_F(FlatJsonColumnRWTest, testMergeMiddleRemainJson2WithConfig) {
+    FlatJsonConfig config;
+    config.set_flat_json_null_factor(0.4);
+    ColumnPtr write_col = JsonColumn::create();
+    auto* json_col = down_cast<JsonColumn*>(write_col.get());
+    std::vector<std::string> json = {
+            R"({"a": 1, "b": {"b1": 22, "b2": {"b3": "abc", "c1": {"c2": "a", "ce": 1},"bc": 1}, "b4": 1}})",
+            R"({"a": 2, "b": {"b1": 23, "b2": {"b3": "efg", "c1": {"c2": "b", "cd": 2},"bd": 2}, "b4": [1, 2, 3]}})",
+            R"({"a": 3, "b": {"b1": 24, "b2": {"b3": "xyz", "c1": {"c2": "c", "cf": 3},"be": 3}, "b4": {"b5": 1}}})",
+            R"({"a": 4, "b": {"b1": 25, "b2": {"b3": "qwe", "c1": {"c2": "d", "cg": 4},"bf": 4}, "b4": {"b7": 2}}})",
+            R"({"a": 5, "b": {"b1": 26, "b2": {"b3": "sdf", "c1": {"c2": "e", "ch": 5},"bg": 5}, "b4": 23}})"};
+
+    for (auto& x : json) {
+        ASSIGN_OR_ABORT(auto jv, JsonValue::parse(x));
+        json_col->append(jv);
+    }
+
+    ASSIGN_OR_ABORT(auto root_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
+    ASSIGN_OR_ABORT(auto b_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.b", 0));
+    ASSIGN_OR_ABORT(auto b2_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.b.b2", 0));
+
+    b_path->children().emplace_back(std::move(b2_path));
+    root_path->children().emplace_back(std::move(b_path));
+
+    ColumnPtr read_col = JsonColumn::create();
+    ColumnWriterOptions writer_opts;
+    writer_opts.need_flat = false;
+    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root_path.get());
+
+    EXPECT_EQ(0, writer_opts.meta->children_columns_size());
+    EXPECT_FALSE(writer_opts.meta->json_meta().is_flat());
+    EXPECT_FALSE(writer_opts.meta->json_meta().has_remain());
+
+    auto* read_json = down_cast<JsonColumn*>(read_col.get());
+    EXPECT_TRUE(read_json->is_flat_json());
+    EXPECT_EQ(5, read_col->size());
+    EXPECT_EQ(R"({b.b2: {"b3": "abc", "bc": 1, "c1": {"c2": "a", "ce": 1}}})", read_col->debug_item(0));
+    EXPECT_EQ(R"({b.b2: {"b3": "efg", "bd": 2, "c1": {"c2": "b", "cd": 2}}})", read_col->debug_item(1));
+    EXPECT_EQ(R"({b.b2: {"b3": "xyz", "be": 3, "c1": {"c2": "c", "cf": 3}}})", read_col->debug_item(2));
+    EXPECT_EQ(R"({b.b2: {"b3": "qwe", "bf": 4, "c1": {"c2": "d", "cg": 4}}})", read_col->debug_item(3));
+    EXPECT_EQ(R"({b.b2: {"b3": "sdf", "bg": 5, "c1": {"c2": "e", "ch": 5}}})", read_col->debug_item(4));
+}
+
 TEST_F(FlatJsonColumnRWTest, testDeepJson) {
     ColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
@@ -899,6 +1130,52 @@ TEST_F(FlatJsonColumnRWTest, testHyperJson) {
     EXPECT_EQ(R"({b.b4.b5: NULL, b.b2.b3: "sdf", a: 5, ff.f1: NULL, gg.g1: NULL})", read_col->debug_item(4));
 }
 
+TEST_F(FlatJsonColumnRWTest, testHyperJsonWithConfig) {
+    FlatJsonConfig config;
+    config.set_flat_json_null_factor(0.4);
+    config.set_flat_json_sparsity_factor(0.5);
+
+    ColumnPtr write_col = JsonColumn::create();
+    auto* json_col = down_cast<JsonColumn*>(write_col.get());
+    std::vector<std::string> json = {
+            R"({"a": 1, "gg": "te1", "ff": {"f1": "985"}, "b": {"b1": 22, "b2": {"b3": "abc", "c1": {"c2": "a", "ce": 1},"bc": 1}, "b4": 1}})",
+            R"({"a": 2, "gg": "te2", "ff": {"f1": "984"}, "b": {"b1": 23, "b2": {"b3": "efg", "c1": {"c2": "b", "cd": 2},"bd": 2}, "b4": [1, 2, 3]}})",
+            R"({"a": 3, "gg": "te3", "ff": {"f1": "983"}, "b": {"b1": 24, "b2": {"b3": "xyz", "c1": {"c2": "c", "cf": 3},"be": 3}, "b4": {"b5": 1}}})",
+            R"({"a": 4, "gg": "te4", "ff": 781, "b": {"b1": 25, "b2": {"b3": "qwe", "c1": {"c2": "d", "cg": 4},"bf": 4}, "b4": {"b7": 2}}})",
+            R"({"a": 5, "gg": "te5", "ff": 782, "b": {"b1": 26, "b2": {"b3": "sdf", "c1": {"c2": "e", "ch": 5},"bg": 5}, "b4": 23}})"};
+
+    for (auto& x : json) {
+        ASSIGN_OR_ABORT(auto jv, JsonValue::parse(x));
+        json_col->append(jv);
+    }
+
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "b.b4.b5");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "b.b2.b3");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "a");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "ff.f1");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "gg.g1");
+
+    ColumnPtr read_col = JsonColumn::create();
+    ColumnWriterOptions writer_opts;
+    writer_opts.need_flat = false;
+    writer_opts.flat_json_config = &config;
+    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
+
+    EXPECT_EQ(0, writer_opts.meta->children_columns_size());
+    EXPECT_FALSE(writer_opts.meta->json_meta().is_flat());
+    EXPECT_FALSE(writer_opts.meta->json_meta().has_remain());
+
+    auto* read_json = down_cast<JsonColumn*>(read_col.get());
+    EXPECT_TRUE(read_json->is_flat_json());
+    EXPECT_EQ(5, read_col->size());
+    EXPECT_EQ(R"({b.b4.b5: NULL, b.b2.b3: "abc", a: 1, ff.f1: "985", gg.g1: NULL})", read_col->debug_item(0));
+    EXPECT_EQ(R"({b.b4.b5: NULL, b.b2.b3: "efg", a: 2, ff.f1: "984", gg.g1: NULL})", read_col->debug_item(1));
+    EXPECT_EQ(R"({b.b4.b5: 1, b.b2.b3: "xyz", a: 3, ff.f1: "983", gg.g1: NULL})", read_col->debug_item(2));
+    EXPECT_EQ(R"({b.b4.b5: NULL, b.b2.b3: "qwe", a: 4, ff.f1: NULL, gg.g1: NULL})", read_col->debug_item(3));
+    EXPECT_EQ(R"({b.b4.b5: NULL, b.b2.b3: "sdf", a: 5, ff.f1: NULL, gg.g1: NULL})", read_col->debug_item(4));
+}
+
 TEST_F(FlatJsonColumnRWTest, testHyperNoCastTypeJson) {
     config::json_flat_null_factor = 0.4;
     config::json_flat_sparsity_factor = 0.5;
@@ -939,6 +1216,48 @@ TEST_F(FlatJsonColumnRWTest, testHyperNoCastTypeJson) {
     EXPECT_EQ(R"({b.b4.b5: NULL, b.b2.b3: 'sdf', a: 5, ff.f1: NULL, gg.g1: NULL})", read_col->debug_item(4));
 }
 
+TEST_F(FlatJsonColumnRWTest, testHyperNoCastTypeJsonWithConfig) {
+    FlatJsonConfig config;
+    config.set_flat_json_null_factor(0.4);
+    config.set_flat_json_sparsity_factor(0.5);
+
+    ColumnPtr write_col = JsonColumn::create();
+    auto* json_col = down_cast<JsonColumn*>(write_col.get());
+    std::vector<std::string> json = {
+            R"({"a": 1, "gg": "te1", "ff": {"f1": "985"}, "b": {"b1": 22, "b2": {"b3": "abc", "c1": {"c2": "a", "ce": 1},"bc": 1}, "b4": 1}})",
+            R"({"a": 2, "gg": "te2", "ff": {"f1": "984"}, "b": {"b1": 23, "b2": {"b3": "efg", "c1": {"c2": "b", "cd": 2},"bd": 2}, "b4": [1, 2, 3]}})",
+            R"({"a": 3, "gg": "te3", "ff": {"f1": "983"}, "b": {"b1": 24, "b2": {"b3": "xyz", "c1": {"c2": "c", "cf": 3},"be": 3}, "b4": {"b5": 1}}})",
+            R"({"a": 4, "gg": "te4", "ff": 781, "b": {"b1": 25, "b2": {"b3": "qwe", "c1": {"c2": "d", "cg": 4},"bf": 4}, "b4": {"b7": 2}}})",
+            R"({"a": 5, "gg": "te5", "ff": 782, "b": {"b1": 26, "b2": {"b3": "sdf", "c1": {"c2": "e", "ch": 5},"bg": 5}, "b4": 23}})"};
+
+    for (auto& x : json) {
+        ASSIGN_OR_ABORT(auto jv, JsonValue::parse(x));
+        json_col->append(jv);
+    }
+
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_BIGINT, "b.b4.b5");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_VARCHAR, "b.b2.b3");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_BIGINT, "a");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "ff.f1");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_VARCHAR, "gg.g1");
+
+    ColumnPtr read_col = JsonColumn::create();
+    ColumnWriterOptions writer_opts;
+    writer_opts.need_flat = true;
+    writer_opts.flat_json_config = &config;
+    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
+
+    auto* read_json = down_cast<JsonColumn*>(read_col.get());
+    EXPECT_TRUE(read_json->is_flat_json());
+    EXPECT_EQ(5, read_col->size());
+    EXPECT_EQ(R"({b.b4.b5: NULL, b.b2.b3: 'abc', a: 1, ff.f1: "985", gg.g1: NULL})", read_col->debug_item(0));
+    EXPECT_EQ(R"({b.b4.b5: NULL, b.b2.b3: 'efg', a: 2, ff.f1: "984", gg.g1: NULL})", read_col->debug_item(1));
+    EXPECT_EQ(R"({b.b4.b5: 1, b.b2.b3: 'xyz', a: 3, ff.f1: "983", gg.g1: NULL})", read_col->debug_item(2));
+    EXPECT_EQ(R"({b.b4.b5: NULL, b.b2.b3: 'qwe', a: 4, ff.f1: NULL, gg.g1: NULL})", read_col->debug_item(3));
+    EXPECT_EQ(R"({b.b4.b5: NULL, b.b2.b3: 'sdf', a: 5, ff.f1: NULL, gg.g1: NULL})", read_col->debug_item(4));
+}
+
 TEST_F(FlatJsonColumnRWTest, testHyperCastTypeJson) {
     config::json_flat_null_factor = 0.4;
     config::json_flat_sparsity_factor = 0.5;
@@ -967,6 +1286,48 @@ TEST_F(FlatJsonColumnRWTest, testHyperCastTypeJson) {
     ColumnPtr read_col = JsonColumn::create();
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
+    test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
+
+    auto* read_json = down_cast<JsonColumn*>(read_col.get());
+    EXPECT_TRUE(read_json->is_flat_json());
+    EXPECT_EQ(5, read_col->size());
+    EXPECT_EQ(R"({b.b4.b5: NULL, b.b2: NULL, a: '1', ff.f1: 985, gg.g1: NULL})", read_col->debug_item(0));
+    EXPECT_EQ(R"({b.b4.b5: NULL, b.b2: NULL, a: '2', ff.f1: 984, gg.g1: NULL})", read_col->debug_item(1));
+    EXPECT_EQ(R"({b.b4.b5: 1, b.b2: NULL, a: '3', ff.f1: 983, gg.g1: NULL})", read_col->debug_item(2));
+    EXPECT_EQ(R"({b.b4.b5: NULL, b.b2: NULL, a: '4', ff.f1: NULL, gg.g1: NULL})", read_col->debug_item(3));
+    EXPECT_EQ(R"({b.b4.b5: NULL, b.b2: NULL, a: '5', ff.f1: NULL, gg.g1: NULL})", read_col->debug_item(4));
+}
+
+TEST_F(FlatJsonColumnRWTest, testHyperCastTypeJsonWithConfig) {
+    FlatJsonConfig config;
+    config.set_flat_json_null_factor(0.4);
+    config.set_flat_json_sparsity_factor(0.5);
+
+    ColumnPtr write_col = JsonColumn::create();
+    auto* json_col = down_cast<JsonColumn*>(write_col.get());
+    std::vector<std::string> json = {
+            R"({"a": 1, "gg": "te1", "ff": {"f1": "985"}, "b": {"b1": 22, "b2": {"b3": "abc", "c1": {"c2": "a", "ce": 1},"bc": 1}, "b4": 1}})",
+            R"({"a": 2, "gg": "te2", "ff": {"f1": "984"}, "b": {"b1": 23, "b2": {"b3": "efg", "c1": {"c2": "b", "cd": 2},"bd": 2}, "b4": [1, 2, 3]}})",
+            R"({"a": 3, "gg": "te3", "ff": {"f1": "983"}, "b": {"b1": 24, "b2": {"b3": "xyz", "c1": {"c2": "c", "cf": 3},"be": 3}, "b4": {"b5": 1}}})",
+            R"({"a": 4, "gg": "te4", "ff": 781, "b": {"b1": 25, "b2": {"b3": "qwe", "c1": {"c2": "d", "cg": 4},"bf": 4}, "b4": {"b7": 2}}})",
+            R"({"a": 5, "gg": "te5", "ff": 782, "b": {"b1": 26, "b2": {"b3": "sdf", "c1": {"c2": "e", "ch": 5},"bg": 5}, "b4": 23}})"};
+
+    for (auto& x : json) {
+        ASSIGN_OR_ABORT(auto jv, JsonValue::parse(x));
+        json_col->append(jv);
+    }
+
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_DOUBLE, "b.b4.b5");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_BIGINT, "b.b2");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_VARCHAR, "a");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_BIGINT, "ff.f1");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "gg.g1");
+
+    ColumnPtr read_col = JsonColumn::create();
+    ColumnWriterOptions writer_opts;
+    writer_opts.need_flat = true;
+    writer_opts.flat_json_config = &config;
     test_json(writer_opts, "/test_flat_json_rw2.data", write_col, read_col, root.get());
 
     auto* read_json = down_cast<JsonColumn*>(read_col.get());

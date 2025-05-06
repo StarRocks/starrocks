@@ -202,6 +202,9 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_REMOVE_MULTI_COLUMN_STATS_META = 10019;
 
+    @IgnorableOnReplayFailed
+    public static final short OP_MODIFY_FLAT_JSON_CONFIG = 10020;
+
 
     // workgroup 10021 ~ 10030
     @IgnorableOnReplayFailed
@@ -540,6 +543,9 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_CREATE_STREAM_LOAD_TASK_V2 = 13070;
 
+    @IgnorableOnReplayFailed
+    public static final short OP_MODIFY_COLUMN_COMMENT = 13080;
+
     // storage volume
 
     @IgnorableOnReplayFailed
@@ -617,6 +623,9 @@ public class OperationType {
 
     @IgnorableOnReplayFailed
     public static final short OP_DROP_SPM_BASELINE_LOG = 13541;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_SET_VIEW_SECURITY_LOG = 13542;
 
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, please follow the above sequence number

@@ -24,6 +24,7 @@ import com.starrocks.proto.AbortCompactionRequest;
 import com.starrocks.proto.AbortCompactionResponse;
 import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.proto.AbortTxnResponse;
+import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.CompactResponse;
 import com.starrocks.proto.DeleteDataRequest;
@@ -110,6 +111,8 @@ import com.starrocks.thrift.TExportTaskRequest;
 import com.starrocks.thrift.TFetchDataParams;
 import com.starrocks.thrift.TFetchDataResult;
 import com.starrocks.thrift.TFinishTaskRequest;
+import com.starrocks.thrift.TGetTabletsInfoRequest;
+import com.starrocks.thrift.TGetTabletsInfoResult;
 import com.starrocks.thrift.THeartbeatResult;
 import com.starrocks.thrift.TMasterInfo;
 import com.starrocks.thrift.TMiniLoadEtlStatusRequest;
@@ -397,6 +400,11 @@ public class MockedBackend {
         }
 
         @Override
+        public TGetTabletsInfoResult get_tablets_info(TGetTabletsInfoRequest request) {
+            return new TGetTabletsInfoResult(new TStatus(TStatusCode.OK));
+        }
+
+        @Override
         public TStatus submit_routine_load_task(List<TRoutineLoadTask> tasks) {
             return new TStatus(TStatusCode.OK);
         }
@@ -622,6 +630,11 @@ public class MockedBackend {
 
         @Override
         public Future<VacuumResponse> vacuum(VacuumRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<PublishVersionResponse> aggregatePublishVersion(AggregatePublishVersionRequest request) {
             return CompletableFuture.completedFuture(null);
         }
     }

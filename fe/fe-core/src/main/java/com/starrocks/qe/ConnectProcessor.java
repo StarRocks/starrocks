@@ -38,6 +38,7 @@ import com.google.common.base.Strings;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
+import com.starrocks.authentication.OAuth2Context;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -73,12 +74,16 @@ import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.txn.BeginStmt;
+import com.starrocks.sql.ast.txn.CommitStmt;
+import com.starrocks.sql.ast.txn.RollbackStmt;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.SqlDigestBuilder;
@@ -93,6 +98,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadMXBean;
+import java.net.URLEncoder;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.AsynchronousCloseException;
@@ -114,7 +122,6 @@ public class ConnectProcessor {
     private ByteBuffer packetBuf;
 
     protected StmtExecutor executor = null;
-
 
     public ConnectProcessor(ConnectContext context) {
         this.ctx = context;
@@ -183,6 +190,24 @@ public class ConnectProcessor {
         ctx.resetSessionVariable();
     }
 
+    public static long getThreadAllocatedBytes(long threadId) {
+        try {
+            ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
+            if (threadMXBean instanceof com.sun.management.ThreadMXBean) {
+                com.sun.management.ThreadMXBean casted = (com.sun.management.ThreadMXBean) threadMXBean;
+                if (casted.isThreadAllocatedMemorySupported() && casted.isThreadAllocatedMemoryEnabled()) {
+                    long allocatedBytes = casted.getThreadAllocatedBytes(threadId);
+                    if (allocatedBytes != -1) {
+                        return allocatedBytes;
+                    }
+                }
+            }
+            return 0;
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
     public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics) {
         // slow query
         long endTime = System.currentTimeMillis();
@@ -241,11 +266,14 @@ public class ConnectProcessor {
             ctx.getAuditEventBuilder().setIsQuery(false);
         }
 
-        // Build Digest for SELECT/INSERT/UPDATE/DELETE
+        // Build Digest and queryFeMemory for SELECT/INSERT/UPDATE/DELETE
         if (ctx.getState().isQuery() || parsedStmt instanceof DmlStmt) {
             if (Config.enable_sql_digest || ctx.getSessionVariable().isEnableSQLDigest()) {
                 ctx.getAuditEventBuilder().setDigest(computeStatementDigest(parsedStmt));
             }
+            long threadAllocatedMemory =
+                    getThreadAllocatedBytes(Thread.currentThread().getId()) - ctx.getCurrentThreadAllocatedMemory();
+            ctx.getAuditEventBuilder().setQueryFeMemory(threadAllocatedMemory);
         }
 
         ctx.getAuditEventBuilder().setFeIp(FrontendOptions.getLocalHostAddress());
@@ -283,6 +311,9 @@ public class ConnectProcessor {
     // process COM_QUERY statement,
     protected void handleQuery() {
         MetricRepo.COUNTER_REQUEST_ALL.increase(1L);
+        long beginMemory = getThreadAllocatedBytes(Thread.currentThread().getId());
+        ctx.setCurrentThreadAllocatedMemory(beginMemory);
+
         // convert statement to Java string
         String originStmt = null;
         byte[] bytes = packetBuf.array();
@@ -343,6 +374,30 @@ public class ConnectProcessor {
                 }
                 parsedStmt.setOrigStmt(new OriginStatement(originStmt, i));
                 Tracers.init(ctx, parsedStmt.getTraceMode(), parsedStmt.getTraceModule());
+
+                if (ctx.getExplicitTxnState() != null &&
+                        !((parsedStmt instanceof InsertStmt && !((InsertStmt) parsedStmt).isOverwrite()) ||
+                                parsedStmt instanceof BeginStmt ||
+                                parsedStmt instanceof CommitStmt ||
+                                parsedStmt instanceof RollbackStmt)) {
+                    ErrorReport.report(ErrorCode.ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT);
+                    ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+                    return;
+                }
+
+                if (ctx.getOAuth2Context() != null && ctx.getAuthToken() == null) {
+                    OAuth2Context oAuth2Context = ctx.getOAuth2Context();
+                    String authUrl = oAuth2Context.authServerUrl() +
+                            "?response_type=code" +
+                            "&client_id=" + URLEncoder.encode(oAuth2Context.clientId(), StandardCharsets.UTF_8) +
+                            "&redirect_uri=" + URLEncoder.encode(oAuth2Context.redirectUrl(), StandardCharsets.UTF_8) +
+                            "?connectionId=" + ctx.getConnectionId() +
+                            "&scope=openid";
+
+                    ErrorReport.report(ErrorCode.ERR_OAUTH2_NOT_AUTHENTICATED, authUrl);
+                    ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+                    return;
+                }
 
                 executor = new StmtExecutor(ctx, parsedStmt);
                 ctx.setExecutor(executor);

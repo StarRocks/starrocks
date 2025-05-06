@@ -87,7 +87,7 @@ public class TaskManager implements MemoryTrackable {
 
     // include PENDING/RUNNING taskRun;
     private final TaskRunManager taskRunManager;
-    private final TaskRunScheduler taskRunScheduler;
+    private final TaskRunScheduler taskRunScheduler = new TaskRunScheduler();
 
     // The periodScheduler is used to generate the corresponding TaskRun on time for the Periodical Task.
     // This scheduler can use the time wheel to optimize later.
@@ -107,9 +107,8 @@ public class TaskManager implements MemoryTrackable {
         idToTaskMap = Maps.newConcurrentMap();
         nameToTaskMap = Maps.newConcurrentMap();
         periodFutureMap = Maps.newConcurrentMap();
-        taskRunManager = new TaskRunManager();
+        taskRunManager = new TaskRunManager(taskRunScheduler);
         taskLock = new QueryableReentrantLock(true);
-        taskRunScheduler = taskRunManager.getTaskRunScheduler();
     }
 
     public void start() {
@@ -377,7 +376,7 @@ public class TaskManager implements MemoryTrackable {
                     }
                     periodFutureMap.remove(task.getId());
                 }
-                if (!killTask(task.getName(), false)) {
+                if (!killTask(task.getName(), true)) {
                     LOG.warn("kill task failed: {}", task.getName());
                 }
                 idToTaskMap.remove(task.getId());

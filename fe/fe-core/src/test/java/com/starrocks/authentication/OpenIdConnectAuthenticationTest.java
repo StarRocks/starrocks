@@ -18,6 +18,7 @@ import com.nimbusds.jose.jwk.JWKSet;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.UserAuthOptionAnalyzer;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.NodePosition;
@@ -36,15 +37,15 @@ public class OpenIdConnectAuthenticationTest {
 
         OpenIdConnectAuthenticationProvider provider =
                 new OpenIdConnectAuthenticationProvider("jwks.json", "preferred_username", emptyIssuer, emptyAudience);
-        provider.analyzeAuthOption(new UserIdentity("harbor", "%"),
-                new UserAuthOption("", null, null, true, NodePosition.ZERO));
+        UserAuthOptionAnalyzer.analyzeAuthOption(new UserIdentity("harbor", "%"),
+                new UserAuthOption(null, "", true, NodePosition.ZERO));
         String openIdConnectJson = mockTokenUtils.generateTestOIDCToken(3600 * 1000);
 
         MysqlSerializer serializer = MysqlSerializer.newInstance();
         serializer.writeInt1(0);
         serializer.writeLenEncodedString(openIdConnectJson);
         try {
-            provider.authenticate(new ConnectContext(), "harbor", "%", serializer.toArray(), null, null);
+            provider.authenticate(new ConnectContext(), new UserIdentity("harbor", "%"), serializer.toArray());
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
@@ -119,7 +120,8 @@ public class OpenIdConnectAuthenticationTest {
 
         try {
             OpenIdConnectVerifier.verify(openIdConnectJson, "harbor",
-                    jwkSet, "preferred_username", new String[] {"http://localhost:38080/realms/master"}, new String[] {"foo", "56789"});
+                    jwkSet, "preferred_username", new String[] {"http://localhost:38080/realms/master"},
+                    new String[] {"foo", "56789"});
             Assert.fail();
         } catch (AuthenticationException e) {
             Assert.assertTrue(e.getMessage().contains("Audience (aud) field [12345] is invalid"));

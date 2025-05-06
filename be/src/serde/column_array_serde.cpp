@@ -363,7 +363,6 @@ public:
         uint32_t num_objects = 0;
         buff = read_little_endian_32(buff, &actual_version);
         buff = read_little_endian_32(buff, &num_objects);
-        CHECK_EQ(actual_version, kJsonMetaDefaultFormatVersion) << "Only format_version=1 is supported";
 
         column->reset_column();
         auto& pool = column->get_pool();

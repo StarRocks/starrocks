@@ -127,7 +127,6 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
             }
 
         };
-
     }
 
     /**

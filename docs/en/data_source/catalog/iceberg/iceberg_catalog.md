@@ -302,6 +302,11 @@ Description: Whether to use credentials provided by REST backend for file system
 Required: No
 Description: The warehouse location or identifier of the Iceberg catalog. Example: `s3://my_bucket/warehouse_location` or `sandbox`.
 
+##### iceberg.catalog.rest.nested-namespace-enabled
+
+Required: No
+
+Description: Whether to support querying objects under nested namespace. Default: `false`.
 
 
 The following example creates an Iceberg catalog named `tabular` that uses Tabular as metastore:
@@ -344,6 +349,14 @@ mysql> select * from smith_polaris.`ns1.ns2.tpch_namespace`.tbl;
 +------+
 3 rows in set (0.34 sec)
 ```
+
+</TabItem>
+
+<TabItem value="S3 Tables" label="S3 Tables">
+
+#### S3 Tables
+
+For detailed instructions, see [Create Iceberg REST Catalog for AWS S3 tables](./iceberg_rest_s3.md).
 
 </TabItem>
 

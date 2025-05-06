@@ -1,28 +1,31 @@
 ---
 displayed_sidebar: docs
 ---
+import Experimental from '../../_assets/commonMarkdown/_experimental.mdx'
 
-# [実験的機能] Kudu catalog
+# Kudu catalog
+
+<Experimental />
 
 StarRocks は v3.3 以降で Kudu catalog をサポートしています。
 
-Kudu catalog は、Apache Kudu からデータを取り込まずにクエリを実行できる外部 catalog の一種です。
+Kudu catalog は、Apache Kudu からデータを取り込まずにクエリを実行できる外部カタログの一種です。
 
-また、Kudu catalog を基に [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) を使用して、Kudu からデータを直接変換してロードすることもできます。
+また、Kudu catalog を使用して [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) を利用することで、Kudu からデータを直接変換してロードすることができます。
 
 Kudu クラスターで SQL ワークロードを成功させるためには、StarRocks クラスターが以下の重要なコンポーネントと統合する必要があります。
 
-- Kudu ファイルシステムや Hive メタストアのようなメタストア
+- Kudu ファイルシステムまたは Hive メタストアのようなメタストア
 
 ## 使用上の注意
 
-Kudu catalog はデータのクエリにのみ使用できます。Kudu catalog を使用して Kudu クラスター内のデータを削除、削除、または挿入することはできません。
+Kudu catalog はデータのクエリにのみ使用できます。Kudu catalog を使用して、Kudu クラスター内のデータを削除、削除、または挿入することはできません。
 
 ## 統合準備
 
 Kudu catalog を作成する前に、StarRocks クラスターが Kudu クラスターのストレージシステムとメタストアと統合できることを確認してください。
 
-> **注意**
+> **NOTE**
 >
 > クエリを送信した際に不明なホストを示すエラーが返された場合は、KUDU クラスターのノードのホスト名と IP アドレスのマッピングを **/etc/hosts** パスに追加する必要があります。
 
@@ -30,7 +33,7 @@ Kudu catalog を作成する前に、StarRocks クラスターが Kudu クラス
 
 KUDU クラスターまたは Hive メタストアで Kerberos 認証が有効になっている場合、StarRocks クラスターを次のように設定します。
 
-- 各 FE と各 BE で `kinit -kt keytab_path principal` コマンドを実行して、Key Distribution Center (KDC) から Ticket Granting Ticket (TGT) を取得します。このコマンドを実行するには、KUDU クラスターと Hive メタストアにアクセスする権限が必要です。このコマンドを使用して KDC にアクセスすることは時間に敏感です。そのため、このコマンドを定期的に実行するために cron を使用する必要があります。
+- 各 FE と各 BE で `kinit -kt keytab_path principal` コマンドを実行して、Key Distribution Center (KDC) から Ticket Granting Ticket (TGT) を取得します。このコマンドを実行するには、KUDU クラスターと Hive メタストアにアクセスする権限が必要です。このコマンドを使用して KDC にアクセスすることは時間に敏感です。そのため、cron を使用してこのコマンドを定期的に実行する必要があります。
 - 各 FE の **$FE_HOME/conf/fe.conf** ファイルと各 BE の **$BE_HOME/conf/be.conf** ファイルに `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"` を追加します。この例では、`/etc/krb5.conf` は **krb5.conf** ファイルの保存パスです。必要に応じてパスを変更できます。
 
 ## Kudu catalog の作成
@@ -53,8 +56,8 @@ PROPERTIES
 
 Kudu catalog の名前です。命名規則は以下の通りです。
 
-- 名前には文字、数字 (0-9)、およびアンダースコア (_) を含めることができます。文字で始める必要があります。
-- 名前は大文字と小文字を区別し、長さは 1023 文字を超えてはなりません。
+- 名前には文字、数字 (0-9)、およびアンダースコア (_) を含めることができます。文字で始まる必要があります。
+- 名前は大文字と小文字を区別し、1023 文字を超えることはできません。
 
 #### comment
 
@@ -66,21 +69,21 @@ Kudu catalog の説明です。このパラメータはオプションです。
 
 #### CatalogParams
 
-StarRocks が Kudu クラスターのメタデータにアクセスする方法に関するパラメータのセットです。
+StarRocks が Kudu クラスターのメタデータにアクセスする方法に関する一連のパラメータです。
 
-以下の表は、`CatalogParams` で設定する必要があるパラメータを説明しています。
+次の表は、`CatalogParams` で設定する必要があるパラメータを説明しています。
 
 | パラメータ           | 必須 | 説明                                                                                                                                                                                                                                                                                                                                                                                                             |
 |---------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | kudu.catalog.type   | はい      | Kudu クラスターで使用するメタストアのタイプです。このパラメータを `kudu` または `hive` に設定します。                                                                                                                                                                                                                                                                                                                       |
-| kudu.master                   | いいえ       | Kudu マスターのアドレスを指定します。デフォルトは `localhost:7051` です。                                                                                                                                                                                                                                                                                                                                         |
+| kudu.master                   | いいえ       | Kudu Master のアドレスを指定します。デフォルトは `localhost:7051` です。                                                                                                                                                                                                                                                                                                                                         |
 | hive.metastore.uris | いいえ       | Hive メタストアの URI です。形式: `thrift://<metastore_IP_address>:<metastore_port>`。Hive メタストアで高可用性 (HA) が有効になっている場合、複数のメタストア URI を指定し、カンマ (`,`) で区切ることができます。例: `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`。 |
 | kudu.schema-emulation.enabled | いいえ       | `schema` エミュレーションを有効または無効にするオプションです。デフォルトではオフ (false) になっており、すべてのテーブルは `default` `schema` に属します。                                                                                                                                                                                                                                                                 |
-| kudu.schema-emulation.prefix | いいえ       | `schema` エミュレーションのプレフィックスは、`kudu.schema-emulation.enabled` = `true` の場合にのみ設定する必要があります。デフォルトのプレフィックスは空文字列です: ` `。                                                                                                                                                                                                                                                                       |
+| kudu.schema-emulation.prefix | いいえ       | `kudu.schema-emulation.enabled` = `true` の場合にのみ設定する `schema` エミュレーションのプレフィックスです。デフォルトのプレフィックスは空文字列です: ` `。                                                                                                                                                                                                                                                                       |
 
-> **注意**
+> **NOTE**
 >
-> Hive メタストアを使用する場合、Kudu データをクエリする前に、Hive メタストアノードのホスト名と IP アドレスのマッピングを `/etc/hosts` パスに追加する必要があります。そうしないと、クエリを開始した際に StarRocks が Hive メタストアにアクセスできない可能性があります。
+> Hive メタストアを使用する場合、Kudu データをクエリする前に、Hive メタストアノードのホスト名と IP アドレスのマッピングを `/etc/hosts` パスに追加する必要があります。そうしないと、クエリを開始する際に StarRocks が Hive メタストアにアクセスできない可能性があります。
 
 ### 例
 
@@ -137,17 +140,17 @@ SHOW CREATE CATALOG kudu_catalog;
 DROP Catalog kudu_catalog;
 ```
 
-## Kudu テーブルのスキーマを表示
+## Kudu テーブルのスキーマの表示
 
-Kudu テーブルのスキーマを表示するには、次の構文のいずれかを使用します。
+Kudu テーブルのスキーマを表示するには、次のいずれかの構文を使用します。
 
-- スキーマを表示
+- スキーマの表示
 
   ```SQL
   DESC[RIBE] <catalog_name>.<database_name>.<table_name>;
   ```
 
-- CREATE ステートメントからスキーマと場所を表示
+- CREATE ステートメントからスキーマと場所の表示
 
   ```SQL
   SHOW CREATE TABLE <catalog_name>.<database_name>.<table_name>;
@@ -187,7 +190,7 @@ Kudu テーブルのスキーマを表示するには、次の構文のいずれ
 
 ## Kudu からのデータのロード
 
-OLAP テーブル `olap_tbl` があると仮定して、以下のようにデータを変換してロードできます。
+OLAP テーブル `olap_tbl` があると仮定して、次のようにデータを変換してロードできます。
 
 ```SQL
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM kudu_table;

@@ -330,6 +330,12 @@ public class StatisticsMetaManager extends FrontendDaemon {
             return false;
         }
         LOG.info("create multi column statistics table done");
+        for (MultiColumnStatsMeta meta : GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                .getMultiColumnStatsMetaMap().values()) {
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().addMultiColumnStatsMeta(new MultiColumnStatsMeta(
+                    meta.getDbId(), meta.getTableId(), meta.getColumnIds(), meta.getAnalyzeType(),
+                    meta.getStatsTypes(), LocalDateTime.MIN, meta.getProperties()));
+        }
         return checkTableExist(MULTI_COLUMN_STATISTICS_TABLE_NAME);
     }
 
@@ -341,11 +347,14 @@ public class StatisticsMetaManager extends FrontendDaemon {
         try {
             List<ColumnDef> columns = ImmutableList.of(
                     new ColumnDef("id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("is_enable", new TypeDef(ScalarType.createType(PrimitiveType.BOOLEAN))),
                     new ColumnDef("bind_sql", new TypeDef(ScalarType.createVarcharType(65530))),
                     new ColumnDef("bind_sql_digest", new TypeDef(ScalarType.createVarcharType(65530))),
                     new ColumnDef("bind_sql_hash", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                     new ColumnDef("plan_sql", new TypeDef(ScalarType.createVarcharType(65530))),
                     new ColumnDef("costs", new TypeDef(ScalarType.createType(PrimitiveType.DOUBLE))),
+                    new ColumnDef("query_ms", new TypeDef(ScalarType.createType(PrimitiveType.DOUBLE))),
+                    new ColumnDef("source", new TypeDef(ScalarType.createVarcharType(100))),
                     new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
             );
 

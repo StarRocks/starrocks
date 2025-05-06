@@ -79,6 +79,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
@@ -315,6 +316,7 @@ public class TransactionState implements Writable, GsonPreProcessable {
     private ConcurrentMap<Long, TTabletLocation> tabletIdToTTabletLocation = Maps.newConcurrentMap();
 
     private List<String> createdPartitionNames = Lists.newArrayList();
+    private AtomicBoolean isCreatePartitionFailed = new AtomicBoolean(false);
 
     private final ReentrantReadWriteLock txnLock = new ReentrantReadWriteLock(true);
 
@@ -473,9 +475,10 @@ public class TransactionState implements Writable, GsonPreProcessable {
             }
             return true;
         }
-        if (state != ReplicaState.NORMAL) {
-            // Skip check when replica is CLONE, ALTER or SCHEMA CHANGE
-            // We handle version missing in finishTask when change state to NORMAL
+        if (state != ReplicaState.NORMAL && state != ReplicaState.CLONE) {
+            // Skip check when replica is ALTER or SCHEMA CHANGE.
+            // Should not return true if the state is CLONE, because lastSuccessVersion will be updated incorrectly
+            // in 'OlapTableTxnLogApplier.applyVisibleLog'.
             if (LOG.isDebugEnabled()) {
                 Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId);
                 LOG.debug("skip tabletCommitInfos check because tablet {} backend {} is in state {}",
@@ -557,10 +560,10 @@ public class TransactionState implements Writable, GsonPreProcessable {
     }
 
     public List<Long> getCallbackId() {
-        if (callbackId != -1) {
+        if (this.callbackIdList == null || this.callbackIdList.isEmpty()) {
             return Lists.newArrayList(callbackId);
         } else {
-            return new ArrayList<>(callbackIdList);
+            return Lists.newArrayList(this.callbackIdList);
         }
     }
 
@@ -1113,6 +1116,14 @@ public class TransactionState implements Writable, GsonPreProcessable {
         }
         partitionNameToTPartition.clear();
         tabletIdToTTabletLocation.clear();
+    }
+
+    public void setIsCreatePartitionFailed(boolean v) {
+        this.isCreatePartitionFailed.set(v);
+    }
+
+    public boolean getIsCreatePartitionFailed() {
+        return this.isCreatePartitionFailed.get();
     }
 
     @Override

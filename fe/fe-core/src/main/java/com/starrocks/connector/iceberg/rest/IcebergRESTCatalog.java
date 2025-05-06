@@ -19,15 +19,12 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
 import com.starrocks.connector.share.iceberg.IcebergAwsClientFactory;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -40,7 +37,9 @@ import org.apache.iceberg.aws.AwsProperties;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.BadRequestException;
+import org.apache.iceberg.exceptions.RESTException;
 import org.apache.iceberg.rest.RESTCatalog;
+import org.apache.iceberg.util.PropertyUtil;
 import org.apache.iceberg.view.View;
 import org.apache.iceberg.view.ViewBuilder;
 import org.apache.logging.log4j.LogManager;
@@ -52,11 +51,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
+import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.convertDbNameToNamespace;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX;
-import static com.starrocks.connector.iceberg.IcebergMetadata.COMMENT;
 import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
 
 public class IcebergRESTCatalog implements IcebergCatalog {
@@ -65,9 +65,11 @@ public class IcebergRESTCatalog implements IcebergCatalog {
 
     public static final String KEY_CREDENTIAL_WITH_PREFIX = ICEBERG_CUSTOM_PROPERTIES_PREFIX + "credential";
     public static final String KEY_VENDED_CREDENTIALS_ENABLED = "vended-credentials-enabled";
+    public static final String KEY_NESTED_NAMESPACE_ENABLED = "rest.nested-namespace-enabled";
 
     private final Configuration conf;
     private final RESTCatalog delegate;
+    private final boolean nestedNamespaceEnabled;
 
     public IcebergRESTCatalog(String name, Configuration conf, Map<String, String> properties) {
         this.conf = conf;
@@ -88,10 +90,10 @@ public class IcebergRESTCatalog implements IcebergCatalog {
                 Boolean.parseBoolean(copiedProperties.getOrDefault(KEY_VENDED_CREDENTIALS_ENABLED, "true"));
         if (enableVendedCredentials) {
             copiedProperties.put("header.X-Iceberg-Access-Delegation", "vended-credentials");
-        } else {
-            copiedProperties.put(AwsProperties.CLIENT_FACTORY, IcebergAwsClientFactory.class.getName());
         }
+        copiedProperties.put(AwsProperties.CLIENT_FACTORY, IcebergAwsClientFactory.class.getName());
 
+        nestedNamespaceEnabled = PropertyUtil.propertyAsBoolean(copiedProperties, KEY_NESTED_NAMESPACE_ENABLED, false);
         // setup oauth2
         OAuth2SecurityConfig securityConfig = OAuth2SecurityConfigBuilder.build(copiedProperties);
         OAuth2SecurityProperties securityProperties = new OAuth2SecurityProperties(securityConfig);
@@ -104,6 +106,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     public IcebergRESTCatalog(RESTCatalog restCatalog, Configuration conf) {
         this.delegate = restCatalog;
         this.conf = conf;
+        this.nestedNamespaceEnabled = false;
     }
 
     @Override
@@ -123,9 +126,22 @@ public class IcebergRESTCatalog implements IcebergCatalog {
 
     @Override
     public List<String> listAllDatabases() {
-        return delegate.listNamespaces().stream()
-                .map(ns -> ns.level(0))
-                .collect(Collectors.toList());
+        try {
+            if (nestedNamespaceEnabled) {
+                return listNamespaces(Namespace.empty());
+            } else {
+                return delegate.listNamespaces().stream().map(ns -> ns.level(0))
+                            .collect(Collectors.toList());
+            }
+        } catch (RESTException e) {
+            throw new StarRocksConnectorException("Failed to list namespaces", e);
+        }
+    }
+
+    private List<String> listNamespaces(Namespace parent) {
+        return delegate.listNamespaces(parent).stream().
+                flatMap(child -> Stream.concat(Stream.of(child.toString()), listNamespaces(child).stream()))
+                .collect(toImmutableList());
     }
 
     @Override
@@ -263,26 +279,6 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     @Override
     public Map<String, String> loadNamespaceMetadata(Namespace ns) {
         return ImmutableMap.copyOf(delegate.loadNamespaceMetadata(ns));
-    }
-
-    private Map<String, String> buildProperties(ConnectorViewDefinition definition) {
-        ConnectContext connectContext = ConnectContext.get();
-        if (connectContext == null) {
-            throw new StarRocksConnectorException("not found connect context when building iceberg view properties");
-        }
-
-        String queryId = connectContext.getQueryId().toString();
-
-        Map<String, String> properties = ImmutableMap.of(
-                "queryId", queryId,
-                "starrocksCatalog", delegate.name(),
-                "starrocksVersion", GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFeVersion());
-
-        if (!Strings.isNullOrEmpty(definition.getComment())) {
-            properties.put(COMMENT, definition.getComment());
-        }
-
-        return properties;
     }
 
     @Override

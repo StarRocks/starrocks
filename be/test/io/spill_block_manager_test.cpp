@@ -178,6 +178,7 @@ TEST_F(SpillBlockManagerTest, log_block_allocation_test) {
         auto res = log_block_mgr->acquire_block(opts);
         ASSERT_TRUE(res.ok());
         auto block = res.value();
+        ASSERT_TRUE(block->try_acquire_sizes(10));
         std::string expected = fmt::format("LogBlock[container={}/{}/{}-{}]", local_path, print_id(dummy_query_id),
                                            print_id(dummy_query_id), "node1-1-0");
         ASSERT_EQ(block->debug_string(), expected);
@@ -231,6 +232,7 @@ TEST_F(SpillBlockManagerTest, file_block_allocation_test) {
         auto res = file_block_mgr->acquire_block(opts);
         ASSERT_TRUE(res.ok());
         auto block = res.value();
+        ASSERT_TRUE(block->try_acquire_sizes(10));
         std::string expected = fmt::format("FileBlock[container={}/{}/{}-{}]", local_path, print_id(dummy_query_id),
                                            print_id(dummy_query_id), "node1-1-0");
         ASSERT_EQ(block->debug_string(), expected);
@@ -344,51 +346,38 @@ TEST_F(SpillBlockManagerTest, dir_allocate_test) {
 }
 
 TEST_F(SpillBlockManagerTest, block_capacity_test) {
-    auto test_func = [&](std::shared_ptr<spill::BlockManager>& block_mgr, spill::DirPtr dir) {
-        ASSERT_OK(block_mgr->open());
-        {
-            spill::AcquireBlockOptions opts{.query_id = dummy_query_id,
-                                            .fragment_instance_id = dummy_query_id,
-                                            .plan_node_id = 1,
-                                            .name = "node1",
-                                            .block_size = 10};
-            auto res = block_mgr->acquire_block(opts);
-            ASSERT_TRUE(res.ok());
-            ASSERT_EQ(dir->get_current_size(), 10);
-            auto block = res.value();
+    {
+        auto log_block_mgr = std::make_shared<spill::LogBlockManager>(dummy_query_id, local_dir_mgr.get());
+        ASSERT_OK(log_block_mgr->open());
+        char vals[4096];
+        // 1. allocate the first block but not release it
+        spill::AcquireBlockOptions opts{.query_id = dummy_query_id,
+                                        .fragment_instance_id = dummy_query_id,
+                                        .plan_node_id = 1,
+                                        .name = "node1",
+                                        .block_size = 10};
+        opts.affinity_group = log_block_mgr->acquire_affinity_group();
+        auto res = log_block_mgr->acquire_block(opts);
+        ASSERT_TRUE(res.ok());
+        ASSERT_EQ(local_dir->get_current_size(), 10);
+        ASSERT_OK(res.value()->append(std::vector<Slice>{Slice(vals, 5)}));
+        ASSERT_EQ(local_dir->get_current_size(), 10);
+        ASSERT_OK(res.value()->append(std::vector<Slice>{Slice(vals, 5)}));
+        ASSERT_EQ(local_dir->get_current_size(), 10);
+        ASSERT_OK(res.value()->append(std::vector<Slice>{Slice(vals, 5)}));
+        ASSERT_EQ(local_dir->get_current_size(), 15);
+        ASSERT_OK(log_block_mgr->release_block(res.value()));
 
-            ASSERT_TRUE(block->preallocate(5));
-            // there are 10 bytes left unused, preallocate will not actually apply for space at this time
-            ASSERT_EQ(dir->get_current_size(), 10);
-            ASSERT_EQ(block->size(), 0);
-            char tmp[5];
-            ASSERT_OK(block->append({Slice(tmp, 5)}));
-            ASSERT_EQ(block->size(), 5);
+        res = log_block_mgr->acquire_block(opts);
+        ASSERT_TRUE(res.ok());
+        ASSERT_EQ(local_dir->get_current_size(), 25);
+        ASSERT_OK(log_block_mgr->release_block(res.value()));
 
-            // there are 5 bytes left unused, preallocate will not actually apply for space at this time
-            ASSERT_TRUE(block->preallocate(5));
-            ASSERT_EQ(dir->get_current_size(), 10);
-            ASSERT_OK(block->append({Slice(tmp, 5)}));
-            ASSERT_EQ(block->size(), 10);
-            ASSERT_EQ(dir->get_current_size(), 10);
-
-            // there is no remaining space, preallocate needs to actually apply for space
-            ASSERT_TRUE(block->preallocate(20));
-            ASSERT_EQ(block->size(), 10);
-            ASSERT_EQ(dir->get_current_size(), 30);
-        }
-
-        block_mgr.reset();
-        // after block_mgr is destroyed, all space should be released
-        ASSERT_EQ(dir->get_current_size(), 0);
-    };
-    std::shared_ptr<spill::BlockManager> log_block_mgr =
-            std::make_shared<spill::LogBlockManager>(dummy_query_id, local_dir_mgr.get());
-    test_func(log_block_mgr, local_dir);
-
-    std::shared_ptr<spill::BlockManager> file_block_mgr =
-            std::make_shared<spill::FileBlockManager>(dummy_query_id, remote_dir_mgr.get());
-    test_func(file_block_mgr, remote_dir);
+        res = log_block_mgr->acquire_block(opts);
+        ASSERT_TRUE(res.ok());
+        ASSERT_EQ(local_dir->get_current_size(), 25);
+    }
+    ASSERT_EQ(local_dir->get_current_size(), 0);
 }
 
 } // namespace starrocks::vectorized

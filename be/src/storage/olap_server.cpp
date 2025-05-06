@@ -326,7 +326,12 @@ void* StorageEngine::_adjust_pagecache_callback(void* arg_this) {
             size_t bytes_to_dec = dec_advisor->bytes_should_gc(MonoTime::Now(), delta_high);
             evict_pagecache(cache, static_cast<int64_t>(bytes_to_dec), _bg_worker_stopped);
         } else {
-            int64_t max_cache_size = std::max(GlobalEnv::GetInstance()->get_storage_page_cache_size(), kcacheMinSize);
+            auto ret = CacheEnv::GetInstance()->get_storage_page_cache_limit();
+            if (!ret.ok()) {
+                LOG(ERROR) << "Failed to get storage page size: " << ret.status();
+                continue;
+            }
+            int64_t max_cache_size = std::max(ret.value(), kcacheMinSize);
             int64_t cur_cache_size = cache->get_capacity();
             if (cur_cache_size >= max_cache_size) {
                 continue;
@@ -936,7 +941,8 @@ void* StorageEngine::_schedule_apply_thread_callback(void* arg) {
             }
 
             if (!_bg_worker_stopped.load(std::memory_order_consume) && !_schedule_apply_tasks.empty()) {
-                _apply_tablet_changed_cv.wait_until(ul, _schedule_apply_tasks.top().first);
+                auto wait_time = _schedule_apply_tasks.top().first;
+                _apply_tablet_changed_cv.wait_until(ul, wait_time);
             }
         }
     }

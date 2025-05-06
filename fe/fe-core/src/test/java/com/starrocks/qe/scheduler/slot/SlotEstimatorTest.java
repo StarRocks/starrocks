@@ -14,6 +14,7 @@
 
 package com.starrocks.qe.scheduler.slot;
 
+import com.starrocks.common.Config;
 import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.qe.DefaultCoordinator;
@@ -239,5 +240,34 @@ public class SlotEstimatorTest extends SchedulerTestBase {
         }
 
         return null;
+    }
+
+    @Test
+    public void testCreateWithPolicy() {
+        {
+            Config.query_queue_slots_estimator_strategy = "MBE";
+            QueryQueueOptions opts = new QueryQueueOptions(true, new QueryQueueOptions.V2());
+            assertThat(SlotEstimatorFactory.create(opts)).isInstanceOf(SlotEstimatorFactory.MemoryBasedSlotsEstimator.class);
+        }
+        {
+            Config.query_queue_slots_estimator_strategy = "PBE";
+            QueryQueueOptions opts = new QueryQueueOptions(true, new QueryQueueOptions.V2());
+            assertThat(SlotEstimatorFactory.create(opts)).isInstanceOf(SlotEstimatorFactory.ParallelismBasedSlotsEstimator.class);
+        }
+        {
+            Config.query_queue_slots_estimator_strategy = "MAX";
+            QueryQueueOptions opts = new QueryQueueOptions(true, new QueryQueueOptions.V2());
+            assertThat(SlotEstimatorFactory.create(opts)).isInstanceOf(SlotEstimatorFactory.MaxSlotsEstimator.class);
+        }
+        {
+            Config.query_queue_slots_estimator_strategy = "MIN";
+            QueryQueueOptions opts = new QueryQueueOptions(true, new QueryQueueOptions.V2());
+            assertThat(SlotEstimatorFactory.create(opts)).isInstanceOf(SlotEstimatorFactory.MinSlotsEstimator.class);
+        }
+        {
+            Config.query_queue_slots_estimator_strategy = "BAD_SET";
+            QueryQueueOptions opts = new QueryQueueOptions(true, new QueryQueueOptions.V2());
+            assertThat(SlotEstimatorFactory.create(opts)).isInstanceOf(SlotEstimatorFactory.MaxSlotsEstimator.class);
+        }
     }
 }

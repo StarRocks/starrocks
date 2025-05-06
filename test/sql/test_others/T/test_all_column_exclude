@@ -1,0 +1,19 @@
+-- name: test_all_column_exclude @slow
+CREATE TABLE test_table ( id INT, name VARCHAR(50), age INT, email VARCHAR(100)) DUPLICATE KEY(id) PROPERTIES ("compression" = "LZ4","replicated_storage" = "true","replication_num" = "1");
+INSERT INTO test_table VALUES (1, 'John', 30, 'john@example.com');
+SELECT * EXCLUDE (age) FROM test_table;
+SELECT * EXCEPT (age) FROM test_table;
+SELECT * EXCLUDE (name, email) FROM test_table;
+SELECT * EXCEPT (name, email) FROM test_table;
+SELECT test_table.* EXCLUDE (email) FROM test_table;
+SELECT * EXCLUDE (id) FROM test_table WHERE age > 25;
+SELECT * EXCLUDE (age) AS t FROM test_table;
+SELECT * EXCLUDE (invalid_col) FROM test_table;
+SELECT test_table.* EXCLUDE (department) FROM test_table;
+SELECT * EXCLUDE (age) FROM test_table WHERE id = 1;
+SELECT id, name EXCLUDE (name) FROM test_table; 
+SELECT * EXCLUDE (id, name, age, email) FROM test_table;
+SELECT * EXCLUDE (age, age) FROM test_table;
+SELECT * EXCLUDE (NAME) FROM test_table; 
+with cte1 as ( select * EXCLUDE (name) from test_table)  select * from cte1;
+select * from (select * EXCLUDE(name) from test_table)r;

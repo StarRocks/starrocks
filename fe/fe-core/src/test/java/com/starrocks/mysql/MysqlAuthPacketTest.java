@@ -20,6 +20,7 @@ package com.starrocks.mysql;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.OIDCSecurityIntegration;
+import com.starrocks.authentication.OpenIdConnectAuthenticationProvider;
 import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.privilege.AuthPlugin;
@@ -92,7 +93,7 @@ public class MysqlAuthPacketTest {
         Assert.assertEquals("testDb", packet.getDb());
     }
 
-    private MysqlAuthPacket buildPacket(String user) {
+    public static MysqlAuthPacket buildPacket(String user, byte[] password, AuthPlugin.Client authPlugin) {
         MysqlSerializer serializer = MysqlSerializer.newInstance();
 
         // capability
@@ -105,20 +106,18 @@ public class MysqlAuthPacketTest {
         serializer.writeBytes(new byte[23]);
         // user name
         serializer.writeNulTerminateString(user);
-        // plugin data
-        serializer.writeInt1(20);
-        byte[] buf = new byte[20];
-        for (int i = 0; i < 20; ++i) {
-            buf[i] = (byte) ('a' + i);
-        }
-        serializer.writeBytes(buf);
+
+        // auth response
+        serializer.writeInt1(password.length);
+        serializer.writeBytes(password);
+
         // database
-        serializer.writeNulTerminateString("testDb");
+        serializer.writeNulTerminateString("");
 
         //plugin
-        serializer.writeNulTerminateString("mysql_native_password");
+        serializer.writeNulTerminateString(authPlugin.toString());
 
-        byteBuffer = serializer.toByteBuffer();
+        ByteBuffer byteBuffer = serializer.toByteBuffer();
 
         MysqlAuthPacket packet = new MysqlAuthPacket();
         packet.readFrom(byteBuffer);
@@ -147,7 +146,11 @@ public class MysqlAuthPacketTest {
         Analyzer.analyze(createUserStmt, ctx);
         authenticationMgr.createUser(createUserStmt);
 
-        MysqlAuthPacket authPacket = buildPacket("harbor");
+        byte[] buf = new byte[20];
+        for (int i = 0; i < 20; ++i) {
+            buf[i] = (byte) ('a' + i);
+        }
+        MysqlAuthPacket authPacket = buildPacket("harbor", buf, AuthPlugin.Client.MYSQL_NATIVE_PASSWORD);
         ConnectContext context = new ConnectContext();
         MysqlProto.switchAuthPlugin(authPacket, context);
         Assert.assertEquals("authentication_openid_connect_client", authPacket.getPluginName());
@@ -155,14 +158,14 @@ public class MysqlAuthPacketTest {
         //test security integration
         Map<String, String> properties = new HashMap<>();
         properties.put(OIDCSecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_openid_connect");
-        properties.put(OIDCSecurityIntegration.OIDC_JWKS_URL, "jwks.json");
-        properties.put(OIDCSecurityIntegration.OIDC_PRINCIPAL_FIELD, "preferred_username");
+        properties.put(OpenIdConnectAuthenticationProvider.OIDC_JWKS_URL, "jwks.json");
+        properties.put(OpenIdConnectAuthenticationProvider.OIDC_PRINCIPAL_FIELD, "preferred_username");
         properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER, "file_group_provider");
         properties.put(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN, "group1");
         authenticationMgr.createSecurityIntegration("oidc", properties, true);
 
         Config.authentication_chain = new String[] {"native", "oidc"};
-        authPacket = buildPacket("tina");
+        authPacket = buildPacket("tina", buf, AuthPlugin.Client.MYSQL_NATIVE_PASSWORD);
         MysqlProto.switchAuthPlugin(authPacket, context);
         Assert.assertEquals("authentication_openid_connect_client", authPacket.getPluginName());
     }
@@ -188,7 +191,11 @@ public class MysqlAuthPacketTest {
         Analyzer.analyze(createUserStmt, ctx);
         authenticationMgr.createUser(createUserStmt);
 
-        MysqlAuthPacket authPacket = buildPacket("harbor");
+        byte[] buf = new byte[20];
+        for (int i = 0; i < 20; ++i) {
+            buf[i] = (byte) ('a' + i);
+        }
+        MysqlAuthPacket authPacket = buildPacket("harbor", buf, AuthPlugin.Client.MYSQL_NATIVE_PASSWORD);
         ConnectContext context = new ConnectContext();
         Assert.assertThrows(AuthenticationException.class, () -> MysqlProto.switchAuthPlugin(authPacket, context));
 

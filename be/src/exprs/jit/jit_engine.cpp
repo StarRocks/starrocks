@@ -98,13 +98,12 @@ Status JitObjectCache::register_func(JITScalarFunction func) {
     // put into LRU cache
     auto* cache = new JitCacheEntry(_obj_code, _func);
     GlobalEnv::GetInstance()->jit_cache_mem_tracker()->consume(cache_func_size);
-    auto* handle = _lru_cache->insert(
-            _cache_key, (void*)cache, cache_func_size, cache_func_size, [](const CacheKey& key, void* value) {
-                auto* entry = ((JitCacheEntry*)value);
-                // maybe release earlier as the std::shared_ptr<llvm::MemoryBuffer> is hold by caller
-                GlobalEnv::GetInstance()->jit_cache_mem_tracker()->release(entry->obj_buff->getBufferSize());
-                delete entry;
-            });
+    auto* handle = _lru_cache->insert(_cache_key, (void*)cache, cache_func_size, [](const CacheKey& key, void* value) {
+        auto* entry = ((JitCacheEntry*)value);
+        // maybe release earlier as the std::shared_ptr<llvm::MemoryBuffer> is hold by caller
+        GlobalEnv::GetInstance()->jit_cache_mem_tracker()->release(entry->obj_buff->getBufferSize());
+        delete entry;
+    });
     if (handle == nullptr) {
         delete cache;
         LOG(WARNING) << "JIT register func failed, func = " << _cache_key << ", ir size = " << cache_func_size;
@@ -133,10 +132,7 @@ Status JITEngine::init() {
 #if BE_TEST
     _func_cache = new_lru_cache(32000); // 1k capacity per cache of 32 shards in LRU cache
 #else
-    int64_t mem_limit = MemInfo::physical_mem();
-    if (GlobalEnv::GetInstance()->process_mem_tracker()->has_limit()) {
-        mem_limit = GlobalEnv::GetInstance()->process_mem_tracker()->limit();
-    }
+    int64_t mem_limit = GlobalEnv::GetInstance()->process_mem_limit();
     int64_t jit_lru_cache_size = config::jit_lru_cache_size;
     if (jit_lru_cache_size <= 0) {
         if (mem_limit < JIT_CACHE_LOWEST_LIMIT) {

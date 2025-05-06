@@ -27,6 +27,7 @@ import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.SlotProvider;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -529,6 +530,14 @@ public class JobSpec {
         return isSyncStreamLoad;
     }
 
+    public boolean isJobNeedCheckQueue() {
+        // The queries only using schema meta will never been queued, because a MySQL client will
+        // query schema meta after the connection is established.
+        boolean notNeed =
+                this.scanNodes.isEmpty() || this.scanNodes.stream().allMatch(SchemaScanNode.class::isInstance);
+        return !notNeed;
+    }
+
     public static class Builder {
         private final JobSpec instance = new JobSpec();
 
@@ -644,32 +653,15 @@ public class JobSpec {
         }
 
         private boolean isEnableQueue(ConnectContext connectContext) {
-            if (connectContext != null && connectContext.getSessionVariable() != null &&
-                    !connectContext.getSessionVariable().isEnableQueryQueue()) {
-                return false;
-            }
-            if (instance.isStatisticsJob()) {
-                return GlobalVariable.isEnableQueryQueueStatistic();
-            }
-
-            if (instance.isLoadType()) {
-                return GlobalVariable.isEnableQueryQueueLoad();
-            }
-
-            return GlobalVariable.isEnableQueryQueueSelect();
+            BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
+            return slotManager.isEnableQueryQueue(connectContext, instance);
         }
 
         private boolean needCheckQueue() {
             if (!instance.connectContext.isNeedQueued()) {
                 return false;
             }
-
-            // The queries only using schema meta will never been queued, because a MySQL client will
-            // query schema meta after the connection is established.
-            boolean notNeed =
-                    instance.scanNodes.isEmpty() || instance.scanNodes.stream().allMatch(SchemaScanNode.class::isInstance);
-            return !notNeed;
+            return instance.isJobNeedCheckQueue();
         }
     }
-
 }

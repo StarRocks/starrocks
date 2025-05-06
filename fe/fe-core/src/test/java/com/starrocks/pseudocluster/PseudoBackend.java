@@ -29,6 +29,7 @@ import com.starrocks.proto.AbortCompactionRequest;
 import com.starrocks.proto.AbortCompactionResponse;
 import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.proto.AbortTxnResponse;
+import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.CompactResponse;
 import com.starrocks.proto.DeleteDataRequest;
@@ -128,6 +129,8 @@ import com.starrocks.thrift.TExportTaskRequest;
 import com.starrocks.thrift.TFetchDataParams;
 import com.starrocks.thrift.TFetchDataResult;
 import com.starrocks.thrift.TFinishTaskRequest;
+import com.starrocks.thrift.TGetTabletsInfoRequest;
+import com.starrocks.thrift.TGetTabletsInfoResult;
 import com.starrocks.thrift.THeartbeatResult;
 import com.starrocks.thrift.TMasterInfo;
 import com.starrocks.thrift.TMasterResult;
@@ -895,6 +898,13 @@ public class PseudoBackend {
             return null;
         }
 
+        @Override
+        public TGetTabletsInfoResult get_tablets_info(TGetTabletsInfoRequest request) throws TException {
+            TGetTabletsInfoResult result = new TGetTabletsInfoResult(new TStatus(TStatusCode.OK));
+            result.setReport_version(reportVersion.get());
+            result.setTablets(tabletManager.getAllTabletInfo());
+            return result;
+        }
     }
 
     private class PseudoPBackendService implements PBackendService {
@@ -1183,6 +1193,11 @@ public class PseudoBackend {
 
         @Override
         public Future<VacuumResponse> vacuum(VacuumRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<PublishVersionResponse> aggregatePublishVersion(AggregatePublishVersionRequest request) {
             return CompletableFuture.completedFuture(null);
         }
     }

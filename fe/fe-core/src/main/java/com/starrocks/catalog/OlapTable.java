@@ -90,6 +90,7 @@ import com.starrocks.common.util.Util;
 import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.DataCacheInfo;
+import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.ColocatePersistInfo;
@@ -360,7 +361,7 @@ public class OlapTable extends Table {
 
         for (Index index : indexes) {
             Set<ColumnId> columnIdsSetForIndex = index.getColumns().stream().collect(Collectors.toSet());
-            if (columnIdsSetForSchema.containsAll​(columnIdsSetForIndex)) {
+            if (columnIdsSetForSchema.containsAll(columnIdsSetForIndex)) {
                 hitIndexes.add(index);
             }
         }
@@ -448,6 +449,14 @@ public class OlapTable extends Table {
         olapTable.dbName = this.dbName;
     }
 
+    protected void restoreColumnUniqueIdIfNeed() {
+        boolean needRestoreColumnUniqueId = (indexIdToMeta.values().stream().findFirst().
+                get().getSchema().get(0).getUniqueId() < 0);
+        if (needRestoreColumnUniqueId) {
+            setMaxColUniqueId(LakeTableHelper.restoreColumnUniqueId(this));
+        }
+    }
+
     public void addDoubleWritePartition(long sourcePartitionId, long tempPartitionId) {
         doubleWritePartitions.put(sourcePartitionId, tempPartitionId);
     }
@@ -491,10 +500,33 @@ public class OlapTable extends Table {
         tableProperty.setBinlogConfig(curBinlogConfig);
     }
 
+    public void setFlatJsonConfig(FlatJsonConfig flatJsonConfig) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(Maps.newHashMap());
+        }
+        tableProperty.modifyTableProperties(flatJsonConfig.toProperties());
+        tableProperty.setFlatJsonConfig(flatJsonConfig);
+    }
+
+    public FlatJsonConfig getFlatJsonConfig() {
+        if (tableProperty != null) {
+            return tableProperty.getFlatJsonConfig();
+        }
+        return null;
+    }
+
     public boolean containsBinlogConfig() {
         if (tableProperty == null ||
                 tableProperty.getBinlogConfig() == null ||
                 tableProperty.getBinlogConfig().getVersion() == BinlogConfig.INVALID) {
+            return false;
+        }
+        return true;
+    }
+
+    public boolean containsFlatJsonConfig() {
+        if (tableProperty == null ||
+                tableProperty.getFlatJsonConfig() == null) {
             return false;
         }
         return true;
@@ -1349,22 +1381,24 @@ public class OlapTable extends Table {
      * Infer the distribution info based on partitions and cluster status
      */
     public void inferDistribution(DistributionInfo info) throws DdlException {
-        if (info.getBucketNum() == 0) {
-            if (info.getType() == DistributionInfo.DistributionInfoType.HASH) {
-                // infer bucket num
+        if (info.getType() == DistributionInfo.DistributionInfoType.HASH) {
+            // infer bucket num
+            if (info.getBucketNum() == 0) {
                 int numBucket = CatalogUtils.calAvgBucketNumOfRecentPartitions(this,
                         5, Config.enable_auto_tablet_distribution);
                 info.setBucketNum(numBucket);
-            } else if (info.getType() == DistributionInfo.DistributionInfoType.RANDOM) {
-                // prior to use user set mutable bucket num
-                long numBucket = getMutableBucketNum();
-                if (numBucket <= 0) {
-                    numBucket = CatalogUtils.calPhysicalPartitionBucketNum();
-                }
-                info.setBucketNum((int) numBucket);
-            } else {
-                throw new DdlException("Unknown distribution info type: " + info.getType());
             }
+        } else if (info.getType() == DistributionInfo.DistributionInfoType.RANDOM) {
+            // prior to use user set mutable bucket num
+            long numBucket = getMutableBucketNum();
+            if (numBucket > 0) {
+                info.setBucketNum((int) numBucket);
+            } else if (info.getBucketNum() == 0) {
+                numBucket = CatalogUtils.calPhysicalPartitionBucketNum();
+                info.setBucketNum((int) numBucket);
+            }
+        } else {
+            throw new DdlException("Unknown distribution info type: " + info.getType());
         }
     }
 
@@ -2461,6 +2495,13 @@ public class OlapTable extends Table {
         tableProperty.buildInMemory();
     }
 
+    public Boolean enablePartitionAggregation() {
+        if (tableProperty != null) {
+            return tableProperty.enablePartitionAggregation();
+        }
+        return false;
+    }
+
     public Boolean enablePersistentIndex() {
         if (tableProperty != null) {
             return tableProperty.enablePersistentIndex();
@@ -2746,6 +2787,15 @@ public class OlapTable extends Table {
         tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION,
                 TimeUtils.toHumanReadableString(duration));
         tableProperty.buildDataCachePartitionDuration();
+    }
+
+    public void setEnablePartitionAggregation(boolean enablePartitionAggregation) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION,
+                        Boolean.valueOf(enablePartitionAggregation).toString());
+        tableProperty.buildEnablePartitionAggregation();
     }
 
     public void setStorageCoolDownTTL(PeriodDuration duration) {
@@ -3427,6 +3477,10 @@ public class OlapTable extends Table {
             }
         }
 
+        if (enablePartitionAggregation()) {
+            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION, enablePartitionAggregation().toString());
+        }
+
         Map<String, String> tableProperties = tableProperty != null ? tableProperty.getProperties() : Maps.newLinkedHashMap();
         // partition live number
         String partitionLiveNumber = tableProperties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER);
@@ -3518,6 +3572,30 @@ public class OlapTable extends Table {
         // storage type
         if (storageType() != null && !PropertyAnalyzer.PROPERTIES_STORAGE_TYPE_COLUMN.equalsIgnoreCase(storageType())) {
             properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE, storageType());
+        }
+
+        // flat json enable
+        String flatJsonEnable = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE);
+        if (!Strings.isNullOrEmpty(flatJsonEnable)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, flatJsonEnable);
+        }
+
+        // flat json null factor
+        String flatJsonNullFactor = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR);
+        if (!Strings.isNullOrEmpty(flatJsonNullFactor)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, flatJsonNullFactor);
+        }
+
+        // flat json sparsity factor
+        String flatJsonSparsityFactor = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR);
+        if (!Strings.isNullOrEmpty(flatJsonSparsityFactor)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, flatJsonSparsityFactor);
+        }
+
+        // flat json column max
+        String flatJsonColumnMax = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX);
+        if (!Strings.isNullOrEmpty(flatJsonColumnMax)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, flatJsonColumnMax);
         }
 
         return properties;

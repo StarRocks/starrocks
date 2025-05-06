@@ -38,6 +38,7 @@ class RowsetUpdateState;
 class RowsetColumnUpdateState;
 class Tablet;
 class PersistentIndexCompactionManager;
+class PersistentIndexLoadExecutor;
 
 class LocalDelvecLoader : public DelvecLoader {
 public:
@@ -96,6 +97,7 @@ public:
     ThreadPool* apply_thread_pool() { return _apply_thread_pool.get(); }
     ThreadPool* get_pindex_thread_pool() { return _get_pindex_thread_pool.get(); }
     PersistentIndexCompactionManager* get_pindex_compaction_mgr() { return _persistent_index_compaction_mgr.get(); }
+    PersistentIndexLoadExecutor* get_pindex_load_executor() { return _pindex_load_executor.get(); }
 
     DynamicCache<uint64_t, PrimaryIndex>& index_cache() { return _index_cache; }
 
@@ -116,8 +118,10 @@ public:
 
     void clear_cache();
 
+    void clear_cached_del_vec_by_tablet_id(int64_t tablet_id);
     void clear_cached_del_vec(const std::vector<TabletSegmentId>& tsids);
 
+    void clear_cached_delta_column_group_by_tablet_id(int64_t tablet_id);
     void clear_cached_delta_column_group(const std::vector<TabletSegmentId>& tsids);
 
     StatusOr<size_t> clear_delta_column_group_before_version(KVStore* meta, const std::string& tablet_path,
@@ -129,6 +133,8 @@ public:
 
     MemTracker* mem_tracker() const { return _update_mem_tracker; }
 
+    MemTracker* update_state_mem_tracker() const { return _update_state_mem_tracker.get(); }
+
     string memory_stats();
 
     string detail_memory_stats();
@@ -136,7 +142,7 @@ public:
     string topn_memory_stats(size_t topn);
 
     Status update_primary_index_memory_limit(int32_t update_memory_limit_percent) {
-        int64_t byte_limits = ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem());
+        int64_t byte_limits = GlobalEnv::GetInstance()->process_mem_limit();
         int32_t update_mem_percent = std::max(std::min(100, update_memory_limit_percent), 0);
         _index_cache.set_capacity(byte_limits * update_mem_percent);
         return Status::OK();
@@ -148,9 +154,6 @@ public:
     // Used in UT only
     bool TEST_update_state_exist(Tablet* tablet, Rowset* rowset);
     bool TEST_primary_index_refcnt(int64_t tablet_id, uint32_t expected_cnt);
-
-private:
-    void* _schedule_apply_thread_callback(void* arg);
 
 private:
     // default 6min
@@ -182,6 +185,7 @@ private:
     std::unique_ptr<ThreadPool> _apply_thread_pool;
     std::unique_ptr<ThreadPool> _get_pindex_thread_pool;
     std::unique_ptr<PersistentIndexCompactionManager> _persistent_index_compaction_mgr;
+    std::unique_ptr<PersistentIndexLoadExecutor> _pindex_load_executor;
 
     bool _keep_pindex_bf = true;
 

@@ -242,6 +242,11 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 sortKeyColumnUniqueIds = sortKeyUniqueIds;
             }
 
+            // If upgraded from an old version and do schema change,
+            // the schema saved in indexSchemaMap is the schema in the old version, whose uniqueId is -1,
+            // so here we initialize column uniqueId here.
+            restoreColumnUniqueIdIfNeed(indexSchemaMap.get(shadowIdxId));
+
             table.setIndexMeta(shadowIdxId, indexIdToName.get(shadowIdxId), indexSchemaMap.get(shadowIdxId), 0, 0,
                     indexShortKeyMap.get(shadowIdxId), TStorageType.COLUMN,
                     table.getKeysTypeByIndexId(indexIdMap.get(shadowIdxId)), null, sortKeyColumnIndexes,
@@ -352,6 +357,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             OlapTable table = getTableOrThrow(db, tableId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
 
+            enableTabletCreationOptimization |= table.enablePartitionAggregation();
             if (enableTabletCreationOptimization) {
                 numTablets = physicalPartitionIndexMap.size();
             } else {

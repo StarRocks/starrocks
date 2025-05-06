@@ -11,7 +11,9 @@
             "items": [
                 "introduction/what_is_starrocks",
                 "introduction/Architecture",
-                "introduction/Features"
+                "introduction/Features",
+                "introduction/versioning",
+                "introduction/maturity"
             ]
         },
         {
@@ -191,6 +193,7 @@
                 "loading/Stream_Load_transaction_interface",
                 "loading/Flink_cdc_load",
                 "loading/Flink-connector-starrocks",
+                "loading/load_from_pulsar",
                 "loading/Load_to_Primary_Key_tables",
                 "loading/Etl_in_loading",
                 "loading/loading_tools",
@@ -239,7 +242,9 @@
                                 "id": "data_source/catalog/iceberg/iceberg_catalog"
                             },
                             "items": [
-                                "data_source/catalog/iceberg/iceberg_timetravel"
+                                "data_source/catalog/iceberg/iceberg_timetravel",
+                                "data_source/catalog/iceberg/iceberg_meta_table",
+                                "data_source/catalog/iceberg/iceberg_rest_s3"
                             ]
                         },
                         "data_source/catalog/hudi_catalog",
@@ -454,6 +459,7 @@
                         "administration/management/Scale_up_down",
                         "administration/management/BE_blacklist",
                         "administration/management/Backup_and_restore",
+                        "administration/cluster_snapshot",
                         {
                             "type": "category",
                             "label": "Monitor and Alert",
@@ -572,6 +578,7 @@
                 "faq/datalake",
                 "faq/Sql_faq",
                 "faq/Dump_query",
+                "faq/fe_mem_faq",
                 "faq/Others"
             ]
         },

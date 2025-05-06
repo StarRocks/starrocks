@@ -249,6 +249,12 @@ public:
         ASAN_POISON_MEMORY_REGION(rhs.data_ + rhs.len_, rhs.capacity_ - rhs.len_);
     }
 
+    void advance(size_t count) {
+        EnsureRoomForAppend(count);
+        ASAN_UNPOISON_MEMORY_REGION(data_ + len_, count);
+        len_ += count;
+    }
+
 private:
     faststring(const faststring&) = delete;
     const faststring& operator=(const faststring&) = delete;
