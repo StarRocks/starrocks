@@ -22,7 +22,6 @@
         </Root>
         <Logger name='com.starrocks.alter' level='DEBUG' />
         <Logger name='com.starrocks.catalog' level='DEBUG' />
-        <Logger name='com.starrocks.journal' level='DEBUG' />
         <Logger name='com.starrocks.scheduler' level='DEBUG' />
     </Loggers>
 </Configuration>
