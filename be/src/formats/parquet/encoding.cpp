@@ -190,6 +190,7 @@ EncodingInfoResolver::EncodingInfoResolver() {
     // FIXED_LEN_BYTE_ARRAY encoding
     _add_map<tparquet::Type::FIXED_LEN_BYTE_ARRAY, tparquet::Encoding::PLAIN>();
     _add_map<tparquet::Type::FIXED_LEN_BYTE_ARRAY, tparquet::Encoding::RLE_DICTIONARY>();
+    _add_map<tparquet::Type::FIXED_LEN_BYTE_ARRAY, tparquet::Encoding::DELTA_LENGTH_BYTE_ARRAY>();
     _add_map<tparquet::Type::FIXED_LEN_BYTE_ARRAY, tparquet::Encoding::DELTA_BYTE_ARRAY>();
     _add_map<tparquet::Type::FIXED_LEN_BYTE_ARRAY, tparquet::Encoding::BYTE_STREAM_SPLIT>();
 }
