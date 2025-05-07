@@ -15,8 +15,8 @@
 package com.starrocks.sql.optimizer;
 
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.server.GlobalStateMgr;
-import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;

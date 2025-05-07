@@ -47,6 +47,7 @@ import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -64,7 +65,6 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import org.apache.commons.lang3.time.StopWatch;
-import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
