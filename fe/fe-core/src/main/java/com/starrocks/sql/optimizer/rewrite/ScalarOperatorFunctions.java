@@ -49,6 +49,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import net.openhft.hashing.LongHashFunction;
 import org.apache.commons.lang.StringUtils;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.utils.URLEncodedUtils;
@@ -87,6 +88,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.catalog.PrimitiveType.BIGINT;
 import static com.starrocks.catalog.PrimitiveType.BITMAP;
 import static com.starrocks.catalog.PrimitiveType.BOOLEAN;
+import static com.starrocks.catalog.PrimitiveType.CHAR;
 import static com.starrocks.catalog.PrimitiveType.DATE;
 import static com.starrocks.catalog.PrimitiveType.DATETIME;
 import static com.starrocks.catalog.PrimitiveType.DECIMAL128;
@@ -230,6 +232,23 @@ public class ScalarOperatorFunctions {
             Pair<Long, Long> value = computeYearWeekValue(year, month, day, weekBehaviour | 2);
             return value.first * 100 + value.second;
         }
+    }
+
+    public static class HashFunctions {
+        private static final long XX_HASH3_64_SEED = 0;
+        public static long hash64(String value) {
+            byte[] data = value.getBytes();
+            LongHashFunction hasher = LongHashFunction.xx3(XX_HASH3_64_SEED);
+            return hasher.hashBytes(data, 0, data.length);
+        }
+    }
+
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "xx_hash3_64", argTypes = {VARCHAR}, returnType = BIGINT),
+            @ConstantFunction(name = "xx_hash3_64", argTypes = {CHAR}, returnType = BIGINT)
+    })
+    public static ConstantOperator xxHash64(ConstantOperator input) {
+        return ConstantOperator.createBigint(HashFunctions.hash64(input.getVarchar()));
     }
 
     /**
