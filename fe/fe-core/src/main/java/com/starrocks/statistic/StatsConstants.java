@@ -61,6 +61,7 @@ public class StatsConstants {
                     .build();
 
     public static final int STATISTICS_PARTITION_UPDATED_THRESHOLD = 10;
+
     public static final String STATISTICS_DB_NAME = "_statistics_";
     public static final String SAMPLE_STATISTICS_TABLE_NAME = "table_statistic_v1";
     public static final String FULL_STATISTICS_TABLE_NAME = "column_statistics";
@@ -98,6 +99,7 @@ public class StatsConstants {
 
     // SQL plan manager table
     public static final String SPM_BASELINE_TABLE_NAME = "spm_baselines";
+    public static final String QUERY_HISTORY_TABLE_NAME = "query_history";
 
     /**
      * Deprecated stats properties
