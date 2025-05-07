@@ -187,11 +187,14 @@ public class SPMPlanner {
 
         @Override
         public Boolean visitInPredicate(InPredicate node, ParseNode context) {
-            if (node.getChildren().stream().noneMatch(SPMFunctions::isSPMFunctions)) {
+            if (node.getChildren().stream().skip(1).noneMatch(SPMFunctions::isSPMFunctions)) {
                 return super.visitExpression(node, context);
             }
             InPredicate other = cast(context);
             if (node.isNotIn() != other.isNotIn() || !check(node.getChild(0), other.getChild(0))) {
+                return false;
+            }
+            if (!check(node.getChild(0), other.getChild(0))) {
                 return false;
             }
             Preconditions.checkState(node.getChildren().size() == 2);
@@ -222,14 +225,14 @@ public class SPMPlanner {
 
         @Override
         public ParseNode visitInPredicate(InPredicate node, Void context) {
-            if (node.getChildren().stream().anyMatch(SPMFunctions::isSPMFunctions)) {
+            if (node.getChildren().stream().skip(1).anyMatch(SPMFunctions::isSPMFunctions)) {
                 Preconditions.checkState(node.getChildren().size() == 2);
                 Preconditions.checkState(SPMFunctions.isSPMFunctions(node.getChild(1)));
                 Preconditions.checkState(!node.getChild(1).getChildren().isEmpty());
                 Preconditions.checkState(node.getChild(1).getChild(0) instanceof IntLiteral);
                 long spmId = ((IntLiteral) node.getChild(1).getChild(0)).getValue();
                 InPredicate value = placeholderValues.get(spmId).cast();
-                return new InPredicate(node.getChild(0), value.getListChildren(), node.isNotIn());
+                return new InPredicate(visitExpr(node.getChild(0), context), value.getListChildren(), node.isNotIn());
             }
             return super.visitExpression(node, context);
         }

@@ -85,13 +85,12 @@ public class SPMPlanRewriteTest extends PlanTestBase {
         Assertions.assertTrue(planner.getBaseline().getId() > 1);
         Assertions.assertNotEquals(query, statements.get(0));
         assertContains(planner.getBaseline().getPlanSql(),
-                "SELECT v2, v4 FROM " + "(SELECT * FROM t0 WHERE v2 = _spm_const_var(1)) t_0 INNER JOIN[SHUFFLE] " +
-                        "(SELECT * FROM t1 WHERE v6 IS NOT NULL) t_1 ON v3 = v6");
-        assertContains(AstToSQLBuilder.toSQL(query), "SELECT `v2`, `v4`\n" +
-                "FROM (SELECT *\n" +
-                "FROM `t0`\n" +
-                "WHERE `v2` = 2) `t_0` INNER JOIN [SHUFFLE] (SELECT *\n" +
-                "FROM `t1`\n" +
-                "WHERE `v6` IS NOT NULL) `t_1` ON `v3` = `v6`");
+                "SELECT v4, v2 FROM (SELECT v2, v4 FROM "
+                        + "(SELECT * FROM t0 WHERE v2 = _spm_const_var(1)) t_0 INNER JOIN[SHUFFLE] t1 ON v3 = v6) t2");
+        assertContains(AstToSQLBuilder.toSQL(query), "SELECT `v4`, `v2`\n"
+                + "FROM (SELECT `v2`, `v4`\n"
+                + "FROM (SELECT *\n"
+                + "FROM `t0`\n"
+                + "WHERE `v2` = 2) `t_0` INNER JOIN [SHUFFLE] `t1` ON `v3` = `v6`) `t2`");
     }
 }

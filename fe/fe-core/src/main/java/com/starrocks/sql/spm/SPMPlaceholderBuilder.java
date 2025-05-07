@@ -122,12 +122,13 @@ public class SPMPlaceholderBuilder {
     private class PlaceholderInserter extends SPMUpdateExprVisitor<Expr> {
         @Override
         public ParseNode visitInPredicate(InPredicate node, Expr root) {
-            if (node.getChildren().stream().anyMatch(SPMFunctions::isSPMFunctions)) {
+            if (node.getChildren().stream().skip(1).anyMatch(SPMFunctions::isSPMFunctions)) {
                 return visitExpression(node, root);
             }
             if (!node.isConstantValues()) {
                 return visitExpression(node, root);
             }
+            node.setChild(0, visitExpr(node.getChild(0), root == null ? node.clone() : root));
             Optional<Expr> placeholder = findPlaceholderExpr(node, root);
             if (placeholder.isPresent()) {
                 if (isStrictCheck) {
@@ -140,7 +141,7 @@ public class SPMPlaceholderBuilder {
             List<Expr> v = node.getChildren().stream().skip(1).collect(Collectors.toList());
             Expr spm = SPMFunctions.newFunc(SPMFunctions.CONST_LIST_FUNC, nextId(), v);
             Expr in = new InPredicate(node.getChild(0), List.of(spm), node.isNotIn(), node.getPos());
-            placeholderExprs.add(new PlaceholderExpr(node, in, node));
+            placeholderExprs.add(new PlaceholderExpr(node, in, root));
             return in;
         }
 
@@ -168,7 +169,7 @@ public class SPMPlaceholderBuilder {
                 placeholderExprs.add(p);
                 return node;
             }
-            return super.visitFunctionCall(node, root);
+            return visitExpression(node, root);
         }
 
         @Override
@@ -177,12 +178,7 @@ public class SPMPlaceholderBuilder {
             // e.g. A AND B AND C, set root to be A/B/C
             if (root == null) {
                 for (int i = 0; i < node.getChildren().size(); i++) {
-                    if (node.getChild(i) instanceof CompoundPredicate) {
-                        // update root by child
-                        node.setChild(i, visitExpr(node.getChild(i), null));
-                    } else {
-                        node.setChild(i, visitExpr(node.getChild(i), node.getChild(i).clone()));
-                    }
+                    node.setChild(i, visitExpr(node.getChild(i), null));
                 }
             } else {
                 // when compound not root, keep root
@@ -208,8 +204,9 @@ public class SPMPlaceholderBuilder {
                     // must clone root node, because node will update
                     node.setChild(i, visitExpr(node.getChild(i), null));
                 }
+                return node;
             }
-            return super.visitBinaryPredicate(node, root);
+            return visitExpression(node, root);
         }
 
         @Override
@@ -246,13 +243,15 @@ public class SPMPlaceholderBuilder {
 
         @Override
         public ParseNode visitInPredicate(InPredicate node, Expr root) {
-            if (node.getChildren().stream().anyMatch(SPMFunctions::isSPMFunctions)) {
+            if (node.getChildren().stream().skip(1).anyMatch(SPMFunctions::isSPMFunctions)) {
                 return visitExpression(node, root);
             }
             if (!node.isConstantValues()) {
                 return visitExpression(node, root);
             }
-            Optional<Expr> spm = findPlaceholderExpr(node, node);
+
+            node.setChild(0, visitExpr(node.getChild(0), root == null ? node.clone() : root));
+            Optional<Expr> spm = findPlaceholderExpr(node, root);
             if (spm.isEmpty()) {
                 throw new SemanticException("can't find expression placeholder or placeholder conflict, "
                         + "expression : " + node.toMySql());

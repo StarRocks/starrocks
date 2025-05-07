@@ -33,7 +33,6 @@ import java.util.List;
 
 public class SPMTPCHUseTest extends PlanTestBase {
     private static final Logger LOG = LogManager.getLogger(SPMTPCHUseTest.class);
-    private static final List<String> UNSUPPORTED = Lists.newArrayList("q11", "q15", "q16", "q22");
 
     public static CreateBaselinePlanStmt createBaselinePlanStmt(String sql) {
         String createSql = "create baseline using " + sql;
@@ -47,9 +46,6 @@ public class SPMTPCHUseTest extends PlanTestBase {
     public static void beforeAll() throws Exception {
         beforeClass();
         for (var entry : TpchSQL.getAllSQL().entrySet()) {
-            if (UNSUPPORTED.contains(entry.getKey())) {
-                continue;
-            }
             CreateBaselinePlanStmt stmt = createBaselinePlanStmt(entry.getValue());
             SPMStmtExecutor.execute(connectContext, stmt);
         }
@@ -67,12 +63,8 @@ public class SPMTPCHUseTest extends PlanTestBase {
     @MethodSource("testCases")
     public void validate(String name, String sql) throws Exception {
         String s = getFragmentPlan(sql);
-        if (UNSUPPORTED.contains(name)) {
-            assertNotContains(s, "Using baseline plan");
-        } else {
-            assertContains(s, "Using baseline plan");
-            assertNotContains(s, "spm_");
-        }
+        assertContains(s, "Using baseline plan");
+        assertNotContains(s, "spm_");
     }
 
     public static List<Arguments> testCases() {

@@ -65,6 +65,7 @@ public class SPMOptimizer extends Optimizer {
 
         context.setMemo(memo);
         context.setTaskScheduler(scheduler);
+        context.setEnableJoinIsNullPredicateDerive(false);
         this.requiredColumns = requiredColumns;
 
         TaskContext taskContext = new TaskContext(context, requiredProperty, requiredColumns.clone(), Double.MAX_VALUE);

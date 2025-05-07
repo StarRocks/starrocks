@@ -68,6 +68,7 @@ public class OptimizerContext {
     // The options for join predicate pushdown rule
     private boolean enableJoinEquivalenceDerive = true;
     private boolean enableJoinPredicatePushDown = true;
+    private boolean enableJoinIsNullPredicateDerive = true;
 
     // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
     // lifecycle instead of per materialized view.
@@ -89,6 +90,7 @@ public class OptimizerContext {
         this.cteContext.setMaxCTELimit(getSessionVariable().getCboCTEMaxLimit());
 
         this.optimizerOptions = OptimizerOptions.defaultOpt();
+        this.enableJoinIsNullPredicateDerive = getSessionVariable().isCboDeriveJoinIsNullPredicate();
     }
 
     // ============================ Query ============================
@@ -212,6 +214,14 @@ public class OptimizerContext {
 
     public void setEnableJoinPredicatePushDown(boolean enableJoinPredicatePushDown) {
         this.enableJoinPredicatePushDown = enableJoinPredicatePushDown;
+    }
+
+    public boolean isEnableJoinIsNullPredicateDerive() {
+        return enableJoinIsNullPredicateDerive;
+    }
+
+    public void setEnableJoinIsNullPredicateDerive(boolean enableJoinIsNullPredicateDerive) {
+        this.enableJoinIsNullPredicateDerive = enableJoinIsNullPredicateDerive;
     }
 
     public boolean isObtainedFromInternalStatistics() {
