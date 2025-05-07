@@ -189,6 +189,7 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
 | iceberg.catalog.type       | 是      | Iceberg 集群所使用的元数据服务的类型。设置为 `rest`。           |
 | iceberg.catalog.uri        | 是      | REST 服务 Endpoint 的 URI，如 `https://api.tabular.io/ws`。      |
 | iceberg.catalog.security   | 否      | 要使用的授权协议类型。默认值：`NONE`。有效值：`OAUTH2`。使用 `OAUTH2` 需要指定 `token` 或 `credential`。 |
+| iceberg.catalog.view-endpoints-supported   | 否      | 当早期版本的 REST 服务不在 `CatalogConfig` 中返回 Endpoint 时，是否使用视图 Endpoint 来支持与视图相关的操作。该参数用于向后兼容早期版本的 REST 服务器。默认值：`false`。 |
 | iceberg.catalog.oauth2.token | 否    | 用于与服务器交互的 Bearer Token。使用 `OAUTH2` 需要指定 `token` 或 `credential`。示例：`AbCdEf123456`。 |
 | iceberg.catalog.oauth2.credential | 否  | 用于与服务器的 OAuth2 客户端 Credentials Flow 交换 Token 的 Credential。使用 `OAUTH2` 需要指定 `token` 或 `credential`。示例：`AbCdEf123456`。 |
 | iceberg.catalog.oauth2.scope | 否  | 与 REST Catalog 通信时使用的范围。仅在使用 `credential` 时适用。 |
