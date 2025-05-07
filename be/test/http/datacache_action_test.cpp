@@ -19,7 +19,6 @@
 #include <gtest/gtest.h>
 #include <rapidjson/document.h>
 
-#include "cache/block_cache/block_cache.h"
 #include "cache/block_cache/block_cache_hit_rate_counter.hpp"
 #include "cache/block_cache/starcache_wrapper.h"
 #include "cache/block_cache/test_cache_utils.h"
@@ -37,19 +36,6 @@ static void inject_send_reply(HttpRequest* request, HttpStatus status, std::stri
     k_response_str = content;
 }
 } // namespace
-
-Status init_datacache_instance(const std::string& engine, LocalCache* cache) {
-    if (cache->is_initialized()) {
-        return Status::OK();
-    }
-    CacheOptions options;
-    options.mem_space_size = 20 * 1024 * 1024;
-    options.block_size = 256 * 1024;
-    options.max_concurrent_inserts = 100000;
-    options.enable_checksum = false;
-    options.engine = engine;
-    return cache->init(options);
-}
 
 class DataCacheActionTest : public testing::Test {
 public:
