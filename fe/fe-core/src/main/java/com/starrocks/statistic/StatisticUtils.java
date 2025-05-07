@@ -212,7 +212,6 @@ public class StatisticUtils {
                 }
             }
         }
-
         return true;
     }
 
