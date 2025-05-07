@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
@@ -122,12 +123,9 @@ public class CostModel {
     }
 
     public static double getRealCost(CostEstimate costEstimate) {
-        double cpuCostWeight = 0.5;
-        double memoryCostWeight = 2;
-        double networkCostWeight = 1.5;
-        return costEstimate.getCpuCost() * cpuCostWeight +
-                costEstimate.getMemoryCost() * memoryCostWeight +
-                costEstimate.getNetworkCost() * networkCostWeight;
+        return costEstimate.getCpuCost() * GlobalVariable.getCpuCostWeight() +
+                costEstimate.getMemoryCost() * GlobalVariable.getMemoryCostWeight() +
+                costEstimate.getNetworkCost() * GlobalVariable.getNetworkCostWeight();
     }
 
     private static class CostEstimator extends OperatorVisitor<CostEstimate, ExpressionContext> {
