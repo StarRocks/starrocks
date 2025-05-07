@@ -80,7 +80,7 @@ void FunctionHelper::union_produce_nullable_column(const ColumnPtr& v1, NullColu
     }
 }
 
-MFV_AVX512(void union_null_column_impl(uint8_t* dest, const uint8_t* v1, const uint8_t* v2, const size_t bytes) {
+MFV_AVX512F(void union_null_column_impl(uint8_t* dest, const uint8_t* v1, const uint8_t* v2, const size_t bytes) {
     constexpr auto SIMD_SIZE = sizeof(__m512i);
     const auto null1_end = v1 + bytes;
     const auto null1_simd_end = v1 + (bytes & ~(SIMD_SIZE - 1));

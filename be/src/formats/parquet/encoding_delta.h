@@ -652,12 +652,11 @@ private:
         if constexpr (PT == tparquet::Type::FIXED_LEN_BYTE_ARRAY) {
             data_size += max_values * type_length_;
         } else {
+            if (contains_negative_value(length_ptr, max_values)) {
+                return Status::Corruption("negative string delta length");
+            }
             for (int i = 0; i < max_values; ++i) {
-                int32_t len = length_ptr[i];
-                if (PREDICT_FALSE(len < 0)) {
-                    return Status::Corruption("negative string delta length");
-                }
-                data_size += len;
+                data_size += length_ptr[i];
             }
         }
         if (data_size > std::numeric_limits<int32_t>::max()) {
@@ -683,20 +682,18 @@ private:
         int64_t data_size = 0;
         const uint8_t* data_ptr = data_ + bytes_offset_;
         const int32_t* length_ptr = buffered_length_.data() + length_idx_;
+        if (contains_negative_value(length_ptr, max_values)) {
+            return Status::Corruption("negative string delta length");
+        }
         for (int i = 0; i < max_values; ++i) {
             int32_t len = length_ptr[i];
-            if (PREDICT_FALSE(len < 0)) {
-                return Status::Corruption("negative string delta length");
-            }
+            buffer[i].data = (char*)data_ptr;
             buffer[i].size = len;
+            data_ptr += len;
             data_size += len;
         }
         if (data_size > std::numeric_limits<int32_t>::max()) {
             return Status::Corruption("data size overflow in DELTA_LENGTH_BYTE_ARRAY");
-        }
-        for (int i = 0; i < max_values; ++i) {
-            buffer[i].data = (char*)data_ptr;
-            data_ptr += buffer[i].size;
         }
         length_idx_ += max_values;
         num_valid_values_ -= max_values;
@@ -886,7 +883,7 @@ public:
 protected:
     template <bool is_first_run>
     static Status BuildBufferInternal(const int32_t* prefix_len_ptr, int i, Slice* buffer, std::string_view* prefix,
-                                      uint8_t** data_ptr) {
+                                      uint8_t** __restrict__ data_ptr) {
         if (PREDICT_FALSE(static_cast<size_t>(prefix_len_ptr[i]) > prefix->length())) {
             return Status::Corruption("prefix length too large in DELTA_BYTE_ARRAY");
         }
@@ -917,10 +914,10 @@ protected:
         RETURN_IF_ERROR(suffix_decoder_.next_batch(max_values, reinterpret_cast<uint8_t*>(buffer)));
         int64_t data_size = 0;
         const int32_t* prefix_len_ptr = (const int32_t*)buffered_prefix_length_.data() + prefix_len_offset_;
+        if (contains_negative_value(prefix_len_ptr, max_values)) {
+            return Status::Corruption("negative prefix length in DELTA_BYTE_ARRAY");
+        }
         for (int i = 0; i < max_values; ++i) {
-            if (PREDICT_FALSE(prefix_len_ptr[i] < 0)) {
-                return Status::Corruption("negative prefix length in DELTA_BYTE_ARRAY");
-            }
             data_size += prefix_len_ptr[i] + buffer[i].size;
         }
         if (data_size > std::numeric_limits<int32_t>::max()) {
