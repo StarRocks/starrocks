@@ -1295,15 +1295,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return matchTable(excludedTriggerTables, dbName, tableName);
     }
 
-    public boolean shouldRefreshTable(String tableName) {
-        long dbId = this.getDbId();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        if (db == null) {
-            LOG.warn("failed to get Database when pending refresh, DBId: {}", dbId);
-            return false;
-        }
-        String dbName = db.getFullName();
-
+    public boolean shouldRefreshTable(String dbName, String tableName) {
         TableProperty tableProperty = getTableProperty();
         if (tableProperty == null) {
             return true;
