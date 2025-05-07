@@ -122,7 +122,8 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 #ifdef USE_STAROS
     auto* local_cache = cache_env->local_cache();
     if (config::datacache_unified_instance_enable && local_cache != nullptr && local_cache->is_initialized()) {
-        init_staros_worker(local_cache->starcache_instance());
+        auto* starcache = reinterpret_cast<StarCacheWrapper*>(local_cache.get());
+        init_staros_worker(star_cache->starcache_instance());
     } else {
         init_staros_worker(nullptr);
     }

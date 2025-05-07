@@ -29,6 +29,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "testutil/assert.h"
+#include "cache/block_cache/starcache_wrapper.h"
 
 namespace starrocks {
 
@@ -64,6 +65,7 @@ protected:
     RuntimeProfile* _runtime_profile = nullptr;
     RuntimeState* _runtime_state = nullptr;
     std::string _debug_row_output;
+    std::shared_ptr<LocalCache> _local_cache;
     int _debug_rows_per_call = 1;
 };
 
@@ -87,17 +89,17 @@ void HdfsScannerTest::_create_runtime_state(const std::string& timezone) {
 }
 
 Status HdfsScannerTest::_init_datacache(size_t mem_size, const std::string& engine) {
-    auto local_cache = CacheEnv::GetInstance()->local_cache_ptr();
+    _local_cache = std::make_shared<StarCacheWrapper>();
     CacheOptions cache_options;
     cache_options.mem_space_size = mem_size;
-    cache_options.block_size = starrocks::config::datacache_block_size;
-    cache_options.enable_checksum = starrocks::config::datacache_checksum_enable;
+    cache_options.block_size = config::datacache_block_size;
+    cache_options.enable_checksum = config::datacache_checksum_enable;
     cache_options.max_concurrent_inserts = 1500000;
     cache_options.engine = engine;
-    RETURN_IF_ERROR(local_cache->init(cache_options));
+    RETURN_IF_ERROR(_local_cache->init(cache_options));
 
     BlockCache* cache = BlockCache::instance();
-    return cache->init(cache_options, local_cache, nullptr);
+    return cache->init(cache_options, _local_cache, nullptr);
 }
 
 THdfsScanRange* HdfsScannerTest::_create_scan_range(const std::string& file, uint64_t offset, uint64_t length) {

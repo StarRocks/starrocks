@@ -63,10 +63,6 @@ public:
 
     virtual bool available() const = 0;
     virtual bool mem_cache_available() const = 0;
-
-#ifdef WITH_STARCACHE
-    virtual std::shared_ptr<starcache::StarCache> starcache_instance() = 0;
-#endif
 };
 
 } // namespace starrocks

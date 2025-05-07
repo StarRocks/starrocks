@@ -366,7 +366,8 @@ void CacheEnv::destroy() {
 Status CacheEnv::_init_starcache_based_object_cache() {
 #ifdef WITH_STARCACHE
     if (_local_cache != nullptr && _local_cache->is_initialized()) {
-        _starcache_based_object_cache = std::make_shared<StarCacheModule>(_local_cache->starcache_instance());
+        auto* starcache = reinterpret_cast<StarCacheWrapper*>(_local_cache.get());
+        _starcache_based_object_cache = std::make_shared<StarCacheModule>(starcache->starcache_instance());
     }
 #endif
     return Status::OK();
