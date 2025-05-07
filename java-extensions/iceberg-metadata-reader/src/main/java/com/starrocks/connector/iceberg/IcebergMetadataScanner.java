@@ -175,24 +175,38 @@ public class IcebergMetadataScanner extends AbstractIcebergMetadataScanner {
 
     // TODO(stephen): use a unified schema on the com.starrocks.connector.share.iceberg
     private Object get(String columnName, ContentFile<?> file) {
-      return switch (columnName) {
-        case "content" -> file.content().id();
-        case "file_path" -> file.location();
-        case "file_format" -> file.format().toString();
-        case "spec_id" -> file.specId();
-        case "partition_data" -> table.spec().isPartitioned() ? getPartitionData(file) : null;
-        case "record_count" -> file.recordCount();
-        case "file_size_in_bytes" -> file.fileSizeInBytes();
-        case "split_offsets" -> file.splitOffsets();
-        case "sort_id" -> file.sortOrderId();
-        case "equality_ids" -> file.equalityFieldIds() != null ? file.equalityFieldIds() : null;
-        case "file_sequence_number" -> file.fileSequenceNumber();
-        case "data_sequence_number" -> file.dataSequenceNumber();
-        case "column_stats" -> getIcebergMetrics(file);
-        case "key_metadata" -> file.keyMetadata() == null ? null : toByteArray(file.keyMetadata());
-        case "first_row_id" -> file.firstRowId();
-        default -> throw new IllegalArgumentException("Unrecognized column name " + columnName);
-      };
+        switch (columnName) {
+            case "content":
+                return file.content().id();
+            case "file_path":
+                return file.path().toString();
+            case "file_format":
+                return file.format().toString();
+            case "spec_id":
+                return file.specId();
+            case "partition_data":
+                return table.spec().isPartitioned() ? getPartitionData(file) : null;
+            case "record_count":
+                return file.recordCount();
+            case "file_size_in_bytes":
+                return file.fileSizeInBytes();
+            case "split_offsets":
+                return file.splitOffsets();
+            case "sort_id":
+                return file.sortOrderId();
+            case "equality_ids":
+                return file.equalityFieldIds() != null ? file.equalityFieldIds() : null;
+            case "file_sequence_number":
+                return file.fileSequenceNumber();
+            case "data_sequence_number":
+                return file.dataSequenceNumber();
+            case "column_stats":
+                return getIcebergMetrics(file);
+            case "key_metadata":
+                return file.keyMetadata() == null ? null : toByteArray(file.keyMetadata());
+            default:
+                throw new IllegalArgumentException("Unrecognized column name " + columnName);
+        }
     }
 
     private byte[] getPartitionData(ContentFile<?> file) {

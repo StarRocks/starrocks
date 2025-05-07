@@ -34,7 +34,6 @@ public class IcebergMetadataCollectJob extends MetadataCollectJob {
             ", data_sequence_number" + // BIGINT
             ", column_stats" + // BINARY
             ", key_metadata" + // BINARY
-            ", first_row_id " + // BIGINT
             "FROM `$catalogName`.`$dbName`.`$tableName$logical_iceberg_metadata` " +
             "FOR VERSION AS OF $snapshotId " +
             "WHERE $predicate'";

@@ -1407,7 +1407,7 @@ public class IcebergMetadataTest extends TableTestBase {
         collectJob.init(starRocksAssert.getCtx().getSessionVariable());
         String expectedSql = "SELECT content, file_path, file_format, spec_id, partition_data, record_count," +
                 " file_size_in_bytes, split_offsets, sort_id, equality_ids, file_sequence_number," +
-                " data_sequence_number, column_stats, key_metadata, first_row_id FROM" +
+                " data_sequence_number, column_stats, key_metadata FROM" +
                 " `iceberg_catalog`.`db`.`table$logical_iceberg_metadata` FOR VERSION AS OF 1 WHERE 1=1'";
         Assert.assertEquals(expectedSql, collectJob.getSql());
         Assert.assertNotNull(collectJob.getContext());
