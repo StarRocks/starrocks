@@ -261,6 +261,12 @@ REST catalog 用の `MetastoreParams`:
 必須: はい
 説明: REST サービスエンドポイントの URI。例: `https://api.tabular.io/ws`。
 
+###### iceberg.catalog.view-endpoints-supported
+
+必須: いいえ
+
+説明: 以前のバージョンの REST サービスが `CatalogConfig` でエンドポイントを返さない場合に、ビュー関連の操作をサポートするためにビューエンドポイントを使用するかどうか。このパラメータは初期のバージョンの REST サーバとの下位互換性のために使用される。デフォルト: `false`。
+
 ###### iceberg.catalog.security
 
 必須: いいえ
