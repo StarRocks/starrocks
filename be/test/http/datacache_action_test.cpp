@@ -20,8 +20,9 @@
 #include <rapidjson/document.h>
 
 #include "cache/block_cache/block_cache.h"
-#include "cache/block_cache/local_cache.h"
 #include "cache/block_cache/block_cache_hit_rate_counter.hpp"
+#include "cache/block_cache/starcache_wrapper.h"
+#include "cache/block_cache/test_cache_utils.h"
 #include "http/http_channel.h"
 #include "http/http_request.h"
 #include "util/brpc_stub_cache.h"
@@ -60,6 +61,10 @@ public:
     void SetUp() override {
         k_response_str = "";
         _evhttp_req = evhttp_request_new(nullptr, nullptr);
+
+        auto options = TestCacheUtils::create_simple_options(256 * KB, 20 * MB);
+        _cache = std::make_shared<StarCacheWrapper>();
+        ASSERT_OK(_cache->init(options));
     }
     void TearDown() override {
         if (_evhttp_req != nullptr) {
@@ -69,13 +74,11 @@ public:
 
 protected:
     evhttp_request* _evhttp_req = nullptr;
+    std::shared_ptr<LocalCache> _cache;
 };
 
 TEST_F(DataCacheActionTest, stat_success) {
-    auto cache = std::make_shared<StarCacheWrapper>();
-    ASSERT_TRUE(init_datacache_instance("starcache", cache.get()).ok());
-
-    DataCacheAction action(cache.get());
+    DataCacheAction action(_cache.get());
 
     HttpRequest request(_evhttp_req);
     request._method = HttpMethod::GET;
@@ -90,12 +93,10 @@ TEST_F(DataCacheActionTest, stat_success) {
 }
 
 TEST_F(DataCacheActionTest, app_stat_success) {
-    auto cache = std::make_shared<StarCacheWrapper>();
     BlockCacheHitRateCounter* counter = BlockCacheHitRateCounter::instance();
     counter->reset();
-    ASSERT_TRUE(init_datacache_instance("starcache", cache.get()).ok());
 
-    DataCacheAction action(cache.get());
+    DataCacheAction action(_cache.get());
 
     {
         HttpRequest request(_evhttp_req);
