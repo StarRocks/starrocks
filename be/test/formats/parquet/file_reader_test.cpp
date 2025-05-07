@@ -21,8 +21,9 @@
 #include <set>
 
 #include "cache/block_cache/block_cache.h"
-#include "cache/object_cache/starcache_module.h"
 #include "cache/block_cache/starcache_wrapper.h"
+#include "cache/block_cache/test_cache_utils.h"
+#include "cache/object_cache/starcache_module.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "common/logging.h"
@@ -3344,11 +3345,7 @@ TEST_F(FileReaderTest, TestStructSubfieldNoDecodeNotOutput) {
 }
 
 TEST_F(FileReaderTest, TestReadFooterCache) {
-    auto block_cache = std::make_shared<BlockCache>();
-    CacheOptions options;
-    options.mem_space_size = 100 * 1024 * 1024;
-    options.max_concurrent_inserts = 100000;
-    options.engine = "starcache";
+    CacheOptions options = TestCacheUtils::create_simple_options(256 * KB, 100 * MB);
     auto local_cache = std::make_shared<StarCacheWrapper>();
     ASSERT_OK(local_cache->init(options));
     auto cache = std::make_shared<StarCacheModule>(local_cache->starcache_instance());
