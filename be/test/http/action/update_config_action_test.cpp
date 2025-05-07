@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "cache/block_cache/block_cache.h"
+#include "cache/block_cache/test_cache_utils.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
 #include "storage/persistent_index_load_executor.h"
@@ -24,7 +25,6 @@
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
 #include "testutil/scoped_updater.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks {
 
@@ -32,8 +32,6 @@ class UpdateConfigActionTest : public testing::Test {
 public:
     UpdateConfigActionTest() = default;
     ~UpdateConfigActionTest() override = default;
-    static void SetUpTestSuite() {}
-    static void TearDownTestSuite() {}
 
     void SetUp() override {}
     void TearDown() override {}
@@ -44,26 +42,22 @@ TEST_F(UpdateConfigActionTest, update_datacache_disk_size) {
     const std::string cache_dir = "./block_cache_for_update_config";
     ASSERT_TRUE(fs::create_directories(cache_dir).ok());
 
-    auto* cache = CacheEnv::GetInstance()->local_cache();
-    CacheOptions options;
-    options.mem_space_size = 0;
-    options.disk_spaces.push_back({.path = cache_dir, .size = 50 * 1024 * 1024});
-    options.max_concurrent_inserts = 100000;
-    options.block_size = 256 * 1024;
-    options.enable_checksum = false;
-    options.engine = "starcache";
+    auto cache = std::make_shared<StarCacheWrapper>();
+    CacheOptions options = TestCacheUtils::create_simple_options(256 * KB, 0);
+    options.disk_spaces.push_back({.path = cache_dir, .size = 50 * MB});
     ASSERT_OK(cache->init(options));
+    CacheEnv::GetInstance()->set_local_cache(cache);
 
     UpdateConfigAction action(ExecEnv::GetInstance());
 
     ASSERT_ERROR(action.update_config("datacache_disk_size", "-200"));
 
-    ASSERT_ERROR(action.update_config("datacache_disk_size", "100000000"));
+    ASSERT_OK(action.update_config("datacache_disk_size", "100000000"));
 
     std::vector<DirSpace> spaces;
     cache->disk_spaces(&spaces);
     ASSERT_EQ(spaces.size(), 1);
-    ASSERT_EQ(spaces[0].size, 100000000);
+    ASSERT_EQ(spaces[0].size, 100 * MB);
 
     fs::remove_all(cache_dir).ok();
 }
