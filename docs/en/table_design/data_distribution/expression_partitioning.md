@@ -327,7 +327,9 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 
 ### Supported time functions
 
-Expression partitioning supports the following time functions:
+Expression partitioning supports the following functions:
+
+**Time functions**:
 
 - timediff
 - datediff
@@ -351,6 +353,9 @@ Expression partitioning supports the following time functions:
 - unix_timestamp
 - from_unixtime(YmdHiSf/YmdHisf)
 - time_slice
+
+**Other functions**:
+
 - add
 - subtract
 - cast
@@ -359,5 +364,10 @@ Expression partitioning supports the following time functions:
 
 - Combined usage of multiple time functions is supported.
 - The system default time zone is used for all the time functions listed above.
+- The value format of the time function, `YmdHiSf`, must start with the roughest time granularity, `%Y`. Formats that start with a finer time granularity, for example, `%m-%d`, is not allowed.
+
+**Example**
+
+`PARTITION BY from_unixtime(cast(str as INT) + 3600, '%Y-%m-%d')`
 
 :::

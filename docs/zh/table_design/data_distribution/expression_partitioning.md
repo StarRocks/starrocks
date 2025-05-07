@@ -332,7 +332,9 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 
 ### 支持的时间函数
 
-表达式分区支持以下时间函数：
+表达式分区支持以下函数：
+
+**时间函数**:
 
 - timediff
 - datediff
@@ -356,6 +358,9 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 - unix_timestamp
 - from_unixtime(YmdHiSf/YmdHisf)
 - time_slice
+
+**其他函数**：
+
 - add
 - subtract
 - cast
@@ -364,5 +369,10 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 
 - 支持多种时间函数的组合使用。
 - 上述所有时间函数均使用系统默认时区。
+- 时间函数的值的格式 `YmdHiSf` 必须以最粗时间粒度 `%Y` 开始。不允许以更细的时间粒度（例如 `%m-%d`）开始的格式。
+
+**示例**
+
+`PARTITION BY from_unixtime(cast(str as INT) + 3600, '%Y-%m-%d')`
 
 :::

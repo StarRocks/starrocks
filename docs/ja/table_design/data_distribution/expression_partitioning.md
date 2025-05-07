@@ -325,7 +325,9 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 
 ### サポートされている時間関数
 
-式に基づくパーティション化は以下の時間関数をサポートしている：
+式に基づくパーティション化は以下の関数をサポートしている：
+
+**時間関数**：
 
 - timediff
 - datediff
@@ -349,6 +351,9 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 - unix_timestamp
 - from_unixtime(YmdHiSf/YmdHisf)
 - time_slice
+
+**その他の関数**：
+
 - add
 - subtract
 - cast
@@ -357,5 +362,10 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 
 - 複数の時間機能を組み合わせて使用することも可能です。
 - システムのデフォルトタイムゾーンは、上記のすべての時間機能に使用される。
+- 時間関数の値のフォーマットである `YmdHiSf` は、最も大まかな時間の粒度である `%Y` で始まらなければならない。例えば `%m-%d` のように、より細かい時間単位で始まるフォーマットは許可されない。
+
+**例**
+
+`PARTITION BY from_unixtime(cast(str as INT) + 3600, '%Y-%m-%d')`
 
 :::
