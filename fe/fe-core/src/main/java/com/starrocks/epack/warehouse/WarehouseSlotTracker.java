@@ -16,7 +16,6 @@ package com.starrocks.epack.warehouse;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
-import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.BaseSlotTracker;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
@@ -56,25 +55,20 @@ public class WarehouseSlotTracker extends BaseSlotTracker {
     }
 
     @Override
-    public boolean requireSlot(LogicalSlot slot) {
+    protected boolean isResourceCapacityEnough(LogicalSlot slot) {
         final BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
-        if (pendingSlots.size() >= slotManager.getQueryQueueMaxQueuedQueries(slot.getWarehouseId())) {
+        final int maxPendingQueries = slotManager.getQueryQueueMaxQueuedQueries(slot.getWarehouseId());
+        if (maxPendingQueries > 0 && pendingSlots.size() >= maxPendingQueries) {
             return false;
         }
-
-        if (slots.containsKey(slot.getSlotId())) {
-            return true;
-        }
-
-        slots.put(slot.getSlotId(), slot);
-        slotsOrderByExpiredTime.add(slot);
-        pendingSlots.put(slot.getSlotId(), slot);
-
-        MetricRepo.COUNTER_QUERY_QUEUE_SLOT_PENDING.increase((long) slot.getNumPhysicalSlots());
-
-        listeners.forEach(listener -> listener.onRequireSlot(slot));
-        slot.onRequire();
-
         return true;
+    }
+
+
+    @Override
+    public Optional<ExtraMessage> getExtraMessage() {
+        final int concurrency = getCurrentCurrency();
+        final QueryQueueOptions.V2 queryOption = getOptsV2().orElse(QueryQueueOptions.V2.DEFAULT);
+        return Optional.of(new BaseSlotTracker.ExtraMessage(concurrency, queryOption));
     }
 }

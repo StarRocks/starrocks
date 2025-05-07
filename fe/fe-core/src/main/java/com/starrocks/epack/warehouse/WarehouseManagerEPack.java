@@ -241,6 +241,13 @@ public class WarehouseManagerEPack extends WarehouseManager {
                     warehouseProperty.setQueryQueuePendingTimeoutSecond(queryQueuePendingTimeoutSecond);
                     properties.remove(WarehouseProperty.PROPERTY_QUERY_QUEUE_PENDING_TIMEOUT_SECOND);
                 }
+                // query_queue_max_queued_queries
+                if (properties.containsKey(WarehouseProperty.PROPERTY_QUERY_QUEUE_CONCURRENCY_LIMIT)) {
+                    int queryQueueConcurrencyLimit =
+                            Integer.parseInt(properties.get(WarehouseProperty.PROPERTY_QUERY_QUEUE_CONCURRENCY_LIMIT));
+                    warehouseProperty.setQueryQueueConcurrencyLimit(queryQueueConcurrencyLimit);
+                    properties.remove(WarehouseProperty.PROPERTY_QUERY_QUEUE_CONCURRENCY_LIMIT);
+                }
 
                 if (!properties.isEmpty()) {
                     throw new DdlException(String.format("Unknown warehouse properties: {%s}",
@@ -501,6 +508,13 @@ public class WarehouseManagerEPack extends WarehouseManager {
                 }
                 warehouseProperty.setQueryQueuePendingTimeoutSecond(queryQueuePendingTimeoutSecond);
                 properties.remove(WarehouseProperty.PROPERTY_QUERY_QUEUE_PENDING_TIMEOUT_SECOND);
+            }
+            // query_queue_concurrency_limit
+            if (properties.get(WarehouseProperty.PROPERTY_QUERY_QUEUE_CONCURRENCY_LIMIT) != null) {
+                int queryQueueConcurrencyLimit =
+                        Integer.parseInt(properties.get(WarehouseProperty.PROPERTY_QUERY_QUEUE_CONCURRENCY_LIMIT));
+                warehouseProperty.setQueryQueueConcurrencyLimit(queryQueueConcurrencyLimit);
+                properties.remove(WarehouseProperty.PROPERTY_QUERY_QUEUE_CONCURRENCY_LIMIT);
             }
 
             if (!properties.isEmpty()) {

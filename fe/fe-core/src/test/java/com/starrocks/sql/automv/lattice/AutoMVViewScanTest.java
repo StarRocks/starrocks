@@ -64,6 +64,7 @@ public class AutoMVViewScanTest {
                     "union all\n" +
                     "select item_sk,customer_sk, d_date,cume_sales\n" +
                     "from store_v1;";
+            starRocksAssert.getCtx().getSessionVariable().setOptimizerExecuteTimeout(30000);
 
             Result.wrap(() -> starRocksAssert.withView(viewSql));
             STARROCKS_ASSERT.set(starRocksAssert);

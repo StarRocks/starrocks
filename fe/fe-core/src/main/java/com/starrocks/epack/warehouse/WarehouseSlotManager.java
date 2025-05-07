@@ -291,4 +291,17 @@ public class WarehouseSlotManager extends BaseSlotManager {
             return ((LocalWarehouse) warehouse).getProperty().isEnableQueryQueue();
         }
     }
+
+    @Override
+    public int getQueryQueueConcurrencyLimit(long warehouseId) {
+        if (RunMode.isSharedNothingMode()) {
+            return super.getQueryQueueConcurrencyLimit(warehouseId);
+        } else {
+            Warehouse warehouse = getWarehouse(warehouseId);
+            if (warehouse == null || !(warehouse instanceof LocalWarehouse)) {
+                return -1;
+            }
+            return ((LocalWarehouse) warehouse).getProperty().getQueryQueueConcurrencyLimit();
+        }
+    }
 }

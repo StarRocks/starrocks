@@ -280,12 +280,14 @@ public class WarehouseStmtTest {
 
         // test query options
         Assert.assertFalse(warehouseSlotManager.isEnableQueryQueueV2(warehouseId));
+        Assert.assertEquals(-1, warehouseSlotManager.getQueryQueueConcurrencyLimit(warehouseId));
 
         // alter warehouse
         sql = "ALTER WAREHOUSE warehouse_1\n" +
                 "SET (\n" +
                 "    'enable_query_queue' = 'true',\n" +
                 "    'query_queue_max_queued_queries' = '100',\n" +
+                "    'query_queue_concurrency_limit' = '60',\n" +
                 "    'query_queue_pending_timeout_second' = '600'\n" +
                 ")";
         stmt = AnalyzeTestUtil.analyzeSuccess(sql);
@@ -300,6 +302,7 @@ public class WarehouseStmtTest {
         Assert.assertTrue(warehouseSlotManager.isEnableQueryQueueV2(warehouseId));
         Assert.assertEquals(100, warehouseSlotManager.getQueryQueueMaxQueuedQueries(warehouseId));
         Assert.assertEquals(600, warehouseSlotManager.getQueryQueuePendingTimeoutSecond(warehouseId));
+        Assert.assertEquals(60, warehouseSlotManager.getQueryQueueConcurrencyLimit(warehouseId));
 
         // recreate warehouse
         try {
@@ -366,6 +369,7 @@ public class WarehouseStmtTest {
         long warehouseId = warehouse.getId();
         WarehouseProperty property = warehouse.getProperty();
         Assert.assertFalse(property.isEnableQueryQueue());
+        Assert.assertEquals(-1, property.getQueryQueueConcurrencyLimit());
 
         BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
         Assert.assertTrue(slotManager instanceof WarehouseSlotManager);
@@ -383,6 +387,7 @@ public class WarehouseStmtTest {
                 "    'enable_query_queue_load' = 'true',\n" +
                 "    'enable_query_queue_statistic' = 'true',\n" +
                 "    'query_queue_max_queued_queries' = '100',\n" +
+                "    'query_queue_concurrency_limit' = '10',\n" +
                 "    'query_queue_pending_timeout_second' = '600'\n" +
                 ")";
         StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql);
@@ -400,5 +405,6 @@ public class WarehouseStmtTest {
         Assert.assertTrue(warehouseSlotManager.isEnableQueryQueueV2(warehouseId));
         Assert.assertEquals(100, warehouseSlotManager.getQueryQueueMaxQueuedQueries(warehouseId));
         Assert.assertEquals(600, warehouseSlotManager.getQueryQueuePendingTimeoutSecond(warehouseId));
+        Assert.assertEquals(10, property.getQueryQueueConcurrencyLimit());
     }
 }

@@ -34,6 +34,7 @@ public class WarehouseProperty {
     public static final String PROPERTY_ENABLE_QUERY_QUEUE = "enable_query_queue";
     public static final String PROPERTY_ENABLE_QUERY_QUEUE_LOAD = "enable_query_queue_load";
     public static final String PROPERTY_ENABLE_QUERY_QUEUE_STATISTIC = "enable_query_queue_statistic";
+    public static final String PROPERTY_QUERY_QUEUE_CONCURRENCY_LIMIT = "query_queue_concurrency_limit";
     public static final String PROPERTY_QUERY_QUEUE_MAX_QUEUED_QUERIES = "query_queue_max_queued_queries";
     public static final String PROPERTY_QUERY_QUEUE_PENDING_TIMEOUT_SECOND = "query_queue_pending_timeout_second";
 
@@ -69,6 +70,8 @@ public class WarehouseProperty {
     private int queryQueueMaxQueuedQueries = GlobalVariable.getQueryQueueMaxQueuedQueries();
     @SerializedName(value = "query_queue_pending_timeout_second")
     private int queryQueuePendingTimeoutSecond = GlobalVariable.getQueryQueuePendingTimeoutSecond();
+    @SerializedName(value = "query_queue_concurrency_limit")
+    private int queryQueueConcurrencyLimit = -1;
 
     public WarehouseProperty() {
         this.computeReplica = DEFAULT_REPLICA_NUMBER;
@@ -89,6 +92,7 @@ public class WarehouseProperty {
         this.enableQueryQueueStatistic = that.enableQueryQueueStatistic;
         this.queryQueueMaxQueuedQueries = that.queryQueueMaxQueuedQueries;
         this.queryQueuePendingTimeoutSecond = that.queryQueuePendingTimeoutSecond;
+        this.queryQueueConcurrencyLimit = that.queryQueueConcurrencyLimit;
     }
 
     public WarehouseProperty(int computeReplica, ReplicationType repType, WarmupLevelType warmupLevel, boolean enableQueryQueue) {
@@ -162,6 +166,14 @@ public class WarehouseProperty {
         this.queryQueuePendingTimeoutSecond = queryQueuePendingTimeoutSecond;
     }
 
+    public int getQueryQueueConcurrencyLimit() {
+        return queryQueueConcurrencyLimit;
+    }
+
+    public void setQueryQueueConcurrencyLimit(int queryQueueConcurrencyLimit) {
+        this.queryQueueConcurrencyLimit = queryQueueConcurrencyLimit;
+    }
+
     public String toString() {
         return new Gson().toJson(this);
     }
@@ -180,7 +192,8 @@ public class WarehouseProperty {
                 && this.enableQueryQueueLoad == prop.enableQueryQueueLoad
                 && this.enableQueryQueueStatistic == prop.enableQueryQueueStatistic
                 && this.queryQueueMaxQueuedQueries == prop.queryQueueMaxQueuedQueries
-                && this.queryQueuePendingTimeoutSecond == prop.queryQueuePendingTimeoutSecond;
+                && this.queryQueuePendingTimeoutSecond == prop.queryQueuePendingTimeoutSecond
+                && this.queryQueueConcurrencyLimit == prop.queryQueueConcurrencyLimit;
     }
 
     public static ReplicationType replicationTypeFromString(String strType) throws DdlException {
