@@ -264,7 +264,7 @@ Description: The URI of the REST service endpoint. Example: `https://api.tabular
 ###### iceberg.catalog.view-endpoints-supported
 
 Required: No
-Description: Enables support for View-related operations. Default: `false`
+Description: When the old REST service does not return endpoints in CatalogConfig, whether to use the view endpoints to support view-related operations. This parameter is used for backwards compatibility with older REST servers. Default: `false`
 
 ###### iceberg.catalog.security
 
