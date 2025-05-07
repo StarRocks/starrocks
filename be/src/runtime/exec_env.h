@@ -260,6 +260,8 @@ public:
     ObjectCache* external_table_meta_cache() const { return _starcache_based_object_cache.get(); }
     ObjectCache* external_table_page_cache() const { return _starcache_based_object_cache.get(); }
     StoragePageCache* page_cache() const { return _page_cache.get(); }
+    void set_local_cache(std::shared_ptr<LocalCache> local_cache) { _local_cache = std::move(local_cache); }
+    void set_block_cache(std::shared_ptr<BlockCache> block_cache) { _block_cache = std::move(block_cache); }
 
     StatusOr<int64_t> get_storage_page_cache_limit();
     int64_t check_storage_page_cache_limit(int64_t storage_cache_limit);

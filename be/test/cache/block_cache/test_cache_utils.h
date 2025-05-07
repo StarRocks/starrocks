@@ -15,11 +15,12 @@
 #pragma once
 
 #include <fmt/format.h>
+#include <gtest/gtest.h>
 
 #include "cache/block_cache/block_cache.h"
+#include "cache/block_cache/peer_cache_wrapper.h"
 #include "common/logging.h"
 #include "testutil/assert.h"
-#include <gtest/gtest.h>
 
 namespace starrocks {
 
@@ -30,7 +31,7 @@ constexpr size_t GB = MB * 1024;
 class TestCacheUtils {
 public:
     static CacheOptions create_simple_options(size_t block_size, size_t mem_quota, ssize_t disk_quota = -1,
-                                       const std::string& engine = "starcache") {
+                                              const std::string& engine = "starcache") {
         CacheOptions options;
         options.mem_space_size = mem_quota;
         if (disk_quota > 0) {
@@ -48,9 +49,11 @@ public:
 
     static std::shared_ptr<BlockCache> create_cache(const CacheOptions& options) {
         auto local_cache = std::make_shared<StarCacheWrapper>();
+        auto remote_cache = std::make_shared<PeerCacheWrapper>();
         auto block_cache = std::make_shared<BlockCache>();
         EXPECT_OK(local_cache->init(options));
-        EXPECT_OK(block_cache->init(options, local_cache, nullptr));
+        EXPECT_OK(remote_cache->init(options));
+        EXPECT_OK(block_cache->init(options, local_cache, remote_cache));
         return block_cache;
     }
 };
