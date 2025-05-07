@@ -88,17 +88,14 @@ public:
 
     static void TearDownTestCase() { ASSERT_TRUE(fs::remove_all("./block_disk_cache").ok()); }
 
-    void SetUp() override {}
-    void TearDown() override {
-        if (_cache) {
-            _cache->shutdown();
-        }
-    }
+    void SetUp() override { _mock_fs = std::make_shared<MockFileSystem>(); }
+
+    void TearDown() override {}
 
     static void insert_to_cache(BlockCache* cache, size_t count);
 
-private:
-    BlockCache* _cache = nullptr;
+protected:
+    std::shared_ptr<MockFileSystem> _mock_fs;
 };
 
 const size_t DiskSpaceMonitorTest::kBlockSize = 256 * KB;
@@ -119,13 +116,10 @@ TEST_F(DiskSpaceMonitorTest, adjust_for_empty_cache_dir) {
     SCOPED_UPDATE(int64_t, config::datacache_disk_safe_level, 70);
     SCOPED_UPDATE(int64_t, config::datacache_min_disk_quota_for_adjustment, 0);
 
-    auto space_monitor = std::make_unique<DiskSpaceMonitor>(nullptr);
-    MockFileSystem* mock_fs = new MockFileSystem;
-    space_monitor->_fs.reset(mock_fs);
-
     SpaceInfo space_info = {.capacity = 1000 * GB, .free = 800 * GB, .available = 500 * GB};
-    mock_fs->set_space(1, "disk1", space_info);
-    mock_fs->set_space(2, "disk2", space_info);
+    _mock_fs->set_space(1, "disk1", space_info);
+    _mock_fs->set_space(2, "disk2", space_info);
+    auto space_monitor = std::make_unique<DiskSpaceMonitor>(nullptr, _mock_fs);
 
     std::vector<DirSpace> dir_spaces = {
             {.path = "disk1/dir1", .size = 0}, {.path = "disk1/dir2", .size = 0}, {.path = "disk2/dir2", .size = 0}};
@@ -148,14 +142,11 @@ TEST_F(DiskSpaceMonitorTest, adjust_for_dirty_cache_dir) {
     SCOPED_UPDATE(int64_t, config::datacache_disk_safe_level, 70);
     SCOPED_UPDATE(int64_t, config::datacache_disk_low_level, 60);
 
-    auto space_monitor = std::make_unique<DiskSpaceMonitor>(nullptr);
-    MockFileSystem* mock_fs = new MockFileSystem;
-    space_monitor->_fs.reset(mock_fs);
-
     SpaceInfo space_info = {.capacity = 1000 * GB, .free = 800 * GB, .available = 200 * GB};
-    mock_fs->set_space(1, "disk1", space_info);
-    mock_fs->set_space(2, "disk2", space_info);
-    mock_fs->set_global_directory_capacity(300 * GB);
+    _mock_fs->set_space(1, "disk1", space_info);
+    _mock_fs->set_space(2, "disk2", space_info);
+    _mock_fs->set_global_directory_capacity(300 * GB);
+    auto space_monitor = std::make_unique<DiskSpaceMonitor>(nullptr, _mock_fs);
 
     std::vector<DirSpace> dir_spaces = {
             {.path = "disk1/dir1", .size = 0}, {.path = "disk1/dir2", .size = 0}, {.path = "disk2/dir2", .size = 0}};
@@ -186,12 +177,12 @@ TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota) {
     auto cache = TestCacheUtils::create_cache(options);
     auto* local_cache = cache->local_cache();
 
-    auto mock_fs = std::make_shared<MockFileSystem>();
     SpaceInfo space_info = {.capacity = 500 * MB, .free = 400 * MB, .available = 300 * MB};
-    mock_fs->set_space(1, ".", space_info);
+    _mock_fs->set_space(1, ".", space_info);
 
-    auto space_monitor = std::make_shared<DiskSpaceMonitor>(local_cache, mock_fs);
-    space_monitor->init(&options.disk_spaces);
+    auto space_monitor = std::make_shared<DiskSpaceMonitor>(local_cache, _mock_fs);
+    ASSERT_OK(space_monitor->init(&options.disk_spaces));
+    space_monitor->start();
 
     // Fill cache data
     {
@@ -237,16 +228,16 @@ TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota_with_limit) {
     config::datacache_disk_size = "25%";
     DeferOp defer([]() { config::datacache_disk_size = "100%"; });
 
+    SpaceInfo space_info = {.capacity = 500 * MB, .free = 400 * MB, .available = 300 * MB};
+    _mock_fs->set_space(1, ".", space_info);
+
     auto options = TestCacheUtils::create_simple_options(kBlockSize, 0, 20 * MB);
     auto cache = TestCacheUtils::create_cache(options);
     auto* local_cache = cache->local_cache();
 
-    auto mock_fs = std::make_shared<MockFileSystem>();
-    SpaceInfo space_info = {.capacity = 500 * MB, .free = 400 * MB, .available = 300 * MB};
-    mock_fs->set_space(1, ".", space_info);
-
-    auto space_monitor = std::make_shared<DiskSpaceMonitor>(local_cache, mock_fs);
-    space_monitor->init(&options.disk_spaces);
+    auto space_monitor = std::make_shared<DiskSpaceMonitor>(local_cache, _mock_fs);
+    ASSERT_OK(space_monitor->init(&options.disk_spaces));
+    space_monitor->start();
 
     // Fill cache data
     {
@@ -296,12 +287,12 @@ TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota) {
     auto cache = TestCacheUtils::create_cache(options);
     auto* local_cache = cache->local_cache();
 
-    auto mock_fs = std::make_shared<MockFileSystem>();
     SpaceInfo space_info = {.capacity = 100 * MB, .free = 20 * MB, .available = 10 * MB};
-    mock_fs->set_space(1, ".", space_info);
+    _mock_fs->set_space(1, ".", space_info);
 
-    auto space_monitor = std::make_shared<DiskSpaceMonitor>(local_cache, mock_fs);
-    space_monitor->init(&options.disk_spaces);
+    auto space_monitor = std::make_shared<DiskSpaceMonitor>(local_cache, _mock_fs);
+    ASSERT_OK(space_monitor->init(&options.disk_spaces));
+    space_monitor->start();
 
     // Fill cache data
     {
@@ -350,12 +341,12 @@ TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota_to_zero) {
     auto cache = TestCacheUtils::create_cache(options);
     auto* local_cache = cache->local_cache();
 
-    auto mock_fs = std::make_shared<MockFileSystem>();
     SpaceInfo space_info = {.capacity = 100 * MB, .free = 20 * MB, .available = 10 * MB};
-    mock_fs->set_space(1, ".", space_info);
+    _mock_fs->set_space(1, ".", space_info);
 
-    auto space_monitor = std::make_shared<DiskSpaceMonitor>(local_cache, mock_fs);
-    space_monitor->init(&options.disk_spaces);
+    auto space_monitor = std::make_shared<DiskSpaceMonitor>(local_cache, _mock_fs);
+    ASSERT_OK(space_monitor->init(&options.disk_spaces));
+    space_monitor->start();
 
     // Fill cache data
     {
@@ -390,7 +381,7 @@ TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota_to_zero) {
         ASSERT_EQ(new_quota, 0);
     }
 
-    cache->shutdown();
+    ASSERT_OK(cache->shutdown());
 }
 
 TEST_F(DiskSpaceMonitorTest, get_directory_capacity) {
