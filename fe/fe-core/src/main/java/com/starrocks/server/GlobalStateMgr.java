@@ -218,6 +218,7 @@ import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.sql.spm.SPMAutoCapturer;
 import com.starrocks.sql.spm.SQLPlanStorage;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.statistic.AnalyzeMgr;
@@ -528,6 +529,7 @@ public class GlobalStateMgr {
     private final TabletCollector tabletCollector;
     private final SQLPlanStorage sqlPlanStorage;
     private final QueryHistoryMgr queryHistoryMgr;
+    private final SPMAutoCapturer spmAutoCapturer;
 
     private JwkMgr jwkMgr;
 
@@ -680,6 +682,7 @@ public class GlobalStateMgr {
         this.statisticStorage = new CachedStatisticStorage();
         this.sqlPlanStorage = SQLPlanStorage.create(true);
         this.queryHistoryMgr = new QueryHistoryMgr();
+        this.spmAutoCapturer = new SPMAutoCapturer();
 
         this.replayedJournalId = new AtomicLong(0L);
         this.synchronizedTimeMs = 0;
@@ -1419,6 +1422,7 @@ public class GlobalStateMgr {
         pipeListener.start();
         pipeScheduler.start();
         mvActiveChecker.start();
+        spmAutoCapturer.start();
 
         // start daemon thread to report the progress of RunningTaskRun to the follower by editlog
         taskRunStateSynchronizer = new TaskRunStateSynchronizer();
