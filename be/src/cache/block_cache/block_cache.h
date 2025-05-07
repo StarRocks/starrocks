@@ -76,6 +76,7 @@ public:
     bool available() const { return is_initialized() && _local_cache->available(); }
     bool mem_cache_available() const { return is_initialized() && _local_cache->mem_cache_available(); }
     LocalCache* local_cache() const { return _local_cache.get(); }
+    std::shared_ptr<LocalCache> local_cache_ptr() { return _local_cache; }
 
     static const size_t MAX_BLOCK_SIZE;
 

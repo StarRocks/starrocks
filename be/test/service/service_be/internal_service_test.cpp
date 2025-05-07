@@ -181,12 +181,9 @@ TEST_F(InternalServiceTest, test_fetch_datacache_via_brpc) {
         ASSERT_FALSE(st.ok());
     }
 
-    auto local_cache = std::make_shared<StarCacheWrapper>();
-    std::shared_ptr<BlockCache> cache(new BlockCache);
     {
         CacheOptions options = TestCacheUtils::create_simple_options(256 * KB, 20 * MB);
-        ASSERT_OK(local_cache->init(options));
-        ASSERT_OK(cache->init(options, local_cache, nullptr));
+        auto cache = TestCacheUtils::create_cache(options);
 
         const size_t cache_size = 1024;
         const std::string cache_key = "test_file";
@@ -195,7 +192,7 @@ TEST_F(InternalServiceTest, test_fetch_datacache_via_brpc) {
         ASSERT_TRUE(st.ok());
 
         CacheEnv* cache_env = CacheEnv::GetInstance();
-        cache_env->_local_cache = local_cache;
+        cache_env->_local_cache = cache->local_cache_ptr();
         cache_env->_block_cache = cache;
     }
 
