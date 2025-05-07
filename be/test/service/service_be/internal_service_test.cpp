@@ -183,6 +183,7 @@ TEST_F(InternalServiceTest, test_fetch_datacache_via_brpc) {
 
     {
         CacheOptions options = TestCacheUtils::create_simple_options(256 * KB, 20 * MB);
+        options.inline_item_count_limit = 1000;
         auto cache = TestCacheUtils::create_cache(options);
 
         const size_t cache_size = 1024;
