@@ -18,6 +18,7 @@
 
 #include "cache/block_cache/block_cache.h"
 #include "cache/block_cache/local_cache.h"
+#include "cache/block_cache/test_cache_utils.h"
 #include "cache/object_cache/lrucache_module.h"
 #include "cache/object_cache/starcache_module.h"
 #include "fs/fs_util.h"
@@ -78,16 +79,10 @@ protected:
 };
 
 void ObjectCacheTest::_init_local_cache() {
-    _local_cache = std::make_shared<StarCacheWrapper>();
+    CacheOptions options = TestCacheUtils::create_simple_options(256 * KB, _mem_quota);
+    options.disk_spaces.push_back({.path = _cache_dir, .size = 50 * MB});
 
-    CacheOptions options;
-    options.mem_space_size = _mem_quota;
-    size_t quota = 50 * 1024 * 1024;
-    options.disk_spaces.push_back({.path = _cache_dir, .size = quota});
-    options.block_size = 256 * 1024;
-    options.max_concurrent_inserts = 100000;
-    options.max_flying_memory_mb = 100;
-    options.engine = "starcache";
+    _local_cache = std::make_shared<StarCacheWrapper>();
     ASSERT_OK(_local_cache->init(options));
 }
 
