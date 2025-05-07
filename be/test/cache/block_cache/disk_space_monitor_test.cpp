@@ -182,8 +182,8 @@ TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota) {
     SCOPED_UPDATE(int64_t, config::datacache_disk_safe_level, 70);
     SCOPED_UPDATE(int64_t, config::datacache_disk_low_level, 60);
 
-    auto options = create_simple_options(kBlockSize, 0, 20 * MB);
-    auto cache = create_cache(options);
+    auto options = TestCacheUtils::create_simple_options(kBlockSize, 0, 20 * MB);
+    auto cache = TestCacheUtils::create_cache(options);
     auto* local_cache = cache->local_cache();
 
     auto mock_fs = std::make_shared<MockFileSystem>();
@@ -237,8 +237,8 @@ TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota_with_limit) {
     config::datacache_disk_size = "25%";
     DeferOp defer([]() { config::datacache_disk_size = "100%"; });
 
-    auto options = create_simple_options(kBlockSize, 0, 20 * MB);
-    auto cache = create_cache(options);
+    auto options = TestCacheUtils::create_simple_options(kBlockSize, 0, 20 * MB);
+    auto cache = TestCacheUtils::create_cache(options);
     auto* local_cache = cache->local_cache();
 
     auto mock_fs = std::make_shared<MockFileSystem>();
@@ -292,8 +292,8 @@ TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota) {
     SCOPED_UPDATE(int64_t, config::datacache_disk_safe_level, 70);
     SCOPED_UPDATE(int64_t, config::datacache_disk_low_level, 60);
 
-    auto options = create_simple_options(kBlockSize, 0, 50 * MB);
-    auto cache = create_cache(options);
+    auto options = TestCacheUtils::create_simple_options(kBlockSize, 0, 50 * MB);
+    auto cache = TestCacheUtils::create_cache(options);
     auto* local_cache = cache->local_cache();
 
     auto mock_fs = std::make_shared<MockFileSystem>();
@@ -346,8 +346,8 @@ TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota_to_zero) {
     SCOPED_UPDATE(int64_t, config::datacache_disk_safe_level, 70);
     SCOPED_UPDATE(int64_t, config::datacache_disk_low_level, 60);
 
-    auto options = create_simple_options(kBlockSize, 0, 50 * MB);
-    auto cache = create_cache(options);
+    auto options = TestCacheUtils::create_simple_options(kBlockSize, 0, 50 * MB);
+    auto cache = TestCacheUtils::create_cache(options);
     auto* local_cache = cache->local_cache();
 
     auto mock_fs = std::make_shared<MockFileSystem>();
@@ -397,8 +397,8 @@ TEST_F(DiskSpaceMonitorTest, get_directory_capacity) {
     SCOPED_UPDATE(bool, config::datacache_enable, true);
     SCOPED_UPDATE(bool, config::datacache_auto_adjust_enable, false);
 
-    auto options = create_simple_options(kBlockSize, 0, 20 * MB);
-    auto cache = create_cache(options);
+    auto options = TestCacheUtils::create_simple_options(kBlockSize, 0, 20 * MB);
+    auto cache = TestCacheUtils::create_cache(options);
 
     auto space_monitor = std::make_shared<DiskSpaceMonitor>(cache->local_cache());
 

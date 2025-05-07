@@ -58,6 +58,7 @@ Status StarCacheWrapper::init(const CacheOptions& options) {
     _cache = std::make_shared<starcache::StarCache>();
     RETURN_IF_ERROR(to_status(_cache->init(opt)));
     _refresh_quota();
+    _initialized.store(true, std::memory_order_relaxed);
     return Status::OK();
 }
 
