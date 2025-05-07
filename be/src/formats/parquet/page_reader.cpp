@@ -254,8 +254,9 @@ StatusOr<Slice> PageReader::read_and_decompress_page_data() {
 }
 
 bool PageReader::_cache_decompressed_data() {
-    return _cur_header.uncompressed_page_size * 1.0 / _cur_header.compressed_page_size <
-           config::parquet_page_cache_decompress_threshold;
+    return _codec == tparquet::CompressionCodec::UNCOMPRESSED ||
+           _cur_header.uncompressed_page_size <=
+                   config::parquet_page_cache_decompress_threshold * _cur_header.compressed_page_size;
 }
 
 Status PageReader::_decompress_page(starrocks::Slice& input, starrocks::Slice* output) {
@@ -302,7 +303,6 @@ Status PageReader::_read_and_decompress_internal(bool need_fill_cache) {
         read_data = Slice(ret.value().data(), read_size);
     } else {
         std::vector<uint8_t>& read_buffer = is_compressed ? *_compressed_buf : *_uncompressed_buf;
-        //TODO cache compressed data
         if (!need_fill_cache || (is_compressed && _cache_decompressed_data())) {
             read_buffer.reserve(read_size);
             read_data = Slice(read_buffer.data(), read_size);
