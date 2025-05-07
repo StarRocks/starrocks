@@ -153,21 +153,17 @@ public class IcebergRESTCatalog implements IcebergCatalog {
                 return delegate.listNamespaces().stream().map(ns -> ns.level(0))
                             .collect(Collectors.toList());
             }
-        } catch (RESTException e) {
-            throw new StarRocksConnectorException("Failed to list namespaces", e);
+        } catch (RESTException re) {
+            LOG.error("Failed to list databases using REST Catalog ", re);
+            throw new StarRocksConnectorException("Failed to list all databases using REST Catalog",
+                    new RuntimeException("Failed to list all databases using REST Catalog, exception: " + re.getMessage(), re));
         }
     }
 
     private List<String> listNamespaces(Namespace parent) {
-        try {
-            return delegate.listNamespaces(parent).stream().
-                    flatMap(child -> Stream.concat(Stream.of(child.toString()), listNamespaces(child).stream()))
-                    .collect(toImmutableList());
-        } catch (RESTException re) {
-            LOG.error("Failed to list databases using REST Catalog ", re);
-            throw new StarRocksConnectorException("Failed to list databases using REST Catalog",
-                    new RuntimeException("Failed to list databases using REST Catalog, exception: " + re.getMessage(), re));
-        }
+        return delegate.listNamespaces(parent).stream().
+                flatMap(child -> Stream.concat(Stream.of(child.toString()), listNamespaces(child).stream()))
+                .collect(toImmutableList());
     }
 
     @Override

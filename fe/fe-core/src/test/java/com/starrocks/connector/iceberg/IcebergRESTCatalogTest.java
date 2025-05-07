@@ -111,7 +111,7 @@ public class IcebergRESTCatalogTest {
         Map<String, String> icebergProperties = new HashMap<>();
         IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(
                 "rest_native_catalog", new Configuration(), icebergProperties);
-        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class, "Failed to list namespaces",
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class, "Failed to list all databases using REST Catalog",
                 icebergRESTCatalog::listAllDatabases);
 
         new Expectations() {
@@ -126,7 +126,7 @@ public class IcebergRESTCatalogTest {
                 "iceberg.catalog.rest.nested-namespace-enabled", "true");
         icebergRESTCatalog = new IcebergRESTCatalog(
                 "rest_native_catalog", new Configuration(), icebergProperties);
-        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class, "Failed to list namespaces",
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class, "Failed to list all databases using REST Catalog",
                 icebergRESTCatalog::listAllDatabases);
     }
 
