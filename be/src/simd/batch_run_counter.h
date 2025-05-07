@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include <type_traits>
 #ifdef __AVX2__
 #include <emmintrin.h>
 #include <immintrin.h>
@@ -25,8 +24,7 @@
 #endif
 
 #include <cstdint>
-
-#include "simd/simd.h"
+#include <cstring>
 
 namespace starrocks {
 /// Return value from BatchRunCounter: the total number of filter and

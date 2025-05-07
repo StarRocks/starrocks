@@ -16,22 +16,11 @@
 
 #include <cstdlib>
 
-#include "fs/fs_memory.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/persistent_index.h"
-#include "storage/rowset/rowset.h"
-#include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
-#include "storage/rowset/rowset_writer_context.h"
-#include "storage/rowset_update_state.h"
-#include "storage/storage_engine.h"
-#include "storage/tablet_manager.h"
-#include "storage/update_manager.h"
 #include "testutil/assert.h"
-#include "testutil/parallel_test.h"
-#include "util/coding.h"
-#include "util/faststring.h"
 
 namespace starrocks {
 

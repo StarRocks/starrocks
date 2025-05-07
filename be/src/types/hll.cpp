@@ -39,8 +39,6 @@
 
 #include "common/logging.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/mem_pool.h"
-#include "runtime/string_value.h"
 #include "simd/multi_version.h"
 #include "util/coding.h"
 #include "util/phmap/phmap.h"

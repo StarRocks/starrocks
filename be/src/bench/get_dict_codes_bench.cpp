@@ -14,7 +14,6 @@
 
 #include <benchmark/benchmark.h>
 
-#include <map>
 #include <random>
 #include <vector>
 
@@ -24,8 +23,7 @@
 #include "simd/simd.h"
 #include "util/slice.h"
 
-namespace starrocks {
-namespace parquet {
+namespace starrocks::parquet {
 
 static const int kDictSize = 4000;
 static const int kDictLength = 5;
@@ -239,7 +237,6 @@ BM_GetDictCodesWithFilterBatch32/960       0.001 ms        0.001 ms       779697
 BM_GetDictCodesWithFilterBatch32/980       0.001 ms        0.001 ms       796140
 BM_GetDictCodesWithFilterBatch32/1000      0.001 ms        0.001 ms       788616
 */
-} // namespace parquet
-} // namespace starrocks
+} // namespace starrocks::parquet
 
 BENCHMARK_MAIN();
