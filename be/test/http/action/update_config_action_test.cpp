@@ -57,7 +57,7 @@ TEST_F(UpdateConfigActionTest, update_datacache_disk_size) {
     std::vector<DirSpace> spaces;
     cache->disk_spaces(&spaces);
     ASSERT_EQ(spaces.size(), 1);
-    ASSERT_EQ(spaces[0].size, 100 * MB);
+    ASSERT_EQ(spaces[0].size, 100000000);
 
     fs::remove_all(cache_dir).ok();
 }
