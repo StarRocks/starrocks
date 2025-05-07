@@ -448,7 +448,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         ctx.removeResult(queryId);
     }
 
-    private FlightInfo getFlightInfoFromQuery(ArrowFlightSqlConnectContext ctx, FlightDescriptor descriptor) {
+    protected FlightInfo getFlightInfoFromQuery(ArrowFlightSqlConnectContext ctx, FlightDescriptor descriptor) {
         try {
             CompletableFuture<Void> processorFinished = new CompletableFuture<>();
             executor.submit(() -> {
@@ -545,14 +545,14 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         return buildFlightInfo(request, descriptor, schema, feEndpoint);
     }
 
-    private <T extends Message> FlightInfo buildFlightInfo(T request, FlightDescriptor descriptor,
+    protected  <T extends Message> FlightInfo buildFlightInfo(T request, FlightDescriptor descriptor,
                                                            Schema schema, Location endpoint) {
         final Ticket ticket = new Ticket(Any.pack(request).toByteArray());
         final List<FlightEndpoint> endpoints = Collections.singletonList(new FlightEndpoint(ticket, endpoint));
         return new FlightInfo(schema, descriptor, endpoints, -1, -1);
     }
 
-    private Schema fetchArrowSchema(ConnectContext ctx, TNetworkAddress brpcAddress, PUniqueId rootInstanceId, long timeoutMs) {
+    protected Schema fetchArrowSchema(ConnectContext ctx, TNetworkAddress brpcAddress, PUniqueId rootInstanceId, long timeoutMs) {
         PFetchArrowSchemaRequest request = new PFetchArrowSchemaRequest();
         request.setFinstId(rootInstanceId);
 
@@ -574,7 +574,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         }
     }
 
-    private StatementBase parse(String sql, SessionVariable sessionVariables) {
+    protected StatementBase parse(String sql, SessionVariable sessionVariables) {
         List<StatementBase> stmts;
 
         stmts = com.starrocks.sql.parser.SqlParser.parse(sql, sessionVariables);

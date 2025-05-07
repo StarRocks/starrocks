@@ -202,9 +202,7 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
 
         for (Column col : metaData.getColumns()) {
             schemaFields.add(new Field(col.getName(), FieldType.nullable(new Utf8()), null));
-            VarCharVector varCharVector = new VarCharVector(col.getName(), allocator);
-            varCharVector.allocateNew();
-            varCharVector.setValueCount(resultData.size());
+            VarCharVector varCharVector = ArrowUtil.createVarCharVector(col.getName(), allocator, resultData.size());
             dataFields.add(varCharVector);
         }
 
@@ -220,7 +218,9 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
             }
         }
 
-        resultCache.put(queryId, new ArrowSchemaRootWrapper(new VectorSchemaRoot(schemaFields, dataFields)));
+        VectorSchemaRoot root = new VectorSchemaRoot(schemaFields, dataFields);
+        root.setRowCount(resultData.size());
+        resultCache.put(queryId, new ArrowSchemaRootWrapper(root));
     }
 
     @Override

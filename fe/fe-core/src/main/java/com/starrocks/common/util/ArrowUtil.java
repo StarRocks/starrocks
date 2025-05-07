@@ -39,4 +39,11 @@ public class ArrowUtil {
 
         return VectorSchemaRoot.of(varCharVector);
     }
+
+    public static VarCharVector createVarCharVector(String name, BufferAllocator allocator, int valueCount) {
+        VarCharVector vector = new VarCharVector(name, allocator);
+        vector.allocateNew();
+        vector.setValueCount(valueCount);
+        return vector;
+    }
 }
