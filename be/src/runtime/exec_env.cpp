@@ -478,13 +478,17 @@ Status CacheEnv::_init_datacache() {
     cache_options.inline_item_count_limit = config::datacache_inline_item_count_limit;
     cache_options.engine = config::datacache_engine;
     cache_options.eviction_policy = config::datacache_eviction_policy;
+
     _local_cache = std::make_shared<StarCacheWrapper>();
+    RETURN_IF_ERROR(_local_cache->init(cache_options));
+
     _disk_space_monitor = std::make_unique<DiskSpaceMonitor>(_local_cache.get());
     RETURN_IF_ERROR(_disk_space_monitor->init(&cache_options.disk_spaces));
-    RETURN_IF_ERROR(_local_cache->init(cache_options));
     _disk_space_monitor->start();
+
     _remote_cache = std::make_shared<PeerCacheWrapper>();
     RETURN_IF_ERROR(_remote_cache->init(cache_options));
+
     RETURN_IF_ERROR(_block_cache->init(cache_options, _local_cache, _remote_cache));
     LOG(INFO) << "datacache init successfully";
 #endif
