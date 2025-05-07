@@ -118,8 +118,10 @@ public:
 
     void clear_cache();
 
+    void clear_cached_del_vec_by_tablet_id(int64_t tablet_id);
     void clear_cached_del_vec(const std::vector<TabletSegmentId>& tsids);
 
+    void clear_cached_delta_column_group_by_tablet_id(int64_t tablet_id);
     void clear_cached_delta_column_group(const std::vector<TabletSegmentId>& tsids);
 
     StatusOr<size_t> clear_delta_column_group_before_version(KVStore* meta, const std::string& tablet_path,
@@ -140,7 +142,7 @@ public:
     string topn_memory_stats(size_t topn);
 
     Status update_primary_index_memory_limit(int32_t update_memory_limit_percent) {
-        ASSIGN_OR_RETURN(int64_t byte_limits, ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem()));
+        int64_t byte_limits = GlobalEnv::GetInstance()->process_mem_limit();
         int32_t update_mem_percent = std::max(std::min(100, update_memory_limit_percent), 0);
         _index_cache.set_capacity(byte_limits * update_mem_percent);
         return Status::OK();
@@ -152,9 +154,6 @@ public:
     // Used in UT only
     bool TEST_update_state_exist(Tablet* tablet, Rowset* rowset);
     bool TEST_primary_index_refcnt(int64_t tablet_id, uint32_t expected_cnt);
-
-private:
-    void* _schedule_apply_thread_callback(void* arg);
 
 private:
     // default 6min
