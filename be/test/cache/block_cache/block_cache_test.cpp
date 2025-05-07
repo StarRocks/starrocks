@@ -298,7 +298,7 @@ TEST_F(BlockCacheTest, read_peer_cache) {
     ReadCacheOptions read_options;
     read_options.remote_host = "127.0.0.1";
     read_options.remote_port = 0;
-    ASSERT_OK(cache->read_buffer_from_remote_cache("test_key", 0, 100, &iobuf, &read_options));
+    ASSERT_ERROR(cache->read_buffer_from_remote_cache("test_key", 0, 100, &iobuf, &read_options));
 }
 
 } // namespace starrocks
