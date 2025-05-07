@@ -44,7 +44,8 @@ import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 public class MvRefreshArbiter {
     private static final Logger LOG = LogManager.getLogger(MvRefreshArbiter.class);
 
-    public static boolean needsToRefreshTable(MaterializedView mv,BaseTableInfo baseTableInfo, Table table, boolean isQueryRewrite) {
+    public static boolean needsToRefreshTable(MaterializedView mv, BaseTableInfo baseTableInfo, Table table,
+                                              boolean isQueryRewrite) {
         Optional<Boolean> needsToRefresh = needsToRefreshTable(mv, baseTableInfo, table, true, isQueryRewrite);
         if (needsToRefresh.isPresent()) {
             return needsToRefresh.get();
