@@ -185,14 +185,6 @@ TEST_F(InternalServiceTest, test_fetch_datacache_via_brpc) {
     std::shared_ptr<BlockCache> cache(new BlockCache);
     {
         CacheOptions options = TestCacheUtils::create_simple_options(256 * KB, 20 * MB);
-        /*
-        options.mem_space_size = 20 * 1024 * 1024;
-        options.block_size = 256 * 1024 * 1024;
-        options.max_concurrent_inserts = 100000;
-        options.max_flying_memory_mb = 100;
-        options.engine = "starcache";
-        options.inline_item_count_limit = 1000;
-        */
         ASSERT_OK(local_cache->init(options));
         ASSERT_OK(cache->init(options, local_cache, nullptr));
 
