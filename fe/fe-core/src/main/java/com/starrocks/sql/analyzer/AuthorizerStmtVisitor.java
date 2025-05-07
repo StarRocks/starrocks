@@ -1366,11 +1366,11 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
         try {
             if (user != null && !user.equals(context.getCurrentUserIdentity())) {
                 Authorizer.checkSystemAction(context, PrivilegeType.GRANT);
-            } else if (statement.getRole() != null) {
+            } else if (statement.getGroupOrRole() != null) {
                 AuthorizationMgr authorizationManager = context.getGlobalStateMgr().getAuthorizationMgr();
                 Set<String> roleNames =
                         authorizationManager.getAllPredecessorRoleNamesByUser(context.getCurrentUserIdentity());
-                if (!roleNames.contains(statement.getRole())) {
+                if (!roleNames.contains(statement.getGroupOrRole())) {
                     Authorizer.checkSystemAction(context,
                             PrivilegeType.GRANT);
                 }
