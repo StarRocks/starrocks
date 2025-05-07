@@ -894,6 +894,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String LOWER_UPPER_SUPPORT_UTF8 = "lower_upper_support_utf8";
 
+    public static final String SEMI_JOIN_DEDUPLICATE_MODE = "semi_join_deduplicat_mode";
+    public static final String ENABLE_INNER_JOIN_TO_SEMI = "enable_inner_join_to_semi";
+    public static final String ENABLE_JOIN_REORDER_BEFORE_DEDUPLICATE = "enable_join_reorder_before_deduplicate";
+    public static final String JOIN_REORDER_DRIVING_TABLE_MAX_ELEMENT = "join_reorder_driving_table_max_element";
+
+    public static final String CBO_PUSH_DOWN_DISTINCT = "cbo_push_down_distinct";
+
     public static final String ENABLE_DATACACHE_SHARING = "enable_datacache_sharing";
     public static final String DATACACHE_SHARING_WORK_PERIOD = "datacache_sharing_work_period";
     public static final String HISTORICAL_NODES_MIN_UPDATE_INTERVAL = "historical_nodes_min_update_interval";
@@ -1780,6 +1787,28 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // In order to be compatible with the previous behavior, the default value is false.
     @VarAttr(name = LOWER_UPPER_SUPPORT_UTF8)
     private boolean lowerUpperSupportUTF8 = false;
+
+    // this sv controls whether to create distinct agg below semi join
+    // -1 means disable this optimization
+    // 0 means auto, and the optimizer will decide whether to enable this optimization based on cardinality
+    // 1 means froce, optimizer will add distinct agg below semi-join regardless of cardinality
+    @VarAttr(name = SEMI_JOIN_DEDUPLICATE_MODE)
+    private int semiJoinDeduplicateMode = 0;
+
+    @VarAttr(name = ENABLE_INNER_JOIN_TO_SEMI)
+    private boolean enableInnerJoinToSemi = true;
+
+    @VarAttr(name = JOIN_REORDER_DRIVING_TABLE_MAX_ELEMENT)
+    private int joinReorderDrivingTableMaxElement = 5;
+
+    @VarAttr(name = ENABLE_JOIN_REORDER_BEFORE_DEDUPLICATE)
+    private boolean enableJoinReorderBeforeDeduplicate = false;
+
+    // when enable distinct agg below semi-join optimization
+    // this sv controls create a global agg or local agg
+    // local won't add exchange node, but the aggregate effect will be worse than global
+    @VarAttr(name = CBO_PUSH_DOWN_DISTINCT, flag = VariableMgr.INVISIBLE)
+    private String cboPushDownDistinct = "global";
 
     @VarAttr(name = ENABLE_DATACACHE_SHARING)
     private boolean enableDataCacheSharing = true;
@@ -4905,6 +4934,38 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableSPMRewrite(boolean enableSPMRewrite) {
         this.enableSPMRewrite = enableSPMRewrite;
+    }
+
+    public int getSemiJoinDeduplicateMode() {
+        return semiJoinDeduplicateMode;
+    }
+
+    public void setSemiJoinDeduplicateMode(int semiJoinDeduplicateMode) {
+        this.semiJoinDeduplicateMode = semiJoinDeduplicateMode;
+    }
+
+    public boolean isEnableInnerJoinToSemi() {
+        return enableInnerJoinToSemi;
+    }
+
+    public void setEnableInnerJoinToSemi(boolean enableInnerJoinToSemi) {
+        this.enableInnerJoinToSemi = enableInnerJoinToSemi;
+    }
+
+    public String getCboPushDownDistinct() {
+        return cboPushDownDistinct;
+    }
+
+    public int getJoinReorderDrivingTableMaxElement() {
+        return joinReorderDrivingTableMaxElement;
+    }
+
+    public boolean isEnableJoinReorderBeforeDeduplicate() {
+        return enableJoinReorderBeforeDeduplicate;
+    }
+
+    public void setEnableJoinReorderBeforeDeduplicate(boolean enableJoinReorderBeforeDeduplicate) {
+        this.enableJoinReorderBeforeDeduplicate = enableJoinReorderBeforeDeduplicate;
     }
 
     // Serialize to thrift object
