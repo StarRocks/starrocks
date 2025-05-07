@@ -17,12 +17,10 @@
 #include <testutil/assert.h>
 
 #include <memory>
-#include <numeric>
 #include <random>
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "column/datum_tuple.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "exec/chunks_sorter.h"
@@ -30,7 +28,6 @@
 #include "exec/chunks_sorter_heap_sort.h"
 #include "exec/chunks_sorter_topn.h"
 #include "exec/sorting/merge.h"
-#include "exec/sorting/sort_helper.h"
 #include "exec/sorting/sorting.h"
 #include "exprs/column_ref.h"
 #include "runtime/chunk_cursor.h"

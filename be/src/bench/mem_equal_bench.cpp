@@ -16,13 +16,11 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
-#include <memory>
 #include <numeric>
 #include <random>
 #include <vector>
 
 #include "column/column_hash.h"
-#include "exprs/string_functions.h"
 #include "util/memcmp.h"
 
 namespace starrocks {
