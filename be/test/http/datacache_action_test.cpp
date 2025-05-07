@@ -76,7 +76,7 @@ TEST_F(DataCacheActionTest, stat_success) {
     auto cache = std::make_shared<BlockCache>();
     ASSERT_TRUE(init_datacache_instance("starcache", cache.get()).ok());
 
-    DataCacheAction action(cache.get());
+    DataCacheAction action(cache->local_cache().get());
 
     HttpRequest request(_evhttp_req);
     request._method = HttpMethod::GET;
@@ -96,7 +96,7 @@ TEST_F(DataCacheActionTest, app_stat_success) {
     counter->reset();
     ASSERT_TRUE(init_datacache_instance("starcache", cache.get()).ok());
 
-    DataCacheAction action(cache.get());
+    DataCacheAction action(cache->local_cache().get());
 
     {
         HttpRequest request(_evhttp_req);
@@ -136,7 +136,7 @@ TEST_F(DataCacheActionTest, app_stat_success) {
 
 TEST_F(DataCacheActionTest, stat_with_uninitialized_cache) {
     auto cache = std::make_shared<BlockCache>();
-    DataCacheAction action(cache.get());
+    DataCacheAction action(cache->local_cache().get());
 
     HttpRequest request(_evhttp_req);
     request._method = HttpMethod::GET;

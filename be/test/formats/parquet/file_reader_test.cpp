@@ -3350,7 +3350,8 @@ TEST_F(FileReaderTest, TestReadFooterCache) {
     options.engine = "starcache";
     Status status = block_cache->init(options);
     ASSERT_TRUE(status.ok());
-    auto cache = std::make_shared<StarCacheModule>(block_cache->starcache_instance());
+    auto local_cache = block_cache->local_cache();
+    auto cache = std::make_shared<StarCacheModule>(local_cache->starcache_instance());
 
     auto file = _create_file(_file1_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),

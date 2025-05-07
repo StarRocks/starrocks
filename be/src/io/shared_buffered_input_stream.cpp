@@ -57,9 +57,9 @@ Status SharedBufferedInputStream::_sort_and_check_overlap(std::vector<IORange>& 
     // check io range is not overlapped.
     for (size_t i = 1; i < ranges.size(); i++) {
         if (ranges[i].offset < (ranges[i - 1].offset + ranges[i - 1].size)) {
-            LOG(WARNING) << "io ranges are overalpped" << ranges[i].offset << " "
+            LOG(WARNING) << "io ranges are overlapped" << ranges[i].offset << " "
                          << ranges[i - 1].offset + ranges[i - 1].size;
-            return Status::RuntimeError("io ranges are overalpped");
+            return Status::RuntimeError("io ranges are overlapped");
         }
     }
 

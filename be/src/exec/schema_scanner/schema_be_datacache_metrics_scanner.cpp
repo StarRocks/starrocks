@@ -15,9 +15,10 @@
 #include "exec/schema_scanner/schema_be_datacache_metrics_scanner.h"
 
 #include "agent/master_info.h"
-#include "cache/block_cache/block_cache.h"
+#include "cache/block_cache/local_cache.h"
 #include "column/datum.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/exec_env.h"
 #include "runtime/string_value.h"
 
 namespace starrocks {
@@ -63,9 +64,9 @@ Status SchemaBeDataCacheMetricsScanner::get_next(ChunkPtr* chunk, bool* eos) {
 
     row.emplace_back(_be_id);
 
-    const BlockCache* cache = BlockCache::instance();
-    if (cache->is_initialized()) {
-        // retrive different priority's used bytes from level = 2 metrics
+    const LocalCache* cache = CacheEnv::GetInstance()->local_cache();
+    if (cache != nullptr && cache->is_initialized()) {
+        // retrieve different priority's used bytes from level = 2 metrics
         metrics = cache->cache_metrics(2);
 
         switch (metrics.status) {

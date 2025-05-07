@@ -27,6 +27,7 @@ public:
     ~StarCacheWrapper() override = default;
 
     Status init(const CacheOptions& options) override;
+    bool is_initialized() const override { return _initialized.load(std::memory_order_relaxed); }
 
     Status write(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) override;
 
@@ -40,22 +41,34 @@ public:
 
     Status update_disk_spaces(const std::vector<DirSpace>& spaces) override;
 
-    const DataCacheMetrics cache_metrics(int level) override;
+    const DataCacheMetrics cache_metrics(int level) const override;
 
-    void record_read_remote(size_t size, int64_t lateny_us) override;
+    void record_read_remote(size_t size, int64_t latency_us) override;
 
-    void record_read_cache(size_t size, int64_t lateny_us) override;
+    void record_read_cache(size_t size, int64_t latency_us) override;
 
     Status shutdown() override;
 
     DataCacheEngineType engine_type() override { return DataCacheEngineType::STARCACHE; }
 
     std::shared_ptr<starcache::StarCache> starcache_instance() override { return _cache; }
+    bool has_mem_cache() const { return _mem_quota.load(std::memory_order_relaxed) > 0; }
+    bool has_disk_cache() const { return _disk_quota.load(std::memory_order_relaxed) > 0; }
+    bool available() const override { return is_initialized() && (has_mem_cache() || has_disk_cache()); }
+    bool mem_cache_available() const override { return is_initialized() && has_mem_cache(); }
+
+    void disk_spaces(std::vector<DirSpace>* spaces) const override;
 
 private:
+    void _refresh_quota();
+
     std::shared_ptr<starcache::StarCache> _cache;
     std::unique_ptr<starcache::TimeBasedCacheAdaptor> _cache_adaptor;
     bool _enable_tiered_cache = false;
     bool _enable_datacache_persistence = false;
+    std::atomic<bool> _initialized = false;
+
+    std::atomic<size_t> _mem_quota = 0;
+    std::atomic<size_t> _disk_quota = 0;
 };
 } // namespace starrocks
