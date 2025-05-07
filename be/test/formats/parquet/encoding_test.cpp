@@ -564,14 +564,19 @@ TEST_F(ParquetEncodingTest, DeltaBinaryPacked) {
         auto gen = std::mt19937(seed);
         std::uniform_int_distribution<T> dist(std::numeric_limits<T>::min(), std::numeric_limits<T>::max());
 
-        for (int rep = 0; rep < 10; rep++) {
-            values.push_back(std::numeric_limits<T>::max());
-            values.push_back(std::numeric_limits<T>::min());
-            for (int i = 0; i < n; i++) {
-                values.push_back(dist(gen));
+        if (seed == -1) {
+            values.resize(rep * n);
+            std::fill(values.begin(), values.end(), dist(gen));
+        } else {
+            for (int rep = 0; rep < 10; rep++) {
+                values.push_back(std::numeric_limits<T>::max());
+                values.push_back(std::numeric_limits<T>::min());
+                for (int i = 0; i < n; i++) {
+                    values.push_back(dist(gen));
+                }
+                values.push_back(std::numeric_limits<T>::max());
+                values.push_back(std::numeric_limits<T>::min());
             }
-            values.push_back(std::numeric_limits<T>::max());
-            values.push_back(std::numeric_limits<T>::min());
         }
 
         const EncodingInfo* encoding = nullptr;
@@ -608,11 +613,13 @@ TEST_F(ParquetEncodingTest, DeltaBinaryPacked) {
         }
     };
 
+    fn.operator()<tparquet::Type::INT32>(10, 8, -1);
     fn.operator()<tparquet::Type::INT32>(10, 8, 0);
     fn.operator()<tparquet::Type::INT32>(10, 31, 0);
     fn.operator()<tparquet::Type::INT32>(10, 127, 0);
     fn.operator()<tparquet::Type::INT32>(10, 255, 0);
 
+    fn.operator()<tparquet::Type::INT64>(10, 8, -1);
     fn.operator()<tparquet::Type::INT64>(10, 8, 0);
     fn.operator()<tparquet::Type::INT64>(10, 31, 0);
     fn.operator()<tparquet::Type::INT64>(10, 127, 0);

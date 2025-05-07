@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "gutil/integral_types.h"
-#include "util/bit_stream_utils.inline.h"
 #ifdef __AVX2__
 #include <arrow/util/bpacking_avx2.h>
 #endif
@@ -23,15 +21,14 @@
 #include <gtest/gtest.h>
 #include <testutil/assert.h>
 
-#include <memory>
 #include <random>
 #include <vector>
 
-#include "bench.h"
 #include "bench/bit_copy.h"
 #include "util/bit_packing.h"
 #include "util/bit_packing_adapter.h"
 #include "util/bit_packing_simd.h"
+#include "util/bit_stream_utils.inline.h"
 
 namespace starrocks {
 

@@ -23,11 +23,8 @@
 
 #include <filesystem>
 #include <memory>
-#include <numeric>
 
 #include "block_cache/starcache_wrapper.h"
-#include "common/config.h"
-#include "common/statusor.h"
 #include "starcache/common/types.h"
 #include "util/logging.h"
 #include "util/random.h"

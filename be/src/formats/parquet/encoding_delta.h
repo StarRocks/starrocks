@@ -14,12 +14,14 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
+#include "simd/delta_decode.h"
 #include "util/bit_stream_utils.h"
 #include "util/slice.h"
 
@@ -242,6 +244,7 @@ template <typename T>
 class DeltaBinaryPackedDecoder final : public Decoder {
 public:
     static_assert(std::is_integral_v<T>, "T must be an integral type");
+    static_assert(sizeof(T) == 4 || sizeof(T) == 8, "T must be 4 or 8 bytes");
     using UT = std::make_unsigned_t<T>;
     DeltaBinaryPackedDecoder() = default;
     ~DeltaBinaryPackedDecoder() override = default;
@@ -307,6 +310,9 @@ private:
     std::string delta_bit_widths_;
     int delta_bit_width_;
 
+    bool fixed_values_ = true;
+    int values_remaining_current_block_ = 0;
+
     T last_value_;
 
     // ============
@@ -346,6 +352,7 @@ private:
         delta_bit_widths_.resize(mini_blocks_per_block_);
         first_block_initialized_ = false;
         values_remaining_current_mini_block_ = 0;
+        fixed_values_ = true;
         return Status::OK();
     }
 
@@ -357,6 +364,9 @@ private:
             return Status::Corruption("InitBlock EOF");
         }
 
+        fixed_values_ = true;
+        fixed_values_ &= (min_delta_ == 0);
+
         // read the bitwidth of each miniblock
         uint8_t* bit_width_data = (uint8_t*)delta_bit_widths_.data();
         for (uint32_t i = 0; i < mini_blocks_per_block_; ++i) {
@@ -366,9 +376,11 @@ private:
             // Note that non-conformant bitwidth entries are allowed by the Parquet spec
             // for extraneous miniblocks in the last block (GH-14923), so we check
             // the bitwidths when actually using them (see InitMiniBlock()).
+            fixed_values_ &= (bit_width_data[i] == 0);
         }
-        mini_block_idx_ = 0;
+        values_remaining_current_block_ = values_per_block_;
         first_block_initialized_ = true;
+        mini_block_idx_ = 0;
         RETURN_IF_ERROR(InitMiniBlock(bit_width_data[0]));
         return Status::OK();
     }
@@ -411,9 +423,23 @@ private:
             }
             RETURN_IF_ERROR(InitBlock());
         }
-
         DCHECK(first_block_initialized_);
+
         while (i < max_values) {
+            // optimization for fixed values. Remember `fixed_values` only applies in a single block.
+            // if current block is fixed values and we can fill more values
+            if (fixed_values_ && values_remaining_current_block_ > 0) {
+                int values_decode = std::min(values_remaining_current_block_, max_values - i);
+                std::fill(buffer + i, buffer + i + values_decode, last_value_);
+                i += values_decode;
+                values_remaining_current_block_ -= values_decode;
+
+                int values_used_current_block = (values_per_block_ - values_remaining_current_block_);
+                mini_block_idx_ = values_used_current_block / values_per_mini_block_;
+                values_remaining_current_mini_block_ = values_used_current_block % values_per_mini_block_;
+                continue;
+            }
+
             // Ensure we have an initialized mini-block
             if (PREDICT_FALSE(values_remaining_current_mini_block_ == 0)) {
                 ++mini_block_idx_;
@@ -421,6 +447,9 @@ private:
                     RETURN_IF_ERROR(InitMiniBlock(delta_bit_widths_.data()[mini_block_idx_]));
                 } else {
                     RETURN_IF_ERROR(InitBlock());
+                    if (fixed_values_) {
+                        continue;
+                    }
                 }
             }
 
@@ -428,12 +457,25 @@ private:
             if (!decoder_->GetBatch(delta_bit_width_, buffer + i, values_decode)) {
                 return Status::Corruption("GetBatch failed");
             }
-            for (int j = 0; j < values_decode; ++j) {
-                // Addition between min_delta, packed int and last_value should be treated as
-                // unsigned addition. Overflow is as expected.
-                buffer[i + j] =
-                        static_cast<UT>(min_delta_) + static_cast<UT>(buffer[i + j]) + static_cast<UT>(last_value_);
-                last_value_ = buffer[i + j];
+            // original version using chain addition.
+            // for (int j = 0; j < values_decode; ++j) {
+            //     // Addition between min_delta, packed int and last_value should be treated as
+            //     // unsigned addition. Overflow is as expected.
+            //     buffer[i + j] =
+            //             static_cast<UT>(min_delta_) + static_cast<UT>(buffer[i + j]) + static_cast<UT>(last_value_);
+            //     last_value_ = buffer[i + j];
+            // }
+
+            // fprintf(stderr, "delta_bit_width_ = %d, values_decode = %d, mini_delta = %d, last_value = %d\n",
+            //         delta_bit_width_, values_decode, min_delta_, last_value_);
+
+            // fixed values.
+            if (PREDICT_FALSE(min_delta_ == 0 && delta_bit_width_ == 0)) {
+                std::fill(buffer + i, buffer + i + values_decode, last_value_);
+            } else if constexpr (sizeof(T) == 4) {
+                delta_decode_chain_int32(buffer + i, values_decode, min_delta_, last_value_);
+            } else if constexpr (sizeof(T) == 8) {
+                delta_decode_chain_int64(buffer + i, values_decode, min_delta_, last_value_);
             }
             values_remaining_current_mini_block_ -= values_decode;
             i += values_decode;

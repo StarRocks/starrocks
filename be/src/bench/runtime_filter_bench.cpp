@@ -16,12 +16,9 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
-#include <random>
-
-#include "bench.h"
+#include "bench_util.h"
 #include "column/column_helper.h"
 #include "exprs/runtime_filter.h"
-#include "exprs/runtime_filter_bank.h"
 #include "simd/simd.h"
 #include "util/time.h"
 
@@ -135,8 +132,7 @@ public:
     static void Setup(int32_t num_rows, int32_t num_column) {
         if (columns.empty()) {
             for (int i = 0; i < num_column; i++) {
-                auto type_desc = TypeDescriptor(TYPE_INT);
-                auto column = Bench::create_series_column(type_desc, num_rows);
+                auto column = BenchUtil::create_series_int_column(num_rows);
                 columns.push_back(std::move(column));
             }
             std::cout << "generate num_rows:" << num_rows << std::endl;

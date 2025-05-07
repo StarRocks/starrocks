@@ -20,10 +20,10 @@
 #include <random>
 #include <vector>
 
+#include "bench/bench_util.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
-#include "exprs/exprs_test_helper.h"
 #include "exprs/string_functions.h"
 
 namespace starrocks {
@@ -33,7 +33,7 @@ public:
     void init(size_t ratio) {
         _columns.clear();
         _ratio = ratio;
-        auto column = ExprsTestHelper::create_random_column(type_desc, _num_rows, false, false, 20);
+        auto column = BenchUtil::create_random_string_column(_num_rows, 20);
         auto binary = down_cast<BinaryColumn*>(column.get());
         Bytes& data = binary->get_bytes();
         std::random_device rd;
