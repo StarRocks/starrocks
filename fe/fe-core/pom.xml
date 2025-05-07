@@ -209,7 +209,6 @@ under the License.
         <dependency>
             <groupId>com.baidu</groupId>
             <artifactId>jprotobuf</artifactId>
-            <classifier>jar-with-dependencies</classifier>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf-precompile-plugin -->

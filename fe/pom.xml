@@ -41,7 +41,7 @@ under the License.
     <properties>
         <starrocks.home>${basedir}/../</starrocks.home>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <jprotobuf.version>2.4.21</jprotobuf.version>
+        <jprotobuf.version>2.4.23</jprotobuf.version>
         <log4j.version>2.19.0</log4j.version>
         <jackson.version>2.15.2</jackson.version>
         <spark.version>3.5.5</spark.version>
@@ -364,12 +364,6 @@ under the License.
                 <groupId>com.baidu</groupId>
                 <artifactId>jprotobuf</artifactId>
                 <version>${jprotobuf.version}</version>
-                <exclusions>
-                    <exclusion>
-                        <groupId>com.google.auto.value</groupId>
-                        <artifactId>auto-value</artifactId>
-                    </exclusion>
-                </exclusions>
             </dependency>
 
             <!--Only used to compile protobuf-->
@@ -379,7 +373,6 @@ under the License.
                 <groupId>com.baidu</groupId>
                 <artifactId>jprotobuf</artifactId>
                 <version>${jprotobuf.version}</version>
-                <classifier>jar-with-dependencies</classifier>
                 <scope>provided</scope>
             </dependency>
 
