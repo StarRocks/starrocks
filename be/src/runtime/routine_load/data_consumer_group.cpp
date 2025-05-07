@@ -120,7 +120,8 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
     std::map<int32_t, int64_t> cmt_offset_timestamp;
 
     //improve performance
-    Status (KafkaConsumerPipe::*append_data)(const char* data, size_t size, char row_delimiter);
+    Status (KafkaConsumerPipe::*append_data)(const char* data, size_t size, char row_delimiter, int32_t partition,
+                                             int64_t offset);
     char row_delimiter = '\n';
     if (ctx->format == TFileFormatType::FORMAT_JSON || ctx->format == TFileFormatType::FORMAT_AVRO) {
         append_data = &KafkaConsumerPipe::append_json;
@@ -220,7 +221,8 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
             } else {
                 Status st = Status::OK();
                 st = (kafka_pipe.get()->*append_data)(static_cast<const char*>(msg->payload()),
-                                                      static_cast<size_t>(msg->len()), row_delimiter);
+                                                      static_cast<size_t>(msg->len()), row_delimiter, msg->partition(),
+                                                      msg->offset());
                 if (st.ok()) {
                     received_rows++;
                     left_bytes -= msg->len();
