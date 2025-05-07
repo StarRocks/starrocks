@@ -38,8 +38,6 @@
 #include <memory>
 #include <unordered_map>
 
-#include "cache/block_cache/disk_space_monitor.h"
-#include "cache/block_cache/local_cache.h"
 #include "common/status.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/schedule/pipeline_timer.h"
@@ -83,9 +81,11 @@ class RuntimeFilterCache;
 class ProfileReportWorker;
 class QuerySpillManager;
 class BlockCache;
+class LocalCache;
 class ObjectCache;
 class RemoteCache;
 class StoragePageCache;
+class DiskSpaceMonitor;
 struct RfTracePoint;
 
 class BackendServiceClient;
