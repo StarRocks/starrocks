@@ -151,7 +151,9 @@ template <typename T, bool sorted>
 class FixedLengthColumnSerde {
 public:
     static int64_t max_serialized_size(const FixedLengthColumnBase<T>& column, const int encode_level) {
-        uint32_t size = sizeof(T) * column.size();
+        // NOTE that `serialize` and `deserialize` will store and load the size as uint32_t.
+        // If you use `serialize` and `deserialize`, please make sure that the size of the column is less than 2^32.
+        int64_t size = sizeof(T) * column.size();
         if (EncodeContext::enable_encode_integer(encode_level) && size >= ENCODE_SIZE_LIMIT) {
             return sizeof(uint32_t) + sizeof(uint64_t) +
                    std::max((int64_t)size, (int64_t)streamvbyte_max_compressedbytes(upper_int32(size)));
