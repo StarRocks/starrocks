@@ -39,6 +39,10 @@ public interface JoinReorderFactory {
         return (context, multiJoinNode) -> List.of(new JoinReorderCardinalityPreserving(context));
     }
 
+    static JoinReorderFactory createJoinReorderDrivingTable() {
+        return (context, multiJoinNode) -> List.of(new JoinReorderDrivingTable(context));
+    }
+
     static JoinReorderFactory createJoinReorderAdaptive() {
         return (context, multiJoinNode) -> {
             List<JoinOrder> algorithms = Lists.newArrayList();

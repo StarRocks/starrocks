@@ -95,6 +95,16 @@ public class MaterializedViewOptimizer {
             connectContext.getSessionVariable().setDisableFunctionFoldConstants(true);
         }
 
+        final boolean originalEnableInnerToSemi = connectContext.getSessionVariable().isEnableInnerJoinToSemi();
+        if (originalEnableInnerToSemi) {
+            connectContext.getSessionVariable().setEnableInnerJoinToSemi(false);
+        }
+
+        final int originalSemiJoinDeduplicateMode = connectContext.getSessionVariable().getSemiJoinDeduplicateMode();
+        if (originalSemiJoinDeduplicateMode != -1) {
+            connectContext.getSessionVariable().setSemiJoinDeduplicateMode(-1);
+        }
+
         try {
             // get optimized plan of mv's defined query
             Pair<OptExpression, LogicalPlan> plans =
@@ -115,6 +125,8 @@ public class MaterializedViewOptimizer {
         } finally {
             connectContext.getSessionVariable().setCboPushDownAggregateMode(originAggPushDownMode);
             connectContext.getSessionVariable().setDisableFunctionFoldConstants(originDisableFunctionFoldConstants);
+            connectContext.getSessionVariable().setEnableInnerJoinToSemi(originalEnableInnerToSemi);
+            connectContext.getSessionVariable().setSemiJoinDeduplicateMode(originalSemiJoinDeduplicateMode);
         }
     }
 }
