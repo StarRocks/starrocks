@@ -268,7 +268,7 @@ TEST_F(UpdateManagerTest, testEraseDCGCacheByTablet) {
     tsid.tablet_id = _tablet->tablet_id();
     tsid.segment_id = 1;
     _update_manager->set_cached_empty_delta_column_group(_tablet->data_dir()->get_meta(), tsid);
-    auto init_consumption = _root_mem_tracker->consumption();
+    [[maybe_unused]] auto init_consumption = _root_mem_tracker->consumption();
 
     _update_manager->clear_cached_delta_column_group_by_tablet_id(_tablet->tablet_id());
     ASSERT_EQ(0, _root_mem_tracker->consumption());

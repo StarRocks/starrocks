@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <limits>
 
 #include "column/column.h"
 #include "column/column_helper.h"
@@ -528,18 +529,18 @@ private:
 
         constexpr int kBatchSize = 256;
         std::array<int32_t, kBatchSize> lengths;
-        int32_t total_increment_size = 0;
+        int64_t total_increment_size = 0;
         for (int idx = 0; idx < num_values; idx += kBatchSize) {
             const int batch_size = std::min(kBatchSize, num_values - idx);
             for (int j = 0; j < batch_size; ++j) {
                 const int32_t len = src[idx + j].size;
                 total_increment_size += len;
-                if (PREDICT_FALSE(total_increment_size < 0)) {
-                    return Status::Corruption("total increment size overflow in DELTA_LENGTH_BYTE_ARRAY");
-                }
                 lengths[j] = len;
             }
             RETURN_IF_ERROR(length_encoder_.append((const uint8_t*)lengths.data(), batch_size));
+        }
+        if (total_increment_size > std::numeric_limits<int32_t>::max()) {
+            return Status::Corruption("total increment size overflow in DELTA_LENGTH_BYTE_ARRAY");
         }
         if (string_buffer_.length() + total_increment_size > std::numeric_limits<int32_t>::max()) {
             return Status::Corruption("excess expansion in DELTA_LENGTH_BYTE_ARRAY");
@@ -646,9 +647,8 @@ private:
         if (max_values == 0) {
             return Status::OK();
         }
-        int32_t data_size = 0;
+        int64_t data_size = 0;
         const int32_t* length_ptr = buffered_length_.data() + length_idx_;
-
         if constexpr (PT == tparquet::Type::FIXED_LEN_BYTE_ARRAY) {
             data_size += max_values * type_length_;
         } else {
@@ -658,10 +658,10 @@ private:
                     return Status::Corruption("negative string delta length");
                 }
                 data_size += len;
-                if (PREDICT_FALSE(data_size < 0)) {
-                    return Status::Corruption("data size overflow in DELTA_LENGTH_BYTE_ARRAY");
-                }
             }
+        }
+        if (data_size > std::numeric_limits<int32_t>::max()) {
+            return Status::Corruption("data size overflow in DELTA_LENGTH_BYTE_ARRAY");
         }
         length_idx_ += max_values;
         num_valid_values_ -= max_values;
@@ -680,7 +680,7 @@ private:
             return Status::OK();
         }
 
-        int32_t data_size = 0;
+        int64_t data_size = 0;
         const uint8_t* data_ptr = data_ + bytes_offset_;
         const int32_t* length_ptr = buffered_length_.data() + length_idx_;
         for (int i = 0; i < max_values; ++i) {
@@ -690,9 +690,9 @@ private:
             }
             buffer[i].size = len;
             data_size += len;
-            if (PREDICT_FALSE(data_size < 0)) {
-                return Status::Corruption("data size overflow in DELTA_LENGTH_BYTE_ARRAY");
-            }
+        }
+        if (data_size > std::numeric_limits<int32_t>::max()) {
+            return Status::Corruption("data size overflow in DELTA_LENGTH_BYTE_ARRAY");
         }
         for (int i = 0; i < max_values; ++i) {
             buffer[i].data = (char*)data_ptr;
@@ -814,7 +814,7 @@ public:
 private:
     DeltaBinaryPackedDecoder<int32_t> prefix_len_decoder_;
     DeltaLengthByteArrayDecoder<tparquet::Type::BYTE_ARRAY> suffix_decoder_;
-    std::string last_value_;
+    Slice last_value_;
     // string buffer for last value in previous page
     // std::string last_value_in_previous_page_;
     int num_valid_values_{0};
@@ -824,7 +824,6 @@ private:
     // until the next call of Decode.
     faststring buffered_data_;
     std::vector<Slice> slice_buffer_;
-    static constexpr bool append_continuous_slices_ = true;
 
 public:
     Status set_data(const Slice& data) override {
@@ -871,11 +870,7 @@ public:
             down_cast<NullableColumn*>(dst)->mutable_null_column()->append_default(count);
         }
         auto* binary_column = ColumnHelper::get_binary_column(dst);
-        if (append_continuous_slices_) {
-            binary_column->append_continuous_strings(slice_buffer_.data(), count);
-        } else {
-            binary_column->append_strings(slice_buffer_.data(), count);
-        }
+        binary_column->append_continuous_strings(slice_buffer_.data(), count);
         return Status::OK();
     }
 
@@ -895,25 +890,8 @@ protected:
         if (PREDICT_FALSE(static_cast<size_t>(prefix_len_ptr[i]) > prefix->length())) {
             return Status::Corruption("prefix length too large in DELTA_BYTE_ARRAY");
         }
-        // For now, `buffer` points to string suffixes, and the suffix decoder
-        // ensures that the suffix data has sufficient lifetime.
-        if (prefix_len_ptr[i] == 0 && !append_continuous_slices_) {
-            // prefix is empty: buffer[i] already points to the suffix.
-            *prefix = std::string_view{buffer[i]};
-            return Status::OK();
-        }
 
         DCHECK_EQ(is_first_run, i == 0);
-        if constexpr (!is_first_run) {
-            if (PREDICT_FALSE(buffer[i].size == 0 && !append_continuous_slices_)) {
-                // suffix is empty: buffer[i] can simply point to the prefix.
-                // This is not possible for the first run since the prefix
-                // would point to the mutable `last_value_`.
-                *prefix = prefix->substr(0, prefix_len_ptr[i]);
-                buffer[i] = Slice(prefix->data(), prefix->size());
-                return Status::OK();
-            }
-        }
         // Both prefix and suffix are non-empty, so we need to decode the string
         // into `data_ptr`.
         // 1. Copy the prefix
@@ -937,26 +915,13 @@ protected:
         }
 
         RETURN_IF_ERROR(suffix_decoder_.next_batch(max_values, reinterpret_cast<uint8_t*>(buffer)));
-        int32_t data_size = 0;
+        int64_t data_size = 0;
         const int32_t* prefix_len_ptr = (const int32_t*)buffered_prefix_length_.data() + prefix_len_offset_;
         for (int i = 0; i < max_values; ++i) {
-            if (prefix_len_ptr[i] == 0 && !append_continuous_slices_) {
-                // We don't need to copy the suffix if the prefix length is 0.
-                continue;
-            }
             if (PREDICT_FALSE(prefix_len_ptr[i] < 0)) {
                 return Status::Corruption("negative prefix length in DELTA_BYTE_ARRAY");
             }
-            if (buffer[i].size == 0 && i != 0) {
-                // We don't need to copy the prefix if the suffix length is 0
-                // and this is not the first run (that is, the prefix doesn't point
-                // to the mutable `last_value_`).
-                continue;
-            }
             data_size += prefix_len_ptr[i] + buffer[i].size;
-            if (PREDICT_FALSE(data_size < 0)) {
-                return Status::Corruption("data size overflow in DELTA_BYTE_ARRAY");
-            }
         }
         if (data_size > std::numeric_limits<int32_t>::max()) {
             return Status::Corruption("excess expansion in DELTA_BYTE_ARRAY");
@@ -973,7 +938,7 @@ protected:
         DCHECK_EQ(data_ptr - buffered_data_.data(), data_size);
         prefix_len_offset_ += max_values;
         num_valid_values_ -= max_values;
-        last_value_ = std::string{prefix};
+        last_value_ = Slice(prefix.data(), prefix.length());
         return Status::OK();
     }
 };
