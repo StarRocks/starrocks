@@ -433,7 +433,6 @@ set(EXEC_FILES
         ./simd/simd_test.cpp
         ./simd/simd_selector_test.cpp
         ./simd/simd_mulselector_test.cpp
-        ./simd/delta_decode_test.cpp
         ./util/phmap_test.cpp
         ./util/aes_util_test.cpp
         ./util/await_test.cpp
@@ -533,6 +532,11 @@ set(EXEC_FILES
         ./udf/java/java_native_method_test.cpp
         ./udf/java/java_data_converter_test.cpp
         )
+
+if (${USE_AVX512})
+    list(APPEND EXEC_FILES ./simd/delta_decode_test.cpp)
+endif()
+
 
 if ("${WITH_STARCACHE}" STREQUAL "ON")
     list(APPEND EXEC_FILES ./cache/block_cache/block_cache_test.cpp)
