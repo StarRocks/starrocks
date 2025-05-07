@@ -88,7 +88,6 @@ import java.util.stream.Collectors;
 import static com.starrocks.catalog.PrimitiveType.BIGINT;
 import static com.starrocks.catalog.PrimitiveType.BITMAP;
 import static com.starrocks.catalog.PrimitiveType.BOOLEAN;
-import static com.starrocks.catalog.PrimitiveType.CHAR;
 import static com.starrocks.catalog.PrimitiveType.DATE;
 import static com.starrocks.catalog.PrimitiveType.DATETIME;
 import static com.starrocks.catalog.PrimitiveType.DECIMAL128;
@@ -236,19 +235,22 @@ public class ScalarOperatorFunctions {
 
     public static class HashFunctions {
         private static final long XX_HASH3_64_SEED = 0;
-        public static long hash64(String value) {
+
+        public static long hash64(String value, long seed) {
             byte[] data = value.getBytes();
-            LongHashFunction hasher = LongHashFunction.xx3(XX_HASH3_64_SEED);
+            LongHashFunction hasher = LongHashFunction.xx3(seed);
             return hasher.hashBytes(data, 0, data.length);
         }
     }
 
-    @ConstantFunction.List(list = {
-            @ConstantFunction(name = "xx_hash3_64", argTypes = {VARCHAR}, returnType = BIGINT),
-            @ConstantFunction(name = "xx_hash3_64", argTypes = {CHAR}, returnType = BIGINT)
-    })
-    public static ConstantOperator xxHash64(ConstantOperator input) {
-        return ConstantOperator.createBigint(HashFunctions.hash64(input.getVarchar()));
+    @ConstantFunction(name = "xx_hash3_64", argTypes = {VARCHAR}, returnType = BIGINT)
+    public static ConstantOperator xxHash64(ConstantOperator... input) {
+        Preconditions.checkArgument(input.length > 0);
+        long hashValue = HashFunctions.XX_HASH3_64_SEED;
+        for (ConstantOperator constantOperator : input) {
+            hashValue = HashFunctions.hash64(constantOperator.getVarchar(), hashValue);
+        }
+        return ConstantOperator.createBigint(hashValue);
     }
 
     /**

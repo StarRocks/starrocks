@@ -115,6 +115,10 @@ public class ScalarOperatorFunctionsTest {
     public void xxHash64() {
         assertEquals(8354710922730016039L, ScalarOperatorFunctions.xxHash64(
                 ConstantOperator.createVarchar("41c630d2-e339-380b-a65a-f295ca422070")).getBigint());
+
+        assertEquals(2897331577432926379L, ScalarOperatorFunctions.xxHash64(
+                ConstantOperator.createVarchar("41c630d2-e339-380b-a65a-f295ca422070"),
+                ConstantOperator.createVarchar("cd824fbe-8134-8015-7f4a-000004ffffff")).getBigint());
     }
 
     @Test
