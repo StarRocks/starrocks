@@ -107,6 +107,7 @@ set(UTIL_FILES
   bthreads/future_impl.cpp
   hash_util.cpp
   internal_service_recoverable_stub.cpp
+  byte_buffer.cpp
 )
 
 add_library(Util STATIC
