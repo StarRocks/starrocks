@@ -46,12 +46,8 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.Pair;
-<<<<<<< HEAD
 import com.starrocks.common.UserException;
-=======
-import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.ThreadUtil;
->>>>>>> dcf431b58c ([BugFix] Fix negative sleep time in sleepAtLeastIgnoreInterrupts (#58732))
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
