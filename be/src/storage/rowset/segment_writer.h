@@ -136,7 +136,8 @@ public:
     // finalize columns data and index
     Status finalize_columns(uint64_t* index_size);
     // finalize footer
-    Status finalize_footer(uint64_t* segment_file_size, uint64_t* footer_position = nullptr);
+    Status finalize_footer(uint64_t* segment_file_size, uint64_t* footer_position = nullptr,
+                           uint64_t* index_size = nullptr);
 
     uint32_t segment_id() const { return _segment_id; }
 
@@ -151,6 +152,7 @@ public:
     StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics();
 
 private:
+    Status _flush_index(uint64_t* index_size);
     Status _write_short_key_index();
     Status _write_footer();
     Status _write_raw_data(const std::vector<Slice>& slices);
@@ -167,6 +169,7 @@ private:
     std::unique_ptr<ShortKeyIndexBuilder> _index_builder;
     std::vector<std::unique_ptr<ColumnWriter>> _column_writers;
     std::vector<uint32_t> _column_indexes;
+    std::vector<std::vector<std::unique_ptr<ColumnWriter>>> group_column_writers;
     bool _has_key = true;
     std::vector<uint32_t> _sort_column_indexes;
     std::unique_ptr<Schema> _schema_without_full_row_column;
@@ -177,6 +180,7 @@ private:
     uint32_t _num_rows = 0;
 
     DictColumnsValidMap _global_dict_columns_valid_info;
+    bool _enable_index_group = false;
 };
 
 } // namespace starrocks

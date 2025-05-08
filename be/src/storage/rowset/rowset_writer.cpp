@@ -1346,7 +1346,8 @@ Status VerticalRowsetWriter::final_flush() {
     for (auto& segment_writer : _segment_writers) {
         uint64_t segment_size = 0;
         uint64_t footer_position = 0;
-        if (auto st = segment_writer->finalize_footer(&segment_size, &footer_position); !st.ok()) {
+        uint64_t index_size = 0;
+        if (auto st = segment_writer->finalize_footer(&segment_size, &footer_position, &index_size); !st.ok()) {
             LOG(WARNING) << "Fail to finalize segment footer, " << st;
             return st;
         }
@@ -1358,6 +1359,7 @@ Status VerticalRowsetWriter::final_flush() {
         {
             std::lock_guard<std::mutex> l(_lock);
             _total_data_size += static_cast<int64_t>(segment_size);
+            _total_index_size += static_cast<int64_t>(index_size);
         }
 
         // check global_dict efficacy

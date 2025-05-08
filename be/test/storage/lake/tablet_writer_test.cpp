@@ -37,20 +37,29 @@ namespace starrocks::lake {
 
 using namespace starrocks;
 
-class LakeTabletWriterTest : public TestBase, testing::WithParamInterface<KeysType> {
+struct WriteOptions {
+    KeysType keys_type;
+    bool enable_index_group;
+};
+
+class LakeTabletWriterTest : public TestBase, testing::WithParamInterface<WriteOptions> {
 public:
     LakeTabletWriterTest() : TestBase(kTestDirectory) {
-        _tablet_metadata = generate_simple_tablet_metadata(GetParam());
+        _tablet_metadata = generate_simple_tablet_metadata(GetParam().keys_type);
         _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
         _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
     }
 
     void SetUp() override {
         clear_and_init_test_dir();
+        config::enable_index_group = GetParam().enable_index_group;
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
 
-    void TearDown() override { remove_test_dir_ignore_error(); }
+    void TearDown() override {
+        config::enable_index_group = false;
+        remove_test_dir_ignore_error();
+    }
 
 protected:
     constexpr static const char* const kTestDirectory = "test_lake_tablet_writer";
@@ -58,6 +67,7 @@ protected:
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
+    bool pre_enable_index_group;
 };
 
 TEST_P(LakeTabletWriterTest, test_write_success) {
@@ -354,6 +364,9 @@ TEST_P(LakeTabletWriterTest, test_write_sdk) {
 #endif // USE_STAROS
 
 INSTANTIATE_TEST_SUITE_P(LakeTabletWriterTest, LakeTabletWriterTest,
-                         ::testing::Values(DUP_KEYS, AGG_KEYS, UNIQUE_KEYS, PRIMARY_KEYS));
+                         ::testing::Values(WriteOptions{DUP_KEYS, true}, WriteOptions{DUP_KEYS, false},
+                                           WriteOptions{AGG_KEYS, true}, WriteOptions{AGG_KEYS, false},
+                                           WriteOptions{UNIQUE_KEYS, true}, WriteOptions{UNIQUE_KEYS, false},
+                                           WriteOptions{PRIMARY_KEYS, true}, WriteOptions{PRIMARY_KEYS, false}));
 
 } // namespace starrocks::lake

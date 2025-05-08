@@ -91,7 +91,7 @@ Status IndexedColumnReader::read_page(const IndexReadOptions& opts, const PagePo
                                       Slice* body, PageFooterPB* footer) const {
     VLOG(11) << "indexreader read page, length=" << pp.size << ",offset=" << pp.offset;
     PageReadOptions page_opts;
-    page_opts.read_file = opts.read_file;
+    page_opts.read_file = opts.index_read_file != nullptr ? opts.index_read_file : opts.read_file;
     page_opts.page_pointer = pp;
     page_opts.codec = _compress_codec;
     page_opts.stats = opts.stats;

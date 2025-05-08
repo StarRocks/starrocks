@@ -323,6 +323,7 @@ private:
     std::shared_ptr<Segment> _segment;
     std::unordered_map<std::string, std::shared_ptr<Segment>> _dcg_segments;
     SegmentReadOptions _opts;
+    std::shared_ptr<RandomAccessFile> _index_file = nullptr;
     RawColumnIterators _column_iterators;
     std::vector<int> _io_coalesce_column_index;
     ColumnDecoders _column_decoders;
@@ -863,9 +864,11 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
                 _column_files[cid] = std::move(shared_buffered_input_stream);
                 _io_coalesce_column_index.emplace_back(cid);
             }
+            iter_opts.index_read_file = _index_file.get();
 
         } else {
             iter_opts.read_file = rfile.get();
+            iter_opts.index_read_file = _index_file.get();
             _column_files[cid] = std::move(rfile);
         }
     } else {
@@ -908,6 +911,25 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
             } else {
                 check_dict_enc = has_predicate;
             }
+
+            // init a common index reader
+            if (config::enable_index_group && _index_file == nullptr) {
+                RandomAccessFileOptions opts{.skip_fill_local_cache = !_opts.lake_io_opts.fill_data_cache,
+                                             .buffer_size = _opts.lake_io_opts.buffer_size};
+
+                bool is_compaction = (_opts.reader_type == READER_BASE_COMPACTION ||
+                                      _opts.reader_type == READER_CUMULATIVE_COMPACTION);
+                if (is_compaction) {
+                    opts.op_type = OperationKind::COMPACTION;
+                }
+                const auto encryption_info = _segment->encryption_info();
+                if (encryption_info) {
+                    opts.encryption_info = *encryption_info;
+                }
+                ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file(opts, _segment->file_info()));
+                _index_file = std::shared_ptr<RandomAccessFile>(std::move(rfile));
+            }
+
             RETURN_IF_ERROR(_init_column_iterator_by_cid(cid, f->uid(), check_dict_enc));
 
             if constexpr (check_global_dict) {
@@ -2650,6 +2672,18 @@ void SegmentIterator::close() {
         if (iter != nullptr) {
             delete iter;
         }
+    }
+
+    if (_index_file != nullptr) {
+        auto statistics = _index_file->get_numeric_statistics();
+        if (!statistics.ok()) {
+            LOG(WARNING) << "failed to get statistics index file: " << statistics.status()
+                         << ", path: " << _index_file->filename();
+            return;
+        }
+
+        _update_stats(_index_file.get());
+        _index_file.reset();
     }
 }
 
