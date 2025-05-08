@@ -17,7 +17,6 @@ The **CelerData Doctor** script is a comprehensive diagnostic tool designed for 
 - Generates a compressed `.tar.gz` file for easy sharing with support teams.
 - Summarizes findings in a single `summary.txt` for rapid assessment.
 
----
 
 ## Installation
 
@@ -46,7 +45,6 @@ git clone <REPO_URL>
 cd celerdata-doctor
 ```
 
----
 
 ## Usage
 
@@ -70,7 +68,6 @@ Enter StarRocks password:
 ✅ Connected to StarRocks
 ```
 
----
 
 ## Output Structure
 
@@ -104,19 +101,19 @@ starrocks_metadata_<timestamp>/
 ```
 
 ### Key Files
-- **summary.txt** - High-level overview of detected issues.
-- **<table>.sql** - Table schemas.
-- **<table>_partitions.csv** - Partition information.
-- **<table>_tablets.csv** - Tablet metadata.
+- summary.txt - High-level overview of detected issues.
+- <table>.sql - Table schemas.
+- <table>_partitions.csv - Partition information.
+- <table>_tablets.csv - Tablet metadata.
 
----
+
 
 ## Known Limitations
 - Does not currently detect tables with incomplete or failed replicas.
 - Assumes all databases in a catalog should be included (no exclusion filter).
 - Assumes partition and tablet data is available via `information_schema` (requires appropriate StarRocks version).
 
----
+
 
 ## Future Improvements
 - Add more comprehensive health checks (e.g., data corruption, index issues).
@@ -124,12 +121,12 @@ starrocks_metadata_<timestamp>/
 - Support for multi-cluster environments.
 - Option to generate HTML or PDF reports for non-technical stakeholders.
 
----
+
 
 ## Contributing
 Contributions are welcome! Please submit pull requests or open issues on GitHub.
 
----
+
 
 ## License
-MIT License. See `LICENSE` file for details.
+Apache License, Version 2.0 
