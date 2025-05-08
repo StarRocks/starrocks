@@ -44,6 +44,7 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
+import com.starrocks.authorization.GrantType;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Catalog;
@@ -1235,7 +1236,7 @@ public class ShowExecutorTest {
 
     @Test
     public void testShowGrants() throws Exception {
-        ShowGrantsStmt stmt = new ShowGrantsStmt("root");
+        ShowGrantsStmt stmt = new ShowGrantsStmt("root", GrantType.ROLE, NodePosition.ZERO);
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         resultSet.getResultRows().forEach(System.out::println);
