@@ -229,7 +229,7 @@ LastConsistencyCheckTime: NULL
 
 ## 复杂时间函数表达式分区 (自 v3.4)
 
-从 v3.4.0 版本开始，表达式分区支持返回 DATE 或 DATETIME 类型的任意表达式，以满足更加复杂的分区场景需求。
+从 v3.4.0 版本开始，表达式分区支持返回 DATE 或 DATETIME 类型的任意表达式，以满足更加复杂的分区场景需求。有关支持的时间函数，请参阅 [附录 - 支持的时间函数](#支持的时间函数)。
 
 例如，您可以定义一个 Unix 时间戳列，并直接在分区表达式中使用 from_unixtime() 函数作为分区键，而无需通过该函数生成一个 DATE 或 DATETIME 列。有关用法的更多信息，请参见以下示例。
 
@@ -327,3 +327,52 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 - 使用 `ALTER TABLE <table_name> DROP PARTITION <partition_name>` 删除列表达式分区时，分区直接被删除并且不能被恢复。
 - 自 v3.4.0、v3.3.8、v3.2.13 以及 v3.1.16 起，StarRocks 支持[备份与恢复](../../administration/management/Backup_and_restore.md)表达式分区表。
 - 如果使用表达式分区，则仅支持回滚到 2.5.4 及以后的版本。
+
+## 附录
+
+### 支持的时间函数
+
+表达式分区支持以下函数：
+
+**时间函数**:
+
+- timediff
+- datediff
+- to_days
+- years_add/sub
+- quarters_add/sub
+- months_add/sub
+- weeks_add/sub
+- date_add/sub
+- days_add/sub
+- hours_add/sub
+- minutes_add/sub
+- seconds_add/sub
+- milliseconds_add/sub
+- date_trunc
+- date_format(YmdHiSf/YmdHisf)
+- str2date(YmdHiSf/YmdHisf)
+- str_to_date(YmdHiSf/YmdHisf)
+- to_iso8601
+- to_date
+- unix_timestamp
+- from_unixtime(YmdHiSf/YmdHisf)
+- time_slice
+
+**其他函数**：
+
+- add
+- subtract
+- cast
+
+:::note
+
+- 支持多种时间函数的组合使用。
+- 上述所有时间函数均使用系统默认时区。
+- 时间函数的值的格式 `YmdHiSf` 必须以最粗时间粒度 `%Y` 开始。不允许以更细的时间粒度（例如 `%m-%d`）开始的格式。
+
+**示例**
+
+`PARTITION BY from_unixtime(cast(str as INT) + 3600, '%Y-%m-%d')`
+
+:::
