@@ -86,7 +86,27 @@ class WindowFunction : public AggregateFunctionStateHelper<State> {
     }
 };
 
+<<<<<<< HEAD
 template <LogicalType LT, typename State, typename T = RunTimeCppType<LT>, typename = guard::Guard>
+=======
+template <LogicalType LT, typename = guard::Guard>
+struct ValueWindowStrategy {
+    static constexpr bool use_append = false;
+};
+template <LogicalType LT>
+struct ValueWindowStrategy<LT, StringLTGuard<LT>> {
+    /// TODO: do not hack the string type
+    /// The dst BinaryColumn hasn't been resized, because the underlying _bytes and _offsets column couldn't be resized.
+    static constexpr bool use_append = true;
+};
+template <LogicalType LT>
+struct ValueWindowStrategy<LT, JsonGuard<LT>> {
+    /// The dst Object column hasn't been resized.
+    static constexpr bool use_append = true;
+};
+
+template <LogicalType LT, typename State, typename T = RunTimeCppType<LT>>
+>>>>>>> ddcbb47196 ([BugFix] Fix window func bug for bitmap/hll/percentile type (#58776))
 class ValueWindowFunction : public WindowFunction<State> {
 public:
     using InputColumnType = RunTimeColumnType<LT>;
