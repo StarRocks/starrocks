@@ -1057,18 +1057,23 @@ CONF_Int32(starlet_port, "9070");
 CONF_mInt32(starlet_cache_thread_num, "16");
 // Root dir used for cache if cache enabled.
 CONF_String(starlet_cache_dir, "");
+// @Deprecated
 // Cache backend check interval (in seconds), for async write sync check and ttl clean, e.t.c.
 CONF_Int32(starlet_cache_check_interval, "900");
+// @Deprecated
 // Cache backend cache evictor interval (in seconds)
 CONF_mInt32(starlet_cache_evict_interval, "60");
 // Cache will start evict cache files if free space belows this value(percentage)
 CONF_mDouble(starlet_cache_evict_low_water, "0.1");
 // Cache will stop evict cache files if free space is above this value(percentage)
 CONF_mDouble(starlet_cache_evict_high_water, "0.2");
+// @Deprecated
 // type:Integer. cache directory allocation policy. (0:default, 1:random, 2:round-robin)
 CONF_Int32(starlet_cache_dir_allocate_policy, "0");
+// @Deprecated
 // Cache will evict file cache at this percent if star cache is turned on
 CONF_mDouble(starlet_cache_evict_percent, "0.1");
+// @Deprecated
 // Cache will evict file cache at this speed if star cache is turned on
 CONF_mInt32(starlet_cache_evict_throughput_mb, "200");
 // Buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.

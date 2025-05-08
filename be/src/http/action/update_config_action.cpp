@@ -359,14 +359,9 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
     });
 
         UPDATE_STARLET_CONFIG(starlet_cache_thread_num, cachemgr_threadpool_size);
-        UPDATE_STARLET_CONFIG(starlet_cache_evict_low_water, cachemgr_evict_low_water);
-        UPDATE_STARLET_CONFIG(starlet_cache_evict_high_water, cachemgr_evict_high_water);
-        UPDATE_STARLET_CONFIG(starlet_cache_evict_percent, cachemgr_evict_percent);
-        UPDATE_STARLET_CONFIG(starlet_cache_evict_throughput_mb, cachemgr_evict_throughput_mb);
         UPDATE_STARLET_CONFIG(starlet_fs_stream_buffer_size_bytes, fs_stream_buffer_size_bytes);
         UPDATE_STARLET_CONFIG(starlet_fs_read_prefetch_enable, fs_enable_buffer_prefetch);
         UPDATE_STARLET_CONFIG(starlet_fs_read_prefetch_threadpool_size, fs_buffer_prefetch_threadpool_size);
-        UPDATE_STARLET_CONFIG(starlet_cache_evict_interval, cachemgr_evict_interval);
         UPDATE_STARLET_CONFIG(starlet_fslib_s3client_nonread_max_retries, fslib_s3client_nonread_max_retries);
         UPDATE_STARLET_CONFIG(starlet_fslib_s3client_nonread_retry_scale_factor,
                               fslib_s3client_nonread_retry_scale_factor);
