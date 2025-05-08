@@ -53,7 +53,7 @@
         <!-- hadoop-azure requires no more than jetty10+ -->
         <!-- https://stackoverflow.com/questions/66713254/spark-wasb-and-jetty-11 -->
         <jetty.version>9.4.57.v20241219</jetty.version>
-        <parquet.version>1.15.1</parquet.version>
+        <parquet.version>1.15.2</parquet.version>
         <airlift.version>0.27</airlift.version>
         <avro.version>1.11.4</avro.version>
         <luben.zstd.jni.version>1.5.4-2</luben.zstd.jni.version>
