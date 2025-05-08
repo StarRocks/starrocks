@@ -448,6 +448,47 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
     }
 
     @Test
+    public void testDateTruncMvRewrite() throws Exception {
+        String tableSQL = "CREATE TABLE `test_partition_expr_tbl1` (\n" +
+                "  `order_id` bigint(20) NOT NULL,\n" +
+                "  `dt` date NOT NULL,\n" +
+                "  `gmv` bigint(20) NULL \n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`order_id`, `dt`)\n" +
+                "PARTITION BY date_trunc('day', `dt`)\n" +
+                "DISTRIBUTED BY HASH(`order_id`)";
+        starRocksAssert.withTable(tableSQL);
+        String mv = "CREATE MATERIALIZED VIEW `test_partition_expr_mv1`\n" +
+                "PARTITION BY ds \n" +
+                "DISTRIBUTED BY RANDOM \n" +
+                "AS SELECT \n" +
+                "sum(gmv) AS `sum_gmv`, \n" +
+                "date_trunc('month', `dt`) AS ds\n" +
+                "FROM `test_partition_expr_tbl1`\n" +
+                "group by ds;";
+        starRocksAssert.withMaterializedView(mv);
+
+        {
+            sql("SELECT \n" +
+                    "sum(gmv) AS `sum_gmv` \n" +
+                    "FROM `test_partition_expr_tbl1`\n" +
+                    "WHERE dt >= '2023-04-01' and dt <= '2023-04-30'\n")
+                    .match("test_partition_expr_mv1");
+        }
+
+        {
+            sql("SELECT \n" +
+                    "sum(gmv) AS `sum_gmv` \n" +
+                    "FROM `test_partition_expr_tbl1`\n" +
+                    "WHERE dt >= '2023-04-01' and dt < '2023-05-01'\n")
+                    .match("test_partition_expr_mv1");
+        }
+
+        starRocksAssert.dropMaterializedView("test_partition_expr_mv1");
+        starRocksAssert.dropTable("test_partition_expr_tbl1");
+    }
+
+    @Test
     public void testMvRewriteForColumnReorder() throws Exception {
         {
             starRocksAssert.withMaterializedView("create materialized view mv0" +
