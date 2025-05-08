@@ -108,7 +108,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         _config_callback.emplace("datacache_mem_size", [&]() -> Status {
             LocalCache* cache = CacheEnv::GetInstance()->local_cache();
             if (cache == nullptr || !cache->is_initialized()) {
-                return Status::InternalError("Loacl cache is not initialized");
+                return Status::InternalError("Local cache is not initialized");
             }
 
             size_t mem_size = 0;
