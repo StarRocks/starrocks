@@ -63,7 +63,7 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
                 batchWriteMgr.requestCoordinatorBackends(tableId1, params1);
         assertTrue(result1.isOk());
         assertEquals(1, result1.getValue().size());
-        assertEquals(1, batchWriteMgr.numBatchWrites());
+        assertEquals(1, batchWriteMgr.numJobs());
 
         StreamLoadKvParams params2 = new StreamLoadKvParams(new HashMap<>() {{
                 put(HTTP_FORMAT, "json");
@@ -74,7 +74,7 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
                 batchWriteMgr.requestCoordinatorBackends(tableId1, params2);
         assertTrue(result2.isOk());
         assertEquals(1, result2.getValue().size());
-        assertEquals(2, batchWriteMgr.numBatchWrites());
+        assertEquals(2, batchWriteMgr.numJobs());
 
         StreamLoadKvParams params3 = new StreamLoadKvParams(new HashMap<>() {{
                 put(HTTP_BATCH_WRITE_INTERVAL_MS, "10000");
@@ -84,7 +84,7 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
                 batchWriteMgr.requestCoordinatorBackends(tableId2, params3);
         assertTrue(result3.isOk());
         assertEquals(4, result3.getValue().size());
-        assertEquals(3, batchWriteMgr.numBatchWrites());
+        assertEquals(3, batchWriteMgr.numJobs());
 
         StreamLoadKvParams params4 = new StreamLoadKvParams(new HashMap<>() {{
                 put(HTTP_BATCH_WRITE_INTERVAL_MS, "10000");
@@ -94,7 +94,7 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
                 batchWriteMgr.requestCoordinatorBackends(tableId3, params4);
         assertTrue(result4.isOk());
         assertEquals(4, result4.getValue().size());
-        assertEquals(4, batchWriteMgr.numBatchWrites());
+        assertEquals(4, batchWriteMgr.numJobs());
     }
 
     @Test
@@ -107,13 +107,13 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
                 tableId4, params, allNodes.get(0).getId(), allNodes.get(0).getHost());
         assertTrue(result1.isOk());
         assertNotNull(result1.getValue());
-        assertEquals(1, batchWriteMgr.numBatchWrites());
+        assertEquals(1, batchWriteMgr.numJobs());
 
         RequestLoadResult result2 = batchWriteMgr.requestLoad(
                 tableId4, params, allNodes.get(0).getId(), allNodes.get(0).getHost());
         assertTrue(result2.isOk());
         assertEquals(result1.getValue(), result2.getValue());
-        assertEquals(1, batchWriteMgr.numBatchWrites());
+        assertEquals(1, batchWriteMgr.numJobs());
     }
 
     @Test
@@ -123,7 +123,7 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
                 batchWriteMgr.requestCoordinatorBackends(tableId1, params1);
         assertFalse(result1.isOk());
         assertEquals(TStatusCode.INVALID_ARGUMENT, result1.getStatus().getStatus_code());
-        assertEquals(0, batchWriteMgr.numBatchWrites());
+        assertEquals(0, batchWriteMgr.numJobs());
 
         StreamLoadKvParams params2 = new StreamLoadKvParams(new HashMap<>() {{
                 put(HTTP_BATCH_WRITE_INTERVAL_MS, "10000");
@@ -132,7 +132,7 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
                 batchWriteMgr.requestCoordinatorBackends(tableId2, params2);
         assertFalse(result2.isOk());
         assertEquals(TStatusCode.INVALID_ARGUMENT, result2.getStatus().getStatus_code());
-        assertEquals(0, batchWriteMgr.numBatchWrites());
+        assertEquals(0, batchWriteMgr.numJobs());
 
         StreamLoadKvParams params3 = new StreamLoadKvParams(new HashMap<>() {{
                 put(HTTP_BATCH_WRITE_INTERVAL_MS, "10000");
@@ -143,18 +143,18 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
                 batchWriteMgr.requestCoordinatorBackends(tableId3, params3);
         assertFalse(result3.isOk());
         assertEquals(TStatusCode.INVALID_ARGUMENT, result3.getStatus().getStatus_code());
-        assertEquals(0, batchWriteMgr.numBatchWrites());
+        assertEquals(0, batchWriteMgr.numJobs());
     }
 
     @Test
-    public void testCleanupInactiveBatchWrite() {
+    public void testCleanupInactiveJobs() {
         StreamLoadKvParams params1 = new StreamLoadKvParams(new HashMap<>() {{
                 put(HTTP_BATCH_WRITE_INTERVAL_MS, "10000");
                 put(HTTP_BATCH_WRITE_PARALLEL, "4");
             }});
         RequestCoordinatorBackendResult result1 = batchWriteMgr.requestCoordinatorBackends(tableId1, params1);
         assertTrue(result1.isOk());
-        assertEquals(1, batchWriteMgr.numBatchWrites());
+        assertEquals(1, batchWriteMgr.numJobs());
 
         StreamLoadKvParams params2 = new StreamLoadKvParams(new HashMap<>() {{
                 put(HTTP_BATCH_WRITE_INTERVAL_MS, "100000");
@@ -163,17 +163,17 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
         RequestLoadResult result2 = batchWriteMgr.requestLoad(
                 tableId4, params2, allNodes.get(0).getId(), allNodes.get(0).getHost());
         assertTrue(result2.isOk());
-        assertEquals(2, batchWriteMgr.numBatchWrites());
+        assertEquals(2, batchWriteMgr.numJobs());
 
-        new MockUp<IsomorphicBatchWrite>() {
+        new MockUp<MergeCommitJob>() {
 
             @Mock
             public boolean isActive() {
                 return false;
             }
         };
-        batchWriteMgr.cleanupInactiveBatchWrite();
-        assertEquals(0, batchWriteMgr.numBatchWrites());
+        batchWriteMgr.cleanupInactiveJobs();
+        assertEquals(0, batchWriteMgr.numJobs());
     }
 
     @Test
@@ -191,6 +191,6 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
         };
         RequestCoordinatorBackendResult result = batchWriteMgr.requestCoordinatorBackends(tableId1, params1);
         assertEquals(TStatusCode.INTERNAL_ERROR, result.getStatus().getStatus_code());
-        assertEquals(0, batchWriteMgr.numBatchWrites());
+        assertEquals(0, batchWriteMgr.numJobs());
     }
 }
