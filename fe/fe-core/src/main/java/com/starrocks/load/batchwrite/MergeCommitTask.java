@@ -58,11 +58,11 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Responsible for executing a load.
+ * A task responsible for executing a load.
  */
-public class LoadExecutor implements Runnable {
+public class MergeCommitTask implements Runnable {
 
-    private static final Logger LOG = LoggerFactory.getLogger(LoadExecutor.class);
+    private static final Logger LOG = LoggerFactory.getLogger(MergeCommitTask.class);
 
     // Initialized in constructor ==================================
     private final TableId tableId;
@@ -73,7 +73,7 @@ public class LoadExecutor implements Runnable {
     private final Set<Long> coordinatorBackendIds;
     private final int batchWriteIntervalMs;
     private final Coordinator.Factory coordinatorFactory;
-    private final LoadExecuteCallback loadExecuteCallback;
+    private final MergeCommitTaskCallback mergeCommitTaskCallback;
     private final TimeTrace timeTrace;
     private final AtomicReference<Throwable> failure;
 
@@ -89,7 +89,7 @@ public class LoadExecutor implements Runnable {
     private LoadJobFinalOperation loadJobFinalOperation;
     private boolean collectProfileSuccess = false;
 
-    public LoadExecutor(
+    public MergeCommitTask(
             TableId tableId,
             String label,
             TUniqueId loadId,
@@ -98,7 +98,7 @@ public class LoadExecutor implements Runnable {
             StreamLoadKvParams loadParameters,
             Set<Long> coordinatorBackendIds,
             Coordinator.Factory coordinatorFactory,
-            LoadExecuteCallback loadExecuteCallback) {
+            MergeCommitTaskCallback mergeCommitTaskCallback) {
         this.tableId = tableId;
         this.label = label;
         this.loadId = loadId;
@@ -107,7 +107,7 @@ public class LoadExecutor implements Runnable {
         this.loadParameters = loadParameters;
         this.coordinatorBackendIds = coordinatorBackendIds;
         this.coordinatorFactory = coordinatorFactory;
-        this.loadExecuteCallback = loadExecuteCallback;
+        this.mergeCommitTaskCallback = mergeCommitTaskCallback;
         this.timeTrace = new TimeTrace();
         this.failure = new AtomicReference<>();
     }
@@ -124,8 +124,9 @@ public class LoadExecutor implements Runnable {
             LOG.error("Failed to execute load, label: {}, load id: {}, txn id: {}",
                     label, DebugUtil.printId(loadId), txnId, e);
         } finally {
-            loadExecuteCallback.finishLoad(this);
+            mergeCommitTaskCallback.finish(this);
             timeTrace.finishTimeMs = System.currentTimeMillis();
+            MergeCommitMetricRegistry.getInstance().updateLoadLatency(timeTrace.totalCostMs());
             reportProfile();
             LOG.debug("Finish load, label: {}, load id: {}, txn_id: {}, {}",
                     label, DebugUtil.printId(loadId), txnId, timeTrace.summary());
@@ -268,6 +269,9 @@ public class LoadExecutor implements Runnable {
                 }
                 long loadedRows = Long.parseLong(
                         etlStatus.getCounters().getOrDefault(LoadEtlTask.DPP_NORMAL_ALL, "0"));
+                long loadBytes = Long.parseLong(
+                        etlStatus.getCounters().getOrDefault(LoadJob.LOADED_BYTES, "0"));
+                MergeCommitMetricRegistry.getInstance().incLoadData(loadedRows, loadBytes);
                 long filteredRows = Long.parseLong(
                         etlStatus.getCounters().getOrDefault(LoadEtlTask.DPP_ABNORMAL_ALL, "0"));
                 double maxFilterRatio = loadParameters.getMaxFilterRatio().orElse(0.0);

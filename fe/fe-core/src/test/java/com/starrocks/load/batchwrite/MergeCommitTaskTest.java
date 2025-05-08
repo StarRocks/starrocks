@@ -64,13 +64,13 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
-public class LoadExecutorTest extends BatchWriteTestBase {
+public class MergeCommitTaskTest extends BatchWriteTestBase {
 
     private String label;
     private TUniqueId loadId;
     StreamLoadKvParams kvParams;
     private StreamLoadInfo streamLoadInfo;
-    private TestLoadExecuteCallback loadExecuteCallback;
+    private TestMergeCommitTaskCallback loadExecuteCallback;
 
     @Mocked
     private Coordinator coordinator;
@@ -102,13 +102,13 @@ public class LoadExecutorTest extends BatchWriteTestBase {
         map.put(StreamLoadHttpHeader.HTTP_BATCH_WRITE_ASYNC, "true");
         kvParams = new StreamLoadKvParams(map);
         streamLoadInfo = StreamLoadInfo.fromHttpStreamLoadRequest(null, -1, Optional.empty(), kvParams);
-        loadExecuteCallback = new TestLoadExecuteCallback();
+        loadExecuteCallback = new TestMergeCommitTaskCallback();
         coordinatorFactory = new TestCoordinatorFactor(coordinator);
     }
 
     @Test
     public void testLoadSuccess() {
-        LoadExecutor executor = new LoadExecutor(
+        MergeCommitTask executor = new MergeCommitTask(
                 new TableId(DB_NAME_1, TABLE_NAME_1_1),
                 label,
                 loadId,
@@ -144,7 +144,7 @@ public class LoadExecutorTest extends BatchWriteTestBase {
 
     @Test
     public void testPlanExecuteFail() {
-        LoadExecutor executor = new LoadExecutor(
+        MergeCommitTask executor = new MergeCommitTask(
                 new TableId(DB_NAME_1, TABLE_NAME_1_1),
                 label,
                 loadId,
@@ -174,7 +174,7 @@ public class LoadExecutorTest extends BatchWriteTestBase {
 
     @Test
     public void testPlanExecuteTimeout() {
-        LoadExecutor executor = new LoadExecutor(
+        MergeCommitTask executor = new MergeCommitTask(
                 new TableId(DB_NAME_1, TABLE_NAME_1_1),
                 label,
                 loadId,
@@ -200,7 +200,7 @@ public class LoadExecutorTest extends BatchWriteTestBase {
     @Test
     public void testTableDoesNotExist() {
         String fakeTableName = TABLE_NAME_1_1 + "_fake";
-        LoadExecutor executor = new LoadExecutor(
+        MergeCommitTask executor = new MergeCommitTask(
                 new TableId(DB_NAME_1, fakeTableName),
                 label,
                 loadId,
@@ -219,7 +219,7 @@ public class LoadExecutorTest extends BatchWriteTestBase {
 
     @Test
     public void testMaxFilterRatio() {
-        LoadExecutor executor = new LoadExecutor(
+        MergeCommitTask executor = new MergeCommitTask(
                 new TableId(DB_NAME_1, TABLE_NAME_1_1),
                 label,
                 loadId,
@@ -257,7 +257,7 @@ public class LoadExecutorTest extends BatchWriteTestBase {
     }
 
     private void testLoadFailBase(
-            LoadExecutor executor, Exception expectedException, TransactionStatus expectedTxnStatus) {
+            MergeCommitTask executor, Exception expectedException, TransactionStatus expectedTxnStatus) {
         executor.run();
         Throwable throwable = executor.getFailure();
         assertNotNull(throwable);
@@ -273,7 +273,7 @@ public class LoadExecutorTest extends BatchWriteTestBase {
 
     @Test
     public void testIsActive() {
-        LoadExecutor executor = new LoadExecutor(
+        MergeCommitTask executor = new MergeCommitTask(
                 new TableId(DB_NAME_1, TABLE_NAME_1_1),
                 label,
                 loadId,
@@ -301,7 +301,7 @@ public class LoadExecutorTest extends BatchWriteTestBase {
 
     @Test
     public void testContainCoordinatorBackend() {
-        LoadExecutor executor = new LoadExecutor(
+        MergeCommitTask executor = new MergeCommitTask(
                 new TableId(DB_NAME_1, TABLE_NAME_1_1),
                 label,
                 loadId,
@@ -323,7 +323,7 @@ public class LoadExecutorTest extends BatchWriteTestBase {
         long oldIntervalSecond = Config.load_profile_collect_interval_second;
         Config.load_profile_collect_interval_second = 1;
         try {
-            LoadExecutor executor = new LoadExecutor(
+            MergeCommitTask executor = new MergeCommitTask(
                     new TableId(DB_NAME_1, TABLE_NAME_1_1),
                     label,
                     loadId,
@@ -357,7 +357,7 @@ public class LoadExecutorTest extends BatchWriteTestBase {
         }
     }
 
-    private static class TestLoadExecuteCallback implements LoadExecuteCallback {
+    private static class TestMergeCommitTaskCallback implements MergeCommitTaskCallback {
 
         private final List<String> finishedLoads = new ArrayList<>();
 
@@ -366,8 +366,8 @@ public class LoadExecutorTest extends BatchWriteTestBase {
         }
 
         @Override
-        public void finishLoad(LoadExecutor loadExecutor) {
-            finishedLoads.add(loadExecutor.getLabel());
+        public void finish(MergeCommitTask mergeCommitTask) {
+            finishedLoads.add(mergeCommitTask.getLabel());
         }
     }
     
