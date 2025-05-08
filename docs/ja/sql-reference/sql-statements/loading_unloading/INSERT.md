@@ -81,13 +81,7 @@ Query OK, 5 rows affected, 2 warnings (0.05 sec)
 | status        | ロードされたデータが可視であるかどうかを示します。`VISIBLE`: データが正常にロードされ、可視です。`COMMITTED`: データが正常にロードされましたが、現在は不可視です。 |
 | txnId         | 各INSERTトランザクションに対応するID番号。      |
 
-## Usage notes
-
-- 現在のバージョンでは、StarRocksがINSERT INTOステートメントを実行する際、データのいずれかの行が宛先テーブルのフォーマットと一致しない場合（例えば、文字列が長すぎる場合）、デフォルトでINSERTトランザクションは失敗します。セッション変数 `enable_insert_strict` を `false` に設定すると、システムは宛先テーブルのフォーマットと一致しないデータをフィルタリングし、トランザクションの実行を続行します。
-
-- INSERT OVERWRITEステートメントが実行されると、StarRocksは元のデータを格納するパーティションのために一時パーティションを作成し、一時パーティションにデータを挿入し、元のパーティションと一時パーティションを入れ替えます。これらの操作はすべてLeader FEノードで実行されます。したがって、Leader FEノードがINSERT OVERWRITEステートメントを実行中にクラッシュすると、ロードトランザクション全体が失敗し、一時パーティションが削除されます。
-
-### Dynamic Overwrite
+## Dynamic Overwrite
 
 v3.4.0以降、StarRocksはパーティションテーブルに対するINSERT OVERWRITEの新しいセマンティクス - Dynamic Overwriteをサポートします。
 
@@ -118,6 +112,19 @@ INSERT OVERWRITEステートメントのヒントに設定して、ステート�
 INSERT OVERWRITE /*+set_var(set dynamic_overwrite = false)*/ insert_wiki_edit
 SELECT * FROM source_wiki_edit;
 ```
+
+## Usage notes
+
+- 現在のバージョンでは、StarRocksがINSERT INTOステートメントを実行する際、データのいずれかの行が宛先テーブルのフォーマットと一致しない場合（例えば、文字列が長すぎる場合）、デフォルトでINSERTトランザクションは失敗します。セッション変数 `enable_insert_strict` を `false` に設定すると、システムは宛先テーブルのフォーマットと一致しないデータをフィルタリングし、トランザクションの実行を続行します。
+
+- INSERT OVERWRITEステートメントが実行されると、StarRocksは元のデータを格納するパーティションのために一時パーティションを作成し、一時パーティションにデータを挿入し、元のパーティションと一時パーティションを入れ替えます。これらの操作はすべてLeader FEノードで実行されます。したがって、Leader FEノードがINSERT OVERWRITEステートメントを実行中にクラッシュすると、ロードトランザクション全体が失敗し、一時パーティションが削除されます。
+
+- StarRocks では、 INSERT OVERWRITE 文を使用した非式に基づくパーティションへの書き込みがサポートされています。ただし、以前に存在しなかったパーティションに新しいデータを書き込む場合、システムは存在しないパーティションを作成しません。
+
+**Dynamic Overwrite について**
+
+- Dynamic Overwrite は式に基づくパーティションのみをサポートします。パーティションが存在しないときに新しいデータを書き込むと、システムは自動的に存在しないパーティションを作成します。
+- Dynamic Overwrite は、混合式に基づくパーティションをサポートします。
 
 ## Example
 

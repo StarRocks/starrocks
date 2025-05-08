@@ -213,7 +213,7 @@ LastConsistencyCheckTime: NULL
 
 ## 複雑な時間関数式に基づくパーティション化（v3.4以降）
 
-v3.4.0以降、式に基づくパーティション化は、DATEまたはDATETIME型を返す任意の式をサポートし、さらに複雑なパーティション化シナリオに対応します。
+v3.4.0以降、式に基づくパーティション化は、DATEまたはDATETIME型を返す任意の式をサポートし、さらに複雑なパーティション化シナリオに対応します。サポートされている時間関数については、[付録 - サポートされている時間関数](#サポートされている時間関数)を参照してください。
 
 たとえば、Unixタイムスタンプ列を定義し、パーティション式でfrom_unixtime()を直接使用してパーティションキーを定義することができます。生成されたDATEまたはDATETIME列を関数で定義する必要はありません。使用方法の詳細については、[例](#examples-2)を参照してください。
 
@@ -310,3 +310,55 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 - 現在、Spark Loadを使用して式に基づくパーティション化を使用するテーブルにデータをロードすることはサポートされていません。
 - `ALTER TABLE <table_name> DROP PARTITION <partition_name>` ステートメントを使用して列式で作成されたパーティションを削除する場合、パーティション内のデータは直接削除され、復元できません。
 - v3.4.0、v3.3.8、v3.2.13、およびv3.1.16以降、StarRocksは式に基づくパーティション化戦略で作成されたテーブルの[バックアップと復元](../../administration/management/Backup_and_restore.md)をサポートしています。
+<<<<<<< HEAD
+=======
+
+## 付録
+
+### サポートされている時間関数
+
+式に基づくパーティション化は以下の関数をサポートしている：
+
+**時間関数**：
+
+- timediff
+- datediff
+- to_days
+- years_add/sub
+- quarters_add/sub
+- months_add/sub
+- weeks_add/sub
+- date_add/sub
+- days_add/sub
+- hours_add/sub
+- minutes_add/sub
+- seconds_add/sub
+- milliseconds_add/sub
+- date_trunc
+- date_format(YmdHiSf/YmdHisf)
+- str2date(YmdHiSf/YmdHisf)
+- str_to_date(YmdHiSf/YmdHisf)
+- to_iso8601
+- to_date
+- unix_timestamp
+- from_unixtime(YmdHiSf/YmdHisf)
+- time_slice
+
+**その他の関数**：
+
+- add
+- subtract
+- cast
+
+:::note
+
+- 複数の時間機能を組み合わせて使用することも可能です。
+- システムのデフォルトタイムゾーンは、上記のすべての時間機能に使用される。
+- 時間関数の値のフォーマットである `YmdHiSf` は、最も大まかな時間の粒度である `%Y` で始まらなければならない。例えば `%m-%d` のように、より細かい時間単位で始まるフォーマットは許可されない。
+
+**例**
+
+`PARTITION BY from_unixtime(cast(str as INT) + 3600, '%Y-%m-%d')`
+
+:::
+>>>>>>> 7437185909 ([Doc] Update description for Expression Partition and Dynamic Overwrite (#58745))
