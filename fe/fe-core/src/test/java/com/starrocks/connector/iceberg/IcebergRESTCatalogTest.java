@@ -23,8 +23,6 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergView;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.AlreadyExistsException;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.HdfsEnvironment;
@@ -34,7 +32,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.ColWithComment;
-import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.parser.NodePosition;
@@ -44,13 +41,11 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.RESTException;
 import org.apache.iceberg.rest.RESTCatalog;
-import org.apache.iceberg.rest.RESTSessionCatalog;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.view.BaseView;
 import org.apache.iceberg.view.ImmutableSQLViewRepresentation;
@@ -69,7 +64,6 @@ import java.util.concurrent.Executors;
 import static com.starrocks.catalog.Table.TableType.ICEBERG_VIEW;
 import static com.starrocks.catalog.Type.INT;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
-import static org.mockito.Mockito.mock;
 
 
 public class IcebergRESTCatalogTest {
@@ -343,7 +337,7 @@ public class IcebergRESTCatalogTest {
 
         new Expectations() {
             {
-                restCatalog.buildTable((TableIdentifier)any, (Schema) any);
+                restCatalog.buildTable((TableIdentifier) any, (Schema) any);
                 result = new StarRocksConnectorException("Failed to create table using REST Catalog",
                         new RuntimeException("Failed to create table using REST Catalog, exception:"));
                 minTimes = 1;
