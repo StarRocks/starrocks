@@ -214,7 +214,7 @@ private:
 
     std::unique_ptr<Shuffler> _shuffler;
 
-	std::atomic<int32_t>& _num_sinkers;
+    std::atomic<int32_t>& _num_sinkers;
 };
 
 class ExchangeSinkOperatorFactory final : public OperatorFactory {
@@ -238,7 +238,7 @@ public:
     void close(RuntimeState* state) override;
 
 private:
-	void _increment_num_sinkers_no_barrier() { _num_sinkers.fetch_add(1, std::memory_order_relaxed); }
+    void _increment_num_sinkers_no_barrier() { _num_sinkers.fetch_add(1, std::memory_order_relaxed); }
 
     std::shared_ptr<SinkBuffer> _buffer;
     const TPartitionType::type _part_type;
@@ -259,7 +259,7 @@ private:
 
     const std::vector<int32_t> _output_columns;
 
-	std::atomic<int32_t> _num_sinkers = 0;
+    std::atomic<int32_t> _num_sinkers = 0;
 };
 
 } // namespace pipeline

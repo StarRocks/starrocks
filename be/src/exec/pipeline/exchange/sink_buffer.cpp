@@ -99,9 +99,8 @@ Status SinkBuffer::add_request(TransmitChunkInfo& request) {
                 _sent_audit_stats_frequency = _sent_audit_stats_frequency << 1;
             }
 
-            auto fragment_id = _fragment_ctx->fragment_instance_id();
             if (auto part_stats = _fragment_ctx->runtime_state()->query_ctx()->intermediate_query_statistic(
-                        _delta_bytes_sent.exchange(0), fragment_id, "not final")) {
+                        _delta_bytes_sent.exchange(0))) {
                 part_stats->to_pb(request.params->mutable_query_statistics());
             }
         }
@@ -341,9 +340,8 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
                     return Status::OK();
                 }
                 // this is the last eos query, set query stats
-                auto fragment_id = _fragment_ctx->fragment_instance_id();
                 if (auto final_stats = _fragment_ctx->runtime_state()->query_ctx()->intermediate_query_statistic(
-                            _delta_bytes_sent.exchange(0), fragment_id, std::string{"final"})) {
+                            _delta_bytes_sent.exchange(0))) {
                     final_stats->to_pb(request.params->mutable_query_statistics());
                 }
             }

@@ -92,7 +92,7 @@ void QueryStatistics::clear() {
     cpu_ns = 0;
     returned_rows = 0;
     spill_bytes = 0;
-	sent_bytes = 0;
+    sent_bytes = 0;
     _stats_items.clear();
     _exec_stats_items.clear();
 }
