@@ -135,6 +135,7 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
                 if (isPeriodicalCheckRunning.compareAndSet(false, true)) {
                     runPeriodicalCheck();
                     isPeriodicalCheckRunning.set(false);
+                    updateMetrics();
                 }
                 continue;
             }
@@ -159,6 +160,7 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
                 if (task.getScheduleType() == EventType.DETECT_UNAVAILABLE_NODES) {
                     numPendingTasksForDetectUnavailableNodes.decrementAndGet();
                 }
+                updateMetrics();
             }
         }
     }
@@ -680,6 +682,23 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
                         warehouseMeta.warehouseId, nodeMeta.node, nodeMeta.loadIds.size(), nodeMeta.loadIds);
             }
         }
+    }
+
+    private void updateMetrics() {
+        int warehouseNum = 0;
+        int cnNum = 0;
+        int totalExpectParallel = 0;
+        int totalActualParallel = 0;
+        for (WarehouseMeta warehouseMeta : warehouseMetas.values()) {
+            warehouseNum++;
+            cnNum += warehouseMeta.sortedNodeMetas.size();
+            for (LoadMeta loadMeta : warehouseMeta.loadMetas.values()) {
+                totalExpectParallel += loadMeta.expectParallel;
+                totalActualParallel += loadMeta.nodes.size();
+            }
+        }
+        MergeCommitMetricRegistry.getInstance().updateBackendAssigner(
+                warehouseNum, cnNum, totalExpectParallel, totalActualParallel);
     }
 
     // Note that warehouse id may be invalid after the warehouse is dropped, and an exception can be thrown

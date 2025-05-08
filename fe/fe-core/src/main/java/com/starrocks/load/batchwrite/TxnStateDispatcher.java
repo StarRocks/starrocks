@@ -74,6 +74,7 @@ public class TxnStateDispatcher {
             try {
                 rpcExecutor.execute(() -> runTask(task));
                 success = true;
+                MergeCommitMetricRegistry.getInstance().updatePendingTxnDispatch(1L);
                 break;
             } catch (Throwable e) {
                 LOG.warn("Failed to submit txn state update task, db: {}, txn_id: {}, backend_id: {}, num retry: {}",
@@ -102,8 +103,10 @@ public class TxnStateDispatcher {
     }
 
     private void runTask(Task task) {
+        MergeCommitMetricRegistry.getInstance().updatePendingTxnDispatch(-1L);
         int maxRetries = Config.merge_commit_txn_state_dispatch_retry_times;
         int numRetry = 0;
+        long startTimeNs = System.nanoTime();
         DispatchResult result;
         while (true) {
             result = dispatchTxnState(task.dbName, task.taskId.txnId, task.taskId.backendId);
@@ -123,7 +126,8 @@ public class TxnStateDispatcher {
                 break;
             }
         }
-        if (result.getStatus() == DispatchStatus.SUCCESS) {
+        boolean success = result.getStatus() == DispatchStatus.SUCCESS;
+        if (success) {
             LOG.debug("Success to dispatch txn state, db: {}, txn_id: {}, backend_id: {}, num retry: {}, txn state: {}",
                     task.dbName, task.taskId.txnId, task.taskId.backendId, numRetry, result.getState());
         } else {
@@ -131,6 +135,8 @@ public class TxnStateDispatcher {
                     task.dbName, task.taskId.txnId, task.taskId.backendId, result.getFailReason(), result.getState());
         }
         pendingTasks.remove(task.taskId);
+        MergeCommitMetricRegistry.getInstance().updateTxnDispatchResult(
+                success, numRetry, (System.nanoTime() - startTimeNs) / 1000);
         if (taskExecuteListener != null) {
             taskExecuteListener.onFinish(task, result, numRetry);
         }

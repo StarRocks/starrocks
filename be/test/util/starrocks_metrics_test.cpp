@@ -347,6 +347,11 @@ TEST_F(StarRocksMetricsTest, test_metrics_register) {
     assert_threadpool_metrics_register("clone", instance);
     assert_threadpool_metrics_register("remote_snapshot", instance);
     assert_threadpool_metrics_register("replicate_snapshot", instance);
+<<<<<<< HEAD
+=======
+    assert_threadpool_metrics_register("load_channel", instance);
+    assert_threadpool_metrics_register("merge_commit", instance);
+>>>>>>> 6f3e52eb90 ([Enhancement] Add more merge commit metrics (#58678))
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_total"));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_eos_total"));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_duration_us"));

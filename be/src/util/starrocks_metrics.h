@@ -203,6 +203,7 @@ public:
     METRIC_DEFINE_INT_COUNTER(stream_load_rows_total, MetricUnit::ROWS);
     METRIC_DEFINE_INT_COUNTER(load_rows_total, MetricUnit::ROWS);
     METRIC_DEFINE_INT_COUNTER(load_bytes_total, MetricUnit::BYTES);
+    METRICS_DEFINE_THREAD_POOL(merge_commit);
 
     // Metrics for LoadChannel
     // The number that LoadChannel#add_chunks is accessed
