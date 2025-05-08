@@ -149,11 +149,11 @@ public class FileListRepoTest {
         // add files
         sql = RepoAccessor.getInstance().buildSqlAddFiles(records);
         Assert.assertEquals("INSERT INTO _statistics_.pipe_file_list" +
-                        "(`pipe_id`, `file_name`, `file_version`, `file_size`, `state`, `last_modified`, " +
+                        "(`id`, `pipe_id`, `file_name`, `file_version`, `file_size`, `state`, `last_modified`, " +
                         "`staged_time`, `start_load`, `finish_load`, `error_info`, `insert_label`) VALUES " +
-                "(1, 'a.parquet', '123asdf', 1024, 'UNLOADED', '2023-07-01 01:01:01', " +
+                "(DEFAULT, 1, 'a.parquet', '123asdf', 1024, 'UNLOADED', '2023-07-01 01:01:01', " +
                         "'2023-07-01 01:01:01', '2023-07-01 01:01:01', '2023-07-01 01:01:01', '{\"errorMessage\":null}', '')," +
-                "(1, 'a.parquet', '123asdf', 1024, 'UNLOADED', '2023-07-01 01:01:01', " +
+                "(DEFAULT, 1, 'a.parquet', '123asdf', 1024, 'UNLOADED', '2023-07-01 01:01:01', " +
                         "'2023-07-01 01:01:01', '2023-07-01 01:01:01', '2023-07-01 01:01:01', '{\"errorMessage\":null}', '')",
                 sql);
 
@@ -298,10 +298,10 @@ public class FileListRepoTest {
         new Expectations(executor) {
             {
                 executor.executeDML(
-                        "INSERT INTO _statistics_.pipe_file_list(`pipe_id`, `file_name`, `file_version`, " +
+                        "INSERT INTO _statistics_.pipe_file_list(`id`, `pipe_id`, `file_name`, `file_version`, " +
                                 "`file_size`, `state`, `last_modified`, `staged_time`, `start_load`, `finish_load`, " +
                                 "`error_info`, `insert_label`) VALUES " +
-                                "(1, 'a.parquet', '1', 0, 'UNLOADED', NULL, NULL, " +
+                                "(DEFAULT, 1, 'a.parquet', '1', 0, 'UNLOADED', NULL, NULL, " +
                                 "NULL, NULL, '{\"errorMessage\":null}', '')");
                 result = Lists.newArrayList();
             }
@@ -386,10 +386,11 @@ public class FileListRepoTest {
         new Expectations(executor) {
             {
                 executor.executeDML(
-                        String.format("INSERT INTO _statistics_.pipe_file_list(`pipe_id`, `file_name`, `file_version`, " +
-                                "`file_size`, `state`, `last_modified`, `staged_time`, `start_load`, `finish_load`, " +
-                                "`error_info`, `insert_label`) VALUES (1, '%d.parquet', '%d', %d, 'UNLOADED', NULL, NULL, " +
-                                "NULL, NULL, '{\"errorMessage\":null}', '')", recordSize, recordSize, recordSize));
+                        String.format("INSERT INTO _statistics_.pipe_file_list(`id`, `pipe_id`, `file_name`, `file_version`, " +
+                            "`file_size`, `state`, `last_modified`, `staged_time`, `start_load`, `finish_load`, " +
+                                    "`error_info`, `insert_label`) VALUES (DEFAULT, 1, '%d.parquet', '%d', %d, 'UNLOADED', " +
+                                        "NULL, NULL, NULL, NULL, '{\"errorMessage\":null}', '')",
+                                            recordSize, recordSize, recordSize));
                 times = 1;
                 result = null;
             }
