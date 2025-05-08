@@ -72,6 +72,12 @@ public:
 
     // Checks if the Version has the correct statistics for a given column
     bool HasCorrectStatistics(const tparquet::ColumnMetaData& column_meta, const SortOrder& sort_order) const;
+
+    // ARROW-17100: [C++][Parquet] Fix backwards compatibility for ParquetV2 data pages written prior to 3.0.0 per ARROW-10353 #13665
+    // https://github.com/apache/arrow/pull/13665/files
+    // Prior to Arrow 3.0.0, is_compressed was always set to false in column headers,
+    // even if compression was used. See ARROW-17100.
+    bool IsAlwaysCompressed() const;
 };
 
 // Class corresponding to FileMetaData in thrift

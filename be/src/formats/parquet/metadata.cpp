@@ -433,6 +433,10 @@ bool ApplicationVersion::HasCorrectStatistics(const tparquet::ColumnMetaData& co
     return true;
 }
 
+bool ApplicationVersion::IsAlwaysCompressed() const {
+    return VersionLt(PARQUET_CPP_10353_FIXED_VERSION());
+}
+
 StatusOr<FileMetaDataPtr> FileMetaDataParser::get_file_metadata() {
     // return from split_context directly
     if (_scanner_ctx->split_context != nullptr) {
