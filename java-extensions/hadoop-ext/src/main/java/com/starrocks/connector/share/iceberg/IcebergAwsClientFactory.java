@@ -218,7 +218,7 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
 
         s3AsyncClientBuilder.region(tryToResolveRegion(s3Region));
 
-        // To prevent the 's3ClientBuilder' (NPE) exception, when 'aws.s3.endpoint' does not have
+        // To prevent the 's3AsyncClientBuilder' (NPE) exception, when 'aws.s3.endpoint' does not have
         // 'scheme', we will add https scheme.
         if (!s3Endpoint.isEmpty()) {
             s3AsyncClientBuilder.endpointOverride(ensureSchemeInEndpoint(s3Endpoint));
