@@ -82,9 +82,6 @@ public class IcebergMetadataScanner extends AbstractIcebergMetadataScanner {
                     "partition",
                     "key_metadata",
                     "split_offsets",
-                    "referenced_data_file",
-                    "content_offset",
-                    "content_size_in_bytes",
                     "equality_ids");
     protected static final List<String> DELETE_SCAN_WITH_STATS_COLUMNS =
             ImmutableList.<String>builder().addAll(DELETE_SCAN_COLUMNS).addAll(STATS_COLUMNS).build();
