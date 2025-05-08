@@ -281,10 +281,23 @@ Status PageReader::_decompress_page(starrocks::Slice& input, starrocks::Slice* o
 }
 
 Status PageReader::_read_and_decompress_internal(bool need_fill_cache) {
-    bool is_compressed = _codec != tparquet::CompressionCodec::UNCOMPRESSED &&
-                         (_cur_header.type != tparquet::PageType::DATA_PAGE_V2 ||
-                          !(_cur_header.data_page_header_v2.__isset.is_compressed) ||
-                          (_cur_header.data_page_header_v2.is_compressed));
+    bool is_compressed = true;
+    if (_cur_header.type == tparquet::PageType::DATA_PAGE_V2) {
+        const auto& page_header = _cur_header.data_page_header_v2;
+        if (page_header.__isset.is_compressed) {
+            is_compressed = page_header.is_compressed;
+        }
+    }
+
+    // ARROW-17100: [C++][Parquet] Fix backwards compatibility for ParquetV2 data pages written prior to 3.0.0 per ARROW-10353 #13665
+    // https://github.com/apache/arrow/pull/13665/files
+    // Prior to Arrow 3.0.0, is_compressed was always set to false in column headers,
+    // even if compression was used. See ARROW-17100.
+    bool always_compressed = (_opts.file_meta_data->writer_version().IsAlwaysCompressed());
+    is_compressed |= always_compressed;
+
+    is_compressed = is_compressed && (_codec != tparquet::CompressionCodec::UNCOMPRESSED);
+
     RETURN_IF_ERROR(CurrentThread::mem_tracker()->check_mem_limit("read and decompress page"));
 
     size_t uncompressed_size = _cur_header.uncompressed_page_size;
