@@ -240,4 +240,20 @@ public class ListPartitionInfoTest {
         return table;
     }
 
+    @Test
+    public void testToSqlWithAutomaticPartition() {
+        {
+            String sql = this.listPartitionInfo.toSql(this.findTableForSingleListPartition(), false);
+            String target = "PARTITION BY LIST(`province`)(\n" +
+                    "  PARTITION p1 VALUES IN (\'guangdong\', \'tianjin\'),\n" +
+                    "  PARTITION p2 VALUES IN (\'shanghai\', \'beijing\')\n" +
+                    ")";
+            Assert.assertEquals(sql, target);
+        }
+        {
+            String sql = this.listPartitionInfo.toSql(this.findTableForSingleListPartition(), true);
+            String target = "PARTITION BY (`province`)";
+            Assert.assertEquals(sql, target);
+        }
+    }
 }

@@ -1,4 +1,4 @@
--- name: test_mv_refresh
+-- name: test_mv_inactive_list
 create database db_${uuid0};
 -- result:
 -- !result
@@ -12,12 +12,7 @@ CREATE TABLE t1 (
 )
 DUPLICATE KEY(k1)
 COMMENT "OLAP"
-PARTITION BY RANGE(`k1`)
-(
-    PARTITION `p202006` VALUES LESS THAN ("2020-07-01"),
-    PARTITION `p202007` VALUES LESS THAN ("2020-08-01"),
-    PARTITION `p202008` VALUES LESS THAN ("2020-09-01")
-)
+PARTITION BY (k1, k2)
 PROPERTIES (
     "replication_num" = "1"
 );
@@ -46,7 +41,7 @@ function: print_hit_materialized_view("SELECT k1,min(k2) as k2 FROM t1 GROUP BY 
 -- result:
 True
 -- !result
-[UC]ALTER VIEW v1 AS SELECT k1,avg(k2) as k2,avg(k3) as k3 FROM t1 GROUP BY k1;
+[UC]ALTER MATERIALIZED VIEW mv1 inactive;
 -- result:
 -- !result
 function: print_hit_materialized_view("SELECT k1,min(k2) as k2 FROM t1 GROUP BY k1 order by 1;", "mv1")
@@ -60,21 +55,14 @@ False
 [UC]REFRESH MATERIALIZED VIEW mv1 with sync mode;
 [UC]ALTER MATERIALIZED VIEW mv1 active;
 -- result:
-[REGEX].*Can not active materialized view [mv_on_view_1] because analyze materialized view define sql.*
--- !result
-[UC]ALTER VIEW v1 AS SELECT k1,max(k2) as k2,max(k3) as k3 FROM t1 GROUP BY k1;
--- result:
--- !result
-[UC]ALTER MATERIALIZED VIEW mv1 active;
--- result:
 -- !result
 function: print_hit_materialized_view("SELECT k1,min(k2) as k2 FROM t1 GROUP BY k1 order by 1;", "mv1")
 -- result:
-False
+True
 -- !result
 function: print_hit_materialized_view("SELECT k1,min(k2) as k2 FROM t1 GROUP BY k1 order by 1;", "mv1")
 -- result:
-False
+True
 -- !result
 SELECT k1,min(k2) as k2 FROM t1 GROUP BY k1 order by 1;
 -- result:
