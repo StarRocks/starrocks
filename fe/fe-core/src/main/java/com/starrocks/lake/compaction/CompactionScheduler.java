@@ -404,6 +404,7 @@ public class CompactionScheduler extends Daemon {
             request.allowPartialSuccess = false;
             request.encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
             request.forceBaseCompaction = (priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+            request.skipWriteTxnlog = true;
 
             aggRequest.requests.add(request);
             aggRequest.computeNodes.add(nodePB);
