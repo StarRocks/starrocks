@@ -18,7 +18,6 @@ import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.fs.FileSystem;
 import com.starrocks.fs.HdfsUtil;
-import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.THdfsProperties;
 import org.apache.hadoop.fs.FileStatus;
 
@@ -38,9 +37,9 @@ public class HdfsFileSystemWrap implements FileSystem {
     }
 
     @Override
-    public TCloudConfiguration getCloudConfiguration(String path) throws StarRocksException {
+    public THdfsProperties getHdfsProperties(String path) throws StarRocksException {
         THdfsProperties hdfsProperties = new THdfsProperties();
         HdfsUtil.getTProperties(path, new BrokerDesc(properties), hdfsProperties);
-        return hdfsProperties.getCloud_configuration();
+        return hdfsProperties;
     }
 }

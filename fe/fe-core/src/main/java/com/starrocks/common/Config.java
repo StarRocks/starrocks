@@ -2746,6 +2746,14 @@ public class Config extends ConfigBase {
     // * END: of Cloud native meta server related configurations
     // ***********************************************************
 
+    /**
+     * Whether to use Azure Native SDK (FE java and BE c++) to access Azure Storage.
+     * Default is true. If set to false, use Hadoop Azure.
+     * Currently only supported for Azure Blob Storage in files() table function.
+     */
+    @ConfField(mutable = true)
+    public static boolean azure_use_native_sdk = true;
+
     @ConfField(mutable = true)
     public static boolean enable_experimental_rowstore = false;
 
