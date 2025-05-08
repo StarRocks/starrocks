@@ -532,6 +532,7 @@ void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache)
     fslib::FLAGS_index_cache_disk_size_bytes = config::starlet_index_cache_disk_size_bytes;
     fslib::FLAGS_index_cache_block_size_bytes = config::starlet_index_cache_block_size_bytes;
     fslib::FLAGS_star_cache_enable_stat = config::starlet_enable_cache_stat;
+    fslib::FLAGS_star_cache_meta_size_bytes = config::starlet_star_cache_meta_size_bytes;
 
     staros::starlet::StarletConfig starlet_config;
     starlet_config.rpc_port = config::starlet_port;
