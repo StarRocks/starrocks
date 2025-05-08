@@ -53,6 +53,7 @@ TEST_F(UpdateConfigActionTest, update_datacache_disk_size) {
     options.engine = "starcache";
     Status st = BlockCache::instance()->init(options);
     ASSERT_TRUE(st.ok());
+    CacheEnv::GetInstance()->set_local_cache(cache->local_cache());
 
     UpdateConfigAction action(ExecEnv::GetInstance());
 

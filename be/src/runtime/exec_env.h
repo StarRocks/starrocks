@@ -252,6 +252,8 @@ public:
 
     void try_release_resource_before_core_dump();
 
+    void set_local_cache(std::shared_ptr<LocalCache> local_cache) { _local_cache = std::move(local_cache); }
+
     LocalCache* local_cache() { return _local_cache.get(); }
     BlockCache* block_cache() const { return _block_cache.get(); }
     ObjectCache* external_table_meta_cache() const { return _starcache_based_object_cache.get(); }
