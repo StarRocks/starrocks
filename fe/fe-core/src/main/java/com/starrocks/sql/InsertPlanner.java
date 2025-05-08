@@ -384,6 +384,9 @@ public class InsertPlanner {
                         nullExprInAutoIncrement, enableAutomaticPartition, session.getCurrentWarehouseId());
                 if (insertStmt.usePartialUpdate()) {
                     ((OlapTableSink) dataSink).setPartialUpdateMode(TPartialUpdateMode.AUTO_MODE);
+                    if (insertStmt.autoIncrementPartialUpdate()) {
+                        ((OlapTableSink) dataSink).setMissAutoIncrementColumn();
+                    }
                 }
                 if (olapTable.getAutomaticBucketSize() > 0) {
                     ((OlapTableSink) dataSink).setAutomaticBucketSize(olapTable.getAutomaticBucketSize());

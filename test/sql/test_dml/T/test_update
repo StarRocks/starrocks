@@ -51,7 +51,7 @@ CREATE TABLE `pk_tbl1` (
 ) ENGINE=OLAP
 PRIMARY KEY(`k1`)
 DISTRIBUTED BY HASH(`k1`);
-insert into pk_tbl1(k2, k3, k4, k5) values('2024-01-01', 1, 2, 3), ('2024-01-01', 1, 2, 3);
+insert into pk_tbl1(k1, k2, k3, k4, k5) values(DEFAULT, '2024-01-01', 1, 2, 3), (DEFAULT, '2024-01-01', 1, 2, 3);
 update pk_tbl1 set K4 = 1, K3 = 1, K5 = 1 where K1 = 1;
 select * from pk_tbl1 order by k1;
 drop table if exists pk_tbl1;
