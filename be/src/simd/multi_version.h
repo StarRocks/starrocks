@@ -36,6 +36,7 @@
 #define MFV_SSE42(IMPL)
 #define MFV_AVX2(IMPL)
 #define MFV_AVX512F(IMPL)
+#define MFV_AVX512BW(IMPL)
 #define MFV_AVX512VL(IMPL)
 #define MFV_DEFAULT(IMPL) IMPL
 
