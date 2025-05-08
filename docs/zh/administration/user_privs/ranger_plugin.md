@@ -137,7 +137,7 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
    - `ranger.plugin.starrocks.service.name` 改为刚刚创建的 StarRocks Service 的名称。
    - `ranger.plugin.starrocks.policy.rest.url` 改为 Ranger Admin 的地址。
 
-   如需修改其他配置也可根据 Ranger 官方文档进行对应修改。比如可以修改 `ranger.plugin.starrocks.policy.pollIntervalM` 来更改拉取权限变更的时间。
+   如需修改其他配置也可根据 Ranger 官方文档进行对应修改。比如可以修改 `ranger.plugin.starrocks.policy.pollIntervalMs` 来更改拉取权限变更的时间。
 
    ```SQL
    vim ranger-starrocks-security.xml
