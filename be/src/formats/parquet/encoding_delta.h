@@ -811,7 +811,7 @@ public:
 private:
     DeltaBinaryPackedDecoder<int32_t> prefix_len_decoder_;
     DeltaLengthByteArrayDecoder<tparquet::Type::BYTE_ARRAY> suffix_decoder_;
-    Slice last_value_;
+    std::string last_value_;
     // string buffer for last value in previous page
     // std::string last_value_in_previous_page_;
     int num_valid_values_{0};
@@ -935,7 +935,7 @@ protected:
         DCHECK_EQ(data_ptr - buffered_data_.data(), data_size);
         prefix_len_offset_ += max_values;
         num_valid_values_ -= max_values;
-        last_value_ = Slice(prefix.data(), prefix.length());
+        last_value_ = std::string(prefix);
         return Status::OK();
     }
 };
