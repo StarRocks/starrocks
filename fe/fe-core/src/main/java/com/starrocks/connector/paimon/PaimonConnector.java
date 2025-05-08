@@ -198,7 +198,6 @@ public class PaimonConnector implements Connector {
         try {
             if ((catalogType.equalsIgnoreCase("rest") && this.paimonOptions.get("token.provider").equalsIgnoreCase("dlf"))
                     || catalogType.equalsIgnoreCase("dlf-paimon")) {
-                // For DLF 2.0, we should judge ramUser to see if catalog can be cached
                 String ramUser = DlfUtil.getRamUser();
                 boolean noAK = Strings.isNullOrEmpty(this.paimonOptions.get("dlf.access-key-id"))
                         || Strings.isNullOrEmpty(this.paimonOptions.get("dlf.access-key-secret"));
@@ -221,7 +220,6 @@ public class PaimonConnector implements Connector {
                     }
                 }
             } else if (paimonNativeCatalog != null) {
-                // For non DLF 2.0, keep the old method
                 return paimonNativeCatalog;
             }
             Configuration configuration = new Configuration();
@@ -240,7 +238,7 @@ public class PaimonConnector implements Connector {
         } catch (Exception e) {
             if (e instanceof NullPointerException ||
                     (e.getMessage() != null && e.getMessage().contains(DLF_AUTH_USER_NAME))) {
-                throw new StarRocksConnectorException("NPE found. Maybe current user is not a ram user.", e);
+                throw new StarRocksConnectorException("NPE found. Maybe current user is not a ram user. " + e.getMessage(), e);
             }
             throw new StarRocksConnectorException("Error creating a paimon catalog.", e);
         }

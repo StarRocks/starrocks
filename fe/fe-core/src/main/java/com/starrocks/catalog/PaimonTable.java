@@ -15,8 +15,6 @@
 package com.starrocks.catalog;
 
 import com.aliyun.datalake.catalog.CatalogClient;
-import com.aliyun.datalake.common.DlfDataToken;
-import com.aliyun.datalake.common.DlfMetaToken;
 import com.aliyun.datalake.common.credential.SimpleStsCredentialsProvider;
 import com.aliyun.datalake.common.impl.Base64Util;
 import com.aliyun.datalake.core.DlfAuthContext;
@@ -38,12 +36,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.paimon.CoreOptions;
 import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.fs.FileIO;
-import org.apache.paimon.options.Options;
-import org.apache.paimon.rest.RESTCatalogLoader;
-import org.apache.paimon.rest.RESTTokenFileIO;
-import org.apache.paimon.table.AppendOnlyFileStoreTable;
 import org.apache.paimon.table.DataTable;
-import org.apache.paimon.table.PrimaryKeyFileStoreTable;
 import org.apache.paimon.types.DataField;
 
 import java.io.File;
@@ -236,37 +229,6 @@ public class PaimonTable extends Table {
                         DlfUtil.getFieldValue(paimonNativeTable, "checker"));
             } else {
                 LOG.warn("Cannot find data token file " + dataTokenPath);
-            }
-        } else if (paimonFileIO instanceof RESTTokenFileIO) {
-            // For DLF 2.5 JNI writer
-            try {
-                if (paimonNativeTable instanceof AppendOnlyFileStoreTable) {
-                    Options options = ((RESTCatalogLoader) (((AppendOnlyFileStoreTable) paimonNativeTable)
-                            .catalogEnvironment().catalogLoader()))
-                            .context().options();
-                    if (options.get("token.provider").equalsIgnoreCase("dlf")
-                            && !Strings.isNullOrEmpty(options.get("dlf.token-path"))) {
-                        DlfMetaToken token = DlfUtil.getDlfToken(options.get("dlf.token-path"));
-                        options.remove("dlf.token-path");
-                        options.set("dlf.access-key-id", token.getAccessKeyId());
-                        options.set("dlf.access-key-secret", token.getAccessKeySecret());
-                        options.set("dlf.security-token", token.getSecurityToken());
-                    }
-                } else if (paimonNativeTable instanceof PrimaryKeyFileStoreTable) {
-                    Options options = ((RESTCatalogLoader) (((PrimaryKeyFileStoreTable) paimonNativeTable)
-                            .catalogEnvironment().catalogLoader()))
-                            .context().options();
-                    if (options.get("token.provider").equalsIgnoreCase("dlf")
-                            && !Strings.isNullOrEmpty(options.get("dlf.token-path"))) {
-                        DlfMetaToken token = DlfUtil.getDlfToken(options.get("dlf.token-path"));
-                        options.remove("dlf.token-path");
-                        options.set("dlf.access-key-id", token.getAccessKeyId());
-                        options.set("dlf.access-key-secret", token.getAccessKeySecret());
-                        options.set("dlf.security-token", token.getSecurityToken());
-                    }
-                }
-            } catch (Exception e) {
-                LOG.warn(e.getMessage());
             }
         }
         String encodedTable = PaimonScanNode.encodeObjectToString(paimonNativeTable);
