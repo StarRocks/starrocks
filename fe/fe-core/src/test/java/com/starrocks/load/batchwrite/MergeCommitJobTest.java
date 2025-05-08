@@ -55,7 +55,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
-public class IsomorphicBatchWriteTest extends BatchWriteTestBase {
+public class MergeCommitJobTest extends BatchWriteTestBase {
 
     @Mocked
     private CoordinatorBackendAssigner assigner;
@@ -63,7 +63,7 @@ public class IsomorphicBatchWriteTest extends BatchWriteTestBase {
     private TxnStateDispatcher txnStateDispatcher;
     private int parallel;
 
-    private IsomorphicBatchWrite load;
+    private MergeCommitJob load;
 
     @Before
     public void setup() throws Exception {
@@ -78,7 +78,7 @@ public class IsomorphicBatchWriteTest extends BatchWriteTestBase {
         StreamLoadKvParams params = new StreamLoadKvParams(map);
         StreamLoadInfo streamLoadInfo =
                 StreamLoadInfo.fromHttpStreamLoadRequest(null, -1, Optional.empty(), params);
-        load = new IsomorphicBatchWrite(
+        load = new MergeCommitJob(
                 1,
                 new TableId(DB_NAME_1, TABLE_NAME_1_1),
                 WarehouseManager.DEFAULT_WAREHOUSE_NAME,
@@ -145,21 +145,21 @@ public class IsomorphicBatchWriteTest extends BatchWriteTestBase {
         String label = result1.getValue();
         assertNotNull(label);
         assertEquals(1, load.numRunningLoads());
-        LoadExecutor loadExecutor = load.getLoadExecutor(label);
-        assertNotNull(loadExecutor);
+        MergeCommitTask mergeCommitTask = load.getTask(label);
+        assertNotNull(mergeCommitTask);
         assertEquals(nodes.stream().map(ComputeNode::getId).collect(Collectors.toSet()),
-                loadExecutor.getCoordinatorBackendIds());
+                mergeCommitTask.getCoordinatorBackendIds());
 
         RequestLoadResult result2 = load.requestLoad(nodes.get(1).getId(), nodes.get(1).getHost());
         assertTrue(result2.isOk());
         assertEquals(label, result2.getValue());
 
-        executor.manualRun(loadExecutor);
+        executor.manualRun(mergeCommitTask);
 
         assertEquals(TransactionStatus.VISIBLE, getTxnStatus(label));
-        assertNull(load.getLoadExecutor(label));
+        assertNull(load.getTask(label));
         assertEquals(0, load.numRunningLoads());
-        assertEquals(loadExecutor.getBackendIds().size(), txnStateDispatcher.getNumSubmittedTasks());
+        assertEquals(mergeCommitTask.getBackendIds().size(), txnStateDispatcher.getNumSubmittedTasks());
     }
 
     @Test
@@ -178,10 +178,10 @@ public class IsomorphicBatchWriteTest extends BatchWriteTestBase {
         String label1 = result1.getValue();
         assertNotNull(label1);
         assertEquals(1, load.numRunningLoads());
-        LoadExecutor loadExecutor1 = load.getLoadExecutor(label1);
-        assertNotNull(loadExecutor1);
+        MergeCommitTask mergeCommitTask1 = load.getTask(label1);
+        assertNotNull(mergeCommitTask1);
         assertEquals(nodes.stream().map(ComputeNode::getId).collect(Collectors.toSet()),
-                loadExecutor1.getCoordinatorBackendIds());
+                mergeCommitTask1.getCoordinatorBackendIds());
 
         RequestLoadResult result2 = load.requestLoad(allNodes.get(parallel).getId(), allNodes.get(parallel).getHost());
         assertTrue(result2.isOk());
@@ -189,20 +189,20 @@ public class IsomorphicBatchWriteTest extends BatchWriteTestBase {
         assertNotNull(label2);
         assertEquals(2, load.numRunningLoads());
         assertNotEquals(label1, label2);
-        LoadExecutor loadExecutor2 = load.getLoadExecutor(label2);
-        assertNotNull(loadExecutor2);
-        assertNotSame(loadExecutor1, loadExecutor2);
+        MergeCommitTask mergeCommitTask2 = load.getTask(label2);
+        assertNotNull(mergeCommitTask2);
+        assertNotSame(mergeCommitTask1, mergeCommitTask2);
         Set<Long> expectNodeIds = nodes.stream().map(ComputeNode::getId).collect(Collectors.toSet());
         expectNodeIds.add(allNodes.get(parallel).getId());
-        assertEquals(expectNodeIds, loadExecutor2.getCoordinatorBackendIds());
+        assertEquals(expectNodeIds, mergeCommitTask2.getCoordinatorBackendIds());
 
-        executor.manualRun(loadExecutor1);
+        executor.manualRun(mergeCommitTask1);
         assertEquals(TransactionStatus.VISIBLE, getTxnStatus(label1));
-        assertEquals(loadExecutor1.getCoordinatorBackendIds().size(), txnStateDispatcher.getNumSubmittedTasks());
+        assertEquals(mergeCommitTask1.getCoordinatorBackendIds().size(), txnStateDispatcher.getNumSubmittedTasks());
 
-        executor.manualRun(loadExecutor2);
+        executor.manualRun(mergeCommitTask2);
         assertEquals(TransactionStatus.VISIBLE, getTxnStatus(label2));
-        assertEquals(loadExecutor1.getBackendIds().size() + loadExecutor2.getBackendIds().size(),
+        assertEquals(mergeCommitTask1.getBackendIds().size() + mergeCommitTask2.getBackendIds().size(),
                 txnStateDispatcher.getNumSubmittedTasks());
 
         assertEquals(0, load.numRunningLoads());
@@ -273,22 +273,22 @@ public class IsomorphicBatchWriteTest extends BatchWriteTestBase {
                 return;
             }
 
-            if (!(runnable instanceof LoadExecutor)) {
+            if (!(runnable instanceof MergeCommitTask)) {
                 runnable.run();
                 return;
             }
 
-            LoadExecutor loadExecutor = (LoadExecutor) runnable;
-            Thread thread = new Thread(loadExecutor);
+            MergeCommitTask mergeCommitTask = (MergeCommitTask) runnable;
+            Thread thread = new Thread(mergeCommitTask);
             thread.start();
             long endTime = System.currentTimeMillis() + 120000;
-            while (loadExecutor.getTimeTrace().joinPlanTimeMs.get() <= 0) {
+            while (mergeCommitTask.getTimeTrace().joinPlanTimeMs.get() <= 0) {
                 if (System.currentTimeMillis() > endTime) {
                     throw new Exception("Load executor execute plan timeout");
                 }
                 Thread.sleep(10);
             }
-            DefaultCoordinator coordinator = (DefaultCoordinator) loadExecutor.getCoordinator();
+            DefaultCoordinator coordinator = (DefaultCoordinator) mergeCommitTask.getCoordinator();
             assertNotNull(coordinator);
             coordinator.getExecutionDAG().getExecutions().forEach(execution -> {
                 int indexInJob = execution.getIndexInJob();

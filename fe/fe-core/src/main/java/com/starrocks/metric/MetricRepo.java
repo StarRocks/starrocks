@@ -57,6 +57,7 @@ import com.starrocks.common.util.NetUtils;
 import com.starrocks.http.HttpMetricRegistry;
 import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.load.EtlJobType;
+import com.starrocks.load.batchwrite.MergeCommitMetricRegistry;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.load.routineload.KafkaProgress;
@@ -920,6 +921,9 @@ public final class MetricRepo {
 
         // collect brpc pool metrics
         collectBrpcMetrics(visitor);
+
+        // collect merge commit metrics
+        MergeCommitMetricRegistry.getInstance().visit(visitor);
 
         // node info
         visitor.getNodeInfo();
