@@ -415,14 +415,14 @@ public class QueryStatisticsInfo {
                     JsonObject progressInfo = jsonObject.getAsJsonObject("progress_info");
                     result = progressInfo.get("progress_percent").getAsString();
                 } catch (JsonSyntaxException e) {
-                    LOG.warn("Failed to get query progress, query_id: {}, msg: {}", queryId, response.body());
+                    LOG.warn("failed to get query progress, query_id: {}, msg: {}", queryId, response.body());
                 }
             } else {
-                LOG.warn("Failed to get query progress, query_id: {}, status code: {}, msg: {}",
+                LOG.warn("failed to get query progress, query_id: {}, status code: {}, msg: {}",
                         queryId, response.statusCode(), response.body());
             }
         } catch (IOException | InterruptedException e) {
-            LOG.warn("Failed to get query progress, query_id: {}, msg: {}", queryId, e);
+            LOG.warn("failed to get query progress, query_id: {}, msg: {}", queryId, e);
         } finally {
             return result;
         }
