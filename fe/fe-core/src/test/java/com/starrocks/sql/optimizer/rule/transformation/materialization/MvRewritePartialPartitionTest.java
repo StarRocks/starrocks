@@ -927,6 +927,64 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
     }
 
     @Test
+    public void testPartialPartitionRewriteWithDateTruncExpr3() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_tbl1 (\n" +
+                " ds date,\n" +
+                " v1 INT,\n" +
+                " v2 INT)\n" +
+                " DUPLICATE KEY(ds)\n" +
+                " PARTITION BY RANGE(`ds`)\n" +
+                " (\n" +
+                "  PARTITION `p1` VALUES [('2020-01-01') , ('2020-01-02')),\n" +
+                "  PARTITION `p2` VALUES [('2020-01-03') , ('2020-01-04')),\n" +
+                "  PARTITION `p3` VALUES [('2020-02-02') , ('2020-02-03'))\n" +
+                " )\n" +
+                " DISTRIBUTED BY HASH(ds) properties('replication_num'='1');");
+        executeInsertSql(connectContext, "insert into base_tbl1 values " +
+                " (\"2020-01-01\",1,1),(\"2020-01-03\",1,2),(\"2020-02-02\",2,1);");
+
+        createAndRefreshMv("CREATE MATERIALIZED VIEW test_month_mv1 \n" +
+                " PARTITION BY ds \n" +
+                " DISTRIBUTED BY HASH(ds) BUCKETS 10\n" +
+                " REFRESH MANUAL\n" +
+                " AS SELECT " +
+                " date_trunc('month', `ds`) AS ds, sum(v1) " +
+                " FROM base_tbl1 " +
+                " group by ds;");
+
+        {
+            String query = "select sum(v1) " +
+                    " FROM base_tbl1 where ds >= '2020-01-01' and ds <= '2020-01-31'";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_month_mv1");
+        }
+
+        {
+            String query = "select sum(v1) " +
+                    " FROM base_tbl1 where ds >= '2020-01-01' and ds < '2020-02-01'";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_month_mv1");
+        }
+
+        {
+            String query = "select sum(v1) " +
+                    " FROM base_tbl1 where ds >= '2020-01-01' and ds <= '2020-02-29'";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_month_mv1");
+        }
+
+        {
+            String query = "select sum(v1) " +
+                    " FROM base_tbl1 where ds >= '2020-01-01' and ds < '2020-03-01'";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_month_mv1");
+        }
+
+        dropMv("test", "test_mv1");
+        starRocksAssert.dropTable("base_tbl1");
+    }
+
+    @Test
     public void testPartialPartitionRewriteWithTimeSliceExpr1() throws Exception {
         starRocksAssert.withTable("CREATE TABLE base_tbl1 (\n" +
                 " k1 datetime,\n" +

@@ -105,10 +105,16 @@ public class DateTruncEquivalent extends IPredicateRewriteEquivalent {
             if (!right.isConstantRef() || !left.equals(eqContext.getEquivalent())) {
                 return null;
             }
+            BinaryPredicateOperator predicate = (BinaryPredicateOperator) newInput.clone();
+            // ds >= '2020-01-01' and ds <= '2020-01-31' => ds >= '2020-01-01' and ds < '2020-02-01'
+            if (left.getType().isDate() && predicate.getBinaryType() == BinaryType.LE && right.getType().isDate()) {
+                predicate.setBinaryType(BinaryType.LT);
+                right = ScalarOperatorFunctions.daysAdd((ConstantOperator) right, ConstantOperator.createInt(1));
+                predicate.setChild(1, right);
+            }
             if (!isEquivalent(eqContext.getInput(), (ConstantOperator) right)) {
                 return null;
             }
-            BinaryPredicateOperator predicate = (BinaryPredicateOperator) newInput.clone();
             if (!isSupportedBinaryType(predicate.getBinaryType())) {
                 return null;
             }
