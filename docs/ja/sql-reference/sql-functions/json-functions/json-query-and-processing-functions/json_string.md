@@ -14,7 +14,7 @@ json_string(json_object_expr)
 
 ## パラメータ
 
-- `json_object_expr`: JSON オブジェクトを表す式です。オブジェクトは、JSON カラムや PARSE_JSON などの JSON コンストラクタ関数によって生成された JSON オブジェクトである可能性があります。
+- `json_object_expr`: JSON オブジェクトを表す式。このオブジェクトは、JSON カラムまたは PARSE_JSON などの JSON コンストラクタ関数によって生成された JSON オブジェクトである可能性があります。
 
 ## 戻り値
 
@@ -43,3 +43,7 @@ select json_string(parse_json('{"Name": "Alice"}'));
 | {"Name": "Alice"}                |
 +----------------------------------+
 ```
+
+:::tip
+すべての JSON 関数と演算子は、ナビゲーションおよび [概要ページ](../overview-of-json-functions-and-operators.md) に一覧されています。
+:::

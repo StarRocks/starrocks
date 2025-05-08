@@ -62,3 +62,7 @@ BOOLEAN get_json_bool(VARCHAR json_str, VARCHAR json_path)
 ## keyword
 
 GET_JSON_BOOL,GET,JSON,BOOL
+
+:::tip
+すべての JSON 関数と演算子はナビゲーションと [overview page](../overview-of-json-functions-and-operators.md) に一覧されています。
+:::

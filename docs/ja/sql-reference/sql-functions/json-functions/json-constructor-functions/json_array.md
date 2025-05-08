@@ -14,7 +14,7 @@ json_array(value, ...)
 
 ## Parameters
 
-`value`: SQL 配列の要素。`NULL` 値と以下のデータ型のみサポートされています: STRING, VARCHAR, CHAR, JSON, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DOUBLE, FLOAT, および BOOLEAN。
+`value`: SQL 配列の要素。`NULL` 値と次のデータ型のみがサポートされています: STRING, VARCHAR, CHAR, JSON, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DOUBLE, FLOAT, および BOOLEAN。
 
 ## Return value
 
@@ -37,3 +37,7 @@ mysql> SELECT json_array();
 
        -> []
 ```
+
+:::tip
+すべての JSON 関数と演算子は、ナビゲーションおよび [overview page](../overview-of-json-functions-and-operators.md) に一覧されています。
+:::

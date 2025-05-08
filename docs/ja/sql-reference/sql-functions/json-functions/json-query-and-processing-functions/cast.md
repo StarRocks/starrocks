@@ -24,7 +24,7 @@ cast(sql_expr AS JSON)
 
 - `json_expr`: SQL 値に変換したい JSON 値を表す式。
 
-- `sql_data_type`: JSON 値を変換したい SQL データ型。STRING、VARCHAR、CHAR、BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、DOUBLE、FLOAT のみがサポートされています。
+- `sql_data_type`: JSON 値を変換したい SQL データ型。STRING、VARCHAR、CHAR、BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、DOUBLE、および FLOAT データ型のみがサポートされています。
 
 - `sql_expr`: JSON 値に変換したい SQL 値を表す式。このパラメータは、`sql_data_type` パラメータでサポートされているすべての SQL データ型をサポートします。
 
@@ -38,7 +38,7 @@ cast(sql_expr AS JSON)
 
 - SQL から JSON への変換
 
-  - SQL 値が JSON でサポートされている精度を超える場合、キャスト関数は算術オーバーフローを防ぐために `NULL` を返します。
+  - SQL 値が JSON によってサポートされる精度を超える場合、キャスト関数は算術オーバーフローを防ぐために `NULL` を返します。
 
   - SQL 値が `NULL` の場合、キャスト関数は SQL 値 `NULL` を JSON 値の `NULL` に変換しません。戻り値は依然として SQL 値の `NULL` です。
 
@@ -50,9 +50,9 @@ cast(sql_expr AS JSON)
 
   - 算術オーバーフローが発生した場合、キャスト関数は SQL 値の `NULL` を返します。
 
-  - JSON 値の `NULL` を SQL 値に変換すると、関数は SQL 値の `NULL` を返します。
+  - JSON 値の `NULL` を SQL 値に変換した場合、関数は SQL 値の `NULL` を返します。
 
-  - JSON 文字列を VARCHAR 値に変換すると、関数は二重引用符 (") で囲まれていない VARCHAR 値を返します。
+  - JSON 文字列を VARCHAR 値に変換した場合、関数は二重引用符 (") で囲まれていない VARCHAR 値を返します。
 
 ## 例
 
@@ -120,3 +120,7 @@ mysql> select cast(true as json);
 | true               |
 +--------------------+
 ```
+
+:::tip
+すべての JSON 関数と演算子は、ナビゲーションおよび [overview page](../overview-of-json-functions-and-operators.md) に一覧されています。
+:::

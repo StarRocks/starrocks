@@ -97,3 +97,7 @@ select json_keys('[0, 1, {"a": 1, "b": 2}]', '$[2]');
 | ["a", "b"]                                    |
 +-----------------------------------------------+
 ```
+
+:::tip
+All of the JSON functions and operators are listed in the navigation and on the [overview page](../overview-of-json-functions-and-operators.md)
+:::

@@ -126,3 +126,7 @@ select json_length('{"x": 1, "y": [1, 2]}', '$.y');
 |                                           2 |
 +---------------------------------------------+
 ```
+
+:::tip
+All of the JSON functions and operators are listed in the navigation and on the [overview page](../overview-of-json-functions-and-operators.md)
+:::
