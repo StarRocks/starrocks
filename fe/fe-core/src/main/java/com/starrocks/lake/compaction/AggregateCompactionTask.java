@@ -44,7 +44,7 @@ public class AggregateCompactionTask extends CompactionTask {
         this.request = Objects.requireNonNull(request, "request is null");
     }
     
-    @override
+    @Override
     public TaskResult getResult() {
         if (!isDone()) {
             return TaskResult.NOT_FINISHED;
@@ -65,14 +65,14 @@ public class AggregateCompactionTask extends CompactionTask {
         }
     }
 
-    @override
+    @Override
     public void sendRequest() {
         if (responseFuture == null) {
             responseFuture = rpcChannel.aggregateCompact(request);
         }
     }
 
-    @override
+    @Override
     public void abort() {
         // no need to aggregate abort request
         TaskResult taskResult = getResult();
@@ -108,7 +108,7 @@ public class AggregateCompactionTask extends CompactionTask {
         return tabletCommitInfo;
     }
 
-    @override
+    @Override
     public int tabletCount() {
         int tabletCount = 0;
         for (CompactRequest request : request.requests) {
