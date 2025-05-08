@@ -18,6 +18,8 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.exception.CatalogException;
+import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
@@ -39,6 +41,7 @@ import org.apache.iceberg.TableScan;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchTableException;
+import org.apache.iceberg.exceptions.RESTException;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.util.StructProjection;
 import org.apache.iceberg.view.SQLViewRepresentation;
@@ -127,7 +130,14 @@ public interface IcebergCatalog extends MemoryTrackable {
                 .withLocation(defaultTableLocation(ns, definition.getViewName()));
 
         if (replace) {
-            viewBuilder.createOrReplace();
+            try {
+                viewBuilder.createOrReplace();
+            } catch (RESTException re) {
+                DEFAULT_LOGGER.error("Failed to create view using Iceberg Catalog, for dbName {} viewName {}",
+                        definition.getDatabaseName(), definition.getViewName(), re);
+                throw new CatalogException(InternalErrorCode.ICEBERG_CATALOG_ERROR,
+                        new RuntimeException("Failed to create view using Iceberg Catalog, exception: " + re.getMessage(), re));
+            }
         } else {
             viewBuilder.create();
         }
