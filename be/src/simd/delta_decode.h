@@ -18,6 +18,22 @@
 
 namespace starrocks {
 
+static inline bool contains_negative_value(const int32_t* data, size_t size) {
+    size_t i = 0;
+#ifdef __AVX2__
+    __m256i v_zero = _mm256_setzero_si256();
+    for (; i + 8 <= size; i += 8) {
+        __m256i v = _mm256_loadu_si256((__m256i*)(data + i));
+        __m256i cmp = _mm256_cmpgt_epi32(v_zero, v);
+        if (_mm256_movemask_epi8(cmp)) return true;
+    }
+#endif
+    for (; i < size; ++i) {
+        if (data[i] < 0) return true;
+    }
+    return false;
+}
+
 template <typename T>
 static inline void delta_decode_chain_scalar_prefetch(T* buf, int n, T min_delta, T& last_value) noexcept {
     T acc = last_value;
@@ -37,8 +53,7 @@ static inline void delta_decode_chain_scalar_prefetch(T* buf, int n, T min_delta
 // =========================
 // reference: https://en.algorithmica.org/hpc/algorithms/prefix/
 // int32 / uint32_t version
-__attribute__((target("avx2"))) static inline void delta_decode_chain_int32_avx2(int32_t* buf, int n, int32_t min_delta,
-                                                                                 int32_t& last_value) {
+MFV_AVX2(void delta_decode_chain_int32_avx2(int32_t* buf, int n, int32_t min_delta, int32_t& last_value) {
     using v4i = __m128i;
     using v8i = __m256i;
 
@@ -78,11 +93,11 @@ __attribute__((target("avx2"))) static inline void delta_decode_chain_int32_avx2
         buf[i] += last_value + min_delta;
         last_value = buf[i];
     }
-}
+});
 
 // Though we handle 256bit as a unit, we still use some instructions of avx512f + avx512vl.
-__attribute__((target("avx512f,avx512vl"))) static inline __m256i prefix_and_accumulate_int32_avx2(
-        int32_t* p, __m256i s, const __m256i& v_min_delta, const __m256i& v_zero, const __m256i& v_perm7) {
+MFV_AVX512VL(__m256i prefix_and_accumulate_int32_avx2(int32_t* p, __m256i s, const __m256i& v_min_delta,
+                                                      const __m256i& v_zero, const __m256i& v_perm7) {
     __m256i x = _mm256_loadu_si256((__m256i*)p);
     x = _mm256_add_epi32(x, v_min_delta);
     x = _mm256_add_epi32(x, _mm256_alignr_epi32(x, v_zero, 8 - 1));
@@ -93,10 +108,9 @@ __attribute__((target("avx512f,avx512vl"))) static inline __m256i prefix_and_acc
     _mm256_storeu_si256((__m256i*)p, x);
     // return last value.
     return _mm256_permutevar8x32_epi32(x, v_perm7);
-}
+});
 
-__attribute__((target("avx2,avx512f,avx512vl"))) static inline void delta_decode_chain_int32_avx2x(
-        int32_t* buf, int n, int32_t min_delta, int32_t& last_value) {
+MFV_AVX512VL(void delta_decode_chain_int32_avx2x(int32_t* buf, int n, int32_t min_delta, int32_t& last_value) {
     using v4i = __m128i;
     using v8i = __m256i;
 
@@ -118,12 +132,10 @@ __attribute__((target("avx2,avx512f,avx512vl"))) static inline void delta_decode
         buf[i] += last_value + min_delta;
         last_value = buf[i];
     }
-}
+});
 
-__attribute__((target("avx512f"))) static inline __m512i prefix_and_accumulate_int32_avx512(int32_t* p, __m512i s,
-                                                                                            const __m512i& v_min_delta,
-                                                                                            const __m512i& v_zero,
-                                                                                            const __m512i& v_perm15) {
+MFV_AVX512F(__m512i prefix_and_accumulate_int32_avx512(int32_t* p, __m512i s, const __m512i& v_min_delta,
+                                                       const __m512i& v_zero, const __m512i& v_perm15) {
     // prefix
     __m512i x = _mm512_loadu_si512(p);
     x = _mm512_add_epi32(x, v_min_delta);
@@ -136,12 +148,10 @@ __attribute__((target("avx512f"))) static inline __m512i prefix_and_accumulate_i
     _mm512_storeu_si512((__m512i*)p, x);
     // return last value.
     return _mm512_permutexvar_epi32(v_perm15, x);
-};
+});
 
 // reference: https://www.adms-conf.org/2020-camera-ready/ADMS20_05.pdf
-__attribute__((target("avx512f"))) static inline void delta_decode_chain_int32_avx512(int32_t* buf, int n,
-                                                                                      int32_t min_delta,
-                                                                                      int32_t& last_value) {
+MFV_AVX512F(void delta_decode_chain_int32_avx512(int32_t* buf, int n, int32_t min_delta, int32_t& last_value) {
     using v4i = __m128i;
     using v8i = __m256i;
     using v16i = __m512i;
@@ -189,13 +199,13 @@ __attribute__((target("avx512f"))) static inline void delta_decode_chain_int32_a
         buf[i] += last_value + min_delta;
         last_value = buf[i];
     }
-}
+});
 
 MFV_AVX2(void delta_decode_chain_int32(int32_t* buf, int n, int32_t min_delta, int32_t& last_value) {
     return delta_decode_chain_int32_avx2(buf, n, min_delta, last_value);
 });
 
-MFV_AVX512(void delta_decode_chain_int32(int32_t* buf, int n, int32_t min_delta, int32_t& last_value) {
+MFV_AVX512F(void delta_decode_chain_int32(int32_t* buf, int n, int32_t min_delta, int32_t& last_value) {
     return delta_decode_chain_int32_avx512(buf, n, min_delta, last_value);
 });
 
@@ -205,10 +215,8 @@ MFV_DEFAULT(void delta_decode_chain_int32(int32_t* buf, int n, int32_t min_delta
 
 // ==========================================
 
-__attribute__((target("avx512f"))) static inline __m512i prefix_and_accumulate_int64_avx512(int64_t* p, __m512i s,
-                                                                                            const __m512i& v_min_delta,
-                                                                                            const __m512i& v_zero,
-                                                                                            const __m512i& v_perm7) {
+MFV_AVX512F(__m512i prefix_and_accumulate_int64_avx512(int64_t* p, __m512i s, const __m512i& v_min_delta,
+                                                       const __m512i& v_zero, const __m512i& v_perm7) {
     // prefix
     __m512i x = _mm512_loadu_si512(p);
     x = _mm512_add_epi64(x, v_min_delta);
@@ -220,11 +228,9 @@ __attribute__((target("avx512f"))) static inline __m512i prefix_and_accumulate_i
     _mm512_storeu_si512((__m512i*)p, x);
     // return last value.
     return _mm512_permutexvar_epi64(v_perm7, x);
-};
+});
 
-__attribute__((target("avx512f"))) static inline void delta_decode_chain_int64_avx512(int64_t* buf, int n,
-                                                                                      int64_t min_delta,
-                                                                                      int64_t& last_value) {
+MFV_AVX512F(void delta_decode_chain_int64_avx512(int64_t* buf, int n, int64_t min_delta, int64_t& last_value) {
     using v4i = __m128i;
     using v8i = __m256i;
     using v16i = __m512i;
@@ -248,9 +254,9 @@ __attribute__((target("avx512f"))) static inline void delta_decode_chain_int64_a
         buf[i] += last_value + min_delta;
         last_value = buf[i];
     }
-}
+});
 
-MFV_AVX512(void delta_decode_chain_int64(int64_t* buf, int n, int64_t min_delta, int64_t& last_value) {
+MFV_AVX512F(void delta_decode_chain_int64(int64_t* buf, int n, int64_t min_delta, int64_t& last_value) {
     return delta_decode_chain_int64_avx512(buf, n, min_delta, last_value);
 });
 
