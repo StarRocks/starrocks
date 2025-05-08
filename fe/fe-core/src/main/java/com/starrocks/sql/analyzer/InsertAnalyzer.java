@@ -218,6 +218,11 @@ public class InsertAnalyzer {
                     }
                     if (targetColumns.size() < olapTable.getBaseSchemaWithoutGeneratedColumn().size()) {
                         insertStmt.setUsePartialUpdate();
+                        // mark if partial update for auto increment column
+                        if (olapTable.hasAutoIncrementColumn() &&
+                                !targetColumns.stream().anyMatch(col -> col.isAutoIncrement())) {
+                            insertStmt.setAutoIncrementPartialUpdate();
+                        }
                     }
                 }
             }
