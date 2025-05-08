@@ -49,15 +49,15 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
                                  long timeoutMs, TTabletMetaType metaType, boolean metaValue,
                                  String persistentIndexType) {
         this(jobId, dbId, tableId, tableName, timeoutMs, metaType, metaValue, persistentIndexType,
-                false, false);
+                MetadataOp.NO_OPERATION);
     }
 
     public LakeTableAlterMetaJob(long jobId, long dbId, long tableId, String tableName,
                                  long timeoutMs, TTabletMetaType metaType, boolean metaValue,
                                  String persistentIndexType,
-                                 boolean aggregateTabletMetadata, boolean splitTabletMetadata) {
+                                 MetadataOp metadataOp) {
         super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs, 
-                aggregateTabletMetadata, splitTabletMetadata);
+                metadataOp);
         this.metaType = metaType;
         this.metaValue = metaValue;
         this.persistentIndexType = persistentIndexType;

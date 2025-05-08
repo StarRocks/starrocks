@@ -3818,4 +3818,15 @@ public class OlapTable extends Table {
         }
         return null;
     }
+
+    public boolean allowUpdatePartitionAggregation() {
+        for (Partition partition : getPartitions()) {
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                if (physicalPartition.getMetadataSwitchVersion() != 0) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
 }

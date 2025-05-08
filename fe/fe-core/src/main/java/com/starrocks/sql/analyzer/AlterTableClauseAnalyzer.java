@@ -276,6 +276,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                         "Property " + PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION +
                                 " must be bool type(false/true)");
             }
+
             if (!table.isCloudNativeTable()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                             "Property " + PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION +
@@ -283,6 +284,13 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             }
             // TODO(zhangqiang)
             // reject alter partition_aggregate request if the table contains metadata with two different types
+            OlapTable olapTable = (OlapTable) table;
+            if (!olapTable.allowUpdatePartitionAggregation()) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Property " + PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION +
+                                    " cannot be updated now because this table contains mixed metadata types "  + 
+                                    "(both split and aggregate). Please wait until old metadata versions are vacuumed");
+            }
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
             if (!properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE).equalsIgnoreCase("true") &&
                     !properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE).equalsIgnoreCase("false")) {

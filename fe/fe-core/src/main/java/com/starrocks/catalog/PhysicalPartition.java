@@ -102,18 +102,12 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     private long versionEpoch;
     @SerializedName(value = "versionTxnType")
     private TransactionType versionTxnType;
+
     /**
-     * if splitMetadataVersion is not 0, it means the tablet data before splitMetadataVersion will keep its own
-     * metadata
+     * metadataSwitchVersion is non-zero: Tablets with versions below this value maintain independent metadata.
      */
-    @SerializedName(value = "splitMetadataVersion")
-    private long splitMetadataVersion;
-    /**
-     * if aggregateMetadataVersion is not 0, it means the tablet data before aggregateMetadataVersion will keep a
-     * shared metadata
-     */
-    @SerializedName(value = "aggregateMetadataVersion")
-    private long aggregateMetadataVersion;
+    @SerializedName(value = "metadataSwitchVersion")
+    private long metadataSwitchVersion;
     /**
      * ID of the transaction that has committed current visible version.
      * Just for tracing the txn log, no need to persist.
@@ -211,7 +205,11 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     }
 
     public long getMinRetainVersion() {
-        return minRetainVersion;
+        long retainVersion = minRetainVersion;
+        if (metadataSwitchVersion != 0) {
+            retainVersion = Math.min(retainVersion, metadataSwitchVersion);
+        }
+        return retainVersion;
     }
 
     public void setMinRetainVersion(long minRetainVersion) {
@@ -356,12 +354,12 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         this.versionTxnType = versionTxnType;
     }
 
-    public void setSplitMetadataVersion(long splitMetadataVersion) {
-        this.splitMetadataVersion = splitMetadataVersion;
+    public long getMetadataSwitchVersion() {
+        return metadataSwitchVersion;
     }
 
-    public void setAggregateMetadataVersion(long aggregateMetadataVersion) {
-        this.aggregateMetadataVersion = aggregateMetadataVersion;
+    public void setMetadataSwitchVersion(long metadataSwitchVersion) {
+        this.metadataSwitchVersion = metadataSwitchVersion;
     }
 
     public MaterializedIndex getIndex(long indexId) {

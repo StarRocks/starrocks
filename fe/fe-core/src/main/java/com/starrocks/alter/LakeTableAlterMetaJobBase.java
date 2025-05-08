@@ -62,6 +62,14 @@ import javax.validation.constraints.NotNull;
 
 public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     private static final Logger LOG = LogManager.getLogger(LakeTableAlterMetaJobBase.class);
+
+    public enum MetadataOp {
+        NO_OPERATION, // do nothing
+        AGGREGATE, // update enable_partition_aggregation from false to true
+        SPLIT // update enable_partition_aggregation from true to false
+    }
+
+
     @SerializedName(value = "watershedTxnId")
     private long watershedTxnId = -1;
     @SerializedName(value = "watershedGtid")
@@ -71,10 +79,8 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     private Table<Long, Long, MaterializedIndex> physicalPartitionIndexMap = HashBasedTable.create();
     @SerializedName(value = "commitVersionMap")
     private Map<Long, Long> commitVersionMap = new HashMap<>();
-    @SerializedName(value = "aggregateTabletMetadata")
-    private boolean aggregateTabletMetadata = false;
-    @SerializedName(value = "splitTabletMetadata")
-    private boolean splitTabletMetadata = false;
+    @SerializedName(value = "metadataOp")
+    private MetadataOp metadataOp;
     private AgentBatchTask batchTask = null;
 
     public LakeTableAlterMetaJobBase(JobType jobType) {
@@ -83,16 +89,14 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
 
     public LakeTableAlterMetaJobBase(long jobId, JobType jobType, long dbId, long tableId,
                                      String tableName, long timeoutMs) {
-        this(jobId, jobType, dbId, tableId, tableName, timeoutMs, false, false);
+        this(jobId, jobType, dbId, tableId, tableName, timeoutMs, MetadataOp.NO_OPERATION);
     }
 
     public LakeTableAlterMetaJobBase(long jobId, JobType jobType, long dbId, long tableId,
                                      String tableName, long timeoutMs,
-                                     boolean aggregateTabletMetadata,
-                                     boolean splitTabletMetadata) {
+                                     MetadataOp metadataOp) {
         super(jobId, jobType, dbId, tableId, tableName, timeoutMs);
-        this.aggregateTabletMetadata = aggregateTabletMetadata;
-        this.splitTabletMetadata = splitTabletMetadata;
+        this.metadataOp = metadataOp;
     }
 
     @Override
@@ -281,14 +285,14 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                 Map<Long, MaterializedIndex> dirtyIndexMap = physicalPartitionIndexMap.row(partitionId);
                 List<Tablet> tablets = new ArrayList<>();
                 for (MaterializedIndex index : dirtyIndexMap.values()) {
-                    if (aggregateTabletMetadata) {
+                    if (metadataOp == MetadataOp.AGGREGATE) {
                         tablets.addAll(index.getTablets());
                     } else {
                         Utils.publishVersion(index.getTablets(), txnInfo, commitVersion - 1, commitVersion,
                                 warehouseId);
                     }
                 }
-                if (aggregateTabletMetadata) {
+                if (metadataOp == MetadataOp.AGGREGATE) {
                     Utils.aggregatePublishVersion(tablets, Lists.newArrayList(txnInfo), commitVersion - 1, commitVersion, 
                                 null, null, warehouseId, null);
                 }
@@ -428,11 +432,8 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             Preconditions.checkState(partition.getVisibleVersion() == commitVersion - 1,
                     "partitionVisitionVersion=" + partition.getVisibleVersion() + " commitVersion=" + commitVersion);
             partition.updateVisibleVersion(commitVersion, finishedTimeMs);
-            if (aggregateTabletMetadata) {
-                partition.setSplitMetadataVersion(commitVersion - 1);
-            }
-            if (splitTabletMetadata) {
-                partition.setAggregateMetadataVersion(commitVersion - 1);
+            if (metadataOp == MetadataOp.AGGREGATE || metadataOp == MetadataOp.SPLIT) {
+                partition.setMetadataSwitchVersion(commitVersion - 1);
             }
             LOG.info("partitionVisibleVersion=" + partition.getVisibleVersion() + " commitVersion=" + commitVersion);
             LOG.info("LakeTableAlterMetaJob id: {} update visible version of partition: {}, visible Version: {}",
@@ -512,8 +513,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             this.watershedTxnId = other.watershedTxnId;
             this.watershedGtid = other.watershedGtid;
             this.commitVersionMap = other.commitVersionMap;
-            this.aggregateTabletMetadata = other.aggregateTabletMetadata;
-            this.splitTabletMetadata = other.splitTabletMetadata;
+            this.metadataOp = other.metadataOp;
 
             restoreState(other);
         }
@@ -620,6 +620,6 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     }
 
     public boolean getAggregateTabletMetadata() {
-        return aggregateTabletMetadata;
+        return metadataOp == MetadataOp.AGGREGATE;
     }
 }
