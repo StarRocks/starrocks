@@ -417,7 +417,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         throw CallStatus.UNIMPLEMENTED.withDescription("listFlights unimplemented").toRuntimeException();
     }
 
-    private static ByteBuffer serializeMetadata(final Schema schema) {
+    protected static ByteBuffer serializeMetadata(final Schema schema) {
         final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         try {
             // Convert to Arrow IPC format.
