@@ -310,8 +310,6 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 - 現在、Spark Loadを使用して式に基づくパーティション化を使用するテーブルにデータをロードすることはサポートされていません。
 - `ALTER TABLE <table_name> DROP PARTITION <partition_name>` ステートメントを使用して列式で作成されたパーティションを削除する場合、パーティション内のデータは直接削除され、復元できません。
 - v3.4.0、v3.3.8、v3.2.13、およびv3.1.16以降、StarRocksは式に基づくパーティション化戦略で作成されたテーブルの[バックアップと復元](../../administration/management/Backup_and_restore.md)をサポートしています。
-<<<<<<< HEAD
-=======
 
 ## 付録
 
@@ -361,4 +359,3 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 `PARTITION BY from_unixtime(cast(str as INT) + 3600, '%Y-%m-%d')`
 
 :::
->>>>>>> 7437185909 ([Doc] Update description for Expression Partition and Dynamic Overwrite (#58745))
