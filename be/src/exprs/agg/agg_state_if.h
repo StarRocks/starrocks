@@ -86,13 +86,13 @@ public:
                                   AggDataPtr* states, const Filter& filter) const override {
         auto column_size = ctx->get_num_args() + 1;
         const Column* data_columns[column_size - 1];
-        ColumnPtr newNullableColumn;
-        update_help(ctx, chunk_size, columns, data_columns, newNullableColumn);
+        ColumnPtr new_nullable_column;
+        update_help(ctx, chunk_size, columns, data_columns, new_nullable_column);
         _function->update_batch_selectively(ctx, chunk_size, state_offset, data_columns, states, filter);
     }
 
     void update_help(FunctionContext* ctx, size_t chunk_size, const Column** columns, const Column** replace_columns,
-                     ColumnPtr& newNullableColumn) const {
+                     ColumnPtr& new_nullable_column) const {
         auto fake_null_column = NullColumn::create(columns[0]->size(), 0);
         uint8_t* __restrict fake_null_column_raw_data = fake_null_column->mutable_raw_data();
 
@@ -149,34 +149,34 @@ public:
             }
         }
 
-        ColumnPtr dataColumn;
+        ColumnPtr data_column;
         if (first_nullable_arg_col == nullptr) {
             // if all not-null, pick the first column
-            dataColumn = const_cast<Column*>(columns[0])->get_ptr();
+            data_column = const_cast<Column*>(columns[0])->get_ptr();
         } else {
-            dataColumn = first_nullable_arg_col;
+            data_column = first_nullable_arg_col;
             if (first_nullable_arg_col->has_null()) {
                 // step 2: merge first_nullable_arg_col(if exsited)'s null_column into fake_null_column
                 const uint8_t* __restrict nulls = first_nullable_arg_col->immutable_null_column_data().data();
                 // merge two null column
                 ColumnHelper::or_two_filters(&fake_null_column->get_data(), nulls);
-                dataColumn = first_nullable_arg_col;
+                data_column = first_nullable_arg_col;
             }
         }
 
-        dataColumn = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, dataColumn);
-        if (dataColumn->is_nullable()) {
+        data_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, data_column);
+        if (data_column->is_nullable()) {
             NullableColumn* original_nullable_column =
-                    const_cast<NullableColumn*>(down_cast<const NullableColumn*>(dataColumn.get()));
-            newNullableColumn =
+                    const_cast<NullableColumn*>(down_cast<const NullableColumn*>(data_column.get()));
+            new_nullable_column =
                     NullableColumn::create(original_nullable_column->data_column_mutable_ptr(), fake_null_column);
         } else {
-            newNullableColumn = NullableColumn::create(dataColumn, fake_null_column);
+            new_nullable_column = NullableColumn::create(data_column, fake_null_column);
         }
 
         for (int i = 0; i < column_size - 1; i++) {
             if (i == first_nullable_arg_col_index) {
-                replace_columns[i] = newNullableColumn.get();
+                replace_columns[i] = new_nullable_column.get();
             } else {
                 replace_columns[i] = columns[i];
             }

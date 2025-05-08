@@ -525,6 +525,13 @@ Status Aggregator::_create_aggregate_function(starrocks::RuntimeState* state, co
     if (fn.__isset.agg_state_desc) {
         auto agg_state_desc = AggStateDesc::from_thrift(fn.agg_state_desc);
         auto nested_func_name = agg_state_desc.get_func_name();
+        bool isMergeOrUnion = nested_func_name + AGG_STATE_MERGE_SUFFIX == func_name ||
+                              nested_func_name + AGG_STATE_UNION_SUFFIX == func_name;
+        if (arg_types.size() != 1 && isMergeOrUnion) {
+            return Status::InternalError(strings::Substitute("Invalid agg function plan: $0 with (arg type $1)",
+                                                             func_name, arg_types.size()));
+        }
+
         if (nested_func_name + AGG_STATE_MERGE_SUFFIX == func_name) {
             // aggregate _merge combinator
             auto* nested_func = AggStateDesc::get_agg_state_func(&agg_state_desc);
