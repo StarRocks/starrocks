@@ -148,7 +148,7 @@ Status DataCacheUtils::change_disk_path(const std::string& old_disk_path, const 
     std::filesystem::path new_path(new_disk_path);
     if (std::filesystem::exists(old_path)) {
         if (disk_device_id(old_path.c_str()) != disk_device_id(new_path.c_str())) {
-            LOG(ERROR) << "fail to rename the old dataache directory [" << old_path.string() << "] to the new one ["
+            LOG(ERROR) << "fail to rename the old datacache directory [" << old_path.string() << "] to the new one ["
                        << new_path.string() << "] because they are located on different disks.";
             return Status::InternalError("The old datacache directory is different from the new one");
         }
@@ -158,7 +158,7 @@ Status DataCacheUtils::change_disk_path(const std::string& old_disk_path, const 
             std::filesystem::rename(old_path, new_path, ec);
         }
         if (ec) {
-            LOG(ERROR) << "fail to rename the old dataache directory [" << old_path.string() << "] to the new one ["
+            LOG(ERROR) << "fail to rename the old datacache directory [" << old_path.string() << "] to the new one ["
                        << new_path.string() << "], reason: " << ec.message();
             return Status::InternalError("fail to handle the old starlet_cache data");
         }
