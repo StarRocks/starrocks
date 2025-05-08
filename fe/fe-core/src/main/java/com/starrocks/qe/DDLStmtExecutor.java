@@ -146,6 +146,7 @@ import com.starrocks.sql.ast.integration.DropSecurityIntegrationStatement;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
+import com.starrocks.sql.ast.spm.ControlBaselinePlanStmt;
 import com.starrocks.sql.ast.spm.CreateBaselinePlanStmt;
 import com.starrocks.sql.ast.spm.DropBaselinePlanStmt;
 import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
@@ -1276,6 +1277,12 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitDropBaselinePlanStatement(DropBaselinePlanStmt statement, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> SPMStmtExecutor.execute(context, statement));
+            return null;
+        }
+
+        public ShowResultSet visitControlBaselinePlanStatement(ControlBaselinePlanStmt statement,
+                                                               ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> SPMStmtExecutor.execute(context, statement));
             return null;
         }

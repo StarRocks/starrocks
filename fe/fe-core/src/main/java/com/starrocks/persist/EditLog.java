@@ -1230,6 +1230,16 @@ public class EditLog {
                     globalStateMgr.getSqlPlanStorage().replayBaselinePlan(bp, false);
                     break;
                 }
+                case OperationType.OP_ENABLE_SPM_BASELINE_LOG: {
+                    BaselinePlan.Info bp = (BaselinePlan.Info) journal.data();
+                    globalStateMgr.getSqlPlanStorage().replayUpdateBaselinePlan(bp, true);
+                    break;
+                }
+                case OperationType.OP_DISABLE_SPM_BASELINE_LOG: {
+                    BaselinePlan.Info bp = (BaselinePlan.Info) journal.data();
+                    globalStateMgr.getSqlPlanStorage().replayUpdateBaselinePlan(bp, false);
+                    break;
+                }
                 default: {
                     if (Config.metadata_ignore_unknown_operation_type) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -2148,5 +2158,13 @@ public class EditLog {
 
     public void logDropSPMBaseline(BaselinePlan.Info info) {
         logEdit(OperationType.OP_DROP_SPM_BASELINE_LOG, info);
+    }
+
+    public void logUpdateSPMBaseline(BaselinePlan.Info info, boolean isEnable) {
+        if (isEnable) {
+            logEdit(OperationType.OP_ENABLE_SPM_BASELINE_LOG, info);
+        } else {
+            logEdit(OperationType.OP_DISABLE_SPM_BASELINE_LOG, info);
+        }
     }
 }

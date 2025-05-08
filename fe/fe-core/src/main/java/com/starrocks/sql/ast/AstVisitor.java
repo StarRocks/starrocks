@@ -74,6 +74,7 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+import com.starrocks.sql.ast.spm.ControlBaselinePlanStmt;
 import com.starrocks.sql.ast.spm.CreateBaselinePlanStmt;
 import com.starrocks.sql.ast.spm.DropBaselinePlanStmt;
 import com.starrocks.sql.ast.spm.ShowBaselinePlanStmt;
@@ -1629,5 +1630,9 @@ public interface AstVisitor<R, C> {
 
     default R visitShowBaselinePlanStatement(ShowBaselinePlanStmt statement, C context) {
         return visitShowStatement(statement, context);
+    }
+
+    default R visitControlBaselinePlanStatement(ControlBaselinePlanStmt statement, C context) {
+        return visitDDLStatement(statement, context);
     }
 }

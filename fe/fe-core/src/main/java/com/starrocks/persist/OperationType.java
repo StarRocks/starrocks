@@ -627,6 +627,12 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_SET_VIEW_SECURITY_LOG = 13542;
 
+    @IgnorableOnReplayFailed
+    public static final short OP_ENABLE_SPM_BASELINE_LOG = 13543;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_DISABLE_SPM_BASELINE_LOG = 13544;
+
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, please follow the above sequence number
      */
