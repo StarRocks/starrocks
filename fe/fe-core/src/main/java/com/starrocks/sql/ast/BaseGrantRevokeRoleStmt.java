@@ -12,42 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
+import com.starrocks.authorization.GrantType;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
 // GrantRoleStmt and RevokeRoleStmt share the same parameter and check logic with GrantRoleStmt
-// GRANT rolex TO userx
-// GRANT role1 TO ROLE role2   supported on new RBAC framework
 public abstract class BaseGrantRevokeRoleStmt extends DdlStmt {
     protected List<String> granteeRole;
     protected UserIdentity userIdentity;
-    protected String role;
-
-    protected BaseGrantRevokeRoleStmt(List<String> granteeRole, UserIdentity userIdentity) {
-        this(granteeRole, userIdentity, NodePosition.ZERO);
-    }
+    protected String roleOrGroup;
+    protected GrantType grantType;
 
     protected BaseGrantRevokeRoleStmt(List<String> granteeRole, UserIdentity userIdentity, NodePosition pos) {
         super(pos);
         this.granteeRole = granteeRole;
         this.userIdentity = userIdentity;
-        this.role = null;
+        this.roleOrGroup = null;
+        this.grantType = GrantType.USER;
     }
 
-    protected BaseGrantRevokeRoleStmt(List<String> granteeRole, String role) {
-        this(granteeRole, role, NodePosition.ZERO);
-
-    }
-
-    protected BaseGrantRevokeRoleStmt(List<String> granteeRole, String role, NodePosition pos) {
+    protected BaseGrantRevokeRoleStmt(List<String> granteeRole, String roleOrGroup, GrantType grantType, NodePosition pos) {
         super(pos);
         this.granteeRole = granteeRole;
         this.userIdentity = null;
-        this.role = role;
+        this.roleOrGroup = roleOrGroup;
+        this.grantType = grantType;
     }
 
     public UserIdentity getUserIdentity() {
@@ -58,8 +50,12 @@ public abstract class BaseGrantRevokeRoleStmt extends DdlStmt {
         return granteeRole;
     }
 
-    public String getRole() {
-        return role;
+    public String getRoleOrGroup() {
+        return roleOrGroup;
+    }
+
+    public GrantType getGrantType() {
+        return grantType;
     }
 
     @Override
