@@ -17,12 +17,12 @@ package com.starrocks.load.batchwrite;
 /**
  * Callback interface for load execution.
  */
-public interface LoadExecuteCallback {
+public interface MergeCommitTaskCallback {
 
     /**
-     * Called when the load operation is finished.
+     * Called when the task is finished.
      *
-     * @param loadExecutor The executor associated with the load operation.
+     * @param mergeCommitTask The executor associated with the load operation.
      */
-    void finishLoad(LoadExecutor loadExecutor);
+    void finish(MergeCommitTask mergeCommitTask);
 }
