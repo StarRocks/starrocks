@@ -65,6 +65,7 @@ public class CurrentQueryStatisticsProcDir implements ProcDirInterface {
             .add("DiskSpillSize")
             .add("CPUTime")
             .add("ExecTime")
+            .add("ExecProgress")
             .add("Warehouse")
             .add("CustomQueryId")
             .add("ResourceGroup")

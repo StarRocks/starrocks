@@ -38,6 +38,7 @@ public class QueryStatisticsInfoTest {
                 firstQuery.getMemUsageBytes(),
                 firstQuery.getSpillBytes(),
                 firstQuery.getExecTime(),
+                firstQuery.getExecProgress(),
                 firstQuery.getWareHouseName(),
                 firstQuery.getCustomQueryId(),
                 firstQuery.getResourceGroupName()
