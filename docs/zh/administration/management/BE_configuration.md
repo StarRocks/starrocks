@@ -1236,7 +1236,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：Bytes
 - 是否动态：否
-- 描述：Row source mask buffer 的最大内存占用大小。当 buffer 大于该值时将会持久化到磁盘临时文件中。该值应该小于 `compaction_mem_limit` 参数的值。
+- 描述：Row source mask buffer 的最大内存占用大小。当 buffer 大于该值时将会持久化到磁盘临时文件中。该值应该小于 `compaction_memory_limit_per_worker` 参数的值。
 - 引入版本：-
 
 ##### memory_maintenance_sleep_time_s
