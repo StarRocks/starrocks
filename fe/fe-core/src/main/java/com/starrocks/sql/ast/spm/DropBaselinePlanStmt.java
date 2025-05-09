@@ -18,15 +18,17 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.parser.NodePosition;
 
-public class DropBaselinePlanStmt extends DdlStmt {
-    private final long baseLineId;
+import java.util.List;
 
-    public DropBaselinePlanStmt(long baseLineId, NodePosition pos) {
+public class DropBaselinePlanStmt extends DdlStmt {
+    private final List<Long> baseLineId;
+
+    public DropBaselinePlanStmt(List<Long> baseLineId, NodePosition pos) {
         super(pos);
         this.baseLineId = baseLineId;
     }
 
-    public long getBaseLineId() {
+    public List<Long> getBaseLineId() {
         return baseLineId;
     }
 

@@ -55,7 +55,7 @@ import java.util.stream.Collectors;
  * it will be consistent with the original db-lock logic
  * and obtain the db-read-lock of all dbs involved in the query.
  */
-public class PlannerMetaLocker {
+public class PlannerMetaLocker implements AutoCloseable {
     // Map database id -> database
     private Map<Long, Database> dbs = Maps.newTreeMap(Long::compareTo);
 
@@ -121,6 +121,10 @@ public class PlannerMetaLocker {
         }
     }
 
+    @Override
+    public void close() {
+        unlock();
+    }
     /**
      * Collect tables that need to be protected by the PlannerMetaLock
      */
