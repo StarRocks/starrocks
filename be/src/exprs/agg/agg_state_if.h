@@ -77,8 +77,8 @@ public:
                       AggDataPtr* states) const override {
         auto column_size = ctx->get_num_args() + 1;
         const Column* data_columns[column_size - 1];
-        ColumnPtr newNullableColumn;
-        update_help(ctx, chunk_size, columns, data_columns, newNullableColumn);
+        ColumnPtr new_nullable_column;
+        update_help(ctx, chunk_size, columns, data_columns, new_nullable_column);
         _function->update_batch(ctx, chunk_size, state_offset, data_columns, states);
     }
 
@@ -187,8 +187,8 @@ public:
                                    AggDataPtr __restrict state) const override {
         auto column_size = ctx->get_num_args() + 1;
         const Column* data_columns[column_size - 1];
-        ColumnPtr newNullableColumn;
-        update_help(ctx, chunk_size, columns, data_columns, newNullableColumn);
+        ColumnPtr new_nullable_column;
+        update_help(ctx, chunk_size, columns, data_columns, new_nullable_column);
         return _function->update_batch_single_state(ctx, chunk_size, data_columns, state);
     }
 
