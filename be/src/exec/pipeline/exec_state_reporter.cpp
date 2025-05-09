@@ -166,41 +166,17 @@ Status ExecStateReporter::report_exec_status(const TReportExecStatusParams& para
     }
 
     TReportExecStatusResult res;
-    Status rpc_status;
-
     try {
-        try {
-            coord->reportExecStatus(res, params);
-        } catch (TTransportException& e) {
-            TTransportException::TTransportExceptionType type = e.getType();
-            if (type != TTransportException::TTransportExceptionType::TIMED_OUT) {
-                // if not TIMED_OUT, retry
-                rpc_status = coord.reopen(config::thrift_rpc_timeout_ms);
-
-                if (!rpc_status.ok()) {
-                    return rpc_status;
-                }
-                coord->reportExecStatus(res, params);
-            } else {
-                (void)coord.reopen(config::thrift_rpc_timeout_ms);
-                std::stringstream msg;
-                msg << "ReportExecStatus() to " << fe_addr << " failed:\n" << e.what();
-                LOG(WARNING) << msg.str();
-                rpc_status = Status::InternalError(msg.str());
-                return rpc_status;
-            }
-        }
-
-        rpc_status = Status(res.status);
+        // since the caller(report_exec_state) has already retried {@code config::report_exec_rpc_request_retry_num} times,
+        // no need to retry again.
+        coord->reportExecStatus(res, params);
+        return Status(res.status);
     } catch (TException& e) {
-        (void)coord.reopen(config::thrift_rpc_timeout_ms);
         std::stringstream msg;
         msg << "ReportExecStatus() to " << fe_addr << " failed:\n" << e.what();
         LOG(WARNING) << msg.str();
-        rpc_status = Status::InternalError(msg.str());
-        return rpc_status;
+        return Status::InternalError(msg.str());
     }
-    return rpc_status;
 }
 
 TMVMaintenanceTasks ExecStateReporter::create_report_epoch_params(const QueryContext* query_ctx,
