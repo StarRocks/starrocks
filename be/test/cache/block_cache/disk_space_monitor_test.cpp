@@ -181,6 +181,7 @@ TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota) {
 
     auto space_monitor = std::make_shared<DiskSpaceMonitor>(local_cache.get(), _mock_fs);
     ASSERT_OK(space_monitor->init(&options.disk_spaces));
+    space_monitor->start();
 
     // Fill cache data
     {
@@ -228,9 +229,8 @@ TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota_with_limit) {
     auto block_cache = TestCacheUtils::create_cache(options);
     auto local_cache = block_cache->local_cache();
 
-    MockFileSystem* mock_fs = new MockFileSystem;
     SpaceInfo space_info = {.capacity = 500 * MB, .free = 400 * MB, .available = 300 * MB};
-    mock_fs->set_space(1, ".", space_info);
+    _mock_fs->set_space(1, ".", space_info);
 
     auto space_monitor = std::make_shared<DiskSpaceMonitor>(local_cache.get(), _mock_fs);
     ASSERT_OK(space_monitor->init(&options.disk_spaces));
