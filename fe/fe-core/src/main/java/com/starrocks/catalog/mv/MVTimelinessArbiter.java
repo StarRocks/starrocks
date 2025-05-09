@@ -119,7 +119,7 @@ public abstract class MVTimelinessArbiter {
                 return true;
             }
             // If the non-ref table has already changed, need refresh all materialized views' partitions.
-            if (needsToRefreshTable(mv, baseTable, isQueryRewrite)) {
+            if (needsToRefreshTable(mv, tableInfo, baseTable, isQueryRewrite)) {
                 return true;
             }
         }
