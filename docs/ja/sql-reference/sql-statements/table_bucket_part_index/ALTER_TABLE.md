@@ -588,11 +588,7 @@ DISTRIBUTED BY HASH(order_id);
 ALTER TABLE orders ORDER BY (dt, revenue, state);
 ```
 
-import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
-
 #### STRUCT列を変更してフィールドを追加または削除する
-
-<Beta />
 
 v3.2.10およびv3.3.2以降、StarRocksはSTRUCT列を変更してフィールドを追加または削除することをサポートしています。これは、ネストされたARRAY型内でも可能です。
 
