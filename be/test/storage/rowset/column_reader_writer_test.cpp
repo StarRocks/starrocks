@@ -270,6 +270,7 @@ protected:
 
                 auto column = ChunkHelper::column_from_field_type(type, true);
 
+                int idx = 0;
                 size_t rows_read = 512;
                 st = iter.next_batch(&rows_read, column.get());
                 ASSERT_TRUE(st.ok());
@@ -283,6 +284,7 @@ protected:
                     } else {
                         ASSERT_EQ(*(Type*)result, reinterpret_cast<const Type*>(column->raw_data())[j]);
                     }
+                    idx++;
                 }
             }
 

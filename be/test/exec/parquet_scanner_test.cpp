@@ -56,6 +56,10 @@ class ParquetScannerTest : public ::testing::Test {
                                                         int32_t num_columns_from_file,
                                                         const std::vector<std::string>& columns_from_path) {
         std::vector<TBrokerRangeDesc> ranges;
+        int total_size = 0;
+        for (auto s : file_sizes) {
+            total_size += s;
+        }
         int split_size = 128 * 1024;
 
         for (auto i = 0; i < file_names.size(); ++i) {

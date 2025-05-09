@@ -343,22 +343,22 @@ public class HiveMetadataTest {
     public void createDbTest() throws AlreadyExistsException {
         ExceptionChecker.expectThrowsWithMsg(AlreadyExistsException.class,
                 "Database Already Exists",
-                () -> hiveMetadata.createDb("db1", new HashMap<>()));
+                () -> hiveMetadata.createDb(connectContext, "db1", new HashMap<>()));
 
         Map<String, String> conf = new HashMap<>();
         conf.put("location", "abs://xxx/zzz");
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
                 "Invalid location URI: abs://xxx/zzz",
-                () -> hiveMetadata.createDb("db3", conf));
+                () -> hiveMetadata.createDb(connectContext, "db3", conf));
 
         conf.clear();
         conf.put("not_support_prop", "xxx");
         ExceptionChecker.expectThrowsWithMsg(IllegalArgumentException.class,
                 "Unrecognized property: not_support_prop",
-                () -> hiveMetadata.createDb("db3", conf));
+                () -> hiveMetadata.createDb(connectContext, "db3", conf));
 
         conf.clear();
-        hiveMetadata.createDb("db4", conf);
+        hiveMetadata.createDb(connectContext, "db4", conf);
     }
 
     @Test
@@ -385,9 +385,9 @@ public class HiveMetadataTest {
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Table location will be cleared. 'Force' must be set when dropping a hive table." +
                         " Please execute 'drop table hive_catalog.hive_db.hive_table force",
-                () -> hiveMetadata.dropTable(new DropTableStmt(false, tableName, false)));
+                () -> hiveMetadata.dropTable(connectContext, new DropTableStmt(false, tableName, false)));
 
-        hiveMetadata.dropTable(new DropTableStmt(false, tableName, true));
+        hiveMetadata.dropTable(connectContext, new DropTableStmt(false, tableName, true));
 
         new MockUp<HiveMetadata>() {
             @Mock
@@ -396,7 +396,7 @@ public class HiveMetadataTest {
             }
         };
 
-        hiveMetadata.dropTable(new DropTableStmt(true, tableName, true));
+        hiveMetadata.dropTable(connectContext, new DropTableStmt(true, tableName, true));
     }
 
     @Test(expected = StarRocksConnectorException.class)
@@ -774,7 +774,7 @@ public class HiveMetadataTest {
                 return true;
             }
         };
-        Assert.assertTrue(hiveMetadata.createTable(createTableStmt));
+        Assert.assertTrue(hiveMetadata.createTable(connectContext, createTableStmt));
     }
 
     @Test
