@@ -207,7 +207,7 @@ Status StreamPipelineTest::wait_until_epoch_finished(const EpochInfo& epoch_info
     };
 
     while (!are_all_drivers_parked_func()) {
-        sleep(0.1);
+        usleep(100000);
     }
     VLOG_ROW << "WaitUntilEpochEnd Done " << epoch_info.debug_string();
     return Status::OK();

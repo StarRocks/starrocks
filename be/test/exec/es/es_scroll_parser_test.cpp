@@ -20,10 +20,14 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
 
+#ifndef __clang__
 DIAGNOSTIC_PUSH
 DIAGNOSTIC_IGNORE("-Wclass-memaccess")
+#endif
 #include <rapidjson/document.h>
+#ifndef __clang__
 DIAGNOSTIC_POP
+#endif
 
 namespace starrocks {
 

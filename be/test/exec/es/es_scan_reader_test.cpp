@@ -44,13 +44,16 @@
 #include "http/http_channel.h"
 #include "http/http_handler.h"
 #include "http/http_request.h"
+#ifndef __clang__
 DIAGNOSTIC_PUSH
 DIAGNOSTIC_IGNORE("-Wclass-memaccess")
+#endif
 #include "rapidjson/document.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
+#ifndef __clang__
 DIAGNOSTIC_POP
-
+#endif
 namespace starrocks {
 
 class RestSearchAction : public HttpHandler {

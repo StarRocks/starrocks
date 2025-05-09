@@ -64,12 +64,14 @@ constexpr int32_t REPLICATION_CPU_CORES_MULTIPLIER = 4;
 
 using TTaskTypeHash = std::hash<std::underlying_type<TTaskType::type>::type>;
 
+#ifndef BE_TEST
 const uint32_t REPORT_TASK_WORKER_COUNT = 1;
 const uint32_t REPORT_DISK_STATE_WORKER_COUNT = 1;
 const uint32_t REPORT_OLAP_TABLE_WORKER_COUNT = 1;
 const uint32_t REPORT_WORKGROUP_WORKER_COUNT = 1;
 const uint32_t REPORT_RESOURCE_USAGE_WORKER_COUNT = 1;
 const uint32_t REPORT_DATACACHE_METRICS_WORKER_COUNT = 1;
+#endif
 
 /* calculate real num threads
  * if num_threads > 0, return num_threads
