@@ -26,6 +26,7 @@ namespace starrocks {
 class ConcurrencyLimitedThreadPoolToken;
 class SegmentWriter;
 class ThreadPool;
+class SharedWritableFileContext;
 } // namespace starrocks
 
 namespace starrocks::lake {
@@ -34,7 +35,8 @@ class HorizontalGeneralTabletWriter : public TabletWriter {
 public:
     explicit HorizontalGeneralTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
                                            std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
-                                           bool is_compaction, ThreadPool* flush_pool = nullptr);
+                                           bool is_compaction, ThreadPool* flush_pool = nullptr,
+                                           SharedWritableFileContext* shared_file_context = nullptr);
 
     ~HorizontalGeneralTabletWriter() override;
 
@@ -78,6 +80,7 @@ protected:
     virtual Status flush_segment_writer(SegmentPB* segment = nullptr);
 
     std::unique_ptr<SegmentWriter> _seg_writer;
+    SharedWritableFileContext* _shared_file_context = nullptr;
 };
 
 class VerticalGeneralTabletWriter : public TabletWriter {
