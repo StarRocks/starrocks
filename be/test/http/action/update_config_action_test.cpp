@@ -19,6 +19,10 @@
 #include "block_cache/block_cache.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
+#include "storage/persistent_index_load_executor.h"
+#include "storage/storage_engine.h"
+#include "storage/update_manager.h"
+#include "testutil/assert.h"
 #include "testutil/scoped_updater.h"
 
 namespace starrocks {
@@ -64,6 +68,16 @@ TEST_F(UpdateConfigActionTest, update_datacache_disk_size) {
     ASSERT_EQ(spaces[0].size, 100000000);
 
     fs::remove_all(cache_dir).ok();
+}
+
+TEST_F(UpdateConfigActionTest, test_update_pindex_load_thread_pool_num_max) {
+    UpdateConfigAction action(ExecEnv::GetInstance());
+
+    auto st = action.update_config("pindex_load_thread_pool_num_max", "16");
+    CHECK_OK(st);
+
+    auto* load_pool = StorageEngine::instance()->update_manager()->get_pindex_load_executor()->TEST_get_load_pool();
+    ASSERT_EQ(16, load_pool->max_threads());
 }
 
 } // namespace starrocks

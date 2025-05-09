@@ -1122,6 +1122,11 @@ void PrimaryIndex::unload() {
     _calc_memory_usage();
 }
 
+bool PrimaryIndex::is_loaded() {
+    std::lock_guard<std::mutex> lg(_lock);
+    return _loaded && _status.ok();
+}
+
 static string int_list_to_string(const vector<uint32_t>& l) {
     string ret;
     for (size_t i = 0; i < l.size(); i++) {

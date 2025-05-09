@@ -352,7 +352,9 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
             LOG(WARNING) << "fail to get dest store. path_hash:" << clone_req.dest_path_hash;
             status_code = TStatusCode::RUNTIME_ERROR;
         } else {
-            EngineStorageMigrationTask engine_task(clone_req.tablet_id, clone_req.schema_hash, dest_store);
+            bool need_rebuild_pk_index = clone_req.__isset.need_rebuild_pk_index && clone_req.need_rebuild_pk_index;
+            EngineStorageMigrationTask engine_task(clone_req.tablet_id, clone_req.schema_hash, dest_store,
+                                                   need_rebuild_pk_index);
             Status res = StorageEngine::instance()->execute_task(&engine_task);
             if (!res.ok()) {
                 status_code = TStatusCode::RUNTIME_ERROR;
@@ -456,7 +458,10 @@ void run_storage_medium_migrate_task(const std::shared_ptr<StorageMediumMigrateT
             break;
         }
 
-        EngineStorageMigrationTask engine_task(tablet_id, schema_hash, stores[0]);
+        bool need_rebuild_pk_index = storage_medium_migrate_req.__isset.need_rebuild_pk_index &&
+                                     storage_medium_migrate_req.need_rebuild_pk_index;
+
+        EngineStorageMigrationTask engine_task(tablet_id, schema_hash, stores[0], need_rebuild_pk_index);
         Status res = StorageEngine::instance()->execute_task(&engine_task);
         if (!res.ok()) {
             LOG(WARNING) << "storage media migrate failed. status: " << res

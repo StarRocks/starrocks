@@ -224,12 +224,14 @@ struct TCloneReq {
     10: optional i32 timeout_s
 
     30: optional bool is_local
+    31: optional bool need_rebuild_pk_index
 }
 
 struct TStorageMediumMigrateReq {
     1: required Types.TTabletId tablet_id
     2: required Types.TSchemaHash schema_hash
     3: required Types.TStorageMedium storage_medium
+    4: optional bool need_rebuild_pk_index
 }
 
 struct TCancelDeleteDataReq {
