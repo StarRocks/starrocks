@@ -28,7 +28,13 @@ namespace starrocks {
 UnionNode::UnionNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs),
           _first_materialized_child_idx(tnode.union_node.first_materialized_child_idx),
-          _tuple_id(tnode.union_node.tuple_id) {}
+          _tuple_id(tnode.union_node.tuple_id) {
+    if (tnode.union_node.local_exchanger_type == TLocalExchangerType::PASSTHROUGH) {
+        _pass_through_type = pipeline::LocalExchanger::PassThroughType::RANDOM;
+    } else {
+        _pass_through_type = pipeline::LocalExchanger::PassThroughType::DIRECT;
+    }
+}
 
 UnionNode::~UnionNode() {
     if (runtime_state() != nullptr) {
@@ -428,7 +434,9 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
         }
     }
 
-    auto final_operators = context->maybe_gather_pipelines_to_one(runtime_state(), id(), operators_list);
+    auto final_operators =
+            context->maybe_gather_pipelines_to_one(runtime_state(), id(), operators_list, _pass_through_type);
+
     if (limit() != -1) {
         final_operators.emplace_back(
                 std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));

@@ -16,6 +16,7 @@
 
 #include "exec/exec_node.h"
 #include "exec/pipeline/set/union_passthrough_operator.h"
+#include "pipeline/exchange/local_exchange.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -75,6 +76,8 @@ private:
     bool _child_eos = false;
     const int _tuple_id = 0;
     const TupleDescriptor* _tuple_desc = nullptr;
+
+    pipeline::LocalExchanger::PassThroughType _pass_through_type;
 };
 
 } // namespace starrocks

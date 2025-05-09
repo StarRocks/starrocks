@@ -376,7 +376,7 @@ public class TaskManager implements MemoryTrackable {
                     }
                     periodFutureMap.remove(task.getId());
                 }
-                if (!killTask(task.getName(), false)) {
+                if (!killTask(task.getName(), true)) {
                     LOG.warn("kill task failed: {}", task.getName());
                 }
                 idToTaskMap.remove(task.getId());

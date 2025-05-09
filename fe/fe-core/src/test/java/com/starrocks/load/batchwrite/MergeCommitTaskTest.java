@@ -16,9 +16,12 @@ package com.starrocks.load.batchwrite;
 
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.Config;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.streamload.StreamLoadHttpHeader;
 import com.starrocks.load.streamload.StreamLoadInfo;
@@ -61,13 +64,13 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
-public class LoadExecutorTest extends BatchWriteTestBase {
+public class MergeCommitTaskTest extends BatchWriteTestBase {
 
     private String label;
     private TUniqueId loadId;
     StreamLoadKvParams kvParams;
     private StreamLoadInfo streamLoadInfo;
-    private TestLoadExecuteCallback loadExecuteCallback;
+    private TestMergeCommitTaskCallback loadExecuteCallback;
 
     @Mocked
     private Coordinator coordinator;
@@ -99,13 +102,13 @@ public class LoadExecutorTest extends BatchWriteTestBase {
         map.put(StreamLoadHttpHeader.HTTP_BATCH_WRITE_ASYNC, "true");
         kvParams = new StreamLoadKvParams(map);
         streamLoadInfo = StreamLoadInfo.fromHttpStreamLoadRequest(null, -1, Optional.empty(), kvParams);
-        loadExecuteCallback = new TestLoadExecuteCallback();
+        loadExecuteCallback = new TestMergeCommitTaskCallback();
         coordinatorFactory = new TestCoordinatorFactor(coordinator);
     }
 
     @Test
     public void testLoadSuccess() {
-        LoadExecutor executor = new LoadExecutor(
+        MergeCommitTask executor = new MergeCommitTask(
                 new TableId(DB_NAME_1, TABLE_NAME_1_1),
                 label,
                 loadId,
@@ -136,11 +139,12 @@ public class LoadExecutorTest extends BatchWriteTestBase {
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                         .getLabelStatus(DATABASE_1.getId(), label).getStatus();
         assertEquals(TransactionStatus.VISIBLE, txnStatus);
+        assertNull(ProfileManager.getInstance().getProfile(DebugUtil.printId(loadId)));
     }
 
     @Test
     public void testPlanExecuteFail() {
-        LoadExecutor executor = new LoadExecutor(
+        MergeCommitTask executor = new MergeCommitTask(
                 new TableId(DB_NAME_1, TABLE_NAME_1_1),
                 label,
                 loadId,
@@ -170,7 +174,7 @@ public class LoadExecutorTest extends BatchWriteTestBase {
 
     @Test
     public void testPlanExecuteTimeout() {
-        LoadExecutor executor = new LoadExecutor(
+        MergeCommitTask executor = new MergeCommitTask(
                 new TableId(DB_NAME_1, TABLE_NAME_1_1),
                 label,
                 loadId,
@@ -196,7 +200,7 @@ public class LoadExecutorTest extends BatchWriteTestBase {
     @Test
     public void testTableDoesNotExist() {
         String fakeTableName = TABLE_NAME_1_1 + "_fake";
-        LoadExecutor executor = new LoadExecutor(
+        MergeCommitTask executor = new MergeCommitTask(
                 new TableId(DB_NAME_1, fakeTableName),
                 label,
                 loadId,
@@ -215,7 +219,7 @@ public class LoadExecutorTest extends BatchWriteTestBase {
 
     @Test
     public void testMaxFilterRatio() {
-        LoadExecutor executor = new LoadExecutor(
+        MergeCommitTask executor = new MergeCommitTask(
                 new TableId(DB_NAME_1, TABLE_NAME_1_1),
                 label,
                 loadId,
@@ -253,7 +257,7 @@ public class LoadExecutorTest extends BatchWriteTestBase {
     }
 
     private void testLoadFailBase(
-            LoadExecutor executor, Exception expectedException, TransactionStatus expectedTxnStatus) {
+            MergeCommitTask executor, Exception expectedException, TransactionStatus expectedTxnStatus) {
         executor.run();
         Throwable throwable = executor.getFailure();
         assertNotNull(throwable);
@@ -269,7 +273,7 @@ public class LoadExecutorTest extends BatchWriteTestBase {
 
     @Test
     public void testIsActive() {
-        LoadExecutor executor = new LoadExecutor(
+        MergeCommitTask executor = new MergeCommitTask(
                 new TableId(DB_NAME_1, TABLE_NAME_1_1),
                 label,
                 loadId,
@@ -297,7 +301,7 @@ public class LoadExecutorTest extends BatchWriteTestBase {
 
     @Test
     public void testContainCoordinatorBackend() {
-        LoadExecutor executor = new LoadExecutor(
+        MergeCommitTask executor = new MergeCommitTask(
                 new TableId(DB_NAME_1, TABLE_NAME_1_1),
                 label,
                 loadId,
@@ -312,7 +316,48 @@ public class LoadExecutorTest extends BatchWriteTestBase {
         assertTrue(executor.containCoordinatorBackend(10002L));
     }
 
-    private static class TestLoadExecuteCallback implements LoadExecuteCallback {
+    @Test
+    public void testProfile() throws Exception {
+        starRocksAssert.alterTableProperties(
+                String.format("alter table %s.%s set('enable_load_profile'='true');", DB_NAME_1, TABLE_NAME_1_1));
+        long oldIntervalSecond = Config.load_profile_collect_interval_second;
+        Config.load_profile_collect_interval_second = 1;
+        try {
+            MergeCommitTask executor = new MergeCommitTask(
+                    new TableId(DB_NAME_1, TABLE_NAME_1_1),
+                    label,
+                    loadId,
+                    streamLoadInfo,
+                    1000,
+                    kvParams,
+                    new HashSet<>(Arrays.asList(10002L, 10003L)),
+                    coordinatorFactory,
+                    loadExecuteCallback
+            );
+
+            new Expectations() {
+                {
+                    coordinator.join((anyInt));
+                    result = true;
+                    coordinator.getExecStatus();
+                    result = new Status();
+                    coordinator.getCommitInfos();
+                    result = buildCommitInfos();
+                    coordinator.buildQueryProfile(true);
+                    result = new RuntimeProfile("Execution");
+                }
+            };
+
+            executor.run();
+            assertNotNull(ProfileManager.getInstance().getProfile(DebugUtil.printId(loadId)));
+        } finally {
+            Config.load_profile_collect_interval_second = oldIntervalSecond;
+            starRocksAssert.alterTableProperties(
+                    String.format("alter table %s.%s set('enable_load_profile'='false');", DB_NAME_1, TABLE_NAME_1_1));
+        }
+    }
+
+    private static class TestMergeCommitTaskCallback implements MergeCommitTaskCallback {
 
         private final List<String> finishedLoads = new ArrayList<>();
 
@@ -321,8 +366,8 @@ public class LoadExecutorTest extends BatchWriteTestBase {
         }
 
         @Override
-        public void finishLoad(LoadExecutor loadExecutor) {
-            finishedLoads.add(loadExecutor.getLabel());
+        public void finish(MergeCommitTask mergeCommitTask) {
+            finishedLoads.add(mergeCommitTask.getLabel());
         }
     }
     

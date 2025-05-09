@@ -3638,6 +3638,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return profileTimeout;
     }
 
+    public void setRuntimeProfileReportInterval(int runtimeProfileReportInterval) {
+        this.runtimeProfileReportInterval = runtimeProfileReportInterval;
+    }
+
     public int getRuntimeProfileReportInterval() {
         return runtimeProfileReportInterval;
     }

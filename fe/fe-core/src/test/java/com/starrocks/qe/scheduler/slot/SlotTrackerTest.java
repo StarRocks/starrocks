@@ -17,6 +17,7 @@ package com.starrocks.qe.scheduler.slot;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.WarehouseManager;
 import org.junit.BeforeClass;
@@ -25,6 +26,7 @@ import org.junit.Test;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.Assert.assertTrue;
 
 public class SlotTrackerTest {
     @BeforeClass
@@ -110,7 +112,7 @@ public class SlotTrackerTest {
         assertThat(slotTracker.getWarehouseId()).isEqualTo(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         assertThat(slotTracker.getWarehouseName().equals(""));
         assertThat(slotTracker.getQueuePendingLength()).isEqualTo(0);
-        assertThat(slotTracker.getAllocatedLength()).isEqualTo(0);
+        assertThat(slotTracker.getNumAllocatedSlots()).isEqualTo(0);
         assertThat(slotTracker.getMaxRequiredSlots()).isEmpty();
         assertThat(slotTracker.getSumRequiredSlots()).isEmpty();
         assertThat(slotTracker.getMaxSlots()).isEmpty();
@@ -121,7 +123,7 @@ public class SlotTrackerTest {
         LogicalSlot slot1 = generateSlot(1);
         assertThat(slotTracker.requireSlot(slot1)).isTrue();
         assertThat(slotTracker.getQueuePendingLength()).isEqualTo(1);
-        assertThat(slotTracker.getAllocatedLength()).isEqualTo(0);
+        assertThat(slotTracker.getNumAllocatedSlots()).isEqualTo(0);
         assertThat(slotTracker.getMaxRequiredSlots()).isEqualTo(Optional.of(1));
         assertThat(slotTracker.getSumRequiredSlots()).isEqualTo(Optional.of(1));
         assertThat(slotTracker.getMaxSlots()).isEmpty();
@@ -132,7 +134,7 @@ public class SlotTrackerTest {
         // re-release of the same slot has no effect.
         assertThat(slotTracker.requireSlot(slot1)).isTrue();
         assertThat(slotTracker.getQueuePendingLength()).isEqualTo(1);
-        assertThat(slotTracker.getAllocatedLength()).isEqualTo(0);
+        assertThat(slotTracker.getNumAllocatedSlots()).isEqualTo(0);
         assertThat(slotTracker.getMaxRequiredSlots()).isEqualTo(Optional.of(1));
         assertThat(slotTracker.getSumRequiredSlots()).isEqualTo(Optional.of(1));
         assertThat(slotTracker.getMaxSlots()).isEmpty();
@@ -144,7 +146,7 @@ public class SlotTrackerTest {
         slotTracker.allocateSlot(slot1);
         assertThat(slotTracker.requireSlot(slot1)).isTrue();
         assertThat(slotTracker.getQueuePendingLength()).isEqualTo(0);
-        assertThat(slotTracker.getAllocatedLength()).isEqualTo(1);
+        assertThat(slotTracker.getNumAllocatedSlots()).isEqualTo(1);
         assertThat(slotTracker.getMaxRequiredSlots()).isEmpty();
         assertThat(slotTracker.getSumRequiredSlots()).isEmpty();
         assertThat(slotTracker.getMaxSlots()).isEmpty();
@@ -155,12 +157,28 @@ public class SlotTrackerTest {
         // release slot tracker
         assertThat(slotTracker.releaseSlot(slot1.getSlotId())).isSameAs(slot1);
         assertThat(slotTracker.getQueuePendingLength()).isEqualTo(0);
-        assertThat(slotTracker.getAllocatedLength()).isEqualTo(0);
+        assertThat(slotTracker.getNumAllocatedSlots()).isEqualTo(0);
         assertThat(slotTracker.getMaxRequiredSlots()).isEmpty();
         assertThat(slotTracker.getSumRequiredSlots()).isEmpty();
         assertThat(slotTracker.getMaxSlots()).isEmpty();
         assertThat(slotTracker.getRemainSlots()).isEqualTo(slotTracker.getMaxSlots());
         assertThat(slotTracker.getMaxQueueQueueLength()).isEqualTo(GlobalVariable.getQueryQueueMaxQueuedQueries());
         assertThat(slotTracker.getMaxQueuePendingTimeSecond()).isEqualTo(GlobalVariable.getQueryQueuePendingTimeoutSecond());
+    }
+
+    @Test
+    public void testExtraMessage() {
+        QueryQueueOptions.V2 v2 = new QueryQueueOptions.V2(
+                GlobalVariable.getQueryQueueMaxQueuedQueries(),
+                GlobalVariable.getQueryQueuePendingTimeoutSecond(),
+                1, 1, 1, 1
+        );
+        BaseSlotTracker.ExtraMessage extraMessage = new BaseSlotTracker.ExtraMessage(1, v2);
+        assertTrue(extraMessage.getConcurrency() == 1);
+        assertThat(extraMessage.getV2().equals(v2));
+        String json = GsonUtils.GSON.toJson(extraMessage);
+        assertTrue(json.equals("{\"Concurrency\":1,\"QueryQueueOption\":{\"NumWorkers\":300,\"NumRowsPerSlot\":1," +
+                "\"TotalSlots\":307200,\"MemBytesPerSlot\":0," +
+                "\"CpuCostsPerSlot\":1,\"TotalSmallSlots\":1}}"));
     }
 }

@@ -19,8 +19,6 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import org.apache.commons.collections.CollectionUtils;
 
@@ -60,7 +58,7 @@ public class PlanFeatures {
     }
 
     private List<Long> operatorFeatureVectors;
-    private final Set<Table> tables = Sets.newHashSet();
+    private final Set<OperatorFeatures.TableFeature> tableFeatures = Sets.newHashSet();
 
     // environment
     private long numBeNodes;
@@ -87,6 +85,10 @@ public class PlanFeatures {
         }
 
         return Joiner.on(DELIMITER).join(fields);
+    }
+
+    public Set<OperatorFeatures.TableFeature> getTableFeatures() {
+        return tableFeatures;
     }
 
     /**
@@ -117,8 +119,8 @@ public class PlanFeatures {
         StringBuilder sb = new StringBuilder();
 
         var topTables = extractTopTables();
-        for (var tableId : topTables) {
-            sb.append(String.valueOf(tableId)).append(DELIMITER);
+        for (var tableName : topTables) {
+            sb.append(tableName).append(DELIMITER);
         }
         // env
         sb.append(numBeNodes).append(DELIMITER);
@@ -151,8 +153,8 @@ public class PlanFeatures {
         this.dop = dop;
     }
 
-    public void addTableFeatures(Set<Table> tables) {
-        this.tables.addAll(tables);
+    public void addTableFeatures(Set<OperatorFeatures.TableFeature> tables) {
+        this.tableFeatures.addAll(tables);
     }
 
     public void addOperatorFeatures(Map<OperatorType, AggregatedFeature> operatorFeatures) {
@@ -179,12 +181,6 @@ public class PlanFeatures {
         if (EXCLUDE_OPERATORS.contains(operatorType)) {
             return true;
         }
-        /*
-          {@link OperatorFeatures.ScanOperatorFeatures}
-         */
-        if (operatorType.isPhysicalScan() && (operatorType != OperatorType.PHYSICAL_OLAP_SCAN)) {
-            return true;
-        }
         return false;
     }
 
@@ -204,24 +200,16 @@ public class PlanFeatures {
         }
     }
 
-
-    private List<Long> extractTopTables() {
-
-        List<Long> result = Lists.newArrayList();
+    private List<String> extractTopTables() {
+        List<String> result = Lists.newArrayList();
         for (int i = 0; i < TOP_N_TABLES; i++) {
-            result.add(0L);
+            result.add("0");
         }
-        if (CollectionUtils.isNotEmpty(tables)) {
-            result.addAll(tables.stream()
-                    .sorted(Comparator.comparing(x -> {
-                        if (x instanceof OlapTable) {
-                            return ((OlapTable) x).getRowCount();
-                        } else {
-                            return ((Table) x).getId();
-                        }
-                    }).reversed())
+        if (CollectionUtils.isNotEmpty(tableFeatures)) {
+            result.addAll(tableFeatures.stream()
+                    .sorted(Comparator.comparing(OperatorFeatures.TableFeature::getRowCount).reversed())
                     .limit(TOP_N_TABLES)
-                    .map(Table::getId)
+                    .map(x -> x.getTableIdentifier())
                     .toList());
             result = result.subList(result.size() - TOP_N_TABLES, result.size());
         }
@@ -281,6 +269,5 @@ public class PlanFeatures {
             }
             return result;
         }
-
     }
 }

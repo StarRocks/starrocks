@@ -341,6 +341,25 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                 if (!Strings.isNullOrEmpty(sasToken)) {
                     params.put(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN, sasToken);
                 }
+                String tenantId = adls2credentialInfo.getTenantId();
+                if (!Strings.isNullOrEmpty(tenantId)) {
+                    params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TENANT_ID, tenantId);
+                }
+                String clientId = adls2credentialInfo.getClientId();
+                if (!Strings.isNullOrEmpty(clientId)) {
+                    params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ID, clientId);
+                }
+                if (!Strings.isNullOrEmpty(tenantId) && !Strings.isNullOrEmpty(clientId)) {
+                    params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY, "true");
+                }
+                String clientSecret = adls2credentialInfo.getClientSecret();
+                if (!Strings.isNullOrEmpty(clientSecret)) {
+                    params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET, clientSecret);
+                }
+                String clientEndpoint = adls2credentialInfo.getAuthorityHost();
+                if (!Strings.isNullOrEmpty(clientEndpoint)) {
+                    params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT, clientEndpoint);
+                }
                 return params;
             }
             default:

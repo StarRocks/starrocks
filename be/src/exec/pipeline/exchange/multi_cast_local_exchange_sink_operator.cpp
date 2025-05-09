@@ -46,4 +46,13 @@ Status MultiCastLocalExchangeSinkOperator::push_chunk(RuntimeState* state, const
     return _exchanger->push_chunk(chunk, _driver_sequence);
 }
 
+Status MultiCastLocalExchangeSinkOperatorFactory::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(OperatorFactory::prepare(state));
+    RETURN_IF_ERROR(_exchanger->prepare(state));
+    return Status::OK();
+}
+void MultiCastLocalExchangeSinkOperatorFactory::close(RuntimeState* state) {
+    _exchanger->close(state);
+    OperatorFactory::close(state);
+}
 } // namespace starrocks::pipeline

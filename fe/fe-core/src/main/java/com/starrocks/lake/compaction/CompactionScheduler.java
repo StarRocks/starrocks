@@ -430,6 +430,7 @@ public class CompactionScheduler extends Daemon {
             }
             waiter = transactionMgr.commitTransaction(db.getId(), job.getTxnId(), commitInfoList,
                     Collections.emptyList(), attachment);
+            job.getPartition().incExtraFileSize(job.getSuccessCompactInputFileSize());
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
         }

@@ -51,8 +51,8 @@ public class BatchWriteMgr extends FrontendDaemon {
     // A read-write lock to ensure thread-safe access to the loadMap.
     private final ReentrantReadWriteLock lock;
 
-    // A concurrent map that stores IsomorphicBatchWrite instances, keyed by BatchWriteId.
-    private final ConcurrentHashMap<BatchWriteId, IsomorphicBatchWrite> isomorphicBatchWriteMap;
+    // A concurrent map that stores MergeCommitJob instances, keyed by BatchWriteId.
+    private final ConcurrentHashMap<BatchWriteId, MergeCommitJob> mergeCommitJobs;
 
     // An assigner that manages the assignment of coordinator backends.
     private final CoordinatorBackendAssigner coordinatorBackendAssigner;
@@ -65,7 +65,7 @@ public class BatchWriteMgr extends FrontendDaemon {
     public BatchWriteMgr() {
         super("merge-commit-mgr", Config.merge_commit_gc_check_interval_ms);
         this.idGenerator = new AtomicLong(0L);
-        this.isomorphicBatchWriteMap = new ConcurrentHashMap<>();
+        this.mergeCommitJobs = new ConcurrentHashMap<>();
         this.lock = new ReentrantReadWriteLock();
         this.coordinatorBackendAssigner = new CoordinatorBackendAssignerImpl();
         this.threadPoolExecutor = ThreadPoolManager.newDaemonCacheThreadPool(
@@ -83,7 +83,7 @@ public class BatchWriteMgr extends FrontendDaemon {
     @Override
     protected void runAfterCatalogReady() {
         setInterval(Config.merge_commit_gc_check_interval_ms);
-        cleanupInactiveBatchWrite();
+        cleanupInactiveJobs();
     }
 
     /**
@@ -96,7 +96,7 @@ public class BatchWriteMgr extends FrontendDaemon {
     public RequestCoordinatorBackendResult requestCoordinatorBackends(TableId tableId, StreamLoadKvParams params) {
         lock.readLock().lock();
         try {
-            Pair<TStatus, IsomorphicBatchWrite> result = getOrCreateTableBatchWrite(tableId, params);
+            Pair<TStatus, MergeCommitJob> result = getOrCreateJob(tableId, params);
             if (result.first.getStatus_code() != TStatusCode.OK) {
                 return new RequestCoordinatorBackendResult(result.first, null);
             }
@@ -119,7 +119,7 @@ public class BatchWriteMgr extends FrontendDaemon {
             TableId tableId, StreamLoadKvParams params, long backendId, String backendHost) {
         lock.readLock().lock();
         try {
-            Pair<TStatus, IsomorphicBatchWrite> result = getOrCreateTableBatchWrite(tableId, params);
+            Pair<TStatus, MergeCommitJob> result = getOrCreateJob(tableId, params);
             if (result.first.getStatus_code() != TStatusCode.OK) {
                 return new RequestLoadResult(result.first, null);
             }
@@ -130,34 +130,35 @@ public class BatchWriteMgr extends FrontendDaemon {
     }
 
     /**
-     * Cleans up inactive batch writes to release resources.
+     * Cleans up inactive jobs to release resources.
      */
     @VisibleForTesting
-    void cleanupInactiveBatchWrite() {
+    void cleanupInactiveJobs() {
         lock.writeLock().lock();
         try {
-            List<Map.Entry<BatchWriteId, IsomorphicBatchWrite>> loads = isomorphicBatchWriteMap.entrySet().stream()
+            List<Map.Entry<BatchWriteId, MergeCommitJob>> loads = mergeCommitJobs.entrySet().stream()
                             .filter(entry -> !entry.getValue().isActive())
                             .collect(Collectors.toList());
-            for (Map.Entry<BatchWriteId, IsomorphicBatchWrite> entry : loads) {
-                isomorphicBatchWriteMap.remove(entry.getKey());
+            for (Map.Entry<BatchWriteId, MergeCommitJob> entry : loads) {
+                mergeCommitJobs.remove(entry.getKey());
                 coordinatorBackendAssigner.unregisterBatchWrite(entry.getValue().getId());
             }
+            MergeCommitMetricRegistry.getInstance().setJobNum(mergeCommitJobs.size());
         } finally {
             lock.writeLock().unlock();
         }
     }
 
     /**
-     * Retrieves or creates an IsomorphicBatchWrite instance for the specified table and parameters.
+     * Retrieves or creates an MergeCommitJob instance for the specified table and parameters.
      *
      * @param tableId The ID of the table for which the batch write is requested.
      * @param params The parameters for the stream load.
-     * @return A Pair containing the status of the operation and the IsomorphicBatchWrite instance.
+     * @return A Pair containing the status of the operation and the MergeCommitJob instance.
      */
-    private Pair<TStatus, IsomorphicBatchWrite> getOrCreateTableBatchWrite(TableId tableId, StreamLoadKvParams params) {
+    private Pair<TStatus, MergeCommitJob> getOrCreateJob(TableId tableId, StreamLoadKvParams params) {
         BatchWriteId uniqueId = new BatchWriteId(tableId, params);
-        IsomorphicBatchWrite load = isomorphicBatchWriteMap.get(uniqueId);
+        MergeCommitJob load = mergeCommitJobs.get(uniqueId);
         if (load != null) {
             return new Pair<>(new TStatus(TStatusCode.OK), load);
         }
@@ -193,9 +194,9 @@ public class BatchWriteMgr extends FrontendDaemon {
         }
 
         try {
-            load = isomorphicBatchWriteMap.computeIfAbsent(uniqueId, uid -> {
+            load = mergeCommitJobs.computeIfAbsent(uniqueId, uid -> {
                 long id = idGenerator.getAndIncrement();
-                IsomorphicBatchWrite newLoad = new IsomorphicBatchWrite(
+                MergeCommitJob newLoad = new MergeCommitJob(
                         id, tableId, warehouseName, streamLoadInfo, batchWriteIntervalMs, batchWriteParallel,
                         params, coordinatorBackendAssigner, threadPoolExecutor, txnStateDispatcher);
                 coordinatorBackendAssigner.registerBatchWrite(id, newLoad.getWarehouseId(), tableId,
@@ -210,17 +211,17 @@ public class BatchWriteMgr extends FrontendDaemon {
             LOG.error("Failed to create batch write for {}, params: {}", tableId, params, e);
             return new Pair<>(status, null);
         }
-
+        MergeCommitMetricRegistry.getInstance().setJobNum(mergeCommitJobs.size());
         return new Pair<>(new TStatus(TStatusCode.OK), load);
     }
 
     /**
-     * Returns the number of batch writes currently managed.
+     * Returns the number of jobs currently managed.
      *
-     * @return The number of batch writes.
+     * @return The number of jobs.
      */
-    public int numBatchWrites() {
-        return isomorphicBatchWriteMap.size();
+    public int numJobs() {
+        return mergeCommitJobs.size();
     }
 
     public CoordinatorBackendAssigner getCoordinatorBackendAssigner() {

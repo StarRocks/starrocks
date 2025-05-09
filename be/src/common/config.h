@@ -1450,7 +1450,7 @@ CONF_mInt32(desc_hint_split_range, "10");
 // it may be evicted if the disk is full
 CONF_mInt64(lake_local_pk_index_unused_threshold_seconds, "86400"); // 1 day
 
-CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "false");
+CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "true");
 
 CONF_mInt32(dictionary_cache_refresh_timeout_ms, "60000"); // 1 min
 CONF_mInt32(dictionary_cache_refresh_threadpool_size, "8");
@@ -1647,4 +1647,9 @@ CONF_mInt64(rf_sample_ratio, "32");
 CONF_mInt64(rf_branchless_ratio, "8");
 
 CONF_mInt32(big_query_sec, "1");
+
+CONF_mInt64(split_exchanger_buffer_chunk_num, "1000");
+
+// when to split hashmap/hashset into two level hashmap/hashset, negative number means use default value
+CONF_mInt64(two_level_memory_threshold, "-1");
 } // namespace starrocks::config
