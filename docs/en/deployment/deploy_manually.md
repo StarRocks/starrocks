@@ -531,19 +531,19 @@ You can stop the StarRocks cluster by running the following commands on the corr
 - Stop an FE node.
 
   ```Bash
-  ./fe/bin/stop_fe.sh --daemon
+  ./fe/bin/stop_fe.sh
   ```
 
 - Stop a BE node.
 
   ```Bash
-  ./be/bin/stop_be.sh --daemon
+  ./be/bin/stop_be.sh
   ```
 
 - Stop a CN node.
 
   ```Bash
-  ./be/bin/stop_cn.sh --daemon
+  ./be/bin/stop_cn.sh
   ```
 
 ## Troubleshooting
