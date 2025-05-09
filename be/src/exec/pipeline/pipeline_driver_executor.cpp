@@ -30,6 +30,7 @@
 namespace starrocks::pipeline {
 
 DEFINE_FAIL_POINT(operator_return_failed_status);
+DEFINE_FAIL_POINT(report_exec_state_failed_status);
 
 GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_ptr<ThreadPool> thread_pool,
                                            bool enable_resource_group, const CpuUtil::CpuIds& cpuids)
@@ -352,15 +353,24 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
 
     auto report_task = [params, exec_env, fe_addr, fragment_id]() {
         int retry_times = 0;
-        while (retry_times++ < 3) {
+        int max_retry_times = config::report_exec_rpc_request_retry_num;
+        while (retry_times++ < max_retry_times) {
             auto status = ExecStateReporter::report_exec_status(*params, exec_env, fe_addr);
+
+            FAIL_POINT_TRIGGER_EXECUTE(report_exec_state_failed_status, {
+                if (status.ok()) {
+                    status = Status::InternalError("injected failed status");
+                }
+            });
+
             if (!status.ok()) {
                 if (status.is_not_found()) {
                     VLOG(1) << "[Driver] Fail to report exec state due to query not found: fragment_instance_id="
                             << print_id(fragment_id);
                 } else {
                     LOG(WARNING) << "[Driver] Fail to report exec state: fragment_instance_id=" << print_id(fragment_id)
-                                 << ", status: " << status.to_string() << ", retry_times=" << retry_times;
+                                 << ", status: " << status.to_string() << ", retry_times=" << retry_times
+                                 << ", max_retry_times=" << max_retry_times;
                     // if it is done exec state report, we should retry
                     if (params->__isset.done && params->done) {
                         continue;
