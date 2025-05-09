@@ -83,9 +83,7 @@ public:
         auto block_cache = TestCacheUtils::create_cache(options);
         CacheEnv::GetInstance()->set_block_cache(block_cache);
     }
-    void TearDown() override {
-        config::datacache_auto_adjust_enable = _saved_enable_auto_adjust;
-    }
+    void TearDown() override { config::datacache_auto_adjust_enable = _saved_enable_auto_adjust; }
 
     static void read_stream_data(io::SeekableInputStream* stream, int64_t offset, int64_t size, char* data) {
         ASSERT_OK(stream->seek(offset));
