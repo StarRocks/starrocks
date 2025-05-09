@@ -525,19 +525,19 @@ Compute Node (CN) はデータを自ら保持しないステートレスなコ�
 - FE ノードを停止します。
 
   ```Bash
-  ./fe/bin/stop_fe.sh --daemon
+  ./fe/bin/stop_fe.sh
   ```
 
 - BE ノードを停止します。
 
   ```Bash
-  ./be/bin/stop_be.sh --daemon
+  ./be/bin/stop_be.sh
   ```
 
 - CN ノードを停止します。
 
   ```Bash
-  ./be/bin/stop_cn.sh --daemon
+  ./be/bin/stop_cn.sh
   ```
 
 ## Troubleshooting
