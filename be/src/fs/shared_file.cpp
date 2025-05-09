@@ -1,0 +1,143 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "fs/shared_file.h"
+
+#include "fs/fs.h"
+#include "fs/fs_util.h"
+
+namespace starrocks {
+
+void SharedWritableFileContext::init(bool eos) {
+    std::lock_guard<std::mutex> l(shared_file_mutex);
+    if (!is_inited && eos) {
+        enable_shared_file = true;
+    }
+    is_inited = true;
+}
+
+Status SharedWritableFileContext::try_create_shared_file(
+        const std::function<StatusOr<std::unique_ptr<WritableFile>>()>& create_file_fn) {
+    std::lock_guard<std::mutex> l(shared_file_mutex);
+    if (shared_file == nullptr) {
+        ASSIGN_OR_RETURN(shared_file, create_file_fn());
+    } else {
+        // If the shared file is already created, we don't need to create it again.
+        // Just return OK.
+    }
+    return Status::OK();
+}
+
+Status SharedWritableFileContext::close() {
+    if (shared_file) {
+        RETURN_IF_ERROR(shared_file->close());
+    }
+    return Status::OK();
+}
+
+void SharedWritableFileContext::increase_active_writers() {
+    std::lock_guard<std::mutex> l(shared_file_mutex);
+    active_writers++;
+}
+
+Status SharedWritableFileContext::decrease_active_writers() {
+    bool is_last_writer = false;
+    {
+        std::lock_guard<std::mutex> l(shared_file_mutex);
+        active_writers--;
+        is_last_writer = (active_writers == 0);
+    }
+    if (is_last_writer) {
+        // If there are no active writers, we can close the shared file.
+        RETURN_IF_ERROR(close());
+    }
+    return Status::OK();
+}
+
+Status SharedWritableFile::append(const Slice& data) {
+    _buffers.emplace_back(std::make_unique<std::string>(data.data, data.size));
+    _slices.emplace_back(*_buffers.back());
+    _local_buffer_file_size += data.size;
+    return Status::OK();
+}
+
+Status SharedWritableFile::appendv(const Slice* data, size_t cnt) {
+    for (size_t i = 0; i < cnt; ++i) {
+        _buffers.emplace_back(std::make_unique<std::string>(data[i].data, data[i].size));
+        _slices.emplace_back(*_buffers.back());
+        _local_buffer_file_size += data[i].size;
+    }
+    return Status::OK();
+}
+
+Status SharedWritableFile::close() {
+    if (_local_buffer_file_size > 0) {
+        // Use lock to make sure each thread will write to the shared file in order.
+        std::lock_guard<std::mutex> l(_context->shared_file_mutex);
+        // Get the offset of current file in the shared file.
+        _shared_file_offset = _context->shared_file->size();
+        // Append the local buffer to the shared file.
+        _context->shared_file->set_encryption_info(_encryption_info);
+        RETURN_IF_ERROR(_context->shared_file->appendv(_slices.data(), _slices.size()));
+    }
+    return Status::OK();
+}
+
+Status SharedSeekableInputStream::init() {
+    // Initialize the stream.
+    RETURN_IF_ERROR(_stream->seek(_offset));
+    return Status::OK();
+}
+
+Status SharedSeekableInputStream::seek(int64_t position) {
+    return _stream->seek(_offset + position);
+}
+
+StatusOr<int64_t> SharedSeekableInputStream::position() {
+    ASSIGN_OR_RETURN(auto pos, _stream->position());
+    return pos - _offset;
+}
+
+StatusOr<int64_t> SharedSeekableInputStream::read_at(int64_t offset, void* out, int64_t count) {
+    return _stream->read_at(_offset + offset, out, count);
+}
+
+Status SharedSeekableInputStream::read_at_fully(int64_t offset, void* out, int64_t count) {
+    return _stream->read_at_fully(_offset + offset, out, count);
+}
+
+StatusOr<int64_t> SharedSeekableInputStream::get_size() {
+    return _size;
+}
+
+Status SharedSeekableInputStream::skip(int64_t count) {
+    return _stream->skip(count);
+}
+
+StatusOr<std::string> SharedSeekableInputStream::read_all() {
+    std::string result;
+    result.resize(_size);
+    RETURN_IF_ERROR(_stream->read_at_fully(_offset, result.data(), _size));
+    return std::move(result);
+}
+
+const std::string& SharedSeekableInputStream::filename() const {
+    return _stream->filename();
+}
+
+StatusOr<int64_t> SharedSeekableInputStream::read(void* data, int64_t count) {
+    return _stream->read(data, count);
+}
+
+} // namespace starrocks
