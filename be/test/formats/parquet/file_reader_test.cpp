@@ -2963,7 +2963,8 @@ TEST_F(FileReaderTest, bloom_filter_reader_test_hit) {
 
 TEST_F(FileReaderTest, read_parquet_bloom_filter_by_parquet_hadoop) {
     Utils::SlotDesc slot_descs[] = {{"c0", TYPE_VARCHAR_DESC}, {"c1", TYPE_INT_DESC}, {"c2", TYPE_DATETIME_DESC}, {""}};
-    const std::string bloom_filter_file = "./be/test/formats/parquet/test_data/bloom_filter_by_parquet_hadoop_1.parquet";
+    const std::string bloom_filter_file =
+            "./be/test/formats/parquet/test_data/bloom_filter_by_parquet_hadoop_1.parquet";
     auto file_reader = _create_file_reader(bloom_filter_file);
     auto ctx = _create_file_random_read_context(bloom_filter_file, slot_descs);
     Status status = file_reader->init(ctx);
