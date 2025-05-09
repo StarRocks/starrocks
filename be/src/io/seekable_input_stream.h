@@ -143,6 +143,8 @@ public:
 
     bool is_encrypted() const override { return _impl->is_encrypted(); };
 
+    Status touch_cache(int64_t offset, size_t length) override { return _impl->touch_cache(offset, length); }
+
 private:
     SeekableInputStream* _impl;
     Ownership _ownership;
