@@ -21,8 +21,8 @@
 
 #include <string>
 
-#include "cache/block_cache/block_cache.h"
 #include "cache/block_cache/block_cache_hit_rate_counter.hpp"
+#include "cache/block_cache/local_cache.h"
 #include "http/http_channel.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
@@ -71,9 +71,9 @@ void DataCacheAction::handle(HttpRequest* req) {
     if (!_check_request(req)) {
         return;
     }
-    if (!_block_cache || !_block_cache->is_initialized()) {
+    if (!_local_cache || !_local_cache->is_initialized()) {
         _handle_error(req, strings::Substitute("Cache system is not ready"));
-    } else if (_block_cache->engine_type() != DataCacheEngineType::STARCACHE) {
+    } else if (_local_cache->engine_type() != DataCacheEngineType::STARCACHE) {
         _handle_error(req, strings::Substitute("No more metrics for current cache engine type"));
     } else if (req->param(ACTION_KEY) == ACTION_STAT) {
         _handle_stat(req);
@@ -97,7 +97,7 @@ void DataCacheAction::_handle_stat(HttpRequest* req) {
     _handle(req, [=](rapidjson::Document& root) {
 #ifdef WITH_STARCACHE
         auto& allocator = root.GetAllocator();
-        auto&& metrics = _block_cache->cache_metrics(2);
+        auto&& metrics = _local_cache->cache_metrics(2);
         std::string status = cache_status_str(metrics.status);
 
         rapidjson::Value status_value;

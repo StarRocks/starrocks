@@ -42,7 +42,7 @@
 #include <cstdio>
 #include <memory>
 
-#include "cache/block_cache/block_cache.h"
+#include "cache/block_cache/local_cache.h"
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
 #endif
@@ -50,7 +50,6 @@
 #include "gutil/strtoint.h"      //  for atoi64
 #include "io/io_profiler.h"
 #include "jemalloc/jemalloc.h"
-#include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter_worker.h"
 #include "storage/page_cache.h"
 #include "util/metrics.h"
@@ -302,9 +301,9 @@ void SystemMetrics::_update_datacache_mem_tracker() {
     int64_t datacache_mem_bytes = 0;
     auto* datacache_mem_tracker = GlobalEnv::GetInstance()->datacache_mem_tracker();
     if (datacache_mem_tracker) {
-        BlockCache* block_cache = BlockCache::instance();
-        if (block_cache != nullptr && block_cache->is_initialized()) {
-            auto datacache_metrics = block_cache->cache_metrics();
+        LocalCache* local_cache = CacheEnv::GetInstance()->local_cache();
+        if (local_cache != nullptr && local_cache->is_initialized()) {
+            auto datacache_metrics = local_cache->cache_metrics(0);
             datacache_mem_bytes = datacache_metrics.mem_used_bytes + datacache_metrics.meta_used_bytes;
         }
 #ifdef USE_STAROS

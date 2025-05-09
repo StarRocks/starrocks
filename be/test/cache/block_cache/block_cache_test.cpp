@@ -71,7 +71,6 @@ TEST_F(BlockCacheTest, copy_to_iobuf) {
     ASSERT_EQ(memcmp(result, expect, size), 0);
 }
 
-#ifdef WITH_STARCACHE
 TEST_F(BlockCacheTest, hybrid_cache) {
     const std::string cache_dir = "./block_disk_cache3";
     ASSERT_TRUE(fs::create_directories(cache_dir).ok());
@@ -248,7 +247,7 @@ TEST_F(BlockCacheTest, update_cache_quota) {
     const std::string cache_dir = "./block_disk_cache5";
     ASSERT_TRUE(fs::create_directories(cache_dir).ok());
 
-    std::unique_ptr<BlockCache> cache(new BlockCache);
+    std::unique_ptr<BlockCache> block_cache(new BlockCache);
     const size_t block_size = 256 * 1024;
 
     CacheOptions options;
@@ -260,11 +259,12 @@ TEST_F(BlockCacheTest, update_cache_quota) {
     options.max_flying_memory_mb = 100;
     options.enable_direct_io = false;
     options.engine = "starcache";
-    Status status = cache->init(options);
+    Status status = block_cache->init(options);
     ASSERT_TRUE(status.ok());
+    auto cache = block_cache->local_cache();
 
     {
-        auto metrics = cache->cache_metrics();
+        auto metrics = cache->cache_metrics(0);
         ASSERT_EQ(metrics.mem_quota_bytes, options.mem_space_size);
         ASSERT_EQ(metrics.disk_quota_bytes, quota);
     }
@@ -272,7 +272,7 @@ TEST_F(BlockCacheTest, update_cache_quota) {
     {
         size_t new_mem_quota = 2 * 1024 * 1024;
         ASSERT_TRUE(cache->update_mem_quota(new_mem_quota, false).ok());
-        auto metrics = cache->cache_metrics();
+        auto metrics = cache->cache_metrics(0);
         ASSERT_EQ(metrics.mem_quota_bytes, new_mem_quota);
     }
 
@@ -281,7 +281,7 @@ TEST_F(BlockCacheTest, update_cache_quota) {
         std::vector<DirSpace> dir_spaces;
         dir_spaces.push_back({.path = cache_dir, .size = new_disk_quota});
         ASSERT_TRUE(cache->update_disk_spaces(dir_spaces).ok());
-        auto metrics = cache->cache_metrics();
+        auto metrics = cache->cache_metrics(0);
         ASSERT_EQ(metrics.disk_quota_bytes, new_disk_quota);
     }
 
@@ -357,7 +357,4 @@ TEST_F(BlockCacheTest, read_peer_cache) {
 
     cache->shutdown();
 }
-
-#endif
-
 } // namespace starrocks
