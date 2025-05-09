@@ -42,9 +42,22 @@ public class OptimizerTraceUtil {
         logMVPrepare(ctx, null, format, object);
     }
 
+    public static void logMVPrepare(Tracers tracers, ConnectContext ctx, String format, Object... object) {
+        logMVPrepare(tracers, ctx, null, format, object);
+    }
+
     public static void logMVPrepare(ConnectContext ctx, MaterializedView mv,
                                     String format, Object... object) {
         Tracers.log(Tracers.Module.MV, input -> {
+            String str = MessageFormatter.arrayFormat(format, object).getMessage();
+            Object[] args = new Object[] {mv == null ? "GLOBAL" : mv.getName(), str};
+            return MessageFormatter.arrayFormat("[MV TRACE] [PREPARE {}] {}", args).getMessage();
+        });
+    }
+
+    public static void logMVPrepare(Tracers tracers, ConnectContext ctx, MaterializedView mv,
+                                    String format, Object... object) {
+        Tracers.log(tracers, Tracers.Module.MV, input -> {
             String str = MessageFormatter.arrayFormat(format, object).getMessage();
             Object[] args = new Object[] {mv == null ? "GLOBAL" : mv.getName(), str};
             return MessageFormatter.arrayFormat("[MV TRACE] [PREPARE {}] {}", args).getMessage();
@@ -62,6 +75,15 @@ public class OptimizerTraceUtil {
     public static void logMVPrepare(MaterializedView mv,
                                     String format, Object... object) {
         Tracers.log(Tracers.Module.MV, input -> {
+            String str = MessageFormatter.arrayFormat(format, object).getMessage();
+            Object[] args = new Object[] {mv == null ? "GLOBAL" : mv.getName(), str};
+            return MessageFormatter.arrayFormat("[MV TRACE] [PREPARE {}] {}", args).getMessage();
+        });
+    }
+
+    public static void logMVPrepare(Tracers tracers, MaterializedView mv,
+                                    String format, Object... object) {
+        Tracers.log(tracers, Tracers.Module.MV, input -> {
             String str = MessageFormatter.arrayFormat(format, object).getMessage();
             Object[] args = new Object[] {mv == null ? "GLOBAL" : mv.getName(), str};
             return MessageFormatter.arrayFormat("[MV TRACE] [PREPARE {}] {}", args).getMessage();
