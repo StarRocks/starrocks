@@ -1,0 +1,26 @@
+-- name: test_insert_with_profile
+create table t1(k int) 
+distributed by hash(k) buckets 96;
+
+create table t2(k int) 
+distributed by hash(k) buckets 96;
+
+set enable_profile=true;
+set big_query_profile_threshold='1s';
+set runtime_profile_report_interval=1;
+set pipeline_dop=96;
+
+insert into t1 select * from TABLE(generate_series(0, 10));
+select count(*) from t1;
+
+admin enable failpoint 'report_exec_state_failed_status';
+
+insert into t2 select a.k from t1 a join t1 b on a.k = b.k where a.k = 0 and b.k = 0;
+insert into t2 select a.k from t1 a join t1 b on a.k = b.k where a.k = 0 and b.k = 0;
+insert into t2 select a.k from t1 a join t1 b on a.k = b.k where a.k = 0 and b.k = 0;
+insert into t2 select a.k from t1 a join t1 b on a.k = b.k where a.k = 0 and b.k = 0;
+insert into t2 select a.k from t1 a join t1 b on a.k = b.k where a.k = 0 and b.k = 0;
+insert into t2 select a.k from t1 a join t1 b on a.k = b.k where a.k = 0 and b.k = 0;
+insert into t2 select a.k from t1 a join t1 b on a.k = b.k where a.k = 0 and b.k = 0;
+
+select count(*) from t2;

@@ -721,7 +721,7 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
                     config::thrift_rpc_timeout_ms);
 
             if (!rpc_status.ok()) {
-                LOG(WARNING) << "thrift rpc error:" << rpc_status;
+                LOG(WARNING) << "batch report exec status rpc error:" << rpc_status;
                 continue;
             }
 
