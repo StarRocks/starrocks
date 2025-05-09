@@ -83,6 +83,7 @@ import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.authentication.UserProperty;
+import com.starrocks.authorization.GrantType;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
@@ -6394,7 +6395,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new GrantRoleStmt(roleNameList, ((Identifier) visit(context.identifierOrString())).getValue(),
-                createPos(context));
+                GrantType.ROLE, createPos(context));
     }
 
     @Override
@@ -6417,7 +6418,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new RevokeRoleStmt(roleNameList, ((Identifier) visit(context.identifierOrString())).getValue(),
-                createPos(context));
+                GrantType.ROLE, createPos(context));
     }
 
     @Override
@@ -6469,10 +6470,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         NodePosition pos = createPos(context);
         if (context.ROLE() != null) {
             Identifier role = (Identifier) visit(context.identifierOrString());
-            return new ShowGrantsStmt(null, role.getValue(), pos);
+            return new ShowGrantsStmt(role.getValue(), GrantType.ROLE, pos);
         } else {
             UserIdentity userId = context.user() == null ? null : (UserIdentity) visit(context.user());
-            return new ShowGrantsStmt(userId, null, pos);
+            return new ShowGrantsStmt(userId, pos);
         }
     }
 
