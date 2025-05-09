@@ -117,9 +117,8 @@ void ValidateRleBatch(const std::vector<T>& values, int bit_width, uint8_t* expe
     // Verify read
     RleDecoder<T> decoder(buffer.data(), encoded_len, bit_width);
     std::vector<T> to_check(values.size());
-    auto n = decoder.GetBatch(to_check.data(), values.size());
-    ASSERT_EQ(values.size(), n);
-    for (int i = 0; i < n; ++i) {
+    ASSERT_TRUE(decoder.GetBatch(to_check.data(), values.size()));
+    for (int i = 0; i < values.size(); ++i) {
         EXPECT_EQ(values[i], to_check[i]);
     }
 }
@@ -435,26 +434,34 @@ TEST_F(TestRle, TestSkip) {
     size_t run_length;
     RleDecoder<bool> decoder(buffer.data(), encoder.len(), 1);
 
+    size_t not_null_cnt = 0;
     // position before "A"
-    ASSERT_EQ(3, decoder.Skip(7));
+    ASSERT_TRUE(decoder.Skip(7, &not_null_cnt));
+    ASSERT_EQ(3, not_null_cnt);
     run_length = decoder.GetNextRun(&val, std::numeric_limits<std::size_t>::max());
     ASSERT_TRUE(val);
     ASSERT_EQ(1, run_length);
 
     // position before "B"
-    ASSERT_EQ(7, decoder.Skip(14));
+    not_null_cnt = 0;
+    ASSERT_TRUE(decoder.Skip(14, &not_null_cnt));
+    ASSERT_EQ(7, not_null_cnt);
     run_length = decoder.GetNextRun(&val, std::numeric_limits<std::size_t>::max());
     ASSERT_FALSE(val);
     ASSERT_EQ(2, run_length);
 
     // position before "C"
-    ASSERT_EQ(18, decoder.Skip(46));
+    not_null_cnt = 0;
+    ASSERT_TRUE(decoder.Skip(46, &not_null_cnt));
+    ASSERT_EQ(18, not_null_cnt);
     run_length = decoder.GetNextRun(&val, std::numeric_limits<std::size_t>::max());
     ASSERT_TRUE(val);
     ASSERT_EQ(10, run_length);
 
     // position before "D"
-    ASSERT_EQ(24, decoder.Skip(49));
+    not_null_cnt = 0;
+    ASSERT_TRUE(decoder.Skip(49, &not_null_cnt));
+    ASSERT_EQ(24, not_null_cnt);
     run_length = decoder.GetNextRun(&val, std::numeric_limits<std::size_t>::max());
     ASSERT_FALSE(val);
     ASSERT_EQ(11, run_length);
@@ -474,8 +481,7 @@ TEST_F(TestRle, TestBatch) {
 
     RleDecoder<int> decoder(buffer.data(), buffer.size(), 16);
     std::vector<int> to_check(2048);
-    auto n = decoder.GetBatch(&to_check[0], 2048);
-    ASSERT_EQ(1024, n);
+    ASSERT_FALSE(decoder.GetBatch(&to_check[0], 2048));
 }
 
 TEST_F(TestRle, TestGetBatchWithDict) {

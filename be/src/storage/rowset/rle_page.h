@@ -35,6 +35,7 @@
 #pragma once
 
 #include "column/column.h"
+#include "common/status.h"
 #include "storage/range.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
@@ -193,13 +194,18 @@ public:
         if (_cur_index == pos) {
             // No need to seek.
             return Status::OK();
-        } else if (_cur_index < pos) {
-            uint nskip = pos - _cur_index;
-            _rle_decoder.Skip(nskip);
         } else {
-            _rle_decoder = RleDecoder<CppType>((uint8_t*)_data.data + RLE_PAGE_HEADER_SIZE,
-                                               _data.size - RLE_PAGE_HEADER_SIZE, _bit_width);
-            _rle_decoder.Skip(pos);
+            size_t to_skip;
+            if (_cur_index < pos) {
+                to_skip = pos - _cur_index;
+            } else {
+                _rle_decoder = RleDecoder<CppType>((uint8_t*)_data.data + RLE_PAGE_HEADER_SIZE,
+                                                   _data.size - RLE_PAGE_HEADER_SIZE, _bit_width);
+                to_skip = pos;
+            }
+            if (PREDICT_FALSE(!_rle_decoder.Skip(to_skip))) {
+                return Status::InternalError("RlePageDecoder seek error");
+            }
         }
         _cur_index = pos;
         return Status::OK();
