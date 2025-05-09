@@ -17,6 +17,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
+import com.starrocks.utframe.StarRocksAssert;
 import mockit.Expectations;
 import org.junit.After;
 import org.junit.Before;
@@ -69,6 +70,34 @@ public class InnerToSemiTest extends PlanWithCostTestBase {
             }
         };
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        String createTbl0StmtStr = "" +
+                "create table table_struct_smallint (\n" +
+                "    col_int int,\n" +
+                "    col_struct struct < c_smallint smallint >,\n" +
+                "    col_struct2 struct < c_double double >,\n" +
+                "    col_struct3 struct < c_int int >\n" +
+                ")\n" +
+                "duplicate key(col_int)\n" +
+                "properties (\"replication_num\" = \"1\")";
+
+        String createTbl1StmtStr = "" +
+                "create table duplicate_table_struct (\n" +
+                "    col_int int,\n" +
+                "    col_string string,\n" +
+                "    col_struct struct < c_int int,\n" +
+                "    c_float float,\n" +
+                "    c_double double,\n" +
+                "    c_char char(30),\n" +
+                "    c_varchar varchar(200),\n" +
+                "    c_date date,\n" +
+                "    c_timestamp datetime,\n" +
+                "    c_boolean boolean >\n" +
+                ")\n" +
+                "duplicate key(col_int)\n" +
+                "properties (\"replication_num\" = \"1\")";
+        starRocksAssert.withTable(createTbl0StmtStr);
+        starRocksAssert.withTable(createTbl1StmtStr);
     }
 
     @After
@@ -90,5 +119,10 @@ public class InnerToSemiTest extends PlanWithCostTestBase {
         assertContains(plan, " LEFT SEMI JOIN (join-predicate [1: v1 = 7: v7] post-join-predicate [null])\n" +
                 "        LEFT SEMI JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])");
 
+        sql = "select distinct t1.col_struct.c_char from duplicate_table_struct t1 " +
+                "where col_struct.c_double = (select max(t2.col_struct2.c_double) from table_struct_smallint t2 " +
+                "where t1.col_struct.c_int = t2.col_struct3.c_int ) order by 1;";
+        plan = getLogicalFragmentPlan(sql);
+        assertContains(plan, "LEFT SEMI JOIN (join-predicate [13: expr = 12: expr AND 14: expr = 9: max]");
     }
 }
