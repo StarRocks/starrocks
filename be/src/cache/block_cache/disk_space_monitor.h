@@ -20,6 +20,7 @@
 #include <unordered_map>
 
 #include "cache/block_cache/cache_options.h"
+#include "cache/block_cache/local_cache.h"
 #include "common/status.h"
 #include "fs/fs.h"
 #include "util/disk_info.h"
@@ -116,7 +117,8 @@ private:
 
 class DiskSpaceMonitor {
 public:
-    DiskSpaceMonitor(BlockCache* cache);
+    DiskSpaceMonitor(LocalCache* cache);
+    DiskSpaceMonitor(LocalCache* cache, std::shared_ptr<DiskSpace::FileSystemWrapper> fs);
     ~DiskSpaceMonitor();
 
     Status init(std::vector<DirSpace>* dir_spaces);
@@ -149,7 +151,7 @@ private:
 
     size_t _total_cache_usage = 0;
     size_t _total_cache_quota = 0;
-    BlockCache* _cache = nullptr;
+    LocalCache* _cache = nullptr;
     std::shared_ptr<DiskSpace::FileSystemWrapper> _fs = nullptr;
 };
 

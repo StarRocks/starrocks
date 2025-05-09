@@ -28,10 +28,10 @@
 
 namespace starrocks {
 
-class BlockCache;
+class LocalCache;
 class DataCacheAction : public HttpHandler {
 public:
-    explicit DataCacheAction(BlockCache* block_cache) : _block_cache(block_cache) {}
+    explicit DataCacheAction(LocalCache* local_cache) : _local_cache(local_cache) {}
     ~DataCacheAction() override = default;
 
     void handle(HttpRequest* req) override;
@@ -43,7 +43,7 @@ private:
     void _handle_app_stat(HttpRequest* req);
     void _handle_error(HttpRequest* req, const std::string& error_msg);
 
-    BlockCache* _block_cache;
+    LocalCache* _local_cache;
 };
 
 } // namespace starrocks

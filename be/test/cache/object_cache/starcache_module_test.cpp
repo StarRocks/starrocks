@@ -27,7 +27,8 @@ protected:
         ASSERT_OK(fs::create_directories(cache_dir));
 
         _init_block_cache();
-        _cache = std::make_shared<StarCacheModule>(_block_cache->starcache_instance());
+        _local_cache = _block_cache->local_cache();
+        _cache = std::make_shared<StarCacheModule>(_local_cache->starcache_instance());
     }
     void TearDown() override {
         ASSERT_OK(_block_cache->shutdown());
@@ -62,6 +63,7 @@ protected:
 
     std::string cache_dir = "./starcache_module_test";
     std::shared_ptr<BlockCache> _block_cache;
+    std::shared_ptr<LocalCache> _local_cache;
     std::shared_ptr<ObjectCache> _cache;
     ObjectCacheWriteOptions _write_opt;
     size_t _value_size = 256 * 1024;
