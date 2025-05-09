@@ -185,8 +185,11 @@ Status PageReader::next_header() {
         RETURN_IF_ERROR(_read_and_deserialize_header(false));
     }
 
-    if (_cur_header.type == tparquet::PageType::DATA_PAGE || _cur_header.type == tparquet::PageType::DATA_PAGE_V2) {
+    if (_cur_header.type == tparquet::PageType::DATA_PAGE) {
         _num_values_read += _cur_header.data_page_header.num_values;
+        _next_read_page_idx++;
+    } else if (_cur_header.type == tparquet::PageType::DATA_PAGE_V2) {
+        _num_values_read += _cur_header.data_page_header_v2.num_values;
         _next_read_page_idx++;
     }
     return Status::OK();
