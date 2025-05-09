@@ -124,7 +124,7 @@ Status PageReader::_read_and_deserialize_header(bool need_fill_cache) {
                 page_buf = (const uint8_t*)st.value().data();
                 peek_mode = true;
             } else {
-                raw::stl_vector_resize_uninitialized(page_buffer.get(), allowed_page_size);
+                TRY_CATCH_BAD_ALLOC(raw::stl_vector_resize_uninitialized(page_buffer.get(), allowed_page_size));
                 RETURN_IF_ERROR(_stream->read_at_fully(_offset, page_buffer->data(), allowed_page_size));
                 page_buf = page_buffer->data();
                 auto st = _stream->peek(allowed_page_size);
@@ -245,7 +245,8 @@ StatusOr<Slice> PageReader::read_and_decompress_page_data() {
         } else {
             _opts.stats->page_cache_read_compressed_counter += 1;
             Slice input = Slice(_cache_buf->data() + _header_length, _cache_buf->size() - _header_length);
-            raw::stl_vector_resize_uninitialized(_uncompressed_buf.get(), _cur_header.uncompressed_page_size);
+            TRY_CATCH_BAD_ALLOC(
+                    raw::stl_vector_resize_uninitialized(_uncompressed_buf.get(), _cur_header.uncompressed_page_size));
             _uncompressed_data = Slice(_uncompressed_buf->data(), _cur_header.uncompressed_page_size);
             RETURN_IF_ERROR(_decompress_page(input, &_uncompressed_data));
         }
@@ -301,7 +302,9 @@ Status PageReader::_read_and_decompress_internal(bool need_fill_cache) {
     RETURN_IF_ERROR(CurrentThread::mem_tracker()->check_mem_limit("read and decompress page"));
 
     size_t uncompressed_size = _cur_header.uncompressed_page_size;
-    size_t read_size = is_compressed ? _cur_header.compressed_page_size : uncompressed_size;
+    // based on parquet.thrift Line 571~575, for DATA_PAGE_V2, even when is_compressed is set as false,
+    // data length is decided by compressed_page_size
+    size_t read_size = _data_length();
     _opts.stats->request_bytes_read += read_size;
     _opts.stats->request_bytes_read_uncompressed += uncompressed_size;
 
@@ -317,11 +320,11 @@ Status PageReader::_read_and_decompress_internal(bool need_fill_cache) {
     } else {
         std::vector<uint8_t>& read_buffer = is_compressed ? *_compressed_buf : *_uncompressed_buf;
         if (!need_fill_cache || (is_compressed && _cache_decompressed_data())) {
-            read_buffer.reserve(read_size);
+            TRY_CATCH_BAD_ALLOC(read_buffer.reserve(read_size));
             read_data = Slice(read_buffer.data(), read_size);
         } else {
             auto original_size = _cache_buf->size();
-            raw::stl_vector_resize_uninitialized(_cache_buf.get(), original_size + read_size);
+            TRY_CATCH_BAD_ALLOC(raw::stl_vector_resize_uninitialized(_cache_buf.get(), original_size + read_size));
             read_data = Slice(_cache_buf->data() + original_size, read_size);
         }
         RETURN_IF_ERROR(_read_bytes(read_data.data, read_data.size));
@@ -332,10 +335,11 @@ Status PageReader::_read_and_decompress_internal(bool need_fill_cache) {
     if (is_compressed) {
         if (need_fill_cache && _cache_decompressed_data()) {
             auto original_size = _cache_buf->size();
-            raw::stl_vector_resize_uninitialized(_cache_buf.get(), uncompressed_size + original_size);
+            TRY_CATCH_BAD_ALLOC(
+                    raw::stl_vector_resize_uninitialized(_cache_buf.get(), uncompressed_size + original_size));
             _uncompressed_data = Slice(_cache_buf->data() + original_size, uncompressed_size);
         } else {
-            raw::stl_vector_resize_uninitialized(_uncompressed_buf.get(), uncompressed_size);
+            TRY_CATCH_BAD_ALLOC(raw::stl_vector_resize_uninitialized(_uncompressed_buf.get(), uncompressed_size));
             _uncompressed_data = Slice(_uncompressed_buf->data(), uncompressed_size);
         }
         return _decompress_page(read_data, &_uncompressed_data);

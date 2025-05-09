@@ -113,7 +113,7 @@ public:
     RleDecoder() = default;
 
     // Skip n values, and returns the number of non-zero entries skipped.
-    size_t Skip(size_t to_skip);
+    bool Skip(size_t to_skip, size_t* non_zero_count = nullptr);
 
     // Gets the next value.  Returns false if there are no more.
     bool Get(T* val);
@@ -127,7 +127,7 @@ public:
     // GetNextRun will return more from the same run.
     size_t GetNextRun(T* val, size_t max_run);
 
-    size_t GetBatch(T* vals, size_t batch_num);
+    bool GetBatch(T* vals, size_t batch_num);
 
     size_t repeated_count() {
         if (repeat_count_ > 0) {
@@ -305,8 +305,9 @@ inline bool RleDecoder<T>::Get(T* val) {
         rewind_state_ = REWIND_RUN;
     } else {
         DCHECK(literal_count_ > 0);
-        bool result = bit_reader_.GetValue(bit_width_, val);
-        DCHECK(result);
+        if (PREDICT_FALSE(!bit_reader_.GetValue(bit_width_, val))) {
+            return false;
+        }
         --literal_count_;
         rewind_state_ = REWIND_LITERAL;
     }
@@ -384,20 +385,20 @@ inline size_t RleDecoder<T>::GetNextRun(T* val, size_t max_run) {
 }
 
 template <typename T>
-inline size_t RleDecoder<T>::Skip(size_t to_skip) {
+inline bool RleDecoder<T>::Skip(size_t to_skip, size_t* non_zero_count) {
     DCHECK(bit_reader_.is_initialized());
 
-    size_t set_count = 0;
     while (to_skip > 0) {
-        bool result = ReadHeader();
-        DCHECK(result);
+        if (PREDICT_FALSE(!ReadHeader())) {
+            return false;
+        }
 
         if (PREDICT_TRUE(repeat_count_ > 0)) {
             size_t nskip = (repeat_count_ < to_skip) ? repeat_count_ : to_skip;
             repeat_count_ -= nskip;
             to_skip -= nskip;
-            if (current_value_ != 0) {
-                set_count += nskip;
+            if (current_value_ != 0 && non_zero_count != nullptr) {
+                *non_zero_count += nskip;
             }
         } else {
             DCHECK(literal_count_ > 0);
@@ -406,19 +407,20 @@ inline size_t RleDecoder<T>::Skip(size_t to_skip) {
             to_skip -= nskip;
             for (; nskip > 0; nskip--) {
                 T value = 0;
-                result = bit_reader_.GetValue(bit_width_, &value);
-                DCHECK(result);
-                if (value != 0) {
-                    set_count++;
+                if (PREDICT_FALSE(!bit_reader_.GetValue(bit_width_, &value))) {
+                    return false;
+                }
+                if (value != 0 && non_zero_count != nullptr) {
+                    (*non_zero_count)++;
                 }
             }
         }
     }
-    return set_count;
+    return true;
 }
 
 template <typename T>
-inline size_t RleDecoder<T>::GetBatch(T* vals, size_t batch_num) {
+inline bool RleDecoder<T>::GetBatch(T* vals, size_t batch_num) {
     size_t read_num = 0;
     while (read_num < batch_num) {
         size_t read_this_time = batch_num - read_num;
@@ -431,20 +433,19 @@ inline size_t RleDecoder<T>::GetBatch(T* vals, size_t batch_num) {
             read_num += read_this_time;
         } else if (literal_count_ > 0) {
             read_this_time = std::min((size_t)literal_count_, read_this_time);
-            for (int i = 0; i < read_this_time; ++i) {
-                bool result = bit_reader_.GetValue(bit_width_, vals);
-                DCHECK(result);
-                vals++;
+            if (PREDICT_FALSE(!bit_reader_.GetBatch(bit_width_, vals, read_this_time))) {
+                return false;
             }
+            vals += read_this_time;
             literal_count_ -= read_this_time;
             read_num += read_this_time;
         } else {
             if (!ReadHeader()) {
-                return read_num;
+                break;
             }
         }
     }
-    return read_num;
+    return read_num == batch_num;
 }
 
 // This function buffers input values 8 at a time.  After seeing all 8 values,
