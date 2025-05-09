@@ -48,8 +48,8 @@
 #include "agent/report_task.h"
 #include "agent/resource_group_usage_recorder.h"
 #include "agent/task_signatures_manager.h"
-#include "cache/block_cache/block_cache.h"
 #include "cache/block_cache/datacache_utils.h"
+#include "cache/block_cache/local_cache.h"
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/work_group.h"
@@ -839,9 +839,9 @@ void* ReportDataCacheMetricsTaskWorkerPool::_worker_thread_callback(void* arg_th
         request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
 
         TDataCacheMetrics t_metrics{};
-        const BlockCache* cache = BlockCache::instance();
-        if (cache->is_initialized()) {
-            const DataCacheMetrics& metrics = cache->cache_metrics();
+        const LocalCache* cache = CacheEnv::GetInstance()->local_cache();
+        if (cache != nullptr && cache->is_initialized()) {
+            const DataCacheMetrics& metrics = cache->cache_metrics(0);
             DataCacheUtils::set_metrics_from_thrift(t_metrics, metrics);
         } else {
             t_metrics.__set_status(TDataCacheStatus::DISABLED);

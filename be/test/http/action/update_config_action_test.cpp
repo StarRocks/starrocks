@@ -53,6 +53,7 @@ TEST_F(UpdateConfigActionTest, update_datacache_disk_size) {
     options.engine = "starcache";
     Status st = BlockCache::instance()->init(options);
     ASSERT_TRUE(st.ok());
+    CacheEnv::GetInstance()->set_local_cache(cache->local_cache());
 
     UpdateConfigAction action(ExecEnv::GetInstance());
 
@@ -62,8 +63,9 @@ TEST_F(UpdateConfigActionTest, update_datacache_disk_size) {
     st = action.update_config("datacache_disk_size", "100000000");
     ASSERT_TRUE(st.ok());
 
+    auto local_cache = cache->local_cache();
     std::vector<DirSpace> spaces;
-    cache->disk_spaces(&spaces);
+    local_cache->disk_spaces(&spaces);
     ASSERT_EQ(spaces.size(), 1);
     ASSERT_EQ(spaces[0].size, 100000000);
 

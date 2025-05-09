@@ -28,6 +28,7 @@ public:
 
     // Init KV cache
     virtual Status init(const CacheOptions& options) = 0;
+    virtual bool is_initialized() const = 0;
 
     // Write data to cache
     virtual Status write(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) = 0;
@@ -45,14 +46,14 @@ public:
     // Update the datacache memory quota.
     virtual Status update_mem_quota(size_t quota_bytes, bool flush_to_disk) = 0;
 
-    // Update the datacache disk space infomation, such as disk quota or disk path.
+    // Update the datacache disk space information, such as disk quota or disk path.
     virtual Status update_disk_spaces(const std::vector<DirSpace>& spaces) = 0;
 
-    virtual const DataCacheMetrics cache_metrics(int level) = 0;
+    virtual const DataCacheMetrics cache_metrics(int level) const = 0;
 
-    virtual void record_read_remote(size_t size, int64_t lateny_us) = 0;
+    virtual void record_read_remote(size_t size, int64_t latency_us) = 0;
 
-    virtual void record_read_cache(size_t size, int64_t lateny_us) = 0;
+    virtual void record_read_cache(size_t size, int64_t latency_us) = 0;
 
     virtual Status shutdown() = 0;
 
@@ -61,6 +62,10 @@ public:
 #ifdef WITH_STARCACHE
     virtual std::shared_ptr<starcache::StarCache> starcache_instance() = 0;
 #endif
+
+    virtual bool available() const = 0;
+    virtual bool mem_cache_available() const = 0;
+    virtual void disk_spaces(std::vector<DirSpace>* spaces) const = 0;
 };
 
 } // namespace starrocks

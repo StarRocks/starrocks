@@ -40,7 +40,8 @@ protected:
             _cache_opt.capacity = _mem_quota;
             ASSERT_OK(fs::create_directories(_cache_dir));
             _init_block_cache();
-            _cache = std::make_shared<StarCacheModule>(_block_cache->starcache_instance());
+            _local_cache = _block_cache->local_cache();
+            _cache = std::make_shared<StarCacheModule>(_local_cache->starcache_instance());
         }
     }
     void TearDown() override {
@@ -66,6 +67,7 @@ protected:
     std::string _cache_dir = "./object_cache_test";
     int64_t _mem_quota = 0;
     std::shared_ptr<BlockCache> _block_cache;
+    std::shared_ptr<LocalCache> _local_cache;
     std::shared_ptr<ObjectCache> _cache;
     ObjectCacheOptions _cache_opt;
     ObjectCacheWriteOptions _write_opt;

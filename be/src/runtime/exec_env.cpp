@@ -364,8 +364,8 @@ void CacheEnv::destroy() {
 
 Status CacheEnv::_init_starcache_based_object_cache() {
 #ifdef WITH_STARCACHE
-    if (_block_cache != nullptr && _block_cache->is_initialized()) {
-        _starcache_based_object_cache = std::make_shared<StarCacheModule>(_block_cache->starcache_instance());
+    if (_local_cache != nullptr && _local_cache->is_initialized()) {
+        _starcache_based_object_cache = std::make_shared<StarCacheModule>(_local_cache->starcache_instance());
     }
 #endif
     return Status::OK();
@@ -474,6 +474,9 @@ Status CacheEnv::_init_datacache() {
         cache_options.engine = config::datacache_engine;
         cache_options.eviction_policy = config::datacache_eviction_policy;
         RETURN_IF_ERROR(_block_cache->init(cache_options));
+
+        _local_cache = _block_cache->local_cache();
+
         LOG(INFO) << "datacache init successfully";
     } else {
         LOG(INFO) << "starts by skipping the datacache initialization";
@@ -498,10 +501,10 @@ void CacheEnv::try_release_resource_before_core_dump() {
     if (_page_cache != nullptr && need_release("data_cache")) {
         _page_cache->set_capacity(0);
     }
-    if (_block_cache != nullptr && _block_cache->available() && need_release("data_cache")) {
+    if (_local_cache != nullptr && _local_cache->available() && need_release("data_cache")) {
         // TODO: Currently, block cache don't support shutdown now,
         //  so here will temporary use update_mem_quota instead to release memory.
-        (void)_block_cache->update_mem_quota(0, false);
+        (void)_local_cache->update_mem_quota(0, false);
     }
 }
 
