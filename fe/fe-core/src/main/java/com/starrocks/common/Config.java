@@ -1983,6 +1983,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "The max depth that scalar operator optimization can be applied")
     public static int max_scalar_operator_optimize_depth = 256;
 
+    @ConfField(mutable = true, comment = "scalar operator maximum number of flat children.")
+    public static int max_scalar_operator_flat_children = 10000;
+
     /**
      * statistic collect flag
      */
@@ -2696,6 +2699,16 @@ public class Config extends ConfigBase {
     public static String azure_adls2_shared_key = "";
     @ConfField
     public static String azure_adls2_sas_token = "";
+    @ConfField
+    public static boolean azure_adls2_oauth2_use_managed_identity = false;
+    @ConfField
+    public static String azure_adls2_oauth2_tenant_id = "";
+    @ConfField
+    public static String azure_adls2_oauth2_client_id = "";
+    @ConfField
+    public static String azure_adls2_oauth2_client_secret = "";
+    @ConfField
+    public static String azure_adls2_oauth2_oauth2_client_endpoint = "";
 
     @ConfField(mutable = true)
     public static int starmgr_grpc_timeout_seconds = 5;

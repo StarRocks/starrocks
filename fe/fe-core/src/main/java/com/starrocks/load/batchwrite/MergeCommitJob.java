@@ -42,12 +42,12 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
 /**
- * Responsible for managing batch write operations with the isomorphic parameters.
- * It will allocate a load for each write operation, and monitor the status of the load.
+ * Responsible for managing load requests with the isomorphic parameters. It will
+ * create load tasks to merge these requests, and monitor the status of these tasks.
  */
-public class IsomorphicBatchWrite implements LoadExecuteCallback {
+public class MergeCommitJob implements MergeCommitTaskCallback {
 
-    private static final Logger LOG = LoggerFactory.getLogger(IsomorphicBatchWrite.class);
+    private static final Logger LOG = LoggerFactory.getLogger(MergeCommitJob.class);
 
     private static final String LABEL_PREFIX = "merge_commit_";
 
@@ -86,11 +86,11 @@ public class IsomorphicBatchWrite implements LoadExecuteCallback {
     /**
      * The map to store load executors, keyed by their labels.
      */
-    private final ConcurrentHashMap<String, LoadExecutor> loadExecutorMap;
+    private final ConcurrentHashMap<String, MergeCommitTask> mergeCommitTasks;
 
     private final AtomicLong lastLoadCreateTimeMs;
 
-    public IsomorphicBatchWrite(
+    public MergeCommitJob(
             long id,
             TableId tableId,
             String warehouseName,
@@ -113,7 +113,7 @@ public class IsomorphicBatchWrite implements LoadExecuteCallback {
         this.executor = executor;
         this.txnUpdateDispatch = txnUpdateDispatch;
         this.queryCoordinatorFactory = new DefaultCoordinator.Factory();
-        this.loadExecutorMap = new ConcurrentHashMap<>();
+        this.mergeCommitTasks = new ConcurrentHashMap<>();
         this.lock = new ReentrantReadWriteLock();
         this.lastLoadCreateTimeMs = new AtomicLong(System.currentTimeMillis());
     }
@@ -135,7 +135,7 @@ public class IsomorphicBatchWrite implements LoadExecuteCallback {
     }
 
     public int numRunningLoads() {
-        return loadExecutorMap.size();
+        return mergeCommitTasks.size();
     }
 
     /**
@@ -183,10 +183,10 @@ public class IsomorphicBatchWrite implements LoadExecuteCallback {
         TStatus status = new TStatus();
         lock.readLock().lock();
         try {
-            for (LoadExecutor loadExecutor : loadExecutorMap.values()) {
-                if (loadExecutor.isActive() && loadExecutor.containCoordinatorBackend(backendId)) {
+            for (MergeCommitTask mergeCommitTask : mergeCommitTasks.values()) {
+                if (mergeCommitTask.isActive() && mergeCommitTask.containCoordinatorBackend(backendId)) {
                     status.setStatus_code(TStatusCode.OK);
-                    return new RequestLoadResult(status, loadExecutor.getLabel());
+                    return new RequestLoadResult(status, mergeCommitTask.getLabel());
                 }
             }
         } finally {
@@ -195,10 +195,10 @@ public class IsomorphicBatchWrite implements LoadExecuteCallback {
 
         lock.writeLock().lock();
         try {
-            for (LoadExecutor loadExecutor : loadExecutorMap.values()) {
-                if (loadExecutor.isActive() && loadExecutor.containCoordinatorBackend(backendId)) {
+            for (MergeCommitTask mergeCommitTask : mergeCommitTasks.values()) {
+                if (mergeCommitTask.isActive() && mergeCommitTask.containCoordinatorBackend(backendId)) {
                     status.setStatus_code(TStatusCode.OK);
-                    return new RequestLoadResult(status, loadExecutor.getLabel());
+                    return new RequestLoadResult(status, mergeCommitTask.getLabel());
                 }
             }
 
@@ -223,18 +223,19 @@ public class IsomorphicBatchWrite implements LoadExecuteCallback {
 
             String label = LABEL_PREFIX + DebugUtil.printId(UUIDUtil.toTUniqueId(UUID.randomUUID()));
             TUniqueId loadId = UUIDUtil.toTUniqueId(UUID.randomUUID());
-            LoadExecutor loadExecutor = new LoadExecutor(
+            MergeCommitTask mergeCommitTask = new MergeCommitTask(
                     tableId, label, loadId, streamLoadInfo, batchWriteIntervalMs, loadParameters,
                     backendIds, queryCoordinatorFactory, this);
-            loadExecutorMap.put(label, loadExecutor);
+            mergeCommitTasks.put(label, mergeCommitTask);
             try {
-                executor.execute(loadExecutor);
+                executor.execute(mergeCommitTask);
             } catch (Exception e) {
-                loadExecutorMap.remove(label);
+                mergeCommitTasks.remove(label);
                 status.setStatus_code(TStatusCode.INTERNAL_ERROR);
                 status.setError_msgs(Collections.singletonList(e.getMessage()));
                 return new RequestLoadResult(status, null);
             }
+            MergeCommitMetricRegistry.getInstance().updateRunningTask(1L);
             status.setStatus_code(TStatusCode.OK);
             lastLoadCreateTimeMs.set(System.currentTimeMillis());
             return new RequestLoadResult(status, label);
@@ -251,17 +252,24 @@ public class IsomorphicBatchWrite implements LoadExecuteCallback {
      */
     public boolean isActive() {
         long idleTime = System.currentTimeMillis() - lastLoadCreateTimeMs.get();
-        return !loadExecutorMap.isEmpty() || idleTime < Config.merge_commit_idle_ms;
+        return !mergeCommitTasks.isEmpty() || idleTime < Config.merge_commit_idle_ms;
     }
 
     @Override
-    public void finishLoad(LoadExecutor executor) {
+    public void finish(MergeCommitTask executor) {
         lock.writeLock().lock();
         try {
-            loadExecutorMap.remove(executor.getLabel());
+            mergeCommitTasks.remove(executor.getLabel());
         } finally {
             lock.writeLock().unlock();
         }
+
+        if (executor.getFailure() == null) {
+            MergeCommitMetricRegistry.getInstance().incSuccessTask();
+        } else {
+            MergeCommitMetricRegistry.getInstance().incFailTask();
+        }
+        MergeCommitMetricRegistry.getInstance().updateRunningTask(-1L);
 
         long txnId = executor.getTxnId();
         if (!asyncMode && txnId > 0) {
@@ -277,7 +285,7 @@ public class IsomorphicBatchWrite implements LoadExecuteCallback {
     }
 
     @VisibleForTesting
-    LoadExecutor getLoadExecutor(String label) {
-        return loadExecutorMap.get(label);
+    MergeCommitTask getTask(String label) {
+        return mergeCommitTasks.get(label);
     }
 }

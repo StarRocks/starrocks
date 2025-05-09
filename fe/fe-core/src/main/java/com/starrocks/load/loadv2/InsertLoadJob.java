@@ -141,7 +141,6 @@ public class InsertLoadJob extends LoadJob {
                 this.failMsg = new FailMsg(CancelType.LOAD_RUN_FAIL, failMsg);
                 this.progress = 0;
             }
-            this.authorizationInfo = gatherAuthInfo();
             this.loadingStatus.setTrackingUrl(trackingUrl);
             this.coordinator = null;
         } finally {

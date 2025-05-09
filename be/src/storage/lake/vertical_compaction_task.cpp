@@ -38,6 +38,8 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
         _total_num_rows += rowset->num_rows();
         _total_data_size += rowset->data_size();
         _total_input_segs += rowset->is_overlapped() ? rowset->num_segments() : 1;
+        // do not check `is_overlapped`, we want actual segment count here
+        _context->stats->read_segment_count += rowset->num_segments();
     }
 
     const auto& store_paths = ExecEnv::GetInstance()->store_paths();
@@ -81,6 +83,7 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     //    number of rows counted in the metadata.
     // 2. If the number of rows is 0, the progress will not be updated
     _context->progress.update(100);
+    _context->stats->collect(writer->stats());
 
     auto txn_log = std::make_shared<TxnLog>();
     auto op_compaction = txn_log->mutable_op_compaction();

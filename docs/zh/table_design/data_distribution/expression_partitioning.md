@@ -23,7 +23,7 @@ sidebar_position: 10
 ```sql
 PARTITION BY expression
 ...
-[ PROPERTIES( { 'partition_live_number' = 'xxx' | 'partition_retention_condition' = 'expr' } ) ]
+[ PROPERTIES( 'partition_live_number' = 'xxx' ) ]
 
 expression ::=
     { date_trunc ( <time_unit> , <partition_column> ) |
@@ -56,17 +56,6 @@ expression ::=
 
 - 必填：否
 - 说明：保留最近多少数量的分区。最近是指分区按时间的先后顺序进行排序，以**当前时间**为基准，然后从后往前数指定个数的分区进行保留，其余（更早的）分区会被删除。后台会定时调度任务来管理分区数量，调度间隔可以通过 FE 动态参数 `dynamic_partition_check_interval_seconds` 配置，默认为 600 秒，即 10 分钟。假设当前为 2023 年 4 月 4 日，`partition_live_number` 设置为 `2`，分区包含 `p20230401`、`p20230402`、`p20230403`、`p20230404`，则分区 `p20230403`、`p20230404` 会保留，其他分区会删除。如果导入了脏数据，比如未来时间 4 月 5 日和 6 日的数据，导致分区包含 `p20230401`、`p20230402`、`p20230403`、`p20230404`、`p20230405`、`p20230406`，则分区 `p20230403`、`p20230404`、`p20230405`、`p20230406` 会保留，其他分区会删除。
-
-#### `partition_retention_condition`
-
-从 v3.4.1 开始，StarRocks 内表支持通用分区表达式（Common Partition Expression）TTL。
-
-- 必填：否
-- 说明：用于声明动态保留分区的表达式。不符合表达式中条件的分区将被定期删除。示例：`"partition_retention_condition" = "dt >= CURRENT_DATE() - INTERVAL 3 MONTH"`。
-  - 表达式只能包含分区列和常量。不支持非分区列。
-  - 通用分区表达式处理 List 分区和 Range 分区的方式不同：
-    - 对于 List 分区表，StarRocks 支持通过通用分区表达式过滤删除分区。
-    - 对于 Range 分区表，StarRocks 只能基于 FE 的分区裁剪功能过滤删除分区。对于分区裁剪不支持的谓词，StarRocks 无法过滤删除对应的分区。
 
 ### 使用说明
 
@@ -229,7 +218,7 @@ LastConsistencyCheckTime: NULL
 
 ## 复杂时间函数表达式分区 (自 v3.4)
 
-从 v3.4.0 版本开始，表达式分区支持返回 DATE 或 DATETIME 类型的任意表达式，以满足更加复杂的分区场景需求。
+从 v3.4.0 版本开始，表达式分区支持返回 DATE 或 DATETIME 类型的任意表达式，以满足更加复杂的分区场景需求。有关支持的时间函数，请参阅 [附录 - 支持的时间函数](#支持的时间函数)。
 
 例如，您可以定义一个 Unix 时间戳列，并直接在分区表达式中使用 from_unixtime() 函数作为分区键，而无需通过该函数生成一个 DATE 或 DATETIME 列。有关用法的更多信息，请参见以下示例。
 
@@ -327,3 +316,52 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 - 使用 `ALTER TABLE <table_name> DROP PARTITION <partition_name>` 删除列表达式分区时，分区直接被删除并且不能被恢复。
 - 自 v3.4.0、v3.3.8、v3.2.13 以及 v3.1.16 起，StarRocks 支持[备份与恢复](../../administration/management/Backup_and_restore.md)表达式分区表。
 - 如果使用表达式分区，则仅支持回滚到 2.5.4 及以后的版本。
+
+## 附录
+
+### 支持的时间函数
+
+表达式分区支持以下函数：
+
+**时间函数**:
+
+- timediff
+- datediff
+- to_days
+- years_add/sub
+- quarters_add/sub
+- months_add/sub
+- weeks_add/sub
+- date_add/sub
+- days_add/sub
+- hours_add/sub
+- minutes_add/sub
+- seconds_add/sub
+- milliseconds_add/sub
+- date_trunc
+- date_format(YmdHiSf/YmdHisf)
+- str2date(YmdHiSf/YmdHisf)
+- str_to_date(YmdHiSf/YmdHisf)
+- to_iso8601
+- to_date
+- unix_timestamp
+- from_unixtime(YmdHiSf/YmdHisf)
+- time_slice
+
+**其他函数**：
+
+- add
+- subtract
+- cast
+
+:::note
+
+- 支持多种时间函数的组合使用。
+- 上述所有时间函数均使用系统默认时区。
+- 时间函数的值的格式 `YmdHiSf` 必须以最粗时间粒度 `%Y` 开始。不允许以更细的时间粒度（例如 `%m-%d`）开始的格式。
+
+**示例**
+
+`PARTITION BY from_unixtime(cast(str as INT) + 3600, '%Y-%m-%d')`
+
+:::

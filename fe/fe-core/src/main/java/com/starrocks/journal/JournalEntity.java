@@ -306,6 +306,10 @@ public class JournalEntity implements Writable {
                 data = AlterViewInfo.read(in);
                 break;
             }
+            case OperationType.OP_SET_VIEW_SECURITY_LOG: {
+                data = GsonUtils.GSON.fromJson(Text.readString(in), AlterViewInfo.class);
+                break;
+            }
             case OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME:
                 data = ChangeMaterializedViewRefreshSchemeLog.read(in);
                 break;

@@ -326,7 +326,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 Long latestAccessTime = tableLatestAccessTime.get(identifier);
                 if (latestAccessTime == null || (System.currentTimeMillis() - latestAccessTime) / 1000 >
                         Config.background_refresh_metadata_time_secs_since_last_access_secs) {
-                    return;
+                    continue;
                 }
 
                 refreshTable(identifier.dbName, identifier.tableName, backgroundExecutor);

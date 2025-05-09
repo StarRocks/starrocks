@@ -115,6 +115,8 @@ Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
         std::string segment_name = std::string(basename(segment_path));
         _files.emplace_back(FileInfo{segment_name, segment_size, _seg_writer->encryption_meta()});
         _data_size += segment_size;
+        _stats.bytes_write += segment_size;
+        _stats.segment_count++;
         if (segment) {
             segment->set_data_size(segment_size);
             segment->set_index_size(index_size);
@@ -248,6 +250,8 @@ Status VerticalGeneralTabletWriter::finish(SegmentPB* segment) {
         std::string segment_name = std::string(basename(segment_path));
         _files.emplace_back(FileInfo{segment_name, segment_size, segment_writer->encryption_meta()});
         _data_size += segment_size;
+        _stats.bytes_write += segment_size;
+        _stats.segment_count++;
         segment_writer.reset();
     }
     _segment_writers.clear();

@@ -42,6 +42,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
+import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.IcebergTable;
@@ -196,7 +197,7 @@ public class MaterializedViewAnalyzer {
                 continue;
             }
 
-            if (!FeConstants.isReplayFromQueryDump && isExternalTableFromResource(table)) {
+            if (!FeConstants.isReplayFromQueryDump && !isSupportedExternalTables(table)) {
                 throw new SemanticException(
                         "Only supports creating materialized views based on the external table " +
                                 "which created by catalog", tableNameInfo.getPos());
@@ -210,14 +211,38 @@ public class MaterializedViewAnalyzer {
         return SUPPORTED_TABLE_TYPE.contains(table.getType()) || table instanceof OlapTable;
     }
 
-    private static boolean isExternalTableFromResource(Table table) {
+    /**
+     * Check if the table is external table from resource.
+     */
+    public static boolean isExternalTableFromResource(Table table) {
+        // external olap table is not supported to use for creating materialized view.
+        if (table instanceof ExternalOlapTable) {
+            return true;
+        }
+        // olap table is not external table
         if (table instanceof OlapTable) {
-            return false;
-        } else if (table instanceof JDBCTable || table instanceof MysqlTable) {
             return false;
         }
         String catalog = table.getCatalogName();
         return Strings.isNullOrEmpty(catalog) || isResourceMappingCatalog(catalog);
+    }
+
+    /**
+     * We can support some external tables for creating materialized view.
+     * For more details see: https://github.com/StarRocks/starrocks/issues/19581
+     * @param table : table to check
+     * @return true if the external table is supported for materialized view
+     */
+    public static boolean isSupportedExternalTables(Table table) {
+        // if the table is not external table, return true directly
+        if (!isExternalTableFromResource(table)) {
+            return true;
+        }
+        // only jdbc external table can be used for creating mv
+        if (table instanceof JDBCTable || table instanceof MysqlTable) {
+            return true;
+        }
+        return false;
     }
 
     private static void processViews(QueryStatement queryStatement, Set<BaseTableInfo> baseTableInfos,
@@ -928,6 +953,10 @@ public class MaterializedViewAnalyzer {
                 Table table = tableNameTableMap.get(tableName);
                 if (table == null) {
                     throw new SemanticException("Materialized view partition expression %s could only ref to base table",
+                            slotRef.toSql());
+                }
+                if (!FeConstants.isReplayFromQueryDump && isExternalTableFromResource(table)) {
+                    throw new SemanticException("Materialized view partition expression %s could not ref to external table",
                             slotRef.toSql());
                 }
                 if (table.isNativeTableOrMaterializedView()) {

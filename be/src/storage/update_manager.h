@@ -118,8 +118,10 @@ public:
 
     void clear_cache();
 
+    void clear_cached_del_vec_by_tablet_id(int64_t tablet_id);
     void clear_cached_del_vec(const std::vector<TabletSegmentId>& tsids);
 
+    void clear_cached_delta_column_group_by_tablet_id(int64_t tablet_id);
     void clear_cached_delta_column_group(const std::vector<TabletSegmentId>& tsids);
 
     StatusOr<size_t> clear_delta_column_group_before_version(KVStore* meta, const std::string& tablet_path,
@@ -130,6 +132,8 @@ public:
     void evict_cache(int64_t memory_urgent_level, int64_t memory_high_level);
 
     MemTracker* mem_tracker() const { return _update_mem_tracker; }
+
+    MemTracker* update_state_mem_tracker() const { return _update_state_mem_tracker.get(); }
 
     string memory_stats();
 

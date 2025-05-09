@@ -185,6 +185,7 @@ set(EXEC_FILES
         ./formats/avro/nullable_column_test.cpp
         ./formats/avro/cpp/avro_reader_test.cpp
         ./formats/avro/cpp/binary_column_reader_test.cpp
+        ./formats/avro/cpp/complex_column_reader_test.cpp
         ./formats/avro/cpp/date_column_reader_test.cpp
         ./formats/avro/cpp/numeric_column_reader_test.cpp
         ./formats/avro/cpp/utils_test.cpp
@@ -323,6 +324,7 @@ set(EXEC_FILES
         ./storage/table_reader_remote_test.cpp
         ./storage/table_reader_test.cpp
         ./storage/tablet_schema_test.cpp
+        ./storage/tablet_test.cpp
         ./storage/tablet_updates_test.cpp
         ./storage/tablet_updates_schema_change_test.cpp
         ./storage/update_manager_test.cpp
@@ -437,6 +439,7 @@ set(EXEC_FILES
         ./util/bthreads/shared_mutex_test.cpp
         ./util/bthreads/shared_future_test.cpp
         ./util/bthreads/single_flight_test.cpp
+        ./util/byte_buffer_test.cpp
         ./util/c_string_test.cpp
         ./util/cidr_test.cpp
         ./util/coding_test.cpp

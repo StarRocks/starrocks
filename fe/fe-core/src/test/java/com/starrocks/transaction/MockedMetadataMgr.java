@@ -12,17 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.load.batchwrite;
+package com.starrocks.transaction;
 
-/**
- * Callback interface for load execution.
- */
-public interface LoadExecuteCallback {
+import com.starrocks.connector.ConnectorMgr;
+import com.starrocks.connector.ConnectorTblMetaInfoMgr;
+import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.TemporaryTableMgr;
 
-    /**
-     * Called when the load operation is finished.
-     *
-     * @param loadExecutor The executor associated with the load operation.
-     */
-    void finishLoad(LoadExecutor loadExecutor);
+public class MockedMetadataMgr extends MetadataMgr {
+    public MockedMetadataMgr(LocalMetastore localMetastore, ConnectorMgr connectorMgr) {
+        super(localMetastore, new TemporaryTableMgr(), connectorMgr, new ConnectorTblMetaInfoMgr());
+    }
 }

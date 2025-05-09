@@ -17,78 +17,24 @@
 #include <gtest/gtest.h>
 
 #include <avrocpp/NodeImpl.hh>
-#include <chrono>
-#include <sstream>
 
 #include "column/column_helper.h"
+#include "formats/avro/cpp/test_avro_utils.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "testutil/assert.h"
 #include "util/timezone_utils.h"
 
 namespace starrocks::avrocpp {
 
-class DateColumnReaderTest : public ::testing::Test {
-public:
+class DateColumnReaderTest : public ColumnReaderTest, public ::testing::Test {
+protected:
+    using ColumnReaderTest::get_column_reader;
+
+private:
     ColumnReaderUniquePtr get_column_reader(const TypeDescriptor& type_desc, const cctz::time_zone& timezone,
                                             bool invalid_as_null) {
         return ColumnReader::get_nullable_column_reader(_col_name, type_desc, timezone, invalid_as_null);
     }
-
-    avrocpp::ColumnReaderUniquePtr get_column_reader(const TypeDescriptor& type_desc, bool invalid_as_null) {
-        return get_column_reader(type_desc, _timezone, invalid_as_null);
-    }
-
-    ColumnPtr create_adaptive_nullable_column(const TypeDescriptor& type_desc) {
-        return ColumnHelper::create_column(type_desc, true, false, 0, true);
-    }
-
-    int days_since_epoch(const std::string& date_str) {
-        std::tm tm = {};
-        std::istringstream ss(date_str);
-
-        ss >> std::get_time(&tm, "%Y-%m-%d");
-
-        auto tp = std::chrono::system_clock::from_time_t(std::mktime(&tm));
-        auto days = std::chrono::duration_cast<std::chrono::days>(tp.time_since_epoch());
-        return days.count();
-    }
-
-    int64_t milliseconds_since_epoch(const std::string& datetime_str) {
-        std::tm tm = {};
-        char dot = '\0';
-        int milliseconds = 0;
-
-        std::istringstream ss(datetime_str);
-        ss >> std::get_time(&tm, "%Y-%m-%d %H:%M:%S");
-        ss >> dot >> milliseconds;
-
-        time_t seconds = timegm(&tm);
-        return static_cast<int64_t>(seconds) * 1000 + milliseconds;
-    }
-
-    int64_t microseconds_since_epoch(const std::string& datetime_str) {
-        std::tm tm = {};
-        char dot = '\0';
-        int microseconds = 0;
-
-        std::istringstream ss(datetime_str);
-        ss >> std::get_time(&tm, "%Y-%m-%d %H:%M:%S");
-        ss >> dot;
-
-        std::string micro_str;
-        ss >> micro_str;
-        while (micro_str.size() < 6) {
-            micro_str += "0";
-        }
-        microseconds = std::stoi(micro_str.substr(0, 6));
-
-        time_t seconds = timegm(&tm);
-        return static_cast<int64_t>(seconds) * 1000000 + microseconds;
-    }
-
-private:
-    std::string _col_name = "k1";
-    cctz::time_zone _timezone = cctz::utc_time_zone();
 };
 
 TEST_F(DateColumnReaderTest, test_date) {

@@ -165,6 +165,6 @@ public class TransactionStateTest {
         Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(10002, 10002, ReplicaState.NORMAL));
         Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(1001, 1001, ReplicaState.ALTER));
         Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(1001, 1001, ReplicaState.SCHEMA_CHANGE));
-        Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(1001, 1001, ReplicaState.CLONE));
+        Assert.assertFalse(transactionState.tabletCommitInfosContainsReplica(1001, 1001, ReplicaState.CLONE));
     }
 }

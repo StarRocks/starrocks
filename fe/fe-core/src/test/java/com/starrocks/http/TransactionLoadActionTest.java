@@ -127,9 +127,6 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
             }
 
         };
-
-        // For ut stable
-        GlobalStateMgr.getServingState().isReady();
     }
 
     /**

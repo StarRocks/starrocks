@@ -190,6 +190,7 @@ import com.starrocks.qe.JournalObservable;
 import com.starrocks.qe.QueryStatisticsInfo;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.qe.scheduler.slot.GlobalSlotProvider;
 import com.starrocks.qe.scheduler.slot.LocalSlotProvider;
@@ -446,7 +447,7 @@ public class GlobalStateMgr {
     private final TaskManager taskManager;
     private final InsertOverwriteJobMgr insertOverwriteJobMgr;
 
-    private final LocalMetastore localMetastore;
+    private LocalMetastore localMetastore;
     private final GlobalFunctionMgr globalFunctionMgr;
 
     @Deprecated
@@ -579,6 +580,10 @@ public class GlobalStateMgr {
 
     public LocalMetastore getLocalMetastore() {
         return localMetastore;
+    }
+
+    public void setLocalMetastore(LocalMetastore localMetastore) {
+        this.localMetastore = localMetastore;
     }
 
     public TemporaryTableMgr getTemporaryTableMgr() {
@@ -1472,6 +1477,7 @@ public class GlobalStateMgr {
 
         // The memory tracker should be placed at the end
         memoryUsageTracker.start();
+        SimpleScheduler.startAutoUpdate();
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {

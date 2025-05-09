@@ -34,6 +34,7 @@ import org.apache.thrift.TException;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 public abstract class CheckpointWorker extends FrontendDaemon {
     public static final Logger LOG = LogManager.getLogger(CheckpointWorker.class);
@@ -42,7 +43,7 @@ public abstract class CheckpointWorker extends FrontendDaemon {
     protected final Journal journal;
 
     // the next checkpoint task(epoch, journalId) to do
-    private NextPoint nextPoint;
+    private final AtomicReference<NextPoint> nextPoint = new AtomicReference<>();
     protected GlobalStateMgr servingGlobalState;
     private String subDir;
 
@@ -69,7 +70,7 @@ public abstract class CheckpointWorker extends FrontendDaemon {
                     journalId, journal.getMaxJournalId()));
         }
 
-        nextPoint = new NextPoint(epoch, journalId);
+        nextPoint.set(new NextPoint(epoch, journalId));
         LOG.info("set next point to epoch:{}, journalId:{}", epoch, journalId);
     }
 
@@ -77,27 +78,24 @@ public abstract class CheckpointWorker extends FrontendDaemon {
     protected void runAfterCatalogReady() {
         init();
 
-        if (nextPoint == null) {
+        NextPoint np = nextPoint.getAndSet(null);
+        if (np == null) {
             return;
         }
 
-        if (nextPoint.journalId <= getImageJournalId()) {
-            return;
-        }
-
-        if (nextPoint.epoch != servingGlobalState.getEpoch()) {
-            return;
-        }
-
-        createImage(nextPoint.epoch, nextPoint.journalId);
+        createImage(np.epoch, np.journalId);
     }
 
-    private void init() {
+    protected void init() {
         this.servingGlobalState = GlobalStateMgr.getServingState();
         this.imageDir = servingGlobalState.getImageDir() + subDir;
     }
 
     private void createImage(long epoch, long journalId) {
+        if (!preCheckParamValid(epoch, journalId)) {
+            return;
+        }
+
         try {
             doCheckpoint(epoch, journalId);
         } catch (Exception e) {
@@ -109,6 +107,22 @@ public abstract class CheckpointWorker extends FrontendDaemon {
         cleanOldImages();
 
         finishCheckpoint(epoch, journalId, true, "success");
+    }
+
+    protected boolean preCheckParamValid(long epoch, long journalId) {
+        if (journalId < getImageJournalId()) {
+            finishCheckpoint(epoch, journalId, false, "journalId is too small");
+            return false;
+        }
+        if (journalId == getImageJournalId()) {
+            finishCheckpoint(epoch, journalId, true, "success");
+            return false;
+        }
+        if (epoch != servingGlobalState.getEpoch()) {
+            finishCheckpoint(epoch, journalId, false, "epoch outdated");
+            return false;
+        }
+        return true;
     }
 
     private void cleanOldImages() {

@@ -17,29 +17,15 @@
 #include <gtest/gtest.h>
 
 #include <avrocpp/NodeImpl.hh>
-#include <chrono>
-#include <sstream>
 
 #include "column/column_helper.h"
+#include "formats/avro/cpp/test_avro_utils.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "testutil/assert.h"
 
 namespace starrocks::avrocpp {
 
-class BinaryColumnReaderTest : public ::testing::Test {
-public:
-    ColumnReaderUniquePtr get_column_reader(const TypeDescriptor& type_desc, bool invalid_as_null) {
-        return ColumnReader::get_nullable_column_reader(_col_name, type_desc, _timezone, invalid_as_null);
-    }
-
-    ColumnPtr create_adaptive_nullable_column(const TypeDescriptor& type_desc) {
-        return ColumnHelper::create_column(type_desc, true, false, 0, true);
-    }
-
-private:
-    std::string _col_name = "k1";
-    cctz::time_zone _timezone = cctz::utc_time_zone();
-};
+class BinaryColumnReaderTest : public ColumnReaderTest, public ::testing::Test {};
 
 TEST_F(BinaryColumnReaderTest, test_normal) {
     auto type_desc = TypeDescriptor::create_varchar_type(1024);
@@ -176,6 +162,152 @@ TEST_F(BinaryColumnReaderTest, test_invalid_as_null) {
 
     ASSERT_EQ(4, column->size());
     ASSERT_EQ("[NULL, NULL, NULL, NULL]", column->debug_string());
+}
+
+TEST_F(BinaryColumnReaderTest, test_from_complex_type) {
+    auto type_desc = TypeDescriptor::create_varchar_type(1024);
+    auto column = create_adaptive_nullable_column(type_desc);
+    auto reader = get_column_reader(type_desc, false);
+
+    {
+        // record
+        avro::MultiLeaves field_nodes;
+        field_nodes.add(avro::NodePtr(new avro::NodePrimitive(avro::AVRO_INT)));
+        field_nodes.add(avro::NodePtr(new avro::NodePrimitive(avro::AVRO_STRING)));
+
+        avro::LeafNames field_names;
+        field_names.add("int_col");
+        field_names.add("string_col");
+
+        std::vector<avro::GenericDatum> datums;
+        int32_t int_v = 10;
+        datums.emplace_back(avro::GenericDatum(int_v));
+        std::string string_v = "abc";
+        datums.emplace_back(avro::GenericDatum(string_v));
+
+        auto record_schema = avro::NodePtr(
+                new avro::NodeRecord(avro::HasName(avro::Name(_col_name)), field_nodes, field_names, datums));
+
+        auto record_datum = avro::GenericRecord(record_schema);
+        for (size_t i = 0; i < datums.size(); ++i) {
+            record_datum.setFieldAt(i, datums[i]);
+        }
+
+        auto datum = avro::GenericDatum(record_schema, record_datum);
+
+        CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+    }
+
+    {
+        // array
+        avro::SingleLeaf item_node(avro::NodePtr(new avro::NodePrimitive(avro::AVRO_INT)));
+        auto array_schema = avro::NodePtr(new avro::NodeArray(item_node));
+
+        auto array_datum = avro::GenericArray(array_schema);
+        auto& array_value = array_datum.value();
+        {
+            int32_t int_v = 10;
+            array_value.emplace_back(avro::GenericDatum(int_v));
+        }
+        {
+            int32_t int_v = 11;
+            array_value.emplace_back(avro::GenericDatum(int_v));
+        }
+
+        auto datum = avro::GenericDatum(array_schema, array_datum);
+
+        CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+    }
+
+    {
+        // map
+        avro::SingleLeaf value_node(avro::NodePtr(new avro::NodePrimitive(avro::AVRO_INT)));
+        auto map_schema = avro::NodePtr(new avro::NodeMap(value_node));
+
+        auto map_datum = avro::GenericMap(map_schema);
+        auto& map_value = map_datum.value();
+        {
+            int32_t int_v = 10;
+            map_value.emplace_back("abc", avro::GenericDatum(int_v));
+        }
+        {
+            int32_t int_v = 11;
+            map_value.emplace_back("def", avro::GenericDatum(int_v));
+        }
+
+        auto datum = avro::GenericDatum(map_schema, map_datum);
+
+        CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+    }
+
+    ASSERT_EQ(3, column->size());
+    ASSERT_EQ("['{\"int_col\":10,\"string_col\":\"abc\"}', '[10,11]', '{\"abc\":10,\"def\":11}']",
+              column->debug_string());
+}
+
+TEST_F(BinaryColumnReaderTest, test_from_logical_type) {
+    auto type_desc = TypeDescriptor::create_varchar_type(1024);
+    auto column = create_adaptive_nullable_column(type_desc);
+    auto reader = get_column_reader(type_desc, false);
+
+    {
+        // date
+        int32_t int_v = days_since_epoch("2025-04-16");
+        avro::GenericDatum datum(avro::AVRO_INT, avro::LogicalType(avro::LogicalType::DATE), int_v);
+        CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+    }
+
+    {
+        // timestamp millis
+        int64_t long_v = milliseconds_since_epoch("2025-04-16 12:01:01.123");
+        avro::GenericDatum datum(avro::AVRO_LONG, avro::LogicalType(avro::LogicalType::TIMESTAMP_MILLIS), long_v);
+        CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+    }
+
+    {
+        // timestamp micros
+        int64_t long_v = microseconds_since_epoch("2025-04-16 12:01:01.123456");
+        avro::GenericDatum datum(avro::AVRO_LONG, avro::LogicalType(avro::LogicalType::TIMESTAMP_MICROS), long_v);
+        CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+    }
+
+    {
+        // bytes decimal
+        int64_t decimal_v = 1433;
+        auto encoded_bytes = encode_decimal_bytes(decimal_v);
+
+        avro::LogicalType logical_type(avro::LogicalType::DECIMAL);
+        logical_type.setPrecision(10);
+        logical_type.setScale(2);
+
+        avro::GenericDatum datum(avro::AVRO_BYTES, logical_type, encoded_bytes);
+
+        CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+    }
+
+    {
+        // fixed decimal
+        int64_t decimal_v = 1534;
+        size_t fixed_size = 8;
+        auto encoded_bytes = encode_decimal_bytes(decimal_v, fixed_size);
+
+        avro::LogicalType logical_type(avro::LogicalType::DECIMAL);
+        logical_type.setPrecision(10);
+        logical_type.setScale(2);
+
+        auto node = avro::NodePtr(new avro::NodeFixed(avro::HasName(avro::Name(_col_name)), avro::HasSize(fixed_size)));
+        node->setLogicalType(logical_type);
+
+        avro::GenericFixed fixed(node, encoded_bytes);
+
+        avro::GenericDatum datum(avro::AVRO_FIXED, logical_type, fixed);
+
+        CHECK_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+    }
+
+    ASSERT_EQ(5, column->size());
+    ASSERT_EQ("['2025-04-16', '2025-04-16 12:01:01.123000', '2025-04-16 12:01:01.123456', '14.330000', '15.340000']",
+              column->debug_string());
 }
 
 } // namespace starrocks::avrocpp

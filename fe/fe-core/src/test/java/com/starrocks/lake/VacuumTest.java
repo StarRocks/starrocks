@@ -119,6 +119,7 @@ public class VacuumTest {
         mockResponse.vacuumedFiles = 10L;
         mockResponse.vacuumedFileSize = 1024L;
         mockResponse.vacuumedVersion = 5L;
+        mockResponse.extraFileSize = 1024L;
         mockResponse.tabletInfos = new ArrayList<>();
 
         Future<VacuumResponse> mockFuture = mock(Future.class);
@@ -157,6 +158,7 @@ public class VacuumTest {
         mockResponse.vacuumedFiles = 10L;
         mockResponse.vacuumedFileSize = 1024L;
         mockResponse.vacuumedVersion = 5L;
+        mockResponse.extraFileSize = 1024L;
         mockResponse.tabletInfos = new ArrayList<>();
 
         Future<VacuumResponse> mockFuture = mock(Future.class);
