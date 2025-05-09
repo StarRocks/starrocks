@@ -123,7 +123,9 @@ JITEngine::~JITEngine() {
     delete _func_cache;
 }
 
+#ifndef BE_TEST
 constexpr int64_t JIT_CACHE_LOWEST_LIMIT = (1UL << 34); // 16GB
+#endif
 
 Status JITEngine::init() {
     if (_initialized) {
