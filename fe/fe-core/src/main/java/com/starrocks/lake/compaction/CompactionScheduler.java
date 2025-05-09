@@ -184,29 +184,39 @@ public class CompactionScheduler extends Daemon {
                 compactionManager.enableCompactionAfter(partition, Config.lake_compaction_interval_ms_on_success * factor);
             }
         }
+        tryCompactionSchedule();
+    }
 
+    @VisibleForTesting
+    protected void tryCompactionSchedule() {
         if (isScheduleDisabled()) {
             LOG.debug("Lake compaction schedule has been disabled");
             return;
         }
 
-        // Create new compaction tasks.
+        // Chose and group partitions by warehouse id
+        Map<Long, List<PartitionStatisticsSnapshot>> warehouseToPartitionsMap =
+                compactionManager.choosePartitionsToCompact(runningCompactions.keySet(), disabledIds)
+                        .stream()
+                        .collect(Collectors.groupingBy(this::getCompactionWarehouseId));
+
+        // Parallelize the compaction schedule for each warehouse
+        warehouseToPartitionsMap.entrySet().parallelStream().forEach(entry ->
+                tryScheduleCompactionInWarehouse(entry.getKey(), entry.getValue()));
+    }
+
+    private void tryScheduleCompactionInWarehouse(long warehouseId,
+                                                 List<PartitionStatisticsSnapshot> partitionStatisticsSnapshots) {
         int index = 0;
-        List<PartitionStatisticsSnapshot> partitions =
-                compactionManager.choosePartitionsToCompact(runningCompactions.keySet(), disabledIds);
-        while (index < partitions.size() && !checkIfAllWarehouseTaskLimitExceeded()) {
-            PartitionStatisticsSnapshot partitionStatisticsSnapshot = partitions.get(index++);
-            long warehouseId = getCompactionWarehouseId(partitionStatisticsSnapshot);
-            int warehouseTaskLimit = compactionTaskLimitPerWarehouse(warehouseId);
-            int runningTaskCountInWarehouse = (numRunningTasksPerWarehouse().get(warehouseId) == null)
-                    ? 0 : numRunningTasksPerWarehouse().get(warehouseId);
-            if (runningTaskCountInWarehouse > warehouseTaskLimit) {
-                continue;
-            }
+        int compactionLimit = compactionTaskLimit(warehouseId);
+        int numRunningTasks = numRunningTasks(warehouseId);
+        while (numRunningTasks < compactionLimit && index < partitionStatisticsSnapshots.size()) {
+            PartitionStatisticsSnapshot partitionStatisticsSnapshot = partitionStatisticsSnapshots.get(index++);
             CompactionJob job = startCompaction(partitionStatisticsSnapshot, warehouseId);
             if (job == null) {
                 continue;
             }
+            numRunningTasks += job.getNumTabletCompactionTasks();
             runningCompactions.put(partitionStatisticsSnapshot.getPartition(), job);
             if (LOG.isDebugEnabled()) {
                 Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
@@ -249,7 +259,7 @@ public class CompactionScheduler extends Daemon {
      * If enabled, it retrieves the warehouse ID associated with the partition's statistics.
      * <p>
      * If the warehouse no longer exists, or if the warehouse ID is unassigned (default -1), it falls back to using
-     * the default compaction warehouse.
+     * the default compaction warehouse (configured by `Config.lake_compaction_warehouse`).
      *
      * @param partitionStatisticsSnapshot Partition statistics containing metadata for compaction decision
      * @return The selected warehouse ID for executing the compaction task
@@ -278,28 +288,12 @@ public class CompactionScheduler extends Daemon {
     }
 
     @VisibleForTesting
-    protected Map<Long, Integer> numRunningTasksPerWarehouse() {
+    protected int numRunningTasks(long warehouseId) {
         Map<Long, Integer> warehouseIdToNumRunningTasks = new HashMap<>();
         for (CompactionJob job : runningCompactions.values()) {
             warehouseIdToNumRunningTasks.merge(job.getWarehouseId(), job.getNumTabletCompactionTasks(), Integer::sum);
         }
-        return warehouseIdToNumRunningTasks;
-    }
-
-    @VisibleForTesting
-    protected boolean checkIfAllWarehouseTaskLimitExceeded() {
-        Map<Long, Integer> runningTasksPerWarehouse = numRunningTasksPerWarehouse();
-        assert runningTasksPerWarehouse != null;
-        if (runningTasksPerWarehouse.isEmpty()) {
-            return false;
-        }
-        for (long warehouseId : runningTasksPerWarehouse.keySet()) {
-            int runningTasks = runningTasksPerWarehouse.get(warehouseId);
-            if (runningTasks < compactionTaskLimitPerWarehouse(warehouseId)) {
-                return false;
-            }
-        }
-        return true;
+        return warehouseIdToNumRunningTasks.get(warehouseId) == null ? 0 : warehouseIdToNumRunningTasks.get(warehouseId);
     }
 
     private void abortTransactionIgnoreException(CompactionJob job, String reason) {
@@ -322,7 +316,7 @@ public class CompactionScheduler extends Daemon {
      * @param warehouseId Target warehouse identifier
      * @return Maximum allowed concurrent compaction tasks for the warehouse
      */
-    protected int compactionTaskLimitPerWarehouse(long warehouseId) {
+    protected int compactionTaskLimit(long warehouseId) {
         if (Config.lake_compaction_max_tasks >= 0) {
             return Config.lake_compaction_max_tasks;
         }

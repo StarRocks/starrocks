@@ -46,6 +46,7 @@ public class MockedWarehouseManager extends WarehouseManager {
     private Long computeNodeId = 1000L;
     private boolean throwUnknownWarehouseException = false;
     private boolean warehouseExisted = true;
+    private long compactionWarehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
     public MockedWarehouseManager() {
         super();
@@ -168,5 +169,15 @@ public class MockedWarehouseManager extends WarehouseManager {
 
     public void setWarehouseExisted(boolean warehouseExisted) {
         this.warehouseExisted = warehouseExisted;
+    }
+
+    @Override
+    public long getCompactionWarehouseID() {
+        return compactionWarehouseId == WarehouseManager.DEFAULT_WAREHOUSE_ID ?
+                super.getCompactionWarehouseID() : compactionWarehouseId;
+    }
+
+    public void setCompactionWarehouseID(long compactionWarehouseId) {
+        this.compactionWarehouseId = compactionWarehouseId;
     }
 }
