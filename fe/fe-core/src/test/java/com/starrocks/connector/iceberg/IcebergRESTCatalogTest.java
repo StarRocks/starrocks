@@ -18,20 +18,20 @@ package com.starrocks.connector.iceberg;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergView;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.AlreadyExistsException;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.ColWithComment;
-import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.parser.NodePosition;
@@ -41,7 +41,6 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
@@ -65,7 +64,7 @@ import java.util.concurrent.Executors;
 import static com.starrocks.catalog.Table.TableType.ICEBERG_VIEW;
 import static com.starrocks.catalog.Type.INT;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
-import static org.mockito.Mockito.mock;
+
 
 public class IcebergRESTCatalogTest {
     private static final String CATALOG_NAME = "iceberg_rest_catalog";
@@ -285,95 +284,85 @@ public class IcebergRESTCatalogTest {
                 restCatalog.listNamespaces();
                 result = new StarRocksConnectorException("Failed to list all namespaces using REST Catalog",
                         new RuntimeException("Failed to rename view using REST Catalog, exception:"));
-                new RuntimeException("Failed to list all namespaces using REST Catalog, exception:");
-                minTimes = 1;
-
-                restCatalog.listNamespaces((Namespace) any);
-                result = new StarRocksConnectorException("Failed to list all namespaces using REST Catalog",
-                        new RuntimeException("Failed to list all namespaces using REST Catalog, exception:"));
                 minTimes = 1;
 
                 restCatalog.listTables((Namespace) any);
                 result = new StarRocksConnectorException("Failed to list tables using REST Catalog",
                         new RuntimeException("Failed to list tables using REST Catalog, exception:"));
                 minTimes = 1;
+            }
+        };
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Failed to list all namespaces using REST Catalog",
+                () -> metadata.listDbNames(new ConnectContext()));
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Failed to list tables using REST Catalog",
+                () -> metadata.listTableNames(new ConnectContext(), "db"));
+
+        new Expectations() {
+            {
+                restCatalog.listTables((Namespace) any);
+                result = ImmutableList.of(TableIdentifier.of(Namespace.of("db"), "tbl1"));
+                minTimes = 1;
 
                 restCatalog.listViews((Namespace) any);
                 result = new StarRocksConnectorException("Failed to list views using REST Catalog",
                         new RuntimeException("Failed to list views using REST Catalog, exception:"));
                 minTimes = 1;
+            }
+        };
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Failed to list views using REST Catalog",
+                () -> metadata.listTableNames(new ConnectContext(), "db"));
+
+
+        new Expectations() {
+            {
+                restCatalog.listNamespaces();
+                result = ImmutableList.of(Namespace.of("db1"));
+                minTimes = 1;
 
                 restCatalog.createNamespace((Namespace) any, (Map<String, String>) any);
+                result = new StarRocksConnectorException("Failed to create namespace using REST Catalog",
+                        new RuntimeException("Failed to create namespace using REST Catalog, exception:"));
+                minTimes = 1;
+            }
+        };
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Failed to create namespace using REST Catalog",
+                () -> metadata.createDb("db2", Map.of()));
+
+        new Expectations() {
+            {
+                restCatalog.buildTable((TableIdentifier) any, (Schema) any);
                 result = new StarRocksConnectorException("Failed to create table using REST Catalog",
                         new RuntimeException("Failed to create table using REST Catalog, exception:"));
                 minTimes = 1;
+            }
+        };
 
-                restCatalog.createNamespace((Namespace) any);
-                result = new StarRocksConnectorException("Failed to create table using REST Catalog",
-                        new RuntimeException("Failed to create table using REST Catalog, exception:"));
-                minTimes = 1;
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(restCatalog, new Configuration());
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Failed to create table using REST Catalog",
+                () -> icebergRESTCatalog.createTable("db", "tbl", null, null, null,
+                        Maps.newHashMap()));
 
-                restCatalog.createTable((TableIdentifier) any, (Schema) any, (PartitionSpec) any, (Map) any);
-                result = new StarRocksConnectorException("Failed to create table using REST Catalog",
-                        new RuntimeException("Failed to create table using REST Catalog, exception:"));
-                minTimes = 1;
-
-                restCatalog.createTable((TableIdentifier) any, (Schema) any, (PartitionSpec) any);
-                result = new StarRocksConnectorException("Failed to create table using REST Catalog",
-                        new RuntimeException("Failed to create table using REST Catalog, exception:"));
-                minTimes = 1;
-
-                restCatalog.createTable((TableIdentifier) any, (Schema) any);
-                result = new StarRocksConnectorException("Failed to create table using REST Catalog",
-                        new RuntimeException("Failed to create table using REST Catalog, exception:"));
-                minTimes = 1;
-
+        new Expectations() {
+            {
                 restCatalog.buildView((TableIdentifier) any);
                 result = new StarRocksConnectorException("Failed to create view using REST Catalog",
                         new RuntimeException("Failed to create view using REST Catalog, exception:"));
                 minTimes = 1;
             }
         };
-        expectedEx.expect(StarRocksConnectorException.class);
-        expectedEx.expectMessage("Failed to list all namespaces using REST Catalog");
-        metadata.listDbNames(new ConnectContext());
-
-        expectedEx.expect(StarRocksConnectorException.class);
-        expectedEx.expectMessage("Failed to list tables using REST Catalog");
-        metadata.listTableNames(new ConnectContext(), "db");
-
-        expectedEx.expect(StarRocksConnectorException.class);
-        expectedEx.expectMessage("Failed to list tables using REST Catalog");
-        try {
-            metadata.createDb("db2", Map.of());
-        } catch (AlreadyExistsException e) {
-            Assert.fail();
-        }
-
-        expectedEx.expect(StarRocksConnectorException.class);
-        expectedEx.expectMessage("Failed to list tables using REST Catalog");
-        try {
-            metadata.createDb("db2", Map.of());
-        } catch (AlreadyExistsException e) {
-            Assert.fail();
-        }
-
-        CreateTableStmt createTableStmt = mock(CreateTableStmt.class);
-        expectedEx.expect(StarRocksConnectorException.class);
-        expectedEx.expectMessage("Failed to create table using REST Catalog");
-        try {
-            metadata.createTable(createTableStmt);
-        } catch (DdlException e) {
-            Assert.fail();
-        }
-
-        CreateViewStmt createViewStmt = mock(CreateViewStmt.class);
-        expectedEx.expect(StarRocksConnectorException.class);
-        expectedEx.expectMessage("Failed to create view using REST Catalog");
-        try {
-            metadata.createView(createViewStmt);
-        } catch (DdlException e) {
-            Assert.fail();
-        }
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Failed to create view using REST Catalog",
+                () -> icebergRESTCatalog.createView("catalog", new ConnectorViewDefinition(
+                        "catalog", "db", "view", "comment",
+                        Lists.newArrayList(new Column("k1", INT)), "select * from t",
+                        AlterViewStmt.AlterDialectType.NONE, Maps.newHashMap()), false));
     }
 }
