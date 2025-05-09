@@ -28,10 +28,14 @@
 #include <arrow/result.h>
 
 #include "common/compiler_util.h"
+#ifndef __clang__
 DIAGNOSTIC_PUSH
 DIAGNOSTIC_IGNORE("-Wclass-memaccess")
+#endif
 #include <arrow/json/test_common.h>
+#ifndef __clang__
 DIAGNOSTIC_POP
+#endif
 
 #include <arrow/ipc/json_simple.h>
 #include <arrow/memory_pool.h>
