@@ -21,6 +21,8 @@
 #include <set>
 
 #include "cache/block_cache/block_cache.h"
+#include "cache/block_cache/starcache_wrapper.h"
+#include "cache/block_cache/test_cache_utils.h"
 #include "cache/object_cache/starcache_module.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
@@ -3343,14 +3345,9 @@ TEST_F(FileReaderTest, TestStructSubfieldNoDecodeNotOutput) {
 }
 
 TEST_F(FileReaderTest, TestReadFooterCache) {
-    auto block_cache = std::make_shared<BlockCache>();
-    CacheOptions options;
-    options.mem_space_size = 100 * 1024 * 1024;
-    options.max_concurrent_inserts = 100000;
-    options.engine = "starcache";
-    Status status = block_cache->init(options);
-    ASSERT_TRUE(status.ok());
-    auto local_cache = block_cache->local_cache();
+    CacheOptions options = TestCacheUtils::create_simple_options(256 * KB, 100 * MB);
+    auto local_cache = std::make_shared<StarCacheWrapper>();
+    ASSERT_OK(local_cache->init(options));
     auto cache = std::make_shared<StarCacheModule>(local_cache->starcache_instance());
 
     auto file = _create_file(_file1_path);
@@ -3358,12 +3355,11 @@ TEST_F(FileReaderTest, TestReadFooterCache) {
                                                     std::filesystem::file_size(_file1_path), _mock_datacache_options());
     file_reader->_cache = cache.get();
 
-    // first init, populcate footer cache
+    // first init, populate footer cache
     auto* ctx = _create_file1_base_context();
     ctx->stats->footer_cache_read_count = 0;
     ctx->stats->footer_cache_write_count = 0;
-    status = file_reader->init(ctx);
-    ASSERT_TRUE(status.ok());
+    ASSERT_OK(file_reader->init(ctx));
     ASSERT_EQ(ctx->stats->footer_cache_read_count, 0);
     ASSERT_EQ(ctx->stats->footer_cache_write_count, 1);
 

@@ -16,7 +16,8 @@
 
 #include <gtest/gtest.h>
 
-#include "cache/block_cache/block_cache.h"
+#include "cache/block_cache/starcache_wrapper.h"
+#include "cache/block_cache/test_cache_utils.h"
 #include "cache/object_cache/lrucache_module.h"
 #include "cache/object_cache/starcache_module.h"
 #include "fs/fs_util.h"
@@ -39,14 +40,13 @@ protected:
             _mem_quota = 64 * 1024 * 1024;
             _cache_opt.capacity = _mem_quota;
             ASSERT_OK(fs::create_directories(_cache_dir));
-            _init_block_cache();
-            _local_cache = _block_cache->local_cache();
+            _init_local_cache();
             _cache = std::make_shared<StarCacheModule>(_local_cache->starcache_instance());
         }
     }
     void TearDown() override {
         if (_mode == ObjectCacheModuleType::STARCACHE) {
-            ASSERT_OK(_block_cache->shutdown());
+            ASSERT_OK(_local_cache->shutdown());
             ASSERT_OK(fs::remove_all(_cache_dir));
         }
     }
@@ -55,7 +55,7 @@ protected:
     void _insert_data();
     void _check_not_found(int value);
     void _check_found(int value);
-    void _init_block_cache();
+    void _init_local_cache();
 
     static std::string int_to_string(size_t length, int num) {
         std::ostringstream oss;
@@ -66,8 +66,7 @@ protected:
     ObjectCacheModuleType _mode;
     std::string _cache_dir = "./object_cache_test";
     int64_t _mem_quota = 0;
-    std::shared_ptr<BlockCache> _block_cache;
-    std::shared_ptr<LocalCache> _local_cache;
+    std::shared_ptr<StarCacheWrapper> _local_cache;
     std::shared_ptr<ObjectCache> _cache;
     ObjectCacheOptions _cache_opt;
     ObjectCacheWriteOptions _write_opt;
@@ -78,18 +77,12 @@ protected:
     size_t _kv_size = 0;
 };
 
-void ObjectCacheTest::_init_block_cache() {
-    _block_cache = std::make_shared<BlockCache>();
+void ObjectCacheTest::_init_local_cache() {
+    CacheOptions options = TestCacheUtils::create_simple_options(256 * KB, _mem_quota);
+    options.disk_spaces.push_back({.path = _cache_dir, .size = 50 * MB});
 
-    CacheOptions options;
-    options.mem_space_size = _mem_quota;
-    size_t quota = 50 * 1024 * 1024;
-    options.disk_spaces.push_back({.path = _cache_dir, .size = quota});
-    options.block_size = 256 * 1024;
-    options.max_concurrent_inserts = 100000;
-    options.max_flying_memory_mb = 100;
-    options.engine = "starcache";
-    ASSERT_OK(_block_cache->init(options));
+    _local_cache = std::make_shared<StarCacheWrapper>();
+    ASSERT_OK(_local_cache->init(options));
 }
 
 void ObjectCacheTest::_insert_data() {

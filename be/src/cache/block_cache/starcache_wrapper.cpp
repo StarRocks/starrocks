@@ -16,6 +16,7 @@
 
 #include <filesystem>
 
+#include "cache/block_cache/disk_space_monitor.h"
 #include "cache/status.h"
 #include "common/logging.h"
 #include "common/statusor.h"
@@ -60,6 +61,9 @@ Status StarCacheWrapper::init(const CacheOptions& options) {
 
     _refresh_quota();
     _initialized.store(true, std::memory_order_relaxed);
+
+    LOG(INFO) << "init starcache engine, block_size: " << options.block_size
+              << ", disk_spaces: " << DiskSpaceMonitor::to_string(options.disk_spaces);
     return Status::OK();
 }
 
