@@ -44,6 +44,8 @@ public:
 
     StatusOr<int64_t> get_size() override { return _contents.size(); }
 
+    Status touch_cache(int64_t offset, size_t length) override { return Status::InvalidArgument("TestInputStream"); }
+
 private:
     std::string _contents;
     int64_t _block_size;
@@ -117,6 +119,13 @@ PARALLEL_TEST(SeekableInputStreamTest, test_encrypted) {
 
     EncryptSeekableInputStream encrypted(std::move(s), {EncryptionAlgorithmPB::AES_128, "0000000000000000"});
     ASSERT_TRUE(encrypted.is_encrypted());
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(SeekableInputStreamTest, test_touch_cache) {
+    TestInputStream in("0123456789", 5);
+    SeekableInputStreamWrapper wrapper(&in, Ownership::kDontTakeOwnership);
+    ASSERT_TRUE(wrapper.touch_cache(0, 0).is_invalid_argument());
 }
 
 } // namespace starrocks::io
