@@ -153,9 +153,11 @@ Status ExecStateReporter::report_exec_status(const TReportExecStatusParams& para
     TReportExecStatusResult res;
     Status rpc_status;
 
+    // since the caller(report_exec_state) has already retried {@code config::report_exec_rpc_request_retry_num} times,
+    // no need to retry again.
     rpc_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
             fe_addr, [&res, &params](FrontendServiceConnection& client) { client->reportExecStatus(res, params); },
-            config::thrift_rpc_timeout_ms);
+            config::thrift_rpc_timeout_ms, 1);
 
     if (rpc_status.ok()) {
         rpc_status = Status(res.status);

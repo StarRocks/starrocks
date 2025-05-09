@@ -1191,6 +1191,11 @@ CONF_mInt64(mem_limited_chunk_queue_block_size, "8388608");
 
 CONF_Int32(internal_service_query_rpc_thread_num, "-1");
 CONF_Int32(internal_service_datacache_rpc_thread_num, "-1");
+// The retry times of rpc request to report exec rpc request to FE. The default value is 10,
+// which means that the rpc request will be retried 10 times if it fails if it's fragment instatnce finish rpc.
+// Report exec rpc request is important for load job, if one fragment instance finish report failed,
+// the load job will be hang until timeout.
+CONF_mInt32(report_exec_rpc_request_retry_num, "10");
 
 /*
  * When compile with ENABLE_STATUS_FAILED, every use of RETURN_INJECT has probability of 1/cardinality_of_inject
