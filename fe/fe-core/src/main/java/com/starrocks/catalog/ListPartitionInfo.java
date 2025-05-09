@@ -385,7 +385,7 @@ public class ListPartitionInfo extends PartitionInfo {
         }
         sb.append("(");
         sb.append(MetaUtils.getColumnsByColumnIds(table, partitionColumnIds).stream()
-                .map(item -> "`" + item.getName() + "`")
+                .map(item -> MetaUtils.getPartitionColumnToSql(item))
                 .collect(Collectors.joining(",")));
         sb.append(")");
         if (!isAutomaticPartition) {

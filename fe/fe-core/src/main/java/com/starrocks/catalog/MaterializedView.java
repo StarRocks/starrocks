@@ -111,7 +111,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 import static com.starrocks.backup.mv.MVRestoreUpdater.checkMvDefinedQuery;
 import static com.starrocks.backup.mv.MVRestoreUpdater.restoreBaseTableInfoIfNoRestored;
@@ -1348,11 +1347,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         StringBuilder sb = new StringBuilder();
         sb.append("CREATE MATERIALIZED VIEW `").append(getName()).append("` (");
         List<String> colDef = Lists.newArrayList();
-        List<Integer> outputIndices =
-                CollectionUtils.isNotEmpty(queryOutputIndices) ? queryOutputIndices :
-                        IntStream.range(0, getBaseSchema().size()).boxed().collect(Collectors.toList());
-        for (int index : outputIndices) {
-            Column column = getBaseSchema().get(index);
+
+        // NOTE: only output non-generated columns
+        // use ordered columns to keep the same order as the original create statement
+        List<Column> orderedColumns = getOrderedOutputColumns();
+        for (Column column : orderedColumns) {
             StringBuilder colSb = new StringBuilder();
             // Since mv supports complex expressions as the output column, add `` to support to replay it.
             colSb.append("`" + column.getName() + "`");
