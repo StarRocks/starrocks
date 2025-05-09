@@ -1190,7 +1190,7 @@ public class DefaultCoordinator extends Coordinator {
         // For DML jobs, finishInstance is ensured to be called only after instance finished and should not be
         // called repeatedly. Otherwise, it will cause commit with wrong commit info.
         if (jobSpec.isLoadType() && execState.getState().isFinished() && queryProfile.isFinished()) {
-            throw new RuntimeException(String.format("updateFinishInstance called after fragment instatnce is finished:%s, query_id:%s",
+            throw new RuntimeException(String.format("updateFinishInstance called after fragment is finished:%s, query_id:%s",
                     instanceId, DebugUtil.printId(params.getQuery_id())));
         }
         try {
