@@ -18,8 +18,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.exception.CatalogException;
-import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
@@ -135,7 +133,7 @@ public interface IcebergCatalog extends MemoryTrackable {
             } catch (RESTException re) {
                 DEFAULT_LOGGER.error("Failed to create view using Iceberg Catalog, for dbName {} viewName {}",
                         definition.getDatabaseName(), definition.getViewName(), re);
-                throw new CatalogException(InternalErrorCode.ICEBERG_CATALOG_ERROR,
+                throw new StarRocksConnectorException("Failed to create view using Iceberg Catalog",
                         new RuntimeException("Failed to create view using Iceberg Catalog, exception: " + re.getMessage(), re));
             }
         } else {
