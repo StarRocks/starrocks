@@ -339,8 +339,7 @@ public class StarRocksIcebergTableScan
             return null;
         }
 
-        // only the table created by flink has equality ids in the table schema.
-        if (!deleteFileIndex.noEqDeletes() && enableCacheDataFileIdentifierColumnMetrics &&
+        if (deleteFileIndex.hasEqualityDeletes() && enableCacheDataFileIdentifierColumnMetrics &&
                 !tableSchema().identifierFieldIds().isEmpty()) {
             this.dataFileCacheWithMetrics = true;
             return tableSchema().identifierFieldIds();

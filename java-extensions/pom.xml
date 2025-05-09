@@ -34,7 +34,7 @@
         <java-extensions.home>${basedir}</java-extensions.home>
         <aws-v2-sdk.version>2.29.52</aws-v2-sdk.version>
         <hadoop.version>3.4.1</hadoop.version>
-        <iceberg.version>1.7.1</iceberg.version>
+        <iceberg.version>1.9.0</iceberg.version>
         <log4j2.version>2.23.1</log4j2.version>
         <junit.version>5.10.3</junit.version>
         <hive-apache.version>3.1.2-22</hive-apache.version>
@@ -55,7 +55,7 @@
         <jetty.version>9.4.57.v20241219</jetty.version>
         <parquet.version>1.15.2</parquet.version>
         <airlift.version>0.27</airlift.version>
-        <avro.version>1.11.4</avro.version>
+        <avro.version>1.12.0</avro.version>
         <luben.zstd.jni.version>1.5.4-2</luben.zstd.jni.version>
         <kryo.version>4.0.2</kryo.version>
     </properties>

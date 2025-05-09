@@ -42,6 +42,7 @@ public class IcebergAwsClientFactoryTest {
         IcebergAwsClientFactory factory = new IcebergAwsClientFactory();
         factory.initialize(properties);
         Assert.assertNotNull(factory.s3());
+        Assert.assertNotNull(factory.s3Async());
         Assert.assertNotNull(factory.glue());
 
         Assert.assertNull(factory.dynamo());
