@@ -30,6 +30,7 @@ public class TransactionResult extends RestBaseResult {
     public static final String LABEL_KEY = "Label";
 
     private final Map<String, Object> resultMap;
+    private Exception exception = null;
 
     public TransactionResult() {
         status = ActionStatus.OK;
@@ -39,6 +40,12 @@ public class TransactionResult extends RestBaseResult {
 
     public void addResultEntry(String key, Object value) {
         resultMap.put(key, value);
+    }
+
+    public void setError(ActionStatus status, String errMsg, Exception e) {
+        this.status = status;
+        this.exception = e;
+        this.msg = errMsg;
     }
 
     public void setErrorMsg(String errMsg) {
@@ -56,6 +63,10 @@ public class TransactionResult extends RestBaseResult {
 
     public boolean stateOK() {
         return status == ActionStatus.OK;
+    }
+
+    public Exception getException() {
+        return exception;
     }
 
     public String toJson() {
