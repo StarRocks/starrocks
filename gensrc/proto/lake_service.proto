@@ -288,6 +288,8 @@ message VacuumRequest {
     optional int64 partition_id = 6;
     // The tablet infos to be vacuumed.
     repeated TabletInfoPB tablet_infos = 7;
+    // Whether enable partition aggregation
+    optional bool enable_partition_aggregation = 8;
 }
 
 message VacuumResponse {
