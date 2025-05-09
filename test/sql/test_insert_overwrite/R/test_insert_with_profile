@@ -1,0 +1,56 @@
+-- name: test_insert_with_profile
+create table t1(k int) 
+distributed by hash(k) buckets 96;
+-- result:
+-- !result
+create table t2(k int) 
+distributed by hash(k) buckets 96;
+-- result:
+-- !result
+set enable_profile=true;
+-- result:
+-- !result
+set big_query_profile_threshold='1s';
+-- result:
+-- !result
+set runtime_profile_report_interval=1;
+-- result:
+-- !result
+set pipeline_dop=96;
+-- result:
+-- !result
+insert into t1 select * from TABLE(generate_series(0, 10));
+-- result:
+-- !result
+select count(*) from t1;
+-- result:
+11
+-- !result
+admin enable failpoint 'report_exec_state_failed_status';
+-- result:
+-- !result
+insert into t2 select a.k from t1 a join t1 b on a.k = b.k where a.k = 0 and b.k = 0;
+-- result:
+-- !result
+insert into t2 select a.k from t1 a join t1 b on a.k = b.k where a.k = 0 and b.k = 0;
+-- result:
+-- !result
+insert into t2 select a.k from t1 a join t1 b on a.k = b.k where a.k = 0 and b.k = 0;
+-- result:
+-- !result
+insert into t2 select a.k from t1 a join t1 b on a.k = b.k where a.k = 0 and b.k = 0;
+-- result:
+-- !result
+insert into t2 select a.k from t1 a join t1 b on a.k = b.k where a.k = 0 and b.k = 0;
+-- result:
+-- !result
+insert into t2 select a.k from t1 a join t1 b on a.k = b.k where a.k = 0 and b.k = 0;
+-- result:
+-- !result
+insert into t2 select a.k from t1 a join t1 b on a.k = b.k where a.k = 0 and b.k = 0;
+-- result:
+-- !result
+select count(*) from t2;
+-- result:
+7
+-- !result
