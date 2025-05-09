@@ -21,9 +21,9 @@
 #include <set>
 
 #include "cache/block_cache/block_cache.h"
-#include "cache/block_cache/starcache_wrapper.h"
 #include "cache/block_cache/test_cache_utils.h"
 #include "cache/object_cache/starcache_module.h"
+#include "cache/starcache_wrapper.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "common/logging.h"

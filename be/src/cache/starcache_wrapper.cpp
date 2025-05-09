@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "cache/block_cache/starcache_wrapper.h"
+#include "cache/starcache_wrapper.h"
 
 #include <filesystem>
 
-#include "cache/block_cache/disk_space_monitor.h"
+#include "cache/disk_space_monitor.h"
 #include "cache/status.h"
 #include "common/logging.h"
 #include "common/statusor.h"
