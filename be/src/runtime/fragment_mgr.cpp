@@ -768,17 +768,11 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
                     fe_connection->batchReportExecStatus(res, report_batch);
                 }
 
-<<<<<<< HEAD
             } catch (TException& e) {
                 (void)fe_connection.reopen(config::thrift_rpc_timeout_ms);
                 std::stringstream msg;
                 msg << "ReportExecStatus() to " << fragment_exec_state->coord_addr() << " failed:\n" << e.what();
                 LOG(WARNING) << msg.str();
-=======
-            if (!rpc_status.ok()) {
-                LOG(WARNING) << "batch report exec status rpc error:" << rpc_status;
-                continue;
->>>>>>> 1d15b05da7 ([BugFix] Fix possible duplicate finishInstance calls (#58753))
             }
 
             const std::vector<TStatus>& status_list = res.status_list;
