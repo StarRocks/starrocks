@@ -19,9 +19,11 @@ import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionTableScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -65,24 +67,26 @@ public class DeferProjectAfterTopNRule extends TransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        LogicalTopNOperator topNOperator = (LogicalTopNOperator) input.getOp();
-
-        LogicalProjectOperator projectOperator = (LogicalProjectOperator) input.getInputs().get(0).getOp();
+        LogicalTopNOperator topNOperator = input.getOp().cast();
+        OptExpression projectExpression = input.getInputs().get(0);
+        LogicalProjectOperator projectOperator = projectExpression.getOp().cast();
         Map<ColumnRefOperator, ScalarOperator> projectMap = projectOperator.getColumnRefMap();
 
         ColumnRefSet topNRequiredInputColumns = topNOperator.getRequiredChildInputColumns();
 
         Set<String> columnsWithAccessPath = new HashSet<>();
 
-        if (input.getInputs().get(0).getInputs().get(0).getOp() instanceof LogicalOlapScanOperator) {
-            LogicalOlapScanOperator olapScanOperator =
-                    (LogicalOlapScanOperator) input.getInputs().get(0).getInputs().get(0).getOp();
+        Operator projectChild = projectExpression.getInputs().get(0).getOp();
+        if (projectChild instanceof LogicalOlapScanOperator) {
+            LogicalOlapScanOperator olapScanOperator = projectChild.cast();
             List<ColumnAccessPath> columnAccessPaths = olapScanOperator.getColumnAccessPaths();
             if (columnAccessPaths != null) {
                 columnAccessPaths.forEach(columnAccessPath -> {
                     columnsWithAccessPath.add(columnAccessPath.getPath());
                 });
             }
+        } else if (projectChild instanceof LogicalTableFunctionTableScanOperator) {
+            return Collections.emptyList();
         }
 
         boolean canDeferProject = projectMap.entrySet().stream().anyMatch(entry -> {
@@ -127,10 +131,10 @@ public class DeferProjectAfterTopNRule extends TransformationRule {
         });
 
         LogicalProjectOperator preProjectOperator = new LogicalProjectOperator(preProjectionMap);
-        LogicalProjectOperator postProjectOperaotr = new LogicalProjectOperator(postProjectionMap);
+        LogicalProjectOperator postProjectOperator = new LogicalProjectOperator(postProjectionMap);
 
         OptExpression result = OptExpression.create(
-                postProjectOperaotr, OptExpression.create(
+                postProjectOperator, OptExpression.create(
                         topNOperator, OptExpression.create(preProjectOperator, input.getInputs().get(0).getInputs())));
         return Lists.newArrayList(result);
     }
