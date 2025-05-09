@@ -41,6 +41,11 @@ public:
     void delete_tablet(::google::protobuf::RpcController* controller, const ::starrocks::DeleteTabletRequest* request,
                        ::starrocks::DeleteTabletResponse* response, ::google::protobuf::Closure* done) override;
 
+    void delete_tablet_cache(::google::protobuf::RpcController* controller,
+                             const ::starrocks::DeleteTabletCacheRequest* request,
+                             ::starrocks::DeleteTabletCacheResponse* response,
+                             ::google::protobuf::Closure* done) override;
+
     void delete_txn_log(::google::protobuf::RpcController* controller, const ::starrocks::DeleteTxnLogRequest* request,
                         ::starrocks::DeleteTxnLogResponse* response, ::google::protobuf::Closure* done) override;
 

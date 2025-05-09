@@ -38,6 +38,9 @@ void vacuum_full(TabletManager* tablet_mgr, const VacuumFullRequest& request, Va
 //  - response != NULL
 void delete_tablets(TabletManager* tablet_mgr, const DeleteTabletRequest& request, DeleteTabletResponse* response);
 
+void delete_tablet_cache(TabletManager* tablet_mgr, const DeleteTabletCacheRequest& request,
+                         DeleteTabletCacheResponse* response);
+
 void delete_txn_log(TabletManager* tablet_mgr, const DeleteTxnLogRequest& request, DeleteTxnLogResponse* response);
 
 // Batch delete files.

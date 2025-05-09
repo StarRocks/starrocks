@@ -24,6 +24,8 @@ import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.CompactResponse;
 import com.starrocks.proto.DeleteDataRequest;
 import com.starrocks.proto.DeleteDataResponse;
+import com.starrocks.proto.DeleteTabletCacheRequest;
+import com.starrocks.proto.DeleteTabletCacheResponse;
 import com.starrocks.proto.DeleteTabletRequest;
 import com.starrocks.proto.DeleteTabletResponse;
 import com.starrocks.proto.DeleteTxnLogRequest;
@@ -79,6 +81,9 @@ public interface LakeService {
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "delete_tablet", onceTalkTimeout = TIMEOUT_DELETE_TABLET)
     Future<DeleteTabletResponse> deleteTablet(DeleteTabletRequest request);
+
+    @ProtobufRPC(serviceName = "LakeService", methodName = "delete_tablet_cache", onceTalkTimeout = TIMEOUT_DELETE_TABLET)
+    Future<DeleteTabletCacheResponse> deleteTabletCache(DeleteTabletCacheRequest request);
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "delete_data", onceTalkTimeout = TIMEOUT_DELETE_DATA)
     Future<DeleteDataResponse> deleteData(DeleteDataRequest request);

@@ -994,6 +994,10 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean lake_enable_tablet_creation_optimization = false;
+    
+    // Whether to delete data cache after dropping partition
+    @ConfField(mutable = true)
+    public static boolean lake_enable_delete_cache_after_dropping_partition = true;
 
     /**
      * The thrift server max worker threads

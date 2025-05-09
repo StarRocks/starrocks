@@ -15,6 +15,7 @@
 package com.starrocks.lake;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.staros.client.StarClientException;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
@@ -29,10 +30,13 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
+import com.starrocks.proto.DeleteTabletCacheRequest;
+import com.starrocks.proto.DeleteTabletCacheResponse;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
+import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -45,10 +49,15 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
 public class LakeTableHelper {
     private static final Logger LOG = LogManager.getLogger(LakeTableHelper.class);
@@ -144,8 +153,14 @@ public class LakeTableHelper {
         return Optional.empty();
     }
 
-    static boolean removePartitionDirectory(Partition partition, long warehouseId) throws StarClientException {
+    // 1. get shard info to determine whether it needs to be removed
+    // 2. collect all tablet whose cache should be removed
+    // 3. call lake /delete_tablet_cache to remove cache
+    // 4. call lake /drop_tablet to remove partition directory from remote storage
+    static boolean removePartition(Partition partition, long warehouseId)  throws StarClientException {
         boolean ret = true;
+        List<ShardInfo> shardInfos = new ArrayList<>();
+        List<Tablet> tablets = new ArrayList<>();
         for (PhysicalPartition subPartition : partition.getSubPartitions()) {
             ShardInfo shardInfo = getAssociatedShardInfo(subPartition, warehouseId).orElse(null);
             if (shardInfo == null) {
@@ -157,11 +172,77 @@ public class LakeTableHelper {
                         shardInfo.getFilePath().getFullPath());
                 continue;
             }
-            if (!removeShardRootDirectory(shardInfo)) {
-                ret = false;
+            // Currently we don't check partition_duration property because:
+            // 1. OlapTable is needed but it can't be acquired directly base on partition
+            // 2. Even if the partition is out of the range, it's still possible to exist in cache
+            if (Config.lake_enable_delete_cache_after_dropping_partition
+                    && shardInfo.hasFileCache() && shardInfo.getFileCache().getEnableCache()) {
+                for (MaterializedIndex index : subPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                    tablets.addAll(index.getTablets());
+                }
             }
+            shardInfos.add(shardInfo);
+        }
+        if (!tablets.isEmpty()) {
+            removeTabletCache(tablets, partition.getId(), partition.getVisibleVersion(), warehouseId);
+        }
+        for (ShardInfo shardInfo : shardInfos) {
+            ret &= removeShardRootDirectory(shardInfo);
         }
         return ret;
+    }
+
+    static void removeTabletCache(List<Tablet> tablets, long partitionId, long version, long warehouseId) {
+        long start = System.currentTimeMillis();
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        Map<ComputeNode, List<Long>> beToTabletsMap = new HashMap<>();
+        for (Tablet tablet : tablets) {
+            ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(
+                    warehouseId, (LakeTablet) tablet);
+            if (computeNode == null) {
+                LOG.warn("no alive backends found when remove partition cache");
+                continue;
+            }
+            beToTabletsMap.computeIfAbsent(computeNode, k -> Lists.newArrayList()).add(tablet.getId());
+        }
+        List<Future<DeleteTabletCacheResponse>> responseFutures = Lists.newArrayListWithCapacity(beToTabletsMap.size());
+        for (Map.Entry<ComputeNode, List<Long>> entry : beToTabletsMap.entrySet()) {
+            ComputeNode node = entry.getKey();
+            DeleteTabletCacheRequest request = new DeleteTabletCacheRequest();
+            request.tabletIds = entry.getValue();
+            request.tabletVersions = new ArrayList<>(Collections.nCopies(entry.getValue().size(), version));
+            LOG.debug("send delete cache request for partition {} tablets {}", partitionId, entry.getValue());
+            try {
+                LakeService service = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
+                responseFutures.add(service.deleteTabletCache(request));
+            } catch (RpcException e) {
+                LOG.error("failed to send delete cache request for partition {}.{}.{}", partitionId,
+                        entry.getKey(), entry.getValue());
+                break;
+            }
+        }
+        long deletedFiles = 0;
+        long deletedFileSize = 0;
+        for (Future<DeleteTabletCacheResponse> responseFuture : responseFutures) {
+            try {
+                DeleteTabletCacheResponse response = responseFuture.get();
+                if (response.status.statusCode != 0) {
+                    LOG.warn("remove partition cache {} with error: {}", partitionId,
+                            response.status.errorMsgs.get(0));
+                } else {
+                    deletedFiles += response.deletedFiles;
+                    deletedFileSize += response.deletedFileSize;
+                }
+            } catch (InterruptedException e) {
+                LOG.warn("thread interrupted");
+                Thread.currentThread().interrupt();
+            } catch (ExecutionException e) {
+                LOG.error("failed to remove partition cache {}: {}", partitionId,
+                        e.getMessage());
+            }
+        }
+        LOG.info("Removed partition cache {}, removed files {}, removed size {}, cost {} ms", partitionId, deletedFiles,
+                deletedFileSize, System.currentTimeMillis() - start);
     }
 
     /**

@@ -719,6 +719,83 @@ void delete_tablets(TabletManager* tablet_mgr, const DeleteTabletRequest& reques
     st.to_protobuf(response->mutable_status());
 }
 
+/*
+ * Delete tablet files from datacache, currently we ignore prev garbage files since vacuum will do it
+ */
+void delete_tablet_cache(TabletManager* tablet_mgr, const DeleteTabletCacheRequest& request,
+                         DeleteTabletCacheResponse* response) {
+    DCHECK(tablet_mgr != nullptr);
+    DCHECK(request.tablet_ids_size() > 0);
+    DCHECK(request.tablet_ids_size() == request.tablet_versions_size());
+
+    auto root_dir = tablet_mgr->tablet_root_location(request.tablet_ids()[0]);
+    auto meta_dir = join_path(root_dir, kMetadataDirectoryName);
+    auto data_dir = join_path(root_dir, kSegmentDirectoryName);
+
+    auto fs = FileSystem::CreateSharedFromString(root_dir);
+    if (!fs.ok()) {
+        LOG(WARNING) << "create file system failed during delete tablet cache";
+        fs.status().to_protobuf(response->mutable_status());
+        return;
+    }
+    size_t deleted_files = 0;
+    size_t deleted_file_size = 0;
+    auto delete_func = [&](const std::string& path) {
+        if (config::lake_print_delete_log) {
+            LOG(INFO) << "deleting cache file: " << path;
+        }
+        auto st = fs.value()->drop_local_cache(path);
+        if (st.ok()) {
+            deleted_file_size += *st;
+            deleted_files++;
+        } else {
+            LOG_EVERY_N(WARNING, 100) << "fail to delete cache file: " << path << ", " << st;
+        }
+    };
+    for (int i = 0; i < request.tablet_ids_size(); i++) {
+        auto tablet_id = request.tablet_ids()[i];
+        auto version = request.tablet_versions()[i];
+        auto res = tablet_mgr->get_tablet_metadata(tablet_id, version, false);
+        if (!res.ok()) {
+            LOG(WARNING) << "delete_tablet_cache fail to read tablet meta " << tablet_id << ", version=" << version
+                         << ": " << res.status();
+            continue;
+        }
+        std::vector<std::string> files;
+        auto metadata = std::move(res).value();
+        for (const auto& rowset : metadata->compaction_inputs()) {
+            for (const auto& segment : rowset.segments()) {
+                delete_func(join_path(data_dir, segment));
+            }
+            for (const auto& del_file : rowset.del_files()) {
+                delete_func(join_path(data_dir, del_file.name()));
+            }
+        }
+        for (const auto& file : metadata->orphan_files()) {
+            delete_func(join_path(data_dir, file.name()));
+        }
+        for (const auto& rowset : metadata->rowsets()) {
+            for (const auto& segment : rowset.segments()) {
+                delete_func(join_path(data_dir, segment));
+            }
+        }
+        if (metadata->has_delvec_meta()) {
+            for (const auto& [v, f] : metadata->delvec_meta().version_to_file()) {
+                delete_func(join_path(data_dir, f.name()));
+            }
+        }
+        if (metadata->sstable_meta().sstables_size() > 0) {
+            for (const auto& sst : metadata->sstable_meta().sstables()) {
+                delete_func(join_path(data_dir, sst.filename()));
+            }
+        }
+    }
+    LOG(INFO) << "delete cache files=" << deleted_files << ", size=" << deleted_file_size;
+    response->set_deleted_files(deleted_files);
+    response->set_deleted_file_size(deleted_file_size);
+    Status::OK().to_protobuf(response->mutable_status());
+}
+
 void delete_txn_log(TabletManager* tablet_mgr, const DeleteTxnLogRequest& request, DeleteTxnLogResponse* response) {
     DCHECK(tablet_mgr != nullptr);
     DCHECK(request.tablet_ids_size() > 0);

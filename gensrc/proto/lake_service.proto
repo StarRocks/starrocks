@@ -73,6 +73,17 @@ message DeleteTabletResponse {
     optional StatusPB status = 2;
 }
 
+message DeleteTabletCacheRequest {
+    repeated int64 tablet_ids = 1;
+    repeated int64 tablet_versions = 2;
+}
+
+message DeleteTabletCacheResponse {
+    optional StatusPB status = 1;
+    optional int64 deleted_files = 2;
+    optional int64 deleted_file_size = 3;
+}
+
 message DeleteTxnLogRequest {
     repeated int64 tablet_ids = 1;
     repeated int64 txn_ids = 2; // deprecated 
@@ -313,6 +324,7 @@ service LakeService {
     rpc abort_txn(AbortTxnRequest) returns (AbortTxnResponse);
     rpc compact(CompactRequest) returns (CompactResponse);
     rpc delete_tablet(DeleteTabletRequest) returns (DeleteTabletResponse);
+    rpc delete_tablet_cache(DeleteTabletCacheRequest) returns (DeleteTabletCacheResponse);
     rpc drop_table(DropTableRequest) returns (DropTableResponse);
     rpc delete_data(DeleteDataRequest) returns (DeleteDataResponse);
     rpc get_tablet_stats(TabletStatRequest) returns (TabletStatResponse);
