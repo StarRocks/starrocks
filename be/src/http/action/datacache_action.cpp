@@ -20,6 +20,8 @@
 #include <rapidjson/stringbuffer.h>
 
 #include <string>
+#include <sstream>
+#include <chrono>
 
 #include "cache/block_cache/block_cache.h"
 #include "cache/block_cache/block_cache_hit_rate_counter.hpp"
@@ -34,6 +36,7 @@ const static std::string HEADER_JSON = "application/json";
 const static std::string ACTION_KEY = "action";
 const static std::string ACTION_STAT = "stat";
 const static std::string ACTION_APP_STAT = "app_stat";
+const static std::string ACTION_PROMETHEUS = "prometheus";
 
 std::string cache_status_str(const DataCacheStatus& status) {
     std::string str_status;
@@ -59,7 +62,9 @@ bool DataCacheAction::_check_request(HttpRequest* req) {
         HttpChannel::send_reply(req, HttpStatus::METHOD_NOT_ALLOWED, "Method Not Allowed");
         return false;
     }
-    if (req->param(ACTION_KEY) != ACTION_STAT && req->param(ACTION_KEY) != ACTION_APP_STAT) {
+    if (req->param(ACTION_KEY) != ACTION_STAT && 
+        req->param(ACTION_KEY) != ACTION_APP_STAT && 
+        req->param(ACTION_KEY) != ACTION_PROMETHEUS) {
         HttpChannel::send_reply(req, HttpStatus::NOT_FOUND, "Not Found");
         return false;
     }
@@ -77,8 +82,12 @@ void DataCacheAction::handle(HttpRequest* req) {
         _handle_error(req, strings::Substitute("No more metrics for current cache engine type"));
     } else if (req->param(ACTION_KEY) == ACTION_STAT) {
         _handle_stat(req);
-    } else {
+    } else if (req->param(ACTION_KEY) == ACTION_APP_STAT) {
         _handle_app_stat(req);
+    } else if (req->param(ACTION_KEY) == ACTION_PROMETHEUS) {
+        _handle_prometheus(req);
+    } else {
+        _handle_error(req, strings::Substitute("Unknown action type"));
     }
 }
 
@@ -190,6 +199,132 @@ void DataCacheAction::_handle_app_stat(HttpRequest* req) {
         root.AddMember("hit_rate_last_minute", rapidjson::Value(hit_rate_counter->hit_rate_last_minute()), allocator);
 #endif
     });
+}
+
+void DataCacheAction::_handle_prometheus(HttpRequest* req) {
+    if (!_block_cache || !_block_cache->is_initialized()) {
+        _handle_error(req, "Cache system is not ready");
+        return;
+    }
+
+    std::stringstream ss;
+    auto&& metrics = _block_cache->cache_metrics(2);
+    BlockCacheHitRateCounter* hit_rate_counter = BlockCacheHitRateCounter::instance();
+
+    // Cache status
+    ss << "# HELP starrocks_cache_status Cache status\n"
+       << "# TYPE starrocks_cache_status gauge\n"
+       << "starrocks_cache_status{status=\"" << cache_status_str(metrics.status) << "\"} 1\n";
+
+    // Memory metrics
+    ss << "# HELP starrocks_cache_memory_bytes Memory usage in bytes\n"
+       << "# TYPE starrocks_cache_memory_bytes gauge\n"
+       << "starrocks_cache_memory_bytes{type=\"quota\"} " << metrics.mem_quota_bytes << "\n"
+       << "starrocks_cache_memory_bytes{type=\"used\"} " << metrics.mem_used_bytes << "\n";
+
+    // Memory usage rate
+    double mem_used_rate = 0.0;
+    if (metrics.mem_quota_bytes > 0) {
+        mem_used_rate = std::round(double(metrics.mem_used_bytes) / double(metrics.mem_quota_bytes) * 100.0) / 100.0;
+    }
+    ss << "# HELP starrocks_cache_memory_usage_rate Memory usage rate\n"
+       << "# TYPE starrocks_cache_memory_usage_rate gauge\n"
+       << "starrocks_cache_memory_usage_rate " << mem_used_rate << "\n";
+
+    // Disk metrics
+    ss << "# HELP starrocks_cache_disk_bytes Disk usage in bytes\n"
+       << "# TYPE starrocks_cache_disk_bytes gauge\n"
+       << "starrocks_cache_disk_bytes{type=\"quota\"} " << metrics.disk_quota_bytes << "\n"
+       << "starrocks_cache_disk_bytes{type=\"used\"} " << metrics.disk_used_bytes << "\n";
+
+    // Disk usage rate
+    double disk_used_rate = 0.0;
+    if (metrics.disk_quota_bytes > 0) {
+        disk_used_rate = std::round(double(metrics.disk_used_bytes) / double(metrics.disk_quota_bytes) * 100.0) / 100.0;
+    }
+    ss << "# HELP starrocks_cache_disk_usage_rate Disk usage rate\n"
+       << "# TYPE starrocks_cache_disk_usage_rate gauge\n"
+       << "starrocks_cache_disk_usage_rate " << disk_used_rate << "\n";
+
+    // Disk spaces
+    for (size_t i = 0; i < metrics.disk_dir_spaces.size(); ++i) {
+        ss << "# HELP starrocks_cache_disk_space Disk space configuration\n"
+           << "# TYPE starrocks_cache_disk_space gauge\n"
+           << "starrocks_cache_disk_space{path=\"" << metrics.disk_dir_spaces[i].path 
+           << "\",quota_bytes=\"" << metrics.disk_dir_spaces[i].quota_bytes << "\"} 1\n";
+    }
+
+    // Meta metrics
+    ss << "# HELP starrocks_cache_meta_bytes Meta data usage in bytes\n"
+       << "# TYPE starrocks_cache_meta_bytes gauge\n"
+       << "starrocks_cache_meta_bytes " << metrics.meta_used_bytes << "\n";
+
+    // Hit/miss operations
+    ss << "# HELP starrocks_cache_operations_total Total cache operations\n"
+       << "# TYPE starrocks_cache_operations_total counter\n"
+       << "starrocks_cache_operations_total{type=\"hit\"} " << metrics.detail_l1->hit_count << "\n"
+       << "starrocks_cache_operations_total{type=\"miss\"} " << metrics.detail_l1->miss_count << "\n";
+
+    // Hit/miss bytes
+    ss << "# HELP starrocks_cache_bytes_total Total cache bytes\n"
+       << "# TYPE starrocks_cache_bytes_total counter\n"
+       << "starrocks_cache_bytes_total{type=\"hit\"} " << metrics.detail_l1->hit_bytes << "\n"
+       << "starrocks_cache_bytes_total{type=\"miss\"} " << metrics.detail_l1->miss_bytes << "\n";
+
+    // Hit rate
+    ss << "# HELP starrocks_cache_hit_rate Cache hit rate\n"
+       << "# TYPE starrocks_cache_hit_rate gauge\n"
+       << "starrocks_cache_hit_rate " << hit_rate_counter->hit_rate() << "\n";
+
+    // Last minute metrics
+    ss << "# HELP starrocks_cache_hit_rate_last_minute Cache hit rate in last minute\n"
+       << "# TYPE starrocks_cache_hit_rate_last_minute gauge\n"
+       << "starrocks_cache_hit_rate_last_minute " << hit_rate_counter->hit_rate_last_minute() << "\n";
+
+    // Buffer metrics
+    ss << "# HELP starrocks_cache_buffer_items Buffer items count\n"
+       << "# TYPE starrocks_cache_buffer_items gauge\n"
+       << "starrocks_cache_buffer_items " << metrics.detail_l2->buffer_item_count << "\n";
+
+    ss << "# HELP starrocks_cache_buffer_bytes Buffer items bytes\n"
+       << "# TYPE starrocks_cache_buffer_bytes gauge\n"
+       << "starrocks_cache_buffer_bytes " << metrics.detail_l2->buffer_item_bytes << "\n";
+
+    // Read metrics
+    ss << "# HELP starrocks_cache_read_bytes_total Total read bytes\n"
+       << "# TYPE starrocks_cache_read_bytes_total counter\n"
+       << "starrocks_cache_read_bytes_total{type=\"memory\"} " << metrics.detail_l2->read_mem_bytes << "\n"
+       << "starrocks_cache_read_bytes_total{type=\"disk\"} " << metrics.detail_l2->read_disk_bytes << "\n";
+
+    // Write metrics
+    ss << "# HELP starrocks_cache_write_operations_total Total write operations\n"
+       << "# TYPE starrocks_cache_write_operations_total counter\n"
+       << "starrocks_cache_write_operations_total{type=\"success\"} " << metrics.detail_l2->write_success_count << "\n"
+       << "starrocks_cache_write_operations_total{type=\"fail\"} " << metrics.detail_l2->write_fail_count << "\n";
+
+    ss << "# HELP starrocks_cache_write_bytes_total Total write bytes\n"
+       << "# TYPE starrocks_cache_write_bytes_total counter\n"
+       << "starrocks_cache_write_bytes_total " << metrics.detail_l2->write_bytes << "\n";
+
+    // Remove metrics
+    ss << "# HELP starrocks_cache_remove_operations_total Total remove operations\n"
+       << "# TYPE starrocks_cache_remove_operations_total counter\n"
+       << "starrocks_cache_remove_operations_total{type=\"success\"} " << metrics.detail_l2->remove_success_count << "\n"
+       << "starrocks_cache_remove_operations_total{type=\"fail\"} " << metrics.detail_l2->remove_fail_count << "\n";
+
+    ss << "# HELP starrocks_cache_remove_bytes_total Total remove bytes\n"
+       << "# TYPE starrocks_cache_remove_bytes_total counter\n"
+       << "starrocks_cache_remove_bytes_total " << metrics.detail_l2->remove_bytes << "\n";
+
+    // Current operation counts
+    ss << "# HELP starrocks_cache_current_operations Current operations count\n"
+       << "# TYPE starrocks_cache_current_operations gauge\n"
+       << "starrocks_cache_current_operations{type=\"reading\"} " << metrics.detail_l2->current_reading_count << "\n"
+       << "starrocks_cache_current_operations{type=\"writing\"} " << metrics.detail_l2->current_writing_count << "\n"
+       << "starrocks_cache_current_operations{type=\"removing\"} " << metrics.detail_l2->current_removing_count << "\n";
+
+    req->add_output_header(HttpHeaders::CONTENT_TYPE, "text/plain; version=0.0.4");
+    HttpChannel::send_reply(req, ss.str());
 }
 
 void DataCacheAction::_handle_error(HttpRequest* req, const std::string& err_msg) {

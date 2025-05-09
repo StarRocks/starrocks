@@ -20,6 +20,7 @@
 #include "cache/block_cache/local_cache.h"
 #include "cache/block_cache/remote_cache.h"
 #include "common/status.h"
+#include "cache/block_cache/block_cache_metrics.h"
 
 namespace starrocks {
 
@@ -101,6 +102,7 @@ public:
 
 private:
     void _refresh_quota();
+    void _update_metrics();
 
     size_t _block_size = 0;
     std::shared_ptr<LocalCache> _local_cache;
@@ -110,6 +112,7 @@ private:
     std::atomic<bool> _initialized = false;
     std::atomic<size_t> _mem_quota = 0;
     std::atomic<size_t> _disk_quota = 0;
+    BlockCacheMetrics _metrics;
 };
 
 } // namespace starrocks

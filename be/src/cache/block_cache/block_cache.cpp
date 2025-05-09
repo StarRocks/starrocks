@@ -68,6 +68,10 @@ Status BlockCache::init(const CacheOptions& options) {
     if (_disk_space_monitor) {
         _disk_space_monitor->start();
     }
+
+    // Register metrics with the global registry
+    _metrics.register_metrics(ExecEnv::GetInstance()->metrics());
+
     return Status::OK();
 }
 
@@ -215,6 +219,65 @@ void BlockCache::_refresh_quota() {
     auto metrics = _local_cache->cache_metrics(0);
     _mem_quota.store(metrics.mem_quota_bytes, std::memory_order_relaxed);
     _disk_quota.store(metrics.disk_quota_bytes, std::memory_order_relaxed);
+}
+
+void BlockCache::_update_metrics() {
+    auto&& metrics = cache_metrics(2);
+    
+    // Update cache status
+    _metrics.cache_status.set_value(static_cast<int64_t>(metrics.status));
+    
+    // Update memory metrics
+    _metrics.mem_quota_bytes.set_value(metrics.mem_quota_bytes);
+    _metrics.mem_used_bytes.set_value(metrics.mem_used_bytes);
+    if (metrics.mem_quota_bytes > 0) {
+        _metrics.mem_used_rate.set_value(
+            std::round(double(metrics.mem_used_bytes) / double(metrics.mem_quota_bytes) * 100.0) / 100.0);
+    }
+    
+    // Update disk metrics
+    _metrics.disk_quota_bytes.set_value(metrics.disk_quota_bytes);
+    _metrics.disk_used_bytes.set_value(metrics.disk_used_bytes);
+    if (metrics.disk_quota_bytes > 0) {
+        _metrics.disk_used_rate.set_value(
+            std::round(double(metrics.disk_used_bytes) / double(metrics.disk_quota_bytes) * 100.0) / 100.0);
+    }
+    _metrics.meta_used_bytes.set_value(metrics.meta_used_bytes);
+    
+    // Update hit/miss metrics
+    _metrics.hit_count.set_value(metrics.detail_l1->hit_count);
+    _metrics.miss_count.set_value(metrics.detail_l1->miss_count);
+    size_t total_reads = metrics.detail_l1->hit_count + metrics.detail_l1->miss_count;
+    _metrics.hit_rate.set_value(
+        total_reads == 0 ? 0.0
+                         : std::round(double(metrics.detail_l1->hit_count) / double(total_reads) * 100.0) / 100.0);
+    _metrics.hit_bytes.set_value(metrics.detail_l1->hit_bytes);
+    _metrics.miss_bytes.set_value(metrics.detail_l1->miss_bytes);
+    
+    // Update last minute metrics
+    _metrics.hit_count_last_minute.set_value(metrics.detail_l2->hit_count_last_minite);
+    _metrics.miss_count_last_minute.set_value(metrics.detail_l2->miss_count_last_minite);
+    _metrics.hit_bytes_last_minute.set_value(metrics.detail_l2->hit_bytes_last_minite);
+    _metrics.miss_bytes_last_minute.set_value(metrics.detail_l2->miss_bytes_last_minite);
+    
+    // Update read metrics
+    _metrics.read_mem_bytes.set_value(metrics.detail_l2->read_mem_bytes);
+    _metrics.read_disk_bytes.set_value(metrics.detail_l2->read_disk_bytes);
+    
+    // Update write metrics
+    _metrics.write_bytes.set_value(metrics.detail_l2->write_bytes);
+    _metrics.write_success_count.set_value(metrics.detail_l2->write_success_count);
+    _metrics.write_fail_count.set_value(metrics.detail_l2->write_fail_count);
+    
+    // Update remove metrics
+    _metrics.remove_bytes.set_value(metrics.detail_l2->remove_bytes);
+    _metrics.remove_success_count.set_value(metrics.detail_l2->remove_success_count);
+    _metrics.remove_fail_count.set_value(metrics.detail_l2->remove_fail_count);
+    
+    // Update current operation counts
+    _metrics.current_reading_count.set_value(metrics.detail_l2->current_reading_count);
+    _metrics.current_writing_count.set_value(metrics.detail_l2->current_writing_count);
+    _metrics.current_removing_count.set_value(metrics.detail_l2->current_removing_count);
 }
 
 } // namespace starrocks
