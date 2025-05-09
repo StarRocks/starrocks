@@ -968,11 +968,7 @@ struct AggregateCompactContext {
         }
     }
 
-    void write_combined_txn_log() {
-        if (final_status.ok()) {
-            final_status = starrocks::write_combined_txn_log(combined_txn_log);
-        }
-    }
+    Status write_combined_txn_log() { return starrocks::write_combined_txn_log(combined_txn_log); }
 };
 
 static void aggregate_compact_cb(brpc::Controller* cntl, CompactResponse* response,
@@ -1017,6 +1013,11 @@ void LakeServiceImpl::aggregate_compact(::google::protobuf::RpcController* contr
     ac_context.latch = std::make_unique<BThreadCountDownLatch>(request->requests_size());
 
     for (int i = 0; i < request->requests_size(); i++) {
+        if (!ac_context.final_status.ok()) {
+            // skip next request if previous request failed
+            ac_context.count_down();
+            continue;
+        }
         const auto& single_req = request->requests(i);
         const auto& compute_node = request->compute_nodes(i);
         if (!compute_node.has_host() || !compute_node.has_brpc_port()) {
@@ -1050,7 +1051,9 @@ void LakeServiceImpl::aggregate_compact(::google::protobuf::RpcController* contr
 
     // write combined txn log
     // TODO // submit write_combined_txn_log to thread pool to avoid block brpc thread.
-    ac_context.write_combined_txn_log();
+    if (ac_context.final_status.ok()) {
+        ac_context.final_status = ac_context.write_combined_txn_log();
+    }
 
     // fill response
     ac_context.final_status.to_protobuf(response->mutable_status());
