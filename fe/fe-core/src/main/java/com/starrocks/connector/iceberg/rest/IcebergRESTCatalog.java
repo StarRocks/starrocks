@@ -104,7 +104,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             delegate = (RESTCatalog) CatalogUtil.loadCatalog(RESTCatalog.class.getName(), name, copiedProperties, conf);
         } catch (Exception re) {
             LOG.error("Failed to rest load catalog", re);
-            throw new StarRocksConnectorException("Failed to rest load catalog",
+            throw new StarRocksConnectorException("Failed to load rest catalog",
                     new RuntimeException("Failed to load rest catalog, exception: " + re.getMessage(), re));
         }
 
@@ -372,7 +372,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         try {
             return ImmutableMap.copyOf(delegate.loadNamespaceMetadata(ns));
         } catch (RESTException re) {
-            LOG.error("Failed to load table metadata using REST Catalog, for namespace", ns, re);
+            LOG.error("Failed to load table metadata using REST Catalog, for namespace {}", ns, re);
             throw new StarRocksConnectorException("Failed to load table metadata using REST Catalog/defaultTableLocation",
                     new RuntimeException(
                             "Failed to load table metadata using REST Catalog/defaultTableLocation, exception: " +
