@@ -30,6 +30,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaterializedView.PartitionRefreshMode;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -303,9 +304,20 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 return mvToRefreshedPartitions;
             }
 
-            // Only refresh the first partition refresh number partitions, other partitions will generate new tasks
-            filterPartitionByRefreshNumber(mvToRefreshedPartitions, mvPotentialPartitionNames, mv,
-                    tentative);
+            PartitionRefreshMode partitionRefreshMode =
+                    PartitionRefreshMode.valueOf(mv.getTableProperty().getPartitionRefreshMode().trim().toUpperCase());
+            switch (partitionRefreshMode) {
+                case SMART:
+                    filterPartitionByAdaptiveRefreshNumber(mvToRefreshedPartitions, mvPotentialPartitionNames, mv,
+                            tentative);
+                    break;
+                case DEFAULT:
+                default:
+                    // Only refresh the first partition refresh number partitions, other partitions will generate new tasks
+                    filterPartitionByRefreshNumber(mvToRefreshedPartitions, mvPotentialPartitionNames, mv,
+                            tentative);
+            }
+
             int partitionRefreshNumber = mv.getTableProperty().getPartitionRefreshNumber();
             logger.info("filter partitions to refresh partitionRefreshNumber={}, partitionsToRefresh:{}, " +
                             "mvPotentialPartitionNames:{}, next start:{}, next end:{}, next list values:{}",
@@ -664,6 +676,30 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
         // do filter actions
         mvRefreshPartitioner.filterPartitionByRefreshNumber(partitionsToRefresh, mvPotentialPartitionNames, tentative);
+    }
+
+    @VisibleForTesting
+    public void filterPartitionByAdaptiveRefreshNumber(Set<String> partitionsToRefresh,
+                                                       Set<String> mvPotentialPartitionNames,
+                                                       MaterializedView mv) {
+        filterPartitionByAdaptiveRefreshNumber(partitionsToRefresh, mvPotentialPartitionNames, mv, false);
+    }
+
+    public void filterPartitionByAdaptiveRefreshNumber(Set<String> partitionsToRefresh,
+                                                       Set<String> mvPotentialPartitionNames,
+                                                       MaterializedView mv,
+                                                       boolean tentative) {
+        // refresh all partition when it's a sync refresh, otherwise updated partitions may be lost.
+        if (mvContext.executeOption != null && mvContext.executeOption.getIsSync()) {
+            return;
+        }
+        // ignore if mv is not partitioned.
+        if (!mv.isPartitionedTable()) {
+            return;
+        }
+
+        // do filter actions
+        mvRefreshPartitioner.filterPartitionByAdaptiveRefreshNumber(partitionsToRefresh, mvPotentialPartitionNames, tentative);
     }
 
     private void generateNextTaskRun() {
