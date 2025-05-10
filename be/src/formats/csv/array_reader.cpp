@@ -93,7 +93,7 @@ bool HiveTextArrayReader::split_array_elements(const Slice& s, std::vector<Slice
             left = right + 1;
         }
     }
-    if (right > left) {
+    if (right >= left) {
         elements.emplace_back(s.data + left, right - left);
     }
 
