@@ -13,55 +13,147 @@
 // limitations under the License.
 package com.starrocks.common;
 
-import com.google.common.base.Strings;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.message.AbstractMessageFactory;
 import org.apache.logging.log4j.message.Message;
-import org.apache.logging.log4j.message.MessageFactory;
 import org.apache.logging.log4j.message.ParameterizedMessage;
+import org.apache.logging.log4j.spi.LoggerContext;
+import org.apache.parquet.Strings;
+
+import java.util.Objects;
 
 /**
  * A logger factory that adds a prefix to all log messages.
  */
 public class StarRocksLoggerFactory {
-    private final String prefix;
-
-    public StarRocksLoggerFactory(String prefix) {
-        this.prefix = prefix == null ? "" : prefix;
-    }
+    public static final StarRocksLoggerFactory INSTANCE = new StarRocksLoggerFactory();
 
     public StarRocksLoggerFactory() {
-        this("");
     }
 
-    public Logger getLogger(Class<?> clazz) {
-        if (FeConstants.runningUnitTest || Strings.isNullOrEmpty(prefix)) {
+    /**
+     * @param clazz The class to get the logger for
+     * @param prefix The prefix to be used for the logger
+     * @return The logger for the class with the given identifier by using the specific message factory.
+     */
+    public Logger getLogger(Class<?> clazz, String prefix) {
+        if (!Config.enable_mv_refresh_extra_prefix_logging || Strings.isNullOrEmpty(prefix)) {
             return LogManager.getLogger(clazz);
         } else {
-            return LogManager.getLogger(clazz, new PrefixedMessageFactory(prefix));
+            final LoggerContext loggerContext = LogManager.getContext(LogManager.class.getClassLoader(), false);
+            // The message factory is used only when creating a logger, subsequent use does not change
+            // the logger but will log a warning if mismatched.
+            // For more details see {@code LoggerContext#getLogger}
+            final PrefixedMessageFactory messageFactory = new PrefixedMessageFactory(prefix);
+            return loggerContext.getLogger(factoryClassKey(clazz, prefix), messageFactory);
         }
     }
 
-    public class PrefixedMessageFactory implements MessageFactory {
+    /**
+     * Format an identifier key for the logger to be used in the logger context.
+     * @param clazz The class to get the logger for
+     * @param prefix The prefix to be used for the logger
+     * @return An identifier key for the class to be used in the logger context.
+     */
+    private String factoryClassKey(Class<?> clazz, String prefix) {
+        return String.format("%s.%s", clazz.getName(), prefix);
+    }
+
+    /**
+     * A message factory that adds a prefix to all associated log messages.
+     */
+    public static class PrefixedMessageFactory extends AbstractMessageFactory {
         private final String prefix;
 
         public PrefixedMessageFactory(String prefix) {
             this.prefix = prefix;
         }
 
-        @Override
-        public Message newMessage(String message, Object... params) {
-            return new ParameterizedMessage("[" + prefix + "] " + message, params);
+        private String format(String message) {
+            return prefix + message;
         }
 
         @Override
-        public Message newMessage(String message) {
-            return new ParameterizedMessage("[" + prefix + "] " + message);
+        public Message newMessage(final String message, final Object... params) {
+            return new ParameterizedMessage(format(message), params);
         }
 
         @Override
-        public Message newMessage(Object message) {
-            return new ParameterizedMessage("[" + prefix + "] " + message.toString());
+        public Message newMessage(final String message, final Object p0) {
+            return new ParameterizedMessage(format(message), p0);
+        }
+
+        @Override
+        public Message newMessage(final String message, final Object p0, final Object p1) {
+            return new ParameterizedMessage(format(message), p0, p1);
+        }
+
+        @Override
+        public Message newMessage(final String message, final Object p0, final Object p1, final Object p2) {
+            return new ParameterizedMessage(format(message), p0, p1, p2);
+        }
+
+        @Override
+        public Message newMessage(final String message, final Object p0, final Object p1, final Object p2,
+                                  final Object p3) {
+            return new ParameterizedMessage(format(message), p0, p1, p2, p3);
+        }
+
+        @Override
+        public Message newMessage(final String message, final Object p0, final Object p1, final Object p2,
+                                  final Object p3, final Object p4) {
+            return new ParameterizedMessage(format(message), p0, p1, p2, p3, p4);
+        }
+
+        @Override
+        public Message newMessage(final String message, final Object p0, final Object p1, final Object p2,
+                                  final Object p3, final Object p4, final Object p5) {
+            return new ParameterizedMessage(format(message), p0, p1, p2, p3, p4, p5);
+        }
+
+        @Override
+        public Message newMessage(final String message, final Object p0, final Object p1, final Object p2,
+                                  final Object p3, final Object p4, final Object p5,
+                                  final Object p6) {
+            return new ParameterizedMessage(format(message), p0, p1, p2, p3, p4, p5, p6);
+        }
+
+        @Override
+        public Message newMessage(final String message, final Object p0, final Object p1, final Object p2,
+                                  final Object p3, final Object p4, final Object p5,
+                                  final Object p6, final Object p7) {
+            return new ParameterizedMessage(format(message), p0, p1, p2, p3, p4, p5, p6, p7);
+        }
+
+        @Override
+        public Message newMessage(final String message, final Object p0, final Object p1, final Object p2,
+                                  final Object p3, final Object p4, final Object p5,
+                                  final Object p6, final Object p7, final Object p8) {
+            return new ParameterizedMessage(format(message), p0, p1, p2, p3, p4, p5, p6, p7, p8);
+        }
+
+        @Override
+        public Message newMessage(final String message, final Object p0, final Object p1, final Object p2,
+                                  final Object p3, final Object p4, final Object p5,
+                                  final Object p6, final Object p7, final Object p8, final Object p9) {
+            return new ParameterizedMessage(format(message), p0, p1, p2, p3, p4, p5, p6, p7, p8, p9);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hashCode(prefix);
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (o == this) {
+                return true;
+            }
+            if (o == null || !(o instanceof PrefixedMessageFactory)) {
+                return false;
+            }
+            return ((PrefixedMessageFactory) o).prefix.equals(this.prefix);
         }
     }
 }

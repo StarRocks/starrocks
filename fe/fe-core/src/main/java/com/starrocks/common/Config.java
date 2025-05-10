@@ -3264,6 +3264,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Whether enable profile in refreshing materialized view or not by default")
     public static boolean enable_mv_refresh_collect_profile = false;
 
+    @ConfField(mutable = true, comment = "Whether enable adding extra materialized view name logging for better debug")
+    public static boolean enable_mv_refresh_extra_prefix_logging = true;
+
     @ConfField(mutable = true, comment = "The max length for mv task run extra message's values(set/map) to avoid " +
             "occupying too much meta memory")
     public static int max_mv_task_run_meta_message_values_length = 16;

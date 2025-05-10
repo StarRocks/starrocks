@@ -16,6 +16,7 @@ package com.starrocks.scheduler;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
@@ -23,8 +24,10 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.loadv2.InsertLoadJob;
@@ -35,6 +38,7 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -380,7 +384,11 @@ public class TaskRun implements Comparable<TaskRun> {
         // NOTE: definition will cause a lot of repeats and cost a lot of metadata memory resources,
         // since history task runs has been stored in sr's internal table, we can save it in the
         // task run status.
-        status.setDefinition(task.getDefinition());
+        if (!Strings.isNullOrEmpty(task.getDefinition())) {
+            // Remove line separator and shrink to MAX_FIELD_VARCHAR_LENGTH/4 which is defined in the TaskRunsSystemTable.java
+            String query = LogUtil.removeLineSeparator(task.getDefinition());
+            status.setDefinition(MvUtils.shrinkToSize(query, SystemTable.MAX_FIELD_VARCHAR_LENGTH / 4));
+        }
         status.getMvTaskRunExtraMessage().setExecuteOption(this.executeOption);
 
         LOG.info("init task status, task:{}, query_id:{}, create_time:{}", task.getName(), queryId, status.getCreateTime());
