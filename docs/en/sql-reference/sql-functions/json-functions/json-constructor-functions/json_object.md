@@ -51,3 +51,7 @@ mysql> SELECT json_object();
 
        -> {}
 ```
+
+:::tip
+All of the JSON functions and operators are listed in the navigation and on the [overview page](../overview-of-json-functions-and-operators.md)
+:::

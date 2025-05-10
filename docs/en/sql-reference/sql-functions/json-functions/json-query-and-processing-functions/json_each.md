@@ -49,3 +49,7 @@ mysql> SELECT * FROM tj, LATERAL json_each(j);
 |    3 | {"a": 3}         | a    | 3     |
 +------+------------------+------+-------+
 ```
+
+:::tip
+All of the JSON functions and operators are listed in the navigation and on the [overview page](../overview-of-json-functions-and-operators.md)
+:::

@@ -48,3 +48,7 @@ mysql> SELECT PARSE_JSON('"a"') < PARSE_JSON('{"a": 1, "c": 2}');
 
        -> 0
 ```
+
+:::tip
+All of the JSON functions and operators are listed in the navigation and on the [overview page](./overview-of-json-functions-and-operators.md)
+:::
