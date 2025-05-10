@@ -38,8 +38,11 @@
 
 #include "gen_cpp/data.pb.h"
 #include "runtime/current_thread.h"
+#include "util/failpoint/fail_point.h"
 
 namespace starrocks {
+
+DEFINE_FAIL_POINT(memtable_flush_fail)
 
 class MemtableFlushTask final : public Runnable {
 public:
@@ -137,6 +140,11 @@ void FlushToken::_flush_memtable(MemTable* memtable, SegmentPB* segment, bool eo
         return;
     }
 
+    FAIL_POINT_TRIGGER_EXECUTE(memtable_flush_fail, {
+        set_status(Status::InternalError("inject memtable_flush_fail"));
+        LOG(INFO) << "memtable_flush_fail, tablet_id: " << memtable->tablet_id();
+        return;
+    });
     set_status(memtable->flush(segment, eos, flush_data_size));
     _stats.flush_count++;
     _stats.memtable_stats += memtable->get_stat();
