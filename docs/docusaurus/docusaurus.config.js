@@ -68,8 +68,6 @@ const config = {
               docPath
             );
           },
-<<<<<<< HEAD
-=======
           admonitions: {
             keywords: [
               "experimental",
@@ -81,7 +79,6 @@ const config = {
               "danger",
             ],
           },
->>>>>>> d58c15734e ([Doc]  Sync build from prod (#58853))
           // Versions:
           // We don't want to show `main` or `current`, we want to show the released versions.
           // lastVersion identifies the latest release.
