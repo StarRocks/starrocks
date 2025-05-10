@@ -96,6 +96,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
@@ -821,6 +822,10 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
 
         builder = addOrderByLimit(builder, node);
 
+        if (node.isAssertRows()) {
+            LogicalAssertOneRowOperator assertOneRowOperator = LogicalAssertOneRowOperator.createLessEqOne("");
+            builder = builder.withNewRoot(assertOneRowOperator);
+        }
         // store opt expression to ast map if sub-query's type is supported.
         OperatorType operatorType = subQueryOptExpression.getOp().getOpType();
         if (this.mvTransformerContext != null
