@@ -81,6 +81,17 @@ public class FunctionParams implements Writable {
         this.orderByElements = orderByElements;
     }
 
+    public FunctionParams(boolean isStar, List<Expr> exprs,  List<String> exprsNames, boolean isDistinct, List<OrderByElement> orderByElements) {
+        this.isStar = isStar;
+        this.exprs = exprs;
+        this.exprsNames = exprsNames;
+
+        this.isDistinct = isDistinct;
+        this.orderByElements = orderByElements;
+    }
+
+
+
     // c'tor for non-star, non-distinct params
     public FunctionParams(List<Expr> exprs) {
         this(false, exprs);
