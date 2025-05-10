@@ -4039,6 +4039,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：Query Pool 能够使用的最大内存上限。以 Process 内存上限的百分比来表示。
 - 引入版本：v3.1.0
 
+##### rocksdb_write_buffer_memory_percent
+
+- 默认值：5
+- 类型：Int64
+- 单位：-
+- 是否动态：否
+- 描述：rocksdb中write buffer可以使用的内存占比。默认值是百分之5，最终取值不会小于64MB，也不会大于1GB。
+- 引入版本：v3.5.0
+
+##### rocksdb_max_write_buffer_memory_bytes
+
+- 默认值：1073741824
+- 类型：Int64
+- 单位：-
+- 是否动态：否
+- 描述：rocksdb中write buffer内存的最大上限。
+- 引入版本：v3.5.0
+
 <!--
 ##### datacache_block_size
 
