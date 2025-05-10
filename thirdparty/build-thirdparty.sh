@@ -124,6 +124,7 @@ BUILD_SYSTEM=${BUILD_SYSTEM:-make}
 # and if the filesystem is not case sensitive, `mkdir` will fail.
 BUILD_DIR=starrocks_build
 MACHINE_TYPE=$(uname -m)
+BUILD_TPYE=RelWithDebInfo
 
 # handle mac m1 platform, change arm64 to aarch64
 if [[ "${MACHINE_TYPE}" == "arm64" ]]; then
@@ -321,7 +322,7 @@ build_llvm() {
     -DLLVM_INCLUDE_TESTS:BOOL=False \
     -DLLVM_INCLUDE_BENCHMARKS:BOOL=False \
     -DBUILD_SHARED_LIBS:BOOL=False \
-    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
     -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}/llvm ../${LLVM_SOURCE}
 
     # TODO(yueyang): Add more targets.
@@ -536,7 +537,7 @@ build_re2() {
     check_if_source_exist $RE2_SOURCE
     cd $TP_SOURCE_DIR/$RE2_SOURCE
 
-    $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_BUILD_TYPE=Release \
+    $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
 	    -DBUILD_SHARED_LIBS=0 -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DCMAKE_INSTALL_LIBDIR=lib
     ${BUILD_SYSTEM} -j$PARALLEL install
 }
@@ -665,7 +666,7 @@ build_brotli() {
     cd $TP_SOURCE_DIR/$BROTLI_SOURCE
     mkdir -p $BUILD_DIR
     cd $BUILD_DIR
-    ${CMAKE_CMD} .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DCMAKE_INSTALL_LIBDIR=lib64
+    ${CMAKE_CMD} .. -DCMAKE_BUILD_TYPE=${BUILD_TYPE} -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DCMAKE_INSTALL_LIBDIR=lib64
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
     mv -f $TP_INSTALL_DIR/lib64/libbrotlienc-static.a $TP_INSTALL_DIR/lib64/libbrotlienc.a
@@ -891,7 +892,7 @@ build_fmt() {
     cd $TP_SOURCE_DIR/$FMT_SOURCE
     mkdir -p build
     cd build
-    $CMAKE_CMD -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} ../ \
+    $CMAKE_CMD -DCMAKE_BUILD_TYPE=${BUILD_TYPE} -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} ../ \
             -DCMAKE_INSTALL_LIBDIR=lib64 -G "${CMAKE_GENERATOR}" -DFMT_TEST=OFF
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
@@ -954,7 +955,7 @@ build_hyperscan() {
     check_if_source_exist $HYPERSCAN_SOURCE
     cd $TP_SOURCE_DIR/$HYPERSCAN_SOURCE
     export PATH=$TP_INSTALL_DIR/bin:$PATH
-    $CMAKE_CMD -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DBOOST_ROOT=$STARROCKS_THIRDPARTY/installed/include \
+    $CMAKE_CMD -DCMAKE_BUILD_TYPE=${BUILD_TYPE} -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DBOOST_ROOT=$STARROCKS_THIRDPARTY/installed/include \
           -DCMAKE_CXX_COMPILER=$STARROCKS_GCC_HOME/bin/g++ -DCMAKE_C_COMPILER=$STARROCKS_GCC_HOME/bin/gcc  -DCMAKE_INSTALL_LIBDIR=lib \
           -DBUILD_EXAMPLES=OFF -DBUILD_UNIT=OFF
     ${BUILD_SYSTEM} -j$PARALLEL
@@ -978,7 +979,7 @@ build_mariadb() {
     cd $TP_SOURCE_DIR/$MARIADB_SOURCE
     mkdir -p build && cd build
 
-    $CMAKE_CMD .. -G "${CMAKE_GENERATOR}" -DCMAKE_BUILD_TYPE=Release    \
+    $CMAKE_CMD .. -G "${CMAKE_GENERATOR}" -DCMAKE_BUILD_TYPE=${BUILD_TYPE}    \
                   -DWITH_UNIT_TESTS=OFF                                 \
                   -DBUILD_SHARED_LIBS=OFF                               \
                   -DOPENSSL_ROOT_DIR=${TP_INSTALL_DIR}                  \
@@ -1041,7 +1042,7 @@ build_vpack() {
     $CMAKE_CMD .. \
         -DCMAKE_CXX_STANDARD="17" \
         -G "${CMAKE_GENERATOR}" \
-        -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} \
+        -DCMAKE_BUILD_TYPE=${BUILD_TYPE} -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} \
         -DCMAKE_CXX_COMPILER=$STARROCKS_GCC_HOME/bin/g++ -DCMAKE_C_COMPILER=$STARROCKS_GCC_HOME/bin/gcc
 
     ${BUILD_SYSTEM} -j$PARALLEL
@@ -1112,7 +1113,7 @@ build_benchmark() {
           -DRUN_HAVE_STD_REGEX=0 \
           -DRUN_HAVE_POSIX_REGEX=0 \
           -DCOMPILE_HAVE_GNU_POSIX_REGEX=0 \
-          -DCMAKE_BUILD_TYPE=Release ../
+          -DCMAKE_BUILD_TYPE=${BUILD_TYPE} ../
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
 }
@@ -1141,7 +1142,7 @@ build_streamvbyte() {
 
     CMAKE_GENERATOR="Unix Makefiles"
     BUILD_SYSTEM='make'
-    $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX:PATH=$TP_INSTALL_DIR/
+    $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=${BUILD_TYPE} -DCMAKE_INSTALL_PREFIX:PATH=$TP_INSTALL_DIR/
 
     make -j$PARALLEL
     make install
@@ -1164,7 +1165,7 @@ build_avro_c() {
     cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c
     mkdir -p build
     cd build
-    $CMAKE_CMD .. -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_INSTALL_LIBDIR=lib64 -DCMAKE_BUILD_TYPE=Release
+    $CMAKE_CMD .. -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_INSTALL_LIBDIR=lib64 -DCMAKE_BUILD_TYPE=${BUILD_TYPE}
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
     rm ${TP_INSTALL_DIR}/lib64/libavro.so*
@@ -1176,7 +1177,7 @@ build_avro_cpp() {
     cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c++
     mkdir -p build
     cd build
-    $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=Release -DBOOST_ROOT=${TP_INSTALL_DIR} -DBoost_USE_STATIC_RUNTIME=ON -DSNAPPY_INCLUDE_DIR=${TP_INSTALL_DIR}/include -DSNAPPY_LIBRARIES=${TP_INSTALL_DIR}/lib
+    $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=${BUILD_TYPE} -DBOOST_ROOT=${TP_INSTALL_DIR} -DBoost_USE_STATIC_RUNTIME=ON -DSNAPPY_INCLUDE_DIR=${TP_INSTALL_DIR}/include -DSNAPPY_LIBRARIES=${TP_INSTALL_DIR}/lib
     ${BUILD_SYSTEM} -j$PARALLEL
     # cp include and lib
     cp libavrocpp_s.a ${TP_INSTALL_DIR}/lib64/
@@ -1250,7 +1251,7 @@ build_libdeflate() {
     check_if_source_exist $LIBDEFLATE_SOURCE
     mkdir -p $TP_SOURCE_DIR/$LIBDEFLATE_SOURCE/build
     cd $TP_SOURCE_DIR/$LIBDEFLATE_SOURCE/build
-    $CMAKE_CMD .. -DCMAKE_INSTALL_LIBDIR=lib64 -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_BUILD_TYPE=Release
+    $CMAKE_CMD .. -DCMAKE_INSTALL_LIBDIR=lib64 -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_BUILD_TYPE=${BUILD_TYPE}
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
 }
@@ -1273,7 +1274,7 @@ build_clucene() {
         -DZLIB_ROOT="$TP_INSTALL_DIR" \
         -DCMAKE_CXX_FLAGS="-g -fno-omit-frame-pointer -Wno-narrowing ${FILE_PREFIX_MAP_OPTION}" \
         -DUSE_STAT64=0 \
-        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
         -DUSE_AVX2=$THIRD_PARTY_BUILD_WITH_AVX2 \
         -DBUILD_CONTRIBS_LIB=ON ..
     ${BUILD_SYSTEM} -j "${PARALLEL}"
