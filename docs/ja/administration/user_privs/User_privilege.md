@@ -81,7 +81,7 @@ SHOW USERS;
 
 ユーザーのアイデンティティ、認証方法、およびデフォルトのロールを指定してユーザーを作成できます。
 
-StarRocks は、ログイン資格情報または LDAP 認証によるユーザー認証をサポートしています。StarRocks の認証に関する詳細は、[Authentication](./Authentication.md) を参照してください。ユーザーの作成に関する詳細および高度な手順については、[CREATE USER](../../sql-reference/sql-statements/account-management/CREATE_USER.md) を参照してください。
+StarRocks は、ログイン資格情報または LDAP 認証によるユーザー認証をサポートしています。StarRocks の認証に関する詳細は、[Authentication](./auth/ldap_authentication.md) を参照してください。ユーザーの作成に関する詳細および高度な手順については、[CREATE USER](../../sql-reference/sql-statements/account-management/CREATE_USER.md) を参照してください。
 
 次の例では、ユーザー `jack` を作成し、IP アドレス `172.10.1.10` からのみ接続を許可し、パスワードを `12345` に設定し、デフォルトのロールとして `example_role` を割り当てます。
 

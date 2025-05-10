@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-sidebar_position: 10
+sidebar_position: 20
 ---
 
 # SSL 認証
@@ -65,7 +65,7 @@ SSL認証を無効にするには、以下の手順に従う：
 
 ## LDAP 認証
 
-LDAP 認証を有効にする方法の詳細については、[認証方法](./Authentication.md)を参照してください。
+LDAP 認証を有効にする方法の詳細については、[認証方法](./ldap_authentication.md)を参照してください。
 
 JDBC 接続については、 StarRocks は SSL 認証をサポートしているので、`AuthPlugin` をカスタマイズする必要はありません。組み込みの `MysqlClearPasswordPlugin` を使用できます。
 
