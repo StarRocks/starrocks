@@ -16,12 +16,16 @@ package com.starrocks.statistic.sample;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 public class ColumnSampleManager {
 
@@ -48,13 +52,24 @@ public class ColumnSampleManager {
             Type columnType = columnTypes.get(i);
 
             if (table.getColumn(columnName) != null) {
-                if (columnType.canStatistic()) {
+                if (columnType.canStatistic() && !columnType.isCollectionType()) {
                     if (onlyOneDistributionCol && table.getDistributionColumnNames().contains(columnName)) {
                         primitiveTypeStats.add(new DistributionColumnStats(columnName, columnType, sampleInfo));
                         onlyOneDistributionCol = false;
                     } else {
                         primitiveTypeStats.add(new PrimitiveTypeColumnStats(columnName, columnType));
                     }
+                } else if (columnType.isCollectionType()) {
+                    Map<Long, Optional<Long>> rowCounts = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                            .getTableStatistics(table.getId(), table.getPartitions());
+                    long tableRowCount = 0;
+                    for (Partition partition : table.getPartitions()) {
+                        if (partition.hasData()) {
+                            Optional<Long> statistic = rowCounts.getOrDefault(partition.getId(), Optional.empty());
+                            tableRowCount += statistic.orElse(partition.getRowCount());
+                        }
+                    }
+                    primitiveTypeStats.add(new CollectionTypeColumnStats(columnName, columnType, tableRowCount));
                 } else {
                     complexTypeStats.add(new ComplexTypeColumnStats(columnName, columnType));
                 }
@@ -91,7 +106,7 @@ public class ColumnSampleManager {
                     }
                 }
                 if (!names.isEmpty()) {
-                    if (columnType.canStatistic()) {
+                    if (columnType.canStatistic() && !columnType.isCollectionType()) {
                         primitiveTypeStats.add(new SubFieldColumnStats(names, columnType));
                     } else {
                         complexTypeStats.add(new SubFieldColumnStats(names, columnType));
@@ -100,7 +115,6 @@ public class ColumnSampleManager {
             }
         }
     }
-
 
     public List<ColumnStats> getComplexTypeStats() {
         return complexTypeStats;
