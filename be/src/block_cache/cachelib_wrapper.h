@@ -50,7 +50,7 @@ public:
 
     Status remove_cache(const std::string& key) override;
 
-    std::unordered_map<std::string, double> cache_stats() override;
+    std::unordered_map<std::string, double> cache_stats();
 
     const DataCacheMetrics cache_metrics() override;
 
