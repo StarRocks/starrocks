@@ -74,26 +74,32 @@ public class SPMPlanner {
         try (Timer ignored = Tracers.watchScope("SPMPlanner")) {
             analyze(query);
 
-            SPMAst2SQLBuilder builder = new SPMAst2SQLBuilder(false, true);
-            String digest = builder.build((QueryStatement) query);
-            long hash = builder.buildHash();
-            List<BaselinePlan> plans = Lists.newArrayList();
-            plans.addAll(session.getSqlPlanStorage().findBaselinePlan(digest, hash));
-            plans.addAll(GlobalStateMgr.getCurrentState().getSqlPlanStorage().findBaselinePlan(digest, hash));
+            BaselinePlan base;
+            try (Timer ignored2 = Tracers.watchScope("foundBaseline")) {
+                SPMAst2SQLBuilder builder = new SPMAst2SQLBuilder(false, true);
+                String digest = builder.build((QueryStatement) query);
+                long hash = builder.buildHash();
+                List<BaselinePlan> plans = Lists.newArrayList();
+                plans.addAll(session.getSqlPlanStorage().findBaselinePlan(digest, hash));
+                plans.addAll(GlobalStateMgr.getCurrentState().getSqlPlanStorage().findBaselinePlan(digest, hash));
 
-            Optional<BaselinePlan> base;
-            try (Timer ignored2 = Tracers.watchScope("bindPlan")) {
-                base = plans.stream().min(Comparator.comparingDouble(BaselinePlan::getCosts));
-                if (base.isEmpty()) {
+                Optional<BaselinePlan> minCosts = plans.stream().filter(BaselinePlan::isEnable)
+                        .min(Comparator.comparingDouble(BaselinePlan::getCosts));
+                Optional<BaselinePlan> minQuery = plans.stream().filter(BaselinePlan::isEnable)
+                        .filter(b -> b.getQueryMs() > 0)
+                        .min(Comparator.comparingDouble(BaselinePlan::getQueryMs));
+
+                if (minQuery.isEmpty() && minCosts.isEmpty()) {
                     return query;
                 }
+                base = minQuery.orElseGet(minCosts::get);
             }
-            try (Timer ignored3 = Tracers.watchScope("replacePlan")) {
-                if (!bind(base.get(), query)) {
+            try (Timer ignored3 = Tracers.watchScope("bindBaseline")) {
+                if (!bind(base, query)) {
                     return query;
                 }
-                baseline = base.get();
-                return replacePlan(base.get());
+                baseline = base;
+                return replacePlan(base);
             }
         } catch (Exception e) {
             // fallback to original query
@@ -187,11 +193,14 @@ public class SPMPlanner {
 
         @Override
         public Boolean visitInPredicate(InPredicate node, ParseNode context) {
-            if (node.getChildren().stream().noneMatch(SPMFunctions::isSPMFunctions)) {
+            if (node.getChildren().stream().skip(1).noneMatch(SPMFunctions::isSPMFunctions)) {
                 return super.visitExpression(node, context);
             }
             InPredicate other = cast(context);
             if (node.isNotIn() != other.isNotIn() || !check(node.getChild(0), other.getChild(0))) {
+                return false;
+            }
+            if (!check(node.getChild(0), other.getChild(0))) {
                 return false;
             }
             Preconditions.checkState(node.getChildren().size() == 2);
@@ -222,14 +231,14 @@ public class SPMPlanner {
 
         @Override
         public ParseNode visitInPredicate(InPredicate node, Void context) {
-            if (node.getChildren().stream().anyMatch(SPMFunctions::isSPMFunctions)) {
+            if (node.getChildren().stream().skip(1).anyMatch(SPMFunctions::isSPMFunctions)) {
                 Preconditions.checkState(node.getChildren().size() == 2);
                 Preconditions.checkState(SPMFunctions.isSPMFunctions(node.getChild(1)));
                 Preconditions.checkState(!node.getChild(1).getChildren().isEmpty());
                 Preconditions.checkState(node.getChild(1).getChild(0) instanceof IntLiteral);
                 long spmId = ((IntLiteral) node.getChild(1).getChild(0)).getValue();
                 InPredicate value = placeholderValues.get(spmId).cast();
-                return new InPredicate(node.getChild(0), value.getListChildren(), node.isNotIn());
+                return new InPredicate(visitExpr(node.getChild(0), context), value.getListChildren(), node.isNotIn());
             }
             return super.visitExpression(node, context);
         }

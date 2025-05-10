@@ -65,6 +65,7 @@ class SQLPlanGlobalStorage implements SQLPlanStorage {
     private static final String QUERY_SQL = "SELECT * FROM " + StatsConstants.SPM_BASELINE_TABLE_NAME + " ";
     private static final String INSERT_SQL = "INSERT INTO " + StatsConstants.SPM_BASELINE_TABLE_NAME + " VALUES ";
     private static final String DELETE_SQL = "DELETE FROM " + StatsConstants.SPM_BASELINE_TABLE_NAME + " WHERE id IN ";
+    private static final String UPDATE_SQL = "UPDATE " + StatsConstants.SPM_BASELINE_TABLE_NAME + " SET is_enable = ";
 
     // for lazy load baseline plan
     private record BaselineId(long id, long bindSQLHash) {}
@@ -142,10 +143,10 @@ class SQLPlanGlobalStorage implements SQLPlanStorage {
                 allBaselineIds.add(new BaselineId(plan.getId(), plan.getBindSqlHash()));
             }
 
-            BaselinePlan message = new BaselinePlan(-1, -1);
-            message.setReplayIds(plans.stream().map(BaselinePlan::getId).collect(Collectors.toList()));
-            message.setReplayBindSQLHash(plans.stream().map(BaselinePlan::getBindSqlHash).collect(Collectors.toList()));
-            GlobalStateMgr.getCurrentState().getEditLog().logCreateSPMBaseline(message);
+            BaselinePlan.Info info = new BaselinePlan.Info();
+            info.setReplayIds(plans.stream().map(BaselinePlan::getId).collect(Collectors.toList()));
+            info.setReplayBindSQLHash(plans.stream().map(BaselinePlan::getBindSqlHash).collect(Collectors.toList()));
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateSPMBaseline(info);
         } catch (Exception e) {
             LOG.warn("sql plan baselines store baseline fail", e);
         }
@@ -175,7 +176,7 @@ class SQLPlanGlobalStorage implements SQLPlanStorage {
 
             String s = ids.stream().map(BaselineId::id).map(String::valueOf).collect(Collectors.joining(","));
             executor.executeDML(DELETE_SQL + "(" + s + ");");
-            BaselinePlan p = new BaselinePlan(-1, -1);
+            BaselinePlan.Info p = new BaselinePlan.Info();
             p.setReplayIds(ids.stream().map(BaselineId::id).collect(Collectors.toList()));
             GlobalStateMgr.getCurrentState().getEditLog().logDropSPMBaseline(p);
         } catch (Exception e) {
@@ -225,14 +226,47 @@ class SQLPlanGlobalStorage implements SQLPlanStorage {
     }
 
     @Override
-    public void replayBaselinePlan(BaselinePlan plan, boolean isCreate) {
+    public void replayBaselinePlan(BaselinePlan.Info info, boolean isCreate) {
         if (isCreate) {
-            for (int i = 0; i < plan.getReplayIds().size(); i++) {
-                allBaselineIds.add(new BaselineId(plan.getReplayIds().get(i), plan.getReplayBindSQLHash().get(i)));
+            for (int i = 0; i < info.getReplayIds().size(); i++) {
+                allBaselineIds.add(new BaselineId(info.getReplayIds().get(i), info.getReplayBindSQLHash().get(i)));
             }
         } else {
-            allBaselineIds.removeIf(b -> plan.getReplayIds().contains(b.id));
+            allBaselineIds.removeIf(b -> info.getReplayIds().contains(b.id));
         }
+    }
+
+    public void replayUpdateBaselinePlan(BaselinePlan.Info info, boolean isEnable) {
+        // invalidate cache
+        cache.invalidateAll(info.getReplayIds());
+    }
+
+    @Override
+    public void controlBaselinePlan(boolean isEnable, List<Long> baseLineIds) {
+        if (!StatisticUtils.checkStatisticTables(List.of(StatsConstants.SPM_BASELINE_TABLE_NAME))) {
+            return;
+        }
+        List<Long> ids = allBaselineIds.stream()
+                .filter(b -> baseLineIds.contains(b.id))
+                .map(BaselineId::id)
+                .toList();
+        if (ids.isEmpty()) {
+            return;
+        }
+
+        String sql = UPDATE_SQL + isEnable + " WHERE id IN (" +
+                ids.stream().map(String::valueOf).collect(Collectors.joining(",")) + ");";
+        try {
+            executor.executeDML(sql);
+        } catch (Exception e) {
+            LOG.warn("sql plan baselines control baseline fail", e);
+        }
+
+        BaselinePlan.Info p = new BaselinePlan.Info();
+        p.setReplayIds(ids);
+        GlobalStateMgr.getCurrentState().getEditLog().logUpdateSPMBaseline(p, isEnable);
+        // invalidate cache
+        cache.invalidateAll(ids);
     }
 
     private class BaselinePlanLoader implements CacheLoader<Long, BaselinePlan> {

@@ -31,5 +31,9 @@ public interface SQLPlanStorage {
     // for ut test use
     void dropAllBaselinePlans();
 
-    default void replayBaselinePlan(BaselinePlan plan, boolean isCreate) {}
+    default void replayBaselinePlan(BaselinePlan.Info info, boolean isCreate) {}
+
+    default void replayUpdateBaselinePlan(BaselinePlan.Info info, boolean isEnable) {}
+
+    void controlBaselinePlan(boolean isEnable, List<Long> baseLineIds);
 }

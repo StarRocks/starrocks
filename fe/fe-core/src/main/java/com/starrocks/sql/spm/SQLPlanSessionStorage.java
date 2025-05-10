@@ -47,4 +47,12 @@ class SQLPlanSessionStorage implements SQLPlanStorage {
         baselinePlans.clear();
     }
 
+    @Override
+    public void controlBaselinePlan(boolean isEnable, List<Long> baseLineIds) {
+        for (BaselinePlan plan : baselinePlans) {
+            if (baseLineIds.contains(plan.getId())) {
+                plan.setEnable(isEnable);
+            }
+        }
+    }
 }

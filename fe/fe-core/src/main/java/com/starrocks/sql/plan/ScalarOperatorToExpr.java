@@ -61,6 +61,7 @@ import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.MapExpr;
+import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
@@ -88,6 +89,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
+import com.starrocks.sql.spm.SPMFunctions;
 import com.starrocks.thrift.TExprOpcode;
 import com.starrocks.thrift.TFunctionBinaryType;
 
@@ -391,6 +393,9 @@ public class ScalarOperatorToExpr {
         public Expr visitCall(CallOperator call, FormatterContext context) {
             String fnName = call.getFnName();
             Expr callExpr;
+            if (SPMFunctions.isSPMFunctions(call)) {
+                throw UnsupportedException.unsupportedException("spm function only used in create baseline stmt");
+            }
             switch (fnName.toLowerCase()) {
                 /*
                  * Arithmetic
