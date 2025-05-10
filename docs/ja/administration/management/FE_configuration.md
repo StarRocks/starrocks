@@ -1266,6 +1266,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: クエリフィードバックの分析をトリガーするクエリの実行時間しきい値。
 - 導入バージョン: v3.4.0
 
+##### low_cardinality_threshold
+
+- デフォルト: 255
+- タイプ: Int
+- 単位: -
+- 変更可能: いいえ
+- 説明: 低基数辞書のしきい値。
+- 導入バージョン: v3.5.0
+
 ### ロードとアンロード
 
 ##### load_straggler_wait_second
