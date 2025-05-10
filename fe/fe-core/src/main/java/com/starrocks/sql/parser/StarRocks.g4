@@ -954,6 +954,7 @@ alterClause
     | dropTagClause
     | tableOperationClause
     | dropPersistentIndexClause
+    | alterTableAutoIncrementClause
 
     //Alter partition clause
     | addPartitionClause
@@ -3118,4 +3119,8 @@ nonReserved
     | ARRAY_ELEMENT
     | PERSISTENT
     | EXCLUDE | EXCEPT
+    ;
+
+alterTableAutoIncrementClause
+    : AUTO_INCREMENT '=' INTEGER_VALUE
     ;

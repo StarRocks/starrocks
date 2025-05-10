@@ -54,6 +54,7 @@ import com.starrocks.analysis.UserVariableHint;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.connector.parser.trino.PlaceholderExpr;
 import com.starrocks.sql.ShowTemporaryTableStmt;
+import com.starrocks.sql.ast.AlterTableAutoIncrementClause;
 import com.starrocks.sql.ast.feedback.AddPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ClearPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.DelPlanAdvisorStmt;
@@ -1238,6 +1239,10 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitReorderColumnsClause(ReorderColumnsClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitAlterTableAutoIncrementClause(AlterTableAutoIncrementClause clause, C context) {
         return visitNode(clause, context);
     }
 
