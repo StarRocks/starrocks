@@ -58,7 +58,6 @@ import org.apache.paimon.metrics.Gauge;
 import org.apache.paimon.metrics.Metric;
 import org.apache.paimon.operation.metrics.ScanMetrics;
 import org.apache.paimon.predicate.Predicate;
-import org.apache.paimon.predicate.PredicateBuilder;
 import org.apache.paimon.reader.RecordReader;
 import org.apache.paimon.reader.RecordReaderIterator;
 import org.apache.paimon.stats.ColStats;
@@ -66,7 +65,6 @@ import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.InnerTableScan;
 import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.source.Split;
-import org.apache.paimon.table.system.SchemasTable;
 import org.apache.paimon.table.system.SnapshotsTable;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
@@ -253,12 +251,11 @@ public class PaimonMetadata implements ConnectorMetadata {
             Column column = new Column(fieldName, fieldType, true, field.description());
             fullSchema.add(column);
         }
-        long createTime = this.getTableCreateTime(dbName, tblName);
         String comment = "";
         if (paimonNativeTable.comment().isPresent()) {
             comment = paimonNativeTable.comment().get();
         }
-        PaimonTable table = new PaimonTable(this.catalogName, dbName, tblName, fullSchema, paimonNativeTable, createTime);
+        PaimonTable table = new PaimonTable(this.catalogName, dbName, tblName, fullSchema, paimonNativeTable);
         table.setComment(comment);
         tables.put(identifier, table);
         return table;
@@ -509,44 +506,6 @@ public class PaimonMetadata implements ConnectorMetadata {
     @Override
     public CloudConfiguration getCloudConfiguration() {
         return hdfsEnvironment.getCloudConfiguration();
-    }
-
-    public long getTableCreateTime(String dbName, String tblName) {
-        Identifier schemaTableIdentifier = new Identifier(dbName, String.format("%s%s", tblName, "$schemas"));
-        RecordReaderIterator<InternalRow> iterator = null;
-        try {
-            SchemasTable table = (SchemasTable) paimonNativeCatalog.getTable(schemaTableIdentifier);
-            RowType rowType = table.rowType();
-            if (!rowType.getFieldNames().contains("update_time")) {
-                return 0;
-            }
-            DataType updateTimeType = rowType.getTypeAt(rowType.getFieldIndex("update_time"));
-            int[] projected = new int[] {0, 6};
-            PredicateBuilder predicateBuilder = new PredicateBuilder(rowType);
-            Predicate equal = predicateBuilder.equal(predicateBuilder.indexOf("schema_id"), 0L);
-            RecordReader<InternalRow> recordReader = table.newReadBuilder().withProjection(projected)
-                    .withFilter(equal).newRead().createReader(table.newScan().plan());
-            iterator = new RecordReaderIterator<>(recordReader);
-            while (iterator.hasNext()) {
-                InternalRow rowData = iterator.next();
-                Long schemaIdValue = rowData.getLong(0);
-                Timestamp updateTime = rowData.getTimestamp(1, DataTypeChecks.getPrecision(updateTimeType));
-                if (schemaIdValue == 0) {
-                    return updateTime.getMillisecond();
-                }
-            }
-        } catch (Exception e) {
-            LOG.error("Failed to get update_time of paimon table {}.{}.", dbName, tblName, e);
-        } finally {
-            if (iterator != null) {
-                try {
-                    iterator.close();
-                } catch (Exception e) {
-                    LOG.error("Failed to get update_time of paimon table {}.{}.", dbName, tblName, e);
-                }
-            }
-        }
-        return 0;
     }
 
     public long getTableUpdateTime(String dbName, String tblName) {
