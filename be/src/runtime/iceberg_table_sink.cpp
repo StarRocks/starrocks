@@ -68,6 +68,7 @@ Status IcebergTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operat
     sink_ctx->path = t_iceberg_sink.location + connector::IcebergUtils::DATA_DIRECTORY;
     sink_ctx->cloud_conf = t_iceberg_sink.cloud_configuration;
     sink_ctx->column_names = iceberg_table_desc->full_column_names();
+    sink_ctx->partition_column_names = iceberg_table_desc->partition_column_names();
     sink_ctx->partition_column_indices = iceberg_table_desc->partition_index_in_schema();
     sink_ctx->executor = ExecEnv::GetInstance()->pipeline_sink_io_pool();
     sink_ctx->format = t_iceberg_sink.file_format; // iceberg sink only supports parquet
@@ -78,6 +79,9 @@ Status IcebergTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operat
     sink_ctx->parquet_field_ids =
             connector::IcebergUtils::generate_parquet_field_ids(iceberg_table_desc->get_iceberg_schema()->fields);
     sink_ctx->column_evaluators = ColumnExprEvaluator::from_exprs(this->get_output_expr(), runtime_state);
+    sink_ctx->transform_exprs = iceberg_table_desc->get_transform_exprs();
+    sink_ctx->partition_evaluators =
+            ColumnExprEvaluator::from_exprs(iceberg_table_desc->get_partition_exprs(), runtime_state);
     sink_ctx->fragment_context = fragment_ctx;
 
     auto connector = connector::ConnectorManager::default_instance()->get(connector::Connector::ICEBERG);
@@ -96,9 +100,8 @@ Status IcebergTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operat
         std::vector<TExpr> partition_expr;
         std::vector<ExprContext*> partition_expr_ctxs;
         auto output_expr = this->get_output_expr();
-        for (const auto& index : iceberg_table_desc->partition_index_in_schema()) {
-            partition_expr.push_back(output_expr[index]);
-        }
+
+        partition_expr = iceberg_table_desc->get_partition_exprs();
 
         RETURN_IF_ERROR(Expr::create_expr_trees(runtime_state->obj_pool(), partition_expr, &partition_expr_ctxs,
                                                 runtime_state));
