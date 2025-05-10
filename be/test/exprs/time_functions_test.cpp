@@ -2190,7 +2190,7 @@ TEST_F(TimeFunctionsTest, jodatime_format) {
                 ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(test_string.c_str(), test_string.size()), 1);
         Columns columns;
         columns.emplace_back(dt_col);
-        columns.emplace_back(fmt_col);
+        columns.emplace_back(std::move(fmt_col));
 
         ctx->set_constant_columns(columns);
         TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
@@ -4006,6 +4006,101 @@ TEST_F(TimeFunctionsTest, formatTimeTest) {
         EXPECT_EQ("14:30", std::string(result_viewer.value(1)));
         EXPECT_EQ("Time: 14:30", std::string(result_viewer.value(2)));
         EXPECT_EQ("14", std::string(result_viewer.value(3)));
+    }
+}
+
+TEST_F(TimeFunctionsTest, fromIso8601DateTest) {
+    // Test with primary ISO 8601 date formats
+    {
+        // Year-Week format: YYYY-Www
+        std::string iso_str = "2020-W10";
+        BinaryColumn::Ptr input = BinaryColumn::create();
+        input->append(Slice(iso_str.c_str(), iso_str.size()));
+        
+        Columns columns;
+        columns.emplace_back(input);
+
+        ColumnPtr result = TimeFunctions::from_iso8601_date(_utils->get_fn_ctx(), columns).value();
+        ASSERT_FALSE(result->is_null(0));
+        auto date_col = ColumnHelper::cast_to<TYPE_DATE>(ColumnHelper::get_data_column(result));
+        DateValue expected;
+        expected.from_date(2020, 3, 2); // 2020-W10 starts at March 2, 2020
+        ASSERT_EQ(expected, date_col->get_data()[0]);
+    }
+
+    {
+        // Year-Week-Day format: YYYY-Www-D
+        std::string iso_str = "2020-W10-3";
+        BinaryColumn::Ptr input = BinaryColumn::create();
+        input->append(Slice(iso_str.c_str(), iso_str.size()));
+        
+        Columns columns;
+        columns.emplace_back(input);
+
+        ColumnPtr result = TimeFunctions::from_iso8601_date(_utils->get_fn_ctx(), columns).value();
+        ASSERT_FALSE(result->is_null(0));
+        auto date_col = ColumnHelper::cast_to<TYPE_DATE>(ColumnHelper::get_data_column(result));
+        DateValue expected;
+        expected.from_date(2020, 3, 4); // 2020-W10-3 is March 4, 2020 (Wednesday)
+        ASSERT_EQ(expected, date_col->get_data()[0]);
+    }
+
+    {
+        // Year-DayOfYear format: YYYY-DDD
+        std::string iso_str = "2020-123";
+        BinaryColumn::Ptr input = BinaryColumn::create();
+        input->append(Slice(iso_str.c_str(), iso_str.size()));
+        
+        Columns columns;
+        columns.emplace_back(input);
+
+        ColumnPtr result = TimeFunctions::from_iso8601_date(_utils->get_fn_ctx(), columns).value();
+        ASSERT_FALSE(result->is_null(0));
+        auto date_col = ColumnHelper::cast_to<TYPE_DATE>(ColumnHelper::get_data_column(result));
+        DateValue expected;
+        expected.from_date(2020, 5, 2); // 2020-123 is the 123rd day of 2020 which is May 2
+        ASSERT_EQ(expected, date_col->get_data()[0]);
+    }
+
+    {
+        // Standard date format: YYYY-MM-DD
+        std::string iso_str = "2020-05-11";
+        BinaryColumn::Ptr input = BinaryColumn::create();
+        input->append(Slice(iso_str.c_str(), iso_str.size()));
+        
+        Columns columns;
+        columns.emplace_back(input);
+
+        ColumnPtr result = TimeFunctions::from_iso8601_date(_utils->get_fn_ctx(), columns).value();
+        ASSERT_FALSE(result->is_null(0));
+        auto date_col = ColumnHelper::cast_to<TYPE_DATE>(ColumnHelper::get_data_column(result));
+        DateValue expected;
+        expected.from_date(2020, 5, 11);
+        ASSERT_EQ(expected, date_col->get_data()[0]);
+    }
+
+    {
+        // Test with invalid input
+        std::string iso_str = "invalid";
+        BinaryColumn::Ptr input = BinaryColumn::create();
+        input->append(Slice(iso_str.c_str(), iso_str.size()));
+        
+        Columns columns;
+        columns.emplace_back(input);
+
+        ColumnPtr result = TimeFunctions::from_iso8601_date(_utils->get_fn_ctx(), columns).value();
+        ASSERT_TRUE(result->is_null(0));
+    }
+
+    {
+        // Test with NULL value
+        auto input = ColumnHelper::create_const_null_column(1);
+        
+        Columns columns;
+        columns.emplace_back(input);
+
+        ColumnPtr result = TimeFunctions::from_iso8601_date(_utils->get_fn_ctx(), columns).value();
+        ASSERT_TRUE(result->is_null(0));
     }
 }
 } // namespace starrocks
