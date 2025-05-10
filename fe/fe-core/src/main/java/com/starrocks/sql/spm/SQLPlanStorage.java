@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.starrocks.sql.spm;
 
+import java.util.Collections;
 import java.util.List;
 
 public interface SQLPlanStorage {
@@ -32,4 +33,8 @@ public interface SQLPlanStorage {
     void dropAllBaselinePlans();
 
     default void replayBaselinePlan(BaselinePlan plan, boolean isCreate) {}
+
+    default List<BaselinePlan> queryBaselinePlan(List<String> sqlDigest, String source) {
+        return Collections.emptyList();
+    }
 }
