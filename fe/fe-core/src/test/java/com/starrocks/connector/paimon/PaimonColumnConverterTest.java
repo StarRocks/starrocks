@@ -15,6 +15,7 @@
 package com.starrocks.connector.paimon;
 
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.ColumnTypeConverter;
@@ -24,6 +25,7 @@ import org.apache.paimon.types.BinaryType;
 import org.apache.paimon.types.BooleanType;
 import org.apache.paimon.types.CharType;
 import org.apache.paimon.types.DataField;
+import org.apache.paimon.types.DataTypes;
 import org.apache.paimon.types.DateType;
 import org.apache.paimon.types.DecimalType;
 import org.apache.paimon.types.DoubleType;
@@ -40,6 +42,7 @@ import org.apache.paimon.types.VarCharType;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -189,5 +192,119 @@ public class PaimonColumnConverterTest {
         Assert.assertEquals(Type.VARBINARY, srType.getField("f0").getType());
         Assert.assertEquals(Type.BIGINT, srType.getField("f1").getType());
         Assert.assertEquals(Type.FLOAT, srType.getField("f2").getType());
+    }
+
+    @Test
+    public void testConvertFromVarBinary() {
+        org.apache.paimon.types.DataType paimonDataType = ColumnTypeConverter.toPaimonDataType(Type.VARBINARY);
+        Assert.assertEquals(paimonDataType, org.apache.paimon.types.DataTypes.VARBINARY(VarBinaryType.MAX_LENGTH));
+    }
+
+    @Test
+    public void testConvertFromChar() {
+        org.apache.paimon.types.DataType paimonDataType = ColumnTypeConverter.toPaimonDataType(Type.CHAR);
+        Assert.assertEquals(paimonDataType, org.apache.paimon.types.DataTypes.CHAR(CharType.MAX_LENGTH));
+    }
+
+    @Test
+    public void testConvertFromVarchar() {
+        org.apache.paimon.types.DataType paimonDataType = ColumnTypeConverter.toPaimonDataType(Type.VARCHAR);
+        Assert.assertEquals(paimonDataType, org.apache.paimon.types.DataTypes.VARCHAR(VarCharType.MAX_LENGTH));
+    }
+
+    @Test
+    public void testConvertFromBool() {
+        org.apache.paimon.types.DataType paimonDataType = ColumnTypeConverter.toPaimonDataType(Type.BOOLEAN);
+        Assert.assertEquals(paimonDataType, org.apache.paimon.types.DataTypes.BOOLEAN());
+    }
+
+    @Test
+    public void testConvertFromDecimal() {
+        int precision = 9;
+        int scale = 5;
+        Type srType = ScalarType.createUnifiedDecimalType(precision, scale);
+        org.apache.paimon.types.DataType paimonDataType = ColumnTypeConverter.toPaimonDataType(srType);
+        Assert.assertEquals(new DecimalType(precision, scale), paimonDataType);
+    }
+
+    @Test
+    public void testConvertFromTinyInt() {
+        org.apache.paimon.types.DataType paimonDataType = ColumnTypeConverter.toPaimonDataType(Type.TINYINT);
+        Assert.assertEquals(paimonDataType, org.apache.paimon.types.DataTypes.INT());
+    }
+
+    @Test
+    public void testConvertFromSmallint() {
+        org.apache.paimon.types.DataType paimonDataType = ColumnTypeConverter.toPaimonDataType(Type.SMALLINT);
+        Assert.assertEquals(paimonDataType, org.apache.paimon.types.DataTypes.INT());
+    }
+
+    @Test
+    public void testConvertFromInt() {
+        org.apache.paimon.types.DataType paimonDataType = ColumnTypeConverter.toPaimonDataType(Type.INT);
+        Assert.assertEquals(paimonDataType, org.apache.paimon.types.DataTypes.INT());
+    }
+
+    @Test
+    public void testConvertFromBigint() {
+        org.apache.paimon.types.DataType paimonDataType = ColumnTypeConverter.toPaimonDataType(Type.BIGINT);
+        Assert.assertEquals(paimonDataType, org.apache.paimon.types.DataTypes.BIGINT());
+    }
+
+    @Test
+    public void testConvertFromFlout() {
+        org.apache.paimon.types.DataType paimonDataType = ColumnTypeConverter.toPaimonDataType(Type.FLOAT);
+        Assert.assertEquals(paimonDataType, org.apache.paimon.types.DataTypes.FLOAT());
+    }
+
+    @Test
+    public void testConvertFromDouble() {
+        org.apache.paimon.types.DataType paimonDataType = ColumnTypeConverter.toPaimonDataType(Type.DOUBLE);
+        Assert.assertEquals(paimonDataType, org.apache.paimon.types.DataTypes.DOUBLE());
+    }
+
+    @Test
+    public void testConvertFromDate() {
+        org.apache.paimon.types.DataType paimonDataType = ColumnTypeConverter.toPaimonDataType(Type.DATE);
+        Assert.assertEquals(paimonDataType, org.apache.paimon.types.DataTypes.DATE());
+    }
+
+    @Test
+    public void testConvertFromDatetime() {
+        org.apache.paimon.types.DataType paimonDataType = ColumnTypeConverter.toPaimonDataType(Type.DATETIME);
+        Assert.assertEquals(paimonDataType, org.apache.paimon.types.DataTypes.TIMESTAMP());
+    }
+
+    @Test
+    public void testConvertFromArray() {
+        org.apache.paimon.types.DataType paimonDataType = ColumnTypeConverter.toPaimonDataType(Type.ARRAY_SMALLINT);
+        Assert.assertTrue(paimonDataType instanceof ArrayType);
+        Assert.assertEquals(new SmallIntType(), new ArrayType(new SmallIntType()).getElementType());
+    }
+
+    @Test
+    public void testConvertFromMap() {
+        org.apache.paimon.types.DataType paimonDataType = ColumnTypeConverter.toPaimonDataType(Type.MAP_VARCHAR_VARCHAR);
+        Assert.assertTrue(paimonDataType instanceof MapType);
+        MapType paimonType = (MapType) paimonDataType;
+        Assert.assertEquals(DataTypes.VARCHAR(VarCharType.MAX_LENGTH), paimonType.getKeyType());
+        Assert.assertEquals(DataTypes.VARCHAR(VarCharType.MAX_LENGTH), paimonType.getValueType());
+    }
+
+    @Test
+    public void testConvertFromStruct() {
+        ArrayList<StructField> structFields = new ArrayList<>(3);
+        structFields.add(new StructField("f0", Type.VARBINARY));
+        structFields.add(new StructField("f1", Type.BIGINT));
+        structFields.add(new StructField("f2", Type.FLOAT));
+        StructType structType = new StructType(structFields);
+        org.apache.paimon.types.DataType paimonDataType = ColumnTypeConverter.toPaimonDataType(structType);
+        Assert.assertTrue(paimonDataType instanceof RowType);
+        RowType paimonType = (RowType) paimonDataType;
+        List<DataField> fields = paimonType.getFields();
+        Assert.assertEquals(3, fields.size());
+        Assert.assertEquals(DataTypes.VARBINARY(VarBinaryType.MAX_LENGTH), paimonType.getField("f0").type());
+        Assert.assertEquals(DataTypes.BIGINT(), paimonType.getField("f1").type());
+        Assert.assertEquals(DataTypes.FLOAT(), paimonType.getField("f2").type());
     }
 }

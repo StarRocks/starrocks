@@ -1061,7 +1061,7 @@ public class ShowExecutorTest {
         new MockUp<MetadataMgr>() {
             @Mock
             public Database getDb(ConnectContext context, String catalogName, String dbName) {
-                return new Database();
+                return new Database(0, "hive_db");
             }
 
             @Mock
@@ -1099,7 +1099,7 @@ public class ShowExecutorTest {
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         Assert.assertEquals("test_table", resultSet.getResultRows().get(0).get(0));
-        Assert.assertEquals("CREATE TABLE `test_table` (\n" +
+        Assert.assertEquals("CREATE TABLE `hive_catalog`.`hive_db`.`test_table` (\n" +
                         "  `id` int(11) DEFAULT NULL COMMENT \"id\",\n" +
                         "  `name` varchar DEFAULT NULL,\n" +
                         "  `year` int(11) DEFAULT NULL,\n" +
@@ -1115,7 +1115,7 @@ public class ShowExecutorTest {
         new MockUp<MetadataMgr>() {
             @Mock
             public Database getDb(ConnectContext context, String catalogName, String dbName) {
-                return new Database();
+                return new Database(0, "hive_db");
             }
 
             @Mock
@@ -1154,7 +1154,7 @@ public class ShowExecutorTest {
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         Assert.assertEquals("test_table", resultSet.getResultRows().get(0).get(0));
-        Assert.assertEquals("CREATE EXTERNAL TABLE `test_table` (\n" +
+        Assert.assertEquals("CREATE EXTERNAL TABLE `hive_catalog`.`hive_db`.`test_table` (\n" +
                         "  `id` int(11) DEFAULT NULL COMMENT \"id\",\n" +
                         "  `name` varchar DEFAULT NULL,\n" +
                         "  `year` int(11) DEFAULT NULL,\n" +
