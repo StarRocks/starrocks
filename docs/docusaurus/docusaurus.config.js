@@ -4,7 +4,7 @@
 // There are various equivalent ways to declare your Docusaurus config.
 // See: https://docusaurus.io/docs/api/docusaurus-config
 
-import {themes as prismThemes} from 'prism-react-renderer';
+import { themes as prismThemes } from "prism-react-renderer";
 
 // if the env var DISABLE_VERSIONING is set
 // (example `export DISABLE_VERSIONING=true`) then build only the
@@ -15,52 +15,69 @@ const isVersioningDisabled = !!process.env.DISABLE_VERSIONING || false;
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
-  title: 'StarRocks',
-  tagline: 'StarRocks documentation',
-  favicon: 'img/favicon.ico',
+  title: "StarRocks",
+  tagline: "StarRocks documentation",
+  favicon: "img/favicon.ico",
 
-  url: 'https://docs.starrocks.io/',
+  url: "https://docs.starrocks.io/",
   // Set the /<baseUrl>/ pathname under which your site is served
-  baseUrl: '/',
+  baseUrl: "/",
 
   // If you aren't using GitHub pages, you don't need these.
-  organizationName: 'StarRocks', // Usually your GitHub org/user name.
-  projectName: 'starrocks', // Usually your repo name.
+  organizationName: "StarRocks", // Usually your GitHub org/user name.
+  projectName: "starrocks", // Usually your repo name.
 
   // needed for hosting in S3:
   trailingSlash: true,
 
-  onBrokenAnchors: 'ignore',
-  onBrokenLinks: 'ignore',
-  onBrokenMarkdownLinks: 'throw',
+  onBrokenAnchors: "ignore",
+  onBrokenLinks: "ignore",
+  onBrokenMarkdownLinks: "throw",
+
+  future: {
+    experimental_faster: true,
+  },
 
   i18n: {
-    defaultLocale: 'en',
-    locales: ['en', 'zh', 'ja'],
+    defaultLocale: "en",
+    locales: ["en", "zh", "ja"],
     localeConfigs: {
       en: {
-        htmlLang: 'en-US',
+        htmlLang: "en-US",
       },
       zh: {
-        htmlLang: 'zh-CN',
+        htmlLang: "zh-CN",
       },
     },
   },
 
   presets: [
     [
-      'classic',
+      "classic",
       /** @type {import('@docusaurus/preset-classic').Options} */
       ({
         docs: {
-          sidebarPath: require.resolve('./sidebars.json'),
+          sidebarPath: require.resolve("./sidebars.json"),
 
           // Edit links for English and Chinese
-          editUrl: ({locale, docPath}) => {
-              return 'https://github.com/StarRocks/starrocks/edit/main/docs/' + locale + '/' + docPath
+          editUrl: ({ locale, docPath }) => {
+            return (
+              "https://github.com/StarRocks/starrocks/edit/main/docs/" +
+              locale +
+              "/" +
+              docPath
+            );
           },
-          admonitions: { keywords:
-              ['experimental','beta', 'note','tip','info','caution','danger'],
+          admonitions: {
+            keywords: [
+              "experimental",
+              "beta",
+              "note",
+              "tip",
+              "info",
+              "caution",
+              "danger",
+            ],
           },
           // Versions:
           // We don't want to show `main` or `current`, we want to show the released versions.
@@ -70,44 +87,43 @@ const config = {
           // versions, so the banner is set to none on the versions other than latest (latest
           // doesn't get a banner by default).
           lastVersion: (() => {
-              if (isVersioningDisabled) {
-                return 'current';
-              } else {
-                return '3.1';
-              }
-            })(),
+            if (isVersioningDisabled) {
+              return "current";
+            } else {
+              return "3.1";
+            }
+          })(),
 
           onlyIncludeVersions: (() => {
-              if (isVersioningDisabled) {
-                return ['current'];
-              } else {
-                return ['3.1', '3.0', '2.5', '2.3', '2.2', '2.1', '2.0', '1.19'];
-              }
-            })(),
+            if (isVersioningDisabled) {
+              return ["current"];
+            } else {
+              return ["3.1", "3.0", "2.5", "2.3", "2.2", "2.1", "2.0", "1.19"];
+            }
+          })(),
 
           versions: (() => {
-              if (isVersioningDisabled) {
-                return { current: { label: 'current' } };
-              } else {
-                return {
-                  '3.1': { label: 'Stable-3.1' },
-                  '3.0': { label: '3.0', banner: 'none' },
-                  '2.5': { label: '2.5', banner: 'none' },
-                  '2.3': { label: '2.3', banner: 'none' },
-                  '2.2': { label: '2.2', banner: 'none' },
-                  '2.1': { label: '2.1', banner: 'none' },
-                  '2.0': { label: '2.0', banner: 'none' },
-                  '1.19': { label: '1.19', banner: 'none' },
-                };
-              }
-            })(),
-
+            if (isVersioningDisabled) {
+              return { current: { label: "current" } };
+            } else {
+              return {
+                3.1: { label: "Stable-3.1" },
+                "3.0": { label: "3.0", banner: "none" },
+                2.5: { label: "2.5", banner: "none" },
+                2.3: { label: "2.3", banner: "none" },
+                2.2: { label: "2.2", banner: "none" },
+                2.1: { label: "2.1", banner: "none" },
+                "2.0": { label: "2.0", banner: "none" },
+                1.19: { label: "1.19", banner: "none" },
+              };
+            }
+          })(),
         },
         theme: {
-          customCss: require.resolve('./src/css/custom.css'),
+          customCss: require.resolve("./src/css/custom.css"),
         },
         gtag: {
-          trackingID: 'G-VTBXVPZLHB',
+          trackingID: "G-VTBXVPZLHB",
           anonymizeIP: true,
         },
       }),
@@ -116,13 +132,13 @@ const config = {
 
   plugins: [
     [
-      '@docusaurus/plugin-client-redirects',
+      "@docusaurus/plugin-client-redirects",
       {
         redirects: [
           // /docs/oldDoc -> /docs/newDoc
           {
-            from: '/docs/loading/cloud_storage_load/',
-            to: '/docs/loading/objectstorage/'
+            from: "/docs/loading/cloud_storage_load/",
+            to: "/docs/loading/objectstorage/",
           },
         ],
       },
@@ -139,46 +155,46 @@ const config = {
         },
       },
       // This image shows in Slack when you paste a link
-      image: 'img/logo.svg',
+      image: "img/logo.svg",
       navbar: {
-        title: 'StarRocks',
+        title: "StarRocks",
         logo: {
-          alt: 'StarRocks Logo',
-          src: 'img/logo.svg',
-          href: 'https://www.starrocks.io/',
+          alt: "StarRocks Logo",
+          src: "img/logo.svg",
+          href: "https://www.starrocks.io/",
         },
         items: [
           {
-            type: 'docSidebar',
-            sidebarId: 'docs',
-            position: 'left',
-            label: 'Documentation',
+            type: "docSidebar",
+            sidebarId: "docs",
+            position: "left",
+            label: "Documentation",
           },
           {
-            type: 'docsVersionDropdown',
-            position: 'left',
+            type: "docsVersionDropdown",
+            position: "left",
             dropdownActiveClassDisabled: true,
           },
           {
-            href: 'https://github.com/StarRocks/starrocks',
-            label: 'GitHub',
-            position: 'right',
+            href: "https://github.com/StarRocks/starrocks",
+            label: "GitHub",
+            position: "right",
           },
           {
-            type: 'localeDropdown',
-            position: 'left',
+            type: "localeDropdown",
+            position: "left",
           },
         ],
       },
       footer: {
-        style: 'dark',
+        style: "dark",
         links: [
           {
-            title: 'Docs',
+            title: "Docs",
             items: [
               {
-                label: 'Documentation',
-                to: '/docs/introduction/StarRocks_intro',
+                label: "Documentation",
+                to: "/docs/introduction/StarRocks_intro",
               },
             ],
           },
@@ -190,34 +206,33 @@ const config = {
         theme: prismThemes.github,
         darkTheme: prismThemes.dracula,
         additionalLanguages: [
-          'java',
-          'haskell',
-          'python',
-          'matlab',
-          'bash',
-          'diff',
-          'json',
-          'scss',
+          "java",
+          "haskell",
+          "python",
+          "matlab",
+          "bash",
+          "diff",
+          "json",
+          "scss",
         ],
       },
       algolia: {
         // The application ID provided by Algolia
-        appId: 'ER08SJMRY1',
-  
+        appId: "ER08SJMRY1",
+
         // Public API key: it is safe to commit it
-        apiKey: '08af8d37380974edb873fe8fd61e8dda',
-  
-        indexName: 'starrocks',
-  
+        apiKey: "08af8d37380974edb873fe8fd61e8dda",
+
+        indexName: "starrocks",
+
         // Optional: see doc section below
         contextualSearch: true,
-  
+
         // Optional: Algolia search parameters
         searchParameters: {},
 
         // Optional: path for search page that enabled by default (`false` to disable it)
-        searchPagePath: 'search',
-
+        searchPagePath: "search",
       },
     }),
 };
