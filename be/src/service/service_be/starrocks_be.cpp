@@ -182,7 +182,8 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
                           "publish_log_version_batch",
                           "vacuum",
                           "vacuum_full",
-                          "aggregate_publish_version"};
+                          "aggregate_publish_version",
+                          "aggregate_compact"};
     for (auto method : methods) {
         brpc_server->MaxConcurrencyOf(service_name, method) = lake_service_max_concurrency;
     }

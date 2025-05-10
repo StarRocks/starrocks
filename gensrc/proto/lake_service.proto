@@ -104,6 +104,12 @@ message CompactRequest {
     optional bool allow_partial_success = 5;
     optional bytes encryption_meta = 6;
     optional bool force_base_compaction = 7;
+    optional bool skip_write_txnlog = 8;
+}
+
+message AggregateCompactRequest {
+    repeated ComputeNodePB compute_nodes = 1;
+    repeated CompactRequest requests = 2;
 }
 
 message CompactStat {
@@ -137,6 +143,7 @@ message CompactResponse {
     optional StatusPB status = 7;
     repeated CompactStat compact_stats = 8;
     optional int64 success_compaction_input_file_size = 9;
+    repeated TxnLogPB txn_logs = 10;
 }
 
 message DropTableRequest {
@@ -338,5 +345,6 @@ service LakeService {
     rpc abort_compaction(AbortCompactionRequest) returns (AbortCompactionResponse);
     rpc vacuum(VacuumRequest) returns (VacuumResponse);
     rpc vacuum_full(VacuumFullRequest) returns (VacuumFullResponse);
+    rpc aggregate_compact(AggregateCompactRequest) returns (CompactResponse);
 }
 
