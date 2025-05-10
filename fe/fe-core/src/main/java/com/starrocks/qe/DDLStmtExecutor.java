@@ -153,6 +153,10 @@ import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.EnableDisableCnGroupStmt;
 import com.starrocks.sql.spm.SPMStmtExecutor;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.ExternalAnalyzeJob;
@@ -1245,6 +1249,47 @@ public class DDLStmtExecutor {
             ErrorReport.wrapWithRuntimeException(() -> {
                 WarehouseManager warehouseMgr = context.getGlobalStateMgr().getWarehouseMgr();
                 warehouseMgr.alterWarehouse(stmt);
+            });
+            return null;
+        }
+
+        //=========================================== CNGroup Statement ==================================================
+        @Override
+        public ShowResultSet visitCreateCNGroupStatement(CreateCnGroupStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                WarehouseManager warehouseMgr = context.getGlobalStateMgr().getWarehouseMgr();
+                warehouseMgr.createCnGroup(stmt);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropCNGroupStatement(DropCnGroupStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                WarehouseManager warehouseMgr = context.getGlobalStateMgr().getWarehouseMgr();
+                warehouseMgr.dropCnGroup(stmt);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitEnableDisableCNGroupStatement(EnableDisableCnGroupStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                WarehouseManager warehouseMgr = context.getGlobalStateMgr().getWarehouseMgr();
+                if (stmt.isSetEnable()) {
+                    warehouseMgr.enableCnGroup(stmt);
+                } else {
+                    warehouseMgr.disableCnGroup(stmt);
+                }
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterCNGroupStatement(AlterCnGroupStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                WarehouseManager warehouseMgr = context.getGlobalStateMgr().getWarehouseMgr();
+                warehouseMgr.alterCnGroup(stmt);
             });
             return null;
         }
