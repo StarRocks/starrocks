@@ -904,6 +904,10 @@ Status NodeChannel::_wait_all_prev_request() {
     if (_next_packet_seq == 0) {
         return Status::OK();
     }
+    if (_all_response_processed) {
+        return _err_st;
+    }
+    _all_response_processed = true;
     for (auto closure : _add_batch_closures) {
         RETURN_IF_ERROR(_wait_request(closure));
     }
@@ -970,20 +974,27 @@ Status NodeChannel::_wait_one_prev_request() {
 }
 
 Status NodeChannel::try_close() {
-    if (_cancelled || _closed) {
+    if (_cancelled) {
         return _err_st;
     }
 
-    if (_check_prev_request_done()) {
-        auto st = _send_request(true /* eos */, false /* finished */);
-        if (!st.ok()) {
-            _cancelled = true;
-            _err_st = st;
-            return _err_st;
+    if (!_closed) {
+        if (_check_prev_request_done()) {
+            auto st = _send_request(true /* eos */, false /* finished */);
+            if (!st.ok()) {
+                _cancelled = true;
+                _err_st = st;
+                return _err_st;
+            }
         }
+        return Status::OK();
     }
 
-    return Status::OK();
+    // check the result of requests, and fail the channel if error happens as soon as possible
+    if (_check_all_prev_request_done()) {
+        RETURN_IF_ERROR(_wait_all_prev_request());
+    }
+    return _err_st;
 }
 
 Status NodeChannel::try_finish() {

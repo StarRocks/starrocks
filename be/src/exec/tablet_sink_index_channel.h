@@ -218,6 +218,7 @@ private:
 
     // channel is closed
     bool _closed{false};
+    bool _all_response_processed{false};
 
     // data sending is finished
     bool _finished{false};
