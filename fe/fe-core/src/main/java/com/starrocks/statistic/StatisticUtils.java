@@ -184,7 +184,7 @@ public class StatisticUtils {
     public static boolean checkStatisticTableStateNormal() {
         List<String> tableNameList = Lists.newArrayList(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME,
                 StatsConstants.FULL_STATISTICS_TABLE_NAME, StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME,
-                StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME);
+                StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME, StatsConstants.MULTI_COLUMN_STATISTICS_TABLE_NAME);
         return checkStatisticTables(tableNameList);
     }
 
