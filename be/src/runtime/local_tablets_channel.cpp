@@ -47,6 +47,7 @@
 #include "storage/txn_manager.h"
 #include "util/brpc_stub_cache.h"
 #include "util/compression/block_compression.h"
+#include "util/disposable_closure.h"
 #include "util/failpoint/fail_point.h"
 #include "util/faststring.h"
 #include "util/starrocks_metrics.h"
@@ -373,7 +374,8 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
                     if (elapse_time_ms > request.timeout_ms()) {
                         LOG(INFO) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
                                   << " wait tablet " << tablet_id << " secondary replica finish timeout "
-                                  << request.timeout_ms() << "ms still in state " << state;
+                                  << request.timeout_ms() << "ms still in state " << state
+                                  << ", primary replica: " << delta_writer->replicas()[0].host();
                         timeout = true;
                         break;
                     }
@@ -381,7 +383,8 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
                     if (i % 6000 == 0) {
                         LOG(INFO) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
                                   << " wait tablet " << tablet_id << " secondary replica finish already "
-                                  << elapse_time_ms << "ms still in state " << state;
+                                  << elapse_time_ms << "ms still in state " << state
+                                  << ", primary replica: " << delta_writer->replicas()[0].host();
                     }
                 } while (true);
             }
@@ -588,13 +591,24 @@ void LocalTabletsChannel::_abort_replica_tablets(
         cancel_request.set_reason(abort_reason);
         cancel_request.set_sink_id(request.sink_id());
 
-        auto closure = new ReusableClosure<PTabletWriterCancelResult>();
-
-        closure->ref();
-        closure->cntl.set_timeout_ms(request.timeout_ms());
-
         string node_abort_tablet_id_list_str;
         JoinInts(tablet_ids, ",", &node_abort_tablet_id_list_str);
+
+        struct Context {
+            PUniqueId load_id;
+            int64_t txn_id;
+            std::string host;
+            std::string tablets;
+        };
+        auto closure = new DisposableClosure<PTabletWriterCancelResult, Context>(
+                {request.id(), _txn_id, endpoint.host(), node_abort_tablet_id_list_str});
+        closure->cntl.set_timeout_ms(request.timeout_ms());
+        SET_IGNORE_OVERCROWDED(closure->cntl, load);
+        closure->addFailedHandler([](const Context& ctx, std::string_view rpc_error_msg) {
+            LOG(ERROR) << "Failed to cancel replicas, txn_id: " << ctx.txn_id << ", load_id: " << print_id(ctx.load_id)
+                       << ", replica_node: " << ctx.host << ", error: " << rpc_error_msg
+                       << ", tablets: " << ctx.tablets;
+        });
 
         stub->tablet_writer_cancel(&closure->cntl, &cancel_request, &closure->result, closure);
 
