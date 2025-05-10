@@ -21,23 +21,23 @@ import com.starrocks.sql.ast.UserIdentity;
 
 public class ArrowFlightSqlTokenInfo {
 
-    private UserIdentity currentUser;
+    private final UserIdentity currentUser;
+    private final String token;
 
-    private String token;
+    public static ArrowFlightSqlTokenInfo createInvalidTokenInfo() {
+        return new ArrowFlightSqlTokenInfo(null, null);
+    }
+
+    public ArrowFlightSqlTokenInfo(UserIdentity currentUser, String token) {
+        this.currentUser = currentUser;
+        this.token = token;
+    }
 
     public String getToken() {
         return token;
     }
 
-    public void setToken(String token) {
-        this.token = token;
-    }
-
     public UserIdentity getCurrentUser() {
         return currentUser;
-    }
-
-    public void setCurrentUser(UserIdentity currentUser) {
-        this.currentUser = currentUser;
     }
 }

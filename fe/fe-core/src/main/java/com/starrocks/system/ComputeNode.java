@@ -74,7 +74,7 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
     @SerializedName("brpcPort")
     private volatile int brpcPort = -1;
     @SerializedName("arrowFlightPort")
-    private volatile int arrowFlightPort = -1; // be arrow port
+    private volatile int arrowFlightPort; // be arrow port
 
     @SerializedName("cpuCores")
     private volatile int cpuCores = 0; // Cpu cores of node

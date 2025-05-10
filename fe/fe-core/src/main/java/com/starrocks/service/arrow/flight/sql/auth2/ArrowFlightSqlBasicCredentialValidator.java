@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.service.arrow.flight.sql.auth;
+package com.starrocks.service.arrow.flight.sql.auth2;
 
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlTokenManager;
+import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.arrow.flight.CallHeaders;
 import org.apache.arrow.flight.CallStatus;
@@ -27,39 +27,37 @@ import org.apache.arrow.flight.auth2.CallHeaderAuthenticator;
 
 import java.nio.charset.StandardCharsets;
 
-public class ArrowFlightSqlCredentialValidator implements BasicCallHeaderAuthenticator.CredentialValidator {
+public class ArrowFlightSqlBasicCredentialValidator implements BasicCallHeaderAuthenticator.CredentialValidator {
 
-    private final ArrowFlightSqlTokenManager arrowFlightSqlTokenManager;
+    private final ArrowFlightSqlSessionManager sessionManager;
 
-    public ArrowFlightSqlCredentialValidator(ArrowFlightSqlTokenManager arrowFlightSqlTokenManager) {
-        this.arrowFlightSqlTokenManager = arrowFlightSqlTokenManager;
+    public ArrowFlightSqlBasicCredentialValidator(ArrowFlightSqlSessionManager sessionManager) {
+        this.sessionManager = sessionManager;
     }
 
     @Override
     public CallHeaderAuthenticator.AuthResult validate(String username, String password) throws Exception {
-        UserIdentity currentUser;
+        UserIdentity user;
         try {
-            currentUser = AuthenticationHandler.authenticate(new ConnectContext(), username, "0.0.0.0",
-                    password.getBytes(StandardCharsets.UTF_8));
+            user = AuthenticationHandler.authenticate(
+                    new ConnectContext(), username, "0.0.0.0", password.getBytes(StandardCharsets.UTF_8));
         } catch (AuthenticationException e) {
-            throw CallStatus.UNAUTHENTICATED.withDescription("Access denied for " + username).toRuntimeException();
+            throw CallStatus.UNAUTHENTICATED
+                    .withDescription("Access denied for user: " + username)
+                    .withCause(e)
+                    .toRuntimeException();
         }
 
-        String encryptedToken = arrowFlightSqlTokenManager.createToken(currentUser);
-        return createAuthToken(encryptedToken);
-    }
-
-    private CallHeaderAuthenticator.AuthResult createAuthToken(String token) {
+        String bearerToken = sessionManager.initializeSession(user);
         return new CallHeaderAuthenticator.AuthResult() {
             @Override
             public String getPeerIdentity() {
-                return token;
+                return bearerToken;
             }
 
             @Override
             public void appendToOutgoingHeaders(CallHeaders outgoingHeaders) {
-                outgoingHeaders.insert(Auth2Constants.AUTHORIZATION_HEADER,
-                        Auth2Constants.BEARER_PREFIX + token);
+                outgoingHeaders.insert(Auth2Constants.AUTHORIZATION_HEADER, Auth2Constants.BEARER_PREFIX + bearerToken);
             }
         };
     }

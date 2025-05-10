@@ -34,6 +34,7 @@
 
 #include "runtime/buffer_control_block.h"
 
+#include <arrow/api.h>
 #include <gtest/gtest.h>
 #include <pthread.h>
 
@@ -204,6 +205,26 @@ TEST_F(BufferControlBlockTest, get_then_close) {
     ASSERT_EQ(0U, get_result.result_batch.rows.size());
 
     pthread_join(id, nullptr);
+}
+
+TEST_F(BufferControlBlockTest, is_full_arrow_batch_queue) {
+    BufferControlBlock control_block(TUniqueId(), 1);
+    ASSERT_TRUE(control_block.init().ok());
+
+    arrow::Int32Builder builder;
+    ASSERT_TRUE(builder.Resize(4097).ok());
+    for (int i = 0; i < 4097; ++i) {
+        ASSERT_TRUE(builder.Append(i).ok());
+    }
+
+    std::shared_ptr<arrow::Array> array;
+    ASSERT_TRUE(builder.Finish(&array).ok());
+
+    auto schema = arrow::schema({arrow::field("int_col", arrow::int32())});
+    auto record_batch = arrow::RecordBatch::Make(schema, 4097, {array});
+    ASSERT_TRUE(control_block.add_arrow_batch(record_batch).ok());
+
+    ASSERT_TRUE(control_block.is_full());
 }
 
 } // namespace starrocks
