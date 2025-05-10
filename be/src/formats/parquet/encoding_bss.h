@@ -147,7 +147,7 @@ public:
             binary_column->append_continuous_fixed_length_strings(string_buffer, count, byte_width_);
         } else {
             size_t cur_size = dst->size();
-            dst->resize_uninitialized(count + cur_size);
+            dst->resize(cur_size + count);
             T* data = reinterpret_cast<T*>(dst->mutable_raw_data()) + cur_size;
             RETURN_IF_ERROR(Decode(data, count));
         }
