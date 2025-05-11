@@ -88,6 +88,8 @@ private:
 
     Status _finish_clone_primary(Tablet* tablet, const std::string& clone_dir);
 
+    void _load_persistent_index(TTableId tablet_id);
+
 private:
     std::unique_ptr<MemTracker> _mem_tracker;
     const TCloneReq& _clone_req;

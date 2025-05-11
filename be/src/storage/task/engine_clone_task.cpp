@@ -65,6 +65,8 @@
 #include "util/network_util.h"
 #include "util/string_parser.hpp"
 #include "util/thrift_rpc_helper.h"
+#include "storage/update_manager.h"
+#include "storage/primary_index.h"
 
 using std::set;
 using std::stringstream;
@@ -335,6 +337,9 @@ Status EngineCloneTask::_do_clone(Tablet* tablet) {
         } else {
             (void)fs::remove(clone_meta_file);
             (void)fs::remove(clone_header_file);
+            if (config::load_persistent_index_after_clone_new_tablet) {
+                _load_persistent_index(tablet_id);
+            }
         }
         return status;
     }
@@ -1006,6 +1011,22 @@ Status EngineCloneTask::_finish_clone_primary(Tablet* tablet, const std::string&
     st = fs::remove_all(clone_dir);
     LOG_IF(WARNING, !st.ok()) << "Fail to remove clone directory " << clone_dir << ": " << st;
     return st;
+}
+
+void EngineCloneTask::_load_persistent_index(TTableId tablet_id)  {
+    auto tablet_manager = StorageEngine::instance()->tablet_manager();
+    auto tablet = tablet_manager->get_tablet(tablet_id, false);
+    if (tablet != nullptr && tablet->get_enable_persistent_index()) {
+        LOG(INFO) << "load persistent index after clone new tablet: " << tablet->tablet_id();
+        auto manager = StorageEngine::instance()->update_manager();
+        auto index_entry = manager->index_cache().get_or_create(tablet->tablet_id());
+        auto status = index_entry->value().load(tablet.get());
+        if (status.ok()) {
+            index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
+            index_entry->value().unload();
+            manager->index_cache().release(index_entry);
+        }
+    }
 }
 
 } // namespace starrocks
