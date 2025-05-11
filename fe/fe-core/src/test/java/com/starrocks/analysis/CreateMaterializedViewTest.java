@@ -5558,10 +5558,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "as select dt as dt, province , avg(age) from list_partition_tbl1 group by dt, province;";
         try {
             starRocksAssert.withMaterializedView(sql);
-            Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Materialized view with list partition column must be 1:1 " +
-                    "mapping with ref base table, but is 1(mv):2(ref)."));
+            Assert.fail();
         }
         starRocksAssert.dropTable("list_partition_tbl1");
     }

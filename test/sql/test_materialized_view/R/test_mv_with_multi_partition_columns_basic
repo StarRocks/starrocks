@@ -16,5 +16,15 @@ partition by (date_trunc("day", k2))
 REFRESH MANUAL
 AS select sum(k1), k2, k3 from t1 group by k2, k3;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Materialized view with list partition column must be 1:1 mapping with ref base table, but is 1(mv):2(ref).')
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("select sum(k1), k2, k3 from t1 group by k2, k3;", "test_mv1")
+-- result:
+True
+-- !result
+select sum(k1), k2, k3 from t1 group by k2, k3;
+-- result:
+1	2020-06-02	BJ
+3	2020-06-02	SZ
+2	2020-07-02	SH
 -- !result

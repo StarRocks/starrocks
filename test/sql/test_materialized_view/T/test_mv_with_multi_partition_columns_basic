@@ -14,3 +14,8 @@ CREATE MATERIALIZED VIEW test_mv1
 partition by (date_trunc("day", k2))
 REFRESH MANUAL
 AS select sum(k1), k2, k3 from t1 group by k2, k3;
+
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+
+function: print_hit_materialized_view("select sum(k1), k2, k3 from t1 group by k2, k3;", "test_mv1")
+select sum(k1), k2, k3 from t1 group by k2, k3;

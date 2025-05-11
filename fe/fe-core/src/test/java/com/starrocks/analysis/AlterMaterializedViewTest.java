@@ -25,14 +25,13 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.RefreshSchemeClause;
-import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Before;
@@ -46,12 +45,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase.executeInsertSql;
-
-public class AlterMaterializedViewTest {
-    private static ConnectContext connectContext;
-    private static StarRocksAssert starRocksAssert;
-
+public class AlterMaterializedViewTest extends MVTestBase  {
     private static GlobalStateMgr currentState;
 
     @BeforeClass
@@ -72,6 +66,7 @@ public class AlterMaterializedViewTest {
 
     @Before
     public void before() {
+        super.before();
         connectContext.setThreadLocalInfo();
     }
 

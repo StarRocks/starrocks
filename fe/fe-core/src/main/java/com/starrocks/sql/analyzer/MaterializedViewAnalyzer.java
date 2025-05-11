@@ -1050,13 +1050,6 @@ public class MaterializedViewAnalyzer {
                     statement.setPartitionType(PartitionType.RANGE);
                     checkRangePartitionColumnLimit(mvPartitionByExprs);
                 } else if (refPartitionInfo.isListPartition()) {
-                    ListPartitionInfo listPartitionInfo = (ListPartitionInfo) refPartitionInfo;
-                    // for list partition mv, only 1:1 mapping with ref base table's partition column is supported
-                    if (listPartitionInfo.getPartitionColumnsSize() != 1) {
-                        throw new SemanticException(String.format("Materialized view with list partition column " +
-                                "must be 1:1 mapping with ref base table, but is 1(mv):%d(ref)",
-                                listPartitionInfo.getPartitionColumnsSize()));
-                    }
                     statement.setPartitionType(PartitionType.LIST);
                 }
             } else {
