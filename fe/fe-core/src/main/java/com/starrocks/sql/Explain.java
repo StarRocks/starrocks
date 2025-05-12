@@ -15,11 +15,9 @@
 
 package com.starrocks.sql;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticWindow;
-import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.HudiTable;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -85,15 +83,10 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class Explain {
-    private static final ExpressionPrinter<Void> EXPR_PRINTER = new ExpressionPrinter<>();
+    public static final Explain DEFAULT_EXPLAIN = new Explain(true, false, "    ", "    ");
 
     public static String toString(OptExpression root, List<ColumnRefOperator> outputColumns) {
-        String outputBuilder = "- Output => [" + outputColumns.stream().map(EXPR_PRINTER::print)
-                .collect(Collectors.joining(", ")) + "]";
-
-        OperatorStr optStrings = new OperatorPrinter().visit(root, new OperatorPrinter.ExplainContext(1));
-        OperatorStr rootOperatorStr = new OperatorStr(outputBuilder, 0, Lists.newArrayList(optStrings));
-        return rootOperatorStr.toString();
+        return DEFAULT_EXPLAIN.print(root, outputColumns);
     }
 
     public static CostEstimate buildCost(OptExpression optExpression) {
@@ -109,7 +102,33 @@ public class Explain {
         return FeatureExtractor.extractFeatures(optExpr);
     }
 
-    private static class OperatorStr {
+    private static final ExpressionPrinter<Void> EXPR_PRINTER = new ExpressionPrinter<>();
+
+    private final boolean enableCosts;
+
+    private final boolean shortCosts;
+
+    private final String stepStr;
+
+    private final String propertyPrefix;
+
+    public Explain(boolean enableCosts, boolean shortCosts, String stepStr, String propertyPrefix) {
+        this.enableCosts = enableCosts;
+        this.shortCosts = shortCosts;
+        this.stepStr = stepStr;
+        this.propertyPrefix = propertyPrefix;
+    }
+
+    public String print(OptExpression root, List<ColumnRefOperator> outputColumns) {
+        String outputBuilder = "- Output => [" + outputColumns.stream().map(EXPR_PRINTER::print)
+                .collect(Collectors.joining(", ")) + "]";
+
+        OperatorStr optStrings = new OperatorPrinter().visit(root, new OperatorPrinter.ExplainContext(1));
+        OperatorStr rootOperatorStr = new OperatorStr(outputBuilder, 0, Lists.newArrayList(optStrings));
+        return rootOperatorStr.toString();
+    }
+
+    private class OperatorStr {
         private final String operatorString;
         private final int step;
         private final List<OperatorStr> children;
@@ -122,8 +141,8 @@ public class Explain {
 
         public String toString() {
             StringBuilder output;
-            output = new StringBuilder(
-                    String.join("", Collections.nCopies(step, "    ")) + operatorString);
+            output = new StringBuilder(Strings.repeat(stepStr, step));
+            output.append(operatorString);
             for (OperatorStr str : children) {
                 String s = output.toString();
                 if (!s.endsWith("\n")) {
@@ -135,7 +154,7 @@ public class Explain {
         }
     }
 
-    public static class OperatorPrinter extends OptExpressionVisitor<OperatorStr, OperatorPrinter.ExplainContext> {
+    private class OperatorPrinter extends OptExpressionVisitor<OperatorStr, OperatorPrinter.ExplainContext> {
         static class ExplainContext {
             Integer step;
 
@@ -208,7 +227,7 @@ public class Explain {
             PhysicalHiveScanOperator scan = (PhysicalHiveScanOperator) optExpression.getOp();
 
             StringBuilder sb = new StringBuilder("- HIVE-SCAN [")
-                    .append(((HiveTable) scan.getTable()).getCatalogTableName())
+                    .append(scan.getTable().getCatalogTableName())
                     .append("]")
                     .append(buildOutputColumns(scan,
                             "[" + scan.getOutputColumns().stream().map(EXPR_PRINTER::print)
@@ -225,7 +244,7 @@ public class Explain {
             PhysicalIcebergScanOperator scan = (PhysicalIcebergScanOperator) optExpression.getOp();
 
             StringBuilder sb = new StringBuilder("- ICEBERG-SCAN [")
-                    .append(((IcebergTable) scan.getTable()).getCatalogTableName())
+                    .append(scan.getTable().getCatalogTableName())
                     .append("]")
                     .append(buildOutputColumns(scan,
                             "[" + scan.getOutputColumns().stream().map(EXPR_PRINTER::print)
@@ -240,7 +259,7 @@ public class Explain {
             PhysicalHudiScanOperator scan = (PhysicalHudiScanOperator) optExpression.getOp();
 
             StringBuilder sb = new StringBuilder("- Hudi-SCAN [")
-                    .append(((HudiTable) scan.getTable()).getCatalogTableName())
+                    .append(scan.getTable().getCatalogTableName())
                     .append("]")
                     .append(buildOutputColumns(scan,
                             "[" + scan.getOutputColumns().stream().map(EXPR_PRINTER::print)
@@ -702,7 +721,7 @@ public class Explain {
             PhysicalStreamScanOperator scan = (PhysicalStreamScanOperator) optExpression.getOp();
 
             StringBuilder sb = new StringBuilder("- StreamScan [")
-                    .append(((OlapTable) scan.getTable()).getName())
+                    .append(scan.getTable().getName())
                     .append("]")
                     .append(buildOutputColumns(scan,
                             "[" + scan.getOutputColumns().stream().map(EXPR_PRINTER::print)
@@ -732,7 +751,16 @@ public class Explain {
         }
     }
 
-    static void buildCostEstimate(StringBuilder sb, OptExpression optExpression, int step) {
+    private void buildCostEstimate(StringBuilder sb, OptExpression optExpression, int step) {
+        if (!enableCosts) {
+            return;
+        }
+        if (shortCosts) {
+            sb.setLength(sb.length() - 1);
+            sb.append(" {rows: ").append((long) optExpression.getStatistics().getOutputRowCount()).append("}");
+            sb.append("\n");
+            return;
+        }
         CostEstimate cost = CostModel.calculateCostEstimate(new ExpressionContext(optExpression));
 
         if (optExpression.getStatistics().getColumnStatistics().values().stream()
@@ -751,7 +779,7 @@ public class Explain {
         }
     }
 
-    static StringBuilder buildOutputColumns(PhysicalOperator operator, String outputColumns) {
+    private static StringBuilder buildOutputColumns(PhysicalOperator operator, String outputColumns) {
         StringBuilder sb = new StringBuilder();
         if (operator.getProjection() != null) {
             sb.append(" => ");
@@ -769,24 +797,25 @@ public class Explain {
         return sb;
     }
 
-    static void buildOperatorProperty(StringBuilder sb, String property, int step) {
-        sb.append(String.join("", Collections.nCopies(step + 2, "    ")))
+    private void buildOperatorProperty(StringBuilder sb, String property, int step) {
+        sb.append(Strings.repeat(stepStr, step + 1))
+                .append(propertyPrefix)
                 .append(property).append("\n");
     }
 
-    static void buildPredicate(StringBuilder sb, PhysicalOperator operator, int step) {
+    private void buildPredicate(StringBuilder sb, PhysicalOperator operator, int step) {
         if (operator.getPredicate() != null) {
             buildOperatorProperty(sb, "predicate: " + EXPR_PRINTER.print(operator.getPredicate()), step);
         }
     }
 
-    static void buildLimit(StringBuilder sb, PhysicalOperator operator, int step) {
+    private void buildLimit(StringBuilder sb, PhysicalOperator operator, int step) {
         if (operator.getLimit() >= 0) {
             buildOperatorProperty(sb, "limit: " + operator.getLimit(), step);
         }
     }
 
-    static void buildExpressionProject(StringBuilder sb, PhysicalOperator operator, int step) {
+    private void buildExpressionProject(StringBuilder sb, PhysicalOperator operator, int step) {
         if (operator.getProjection() != null) {
             for (Map.Entry<ColumnRefOperator, ScalarOperator> kv : operator.getProjection().getColumnRefMap()
                     .entrySet()) {
@@ -811,7 +840,7 @@ public class Explain {
         }
     }
 
-    static void buildCommonProperty(StringBuilder sb, PhysicalOperator operator, int step) {
+    private void buildCommonProperty(StringBuilder sb, PhysicalOperator operator, int step) {
         buildExpressionProject(sb, operator, step);
         buildPredicate(sb, operator, step);
         buildLimit(sb, operator, step);
