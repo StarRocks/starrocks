@@ -16,21 +16,17 @@
 
 #include <fmt/format.h>
 
-#include "runtime/exec_env.h"
-
-#ifdef WITH_STARCACHE
-#include "cache/block_cache/starcache_wrapper.h"
-#endif
 #include "cache/block_cache/peer_cache_wrapper.h"
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/exec_env.h"
 #include "util/hash_util.hpp"
 
 namespace starrocks {
 
 namespace fs = std::filesystem;
 
-// For starcache, in theory we doesn't have a hard limitation for block size, but a very large
+// For starcache, in theory we don't have a hard limitation for block size, but a very large
 // block_size may cause heavy read amplification. So, we also limit it to 2 MB as an empirical value.
 const size_t BlockCache::MAX_BLOCK_SIZE = 2 * 1024 * 1024;
 
@@ -42,31 +38,12 @@ BlockCache::~BlockCache() {
     (void)shutdown();
 }
 
-Status BlockCache::init(const CacheOptions& options) {
+Status BlockCache::init(const CacheOptions& options, std::shared_ptr<LocalCache> local_cache,
+                        std::shared_ptr<RemoteCache> remote_cache) {
     _block_size = std::min(options.block_size, MAX_BLOCK_SIZE);
-    auto cache_options = options;
-#ifdef WITH_STARCACHE
-    if (cache_options.engine == "starcache") {
-        _local_cache = std::make_unique<StarCacheWrapper>();
-        _disk_space_monitor = std::make_unique<DiskSpaceMonitor>(_local_cache.get());
-        RETURN_IF_ERROR(_disk_space_monitor->init(&cache_options.disk_spaces));
-        LOG(INFO) << "init starcache engine, block_size: " << _block_size
-                  << ", disk_spaces: " << _disk_space_monitor->to_string(cache_options.disk_spaces);
-    }
-#endif
-    if (!_local_cache) {
-        LOG(ERROR) << "unsupported block cache engine: " << cache_options.engine;
-        return Status::NotSupported("unsupported block cache engine");
-    }
-    RETURN_IF_ERROR(_local_cache->init(cache_options));
-
-    _remote_cache = std::make_shared<PeerCacheWrapper>();
-    RETURN_IF_ERROR(_remote_cache->init(cache_options));
-
+    _local_cache = std::move(local_cache);
+    _remote_cache = std::move(remote_cache);
     _initialized.store(true, std::memory_order_relaxed);
-    if (_disk_space_monitor) {
-        _disk_space_monitor->start();
-    }
     return Status::OK();
 }
 
@@ -171,15 +148,10 @@ Status BlockCache::shutdown() {
     }
     _initialized.store(false, std::memory_order_relaxed);
 
-    if (_disk_space_monitor) {
-        _disk_space_monitor->stop();
-    }
-    Status local_st = _local_cache->shutdown();
-    Status remote_st = _remote_cache->shutdown();
     _local_cache.reset();
     _remote_cache.reset();
 
-    return local_st.ok() ? remote_st : local_st;
+    return Status::OK();
 }
 
 } // namespace starrocks
