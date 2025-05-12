@@ -452,8 +452,7 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
     return Status::OK();
 }
 
-static void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log,
-                                 std::vector<std::string>* files_to_delete) {
+void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std::vector<std::string>* files_to_delete) {
     auto tablet_id = txn_log.tablet_id();
     if (txn_log.has_op_write()) {
         for (const auto& segment : txn_log.op_write().rowset().segments()) {
@@ -464,8 +463,12 @@ static void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_lo
         }
     }
     if (txn_log.has_op_compaction()) {
-        for (const auto& segment : txn_log.op_compaction().output_rowset().segments()) {
-            files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, segment));
+        // only delete actual new segments
+        size_t new_segment_offset = txn_log.op_compaction().new_segment_offset();
+        size_t new_segment_count = txn_log.op_compaction().new_segment_count();
+        const auto& segments = txn_log.op_compaction().output_rowset().segments();
+        for (size_t idx = new_segment_offset, cnt = 0; idx < segments.size() && cnt < new_segment_count; ++idx, ++cnt) {
+            files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, segments[idx]));
         }
     }
     if (txn_log.has_op_schema_change() && !txn_log.op_schema_change().linked_segment()) {
