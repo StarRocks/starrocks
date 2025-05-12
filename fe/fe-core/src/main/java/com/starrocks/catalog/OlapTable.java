@@ -3531,6 +3531,12 @@ public class OlapTable extends Table {
             properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE, storageType());
         }
 
+        // partition_retention_condition
+        String partitionRetentionCondition = tableProperties.get(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION);
+        if (!Strings.isNullOrEmpty(partitionRetentionCondition)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, partitionRetentionCondition);
+        }
+
         return properties;
     }
 
