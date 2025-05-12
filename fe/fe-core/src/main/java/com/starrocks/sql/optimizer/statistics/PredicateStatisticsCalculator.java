@@ -125,22 +125,17 @@ public class PredicateStatisticsCalculator {
             if (!checkNeedEvalEstimate(predicate)) {
                 return statistics;
             }
+            if (SPMFunctions.isSPMFunctions(predicate) && SPMFunctions.canRevert2ScalarOperator(predicate)) {
+                predicate = (InPredicateOperator) SPMFunctions.revertSPMFunctions(predicate).get(0);
+            }
             double selectivity;
 
             ScalarOperator firstChild = getChildForCastOperator(predicate.getChild(0));
             // 1. compute the inPredicate children column statistics
             ColumnStatistic inColumnStatistic = getExpressionStatistic(firstChild);
 
-            List<ScalarOperator> children = predicate.getChildren();
             List<ScalarOperator> otherChildrenList = predicate.getChildren().stream().skip(1).toList();
-            if (children.size() == 2 && SPMFunctions.isSPMFunctions(children.get(1))) {
-                otherChildrenList = children.get(1).getChildren().stream().skip(1).collect(Collectors.toList());
-                if (otherChildrenList.isEmpty()) {
-                    return statistics;
-                }
-            }
-            otherChildrenList = otherChildrenList.stream().map(this::getChildForCastOperator).distinct().collect(
-                    Collectors.toList());
+            otherChildrenList = otherChildrenList.stream().map(this::getChildForCastOperator).distinct().toList();
             boolean allConstants = otherChildrenList.stream().allMatch(op -> op instanceof ConstantOperator);
 
             if (!predicate.isSubquery() && firstChild.isColumnRef() && !inColumnStatistic.isUnknown() &&
