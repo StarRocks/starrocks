@@ -30,7 +30,6 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -84,6 +83,16 @@ public class PartitionTTLScheduler {
     }
 
     public void scheduleTTLPartition() {
+        // connect context is needed sometime, otherwise ConnectContext.get() is null.
+        ConnectContext connectContext = ConnectContext.buildInner();
+        try (var  guard = connectContext.bindScope()) {
+            doScheduleTTLPartition();
+        } catch (Exception e) {
+            LOG.warn("Failed to schedule ttl partition", e);
+        }
+    }
+
+    public void doScheduleTTLPartition() {
         Iterator<Pair<Long, Long>> iterator = ttlPartitionInfo.iterator();
         while (iterator.hasNext()) {
             Pair<Long, Long> tableInfo = iterator.next();
@@ -114,27 +123,39 @@ public class PartitionTTLScheduler {
                 continue;
             }
 
-            // get expired partition names
-            List<String> dropPartitionNames = getExpiredPartitionNames(db, olapTable, partitionInfo);
-            if (CollectionUtils.isEmpty(dropPartitionNames)) {
-                continue;
+            try {
+                // schedule drop expired partitions
+                doScheduleTableTTLPartition(db, olapTable);
+            } catch (Exception e) {
+                LOG.warn("database={}-{}, table={}-{} failed to schedule drop expired partitions",
+                        db.getFullName(), dbId, olapTable.getName(), tableId, e);
             }
-            LOG.info("database={}, table={} has ttl partitions to drop: {}", db.getOriginName(), olapTable.getName(),
-                    dropPartitionNames);
+        }
+    }
 
-            // do drop partitions
-            String tableName = olapTable.getName();
-            List<DropPartitionClause> dropPartitionClauses = buildDropPartitionClauses(dropPartitionNames);
-            for (DropPartitionClause dropPartitionClause : dropPartitionClauses) {
-                try (AutoCloseableLock ignore = new AutoCloseableLock(
-                        new Locker(), db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE)) {
-                    AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
-                    analyzer.analyze(new ConnectContext(), dropPartitionClause);
-                    GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, olapTable, dropPartitionClause);
-                    runtimeInfoCollector.clearDropPartitionFailedMsg(tableName);
-                } catch (DdlException e) {
-                    runtimeInfoCollector.recordDropPartitionFailedMsg(db.getOriginName(), tableName, e.getMessage());
-                }
+    private void doScheduleTableTTLPartition(Database db, OlapTable olapTable) {
+        // get expired partition names
+        final PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        List<String> dropPartitionNames = getExpiredPartitionNames(db, olapTable, partitionInfo);
+        if (CollectionUtils.isEmpty(dropPartitionNames)) {
+            LOG.info("database={}, table={} has no expired partitions to drop", db.getOriginName(), olapTable.getName());
+            return;
+        }
+        LOG.info("database={}, table={} has ttl partitions to drop: {}", db.getOriginName(), olapTable.getName(),
+                dropPartitionNames);
+
+        // do drop partitions
+        String tableName = olapTable.getName();
+        List<DropPartitionClause> dropPartitionClauses = buildDropPartitionClauses(dropPartitionNames);
+        for (DropPartitionClause dropPartitionClause : dropPartitionClauses) {
+            try (AutoCloseableLock ignore = new AutoCloseableLock(
+                    new Locker(), db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE)) {
+                AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
+                analyzer.analyze(new ConnectContext(), dropPartitionClause);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, olapTable, dropPartitionClause);
+                runtimeInfoCollector.clearDropPartitionFailedMsg(tableName);
+            } catch (Exception e) {
+                runtimeInfoCollector.recordDropPartitionFailedMsg(db.getOriginName(), tableName, e.getMessage());
             }
         }
     }
@@ -192,7 +213,9 @@ public class PartitionTTLScheduler {
                     dropPartitionNames = PartitionSelector.getExpiredPartitionsByRetentionCondition(db, olapTable, ttlCondition);
                 }
             }
-        } catch (AnalysisException e) {
+            LOG.info("database={}-{}, table={}-{} drop partitions by ttl: {}",
+                    db.getFullName(), dbId, olapTable.getName(), tableId, dropPartitionNames);
+        } catch (Exception e) {
             LOG.warn("database={}-{}, table={}-{} failed to build drop partition statement.",
                     db.getFullName(), dbId, olapTable.getName(), tableId, e);
         }
