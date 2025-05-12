@@ -109,6 +109,12 @@ public final class GlobalVariable {
     public static final String AUTOMV_RECOMMENDATIONS_TASK_EXPIRE_TIME  = "automv_recommendations_task_expire_time";
     public static final String AUTOMV_RECOMMENDATIONS_TASK_PENDING_LIMIT  = "automv_recommendations_task_pending_limit";
 
+    public static final String ENABLE_QUERY_HISTORY = "enable_query_history";
+
+    public static final String QUERY_HISTORY_KEEP_SECONDS = "query_history_keep_seconds";
+
+    public static final String QUERY_HISTORY_LOAD_INTERVAL_SECONDS = "query_history_load_interval_seconds";
+
     @VariableMgr.VarAttr(name = VERSION_COMMENT, flag = VariableMgr.READ_ONLY)
     public static String versionComment = Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH;
 
@@ -262,6 +268,19 @@ public final class GlobalVariable {
 
     @VariableMgr.VarAttr(name = AUTOMV_RECOMMENDATIONS_TASK_PENDING_LIMIT)
     private static long autoMVRecommendationsTaskPendingLimit = 100;
+
+    @VariableMgr.VarAttr(name = ENABLE_QUERY_HISTORY, flag = VariableMgr.GLOBAL)
+    public static boolean enableQueryHistory = false;
+
+    @VariableMgr.VarAttr(name = QUERY_HISTORY_KEEP_SECONDS, flag = VariableMgr.GLOBAL)
+    public static long queryHistoryKeepSeconds = 86400 * 3; // 3 days
+
+    @VariableMgr.VarAttr(name = QUERY_HISTORY_LOAD_INTERVAL_SECONDS, flag = VariableMgr.GLOBAL)
+    public static long queryHistoryLoadIntervalSeconds = 60 * 15; // 15min
+
+    public static boolean isEnableQueryHistory() {
+        return enableQueryHistory;
+    }
 
     public static boolean isEnableQueryQueueSelect() {
         return enableQueryQueueSelect;
