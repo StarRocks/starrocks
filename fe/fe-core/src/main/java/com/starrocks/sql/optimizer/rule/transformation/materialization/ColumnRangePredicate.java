@@ -82,9 +82,18 @@ public class ColumnRangePredicate extends RangePredicate {
         this.columnRanges = columnRanges;
         List<Range<ConstantOperator>> canonicalRanges = new ArrayList<>();
         if (ConstantOperatorDiscreteDomain.isSupportedType(this.expression.getType())) {
-            for (Range range : this.columnRanges.asRanges()) {
-                Range canonicalRange = range.canonical(new ConstantOperatorDiscreteDomain());
-                canonicalRanges.add(canonicalRange);
+            // for open range (+∞, +∞), it can not be canonicalized into a close-open range and
+            // IllegalArgumentException/AssertionError is thrown. open range (+∞, +∞) is generated when trying
+            // to canonicalize the range (MAX_VALUE, +∞) yielded by column > MAX_VALUE. for an
+            // example: col > 9223372036854775807 (col is bigint type)
+            try {
+                for (Range range : this.columnRanges.asRanges()) {
+                    Range canonicalRange = range.canonical(new ConstantOperatorDiscreteDomain());
+                    canonicalRanges.add(canonicalRange);
+                }
+            } catch (Throwable ignored) {
+                this.canonicalColumnRanges = columnRanges;
+                return;
             }
             this.canonicalColumnRanges = TreeRangeSet.create(canonicalRanges);
         } else {
