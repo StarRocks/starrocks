@@ -83,6 +83,16 @@ public class PartitionTTLScheduler {
     }
 
     public void scheduleTTLPartition() {
+        // connect context is needed sometime, otherwise ConnectContext.get() is null.
+        ConnectContext connectContext = ConnectContext.buildInner();
+        try (var  guard = connectContext.bindScope()) {
+            doScheduleTTLPartition();
+        } catch (Exception e) {
+            LOG.warn("Failed to schedule ttl partition", e);
+        }
+    }
+
+    public void doScheduleTTLPartition() {
         Iterator<Pair<Long, Long>> iterator = ttlPartitionInfo.iterator();
         while (iterator.hasNext()) {
             Pair<Long, Long> tableInfo = iterator.next();
@@ -115,7 +125,7 @@ public class PartitionTTLScheduler {
 
             try {
                 // schedule drop expired partitions
-                scheduleTableTTLPartition(db, olapTable);
+                doScheduleTableTTLPartition(db, olapTable);
             } catch (Exception e) {
                 LOG.warn("database={}-{}, table={}-{} failed to schedule drop expired partitions",
                         db.getFullName(), dbId, olapTable.getName(), tableId, e);
@@ -123,7 +133,7 @@ public class PartitionTTLScheduler {
         }
     }
 
-    private void scheduleTableTTLPartition(Database db, OlapTable olapTable) {
+    private void doScheduleTableTTLPartition(Database db, OlapTable olapTable) {
         // get expired partition names
         final PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         List<String> dropPartitionNames = getExpiredPartitionNames(db, olapTable, partitionInfo);

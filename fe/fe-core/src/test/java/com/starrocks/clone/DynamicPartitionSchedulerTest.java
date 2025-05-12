@@ -760,4 +760,41 @@ public class DynamicPartitionSchedulerTest {
         System.out.println(visiblePartitionNames);
         Assert.assertEquals(expectedPartitionNames, visiblePartitionNames);
     }
+
+    @Test
+    public void testPartitionConditionTTL2() throws Exception {
+        starRocksAssert.withTable("create table range_par_hour(\n" +
+                " k1 datetime,\n" +
+                " k2 string)\n" +
+                " partition by range(k1)\n" +
+                "     (partition p1 values less than(\"2025-05-11 16:00:00\"),\n" +
+                "      partition p2 values less than(\"2025-05-11 17:00:00\"),\n" +
+                "      partition p3 values less than(\"2025-05-11 18:00:00\"),\n" +
+                "      partition p4 values less than(\"2025-05-11 19:00:00\"),\n" +
+                "      partition p5 values less than(\"2025-05-11 20:00:00\"),\n" +
+                "      partition p6 values less than(\"2025-05-12 21:00:00\"),\n" +
+                "      partition p7 values less than(\"2025-05-12 22:00:00\"),\n" +
+                "      partition p8 values less than(\"2025-05-12 23:00:00\"),\n" +
+                "      partition p9 values less than(\"2025-05-13 00:00:00\"),\n" +
+                "      partition p10 values less than(\"2025-05-13 01:00:00\"),\n" +
+                "      partition p11 values less than(\"2025-05-13 02:00:00\"))\n" +
+                " distributed by hash(k1)\n" +
+                " PROPERTIES (\"partition_retention_condition\" = \"k1 >= '2025-05-12 00:00:00'\");");
+
+        final String tableName = "range_par_hour";
+        OlapTable olapTable = (OlapTable) starRocksAssert.getTable("test", tableName);
+        Assert.assertEquals(11, olapTable.getVisiblePartitions().size());
+        Assert.assertFalse(DynamicPartitionUtil.isDynamicPartitionTable(olapTable));
+        Assert.assertTrue(DynamicPartitionUtil.isTTLPartitionTable(olapTable));
+
+        DynamicPartitionScheduler scheduler = GlobalStateMgr.getCurrentState()
+                .getDynamicPartitionScheduler();
+        scheduler.runOnceForTest();
+        Set<String> visiblePartitionNames = olapTable.getVisiblePartitionNames();
+        System.out.println(visiblePartitionNames);
+        Assert.assertEquals(6, visiblePartitionNames.size());
+        Set<String> expectedPartitionNames = Sets.newHashSet("p6", "p7", "p8", "p9", "p10", "p11");
+        System.out.println(visiblePartitionNames);
+        Assert.assertEquals(expectedPartitionNames, visiblePartitionNames);
+    }
 }
