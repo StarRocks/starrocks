@@ -20,22 +20,34 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.lake.LakeAggregator;
 import com.starrocks.lake.LakeTable;
+import com.starrocks.proto.AggregateCompactRequest;
+import com.starrocks.proto.CompactRequest;
+import com.starrocks.proto.ComputeNodePB;
+import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.DatabaseTransactionMgr;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.utframe.MockedWarehouseManager;
+import com.starrocks.warehouse.Warehouse;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class CompactionSchedulerTest {
@@ -45,6 +57,16 @@ public class CompactionSchedulerTest {
     private GlobalTransactionMgr globalTransactionMgr;
     @Mocked
     private DatabaseTransactionMgr dbTransactionMgr;
+    @Mocked
+    private LakeService lakeService;
+    @Mocked
+    private SystemInfoService systemInfoService;
+    @Mocked
+    private WarehouseManager warehouseManager;
+    @Mocked
+    private Warehouse warehouse;
+    @Mocked
+    private LakeAggregator lakeAggregator;
 
     @Test
     public void testDisableTableCompaction() {
@@ -193,5 +215,100 @@ public class CompactionSchedulerTest {
         };
         compactionScheduler.runOneCycle();
         Assert.assertEquals(0, compactionScheduler.getRunningCompactions().size());
+    }
+
+    @Test
+    public void testCreateAggregateCompactionTask() throws Exception {
+        long currentVersion = 1000L;
+        long txnId = 2000L;
+        Map<Long, List<Long>> beToTablets = new HashMap<>();
+        beToTablets.put(1001L, Lists.newArrayList(101L, 102L));
+        beToTablets.put(1002L, Lists.newArrayList(201L, 202L));
+        PartitionStatistics.CompactionPriority priority = PartitionStatistics.CompactionPriority.DEFAULT;
+
+        CompactionMgr compactionManager = new CompactionMgr();
+
+        ComputeNode node1 = new ComputeNode(1001L, "192.168.0.1", 9040);
+        node1.setBrpcPort(9050);
+        ComputeNode node2 = new ComputeNode(1002L, "192.168.0.2", 9040);
+        node2.setBrpcPort(9050);
+        ComputeNode aggregatorNode = new ComputeNode(1003L, "192.168.0.3", 9040);
+        aggregatorNode.setBrpcPort(9050);
+
+        new Expectations() {
+            {
+                systemInfoService.getBackendOrComputeNode(1001L);
+                result = node1;
+                systemInfoService.getBackendOrComputeNode(1002L);
+                result = node2;
+
+                globalStateMgr.getWarehouseMgr();
+                result = warehouseManager;
+
+                warehouseManager.getCompactionWarehouse();
+                result = warehouse;
+
+                warehouse.getId();
+                result = 100L;
+            }
+        };
+
+        CompactionScheduler scheduler = new CompactionScheduler(compactionManager, systemInfoService,
+                globalTransactionMgr, globalStateMgr, "");
+
+        Method method = CompactionScheduler.class.getDeclaredMethod("createAggregateCompactionTask",
+                long.class, Map.class, long.class, PartitionStatistics.CompactionPriority.class);
+        method.setAccessible(true);
+        CompactionTask task = (CompactionTask) method.invoke(scheduler, currentVersion, beToTablets, txnId, priority);
+
+        Assert.assertNotNull(task);
+        Assert.assertTrue(task instanceof AggregateCompactionTask);
+
+        Field serviceField = CompactionTask.class.getDeclaredField("rpcChannel");
+        serviceField.setAccessible(true);
+
+        Field requestField = AggregateCompactionTask.class.getDeclaredField("request");
+        requestField.setAccessible(true);
+        AggregateCompactRequest aggRequest = (AggregateCompactRequest) requestField.get(task);
+
+        Assert.assertEquals(2, aggRequest.requests.size());
+        Assert.assertEquals(2, aggRequest.computeNodes.size());
+
+        boolean foundTablets1 = false;
+        boolean foundTablets2 = false;
+
+        for (CompactRequest req : aggRequest.requests) {
+            Assert.assertEquals(txnId, req.txnId.longValue());
+            Assert.assertEquals(currentVersion, req.version.longValue());
+            Assert.assertEquals(false, req.allowPartialSuccess);
+            Assert.assertEquals(false, req.forceBaseCompaction);
+
+            if (req.tabletIds.equals(Lists.newArrayList(101L, 102L))) {
+                foundTablets1 = true;
+            } else if (req.tabletIds.equals(Lists.newArrayList(201L, 202L))) {
+                foundTablets2 = true;
+            }
+        }
+
+        Assert.assertTrue(foundTablets1);
+        Assert.assertTrue(foundTablets2);
+
+        boolean foundNode1 = false;
+        boolean foundNode2 = false;
+
+        for (ComputeNodePB nodePB : aggRequest.computeNodes) {
+            if (nodePB.getId() == 1001L) {
+                Assert.assertEquals("192.168.0.1", nodePB.getHost());
+                Assert.assertEquals(9050, (int) nodePB.getBrpcPort());
+                foundNode1 = true;
+            } else if (nodePB.getId() == 1002L) {
+                Assert.assertEquals("192.168.0.2", nodePB.getHost());
+                Assert.assertEquals(9050, (int) nodePB.getBrpcPort());
+                foundNode2 = true;
+            }
+        }
+
+        Assert.assertTrue(foundNode1);
+        Assert.assertTrue(foundNode2);
     }
 }
