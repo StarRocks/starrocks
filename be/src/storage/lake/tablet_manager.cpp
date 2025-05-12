@@ -406,8 +406,8 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id
         } else {
             tablet_metadata_or = get_single_tablet_metadata(tablet_id, version, fill_cache, expected_gtid, fs);
             if (tablet_metadata_or.status().is_not_found()) {
-                tablet_metadata_or =
-                        get_tablet_meta(tablet_metadata_location(tablet_id, version), fill_cache, expected_gtid, fs);
+                tablet_metadata_or = get_tablet_metadata(tablet_metadata_location(tablet_id, version), fill_cache,
+                                                         expected_gtid, fs);
             }
         }
     } else {
