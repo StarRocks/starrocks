@@ -17,6 +17,7 @@
 #include <fmt/format.h>
 #include <fslib/configuration.h>
 #include <fslib/fslib_all_initializer.h>
+#include <fslib/star_cache_configuration.h>
 #include <gtest/gtest.h>
 
 #include <fstream>
@@ -80,6 +81,7 @@ public:
             std::string tmpl("/tmp/sr_starlet_ut_XXXXXX");
             EXPECT_TRUE(::mkdtemp(tmpl.data()) != nullptr);
             config::starlet_cache_dir = tmpl;
+            staros::starlet::fslib::FLAGS_star_cache_async_init = false;
             setenv(staros::starlet::fslib::kFslibCacheDir.c_str(), config::starlet_cache_dir.c_str(),
                    1 /* overwrite */);
         }
@@ -100,8 +102,7 @@ public:
             return;
         }
         (void)g_worker->remove_shard(10086);
-        g_starlet.reset();
-        g_worker.reset();
+        shutdown_staros_worker();
         std::string test_type = GetParam();
         if (test_type == "cachefs" && config::starlet_cache_dir.compare(0, 5, std::string("/tmp/")) == 0) {
             // Clean cache directory
