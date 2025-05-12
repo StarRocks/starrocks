@@ -17,8 +17,10 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.TreeRangeSet;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -209,4 +211,20 @@ public class ColumnRangePredicateTest {
             Assert.assertEquals(ConstantOperator.TRUE, ret);
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testNonCanonicalBigintRangePredicate() {
+        ColumnRefOperator columnRef = new ColumnRefOperator(1, Type.BIGINT, "col", true);
+        ConstantOperator maxValue = ConstantOperator.createBigint(9223372036854775807L);
+        BinaryPredicateOperator pred = new BinaryPredicateOperator(BinaryType.GT, columnRef, maxValue);
+        PredicateExtractor extractor = new PredicateExtractor();
+        PredicateExtractor.PredicateExtractorContext context = new PredicateExtractor.PredicateExtractorContext();
+        RangePredicate rangePredicate = extractor.visitBinaryPredicate(pred, context);
+        String s  = rangePredicate.toScalarOperator().toString();
+        Assert.assertEquals(s, "1: col > 9223372036854775807", s);
+    }
+
+>>>>>>> ff9b98bfd4 ([BugFix] some Range (e.g. (+∞, +∞))can be constructed during canonicalizing range (#58869))
 }
