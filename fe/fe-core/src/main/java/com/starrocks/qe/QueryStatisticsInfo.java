@@ -398,7 +398,7 @@ public class QueryStatisticsInfo {
         return sortedRowData;
     }
 
-    private static String getExecProgress(String feIp, String queryId, HttpClient httpClient) {
+    public static String getExecProgress(String feIp, String queryId, HttpClient httpClient) {
         String result = "";
         try {
             String url = String.format("http://%s:%s/api/query/progress?query_id=%s",
@@ -408,7 +408,7 @@ public class QueryStatisticsInfo {
                     .GET()
                     .build();
 
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == HttpStatus.SC_OK) {
                 try {
                     JsonElement jsonElement = JsonParser.parseString(response.body());
