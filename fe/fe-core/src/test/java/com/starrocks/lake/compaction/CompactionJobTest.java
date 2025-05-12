@@ -93,10 +93,7 @@ public class CompactionJobTest {
         CompactionJob job = new CompactionJob(db, table, partition, 10010, true);
 
         Assert.assertTrue(job.getExecutionProfile().isEmpty());
-
-        List<CompactionTask> list = new ArrayList<>();
-        list.add(new CompactionTask(100));
-        job.setTasks(list);
+        job.setAggregateTask(new CompactionTask(100));
         job.finish();
         new MockUp<CompactionTask>() {
             @Mock
