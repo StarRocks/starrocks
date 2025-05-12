@@ -82,6 +82,7 @@ private:
     MetricRegistry* _metrics;
     std::shared_mutex _mu;
     phmap::flat_hash_map<uint64_t, TableMetricsPtr> _metrics_map;
+    phmap::parallel_flat_hash_map<uint64_t, TableMetricsPtr> _metrics_map_0;
     // In some cases, we may not be able to obtain the metrics for the corresponding table id,
     // For example, when drop tablet and data load concurrently,
     // the Tablets may have been deleted before the load begins, and the table metrics may be cleared.
