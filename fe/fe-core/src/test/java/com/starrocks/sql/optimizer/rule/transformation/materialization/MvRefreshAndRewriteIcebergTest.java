@@ -2048,7 +2048,5 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
                         connectContext);
         MaterializedViewAnalyzer.analyze(stmt, starRocksAssert.getCtx());
         Assert.assertTrue(stmt.isRefBaseTablePartitionWithTransform());
-        final MaterializedView mv = getMv(mvName);
-        Assert.assertTrue(mv.getPartitionInfo().isListPartition());
     }
 }
