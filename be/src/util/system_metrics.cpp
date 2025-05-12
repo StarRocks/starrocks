@@ -42,7 +42,7 @@
 #include <cstdio>
 #include <memory>
 
-#include "cache/block_cache/local_cache.h"
+#include "cache/local_cache.h"
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
 #endif

@@ -24,7 +24,7 @@
 #include <filesystem>
 #include <memory>
 
-#include "block_cache/starcache_wrapper.h"
+#include "cache/starcache_wrapper.h"
 #include "starcache/common/types.h"
 #include "util/logging.h"
 #include "util/random.h"

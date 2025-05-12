@@ -19,8 +19,8 @@
 #include <memory>
 
 #include "cache/block_cache/block_cache.h"
-#include "cache/block_cache/starcache_wrapper.h"
 #include "cache/block_cache/test_cache_utils.h"
+#include "cache/starcache_wrapper.h"
 #include "column/column_helper.h"
 #include "exec/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner_parquet.h"

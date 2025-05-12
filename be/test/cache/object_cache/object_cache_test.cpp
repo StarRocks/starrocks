@@ -16,10 +16,10 @@
 
 #include <gtest/gtest.h>
 
-#include "cache/block_cache/starcache_wrapper.h"
 #include "cache/block_cache/test_cache_utils.h"
 #include "cache/object_cache/lrucache_module.h"
 #include "cache/object_cache/starcache_module.h"
+#include "cache/starcache_wrapper.h"
 #include "fs/fs_util.h"
 #include "testutil/assert.h"
 
