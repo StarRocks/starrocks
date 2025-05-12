@@ -263,7 +263,7 @@ public:
             return Status::InvalidArgument("not enough values to read");
         }
         size_t cur_size = dst->size();
-        dst->resize_uninitialized(count + cur_size);
+        dst->resize(count + cur_size);
         T* data = reinterpret_cast<T*>(dst->mutable_raw_data()) + cur_size;
         RETURN_IF_ERROR(GetInternal(data, count));
         return Status::OK();
