@@ -139,10 +139,6 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
         return ephemeral;
     }
 
-    public void setEphemeral(boolean ephemeral) {
-        this.ephemeral = ephemeral;
-    }
-
     public void analyze() {
         if (Strings.isNullOrEmpty(user)) {
             throw new SemanticException("Does not support anonymous user");
@@ -186,8 +182,7 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
         tUserIdent.setHost(host);
         tUserIdent.setUsername(user);
         tUserIdent.setIs_domain(isDomain);
-        UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
-        tUserIdent.setIs_ephemeral(currentUser.isEphemeral());
+        tUserIdent.setIs_ephemeral(ephemeral);
         TUserRoles tUserRoles = new TUserRoles();
         tUserRoles.setRole_id_list(new ArrayList<>(ConnectContext.get().getCurrentRoleIds()));
         tUserIdent.setCurrent_role_ids(tUserRoles);
