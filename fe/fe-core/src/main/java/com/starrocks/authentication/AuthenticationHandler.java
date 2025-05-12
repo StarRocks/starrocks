@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.Pair;
+import com.starrocks.epack.authentication.LDAPSecurityIntegration;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -122,7 +123,7 @@ public class AuthenticationHandler {
             }
 
             if (!Objects.requireNonNull(AuthPlugin.covertFromServerToClient(securityIntegration.getType()))
-                    .equalsIgnoreCase(context.getAuthPlugin())) {
+                    .equalsIgnoreCase(context.getAuthPlugin()) && !(securityIntegration instanceof LDAPSecurityIntegration)) {
                 continue;
             }
 
