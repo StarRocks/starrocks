@@ -686,4 +686,32 @@ public class DropPartitionWithExprListTest extends MVTestBase {
                     });
         }
     }
+
+    @Test
+    public void testPartitionConditionTTL1() throws Exception {
+        starRocksAssert.withTable("create table list_par_int(\n" +
+                " k1 int,\n" +
+                " k2 string)\n" +
+                " partition by list(k1)\n" +
+                " (partition p1 values in('1','2'),\n" +
+                "  partition p2 values in('3','4'),\n" +
+                "  partition p3 values in('5','6'),\n" +
+                "  partition p4 values in('7','8'),\n" +
+                "  partition p5 values in('9','10'),\n" +
+                "  partition p6 values in('11','12'),\n" +
+                "  partition p7 values in('13','14'),\n" +
+                "  partition p8 values in('15','16'),\n" +
+                "  partition p9 values in('17','18'),\n" +
+                "  partition p10 values in('19','20'))\n" +
+                " distributed by hash(k1)\n");
+
+        OlapTable olapTable = (OlapTable) starRocksAssert.getTable("test", "list_par_int");
+        Assert.assertEquals(10, olapTable.getVisiblePartitions().size());
+
+        String sql = "alter table list_par_int drop partitions where k1 > 5";
+        starRocksAssert.alterTable(sql);
+        Assert.assertEquals(3, olapTable.getVisiblePartitions().size());
+        String[] expectedPartitions = {"p1", "p2", "p3"};
+        Assert.assertArrayEquals(expectedPartitions, olapTable.getVisiblePartitionNames().toArray());
+    }
 }
