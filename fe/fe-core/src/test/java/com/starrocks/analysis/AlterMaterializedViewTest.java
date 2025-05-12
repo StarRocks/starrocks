@@ -40,14 +40,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-<<<<<<< HEAD
-public class AlterMaterializedViewTest {
-    private static ConnectContext connectContext;
-    private static StarRocksAssert starRocksAssert;
-
-=======
 public class AlterMaterializedViewTest extends MVTestBase  {
->>>>>>> e5506288c7 ([BugFix] Fix multi partition column mv related bugs (#58832))
     private static GlobalStateMgr currentState;
 
     @BeforeClass
