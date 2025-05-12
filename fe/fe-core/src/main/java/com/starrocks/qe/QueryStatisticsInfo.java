@@ -368,6 +368,7 @@ public class QueryStatisticsInfo {
                 statistic.values().stream()
                         .sorted(Comparator.comparingLong(QueryStatisticsItem::getQueryStartTime))
                         .collect(Collectors.toList());
+        final HttpClient httpClient = HttpClient.newHttpClient();
         for (QueryStatisticsItem item : sorted) {
             final CurrentQueryInfoProvider.QueryStatistics statistics = statisticsMap.get(item.getQueryId());
 
@@ -379,7 +380,8 @@ public class QueryStatisticsInfo {
                     .withDb(item.getDb())
                     .withUser(item.getUser())
                     .withExecTime(item.getQueryExecTime())
-                    .withExecProgress(getExecProgress(FrontendOptions.getLocalHostAddress(), item.getQueryId()))
+                    .withExecProgress(getExecProgress(FrontendOptions.getLocalHostAddress(), 
+                                                      item.getQueryId(), httpClient))
                     .withWareHouseName(item.getWarehouseName())
                     .withCustomQueryId(item.getCustomQueryId())
                     .withResourceGroupName(item.getResourceGroupName());
@@ -396,12 +398,11 @@ public class QueryStatisticsInfo {
         return sortedRowData;
     }
 
-    private static String getExecProgress(String feIp, String queryId) {
+    private static String getExecProgress(String feIp, String queryId, HttpClient httpClient) {
         String result = "";
         try {
             String url = String.format("http://%s:%s/api/query/progress?query_id=%s",
                     feIp, Config.http_port, queryId);
-            HttpClient client = HttpClient.newHttpClient();
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
                     .GET()
