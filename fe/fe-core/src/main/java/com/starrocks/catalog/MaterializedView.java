@@ -1383,7 +1383,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             // If isAutoMaticPartition is false, it may generate bad partition sql which will cause error in replay.
             if (partitionInfo instanceof ListPartitionInfo) {
                 ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
-                String sql = listPartitionInfo.toSql(this, true);
+                String sql = listPartitionInfo.toSql(this, true, false);
                 sb.append("\n").append(sql);
             } else {
                 sb.append("\n").append(partitionInfo.toSql(this, null));
