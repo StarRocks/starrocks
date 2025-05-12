@@ -83,6 +83,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -236,7 +237,7 @@ public class PartitionSelector {
         } else if (partitionInfo.isListPartition()) {
             ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
             selectedPartitionIds = getListPartitionIdsByExpr(tableName.getDb(), olapTable, listPartitionInfo,
-                    whereExpr, scalarOperator, exprToColumnIdxes, inputCells);
+                    whereExpr, scalarOperator, exprToColumnIdxes, isRecyclingCondition, inputCells);
         } else {
             throw new SemanticException("Unsupported partition type: " + partitionInfo.getType());
         }
@@ -453,12 +454,14 @@ public class PartitionSelector {
                                                         Expr whereExpr,
                                                         ScalarOperator scalarOperator,
                                                         Map<Expr, Integer> exprToColumnIdxes,
+                                                        boolean isRecyclingCondition,
                                                         Map<Long, PCell> inputCells) {
 
         List<Long> result = null;
         // try to prune partitions by FE's constant evaluation ability
         try {
-            result = getListPartitionIdsByExprV1(olapTable, listPartitionInfo, scalarOperator, inputCells);
+            result = getListPartitionIdsByExprV1(olapTable, listPartitionInfo, scalarOperator,
+                    isRecyclingCondition, inputCells);
             if (result != null) {
                 return result;
             }
@@ -475,12 +478,65 @@ public class PartitionSelector {
         }
     }
 
+    static class Recorder {
+        // used to record the state of eval result
+        private boolean isConstTrue = false;
+
+        public Recorder() {
+        }
+
+        public void setConstTrue(boolean constTrue) {
+            this.isConstTrue = constTrue;
+        }
+        public boolean isConstTrue() {
+            return isConstTrue;
+        }
+    }
+
+    private static Optional<Boolean> isEvalResultSatisfied(ScalarOperator result,
+                                                           boolean isRecyclingCondition,
+                                                           Recorder record) {
+        if (isRecyclingCondition) {
+            // for recycling condition, keep partitions as less as possible
+            // T1, partitions:
+            //  p1: [1, 2]
+            //  p2: [2, 3]
+            // eg: alter table T1 drop partitions where p > 1, only choose p1 when all values are satisfied.
+            // p1: [1, 2] is not satisfied, so we need to return p2: [2, 3]
+            if (result.isConstantFalse()) {
+                record.isConstTrue = false;
+                return Optional.of(true);
+            } else if (result.isConstantTrue()) {
+                record.isConstTrue = true;
+            } else {
+                return Optional.empty();
+            }
+        } else {
+            // for retention condition, keep partitions as much as possible
+            // T1, partitions:
+            //  p1: [1, 2]
+            //  p2: [2, 3]
+            // eg: partition_retention_condition = 'p > 1', choose partition if it once is satisfied.
+            // p1: [1, 2]/[2, 3] are all satisfied, so we need to return p1/p2 both
+            if (result.isConstantFalse()) {
+                record.isConstTrue = false;
+            } else if (result.isConstantTrue()) {
+                record.isConstTrue = true;
+                return Optional.of(true);
+            } else {
+                return Optional.empty();
+            }
+        }
+        return Optional.of(false);
+    }
+
     /**
      * Fetch selected partition ids by using FE's constant evaluation ability.
      */
     private static List<Long> getListPartitionIdsByExprV1(OlapTable olapTable,
                                                           ListPartitionInfo listPartitionInfo,
                                                           ScalarOperator scalarOperator,
+                                                          boolean isRecyclingCondition,
                                                           Map<Long, PCell> inputCells) {
         // eval for each conjunct
         Map<ColumnRefOperator, Integer> colRefIdxMap = Maps.newHashMap();
@@ -497,8 +553,8 @@ public class PartitionSelector {
         List<Long> selectedPartitionIds = Lists.newArrayList();
         // single partition column
         Map<Long, List<LiteralExpr>> listPartitions = listPartitionInfo.getLiteralExprValues();
+        Recorder recorder = new Recorder();
         for (Map.Entry<Long, List<LiteralExpr>> e : listPartitions.entrySet()) {
-            boolean isConstTrue = false;
             for (LiteralExpr literalExpr : e.getValue()) {
                 Map<ColumnRefOperator, ScalarOperator> replaceMap = Maps.newHashMap();
                 ConstantOperator replace = (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
@@ -512,23 +568,23 @@ public class PartitionSelector {
                 if (!result.isConstant()) {
                     return null;
                 }
-                if (result.isConstantFalse()) {
-                    isConstTrue = false;
-                    break;
-                } else if (result.isConstantTrue()) {
-                    isConstTrue = true;
-                } else {
+                Optional<Boolean> evalResultSatisfied = isEvalResultSatisfied(result, isRecyclingCondition, recorder);
+                // if eval result is not set, return it directly
+                if (evalResultSatisfied == null || evalResultSatisfied.isEmpty()) {
                     return null;
                 }
+                // if eval result is satisfied, break the loop
+                if (evalResultSatisfied.isPresent() && evalResultSatisfied.get()) {
+                    break;
+                }
             }
-            if (isConstTrue) {
+            if (recorder.isConstTrue()) {
                 selectedPartitionIds.add(e.getKey());
             }
         }
         // multi partition columns
         Map<Long, List<List<LiteralExpr>>> multiListPartitions = listPartitionInfo.getMultiLiteralExprValues();
         for (Map.Entry<Long, List<List<LiteralExpr>>> e : multiListPartitions.entrySet()) {
-            boolean isConstTrue = false;
             for (List<LiteralExpr> values : e.getValue()) {
                 Map<ColumnRefOperator, ScalarOperator> replaceMap = buildReplaceMap(colRefIdxMap, values);
                 ReplaceColumnRefRewriter replaceColumnRefRewriter = new ReplaceColumnRefRewriter(replaceMap);
@@ -537,22 +593,22 @@ public class PartitionSelector {
                 if (!result.isConstant()) {
                     return null;
                 }
-                if (result.isConstantFalse()) {
-                    isConstTrue = false;
-                    break;
-                } else if (result.isConstantTrue()) {
-                    isConstTrue = true;
-                } else {
+                Optional<Boolean> evalResultSatisfied = isEvalResultSatisfied(result, isRecyclingCondition, recorder);
+                // if eval result is not set, return it directly
+                if (evalResultSatisfied == null || evalResultSatisfied.isEmpty()) {
                     return null;
                 }
+                // if eval result is satisfied, break the loop
+                if (evalResultSatisfied.isPresent() && evalResultSatisfied.get()) {
+                    break;
+                }
             }
-            if (isConstTrue) {
+            if (recorder.isConstTrue()) {
                 selectedPartitionIds.add(e.getKey());
             }
         }
         if (!CollectionUtils.sizeIsEmpty(inputCells)) {
             for (Map.Entry<Long, PCell> e : inputCells.entrySet()) {
-                boolean isConstTrue = false;
                 PListCell pListCell = (PListCell) e.getValue();
                 for (List<String> values : pListCell.getPartitionItems()) {
                     Map<ColumnRefOperator, ScalarOperator> replaceMap = buildReplaceMapWithCell(colRefIdxMap, values);
@@ -565,16 +621,17 @@ public class PartitionSelector {
                     if (!result.isConstant()) {
                         return null;
                     }
-                    if (result.isConstantFalse()) {
-                        isConstTrue = false;
-                        break;
-                    } else if (result.isConstantTrue()) {
-                        isConstTrue = true;
-                    } else {
+                    Optional<Boolean> evalResultSatisfied = isEvalResultSatisfied(result, isRecyclingCondition, recorder);
+                    // if eval result is not set, return it directly
+                    if (evalResultSatisfied == null || evalResultSatisfied.isEmpty()) {
                         return null;
                     }
+                    // if eval result is satisfied, break the loop
+                    if (evalResultSatisfied.isPresent() && evalResultSatisfied.get()) {
+                        break;
+                    }
                 }
-                if (isConstTrue) {
+                if (recorder.isConstTrue()) {
                     selectedPartitionIds.add(e.getKey());
                 }
             }
@@ -661,9 +718,10 @@ public class PartitionSelector {
         if (partitionInfo.isListPartition()) {
             // support common partition expressions for list partition tables
         } else if (partitionInfo.isRangePartition()) {
-            Pair<Boolean, String> result = OperatorFunctionChecker.onlyContainMonotonicFunctions(predicate);
+            // TODO: limit it to monotonic functions later.
+            Pair<Boolean, String> result = OperatorFunctionChecker.onlyContainFEConstantFunctions(predicate);
             if (!result.first) {
-                throw new SemanticException("Retention condition must only contain monotonic functions for range partition " +
+                throw new SemanticException("Retention condition must only contain constant functions for range partition " +
                         "tables but contains: " + result.second);
             }
         } else {
