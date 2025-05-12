@@ -587,7 +587,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             mvSessionVariable.setInsertMaxFilterRatio(Config.mv_refresh_fail_on_filter_data ? 0 : 1);
         }
         // enable profile by default for mv refresh task
-        if (!isMVPropertyContains(SessionVariable.ENABLE_PROFILE)) {
+        if (!isMVPropertyContains(SessionVariable.ENABLE_PROFILE) && !mvSessionVariable.isEnableProfile()) {
             mvSessionVariable.setEnableProfile(Config.enable_mv_refresh_collect_profile);
         }
         // set the default new_planner_optimize_timeout for mv refresh

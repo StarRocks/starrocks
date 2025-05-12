@@ -286,6 +286,10 @@ public class ShowExecutorTest {
                 minTimes = 0;
                 result = Lists.newArrayList(column1, column2);
 
+                mv.getOrderedOutputColumns();
+                minTimes = 0;
+                result = Lists.newArrayList(column1, column2);
+
                 mv.getType();
                 minTimes = 0;
                 result = TableType.MATERIALIZED_VIEW;

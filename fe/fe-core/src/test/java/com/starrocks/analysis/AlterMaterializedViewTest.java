@@ -25,14 +25,13 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.RefreshSchemeClause;
-import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Before;
@@ -46,12 +45,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase.executeInsertSql;
-
-public class AlterMaterializedViewTest {
-    private static ConnectContext connectContext;
-    private static StarRocksAssert starRocksAssert;
-
+public class AlterMaterializedViewTest extends MVTestBase  {
     private static GlobalStateMgr currentState;
 
     @BeforeClass
@@ -72,6 +66,7 @@ public class AlterMaterializedViewTest {
 
     @Before
     public void before() {
+        super.before();
         connectContext.setThreadLocalInfo();
     }
 
@@ -551,5 +546,82 @@ public class AlterMaterializedViewTest {
         Assert.assertTrue(activeInfo.isInGracePeriod());
         Duration d = Duration.between(start, activeInfo.getNextActive());
         Assert.assertEquals(d.toMinutes(), MVActiveChecker.MvActiveInfo.MAX_BACKOFF_MINUTES);
+    }
+
+    @Test
+    public void testAlterBaseTableWithOptimizePartition() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_t1 (\n" +
+                "  k1 int,\n" +
+                "  k2 date,\n" +
+                "  k3 string\n" +
+                "  )\n" +
+                "  DUPLICATE KEY(k1)\n" +
+                "  PARTITION BY date_trunc(\"day\", k2);");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 \n" +
+                " partition by (date_trunc(\"day\", k2))\n" +
+                " REFRESH MANUAL\n" +
+                " AS select sum(k1), k2 from base_t1 group by k2;");
+        MaterializedView mv = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), "test_mv1");
+        Assert.assertTrue(mv.isActive());
+        String sql = "alter table base_t1 partition by date_trunc(\"month\", k2);";
+        starRocksAssert.ddl(sql);
+        mv = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), "test_mv1");
+        Assert.assertFalse(mv.isActive());
+        Assert.assertTrue(mv.getInactiveReason().contains("base-table optimized:"));
+    }
+
+    @Test
+    public void testMaterializedViewRename() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_t1 (\n" +
+                "  k1 int,\n" +
+                "  k2 date,\n" +
+                "  k3 string\n" +
+                "  )\n" +
+                "  DUPLICATE KEY(k1)\n" +
+                "  PARTITION BY date_trunc(\"day\", k2);");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 \n" +
+                " partition by (date_trunc(\"day\", k2))\n" +
+                " REFRESH MANUAL\n" +
+                " AS select sum(k1), k2 from base_t1 group by k2;");
+        MaterializedView mv = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), "test_mv1");
+        Assert.assertTrue(mv.isActive());
+        executeInsertSql(connectContext, "INSERT INTO base_t1 VALUES (1,'2020-06-02','BJ'),(3,'2020-06-02','SZ'),(2," +
+                "'2020-07-02','SH');");
+        String sql = "ALTER MATERIALIZED VIEW test_mv1 rename test_mv2;";
+        starRocksAssert.ddl(sql);
+        mv = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), "test_mv2");
+        Assert.assertTrue(mv.isActive());
+        starRocksAssert.query("select * from test_mv2");
+        starRocksAssert.refreshMV("REFRESH MATERIALIZED VIEW test_mv2 with sync mode;");
+    }
+
+    @Test
+    public void testMultiPartitionColumnsMaterializedVieSwap() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_t1 (\n" +
+                "                    k1 int,\n" +
+                "                    k2 date,\n" +
+                "                    k3 string\n" +
+                "                )\n" +
+                "                DUPLICATE KEY(k1)\n" +
+                "                PARTITION BY date_trunc(\"day\", k2), k3;");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1\n" +
+                "                partition by (date_trunc(\"day\", k2), k3)\n" +
+                "                REFRESH MANUAL\n" +
+                "                AS select sum(k1), k2, k3 from base_t1 group by k2, k3;");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv2\n" +
+                "                partition by (date_trunc(\"day\", k2), k3)\n" +
+                "                REFRESH MANUAL\n" +
+                "                AS select avg(k1), k2, k3 from base_t1 group by k2, k3;");
+        executeInsertSql(connectContext, "INSERT INTO base_t1 VALUES (1,'2020-06-02','BJ'),(3,'2020-06-02','SZ'),(2," +
+                "'2020-07-02','SH');");
+        String sql = "ALTER MATERIALIZED VIEW test_mv1 SWAP WITH test_mv2;";
+        starRocksAssert.ddl(sql);
+        MaterializedView mv1 = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), "test_mv1");
+        Assert.assertTrue(mv1.isActive());
+
+        MaterializedView mv2 = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), "test_mv2");
+        Assert.assertTrue(mv2.isActive());
+        starRocksAssert.query("select * from test_mv2");
+        starRocksAssert.refreshMV("REFRESH MATERIALIZED VIEW test_mv2 with sync mode;");
     }
 }
