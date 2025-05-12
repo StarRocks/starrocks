@@ -5080,7 +5080,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Introduced in: -
 -->
 
-
 ##### mv_refresh_fail_on_filter_data
 
 - Default: true
