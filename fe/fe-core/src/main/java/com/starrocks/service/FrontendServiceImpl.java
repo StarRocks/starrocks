@@ -552,6 +552,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
+
         if (db != null) {
             Locker locker = new Locker();
             locker.lockDatabase(db.getId(), LockType.READ);

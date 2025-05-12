@@ -30,6 +30,7 @@ import com.starrocks.credential.aliyun.AliyunCloudConfiguration;
 import com.starrocks.credential.aliyun.AliyunCloudCredential;
 import com.starrocks.credential.aws.AwsCloudConfiguration;
 import com.starrocks.credential.aws.AwsCloudCredential;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.paimon.catalog.CachingCatalog;
@@ -191,11 +192,13 @@ public class PaimonConnector implements Connector {
     }
 
     public void setRamUser(String ramUser) {
-        paimonOptions.set(DLF_AUTH_USER_NAME, ramUser);
+        this.ramUser = ramUser;
+        this.paimonOptions.set(DLF_AUTH_USER_NAME, ramUser);
     }
 
     public Catalog getPaimonNativeCatalog() {
         try {
+            // DLF 2.5 or DLF 2.0
             if ((catalogType.equalsIgnoreCase("rest") && this.paimonOptions.get("token.provider").equalsIgnoreCase("dlf"))
                     || catalogType.equalsIgnoreCase("dlf-paimon")) {
                 String ramUser = DlfUtil.getRamUser();
@@ -208,15 +211,18 @@ public class PaimonConnector implements Connector {
                 }
                 // Do not need ram user check when using ak/sk
                 if (noAK) {
-                    // When reading information_schema, we should keep ramUser
-                    if (this.ramUser == null || this.ramUser.isEmpty()
-                            || (!ramUser.isEmpty() && !this.ramUser.equals(ramUser))) {
-                        this.ramUser = ramUser;
-                        setRamUser(ramUser);
-                    } else if (paimonOptions.get(DLF_AUTH_USER_NAME).equals(ramUser) && paimonNativeCatalog != null) {
-                        return paimonNativeCatalog;
+                    if (ramUser.isEmpty()) {
+                        String qualifiedUser = ConnectContext.get().getQualifiedUser();
+                        String user = ConnectContext.get().getCurrentUserIdentity().getUser();
+                        throw new StarRocksConnectorException("Failed to find a valid RAM user from {} and {}.",
+                                qualifiedUser, user);
                     } else {
-                        setRamUser(this.ramUser);
+                        if (!this.ramUser.isEmpty() && this.ramUser.equals(ramUser) &&
+                                paimonOptions.get(DLF_AUTH_USER_NAME).equals(ramUser) && paimonNativeCatalog != null) {
+                            return paimonNativeCatalog;
+                        } else {
+                            setRamUser(ramUser);
+                        }
                     }
                 }
             } else if (paimonNativeCatalog != null) {
@@ -224,13 +230,8 @@ public class PaimonConnector implements Connector {
             }
             Configuration configuration = new Configuration();
             hdfsEnvironment.getCloudConfiguration().applyToConfiguration(configuration);
-            if (!catalogType.equalsIgnoreCase("dlf-paimon") && getPaimonOptions().get(WAREHOUSE.key()).startsWith("dls")) {
-                this.paimonNativeCatalog = CatalogFactory.createCatalog(CatalogContext.create(getPaimonOptions(),
-                        configuration, new HadoopFileIOLoader(), new HadoopFileIOLoader()));
-            } else {
-                this.paimonNativeCatalog = CatalogFactory.createCatalog(
-                        CatalogContext.create(getPaimonOptions(), configuration));
-            }
+            this.paimonNativeCatalog = CatalogFactory.createCatalog(CatalogContext.create(
+                    getPaimonOptions(), configuration, new HadoopFileIOLoader(), new HadoopFileIOLoader()));
             if (this.paimonNativeCatalog instanceof CachingCatalog) {
                 GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
                         .registerPaimonCatalog(catalogName, this.paimonNativeCatalog);

@@ -123,8 +123,10 @@ public class InformationSchemaDataSource {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(authInfo.user, authInfo.user_ip);
         }
         ConnectContext context = new ConnectContext();
+        context.setQualifiedUser(currentUser.getUser());
         context.setCurrentUserIdentity(currentUser);
         context.setCurrentRoleIds(currentUser);
+        context.setThreadLocalInfo();
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
         List<String> dbNames = metadataMgr.listDbNames(context, catalogName);

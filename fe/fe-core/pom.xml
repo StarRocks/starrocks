@@ -40,8 +40,8 @@ under the License.
         <maven.compiler.release>17</maven.compiler.release>
         <starrocks.home>${basedir}/../../</starrocks.home>
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
-        <paimon.version>1-ali-11.1</paimon.version>
-        <dlf.sdk.version>2.3.0-1-ali-6.2</dlf.sdk.version>
+        <paimon.version>1-ali-11.5</paimon.version>
+        <dlf.sdk.version>1-ali-11.0</dlf.sdk.version>
         <python>python</python>
     </properties>
 
