@@ -424,7 +424,7 @@ public class ListPartitionDescTest {
         ListPartitionDesc listPartitionDesc5 = new ListPartitionDesc(partitionNames, new ArrayList<>());
 
         ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
-                "Invalid partition column",
+                "Invalid hive partition column",
                 () -> listPartitionDesc5.analyzeExternalPartitionColumns(columnDefs1, "hive"));
 
         partitionNames = Lists.newArrayList("p1");

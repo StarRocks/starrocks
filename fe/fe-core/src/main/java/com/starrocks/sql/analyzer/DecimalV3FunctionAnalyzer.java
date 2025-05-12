@@ -47,7 +47,8 @@ public class DecimalV3FunctionAnalyzer {
     public static final Set<String> DECIMAL_UNARY_FUNCTION_SET =
             new ImmutableSortedSet.Builder<>(String::compareTo)
                     .add(FunctionSet.ABS).add(FunctionSet.POSITIVE).add(FunctionSet.NEGATIVE)
-                    .add(FunctionSet.MONEY_FORMAT).build();
+                    .add(FunctionSet.MONEY_FORMAT).add(FunctionSet.ICEBERG_TRANSFORM_TRUNCATE)
+                    .add(FunctionSet.ICEBERG_TRANSFORM_BUCKET).build();
 
     public static final Set<String> DECIMAL_IDENTICAL_TYPE_FUNCTION_SET =
             new ImmutableSortedSet.Builder<>(String::compareTo)

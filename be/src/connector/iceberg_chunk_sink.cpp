@@ -27,14 +27,14 @@
 
 namespace starrocks::connector {
 
-IcebergChunkSink::IcebergChunkSink(std::vector<std::string> partition_columns,
+IcebergChunkSink::IcebergChunkSink(std::vector<std::string> partition_columns, std::vector<std::string> transform_exprs,
                                    std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
                                    std::unique_ptr<LocationProvider> location_provider,
                                    std::unique_ptr<formats::FileWriterFactory> file_writer_factory,
                                    int64_t max_file_size, RuntimeState* state)
         : ConnectorChunkSink(std::move(partition_columns), std::move(partition_column_evaluators),
-                             std::move(location_provider), std::move(file_writer_factory), max_file_size, state, true) {
-}
+                             std::move(location_provider), std::move(file_writer_factory), max_file_size, state, true),
+          _transform_exprs(std::move(transform_exprs)) {}
 
 void IcebergChunkSink::callback_on_commit(const CommitResult& result) {
     _rollback_actions.push_back(std::move(result.rollback_action));
@@ -65,6 +65,7 @@ void IcebergChunkSink::callback_on_commit(const CommitResult& result) {
         iceberg_data_file.__set_format(result.format);
         iceberg_data_file.__set_record_count(result.file_statistics.record_count);
         iceberg_data_file.__set_file_size_in_bytes(result.file_statistics.file_size);
+        iceberg_data_file.__set_partition_null_fingerprint(result.extra_data);
 
         if (result.file_statistics.split_offsets.has_value()) {
             iceberg_data_file.__set_split_offsets(result.file_statistics.split_offsets.value());
@@ -95,15 +96,12 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergChunkSinkProvider::create_c
         file_writer_factory = std::make_unique<formats::UnknownFileWriterFactory>(ctx->format);
     }
 
-    std::vector<std::string> partition_columns;
-    std::vector<std::unique_ptr<ColumnEvaluator>> partition_column_evaluators;
-    for (auto idx : ctx->partition_column_indices) {
-        partition_columns.push_back(ctx->column_names[idx]);
-        partition_column_evaluators.push_back(ctx->column_evaluators[idx]->clone());
-    }
-    return std::make_unique<connector::IcebergChunkSink>(partition_columns, std::move(partition_column_evaluators),
-                                                         std::move(location_provider), std::move(file_writer_factory),
-                                                         ctx->max_file_size, runtime_state);
+    std::vector<std::string>& partition_columns = ctx->partition_column_names;
+    std::vector<std::string>& transform_exprs = ctx->transform_exprs;
+    auto partition_evaluators = ColumnEvaluator::clone(ctx->partition_evaluators);
+    return std::make_unique<connector::IcebergChunkSink>(
+            partition_columns, transform_exprs, std::move(partition_evaluators), std::move(location_provider),
+            std::move(file_writer_factory), ctx->max_file_size, runtime_state);
 }
 
 } // namespace starrocks::connector

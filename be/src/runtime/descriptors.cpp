@@ -229,7 +229,15 @@ IcebergTableDescriptor::IcebergTableDescriptor(const TTableDescriptor& tdesc, Ob
     _table_location = tdesc.icebergTable.location;
     _columns = tdesc.icebergTable.columns;
     _t_iceberg_schema = tdesc.icebergTable.iceberg_schema;
-    _partition_column_names = tdesc.icebergTable.partition_column_names;
+    if (tdesc.icebergTable.__isset.partition_info) {
+        for (const auto& part_info : tdesc.icebergTable.partition_info) {
+            _partition_column_names.push_back(part_info.partition_column_name);
+            _transform_exprs.push_back(part_info.transform_expr);
+            _partition_exprs.push_back(part_info.partition_expr);
+        }
+    } else {
+        _partition_column_names = tdesc.icebergTable.partition_column_names;
+    }
 }
 
 std::vector<int32_t> IcebergTableDescriptor::partition_index_in_schema() {
@@ -237,11 +245,15 @@ std::vector<int32_t> IcebergTableDescriptor::partition_index_in_schema() {
     indexes.reserve(_partition_column_names.size());
 
     for (const auto& name : _partition_column_names) {
-        for (int i = 0; i < _columns.size(); ++i) {
+        bool found = false;
+        for (int i = 0; !found && i < _columns.size(); ++i) {
             if (_columns[i].column_name == name) {
                 indexes.emplace_back(i);
-                break;
+                found = true;
             }
+        }
+        if (!found) {
+            indexes.emplace_back(-1);
         }
     }
 

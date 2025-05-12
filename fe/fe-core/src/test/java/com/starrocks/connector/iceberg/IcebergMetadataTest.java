@@ -620,6 +620,7 @@ public class IcebergMetadataTest extends TableTestBase {
         tIcebergDataFile.setSplit_offsets(splitOffsets);
         tIcebergDataFile.setPartition_path(partitionPath);
         tIcebergDataFile.setFile_size_in_bytes(fileSize);
+        tIcebergDataFile.setPartition_null_fingerprint("0");
 
         tSinkCommitInfo.setIs_overwrite(false);
         tSinkCommitInfo.setIceberg_data_file(tIcebergDataFile);
@@ -658,6 +659,91 @@ public class IcebergMetadataTest extends TableTestBase {
         metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo), null);
         mockedNativeTableA.refresh();
         TableScan scan = mockedNativeTableA.newScan().includeColumnStats();
+        fileScanTasks = Lists.newArrayList(scan.planFiles());
+
+        Assert.assertEquals(1, fileScanTasks.size());
+        task = fileScanTasks.get(0);
+        Assert.assertEquals(0, task.deletes().size());
+        dataFile = task.file();
+        Assert.assertEquals(path, dataFile.path());
+        Assert.assertEquals(format, dataFile.format().name().toLowerCase(Locale.ROOT));
+        Assert.assertEquals(1, dataFile.partition().size());
+        Assert.assertEquals(recordCount, dataFile.recordCount());
+        Assert.assertEquals(fileSize, dataFile.fileSizeInBytes());
+        Assert.assertEquals(4, dataFile.splitOffsets().get(0).longValue());
+        Assert.assertEquals(111L, dataFile.valueCounts().get(1).longValue());
+    }
+
+    @Test
+    public void testFinishSink2() {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableJ, Maps.newHashMap());
+
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        TSinkCommitInfo tSinkCommitInfo = new TSinkCommitInfo();
+        TIcebergDataFile tIcebergDataFile = new TIcebergDataFile();
+        String path = mockedNativeTableJ.location() + "/data/ts_month=2022-01/c.parquet";
+        String format = "parquet";
+        long recordCount = 10;
+        long fileSize = 2000;
+        String partitionPath = mockedNativeTableJ.location() + "/data/ts_month=2022-01/";
+        List<Long> splitOffsets = Lists.newArrayList(4L);
+        tIcebergDataFile.setPath(path);
+        tIcebergDataFile.setFormat(format);
+        tIcebergDataFile.setRecord_count(recordCount);
+        tIcebergDataFile.setSplit_offsets(splitOffsets);
+        tIcebergDataFile.setPartition_path(partitionPath);
+        tIcebergDataFile.setFile_size_in_bytes(fileSize);
+        tIcebergDataFile.setPartition_null_fingerprint("0");
+
+        tSinkCommitInfo.setIs_overwrite(false);
+        tSinkCommitInfo.setIceberg_data_file(tIcebergDataFile);
+
+        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo), null);
+
+        List<FileScanTask> fileScanTasks = Lists.newArrayList(mockedNativeTableJ.newScan().planFiles());
+        Assert.assertEquals(1, fileScanTasks.size());
+        FileScanTask task = fileScanTasks.get(0);
+        Assert.assertEquals(0, task.deletes().size());
+        DataFile dataFile = task.file();
+        Assert.assertEquals(path, dataFile.path());
+        Assert.assertEquals(format, dataFile.format().name().toLowerCase(Locale.ROOT));
+        Assert.assertEquals(1, dataFile.partition().size());
+        Assert.assertEquals(recordCount, dataFile.recordCount());
+        Assert.assertEquals(fileSize, dataFile.fileSizeInBytes());
+        Assert.assertEquals(4, dataFile.splitOffsets().get(0).longValue());
+
+        tSinkCommitInfo.setIs_overwrite(true);
+        recordCount = 22;
+        fileSize = 3333;
+        tIcebergDataFile.setRecord_count(recordCount);
+        tIcebergDataFile.setFile_size_in_bytes(fileSize);
+        Map<Integer, Long> valueCounts = new HashMap<>();
+        valueCounts.put(1, 111L);
+        TIcebergColumnStats columnStats = new TIcebergColumnStats();
+        columnStats.setColumn_sizes(new HashMap<>());
+        columnStats.setValue_counts(valueCounts);
+        columnStats.setNull_value_counts(new HashMap<>());
+        columnStats.setLower_bounds(new HashMap<>());
+        columnStats.setUpper_bounds(new HashMap<>());
+        tIcebergDataFile.setColumn_stats(columnStats);
+
+        tSinkCommitInfo.setIceberg_data_file(tIcebergDataFile);
+
+        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo), null);
+        mockedNativeTableJ.refresh();
+        TableScan scan = mockedNativeTableJ.newScan().includeColumnStats();
         fileScanTasks = Lists.newArrayList(scan.planFiles());
 
         Assert.assertEquals(1, fileScanTasks.size());

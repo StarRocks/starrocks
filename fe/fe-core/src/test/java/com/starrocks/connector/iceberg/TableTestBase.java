@@ -224,6 +224,7 @@ public class TableTestBase {
     public TestTables.TestTable mockedNativeTableG = null;
     public TestTables.TestTable mockedNativeTableH = null;
     public TestTables.TestTable mockedNativeTableI = null;
+    public TestTables.TestTable mockedNativeTableJ = null;
 
     protected final int formatVersion = 1;
 
@@ -242,6 +243,7 @@ public class TableTestBase {
         this.mockedNativeTableG = create(SCHEMA_B, SPEC_B_1, "tg", 1);
         this.mockedNativeTableH = create(SCHEMA_H, PartitionSpec.unpartitioned(), "th", 1);
         this.mockedNativeTableI = create(SCHEMA_F, SPEC_F_1, "ti", 1);
+        this.mockedNativeTableJ = create(SCHEMA_E, SPEC_E_3, "tj", 1);
     }
 
     @After

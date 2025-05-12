@@ -607,6 +607,8 @@ public:
                                                         FunctionContext::FunctionStateScope scope);
     static Status ngram_search_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
+    DEFINE_VECTORIZED_FN(iceberg_truncate_string);
+
 private:
     static int index_of(const char* source, int source_count, const char* target, int target_count, int from_index);
 
@@ -815,7 +817,6 @@ StatusOr<ColumnPtr> StringFunctions::field(FunctionContext* context, const Colum
             }
             id++;
         }
-
         result.append(res);
     }
 
