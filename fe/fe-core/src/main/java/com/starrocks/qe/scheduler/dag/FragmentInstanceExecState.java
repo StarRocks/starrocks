@@ -75,7 +75,7 @@ import java.util.stream.Collectors;
 public class FragmentInstanceExecState {
     private static final Logger LOG = LogManager.getLogger(FragmentInstanceExecState.class);
 
-    private State state = State.CREATED;
+    private volatile State state = State.CREATED;
 
     private final JobSpec jobSpec;
     private final PlanFragmentId fragmentId;
@@ -477,6 +477,10 @@ public class FragmentInstanceExecState {
         }
     }
 
+    public State getState() {
+        return state;
+    }
+
     public enum State {
         CREATED,
         DEPLOYING,
@@ -492,6 +496,10 @@ public class FragmentInstanceExecState {
 
         public boolean isTerminal() {
             return this == FINISHED || this == FAILED;
+        }
+
+        public boolean isFinished() {
+            return this == FINISHED;
         }
     }
 }

@@ -126,12 +126,14 @@ Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
         if (status.ok()) {
             return Status::OK();
         }
-        LOG(WARNING) << status;
+        LOG(WARNING) << "rpc failed: " << status << ", retry times: " << i << ", address=" << address
+                     << ", timeout_ms=" << timeout_ms;
         SleepFor(MonoDelta::FromMilliseconds(config::thrift_client_retry_interval_ms));
         // reopen failure will disable this connection to prevent it from being used again.
         auto st = client.reopen(timeout_ms);
         if (!st.ok()) {
-            LOG(WARNING) << "client reopen failed. address=" << address << ", status=" << st.message();
+            LOG(WARNING) << "rpc client reopen failed. address=" << address << ", status=" << st.message()
+                         << ", retry times: " << i;
             break;
         }
     }
