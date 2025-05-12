@@ -156,9 +156,6 @@ static void failure_handler_after_output_log() {
 }
 
 static void failure_writer(const char* data, size_t size) {
-    if (config::enable_core_file_size_optimization) {
-        dontdump_unused_pages();
-    }
     dump_trace_info();
     [[maybe_unused]] auto wt = write(STDERR_FILENO, data, size);
 }
