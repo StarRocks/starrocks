@@ -59,10 +59,6 @@ public:
 
     virtual DataCacheEngineType engine_type() = 0;
 
-#ifdef WITH_STARCACHE
-    virtual std::shared_ptr<starcache::StarCache> starcache_instance() = 0;
-#endif
-
     virtual bool available() const = 0;
     virtual bool mem_cache_available() const = 0;
     virtual void disk_spaces(std::vector<DirSpace>* spaces) const = 0;

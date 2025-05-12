@@ -17,7 +17,10 @@
 #include <gtest/gtest.h>
 
 #include "cache/block_cache/block_cache.h"
+#include "cache/block_cache/starcache_wrapper.h"
+#include "cache/block_cache/test_cache_utils.h"
 #include "fs/fs_util.h"
+#include "runtime/exec_env.h"
 #include "testutil/assert.h"
 
 namespace starrocks::io {
@@ -50,9 +53,7 @@ private:
 
 class CacheInputStreamTest : public ::testing::Test {
 public:
-    static void SetUpTestCase() {}
-
-    CacheOptions cache_options() {
+    static CacheOptions cache_options() {
         CacheOptions options;
         options.mem_space_size = 100 * 1024 * 1024;
 #ifdef WITH_STARCACHE
@@ -77,6 +78,10 @@ public:
     void SetUp() override {
         _saved_enable_auto_adjust = config::datacache_auto_adjust_enable;
         config::datacache_auto_adjust_enable = false;
+
+        CacheOptions options = cache_options();
+        auto block_cache = TestCacheUtils::create_cache(options);
+        CacheEnv::GetInstance()->set_block_cache(block_cache);
     }
     void TearDown() override { config::datacache_auto_adjust_enable = _saved_enable_auto_adjust; }
 
@@ -112,9 +117,6 @@ private:
 const int64_t CacheInputStreamTest::block_size = 256 * 1024;
 
 TEST_F(CacheInputStreamTest, test_aligned_read) {
-    CacheOptions options = cache_options();
-    ASSERT_OK(BlockCache::instance()->init(options));
-
     const int64_t block_count = 3;
 
     int64_t data_size = block_size * block_count;
@@ -148,9 +150,6 @@ TEST_F(CacheInputStreamTest, test_aligned_read) {
 }
 
 TEST_F(CacheInputStreamTest, test_random_read) {
-    CacheOptions options = cache_options();
-    ASSERT_OK(BlockCache::instance()->init(options));
-
     const int64_t block_count = 3;
 
     const int64_t data_size = block_size * block_count;
@@ -190,9 +189,6 @@ TEST_F(CacheInputStreamTest, test_random_read) {
 }
 
 TEST_F(CacheInputStreamTest, test_file_overwrite) {
-    CacheOptions options = cache_options();
-    ASSERT_OK(BlockCache::instance()->init(options));
-
     const int64_t block_count = 3;
 
     int64_t data_size = block_size * block_count;
@@ -237,9 +233,6 @@ TEST_F(CacheInputStreamTest, test_file_overwrite) {
 }
 
 TEST_F(CacheInputStreamTest, test_read_from_io_buffer) {
-    CacheOptions options = cache_options();
-    ASSERT_OK(BlockCache::instance()->init(options));
-
     const int64_t block_count = 1;
 
     int64_t data_size = block_size * block_count;
@@ -274,9 +267,6 @@ TEST_F(CacheInputStreamTest, test_read_from_io_buffer) {
 }
 
 TEST_F(CacheInputStreamTest, test_read_zero_copy) {
-    CacheOptions options = cache_options();
-    ASSERT_OK(BlockCache::instance()->init(options));
-
     int64_t data_size = block_size + 1024;
     char data[data_size + 1];
     gen_test_data(data, data_size, block_size);
@@ -298,9 +288,6 @@ TEST_F(CacheInputStreamTest, test_read_zero_copy) {
 }
 
 TEST_F(CacheInputStreamTest, test_read_with_zero_range) {
-    CacheOptions options = cache_options();
-    ASSERT_OK(BlockCache::instance()->init(options));
-
     const int64_t block_count = 1;
     int64_t data_size = block_size * block_count;
     char data[data_size + 1];
@@ -335,7 +322,8 @@ TEST_F(CacheInputStreamTest, test_read_with_adaptor) {
     // Because the cache adaptor only work for disk cache.
     options.disk_spaces.push_back({.path = cache_dir, .size = 300 * 1024 * 1024});
     options.enable_tiered_cache = false;
-    ASSERT_OK(BlockCache::instance()->init(options));
+    auto block_cache = TestCacheUtils::create_cache(options);
+    CacheEnv::GetInstance()->set_block_cache(block_cache);
 
     const int64_t block_count = 2;
 
@@ -400,9 +388,6 @@ TEST_F(CacheInputStreamTest, test_read_with_adaptor) {
 }
 
 TEST_F(CacheInputStreamTest, test_read_with_shared_buffer) {
-    CacheOptions options = cache_options();
-    ASSERT_OK(BlockCache::instance()->init(options));
-
     const int64_t block_count = 2;
 
     int64_t data_size = block_size * block_count;
@@ -445,9 +430,6 @@ TEST_F(CacheInputStreamTest, test_read_with_shared_buffer) {
 }
 
 TEST_F(CacheInputStreamTest, test_peek) {
-    CacheOptions options = cache_options();
-    ASSERT_OK(BlockCache::instance()->init(options));
-
     const int64_t block_count = 2;
 
     int64_t data_size = block_size * block_count;
@@ -487,9 +469,6 @@ TEST_F(CacheInputStreamTest, test_peek) {
 }
 
 TEST_F(CacheInputStreamTest, test_try_peer_cache) {
-    CacheOptions options = cache_options();
-    ASSERT_OK(BlockCache::instance()->init(options));
-
     const int64_t block_count = 3;
 
     int64_t data_size = block_size * block_count;

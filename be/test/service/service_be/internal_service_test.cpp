@@ -19,10 +19,12 @@
 
 #include <memory>
 
+#include "cache/block_cache/test_cache_utils.h"
 #include "common/utils.h"
 #include "exec/tablet_sink_index_channel.h"
 #include "runtime/exec_env.h"
 #include "service/brpc_service_test_util.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -180,15 +182,9 @@ TEST_F(InternalServiceTest, test_fetch_datacache_via_brpc) {
 
     std::shared_ptr<BlockCache> cache(new BlockCache);
     {
-        CacheOptions options;
-        options.mem_space_size = 20 * 1024 * 1024;
-        options.block_size = 256 * 1024 * 1024;
-        options.max_concurrent_inserts = 100000;
-        options.max_flying_memory_mb = 100;
-        options.engine = "starcache";
+        CacheOptions options = TestCacheUtils::create_simple_options(256 * KB, 20 * MB);
         options.inline_item_count_limit = 1000;
-        Status status = cache->init(options);
-        ASSERT_TRUE(status.ok());
+        auto cache = TestCacheUtils::create_cache(options);
 
         const size_t cache_size = 1024;
         const std::string cache_key = "test_file";
@@ -197,6 +193,7 @@ TEST_F(InternalServiceTest, test_fetch_datacache_via_brpc) {
         ASSERT_TRUE(st.ok());
 
         CacheEnv* cache_env = CacheEnv::GetInstance();
+        cache_env->_local_cache = cache->local_cache();
         cache_env->_block_cache = cache;
     }
 
