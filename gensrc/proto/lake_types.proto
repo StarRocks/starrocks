@@ -188,6 +188,14 @@ message TxnLogPB {
         optional PersistentIndexSstablePB output_sstable = 4;
         // Base version of compaction task, used for conflict check with partial update
         optional int64 compact_version = 5;
+        // For normal compaction, all segments in `output_rowset` will be new segments.
+        // For partial compaction, we put compacted segments and uncompacted segments
+        // together, and when compaction is aborted, we need to avoid uncompacted segments
+        // being deleted.
+        // e.g., a b x y e f, in `output_rowset`, a,b,e,f might be uncompacted segments,
+        // x and y might be new segments
+        optional int32 new_segment_offset = 6;
+        optional int32 new_segment_count = 7;
     }
 
     message OpSchemaChange {
