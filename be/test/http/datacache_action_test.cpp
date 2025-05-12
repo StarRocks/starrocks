@@ -20,8 +20,8 @@
 #include <rapidjson/document.h>
 
 #include "cache/block_cache/block_cache_hit_rate_counter.hpp"
-#include "cache/block_cache/starcache_wrapper.h"
 #include "cache/block_cache/test_cache_utils.h"
+#include "cache/starcache_wrapper.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "http/http_channel.h"
 #include "http/http_request.h"

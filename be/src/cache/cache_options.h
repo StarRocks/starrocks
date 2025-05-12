@@ -19,7 +19,7 @@
 #include <string>
 #include <vector>
 
-#include "cache/block_cache/dummy_types.h"
+#include "cache/dummy_types.h"
 #include "common/status.h"
 
 #ifdef WITH_STARCACHE

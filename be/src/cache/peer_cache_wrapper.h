@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "cache/block_cache/remote_cache.h"
+#include "cache/remote_cache.h"
 #include "starcache/time_based_cache_adaptor.h"
 
 namespace starrocks {

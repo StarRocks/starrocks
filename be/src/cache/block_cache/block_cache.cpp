@@ -16,7 +16,7 @@
 
 #include <fmt/format.h>
 
-#include "cache/block_cache/peer_cache_wrapper.h"
+#include "cache/peer_cache_wrapper.h"
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"

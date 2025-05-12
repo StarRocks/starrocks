@@ -18,8 +18,8 @@
 #include <gtest/gtest.h>
 
 #include "cache/block_cache/block_cache.h"
-#include "cache/block_cache/peer_cache_wrapper.h"
-#include "cache/block_cache/starcache_wrapper.h"
+#include "cache/peer_cache_wrapper.h"
+#include "cache/starcache_wrapper.h"
 #include "common/logging.h"
 #include "testutil/assert.h"
 
