@@ -443,7 +443,10 @@ public class PropertyAnalyzer {
         if (properties != null && properties.containsKey(PROPERTIES_PARTITION_RETENTION_CONDITION)) {
             partitionRetentionCondition = properties.get(PROPERTIES_PARTITION_RETENTION_CONDITION);
             if (Strings.isNullOrEmpty(partitionRetentionCondition)) {
-                throw new SemanticException("Illegal partition retention condition: " + partitionRetentionCondition);
+                if (removeProperties) {
+                    properties.remove(PROPERTIES_PARTITION_RETENTION_CONDITION);
+                }
+                return partitionRetentionCondition;
             }
             // parse retention condition
             Expr whereExpr = null;
