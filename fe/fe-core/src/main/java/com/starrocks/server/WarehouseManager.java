@@ -34,6 +34,10 @@ import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.EnableDisableCnGroupStmt;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.DefaultWarehouse;
@@ -280,6 +284,26 @@ public class WarehouseManager implements Writable {
 
     public void alterWarehouse(AlterWarehouseStmt stmt) throws DdlException {
         throw new DdlException("Multi-Warehouse is not implemented");
+    }
+
+    public void createCnGroup(CreateCnGroupStmt stmt) throws DdlException {
+        throw new DdlException("CnGroup is not implemented");
+    }
+
+    public void dropCnGroup(DropCnGroupStmt stmt) throws DdlException {
+        throw new DdlException("CnGroup is not implemented");
+    }
+
+    public void enableCnGroup(EnableDisableCnGroupStmt stmt) throws DdlException {
+        throw new DdlException("CnGroup is not implemented");
+    }
+
+    public void disableCnGroup(EnableDisableCnGroupStmt stmt) throws DdlException {
+        throw new DdlException("CnGroup is not implemented");
+    }
+
+    public void alterCnGroup(AlterCnGroupStmt stmt) throws DdlException {
+        throw new DdlException("CnGroup is not implemented");
     }
 
     public Set<String> getAllWarehouseNames() {

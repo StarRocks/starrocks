@@ -15,8 +15,10 @@
 package com.starrocks.warehouse;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.ProcResult;
+import com.starrocks.system.ComputeNode;
 
 import java.util.List;
 
@@ -49,6 +51,10 @@ public abstract class Warehouse implements Writable {
     public abstract long getResumeTime();
 
     public abstract Long getAnyWorkerGroupId();
+
+    public abstract void addNodeToCNGroup(ComputeNode node, String cnGroupName) throws DdlException;
+
+    public abstract void validateRemoveNodeFromCNGroup(ComputeNode node, String cnGroupName) throws DdlException;
 
     public abstract List<Long> getWorkerGroupIds();
 

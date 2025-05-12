@@ -69,6 +69,7 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.CreateFunctionStmt;
@@ -94,6 +95,10 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.EnableDisableCnGroupStmt;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
@@ -3898,5 +3903,77 @@ public class PrivilegeCheckerTest {
         DropUserStmt dropUserStmt =
                 (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(dropUserSql, starRocksAssert.getCtx());
         authenticationManager.dropUser(dropUserStmt);
+    }
+
+    @Test
+    public void testCNGroupStatementPrivilege() throws Exception {
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public void createCnGroup(CreateCnGroupStmt stmt) throws DdlException {
+                // do nothing
+            }
+
+            @Mock
+            public void dropCnGroup(DropCnGroupStmt stmt) throws DdlException {
+                // do nothing
+            }
+
+            @Mock
+            public void enableCnGroup(EnableDisableCnGroupStmt stmt) throws DdlException {
+                // do nothing
+            }
+
+            @Mock
+            public void disableCnGroup(EnableDisableCnGroupStmt stmt) throws DdlException {
+                // do nothing
+            }
+
+            @Mock
+            public void alterCnGroup(AlterCnGroupStmt stmt) throws DdlException {
+                // do thing
+            }
+        };
+
+        ctxToTestUser();
+        // create cngroup
+        verifyGrantRevoke(
+                "ALTER WAREHOUSE default_warehouse ADD CNGROUP cngroup1",
+                "grant ALTER on WAREHOUSE default_warehouse to test",
+                "revoke ALTER on WAREHOUSE default_warehouse from test",
+                "Access denied; you need (at least one of) the ALTER privilege(s) on WAREHOUSE"
+                        + " default_warehouse for this operation."
+        );
+        // drop cngroup
+        verifyGrantRevoke(
+                "ALTER WAREHOUSE default_warehouse DROP CNGROUP cngroup1",
+                "grant ALTER on WAREHOUSE default_warehouse to test",
+                "revoke ALTER on WAREHOUSE default_warehouse from test",
+                "Access denied; you need (at least one of) the ALTER privilege(s) on WAREHOUSE"
+                        + " default_warehouse for this operation."
+        );
+        // enable cngroup
+        verifyGrantRevoke(
+                "ALTER WAREHOUSE default_warehouse ENABLE CNGROUP cngroup1",
+                "grant ALTER on WAREHOUSE default_warehouse to test",
+                "revoke ALTER on WAREHOUSE default_warehouse from test",
+                "Access denied; you need (at least one of) the ALTER privilege(s) on WAREHOUSE"
+                        + " default_warehouse for this operation."
+        );
+        // disable cngroup
+        verifyGrantRevoke(
+                "ALTER WAREHOUSE default_warehouse DISABLE CNGROUP cngroup1",
+                "grant ALTER on WAREHOUSE default_warehouse to test",
+                "revoke ALTER on WAREHOUSE default_warehouse from test",
+                "Access denied; you need (at least one of) the ALTER privilege(s) on WAREHOUSE"
+                        + " default_warehouse for this operation."
+        );
+        // modify cngroup
+        verifyGrantRevoke(
+                "ALTER WAREHOUSE default_warehouse MODIFY CNGROUP cngroup1 SET ('label1' = 'value1')",
+                "grant ALTER on WAREHOUSE default_warehouse to test",
+                "revoke ALTER on WAREHOUSE default_warehouse from test",
+                "Access denied; you need (at least one of) the ALTER privilege(s) on WAREHOUSE"
+                        + " default_warehouse for this operation."
+        );
     }
 }
