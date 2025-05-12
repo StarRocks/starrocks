@@ -22,7 +22,7 @@
 #include <string>
 
 #include "cache/block_cache/block_cache_hit_rate_counter.hpp"
-#include "cache/block_cache/local_cache.h"
+#include "cache/local_cache.h"
 #include "http/http_channel.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"

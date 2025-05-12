@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "cache/block_cache/peer_cache_wrapper.h"
+#include "cache/peer_cache_wrapper.h"
 
 #include "common/logging.h"
 #include "gen_cpp/internal_service.pb.h"

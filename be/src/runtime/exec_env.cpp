@@ -41,9 +41,9 @@
 #include "agent/agent_server.h"
 #include "agent/master_info.h"
 #include "cache/block_cache/block_cache.h"
-#include "cache/block_cache/disk_space_monitor.h"
-#include "cache/block_cache/peer_cache_wrapper.h"
+#include "cache/disk_space_monitor.h"
 #include "cache/object_cache/lrucache_module.h"
+#include "cache/peer_cache_wrapper.h"
 #include "common/config.h"
 #include "common/configbase.h"
 #include "common/logging.h"
@@ -111,8 +111,8 @@
 #endif
 
 #ifdef WITH_STARCACHE
-#include "cache/block_cache/starcache_wrapper.h"
 #include "cache/object_cache/starcache_module.h"
+#include "cache/starcache_wrapper.h"
 #endif
 
 namespace starrocks {

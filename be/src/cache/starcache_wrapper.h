@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "cache/block_cache/local_cache.h"
+#include "cache/local_cache.h"
 #include "common/status.h"
 #include "starcache/star_cache.h"
 #include "starcache/time_based_cache_adaptor.h"

@@ -18,9 +18,9 @@
 #include <cstring>
 #include <filesystem>
 
-#include "cache/block_cache/cache_options.h"
 #include "cache/block_cache/io_buffer.h"
-#include "cache/block_cache/peer_cache_wrapper.h"
+#include "cache/cache_options.h"
+#include "cache/peer_cache_wrapper.h"
 #include "common/logging.h"
 #include "common/statusor.h"
 
