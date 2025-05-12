@@ -905,6 +905,8 @@ bool TabletUpdates::_is_retryable(Status& status) {
     case TStatusCode::TIMEOUT:
         return true;
     case TStatusCode::CORRUPTION:
+    case TStatusCode::NOT_IMPLEMENTED_ERROR:
+    case TStatusCode::INVALID_ARGUMENT:
         return false;
     default:
         return _check_status_msg(status.message()) || _retry_times_limit();
