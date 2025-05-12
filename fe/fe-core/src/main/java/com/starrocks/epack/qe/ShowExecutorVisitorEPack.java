@@ -314,16 +314,16 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
         AuthorizationMgr authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         try {
             List<List<String>> infos = new ArrayList<>();
-            if (statement.getRole() != null) {
-                List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForRole(statement.getRole());
+            if (statement.getGroupOrRole() != null) {
+                List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForRole(statement.getGroupOrRole());
                 if (granteeRole != null) {
                     infos.add(granteeRole);
                 }
 
                 Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList =
-                        authorizationManager.getTypeToPrivilegeEntryListByRole(statement.getRole());
+                        authorizationManager.getTypeToPrivilegeEntryListByRole(statement.getGroupOrRole());
                 infos.addAll(privilegeToRowString(authorizationManager,
-                        new GrantRevokeClause(null, statement.getRole()), typeToPrivilegeEntryList));
+                        new GrantRevokeClause(null, statement.getGroupOrRole()), typeToPrivilegeEntryList));
             } else {
                 UserIdentity userIdentity = statement.getUserIdent();
                 List<String> granteeRole =

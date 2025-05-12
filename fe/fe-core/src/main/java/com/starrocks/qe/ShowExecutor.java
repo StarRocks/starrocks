@@ -57,6 +57,7 @@ import com.starrocks.authorization.ActionSet;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.CatalogPEntryObject;
 import com.starrocks.authorization.DbPEntryObject;
+import com.starrocks.authorization.GrantType;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.authorization.PrivilegeEntry;
@@ -2018,26 +2019,29 @@ public class ShowExecutor {
             AuthorizationMgr authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
             try {
                 List<List<String>> infos = new ArrayList<>();
-                if (statement.getRole() != null) {
-                    List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForRole(statement.getRole());
+                if (statement.getGrantType().equals(GrantType.ROLE)) {
+                    List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForRole(statement.getGroupOrRole());
                     if (granteeRole != null) {
                         infos.add(granteeRole);
                     }
 
                     Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList =
-                            authorizationManager.getTypeToPrivilegeEntryListByRole(statement.getRole());
+                            authorizationManager.getTypeToPrivilegeEntryListByRole(statement.getGroupOrRole());
                     infos.addAll(privilegeToRowString(authorizationManager,
-                            new GrantRevokeClause(null, statement.getRole()), typeToPrivilegeEntryList));
+                            new GrantRevokeClause(null, statement.getGroupOrRole()), typeToPrivilegeEntryList));
                 } else {
-                    List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForUser(statement.getUserIdent());
+                    UserIdentity userIdentity = statement.getUserIdent();
+                    List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForUser(userIdentity);
                     if (granteeRole != null) {
                         infos.add(granteeRole);
                     }
 
-                    Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList =
-                            authorizationManager.getTypeToPrivilegeEntryListByUser(statement.getUserIdent());
-                    infos.addAll(privilegeToRowString(authorizationManager,
-                            new GrantRevokeClause(statement.getUserIdent(), null), typeToPrivilegeEntryList));
+                    if (!userIdentity.isEphemeral()) {
+                        Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList =
+                                authorizationManager.getTypeToPrivilegeEntryListByUser(statement.getUserIdent());
+                        infos.addAll(privilegeToRowString(authorizationManager,
+                                new GrantRevokeClause(statement.getUserIdent(), null), typeToPrivilegeEntryList));
+                    }
                 }
                 return new ShowResultSet(statement.getMetaData(), infos);
             } catch (PrivilegeException e) {

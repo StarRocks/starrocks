@@ -12,31 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
+import com.starrocks.authorization.GrantType;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
-// REVOKE Role 'role' FROM 'user'
-// share the same parameter and check logic with GrantRoleStmt
 public class RevokeRoleStmt extends BaseGrantRevokeRoleStmt {
-
-    public RevokeRoleStmt(List<String> granteeRole, UserIdentity userIdent) {
-        super(granteeRole, userIdent);
-    }
-
     public RevokeRoleStmt(List<String> granteeRole, UserIdentity userIdent, NodePosition pos) {
         super(granteeRole, userIdent, pos);
     }
 
-    public RevokeRoleStmt(List<String> granteeRole, String role) {
-        super(granteeRole, role);
-    }
-
-    public RevokeRoleStmt(List<String> granteeRole, String role, NodePosition pos) {
-        super(granteeRole, role, pos);
+    public RevokeRoleStmt(List<String> granteeRole, String group, GrantType grantType, NodePosition pos) {
+        super(granteeRole, group, grantType, pos);
     }
 
     @Override
