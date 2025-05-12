@@ -80,9 +80,15 @@ public:
             std::string tmpl("/tmp/sr_starlet_ut_XXXXXX");
             EXPECT_TRUE(::mkdtemp(tmpl.data()) != nullptr);
             config::starlet_cache_dir = tmpl;
+            setenv(staros::starlet::fslib::kFslibCacheDir.c_str(), config::starlet_cache_dir.c_str(),
+                   1 /* overwrite */);
         }
 
+        staros::starlet::StarletConfig starlet_config;
+        starlet_config.rpc_port = config::starlet_port;
         g_worker = std::make_shared<starrocks::StarOSWorker>();
+        g_starlet = std::make_unique<staros::starlet::Starlet>(g_worker);
+        g_starlet->init(starlet_config);
         (void)g_worker->add_shard(shard_info);
 
         // Expect a clean root directory before testing
@@ -94,6 +100,7 @@ public:
             return;
         }
         (void)g_worker->remove_shard(10086);
+        g_starlet.reset();
         g_worker.reset();
         std::string test_type = GetParam();
         if (test_type == "cachefs" && config::starlet_cache_dir.compare(0, 5, std::string("/tmp/")) == 0) {
