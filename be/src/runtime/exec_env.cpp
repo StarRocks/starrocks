@@ -575,6 +575,11 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _lake_tablet_manager =
             new lake::TabletManager(_lake_location_provider, _lake_update_manager, config::lake_metadata_cache_limit);
     _lake_replication_txn_manager = new lake::ReplicationTxnManager(_lake_tablet_manager);
+    RETURN_IF_ERROR(ThreadPoolBuilder("put_aggregate_metadata_pool")
+                            .set_min_threads(1)
+                            .set_max_threads(1)
+                            .set_max_queue_size(std::numeric_limits<int>::max())
+                            .build(&_put_aggregate_metadata_thread_pool));
 #endif
 
     _agent_server = new AgentServer(this, false);
