@@ -3734,9 +3734,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
             String partitionRetentionCondition = PropertyAnalyzer.analyzePartitionRetentionCondition(
                     db, table, properties, true, null);
-            if (Strings.isNullOrEmpty(partitionRetentionCondition)) {
-                throw new DdlException("Invalid partition retention condition");
-            }
             results.put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, partitionRetentionCondition);
         }
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT)) {

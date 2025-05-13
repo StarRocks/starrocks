@@ -485,7 +485,7 @@ public abstract class JoinOrder {
         exprInfo.expr.deriveLogicalPropertyItself();
     }
 
-    private List<ScalarOperator> buildInnerJoinPredicate(BitSet left, BitSet right) {
+    protected List<ScalarOperator> buildInnerJoinPredicate(BitSet left, BitSet right) {
         List<ScalarOperator> onPredicates = Lists.newArrayList();
         BitSet joinBitSet = new BitSet();
         joinBitSet.or(left);

@@ -62,6 +62,7 @@ import static com.starrocks.statistic.StatsConstants.EXTERNAL_HISTOGRAM_STATISTI
 import static com.starrocks.statistic.StatsConstants.FULL_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.MULTI_COLUMN_STATISTICS_TABLE_NAME;
+import static com.starrocks.statistic.StatsConstants.QUERY_HISTORY_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.SAMPLE_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.SPM_BASELINE_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
@@ -376,6 +377,42 @@ public class StatisticsMetaManager extends FrontendDaemon {
         return checkTableExist(SPM_BASELINE_TABLE_NAME);
     }
 
+    private boolean createQueryHistoryTable(ConnectContext context) {
+        LOG.info("create query_history table start");
+        TableName tableName = new TableName(STATISTICS_DB_NAME, QUERY_HISTORY_TABLE_NAME);
+        KeysType keysType = KeysType.DUP_KEYS;
+        Map<String, String> properties = Maps.newHashMap();
+        try {
+            List<ColumnDef> columns = ImmutableList.of(
+                    new ColumnDef("dt", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME))),
+                    new ColumnDef("frontend", new TypeDef(ScalarType.createVarcharType(65530))),
+                    new ColumnDef("db", new TypeDef(ScalarType.createVarcharType(65530))),
+                    new ColumnDef("sql_digest", new TypeDef(ScalarType.createVarcharType(65530))),
+                    new ColumnDef("sql", new TypeDef(ScalarType.createVarcharType(65530))),
+                    new ColumnDef("plan", new TypeDef(ScalarType.createVarcharType(65530))),
+                    new ColumnDef("plan_costs", new TypeDef(ScalarType.createType(PrimitiveType.DOUBLE))),
+                    new ColumnDef("query_ms", new TypeDef(ScalarType.createType(PrimitiveType.DOUBLE))),
+                    new ColumnDef("other", new TypeDef(ScalarType.createType(PrimitiveType.JSON)))
+            );
+
+            int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
+            properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
+            CreateTableStmt stmt = new CreateTableStmt(false, false,
+                    tableName, columns, EngineType.defaultEngine().name(),
+                    new KeysDesc(keysType, List.of("dt", "frontend")), null,
+                    new HashDistributionDesc(10, List.of("dt")),
+                    properties, null, "");
+
+            Analyzer.analyze(stmt, context);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
+        } catch (StarRocksException e) {
+            LOG.warn("Failed to create query_history table", e);
+            return false;
+        }
+        LOG.info("create query_history table done");
+        return checkTableExist(QUERY_HISTORY_TABLE_NAME);
+    }
+
     private void refreshAnalyzeJob() {
         for (Map.Entry<Long, BasicStatsMeta> entry :
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().entrySet()) {
@@ -415,6 +452,8 @@ public class StatisticsMetaManager extends FrontendDaemon {
                 return createMultiColumnStatisticsTable(context);
             } else if (SPM_BASELINE_TABLE_NAME.equals(tableName)) {
                 return createSPMBaselinesTable(context);
+            } else if (QUERY_HISTORY_TABLE_NAME.equals(tableName)) {
+                return createQueryHistoryTable(context);
             } else {
                 throw new StarRocksPlannerException("Error table name " + tableName, ErrorType.INTERNAL_ERROR);
             }
@@ -521,10 +560,12 @@ public class StatisticsMetaManager extends FrontendDaemon {
         refreshStatisticsTable(EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(MULTI_COLUMN_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(SPM_BASELINE_TABLE_NAME);
+        refreshStatisticsTable(QUERY_HISTORY_TABLE_NAME);
 
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromDroppedPartition();
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromDroppedTable();
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearExpiredAnalyzeStatus();
+        GlobalStateMgr.getCurrentState().getQueryHistoryMgr().clearExpiredQueryHistory();
 
         RepoCreator.getInstance().run();
     }

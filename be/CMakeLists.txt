@@ -495,6 +495,20 @@ if ("${USE_STAROS}" STREQUAL "ON")
     find_package(azure-storage-files-datalake-cpp CONFIG REQUIRED)
     set(AZURE_SDK_LIB Azure::azure-identity Azure::azure-storage-blobs Azure::azure-storage-files-datalake Azure::azure-core Azure::azure-storage-common)
 
+    # gcp cloud storage related dependencies
+    set(ZLIB_INCLUDE_DIR "${THIRDPARTY_DIR}/include")
+    set(ZLIB_LIBRARY "${THIRDPARTY_DIR}/lib/libz.a")
+    set(Crc32c_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/Crc32c" CACHE PATH "Crc32c search path")
+    find_package (Crc32c CONFIG REQUIRED)
+    set(nlohmann_json_DIR "${STARLET_INSTALL_DIR}/third_party/share/cmake/nlohmann_json" CACHE PATH "nlohmann json search path")
+    find_package (nlohmann_json CONFIG REQUIRED)
+    set(google_cloud_cpp_common_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/google_cloud_cpp_common" CACHE PATH "google cloud cpp common search path")
+    find_package (google_cloud_cpp_common CONFIG REQUIRED)
+    set(google_cloud_cpp_rest_internal_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/google_cloud_cpp_rest_internal" CACHE PATH "google cloud cpp rest internal search path")
+    find_package (google_cloud_cpp_rest_internal CONFIG REQUIRED)
+    set(google_cloud_cpp_storage_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/google_cloud_cpp_storage" CACHE PATH "google cloud cpp storage search path")
+    find_package (google_cloud_cpp_storage CONFIG REQUIRED)
+
     set(starlet_DIR "${STARLET_INSTALL_DIR}/starlet_install/lib/cmake" CACHE PATH "starlet search path")
     find_package(starlet CONFIG REQUIRED)
     message(STATUS "Using starlet ${starlet_VERSION}")
@@ -690,8 +704,8 @@ if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" 
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -mbmi2")
     endif()
     if (${USE_AVX512})
-        # the compiler will define __AVX512F__ __AVX512BW__
-        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -mavx512f -mavx512bw")
+        # the compiler will define __AVX512F__ __AVX512BW__ __AVX512DQ__ __AVX512CD__ __AVX512VL__
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -mavx512f -mavx512bw -mavx512dq -mavx512cd -mavx512vl")
     endif()
 elseif ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -march=armv8-a+crc")

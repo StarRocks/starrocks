@@ -1236,7 +1236,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：Bytes
 - 是否动态：否
-- 描述：Row source mask buffer 的最大内存占用大小。当 buffer 大于该值时将会持久化到磁盘临时文件中。该值应该小于 `compaction_mem_limit` 参数的值。
+- 描述：Row source mask buffer 的最大内存占用大小。当 buffer 大于该值时将会持久化到磁盘临时文件中。该值应该小于 `compaction_memory_limit_per_worker` 参数的值。
 - 引入版本：-
 
 ##### memory_maintenance_sleep_time_s
@@ -5250,3 +5250,12 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：否
 - 描述：bitmap 函数输入值的最大长度。
 - 引入版本：-
+
+##### report_exec_rpc_request_retry_num
+
+- 默认值：10
+- 类型: Int
+- 单位：-
+- 是否动态：是
+- 描述：用于向 FE 汇报执行状态的 RPC 请求的重试次数。默认值为 10，意味着如果该 RPC 请求失败（仅限于 fragment instance 的 finish RPC），将最多重试 10 次。该请求对于导入任务（load job）非常重要，如果某个 fragment instance 的完成状态报告失败，整个导入任务将会一直挂起，直到超时。
+-引入版本：-

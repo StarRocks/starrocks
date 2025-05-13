@@ -1270,7 +1270,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Int
 - Unit: Bytes
 - Is mutable: No
-- Description: The maximum memory size of the row source mask buffer. When the buffer is larger than this value, data will be persisted to a temporary file on the disk. This value should be set lower than the value of `compaction_mem_limit`.
+- Description: The maximum memory size of the row source mask buffer. When the buffer is larger than this value, data will be persisted to a temporary file on the disk. This value should be set lower than the value of `compaction_memory_limit_per_worker`.
 - Introduced in: -
 
 ##### memory_maintenance_sleep_time_s
@@ -5257,4 +5257,13 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Unit: Bytes
 - Is mutable: No
 - Description: The maximum length of input values for bitmap functions.
+- Introduced in: -
+
+##### report_exec_rpc_request_retry_num
+
+- Default: 10
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The retry times of rpc request to report exec rpc request to FE. The default value is 10, which means that the rpc request will be retried 10 times if it fails only if it's fragment instatnce finish rpc. Report exec rpc request is important for load job, if one fragment instance finish report failed, the load job will be hang until timeout.
 - Introduced in: -

@@ -334,7 +334,7 @@ TEST_F(BitShufflePageTest, TestBitShuffleFloatBlockEncoderRandom) {
 
     std::unique_ptr<float[]> floats(new float[size]);
     for (int i = 0; i < size; i++) {
-        floats.get()[i] = random() + static_cast<float>(random()) / std::numeric_limits<int>::max();
+        floats.get()[i] = random() + random() / static_cast<float>(std::numeric_limits<int>::max());
     }
 
     test_encode_decode_page_template<TYPE_FLOAT, BitshufflePageBuilder<TYPE_FLOAT>, BitShufflePageDecoder<TYPE_FLOAT>>(
@@ -347,7 +347,7 @@ TEST_F(BitShufflePageTest, TestBitShuffleDoubleBlockEncoderRandom) {
 
     std::unique_ptr<double[]> doubles(new double[size]);
     for (int i = 0; i < size; i++) {
-        doubles.get()[i] = random() + static_cast<double>(random()) / std::numeric_limits<int>::max();
+        doubles.get()[i] = random() + random() / static_cast<double>(std::numeric_limits<int>::max());
     }
 
     test_encode_decode_page_template<TYPE_DOUBLE, BitshufflePageBuilder<TYPE_DOUBLE>,
@@ -443,7 +443,7 @@ TEST_F(BitShufflePageTest, TestBitShuffleFloatBlockEncoderSeekValue) {
     const uint32_t size = 1000;
     std::unique_ptr<float[]> floats(new float[size]);
     for (int i = 0; i < size; i++) {
-        floats.get()[i] = i + 100 + static_cast<float>(random()) / std::numeric_limits<int>::max();
+        floats.get()[i] = i + 100 + random() / static_cast<float>(std::numeric_limits<int>::max());
     }
 
     float small_than_smallest = 99.9;
@@ -458,7 +458,7 @@ TEST_F(BitShufflePageTest, TestBitShuffleDoubleBlockEncoderSeekValue) {
     const uint32_t size = 1000;
     std::unique_ptr<double[]> doubles(new double[size]);
     for (int i = 0; i < size; i++) {
-        doubles.get()[i] = i + 100 + static_cast<double>(random()) / std::numeric_limits<int>::max();
+        doubles.get()[i] = i + 100 + random() / static_cast<double>(std::numeric_limits<int>::max());
     }
 
     double small_than_smallest = 99.9;

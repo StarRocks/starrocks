@@ -83,6 +83,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.StarRocksException;
@@ -168,6 +169,10 @@ public class SchemaChangeHandler extends AlterHandler {
         if (olapTable.getState() != OlapTableState.NORMAL) {
             throw new DdlException("Table[" + olapTable.getName() + "]'s is not in NORMAL state");
         }
+
+        // If optimized olap table contains related mvs, set those mv state to inactive.
+        AlterMVJobExecutor.inactiveRelatedMaterializedView(olapTable,
+                MaterializedViewExceptions.inactiveReasonForBaseTableOptimized(olapTable.getName()), false);
 
         long timeoutSecond = PropertyAnalyzer.analyzeTimeout(propertyMap, Config.alter_table_timeout_second);
 

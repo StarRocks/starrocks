@@ -18,6 +18,7 @@ import com.starrocks.proto.AbortCompactionRequest;
 import com.starrocks.proto.AbortCompactionResponse;
 import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.proto.AbortTxnResponse;
+import com.starrocks.proto.AggregateCompactRequest;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.CompactResponse;
 import com.starrocks.proto.DeleteDataRequest;
@@ -104,6 +105,19 @@ public class LakeServiceWithMetricsTest {
         };
 
         Future<CompactResponse> result = lakeServiceWithMetrics.compact(new CompactRequest());
+        assertNotNull(result);
+    }
+
+    @Test
+    public void testAggregateCompact() throws Exception {
+        new Expectations() {
+            {
+                lakeService.aggregateCompact((AggregateCompactRequest) any);
+                result = CompletableFuture.completedFuture(new CompactResponse());
+            }
+        };
+
+        Future<CompactResponse> result = lakeServiceWithMetrics.aggregateCompact(new AggregateCompactRequest());
         assertNotNull(result);
     }
 
