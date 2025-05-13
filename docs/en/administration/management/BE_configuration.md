@@ -2087,15 +2087,6 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The minimum number of file descriptors in the BE process.
 - Introduced in: -
 
-##### index_stream_cache_capacity
-
-- Default: 10737418240
-- Type: Int
-- Unit: Bytes
-- Is mutable: No
-- Description: The cache capacity for the statistical information of BloomFilter, Min, and Max.
-- Introduced in: -
-
 ##### storage_page_cache_limit
 
 - Default: 20%
@@ -2118,49 +2109,32 @@ When this value is set to less than `0`, the system uses the product of its abso
   - The default value of this item has been changed from `true` to `false` since StarRocks v2.4.
 - Introduced in: -
 
-<!--
 ##### enable_bitmap_index_memory_page_cache
 
-- Default: false
+- Default: true 
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
 - Description: Whether to enable memory cache for Bitmap index. Memory cache is recommended if you want to use Bitmap indexes to accelerate point queries.
 - Introduced in: v3.1
--->
 
-<!--
 ##### enable_zonemap_index_memory_page_cache
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### enable_ordinal_index_memory_page_cache
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### disable_column_pool
 
 - Default: true
 - Type: Boolean
 - Unit: -
-- Is mutable: No
-- Description:
+- Is mutable: Yes
+- Description: Whether to enable memory cache for zonemap index. Memory cache is recommended if you want to use zonemap indexes to accelerate scan.
 - Introduced in: -
--->
+
+##### enable_ordinal_index_memory_page_cache
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable memory cache for ordinal index. Ordinal index is a mapping from row IDs to data page positions, and it can be used to accelerate scans.
+- Introduced in: -
 
 ##### fragment_pool_thread_num_min
 

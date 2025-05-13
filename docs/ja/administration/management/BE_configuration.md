@@ -1360,15 +1360,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: BE プロセスの最小ファイルディスクリプタ数。
 - 導入バージョン: -
 
-##### index_stream_cache_capacity
-
-- デフォルト: 10737418240
-- タイプ: Int
-- 単位: バイト
-- 可変: いいえ
-- 説明: BloomFilter、Min、Max の統計情報のキャッシュ容量。
-- 導入バージョン: -
-
 ##### storage_page_cache_limit
 
 - デフォルト: 20%
@@ -1390,6 +1381,33 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
   - `true` は PageCache を無効にすることを示します。
   - この項目のデフォルト値は StarRocks v2.4 以降、`true` から `false` に変更されました。
 - 導入バージョン: -
+
+##### enable_bitmap_index_memory_page_cache
+
+- デフォルト: true 
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明:Bitmap インデックスのメモリキャッシュを有効にするかどうか。Bitmap インデックスを使用してポイントクエリを高速化したい場合は、メモリキャッシュを使用することを推奨します。
+- 導入バージョン: v3.1
+
+##### enable_zonemap_index_memory_page_cache
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: ゾーンマップインデックスのメモリーキャッシュを有効にするかどうか。ゾーンマップインデックスを使用してスキャンを高速化したい場合は、メモリキャッシュを使用することを推奨します。
+- 導入バージョン: -
+
+##### enable_ordinal_index_memory_page_cache
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: オーディナルインデックスのメモリキャッシュを有効にするかどうか。オーディナルインデックスは行IDからデータページの位置へのマッピングであり、スキャンを高速化するために使用できる。
+- 導入バージョン:  -
 
 ##### fragment_pool_thread_num_min
 
