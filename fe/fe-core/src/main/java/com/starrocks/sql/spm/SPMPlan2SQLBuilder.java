@@ -19,7 +19,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.analysis.HintNode;
-import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.ExpressionPrinter;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -42,15 +41,18 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.Collections;
 import java.util.List;
@@ -71,16 +73,24 @@ public class SPMPlan2SQLBuilder {
             relation.hints = hints.stream().map(HintNode::toSql).collect(Collectors.joining(", "));
         }
         // keep select order
-        String f = relation.toSQL();
-        String select =
-                outputColumn.stream().map(c -> relation.columnNames.get(c.getId())).collect(Collectors.joining(", "));
-        return "SELECT " + select + " FROM (" + f + ") t" + (tableId++);
+        List<Integer> outputIds = outputColumn.stream().map(ColumnRefOperator::getId).toList();
+        List<Integer> selectIds = relation.selects.stream().map(Pair::getKey).toList();
+        if (CollectionUtils.isEmpty(selectIds) || outputIds.equals(selectIds)) {
+            return relation.toSQL(outputColumn);
+        } else {
+            String f = relation.toSQL();
+            String select = outputColumn.stream()
+                    .map(c -> relation.columnNames.get(c.getId()))
+                    .collect(Collectors.joining(", "));
+            return "SELECT " + select + " FROM (" + f + ") t" + (tableId++);
+        }
     }
 
     private class SQLRelation {
         private final Map<Integer, String> columnNames = Maps.newHashMap();
         private List<String> cte = null;
-        private String select = "";
+        //        private Map<Integer, String> selects = Map.of();
+        private List<Pair<Integer, String>> selects = List.of();
         private String hints = "";
         private String from = "";
         private String where = "";
@@ -92,6 +102,7 @@ public class SPMPlan2SQLBuilder {
         private String relationName = null;
         // record table unused column name, avoid conflict
         private List<String> reserveNames = null;
+        private boolean assertRows = false;
 
         private String registerRef(Integer cid, String alias) {
             columnNames.put(cid, alias);
@@ -117,10 +128,17 @@ public class SPMPlan2SQLBuilder {
             if (relationName == null) {
                 return from;
             }
+            if (assertRows) {
+                return "ASSERT_ROWS (" + toSQL() + ") " + relationName;
+            }
             return "(" + toSQL() + ") " + relationName;
         }
 
         private String toSQL() {
+            return toSQL(Collections.emptyList());
+        }
+
+        private String toSQL(List<ColumnRefOperator> outputs) {
             StringBuilder sql = new StringBuilder();
             if (!CollectionUtils.isEmpty(cte)) {
                 sql.append("WITH ");
@@ -131,7 +149,17 @@ public class SPMPlan2SQLBuilder {
             if (!StringUtils.isBlank(hints)) {
                 sql.append(hints);
             }
-            sql.append(StringUtils.isBlank(select) ? "*" : select);
+
+            if (CollectionUtils.isEmpty(outputs)) {
+                sql.append(CollectionUtils.isEmpty(selects) ? "*" :
+                        selects.stream().map(Pair::getValue).collect(Collectors.joining(", ")));
+            } else {
+                Map<Integer, String> temp = CollectionUtils.isEmpty(selects) ?
+                        columnNames :
+                        selects.stream().collect(Collectors.toMap(Pair::getKey, Pair::getValue));
+                sql.append(outputs.stream().map(p -> temp.get(p.getId())).collect(Collectors.joining(", ")));
+            }
+
             sql.append(" FROM ");
             sql.append(from);
             if (!StringUtils.isBlank(where)) {
@@ -198,37 +226,31 @@ public class SPMPlan2SQLBuilder {
             }
 
             if (columnConflicts) {
-                left.columnNames.forEach((k, v) -> {
-                    joinRelation.columnNames.put(k, left.getRelationAlias() + "." + v);
-                });
-                right.columnNames.forEach((k, v) -> {
-                    joinRelation.columnNames.put(k, right.getRelationAlias() + "." + v);
-                });
+                left.columnNames.forEach((k, v) -> joinRelation.columnNames.put(k, left.getRelationAlias() + "." + v));
+                right.columnNames.forEach(
+                        (k, v) -> joinRelation.columnNames.put(k, right.getRelationAlias() + "." + v));
             } else {
                 joinRelation.columnNames.putAll(left.columnNames);
                 joinRelation.columnNames.putAll(right.columnNames);
             }
-
-            if (join.getJoinType() == JoinOperator.NULL_AWARE_LEFT_ANTI_JOIN) {
-                UnsupportedException.unsupportedException("sql plan manager doesn't support not-in subquery");
-            }
-
             joinRelation.from = left.toRelationSQL() + " " + join.getJoinType().toString() + "[" + hints + "] "
                     + right.toRelationSQL();
             if (join.getOnPredicate() != null) {
                 joinRelation.from += " ON " + exprSQLBuilder.print(join.getOnPredicate(), joinRelation);
             }
             joinRelation.where = exprSQLBuilder.print(join.getPredicate(), joinRelation);
+
             if (join.getProjection() != null) {
                 List<Integer> forces = columnConflicts ? Lists.newArrayList(joinRelation.columnNames.keySet()) :
                         Collections.emptyList();
                 visitProjection(join.getProjection(), joinRelation, forces);
             } else if (columnConflicts) {
-                List<String> selects = Lists.newArrayList();
+                List<Pair<Integer, String>> selects = Lists.newArrayList();
                 for (Integer key : joinRelation.columnNames.keySet()) {
-                    selects.add(joinRelation.columnNames.get(key) + " AS " + joinRelation.registerRef(key));
+                    selects.add(Pair.of(key,
+                            joinRelation.columnNames.get(key) + " AS " + joinRelation.registerRef(key)));
                 }
-                joinRelation.select = String.join(", ", selects);
+                joinRelation.selects = selects;
             }
             joinRelation.newAlias();
             return joinRelation;
@@ -251,8 +273,8 @@ public class SPMPlan2SQLBuilder {
 
             // group by grouping sets
             SQLRelation aggRelation;
-            List<String> selects = Lists.newArrayList();
             List<Integer> aliasIds = Lists.newArrayList();
+            List<Pair<Integer, String>> selects = Lists.newArrayList();
 
             if (!StringUtils.isEmpty(childRelation.groupings)) {
                 aggRelation = childRelation;
@@ -260,7 +282,7 @@ public class SPMPlan2SQLBuilder {
                     aliasIds.add(groupBy.getId());
                     if (childRelation.columnNames.containsKey(groupBy.getId())) {
                         // grouping_id doesn't contains
-                        selects.add(exprSQLBuilder.print(groupBy, childRelation));
+                        selects.add(Pair.of(groupBy.getId(), exprSQLBuilder.print(groupBy, childRelation)));
                         aggRelation.registerRef(groupBy.getId(), childRelation.columnNames.get(groupBy.getId()));
                     }
                 }
@@ -270,10 +292,10 @@ public class SPMPlan2SQLBuilder {
                 aggRelation.from = childRelation.toRelationSQL();
                 for (ColumnRefOperator groupBy : agg.getGroupBys()) {
                     Preconditions.checkState(childRelation.columnNames.containsKey(groupBy.getId()));
-                    selects.add(exprSQLBuilder.print(groupBy, childRelation));
+                    selects.add(Pair.of(groupBy.getId(), exprSQLBuilder.print(groupBy, childRelation)));
                     aggRelation.registerRef(groupBy.getId(), childRelation.columnNames.get(groupBy.getId()));
                 }
-                aggRelation.groupBy = String.join(", ", selects);
+                aggRelation.groupBy = selects.stream().map(Pair::getValue).collect(Collectors.joining(", "));
             }
 
             for (var entry : agg.getAggregations().entrySet()) {
@@ -286,12 +308,12 @@ public class SPMPlan2SQLBuilder {
                     fn = exprSQLBuilder.print(aggFn, childRelation);
                 }
                 aggRelation.registerRef(key.getId(), fn);
-                selects.add(fn);
+                selects.add(Pair.of(key.getId(), fn));
                 aliasIds.add(key.getId());
             }
 
             aggRelation.having = exprSQLBuilder.print(agg.getPredicate(), aggRelation);
-            aggRelation.select = String.join(", ", selects);
+            aggRelation.selects = selects;
             visitProjection(agg.getProjection(), aggRelation, aliasIds);
             aggRelation.newAlias();
             return aggRelation;
@@ -312,6 +334,11 @@ public class SPMPlan2SQLBuilder {
             relation.from = "(VALUES " + relation.from + ") AS t";
             relation.from += "(" + values.getColumnRefSet().stream().map(c -> relation.registerRef(c.getId()))
                     .collect(Collectors.joining(", ")) + ")";
+
+            if (values.getRows() != null) {
+                visitProjection(values.getProjection(), relation, Collections.emptyList());
+                relation.newAlias();
+            }
             return relation;
         }
 
@@ -327,18 +354,20 @@ public class SPMPlan2SQLBuilder {
                 String childSQL = "";
 
                 List<ColumnRefOperator> childOutputs = set.getChildOutputColumns().get(i);
-                List<String> childSelects = Lists.newArrayList();
+                List<Pair<Integer, String>> childSelects = Lists.newArrayList();
                 for (int index = 0; index < childOutputs.size(); index++) {
                     String alias = relation.columnNames.get(childOutputs.get(index).getId()) + " AS "
                             + setRelation.columnNames.get(set.getOutputColumnRefOp().get(index).getId());
-                    childSelects.add(alias);
+                    childSelects.add(Pair.of(childOutputs.get(index).getId(), alias));
                 }
 
-                if (StringUtils.isEmpty(relation.select)) {
-                    relation.select = String.join(", ", childSelects);
+                if (CollectionUtils.isEmpty(relation.selects)) {
+                    relation.selects = childSelects;
                     childSQL += relation.toSQL();
                 } else {
-                    childSQL = "SELECT " + String.join(", ", childSelects) + " FROM ";
+                    childSQL += "SELECT ";
+                    childSQL += childSelects.stream().map(Pair::getValue).collect(Collectors.joining(", "));
+                    childSQL += " FROM ";
                     childSQL += relation.toRelationSQL(); // don't need new relation
                 }
                 children.add(childSQL);
@@ -361,6 +390,32 @@ public class SPMPlan2SQLBuilder {
         @Override
         public SQLRelation visitPhysicalIntersect(OptExpression optExpression, Void context) {
             return visitPhysicalSet(optExpression, "INTERSECT");
+        }
+
+        @Override
+        public SQLRelation visitPhysicalTableFunction(OptExpression optExpression, Void context) {
+            SQLRelation child = process(optExpression.getInputs().get(0));
+            PhysicalTableFunctionOperator tableFunction = optExpression.getOp().cast();
+
+            SQLRelation result = new SQLRelation();
+
+            StringBuilder sb = new StringBuilder();
+            sb.append(child.toRelationSQL()).append(", ");
+            sb.append(tableFunction.getFn().functionName());
+            sb.append("(").append(tableFunction.getFnParamColumnRefs().stream()
+                    .map(c -> child.columnNames.get(c.getId()))
+                    .collect(Collectors.joining(", "))).append(")");
+            sb.append(" AS ").append(result.newAlias());
+            sb.append("(").append(tableFunction.getFnResultColRefs().stream()
+                    .map(ColumnRefOperator::getName)
+                    .collect(Collectors.joining(", "))).append(")");
+
+            result.from = sb.toString();
+            result.columnNames.putAll(child.columnNames);
+            for (ColumnRefOperator ref : tableFunction.getFnResultColRefs()) {
+                result.columnNames.put(ref.getId(), result.registerRef(ref.getId(), ref.getName()));
+            }
+            return result;
         }
 
         @Override
@@ -410,6 +465,22 @@ public class SPMPlan2SQLBuilder {
             }
             relation.orderBy = String.join(", ", orderBys);
             return relation;
+        }
+
+        @Override
+        public SQLRelation visitPhysicalAssertOneRow(OptExpression optExpression, Void context) {
+            SQLRelation child = process(optExpression.getInputs().get(0));
+            Preconditions.checkState(child.columnNames.size() == 1);
+
+            child.assertRows = true;
+            if (CollectionUtils.isEmpty(child.selects)) {
+                // must one column
+                List<Pair<Integer, String>> selects = Lists.newArrayList();
+                child.columnNames.forEach((k, v) -> selects.add(Pair.of(k, v)));
+                child.selects = selects;
+            }
+            child.newAlias();
+            return child;
         }
 
         @Override
@@ -472,24 +543,24 @@ public class SPMPlan2SQLBuilder {
                     return;
                 }
                 // 1. update force alias
-                List<String> selects = Lists.newArrayList();
+                List<Pair<Integer, String>> selects = Lists.newArrayList();
                 for (Integer key : relation.columnNames.keySet()) {
                     String v = relation.columnNames.get(key);
                     if (forceAlias.contains(key)) {
-                        selects.add(v + " AS " + relation.registerRef(key));
+                        selects.add(Pair.of(key, v + " AS " + relation.registerRef(key)));
                     } else {
-                        selects.add(v);
+                        selects.add(Pair.of(key, v));
                     }
                 }
-                relation.select = String.join(", ", selects);
+                relation.selects = selects;
                 return;
             }
 
             Map<ColumnRefOperator, ScalarOperator> project = projection.getColumnRefMap();
             List<Integer> saveColumnIds = Lists.newArrayList();
-
             List<String> selects = Lists.newArrayList();
             List<String> alias = Lists.newArrayList();
+
             // 1. print first
             project.forEach((k, v) -> {
                 saveColumnIds.add(k.getId());
@@ -498,20 +569,22 @@ public class SPMPlan2SQLBuilder {
 
             // 2. register & override alias
             project.forEach((k, v) -> {
-                if (k.equals(v) && !forceAlias.contains(k.getId())) {
-                    alias.add("");
-                } else {
+                if (!k.equals(v) || forceAlias.contains(k.getId())) {
                     alias.add(" AS " + relation.registerRef(k.getId()));
+                } else {
+                    alias.add("");
                 }
             });
 
             // 3. combine to select
-            Preconditions.checkState(selects.size() == alias.size());
-            for (int i = 0; i < selects.size(); i++) {
-                selects.set(i, selects.get(i) + alias.get(i));
+            Preconditions.checkState(saveColumnIds.size() == selects.size());
+            Preconditions.checkState(saveColumnIds.size() == alias.size());
+
+            relation.selects = Lists.newArrayList();
+            for (int i = 0; i < saveColumnIds.size(); i++) {
+                relation.selects.add(Pair.of(saveColumnIds.get(i), selects.get(i) + alias.get(i)));
             }
 
-            relation.select = String.join(", ", selects);
             relation.columnNames.entrySet().removeIf(e -> !saveColumnIds.contains(e.getKey()));
         }
 
@@ -687,6 +760,12 @@ public class SPMPlan2SQLBuilder {
         @Override
         public String visitVariableReference(ColumnRefOperator variable, SQLRelation context) {
             return context.columnNames.get(variable.getId());
+        }
+
+        @Override
+        public String visitArray(ArrayOperator array, SQLRelation context) {
+            String child = array.getChildren().stream().map(p -> print(p, context)).collect(Collectors.joining(", "));
+            return array.getType().toTypeString() + "[" + child + "]";
         }
 
         @Override

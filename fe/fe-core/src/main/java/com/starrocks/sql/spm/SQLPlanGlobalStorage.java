@@ -142,10 +142,10 @@ class SQLPlanGlobalStorage implements SQLPlanStorage {
                 allBaselineIds.add(new BaselineId(plan.getId(), plan.getBindSqlHash()));
             }
 
-            BaselinePlan message = new BaselinePlan(-1, -1);
-            message.setReplayIds(plans.stream().map(BaselinePlan::getId).collect(Collectors.toList()));
-            message.setReplayBindSQLHash(plans.stream().map(BaselinePlan::getBindSqlHash).collect(Collectors.toList()));
-            GlobalStateMgr.getCurrentState().getEditLog().logCreateSPMBaseline(message);
+            BaselinePlan.Info info = new BaselinePlan.Info();
+            info.setReplayIds(plans.stream().map(BaselinePlan::getId).collect(Collectors.toList()));
+            info.setReplayBindSQLHash(plans.stream().map(BaselinePlan::getBindSqlHash).collect(Collectors.toList()));
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateSPMBaseline(info);
         } catch (Exception e) {
             LOG.warn("sql plan baselines store baseline fail", e);
         }
@@ -175,7 +175,7 @@ class SQLPlanGlobalStorage implements SQLPlanStorage {
 
             String s = ids.stream().map(BaselineId::id).map(String::valueOf).collect(Collectors.joining(","));
             executor.executeDML(DELETE_SQL + "(" + s + ");");
-            BaselinePlan p = new BaselinePlan(-1, -1);
+            BaselinePlan.Info p = new BaselinePlan.Info();
             p.setReplayIds(ids.stream().map(BaselineId::id).collect(Collectors.toList()));
             GlobalStateMgr.getCurrentState().getEditLog().logDropSPMBaseline(p);
         } catch (Exception e) {
@@ -225,13 +225,13 @@ class SQLPlanGlobalStorage implements SQLPlanStorage {
     }
 
     @Override
-    public void replayBaselinePlan(BaselinePlan plan, boolean isCreate) {
+    public void replayBaselinePlan(BaselinePlan.Info info, boolean isCreate) {
         if (isCreate) {
-            for (int i = 0; i < plan.getReplayIds().size(); i++) {
-                allBaselineIds.add(new BaselineId(plan.getReplayIds().get(i), plan.getReplayBindSQLHash().get(i)));
+            for (int i = 0; i < info.getReplayIds().size(); i++) {
+                allBaselineIds.add(new BaselineId(info.getReplayIds().get(i), info.getReplayBindSQLHash().get(i)));
             }
         } else {
-            allBaselineIds.removeIf(b -> plan.getReplayIds().contains(b.id));
+            allBaselineIds.removeIf(b -> info.getReplayIds().contains(b.id));
         }
     }
 

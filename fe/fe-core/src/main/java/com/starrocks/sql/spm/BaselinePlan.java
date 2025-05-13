@@ -20,7 +20,31 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
 
-public class BaselinePlan implements Writable {
+public class BaselinePlan {
+    public static class Info implements Writable {
+        // for transform replay log
+        @SerializedName("replayIds")
+        private List<Long> replayIds;
+        @SerializedName("replayBindSqlHash")
+        private List<Long> replayBindSQLHash;
+
+        public List<Long> getReplayIds() {
+            return replayIds;
+        }
+
+        public void setReplayIds(List<Long> replayIds) {
+            this.replayIds = replayIds;
+        }
+
+        public List<Long> getReplayBindSQLHash() {
+            return replayBindSQLHash;
+        }
+
+        public void setReplayBindSQLHash(List<Long> replayBindSQLHash) {
+            this.replayBindSQLHash = replayBindSQLHash;
+        }
+    }
+
     public static final String SOURCE_USER = "USER";
 
     public static final String SOURCE_CAPTURE = "CAPTURE";
@@ -47,12 +71,6 @@ public class BaselinePlan implements Writable {
     private double queryMs = -1;
 
     private LocalDateTime updateTime;
-
-    // for transform replay log
-    @SerializedName("replayIds")
-    private List<Long> replayIds;
-    @SerializedName("replayBindSqlHash")
-    private List<Long> replayBindSQLHash;
 
     public BaselinePlan(long id, long bindSqlHash) {
         this.id = id;
@@ -141,22 +159,6 @@ public class BaselinePlan implements Writable {
 
     public LocalDateTime getUpdateTime() {
         return updateTime;
-    }
-
-    public List<Long> getReplayIds() {
-        return replayIds;
-    }
-
-    public void setReplayIds(List<Long> replayIds) {
-        this.replayIds = replayIds;
-    }
-
-    public List<Long> getReplayBindSQLHash() {
-        return replayBindSQLHash;
-    }
-
-    public void setReplayBindSQLHash(List<Long> replayBindSQLHash) {
-        this.replayBindSQLHash = replayBindSQLHash;
     }
 
     @Override

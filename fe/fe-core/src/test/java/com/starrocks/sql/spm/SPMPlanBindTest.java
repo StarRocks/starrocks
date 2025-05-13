@@ -63,7 +63,7 @@ public class SPMPlanBindTest extends PlanTestBase {
 
         generator.execute();
         assertContains(generator.getBindSqlDigest(), "SELECT * FROM `test`.`t0` WHERE `test`.`t0`.`v2` = ?");
-        assertContains(generator.getPlanStmtSQL(), "SELECT * FROM t0 WHERE v2 = _spm_const_var(1)");
+        assertContains(generator.getPlanStmtSQL(), "SELECT v1, v2, v3 FROM t0 WHERE v2 = _spm_const_var(1)");
     }
 
     @Test
@@ -78,9 +78,8 @@ public class SPMPlanBindTest extends PlanTestBase {
                 + "FROM `test`.`t0` INNER JOIN `test`.`t1` ON `test`.`t0`.`v3` = `test`.`t1`.`v6` "
                 + "WHERE `test`.`t0`.`v2` = ?");
 
-        assertContains(generator.getPlanStmtSQL(),
-                "SELECT * FROM " + "(SELECT * FROM t0 WHERE v2 = _spm_const_var(1)) t_0 INNER JOIN[BROADCAST] " +
-                        "(SELECT * FROM t1 WHERE v6 IS NOT NULL) t_1 ON v3 = v6");
+        assertContains(generator.getPlanStmtSQL(), "SELECT v1, v2, v3, v4, v5, v6 FROM "
+                + "(SELECT * FROM t0 WHERE v2 = _spm_const_var(1)) t_0 INNER JOIN[BROADCAST] t1 ON v3 = v6");
     }
 
     @Test
@@ -95,9 +94,8 @@ public class SPMPlanBindTest extends PlanTestBase {
                 "FROM `test`.`t0` INNER JOIN `test`.`t1` ON `test`.`t0`.`v3` = `test`.`t1`.`v6` " +
                 "WHERE `test`.`t0`.`v2` = ?");
 
-        assertContains(generator.getPlanStmtSQL(),
-                "SELECT v2, v4 FROM " + "(SELECT * FROM t0 WHERE v2 = _spm_const_var(1)) t_0 INNER JOIN[BROADCAST] " +
-                        "(SELECT * FROM t1 WHERE v6 IS NOT NULL) t_1 ON v3 = v6");
+        assertContains(generator.getPlanStmtSQL(), "SELECT v4, v2 FROM (SELECT v2, v4 FROM "
+                + "(SELECT * FROM t0 WHERE v2 = _spm_const_var(1)) t_0 INNER JOIN[BROADCAST] t1 ON v3 = v6) t2");
     }
 
     @Test
@@ -116,9 +114,8 @@ public class SPMPlanBindTest extends PlanTestBase {
                 + "FROM `test`.`t0` INNER JOIN `test`.`t1` ON `test`.`t0`.`v3` = `test`.`t1`.`v6` "
                 + "WHERE `test`.`t0`.`v2` = _spm_const_var(1)");
 
-        assertContains(generator.getPlanStmtSQL(),
-                "SELECT v2, v4 FROM " + "(SELECT * FROM t0 WHERE v2 = _spm_const_var(1)) t_0 INNER JOIN[SHUFFLE] " +
-                        "(SELECT * FROM t1 WHERE v6 IS NOT NULL) t_1 ON v3 = v6");
+        assertContains(generator.getPlanStmtSQL(), "SELECT v4, v2 FROM (SELECT v2, v4 FROM "
+                + "(SELECT * FROM t0 WHERE v2 = _spm_const_var(1)) t_0 INNER JOIN[SHUFFLE] t1 ON v3 = v6) t2");
     }
 
     @Test
@@ -136,10 +133,9 @@ public class SPMPlanBindTest extends PlanTestBase {
                 + "FROM `test`.`t0` INNER JOIN `test`.`t1` ON `test`.`t0`.`v3` = `test`.`t1`.`v6` "
                 + "WHERE `test`.`t0`.`v2` IN (_spm_const_list(1, 1, 2, 3, 4))");
 
-        assertContains(generator.getPlanStmtSQL(),
-                "SELECT v2, v4 FROM " + "(SELECT * FROM t0 WHERE v2 IN (_spm_const_list(1, 1, 2, 3, 4))) t_0 " +
-                        "INNER JOIN[SHUFFLE] " +
-                        "(SELECT * FROM t1 WHERE v6 IS NOT NULL) t_1 ON v3 = v6");
+        assertContains(generator.getPlanStmtSQL(), "SELECT v4, v2 FROM (SELECT v2, v4 FROM "
+                + "(SELECT * FROM t0 WHERE v2 IN (_spm_const_list(1, 1, 2, 3, 4))) t_0 "
+                + "INNER JOIN[SHUFFLE] t1 ON v3 = v6) t2");
     }
 
     @Test
@@ -155,7 +151,7 @@ public class SPMPlanBindTest extends PlanTestBase {
                 + "FROM `test`.`t0`");
 
         assertContains(generator.getPlanStmtSQL(),
-                "SELECT /*+SET_VAR(cbo_cte_reuse=false,cbo_push_down_aggregate=false)*/* FROM t0");
+                "SELECT /*+SET_VAR(cbo_cte_reuse=false,cbo_push_down_aggregate=false)*/v1, v2, v3 FROM t0");
     }
 
     @Test
@@ -178,9 +174,8 @@ public class SPMPlanBindTest extends PlanTestBase {
                 "AND (`test`.`t0`.`v2` IN (_spm_const_list(1, 1, 2, 3, 4)))");
 
         assertContains(generator.getPlanStmtSQL(),
-                "SELECT v2, v4 " +
-                        "FROM (SELECT * FROM t0 WHERE v3 IS NOT NULL AND v2 IN (_spm_const_list(1, 1, 2, 3, 4))) t_0 " +
-                        "INNER JOIN[SHUFFLE] (SELECT * FROM t1 WHERE v6 IS NOT NULL) t_1 ON v3 = v6");
+                "SELECT v2, v4 FROM (SELECT * FROM t0 WHERE v2 IN (_spm_const_list(1, 1, 2, 3, 4))) t_0 "
+                        + "INNER JOIN[SHUFFLE] t1 ON v3 = v6");
     }
 
     @Test
@@ -206,9 +201,9 @@ public class SPMPlanBindTest extends PlanTestBase {
                 + "AND (`test`.`t1`.`v5` = _spm_const_var(2, 5))");
 
         assertContains(generator.getPlanStmtSQL(),
-                "SELECT v2, v4 FROM (SELECT * FROM t0 WHERE v3 IS NOT NULL AND v2 IN (_spm_const_list(1, 10, 11))) "
-                        + "t_0 INNER JOIN[SHUFFLE] (SELECT v4, v6 FROM t1 WHERE v6 IS NOT NULL AND v5 = "
-                        + "_spm_const_var(2, 5)) t_1 ON v3 = v6");
+                "SELECT v2, v4 FROM (SELECT * FROM t0 WHERE v2 IN (_spm_const_list(1, 10, 11))) t_0 "
+                        + "INNER JOIN[SHUFFLE] "
+                        + "(SELECT v4, v6 FROM t1 WHERE v5 = _spm_const_var(2, 5)) t_1 ON v3 = v6");
     }
 
     @Test
@@ -234,9 +229,8 @@ public class SPMPlanBindTest extends PlanTestBase {
                 + "AND (`test`.`t1`.`v5` = _spm_const_var(2, 1))");
 
         assertContains(generator.getPlanStmtSQL(), "SELECT v2, v4 FROM "
-                + "(SELECT * FROM t0 WHERE v3 IS NOT NULL AND v2 IN (_spm_const_list(1, 10, 11))) t_0 "
-                + "INNER JOIN[SHUFFLE] (SELECT v4, v6 FROM t1 WHERE v6 IS NOT NULL AND v5 = _spm_const_var(2, 1)) t_1 "
-                + "ON v3 = v6");
+                + "(SELECT * FROM t0 WHERE v2 IN (_spm_const_list(1, 10, 11))) t_0 "
+                + "INNER JOIN[SHUFFLE] (SELECT v4, v6 FROM t1 WHERE v5 = _spm_const_var(2, 1)) t_1 ON v3 = v6");
     }
 
     @Test
@@ -333,7 +327,7 @@ public class SPMPlanBindTest extends PlanTestBase {
                 + "(_spm_const_var(4, 4), _spm_const_var(5, 5), _spm_const_var(6, 6)))");
 
         assertContains(generator.getPlanStmtSQL(),
-                "SELECT * FROM (VALUES (_spm_const_var(1, 1), _spm_const_var(2, 2), _spm_const_var(3, 3)), "
+                "SELECT c_1, c_2, c_3 FROM (VALUES (_spm_const_var(1, 1), _spm_const_var(2, 2), _spm_const_var(3, 3)), "
                         + "(_spm_const_var(4, 4), _spm_const_var(5, 5), _spm_const_var(6, 6))) AS t(c_1, c_2, c_3)");
     }
 
@@ -357,14 +351,13 @@ public class SPMPlanBindTest extends PlanTestBase {
                 + "(_spm_const_var(10, 11), _spm_const_var(11, 22), _spm_const_var(12, 33))) "
                 + "y(v4,v5,v6) ON `x`.`v1` = `y`.`v4`");
 
-        assertContains(generator.getPlanStmtSQL(), "SELECT * FROM "
-                + "(SELECT * FROM "
-                + "(VALUES (_spm_const_var(1, 1), _spm_const_var(2, 2), _spm_const_var(3, 3)), "
-                + "(_spm_const_var(4, 4), _spm_const_var(5, 5), _spm_const_var(6, 6))) AS t(c_1, c_2, c_3) "
-                + "WHERE c_1 IS NOT NULL) t_0 INNER JOIN[BROADCAST] "
+        assertContains(generator.getPlanStmtSQL(), "SELECT c_1, c_2, c_3, c_4, c_5, c_6 FROM "
+                + "(SELECT * FROM (VALUES (_spm_const_var(1, 1), _spm_const_var(2, 2), _spm_const_var(3, 3)), "
+                + "(_spm_const_var(4, 4), _spm_const_var(5, 5), _spm_const_var(6, 6))) AS t(c_1, c_2, c_3)) t_0"
+                + " INNER JOIN[BROADCAST] "
                 + "(SELECT * FROM (VALUES (_spm_const_var(7, 9), _spm_const_var(8, 7), _spm_const_var(9, 8)), "
-                + "(_spm_const_var(10, 11), _spm_const_var(11, 22), _spm_const_var(12, 33))) AS t(c_4, c_5, c_6) "
-                + "WHERE c_4 IS NOT NULL) t_1 ON c_1 = c_4");
+                + "(_spm_const_var(10, 11), _spm_const_var(11, 22), _spm_const_var(12, 33))) AS t(c_4, c_5, c_6)) t_1"
+                + " ON c_1 = c_4");
     }
 
     @Test
@@ -383,7 +376,7 @@ public class SPMPlanBindTest extends PlanTestBase {
                         + "UNION ALL "
                         + "SELECT * FROM `test`.`t0` WHERE `test`.`t0`.`v1` = _spm_const_var(2, 2)");
 
-        assertContains(generator.getPlanStmtSQL(), "SELECT * FROM ("
+        assertContains(generator.getPlanStmtSQL(), "SELECT c_7, c_8, c_9 FROM ("
                 + "SELECT v1 AS c_7, v2 AS c_8, v3 AS c_9 FROM t0 WHERE v1 = _spm_const_var(1, 1) "
                 + "UNION ALL "
                 + "SELECT v1 AS c_7, v2 AS c_8, v3 AS c_9 FROM t0 WHERE v1 = _spm_const_var(2, 2)"
@@ -403,7 +396,7 @@ public class SPMPlanBindTest extends PlanTestBase {
                 + "WHERE `test`.`t0`.`v1` = _spm_const_var(1, 1) ORDER BY `test`.`t0`.`v2` ASC  LIMIT 10, 20");
 
         assertContains(generator.getPlanStmtSQL(),
-                "SELECT * FROM t0 WHERE v1 = _spm_const_var(1, 1) ORDER BY v2 ASC LIMIT 10, 20");
+                "SELECT v1, v2, v3 FROM t0 WHERE v1 = _spm_const_var(1, 1) ORDER BY v2 ASC LIMIT 10, 20");
     }
 
     @Test

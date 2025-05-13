@@ -36,9 +36,7 @@ import java.util.List;
 public class SPMTPCDSBindTest extends TPCDSPlanTestBase {
     private static final Logger LOG = LogManager.getLogger(SPMTPCDSBindTest.class);
 
-    private static final List<String> UNSUPPORTED = Lists.newArrayList(
-            "query04", "query06", "query09", "query14-1", "query14-2",
-            "query23-1", "query23-2", "query24-1", "query24-2", "query44", "query54", "query58");
+    private static final List<String> UNSUPPORTED = List.of();
 
     @BeforeAll
     public static void beforeAll() throws Exception {
@@ -133,12 +131,18 @@ public class SPMTPCDSBindTest extends TPCDSPlanTestBase {
 
     public static List<Arguments> testCases2() {
         List<Arguments> list = Lists.newArrayList();
-        List<String> conflict = Lists.newArrayList("query33", "query56", "query60", "query83");
+        List<String> conflict = Lists.newArrayList("query06", "query23-1", "query23-2", "query44");
         getSqlMap().forEach((k, v) -> {
             if (!UNSUPPORTED.contains(k) && !conflict.contains(k)) {
                 list.add(Arguments.of(k, v, v));
             }
         });
         return list;
+    }
+
+    @Test
+    public void validate3() {
+        CreateBaselinePlanStmt stmt = createBaselinePlanStmt(Q06);
+        SPMStmtExecutor.execute(connectContext, stmt);
     }
 }

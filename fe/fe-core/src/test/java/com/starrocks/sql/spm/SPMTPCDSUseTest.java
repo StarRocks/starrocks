@@ -34,9 +34,7 @@ import java.util.List;
 public class SPMTPCDSUseTest extends TPCDSPlanTestBase {
     private static final Logger LOG = LogManager.getLogger(SPMTPCDSUseTest.class);
 
-    private static final List<String> UNSUPPORTED = Lists.newArrayList(
-            "query04", "query06", "query09", "query14-1", "query14-2",
-            "query23-1", "query23-2", "query24-1", "query24-2", "query44", "query54", "query58");
+    private static final List<String> UNSUPPORTED = List.of();
 
     public static CreateBaselinePlanStmt createBaselinePlanStmt(String sql) {
         String createSql = "create baseline using " + sql;
@@ -80,7 +78,7 @@ public class SPMTPCDSUseTest extends TPCDSPlanTestBase {
 
     @Test
     public void validate2() throws Exception {
-        String s = getFragmentPlan(Q69);
+        String s = getFragmentPlan(Q05);
         assertContains(s, "Using baseline plan");
         assertNotContains(s, "spm_");
     }
