@@ -386,10 +386,10 @@ public class FileListRepoTest {
         new Expectations(executor) {
             {
                 executor.executeDML(
-                    String.format("INSERT INTO _statistics_.pipe_file_list(`pipe_id`, `file_name`, `file_version`, " +
-                            "`file_size`, `state`, `last_modified`, `staged_time`, `start_load`, `finish_load`, " +
-                            "`error_info`, `insert_label`) VALUES (1, '%d.parquet', '%d', %d, 'UNLOADED', NULL, NULL, " +
-                            "NULL, NULL, '{\"errorMessage\":null}', '')", recordSize, recordSize, recordSize));
+                        String.format("INSERT INTO _statistics_.pipe_file_list(`pipe_id`, `file_name`, `file_version`, " +
+                                "`file_size`, `state`, `last_modified`, `staged_time`, `start_load`, `finish_load`, " +
+                                "`error_info`, `insert_label`) VALUES (1, '%d.parquet', '%d', %d, 'UNLOADED', NULL, NULL, " +
+                                "NULL, NULL, '{\"errorMessage\":null}', '')", recordSize, recordSize, recordSize));
                 times = 1;
                 result = null;
             }
