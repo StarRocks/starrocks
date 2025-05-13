@@ -301,11 +301,11 @@ CONF_mString(storage_page_cache_limit, "20%");
 // whether to disable page cache feature in storage
 CONF_mBool(disable_storage_page_cache, "false");
 // whether to enable the bitmap index memory cache
-CONF_mBool(enable_bitmap_index_memory_page_cache, "false");
+CONF_mBool(enable_bitmap_index_memory_page_cache, "true");
 // whether to enable the zonemap index memory cache
-CONF_mBool(enable_zonemap_index_memory_page_cache, "false");
+CONF_mBool(enable_zonemap_index_memory_page_cache, "true");
 // whether to enable the ordinal index memory cache
-CONF_mBool(enable_ordinal_index_memory_page_cache, "false");
+CONF_mBool(enable_ordinal_index_memory_page_cache, "true");
 
 CONF_mInt32(base_compaction_check_interval_seconds, "60");
 CONF_mInt64(min_base_compaction_num_singleton_deltas, "5");
