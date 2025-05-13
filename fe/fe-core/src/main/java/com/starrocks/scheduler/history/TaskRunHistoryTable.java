@@ -210,8 +210,17 @@ public class TaskRunHistoryTable {
             predicates.add(" task_state = " + Strings.quote(params.getState()));
         }
         sql += Joiner.on(" AND ").join(predicates);
-        if (params.isSetPagination() && params.getPagination().getLimit() > 0) {
-            sql += " LIMIT " + params.getPagination().getLimit();
+
+        if (params.isSetPagination()) {
+            if (params.getPagination().getLimit() > 0 || params.getPagination().getOffset() > 0) {
+                sql += " ORDER BY `task_id`, `task_run_id`, `create_time`";
+            }
+            if (params.getPagination().getLimit() > 0) {
+                sql += " LIMIT " + params.getPagination().getLimit();
+            }
+            if (params.getPagination().getOffset() > 0) {
+                sql += " OFFSET " + params.getPagination().getOffset();
+            }
         }
 
         List<TResultBatch> batch = SimpleExecutor.getRepoExecutor().executeDQL(sql);
