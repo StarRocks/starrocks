@@ -136,20 +136,19 @@ public class QueryCacheAndMVTest extends MVTestBase {
     }
 
     @Test
-    public void testCreatePartitionedMVForIcebergWithPartitionTransform1() throws Exception {
+    public void testCreatePartitionedMVForIcebergWithStr2Date() throws Exception {
         // test partition by year(ts)
-        String mvName = "iceberg_year_mv1";
+        String mvName = "test_mv1";
         starRocksAssert.useDatabase("test")
-                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_year_mv1`\n" +
-                        "PARTITION BY date_trunc('year', ts)\n" +
+                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`test_mv1`\n" +
+                        "PARTITION BY str2date(`date`, '%Y-%m-%d')\n" +
                         "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
                         "REFRESH DEFERRED MANUAL\n" +
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_year` as a;");
-
+                        "AS SELECT id, data, date  FROM `iceberg0`.`partitioned_db`.`t1` as a;");
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         MaterializedView partitionedMaterializedView =
                 ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
@@ -165,10 +164,43 @@ public class QueryCacheAndMVTest extends MVTestBase {
         Optional<PlanFragment> optFragment = planAndExecPlan.second.getFragments().stream()
                 .filter(planFragment -> planFragment.getCacheParam() != null)
                 .findFirst();
+        Assert.assertFalse(optFragment.isPresent());
+    }
+
+    @Test
+    public void testCreatePartitionedMVForIcebergWithPartitionTransform() throws Exception {
+        // test partition by year(ts)
+        String mvName = "iceberg_year_mv1";
+        starRocksAssert.useDatabase("test")
+                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_year_mv1`\n" +
+                        "PARTITION BY date_trunc('year', ts)\n" +
+                        "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_year` as a;");
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView partitionedMaterializedView =
+                ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(testDb.getFullName(), mvName));
+        Assert.assertTrue(partitionedMaterializedView.getPartitionInfo().isListPartition());
+        triggerRefreshMv(testDb, partitionedMaterializedView);
+
+        String query = "SELECT /*+SET_VAR(enable_query_cache=true) */ id, sum(data) " +
+                "FROM `iceberg0`.`partitioned_transforms_db`.`t0_year`" +
+                "where ts between '2020-01-01 00:00:00'  and '2021-01-01 00:00:00' " +
+                "group by id";
+
+        Pair<String, ExecPlan> planAndExecPlan = UtFrameUtils.getPlanAndFragment(starRocksAssert.getCtx(), query);
+        Optional<PlanFragment> optFragment = planAndExecPlan.second.getFragments().stream()
+                .filter(planFragment -> planFragment.getCacheParam() != null)
+                .findFirst();
         Assert.assertTrue(optFragment.isPresent());
         PlanFragment fragment = optFragment.get();
-        String expectRange = "[types: [DATETIME]; keys: [2020-01-01 00:00:00]; " +
-                "..types: [DATETIME]; keys: [2021-01-01 00:00:00]; )";
+        String expectRange = "[]";
+        System.out.println(fragment.getCacheParam().getRegion_map().values());
         boolean exists = fragment.getCacheParam().getRegion_map()
                 .values().stream().anyMatch(value -> value.equals(expectRange));
         Assert.assertTrue(exists);
