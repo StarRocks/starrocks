@@ -1360,15 +1360,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: BE プロセスの最小ファイルディスクリプタ数。
 - 導入バージョン: -
 
-##### index_stream_cache_capacity
-
-- デフォルト: 10737418240
-- タイプ: Int
-- 単位: バイト
-- 可変: いいえ
-- 説明: BloomFilter、Min、Max の統計情報のキャッシュ容量。
-- 導入バージョン: -
-
 ##### storage_page_cache_limit
 
 - デフォルト: 20%
