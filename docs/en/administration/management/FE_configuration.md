@@ -5079,3 +5079,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description:
 - Introduced in: -
 -->
+
+##### mv_refresh_fail_on_filter_data
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Mv refresh fails if there is filtered data in refreshing, true by default, otherwise return success by ignoring the filtered data.
+- Introduced in: -

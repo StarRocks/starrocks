@@ -3289,8 +3289,8 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Whether enable to cache mv query context or not")
     public static boolean enable_mv_query_context_cache = true;
 
-    @ConfField(mutable = true, comment = "Mv refresh fails if there is filtered data, false by default")
-    public static boolean mv_refresh_fail_on_filter_data = false;
+    @ConfField(mutable = true, comment = "Mv refresh fails if there is filtered data, true by default")
+    public static boolean mv_refresh_fail_on_filter_data = true;
 
     @ConfField(mutable = true, comment = "The default timeout for planner optimize when refresh materialized view, 30s by " +
             "default")
