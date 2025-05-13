@@ -469,6 +469,15 @@ public final class MetricRepo {
         };
         STARROCKS_METRIC_REGISTER.addMetric(gaugeReportQueueSize);
 
+        GaugeMetric<Long> totalTabletCount = new GaugeMetric<Long>(
+                "tablet_count", MetricUnit.NOUNIT, "total tablet count") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletCount();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(totalTabletCount);
+
         // 2. counter
         COUNTER_REQUEST_ALL = new LongCounterMetric("request_total", MetricUnit.REQUESTS, "total request");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_REQUEST_ALL);
