@@ -2065,7 +2065,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
   - 自 2.4 版本起，该参数默认值由 `true` 变更为 `false`。自 3.1 版本起，该参数由静态变为动态。
 - 引入版本：-
 
-<!--
 ##### enable_bitmap_index_memory_page_cache
 
 - 默认值：true
@@ -2074,9 +2073,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：是
 - 描述：是否为 Bitmap index 开启 Memory Cache。使用 Bitmap index 加速点查时，可以考虑开启。
 - 引入版本：v3.1
--->
 
-<!--
 ##### enable_zonemap_index_memory_page_cache
 
 - 默认值：true
@@ -2085,9 +2082,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：是
 - 描述：是否为 Zonemap index 开启 Memory Cache。使用 Zonemap index 加速 Scan 时，可以考虑开启。
 - 引入版本：-
--->
 
-<!--
 ##### enable_ordinal_index_memory_page_cache
 
 - 默认值：true
@@ -2096,7 +2091,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：是
 - 描述：是否为 Ordinal index 开启 Memory Cache。Ordinal index 是行号到数据 page position 的映射，可以加速 Scan。
 - 引入版本：-
--->
 
 ##### fragment_pool_thread_num_min
 
