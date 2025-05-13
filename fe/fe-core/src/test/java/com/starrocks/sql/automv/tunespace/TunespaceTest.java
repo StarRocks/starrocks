@@ -96,7 +96,7 @@ public class TunespaceTest {
                 "  `category` varchar(255) NOT NULL COMMENT \"\",\n" +
                 "  `traits` json NOT NULL COMMENT \"\"\n" +
                 ") ENGINE=OLAP\n" +
-                "PRIMARY KEY(`id`, `ts`)\n" +
+                "DUPLICATE KEY(`id`, `ts`)\n" +
                 "PARTITION BY RANGE (`ts`)()\n" +
                 "DISTRIBUTED BY HASH(`id`) BUCKETS 8\n";
         Assert.assertTrue(createSql, createSql.startsWith(expectCreateSql));
@@ -160,7 +160,7 @@ public class TunespaceTest {
                     "  `category` varchar(255) NOT NULL COMMENT \"\",\n" +
                     "  `traits` json NOT NULL COMMENT \"\"\n" +
                     ") ENGINE=OLAP\n" +
-                    "PRIMARY KEY(`id`, `ts`)\n" +
+                    "DUPLICATE KEY(`id`, `ts`)\n" +
                     "PARTITION BY RANGE (`ts`)()\n" +
                     "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n"
             ));

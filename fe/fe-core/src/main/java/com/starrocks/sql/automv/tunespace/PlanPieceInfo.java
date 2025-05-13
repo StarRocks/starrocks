@@ -113,7 +113,7 @@ public class PlanPieceInfo {
 
         distributionInfo.setDistributionColumns(bucketKey);
 
-        OlapTable table = new OlapTable(0xdeadbeef, fqTableName, columns, KeysType.PRIMARY_KEYS,
+        OlapTable table = new OlapTable(0xdeadbeef, fqTableName, columns, KeysType.DUP_KEYS,
                 partitionInfo, distributionInfo);
         Map<String, String> properties = Maps.newHashMap();
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE, "true");
