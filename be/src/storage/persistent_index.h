@@ -893,6 +893,8 @@ private:
     // Calculate total memory usage after index been modified.
     void _calc_memory_usage();
 
+    size_t _get_encoded_fixed_size(const Schema& schema);
+
 protected:
     // index storage directory
     std::string _path;
