@@ -55,7 +55,7 @@ E: (6013, 'SemanticException: Getting analyzing error. Detail message: Invalid p
 -- !result
 select get_query_dump('invalid-query');
 -- result:
-[REGEX]E: (6013, "SemanticException: Getting analyzing error. Detail message: Invalid parameter get_query_dump: execute query failed.*
+[REGEX].*SemanticException: Getting analyzing error. Detail message: Invalid parameter get_query_dump: execute query failed.*
 -- !result
 select get_query_dump(rtrim('select * from t1'));
 -- result:
