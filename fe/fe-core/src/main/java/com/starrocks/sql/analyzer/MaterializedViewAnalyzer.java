@@ -981,7 +981,7 @@ public class MaterializedViewAnalyzer {
                 } else if (table.isHiveTable() || table.isHudiTable() || table.isOdpsTable()) {
                     checkPartitionColumnWithBaseHMSTable(slotRef, table);
                 } else if (table.isIcebergTable()) {
-                    checkPartitionColumnWithBaseIcebergTable(expr, slotRef, (IcebergTable) table);
+                    checkPartitionColumnWithBaseIcebergTable(statement, expr, slotRef, (IcebergTable) table);
                 } else if (table.isJDBCTable()) {
                     checkPartitionColumnWithBaseJDBCTable(slotRef, (JDBCTable) table);
                 } else if (table.isPaimonTable()) {
@@ -1073,9 +1073,8 @@ public class MaterializedViewAnalyzer {
                 if (Config.enable_mv_list_partition_for_external_table) {
                     statement.setPartitionType(PartitionType.LIST);
                 } else {
-                    if (partitionExprType.isStringType() &&
-                            mvPartitionByExprs.stream().allMatch(t -> t instanceof SlotRef) &&
-                            !(partitionRefTableExpr instanceof FunctionCallExpr)) {
+                    if (shouldMVPartitionByListType(statement, mvPartitionByExprs,
+                            partitionRefTableExpr, refPartitionCol)) {
                         statement.setPartitionType(PartitionType.LIST);
                     } else {
                         statement.setPartitionType(PartitionType.RANGE);
@@ -1083,6 +1082,23 @@ public class MaterializedViewAnalyzer {
                     }
                 }
             }
+        }
+        private boolean shouldMVPartitionByListType(CreateMaterializedViewStatement statement,
+                                                    List<Expr> mvPartitionByExprs,
+                                                    Expr partitionRefTableExpr,
+                                                    Column refPartitionCol) {
+            // for iceberg table with transform, use list partition since it needs to handle the transform with timezone
+            // original range partition mv cannot handle it correctly.
+            if (statement.isRefBaseTablePartitionWithTransform()) {
+                return true;
+            }
+            final Type partitionExprType = refPartitionCol.getType();
+            if (partitionExprType.isStringType() &&
+                    mvPartitionByExprs.stream().allMatch(t -> t instanceof SlotRef) &&
+                    !(partitionRefTableExpr instanceof FunctionCallExpr)) {
+                return true;
+            }
+            return false;
         }
 
         /**
@@ -1298,7 +1314,8 @@ public class MaterializedViewAnalyzer {
             MVPartitionSlotRefResolver.checkWindowFunction(statement, refTablePartitionExprs);
         }
 
-        private void checkPartitionColumnWithBaseIcebergTable(Expr partitionByExpr,
+        private void checkPartitionColumnWithBaseIcebergTable(CreateMaterializedViewStatement statement,
+                                                              Expr partitionByExpr,
                                                               SlotRef slotRef,
                                                               IcebergTable table) {
             org.apache.iceberg.Table icebergTable = table.getNativeTable();
@@ -1330,6 +1347,8 @@ public class MaterializedViewAnalyzer {
                                             "(<transform>, <partition_colum_name>) instead.", partitionByExpr.toSql(),
                                             transform.name());
                                 }
+                                // mark the statement with partition transform to use list partition mv later.
+                                statement.setRefBaseTablePartitionWithTransform(true);
                                 break;
                             case IDENTITY:
                                 if (!(partitionByExpr instanceof SlotRef) && !MvUtils.isStr2Date(partitionByExpr) &&
