@@ -97,6 +97,10 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private Map<Integer, Column> generatedPartitionCols = Maps.newHashMap();
     private Map<Expr, Expr> partitionByExprToAdjustExprMap = Maps.newHashMap();
 
+    // Whether the mv is created on a partitioned table with transform function. Use list partition mv if ref base table's
+    // partition contains transform function.
+    private boolean isRefBaseTablePartitionWithTransform = false;
+
     public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists,
                                            List<ColWithComment> colWithComments,
                                            List<IndexDef> indexDefs,
@@ -328,6 +332,14 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     }
     public String getOriginalDBName() {
         return originalDBName;
+    }
+
+    public boolean isRefBaseTablePartitionWithTransform() {
+        return isRefBaseTablePartitionWithTransform;
+    }
+
+    public void setRefBaseTablePartitionWithTransform(boolean refBaseTablePartitionWithTransform) {
+        isRefBaseTablePartitionWithTransform = refBaseTablePartitionWithTransform;
     }
 
     @Override
