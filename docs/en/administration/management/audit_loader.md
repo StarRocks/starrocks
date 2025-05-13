@@ -51,7 +51,7 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
 ) ENGINE = OLAP
 DUPLICATE KEY (`queryId`, `timestamp`, `queryType`)
 COMMENT "Audit log table"
-PARTITION BY date_trunc('day', timestamp)
+PARTITION BY date_trunc('day', `timestamp`)
 PROPERTIES (
   "replication_num" = "1",
   "partition_live_number"="30"
