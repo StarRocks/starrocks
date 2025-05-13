@@ -5075,7 +5075,7 @@ Status PersistentIndex::reset(Tablet* tablet, EditVersion version, PersistentInd
         pk_columns[i] = (ColumnId)i;
     }
     auto pkey_schema = ChunkHelper::convert_schema(tablet_schema_ptr, pk_columns);
-    size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
+    size_t fix_size = _get_encoded_fixed_size(pkey_schema);
 
     if (_l0) {
         _l0.reset();
@@ -5214,8 +5214,7 @@ Status PersistentIndex::_load_by_loader(TabletLoader* loader) {
         }
     }
 
-    size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
-
+    size_t fix_size = _get_encoded_fixed_size(pkey_schema);
     // Init PersistentIndex
     _key_size = fix_size;
     _size = 0;
@@ -5333,6 +5332,16 @@ void PersistentIndex::_calc_memory_usage() {
 
 void PersistentIndex::test_force_dump() {
     _dump_snapshot = true;
+}
+
+size_t PersistentIndex::_get_encoded_fixed_size(const Schema& schema) {
+    size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(schema);
+    // if fix_key_size is greater than 128, use SliceMutableIndex because FixedMutableIndex does not support key size greater
+    // than 128.
+    if (fix_size > 128) {
+        fix_size = 0;
+    }
+    return fix_size;
 }
 
 } // namespace starrocks
