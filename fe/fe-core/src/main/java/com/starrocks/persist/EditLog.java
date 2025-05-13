@@ -1221,12 +1221,12 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_CREATE_SPM_BASELINE_LOG: {
-                    BaselinePlan bp = (BaselinePlan) journal.data();
+                    BaselinePlan.Info bp = (BaselinePlan.Info) journal.data();
                     globalStateMgr.getSqlPlanStorage().replayBaselinePlan(bp, true);
                     break;
                 }
                 case OperationType.OP_DROP_SPM_BASELINE_LOG: {
-                    BaselinePlan bp = (BaselinePlan) journal.data();
+                    BaselinePlan.Info bp = (BaselinePlan.Info) journal.data();
                     globalStateMgr.getSqlPlanStorage().replayBaselinePlan(bp, false);
                     break;
                 }
@@ -2142,11 +2142,11 @@ public class EditLog {
         logEdit(OperationType.OP_CLUSTER_SNAPSHOT_LOG, info);
     }
 
-    public void logCreateSPMBaseline(BaselinePlan info) {
+    public void logCreateSPMBaseline(BaselinePlan.Info info) {
         logEdit(OperationType.OP_CREATE_SPM_BASELINE_LOG, info);
     }
 
-    public void logDropSPMBaseline(BaselinePlan info) {
+    public void logDropSPMBaseline(BaselinePlan.Info info) {
         logEdit(OperationType.OP_DROP_SPM_BASELINE_LOG, info);
     }
 }

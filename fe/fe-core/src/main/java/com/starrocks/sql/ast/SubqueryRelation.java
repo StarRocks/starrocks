@@ -24,18 +24,25 @@ import java.util.Map;
 public class SubqueryRelation extends QueryRelation {
     private final QueryStatement queryStatement;
 
+    private final boolean assertRows;
+
     public SubqueryRelation(QueryStatement queryStatement) {
-        this(queryStatement, queryStatement.getPos());
+        this(queryStatement, false, queryStatement.getPos());
     }
 
-    public SubqueryRelation(QueryStatement queryStatement, NodePosition pos) {
+    public SubqueryRelation(QueryStatement queryStatement, boolean assertRows, NodePosition pos) {
         super(pos);
         this.queryStatement = queryStatement;
+        this.assertRows = assertRows;
         QueryRelation queryRelation = this.queryStatement.getQueryRelation();
         // The order by is meaningless in subquery
         if (!queryRelation.hasLimit()) {
             queryRelation.clearOrder();
         }
+    }
+
+    public boolean isAssertRows() {
+        return assertRows;
     }
 
     @Override
