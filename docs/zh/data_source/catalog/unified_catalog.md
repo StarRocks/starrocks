@@ -874,7 +874,7 @@ INSERT INTO unified_catalog.test_database.test_table SELECT * FROM hive_table
 
 ## 在 Unified Catalog 内创建数据库
 
-同 StarRocks 内部数据目录 (Internal Catalog) 一致，如果您拥有 Unified Catalog 的 [CREATE DATABASE](../../administration/user_privs/privilege_item.md#数据目录权限-catalog) 权限，那么您可以使用 [CREATE DATABASE](../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) 在该 Unified Catalog 内创建数据库。
+同 StarRocks 内部数据目录 (Internal Catalog) 一致，如果您拥有 Unified Catalog 的 [CREATE DATABASE](../../administration/user_privs/authorization/privilege_item.md#数据目录权限-catalog) 权限，那么您可以使用 [CREATE DATABASE](../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) 在该 Unified Catalog 内创建数据库。
 
 > **说明**
 >
@@ -910,7 +910,7 @@ CREATE DATABASE <database_name>
 
 ## 从 Unified Catalog 内删除数据库
 
-同 StarRocks 内部数据库一致，如果您拥有 Unified Catalog 内数据库的 [DROP](../../administration/user_privs/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [DROP DATABASE](../../sql-reference/sql-statements/Database/DROP_DATABASE.md) 来删除该数据库。仅支持删除空数据库。
+同 StarRocks 内部数据库一致，如果您拥有 Unified Catalog 内数据库的 [DROP](../../administration/user_privs/authorization/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [DROP DATABASE](../../sql-reference/sql-statements/Database/DROP_DATABASE.md) 来删除该数据库。仅支持删除空数据库。
 
 > **说明**
 >
@@ -928,7 +928,7 @@ DROP DATABASE <database_name>
 
 ## 在 Unified Catalog 内创建表
 
-同 StarRocks 内部数据库一致，如果您拥有 Unified Catalog 内数据库的 [CREATE TABLE](../../administration/user_privs/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) 或 [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) 在该数据库下创建表。
+同 StarRocks 内部数据库一致，如果您拥有 Unified Catalog 内数据库的 [CREATE TABLE](../../administration/user_privs/authorization/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) 或 [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) 在该数据库下创建表。
 
 > **说明**
 >
@@ -962,7 +962,7 @@ PARTITION BY (id,dt);
 
 ## 向 Unified Catalog 内的表中插入数据
 
-同 StarRocks 内表一致，如果您拥有 Unified Catalog 内表的 [INSERT](../../administration/user_privs/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 将 StarRocks 表数据写入到该表（当前仅支持写入到 Parquet 格式的 Unified Catalog 表）。
+同 StarRocks 内表一致，如果您拥有 Unified Catalog 内表的 [INSERT](../../administration/user_privs/authorization/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 将 StarRocks 表数据写入到该表（当前仅支持写入到 Parquet 格式的 Unified Catalog 表）。
 
 > **说明**
 >
@@ -997,7 +997,7 @@ VALUES
 
 ## 从 Unified Catalog 内删除表
 
-同 StarRocks 内表一致，如果您拥有 Unified Catalog 内表的 [DROP](../../administration/user_privs/privilege_item.md#表权限-table) 权限，那么您可以使用 [DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) 来删除该表。
+同 StarRocks 内表一致，如果您拥有 Unified Catalog 内表的 [DROP](../../administration/user_privs/authorization/privilege_item.md#表权限-table) 权限，那么您可以使用 [DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) 来删除该表。
 
 > **说明**
 >
