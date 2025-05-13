@@ -321,9 +321,12 @@ bool valid_decimal(const string& value_str, uint32_t precision, uint32_t frac) {
 }
 
 bool valid_datetime(const string& value_str) {
+    //const char* datetime_pattern =
+    //        "((?:\\d){4})-((?:\\d){2})-((?:\\d){2})[ ]*"
+    //        "(((?:\\d){2}):((?:\\d){2}):((?:\\d){2}))?";
     const char* datetime_pattern =
             "((?:\\d){4})-((?:\\d){2})-((?:\\d){2})[ ]*"
-            "(((?:\\d){2}):((?:\\d){2}):((?:\\d){2}))?";
+            "(((?:\\d){2}):((?:\\d){2}):((?:\\d){2})(\\.(\\d{1,6}))?)?";
     boost::regex e(datetime_pattern);
     boost::smatch what;
 
@@ -361,6 +364,14 @@ bool valid_datetime(const string& value_str) {
             int second = strtol(what[7].str().c_str(), nullptr, 10);
             if (second < 0 || second > 59) {
                 LOG(WARNING) << "invalid second " << second;
+                return false;
+            }
+        }
+
+        if (what[8].length()) {
+            const string& ms_str = what[9].str();
+            if (ms_str.empty() || ms_str.size() > 6) {
+                LOG(WARNING) << "invalid milliseconds length " << ms_str.size();
                 return false;
             }
         }
