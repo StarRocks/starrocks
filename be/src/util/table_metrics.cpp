@@ -47,12 +47,12 @@ void TableMetricsManager::cleanup() {
     }
 
     std::vector<std::pair<uint64_t, TableMetricsPtr>> delete_metrics;
-    _metrics_map.for_each([&] (const auto& pair) {
+    _metrics_map.for_each([&](const auto& pair) {
         if (pair.second->ref_count == 0) {
             delete_metrics.emplace_back(pair.first, pair.second);
         }
     });
-    for (const auto& pair: delete_metrics) {
+    for (const auto& pair : delete_metrics) {
         _metrics_map.erase(pair.first);
         pair.second->uninstall(_metrics);
     }

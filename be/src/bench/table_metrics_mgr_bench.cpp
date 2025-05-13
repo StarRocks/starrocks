@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include <memory>
+
 #include "util/table_metrics.h"
 
 namespace starrocks {
@@ -31,14 +32,12 @@ public:
         }
     }
 
-    void SetUp(const benchmark::State& state) override {
-    }
+    void SetUp(const benchmark::State& state) override {}
 
-    void TearDown(const benchmark::State&) override {
-    }
+    void TearDown(const benchmark::State&) override {}
 
     void bench_register_table(uint64_t start_id) {
-        for (uint64_t i = 0;i < kMaxTableId; i++) {
+        for (uint64_t i = 0; i < kMaxTableId; i++) {
             uint64_t table_id = table_ids[(i + start_id) % kMaxTableId];
             manager->register_table(table_id);
         }
@@ -53,19 +52,17 @@ protected:
 
 BENCHMARK_DEFINE_F(TableMetricsBench, BM_RegisterTable)(benchmark::State& state) {
     const int thread_id = state.thread_index;
-    
+
     for (auto _ : state) {
         uint64_t start_id = thread_id;
-        for (uint64_t i = 0;i < kMaxTableId; ++i) {
+        for (uint64_t i = 0; i < kMaxTableId; ++i) {
             manager->register_table(table_ids[(i + start_id) % kMaxTableId]);
         }
     }
 }
 
-BENCHMARK_REGISTER_F(TableMetricsBench, BM_RegisterTable)
-    ->ThreadRange(1, 32)
-    ->Unit(benchmark::kMillisecond);
+BENCHMARK_REGISTER_F(TableMetricsBench, BM_RegisterTable)->ThreadRange(1, 32)->Unit(benchmark::kMillisecond);
 
 BENCHMARK_MAIN();
 
-}
+} // namespace starrocks

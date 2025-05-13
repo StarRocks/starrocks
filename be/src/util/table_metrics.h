@@ -76,7 +76,9 @@ public:
 
 private:
     MetricRegistry* _metrics;
-    using MetricsMap = phmap::parallel_flat_hash_map<uint64_t, TableMetricsPtr, phmap::Hash<uint64_t>, phmap::EqualTo<uint64_t>, phmap::Allocator<uint64_t>, 4, std::shared_mutex>;
+    using MetricsMap =
+            phmap::parallel_flat_hash_map<uint64_t, TableMetricsPtr, phmap::Hash<uint64_t>, phmap::EqualTo<uint64_t>,
+                                          phmap::Allocator<uint64_t>, 4, std::shared_mutex>;
     MetricsMap _metrics_map;
     // In some cases, we may not be able to obtain the metrics for the corresponding table id,
     // For example, when drop tablet and data load concurrently,
