@@ -226,15 +226,69 @@ If you choose an S3-compatible storage system, such as MinIO, as storage for you
 "aws.s3.secret_key" = "<iam_user_secret_key>"
 ```
 
-The following table describes the parameters you need to configure in `StorageCredentialParams`.
+`StorageCredentialParams`:
 
-| Parameter                        | Required | Description                                                  |
-| -------------------------------- | -------- | ------------------------------------------------------------ |
-| aws.s3.enable_ssl                | Yes      | Specifies whether to enable SSL connection.<br />Valid values: `true` and `false`. Default value: `true`. |
-| aws.s3.enable_path_style_access  | Yes      | Specifies whether to enable path-style access.<br />Valid values: `true` and `false`. Default value: `false`. For MinIO, you must set the value to `true`.<br />Path-style URLs use the following format: `https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`. For example, if you create a bucket named `DOC-EXAMPLE-BUCKET1` in the US West (Oregon) Region, and you want to access the `alice.jpg` object in that bucket, you can use the following path-style URL: `https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`. |
-| aws.s3.endpoint                  | Yes      | The endpoint that is used to connect to your S3-compatible storage system instead of AWS S3. |
-| aws.s3.access_key                | Yes      | The access key of your IAM user. |
-| aws.s3.secret_key                | Yes      | The secret key of your IAM user. |
+- `aws.s3.enable_ssl`
+
+  - Description
+
+      Specifies whether to enable SSL connection.<br />Valid values: `true` and `false`. Default value: `true`. 
+
+  - Required
+
+      Yes      
+
+
+- `aws.s3.enable_path_style_access`
+
+  - Description
+
+      Specifies whether to enable path-style access.<br />Valid values: `true` and `false`. Default value: `false`. For MinIO, you must set the value to `true`.<br />Path-style URLs use the following format:
+      
+      `https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`
+      
+      For example, if you create a bucket named `DOC-EXAMPLE-BUCKET1` in the US West (Oregon) Region, and you want to access the `alice.jpg` object in that bucket, you can use the following path-style URL:
+      
+      `https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`. 
+
+  - Required
+
+      Yes      
+
+
+- `aws.s3.endpoint`
+
+  - Description
+
+      The endpoint that is used to connect to your S3-compatible storage system instead of AWS S3. 
+
+  - Required
+
+      Yes      
+
+
+- `aws.s3.access_key`
+
+  - Description
+
+      The access key of your IAM user. 
+
+  - Required
+
+      Yes      
+
+
+- `aws.s3.secret_key`
+
+  - Description
+
+      The secret key of your IAM user. 
+
+  - Required
+
+      Yes      
+
+
 
 ##### Microsoft Azure Storage
 
@@ -847,11 +901,54 @@ From v3.3.3 onwards, Delta Lake Catalog supports [Metadata Local Cache and Retri
 
 You can configure the Delta Lake metadata cache refresh through the following FE parameters:
 
-| **Configuration item**                                       | **Default** | **Description**                                               |
-| ------------------------------------------------------------ | ----------- | ------------------------------------------------------------- |
-| enable_background_refresh_connector_metadata                 | `true`      | Whether to enable the periodic Delta Lake metadata cache refresh. After it is enabled, StarRocks polls the metastore (Hive Metastore or AWS Glue) of your Delta Lake cluster, and refreshes the cached metadata of the frequently accessed Delta Lake catalogs to perceive data changes. `true` indicates to enable the Delta Lake metadata cache refresh, and `false` indicates to disable it. |
-| background_refresh_metadata_interval_millis                  | `600000`    | The interval between two consecutive Delta Lake metadata cache refreshes. Unit: millisecond. |
-| background_refresh_metadata_time_secs_since_last_access_secs | `86400`     | The expiration time of a Delta Lake metadata cache refresh task. For the Delta Lake catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Delta Lake catalog that has not been accessed, StarRocks will not refresh its cached metadata. Unit: second. |
+###  **Configuration item**                                       
+- Description
+
+    **Description**                                               
+
+- Default:  **Default** 
+
+
+###  ------------------------------------------------------------ 
+- Description
+
+    ------------------------------------------------------------- 
+
+- Default
+
+    ----------- 
+
+
+###  enable_background_refresh_connector_metadata                 
+- Description
+
+    Whether to enable the periodic Delta Lake metadata cache refresh. After it is enabled, StarRocks polls the metastore (Hive Metastore or AWS Glue) of your Delta Lake cluster, and refreshes the cached metadata of the frequently accessed Delta Lake catalogs to perceive data changes. `true` indicates to enable the Delta Lake metadata cache refresh, and `false` indicates to disable it. 
+
+- Default
+
+    `true`      
+
+
+### ` background_refresh_metadata_interval_millis                  `
+- Description
+
+    The interval between two consecutive Delta Lake metadata cache refreshes. Unit: millisecond. 
+
+- Default
+
+    `600000`    
+
+
+### ` background_refresh_metadata_time_secs_since_last_access_secs `
+- Description
+
+    The expiration time of a Delta Lake metadata cache refresh task. For the Delta Lake catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Delta Lake catalog that has not been accessed, StarRocks will not refresh its cached metadata. Unit: second. 
+
+- Default
+
+    `86400`     
+
+
 
 ## Appendix: Metadata Local Cache and Retrieval
 
