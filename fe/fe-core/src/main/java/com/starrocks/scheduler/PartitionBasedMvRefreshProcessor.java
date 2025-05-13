@@ -148,8 +148,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private TaskRun nextTaskRun = null;
 
     public PartitionBasedMvRefreshProcessor() {
-        // to avoid NPE in some test cases
-        this.logger = MVTraceUtils.getLogger(null, PartitionBasedMvRefreshProcessor.class);
     }
 
     @VisibleForTesting
@@ -975,12 +973,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     @Override
     public void prepare(TaskRunContext context) throws Exception {
         Map<String, String> properties = context.getProperties();
-        logger.info("prepare refresh mv, properties:{}", properties);
         // NOTE: mvId is set in Task's properties when creating
         long mvId = Long.parseLong(properties.get(MV_ID));
         this.db = GlobalStateMgr.getCurrentState().getDb(context.ctx.getDatabase());
         if (db == null) {
-            logger.warn("database {} do not exist when refreshing materialized view:{}", context.ctx.getDatabase(), mvId);
             throw new DmlException("database " + context.ctx.getDatabase() + " do not exist.");
         }
         Table table = db.getTable(mvId);
