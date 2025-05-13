@@ -19,7 +19,6 @@
 #include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
-#include "util/timezone_utils.h"
 
 namespace starrocks {
 
@@ -52,27 +51,26 @@ Status SchemaTaskRunsScanner::start(RuntimeState* state) {
     std::string task_name;
     std::string query_id;
     std::string task_run_state;
-    TGetTasksParams task_params;
     // task_name
     if (_parse_expr_predicate("TASK_NAME", task_name)) {
-        task_params.__set_task_name(task_name);
+        _task_params.__set_task_name(task_name);
     }
     // query_id
     if (_parse_expr_predicate("QUERY_ID", query_id)) {
-        task_params.__set_query_id(query_id);
+        _task_params.__set_query_id(query_id);
     }
     // task_run_state
     if (_parse_expr_predicate("STATE", task_run_state)) {
-        task_params.__set_state(task_run_state);
+        _task_params.__set_state(task_run_state);
     }
     if (nullptr != _param->current_user_ident) {
-        task_params.__set_current_user_ident(*(_param->current_user_ident));
+        _task_params.__set_current_user_ident(*(_param->current_user_ident));
     }
-    if (_param->limit > 0) {
-        task_params.__isset.pagination = true;
-        task_params.pagination.__set_limit(_param->limit);
-    }
-    RETURN_IF_ERROR(SchemaHelper::get_task_runs(_ss_state, task_params, &_task_run_result));
+    _task_params.__isset.pagination = true;
+    _task_params.pagination.__set_offset(0);
+    _task_params.pagination.__set_limit(kPaginationBatchSize);
+    RETURN_IF_ERROR(SchemaHelper::get_task_runs(_ss_state, _task_params, &_task_run_result));
+    _task_params.pagination.__set_offset(_task_run_result.task_runs.size());
     _task_run_index = 0;
     return Status::OK();
 }
@@ -284,12 +282,25 @@ Status SchemaTaskRunsScanner::get_next(ChunkPtr* chunk, bool* eos) {
     if (!_is_init) {
         return Status::InternalError("Used before initialized.");
     }
-    if (_task_run_index >= _task_run_result.task_runs.size()) {
-        *eos = true;
-        return Status::OK();
-    }
     if (nullptr == chunk || nullptr == eos) {
         return Status::InternalError("input pointer is nullptr.");
+    }
+
+    // Streamingly fetch the next batch. task_run_result will be empty if EOS is reached.
+    if (_task_run_index >= _task_run_result.task_runs.size()) {
+        if (_param->limit > 0 && _task_params.pagination.offset >= _param->limit) {
+            *eos = true;
+            return {};
+        }
+        _task_run_result.task_runs.clear();
+        RETURN_IF_ERROR(SchemaHelper::get_task_runs(_ss_state, _task_params, &_task_run_result));
+        if (_task_run_result.task_runs.empty()) {
+            *eos = true;
+            return {};
+        }
+        _task_run_index = 0;
+        size_t offset = _task_params.pagination.offset + kPaginationBatchSize;
+        _task_params.pagination.__set_offset(offset);
     }
     *eos = false;
     return fill_chunk(chunk);

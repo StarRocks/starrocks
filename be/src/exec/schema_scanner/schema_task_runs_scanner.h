@@ -28,9 +28,12 @@ public:
     Status get_next(ChunkPtr* chunk, bool* eos) override;
 
 private:
+    static constexpr int64_t kPaginationBatchSize = 1000;
+
     Status fill_chunk(ChunkPtr* chunk);
 
-    int _task_run_index{0};
+    int _task_run_index = 0;
+    TGetTasksParams _task_params;
     TGetTaskRunInfoResult _task_run_result;
     static SchemaScanner::ColumnDesc _s_tbls_columns[];
 };
