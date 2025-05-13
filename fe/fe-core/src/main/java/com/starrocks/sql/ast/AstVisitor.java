@@ -90,6 +90,10 @@ import com.starrocks.sql.ast.warehouse.ShowClustersStmt;
 import com.starrocks.sql.ast.warehouse.ShowNodesStmt;
 import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
 import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.EnableDisableCnGroupStmt;
 
 public interface AstVisitor<R, C> {
     default R visit(ParseNode node) {
@@ -1098,6 +1102,23 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitAlterWarehouseStatement(AlterWarehouseStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    // ------------------------------------------- CNGroup statement ---------------------------------------------------
+    default R visitCreateCNGroupStatement(CreateCnGroupStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitDropCNGroupStatement(DropCnGroupStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitEnableDisableCNGroupStatement(EnableDisableCnGroupStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAlterCNGroupStatement(AlterCnGroupStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 

@@ -137,7 +137,7 @@ public class SystemInfoService implements GsonPostProcessable {
         }
 
         for (Pair<String, Integer> pair : addComputeNodeClause.getHostPortPairs()) {
-            addComputeNode(pair.first, pair.second, addComputeNodeClause.getWarehouse());
+            addComputeNode(pair.first, pair.second, addComputeNodeClause.getWarehouse(), addComputeNodeClause.getCNGroupName());
         }
     }
 
@@ -203,10 +203,10 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     // Final entry of adding compute node
-    public void addComputeNode(String host, int heartbeatPort, String warehouse) throws DdlException {
+    public void addComputeNode(String host, int heartbeatPort, String warehouse, String cnGroupName) throws DdlException {
         ComputeNode newComputeNode = new ComputeNode(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
         setComputeNodeOwner(newComputeNode);
-        addComputeNodeToWarehouse(newComputeNode, warehouse);
+        addComputeNodeToWarehouse(newComputeNode, warehouse, cnGroupName);
 
         // try to record the historical compute nodes
         tryUpdateHistoricalComputeNodes(warehouse);
@@ -232,7 +232,7 @@ public class SystemInfoService implements GsonPostProcessable {
         }
 
         for (Pair<String, Integer> pair : addBackendClause.getHostPortPairs()) {
-            addBackend(pair.first, pair.second, addBackendClause.getWarehouse());
+            addBackend(pair.first, pair.second, addBackendClause.getWarehouse(), addBackendClause.getCNGroupName());
         }
     }
 
@@ -269,16 +269,14 @@ public class SystemInfoService implements GsonPostProcessable {
         backend.setBackendState(BackendState.using);
     }
 
-    public void addComputeNodeToWarehouse(ComputeNode computeNode, String warehouseName)
+    public void addComputeNodeToWarehouse(ComputeNode computeNode, String warehouseName, String cnGroupName)
             throws DdlException {
         Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseName);
         // check if the warehouse exist
         if (warehouse == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouseName));
         }
-
-        computeNode.setWorkerGroupId(warehouse.getAnyWorkerGroupId());
-        computeNode.setWarehouseId(warehouse.getId());
+        warehouse.addNodeToCNGroup(computeNode, cnGroupName);
     }
 
     private void tryUpdateHistoricalBackends(String warehouse) {
@@ -311,11 +309,11 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     // Final entry of adding backend
-    private void addBackend(String host, int heartbeatPort, String warehouse) throws DdlException {
+    private void addBackend(String host, int heartbeatPort, String warehouse, String cnGroupName) throws DdlException {
         Backend newBackend = new Backend(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
         // add backend to DEFAULT_CLUSTER
         setBackendOwner(newBackend);
-        addComputeNodeToWarehouse(newBackend, warehouse);
+        addComputeNodeToWarehouse(newBackend, warehouse, cnGroupName);
 
         // try to record the historical backend nodes
         tryUpdateHistoricalBackends(warehouse);
@@ -439,11 +437,11 @@ public class SystemInfoService implements GsonPostProcessable {
         }
 
         for (Pair<String, Integer> pair : dropComputeNodeClause.getHostPortPairs()) {
-            dropComputeNode(pair.first, pair.second, warehouse);
+            dropComputeNode(pair.first, pair.second, warehouse, dropComputeNodeClause.getCNGroupName());
         }
     }
 
-    public void dropComputeNode(String host, int heartbeatPort, String warehouse)
+    public void dropComputeNode(String host, int heartbeatPort, String warehouse, String cnGroupName)
             throws DdlException {
         ComputeNode dropComputeNode = getComputeNodeWithHeartbeatPort(host, heartbeatPort);
         if (dropComputeNode == null) {
@@ -453,10 +451,17 @@ public class SystemInfoService implements GsonPostProcessable {
 
         // check if warehouseName is right
         Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(dropComputeNode.getWarehouseId());
-        if (wh != null && !warehouse.equalsIgnoreCase(wh.getName())) {
-            throw new DdlException("compute node [" + host + ":" + heartbeatPort +
-                    "] does not exist in warehouse " + warehouse);
+        if (wh != null) {
+            if (!warehouse.equalsIgnoreCase(wh.getName())) {
+                throw new DdlException("compute node [" + host + ":" + heartbeatPort +
+                        "] does not exist in warehouse " + warehouse);
+            }
+            if (!Strings.isNullOrEmpty(cnGroupName)) {
+                // validate cnGroupName if provided
+                wh.validateRemoveNodeFromCNGroup(dropComputeNode, cnGroupName);
+            }
         }
+        // Allow drop compute node if `wh` is null for whatever reason
 
         // try to record the historical backend nodes
         tryUpdateHistoricalComputeNodes(warehouse);
@@ -470,7 +475,7 @@ public class SystemInfoService implements GsonPostProcessable {
         // remove worker
         if (RunMode.isSharedDataMode()) {
             int starletPort = dropComputeNode.getStarletPort();
-            // only need to remove worker after be reported its staretPort
+            // only need to remove worker after be reported its starletPort
             if (starletPort != 0) {
                 String workerAddr = NetUtils.getHostPortInAccessibleFormat(dropComputeNode.getHost(), starletPort);
                 GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr, dropComputeNode.getWorkerGroupId());
@@ -494,7 +499,7 @@ public class SystemInfoService implements GsonPostProcessable {
         }
 
         for (Pair<String, Integer> pair : hostPortPairs) {
-            dropBackend(pair.first, pair.second, warehouse, needCheckWithoutForce);
+            dropBackend(pair.first, pair.second, warehouse, dropBackendClause.cngroupName, needCheckWithoutForce);
         }
     }
 
@@ -505,7 +510,7 @@ public class SystemInfoService implements GsonPostProcessable {
             throw new DdlException("Backend[" + backendId + "] does not exist");
         }
 
-        dropBackend(backend.getHost(), backend.getHeartbeatPort(), WarehouseManager.DEFAULT_WAREHOUSE_NAME, false);
+        dropBackend(backend.getHost(), backend.getHeartbeatPort(), WarehouseManager.DEFAULT_WAREHOUSE_NAME, "", false);
     }
 
     protected void checkWhenNotForceDrop(Backend droppedBackend) {
@@ -548,7 +553,8 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     // final entry of dropping backend
-    public void dropBackend(String host, int heartbeatPort, String warehouse, boolean needCheckWithoutForce) throws DdlException {
+    public void dropBackend(String host, int heartbeatPort, String warehouse, String cnGroupName,
+                            boolean needCheckWithoutForce) throws DdlException {
         Backend droppedBackend = getBackendWithHeartbeatPort(host, heartbeatPort);
 
         if (droppedBackend == null) {
@@ -558,13 +564,20 @@ public class SystemInfoService implements GsonPostProcessable {
 
         // check if warehouseName is right
         Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(droppedBackend.getWarehouseId());
-        if (wh != null && !warehouse.equalsIgnoreCase(wh.getName())) {
-            LOG.warn("warehouseName in dropBackends is not equal, " +
-                            "warehouseName from dropBackendClause is {}, while actual one is {}",
-                    warehouse, wh.getName());
-            throw new DdlException("backend [" + host + ":" + heartbeatPort +
-                    "] does not exist in warehouse " + warehouse);
+        if (wh != null) {
+            if (!warehouse.equalsIgnoreCase(wh.getName())) {
+                LOG.warn("warehouseName in dropBackends is not equal, " +
+                                "warehouseName from dropBackendClause is {}, while actual one is {}",
+                        warehouse, wh.getName());
+                throw new DdlException("backend [" + host + ":" + heartbeatPort +
+                        "] does not exist in warehouse " + warehouse);
+            }
+            if (!Strings.isNullOrEmpty(cnGroupName)) {
+                // validate cnGroupName if provided
+                wh.validateRemoveNodeFromCNGroup(droppedBackend, cnGroupName);
+            }
         }
+        // allow dropping the node if `wh` is null for whatever reason
 
         if (needCheckWithoutForce) {
             try {
@@ -591,7 +604,7 @@ public class SystemInfoService implements GsonPostProcessable {
         // remove worker
         if (RunMode.isSharedDataMode()) {
             int starletPort = droppedBackend.getStarletPort();
-            // only need to remove worker after be reported its staretPort
+            // only need to remove worker after be reported its starletPort
             if (starletPort != 0) {
                 String workerAddr = NetUtils.getHostPortInAccessibleFormat(droppedBackend.getHost(), starletPort);
                 GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr, droppedBackend.getWorkerGroupId());
@@ -1054,8 +1067,10 @@ public class SystemInfoService implements GsonPostProcessable {
         }
     }
 
+    // FOR TEST ONLY
     public void clear() {
         this.idToBackendRef = new ConcurrentHashMap<>();
+        this.idToComputeNodeRef = new ConcurrentHashMap<>();
         this.idToReportVersionRef = ImmutableMap.of();
     }
 

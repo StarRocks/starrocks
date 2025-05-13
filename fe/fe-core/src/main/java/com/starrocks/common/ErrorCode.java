@@ -395,6 +395,8 @@ public enum ErrorCode {
             "unsupported statement in shared_nothing mode"),
     ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_DATA_MODE(5908, new byte[] {'4', '2', '0', '0', '0'},
             "Unsupported statement in shared_data mode"),
+    ERR_INVALID_CNGROUP_NAME(5911, new byte[] {'0', 'A', '0', '0', '0'}, "CNGroup name can not be null or empty"),
+    ERR_CNGROUP_NOT_IMPLEMENTED(5912, new byte[] {'0', 'A', '0', '0', '0'}, "CNGroup feature not implemented"),
 
     /**
      * 6000 - 6100: Planner

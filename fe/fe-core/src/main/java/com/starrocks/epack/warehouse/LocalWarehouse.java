@@ -14,12 +14,15 @@
 
 package com.starrocks.epack.warehouse;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.common.util.TimeUtils;
@@ -171,13 +174,13 @@ public class LocalWarehouse extends Warehouse {
                     continue;
                 }
 
-                systemInfoService.dropBackend(node.getHost(), node.getHeartbeatPort(), name, false);
+                systemInfoService.dropBackend(node.getHost(), node.getHeartbeatPort(), name, "", false);
             } else {
                 if (systemInfoService.getComputeNodeWithHeartbeatPort(node.getHost(), node.getHeartbeatPort()) == null) {
                     continue;
                 }
 
-                systemInfoService.dropComputeNode(node.getHost(), node.getHeartbeatPort(), name);
+                systemInfoService.dropComputeNode(node.getHost(), node.getHeartbeatPort(), name, "");
             }
         }
     }
@@ -185,6 +188,26 @@ public class LocalWarehouse extends Warehouse {
     @Override
     public Long getAnyWorkerGroupId() {
         return getAnyAvailableCluster().getWorkerGroupId();
+    }
+
+    @Override
+    public void addNodeToCNGroup(ComputeNode node, String cnGroupName) throws DdlException {
+        // TODO: Fix it
+        if (!Strings.isNullOrEmpty(cnGroupName)) {
+            // NOTE: NOT IMPLEMENTED, so the cnGroupName must be empty!
+            ErrorReport.reportDdlException(ErrorCode.ERR_CNGROUP_NOT_IMPLEMENTED);
+        }
+        node.setWorkerGroupId(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+        node.setWarehouseId(getId());
+    }
+
+    @Override
+    public void validateRemoveNodeFromCNGroup(ComputeNode node, String cnGroupName) throws DdlException {
+        // TODO: Fix it
+        if (!Strings.isNullOrEmpty(cnGroupName)) {
+            // NOTE: NOT IMPLEMENTED, so the cnGroupName must be empty!
+            ErrorReport.reportDdlException(ErrorCode.ERR_CNGROUP_NOT_IMPLEMENTED);
+        }
     }
 
     @Override
