@@ -6,6 +6,12 @@ displayed_sidebar: docs
 
 在 JSON 类型和 SQL 类型之间转换值。
 
+:::tip
+所有的 JSON 函数和运算符都列在导航栏和[概览页面](../overview-of-json-functions-and-operators.md)
+
+使用[生成列](../../../sql-statements/generated_columns.md)加速查询
+:::
+
 ## 语法
 
 - 从 JSON 转换为 SQL
@@ -38,9 +44,9 @@ cast(sql_expr AS JSON)
 
 - 从 SQL 转换为 JSON
 
-  - 如果 SQL 值超出 JSON 支持的精度，cast 函数返回 `NULL` 以防止算术溢出。
+  - 如果 SQL 值超过 JSON 支持的精度，cast 函数返回 `NULL` 以防止算术溢出。
 
-  - 如果 SQL 值为 `NULL`，cast 函数不会将 SQL 值 `NULL` 转换为 JSON 值的 `NULL`。返回值仍然是 SQL 值的 `NULL`。
+  - 如果 SQL 值为 `NULL`，cast 函数不会将 SQL 值 `NULL` 转换为 JSON 值 `NULL`。返回值仍然是 SQL 值 `NULL`。
 
 - 从 JSON 转换为 SQL
 
@@ -48,11 +54,11 @@ cast(sql_expr AS JSON)
 
   - cast 函数不支持不兼容的 JSON 和 SQL 数据类型之间的转换。例如，如果将 JSON 数字转换为 SQL 字符串，函数返回 `NULL`。
 
-  - 如果发生算术溢出，cast 函数返回 SQL 值的 `NULL`。
+  - 如果发生算术溢出，cast 函数返回 SQL 值 `NULL`。
 
-  - 如果将 JSON 值的 `NULL` 转换为 SQL 值，函数返回 SQL 值的 `NULL`。
+  - 如果将 JSON 值 `NULL` 转换为 SQL 值，函数返回 SQL 值 `NULL`。
 
-  - 如果将 JSON 字符串转换为 VARCHAR 值，函数返回的 VARCHAR 值不包含在双引号（"）中。
+  - 如果将 JSON 字符串转换为 VARCHAR 值，函数返回的 VARCHAR 值不包含双引号（"）。
 
 ## 示例
 
@@ -120,7 +126,3 @@ mysql> select cast(true as json);
 | true               |
 +--------------------+
 ```
-
-:::tip
-所有的 JSON 函数和操作符都列在导航栏和 [概览页面](../overview-of-json-functions-and-operators.md) 上。
-:::

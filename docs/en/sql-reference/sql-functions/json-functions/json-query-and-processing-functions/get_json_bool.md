@@ -4,9 +4,13 @@ displayed_sidebar: docs
 
 # get_json_bool
 
-
-
 Parses and gets the boolean value from a specified JSON path in a JSON string.
+
+:::tip
+All of the JSON functions and operators are listed in the navigation and on the [overview page](../overview-of-json-functions-and-operators.md)
+
+Accelerate your queries with [generated columns](../../../sql-statements/generated_columns.md)
+:::
 
 If the format of `json_str` or `json_path` is invalid, or if no matching content can be found, this function will return NULL.
 
@@ -64,7 +68,3 @@ BOOLEAN get_json_bool(VARCHAR json_str, VARCHAR json_path)
 ## keyword
 
 GET_JSON_BOOL,GET,JSON,BOOL
-
-:::tip
-All of the JSON functions and operators are listed in the navigation and on the [overview page](../overview-of-json-functions-and-operators.md)
-:::

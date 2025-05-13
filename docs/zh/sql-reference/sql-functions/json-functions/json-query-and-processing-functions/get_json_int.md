@@ -4,11 +4,17 @@ displayed_sidebar: docs
 
 # get_json_int
 
-此函数用于解析并从 JSON 字符串中指定路径获取整数值。
+此函数用于分析并从 JSON 字符串中指定路径获取整数值。
+
+:::tip
+所有的 JSON 函数和操作符都列在导航栏和[概述页面](../overview-of-json-functions-and-operators.md)上。
+
+通过[生成列](../../../sql-statements/generated_columns.md)加速查询。
+:::
 
 json_path 必须以 `$` 开头，并使用 `.` 作为路径分隔符。
 
-如果路径中包含 `.`，可以用 `"` 和 `"` 将其括起来。
+如果路径中包含 `.`，可以用 `"` 和 `"` 包围。
 
 `[ ]` 用作数组下标，从 0 开始。
 
@@ -60,7 +66,3 @@ BIGINT get_json_int(VARCHAR json_str, VARCHAR json_path)
 ## 关键词
 
 GET_JSON_INT,GET,JSON,INT
-
-:::tip
-所有的 JSON 函数和操作符都列在导航栏和 [概览页面](../overview-of-json-functions-and-operators.md) 上。
-:::

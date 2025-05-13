@@ -4,13 +4,19 @@ displayed_sidebar: docs
 
 # get_json_double
 
-この関数は、指定されたパスから JSON 文字列の浮動小数点値を解析して取得します。json_path は `$` で始まり、`.` をパスの区切り文字として使用します。
+この関数は、指定されたパスから JSON 文字列内の浮動小数点値を解析して取得します。json_path は `$` で始まり、パスの区切りとして `.` を使用する必要があります。
 
-パスに `.` が含まれる場合は、`"` で囲むことができます。
+:::tip
+すべての JSON 関数と演算子は、ナビゲーションおよび [overview page](../overview-of-json-functions-and-operators.md) に一覧されています。
 
-`[ ]` は配列の添字として使用され、0から始まります。
+クエリを [生成列](../../../sql-statements/generated_columns.md) で高速化しましょう。
+:::
 
-パスの内容には `"` 、`[` 、`]` を含めないでください。
+パスに `.` が含まれる場合、`"` で囲むことができます。
+
+`[ ]` は配列の添字として使用され、0 から始まります。
+
+パスの内容には `"` 、`[` 、および `]` を含めてはいけません。
 
 json_string または json_path の形式が間違っている場合、この関数は NULL を返します。
 
@@ -22,7 +28,7 @@ DOUBLE get_json_double(VARCHAR json_str, VARCHAR json_path)
 
 ## 例
 
-1. キーが "k1" の値を取得
+1. キーが "k1" の値を取得する
 
     ```Plain Text
     MySQL > SELECT get_json_double('{"k1":1.3, "k2":"2"}', "$.k1");
@@ -33,7 +39,7 @@ DOUBLE get_json_double(VARCHAR json_str, VARCHAR json_path)
     +-------------------------------------------------+
     ```
 
-2. キーが "my.key" の配列の2番目の要素を取得
+2. キーが "my.key" の配列の2番目の要素を取得する
 
     ```Plain Text
     MySQL > SELECT get_json_double('{"k1":"v1", "my.key":[1.1, 2.2, 3.3]}', '$."my.key"[1]');
@@ -44,7 +50,7 @@ DOUBLE get_json_double(VARCHAR json_str, VARCHAR json_path)
     +---------------------------------------------------------------------------+
     ```
 
-3. パスが k1.key -> k2 の配列の最初の要素を取得
+3. パスが k1.key -> k2 の配列の最初の要素を取得する
 
     ```Plain Text
     MySQL > SELECT get_json_double('{"k1.key":{"k2":[1.1, 2.2]}}', '$."k1.key".k2[0]');
@@ -57,8 +63,4 @@ DOUBLE get_json_double(VARCHAR json_str, VARCHAR json_path)
 
 ## キーワード
 
-GET_JSON_DOUBLE, GET, JSON, DOUBLE
-
-:::tip
-すべての JSON 関数と演算子は、ナビゲーションと [overview page](../overview-of-json-functions-and-operators.md) に一覧されています。
-:::
+GET_JSON_DOUBLE,GET,JSON,DOUBLE

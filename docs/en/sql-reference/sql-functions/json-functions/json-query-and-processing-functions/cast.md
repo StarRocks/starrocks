@@ -4,9 +4,13 @@ displayed_sidebar: docs
 
 # cast
 
-
-
 Converts a value between the JSON type and SQL type.
+
+:::tip
+All of the JSON functions and operators are listed in the navigation and on the [overview page](../overview-of-json-functions-and-operators.md)
+
+Accelerate your queries with [generated columns](../../../sql-statements/generated_columns.md)
+:::
 
 ## Syntax
 
@@ -122,7 +126,3 @@ mysql> select cast(true as json);
 | true               |
 +--------------------+
 ```
-
-:::tip
-All of the JSON functions and operators are listed in the navigation and on the [overview page](../overview-of-json-functions-and-operators.md)
-:::

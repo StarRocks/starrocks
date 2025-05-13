@@ -6,6 +6,12 @@ displayed_sidebar: docs
 
 1 つ以上のキーと値のペアを JSON オブジェクトに変換します。このオブジェクトはキーと値のペアで構成され、キーは辞書順にソートされます。
 
+:::tip
+すべての JSON 関数と演算子はナビゲーションと [overview page](../overview-of-json-functions-and-operators.md) に一覧されています。
+
+クエリを [生成列](../../../sql-statements/generated_columns.md) で高速化しましょう。
+:::
+
 ## Syntax
 
 ```Haskell
@@ -14,9 +20,9 @@ json_object(key, value, ...)
 
 ## Parameters
 
-- `key`: JSON オブジェクト内のキー。VARCHAR データ型のみサポートされています。
+- `key`: JSON オブジェクト内のキー。VARCHAR データ型のみサポートされます。
 
-- `value`: JSON オブジェクト内の値。`NULL` 値と以下のデータ型のみサポートされています: STRING, VARCHAR, CHAR, JSON, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DOUBLE, FLOAT, および BOOLEAN。
+- `value`: JSON オブジェクト内の値。`NULL` 値と、次のデータ型のみサポートされます: STRING, VARCHAR, CHAR, JSON, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DOUBLE, FLOAT, および BOOLEAN。
 
 ## Return value
 
@@ -34,7 +40,7 @@ mysql> SELECT json_object('name', 'starrocks', 'active', true, 'published', 2020
        -> {"active": true, "name": "starrocks", "published": 2020}            
 ```
 
-Example 2: ネストされた JSON_OBJECT 関数を使用して JSON オブジェクトを構築します。
+Example 2: 入れ子になった JSON_OBJECT 関数を使用して JSON オブジェクトを構築します。
 
 ```plaintext
 mysql> SELECT json_object('k1', 1, 'k2', json_object('k2', 2), 'k3', json_array(4, 5));
@@ -49,7 +55,3 @@ mysql> SELECT json_object();
 
        -> {}
 ```
-
-:::tip
-すべての JSON 関数と演算子はナビゲーションおよび [overview page](../overview-of-json-functions-and-operators.md) に一覧されています。
-:::

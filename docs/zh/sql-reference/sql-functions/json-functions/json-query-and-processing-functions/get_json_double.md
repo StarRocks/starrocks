@@ -4,7 +4,13 @@ displayed_sidebar: docs
 
 # get_json_double
 
-此函数用于解析并从 JSON 字符串中指定路径获取浮点值。json_path 必须以 `$` 开头，并使用 `.` 作为路径分隔符。
+此函数用于分析并从 JSON 字符串中指定路径获取浮点值。json_path 必须以 `$` 开头，并使用 `.` 作为路径分隔符。
+
+:::tip
+所有的 JSON 函数和操作符都列在导航栏和[概览页面](../overview-of-json-functions-and-operators.md)
+
+通过[生成列](../../../sql-statements/generated_columns.md)加速查询
+:::
 
 如果路径中包含 `.`，可以用 `"` 和 `"` 包围。
 
@@ -33,7 +39,7 @@ DOUBLE get_json_double(VARCHAR json_str, VARCHAR json_path)
     +-------------------------------------------------+
     ```
 
-2. 获取数组中键为 "my.key" 的第二个元素
+2. 获取键为 "my.key" 的数组中的第二个元素
 
     ```Plain Text
     MySQL > SELECT get_json_double('{"k1":"v1", "my.key":[1.1, 2.2, 3.3]}', '$."my.key"[1]');
@@ -44,7 +50,7 @@ DOUBLE get_json_double(VARCHAR json_str, VARCHAR json_path)
     +---------------------------------------------------------------------------+
     ```
 
-3. 获取路径为 k1.key -> k2 的数组中的第一个元素
+3. 获取路径为 k1.key -> k2 的数组中的第一个元素。
 
     ```Plain Text
     MySQL > SELECT get_json_double('{"k1.key":{"k2":[1.1, 2.2]}}', '$."k1.key".k2[0]');
@@ -55,10 +61,6 @@ DOUBLE get_json_double(VARCHAR json_str, VARCHAR json_path)
     +---------------------------------------------------------------------+
     ```
 
-## 关键词
+## 关键字
 
 GET_JSON_DOUBLE,GET,JSON,DOUBLE
-
-:::tip
-所有的 JSON 函数和操作符都列在导航中和 [概览页面](../overview-of-json-functions-and-operators.md) 上。
-:::

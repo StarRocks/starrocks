@@ -6,6 +6,12 @@ displayed_sidebar: docs
 
 文字列を JSON 値に変換します。
 
+:::tip
+すべての JSON 関数と演算子はナビゲーションと [overview page](../overview-of-json-functions-and-operators.md) に一覧されています。
+
+クエリを [生成列](../../../sql-statements/generated_columns.md) で高速化しましょう。
+:::
+
 ## Syntax
 
 ```Haskell
@@ -14,7 +20,7 @@ parse_json(string_expr)
 
 ## Parameters
 
-`string_expr`: 文字列を表す式。STRING、VARCHAR、および CHAR データ型のみがサポートされています。
+`string_expr`: 文字列を表す式。STRING、VARCHAR、CHAR データ型のみがサポートされています。
 
 ## Return value
 
@@ -79,7 +85,7 @@ mysql> SELECT parse_json('{star: "rocks"}');
 +-------------------------------+
 ```
 
-Example 6: JSON キーに '.' が含まれている場合、例えば 'a.1' の場合、'\\' でエスケープするか、キー値全体をダブルクォーテーションで囲んでシングルクォーテーションで囲む必要があります。
+Example 6: JSON キーに '.' が含まれる場合、例えば 'a.1'、それは '\\' でエスケープするか、キー値全体をダブルクォーテーションで囲んでシングルクォーテーションで囲む必要があります。
 
 ```plaintext
 mysql> select parse_json('{"b":4, "a.1": "1"}')->"a\\.1";
@@ -99,7 +105,3 @@ mysql> select parse_json('{"b":4, "a.1": "1"}')->'"a.1"';
 ## Keywords
 
 parse_json, parse json
-
-:::tip
-すべての JSON 関数と演算子は、ナビゲーションと [overview page](../overview-of-json-functions-and-operators.md) に一覧されています。
-:::

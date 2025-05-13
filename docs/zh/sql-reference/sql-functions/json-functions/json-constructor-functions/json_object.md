@@ -6,6 +6,12 @@ displayed_sidebar: docs
 
 将一个或多个键值对转换为由这些键值对组成的 JSON 对象。键值对按字典顺序排序。
 
+:::tip
+所有的 JSON 函数和操作符都列在导航栏和[概述页面](../overview-of-json-functions-and-operators.md)
+
+通过[生成列](../../../sql-statements/generated_columns.md)加速查询
+:::
+
 ## 语法
 
 ```Haskell
@@ -22,7 +28,7 @@ json_object(key, value, ...)
 
 返回一个 JSON 对象。
 
-> 如果键和值的总数为奇数，JSON_OBJECT 函数将在最后一个字段填充 `NULL`。
+> 如果键和值的总数是奇数，JSON_OBJECT 函数将在最后一个字段填充 `NULL`。
 
 ## 示例
 
@@ -49,7 +55,3 @@ mysql> SELECT json_object();
 
        -> {}
 ```
-
-:::tip
-所有的 JSON 函数和操作符都列在导航栏和 [概览页面](../overview-of-json-functions-and-operators.md) 上。
-:::

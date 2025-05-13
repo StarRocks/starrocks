@@ -6,6 +6,12 @@ displayed_sidebar: docs
 
 返回 JSON 对象的顶级键作为 JSON 数组，或者如果指定了 `path`，则返回路径中的顶级键。
 
+:::tip
+所有的 JSON 函数和操作符都列在导航栏和[概览页面](../overview-of-json-functions-and-operators.md)
+
+通过[生成列](../../../sql-statements/generated_columns.md)加速查询
+:::
+
 ## 语法
 
 ```Haskell
@@ -14,7 +20,7 @@ json_keys(json_doc[, path])
 
 ## 参数
 
-`json_doc`：必需。要返回键的 JSON 文档。它必须是一个 JSON 对象。
+`json_doc`：必需。用于返回键的 JSON 文档。它必须是一个 JSON 对象。
 
 `path`：可选。路径通常以 `$` 开头，并使用 `.` 作为路径分隔符。`[]` 用作数组下标，从 0 开始。
 
@@ -95,7 +101,3 @@ select json_keys('[0, 1, {"a": 1, "b": 2}]', '$[2]');
 | ["a", "b"]                                    |
 +-----------------------------------------------+
 ```
-
-:::tip
-所有的 JSON 函数和操作符都列在导航栏和 [概览页面](../overview-of-json-functions-and-operators.md) 上。
-:::

@@ -4,7 +4,13 @@ displayed_sidebar: docs
 
 # json_each
 
-将 JSON 对象的最外层元素展开为一组包含在两列中的键值对，并返回一个由每个元素组成的表。
+将 JSON 对象的最外层元素展开为一组包含在两列中的键值对，并返回一个由每个元素组成一行的表。
+
+:::tip
+所有的 JSON 函数和操作符都列在导航栏和 [概览页面](../overview-of-json-functions-and-operators.md)
+
+通过 [生成列](../../../sql-statements/generated_columns.md) 加速查询
+:::
 
 ## 语法
 
@@ -22,12 +28,12 @@ json_each(json_object_expr)
 
 ## 使用说明
 
-json_each 函数是一个表函数，返回一个表。返回的表是由多行组成的结果集。因此，必须在 FROM 子句中使用 lateral join 将返回的表与原始表连接。lateral join 是强制性的，但 LATERAL 关键字是可选的。json_each 函数不能在 SELECT 子句中使用。
+json_each 函数是一个表函数，返回一个表。返回的表是由多行组成的结果集。因此，必须在 FROM 子句中使用 lateral join 将返回的表与原始表连接。lateral join 是必须的，但 LATERAL 关键字是可选的。json_each 函数不能在 SELECT 子句中使用。
 
 ## 示例
 
 ```plaintext
--- 以名为 tj 的表为例。在 tj 表中，j 列是一个 JSON 对象。
+-- 以一个名为 tj 的表为例。在 tj 表中，j 列是一个 JSON 对象。
 mysql> SELECT * FROM tj;
 +------+------------------+
 | id   | j                |
@@ -47,7 +53,3 @@ mysql> SELECT * FROM tj, LATERAL json_each(j);
 |    3 | {"a": 3}         | a    | 3     |
 +------+------------------+------+-------+
 ```
-
-:::tip
-所有的 JSON 函数和操作符都列在导航栏和[概述页面](../overview-of-json-functions-and-operators.md)上。
-:::

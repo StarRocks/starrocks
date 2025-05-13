@@ -6,23 +6,29 @@ displayed_sidebar: docs
 
 この関数は、指定されたパスから JSON 文字列内の整数値を解析して取得します。
 
-json_path は `$` で始まり、パスの区切りとして `.` を使用します。
+:::tip
+すべての JSON 関数と Operator は、ナビゲーションおよび [overview page](../overview-of-json-functions-and-operators.md) に一覧されています。
 
-パスに `.` が含まれる場合は、`"` と `"` で囲むことができます。
+クエリを [生成列](../../../sql-statements/generated_columns.md) で高速化しましょう。
+:::
+
+json_path は `$` で始まり、パスの区切りとして `.` を使用する必要があります。
+
+パスに `.` が含まれる場合は、`"` で囲むことができます。
 
 `[ ]` は配列の添字として使用され、0 から始まります。
 
-パスの内容には `"` 、`[` 、および `]` を含めないでください。
+パスの内容には `"` 、`[` 、`]` を含めることはできません。
 
 json_string または json_path の形式が間違っている場合、この関数は NULL を返します。
 
-## Syntax
+## 構文
 
 ```Haskell
 BIGINT get_json_int(VARCHAR json_str, VARCHAR json_path)
 ```
 
-## Examples
+## 例
 
 1. キーが "k1" の値を取得する
 
@@ -57,10 +63,6 @@ BIGINT get_json_int(VARCHAR json_str, VARCHAR json_path)
     +--------------------------------------------------------------+
     ```
 
-## keyword
+## キーワード
 
 GET_JSON_INT,GET,JSON,INT
-
-:::tip
-すべての JSON 関数と演算子は、ナビゲーションおよび [overview page](../overview-of-json-functions-and-operators.md) に一覧されています。
-:::
