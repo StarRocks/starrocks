@@ -36,17 +36,17 @@ package com.starrocks.catalog;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.google.common.collect.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
+import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap;
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -74,19 +74,19 @@ public class TabletInvertedIndex implements MemoryTrackable {
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     // tablet id -> tablet meta
-    private final Map<Long, TabletMeta> tabletMetaMap = Maps.newConcurrentMap();
+    private final Map<Long, TabletMeta> tabletMetaMap = new Long2ObjectOpenHashMap<>();
 
     // replica id -> tablet id
-    private final Map<Long, Long> replicaToTabletMap = Maps.newHashMap();
+    private final Map<Long, Long> replicaToTabletMap = new Long2LongOpenHashMap();
 
     // tablet id -> backend set
-    private final Map<Long, Set<Long>> forceDeleteTablets = Maps.newHashMap();
+    private final Map<Long, Set<Long>> forceDeleteTablets = new Long2ObjectOpenHashMap<>();
 
     // tablet id -> (backend id -> replica)
-    private final Table<Long, Long, Replica> replicaMetaTable = HashBasedTable.create();
+    private final Map<Long, Map<Long, Replica>> replicaMetaTable = new Long2ObjectOpenHashMap<>();
     // backing replica table, for visiting backend replicas faster.
     // backend id -> (tablet id -> replica)
-    private final Table<Long, Long, Replica> backingReplicaMetaTable = HashBasedTable.create();
+    private final Map<Long, Map<Long, Replica>> backingReplicaMetaTable = new Long2ObjectOpenHashMap<>();
 
     public TabletInvertedIndex() {
     }
@@ -224,14 +224,14 @@ public class TabletInvertedIndex implements MemoryTrackable {
         }
         writeLock();
         try {
-            Map<Long, Replica> replicas = replicaMetaTable.rowMap().remove(tabletId);
+            Map<Long, Replica> replicas = replicaMetaTable.remove(tabletId);
             if (replicas != null) {
                 for (Replica replica : replicas.values()) {
                     replicaToTabletMap.remove(replica.getId());
                 }
 
                 for (long backendId : replicas.keySet()) {
-                    backingReplicaMetaTable.remove(backendId, tabletId);
+                    removeReplica(backingReplicaMetaTable, backendId, tabletId);
                 }
             }
             tabletMetaMap.remove(tabletId);
@@ -242,7 +242,7 @@ public class TabletInvertedIndex implements MemoryTrackable {
         }
     }
 
-    public Table<Long, Long, Replica> getReplicaMetaTable() {
+    public  Map<Long, Map<Long, Replica>> getReplicaMetaTable() {
         return replicaMetaTable;
     }
 
@@ -253,9 +253,9 @@ public class TabletInvertedIndex implements MemoryTrackable {
         writeLock();
         try {
             Preconditions.checkState(tabletMetaMap.containsKey(tabletId));
-            replicaMetaTable.put(tabletId, replica.getBackendId(), replica);
+            setReplica(replicaMetaTable, tabletId, replica.getBackendId(), replica);
             replicaToTabletMap.put(replica.getId(), tabletId);
-            backingReplicaMetaTable.put(replica.getBackendId(), tabletId, replica);
+            setReplica(backingReplicaMetaTable, replica.getBackendId(), tabletId, replica);
             LOG.debug("add replica {} of tablet {} in backend {}",
                     replica.getId(), tabletId, replica.getBackendId());
         } finally {
@@ -272,12 +272,11 @@ public class TabletInvertedIndex implements MemoryTrackable {
             if (!tabletMetaMap.containsKey(tabletId)) {
                 return;
             }
-            if (replicaMetaTable.containsRow(tabletId)) {
-                Replica replica = replicaMetaTable.remove(tabletId, backendId);
-                assert replica != null;
+            if (replicaMetaTable.containsKey(tabletId)) {
+                Replica replica = removeReplica(replicaMetaTable, tabletId, backendId);
+                Preconditions.checkState(replica != null);
                 replicaToTabletMap.remove(replica.getId());
-                replicaMetaTable.remove(tabletId, backendId);
-                backingReplicaMetaTable.remove(backendId, tabletId);
+                removeReplica(backingReplicaMetaTable, backendId, tabletId);
                 LOG.debug("delete replica {} of tablet {} in backend {}",
                         replica.getId(), tabletId, backendId);
             } else {
@@ -293,7 +292,7 @@ public class TabletInvertedIndex implements MemoryTrackable {
     public Replica getReplica(long tabletId, long backendId) {
         readLock();
         try {
-            return replicaMetaTable.get(tabletId, backendId);
+            return getReplica(replicaMetaTable, tabletId, backendId);
         } finally {
             readUnlock();
         }
@@ -302,8 +301,8 @@ public class TabletInvertedIndex implements MemoryTrackable {
     public List<Replica> getReplicasByTabletId(long tabletId) {
         readLock();
         try {
-            if (replicaMetaTable.containsRow(tabletId)) {
-                return Lists.newArrayList(replicaMetaTable.row(tabletId).values());
+            if (replicaMetaTable.containsKey(tabletId)) {
+                return Lists.newArrayList(replicaMetaTable.get(tabletId).values());
             }
             return Lists.newArrayList();
         } finally {
@@ -321,7 +320,7 @@ public class TabletInvertedIndex implements MemoryTrackable {
     public List<Replica> getReplicasOnBackendByTabletIds(List<Long> tabletIds, long backendId) {
         readLock();
         try {
-            Map<Long, Replica> replicaMetaWithBackend = backingReplicaMetaTable.row(backendId);
+            Map<Long, Replica> replicaMetaWithBackend = row(backingReplicaMetaTable, backendId);
             if (!replicaMetaWithBackend.isEmpty()) {
                 List<Replica> replicas = Lists.newArrayList();
                 for (long tabletId : tabletIds) {
@@ -339,7 +338,7 @@ public class TabletInvertedIndex implements MemoryTrackable {
         List<Long> tabletIds = Lists.newArrayList();
         readLock();
         try {
-            Map<Long, Replica> replicaMetaWithBackend = backingReplicaMetaTable.row(backendId);
+            Map<Long, Replica> replicaMetaWithBackend = row(backingReplicaMetaTable, backendId);
             tabletIds.addAll(replicaMetaWithBackend.keySet());
         } finally {
             readUnlock();
@@ -348,23 +347,21 @@ public class TabletInvertedIndex implements MemoryTrackable {
     }
 
     public List<Long> getTabletIdsByBackendIdAndStorageMedium(long backendId, TStorageMedium storageMedium) {
-        List<Long> tabletIds;
         readLock();
         try {
-            Map<Long, Replica> replicaMetaWithBackend = backingReplicaMetaTable.row(backendId);
-            tabletIds = replicaMetaWithBackend.keySet().stream().filter(
-                    id -> tabletMetaMap.get(id).getStorageMedium() == storageMedium).collect(Collectors.toList());
+            Map<Long, Replica> replicaMetaWithBackend = row(backingReplicaMetaTable, backendId);
+            return replicaMetaWithBackend.keySet().stream()
+                    .filter(id -> tabletMetaMap.get(id).getStorageMedium() == storageMedium)
+                    .collect(Collectors.toList());
         } finally {
             readUnlock();
         }
-        return tabletIds;
     }
 
     public long getTabletNumByBackendId(long backendId) {
         readLock();
         try {
-            Map<Long, Replica> replicaMetaWithBackend = backingReplicaMetaTable.row(backendId);
-            return replicaMetaWithBackend.size();
+            return row(backingReplicaMetaTable, backendId).size();
         } finally {
             readUnlock();
         }
@@ -373,7 +370,7 @@ public class TabletInvertedIndex implements MemoryTrackable {
     public long getTabletNumByBackendIdAndPathHash(long backendId, long pathHash) {
         readLock();
         try {
-            Map<Long, Replica> replicaMetaWithBackend = backingReplicaMetaTable.row(backendId);
+            Map<Long, Replica> replicaMetaWithBackend = row(backingReplicaMetaTable, backendId);
             return replicaMetaWithBackend.values().stream().filter(r -> r.getPathHash() == pathHash).count();
         } finally {
             readUnlock();
@@ -386,7 +383,7 @@ public class TabletInvertedIndex implements MemoryTrackable {
         long ssdNum = 0;
         readLock();
         try {
-            Map<Long, Replica> replicaMetaWithBackend = backingReplicaMetaTable.row(backendId);
+            Map<Long, Replica> replicaMetaWithBackend = row(backingReplicaMetaTable, backendId);
             for (long tabletId : replicaMetaWithBackend.keySet()) {
                 if (tabletMetaMap.get(tabletId).getStorageMedium() == TStorageMedium.HDD) {
                     hddNum++;
@@ -409,14 +406,14 @@ public class TabletInvertedIndex implements MemoryTrackable {
     public long getReplicaCount() {
         readLock();
         try {
-            return this.replicaMetaTable.size();
+            return this.replicaToTabletMap.size();
         } finally {
             readUnlock();
         }
     }
 
     public Map<Long, Replica> getReplicaMetaWithBackend(Long backendId) {
-        return backingReplicaMetaTable.row(backendId);
+        return backingReplicaMetaTable.get(backendId);
     }
 
     // just for test
@@ -457,5 +454,42 @@ public class TabletInvertedIndex implements MemoryTrackable {
         } finally {
             readUnlock();
         }
+    }
+
+    private static Replica getReplica(Map<Long, Map<Long, Replica>> table, long rowKey, long columnKey) {
+        if (table.containsKey(rowKey)) {
+            return table.get(rowKey).get(columnKey);
+        }
+        return null;
+    }
+
+    private static void setReplica(Map<Long, Map<Long, Replica>> table, long rowKey, long columnKey, Replica replica) {
+        if (table.containsKey(rowKey)) {
+            table.get(rowKey).put(columnKey, replica);
+        } else {
+            Map<Long, Replica> column = new Long2ObjectOpenHashMap<>();
+            column.put(columnKey, replica);
+            table.put(rowKey, column);
+        }
+    }
+
+    private static Replica removeReplica(Map<Long, Map<Long, Replica>> table, long rowKey, long columnKey) {
+        if (table.containsKey(rowKey)) {
+            Map<Long, Replica> row = table.get(rowKey);
+            Replica replica = row.remove(columnKey);
+            if (row.isEmpty()) {
+                table.remove(rowKey);
+            }
+            return replica;
+        }
+        return null;
+    }
+
+    private static Map<Long, Replica> row(Map<Long, Map<Long, Replica>> table, long rowKey) {
+        Map<Long, Replica> row = table.get(rowKey);
+        if (row == null) {
+            row = new Long2ObjectOpenHashMap<>();
+        }
+        return row;
     }
 }
