@@ -6,7 +6,13 @@ displayed_sidebar: docs
 
 将 Map 或 Struct 值转换为 JSON 字符串。如果输入值为 NULL，则返回 NULL。
 
-如果您想转换其他数据类型的值，请参阅 [cast](./cast.md)。
+:::tip
+所有的 JSON 函数和运算符都列在导航栏和[概述页面](../overview-of-json-functions-and-operators.md)上
+
+通过[生成列](../../../sql-statements/generated_columns.md)加速查询
+:::
+
+如果您想转换其他数据类型的值，请参阅[cast](./cast.md)。
 
 此函数从 v3.1 开始支持。
 

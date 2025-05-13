@@ -6,25 +6,31 @@ displayed_sidebar: docs
 
 Map または Struct の値を JSON 文字列に変換します。入力値が NULL の場合、NULL が返されます。
 
-他のデータ型の値をキャストしたい場合は、 [cast](./cast.md) を参照してください。
+:::tip
+すべての JSON 関数と演算子はナビゲーションと [overview page](../overview-of-json-functions-and-operators.md) に一覧されています。
+
+クエリを [生成列](../../../sql-statements/generated_columns.md) で高速化しましょう。
+:::
+
+他のデータ型の値をキャストしたい場合は、[cast](./cast.md) を参照してください。
 
 この関数は v3.1 以降でサポートされています。
 
-## Syntax
+## 構文
 
 ```Haskell
 to_json(any_value)
 ```
 
-## Parameters
+## パラメータ
 
-`any_value`: 変換したい Map または Struct の式です。入力値が無効な場合、エラーが返されます。Map または Struct の各キーと値のペアの値は nullable です。最後の例を参照してください。
+`any_value`: 変換したい Map または Struct 式。入力値が無効な場合、エラーが返されます。Map または Struct 値の各キーと値のペアの値は nullable です。最後の例を参照してください。
 
-## Return value
+## 戻り値
 
 JSON 値を返します。
 
-## Examples
+## 例
 
 ```Haskell
 select to_json(map{1:'a',2:'b'});
@@ -56,9 +62,9 @@ select to_json(named_struct("k1", cast(null as string), "k2", "v2"));
 +-----------------------------------------------------------------------+
 ```
 
-## See also
+## 関連項目
 
-- [ Map data type](../../../data-types/semi_structured/Map.md)
-- [ Struct data type](../../../data-types/semi_structured/STRUCT.md)
-- [ Map functions](../../README.md#map-functions)
-- [ Struct functions](../../README.md#struct-functions)
+- [Map data type](../../../data-types/semi_structured/Map.md)
+- [Struct data type](../../../data-types/semi_structured/STRUCT.md)
+- [Map functions](../../README.md#map-functions)
+- [Struct functions](../../README.md#struct-functions)
