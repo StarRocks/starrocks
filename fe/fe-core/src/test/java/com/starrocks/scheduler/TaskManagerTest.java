@@ -20,6 +20,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.ThreadUtil;
@@ -818,5 +819,71 @@ public class TaskManagerTest {
         taskRun.getStatus().setPriority(0);
         TaskRunStatus taskRunStatus = taskRun.getStatus();
         Assert.assertEquals(taskRunStatus.getDefinition(), "select 1");
+    }
+
+    @Test
+    public void testTaskRunWithLargeDefinition1() {
+        Task task = new Task("test");
+        StringBuilder sb = new StringBuilder("select ");
+        for (int i = 0; i < SystemTable.MAX_FIELD_VARCHAR_LENGTH; i++) {
+            sb.append("\n ");
+        }
+        sb.append(" 1");
+        task.setDefinition(sb.toString());
+
+        long taskId = 1;
+        TaskRun taskRun1 = TaskRunBuilder
+                .newBuilder(task)
+                .setExecuteOption(makeExecuteOption(true, false))
+                .build();
+        long now = System.currentTimeMillis();
+        taskRun1.setTaskId(taskId);
+        taskRun1.initStatus("1", now);
+        taskRun1.getStatus().setPriority(0);
+
+        Assert.assertTrue(taskRun1.getStatus().getDefinition().equals("select 1"));
+    }
+
+    @Test
+    public void testTaskRunWithLargeDefinition2() {
+        Task task = new Task("test");
+        StringBuilder sb = new StringBuilder("select ");
+        for (int i = 0; i < SystemTable.MAX_FIELD_VARCHAR_LENGTH; i++) {
+            sb.append("'a', \n ");
+        }
+        sb.append(" 1");
+        task.setDefinition(sb.toString());
+
+        long taskId = 1;
+        TaskRun taskRun1 = TaskRunBuilder
+                .newBuilder(task)
+                .setExecuteOption(makeExecuteOption(true, false))
+                .build();
+        long now = System.currentTimeMillis();
+        taskRun1.setTaskId(taskId);
+        taskRun1.initStatus("1", now);
+        taskRun1.getStatus().setPriority(0);
+
+        String definition = taskRun1.getStatus().getDefinition();
+        Assert.assertTrue(definition.length() == SystemTable.MAX_FIELD_VARCHAR_LENGTH / 4);
+    }
+
+    @Test
+    public void testTaskRunWithLargeDefinition3() {
+        Task task = new Task("test");
+        task.setDefinition(null);
+
+        long taskId = 1;
+        TaskRun taskRun1 = TaskRunBuilder
+                .newBuilder(task)
+                .setExecuteOption(makeExecuteOption(true, false))
+                .build();
+        long now = System.currentTimeMillis();
+        taskRun1.setTaskId(taskId);
+        taskRun1.initStatus("1", now);
+        taskRun1.getStatus().setPriority(0);
+
+        String definition = taskRun1.getStatus().getDefinition();
+        Assert.assertTrue(definition == null);
     }
 }
