@@ -445,12 +445,7 @@ public class TabletInvertedIndex implements MemoryTrackable {
                     .limit(1)
                     .collect(Collectors.toList());
 
-            List<Object> longSamples = Lists.newArrayList(0L);
-            long longSize = tabletMetaMap.size() + replicaToTabletMap.size() * 2L + forceDeleteTablets.size() * 4L
-                    + replicaMetaTable.size() * 2L + backingReplicaMetaTable.size() * 2L;
-
-            return Lists.newArrayList(Pair.create(tabletMetaSamples, (long) tabletMetaMap.size()),
-                    Pair.create(longSamples, longSize));
+            return Lists.newArrayList(Pair.create(tabletMetaSamples, (long) tabletMetaMap.size()));
         } finally {
             readUnlock();
         }
