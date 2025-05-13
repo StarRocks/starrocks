@@ -45,18 +45,16 @@ void TableMetricsManager::cleanup() {
     if (current_second - _last_cleanup_ts <= kCleanupIntervalSeconds) {
         return;
     }
-    std::vector<TableMetricsPtr> delete_metrics;
-    std::unique_lock l(_mu);
-    for (auto iter = _metrics_map.begin(), last = _metrics_map.end(); iter != last;) {
-        if (iter->second->ref_count == 0) {
-            delete_metrics.emplace_back(iter->second);
-            iter = _metrics_map.erase(iter);
-        } else {
-            ++iter;
+
+    std::vector<std::pair<uint64_t, TableMetricsPtr>> delete_metrics;
+    _metrics_map.for_each([&] (const auto& pair) {
+        if (pair.second->ref_count == 0) {
+            delete_metrics.emplace_back(pair.first, pair.second);
         }
-    }
-    for (auto& metrics : delete_metrics) {
-        metrics->uninstall(_metrics);
+    });
+    for (const auto& pair: delete_metrics) {
+        _metrics_map.erase(pair.first);
+        pair.second->uninstall(_metrics);
     }
     _last_cleanup_ts = MonotonicSeconds();
 }

@@ -13,11 +13,13 @@
 // limitations under the License.
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <shared_mutex>
 
 #include "util/metrics.h"
 #include "util/phmap/phmap.h"
+#include "util/phmap/phmap_base.h"
 
 namespace starrocks {
 
@@ -47,28 +49,22 @@ public:
     TableMetricsManager(MetricRegistry* metrics) : _metrics(metrics) {}
 
     void register_table(uint64_t table_id) {
-        bool is_created = false;
         TableMetricsPtr metrics_ptr;
-        {
-            std::unique_lock l(_mu);
-            auto [iter, ret] = _metrics_map.try_emplace(table_id, std::make_shared<TableMetrics>());
-            metrics_ptr = iter->second;
-            metrics_ptr->ref_count++;
-            is_created = ret;
-        }
+        auto [iter, is_created] = _metrics_map.try_emplace(table_id, std::make_shared<TableMetrics>());
+        metrics_ptr = iter->second;
+        metrics_ptr->ref_count++;
+
         if (is_created) {
             metrics_ptr->install(_metrics, std::to_string(table_id));
         }
     }
     void unregister_table(uint64_t table_id) {
-        std::unique_lock l(_mu);
         DCHECK(_metrics_map.contains(table_id));
         auto metrics_ptr = _metrics_map.at(table_id);
         metrics_ptr->ref_count--;
     }
 
     TableMetricsPtr get_table_metrics(uint64_t table_id) {
-        std::shared_lock l(_mu);
         auto iter = _metrics_map.find(table_id);
         if (iter != _metrics_map.end()) {
             return iter->second;
@@ -80,9 +76,8 @@ public:
 
 private:
     MetricRegistry* _metrics;
-    std::shared_mutex _mu;
-    phmap::flat_hash_map<uint64_t, TableMetricsPtr> _metrics_map;
-    phmap::parallel_flat_hash_map<uint64_t, TableMetricsPtr> _metrics_map_0;
+    using MetricsMap = phmap::parallel_flat_hash_map<uint64_t, TableMetricsPtr, phmap::Hash<uint64_t>, phmap::EqualTo<uint64_t>, phmap::Allocator<uint64_t>, 4, std::shared_mutex>;
+    MetricsMap _metrics_map;
     // In some cases, we may not be able to obtain the metrics for the corresponding table id,
     // For example, when drop tablet and data load concurrently,
     // the Tablets may have been deleted before the load begins, and the table metrics may be cleared.
