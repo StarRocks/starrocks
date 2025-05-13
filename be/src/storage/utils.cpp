@@ -321,9 +321,6 @@ bool valid_decimal(const string& value_str, uint32_t precision, uint32_t frac) {
 }
 
 bool valid_datetime(const string& value_str) {
-    //const char* datetime_pattern =
-    //        "((?:\\d){4})-((?:\\d){2})-((?:\\d){2})[ ]*"
-    //        "(((?:\\d){2}):((?:\\d){2}):((?:\\d){2}))?";
     const char* datetime_pattern =
             "((?:\\d){4})-((?:\\d){2})-((?:\\d){2})[ ]*"
             "(((?:\\d){2}):((?:\\d){2}):((?:\\d){2})(\\.(\\d{1,6}))?)?";
