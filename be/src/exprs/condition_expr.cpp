@@ -223,7 +223,7 @@ public:
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(auto bhs, _children[0]->evaluate_checked(context, ptr));
-        int true_count = ColumnHelper::count_true_with_notnull(bhs);
+        const int true_count = ColumnHelper::count_true_with_notnull(bhs);
 
         ASSIGN_OR_RETURN(auto lhs, _children[1]->evaluate_checked(context, ptr));
         if (true_count == bhs->size()) {
