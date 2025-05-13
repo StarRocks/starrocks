@@ -32,10 +32,6 @@ public class StarRocksLoggerFactory {
     public StarRocksLoggerFactory() {
     }
 
-<<<<<<< HEAD
-    public Logger getLogger(Class<?> clazz) {
-        if (Strings.isNullOrEmpty(prefix)) {
-=======
     /**
      * @param clazz The class to get the logger for
      * @param prefix The prefix to be used for the logger
@@ -43,7 +39,6 @@ public class StarRocksLoggerFactory {
      */
     public Logger getLogger(Class<?> clazz, String prefix) {
         if (!Config.enable_mv_refresh_extra_prefix_logging || Strings.isNullOrEmpty(prefix)) {
->>>>>>> ba4987d7a5 ([Enhancement] Reduce mv refresh task run size and optimize logging messages (#58626))
             return LogManager.getLogger(clazz);
         } else {
             final LoggerContext loggerContext = LogManager.getContext(LogManager.class.getClassLoader(), false);
