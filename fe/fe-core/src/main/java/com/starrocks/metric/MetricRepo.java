@@ -458,6 +458,27 @@ public final class MetricRepo {
         GAUGE_SAFE_MODE.setValue(0);
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_SAFE_MODE);
 
+<<<<<<< HEAD
+=======
+        GaugeMetric<Long> gaugeReportQueueSize = new GaugeMetric<Long>(
+                "report_queue_size", MetricUnit.NOUNIT, "report queue size") {
+            @Override
+            public Long getValue() {
+                return (long) GlobalStateMgr.getCurrentState().getReportHandler().getReportQueueSize();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(gaugeReportQueueSize);
+
+        GaugeMetric<Long> totalTabletCount = new GaugeMetric<Long>(
+                "tablet_count", MetricUnit.NOUNIT, "total tablet count") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletCount();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(totalTabletCount);
+
+>>>>>>> 0b7e2e6c3c ([Enhancement] support fe total tablet count metric (#58876))
         // 2. counter
         COUNTER_REQUEST_ALL = new LongCounterMetric("request_total", MetricUnit.REQUESTS, "total request");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_REQUEST_ALL);
