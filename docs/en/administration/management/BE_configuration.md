@@ -2109,7 +2109,6 @@ When this value is set to less than `0`, the system uses the product of its abso
   - The default value of this item has been changed from `true` to `false` since StarRocks v2.4.
 - Introduced in: -
 
-<!--
 ##### enable_bitmap_index_memory_page_cache
 
 - Default: true 
@@ -2118,9 +2117,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: Whether to enable memory cache for Bitmap index. Memory cache is recommended if you want to use Bitmap indexes to accelerate point queries.
 - Introduced in: v3.1
--->
 
-<!--
 ##### enable_zonemap_index_memory_page_cache
 
 - Default: true
@@ -2129,9 +2126,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: Whether to enable memory cache for zonemap index. Memory cache is recommended if you want to use zonemap indexes to accelerate scan.
 - Introduced in: -
--->
 
-<!--
 ##### enable_ordinal_index_memory_page_cache
 
 - Default: true
@@ -2140,7 +2135,6 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: Whether to enable memory cache for ordinal index. Ordinal index is a mapping from row IDs to data page positions, and it can be used to accelerate scans.
 - Introduced in: -
--->
 
 ##### fragment_pool_thread_num_min
 
