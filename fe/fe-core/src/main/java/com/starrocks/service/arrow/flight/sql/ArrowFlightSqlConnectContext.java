@@ -50,7 +50,7 @@ import java.util.concurrent.TimeoutException;
 public class ArrowFlightSqlConnectContext extends ConnectContext {
     private final BufferAllocator allocator;
 
-    private final String token;
+    private final String arrowFlightSqlToken;
 
     private StmtExecutor stmtExecutor;
 
@@ -77,10 +77,10 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
             })
             .build();
 
-    public ArrowFlightSqlConnectContext(String token) {
+    public ArrowFlightSqlConnectContext(String arrowFlightSqlToken) {
         super();
         this.allocator = new RootAllocator(Long.MAX_VALUE);
-        this.token = token;
+        this.arrowFlightSqlToken = arrowFlightSqlToken;
         this.statement = null;
         this.query = "";
         this.coordinatorFuture = new CompletableFuture<>();
@@ -132,8 +132,8 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
         this.returnResultFromFE = returnResultFromFE;
     }
 
-    public String getToken() {
-        return token;
+    public String getArrowFlightSqlToken() {
+        return arrowFlightSqlToken;
     }
 
     public void removeAllResults() {
@@ -221,11 +221,6 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
         VectorSchemaRoot root = new VectorSchemaRoot(schemaFields, dataFields);
         root.setRowCount(resultData.size());
         resultCache.put(queryId, new ArrowSchemaRootWrapper(root));
-    }
-
-    @Override
-    public boolean isArrowFlightSQL() {
-        return true;
     }
 
     public boolean isFromFECoordinator() {

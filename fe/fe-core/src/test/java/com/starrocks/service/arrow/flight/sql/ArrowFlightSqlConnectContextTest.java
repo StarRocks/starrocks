@@ -55,7 +55,7 @@ public class ArrowFlightSqlConnectContextTest {
 
     @Test
     public void testConstructor() {
-        assertEquals(token, context.getToken());
+        assertEquals(token, context.getArrowFlightSqlToken());
         assertEquals("", context.getQuery());
         assertTrue(context.returnFromFE());
     }
@@ -154,7 +154,7 @@ public class ArrowFlightSqlConnectContextTest {
 
     @Test
     public void testIsArrowFlightSQL() {
-        assertTrue(context.isArrowFlightSQL());
+        assertTrue(context instanceof ArrowFlightSqlConnectContext);
     }
 
     @Test

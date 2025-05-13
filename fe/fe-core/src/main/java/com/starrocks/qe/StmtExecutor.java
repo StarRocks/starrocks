@@ -685,7 +685,7 @@ public class StmtExecutor {
                     } catch (Exception e) {
                         // For Arrow Flight SQL, FE doesn't know whether the client has already pull data from BE.
                         // So FE cannot decide whether it is able to retry.
-                        if (i == retryTime - 1 || context.isArrowFlightSQL()) {
+                        if (i == retryTime - 1 || context instanceof ArrowFlightSqlConnectContext) {
                             throw e;
                         }
                         ExecuteExceptionHandler.handle(e, retryContext);
@@ -1358,7 +1358,7 @@ public class StmtExecutor {
         RowBatch batch = null;
         if (context instanceof HttpConnectContext) {
             batch = httpResultSender.sendQueryResult(coord, execPlan, parsedStmt.getOrigStmt().getOrigStmt());
-        } else if (context.isArrowFlightSQL()) {
+        } else if (context instanceof ArrowFlightSqlConnectContext) {
             ArrowFlightSqlConnectContext ctx = (ArrowFlightSqlConnectContext) context;
             ctx.setReturnResultFromFE(false);
             ctx.setDeploymentFinished(coord);
@@ -1409,7 +1409,7 @@ public class StmtExecutor {
             }
         }
 
-        if (context.isArrowFlightSQL()) {
+        if (context instanceof ArrowFlightSqlConnectContext) {
             coord.join(0);
         }
 
@@ -1951,7 +1951,7 @@ public class StmtExecutor {
         }
 
         // Send result set for Arrow Flight SQL.
-        if (context.isArrowFlightSQL()) {
+        if (context instanceof ArrowFlightSqlConnectContext) {
             ArrowFlightSqlConnectContext ctx = (ArrowFlightSqlConnectContext) context;
             ctx.addShowResult(DebugUtil.printId(ctx.getExecutionId()), resultSet);
             context.getState().setEof();

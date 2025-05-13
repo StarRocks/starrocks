@@ -126,7 +126,7 @@ public class ArrowFlightSqlServiceImplTest {
         when(mockContext.getExecutionId()).thenReturn(new com.starrocks.thrift.TUniqueId(1, 1));
         when(mockContext.returnFromFE()).thenReturn(true);
         when(mockContext.isFromFECoordinator()).thenReturn(true);
-        when(mockContext.getToken()).thenReturn("token123");
+        when(mockContext.getArrowFlightSqlToken()).thenReturn("token123");
 
         CallHeaders mockHeaders = mock(CallHeaders.class);
         when(mockHeaders.get("database")).thenReturn("test_db");

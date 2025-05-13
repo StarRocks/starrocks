@@ -158,7 +158,7 @@ public class ConnectScheduler {
 
             if (ctx instanceof ArrowFlightSqlConnectContext) {
                 ArrowFlightSqlConnectContext context = (ArrowFlightSqlConnectContext) ctx;
-                arrowFlightSqlConnectContextMap.put(context.getToken(), context);
+                arrowFlightSqlConnectContextMap.put(context.getArrowFlightSqlToken(), context);
             }
 
             return new Pair<>(true, null);
@@ -185,7 +185,7 @@ public class ConnectScheduler {
 
             if (ctx instanceof ArrowFlightSqlConnectContext) {
                 ArrowFlightSqlConnectContext context = (ArrowFlightSqlConnectContext) ctx;
-                arrowFlightSqlConnectContextMap.remove(context.getToken());
+                arrowFlightSqlConnectContextMap.remove(context.getArrowFlightSqlToken());
             }
         } finally {
             connStatsLock.unlock();

@@ -124,7 +124,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     public void closeSession(CloseSessionRequest request, CallContext context, StreamListener<CloseSessionResult> listener) {
         ArrowFlightSqlConnectContext ctx = sessionManager.validateAndGetConnectContext(context.peerIdentity());
         ctx.kill(true, "arrow flight sql close session");
-        sessionManager.closeSession(ctx.getToken());
+        sessionManager.closeSession(ctx.getArrowFlightSqlToken());
     }
 
     /**
@@ -532,7 +532,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
     private static ByteString buildFETicket(ArrowFlightSqlConnectContext ctx) {
         // FETicket: <Token> : <QueryId>
-        return ByteString.copyFromUtf8(ctx.getToken() + ":" + DebugUtil.printId(ctx.getExecutionId()));
+        return ByteString.copyFromUtf8(ctx.getArrowFlightSqlToken() + ":" + DebugUtil.printId(ctx.getExecutionId()));
     }
 
     private static ByteString buildBETicket(TUniqueId queryId, TUniqueId rootFragmentInstanceId) {
