@@ -51,7 +51,7 @@ import java.util.stream.Collectors;
  */
 public class TaskRunHistoryTable {
 
-    public static final int INSERT_BATCH_SIZE = 128;
+    public static final int INSERT_BATCH_SIZE = 32;
     private static final int DEFAULT_RETENTION_DAYS = 7;
     public static final String DATABASE_NAME = StatsConstants.STATISTICS_DB_NAME;
     public static final String TABLE_NAME = "task_run_history";
