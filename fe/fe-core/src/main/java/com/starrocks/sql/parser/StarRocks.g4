@@ -2315,7 +2315,7 @@ relationPrimary
         AS? alias=identifier)? bracketHint? (BEFORE ts=string)?                          #tableAtom
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'
         (AS? alias=identifier columnAliases?)?                                          #inlineTable
-    | subquery (AS? alias=identifier columnAliases?)?                                   #subqueryWithAlias
+    | ASSERT_ROWS? subquery (AS? alias=identifier columnAliases?)?                      #subqueryWithAlias
     | qualifiedName '(' expressionList ')'
         (AS? alias=identifier columnAliases?)?                                          #tableFunction
     | TABLE '(' qualifiedName '(' argumentList ')' ')'
@@ -2374,6 +2374,7 @@ outerAndSemiJoinType
     | FULL OUTER JOIN
     | LEFT SEMI JOIN | RIGHT SEMI JOIN
     | LEFT ANTI JOIN | RIGHT ANTI JOIN
+    | NULL AWARE LEFT ANTI JOIN
     ;
 
 bracketHint
@@ -3046,7 +3047,7 @@ number
 
 nonReserved
     : ACCESS | ACTIVE | ADVISOR | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT | AUTOMATED
-    | ARRAY_AGG | ARRAY_AGG_DISTINCT
+    | ARRAY_AGG | ARRAY_AGG_DISTINCT | ASSERT_ROWS | AWARE
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BRANCH | BROKER | BUCKETS
     | BUILTIN | BASE | BEFORE | BASELINE
     | CACHE | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
