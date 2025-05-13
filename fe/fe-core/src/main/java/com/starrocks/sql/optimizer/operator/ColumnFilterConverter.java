@@ -201,16 +201,14 @@ public class ColumnFilterConverter {
                 return;
             }
             ScalarOperator clone = predicate.clone();
-            List<ScalarOperator> newChildren = Lists.newArrayList();
+            clone.getChildren().clear();
             for (ScalarOperator child : clone.getChildren()) {
                 if (!SPMFunctions.isSPMFunctions(child)) {
-                    newChildren.add(child);
+                    clone.getChildren().add(child);
                 } else {
-                    newChildren.addAll(SPMFunctions.revertSPMFunctions(child));
+                    clone.getChildren().addAll(SPMFunctions.revertSPMFunctions(child));
                 }
             }
-            clone.getChildren().clear();
-            clone.getChildren().addAll(newChildren);
             predicate = clone;
         }
 

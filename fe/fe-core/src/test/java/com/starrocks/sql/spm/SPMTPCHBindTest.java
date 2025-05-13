@@ -175,12 +175,15 @@ public class SPMTPCHBindTest extends PlanTestBase {
     }
 
     @Test
-    public void validatePlanSQL() throws Exception {
-        CreateBaselinePlanStmt stmt = createBaselinePlanStmt(TpchSQL.Q19);
+    public void validatePlanSQL() {
+        CreateBaselinePlanStmt stmt = createBaselinePlanStmt(TpchSQL.Q22);
+        SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
+        generator.execute();
 
-        SPMStmtExecutor.execute(connectContext, stmt);
-        connectContext.getSessionVariable().setEnableSPMRewrite(true);
-        String s = getFragmentPlan(TpchSQL.Q19);
-        System.out.println(s);
+        String bindSQL = generator.getBindSql();
+        String planSQL = generator.getPlanStmtSQL();
+
+        analyzeSuccess(bindSQL);
+        analyzeSuccess(planSQL);
     }
 }

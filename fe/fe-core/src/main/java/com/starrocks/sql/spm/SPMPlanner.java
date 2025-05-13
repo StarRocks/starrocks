@@ -87,15 +87,16 @@ public class SPMPlanner {
                 plans.addAll(session.getSqlPlanStorage().findBaselinePlan(digest, hash));
                 plans.addAll(GlobalStateMgr.getCurrentState().getSqlPlanStorage().findBaselinePlan(digest, hash));
                 checkTimeout();
-                plans.sort((o1, o2) -> {
-                    if (o1.getQueryMs() > 0 && o2.getQueryMs() > 0) {
-                        return Double.compare(o1.getQueryMs(), o2.getQueryMs());
-                    } else if (o1.getQueryMs() < 0 && o2.getQueryMs() < 0) {
-                        return Double.compare(o1.getCosts(), o2.getCosts());
-                    } else {
-                        return o1.getQueryMs() > 0 ? 1 : -1;
-                    }
-                });
+                plans = plans.stream().filter(BaselinePlan::isEnable)
+                        .sorted((o1, o2) -> {
+                            if (o1.getQueryMs() > 0 && o2.getQueryMs() > 0) {
+                                return Double.compare(o1.getQueryMs(), o2.getQueryMs());
+                            } else if (o1.getQueryMs() < 0 && o2.getQueryMs() < 0) {
+                                return Double.compare(o1.getCosts(), o2.getCosts());
+                            } else {
+                                return o1.getQueryMs() > 0 ? 1 : -1;
+                            }
+                        }).toList();
             }
 
             try (Timer ignored3 = Tracers.watchScope("bindBaseline")) {

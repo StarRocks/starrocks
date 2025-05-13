@@ -125,8 +125,12 @@ public class PredicateStatisticsCalculator {
             if (!checkNeedEvalEstimate(predicate)) {
                 return statistics;
             }
-            if (SPMFunctions.isSPMFunctions(predicate) && SPMFunctions.canRevert2ScalarOperator(predicate)) {
-                predicate = (InPredicateOperator) SPMFunctions.revertSPMFunctions(predicate).get(0);
+            if (SPMFunctions.isSPMFunctions(predicate)) {
+                if (SPMFunctions.canRevert2ScalarOperator(predicate)) {
+                    predicate = (InPredicateOperator) SPMFunctions.revertSPMFunctions(predicate).get(0);
+                } else {
+                    return statistics;
+                }
             }
             double selectivity;
 
