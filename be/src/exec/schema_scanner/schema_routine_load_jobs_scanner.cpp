@@ -275,6 +275,9 @@ Status SchemaRoutineLoadJobsScanner::fill_chunk(ChunkPtr* chunk) {
                     down_cast<NullableColumn*>(column.get())->append_nulls(1);
                 } else {
                     fill_column_with_slot<TYPE_JSON>(column.get(), (void*)&json_value_ptr);
+                }
+                break;
+            }
             case 23: {
                 // warehouse
                 if (info.__isset.warehouse) {

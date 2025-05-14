@@ -15,9 +15,10 @@
 package com.starrocks.catalog;
 
 import com.aliyun.datalake.catalog.CatalogClient;
-import com.aliyun.datalake.common.credential.SimpleStsCredentialsProvider;
+import com.aliyun.datalake.common.DlfDataToken;
 import com.aliyun.datalake.common.impl.Base64Util;
 import com.aliyun.datalake.core.DlfAuthContext;
+import com.aliyun.datalake.credential.SimpleStsCredentialsProvider;
 import com.aliyun.datalake.paimon.fs.DlfPaimonFileIO;
 import com.aliyun.datalake.paimon.table.DlfPaimonTable;
 import com.google.common.base.Joiner;

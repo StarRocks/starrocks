@@ -467,6 +467,7 @@ under the License.
         <dependency>
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-core_2.12</artifactId>
+            <exclusions>
                 <exclusion>
                     <groupId>org.glassfish.jersey.core</groupId>
                     <artifactId>jersey-common</artifactId>
@@ -516,11 +517,6 @@ under the License.
         <dependency>
             <groupId>io.trino.hive</groupId>
             <artifactId>hive-apache</artifactId>
-        </dependency>
-        <!-- https://mvnrepository.com/artifact/com.aliyun.datalake/metastore-client-hive3 -->
-        <dependency>
-            <groupId>com.aliyun.datalake</groupId>
-            <artifactId>metastore-client-hive3</artifactId>
         </dependency>
         <!-- https://mvnrepository.com/artifact/com.github.ben-manes.caffeine/caffeine -->
         <dependency>

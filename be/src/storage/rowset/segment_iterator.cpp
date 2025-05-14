@@ -798,7 +798,6 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
 
     bool is_compaction =
             (_opts.reader_type == READER_BASE_COMPACTION || _opts.reader_type == READER_CUMULATIVE_COMPACTION);
-
     if (is_compaction) {
         opts.op_type = OperationKind::COMPACTION;
     }

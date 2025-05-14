@@ -209,6 +209,27 @@ public class PaimonMetadataTest {
     }
 
     @Test
+    public void testGetSystemTable(@Mocked ManifestsTable paimonSystemTable,
+                                   @Mocked ReadBuilder readBuilder,
+                                   @Mocked InnerTableScan scan) throws Exception {
+        new Expectations() {
+            {
+                paimonNativeCatalog.getTable((Identifier) any);
+                result = paimonSystemTable;
+                paimonSystemTable.newReadBuilder();
+                result = readBuilder;
+                readBuilder.withFilter((List<Predicate>) any).withProjection((int[]) any).newScan();
+                result = scan;
+            }
+        };
+        PaimonTable paimonTable = (PaimonTable) metadata.getTable("db1", "tbl1$manifests");
+        List<String> requiredNames = Lists.newArrayList("file_name", "file_size");
+        List<RemoteFileInfo> result =
+                metadata.getRemoteFileInfos(paimonTable, null, -1, null, requiredNames, -1);
+        Assert.assertEquals(1, result.size());
+    }
+
+    @Test
     public void testGetDatabaseDoesNotExist() throws Exception {
         String dbName = "nonexistentDb";
         new Expectations() {
@@ -237,7 +258,7 @@ public class PaimonMetadataTest {
     public void testListPartitionNames(@Mocked FileStoreTable mockPaimonTable,
                                        @Mocked PartitionsTable mockPartitionTable,
                                        @Mocked RecordReader<InternalRow> mockRecordReader)
-            throws Catalog.TableNotExistException, IOException {
+            throws Catalog.TableNotExistException {
 
         RowType tblRowType = RowType.of(
                 new DataType[] {

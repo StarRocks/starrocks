@@ -225,9 +225,6 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
 
     // Build the filesystem under no lock, so the op won't hold the lock for a long time.
     // It is possible that multiple filesystems are built for the same shard from multiple threads under no lock here.
-    if (enable_datacache) {
-        *enable_datacache = need_enable_cache(it->second.shard_info);
-    }
     auto fs_or = build_filesystem_from_shard_info(shard_info, conf);
     if (!fs_or.ok()) {
         return fs_or.status();

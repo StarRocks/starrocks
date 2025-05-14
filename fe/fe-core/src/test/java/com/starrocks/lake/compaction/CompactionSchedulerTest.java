@@ -448,10 +448,10 @@ public class CompactionSchedulerTest {
         PartitionIdentifier partition1 = new PartitionIdentifier(1, 2, 3);
         PartitionIdentifier partition2 = new PartitionIdentifier(1, 2, 4);
 
-        compactionManager.handleLoadingFinished(partition1, 10, System.currentTimeMillis(),
-                                                Quantiles.compute(Lists.newArrayList(10d)));
-        compactionManager.handleLoadingFinished(partition2, 10, System.currentTimeMillis(),
-                                                Quantiles.compute(Lists.newArrayList(10d)));
+        compactionManager.handleLoadingFinished(partition1, 10L, System.currentTimeMillis(),
+                                                Quantiles.compute(Lists.newArrayList(10d)), 0L);
+        compactionManager.handleLoadingFinished(partition2, 10L, System.currentTimeMillis(),
+                                                Quantiles.compute(Lists.newArrayList(10d)), 0L);
 
         ComputeNode c1 = new ComputeNode(10001L, "192.168.0.2", 9050);
         ComputeNode c2 = new ComputeNode(10002L, "192.168.0.3", 9050);
