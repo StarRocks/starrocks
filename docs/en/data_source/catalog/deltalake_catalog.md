@@ -429,8 +429,8 @@ However, if the frequency of data updates in Delta Lake is high, you can tune th
 In most cases, if your Delta Lake data is updated at a granularity of 1 hour or less, the data update frequency is considered high.
 :::
 
-| **Parameter**                                      | **Unit** | **Default** | **Description**                                |
-|----------------------------------------------------| -------- | ------------------------------------------------------------ |
+| **Parameter**                                      | **Unit** | **Default** | **Description**                                                                    |
+|----------------------------------------------------| -------- | -------------|---------------------------------------------------------------------------------- |
 | enable_deltalake_table_cache                       | -        | true         | Whether to enable Table Cache in the metadata cache for Delta Lake. |
 | enable_deltalake_json_meta_cache                   | -        | true         | Whether to enable cache for Delta Log JSON files. |
 | deltalake_json_meta_cache_ttl_sec                  | Second   | 48 * 60 * 60 | Time-To-Live (TTL) for the Delta Log JSON file cache. |
