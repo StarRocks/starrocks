@@ -262,8 +262,8 @@ public:
     LocalCache* local_cache() { return _local_cache.get(); }
     BlockCache* block_cache() const { return _block_cache.get(); }
     void set_block_cache(std::shared_ptr<BlockCache> block_cache) { _block_cache = std::move(block_cache); }
-    ObjectCache* external_table_meta_cache() const { return _starcache_based_object_cache.get(); }
-    ObjectCache* external_table_page_cache() const { return _starcache_based_object_cache.get(); }
+    ObjectCache* external_table_meta_cache() const { return _object_cache.get(); }
+    ObjectCache* external_table_page_cache() const { return _object_cache.get(); }
     StoragePageCache* page_cache() const { return _page_cache.get(); }
 
     StatusOr<int64_t> get_storage_page_cache_limit();
@@ -274,11 +274,10 @@ private:
     StatusOr<CacheOptions> _init_cache_options();
     Status _init_starcache(CacheOptions* cache_options);
     Status _init_peer_cache(const CacheOptions& cache_options);
+    Status _init_object_cache(LocalCache* local_cache);
 #endif
 
-    Status _init_object_cache(LocalCache* local_cache);
-    Status _init_lru_base_object_cache();
-    Status _init_page_cache();
+    Status _init_storage_page_cache();
 
     GlobalEnv* _global_env;
     std::vector<StorePath> _store_paths;
@@ -289,8 +288,7 @@ private:
     std::shared_ptr<Cache> _lru_cache;
 
     // object cache
-    std::shared_ptr<ObjectCache> _starcache_based_object_cache;
-    std::shared_ptr<ObjectCache> _lru_based_object_cache;
+    std::shared_ptr<ObjectCache> _object_cache;
     std::shared_ptr<StoragePageCache> _page_cache;
 
     // block cache

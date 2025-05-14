@@ -367,11 +367,20 @@ Status CacheEnv::init(const std::vector<StorePath>& store_paths) {
         RETURN_IF_ERROR(_block_cache->init(cache_options, _local_cache, _remote_cache));
         RETURN_IF_ERROR(_init_object_cache(_local_cache.get()));
 #endif
+    } else if (config::datacache_engine == "lrucache") {
+        size_t datacache_mem_limit = 0;
+        RETURN_IF_ERROR(DataCacheUtils::parse_conf_datacache_mem_size(
+                config::datacache_mem_size, _global_env->process_mem_limit(), &datacache_mem_limit));
+        datacache_mem_limit = check_storage_page_cache_limit(datacache_mem_limit);
+        _lru_cache = std::make_shared<ShardedLRUCache>(datacache_mem_limit);
+        _object_cache = std::make_shared<LRUCacheModule>(_lru_cache);
     } else {
+        std::string msg = fmt::format("Not supported cache engine: {}", config::datacache_engine);
+        LOG(ERROR) << msg;
+        return Status::InvalidArgument(msg);
     }
 
-    RETURN_IF_ERROR(_init_lru_base_object_cache());
-    RETURN_IF_ERROR(_init_page_cache());
+    RETURN_IF_ERROR(_init_storage_page_cache());
 
     return Status::OK();
 }
@@ -386,29 +395,15 @@ void CacheEnv::destroy() {
     _page_cache.reset();
     LOG(INFO) << "pagecache shutdown successfully";
 
-    _lru_based_object_cache.reset();
-    LOG(INFO) << "lru based object cache shutdown successfully";
-
-    _starcache_based_object_cache.reset();
-    LOG(INFO) << "starcache based object cache shutdown successfully";
+    _object_cache.reset();
+    LOG(INFO) << "object cache shutdown successfully";
 
     _block_cache.reset();
     LOG(INFO) << "datacache shutdown successfully";
 }
 
-Status CacheEnv::_init_lru_base_object_cache() {
-    ASSIGN_OR_RETURN(int64_t storage_cache_limit, get_storage_page_cache_limit());
-    storage_cache_limit = check_storage_page_cache_limit(storage_cache_limit);
-
-    _lru_cache = std::make_shared<ShardedLRUCache>(storage_cache_limit);
-    _lru_based_object_cache = std::make_shared<LRUCacheModule>(_lru_cache);
-
-    LOG(INFO) << "object cache init successfully";
-    return Status::OK();
-}
-
-Status CacheEnv::_init_page_cache() {
-    _page_cache = std::make_shared<StoragePageCache>(_lru_based_object_cache.get());
+Status CacheEnv::_init_storage_page_cache() {
+    _page_cache = std::make_shared<StoragePageCache>(_object_cache.get());
     _page_cache->init_metrics();
     LOG(INFO) << "storage page cache init successfully";
     return Status::OK();
