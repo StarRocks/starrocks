@@ -150,7 +150,6 @@ public class ArrowFlightSqlIntegrationTest {
                 for (int i = 1; i <= columnCount; i++) {
                     System.out.print(rs.getString(i) + "\t");
                 }
-                System.out.println();
             }
         }
         testCaseNum++;
