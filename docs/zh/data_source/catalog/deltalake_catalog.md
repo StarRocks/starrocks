@@ -855,14 +855,7 @@ INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM deltalake_table
 
 目前，Delta Lake catalogs 支持以下表功能：
 
-<<<<<<< HEAD
-- V2 Checkpoint（从 v3.3.0 起）
-- Timestamp without Timezone（从 v3.3.1 起）
-- 列映射（从 v3.3.6 起）
-- Deletion Vector（从 v3.4.0 起）
-=======
 - V2 Checkpoint（从 v3.3.0 开始）
 - 无时区的时间戳（从 v3.3.1 开始）
 - 列映射（从 v3.3.6 开始）
 - Deletion Vector（从 v3.4.1 开始）
->>>>>>> 7cb3703511 ([Doc] move intro to snippet (#58966))
