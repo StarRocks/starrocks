@@ -276,7 +276,7 @@ private:
     Status _init_peer_cache(const CacheOptions& cache_options);
 #endif
 
-    Status _init_starcache_based_object_cache();
+    Status _init_object_cache(LocalCache* local_cache);
     Status _init_lru_base_object_cache();
     Status _init_page_cache();
 

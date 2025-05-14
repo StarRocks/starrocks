@@ -365,12 +365,11 @@ Status CacheEnv::init(const std::vector<StorePath>& store_paths) {
         RETURN_IF_ERROR(_init_starcache(&cache_options));
         RETURN_IF_ERROR(_init_peer_cache(cache_options));
         RETURN_IF_ERROR(_block_cache->init(cache_options, _local_cache, _remote_cache));
+        RETURN_IF_ERROR(_init_object_cache(_local_cache.get()));
 #endif
     } else {
     }
 
-    RETURN_IF_ERROR(_init_datacache());
-    RETURN_IF_ERROR(_init_starcache_based_object_cache());
     RETURN_IF_ERROR(_init_lru_base_object_cache());
     RETURN_IF_ERROR(_init_page_cache());
 
@@ -395,16 +394,6 @@ void CacheEnv::destroy() {
 
     _block_cache.reset();
     LOG(INFO) << "datacache shutdown successfully";
-}
-
-Status CacheEnv::_init_starcache_based_object_cache() {
-#ifdef WITH_STARCACHE
-    if (_local_cache != nullptr && _local_cache->is_initialized()) {
-        auto* starcache = reinterpret_cast<StarCacheWrapper*>(_local_cache.get());
-        _starcache_based_object_cache = std::make_shared<StarCacheModule>(starcache->starcache_instance());
-    }
-#endif
-    return Status::OK();
 }
 
 Status CacheEnv::_init_lru_base_object_cache() {
@@ -501,6 +490,14 @@ Status CacheEnv::_init_starcache(CacheOptions* cache_options) {
 Status CacheEnv::_init_peer_cache(const CacheOptions& cache_options) {
     _remote_cache = std::make_shared<PeerCacheWrapper>();
     return _remote_cache->init(cache_options);
+}
+
+Status CacheEnv::_init_object_cache(LocalCache* local_cache) {
+    if (local_cache != nullptr && local_cache->is_initialized()) {
+        auto* starcache = reinterpret_cast<StarCacheWrapper*>(local_cache);
+        _starcache_based_object_cache = std::make_shared<StarCacheModule>(starcache->starcache_instance());
+    }
+    return Status::OK();
 }
 
 #endif
