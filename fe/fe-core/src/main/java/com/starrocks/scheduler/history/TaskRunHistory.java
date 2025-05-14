@@ -122,7 +122,7 @@ public class TaskRunHistory {
     public List<TaskRunStatus> lookupHistory(TGetTasksParams params) {
         List<TaskRunStatus> memoryList = getInMemoryHistory().stream().filter(x -> x.match(params)).toList();
         Stream<TaskRunStatus> stream = memoryList.stream().sorted(TaskRunStatus.COMPARATOR_BY_CREATE_TIME_DESC);
-        if (params.isSetPagination()) {
+        if (params != null && params.isSetPagination()) {
             if (params.getPagination().getOffset() > 0) {
                 stream = stream.skip(params.getPagination().getOffset());
             }
@@ -133,15 +133,17 @@ public class TaskRunHistory {
         List<TaskRunStatus> result = stream.collect(Collectors.toList());
 
         // calculate the new offset & limit for history table
-        long newOffset = params.getPagination().getOffset() - memoryList.size();
-        newOffset = Math.max(0, newOffset);
-        long newLimit = params.getPagination().getLimit() - result.size();
-        newLimit = Math.max(0, newLimit);
+        if (params != null && params.isSetPagination()) {
+            long newOffset = params.getPagination().getOffset() - memoryList.size();
+            newOffset = Math.max(0, newOffset);
+            long newLimit = params.getPagination().getLimit() - result.size();
+            newLimit = Math.max(0, newLimit);
 
-        params.getPagination().setOffset(newOffset);
-        params.getPagination().setLimit(newLimit);
+            params.getPagination().setOffset(newOffset);
+            params.getPagination().setLimit(newLimit);
+        }
 
-        if (isEnableArchiveHistory() && newLimit > 0) {
+        if (isEnableArchiveHistory()) {
             result.addAll(historyTable.lookup(params));
         }
         return result;
