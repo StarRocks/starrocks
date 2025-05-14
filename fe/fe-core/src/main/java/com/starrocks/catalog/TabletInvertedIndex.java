@@ -400,7 +400,12 @@ public class TabletInvertedIndex implements MemoryTrackable {
     }
 
     public long getTabletCount() {
-        return this.tabletMetaMap.size();
+        readLock();
+        try {
+            return this.tabletMetaMap.size();
+        } finally {
+            readUnlock();
+        }
     }
 
     public long getReplicaCount() {
@@ -431,7 +436,7 @@ public class TabletInvertedIndex implements MemoryTrackable {
 
     @Override
     public Map<String, Long> estimateCount() {
-        return ImmutableMap.of("TabletMeta", (long) tabletMetaMap.size(),
+        return ImmutableMap.of("TabletMeta", getTabletCount(),
                                "TabletCount", getTabletCount(),
                                "ReplicateCount", getReplicaCount());
     }
