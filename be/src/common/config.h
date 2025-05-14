@@ -1292,7 +1292,7 @@ CONF_String(datacache_eviction_policy, "slru");
 
 CONF_Bool(block_cache_enable, "true");
 CONF_mString(block_cache_disk_size, "-1");
-CONF_mString(block_cache_mem_size, "0");
+CONF_mString(block_cache_mem_size, "-1");
 CONF_Alias(datacache_block_size, block_cache_block_size);
 CONF_Alias(datacache_max_concurrent_inserts, block_cache_max_concurrent_inserts);
 CONF_Alias(datacache_checksum_enable, block_cache_checksum_enable);
