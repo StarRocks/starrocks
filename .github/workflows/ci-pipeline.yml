@@ -80,7 +80,6 @@ jobs:
         run: |
           PR_TITLE=$(gh pr view ${PR_NUMBER} -R ${GITHUB_REPOSITORY} --json  title -q '.title')
           status=$(cat .github/.status || echo open)
-          echo "Status: ${status}"
           if [[ "${PR_TITLE}" == *"[Tool]"* ]]; then
             exit 0
           elif [[ "${status}" == "feature-freeze" && "${PR_TITLE}" == *"[Feature]"* ]]; then
