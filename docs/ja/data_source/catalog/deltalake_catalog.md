@@ -429,7 +429,7 @@ v3.3.3 以降、Delta Lake Catalog は [Metadata Local Cache and Retrieval](#app
 :::
 
 | **Parameter**                                      | **Unit** | **Default** | **Description**                                |
-|----------------------------------------------------| -------- | ------------------------------------------------------------ |
+|----------------------------------------------------| -------- | -------------|----------------------------------------------- |
 | enable_deltalake_table_cache                       | -        | true         | Delta Lake のメタデータキャッシュで Table Cache を有効にするかどうか。 |
 | enable_deltalake_json_meta_cache                   | -        | true         | Delta Log JSON ファイルのキャッシュを有効にするかどうか。 |
 | deltalake_json_meta_cache_ttl_sec                  | Second   | 48 * 60 * 60 | Delta Log JSON ファイルキャッシュの有効期限 (TTL)。 |
