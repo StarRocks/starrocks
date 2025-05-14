@@ -290,6 +290,8 @@ message VacuumRequest {
     repeated TabletInfoPB tablet_infos = 7;
     // Whether enable partition aggregation
     optional bool enable_partition_aggregation = 8;
+    // retain versions info
+    repeated int64 retain_versions = 9;
 }
 
 message VacuumResponse {

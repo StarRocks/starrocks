@@ -14,15 +14,27 @@
 
 package com.starrocks.lake.snapshot;
 
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob.ClusterSnapshotJobState;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 // ClusterSnapshotCheckpointScheduler daemon is running on master node. Coordinate two checkpoint controller
 // together to finish image checkpoint one by one and upload image for backup
@@ -79,13 +91,32 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
                 .createAutomatedSnapshotJob(); /* INITIALIZING state */
 
         do {
-            // step 1: capture consistent journal id for checkpoint
+            // step 1: capture consistent journal id and snapshot version info for checkpoint
+            // (DB id, table id, partition id) -> List(visible_version)
+            Map<Pair<Long, Pair<Long, Long>>, List<Long>> estimatedSnapshotVersionInfo = new HashMap<>();
+            // snapshot version info should get before and after capturing checkpoint Ids
+            // Because we do not know the exactly version info corresponding to the snapshot meta
+            // So we try to get a version range which must contain the correct version and protect
+            // all version in the range from GC.
+            long startTime = System.currentTimeMillis();
+            captureSnapshotVersionInfo(estimatedSnapshotVersionInfo);
             Pair<Long, Long> consistentIds = captureConsistentCheckpointIdBetweenFEAndStarMgr();
             if (consistentIds == null) {
                 errMsg = "failed to capture consistent journal id for checkpoint";
                 break;
             }
+            captureSnapshotVersionInfo(estimatedSnapshotVersionInfo);
+            job.setFullEstimatedSnapshotVersions(estimatedSnapshotVersionInfo);
             job.setJournalIds(consistentIds.first, consistentIds.second);
+            long finishTime = System.currentTimeMillis();
+
+            // Check the time taken to obtain consistency information. Reject the snapshot if
+            // it takes too long to finish to prevent the verion has been vacuumed.
+            if ((finishTime - startTime) / 1000 > Config.lake_autovacuum_grace_period_minutes * 60) {
+                errMsg = "Take too long to obtain consistency information";
+                break;
+            }
+
             LOG.info(
                     "Successful capture consistent journal id, FE checkpoint journal Id: {}, StarMgr checkpoint journal Id: {}",
                     consistentIds.first, consistentIds.second);
@@ -154,6 +185,37 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
             LOG.info(
                     "Finish Cluster Snapshot checkpoint, FE checkpoint journal Id: {}, StarMgr checkpoint journal Id: {}",
                     job.getFeJournalId(), job.getStarMgrJournalId());
+        }
+    }
+
+    protected void captureSnapshotVersionInfo(Map<Pair<Long, Pair<Long, Long>>, List<Long>> snapshotVersionInfo) {
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
+        for (Long dbId : dbIds) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            if (db == null) {
+                continue;
+            }
+
+            List<Table> tables = new ArrayList<>();
+            for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+                if (table.isCloudNativeTableOrMaterializedView()) {
+                    tables.add(table);
+                }
+            }
+
+            for (Table table : tables) {
+                Locker locker = new Locker();
+                OlapTable olapTable = (OlapTable) table;
+                locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+                try {
+                    for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
+                        Pair<Long, Pair<Long, Long>> key = Pair.create(dbId, Pair.create(table.getId(), partition.getId()));
+                        snapshotVersionInfo.computeIfAbsent(key, k -> Lists.newArrayList()).add(partition.getVisibleVersion());
+                    }
+                } finally {
+                    locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+                }
+            }
         }
     }
 

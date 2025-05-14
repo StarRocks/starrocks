@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob.ClusterSnapshotJobState;
 import com.starrocks.persist.ClusterSnapshotLog;
@@ -40,10 +41,12 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.NavigableMap;
+import java.util.Set;
 import java.util.concurrent.ConcurrentSkipListMap;
 
 // only used for AUTOMATED snapshot for now
@@ -299,6 +302,43 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         for (Long removeId : removeIds) {
             automatedSnapshotJobs.remove(removeId);
         }
+    }
+
+    public List<Long> getRetainVersionsForVacuum(long dbId, long tableId, long partId) {
+        Pair<Long, Pair<Long, Long>> key = Pair.create(dbId, Pair.create(tableId, partId));
+        // we need to consider the following two job and merge all versions
+        ClusterSnapshotJob lastFinishedAutoSnapshotJob = getLastFinishedAutomatedClusterSnapshotJob();
+        ClusterSnapshotJob runningJob = getRunningJob();
+        if (runningJob != null && runningJob.isInitializing()) {
+            // we need to reject the retain version request because the runningJob is still trying to get
+            // the snapshot version and does not finish
+            return null;
+        }
+
+        Set<Long> versionsSet = new HashSet<>();
+        if (lastFinishedAutoSnapshotJob != null) {
+            List<Long> versions = lastFinishedAutoSnapshotJob.getEstimatedSnapshotVersions().get(key);
+            if (versions != null) {
+                versionsSet.addAll(versions);
+            }
+        }
+        if (runningJob != null) {
+            List<Long> versions = runningJob.getEstimatedSnapshotVersions().get(key);
+            if (versions != null) {
+                versionsSet.addAll(versions);
+            }
+        }
+
+        return Lists.newArrayList(versionsSet);
+    }
+
+    public ClusterSnapshotJob getRunningJob() {
+        Entry<Long, ClusterSnapshotJob> entry = automatedSnapshotJobs.lastEntry();
+        if (entry != null && entry.getValue().isUnFinishedState()) {
+            return entry.getValue();
+        }
+
+        return null;
     }
 
     public void start() {
