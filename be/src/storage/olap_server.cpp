@@ -252,7 +252,7 @@ void StorageEngine::start_schedule_apply_thread() {
     Thread::set_thread_name(_schedule_apply_thread, "schedule_apply");
 }
 
-void evict_pagecache(StoragePageCache* cache, int64_t bytes_to_dec, std::atomic<bool>& stoped) {
+void evict_pagecache(CacheEnv* cache, int64_t bytes_to_dec, std::atomic<bool>& stoped) {
     if (bytes_to_dec > 0) {
         int64_t bytes = bytes_to_dec;
         while (bytes >= GCBYTES_ONE_STEP) {
@@ -277,7 +277,7 @@ void* StorageEngine::_adjust_pagecache_callback(void* arg_this) {
     int64_t cur_interval = config::auto_adjust_pagecache_interval_seconds;
     std::unique_ptr<GCHelper> dec_advisor = std::make_unique<GCHelper>(cur_period, cur_interval, MonoTime::Now());
     std::unique_ptr<GCHelper> inc_advisor = std::make_unique<GCHelper>(cur_period, cur_interval, MonoTime::Now());
-    auto cache = StoragePageCache::instance();
+    auto* cache = CacheEnv::GetInstance();
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         SLEEP_IN_BG_WORKER(cur_interval);
         if (!config::enable_auto_adjust_pagecache) {
@@ -326,7 +326,7 @@ void* StorageEngine::_adjust_pagecache_callback(void* arg_this) {
             size_t bytes_to_dec = dec_advisor->bytes_should_gc(MonoTime::Now(), delta_high);
             evict_pagecache(cache, static_cast<int64_t>(bytes_to_dec), _bg_worker_stopped);
         } else {
-            auto ret = CacheEnv::GetInstance()->get_storage_page_cache_limit();
+            auto ret = CacheEnv::GetInstance()->get_data_cache_mem_limit();
             if (!ret.ok()) {
                 LOG(ERROR) << "Failed to get storage page size: " << ret.status();
                 continue;
