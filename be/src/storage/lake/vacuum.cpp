@@ -361,9 +361,8 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
             extra_file_size += collect_extra_files_size(*metadata, min_retain_version);
             if (skip_check_grace_timestamp) {
                 DCHECK_LE(version, final_retain_version);
-                RETURN_IF_ERROR(
-                        collect_garbage_files(*metadata, data_dir, datafile_deleter, &prepare_vacuum_file_size,
-                                              &retain_files_set));
+                RETURN_IF_ERROR(collect_garbage_files(*metadata, data_dir, datafile_deleter, &prepare_vacuum_file_size,
+                                                      &retain_files_set));
             } else {
                 int64_t compare_time = 0;
                 if (metadata->has_commit_time() && metadata->commit_time() > 0) {
@@ -621,7 +620,7 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
     auto min_active_txn_id = request.min_active_txn_id();
     std::vector<int64_t> retain_versions;
     if (request.retain_versions_size() > 0) {
-        retain_versions = 
+        retain_versions =
                 std::move(std::vector<int64_t>(request.retain_versions().begin(), request.retain_versions().end()));
     }
 
