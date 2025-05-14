@@ -39,6 +39,8 @@ public:
 
     Status update_mem_quota(size_t quota_bytes, bool flush_to_disk) override;
 
+    Status adjust_capacity(int64_t delta, size_t min_capacity) override;
+
     Status update_disk_spaces(const std::vector<DirSpace>& spaces) override;
 
     const DataCacheMetrics cache_metrics(int level) const override;
