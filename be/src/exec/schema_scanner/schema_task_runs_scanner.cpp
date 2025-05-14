@@ -70,7 +70,13 @@ Status SchemaTaskRunsScanner::start(RuntimeState* state) {
     _task_params.pagination.__set_offset(0);
     _task_params.pagination.__set_limit(kPaginationBatchSize);
     RETURN_IF_ERROR(SchemaHelper::get_task_runs(_ss_state, _task_params, &_task_run_result));
-    _task_params.pagination.__set_offset(_task_run_result.task_runs.size());
+    size_t finished_count = 0;
+    for (auto& run : _task_run_result.task_runs) {
+        if (!(run.state == "PENDING" || run.state == "RUNNING")) {
+            finished_count++;
+        }
+    }
+    _task_params.pagination.__set_offset(finished_count);
     _task_run_index = 0;
     return Status::OK();
 }
@@ -286,7 +292,9 @@ Status SchemaTaskRunsScanner::get_next(ChunkPtr* chunk, bool* eos) {
         return Status::InternalError("input pointer is nullptr.");
     }
 
-    // Streamingly fetch the next batch. task_run_result will be empty if EOS is reached.
+    // Fetch the next batch of task runs in a streaming manner. If the end of the stream is reached, task_run_result will be empty.
+    // For the first batch, include both RUNNING and PENDING tasks, and fetch up to kPaginationBatchSize historical tasks starting from offset 0.
+    // For subsequent batches, fetch historical tasks starting from the appropriate offset.
     if (_task_run_index >= _task_run_result.task_runs.size()) {
         if (_param->limit > 0 && _task_params.pagination.offset >= _param->limit) {
             *eos = true;
@@ -299,8 +307,7 @@ Status SchemaTaskRunsScanner::get_next(ChunkPtr* chunk, bool* eos) {
             return {};
         }
         _task_run_index = 0;
-        size_t offset = _task_params.pagination.offset + kPaginationBatchSize;
-        _task_params.pagination.__set_offset(offset);
+        _task_params.pagination.offset += kPaginationBatchSize;
     }
     *eos = false;
     return fill_chunk(chunk);
