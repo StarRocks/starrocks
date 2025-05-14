@@ -52,8 +52,6 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
 
     private final String arrowFlightSqlToken;
 
-    private StmtExecutor stmtExecutor;
-
     private StatementBase statement;
 
     private String query;
@@ -145,12 +143,12 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
     }
 
     public void setStmtExecutor(StmtExecutor stmtExecutor) {
-        this.stmtExecutor = stmtExecutor;
+        this.executor = stmtExecutor;
     }
 
     public void cancelQuery() {
-        if (stmtExecutor != null) {
-            stmtExecutor.cancel("Arrow Flight SQL client disconnected");
+        if (executor != null) {
+            executor.cancel("Arrow Flight SQL client disconnected");
         }
     }
 
