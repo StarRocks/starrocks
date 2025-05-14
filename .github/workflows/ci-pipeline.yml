@@ -71,19 +71,6 @@ jobs:
           echo "${PR_TITLE}" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.ref }}
-
-      - name: Checkout PR
-        run: |
-          git remote add upstream https://github.com/${{ github.event.pull_request.base.repo.full_name }}.git
-          git fetch upstream
-          git merge upstream/${{ github.event.pull_request.base.ref }} --no-edit
-      
       - name: Check Title Format
         id: check_title_format
         env:
@@ -98,6 +85,19 @@ jobs:
               exit 1
               ;;
           esac
+      
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Checkout PR
+        run: |
+          git remote add upstream https://github.com/${{ github.event.pull_request.base.repo.full_name }}.git
+          git fetch upstream
+          git merge upstream/${{ github.event.pull_request.base.ref }} --no-edit
 
       - name: Branch Access Check
         env:
