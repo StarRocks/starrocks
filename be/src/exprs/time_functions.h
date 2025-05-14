@@ -590,6 +590,8 @@ public:
     // Try to process string content, based on uncommon string format
     static StatusOr<ColumnPtr> str_to_date_uncommon(FunctionContext* context, const starrocks::Columns& columns);
 
+    static StatusOr<ColumnPtr> from_iso8601_date(FunctionContext* context, const Columns& columns);
+    static StatusOr<ColumnPtr> from_iso8601_timestamp(FunctionContext* context, const Columns& columns);
     /**
      *
      * cast string to datetime

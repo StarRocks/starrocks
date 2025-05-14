@@ -125,6 +125,12 @@ int DateValue::weekday() const {
     return (_julian + 1) % 7;
 }
 
+int DateValue::weekday_iso() const {
+    // ISO 8601: Monday = 1, Sunday = 7
+    int w = (_julian + 1) % 7;
+    return (w == 0) ? 7 : w; 
+}
+
 void DateValue::trunc_to_day() {}
 
 void DateValue::trunc_to_month() {
@@ -171,6 +177,147 @@ void DateValue::set_end_of_year() {
     int year, month, day;
     date::to_date_with_cache(_julian, &year, &month, &day);
     _julian = date::from_date(year, 12, 31);
+}
+
+bool has_53_weeks(int year) {
+    DateValue jan1;
+    jan1.from_date(year, 1, 1);
+    int jan1_weekday = jan1.weekday_iso();
+
+    DateValue dec31;
+    dec31.from_date(year, 12, 31);
+    int dec31_weekday = dec31.weekday_iso();
+
+    bool is_leap = (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0));
+
+    bool has_53 = (jan1_weekday == 4) ||
+                  (jan1_weekday == 3 && is_leap) ||
+                  (dec31_weekday == 4 || dec31_weekday == 5 || dec31_weekday == 6);
+    
+    return has_53;
+}
+
+DateValue get_first_monday_of_year(int year) {
+    DateValue jan4;
+    jan4.from_date(year, 1, 4);
+    int weekday = jan4.weekday_iso();
+    int days_to_subtract = weekday - 1;
+    return jan4.add<TimeUnit::DAY>(-days_to_subtract);
+}
+
+int get_iso_weekday(int weekday) {
+    return (weekday == 0) ? 7 : weekday;
+}
+
+bool DateValue::from_iso8601_string(const char* str, size_t len) {
+    auto parse_yyyy_mm_dd = [this](int year, int month, int day) -> bool {
+        this->from_date(year, month, day);
+        return this->is_valid();
+    };
+
+   auto parse_yyyy_www = [this](int year, int week, int day_of_week = 1) -> bool {
+       if (week == 0 || day_of_week < 1 || day_of_week > 7) {
+           return false;
+       }
+
+       bool has_week_53 = has_53_weeks(year);
+       if (week > (has_week_53 ? 53 : 52)) {
+           return false;
+       }
+
+       DateValue first_monday = get_first_monday_of_year(year);
+
+       int days_to_add = (week - 1) * 7 + (day_of_week - 1);
+       
+       DateValue dec31;
+       dec31.from_date(year, 12, 31);
+       int max_days = dec31._julian - first_monday._julian;
+       
+       if (days_to_add > max_days) {
+           days_to_add = max_days - (dec31.weekday_iso() - day_of_week);
+       }
+       
+       DateValue target_date = first_monday;
+       target_date._julian += days_to_add;
+
+       if (!target_date.is_valid()) {
+           return false;
+       }
+
+       *this = target_date;
+       return true;
+   };
+
+    auto parse_yyyy_ddd = [this, &parse_yyyy_mm_dd](int year, int day_of_year) -> bool {
+        bool is_leap = (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0));
+        int max_days = is_leap ? 366 : 365;
+
+        if (day_of_year < 1 || day_of_year > max_days) {
+            return false;
+        }
+
+        int days_in_month[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+        if (is_leap) {
+            days_in_month[2] = 29;
+        }
+
+        int month = 1;
+        int day = day_of_year;
+
+        while (day > days_in_month[month]) {
+            day -= days_in_month[month];
+            month++;
+        }
+
+        return parse_yyyy_mm_dd(year, month, day);
+    };
+
+    if (str == nullptr || len == 0) {
+        return false;
+    }
+
+    if (len < 4 || !isdigit(str[0]) || !isdigit(str[1]) || !isdigit(str[2]) || !isdigit(str[3])) {
+        return false;
+    }
+
+    int year = (str[0] - '0') * 1000 + (str[1] - '0') * 100 + (str[2] - '0') * 10 + (str[3] - '0');
+
+    if (year < 1 || year > 9999) {
+        return false;
+    }
+
+    if (len >= 10 && str[4] == '-' && isdigit(str[5]) && isdigit(str[6]) && str[7] == '-' && isdigit(str[8]) && isdigit(str[9])) {
+        int month = (str[5] - '0') * 10 + (str[6] - '0');
+        int day = (str[8] - '0') * 10 + (str[9] - '0');
+        return parse_yyyy_mm_dd(year, month, day);
+    }
+    else if (len >= 8 && str[4] == '-' && (str[5] == 'W' || str[5] == 'w') && isdigit(str[6]) && isdigit(str[7])) {
+        int week = (str[6] - '0') * 10 + (str[7] - '0');
+        int day_of_week = 1;
+
+        if (len >= 10 && str[8] == '-' && isdigit(str[9])) {
+            day_of_week = str[9] - '0';
+            if (day_of_week < 1 || day_of_week > 7) {
+                return false;
+            }
+        }
+
+        return parse_yyyy_www(year, week, day_of_week);
+    }
+    else if (len >= 8 && str[4] == '-' && isdigit(str[5]) && isdigit(str[6]) && isdigit(str[7])) {
+        int day_of_year = (str[5] - '0') * 100 + (str[6] - '0') * 10 + (str[7] - '0');
+        return parse_yyyy_ddd(year, day_of_year);
+    }
+    else if (len >= 8 && isdigit(str[4]) && isdigit(str[5]) && isdigit(str[6]) && isdigit(str[7])) {
+        int month = (str[4] - '0') * 10 + (str[5] - '0');
+        int day = (str[6] - '0') * 10 + (str[7] - '0');
+        return parse_yyyy_mm_dd(year, month, day);
+    }
+    else if (len == 4) {
+        return parse_yyyy_mm_dd(year, 1, 1);
+    }
+
+    return false;
 }
 
 bool DateValue::is_valid() const {
