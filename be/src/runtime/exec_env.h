@@ -278,14 +278,18 @@ private:
     GlobalEnv* _global_env;
     std::vector<StorePath> _store_paths;
 
+    // cache engine
     std::shared_ptr<LocalCache> _local_cache;
     std::shared_ptr<RemoteCache> _remote_cache;
     std::shared_ptr<Cache> _lru_cache;
 
-    std::shared_ptr<BlockCache> _block_cache;
+    // object cache
     std::shared_ptr<ObjectCache> _starcache_based_object_cache;
     std::shared_ptr<ObjectCache> _lru_based_object_cache;
     std::shared_ptr<StoragePageCache> _page_cache;
+
+    // block cache
+    std::shared_ptr<BlockCache> _block_cache;
 
     std::shared_ptr<DiskSpaceMonitor> _disk_space_monitor;
 };
