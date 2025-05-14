@@ -71,7 +71,7 @@ jobs:
       REPO: ${{ github.repository }}
       BACKPORT_SOURCE_PR: ${{ needs.sync-checker.outputs.BACKPORT_SOURCE_PR }}
     steps:
-      - uses: thehanimo/pr-title-checker@v1.3.5
+      - uses: thehanimo/pr-title-checker@v1.4.3
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           pass_on_octokit_error: false
