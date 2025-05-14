@@ -70,7 +70,7 @@ jobs:
           pass_on_octokit_error: false
           configuration_path: ".github/pr-title-checker-config.json"
 
-      - run:
+      - run: |
           echo ${{ steps.check_title_format.outputs.success }}
           exit 1
 
