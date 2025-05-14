@@ -38,6 +38,7 @@ message PublishVersionRequest {
     optional int64 timeout_ms = 6;
     repeated TxnInfoPB txn_infos = 7;
     repeated int64 rebuild_pindex_tablet_ids = 8;
+    optional bool enable_aggregate_publish = 9;
 }
 
 message PublishVersionResponse {
@@ -47,6 +48,18 @@ message PublishVersionResponse {
     optional StatusPB status = 3;
     // Mapping from tablet id to row_nums when the partition is first imported
     map<int64, int64> tablet_row_nums = 4;
+    map<int64, TabletMetadataPB> tablet_metas = 5;
+}
+
+message ComputeNodePB {
+    optional string host = 1;
+    optional int32 brpc_port = 2;
+    optional int64 id = 3;
+}
+
+message AggregatePublishVersionRequest {
+    repeated ComputeNodePB compute_nodes = 1;
+    repeated PublishVersionRequest publish_reqs = 2;
 }
 
 message AbortTxnRequest {
@@ -91,6 +104,12 @@ message CompactRequest {
     optional bool allow_partial_success = 5;
     optional bytes encryption_meta = 6;
     optional bool force_base_compaction = 7;
+    optional bool skip_write_txnlog = 8;
+}
+
+message AggregateCompactRequest {
+    repeated ComputeNodePB compute_nodes = 1;
+    repeated CompactRequest requests = 2;
 }
 
 message CompactStat {
@@ -124,6 +143,7 @@ message CompactResponse {
     optional StatusPB status = 7;
     repeated CompactStat compact_stats = 8;
     optional int64 success_compaction_input_file_size = 9;
+    repeated TxnLogPB txn_logs = 10;
 }
 
 message DropTableRequest {
@@ -275,6 +295,8 @@ message VacuumRequest {
     optional int64 partition_id = 6;
     // The tablet infos to be vacuumed.
     repeated TabletInfoPB tablet_infos = 7;
+    // Whether enable partition aggregation
+    optional bool enable_partition_aggregation = 8;
 }
 
 message VacuumResponse {
@@ -306,6 +328,7 @@ message VacuumFullResponse {
 
 service LakeService {
     rpc publish_version(PublishVersionRequest) returns (PublishVersionResponse);
+    rpc aggregate_publish_version(AggregatePublishVersionRequest) returns (PublishVersionResponse);
     rpc publish_log_version(PublishLogVersionRequest) returns (PublishLogVersionResponse);
     rpc publish_log_version_batch(PublishLogVersionBatchRequest) returns (PublishLogVersionResponse);
     rpc delete_txn_log(DeleteTxnLogRequest) returns (DeleteTxnLogResponse);
@@ -322,5 +345,6 @@ service LakeService {
     rpc abort_compaction(AbortCompactionRequest) returns (AbortCompactionResponse);
     rpc vacuum(VacuumRequest) returns (VacuumResponse);
     rpc vacuum_full(VacuumFullRequest) returns (VacuumFullResponse);
+    rpc aggregate_compact(AggregateCompactRequest) returns (CompactResponse);
 }
 

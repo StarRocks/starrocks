@@ -391,7 +391,7 @@ public class ConnectProcessor {
                             "?response_type=code" +
                             "&client_id=" + URLEncoder.encode(oAuth2Context.clientId(), StandardCharsets.UTF_8) +
                             "&redirect_uri=" + URLEncoder.encode(oAuth2Context.redirectUrl(), StandardCharsets.UTF_8) +
-                            "?connectionId=" + ctx.getConnectionId() +
+                            "&state=" + ctx.getConnectionId() +
                             "&scope=openid";
 
                     ErrorReport.report(ErrorCode.ERR_OAUTH2_NOT_AUTHENTICATED, authUrl);

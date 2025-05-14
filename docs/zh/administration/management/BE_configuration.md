@@ -1236,7 +1236,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：Bytes
 - 是否动态：否
-- 描述：Row source mask buffer 的最大内存占用大小。当 buffer 大于该值时将会持久化到磁盘临时文件中。该值应该小于 `compaction_mem_limit` 参数的值。
+- 描述：Row source mask buffer 的最大内存占用大小。当 buffer 大于该值时将会持久化到磁盘临时文件中。该值应该小于 `compaction_memory_limit_per_worker` 参数的值。
 - 引入版本：-
 
 ##### memory_maintenance_sleep_time_s
@@ -2043,15 +2043,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：BE 进程中文件描述符的最小数量。
 - 引入版本：-
 
-##### index_stream_cache_capacity
-
-- 默认值：10737418240
-- 类型：Int
-- 单位：Bytes
-- 是否动态：否
-- 描述：BloomFilter/Min/Max 等统计信息缓存的容量。
-- 引入版本：-
-
 ##### storage_page_cache_limit
 
 - 默认值：20%
@@ -2074,49 +2065,32 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
   - 自 2.4 版本起，该参数默认值由 `true` 变更为 `false`。自 3.1 版本起，该参数由静态变为动态。
 - 引入版本：-
 
-<!--
 ##### enable_bitmap_index_memory_page_cache
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
 - 描述：是否为 Bitmap index 开启 Memory Cache。使用 Bitmap index 加速点查时，可以考虑开启。
 - 引入版本：v3.1
--->
 
-<!--
 ##### enable_zonemap_index_memory_page_cache
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_ordinal_index_memory_page_cache
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### disable_column_pool
 
 - 默认值：true
 - 类型：Boolean
 - 单位：-
-- 是否动态：否
-- 描述：
+- 是否动态：是
+- 描述：是否为 Zonemap index 开启 Memory Cache。使用 Zonemap index 加速 Scan 时，可以考虑开启。
 - 引入版本：-
--->
+
+##### enable_ordinal_index_memory_page_cache
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否为 Ordinal index 开启 Memory Cache。Ordinal index 是行号到数据 page position 的映射，可以加速 Scan。
+- 引入版本：-
 
 ##### fragment_pool_thread_num_min
 
@@ -5250,3 +5224,12 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：否
 - 描述：bitmap 函数输入值的最大长度。
 - 引入版本：-
+
+##### report_exec_rpc_request_retry_num
+
+- 默认值：10
+- 类型: Int
+- 单位：-
+- 是否动态：是
+- 描述：用于向 FE 汇报执行状态的 RPC 请求的重试次数。默认值为 10，意味着如果该 RPC 请求失败（仅限于 fragment instance 的 finish RPC），将最多重试 10 次。该请求对于导入任务（load job）非常重要，如果某个 fragment instance 的完成状态报告失败，整个导入任务将会一直挂起，直到超时。
+-引入版本：-

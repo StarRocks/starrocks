@@ -22,6 +22,7 @@
 #include "agent/heartbeat_server.h"
 #include "backend_service.h"
 #include "cache/block_cache/block_cache.h"
+#include "cache/starcache_wrapper.h"
 #include "common/config.h"
 #include "common/daemon.h"
 #include "common/process_exit.h"
@@ -120,9 +121,10 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " start step " << start_step++ << ": storage engine start bg threads successfully";
 
 #ifdef USE_STAROS
-    auto* block_cache = cache_env->block_cache();
-    if (config::datacache_unified_instance_enable && block_cache->is_initialized()) {
-        init_staros_worker(block_cache->starcache_instance());
+    auto* local_cache = cache_env->local_cache();
+    if (config::datacache_unified_instance_enable && local_cache->is_initialized()) {
+        auto* starcache = reinterpret_cast<StarCacheWrapper*>(local_cache);
+        init_staros_worker(starcache->starcache_instance());
     } else {
         init_staros_worker(nullptr);
     }
@@ -170,10 +172,20 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     }
     const auto lake_service_max_concurrency = config::lake_service_max_concurrency;
     const auto service_name = "starrocks.LakeService";
-    const auto methods = {
-            "abort_txn",     "abort_compaction", "compact",         "drop_table",          "delete_data",
-            "delete_tablet", "get_tablet_stats", "publish_version", "publish_log_version", "publish_log_version_batch",
-            "vacuum",        "vacuum_full"};
+    const auto methods = {"abort_txn",
+                          "abort_compaction",
+                          "compact",
+                          "drop_table",
+                          "delete_data",
+                          "delete_tablet",
+                          "get_tablet_stats",
+                          "publish_version",
+                          "publish_log_version",
+                          "publish_log_version_batch",
+                          "vacuum",
+                          "vacuum_full",
+                          "aggregate_publish_version",
+                          "aggregate_compact"};
     for (auto method : methods) {
         brpc_server->MaxConcurrencyOf(service_name, method) = lake_service_max_concurrency;
     }

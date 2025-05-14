@@ -191,6 +191,7 @@ set(EXEC_FILES
         ./formats/avro/nullable_column_test.cpp
         ./formats/avro/cpp/avro_reader_test.cpp
         ./formats/avro/cpp/binary_column_reader_test.cpp
+        ./formats/avro/cpp/complex_column_reader_test.cpp
         ./formats/avro/cpp/date_column_reader_test.cpp
         ./formats/avro/cpp/numeric_column_reader_test.cpp
         ./formats/avro/cpp/utils_test.cpp
@@ -432,6 +433,7 @@ set(EXEC_FILES
         ./simd/simd_test.cpp
         ./simd/simd_selector_test.cpp
         ./simd/simd_mulselector_test.cpp
+        ./simd/delta_decode_test.cpp
         ./util/phmap_test.cpp
         ./util/aes_util_test.cpp
         ./util/await_test.cpp
@@ -449,6 +451,7 @@ set(EXEC_FILES
         ./util/bthreads/shared_mutex_test.cpp
         ./util/bthreads/shared_future_test.cpp
         ./util/bthreads/single_flight_test.cpp
+        ./util/byte_buffer_test.cpp
         ./util/c_string_test.cpp
         ./util/cidr_test.cpp
         ./util/coding_test.cpp
@@ -521,9 +524,9 @@ set(EXEC_FILES
         ./storage/lake/replication_txn_manager_test.cpp
         ./storage/lake/persistent_index_sstable_test.cpp
         ./storage/lake/write_combined_txn_log_test.cpp
-        ./cache/block_cache/datacache_utils_test.cpp
+        ./cache/datacache_utils_test.cpp
         ./cache/block_cache/block_cache_hit_rate_counter_test.cpp
-        ./cache/block_cache/peer_cache_test.cpp
+        ./cache/peer_cache_test.cpp
         ./cache/object_cache/lrucache_module_test.cpp
         ./cache/object_cache/object_cache_test.cpp
         ./util/thrift_rpc_helper_test.cpp
@@ -532,8 +535,8 @@ set(EXEC_FILES
         )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON")
+    list(APPEND EXEC_FILES ./cache/disk_space_monitor_test.cpp)
     list(APPEND EXEC_FILES ./cache/block_cache/block_cache_test.cpp)
-    list(APPEND EXEC_FILES ./cache/block_cache/disk_space_monitor_test.cpp)
     list(APPEND EXEC_FILES ./cache/object_cache/starcache_module_test.cpp)
     list(APPEND EXEC_FILES ./cache/object_cache/object_cache_test.cpp)
     list(APPEND EXEC_FILES ./io/cache_input_stream_test.cpp)

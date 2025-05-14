@@ -290,8 +290,6 @@ CONF_Int32(file_descriptor_cache_capacity, "16384");
 // minimum file descriptor number
 // modify them upon necessity
 CONF_Int32(min_file_descriptor_number, "60000");
-CONF_Int64(index_stream_cache_capacity, "10737418240");
-// CONF_Int64(max_packed_row_block_size, "20971520");
 
 // data and index page size, default is 64k
 CONF_Int32(data_page_size, "65536");
@@ -301,11 +299,11 @@ CONF_mString(storage_page_cache_limit, "20%");
 // whether to disable page cache feature in storage
 CONF_mBool(disable_storage_page_cache, "false");
 // whether to enable the bitmap index memory cache
-CONF_mBool(enable_bitmap_index_memory_page_cache, "false");
+CONF_mBool(enable_bitmap_index_memory_page_cache, "true");
 // whether to enable the zonemap index memory cache
-CONF_mBool(enable_zonemap_index_memory_page_cache, "false");
+CONF_mBool(enable_zonemap_index_memory_page_cache, "true");
 // whether to enable the ordinal index memory cache
-CONF_mBool(enable_ordinal_index_memory_page_cache, "false");
+CONF_mBool(enable_ordinal_index_memory_page_cache, "true");
 
 CONF_mInt32(base_compaction_check_interval_seconds, "60");
 CONF_mInt64(min_base_compaction_num_singleton_deltas, "5");
@@ -1057,18 +1055,23 @@ CONF_Int32(starlet_port, "9070");
 CONF_mInt32(starlet_cache_thread_num, "16");
 // Root dir used for cache if cache enabled.
 CONF_String(starlet_cache_dir, "");
+// @Deprecated
 // Cache backend check interval (in seconds), for async write sync check and ttl clean, e.t.c.
 CONF_Int32(starlet_cache_check_interval, "900");
+// @Deprecated
 // Cache backend cache evictor interval (in seconds)
 CONF_mInt32(starlet_cache_evict_interval, "60");
 // Cache will start evict cache files if free space belows this value(percentage)
 CONF_mDouble(starlet_cache_evict_low_water, "0.1");
 // Cache will stop evict cache files if free space is above this value(percentage)
 CONF_mDouble(starlet_cache_evict_high_water, "0.2");
+// @Deprecated
 // type:Integer. cache directory allocation policy. (0:default, 1:random, 2:round-robin)
 CONF_Int32(starlet_cache_dir_allocate_policy, "0");
+// @Deprecated
 // Cache will evict file cache at this percent if star cache is turned on
 CONF_mDouble(starlet_cache_evict_percent, "0.1");
+// @Deprecated
 // Cache will evict file cache at this speed if star cache is turned on
 CONF_mInt32(starlet_cache_evict_throughput_mb, "200");
 // Buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
@@ -1186,6 +1189,11 @@ CONF_mInt64(mem_limited_chunk_queue_block_size, "8388608");
 
 CONF_Int32(internal_service_query_rpc_thread_num, "-1");
 CONF_Int32(internal_service_datacache_rpc_thread_num, "-1");
+// The retry times of rpc request to report exec rpc request to FE. The default value is 10,
+// which means that the rpc request will be retried 10 times if it fails if it's fragment instatnce finish rpc.
+// Report exec rpc request is important for load job, if one fragment instance finish report failed,
+// the load job will be hang until timeout.
+CONF_mInt32(report_exec_rpc_request_retry_num, "10");
 
 /*
  * When compile with ENABLE_STATUS_FAILED, every use of RETURN_INJECT has probability of 1/cardinality_of_inject
@@ -1287,14 +1295,12 @@ CONF_String(datacache_eviction_policy, "slru");
 // the old configuration files.
 CONF_Bool(block_cache_enable, "false");
 CONF_Int64(block_cache_disk_size, "0");
-CONF_String(block_cache_disk_path, "${STARROCKS_HOME}/block_cache/");
-CONF_String(block_cache_meta_path, "${STARROCKS_HOME}/block_cache/");
-CONF_Int64(block_cache_block_size, "262144");   // 256K
 CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
-CONF_Int64(block_cache_max_concurrent_inserts, "1500000");
-CONF_Bool(block_cache_checksum_enable, "false");
-CONF_Bool(block_cache_direct_io_enable, "false");
-CONF_String(block_cache_engine, "");
+CONF_Alias(datacache_block_size, block_cache_block_size);
+CONF_Alias(datacache_max_concurrent_inserts, block_cache_max_concurrent_inserts);
+CONF_Alias(datacache_checksum_enable, block_cache_checksum_enable);
+CONF_Alias(datacache_direct_io_enable, block_cache_direct_io_enable);
+CONF_Alias(datacache_engine, block_cache_engine);
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 // max wal file size in l0

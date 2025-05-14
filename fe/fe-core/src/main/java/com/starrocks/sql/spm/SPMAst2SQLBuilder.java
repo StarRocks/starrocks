@@ -170,7 +170,7 @@ public class SPMAst2SQLBuilder {
 
         @Override
         public String visitInPredicate(InPredicate node, Void context) {
-            if ((node.getChildren().stream().anyMatch(SPMFunctions::isSPMFunctions) || node.isConstantValues())
+            if ((node.getChildren().stream().skip(1).anyMatch(SPMFunctions::isSPMFunctions) || node.isConstantValues())
                     && enableDigest) {
                 StringBuilder strBuilder = new StringBuilder();
                 String notStr = (node.isNotIn()) ? "NOT " : "";

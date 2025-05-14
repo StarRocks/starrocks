@@ -164,15 +164,15 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                         }
                         replica.updateVersionInfo(newVersion, lastFailedVersion, lastSucessVersion);
                     } // end for replicas
-                    if (!skipUpdateReplicas.isEmpty()) {
-                        LOG.warn("skip update replicas to visible version(tabletId_BackendId): {}", skipUpdateReplicas);
-                    }
 
                     if (hasFailedVersion && replicationNum == 1) {
                         TabletScheduler.resetDecommStatForSingleReplicaTabletUnlocked(tablet.getId(), replicas);
                     }
                 } // end for tablets
             } // end for indices
+            if (!skipUpdateReplicas.isEmpty()) {
+                LOG.warn("skip update replicas to visible version(tabletId_BackendId): {}", skipUpdateReplicas);
+            }
 
             long versionTime = partitionCommitInfo.getVersionTime();
             if (txnState.isVersionOverwrite()) {

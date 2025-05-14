@@ -1806,8 +1806,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
 
         TabletTaskExecutor.CreateTabletOption option = new TabletTaskExecutor.CreateTabletOption();
+        // Enable `tablet_creation_optimization` creates only one shared tablet metadata for all tablets under a partition. 
+        // Enable `enable_partition_aggregation` reuses the optimization logic.
+        // These two configure only use in shared-data mode
         option.setEnableTabletCreationOptimization(table.isCloudNativeTableOrMaterializedView()
-                && Config.lake_enable_tablet_creation_optimization);
+                && (Config.lake_enable_tablet_creation_optimization || table.enablePartitionAggregation()));
         option.setGtid(GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid());
 
         try {
@@ -3731,9 +3734,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
             String partitionRetentionCondition = PropertyAnalyzer.analyzePartitionRetentionCondition(
                     db, table, properties, true, null);
-            if (Strings.isNullOrEmpty(partitionRetentionCondition)) {
-                throw new DdlException("Invalid partition retention condition");
-            }
             results.put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, partitionRetentionCondition);
         }
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT)) {
@@ -5199,7 +5199,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
     @Override
     public void handleMVRepair(Database db, Table table, List<MVRepairHandler.PartitionRepairInfo> partitionRepairInfos) {
-        MVMetaVersionRepairer.repairBaseTableVersionChanges(db, table, partitionRepairInfos);
+        MVMetaVersionRepairer.repairBaseTableVersionChanges(table, partitionRepairInfos);
     }
 
     @Override

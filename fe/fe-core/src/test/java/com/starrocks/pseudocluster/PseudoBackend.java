@@ -29,6 +29,8 @@ import com.starrocks.proto.AbortCompactionRequest;
 import com.starrocks.proto.AbortCompactionResponse;
 import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.proto.AbortTxnResponse;
+import com.starrocks.proto.AggregateCompactRequest;
+import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.CompactResponse;
 import com.starrocks.proto.DeleteDataRequest;
@@ -1131,6 +1133,11 @@ public class PseudoBackend {
         }
 
         @Override
+        public Future<CompactResponse> aggregateCompact(AggregateCompactRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
         public Future<DeleteTabletResponse> deleteTablet(DeleteTabletRequest request) {
             return CompletableFuture.completedFuture(null);
         }
@@ -1192,6 +1199,11 @@ public class PseudoBackend {
 
         @Override
         public Future<VacuumResponse> vacuum(VacuumRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<PublishVersionResponse> aggregatePublishVersion(AggregatePublishVersionRequest request) {
             return CompletableFuture.completedFuture(null);
         }
     }

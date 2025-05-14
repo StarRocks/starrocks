@@ -1,0 +1,42 @@
+-- name: test_mv_with_iceberg_transforms @slow
+
+set new_planner_optimize_timeout=10000;
+-- create mv
+create database db_${uuid0};
+use db_${uuid0};
+
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+
+-------------------------------- YEARS --------------------------------
+CREATE MATERIALIZED VIEW test_years
+PARTITION BY (date_trunc('year', l_shipdate))
+REFRESH DEFERRED MANUAL
+PROPERTIES ("replication_num" = "1")
+AS
+  SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_years;
+-- NOT use sync mode since it cannot generate multi task runs for the test.
+REFRESH MATERIALIZED VIEW test_years;
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_years")
+select count(1) from test_years;
+
+function: print_hit_materialized_views("SELECT * FROM test_years order by l_orderkey;")
+function: print_hit_materialized_views("SELECT * FROM test_years where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
+function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_years where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
+function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_years where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
+function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_years order by l_orderkey;")
+SELECT * FROM test_years order by l_orderkey;
+SELECT * FROM test_years where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
+SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_years where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
+SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_years where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
+SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_years order by l_orderkey;
+
+DROP MATERIALIZED VIEW test_years;
+
+drop database db_${uuid0} force;
+drop catalog mv_iceberg_${uuid0};

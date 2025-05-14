@@ -73,8 +73,7 @@ UpdateManager::UpdateManager(MemTracker* mem_tracker)
     _index_cache.set_mem_tracker(_index_cache_mem_tracker.get());
     _update_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
 
-    auto ret = ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem());
-    int64_t byte_limits = ret.ok() ? ret.value() : 0;
+    int64_t byte_limits = GlobalEnv::GetInstance()->process_mem_limit();
     int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
     _index_cache.set_capacity(byte_limits * update_mem_percent / 100);
     _update_column_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
@@ -250,6 +249,18 @@ void UpdateManager::clear_cache() {
     }
 }
 
+void UpdateManager::clear_cached_del_vec_by_tablet_id(int64_t tablet_id) {
+    std::lock_guard<std::mutex> lg(_del_vec_cache_lock);
+    for (auto iter = _del_vec_cache.begin(); iter != _del_vec_cache.end();) {
+        if (iter->first.tablet_id == tablet_id) {
+            _del_vec_cache_mem_tracker->release(iter->second->memory_usage());
+            iter = _del_vec_cache.erase(iter);
+        } else {
+            ++iter;
+        }
+    }
+}
+
 void UpdateManager::clear_cached_del_vec(const std::vector<TabletSegmentId>& tsids) {
     std::lock_guard<std::mutex> lg(_del_vec_cache_lock);
     for (const auto& tsid : tsids) {
@@ -299,6 +310,19 @@ StatusOr<size_t> UpdateManager::clear_delta_column_group_before_version(KVStore*
         WARN_IF_ERROR(fs->delete_file(filename), "delete file fail, filename: " + filename);
     }
     return clear_dcgs.size();
+}
+
+void UpdateManager::clear_cached_delta_column_group_by_tablet_id(int64_t tablet_id) {
+    std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
+    for (auto iter = _delta_column_group_cache.begin(); iter != _delta_column_group_cache.end();) {
+        if (iter->first.tablet_id == tablet_id) {
+            _delta_column_group_cache_mem_tracker->release(
+                    StorageEngine::instance()->delta_column_group_list_memory_usage(iter->second));
+            iter = _delta_column_group_cache.erase(iter);
+        } else {
+            ++iter;
+        }
+    }
 }
 
 void UpdateManager::clear_cached_delta_column_group(const std::vector<TabletSegmentId>& tsids) {

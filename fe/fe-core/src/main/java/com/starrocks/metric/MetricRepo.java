@@ -57,6 +57,7 @@ import com.starrocks.common.util.NetUtils;
 import com.starrocks.http.HttpMetricRegistry;
 import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.load.EtlJobType;
+import com.starrocks.load.batchwrite.MergeCommitMetricRegistry;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.load.routineload.KafkaProgress;
@@ -467,6 +468,15 @@ public final class MetricRepo {
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(gaugeReportQueueSize);
+
+        GaugeMetric<Long> totalTabletCount = new GaugeMetric<Long>(
+                "tablet_count", MetricUnit.NOUNIT, "total tablet count") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletCount();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(totalTabletCount);
 
         // 2. counter
         COUNTER_REQUEST_ALL = new LongCounterMetric("request_total", MetricUnit.REQUESTS, "total request");
@@ -920,6 +930,9 @@ public final class MetricRepo {
 
         // collect brpc pool metrics
         collectBrpcMetrics(visitor);
+
+        // collect merge commit metrics
+        MergeCommitMetricRegistry.getInstance().visit(visitor);
 
         // node info
         visitor.getNodeInfo();

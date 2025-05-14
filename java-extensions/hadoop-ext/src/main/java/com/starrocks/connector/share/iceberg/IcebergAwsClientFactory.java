@@ -34,6 +34,8 @@ import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.glue.GlueClient;
 import software.amazon.awssdk.services.glue.GlueClientBuilder;
 import software.amazon.awssdk.services.kms.KmsClient;
+import software.amazon.awssdk.services.s3.S3AsyncClient;
+import software.amazon.awssdk.services.s3.S3AsyncClientBuilder;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3ClientBuilder;
 import software.amazon.awssdk.services.s3.S3Configuration;
@@ -198,6 +200,35 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
                 S3Configuration.builder().pathStyleAccessEnabled(s3EnablePathStyleAccess).build());
 
         return s3ClientBuilder.build();
+    }
+
+    @Override
+    public S3AsyncClient s3Async() {
+        AwsCredentialsProvider baseAWSCredentialsProvider =
+                getBaseAWSCredentialsProvider(s3UseAWSSDKDefaultBehavior, s3UseInstanceProfile, s3AccessKey,
+                        s3SecretKey, s3SessionToken);
+        S3AsyncClientBuilder s3AsyncClientBuilder = S3AsyncClient.builder();
+
+        if (!s3IamRoleArn.isEmpty()) {
+            s3AsyncClientBuilder.credentialsProvider(getAssumeRoleCredentialsProvider(baseAWSCredentialsProvider,
+                    s3IamRoleArn, s3ExternalId, s3StsRegion, s3StsEndpoint));
+        } else {
+            s3AsyncClientBuilder.credentialsProvider(baseAWSCredentialsProvider);
+        }
+
+        s3AsyncClientBuilder.region(tryToResolveRegion(s3Region));
+
+        // To prevent the 's3AsyncClientBuilder' (NPE) exception, when 'aws.s3.endpoint' does not have
+        // 'scheme', we will add https scheme.
+        if (!s3Endpoint.isEmpty()) {
+            s3AsyncClientBuilder.endpointOverride(ensureSchemeInEndpoint(s3Endpoint));
+        }
+
+        // set for s3 path style access
+        s3AsyncClientBuilder.serviceConfiguration(
+                S3Configuration.builder().pathStyleAccessEnabled(s3EnablePathStyleAccess).build());
+
+        return s3AsyncClientBuilder.build();
     }
 
     @Override

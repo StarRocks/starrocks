@@ -83,6 +83,7 @@ import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.authentication.UserProperty;
+import com.starrocks.authorization.GrantType;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
@@ -6027,6 +6028,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 joinType = JoinOperator.LEFT_OUTER_JOIN;
             } else if (context.outerAndSemiJoinType().SEMI() != null) {
                 joinType = JoinOperator.LEFT_SEMI_JOIN;
+            } else if (context.outerAndSemiJoinType().AWARE() != null) {
+                joinType = JoinOperator.NULL_AWARE_LEFT_ANTI_JOIN;
             } else if (context.outerAndSemiJoinType().ANTI() != null) {
                 joinType = JoinOperator.LEFT_ANTI_JOIN;
             } else {
@@ -6205,7 +6208,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitSubqueryWithAlias(StarRocksParser.SubqueryWithAliasContext context) {
         QueryRelation queryRelation = (QueryRelation) visit(context.subquery());
-        SubqueryRelation subqueryRelation = new SubqueryRelation(new QueryStatement(queryRelation));
+        QueryStatement qs = new QueryStatement(queryRelation);
+        SubqueryRelation subqueryRelation = new SubqueryRelation(qs, context.ASSERT_ROWS() != null, qs.getPos());
 
         if (context.alias != null) {
             Identifier identifier = (Identifier) visit(context.alias);
@@ -6510,7 +6514,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new GrantRoleStmt(roleNameList, ((Identifier) visit(context.identifierOrString())).getValue(),
-                createPos(context));
+                GrantType.ROLE, createPos(context));
     }
 
     @Override
@@ -6533,7 +6537,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new RevokeRoleStmt(roleNameList, ((Identifier) visit(context.identifierOrString())).getValue(),
-                createPos(context));
+                GrantType.ROLE, createPos(context));
     }
 
     @Override
@@ -6585,10 +6589,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         NodePosition pos = createPos(context);
         if (context.ROLE() != null) {
             Identifier role = (Identifier) visit(context.identifierOrString());
-            return new ShowGrantsStmt(null, role.getValue(), pos);
+            return new ShowGrantsStmt(role.getValue(), GrantType.ROLE, pos);
         } else {
             UserIdentity userId = context.user() == null ? null : (UserIdentity) visit(context.user());
-            return new ShowGrantsStmt(userId, null, pos);
+            return new ShowGrantsStmt(userId, pos);
         }
     }
 
@@ -8558,8 +8562,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (ctx.INTEGER_VALUE() == null) {
             throw new ParsingException("Invalid number of statement arguments");
         }
-        long id = Long.parseLong(ctx.INTEGER_VALUE().getText());
-        return new DropBaselinePlanStmt(id, createPos(ctx));
+        List<Long> ids = ctx.INTEGER_VALUE().stream()
+                .map(ParseTree::getText)
+                .map(Long::parseLong).toList();
+
+        return new DropBaselinePlanStmt(ids, createPos(ctx));
     }
 
     @Override
@@ -8807,7 +8814,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     "function", aggFuncName, argTypes), createPos(context));
         }
         AggregateFunction aggFunc = (AggregateFunction) result;
-        if (!AggStateUtils.isSupportedAggStateFunction(aggFunc)) {
+        if (!AggStateUtils.isSupportedAggStateFunction(aggFunc, false)) {
             throw new ParsingException(String.format("AggStateType function %s with input %s is not supported yet.",
                     aggFuncName, argTypes), createPos(context));
         }
