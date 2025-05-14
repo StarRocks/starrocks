@@ -64,10 +64,14 @@ jobs:
           python3 scripts/get_pr_issue.py check_issue ${GITHUB_REPOSITORY} ${PR_NUMBER}
       
       - uses: thehanimo/pr-title-checker@v1.3.5
+        id: check-title-format
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           pass_on_octokit_error: false
           configuration_path: ".github/pr-title-checker-config.json"
+
+      - run:
+          echo ${{ steps.check-title-format.outputs.success }}
 
       - name: Checkout code
         uses: actions/checkout@v4
