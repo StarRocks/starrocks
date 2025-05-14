@@ -85,6 +85,7 @@ class ObjectCache;
 class LocalCache;
 class RemoteCache;
 class StoragePageCache;
+class Cache;
 class DiskSpaceMonitor;
 struct CacheOptions;
 struct RfTracePoint;
@@ -279,6 +280,7 @@ private:
 
     std::shared_ptr<LocalCache> _local_cache;
     std::shared_ptr<RemoteCache> _remote_cache;
+    std::shared_ptr<Cache> _lru_cache;
 
     std::shared_ptr<BlockCache> _block_cache;
     std::shared_ptr<ObjectCache> _starcache_based_object_cache;

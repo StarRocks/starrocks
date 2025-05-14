@@ -59,7 +59,6 @@ public:
 private:
     bool _try_release_obj_handle(ObjectCacheHandlePtr handle);
 
-    ObjectCacheOptions _options;
     std::shared_ptr<starcache::StarCache> _cache;
 };
 

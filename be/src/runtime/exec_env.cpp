@@ -383,12 +383,12 @@ Status CacheEnv::_init_starcache_based_object_cache() {
 }
 
 Status CacheEnv::_init_lru_base_object_cache() {
-    ObjectCacheOptions options;
     ASSIGN_OR_RETURN(int64_t storage_cache_limit, get_storage_page_cache_limit());
     storage_cache_limit = check_storage_page_cache_limit(storage_cache_limit);
-    options.capacity = storage_cache_limit;
 
-    _lru_based_object_cache = std::make_shared<LRUCacheModule>(options);
+    _lru_cache = std::make_shared<ShardedLRUCache>(storage_cache_limit);
+    _lru_based_object_cache = std::make_shared<LRUCacheModule>(_lru_cache);
+
     LOG(INFO) << "object cache init successfully";
     return Status::OK();
 }
