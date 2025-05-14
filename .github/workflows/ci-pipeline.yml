@@ -23,7 +23,6 @@ jobs:
       CODE_PATH: ${{ github.workspace }}
       BRANCH: ${{ github.base_ref }}
       GH_TOKEN: ${{ github.token }}
-      PR_TITLE: ${{ github.event.pull_request.title }}
     outputs:
       PASS: ${{ steps.check.outputs.pass }}
     steps:
@@ -74,6 +73,7 @@ jobs:
           
       - name: Branch Access Check
         run: |
+          PR_TITLE=$(gh pr view ${PR_NUMBER} -R ${GITHUB_REPOSITORY} --json  title -q '.title')
           status=$(cat .github/.status || echo open)
           if [[ "${PR_TITLE}" == *"[Tool]"* ]]; then
             exit 0
@@ -87,7 +87,7 @@ jobs:
             exit 0
           fi
 
-          gh pr comment ${PR_NUMBER} -R ${GITHUB_REPOSITORY} -b "${comment}"
+          echo "::error::${comment}"
           exit 1
 
   be-checker:
