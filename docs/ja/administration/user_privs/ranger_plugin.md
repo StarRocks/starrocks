@@ -140,7 +140,7 @@ Ranger クラスターを操作する権限がない場合や、この機能が�
    - `ranger.plugin.starrocks.service.name`: ステップ 4 で作成した StarRocks Service の名前に変更します。
    - `ranger.plugin.starrocks.policy.rest the url`: Ranger Admin のアドレスに変更します。
 
-   他の設定を変更する必要がある場合は、Apache Ranger の公式ドキュメントを参照してください。たとえば、`ranger.plugin.starrocks.policy.pollIntervalM` を変更してポリシー変更の取得間隔を変更できます。
+   他の設定を変更する必要がある場合は、Apache Ranger の公式ドキュメントを参照してください。たとえば、`ranger.plugin.starrocks.policy.pollIntervalMs` を変更してポリシー変更の取得間隔を変更できます。
 
    ```SQL
    vim ranger-starrocks-security.xml
