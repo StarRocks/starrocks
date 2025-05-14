@@ -343,6 +343,13 @@ CacheEnv* CacheEnv::GetInstance() {
 Status CacheEnv::init(const std::vector<StorePath>& store_paths) {
     _global_env = GlobalEnv::GetInstance();
     _store_paths = store_paths;
+    _block_cache = std::make_shared<BlockCache>();
+
+    if (!config::datacache_enable) {
+        config::disable_storage_page_cache = true;
+        config::block_cache_enable = false;
+        return Status::OK();
+    }
 
     RETURN_IF_ERROR(_init_datacache());
     RETURN_IF_ERROR(_init_starcache_based_object_cache());
@@ -401,8 +408,6 @@ Status CacheEnv::_init_page_cache() {
 }
 
 Status CacheEnv::_init_datacache() {
-    _block_cache = std::make_shared<BlockCache>();
-
 #if !defined(WITH_STARCACHE)
     if (config::datacache_enable) {
         LOG(WARNING) << "No valid engines supported, skip initializing datacache module";
