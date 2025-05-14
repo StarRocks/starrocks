@@ -1,23 +1,14 @@
 ---
 displayed_sidebar: docs
 toc_max_heading_level: 5
+description: "Query data directly from Delta Lake"
 ---
+import Intro from '../../_assets/catalog/_deltalake_intro.mdx'
+import DatabricksParams from '../../_assets/catalog/_databricks_params.mdx'
 
 # Delta Lake catalog
 
-A Delta Lake catalog is a kind of external catalog that enables you to query data from Delta Lake without ingestion.
-
-Also, you can directly transform and load data from Delta Lake by using [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) based on Delta Lake catalogs. StarRocks supports Delta Lake catalogs from v2.5 onwards.
-
-To ensure successful SQL workloads on your Delta Lake cluster, your StarRocks cluster must be able to access the storage system and metastore of your Delta Lake cluster. StarRocks supports the following storage systems and metastores:
-
-- Distributed file system (HDFS) or object storage like AWS S3, Microsoft Azure Storage, Google GCS, or other S3-compatible storage system (for example, MinIO)
-
-- Metastore like Hive metastore or AWS Glue
-
-  > **NOTE**
-  >
-  > If you choose AWS S3 as storage, you can use HMS or AWS Glue as metastore. If you choose any other storage system, you can only use HMS as metastore.
+<Intro />
 
 ## Usage notes
 
@@ -52,9 +43,9 @@ If you choose HDFS as storage, configure your StarRocks cluster as follows:
   - High availability (HA) is enabled for your HDFS cluster: Add the **hdfs-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and to the **$BE_HOME/conf** path of each BE or the **$CN_HOME/conf** path of each CN.
   - View File System (ViewFs) is enabled for your HDFS cluster: Add the **core-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and to the **$BE_HOME/conf** path of each BE or the **$CN_HOME/conf** path of each CN.
 
-> **NOTE**
->
-> If an error indicating an unknown host is returned when you send a query, you must add the mapping between the host names and IP addresses of your HDFS cluster nodes to the **/etc/hosts** path.
+  :::note
+  If an error indicating an unknown host is returned when you send a query, you must add the mapping between the host names and IP addresses of your HDFS cluster nodes to the **/etc/hosts** path.
+  :::
 
 ### Kerberos authentication
 
@@ -109,9 +100,9 @@ If you choose Hive metastore as the metastore of your data source, configure `Me
 "hive.metastore.uris" = "<hive_metastore_uri>"
 ```
 
-> **NOTE**
->
-> Before querying Delta Lake data, you must add the mapping between the host names and IP addresses of your Hive metastore nodes to the `/etc/hosts` path. Otherwise, StarRocks may fail to access your Hive metastore when you start a query.
+:::note
+Before querying Delta Lake data, you must add the mapping between the host names and IP addresses of your Hive metastore nodes to the `/etc/hosts` path. Otherwise, StarRocks may fail to access your Hive metastore when you start a query.
+:::
 
 The following table describes the parameter you need to configure in `MetastoreParams`.
 
@@ -163,6 +154,8 @@ The following table describes the parameters you need to configure in `Metastore
 | aws.glue.secret_key           | No       | The secret key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter. |
 
 For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
+
+<DatabricksParams />
 
 #### StorageCredentialParams
 
@@ -432,9 +425,9 @@ From v3.3.3 onwards, Delta Lake Catalog supports [Metadata Local Cache and Retri
 
 However, if the frequency of data updates in Delta Lake is high, you can tune these parameters to further optimize the performance of automatic asynchronous updates.
 
-> **NOTE**
->
-> In most cases, if your Delta Lake data is updated at a granularity of 1 hour or less, the data update frequency is considered high.
+:::note
+In most cases, if your Delta Lake data is updated at a granularity of 1 hour or less, the data update frequency is considered high.
+:::
 
 | **Parameter**                                      | **Unit** | **Default** | **Description**                                |
 |----------------------------------------------------| -------- | ------------------------------------------------------------ |

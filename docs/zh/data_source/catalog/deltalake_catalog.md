@@ -1,66 +1,59 @@
 ---
+description: 直接从 Delta Lake 查询数据
 displayed_sidebar: docs
-toc_max_heading_level: 5
 ---
+import Intro from '../../_assets/catalog/_deltalake_intro.mdx'
+import DatabricksParams from '../../_assets/catalog/_databricks_params.mdx'
 
 # Delta Lake catalog
 
-Delta Lake Catalog 是一种 External Catalog。通过 Delta Lake Catalog，您不需要执行数据导入就可以直接查询 Delta Lake 里的数据。
-
-此外，您还可以基于 Delta Lake Catalog，结合 [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 能力来实现数据转换和导入。StarRocks 从 2.5 版本开始支持 Delta Lake Catalog。
-
-为保证正常访问 Delta Lake 内的数据，StarRocks 集群必须能够访问 Delta Lake 集群的存储系统和元数据服务。目前 StarRocks 支持以下存储系统和元数据服务：
-
-- 分布式文件系统 (HDFS) 或对象存储。当前支持的对象存储包括：AWS S3、Microsoft Azure Storage、Google GCS、其他兼容 S3 协议的对象存储（如阿里云 OSS、MinIO）。
-
-- 元数据服务。当前支持的元数据服务包括：Hive Metastore（以下简称 HMS）、AWS Glue。
-
-  > **说明**
-  >
-  > 如果选择 AWS S3 作为存储系统，您可以选择 HMS 或 AWS Glue 作为元数据服务。如果选择其他存储系统，则只能选择 HMS 作为元数据服务。
+<Intro />
 
 ## 使用说明
 
-- StarRocks 查询 Delta Lake 数据时，支持 Parquet 文件格式。Parquet 文件支持 SNAPPY、LZ4、ZSTD、GZIP 和 NO_COMPRESSION 压缩格式。
-- StarRocks 查询 Delta Lake 数据时，不支持 MAP 和 STRUCT 数据类型。
+- StarRocks 支持的 Delta Lake 文件格式是 Parquet。Parquet 文件支持以下压缩格式：SNAPPY、LZ4、ZSTD、GZIP 和 NO_COMPRESSION。
+- StarRocks 不支持 Delta Lake 的数据类型为 MAP 和 STRUCT。
 
-## 准备工作
+## 集成准备
 
-在创建 Delta Lake Catalog 之前，请确保 StarRocks 集群能够正常访问 Delta Lake 的文件存储及元数据服务。
+在创建 Delta Lake catalog 之前，请确保您的 StarRocks 集群可以与 Delta Lake 集群的存储系统和元存储集成。
 
 ### AWS IAM
 
-如果 Delta Lake 使用 AWS S3 作为文件存储或使用 AWS Glue 作为元数据服务，您需要选择一种合适的认证鉴权方案，确保 StarRocks 集群可以访问相关的 AWS 云资源。
+如果您的 Delta Lake 集群使用 AWS S3 作为存储或 AWS Glue 作为元存储，请选择适合的身份验证方法并进行必要的准备，以确保您的 StarRocks 集群可以访问相关的 AWS 云资源。
 
-您可以选择如下认证鉴权方案：
+推荐以下身份验证方法：
 
-- Instance Profile（推荐）
-- Assumed Role
-- IAM User
+- 实例配置文件
+- 假设角色
+- IAM 用户
 
-有关 StarRocks 访问 AWS 认证鉴权的详细内容，参见[配置 AWS 认证方式 - 准备工作](../../integrations/authenticate_to_aws_resources.md#准备工作)。
+在上述三种身份验证方法中，实例配置文件是最广泛使用的。
+
+有关更多信息，请参见 [AWS IAM 中的身份验证准备](../../integrations/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication)。
 
 ### HDFS
 
-如果使用 HDFS 作为文件存储，则需要在 StarRocks 集群中做如下配置：
+如果选择 HDFS 作为存储，请按以下步骤配置您的 StarRocks 集群：
 
-- （可选）设置用于访问 HDFS 集群和 HMS 的用户名。 您可以在每个 FE 的 **fe/conf/hadoop_env.sh** 文件、以及每个 BE 的 **be/conf/hadoop_env.sh** 文件（或每个 CN 的 **cn/conf/hadoop_env.sh** 文件）最开头增加 `export HADOOP_USER_NAME="<user_name>"` 来设置该用户名。配置完成后，需重启各个 FE 和 BE（或 CN）使配置生效。如果不设置该用户名，则默认使用 FE 和 BE（或 CN）进程的用户名进行访问。每个 StarRocks 集群仅支持配置一个用户名。
-- 查询 Delta Lake 数据时，StarRocks 集群的 FE 和 BE（或 CN）会通过 HDFS 客户端访问 HDFS 集群。一般情况下，StarRocks 会按照默认配置来启动 HDFS 客户端，无需手动配置。但在以下场景中，需要进行手动配置：
-  - 如果 HDFS 集群开启了高可用（High Availability，简称为“HA”）模式，则需要将 HDFS 集群中的 **hdfs-site.xml** 文件放到每个 FE 的 **$FE_HOME/conf** 路径下、以及每个 BE 的 **$BE_HOME/conf** 路径（或每个 CN 的 **$CN_HOME/conf** 路径）下。
-  - 如果 HDFS 集群配置了 ViewFs，则需要将 HDFS 集群中的 **core-site.xml** 文件放到每个 FE 的 **$FE_HOME/conf** 路径下、以及每个 BE 的 **$BE_HOME/conf** 路径（或每个 CN 的 **$CN_HOME/conf** 路径）下。
+- （可选）设置用于访问 HDFS 集群和 Hive 元存储的用户名。默认情况下，StarRocks 使用 FE 和 BE 或 CN 进程的用户名访问 HDFS 集群和 Hive 元存储。您也可以通过在每个 FE 的 **fe/conf/hadoop_env.sh** 文件和每个 BE 或 CN 的 **be/conf/hadoop_env.sh** 或 **cn/conf/hadoop_env.sh** 文件开头添加 `export HADOOP_USER_NAME="<user_name>"` 来设置用户名。设置完成后，重启每个 FE 和每个 BE 或 CN 以使参数设置生效。每个 StarRocks 集群只能设置一个用户名。
+- 当您查询 Delta Lake 数据时，StarRocks 集群的 FEs 和 BEs 或 CNs 使用 HDFS 客户端访问 HDFS 集群。在大多数情况下，您无需配置 StarRocks 集群即可实现此目的，StarRocks 使用默认配置启动 HDFS 客户端。仅在以下情况下需要配置 StarRocks 集群：
 
-> **注意**
->
-> 如果查询时因为域名无法识别 (Unknown Host) 而发生访问失败，您需要将 HDFS 集群中各节点的主机名及 IP 地址之间的映射关系配置到 **/etc/hosts** 路径中。
+  - 启用了 HDFS 集群的高可用性 (HA)：将 HDFS 集群的 **hdfs-site.xml** 文件添加到每个 FE 的 **$FE_HOME/conf** 路径和每个 BE 或 CN 的 **$BE_HOME/conf** 或 **$CN_HOME/conf** 路径。
+  - 启用了 HDFS 集群的 View File System (ViewFs)：将 HDFS 集群的 **core-site.xml** 文件添加到每个 FE 的 **$FE_HOME/conf** 路径和每个 BE 或 CN 的 **$BE_HOME/conf** 或 **$CN_HOME/conf** 路径。
+
+  :::note
+  如果在发送查询时返回未知主机错误，您必须将 HDFS 集群节点的主机名和 IP 地址映射添加到 **/etc/hosts** 路径。
+  :::
 
 ### Kerberos 认证
 
-如果 HDFS 集群或 HMS 开启了 Kerberos 认证，则需要在 StarRocks 集群中做如下配置：
+如果您的 HDFS 集群或 Hive 元存储启用了 Kerberos 认证，请按以下步骤配置您的 StarRocks 集群：
 
-- 在每个 FE 和 每个 BE（或 CN）上执行 `kinit -kt keytab_path principal` 命令，从 Key Distribution Center (KDC) 获取到 Ticket Granting Ticket (TGT)。执行命令的用户必须拥有访问 HMS 和 HDFS 的权限。注意，使用该命令访问 KDC 具有时效性，因此需要使用 cron 定期执行该命令。
-- 在每个 FE 的 **$FE_HOME/conf/fe.conf** 文件和每个 BE 的 **$BE_HOME/conf/be.conf** 文件（或每个 CN 的 **$CN_HOME/conf/cn.conf** 文件）中添加 `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"`。其中，`/etc/krb5.conf` 是 **krb5.conf** 文件的路径，可以根据文件的实际路径进行修改。
+- 在每个 FE 和每个 BE 或 CN 上运行 `kinit -kt keytab_path principal` 命令，从密钥分发中心 (KDC) 获取票证授予票证 (TGT)。要运行此命令，您必须具有访问 HDFS 集群和 Hive 元存储的权限。请注意，使用此命令访问 KDC 是时间敏感的。因此，您需要使用 cron 定期运行此命令。
+- 将 `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"` 添加到每个 FE 的 **$FE_HOME/conf/fe.conf** 文件和每个 BE 或 CN 的 **$BE_HOME/conf/be.conf** 或 **$CN_HOME/conf/cn.conf** 文件中。在此示例中，`/etc/krb5.conf` 是 **krb5.conf** 文件的保存路径。您可以根据需要修改路径。
 
-## 创建 Delta Lake Catalog
+## 创建 Delta Lake catalog
 
 ### 语法
 
@@ -76,53 +69,52 @@ PROPERTIES
 )
 ```
 
-### 参数说明
+### 参数
 
 #### catalog_name
 
-Delta Lake Catalog 的名称。命名要求如下：
+Delta Lake catalog 的名称。命名规则如下：
 
-- 必须由字母 (a-z 或 A-Z)、数字 (0-9) 或下划线 (_) 组成，且只能以字母开头。
-- 总长度不能超过 1023 个字符。
-- Catalog 名称大小写敏感。
+- 名称可以包含字母、数字 (0-9) 和下划线 (_)。必须以字母开头。
+- 名称区分大小写，长度不能超过 1023 个字符。
 
 #### comment
 
-Delta Lake Catalog 的描述。此参数为可选。
+Delta Lake catalog 的描述。此参数是可选的。
 
 #### type
 
-数据源的类型。设置为 `deltalake`。
+数据源的类型。将值设置为 `deltalake`。
 
 #### MetastoreParams
 
-StarRocks 访问 Delta Lake 集群元数据服务的相关参数配置。
+关于 StarRocks 如何与数据源的元存储集成的一组参数。
 
-##### HMS
+##### Hive metastore
 
-如果选择 HMS 作为 Delta Lake 集群的元数据服务，请按如下配置 `MetastoreParams`：
+如果选择 Hive metastore 作为数据源的元存储，请按以下方式配置 `MetastoreParams`：
 
 ```SQL
 "hive.metastore.type" = "hive",
 "hive.metastore.uris" = "<hive_metastore_uri>"
 ```
 
-> **说明**
->
-> 在查询 Delta Lake 数据之前，必须将所有 HMS 节点的主机名及 IP 地址之间的映射关系添加到 **/etc/hosts** 路径。否则，发起查询时，StarRocks 可能无法访问 HMS。
+:::note
+在查询 Delta Lake 数据之前，必须将 Hive 元存储节点的主机名和 IP 地址映射添加到 `/etc/hosts` 路径。否则，StarRocks 在启动查询时可能无法访问 Hive 元存储。
+:::
 
-`MetastoreParams` 包含如下参数。
+以下表格描述了需要在 `MetastoreParams` 中配置的参数。
 
-| 参数                | 是否必须   | 说明                                                         |
-| ------------------- | -------- | ------------------------------------------------------------ |
-| hive.metastore.type | 是       | Delta Lake 集群所使用的元数据服务的类型。设置为 `hive`。           |
-| hive.metastore.uris | 是       | HMS 的 URI。格式：`thrift://<HMS IP 地址>:<HMS 端口号>`。<br />如果您的 HMS 开启了高可用模式，此处可以填写多个 HMS 地址并用逗号分隔，例如：`"thrift://<HMS IP 地址 1>:<HMS 端口号 1>,thrift://<HMS IP 地址 2>:<HMS 端口号 2>,thrift://<HMS IP 地址 3>:<HMS 端口号 3>"`。 |
+| 参数                  | 必需 | 描述                                                  |
+| ------------------- | ---- | ----------------------------------------------------- |
+| hive.metastore.type | 是   | 您用于 Delta Lake 集群的元存储类型。将值设置为 `hive`。 |
+| hive.metastore.uris | 是   | 您的 Hive 元存储的 URI。格式：`thrift://<metastore_IP_address>:<metastore_port>`。<br />如果启用了 Hive 元存储的高可用性 (HA)，可以指定多个元存储 URI，并用逗号 (`,`) 分隔，例如 `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`。 |
 
 ##### AWS Glue
 
-如果选择 AWS Glue 作为 Delta Lake 集群的元数据服务（只有使用 AWS S3 作为存储系统时支持），请按如下配置 `MetastoreParams`：
+如果选择 AWS Glue 作为数据源的元存储，仅在选择 AWS S3 作为存储时支持，请采取以下操作之一：
 
-- 基于 Instance Profile 进行认证和鉴权
+- 要选择基于实例配置文件的身份验证方法，请按以下方式配置 `MetastoreParams`：
 
   ```SQL
   "hive.metastore.type" = "glue",
@@ -130,7 +122,7 @@ StarRocks 访问 Delta Lake 集群元数据服务的相关参数配置。
   "aws.glue.region" = "<aws_glue_region>"
   ```
 
-- 基于 Assumed Role 进行认证和鉴权
+- 要选择基于假设角色的身份验证方法，请按以下方式配置 `MetastoreParams`：
 
   ```SQL
   "hive.metastore.type" = "glue",
@@ -139,7 +131,7 @@ StarRocks 访问 Delta Lake 集群元数据服务的相关参数配置。
   "aws.glue.region" = "<aws_glue_region>"
   ```
 
-- 基于 IAM User 进行认证和鉴权
+- 要选择基于 IAM 用户的身份验证方法，请按以下方式配置 `MetastoreParams`：
 
   ```SQL
   "hive.metastore.type" = "glue",
@@ -149,39 +141,41 @@ StarRocks 访问 Delta Lake 集群元数据服务的相关参数配置。
   "aws.glue.region" = "<aws_s3_region>"
   ```
 
-`MetastoreParams` 包含如下参数。
+以下表格描述了需要在 `MetastoreParams` 中配置的参数。
 
-| 参数                          | 是否必须   | 说明                                                         |
-| ----------------------------- | -------- | ------------------------------------------------------------ |
-| hive.metastore.type           | 是       | Delta Lake 集群所使用的元数据服务的类型。设置为 `glue`。           |
-| aws.glue.use_instance_profile | 是       | 指定是否开启 Instance Profile 和 Assumed Role 两种鉴权方式。取值范围：`true` 和 `false`。默认值：`false`。 |
-| aws.glue.iam_role_arn         | 否       | 有权限访问 AWS Glue Data Catalog 的 IAM Role 的 ARN。采用 Assumed Role 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
-| aws.glue.region               | 是       | AWS Glue Data Catalog 所在的地域。示例：`us-west-1`。        |
-| aws.glue.access_key           | 否       | IAM User 的 Access Key。采用 IAM User 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
-| aws.glue.secret_key           | 否       | IAM User 的 Secret Key。采用 IAM User 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
+| 参数                           | 必需 | 描述                                                  |
+| ----------------------------- | ---- | ----------------------------------------------------- |
+| hive.metastore.type           | 是   | 您用于 Delta Lake 集群的元存储类型。将值设置为 `glue`。 |
+| aws.glue.use_instance_profile | 是   | 指定是否启用基于实例配置文件的身份验证方法和基于假设角色的身份验证方法。有效值：`true` 和 `false`。默认值：`false`。 |
+| aws.glue.iam_role_arn         | 否   | 在您的 AWS Glue Data Catalog 上具有权限的 IAM 角色的 ARN。如果使用基于假设角色的身份验证方法访问 AWS Glue，必须指定此参数。 |
+| aws.glue.region               | 是   | 您的 AWS Glue Data Catalog 所在的区域。例如：`us-west-1`。 |
+| aws.glue.access_key           | 否   | 您的 AWS IAM 用户的访问密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS Glue，必须指定此参数。 |
+| aws.glue.secret_key           | 否   | 您的 AWS IAM 用户的密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS Glue，必须指定此参数。 |
 
-有关如何选择用于访问 AWS Glue 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS Glue 的认证参数](../../integrations/authenticate_to_aws_resources.md#访问-aws-glue-的认证参数)。
+有关如何选择访问 AWS Glue 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS Glue 的身份验证参数](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue)。
+
+<DatabricksParams />
 
 #### StorageCredentialParams
 
-StarRocks 访问 Delta Lake 集群文件存储的相关参数配置。
+关于 StarRocks 如何与您的存储系统集成的一组参数。此参数集是可选的。
 
-如果您使用 HDFS 作为存储系统，则不需要配置 `StorageCredentialParams`。
+如果使用 HDFS 作为存储，则无需配置 `StorageCredentialParams`。
 
-如果您使用 AWS S3、其他兼容 S3 协议的对象存储、Microsoft Azure Storage、 或 GCS，则必须配置 `StorageCredentialParams`。
+如果使用 AWS S3、其他 S3 兼容存储系统、Microsoft Azure Storage 或 Google GCS 作为存储，则必须配置 `StorageCredentialParams`。
 
 ##### AWS S3
 
-如果选择 AWS S3 作为 Delta Lake 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+如果选择 AWS S3 作为 Delta Lake 集群的存储，请采取以下操作之一：
 
-- 基于 Instance Profile 进行认证和鉴权
+- 要选择基于实例配置文件的身份验证方法，请按以下方式配置 `StorageCredentialParams`：
 
   ```SQL
   "aws.s3.use_instance_profile" = "true",
   "aws.s3.region" = "<aws_s3_region>"
   ```
 
-- 基于 Assumed Role 进行认证和鉴权
+- 要选择基于假设角色的身份验证方法，请按以下方式配置 `StorageCredentialParams`：
 
   ```SQL
   "aws.s3.use_instance_profile" = "true",
@@ -189,7 +183,7 @@ StarRocks 访问 Delta Lake 集群文件存储的相关参数配置。
   "aws.s3.region" = "<aws_s3_region>"
   ```
 
-- 基于 IAM User 进行认证和鉴权
+- 要选择基于 IAM 用户的身份验证方法，请按以下方式配置 `StorageCredentialParams`：
 
   ```SQL
   "aws.s3.use_instance_profile" = "false",
@@ -198,39 +192,23 @@ StarRocks 访问 Delta Lake 集群文件存储的相关参数配置。
   "aws.s3.region" = "<aws_s3_region>"
   ```
 
-`StorageCredentialParams` 包含如下参数。
+以下表格描述了需要在 `StorageCredentialParams` 中配置的参数。
 
-| 参数                        | 是否必须   | 说明                                                         |
-| --------------------------- | -------- | ------------------------------------------------------------ |
-| aws.s3.use_instance_profile | 是       | 指定是否开启 Instance Profile 和 Assumed Role 两种鉴权方式。取值范围：`true` 和 `false`。默认值：`false`。 |
-| aws.s3.iam_role_arn         | 否       | 有权限访问 AWS S3 Bucket 的 IAM Role 的 ARN。采用 Assumed Role 鉴权方式访问 AWS S3 时，必须指定此参数。 |
-| aws.s3.region               | 是       | AWS S3 Bucket 所在的地域。示例：`us-west-1`。                |
-| aws.s3.access_key           | 否       | IAM User 的 Access Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。 |
-| aws.s3.secret_key           | 否       | IAM User 的 Secret Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。 |
+| 参数                         | 必需 | 描述                                                  |
+| --------------------------- | ---- | ----------------------------------------------------- |
+| aws.s3.use_instance_profile | 是   | 指定是否启用基于实例配置文件的身份验证方法和基于假设角色的身份验证方法。有效值：`true` 和 `false`。默认值：`false`。 |
+| aws.s3.iam_role_arn         | 否   | 在您的 AWS S3 存储桶上具有权限的 IAM 角色的 ARN。如果使用基于假设角色的身份验证方法访问 AWS S3，必须指定此参数。 |
+| aws.s3.region               | 是   | 您的 AWS S3 存储桶所在的区域。例如：`us-west-1`。 |
+| aws.s3.access_key           | 否   | 您的 IAM 用户的访问密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS S3，必须指定此参数。 |
+| aws.s3.secret_key           | 否   | 您的 IAM 用户的密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS S3，必须指定此参数。 |
 
-有关如何选择用于访问 AWS S3 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS S3 的认证参数](../../integrations/authenticate_to_aws_resources.md#访问-aws-s3-的认证参数)。
+有关如何选择访问 AWS S3 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS S3 的身份验证参数](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)。
 
-##### 阿里云 OSS
+##### S3 兼容存储系统
 
-如果选择阿里云 OSS 作为 Delta Lake 集群的文件存储，需要在 `StorageCredentialParams` 中配置如下认证参数：
+从 v2.5 开始，Delta Lake catalogs 支持 S3 兼容存储系统。
 
-```SQL
-"aliyun.oss.access_key" = "<user_access_key>",
-"aliyun.oss.secret_key" = "<user_secret_key>",
-"aliyun.oss.endpoint" = "<oss_endpoint>" 
-```
-
-| 参数                            | 是否必须 | 说明                                                         |
-| ------------------------------- | -------- | ------------------------------------------------------------ |
-| aliyun.oss.endpoint             | 是      | 阿里云 OSS Endpoint, 如 `oss-cn-beijing.aliyuncs.com`，您可根据 Endpoint 与地域的对应关系进行查找，请参见 [访问域名和数据中心](https://help.aliyun.com/document_detail/31837.html)。    |
-| aliyun.oss.access_key           | 是      | 指定阿里云账号或 RAM 用户的 AccessKey ID，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.html)。                                     |
-| aliyun.oss.secret_key           | 是      | 指定阿里云账号或 RAM 用户的 AccessKey Secret，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.html)。           ｜
-
-##### 兼容 S3 协议的对象存储
-
-Delta Lake Catalog 从 2.5 版本起支持兼容 S3 协议的对象存储。
-
-如果选择兼容 S3 协议的对象存储（如 MinIO）作为 Delta Lake 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+如果选择 S3 兼容存储系统（如 MinIO）作为 Delta Lake 集群的存储，请按以下方式配置 `StorageCredentialParams` 以确保成功集成：
 
 ```SQL
 "aws.s3.enable_ssl" = "false",
@@ -240,39 +218,39 @@ Delta Lake Catalog 从 2.5 版本起支持兼容 S3 协议的对象存储。
 "aws.s3.secret_key" = "<iam_user_secret_key>"
 ```
 
-`StorageCredentialParams` 包含如下参数。
+以下表格描述了需要在 `StorageCredentialParams` 中配置的参数。
 
-| 参数                             | 是否必须   | 说明                                                  |
-| -------------------------------- | -------- | ------------------------------------------------------------ |
-| aws.s3.enable_ssl                | Yes      | 是否开启 SSL 连接。<br />取值范围：`true` 和 `false`。默认值：`true`。 |
-| aws.s3.enable_path_style_access  | Yes      | 是是否开启路径类型访问 (Path-Style Access)。<br />取值范围：`true` 和 `false`。默认值：`false`。对于 MinIO，必须设置为 `true`。<br />路径类型 URL 使用如下格式：`https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`。例如，如果您在美国西部（俄勒冈）区域中创建一个名为 `DOC-EXAMPLE-BUCKET1` 的存储桶，并希望访问该存储桶中的 `alice.jpg` 对象，则可使用以下路径类型 URL：`https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`。 |
-| aws.s3.endpoint                  | Yes      | 用于访问兼容 S3 协议的对象存储的 Endpoint。 |
-| aws.s3.access_key                | Yes      | IAM User 的 Access Key。 |
-| aws.s3.secret_key                | Yes      | IAM User 的 Secret Key。 |
+| 参数                            | 必需 | 描述                                                  |
+| ------------------------------ | ---- | ----------------------------------------------------- |
+| aws.s3.enable_ssl              | 是   | 指定是否启用 SSL 连接。<br />有效值：`true` 和 `false`。默认值：`true`。 |
+| aws.s3.enable_path_style_access| 是   | 指定是否启用路径样式访问。<br />有效值：`true` 和 `false`。默认值：`false`。对于 MinIO，必须将值设置为 `true`。<br />路径样式 URL 使用以下格式：`https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`。例如，如果在美国西部（俄勒冈）区域创建了一个名为 `DOC-EXAMPLE-BUCKET1` 的存储桶，并且要访问该存储桶中的 `alice.jpg` 对象，可以使用以下路径样式 URL：`https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`。 |
+| aws.s3.endpoint                | 是   | 用于连接到您的 S3 兼容存储系统而不是 AWS S3 的端点。 |
+| aws.s3.access_key              | 是   | 您的 IAM 用户的访问密钥。 |
+| aws.s3.secret_key              | 是   | 您的 IAM 用户的密钥。 |
 
 ##### Microsoft Azure Storage
 
-Delta Lake Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
+从 v3.0 开始，Delta Lake catalogs 支持 Microsoft Azure Storage。
 
 ###### Azure Blob Storage
 
-如果选择 Blob Storage 作为 Delta Lake 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+如果选择 Blob Storage 作为 Delta Lake 集群的存储，请采取以下操作之一：
 
-- 基于 Shared Key 进行认证和鉴权
+- 要选择共享密钥身份验证方法，请按以下方式配置 `StorageCredentialParams`：
 
   ```SQL
   "azure.blob.storage_account" = "<storage_account_name>",
   "azure.blob.shared_key" = "<storage_account_shared_key>"
   ```
 
-  `StorageCredentialParams` 包含如下参数。
+  以下表格描述了需要在 `StorageCredentialParams` 中配置的参数。
 
-  | **参数**                   | **是否必须** | **说明**                         |
-  | -------------------------- | ------------ | -------------------------------- |
-  | azure.blob.storage_account | 是           | Blob Storage 账号的用户名。      |
-  | azure.blob.shared_key      | 是           | Blob Storage 账号的 Shared Key。 |
+  | **参数**                    | **必需** | **描述**                              |
+  | -------------------------- | -------- | ------------------------------------- |
+  | azure.blob.storage_account | 是       | 您的 Blob Storage 账户的用户名。      |
+  | azure.blob.shared_key      | 是       | 您的 Blob Storage 账户的共享密钥。    |
 
-- 基于 SAS Token 进行认证和鉴权
+- 要选择 SAS 令牌身份验证方法，请按以下方式配置 `StorageCredentialParams`：
 
   ```SQL
   "azure.blob.storage_account" = "<storage_account_name>",
@@ -280,19 +258,19 @@ Delta Lake Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
   "azure.blob.sas_token" = "<storage_account_SAS_token>"
   ```
 
-  `StorageCredentialParams` 包含如下参数。
+  以下表格描述了需要在 `StorageCredentialParams` 中配置的参数。
 
-  | **参数**                  | **是否必须** | **说明**                                 |
-  | ------------------------- | ------------ | ---------------------------------------- |
-  | azure.blob.storage_account| 是           | Blob Storage 账号的用户名。              |
-  | azure.blob.container      | 是           | 数据所在 Blob 容器的名称。               |
-  | azure.blob.sas_token      | 是           | 用于访问 Blob Storage 账号的 SAS Token。 |
+  | **参数**                   | **必需** | **描述**                                              |
+  | ------------------------- | -------- | ----------------------------------------------------- |
+  | azure.blob.storage_account| 是       | 您的 Blob Storage 账户的用户名。                      |
+  | azure.blob.container      | 是       | 存储数据的 blob 容器的名称。                          |
+  | azure.blob.sas_token      | 是       | 用于访问您的 Blob Storage 账户的 SAS 令牌。           |
 
 ###### Azure Data Lake Storage Gen2
 
-如果选择 Data Lake Storage Gen2 作为 Delta Lake 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+如果选择 Data Lake Storage Gen2 作为 Delta Lake 集群的存储，请采取以下操作之一：
 
-- 基于 Managed Identity 进行认证和鉴权
+- 要选择托管身份验证方法，请按以下方式配置 `StorageCredentialParams`：
 
   ```SQL
   "azure.adls2.oauth2_use_managed_identity" = "true",
@@ -300,29 +278,29 @@ Delta Lake Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
   "azure.adls2.oauth2_client_id" = "<service_client_id>"
   ```
 
-  `StorageCredentialParams` 包含如下参数。
+  以下表格描述了需要在 `StorageCredentialParams` 中配置的参数。
 
-  | **参数**                                | **是否必须** | **说明**                                                |
-  | --------------------------------------- | ------------ | ------------------------------------------------------- |
-  | azure.adls2.oauth2_use_managed_identity | 是           | 指定是否开启 Managed Identity 鉴权方式。设置为 `true`。 |
-  | azure.adls2.oauth2_tenant_id            | 是           | 数据所属 Tenant 的 ID。                                 |
-  | azure.adls2.oauth2_client_id            | 是           | Managed Identity 的 Client (Application) ID。           |
+  | **参数**                               | **必需** | **描述**                                              |
+  | ------------------------------------- | -------- | ----------------------------------------------------- |
+  | azure.adls2.oauth2_use_managed_identity | 是       | 指定是否启用托管身份验证方法。将值设置为 `true`。     |
+  | azure.adls2.oauth2_tenant_id          | 是       | 您要访问数据的租户的 ID。                             |
+  | azure.adls2.oauth2_client_id          | 是       | 托管身份的客户端（应用程序）ID。                      |
 
-- 基于 Shared Key 进行认证和鉴权
+- 要选择共享密钥身份验证方法，请按以下方式配置 `StorageCredentialParams`：
 
   ```SQL
   "azure.adls2.storage_account" = "<storage_account_name>",
   "azure.adls2.shared_key" = "<storage_account_shared_key>"
   ```
 
-  `StorageCredentialParams` 包含如下参数。
+  以下表格描述了需要在 `StorageCredentialParams` 中配置的参数。
 
-  | **参数**                    | **是否必须** | **说明**                                   |
-  | --------------------------- | ------------ | ------------------------------------------ |
-  | azure.adls2.storage_account | 是           | Data Lake Storage Gen2 账号的用户名。      |
-  | azure.adls2.shared_key      | 是           | Data Lake Storage Gen2 账号的 Shared Key。 |
+  | **参数**                   | **必需** | **描述**                                              |
+  | ------------------------- | -------- | ----------------------------------------------------- |
+  | azure.adls2.storage_account | 是       | 您的 Data Lake Storage Gen2 存储账户的用户名。        |
+  | azure.adls2.shared_key      | 是       | 您的 Data Lake Storage Gen2 存储账户的共享密钥。      |
 
-- 基于 Service Principal 进行认证和鉴权
+- 要选择服务主体身份验证方法，请按以下方式配置 `StorageCredentialParams`：
 
   ```SQL
   "azure.adls2.oauth2_client_id" = "<service_client_id>",
@@ -330,31 +308,31 @@ Delta Lake Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
   "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
   ```
 
-  `StorageCredentialParams` 包含如下参数。
+  以下表格描述了需要在 `StorageCredentialParams` 中配置的参数。
 
-  | **参数**                           | **是否必须** | **说明**                                                     |
+  | **参数**                      | **必需** | **描述**                                              |
   | ---------------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.adls2.oauth2_client_id       | 是           | Service Principal 的 Client (Application) ID。               |
-  | azure.adls2.oauth2_client_secret   | 是           | 新建的 Client (Application) Secret。                         |
-  | azure.adls2.oauth2_client_endpoint | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
+  | azure.adls2.oauth2_client_id       | 是          | 服务主体的客户端（应用程序）ID。        |
+  | azure.adls2.oauth2_client_secret   | 是          | 新创建的客户端（应用程序）密钥的值。    |
+  | azure.adls2.oauth2_client_endpoint | 是          | 服务主体或应用程序的 OAuth 2.0 令牌端点 (v1)。 |
 
 ###### Azure Data Lake Storage Gen1
 
-如果选择 Data Lake Storage Gen1 作为 Delta Lake 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+如果选择 Data Lake Storage Gen1 作为 Delta Lake 集群的存储，请采取以下操作之一：
 
-- 基于 Managed Service Identity 进行认证和鉴权
+- 要选择托管服务身份验证方法，请按以下方式配置 `StorageCredentialParams`：
 
   ```SQL
   "azure.adls1.use_managed_service_identity" = "true"
   ```
 
-  `StorageCredentialParams` 包含如下参数。
+  以下表格描述了需要在 `StorageCredentialParams` 中配置的参数。
 
-  | **参数**                                 | **是否必须** | **说明**                                                     |
+  | **参数**                            | **必需** | **描述**                                              |
   | ---------------------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.adls1.use_managed_service_identity | 是           | 指定是否开启 Managed Service Identity 鉴权方式。设置为 `true`。 |
+  | azure.adls1.use_managed_service_identity | 是          | 指定是否启用托管服务身份验证方法。将值设置为 `true`。 |
 
-- 基于 Service Principal 进行认证和鉴权
+- 要选择服务主体身份验证方法，请按以下方式配置 `StorageCredentialParams`：
 
   ```SQL
   "azure.adls1.oauth2_client_id" = "<application_client_id>",
@@ -362,65 +340,65 @@ Delta Lake Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
   "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
   ```
 
-  `StorageCredentialParams` 包含如下参数。
+  以下表格描述了需要在 `StorageCredentialParams` 中配置的参数。
 
-  | **Parameter**                 | **Required** | **Description**                                              |
+  | **参数**                 | **必需** | **描述**                                              |
   | ----------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.adls1.oauth2_client_id  | 是           | Service Principal 的 Client (Application) ID。               |
-  | azure.adls1.oauth2_credential | 是           | 新建的 Client (Application) Secret。                         |
-  | azure.adls1.oauth2_endpoint   | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
+  | azure.adls1.oauth2_client_id  | 是          | 服务主体的客户端（应用程序）ID。        |
+  | azure.adls1.oauth2_credential | 是          | 新创建的客户端（应用程序）密钥的值。    |
+  | azure.adls1.oauth2_endpoint   | 是          | 服务主体或应用程序的 OAuth 2.0 令牌端点 (v1)。 |
 
 ##### Google GCS
 
-Delta Lake Catalog 从 3.0 版本起支持 Google GCS。
+从 v3.0 开始，Delta Lake catalogs 支持 Google GCS。
 
-如果选择 Google GCS 作为 Delta Lake 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+如果选择 Google GCS 作为 Delta Lake 集群的存储，请采取以下操作之一：
 
-- 基于 VM 进行认证和鉴权
+- 要选择基于 VM 的身份验证方法，请按以下方式配置 `StorageCredentialParams`：
 
   ```SQL
   "gcp.gcs.use_compute_engine_service_account" = "true"
   ```
 
-  `StorageCredentialParams` 包含如下参数。
+  以下表格描述了需要在 `StorageCredentialParams` 中配置的参数。
 
-  | **参数**                                   | **默认值** | **取值样例** | **说明**                                                 |
-  | ------------------------------------------ | ---------- | ------------ | -------------------------------------------------------- |
-  | gcp.gcs.use_compute_engine_service_account | false      | true         | 是否直接使用 Compute Engine 上面绑定的 Service Account。 |
+  | **参数**                              | **默认值** | **值示例** | **描述**                                              |
+  | ------------------------------------------ | ----------------- | --------------------- | ------------------------------------------------------------ |
+  | gcp.gcs.use_compute_engine_service_account | false             | true                  | 指定是否直接使用绑定到您的 Compute Engine 的服务账户。 |
 
-- 基于 Service Account 进行认证和鉴权
+- 要选择服务账户身份验证方法，请按以下方式配置 `StorageCredentialParams`：
 
   ```SQL
   "gcp.gcs.service_account_email" = "<google_service_account_email>",
   "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
-  "gcp.gcs.service_account_private_key" = "<google_service_private_key>"
+  "gcp.gcs.service_account_private_key" = "<google_service_private_key>",
   ```
 
-  `StorageCredentialParams` 包含如下参数。
+  以下表格描述了需要在 `StorageCredentialParams` 中配置的参数。
 
-  | **参数**                               | **默认值** | **取值样例**                                                 | **说明**                                                     |
-  | -------------------------------------- | ---------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-  | gcp.gcs.service_account_email          | ""         | "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)" | 创建 Service Account 时生成的 JSON 文件中的 Email。          |
-  | gcp.gcs.service_account_private_key_id | ""         | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | 创建 Service Account 时生成的 JSON 文件中的 Private Key ID。 |
-  | gcp.gcs.service_account_private_key    | ""         | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | 创建 Service Account 时生成的 JSON 文件中的 Private Key。    |
+  | **参数**                          | **默认值** | **值示例**                                        | **描述**                                              |
+  | -------------------------------------- | ----------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+  | gcp.gcs.service_account_email          | ""                | "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)" | 在创建服务账户时生成的 JSON 文件中的电子邮件地址。 |
+  | gcp.gcs.service_account_private_key_id | ""                | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | 在创建服务账户时生成的 JSON 文件中的私钥 ID。 |
+  | gcp.gcs.service_account_private_key    | ""                | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | 在创建服务账户时生成的 JSON 文件中的私钥。 |
 
-- 基于 Impersonation 进行认证和鉴权
+- 要选择模拟身份验证方法，请按以下方式配置 `StorageCredentialParams`：
 
-  - 使用 VM 实例模拟 Service Account
-
+  - 使 VM 实例模拟服务账户：
+  
     ```SQL
     "gcp.gcs.use_compute_engine_service_account" = "true",
     "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"
     ```
 
-    `StorageCredentialParams` 包含如下参数。
+    以下表格描述了需要在 `StorageCredentialParams` 中配置的参数。
 
-    | **参数**                                   | **默认值** | **取值样例** | **说明**                                                     |
-    | ------------------------------------------ | ---------- | ------------ | ------------------------------------------------------------ |
-    | gcp.gcs.use_compute_engine_service_account | false      | true         | 是否直接使用 Compute Engine 上面绑定的 Service Account。     |
-    | gcp.gcs.impersonation_service_account      | ""         | "hello"      | 需要模拟的目标 Service Account。 |
+    | **参数**                              | **默认值** | **值示例** | **描述**                                              |
+    | ------------------------------------------ | ----------------- | --------------------- | ------------------------------------------------------------ |
+    | gcp.gcs.use_compute_engine_service_account | false             | true                  | 指定是否直接使用绑定到您的 Compute Engine 的服务账户。 |
+    | gcp.gcs.impersonation_service_account      | ""                | "hello"               | 您要模拟的服务账户。            |
 
-  - 使用一个 Service Account（暂时命名为“Meta Service Account”）模拟另一个 Service Account（暂时命名为“Data Service Account”）
+  - 使服务账户（暂时命名为元服务账户）模拟另一个服务账户（暂时命名为数据服务账户）：
 
     ```SQL
     "gcp.gcs.service_account_email" = "<google_service_account_email>",
@@ -429,40 +407,44 @@ Delta Lake Catalog 从 3.0 版本起支持 Google GCS。
     "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
     ```
 
-    `StorageCredentialParams` 包含如下参数。
+    以下表格描述了需要在 `StorageCredentialParams` 中配置的参数。
 
-    | **参数**                               | **默认值** | **取值样例**                                                 | **说明**                                                     |
-    | -------------------------------------- | ---------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-    | gcp.gcs.service_account_email          | ""         | "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)" | 创建 Meta Service Account 时生成的 JSON 文件中的 Email。     |
-    | gcp.gcs.service_account_private_key_id | ""         | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | 创建 Meta Service Account 时生成的 JSON 文件中的 Private Key ID。 |
-    | gcp.gcs.service_account_private_key    | ""         | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | 创建 Meta Service Account 时生成的 JSON 文件中的 Private Key。 |
-    | gcp.gcs.impersonation_service_account  | ""         | "hello"                                                      | 需要模拟的目标 Data Service Account。 |
+    | **参数**                          | **默认值** | **值示例**                                        | **描述**                                              |
+    | -------------------------------------- | ----------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+    | gcp.gcs.service_account_email          | ""                | "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)" | 在创建元服务账户时生成的 JSON 文件中的电子邮件地址。 |
+    | gcp.gcs.service_account_private_key_id | ""                | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | 在创建元服务账户时生成的 JSON 文件中的私钥 ID。 |
+    | gcp.gcs.service_account_private_key    | ""                | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | 在创建元服务账户时生成的 JSON 文件中的私钥。 |
+    | gcp.gcs.impersonation_service_account  | ""                | "hello"                                                      | 您要模拟的数据服务账户。       |
 
 #### MetadataUpdateParams
 
-指定缓存元数据更新策略的一组参数。StarRocks 根据该策略更新缓存的 Delta Lake 元数据。此组参数为可选。
+关于 StarRocks 如何更新 Delta Lake 缓存元数据的一组参数。此参数集是可选的。
 
-自 v3.3.3 起，Delta Lake Catalog 支持 [元数据本地缓存检索方案](#附录元数据本地缓存检索方案)，开箱即用。因此，一般情况下，您可以忽略 `MetadataUpdateParams`，无需对其中的策略参数进行调优。
+从 v3.3.3 开始，Delta Lake Catalog 支持 [元数据本地缓存和检索](#appendix-metadata-local-cache-and-retrieval)。在大多数情况下，您可以忽略 `MetadataUpdateParams`，不需要调整其中的策略参数，因为这些参数的默认值已经为您提供了开箱即用的性能。
 
-如果 Delta Lake 数据更新频率较高，那么您可以对这些参数进行调优，从而优化自动异步更新策略的性能。
+然而，如果 Delta Lake 中的数据更新频率较高，您可以调整这些参数以进一步优化自动异步更新的性能。
 
-| **参数**                                            | **单位** | **默认值** | **说明**                                             |
-| :------------------------------------------------- | :--- | :----------- | :----------------------------------------------------- |
-| enable_deltalake_table_cache                       | 无   | true         | 是否为 Delta Lake 开启元数据缓存中的 Table Cache。     |
-| enable_deltalake_json_meta_cache                   | 无   | true         | 是否为 Delta Log JSON 文件开启缓存。                   |
-| deltalake_json_meta_cache_ttl_sec                  | 秒   | 48 * 60 * 60 | Delta Log JSON 文件缓存的 Time-To-Live（TTL）。        |
-| deltalake_json_meta_cache_memory_usage_ratio       | 无   | 0.1          | Delta Log JSON 文件缓存占用 JVM 内存的最大比例。       |
-| enable_deltalake_checkpoint_meta_cache             | 无   | true         | 是否为 Delta Log Checkpoint 文件开启缓存。             |
-| deltalake_checkpoint_meta_cache_ttl_sec            | 秒   | 48 * 60 * 60 | Delta Log Checkpoint 文件缓存的 Time-To-Live（TTL）。  |
-| deltalake_checkpoint_meta_cache_memory_usage_ratio | 无   | 0.1          | Delta Log Checkpoint 文件缓存占用 JVM 内存的最大比例。 |
+:::note
+在大多数情况下，如果 Delta Lake 数据的更新粒度为 1 小时或更短，则数据更新频率被视为较高。
+:::
+
+| **参数**                                      | **单位** | **默认值** | **描述**                                |
+|----------------------------------------------------| -------- | ------------------------------------------------------------ |
+| enable_deltalake_table_cache                       | -        | true         | 是否在 Delta Lake 的元数据缓存中启用表缓存。 |
+| enable_deltalake_json_meta_cache                   | -        | true         | 是否为 Delta Log JSON 文件启用缓存。 |
+| deltalake_json_meta_cache_ttl_sec                  | 秒       | 48 * 60 * 60 | Delta Log JSON 文件缓存的生存时间 (TTL)。 |
+| deltalake_json_meta_cache_memory_usage_ratio       | -        | 0.1          | Delta Log JSON 文件缓存占用的 JVM 堆内存的最大比例。 |
+| enable_deltalake_checkpoint_meta_cache             | -        | true         | 是否为 Delta Log Checkpoint 文件启用缓存。 |
+| deltalake_checkpoint_meta_cache_ttl_sec            | 秒       | 48 * 60 * 60 | Delta Log Checkpoint 文件缓存的生存时间 (TTL)。  |
+| deltalake_checkpoint_meta_cache_memory_usage_ratio | -        | 0.1          | Delta Log Checkpoint 文件缓存占用的 JVM 堆内存的最大比例。 |
 
 ### 示例
 
-以下示例创建了一个名为 `deltalake_catalog_hms` 或 `deltalake_catalog_glue` 的 Delta Lake Catalog，用于查询 Delta Lake 集群里的数据。
+以下示例创建一个名为 `deltalake_catalog_hms` 或 `deltalake_catalog_glue` 的 Delta Lake catalog，具体取决于您使用的元存储类型，以查询 Delta Lake 集群中的数据。
 
 #### HDFS
 
-使用 HDFS 作为存储时，可以按如下创建 Delta Lake Catalog：
+如果使用 HDFS 作为存储，请运行如下命令：
 
 ```SQL
 CREATE EXTERNAL CATALOG deltalake_catalog_hms
@@ -476,9 +458,9 @@ PROPERTIES
 
 #### AWS S3
 
-##### 如果基于 Instance Profile 进行鉴权和认证
+##### 如果选择基于实例配置文件的凭证
 
-- 如果 Delta Lake 集群使用 HMS 作为元数据服务，可以按如下创建 Delta Lake Catalog：
+- 如果在 Delta Lake 集群中使用 Hive 元存储，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG deltalake_catalog_hms
@@ -492,7 +474,7 @@ PROPERTIES
   );
   ```
 
-- 如果 Amazon EMR Delta Lake 集群使用 AWS Glue 作为元数据服务，可以按如下创建 Delta Lake Catalog：
+- 如果在 Amazon EMR Delta Lake 集群中使用 AWS Glue，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG deltalake_catalog_glue
@@ -507,9 +489,9 @@ PROPERTIES
   );
   ```
 
-##### 如果基于 Assumed Role 进行鉴权和认证
+##### 如果选择基于假设角色的凭证
 
-- 如果 Delta Lake 集群使用 HMS 作为元数据服务，可以按如下创建 Delta Lake Catalog：
+- 如果在 Delta Lake 集群中使用 Hive 元存储，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG deltalake_catalog_hms
@@ -524,7 +506,7 @@ PROPERTIES
   );
   ```
 
-- 如果 Amazon EMR Delta Lake 集群使用 AWS Glue 作为元数据服务，可以按如下创建 Delta Lake Catalog：
+- 如果在 Amazon EMR Delta Lake 集群中使用 AWS Glue，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG deltalake_catalog_glue
@@ -541,9 +523,9 @@ PROPERTIES
   );
   ```
 
-##### 如果基于 IAM User 进行鉴权和认证
+##### 如果选择基于 IAM 用户的凭证
 
-- 如果 Delta Lake 集群使用 HMS 作为元数据服务，可以按如下创建 Delta Lake Catalog：
+- 如果在 Delta Lake 集群中使用 Hive 元存储，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG deltalake_catalog_hms
@@ -559,7 +541,7 @@ PROPERTIES
   );
   ```
 
-- 如果 Amazon EMR Delta Lake 集群使用 AWS Glue 作为元数据服务，可以按如下创建 Delta Lake Catalog：
+- 如果在 Amazon EMR Delta Lake 集群中使用 AWS Glue，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG deltalake_catalog_glue
@@ -578,9 +560,9 @@ PROPERTIES
   );
   ```
 
-#### 兼容 S3 协议的对象存储
+#### S3 兼容存储系统
 
-以 MinIO 为例，可以按如下创建 Delta Lake Catalog：
+以 MinIO 为例。运行如下命令：
 
 ```SQL
 CREATE EXTERNAL CATALOG deltalake_catalog_hms
@@ -601,7 +583,7 @@ PROPERTIES
 
 ##### Azure Blob Storage
 
-- 如果基于 Shared Key 进行认证和鉴权，可以按如下创建 Delta Lake Catalog：
+- 如果选择共享密钥身份验证方法，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG deltalake_catalog_hms
@@ -615,7 +597,7 @@ PROPERTIES
   );
   ```
 
-- 如果基于 SAS Token 进行认证和鉴权，可以按如下创建 Delta Lake Catalog：
+- 如果选择 SAS 令牌身份验证方法，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG deltalake_catalog_hms
@@ -632,7 +614,7 @@ PROPERTIES
 
 ##### Azure Data Lake Storage Gen1
 
-- 如果基于 Managed Service Identity 进行认证和鉴权，可以按如下创建 Delta Lake Catalog：
+- 如果选择托管服务身份验证方法，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG deltalake_catalog_hms
@@ -645,7 +627,7 @@ PROPERTIES
   );
   ```
 
-- 如果基于 Service Principal 进行认证和鉴权，可以按如下创建 Delta Lake Catalog：
+- 如果选择服务主体身份验证方法，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG deltalake_catalog_hms
@@ -662,7 +644,7 @@ PROPERTIES
 
 ##### Azure Data Lake Storage Gen2
 
-- 如果基于 Managed Identity 进行认证和鉴权，可以按如下创建 Delta Lake Catalog：
+- 如果选择托管身份验证方法，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG deltalake_catalog_hms
@@ -677,7 +659,7 @@ PROPERTIES
   );
   ```
 
-- 如果基于 Shared Key 进行认证和鉴权，可以按如下创建 Delta Lake Catalog：
+- 如果选择共享密钥身份验证方法，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG deltalake_catalog_hms
@@ -691,7 +673,7 @@ PROPERTIES
   );
   ```
 
-- 如果基于 Service Principal 进行认证和鉴权，可以按如下创建 Delta Lake Catalog：
+- 如果选择服务主体身份验证方法，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG deltalake_catalog_hms
@@ -708,7 +690,7 @@ PROPERTIES
 
 #### Google GCS
 
-- 如果基于 VM 进行认证和鉴权，可以按如下创建 Delta Lake Catalog：
+- 如果选择基于 VM 的身份验证方法，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG deltalake_catalog_hms
@@ -721,7 +703,7 @@ PROPERTIES
   );
   ```
 
-- 如果基于 Service Account 进行认证和鉴权，可以按如下创建 Delta Lake Catalog：
+- 如果选择服务账户身份验证方法，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG deltalake_catalog_hms
@@ -736,9 +718,9 @@ PROPERTIES
   );
   ```
 
-- 如果基于 Impersonation 进行认证和鉴权
+- 如果选择模拟身份验证方法：
 
-  - 使用 VM 实例模拟 Service Account，可以按如下创建 Delta Lake Catalog：
+  - 如果让 VM 实例模拟服务账户，请运行如下命令：
 
     ```SQL
     CREATE EXTERNAL CATALOG deltalake_catalog_hms
@@ -748,11 +730,11 @@ PROPERTIES
         "hive.metastore.type" = "hive",
         "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
         "gcp.gcs.use_compute_engine_service_account" = "true",
-        "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"
+        "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"    
     );
     ```
 
-  - 使用一个 Service Account 模拟另一个 Service Account，可以按如下创建 Delta Lake Catalog：
+  - 如果让服务账户模拟另一个服务账户，请运行如下命令：
 
     ```SQL
     CREATE EXTERNAL CATALOG deltalake_catalog_hms
@@ -768,112 +750,112 @@ PROPERTIES
     );
     ```
 
-## 查看 Delta Lake Catalog
+## 查看 Delta Lake catalogs
 
-您可以通过 [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
+您可以使用 [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) 查询当前 StarRocks 集群中的所有 catalogs：
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-您也可以通过 [SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Delta Lake Catalog `deltalake_catalog_glue` 的创建语句：
+您还可以使用 [SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) 查询外部 catalog 的创建语句。以下示例查询名为 `deltalake_catalog_glue` 的 Delta Lake catalog 的创建语句：
 
 ```SQL
 SHOW CREATE CATALOG deltalake_catalog_glue;
 ```
 
-## 切换 Delta Lake Catalog 和数据库
+## 切换到 Delta Lake Catalog 及其中的数据库
 
-您可以通过如下方法切换至目标 Delta Lake Catalog 和数据库：
+您可以使用以下方法之一切换到 Delta Lake catalog 及其中的数据库：
 
-- 先通过 [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) 指定当前会话生效的 Delta Lake Catalog，然后再通过 [USE](../../sql-reference/sql-statements/Database/USE.md) 指定数据库：
+- 使用 [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) 指定当前会话中的 Delta Lake catalog，然后使用 [USE](../../sql-reference/sql-statements/Database/USE.md) 指定活动数据库：
 
   ```SQL
-  -- 切换当前会话生效的 Catalog：
+  -- 切换到当前会话中的指定 catalog：
   SET CATALOG <catalog_name>
-  -- 指定当前会话生效的数据库：
+  -- 指定当前会话中的活动数据库：
   USE <db_name>
   ```
 
-- 通过 [USE](../../sql-reference/sql-statements/Database/USE.md) 直接将会话切换到目标 Delta Lake Catalog 下的指定数据库：
+- 直接使用 [USE](../../sql-reference/sql-statements/Database/USE.md) 切换到 Delta Lake catalog 及其中的数据库：
 
   ```SQL
   USE <catalog_name>.<db_name>
   ```
 
-## 删除 Delta Lake Catalog
+## 删除 Delta Lake catalog
 
-您可以通过 [DROP CATALOG](../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) 删除某个 External Catalog。
+您可以使用 [DROP CATALOG](../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) 删除外部 catalog。
 
-例如，通过如下命令删除 Delta Lake Catalog `deltalake_catalog_glue`：
+以下示例删除名为 `deltalake_catalog_glue` 的 Delta Lake catalog：
 
 ```SQL
 DROP Catalog deltalake_catalog_glue;
 ```
 
-## 查看 Delta Lake 表结构
+## 查看 Delta Lake 表的模式
 
-您可以通过如下方法查看 Delta Lake 表的表结构：
+您可以使用以下语法之一查看 Delta Lake 表的模式：
 
-- 查看表结构
+- 查看模式
 
   ```SQL
   DESC[RIBE] <catalog_name>.<database_name>.<table_name>
   ```
 
-- 从 CREATE 命令查看表结构和表文件存放位置
+- 从 CREATE 语句中查看模式和位置
 
   ```SQL
   SHOW CREATE TABLE <catalog_name>.<database_name>.<table_name>
   ```
 
-## 查询 Delta Lake 表数据
+## 查询 Delta Lake 表
 
-1. 通过 [SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) 查看指定 Catalog 所属的 Delta Lake 集群中的数据库：
+1. 使用 [SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) 查看 Delta Lake 集群中的数据库：
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>
    ```
 
-2. [切换至目标 Delta Lake Catalog 和数据库](#切换-delta-lake-catalog-和数据库)。
+2. [切换到 Delta Lake Catalog 及其中的数据库](#switch-to-a-delta-lake-catalog-and-a-database-in-it)。
 
-3. 通过 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 查询目标数据库中的目标表：
+3. 使用 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 查询指定数据库中的目标表：
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10
    ```
 
-## 导入 Delta Lake 数据
+## 从 Delta Lake 导入数据
 
-假设有一个 OLAP 表，表名为 `olap_tbl`。您可以这样来转换该表中的数据，并把数据导入到 StarRocks 中：
+假设您有一个名为 `olap_tbl` 的 OLAP 表，可以按如下方式转换和导入数据：
 
 ```SQL
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM deltalake_table
 ```
 
-## 配置元数据缓存及刷新策略
+## 配置元数据缓存和更新策略
 
-自 v3.3.3 起，Delta Lake Catalog 支持 [元数据本地缓存检索方案](#附录元数据本地缓存检索方案)。
+从 v3.3.3 开始，Delta Lake Catalog 支持 [元数据本地缓存和检索](#appendix-metadata-local-cache-and-retrieval)。
 
-您可以通过以下 FE 配置项来设置 Delta Lake 元数据缓存刷新行为：
+您可以通过以下 FE 参数配置 Delta Lake 元数据缓存刷新：
 
-| **配置项**                                                    | **单位** | **默认值**                  | **含义**                                                    |
-| :----------------------------------------------------------- | :--- | :-------------------------- | :----------------------------------------------------------- |
-| enable_background_refresh_connector_metadata                 | 无   | true | 是否开启 Delta Lake 元数据缓存周期性刷新。开启后，StarRocks 会轮询 Delta Lake 集群的元数据服务（HMS 或 AWS Glue），并刷新经常访问的 Delta Lake 外部数据目录的元数据缓存，以感知数据更新。`true` 代表开启，`false` 代表关闭。 |
-| background_refresh_metadata_interval_millis                  | 毫秒 | 600000（10 分钟）           | 接连两次 Delta Lake 元数据缓存刷新之间的间隔。                     |
-| background_refresh_metadata_time_secs_since_last_access_sec  | 秒   | 86400（24 小时）            | Delta Lake 元数据缓存刷新任务过期时间。对于已被访问过的 Delta Lake Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Delta Lake Catalog，StarRocks 不会刷新其元数据缓存。 |
+| **配置项**                                       | **默认值** | **描述**                                               |
+| ------------------------------------------------------------ | ----------- | ------------------------------------------------------------- |
+| enable_background_refresh_connector_metadata                 | `true`      | 是否启用周期性的 Delta Lake 元数据缓存刷新。启用后，StarRocks 会轮询 Delta Lake 集群的元存储（Hive Metastore 或 AWS Glue），并刷新频繁访问的 Delta Lake catalogs 的缓存元数据，以感知数据变化。`true` 表示启用 Delta Lake 元数据缓存刷新，`false` 表示禁用。 |
+| background_refresh_metadata_interval_millis                  | `600000`    | 两次连续 Delta Lake 元数据缓存刷新之间的间隔。单位：毫秒。 |
+| background_refresh_metadata_time_secs_since_last_access_secs | `86400`     | Delta Lake 元数据缓存刷新任务的过期时间。对于已访问的 Delta Lake catalog，如果超过指定时间未访问，StarRocks 将停止刷新其缓存元数据。对于未访问的 Delta Lake catalog，StarRocks 不会刷新其缓存元数据。单位：秒。 |
 
-## 附录：元数据本地缓存检索方案
+## 附录：元数据本地缓存和检索
 
-由于反复解压和解析元数据文件会引入不必要的延迟，自 v3.3.3 起，StarRocks 采用了一种不同的元数据缓存策略。StarRocks 会将反序列化后的内存对象缓存下来，以应对延迟问题。通过将这些反序列化的文件缓存在FE内存中，系统可以在后续查询中跳过解压和解析阶段，直接访问所需的元数据。这种缓存机制显著减少了检索时间，使系统响应更快，更能满足高查询需求和物化视图改写的要求。
+由于元数据文件的重复解压和解析可能引入不必要的延迟，StarRocks 采用了一种新的元数据缓存策略，将反序列化的内存对象缓存起来。通过将这些反序列化的文件存储在内存中，系统可以绕过后续查询的解压和解析阶段。这种缓存机制允许直接访问所需的元数据，显著减少检索时间。因此，系统变得更加响应，能够更好地满足高查询需求和物化视图重写需求。
 
-您可以通过 Catalog 属性 [MetadataUpdateParams](#metadataupdateparams) 和[相关配置项](#配置元数据缓存及刷新策略)调节该行为。
+您可以通过 Catalog 属性 [MetadataUpdateParams](#metadataupdateparams) 和 [相关配置项](#configure-metadata-cache-and-update-strategy) 配置此行为。
 
 ## 功能支持
 
-目前，Delta Lake Catalog 支持以下功能：
+目前，Delta Lake catalogs 支持以下表功能：
 
-- V2 Checkpoint（从 v3.3.0 起）
-- Timestamp without Timezone（从 v3.3.1 起）
-- 列映射（从 v3.3.6 起）
-- Deletion Vector（从 v3.4.1 起）
+- V2 Checkpoint（从 v3.3.0 开始）
+- 无时区的时间戳（从 v3.3.1 开始）
+- 列映射（从 v3.3.6 开始）
+- Deletion Vector（从 v3.4.1 开始）
