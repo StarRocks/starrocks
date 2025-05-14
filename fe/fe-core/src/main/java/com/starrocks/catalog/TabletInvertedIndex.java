@@ -418,7 +418,7 @@ public class TabletInvertedIndex implements MemoryTrackable {
     }
 
     public Map<Long, Replica> getReplicaMetaWithBackend(Long backendId) {
-        return backingReplicaMetaTable.get(backendId);
+        return row(backingReplicaMetaTable, backendId);
     }
 
     // just for test
