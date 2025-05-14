@@ -1685,11 +1685,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### number_tablet_writer_threads
 
-- Default: 16
+- Default: 0
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The number of threads used for Stream Load. This configuration is changed to dynamic from v3.1.7 onwards.
+- Description: The number of tablet writer threads used in ingestion, such as Stream Load, Broker Load and Insert. When the parameter is set to less than or equal to 0, the system uses half of the number of CPU cores, with a minimum of 16. When the parameter is set to greater than 0, the system uses that value. This configuration is changed to dynamic from v3.1.7 onwards.
 - Introduced in: -
 
 <!--

@@ -1614,11 +1614,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### number_tablet_writer_threads
 
-- 默认值：16
+- 默认值：0
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：用于 Stream Load 的线程数。自 v3.1.7 起变为动态参数。
+- 描述：导入用的 tablet writer 线程数, 用于 Stream Load、Broker Load、Insert 等。当参数设置为小于等于 0 时，系统使用 CPU 核数的二分之一，最小为 16。当参数设置为大于 0 时，系统使用该值。自 v3.1.7 起变为动态参数。
 - 引入版本：-
 
 <!--

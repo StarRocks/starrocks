@@ -1178,11 +1178,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### number_tablet_writer_threads
 
-- デフォルト: 16
+- デフォルト: 0
 - タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: Stream Load に使用されるスレッドの数。この設定は v3.1.7 以降、動的に変更されました。
+- 説明: インポート用の tablet writer のスレッド数，Stream Load、Broker Load、Insert などに使用されます。パラメータが 0 以下に設定されている場合、システムは CPU コア数の半分（最小で 16）を使用します。パラメータが 0 より大きい値に設定されている場合、システムはその値を使用します。この設定は v3.1.7 以降、動的に変更されました。
 - 導入バージョン: -
 
 ##### streaming_load_max_mb

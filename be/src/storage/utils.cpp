@@ -397,4 +397,13 @@ bool is_tracker_hit_hard_limit(MemTracker* tracker, double hard_limit_ratio) {
            (tracker->parent() != nullptr && tracker->parent()->limit_exceeded());
 }
 
+int caculate_delta_writer_thread_num(int thread_num_from_config) {
+    if (thread_num_from_config > 0) {
+        return thread_num_from_config;
+    }
+
+    // The minimum value 16 is for compatibility with previous versions.
+    return std::max<int>(CpuInfo::num_cores() / 2, 16);
+}
+
 } // namespace starrocks
