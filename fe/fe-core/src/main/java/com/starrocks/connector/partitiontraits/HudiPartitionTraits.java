@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.starrocks.connector.partitiontraits;
 
+import com.google.api.client.util.Sets;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.HudiPartitionKey;
 import com.starrocks.catalog.MaterializedView;
@@ -40,8 +41,8 @@ public class HudiPartitionTraits extends DefaultTraits {
     @Override
     public Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
                                                 MaterializedView.AsyncRefreshContext context) {
-        // TODO: implement
-        return null;
+        // TODO: Implement Hudi partition update logic, currently we just return empty set which means
+        //  no check updated partitions
+        return Sets.newHashSet();
     }
 }
-

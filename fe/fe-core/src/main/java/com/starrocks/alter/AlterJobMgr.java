@@ -265,11 +265,11 @@ public class AlterJobMgr {
 
         // validate the schema
         List<Column> newColumns = createStmt.getMvColumnItems().stream()
-                    .sorted(Comparator.comparing(Column::getName))
-                    .collect(Collectors.toList());
-        List<Column> existedColumns = materializedView.getColumns().stream()
-                    .sorted(Comparator.comparing(Column::getName))
-                    .collect(Collectors.toList());
+                .sorted(Comparator.comparing(Column::getName))
+                .collect(Collectors.toList());
+        List<Column> existedColumns = materializedView.getOrderedOutputColumns().stream()
+                .sorted(Comparator.comparing(Column::getName))
+                .collect(Collectors.toList());
         if (newColumns.size() != existedColumns.size()) {
             throw new SemanticException(String.format("number of columns changed: %d != %d",
                         existedColumns.size(), newColumns.size()));

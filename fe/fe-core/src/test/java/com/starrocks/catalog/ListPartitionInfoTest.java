@@ -241,9 +241,9 @@ public class ListPartitionInfoTest {
     }
 
     @Test
-    public void testToSqlWithAutomaticPartition() {
+    public void testToSqlWithAutomaticPartition1() {
         {
-            String sql = this.listPartitionInfo.toSql(this.findTableForSingleListPartition(), false);
+            String sql = this.listPartitionInfo.toSql(this.findTableForSingleListPartition(), false, true);
             String target = "PARTITION BY LIST(`province`)(\n" +
                     "  PARTITION p1 VALUES IN (\'guangdong\', \'tianjin\'),\n" +
                     "  PARTITION p2 VALUES IN (\'shanghai\', \'beijing\')\n" +
@@ -251,7 +251,24 @@ public class ListPartitionInfoTest {
             Assert.assertEquals(sql, target);
         }
         {
-            String sql = this.listPartitionInfo.toSql(this.findTableForSingleListPartition(), true);
+            String sql = this.listPartitionInfo.toSql(this.findTableForSingleListPartition(), true, true);
+            String target = "PARTITION BY (`province`)";
+            Assert.assertEquals(sql, target);
+        }
+    }
+
+    @Test
+    public void testToSqlWithAutomaticPartition2() {
+        {
+            String sql = this.listPartitionInfo.toSql(this.findTableForSingleListPartition(), false, false);
+            String target = "PARTITION BY LIST(`province`)(\n" +
+                    "  PARTITION p1 VALUES IN (\'guangdong\', \'tianjin\'),\n" +
+                    "  PARTITION p2 VALUES IN (\'shanghai\', \'beijing\')\n" +
+                    ")";
+            Assert.assertEquals(sql, target);
+        }
+        {
+            String sql = this.listPartitionInfo.toSql(this.findTableForSingleListPartition(), true, false);
             String target = "PARTITION BY (`province`)";
             Assert.assertEquals(sql, target);
         }

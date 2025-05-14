@@ -283,4 +283,12 @@ public class MetaUtils {
         }
         return columnIds;
     }
+
+    public static String getPartitionColumnToSql(Column column) {
+        if (column.isGeneratedColumn()) {
+            return column.generatedColumnExprToString();
+        } else {
+            return "`" + column.getName() + "`";
+        }
+    }
 }
