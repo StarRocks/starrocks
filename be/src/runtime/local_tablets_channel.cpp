@@ -617,8 +617,9 @@ void LocalTabletsChannel::_abort_replica_tablets(
 #ifndef BE_TEST
         stub->tablet_writer_cancel(&closure->cntl, &cancel_request, &closure->result, closure);
 #else
-        std::pair<PTabletWriterCancelRequest*, google::protobuf::Closure*> rpc_pair{&cancel_request, closure};
-        TEST_SYNC_POINT_CALLBACK("LocalTabletsChannel::rpc::tablet_writer_cancel", &rpc_pair);
+        std::tuple<PTabletWriterCancelRequest*, google::protobuf::Closure*, brpc::Controller*> rpc_tuple{
+                &cancel_request, closure, &closure->cntl};
+        TEST_SYNC_POINT_CALLBACK("LocalTabletsChannel::rpc::tablet_writer_cancel", &rpc_tuple);
 #endif
 
         VLOG(2) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id()) << " Cancel "

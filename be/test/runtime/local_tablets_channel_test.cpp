@@ -323,7 +323,8 @@ TEST_F(LocalTabletsChannelTest, test_secondary_replica_profile) {
     ASSERT_EQ(1, secondary_replicas_profile->get_counter("TabletsNum")->value());
 }
 
-using RpcTabletWriterCancelPair = std::pair<PTabletWriterCancelRequest*, google::protobuf::Closure*>;
+using RpcTabletWriterCancelTuple =
+        std::tuple<PTabletWriterCancelRequest*, google::protobuf::Closure*, brpc::Controller*>;
 
 void LocalTabletsChannelTest::test_cancel_secondary_replica_base(bool is_empty_tablet) {
     ASSERT_OK(_tablets_channel->open(_open_primary_request, &_open_response, _schema_param, false));
@@ -353,8 +354,8 @@ void LocalTabletsChannelTest::test_cancel_secondary_replica_base(bool is_empty_t
     int num_cancel = 0;
     SyncPoint::GetInstance()->EnableProcessing();
     SyncPoint::GetInstance()->SetCallBack("LocalTabletsChannel::rpc::tablet_writer_cancel", [&](void* arg) {
-        RpcTabletWriterCancelPair* rpc_pair = (RpcTabletWriterCancelPair*)arg;
-        PTabletWriterCancelRequest* request = rpc_pair->first;
+        RpcTabletWriterCancelTuple* rpc_tuple = (RpcTabletWriterCancelTuple*)arg;
+        PTabletWriterCancelRequest* request = std::get<0>(*rpc_tuple);
         EXPECT_EQ(print_id(request->id()), print_id(_load_id));
         EXPECT_EQ(request->index_id(), _index_id);
         EXPECT_EQ(request->sender_id(), 0);
@@ -362,7 +363,7 @@ void LocalTabletsChannelTest::test_cancel_secondary_replica_base(bool is_empty_t
         EXPECT_EQ(1, request->tablet_ids().size());
         EXPECT_EQ(_tablet_id, request->tablet_ids().Get(0));
         EXPECT_EQ(request->reason(), is_empty_tablet ? "" : "primary replica failed to sync data");
-        google::protobuf::Closure* closure = rpc_pair->second;
+        google::protobuf::Closure* closure = std::get<1>(*rpc_tuple);
         closure->Run();
         num_cancel += 1;
     });
@@ -383,6 +384,43 @@ TEST_F(LocalTabletsChannelTest, test_cancel_empty_secondary_replica) {
 
 TEST_F(LocalTabletsChannelTest, test_cancel_failed_secondary_replica) {
     test_cancel_secondary_replica_base(false);
+}
+
+TEST_F(LocalTabletsChannelTest, test_cancel_secondary_replica_rpc_fail) {
+    ASSERT_OK(_tablets_channel->open(_open_primary_request, &_open_response, _schema_param, false));
+
+    PTabletWriterAddChunkRequest add_chunk_request;
+    add_chunk_request.mutable_id()->CopyFrom(_load_id);
+    add_chunk_request.set_index_id(_index_id);
+    add_chunk_request.set_sender_id(0);
+    add_chunk_request.set_txn_id(_txn_id);
+    add_chunk_request.set_eos(true);
+    add_chunk_request.set_packet_seq(0);
+    add_chunk_request.set_wait_all_sender_close(true);
+
+    DeferOp defer([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("LocalTabletsChannel::rpc::tablet_writer_cancel");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    int num_cancel = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("LocalTabletsChannel::rpc::tablet_writer_cancel", [&](void* arg) {
+        RpcTabletWriterCancelTuple* rpc_tuple = (RpcTabletWriterCancelTuple*)arg;
+        google::protobuf::Closure* closure = std::get<1>(*rpc_tuple);
+        brpc::Controller* cntl = std::get<2>(*rpc_tuple);
+        cntl->SetFailed("artificial intelligent rpc failure");
+        closure->Run();
+        num_cancel += 1;
+    });
+
+    bool close_channel;
+    PTabletWriterAddBatchResult add_chunk_response;
+    _tablets_channel->add_chunk(nullptr, add_chunk_request, &add_chunk_response, &close_channel);
+    ASSERT_TRUE(add_chunk_response.status().status_code() == TStatusCode::OK)
+            << add_chunk_response.status().error_msgs(0);
+    ASSERT_TRUE(close_channel);
+    ASSERT_EQ(1, num_cancel);
 }
 
 } // namespace starrocks
