@@ -190,7 +190,6 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
         }
     }
 
-
     // Converts the result of the SHOW statement to Arrow's VectorSchemaRoot.
     public void addShowResult(String queryId, ShowResultSet showResultSet) {
         List<Field> schemaFields = new ArrayList<>();

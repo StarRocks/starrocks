@@ -17,18 +17,29 @@ package com.starrocks.service.arrow.flight.sql;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.util.ArrowUtil;
+import com.starrocks.mysql.MysqlChannel;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.qe.StmtExecutor;
+import com.starrocks.qe.scheduler.Coordinator;
+import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.StatementBase;
+import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.vector.VarCharVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 
+import java.lang.reflect.Field;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeoutException;
 
+import static org.junit.Assert.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -42,6 +53,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class ArrowFlightSqlConnectContextTest {
 
@@ -168,5 +180,69 @@ public class ArrowFlightSqlConnectContextTest {
         context.setStmtExecutor(mockExecutor);
         context.cancelQuery();
         verify(mockExecutor, times(1)).cancel("Arrow Flight SQL client disconnected");
+    }
+
+    @Test
+    public void testSetDeploymentFinishedAndWaitSuccess() throws Exception {
+        Coordinator coordinator = mock(Coordinator.class);
+        context.setDeploymentFinished(coordinator);
+        Coordinator result = context.waitForDeploymentFinished(1000);
+        assertEquals(coordinator, result);
+    }
+
+    @Test
+    public void testWaitForDeploymentFinishedTimeout() {
+        assertThrows(TimeoutException.class, () -> {
+            context.waitForDeploymentFinished(1);
+        });
+    }
+
+    @Test
+    public void testKill() throws Exception {
+        ArrowFlightSqlConnectContext context = new ArrowFlightSqlConnectContext("token");
+
+        // mock executor
+        StmtExecutor executor = mock(StmtExecutor.class);
+        Field executorField = ConnectContext.class.getDeclaredField("executor");
+        executorField.setAccessible(true);
+        executorField.set(context, executor);
+
+        // mock coordinator
+        Coordinator coordinator = mock(Coordinator.class);
+        CompletableFuture<Coordinator> future = new CompletableFuture<>();
+        future.complete(coordinator);
+        Field futureField = ArrowFlightSqlConnectContext.class.getDeclaredField("coordinatorFuture");
+        futureField.setAccessible(true);
+        futureField.set(context, future);
+
+        // mock allocator
+        BufferAllocator allocator = mock(BufferAllocator.class);
+        Field allocatorField = ArrowFlightSqlConnectContext.class.getDeclaredField("allocator");
+        allocatorField.setAccessible(true);
+        allocatorField.set(context, allocator);
+
+        MysqlChannel mysqlChannel = mock(MysqlChannel.class);
+        Field mysqlChannelField = ConnectContext.class.getDeclaredField("mysqlChannel");
+        mysqlChannelField.setAccessible(true);
+        mysqlChannelField.set(context, mysqlChannel);
+
+        // mock ExecuteEnv.getInstance().getScheduler().unregisterConnection(this);
+        ConnectScheduler scheduler = mock(ConnectScheduler.class);
+        ExecuteEnv mockEnv = mock(ExecuteEnv.class);
+        when(mockEnv.getScheduler()).thenReturn(scheduler);
+
+        try (MockedStatic<ExecuteEnv> mocked = mockStatic(ExecuteEnv.class)) {
+            mocked.when(ExecuteEnv::getInstance).thenReturn(mockEnv);
+
+            context.kill(true, "cancelled");
+
+            verify(mysqlChannel).close();
+
+            verify(executor).cancel("cancelled");
+
+            verify(coordinator).cancel("cancelled");
+
+            verify(scheduler).unregisterConnection(context);
+        }
     }
 }
