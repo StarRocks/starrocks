@@ -21,6 +21,8 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.cache.RemovalNotification;
+import com.starrocks.authentication.AuthenticationException;
+import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UUIDUtil;
@@ -28,12 +30,12 @@ import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
-import com.starrocks.sql.ast.UserIdentity;
 import org.apache.arrow.flight.CallStatus;
 import org.apache.arrow.flight.FlightRuntimeException;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
 
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 
 public class ArrowFlightSqlSessionManager {
@@ -62,10 +64,43 @@ public class ArrowFlightSqlSessionManager {
                 });
     }
 
-    public String initializeSession(UserIdentity currentUser) {
-        ArrowFlightSqlTokenInfo tokenInfo = createToken(currentUser);
-        createConnectContext(tokenInfo);
-        return tokenInfo.getToken();
+    public String initializeSession(String username, String remoteIP, String password) {
+        String token = UUIDUtil.genUUID().toString();
+        ArrowFlightSqlConnectContext ctx = new ArrowFlightSqlConnectContext(token);
+        ctx.setRemoteIP(remoteIP);
+
+        try {
+            AuthenticationHandler.authenticate(
+                    ctx, username, remoteIP, password.getBytes(StandardCharsets.UTF_8));
+        } catch (AuthenticationException e) {
+            throw CallStatus.UNAUTHENTICATED
+                    .withDescription("Access denied for user: " + username)
+                    .withCause(e)
+                    .toRuntimeException();
+        }
+
+        ArrowFlightSqlTokenInfo tokenInfo = new ArrowFlightSqlTokenInfo(ctx.getCurrentUserIdentity(), token);
+        tokenCache.put(token, tokenInfo);
+
+        ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        ctx.setQueryId(UUIDUtil.genUUID());
+        ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+
+        // Assign connection ID
+        ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
+        ctx.setConnectionId(connectScheduler.getNextConnectionId());
+        ctx.resetConnectionStartTime();
+
+        Pair<Boolean, String> isSuccessAndErrorMsg = connectScheduler.registerConnection(ctx);
+        if (!isSuccessAndErrorMsg.first) {
+            String errorMsg = isSuccessAndErrorMsg.second;
+            ctx.getState().setError(errorMsg);
+            throw CallStatus.RESOURCE_EXHAUSTED
+                    .withDescription("failed to register connection: " + errorMsg)
+                    .toRuntimeException();
+        }
+
+        return token;
     }
 
     public void validateToken(String token) throws IllegalArgumentException {
@@ -95,39 +130,5 @@ public class ArrowFlightSqlSessionManager {
                     .toRuntimeException();
         }
         return connectContext;
-    }
-
-    private ArrowFlightSqlTokenInfo createToken(UserIdentity currentUser) {
-        String token = UUIDUtil.genUUID().toString();
-        ArrowFlightSqlTokenInfo tokenInfo = new ArrowFlightSqlTokenInfo(currentUser, token);
-        tokenCache.put(token, tokenInfo);
-        return tokenInfo;
-    }
-
-    private void createConnectContext(ArrowFlightSqlTokenInfo tokenInfo) throws FlightRuntimeException {
-        UserIdentity currentUser = tokenInfo.getCurrentUser();
-        ArrowFlightSqlConnectContext ctx = new ArrowFlightSqlConnectContext(tokenInfo.getToken());
-
-        ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-        ctx.setQueryId(UUIDUtil.genUUID());
-        ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
-        ctx.setRemoteIP(currentUser.getHost());
-        ctx.setQualifiedUser(currentUser.getUser());
-        ctx.setCurrentUserIdentity(currentUser);
-        ctx.setCurrentRoleIds(currentUser);
-
-        // Assign connection ID
-        ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
-        ctx.setConnectionId(connectScheduler.getNextConnectionId());
-        ctx.resetConnectionStartTime();
-        // Mark as registered
-        Pair<Boolean, String> isSuccessAndErrorMsg = ExecuteEnv.getInstance().getScheduler().registerConnection(ctx);
-        if (!isSuccessAndErrorMsg.first) {
-            String errorMsg = isSuccessAndErrorMsg.second;
-            ctx.getState().setError(errorMsg);
-            throw CallStatus.RESOURCE_EXHAUSTED
-                    .withDescription("failed to register connection: " + errorMsg)
-                    .toRuntimeException();
-        }
     }
 }

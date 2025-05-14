@@ -14,12 +14,10 @@
 
 package com.starrocks.service.arrow.flight.sql;
 
-import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.service.arrow.flight.sql.auth2.ArrowFlightSqlBasicCredentialValidator;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
-import com.starrocks.sql.ast.UserIdentity;
 import org.apache.arrow.flight.CallHeaders;
 import org.apache.arrow.flight.auth2.Auth2Constants;
 import org.apache.arrow.flight.auth2.CallHeaderAuthenticator;
@@ -43,13 +41,18 @@ class ArrowFlightSqlBasicCredentialValidatorTest {
         ArrowFlightSqlSessionManager sessionManager = mock(ArrowFlightSqlSessionManager.class);
         ArrowFlightSqlBasicCredentialValidator validator = new ArrowFlightSqlBasicCredentialValidator(sessionManager);
 
-        UserIdentity mockUser = mock(UserIdentity.class);
-        when(sessionManager.initializeSession(mockUser)).thenReturn("token-123");
+        when(sessionManager.initializeSession("user", "0.0.0.0", "pass")).thenReturn("token-123");
 
+        // mock authenticate
         try (MockedStatic<AuthenticationHandler> mocked = mockStatic(AuthenticationHandler.class)) {
             mocked.when(() -> AuthenticationHandler
                             .authenticate(any(ConnectContext.class), eq("user"), eq("0.0.0.0"), any()))
-                    .thenReturn(mockUser);
+                    .thenAnswer(invocation -> {
+                        ConnectContext ctx = invocation.getArgument(0);
+                        ctx.setQualifiedUser("user");
+                        ctx.setCurrentUserIdentity(null);
+                        return null;
+                    });
 
             CallHeaderAuthenticator.AuthResult result = validator.validate("user", "pass");
 
@@ -66,13 +69,10 @@ class ArrowFlightSqlBasicCredentialValidatorTest {
         ArrowFlightSqlSessionManager sessionManager = mock(ArrowFlightSqlSessionManager.class);
         ArrowFlightSqlBasicCredentialValidator validator = new ArrowFlightSqlBasicCredentialValidator(sessionManager);
 
-        try (MockedStatic<AuthenticationHandler> mocked = mockStatic(AuthenticationHandler.class)) {
-            mocked.when(() -> AuthenticationHandler
-                            .authenticate(any(ConnectContext.class), eq("user"), eq("0.0.0.0"), any()))
-                    .thenThrow(new AuthenticationException("bad credentials"));
+        when(sessionManager.initializeSession("user", "0.0.0.0", "pass"))
+                .thenThrow(new RuntimeException("Access denied for user: user"));
 
-            RuntimeException ex = assertThrows(RuntimeException.class, () -> validator.validate("user", "pass"));
-            assertTrue(ex.getMessage().contains("Access denied"));
-        }
+        RuntimeException ex = assertThrows(RuntimeException.class, () -> validator.validate("user", "pass"));
+        assertTrue(ex.getMessage().contains("Access denied"));
     }
 }
