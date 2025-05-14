@@ -277,7 +277,7 @@ private:
     Status _init_object_cache(LocalCache* local_cache);
 #endif
 
-    Status _init_storage_page_cache();
+    Status _init_page_cache();
 
     GlobalEnv* _global_env;
     std::vector<StorePath> _store_paths;

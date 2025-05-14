@@ -351,7 +351,7 @@ Status CacheEnv::init(const std::vector<StorePath>& store_paths) {
         return Status::InvalidArgument(msg);
     }
 
-    RETURN_IF_ERROR(_init_storage_page_cache());
+    RETURN_IF_ERROR(_init_page_cache());
 
     return Status::OK();
 }
@@ -373,7 +373,7 @@ void CacheEnv::destroy() {
     LOG(INFO) << "datacache shutdown successfully";
 }
 
-Status CacheEnv::_init_storage_page_cache() {
+Status CacheEnv::_init_page_cache() {
     _page_cache = std::make_shared<StoragePageCache>(_object_cache.get());
     _page_cache->init_metrics();
     LOG(INFO) << "storage page cache init successfully";
@@ -461,7 +461,7 @@ Status CacheEnv::_init_peer_cache(const CacheOptions& cache_options) {
 Status CacheEnv::_init_object_cache(LocalCache* local_cache) {
     if (local_cache != nullptr && local_cache->is_initialized()) {
         auto* starcache = reinterpret_cast<StarCacheWrapper*>(local_cache);
-        _starcache_based_object_cache = std::make_shared<StarCacheModule>(starcache->starcache_instance());
+        _object_cache = std::make_shared<StarCacheModule>(starcache->starcache_instance());
     }
     return Status::OK();
 }
