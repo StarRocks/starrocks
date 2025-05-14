@@ -1290,9 +1290,13 @@ CONF_Bool(datacache_unified_instance_enable, "true");
 // * slru: segment lru eviction policies, which can better reduce cache pollution problem.
 CONF_String(datacache_eviction_policy, "slru");
 
+// BlockCache is the cache for the raw data of external catalog and shared-data internal catalog.
+// The separate configuration of block_cache_disk_size and block_cache_mem_size is not supported now.
+// At present, the disk space and memory usage of block cache are uniformly
+// restricted by datacache_disk_size and datacache_mem_size.
 CONF_Bool(block_cache_enable, "true");
 CONF_mString(block_cache_disk_size, "-1");
-CONF_mString(block_cache_mem_size, "-1");
+CONF_mString(block_cache_mem_size, "0");
 CONF_Alias(datacache_block_size, block_cache_block_size);
 CONF_Alias(datacache_max_concurrent_inserts, block_cache_max_concurrent_inserts);
 CONF_Alias(datacache_checksum_enable, block_cache_checksum_enable);
