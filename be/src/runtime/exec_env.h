@@ -85,6 +85,7 @@ class ObjectCache;
 class LocalCache;
 class RemoteCache;
 class StoragePageCache;
+class PeerCacheWrapper;
 class Cache;
 class DiskSpaceMonitor;
 struct CacheOptions;
@@ -269,8 +270,12 @@ public:
     int64_t check_storage_page_cache_limit(int64_t storage_cache_limit);
 
 private:
+#if defined(WITH_STARCACHE)
     StatusOr<CacheOptions> _init_cache_options();
-    Status _init_datacache();
+    Status _init_starcache(CacheOptions* cache_options);
+    Status _init_peer_cache(const CacheOptions& cache_options);
+#endif
+
     Status _init_starcache_based_object_cache();
     Status _init_lru_base_object_cache();
     Status _init_page_cache();
