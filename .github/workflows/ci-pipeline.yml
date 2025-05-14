@@ -13,7 +13,6 @@ concurrency:
   group: ${{ github.event.number }}
   cancel-in-progress: true
 
-
 jobs:
 
   basic-checker:
@@ -24,6 +23,7 @@ jobs:
       CODE_PATH: ${{ github.workspace }}
       BRANCH: ${{ github.base_ref }}
       GH_TOKEN: ${{ github.token }}
+      PR_TITLE: ${{ github.event.pull_request.title }}
     outputs:
       PASS: ${{ steps.check.outputs.pass }}
     steps:
@@ -63,6 +63,32 @@ jobs:
         run: |
           cd ci-tool
           python3 scripts/get_pr_issue.py check_issue ${GITHUB_REPOSITORY} ${PR_NUMBER}
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Checkout PR
+        run: |
+          git fetch origin
+          git merge origin/${{github.base_ref}}
+          
+      - name: Branch Access Check
+        run: |
+          status=$(cat .github/.status || echo open)
+          if [[ "${PR_TITLE}" == *"[Tool]"* ]]; then
+            exit 0
+          elif [[ "${status}" == "feature-freeze" && "${PR_TITLE}" == *"[Feature]"* ]]; then
+            comment="⚠️ Branch in feature-freeze state, [Feature] PRs are not allowed!"
+          elif [[ "${status}" == "bugfix-only" ]] && [[ "${PR_TITLE}" == *"[Feature]"* || "${PR_TITLE}" == *"[Enhancement]"* ]]; then
+            comment="⚠️ Branch in bugfix-only state, [Feature] or [Enhancement] PRs are not allowed!"
+          elif [[ "${status}" == "code-freeze" ]] && [[ "${PR_TITLE}" != *"[Bugfix]"* || "${PR_TITLE}" != *"CVE"* ]]; then
+            comment="⚠️ Branch in code-freeze state, only PRs that fix CVE CVE are allowed!"
+          else
+            exit 0
+          fi
+
+          gh pr comment ${PR_NUMBER} -R ${GITHUB_REPOSITORY} -b "${comment}"
+          exit 1
 
   be-checker:
     runs-on: ubuntu-latest
