@@ -52,7 +52,7 @@ class MemTracker;
 // Page cache min size is 256MB
 static constexpr int64_t kcacheMinSize = 268435456;
 
-// Warpper around Cache, and used for cache page of column datas
+// Wrapper around Cache, and used for cache page of column datas
 // in Segment.
 // TODO(zc): We should add some metric to see cache hit/miss rate.
 class StoragePageCache {
