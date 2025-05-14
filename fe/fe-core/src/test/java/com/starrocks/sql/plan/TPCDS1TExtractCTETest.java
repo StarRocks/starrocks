@@ -40,7 +40,7 @@ public class TPCDS1TExtractCTETest extends TPCDS1TTestBase {
         String plan = getFragmentPlan(Q09);
         assertContains(plan, "MultiCastDataSinks");
         assertContains(plan, "2:AGGREGATE (update serialize)\n" +
-                "  |  output: count(if(461: expr, 1, NULL)), avg(if(461: expr, 394: ss_ext_discount_amt, NULL))");
+                "  |  output: count_if(1, 418: expr), avg_if(420: ss_ext_discount_amt, 418: expr)");
     }
 
     @Test
@@ -77,16 +77,20 @@ public class TPCDS1TExtractCTETest extends TPCDS1TTestBase {
     public void testQuery88() throws Exception {
         String plan = getFragmentPlan(Q88);
         assertContains(plan, "MultiCastDataSinks");
-        assertContains(plan, "AGGREGATE (merge finalize)\n" +
-                "  |  output: count(641: count), count(643: count)");
+        assertContains(plan, "15:AGGREGATE (update serialize)\n" +
+                "  |  output: count_if(1, 640: expr), count_if(1, 642: expr)");
     }
 
     @Test
     public void testQuery90() throws Exception {
         String plan = getFragmentPlan(Q90);
         assertContains(plan, "MultiCastDataSinks");
-        assertContains(plan, "AGGREGATE (update serialize)\n" +
-                "  |  output: count(if((172: t_hour >= 8)");
+        assertContains(plan, " 15:AGGREGATE (update serialize)\n" +
+                "  |  output: count_if(1, 197: expr), count_if(1, 199: expr)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  14:Project\n" +
+                "  |  <slot 197> : (172: t_hour >= 8) AND (172: t_hour <= 9)");
     }
 
     @Test

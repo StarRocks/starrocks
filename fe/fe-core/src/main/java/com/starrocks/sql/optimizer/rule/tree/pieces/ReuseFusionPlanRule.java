@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.Function;
@@ -280,11 +281,14 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
                 if (filterDistinct > 1 && (onlyGroupBy || isMultiParamsAggFunc)) {
                     return Optional.empty();
                 }
+                boolean hasDistinctAgg =
+                        aggregate.getAggregations().values().stream().anyMatch(CallOperator::isDistinct);
+
 
                 ScalarOperator filter = filterDistinct > 1 ? pieceFilters.get(i) : null;
                 aggregate.getAggregations().forEach((ref, call) -> {
                     CallOperator newCall = addFilterAggCall((CallOperator) converter.convert(call), filter,
-                            aggFilterProject);
+                            aggFilterProject, hasDistinctAgg);
 
                     if (aggToRefs.containsKey(newCall)) {
                         converter.add(ref, aggToRefs.get(newCall));
@@ -324,7 +328,7 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
         }
 
         private CallOperator addFilterAggCall(CallOperator call, ScalarOperator filter,
-                                              Map<ScalarOperator, ColumnRefOperator> filterProject) {
+                                              Map<ScalarOperator, ColumnRefOperator> filterProject, boolean hasDistinct) {
             if (filter == null) {
                 return call;
             }
@@ -343,17 +347,39 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
                 child = call.getChild(0);
                 aggFunc = call.getFunction();
             }
-            Function f = Expr.getBuiltinFunction(FunctionSet.IF,
-                    new Type[] {Type.BOOLEAN, child.getType(), child.getType()}, Function.CompareMode.IS_IDENTICAL);
-            CallOperator ifNull = new CallOperator("if", child.getType(),
-                    List.of(filter, child, ConstantOperator.createNull(child.getType())), f);
 
-            if (!filterProject.containsKey(ifNull)) {
-                filterProject.put(ifNull, factory.create(ifNull, child.getType(), true));
+            // since agg_If doens't support distinct right now
+            if (hasDistinct) {
+                Function f = Expr.getBuiltinFunction(FunctionSet.IF,
+                        new Type[] {Type.BOOLEAN, child.getType(), child.getType()}, Function.CompareMode.IS_IDENTICAL);
+                CallOperator ifNull = new CallOperator("if", child.getType(),
+                        List.of(filter, child, ConstantOperator.createNull(child.getType())), f);
+                if (!filterProject.containsKey(ifNull)) {
+                    filterProject.put(ifNull, factory.create(ifNull, child.getType(), true));
+                }
+                return new CallOperator(call.getFnName(), call.getType(), List.of(filterProject.get(ifNull)),
+                        aggFunc, call.isDistinct());
+            } else {
+                Preconditions.checkState(aggFunc instanceof AggregateFunction);
+                Function aggStateIf = Expr.getBuiltinFunction(aggFunc.functionName() + FunctionSet.AGG_STATE_IF_SUFFIX,
+                        new Type[] {child.getType(), Type.BOOLEAN}, Function.CompareMode.IS_IDENTICAL);
+
+                Preconditions.checkState(aggStateIf != null);
+
+                if (!filterProject.containsKey(filter)) {
+                    filterProject.put(filter, factory.create(filter, Type.BOOLEAN, true));
+                }
+
+                if (!filterProject.containsKey(child) && !child.isConstant()) {
+                    filterProject.put(child, factory.create(child, child.getType(), child.isNullable()));
+                }
+
+                ScalarOperator childOutput = child.isConstant() ? child : filterProject.get(child);
+
+                return new CallOperator(aggStateIf.functionName(), call.getType(),
+                        List.of(childOutput, filterProject.get(filter)), aggStateIf,
+                        call.isDistinct());
             }
-
-            return new CallOperator(call.getFnName(), call.getType(), List.of(filterProject.get(ifNull)),
-                    aggFunc, call.isDistinct());
         }
 
         @Override
