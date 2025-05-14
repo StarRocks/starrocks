@@ -374,15 +374,6 @@ Status CacheEnv::_init_page_cache() {
 Status CacheEnv::_init_datacache() {
     _block_cache = std::make_shared<BlockCache>();
 
-    // When configured old `block_cache` configurations, use the old items for compatibility.
-    if (config::block_cache_enable) {
-        config::datacache_enable = true;
-        config::datacache_mem_size = std::to_string(config::block_cache_mem_size);
-        config::datacache_disk_size = std::to_string(config::block_cache_disk_size);
-        LOG(WARNING) << "The configuration items prefixed with `block_cache_` will be deprecated soon"
-                     << ", you'd better use the configuration items prefixed `datacache` instead!";
-    }
-
 #if !defined(WITH_STARCACHE)
     if (config::datacache_enable) {
         LOG(WARNING) << "No valid engines supported, skip initializing datacache module";
