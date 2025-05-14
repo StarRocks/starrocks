@@ -140,7 +140,7 @@ This step configures the StarRocks Service on Ranger so that users can perform a
    - `ranger.plugin.starrocks.service.name`: Change to the name of the StarRocks Service you created in Step 4.
    - `ranger.plugin.starrocks.policy.rest the url`: Change to the address of the Ranger Admin.
 
-   If you need to modify other configurations, refer to official documentation of Apache Ranger. For example, you can modify `ranger.plugin.starrocks.policy.pollIntervalM` to change the interval for pulling policy changes.
+   If you need to modify other configurations, refer to official documentation of Apache Ranger. For example, you can modify `ranger.plugin.starrocks.policy.pollIntervalMs` to change the interval for pulling policy changes.
 
    ```SQL
    vim ranger-starrocks-security.xml
