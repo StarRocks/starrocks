@@ -299,8 +299,10 @@ CONF_Int32(min_file_descriptor_number, "60000");
 // data and index page size, default is 64k
 CONF_Int32(data_page_size, "65536");
 
-// Cache for storage page size
-CONF_mString(storage_page_cache_limit, "20%");
+// Page cache is the cache for the parsed data of external catalog and internal catalog.
+// Currently, BE does not support configure the upper limit of the page cache.
+// The memory limit of page cache are uniformly restricted by datacache_mem_size.
+CONF_mString(storage_page_cache_limit, "-1");
 // whether to disable page cache feature in storage
 CONF_mBool(disable_storage_page_cache, "false");
 // whether to enable the bitmap index memory cache
