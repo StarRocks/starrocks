@@ -46,6 +46,7 @@ import com.starrocks.catalog.mv.MVPlanValidationResult;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
@@ -98,7 +99,7 @@ public class MvRewritePreprocessor {
     private static final Logger LOG = LogManager.getLogger(MvRewritePreprocessor.class);
 
     private static final Executor MV_PREPARE_EXECUTOR = Executors.newFixedThreadPool(
-            Runtime.getRuntime().availableProcessors(),
+            ThreadPoolManager.cpuIntensiveThreadPoolSize(),
             new ThreadFactoryBuilder().setDaemon(true).setNameFormat("mv-prepare-%d").build());
 
     private final ConnectContext connectContext;
