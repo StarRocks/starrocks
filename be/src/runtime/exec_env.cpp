@@ -322,6 +322,24 @@ Status CacheEnv::init(const std::vector<StorePath>& store_paths) {
         return Status::OK();
     }
 
+#if defined(WITH_STARCACHE)
+    if (config::datacache_engine == "") {
+        config::datacache_engine = "starcache";
+    }
+#else
+    config::datacache_engine = "lrucache";
+#endif
+
+    if (config::datacache_engine == "starcache") {
+#if defined(WITH_STARCACHE)
+        ASSIGN_OR_RETURN(auto cache_options, _init_cache_options());
+        RETURN_IF_ERROR(_init_starcache(&cache_options));
+        RETURN_IF_ERROR(_init_peer_cache(cache_options));
+        RETURN_IF_ERROR(_block_cache->init(cache_options, _local_cache, _remote_cache));
+#endif
+    } else {
+    }
+
     RETURN_IF_ERROR(_init_datacache());
     RETURN_IF_ERROR(_init_starcache_based_object_cache());
     RETURN_IF_ERROR(_init_lru_base_object_cache());
@@ -378,40 +396,7 @@ Status CacheEnv::_init_page_cache() {
     return Status::OK();
 }
 
-Status CacheEnv::_init_datacache() {
-#if !defined(WITH_STARCACHE)
-    if (config::datacache_enable) {
-        LOG(WARNING) << "No valid engines supported, skip initializing datacache module";
-        config::datacache_enable = false;
-    }
-#endif
-
-    if (config::datacache_enable) {
 #if defined(WITH_STARCACHE)
-        ASSIGN_OR_RETURN(auto cache_options, _init_cache_options());
-
-        // init starcache & disk monitor
-        _local_cache = std::make_shared<StarCacheWrapper>();
-        _disk_space_monitor = std::make_shared<DiskSpaceMonitor>(_local_cache.get());
-        RETURN_IF_ERROR(_disk_space_monitor->init(&cache_options.disk_spaces));
-        RETURN_IF_ERROR(_local_cache->init(cache_options));
-        _disk_space_monitor->start();
-
-        // init remote cache
-        _remote_cache = std::make_shared<PeerCacheWrapper>();
-        RETURN_IF_ERROR(_remote_cache->init(cache_options));
-
-        // init block cache
-        RETURN_IF_ERROR(_block_cache->init(cache_options, _local_cache, _remote_cache));
-
-        LOG(INFO) << "datacache init successfully";
-#endif
-    } else {
-        LOG(INFO) << "starts by skipping the datacache initialization";
-    }
-    return Status::OK();
-}
-
 StatusOr<CacheOptions> CacheEnv::_init_cache_options() {
     CacheOptions cache_options;
     RETURN_IF_ERROR(DataCacheUtils::parse_conf_datacache_mem_size(
@@ -459,12 +444,6 @@ StatusOr<CacheOptions> CacheEnv::_init_cache_options() {
         config::datacache_auto_adjust_enable = false;
     }
 
-    // Adjust the default engine based on build switches.
-    if (config::datacache_engine == "") {
-#if defined(WITH_STARCACHE)
-        config::datacache_engine = "starcache";
-#endif
-    }
     cache_options.block_size = config::datacache_block_size;
     cache_options.max_flying_memory_mb = config::datacache_max_flying_memory_mb;
     cache_options.max_concurrent_inserts = config::datacache_max_concurrent_inserts;
@@ -479,6 +458,23 @@ StatusOr<CacheOptions> CacheEnv::_init_cache_options() {
     cache_options.eviction_policy = config::datacache_eviction_policy;
     return cache_options;
 }
+
+Status CacheEnv::_init_starcache(CacheOptions* cache_options) {
+    _local_cache = std::make_shared<StarCacheWrapper>();
+    _disk_space_monitor = std::make_shared<DiskSpaceMonitor>(_local_cache.get());
+    RETURN_IF_ERROR(_disk_space_monitor->init(&cache_options->disk_spaces));
+    RETURN_IF_ERROR(_local_cache->init(*cache_options));
+    _disk_space_monitor->start();
+
+    return Status::OK();
+}
+
+Status CacheEnv::_init_peer_cache(const CacheOptions& cache_options) {
+    _remote_cache = std::make_shared<PeerCacheWrapper>();
+    return _remote_cache->init(cache_options);
+}
+
+#endif
 
 void CacheEnv::try_release_resource_before_core_dump() {
     std::set<std::string> modules;
