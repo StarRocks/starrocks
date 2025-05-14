@@ -19,8 +19,8 @@ package com.starrocks.mysql;
 
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.authentication.OIDCSecurityIntegration;
-import com.starrocks.authentication.OpenIdConnectAuthenticationProvider;
+import com.starrocks.authentication.JWTAuthenticationProvider;
+import com.starrocks.authentication.JWTSecurityIntegration;
 import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.privilege.AuthPlugin;
@@ -142,7 +142,7 @@ public class MysqlAuthPacketTest {
         AuthenticationMgr authenticationMgr = new AuthenticationMgr();
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
         CreateUserStmt createUserStmt = (CreateUserStmt) SqlParser
-                .parse("create user harbor identified with authentication_openid_connect", 32).get(0);
+                .parse("create user harbor identified with authentication_jwt", 32).get(0);
         Analyzer.analyze(createUserStmt, ctx);
         authenticationMgr.createUser(createUserStmt);
 
@@ -157,9 +157,9 @@ public class MysqlAuthPacketTest {
 
         //test security integration
         Map<String, String> properties = new HashMap<>();
-        properties.put(OIDCSecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_openid_connect");
-        properties.put(OpenIdConnectAuthenticationProvider.OIDC_JWKS_URL, "jwks.json");
-        properties.put(OpenIdConnectAuthenticationProvider.OIDC_PRINCIPAL_FIELD, "preferred_username");
+        properties.put(JWTSecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_jwt");
+        properties.put(JWTAuthenticationProvider.JWT_JWKS_URL, "jwks.json");
+        properties.put(JWTAuthenticationProvider.JWT_PRINCIPAL_FIELD, "preferred_username");
         properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER, "file_group_provider");
         properties.put(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN, "group1");
         authenticationMgr.createSecurityIntegration("oidc", properties, true);
@@ -187,7 +187,7 @@ public class MysqlAuthPacketTest {
         AuthenticationMgr authenticationMgr = new AuthenticationMgr();
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
         CreateUserStmt createUserStmt = (CreateUserStmt) SqlParser
-                .parse("create user harbor identified with authentication_openid_connect", 32).get(0);
+                .parse("create user harbor identified with authentication_jwt", 32).get(0);
         Analyzer.analyze(createUserStmt, ctx);
         authenticationMgr.createUser(createUserStmt);
 
@@ -210,6 +210,6 @@ public class MysqlAuthPacketTest {
         Assert.assertEquals("mysql_native_password", AuthPlugin.covertFromServerToClient("MYSQL_NATIVE_PASSWORD"));
         Assert.assertEquals("mysql_clear_password", AuthPlugin.covertFromServerToClient("authentication_ldap_simple"));
         Assert.assertEquals("authentication_openid_connect_client",
-                AuthPlugin.covertFromServerToClient("authentication_openid_connect"));
+                AuthPlugin.covertFromServerToClient("authentication_jwt"));
     }
 }
