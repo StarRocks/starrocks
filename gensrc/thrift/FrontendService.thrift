@@ -2132,6 +2132,14 @@ struct TUpdateFailPointResponse {
     1: optional Status.TStatus status;
 }
 
+struct TFragmentProfile {
+    1: optional RuntimeProfile.TRuntimeProfileTree profile;
+    2: optional RuntimeProfile.TRuntimeProfileTree load_channel_profile;
+    3: optional Types.TUniqueId query_id;
+    4: optional Types.TUniqueId fragment_instance_id;
+    5: optional Status.TStatus status;
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -2273,5 +2281,7 @@ service FrontendService {
     TGetWarehouseQueriesResponse getWarehouseQueries(1: TGetWarehouseQueriesRequest request)
 
     TUpdateFailPointResponse updateFailPointStatus(1: TUpdateFailPointRequest request)
+
+    Status.TStatus asyncProfileReport(1: TFragmentProfile request)
 }
 
