@@ -118,4 +118,49 @@ Status BinaryFunctions::from_binary_close(FunctionContext* context, FunctionCont
     return Status::OK();
 }
 
+#define PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1)     \
+    do {                                                                \
+        if (c0->only_null() || c1->only_null()) {                       \
+            return ColumnHelper::create_const_null_column(c0->size());  \
+        }                                                               \
+        if (c0->has_null() || c1->has_null()) {                         \
+            null_flags = FunctionHelper::union_nullable_column(c0, c1); \
+        } else {                                                        \
+            null_flags = NullColumn::create();                          \
+            null_flags->reserve(c0->size());                            \
+            null_flags->append_default(c0->size());                     \
+        }                                                               \
+        c0 = FunctionHelper::get_data_column_of_const(c0);              \
+        c1 = FunctionHelper::get_data_column_of_const(c1);              \
+        c0 = FunctionHelper::get_data_column_of_nullable(c0);           \
+        c1 = FunctionHelper::get_data_column_of_nullable(c1);           \
+    } while (0)
+
+StatusOr<ColumnPtr> BinaryFunctions::iceberg_truncate_binary(FunctionContext* context, const Columns& columns) {
+    ColumnPtr c0 = columns[0];
+    ColumnPtr c1 = columns[1];
+    NullColumnPtr null_flags;
+    PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
+    const int size = c0->size();
+    int32_t width = c1->get(0).get_int32();
+    uint8_t* raw_null_flags = null_flags->get_data().data();
+    auto col = ColumnHelper::cast_to_raw<TYPE_BINARY>(c0);
+    ColumnBuilder<TYPE_BINARY> result(size);
+    RunTimeCppType<TYPE_BINARY>* raw_c0 = col->get_data().data();
+
+#define SLICE_SIZE_MIN(x, y) x < y ? x : y
+    for (auto i = 0; i < size; i++) {
+        if (raw_null_flags[i]) {
+            result.append_null();
+        } else {
+            Slice src_value = raw_c0[i];
+            std::string result_str(src_value.get_data(), SLICE_SIZE_MIN(width, src_value.get_size()));
+            result.append(Slice(result_str.data(), result_str.size()));
+        }
+    }
+#undef SLICE_SIZE_MIN
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+#undef PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC
 } // namespace starrocks

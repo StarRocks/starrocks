@@ -441,6 +441,8 @@ public class FunctionSet {
     public static final String SQUARE = "square";
     public static final String TAN = "tan";
     public static final String TRUNCATE = "truncate";
+    public static final String ICEBERG_TRANSFORM_TRUNCATE = "__iceberg_transform_truncate";
+    public static final String ICEBERG_TRANSFORM_BUCKET = "__iceberg_transform_bucket";
 
     // Window functions:
     public static final String LEAD = "lead";
