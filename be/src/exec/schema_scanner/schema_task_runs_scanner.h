@@ -28,7 +28,7 @@ public:
     Status get_next(ChunkPtr* chunk, bool* eos) override;
 
 private:
-    static constexpr int64_t kPaginationBatchSize = 1000;
+    static constexpr int64_t kPaginationBatchSize = DEFAULT_CHUNK_SIZE;
 
     Status fill_chunk(ChunkPtr* chunk);
 

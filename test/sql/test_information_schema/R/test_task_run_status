@@ -1,4 +1,4 @@
--- name: test_task_run_status
+-- name: test_task_run_status @sequential
 create database db_${uuid0};
 -- result:
 -- !result
@@ -40,7 +40,7 @@ SELECT count(1) FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 
 -- !result
 [UC]task_name=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME='mv1';
 -- result:
-mv-28357
+mv-10385348
 -- !result
 SELECT count(1) FROM information_schema.task_runs WHERE TASK_NAME = '${task_name}';
 -- result:
@@ -55,7 +55,7 @@ admin set frontend config('enable_task_run_fe_evaluation'='false');
 -- !result
 [UC]query_id=SELECT `QUERY_ID` FROM information_schema.task_runs WHERE task_name = '${task_name}' limit 1;
 -- result:
-a780f383-44da-11ef-a7c8-e2d8918adc6e
+8a6eba59-3073-11f0-8bba-cec5eca5cdd9
 -- !result
 SELECT count(1) FROM information_schema.task_runs WHERE QUERY_ID = '${query_id}';
 -- result:
@@ -72,6 +72,36 @@ SUCCESS
 SELECT count(1) FROM information_schema.task_runs WHERE `STATE` = '${state}' and task_name = '${task_name}' and QUERY_ID = '${query_id}';
 -- result:
 1
+-- !result
+INSERT INTO _statistics_.task_run_history 
+    (task_id, task_run_id, create_time, task_name, task_state, finish_time, expire_time, history_content_json)
+    SELECT 1, 'fake-query-id' || generate_series, now(), 'fake-name', 'FAILED', now(), now(), 
+        '{"dbName": "default_cluster:sys"}'
+    FROM table(generate_series(1, 10000));
+-- result:
+-- !result
+SELECT (SELECT count(*) FROM information_schema.task_runs) 
+    >= (SELECT count(*) FROM _statistics_.task_run_history);
+-- result:
+1
+-- !result
+SELECT (SELECT count(*) FROM (SELECT * FROM information_schema.task_runs LIMIT 1) r) 
+    >= (SELECT count(*) FROM (SELECT * FROM _statistics_.task_run_history LIMIT 1) r);
+-- result:
+1
+-- !result
+SELECT (SELECT count(*) FROM (SELECT * FROM information_schema.task_runs LIMIT 4096) r) 
+    >= (SELECT count(*) FROM (SELECT * FROM _statistics_.task_run_history LIMIT 4096) r);
+-- result:
+1
+-- !result
+SELECT (SELECT count(*) FROM (SELECT * FROM information_schema.task_runs LIMIT 5000) r) 
+    >= (SELECT count(*) FROM (SELECT * FROM _statistics_.task_run_history LIMIT 5000) r);
+-- result:
+1
+-- !result
+DELETE FROM _statistics_.task_run_history WHERE task_run_id like 'fake-query-id%';
+-- result:
 -- !result
 drop database db_${uuid0};
 -- result:
