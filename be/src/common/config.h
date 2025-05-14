@@ -1217,7 +1217,7 @@ CONF_mInt64(max_length_for_bitmap_function, "1000000");
 
 // Configuration items for datacache
 CONF_Bool(datacache_enable, "true");
-CONF_mString(datacache_mem_size, "0");
+CONF_mString(datacache_mem_size, "20%");
 CONF_mString(datacache_disk_size, "100%");
 CONF_Int64(datacache_block_size, "262144"); // 256K
 CONF_Bool(datacache_checksum_enable, "false");
@@ -1247,16 +1247,16 @@ CONF_Double(datacache_scheduler_threads_per_cpu, "0.125");
 CONF_Bool(datacache_tiered_cache_enable, "false");
 // Whether to persist cached data
 CONF_Bool(datacache_persistence_enable, "true");
-// DataCache engines, alternatives: starcache.
+// DataCache engines, alternatives: starcache, lrucache.
 // `cachelib` is not support now.
-// Set the default value empty to indicate whether it is manully configured by users.
+// Set the default value empty to indicate whether it is manually configured by users.
 // If not, we need to adjust the default engine based on build switches like "WITH_STARCACHE".
 CONF_String(datacache_engine, "");
 // The interval time (millisecond) for agent report datacache metrics to FE.
 CONF_mInt32(report_datacache_metrics_interval_ms, "60000");
 // Whether enable automatically adjust cache space quota.
 // If true, the cache will choose an appropriate quota based on the current remaining space as the quota.
-// and the quota also will be changed dynamiclly.
+// and the quota also will be changed dynamically.
 // Once the disk space usage reach the high level, the quota will be decreased to keep the disk usage
 // around the disk safe level.
 // On the other hand, if the cache is full and the disk usage falls below the disk low level for a long time,
@@ -1290,12 +1290,9 @@ CONF_Bool(datacache_unified_instance_enable, "true");
 // * slru: segment lru eviction policies, which can better reduce cache pollution problem.
 CONF_String(datacache_eviction_policy, "slru");
 
-// The following configurations will be deprecated, and we use the `datacache` prefix instead.
-// But it is temporarily necessary to keep them for a period of time to be compatible with
-// the old configuration files.
-CONF_Bool(block_cache_enable, "false");
-CONF_Int64(block_cache_disk_size, "0");
-CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
+CONF_Bool(block_cache_enable, "true");
+CONF_mString(block_cache_disk_size, "-1");
+CONF_mString(block_cache_mem_size, "0");
 CONF_Alias(datacache_block_size, block_cache_block_size);
 CONF_Alias(datacache_max_concurrent_inserts, block_cache_max_concurrent_inserts);
 CONF_Alias(datacache_checksum_enable, block_cache_checksum_enable);
