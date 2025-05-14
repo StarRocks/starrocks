@@ -63,16 +63,13 @@ jobs:
           cd ci-tool
           python3 scripts/get_pr_issue.py check_issue ${GITHUB_REPOSITORY} ${PR_NUMBER}
       
-      - uses: thehanimo/pr-title-checker@v1.4.3
-        id: check_title_format
-        with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          pass_on_octokit_error: false
-          configuration_path: ".github/pr-title-checker-config.json"
-
-      - run: |
-          echo ${{ steps.check_title_format.outputs.success }}
-          exit 1
+      - name: Get Title
+        id: get_title
+        run: |
+          PR_TITLE=$(gh pr view ${PR_NUMBER} -R ${GITHUB_REPOSITORY} --json  title -q '.title')
+          echo "PR_TITLE<<EOF" >> $GITHUB_OUTPUT
+          echo "${PR_TITLE}" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -86,10 +83,26 @@ jobs:
           git remote add upstream https://github.com/${{ github.event.pull_request.base.repo.full_name }}.git
           git fetch upstream
           git merge upstream/${{ github.event.pull_request.base.ref }} --no-edit
-          
-      - name: Branch Access Check
+      
+      - name: Check Title Format
+        id: check_title_format
+        env:
+          PR_TITLE: ${{ steps.get_title.outputs.PR_TITLE }}
         run: |
-          PR_TITLE=$(gh pr view ${PR_NUMBER} -R ${GITHUB_REPOSITORY} --json  title -q '.title')
+          case "${{ env.PR_TITLE }}" in
+            '[BugFix]'* | '[Enhancement]'* | '[Feature]'* | '[UT]'* | '[Doc]'* | '[Tool]'* | 'Revert'*)
+              exit 0
+              ;;
+            *)
+              echo "::error::Title format is incorrect, please check!"
+              exit 1
+              ;;
+          esac
+
+      - name: Branch Access Check
+        env:
+          PR_TITLE: ${{ steps.get_title.outputs.PR_TITLE }}
+        run: |
           status=$(cat .github/.status || echo open)
           if [[ "${PR_TITLE}" == *"[Tool]"* ]]; then
             exit 0
