@@ -192,7 +192,8 @@ StatusOr<CacheOptions> DataCache::_init_cache_options() {
         // If the `datacache_disk_size` is manually set a positive value, we will use the maximum cache quota between
         // dataleke and starlet cache as the quota of the unified cache. Otherwise, the cache quota will remain zero
         // and then automatically adjusted based on the current avalible disk space.
-        if (config::datacache_unified_instance_enable && (!config::datacache_auto_adjust_enable || disk_size > 0)) {
+        if (config::datacache_unified_instance_enable &&
+            (!config::enable_datacache_disk_auto_adjust || disk_size > 0)) {
             ASSIGN_OR_RETURN(
                     int64_t starlet_cache_size,
                     DataCacheUtils::parse_conf_datacache_disk_size(
@@ -204,7 +205,7 @@ StatusOr<CacheOptions> DataCache::_init_cache_options() {
     }
 
     if (cache_options.dir_spaces.empty()) {
-        config::datacache_auto_adjust_enable = false;
+        config::enable_datacache_disk_auto_adjust = false;
     }
 
     // Adjust the default engine based on build switches.
