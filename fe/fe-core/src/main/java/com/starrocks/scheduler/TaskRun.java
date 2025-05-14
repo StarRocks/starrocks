@@ -30,6 +30,7 @@ import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.commons.lang3.StringUtils;
@@ -238,11 +239,13 @@ public class TaskRun implements Comparable<TaskRun> {
         }
 
         // Execute post task action, but ignore any exception
-        if (StringUtils.isNotEmpty(taskRunContext.getPostRun())) {
-            try {
-                processor.postTaskRun(taskRunContext);
-            } catch (Exception ignored) {
-                LOG.warn("Execute post taskRun failed {} ", status, ignored);
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("PostTaskRun")) {
+            if (StringUtils.isNotEmpty(taskRunContext.getPostRun())) {
+                try {
+                    processor.postTaskRun(taskRunContext);
+                } catch (Exception e) {
+                    LOG.warn("Execute post taskRun failed {} ", status, e);
+                }
             }
         }
         return true;
