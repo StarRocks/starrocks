@@ -313,13 +313,8 @@ public class PredicateStatisticsCalculator {
                 // only columnRefOperator could add column statistic to statistics
                 leftChildOpt = leftChild.isColumnRef() ? Optional.of((ColumnRefOperator) leftChild) : Optional.empty();
 
-                if (rightChild.isConstant()) {
-                    Optional<ConstantOperator> constantOperator;
-                    if (rightChild.isConstantRef()) {
-                        constantOperator = Optional.of((ConstantOperator) rightChild);
-                    } else {
-                        constantOperator = Optional.empty();
-                    }
+                if (rightChild.isConstantRef()) {
+                    Optional<ConstantOperator> constantOperator = Optional.of((ConstantOperator) rightChild);
                     Statistics binaryStats =
                             BinaryPredicateStatisticCalculator.estimateColumnToConstantComparison(leftChildOpt,
                                     leftColumnStatistic, predicate, constantOperator, statistics);
