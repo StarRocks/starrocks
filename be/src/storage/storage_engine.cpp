@@ -224,7 +224,7 @@ Status StorageEngine::_open(const EngineOptions& options) {
     std::unique_ptr<ThreadPool> thread_pool;
     RETURN_IF_ERROR(ThreadPoolBuilder("delta_writer")
                             .set_min_threads(1)
-                            .set_max_threads(std::max<int>(1, config::number_tablet_writer_threads))
+                            .set_max_threads(caculate_delta_writer_thread_num(config::number_tablet_writer_threads))
                             .set_max_queue_size(40960 /*a random chosen number that should big enough*/)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(/*5 minutes=*/5 * 60 * 1000))
                             .build(&thread_pool));
