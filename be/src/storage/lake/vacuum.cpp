@@ -332,7 +332,8 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
                                       VacuumTabletMetaVerionRange* vacuum_version_range,
                                       AsyncFileDeleter* datafile_deleter, AsyncFileDeleter* metafile_deleter,
                                       int64_t* total_datafile_size, int64_t* vacuumed_version,
-                                      int64_t* extra_datafile_size, const std::unordered_set<int64_t>& retain_versions_set,
+                                      int64_t* extra_datafile_size,
+                                      const std::unordered_set<int64_t>& retain_versions_set,
                                       const std::unordered_set<std::string>& retain_files_set) {
     auto t0 = butil::gettimeofday_ms();
     auto meta_dir = join_path(root_dir, kMetadataDirectoryName);
@@ -361,7 +362,8 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
             if (skip_check_grace_timestamp) {
                 DCHECK_LE(version, final_retain_version);
                 RETURN_IF_ERROR(
-                        collect_garbage_files(*metadata, data_dir, datafile_deleter, &prepare_vacuum_file_size, &retain_files_set));
+                        collect_garbage_files(*metadata, data_dir, datafile_deleter, &prepare_vacuum_file_size,
+                                              &retain_files_set));
             } else {
                 int64_t compare_time = 0;
                 if (metadata->has_commit_time() && metadata->commit_time() > 0) {
@@ -396,7 +398,8 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
                     skip_check_grace_timestamp = true;
 
                     // The metadata will be retained, but garbage files recorded in it can be deleted.
-                    RETURN_IF_ERROR(collect_garbage_files(*metadata, data_dir, datafile_deleter, total_datafile_size, &retain_files_set));
+                    RETURN_IF_ERROR(collect_garbage_files(*metadata, data_dir, datafile_deleter, total_datafile_size,
+                                                          &retain_files_set));
                 } else {
                     DCHECK_LE(version, final_retain_version);
                     final_retain_version = version;
@@ -447,8 +450,8 @@ static void erase_tablet_metadata_from_metacache(TabletManager* tablet_mgr, cons
     }
 }
 
-static Status get_retain_files(const std::vector<int64_t>& retain_versions, int64_t tablet_id, TabletManager* tablet_mgr,
-                                std::unordered_set<std::string>& retain_files_set) {
+static Status get_retain_files(const std::vector<int64_t>& retain_versions, int64_t tablet_id,
+                               TabletManager* tablet_mgr, std::unordered_set<std::string>& retain_files_set) {
     for (const auto& version : retain_versions) {
         auto res = tablet_mgr->get_tablet_metadata(tablet_id, version, false);
         if (!res.status().ok()) {
@@ -503,8 +506,7 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
     std::unordered_set<int64_t> retain_versions_set(retain_versions.begin(), retain_versions.end());
     for (auto& tablet_info : tablet_infos) {
         std::unordered_set<std::string> retain_files_set;
-        RETURN_IF_ERROR(get_retain_files(retain_versions, tablet_info.tablet_id(), tablet_mgr,
-                                         retain_files_set));
+        RETURN_IF_ERROR(get_retain_files(retain_versions, tablet_info.tablet_id(), tablet_mgr, retain_files_set));
 
         int64_t tablet_vacuumed_version = 0;
         AsyncFileDeleter datafile_deleter(config::lake_vacuum_min_batch_delete_size);
@@ -619,9 +621,8 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
     auto min_active_txn_id = request.min_active_txn_id();
     std::vector<int64_t> retain_versions;
     if (request.retain_versions_size() > 0) {
-        retain_versions = std::move(
-            std::vector<int64_t>(
-            request.retain_versions().begin(), request.retain_versions().end()));
+        retain_versions = 
+                std::move(std::vector<int64_t>(request.retain_versions().begin(), request.retain_versions().end()));
     }
 
     int64_t vacuumed_files = 0;
