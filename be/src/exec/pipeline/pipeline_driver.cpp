@@ -918,6 +918,9 @@ void PipelineDriver::_update_statistics(RuntimeState* state, size_t total_chunks
     int64_t accounted_cpu_cost = runtime_ns + source_operator_last_cpu_time_ns + sink_operator_last_cpu_time_ns;
     DCHECK(accounted_cpu_cost >= 0);
     query_ctx()->incr_cpu_cost(accounted_cpu_cost);
+    for (Operator& op : operators) {
+        query_ctx()-> incr_operator_time(op._total_timer->value());
+    }
     if (_workgroup != nullptr) {
         _workgroup->incr_cpu_runtime_ns(accounted_cpu_cost);
     }

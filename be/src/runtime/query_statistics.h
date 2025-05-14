@@ -60,6 +60,8 @@ public:
     void add_cpu_costs(int64_t cpu_ns) { this->cpu_ns += cpu_ns; }
     void add_mem_costs(int64_t bytes) { mem_cost_bytes += bytes; }
     void add_spill_bytes(int64_t bytes) { spill_bytes += bytes; }
+    void add_exec_wall_time(int64_t exec_wall_time_ns) { this->exec_wall_time_ns += exec_wall_time_ns; }
+    void add_operator_time(int64_t operator_time_ns) { this->operator_time_ns += operator_time_ns; }
 
     void to_pb(PQueryStatistics* statistics);
     void to_params(TAuditStatistics* params);
@@ -83,7 +85,8 @@ private:
     std::atomic_int64_t cpu_ns{0};
     std::atomic_int64_t mem_cost_bytes{0};
     std::atomic_int64_t spill_bytes{0};
-
+    std::atomic_int64_t operator_time_ns{0};
+    std::atomic_int64_t exec_wall_time_ns{0};
     // number rows returned by query.
     // only set once by result sink when closing.
     int64_t returned_rows{0};

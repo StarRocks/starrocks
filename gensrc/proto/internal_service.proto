@@ -495,6 +495,8 @@ message PCollectQueryStatistics {
     optional int64 scan_rows = 4;
     optional int64 mem_usage_bytes = 5;
     optional int64 spill_bytes = 6;
+    optional int64 operator_time_ns = 7;
+    optional int64 execution_wall_time_ns = 8;
 }
 
 message PCollectQueryStatisticsResult {

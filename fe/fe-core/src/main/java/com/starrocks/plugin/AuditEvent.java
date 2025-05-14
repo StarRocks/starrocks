@@ -151,6 +151,12 @@ public class AuditEvent {
     @AuditField(value = "QueryFEAllocatedMemory")
     public long queryFeMemory = 0;
 
+    @AuditField(value = "OperatorTimeNs", ignore_zero = true)
+    public long operatorTimeNs = -1;
+
+    @AuditField(value = "ExecutionWallTimeNs", ignore_zero = true)
+    public long executionWallTimeNs = -1;
+
     public static class AuditEventBuilder {
 
         private AuditEvent auditEvent = new AuditEvent();
@@ -382,6 +388,24 @@ public class AuditEvent {
         public AuditEventBuilder setIsForwardToLeader(boolean isForwardToLeader) {
             auditEvent.isForwardToLeader = isForwardToLeader;
             return this;
+        }
+
+        public AuditEventBuilder setOperatorTimeNs(long operatorTimeNs) {
+            auditEvent.operatorTimeNs = operatorTimeNs;
+            return this;
+        }
+
+        public long getOperatorTimeNs() {
+            return this.auditEvent.operatorTimeNs;
+        }
+
+        public AuditEventBuilder setExecutionWallTimeNs(long executionWallTimeNs) {
+            auditEvent.executionWallTimeNs = executionWallTimeNs;
+            return this;
+        }
+
+        public long getExecutionWallTimeNs() {
+            return this.auditEvent.executionWallTimeNs;
         }
 
         public AuditEventBuilder setQueryFeMemory(long queryFeMemory) {

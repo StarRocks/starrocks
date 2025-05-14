@@ -2253,6 +2253,12 @@ public class StmtExecutor {
         if (statisticsForAuditLog.spillBytes == null) {
             statisticsForAuditLog.spillBytes = 0L;
         }
+        if (statisticsForAuditLog.operatorTimeNs == null) {
+            statisticsForAuditLog.operatorTimeNs = 0L;
+        }
+        if (statisticsForAuditLog.executionWallTimeNs == null) {
+            statisticsForAuditLog.executionWallTimeNs = 0L;
+        }
         return statisticsForAuditLog;
     }
 
@@ -3030,9 +3036,10 @@ public class StmtExecutor {
             queryDetail.setCpuCostNs(statistics.cpuCostNs == null ? -1 : statistics.cpuCostNs);
             queryDetail.setMemCostBytes(statistics.memCostBytes == null ? -1 : statistics.memCostBytes);
             queryDetail.setSpillBytes(statistics.spillBytes == null ? -1 : statistics.spillBytes);
+            queryDetail.setOperatorTimeNs(statistics.operatorTimeNs == null ? -1 : statistics.operatorTimeNs);
+            queryDetail.setExecutionWallTimeNs(statistics.executionWallTimeNs == null ? -1 : statistics.executionWallTimeNs);
         }
         queryDetail.setCatalog(ctx.getCurrentCatalog());
-
         QueryDetailQueue.addQueryDetail(queryDetail);
     }
 

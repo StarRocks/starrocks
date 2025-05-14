@@ -56,6 +56,8 @@ public class QueryDetailQueueTest extends PlanTestBase {
         startQueryDetail.setReturnRows(1);
         startQueryDetail.setCpuCostNs(1002);
         startQueryDetail.setMemCostBytes(100003);
+        startQueryDetail.setOperatorTimeNs(1005);
+        startQueryDetail.setExecutionWallTimeNs(2005);
         QueryDetailQueue.addQueryDetail(startQueryDetail);
 
         List<QueryDetail> queryDetails = QueryDetailQueue.getQueryDetailsAfterTime(startQueryDetail.getEventTime() - 1);
@@ -86,6 +88,8 @@ public class QueryDetailQueueTest extends PlanTestBase {
                 "\"spillBytes\":-1," +
                 "\"warehouse\":\"default_warehouse\"," +
                 "\"catalog\":\"default_catalog\"," +
+                "\"operatorTimeNs\":1005," +
+                "\"executionWallTimeNs\":2005," +
                 "\"queryFeMemory\":0}]";
         Assert.assertEquals(jsonString, queryDetailString);
 

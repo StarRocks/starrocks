@@ -262,7 +262,8 @@ std::shared_ptr<QueryStatistics> QueryContext::final_query_statistic() {
     res->add_cpu_costs(cpu_cost());
     res->add_mem_costs(mem_cost_bytes());
     res->add_spill_bytes(get_spill_bytes());
-
+    res->add_exec_wall_time(lifetime());
+    res->add_operator_time(get_operator_time());
     {
         std::lock_guard l(_scan_stats_lock);
         for (const auto& [table_id, scan_stats] : _scan_stats) {
@@ -592,6 +593,7 @@ void QueryContextManager::collect_query_statistics(const PCollectQueryStatistics
             int64_t scan_rows = query_ctx->cur_scan_rows_num();
             int64_t scan_bytes = query_ctx->get_scan_bytes();
             int64_t mem_usage_bytes = query_ctx->current_mem_usage_bytes();
+            int64_t operator_time = query_ctx -> get_operator_time();
             auto query_statistics = response->add_query_statistics();
             auto query_id = query_statistics->mutable_query_id();
             query_id->set_hi(p_query_id.hi());
@@ -601,6 +603,7 @@ void QueryContextManager::collect_query_statistics(const PCollectQueryStatistics
             query_statistics->set_scan_bytes(scan_bytes);
             query_statistics->set_mem_usage_bytes(mem_usage_bytes);
             query_statistics->set_spill_bytes(query_ctx->get_spill_bytes());
+            query_statistics->set_operator_time_ns(operator_time);
         }
     }
 }

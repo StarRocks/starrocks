@@ -186,6 +186,10 @@ public:
     // Some statistic about the query, including cpu, scan_rows, scan_bytes
     int64_t mem_cost_bytes() const { return _mem_tracker->peak_consumption(); }
     int64_t current_mem_usage_bytes() const { return _mem_tracker->consumption(); }
+    void incr_operator_time(int64_t operator_time) {
+        _total_operator_time_ns += operator_time;
+        _delta_operator_time_ns += operator_time;
+    }
     void incr_cpu_cost(int64_t cost) {
         _total_cpu_cost_ns += cost;
         _delta_cpu_cost_ns += cost;
@@ -253,6 +257,7 @@ public:
     int64_t get_scan_bytes() const { return _total_scan_bytes; }
     std::atomic_int64_t* mutable_total_spill_bytes() { return &_total_spill_bytes; }
     int64_t get_spill_bytes() { return _total_spill_bytes; }
+    int64_t get_operator_time() const { return _total_operator_time_ns; }
 
     // Query start time, used to check how long the query has been running
     // To ensure that the minimum run time of the query will not be killed by the big query checking mechanism
@@ -329,10 +334,12 @@ private:
     std::atomic<int64_t> _total_cpu_cost_ns = 0;
     std::atomic<int64_t> _total_scan_rows_num = 0;
     std::atomic<int64_t> _total_scan_bytes = 0;
+    std::atomic<int64_t> _total_operator_time_ns = 0;
     std::atomic<int64_t> _total_spill_bytes = 0;
     std::atomic<int64_t> _delta_cpu_cost_ns = 0;
     std::atomic<int64_t> _delta_scan_rows_num = 0;
     std::atomic<int64_t> _delta_scan_bytes = 0;
+    std::atomic<int64_t> _delta_operator_time_ns = 0;
 
     struct ScanStats {
         std::atomic<int64_t> total_scan_rows_num = 0;
