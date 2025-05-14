@@ -197,6 +197,27 @@ vectorized_functions = [
 
     [10330, "cbrt", True, False, "DOUBLE", ["DOUBLE"], "MathFunctions::cbrt"],
 
+    [10340, '__iceberg_transform_truncate', True, False, 'INT', ['INT', 'INT'], 'MathFunctions::iceberg_truncate_int<TYPE_INT>'],
+    [10341, '__iceberg_transform_truncate', True, False, 'BIGINT', ['BIGINT', 'INT'], 'MathFunctions::iceberg_truncate_int<TYPE_BIGINT>'],
+    [10342, '__iceberg_transform_truncate', True, False, 'DECIMAL32', ['DECIMAL32', 'INT'], 'MathFunctions::iceberg_truncate_decimal<TYPE_DECIMAL32>'],
+    [10343, '__iceberg_transform_truncate', True, False, 'DECIMAL64', ['DECIMAL64', 'INT'], 'MathFunctions::iceberg_truncate_decimal<TYPE_DECIMAL64>'],
+    [10344, '__iceberg_transform_truncate', True, False, 'DECIMAL128', ['DECIMAL128', 'INT'], 'MathFunctions::iceberg_truncate_decimal<TYPE_DECIMAL128>'],
+    [10345, '__iceberg_transform_truncate', True, False, 'VARCHAR', ['VARCHAR', 'INT'], 'StringFunctions::left',
+     'StringFunctions::left_or_right_prepare', 'StringFunctions::left_or_right_close'],
+    [10346, '__iceberg_transform_truncate', True, False, 'VARBINARY', ['VARBINARY', 'INT'], 'BinaryFunctions::iceberg_truncate_binary'],
+     
+
+    [10350, '__iceberg_transform_bucket', True, False, 'INT', ['INT', 'INT'], 'MathFunctions::iceberg_bucket_int<TYPE_INT>'],
+    [10351, '__iceberg_transform_bucket', True, False, 'INT', ['BIGINT', 'INT'], 'MathFunctions::iceberg_bucket_int<TYPE_BIGINT>'],
+    [10352, '__iceberg_transform_bucket', True, False, 'INT', ['DATE', 'INT'], 'MathFunctions::iceberg_bucket_date'],
+    [10353, '__iceberg_transform_bucket', True, False, 'INT', ['DATETIME', 'INT'], 'MathFunctions::iceberg_bucket_datetime'],
+    [10354, '__iceberg_transform_bucket', True, False, 'INT', ['VARCHAR', 'INT'], 'MathFunctions::iceberg_bucket_string'],
+    [10355, '__iceberg_transform_bucket', True, False, 'INT', ['VARBINARY', 'INT'], 'MathFunctions::iceberg_bucket_string'],
+    [10356, '__iceberg_transform_bucket', True, False, 'INT', ['DECIMAL32'], 'MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL32>'],
+    [10357, '__iceberg_transform_bucket', True, False, 'INT', ['DECIMAL64'], 'MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL64>'],
+    [10358, '__iceberg_transform_bucket', True, False, 'INT', ['DECIMAL128'], 'MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL128>'],
+
+
     # 20xxx: bit functions
     [20010, 'bitand', True, False, 'TINYINT', ['TINYINT', 'TINYINT'], "BitFunctions::bitAnd<TYPE_TINYINT>"],
     [20011, 'bitand', True, False, 'SMALLINT', ['SMALLINT', 'SMALLINT'], "BitFunctions::bitAnd<TYPE_SMALLINT>"],
@@ -591,6 +612,15 @@ vectorized_functions = [
      'TimeFunctions::last_day_prepare', 'TimeFunctions::last_day_close'],
     [50501, 'makedate', True, False, 'DATE', ['INT', 'INT'], 'TimeFunctions::make_date'],
     [50610, 'time_format', True, False, 'VARCHAR', ['TIME', 'VARCHAR'], 'TimeFunctions::time_format'],
+
+
+    [50620, '__iceberg_transform_year', True, False, 'BIGINT', ['DATE'], 'TimeFunctions::iceberg_years_since_epoch_date'],
+    [50621, '__iceberg_transform_year', True, False, 'BIGINT', ['DATETIME'], 'TimeFunctions::iceberg_years_since_epoch_datetime'],
+    [50630, '__iceberg_transform_month', True, False, 'BIGINT', ['DATE'], 'TimeFunctions::iceberg_months_since_epoch_date'],
+    [50631, '__iceberg_transform_month', True, False, 'BIGINT', ['DATETIME'], 'TimeFunctions::iceberg_months_since_epoch_datetime'],
+    [50640, '__iceberg_transform_day', True, False, 'BIGINT', ['DATE'], 'TimeFunctions::iceberg_days_since_epoch_date'],
+    [50641, '__iceberg_transform_day', True, False, 'BIGINT', ['DATETIME'], 'TimeFunctions::iceberg_days_since_epoch_datetime'],
+    [50650, '__iceberg_transform_hour', True, False, 'BIGINT', ['DATETIME'], 'TimeFunctions::iceberg_hours_since_epoch_datetime'],
 
     # 60xxx: like predicate
     # important ref: LikePredicate.java, must keep name equals LikePredicate.Operator

@@ -105,4 +105,23 @@ public:
         }                                    \
     } while (false)
 
+#define PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1)     \
+    do {                                                                \
+        if (c0->only_null() || c1->only_null()) {                       \
+            return ColumnHelper::create_const_null_column(c0->size());  \
+        }                                                               \
+        if (c0->has_null() || c1->has_null()) {                         \
+            has_null = true;                                            \
+            null_flags = FunctionHelper::union_nullable_column(c0, c1); \
+        } else {                                                        \
+            null_flags = NullColumn::create();                          \
+            null_flags->reserve(c0->size());                            \
+            null_flags->append_default(c0->size());                     \
+        }                                                               \
+        c0 = FunctionHelper::get_data_column_of_const(c0);              \
+        c1 = FunctionHelper::get_data_column_of_const(c1);              \
+        c0 = FunctionHelper::get_data_column_of_nullable(c0);           \
+        c1 = FunctionHelper::get_data_column_of_nullable(c1);           \
+    } while (0)
+
 } // namespace starrocks

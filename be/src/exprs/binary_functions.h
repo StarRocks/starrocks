@@ -55,6 +55,8 @@ public:
     DEFINE_VECTORIZED_FN(from_binary);
     static Status from_binary_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status from_binary_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+    DEFINE_VECTORIZED_FN(iceberg_truncate_binary);
 };
 
 } // namespace starrocks
