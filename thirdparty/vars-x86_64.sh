@@ -28,7 +28,7 @@ HADOOP_SOURCE="hadoop-3.4.0"
 HADOOP_MD5SUM="2f9244ab73169cf7bc0811d932067f6b"
 
 # OPEN JDK
-JDK_DOWNLOAD="http://cdn-thirdparty.starrocks.com/OpenJDK17U-jdk_x86_64_linux_hotspot_17.0.13_11.tar.gz"
+JDK_DOWNLOAD="https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.13%2B11/OpenJDK17U-jdk_x64_linux_hotspot_17.0.13_11.tar.gz"
 JDK_NAME="OpenJDK17U-jdk_x86_64_linux_hotspot_17.0.13_11.tar.gz"
 JDK_SOURCE="jdk-17.0.13+11"
 JDK_MD5SUM="6876bb460fbcf6234778a62e1f3c4ae9"
