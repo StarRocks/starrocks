@@ -343,7 +343,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
     private boolean createSPMBaselinesTable(ConnectContext context) {
         LOG.info("create spm_baselines table start");
         TableName tableName = new TableName(STATISTICS_DB_NAME, SPM_BASELINE_TABLE_NAME);
-        KeysType keysType = KeysType.DUP_KEYS;
+        KeysType keysType = KeysType.PRIMARY_KEYS;
         Map<String, String> properties = Maps.newHashMap();
         try {
             List<ColumnDef> columns = ImmutableList.of(
