@@ -971,6 +971,11 @@ public class EditLog {
                     globalStateMgr.getLocalMetastore().replayModifyHiveTableColumn(opCode, modifyTableColumnOperationLog);
                     break;
                 }
+                case OperationType.OP_MODIFY_COLUMN_COMMENT: {
+                    ModifyColumnCommentLog modifyColumnCommentLog = (ModifyColumnCommentLog) journal.data();
+                    globalStateMgr.getLocalMetastore().replayModifyColumnComment(opCode, modifyColumnCommentLog);
+                    break;
+                }
                 case OperationType.OP_CREATE_CATALOG: {
                     Catalog catalog = (Catalog) journal.data();
                     globalStateMgr.getCatalogMgr().replayCreateCatalog(catalog);
@@ -1882,6 +1887,10 @@ public class EditLog {
 
     public void logModifyTableColumn(ModifyTableColumnOperationLog log) {
         logEdit(OperationType.OP_MODIFY_HIVE_TABLE_COLUMN, log);
+    }
+
+    public void logModifyColumnComment(ModifyColumnCommentLog log) {
+        logEdit(OperationType.OP_MODIFY_COLUMN_COMMENT, log);
     }
 
     public void logCreateCatalog(Catalog log) {
