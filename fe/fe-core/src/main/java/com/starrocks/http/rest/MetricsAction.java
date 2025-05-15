@@ -117,6 +117,8 @@ public class MetricsAction extends RestBaseAction {
 
     @Override
     public void execute(BaseRequest request, BaseResponse response) throws DdlException {
+        long start = System.currentTimeMillis();
+        LOG.info("Start collecting metrics");
         // parse visitor type
         String type = request.getSingleParameter(TYPE_PARAM);
         MetricVisitor visitor = null;
@@ -133,6 +135,7 @@ public class MetricsAction extends RestBaseAction {
 
         response.setContentType("text/plain");
         response.getContent().append(MetricRepo.getMetric(visitor, requestParams));
+        LOG.info("Finish collecting metrics, cost {} ms", System.currentTimeMillis() - start);
         sendResult(request, response);
     }
 
