@@ -3531,6 +3531,9 @@ public class PlanFragmentBuilder {
                     .map(ColumnRefOperator::getId).distinct().collect(Collectors.toList()));
             exchangeNode.setDataPartition(cteFragment.getDataPartition());
             exchangeNode.forceCollectExecStats();
+            if (consume.hasLimit()) {
+                exchangeNode.setLimit(consume.getLimit());
+            }
 
             PlanFragment consumeFragment = new PlanFragment(context.getNextFragmentId(), exchangeNode,
                     cteFragment.getDataPartition());
@@ -3553,11 +3556,6 @@ public class PlanFragmentBuilder {
                 this.currentExecGroup.add(selectNode, true);
                 selectNode.computeStatistics(optExpression.getStatistics());
                 consumeFragment.setPlanRoot(selectNode);
-            }
-
-            // set limit
-            if (consume.hasLimit()) {
-                consumeFragment.getPlanRoot().setLimit(consume.getLimit());
             }
 
             cteFragment.getDestNodeList().add(exchangeNode);
