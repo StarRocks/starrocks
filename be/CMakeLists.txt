@@ -1053,7 +1053,7 @@ set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
 
 # link gcov if WITH_GCOV is on
 if (WITH_GCOV)
-    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -lgcov)
+    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} --coverage)
 endif()
 
 # Set libraries for test
