@@ -74,26 +74,32 @@ public class SPMPlanner {
         try (Timer ignored = Tracers.watchScope("SPMPlanner")) {
             analyze(query);
 
-            SPMAst2SQLBuilder builder = new SPMAst2SQLBuilder(false, true);
-            String digest = builder.build((QueryStatement) query);
-            long hash = builder.buildHash();
-            List<BaselinePlan> plans = Lists.newArrayList();
-            plans.addAll(session.getSqlPlanStorage().findBaselinePlan(digest, hash));
-            plans.addAll(GlobalStateMgr.getCurrentState().getSqlPlanStorage().findBaselinePlan(digest, hash));
+            BaselinePlan base;
+            try (Timer ignored2 = Tracers.watchScope("foundBaseline")) {
+                SPMAst2SQLBuilder builder = new SPMAst2SQLBuilder(false, true);
+                String digest = builder.build((QueryStatement) query);
+                long hash = builder.buildHash();
+                List<BaselinePlan> plans = Lists.newArrayList();
+                plans.addAll(session.getSqlPlanStorage().findBaselinePlan(digest, hash));
+                plans.addAll(GlobalStateMgr.getCurrentState().getSqlPlanStorage().findBaselinePlan(digest, hash));
 
-            Optional<BaselinePlan> base;
-            try (Timer ignored2 = Tracers.watchScope("bindPlan")) {
-                base = plans.stream().min(Comparator.comparingDouble(BaselinePlan::getCosts));
-                if (base.isEmpty()) {
+                Optional<BaselinePlan> minCosts = plans.stream().filter(BaselinePlan::isEnable)
+                        .min(Comparator.comparingDouble(BaselinePlan::getCosts));
+                Optional<BaselinePlan> minQuery = plans.stream().filter(BaselinePlan::isEnable)
+                        .filter(b -> b.getQueryMs() > 0)
+                        .min(Comparator.comparingDouble(BaselinePlan::getQueryMs));
+
+                if (minQuery.isEmpty() && minCosts.isEmpty()) {
                     return query;
                 }
+                base = minQuery.orElseGet(minCosts::get);
             }
-            try (Timer ignored3 = Tracers.watchScope("replacePlan")) {
-                if (!bind(base.get(), query)) {
+            try (Timer ignored3 = Tracers.watchScope("bindBaseline")) {
+                if (!bind(base, query)) {
                     return query;
                 }
-                baseline = base.get();
-                return replacePlan(base.get());
+                baseline = base;
+                return replacePlan(base);
             }
         } catch (Exception e) {
             // fallback to original query
