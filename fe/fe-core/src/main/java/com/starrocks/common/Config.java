@@ -3555,7 +3555,7 @@ public class Config extends ConfigBase {
      * The URL to a JWKS service or a local file in the conf dir
      */
     @ConfField(mutable = false)
-    public static String oidc_jwks_url = "";
+    public static String jwt_jwks_url = "";
 
     /**
      * String to identify the field in the JWT that identifies the subject of the JWT.
@@ -3563,21 +3563,21 @@ public class Config extends ConfigBase {
      * The value of this field must be the same as the user specified when logging into StarRocks.
      */
     @ConfField(mutable = false)
-    public static String oidc_principal_field = "sub";
+    public static String jwt_principal_field = "sub";
 
     /**
      * Specifies a list of string. One of that must match the value of the JWT’s issuer (iss) field in order to consider
      * this JWT valid. The iss field in the JWT identifies the principal that issued the JWT.
      */
     @ConfField(mutable = false)
-    public static String[] oidc_required_issuer = {};
+    public static String[] jwt_required_issuer = {};
 
     /**
      * Specifies a list of strings. For a JWT to be considered valid, the value of its 'aud' (Audience) field must match
      * at least one of these strings.
      */
     @ConfField(mutable = false)
-    public static String[] oidc_required_audience = {};
+    public static String[] jwt_required_audience = {};
 
     /**
      * The authorization URL. The URL a user’s browser will be redirected to in order to begin the OAuth2 authorization process

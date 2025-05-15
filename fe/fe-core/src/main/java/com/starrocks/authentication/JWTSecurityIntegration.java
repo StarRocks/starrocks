@@ -22,30 +22,30 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-public class OIDCSecurityIntegration extends SecurityIntegration {
+public class JWTSecurityIntegration extends SecurityIntegration {
 
     public static final Set<String> REQUIRED_PROPERTIES = new HashSet<>(Arrays.asList(
             SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY,
-            OpenIdConnectAuthenticationProvider.OIDC_JWKS_URL,
-            OpenIdConnectAuthenticationProvider.OIDC_PRINCIPAL_FIELD));
+            JWTAuthenticationProvider.JWT_JWKS_URL,
+            JWTAuthenticationProvider.JWT_PRINCIPAL_FIELD));
 
     private static final Pattern COMMA_SPLIT = Pattern.compile("\\s*,\\s*");
 
-    public OIDCSecurityIntegration(String name, Map<String, String> propertyMap) {
+    public JWTSecurityIntegration(String name, Map<String, String> propertyMap) {
         super(name, propertyMap);
     }
 
     @Override
     public AuthenticationProvider getAuthenticationProvider() {
-        String jwksUrl = propertyMap.get(OpenIdConnectAuthenticationProvider.OIDC_JWKS_URL);
-        String principalFiled = propertyMap.get(OpenIdConnectAuthenticationProvider.OIDC_PRINCIPAL_FIELD);
-        String commaSeparatedIssuer = propertyMap.get(OpenIdConnectAuthenticationProvider.OIDC_REQUIRED_ISSUER);
+        String jwksUrl = propertyMap.get(JWTAuthenticationProvider.JWT_JWKS_URL);
+        String principalFiled = propertyMap.get(JWTAuthenticationProvider.JWT_PRINCIPAL_FIELD);
+        String commaSeparatedIssuer = propertyMap.get(JWTAuthenticationProvider.JWT_REQUIRED_ISSUER);
         String[] requireIssuer = commaSeparatedIssuer == null ?
                 new String[0] : COMMA_SPLIT.split(commaSeparatedIssuer);
-        String commaSeperatedRequireAudiences = propertyMap.get(OpenIdConnectAuthenticationProvider.OIDC_REQUIRED_AUDIENCE);
+        String commaSeperatedRequireAudiences = propertyMap.get(JWTAuthenticationProvider.JWT_REQUIRED_AUDIENCE);
         String[] requireAudiences = commaSeperatedRequireAudiences == null ?
                 new String[0] : COMMA_SPLIT.split(commaSeperatedRequireAudiences.trim());
-        return new OpenIdConnectAuthenticationProvider(jwksUrl, principalFiled, requireIssuer, requireAudiences);
+        return new JWTAuthenticationProvider(jwksUrl, principalFiled, requireIssuer, requireAudiences);
     }
 
     @Override
