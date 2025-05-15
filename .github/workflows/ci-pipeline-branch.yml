@@ -63,7 +63,7 @@ jobs:
           PR_TITLE: ${{ steps.get_title.outputs.PR_TITLE }}
         run: |
           case "${{ env.PR_TITLE }}" in
-            '[BugFix]'* | '[Enhancement]'* | '[Feature]'* | '[UT]'* | '[Doc]'* | '[Tool]'* | 'Revert'*)
+            '[BugFix]'* | '[Enhancement]'* | '[Feature]'* | '[UT]'* | '[Doc]'* | '[Tool]'* | '[Refactor]' | 'Revert'*)
               exit 0
               ;;
             *)
