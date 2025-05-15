@@ -46,6 +46,7 @@ import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.UnionRelation;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.Logger;
 
@@ -171,7 +172,8 @@ public class MVPCTRefreshPlanBuilder {
             // since it will deduce `hasTableHints` to true and causes rewrite failed.
             boolean isSameTable = relations.stream().allMatch(e ->
                     e.getName().equals(relations.iterator().next().getName()));
-            boolean isPushDownBelowTable = (relations.size() == 1 || isSameTable);
+            // If the query relation is a union relation and the table relation is the same table, need to push down.
+            boolean isPushDownBelowTable = (relations.size() == 1 || (isSameTable && queryRelation instanceof UnionRelation));
             if (isPushDownBelowTable) {
                 boolean ret = pushDownPartitionPredicates(table, tableRelation, refTablePartitionSlotRefs,
                         tablePartitionNames, isEnableMVRefreshQueryRewrite);
