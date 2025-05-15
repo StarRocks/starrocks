@@ -168,7 +168,7 @@ void HyperLogLog::update(uint64_t hash_value) {
     }
 }
 
-MFV_AVX512(void merge_registers_impl(uint8_t* dest, const uint8_t* other) {
+MFV_AVX512BW(void merge_registers_impl(uint8_t* dest, const uint8_t* other) {
     constexpr int SIMD_SIZE = sizeof(__m512i);
     constexpr int loop = HLL_REGISTERS_COUNT / SIMD_SIZE;
     assert(HLL_REGISTERS_COUNT % SIMD_SIZE == 0);

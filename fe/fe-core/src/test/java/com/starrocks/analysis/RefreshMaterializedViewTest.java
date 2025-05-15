@@ -138,8 +138,8 @@ public class RefreshMaterializedViewTest extends MVTestBase {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
             MaterializedView mv =
                     (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1");
-            Assert.assertTrue(mv.shouldRefreshTable("t1"));
-            Assert.assertFalse(mv.shouldRefreshTable("t2"));
+            Assert.assertTrue(mv.shouldRefreshTable("test", "t1"));
+            Assert.assertFalse(mv.shouldRefreshTable("test", "t2"));
 
             // cleanup
             starRocksAssert.dropTable("t1");
@@ -178,15 +178,64 @@ public class RefreshMaterializedViewTest extends MVTestBase {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
             MaterializedView mv =
                     (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1");
-            Assert.assertTrue(mv.shouldRefreshTable("t1"));
-            Assert.assertTrue(mv.shouldRefreshTable("t2"));
+            Assert.assertTrue(mv.shouldRefreshTable("test", "t1"));
+            Assert.assertTrue(mv.shouldRefreshTable("test", "t2"));
 
             String alterSql = "ALTER MATERIALIZED VIEW mv1 SET ('excluded_refresh_tables' = 't2')";
             AlterMaterializedViewStmt stmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterSql, connectContext);
             GlobalStateMgr.getCurrentState().getLocalMetastore().alterMaterializedView(stmt);
-            Assert.assertTrue(mv.shouldRefreshTable("t1"));
-            Assert.assertFalse(mv.shouldRefreshTable("t2"));
+            Assert.assertTrue(mv.shouldRefreshTable("test", "t1"));
+            Assert.assertFalse(mv.shouldRefreshTable("test", "t2"));
+
+            // cleanup
+            starRocksAssert.dropTable("t1");
+            starRocksAssert.dropTable("t2");
+            starRocksAssert.dropMaterializedView("mv1");
+        });
+    }
+
+    @Test
+    public void testCreateMVProperties3() throws Exception {
+        starRocksAssert
+                .withTable("CREATE TABLE t1 \n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int\n" +
+                        ")\n" +
+                        "PARTITION BY date_trunc('day', k1)\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withTable("CREATE TABLE t2 \n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int\n" +
+                        ")\n" +
+                        "PARTITION BY date_trunc('day', k1)\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+        starRocksAssert.createDatabaseIfNotExists("test2");
+        withRefreshedMV("CREATE MATERIALIZED VIEW test2.mv1 \n" +
+                "PARTITION BY date_trunc('day', k1)\n"
+                + "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH ASYNC\n" +
+                "AS \n" +
+                "select k1 from (SELECT * FROM test.t1 UNION ALL SELECT * FROM test.t2) t group by k1\n", () -> {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test2");
+            MaterializedView mv =
+                    (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1");
+            Assert.assertTrue(mv.shouldRefreshTable("test", "t1"));
+            Assert.assertTrue(mv.shouldRefreshTable("test", "t2"));
+
+            String alterSql = "ALTER MATERIALIZED VIEW test2.mv1 SET ('excluded_refresh_tables' = 'test.t2')";
+            AlterMaterializedViewStmt stmt =
+                    (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterSql, connectContext);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().alterMaterializedView(stmt);
+            Assert.assertTrue(mv.shouldRefreshTable("test", "t1"));
+            Assert.assertFalse(mv.shouldRefreshTable("test", "t2"));
+            Assert.assertTrue(mv.shouldRefreshTable("test2", "t2"));
 
             // cleanup
             starRocksAssert.dropTable("t1");

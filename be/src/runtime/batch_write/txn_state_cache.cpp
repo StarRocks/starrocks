@@ -14,6 +14,9 @@
 
 #include "runtime/batch_write/txn_state_cache.h"
 
+#include <bvar/reducer.h>
+#include <bvar/status.h>
+
 #include <utility>
 
 #include "agent/master_info.h"
@@ -25,12 +28,33 @@
 
 namespace starrocks {
 
+// Records the capacity of transaction state cache
+bvar::Status<int64_t> g_mc_txn_cache_capacity("merge_commit_txn_cache", "capacity", 0);
+// Tracks the current number of entries in the transaction state cache
+bvar::Adder<int64_t> g_mc_txn_cache_size("merge_commit_txn_cache", "size");
+// Counts the total number of cache hits when accessing transaction state
+bvar::Adder<int64_t> g_mc_txn_cache_hit("merge_commit_txn_cache", "hit_total");
+// Counts the total number of cache misses when accessing transaction state
+bvar::Adder<int64_t> g_mc_txn_cache_miss("merge_commit_txn_cache", "miss_total");
+// Counts the total number of state updates pushed to the cache
+bvar::Adder<int64_t> g_mc_txn_cache_push("merge_commit_txn_cache", "push_total");
+// Counts the total number of transaction state polling operations
+bvar::Adder<int64_t> g_mc_txn_cache_poll("merge_commit_txn_cache", "poll_total");
+// Tracks the current number of transaction state subscribers
+bvar::Adder<int64_t> g_mc_txn_cache_subscriber("merge_commit_txn_cache", "subscriber_num");
+
+TxnStateHandler::TxnStateHandler() {
+    g_mc_txn_cache_size << 1;
+}
+
 TxnStateHandler::~TxnStateHandler() {
     TEST_SYNC_POINT_CALLBACK("TxnStateHandler::destruct", this);
     TRACE_BATCH_WRITE << "evict txn state, " << debug_string();
+    g_mc_txn_cache_size << -1;
 }
 
 void TxnStateHandler::push_state(TTransactionStatus::type new_status, const std::string& reason) {
+    g_mc_txn_cache_push << 1;
     std::unique_lock<bthread::Mutex> lock(_mutex);
     if (_stopped) {
         return;
@@ -42,6 +66,7 @@ void TxnStateHandler::push_state(TTransactionStatus::type new_status, const std:
 }
 
 bool TxnStateHandler::poll_state(const StatusOr<TxnState>& result) {
+    g_mc_txn_cache_poll << 1;
     std::unique_lock<bthread::Mutex> lock(_mutex);
     if (_stopped) {
         return false;
@@ -76,11 +101,13 @@ void TxnStateHandler::subscribe(bool& trigger_poll) {
     _num_subscriber++;
     // trigger polling if this is the first subscriber and not in finished state
     trigger_poll = _num_subscriber == 1 && !_is_finished_txn_state();
+    g_mc_txn_cache_subscriber << 1;
 }
 
 void TxnStateHandler::unsubscribe() {
     std::unique_lock<bthread::Mutex> lock(_mutex);
     _num_subscriber--;
+    g_mc_txn_cache_subscriber << -1;
 }
 
 StatusOr<TxnState> TxnStateHandler::wait_finished_state(const std::string& subscriber_name, int64_t timeout_us) {
@@ -346,6 +373,7 @@ TxnStateCache::TxnStateCache(size_t capacity, std::unique_ptr<ThreadPoolToken> p
     for (int32_t i = 0; i < kNumShards; i++) {
         _shards[i] = std::make_unique<TxnStateDynamicCache>(capacity_per_shard);
     }
+    g_mc_txn_cache_capacity.set_value(_capacity);
 }
 
 Status TxnStateCache::init() {
@@ -402,6 +430,7 @@ void TxnStateCache::set_capacity(size_t new_capacity) {
         _shard->set_capacity(capacity_per_shard);
     }
     _capacity = new_capacity;
+    g_mc_txn_cache_capacity.set_value(new_capacity);
 }
 
 void TxnStateCache::stop() {
@@ -444,11 +473,17 @@ StatusOr<TxnStateDynamicCacheEntry*> TxnStateCache::_get_txn_entry(TxnStateDynam
     if (_stopped) {
         return Status::ServiceUnavailable("Transaction state cache is stopped");
     }
+
     TxnStateDynamicCacheEntry* entry = nullptr;
     if (create_if_not_exist) {
         entry = cache->get_or_create(txn_id, 1);
         DCHECK(entry != nullptr);
-        // initialize txn_id
+        // need to set txn_id for the new entry whose initial txn_id is -1
+        if (entry->value().txn_id() == -1) {
+            g_mc_txn_cache_hit << 1;
+        } else {
+            g_mc_txn_cache_miss << 1;
+        }
         entry->value().set_txn_id(txn_id);
     } else {
         entry = cache->get(txn_id);

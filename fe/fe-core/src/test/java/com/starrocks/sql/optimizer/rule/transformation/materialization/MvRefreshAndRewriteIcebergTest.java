@@ -20,6 +20,8 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
@@ -2013,5 +2015,38 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
         final MaterializedView mv = getMv(mvName);
         Assert.assertTrue(mv.getPartitionInfo().isListPartition());
         Config.enable_mv_list_partition_for_external_table = false;
+    }
+
+    @Test
+    public void testListMVWithIcebergTable4() throws Exception {
+        String mvName = "test_mv1";
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1\n" +
+                "PARTITION BY date_trunc('month', ts)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_month` as a;");
+        final MaterializedView mv = getMv(mvName);
+        Assert.assertTrue(mv.getPartitionInfo().isListPartition());
+    }
+
+    @Test
+    public void testRefBaseTablePartitionWithTransform() throws Exception {
+        final String mvName = "test_mv1";
+        final String sql = "CREATE MATERIALIZED VIEW test_mv1\n" +
+                "PARTITION BY date_trunc('month', ts)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_month` as a;";
+        CreateMaterializedViewStatement stmt =
+                (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
+                        connectContext);
+        MaterializedViewAnalyzer.analyze(stmt, starRocksAssert.getCtx());
+        Assert.assertTrue(stmt.isRefBaseTablePartitionWithTransform());
     }
 }

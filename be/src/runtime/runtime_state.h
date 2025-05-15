@@ -45,7 +45,7 @@
 #include <vector>
 
 #include "cache/block_cache/block_cache.h"
-#include "cache/block_cache/datacache_utils.h"
+#include "cache/datacache_utils.h"
 #include "cctz/time_zone.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"

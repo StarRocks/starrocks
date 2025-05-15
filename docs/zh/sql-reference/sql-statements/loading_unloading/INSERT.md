@@ -67,13 +67,7 @@ INSERT statements support configuring PROPERTIES from v3.4.0 onwards.
 
 :::
 
-## 注意事项
-
-- 当前版本中，StarRocks 在执行 INSERT 语句时，如果有数据不符合目标表格式的数据（例如字符串超长等情况），INSERT 操作默认执行失败。您可以通过设置会话变量 `enable_insert_strict` 为 `false` 以确保 INSERT 操作过滤不符合目标表格式的数据，并继续执行。
-
-- 执行 INSERT OVERWRITE 语句后，系统将为目标分区创建相应的临时分区，并将数据写入临时分区，最后使用临时分区原子替换目标分区来实现覆盖写入。其所有过程均在在 Leader FE 节点执行。因此，如果 Leader FE 节点在覆盖写入过程中发生宕机，将会导致该次 INSERT OVERWRITE 导入失败，其过程中所创建的临时分区也会被删除。
-
-### Dynamic Overwrite
+## Dynamic Overwrite
 
 从 v3.4.0 开始，StarRocks 支持分区表的 INSERT OVERWRITE 操作的新语义 — Dynamic Overwrite。
 
@@ -104,6 +98,19 @@ SET dynamic_overwrite = true;
 INSERT /*+set_var(dynamic_overwrite = true)*/ OVERWRITE insert_wiki_edit
 SELECT * FROM source_wiki_edit;
 ```
+
+## 注意事项
+
+- 当前版本中，StarRocks 在执行 INSERT 语句时，如果有数据不符合目标表格式的数据（例如字符串超长等情况），INSERT 操作默认执行失败。您可以通过设置会话变量 `enable_insert_strict` 为 `false` 以确保 INSERT 操作过滤不符合目标表格式的数据，并继续执行。
+
+- 执行 INSERT OVERWRITE 语句后，系统将为目标分区创建相应的临时分区，并将数据写入临时分区，最后使用临时分区原子替换目标分区来实现覆盖写入。其所有过程均在在 Leader FE 节点执行。因此，如果 Leader FE 节点在覆盖写入过程中发生宕机，将会导致该次 INSERT OVERWRITE 导入失败，其过程中所创建的临时分区也会被删除。
+
+- StarRocks 支持通过 INSERT OVERWRITE 语句写入非表达式分区。但对于先前不存在的分区，写入新数据时，系统不会创建不存在的分区。
+
+**关于 Dynamic Overwrite**
+
+- Dynamic Overwrite 只支持表达式分区。对于先前不存在的分区，写入新数据时，系统会自动创建不存在的分区。
+- Dynamic Overwrite 支持混合表达式分区。
 
 ## 示例
 

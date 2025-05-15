@@ -52,6 +52,10 @@ public:
     void compact(::google::protobuf::RpcController* controller, const ::starrocks::CompactRequest* request,
                  ::starrocks::CompactResponse* response, ::google::protobuf::Closure* done) override;
 
+    void aggregate_compact(::google::protobuf::RpcController* controller,
+                           const ::starrocks::AggregateCompactRequest* request, ::starrocks::CompactResponse* response,
+                           ::google::protobuf::Closure* done) override;
+
     void drop_table(::google::protobuf::RpcController* controller, const ::starrocks::DropTableRequest* request,
                     ::starrocks::DropTableResponse* response, ::google::protobuf::Closure* done) override;
 

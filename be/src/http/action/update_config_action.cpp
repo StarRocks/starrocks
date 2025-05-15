@@ -106,6 +106,11 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             return Status::OK();
         });
         _config_callback.emplace("datacache_mem_size", [&]() -> Status {
+            LocalCache* cache = CacheEnv::GetInstance()->local_cache();
+            if (cache == nullptr || !cache->is_initialized()) {
+                return Status::InternalError("Local cache is not initialized");
+            }
+
             size_t mem_size = 0;
             Status st = DataCacheUtils::parse_conf_datacache_mem_size(
                     config::datacache_mem_size, GlobalEnv::GetInstance()->process_mem_limit(), &mem_size);
@@ -113,11 +118,16 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 LOG(WARNING) << "Failed to update datacache mem size";
                 return st;
             }
-            return BlockCache::instance()->update_mem_quota(mem_size, true);
+            return cache->update_mem_quota(mem_size, true);
         });
         _config_callback.emplace("datacache_disk_size", [&]() -> Status {
+            LocalCache* cache = CacheEnv::GetInstance()->local_cache();
+            if (cache == nullptr || !cache->is_initialized()) {
+                return Status::InternalError("Local cache is not initialized");
+            }
+
             std::vector<DirSpace> spaces;
-            BlockCache::instance()->disk_spaces(&spaces);
+            cache->disk_spaces(&spaces);
             for (auto& space : spaces) {
                 ASSIGN_OR_RETURN(int64_t disk_size, DataCacheUtils::parse_conf_datacache_disk_size(
                                                             space.path, config::datacache_disk_size, -1));
@@ -127,7 +137,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 }
                 space.size = disk_size;
             }
-            return BlockCache::instance()->update_disk_spaces(spaces);
+            return cache->update_disk_spaces(spaces);
         });
         _config_callback.emplace("max_compaction_concurrency", [&]() -> Status {
             if (!config::enable_event_based_compaction_framework) {
@@ -317,10 +327,11 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                     config::load_channel_rpc_thread_pool_num);
         });
         _config_callback.emplace("number_tablet_writer_threads", [&]() -> Status {
-            LOG(INFO) << "set number_tablet_writer_threads:" << config::number_tablet_writer_threads;
+            int max_delta_writer_thread_num = caculate_delta_writer_thread_num(config::number_tablet_writer_threads);
+            LOG(INFO) << "set max delta writer thread num: " << max_delta_writer_thread_num;
             bthreads::ThreadPoolExecutor* executor = static_cast<bthreads::ThreadPoolExecutor*>(
                     StorageEngine::instance()->async_delta_writer_executor());
-            return executor->get_thread_pool()->update_max_threads(config::number_tablet_writer_threads);
+            return executor->get_thread_pool()->update_max_threads(max_delta_writer_thread_num);
         });
         _config_callback.emplace("compact_threads", [&]() -> Status {
             auto tablet_manager = _exec_env->lake_tablet_manager();
@@ -359,14 +370,9 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
     });
 
         UPDATE_STARLET_CONFIG(starlet_cache_thread_num, cachemgr_threadpool_size);
-        UPDATE_STARLET_CONFIG(starlet_cache_evict_low_water, cachemgr_evict_low_water);
-        UPDATE_STARLET_CONFIG(starlet_cache_evict_high_water, cachemgr_evict_high_water);
-        UPDATE_STARLET_CONFIG(starlet_cache_evict_percent, cachemgr_evict_percent);
-        UPDATE_STARLET_CONFIG(starlet_cache_evict_throughput_mb, cachemgr_evict_throughput_mb);
         UPDATE_STARLET_CONFIG(starlet_fs_stream_buffer_size_bytes, fs_stream_buffer_size_bytes);
         UPDATE_STARLET_CONFIG(starlet_fs_read_prefetch_enable, fs_enable_buffer_prefetch);
         UPDATE_STARLET_CONFIG(starlet_fs_read_prefetch_threadpool_size, fs_buffer_prefetch_threadpool_size);
-        UPDATE_STARLET_CONFIG(starlet_cache_evict_interval, cachemgr_evict_interval);
         UPDATE_STARLET_CONFIG(starlet_fslib_s3client_nonread_max_retries, fslib_s3client_nonread_max_retries);
         UPDATE_STARLET_CONFIG(starlet_fslib_s3client_nonread_retry_scale_factor,
                               fslib_s3client_nonread_retry_scale_factor);

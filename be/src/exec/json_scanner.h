@@ -110,6 +110,8 @@ public:
     };
 
 private:
+    Status _read_chunk_with_except(Chunk* chunk, int32_t rows_to_read);
+
     template <typename ParserType>
     Status _read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_read);
 
@@ -127,6 +129,8 @@ private:
                              const std::string& col_name);
 
     Status _check_ndjson();
+
+    void _append_error_msg(const std::string&, const std::string& error_msg);
 
 private:
     RuntimeState* _state = nullptr;

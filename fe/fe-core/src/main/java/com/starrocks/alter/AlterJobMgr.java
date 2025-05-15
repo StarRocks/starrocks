@@ -267,7 +267,7 @@ public class AlterJobMgr {
         List<Column> newColumns = createStmt.getMvColumnItems().stream()
                 .sorted(Comparator.comparing(Column::getName))
                 .collect(Collectors.toList());
-        List<Column> existedColumns = materializedView.getColumns().stream()
+        List<Column> existedColumns = materializedView.getOrderedOutputColumns().stream()
                 .sorted(Comparator.comparing(Column::getName))
                 .collect(Collectors.toList());
         if (newColumns.size() != existedColumns.size()) {
@@ -422,8 +422,10 @@ public class AlterJobMgr {
             newMvRefreshScheme.setLastRefreshTime(oldRefreshScheme.getLastRefreshTime());
             final MaterializedView.RefreshType refreshType = log.getRefreshType();
             final MaterializedView.AsyncRefreshContext asyncRefreshContext = log.getAsyncRefreshContext();
+            final MaterializedView.RefreshMoment moment = oldRefreshScheme.getMoment();
             newMvRefreshScheme.setType(refreshType);
             newMvRefreshScheme.setAsyncRefreshContext(asyncRefreshContext);
+            newMvRefreshScheme.setMoment(moment);
 
             long maxChangedTableRefreshTime =
                     MvUtils.getMaxTablePartitionInfoRefreshTime(

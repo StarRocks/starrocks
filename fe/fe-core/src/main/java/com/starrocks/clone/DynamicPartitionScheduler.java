@@ -500,12 +500,13 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
     protected void runAfterCatalogReady() {
         // Find all tables that need to be scheduled.
         long now = System.currentTimeMillis();
-        if ((now - lastFindingTime) > Math.max(300000, Config.dynamic_partition_check_interval_seconds)) {
+        long checkIntervalMs = Config.dynamic_partition_check_interval_seconds * 1000L;
+        if ((now - lastFindingTime) > Math.max(60000, checkIntervalMs)) {
             findSchedulableTables();
         }
 
         // Update scheduler interval.
-        setInterval(Config.dynamic_partition_check_interval_seconds * 1000L);
+        setInterval(checkIntervalMs);
 
         // Schedule tables with dynamic partition enabled (only works for base table).
         if (Config.dynamic_partition_enable) {

@@ -22,6 +22,7 @@ import com.starrocks.alter.SystemHandler;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionInfo;
@@ -31,7 +32,11 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTabletType;
+import mockit.Expectations;
+import mockit.Injectable;
+import mockit.Mocked;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
@@ -57,7 +62,8 @@ public class ChangeMaterializedViewRefreshSchemeLogTest {
     }
 
     @Test
-    public void testNormal() throws IOException {
+    public void testNormal(@Mocked GlobalStateMgr globalStateMgr,
+                           @Injectable Database db) throws IOException {
         // 1. Write objects to file
         File file = new File(fileName);
         file.createNewFile();
@@ -74,6 +80,7 @@ public class ChangeMaterializedViewRefreshSchemeLogTest {
         partitionInfo.setIsInMemory(1, false);
         partitionInfo.setTabletType(1, TTabletType.TABLET_TYPE_DISK);
         MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
+        refreshScheme.setMoment(MaterializedView.RefreshMoment.DEFERRED);
         final MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
         asyncRefreshContext.setStartTime(1655732457);
         asyncRefreshContext.setStep(1);
@@ -95,6 +102,26 @@ public class ChangeMaterializedViewRefreshSchemeLogTest {
         Assert.assertEquals(readChangeLogAsyncRefreshContext.getTimeUnit(), "DAY");
         Assert.assertEquals(readChangeLogAsyncRefreshContext.getStep(), 1);
         in.close();
+
+        new Expectations() {
+            {
+                globalStateMgr.getCurrentState().getLocalMetastore().getDb(anyLong);
+                result = db;
+
+                globalStateMgr.getCurrentState().getLocalMetastore().getTable(anyLong, anyLong);
+                result = materializedView;
+
+                db.getId();
+                result = anyLong;
+
+                materializedView.getId();
+                result = anyLong;
+            }
+        };
+        new AlterJobMgr(null, null, null)
+                .replayChangeMaterializedViewRefreshScheme(changeLog);
+
+        Assert.assertEquals(materializedView.getRefreshScheme().getMoment(), MaterializedView.RefreshMoment.DEFERRED);
     }
 
     @Test

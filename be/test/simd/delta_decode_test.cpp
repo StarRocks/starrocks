@@ -28,31 +28,41 @@ TEST_F(DeltaDecodeTest, test_int32) {
     for (int i = 0; i < values.size(); i++) {
         values[i] = 1;
     }
-    std::vector<int32_t> avx2_values(values);
-    std::vector<int32_t> avx2x_values(values);
-    std::vector<int32_t> avx512_values(values);
+    [[maybe_unused]] std::vector<int32_t> avx2_values(values);
+    [[maybe_unused]] std::vector<int32_t> avx2x_values(values);
+    [[maybe_unused]] std::vector<int32_t> avx512_values(values);
+
     {
         int32_t last_value = 10;
         delta_decode_chain_scalar_prefetch<int32_t>(values.data(), values.size(), 10, last_value);
         ASSERT_EQ(values.back(), last_value);
     }
+#ifdef __AVX2__
     {
         int32_t last_value = 10;
         delta_decode_chain_int32_avx2(avx2_values.data(), avx2_values.size(), 10, last_value);
         ASSERT_EQ(avx2_values.back(), last_value);
+        ASSERT_EQ(avx2_values, values);
     }
-    ASSERT_EQ(avx2_values, values);
+#endif
+
+#if defined(__AVX512F__) && defined(__AVX512VL__)
     {
         int32_t last_value = 10;
         delta_decode_chain_int32_avx2x(avx2x_values.data(), avx2x_values.size(), 10, last_value);
         ASSERT_EQ(avx2x_values.back(), last_value);
+        ASSERT_EQ(avx2x_values, values);
     }
+#endif
+
+#ifdef __AVX512F__
     {
         int32_t last_value = 10;
         delta_decode_chain_int32_avx512(avx512_values.data(), avx512_values.size(), 10, last_value);
         ASSERT_EQ(avx512_values.back(), last_value);
+        ASSERT_EQ(avx512_values, values);
     }
-    ASSERT_EQ(avx512_values, values);
+#endif
 }
 
 TEST_F(DeltaDecodeTest, test_int64) {
@@ -60,18 +70,20 @@ TEST_F(DeltaDecodeTest, test_int64) {
     for (int i = 0; i < values.size(); i++) {
         values[i] = 1;
     }
-    std::vector<int64_t> avx512_values(values);
+    [[maybe_unused]] std::vector<int64_t> avx512_values(values);
     {
         int64_t last_value = 10;
         delta_decode_chain_scalar_prefetch<int64_t>(values.data(), values.size(), 10, last_value);
         ASSERT_EQ(values.back(), last_value);
     }
+#ifdef __AVX512F__
     {
         int64_t last_value = 10;
         delta_decode_chain_int64_avx512(avx512_values.data(), avx512_values.size(), 10, last_value);
         ASSERT_EQ(avx512_values.back(), last_value);
+        ASSERT_EQ(avx512_values, values);
     }
-    ASSERT_EQ(avx512_values, values);
+#endif
 }
 
 } // namespace starrocks

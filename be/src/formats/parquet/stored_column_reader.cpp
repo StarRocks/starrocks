@@ -67,7 +67,7 @@ private:
     // Try to decode enough levels in levels buffer, if there are no enough levels, will throw InternalError msg.
     Status _decode_levels(size_t* num_rows, size_t* num_levels_parsed, level_t** def_levels);
 
-    void _delimit_rows(const level_t* rep_levels, size_t* num_rows, size_t* num_levels_parsed);
+    Status _delimit_rows(const level_t* rep_levels, size_t* num_rows, size_t* num_levels_parsed);
 
     void _consume_levels(size_t num_values) {
         _reader->def_level_decoder().consume_levels(num_values);
@@ -193,7 +193,8 @@ void RepeatedStoredColumnReader::reset_levels() {
     _reader->rep_level_decoder().reset();
 }
 
-void RepeatedStoredColumnReader::_delimit_rows(const level_t* rep_levels, size_t* num_rows, size_t* num_levels_parsed) {
+Status RepeatedStoredColumnReader::_delimit_rows(const level_t* rep_levels, size_t* num_rows,
+                                                 size_t* num_levels_parsed) {
     size_t levels_pos = 0;
     size_t avail_levels = *num_levels_parsed;
 
@@ -209,7 +210,9 @@ void RepeatedStoredColumnReader::_delimit_rows(const level_t* rep_levels, size_t
 
     if (!_meet_first_record) {
         _meet_first_record = true;
-        DCHECK_EQ(rep_levels[levels_pos], 0);
+        if (UNLIKELY(rep_levels[levels_pos] != 0)) {
+            return Status::InternalError("bad delimit_rows for repeated column");
+        }
         levels_pos++;
     }
 
@@ -233,6 +236,7 @@ void RepeatedStoredColumnReader::_delimit_rows(const level_t* rep_levels, size_t
     VLOG_FILE << "rows_reader=" << rows_read << ", level_parsed=" << levels_pos;
     *num_rows = rows_read;
     *num_levels_parsed = levels_pos;
+    return Status::OK();
 }
 
 Status RepeatedStoredColumnReader::_decode_levels(size_t* num_rows, size_t* num_levels_parsed, level_t** def_levels) {
@@ -245,7 +249,7 @@ Status RepeatedStoredColumnReader::_decode_levels(size_t* num_rows, size_t* num_
     if (UNLIKELY(avail_levels != _reader->def_level_decoder().get_avail_levels(*num_rows, def_levels))) {
         return Status::InternalError("rep/def levels' length do not match");
     }
-    _delimit_rows(rep_levels, num_rows, &avail_levels);
+    RETURN_IF_ERROR(_delimit_rows(rep_levels, num_rows, &avail_levels));
     *num_levels_parsed = avail_levels;
     _consume_levels(*num_levels_parsed);
     return Status::OK();

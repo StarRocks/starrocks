@@ -152,6 +152,11 @@ public:
     Status set_data(const Slice& data) override {
         if (data.size > 0) {
             uint8_t bit_width = *data.data;
+            // PARQUET-2115: [C++] Parquet dictionary bit widths are limited to 32 bits
+            // https://github.com/apache/arrow/pull/12274/files
+            if (PREDICT_FALSE(bit_width > 32)) {
+                return Status::Corruption("bit width is larger than 32");
+            }
             _rle_batch_reader = RleBatchDecoder<uint32_t>(reinterpret_cast<uint8_t*>(data.data) + 1,
                                                           static_cast<int>(data.size) - 1, bit_width);
         } else {
@@ -312,6 +317,11 @@ public:
     Status set_data(const Slice& data) override {
         if (data.size > 0) {
             uint8_t bit_width = *data.data;
+            // PARQUET-2115: [C++] Parquet dictionary bit widths are limited to 32 bits
+            // https://github.com/apache/arrow/pull/12274/files
+            if (PREDICT_FALSE(bit_width > 32)) {
+                return Status::Corruption("bit width is larger than 32");
+            }
             _rle_batch_reader = RleBatchDecoder<uint32_t>(reinterpret_cast<uint8_t*>(data.data) + 1,
                                                           static_cast<int>(data.size) - 1, bit_width);
         } else {

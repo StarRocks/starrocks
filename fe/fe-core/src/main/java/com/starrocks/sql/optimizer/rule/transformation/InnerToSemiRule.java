@@ -67,27 +67,42 @@ public class InnerToSemiRule extends TransformationRule {
 
             // only support inner->semi
             if (joinOperator.getJoinType() == JoinOperator.INNER_JOIN) {
+                ColumnRefSet joinOpOutputCols;
+                if (opt.getOp().getProjection() != null) {
+                    // in this case, opt.getOutputColumns will return column output by projection
+                    // instead of column output by join operator
+                    joinOpOutputCols = opt.getOp().getProjection().getUsedColumns();
+                } else {
+                    joinOpOutputCols = opt.getOutputColumns();
+                }
+
                 List<OptExpression> children = opt.getInputs();
-                for (int i = 0; i < children.size(); i++) {
-                    OptExpression child = children.get(i);
-                    // if child's output doesn't intersect with parent
-                    // which means this child is only used to filter the other child
-                    if (!opt.getOutputColumns().isIntersect(child.getOutputColumns())) {
-                        if (i == 0) {
-                            joinOperator = new LogicalJoinOperator(JoinOperator.RIGHT_SEMI_JOIN,
-                                    joinOperator.getOnPredicate());
-                        } else {
-                            joinOperator = new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN,
-                                    joinOperator.getOnPredicate());
+                long intersetChildNum =
+                        children.stream().filter(child -> joinOpOutputCols.isIntersect(child.getOutputColumns()))
+                                .count();
+                if (intersetChildNum == 1) {
+                    for (int i = 0; i < children.size(); i++) {
+                        OptExpression child = children.get(i);
+
+                        // if child's output doesn't intersect with parent
+                        // which means this child is only used to filter the other child
+                        if (!joinOpOutputCols.isIntersect(child.getOutputColumns())) {
+                            if (i == 0) {
+                                joinOperator = new LogicalJoinOperator(JoinOperator.RIGHT_SEMI_JOIN,
+                                        joinOperator.getOnPredicate());
+                            } else {
+                                joinOperator = new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN,
+                                        joinOperator.getOnPredicate());
+                            }
+
+                            if (opt.getOp().getProjection() != null) {
+                                joinOperator.setProjection(opt.getOp().getProjection());
+                            }
+
+                            opt = OptExpression.create(joinOperator, opt.getInputs());
+
+                            break;
                         }
-
-                        if (opt.getOp().getProjection() != null) {
-                            joinOperator.setProjection(opt.getOp().getProjection());
-                        }
-
-                        opt = OptExpression.create(joinOperator, opt.getInputs());
-
-                        break;
                     }
                 }
                 for (int i = 0; i < opt.getInputs().size(); i++) {

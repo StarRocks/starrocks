@@ -110,15 +110,16 @@ void ProfileReportWorker::_start_report_profile() {
 void ProfileReportWorker::execute() {
     LOG(INFO) << "ProfileReportWorker start working.";
 
-    int32_t interval = config::profile_report_interval;
-
     while (!_stop.load(std::memory_order_consume)) {
         _start_report_profile();
 
+        // interval can be changed by config dynamically
+        int32_t interval = config::profile_report_interval;
         if (interval <= 0) {
             LOG(WARNING) << "profile_report_interval config is illegal: " << interval << ", force set to 1";
             interval = 1;
         }
+
         nap_sleep(interval, [this] { return _stop.load(std::memory_order_consume); });
     }
     LOG(INFO) << "ProfileReportWorker going to exit.";

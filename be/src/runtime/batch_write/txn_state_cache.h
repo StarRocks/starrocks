@@ -57,6 +57,7 @@ inline std::ostream& operator<<(std::ostream& os, const TxnState& txn_state) {
 //    until the txn state reaches the finished state, and there is no subscriber
 class TxnStateHandler {
 public:
+    TxnStateHandler();
     ~TxnStateHandler();
 
     // update the txn state pushed by FE

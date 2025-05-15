@@ -52,16 +52,10 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
 ) ENGINE = OLAP
 DUPLICATE KEY (`queryId`, `timestamp`, `queryType`)
 COMMENT "审计日志表"
-PARTITION BY RANGE (`timestamp`) ()
-DISTRIBUTED BY HASH (`queryId`) BUCKETS 3 
+PARTITION BY date_trunc('day', `timestamp`)
 PROPERTIES (
-  "dynamic_partition.time_unit" = "DAY",
-  "dynamic_partition.start" = "-30",  --表示只保留最近30天的审计信息，可视需求调整。
-  "dynamic_partition.end" = "3",
-  "dynamic_partition.prefix" = "p",
-  "dynamic_partition.buckets" = "3",
-  "dynamic_partition.enable" = "true",
-  "replication_num" = "3"  --若集群中BE个数不大于3，可调整副本数为1，生产集群不推荐调整。
+  "replication_num" = "1",
+  "partition_live_number"="30"
 );
 ```
 

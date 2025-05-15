@@ -89,7 +89,7 @@ public class FileListTableRepo extends FileListRepo {
             "UPDATE " + FILE_LIST_FULL_NAME + " SET `state` = %s, `finish_load` = now() WHERE ";
 
     protected static final String INSERT_FILES =
-            "INSERT INTO " + FILE_LIST_FULL_NAME + "(" + ALL_COLUMNS + ")" + " VALUES ";
+            "INSERT INTO " + FILE_LIST_FULL_NAME + "(" + "`id`, " + ALL_COLUMNS + ")" + " VALUES ";
 
     protected static final String SELECTED_STAGED_FILES =
             "SELECT " + ALL_COLUMNS + " FROM " + FILE_LIST_FULL_NAME + " WHERE ";

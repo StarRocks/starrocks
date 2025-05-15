@@ -51,7 +51,11 @@ public abstract class StarRocksTestBase {
     @After
     public void after() throws Exception {
         if (starRocksAssert != null) {
-            cleanup(starRocksAssert, existedTables);
+            try {
+                cleanup(starRocksAssert, existedTables);
+            } catch (Exception e) {
+                // ignore exception
+            }
         }
     }
 

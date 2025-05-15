@@ -48,6 +48,7 @@ import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.parser.NodePosition;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -516,10 +517,9 @@ public class AuthorizationMgr {
 
     public void grantRole(GrantRoleStmt stmt) throws DdlException {
         try {
-            if (stmt.getUserIdentity() != null) {
-                grantRoleToUser(stmt.getGranteeRole(), stmt.getUserIdentity());
-            } else {
-                grantRoleToRole(stmt.getGranteeRole(), stmt.getRole());
+            switch (stmt.getGrantType()) {
+                case USER -> grantRoleToUser(stmt.getGranteeRole(), stmt.getUserIdentity());
+                case ROLE -> grantRoleToRole(stmt.getGranteeRole(), stmt.getRoleOrGroup());
             }
         } catch (PrivilegeException e) {
             throw new DdlException("failed to grant role: " + e.getMessage(), e);
@@ -649,10 +649,9 @@ public class AuthorizationMgr {
 
     public void revokeRole(RevokeRoleStmt stmt) throws DdlException {
         try {
-            if (stmt.getUserIdentity() != null) {
-                revokeRoleFromUser(stmt.getGranteeRole(), stmt.getUserIdentity());
-            } else {
-                revokeRoleFromRole(stmt.getGranteeRole(), stmt.getRole());
+            switch (stmt.getGrantType()) {
+                case USER -> revokeRoleFromUser(stmt.getGranteeRole(), stmt.getUserIdentity());
+                case ROLE -> revokeRoleFromRole(stmt.getGranteeRole(), stmt.getRoleOrGroup());
             }
         } catch (PrivilegeException e) {
             throw new DdlException("failed to revoke role: " + e.getMessage(), e);
@@ -1090,8 +1089,8 @@ public class AuthorizationMgr {
             }
 
             if (!parentRoleNameList.isEmpty()) {
-                return Lists.newArrayList(roleName, null,
-                        AstToSQLBuilder.toSQL(new GrantRoleStmt(parentRoleNameList, roleName)));
+                return Lists.newArrayList(roleName, null, AstToSQLBuilder.toSQL(
+                        new GrantRoleStmt(parentRoleNameList, roleName, GrantType.ROLE, NodePosition.ZERO)));
             }
             return null;
         } catch (PrivilegeException e) {
@@ -1139,7 +1138,7 @@ public class AuthorizationMgr {
 
                 if (!parentRoleNameList.isEmpty()) {
                     return Lists.newArrayList(userIdentity.toString(), null,
-                            AstToSQLBuilder.toSQL(new GrantRoleStmt(parentRoleNameList, userIdentity)));
+                            AstToSQLBuilder.toSQL(new GrantRoleStmt(parentRoleNameList, userIdentity, NodePosition.ZERO)));
                 }
                 return null;
             } finally {

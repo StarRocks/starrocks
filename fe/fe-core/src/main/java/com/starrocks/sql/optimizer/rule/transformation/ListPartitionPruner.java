@@ -324,8 +324,7 @@ public class ListPartitionPruner implements PartitionPruner {
                 ScalarOperator call =
                         SqlToScalarOperatorTranslator.translateWithSlotRef(generatedExpr, slotRefResolver);
 
-                if (call instanceof CallOperator &&
-                        OperatorFunctionChecker.onlyContainMonotonicFunctions((CallOperator) call).first) {
+                if (call instanceof CallOperator) {
                     List<ColumnRefOperator> columnRefOperatorList = Utils.extractColumnRef(call);
 
                     for (ColumnRefOperator ref : columnRefOperatorList) {
@@ -355,6 +354,21 @@ public class ListPartitionPruner implements PartitionPruner {
             }
             ColumnRefOperator generatedColumn = pair.first;
             ScalarOperator generatedExpr = pair.second;
+
+            if (conjunct instanceof BinaryPredicateOperator) {
+                BinaryPredicateOperator binaryPredicate = (BinaryPredicateOperator) conjunct;
+                // Only support fe constant function
+                if (!OperatorFunctionChecker.onlyContainFEConstantFunctions((CallOperator) generatedExpr).first) {
+                    continue;
+                }
+                if (!binaryPredicate.getBinaryType().isEqual()) {
+                    if (!OperatorFunctionChecker.onlyContainMonotonicFunctions((CallOperator) generatedExpr).first) {
+                        // skip non-monotonic function for not equal predicate
+                        continue;
+                    }
+                }
+            }
+
             ScalarOperator result = buildDeducedConjunct(conjunct, generatedExpr, generatedColumn);
             if (result != null) {
                 extraConjuncts.add(result);

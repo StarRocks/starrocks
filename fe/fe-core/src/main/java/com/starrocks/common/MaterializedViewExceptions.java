@@ -44,6 +44,10 @@ public class MaterializedViewExceptions {
         return "base-table swapped: " + tableName;
     }
 
+    public static String inactiveReasonForBaseTableOptimized(String tableName) {
+        return "base-table optimized: " + tableName;
+    }
+
     public static String inactiveReasonForBaseTableActive(String tableName) {
         return "base-mv inactive: " + tableName;
     }

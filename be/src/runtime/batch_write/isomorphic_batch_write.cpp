@@ -36,6 +36,35 @@
 
 namespace starrocks {
 
+// Counter for total number of merge commit requests received
+bvar::Adder<int64_t> g_mc_request_total("merge_commit", "request_total");
+// Counter for total bytes of data received in merge commit requests
+bvar::Adder<int64_t> g_mc_request_bytes("merge_commit", "request_bytes");
+// Counter for successfully processed merge commit requests
+bvar::Adder<int64_t> g_mc_success_total("merge_commit", "success_total");
+// Counter for failed merge commit requests
+bvar::Adder<int64_t> g_mc_fail_total("merge_commit", "fail_total");
+// Counter for merge commit tasks currently waiting in the execution queue
+bvar::Adder<int64_t> g_mc_pending_total("merge_commit", "pending_total");
+// Counter for total bytes of data in pending merge commit tasks
+bvar::Adder<int64_t> g_mc_pending_bytes("merge_commit", "pending_bytes");
+// Counter for RPC requests sent to initiate new merge commit operations
+bvar::Adder<int64_t> g_mc_send_rpc_total("merge_commit", "send_rpc_total");
+// Counter for stream load pipes registered for merge commit operations
+bvar::Adder<int64_t> g_mc_register_pipe_total("merge_commit", "register_pipe_total");
+// Counter for stream load pipes unregistered for merge commit operations
+bvar::Adder<int64_t> g_mc_unregister_pipe_total("merge_commit", "unregister_pipe_total");
+// Latency recorder for end-to-end merge commit processing time (nanoseconds)
+bvar::LatencyRecorder g_mc_total_latency_ns("merge_commit", "reqeust");
+// Latency recorder for time tasks spend in pending queue before execution (nanoseconds)
+bvar::LatencyRecorder g_mc_pending_latency_ns("merge_commit", "pending");
+// Latency recorder for combined RPC request time and pipe availability wait time (nanoseconds)
+bvar::LatencyRecorder g_mc_wait_plan_latency_ns("merge_commit", "wait_plan");
+// Latency recorder for time spent appending data to stream load pipes (nanoseconds)
+bvar::LatencyRecorder g_mc_append_pipe_latency_ns("merge_commit", "append_pipe");
+// Latency recorder for time spent waiting for load operations to complete (nanoseconds)
+bvar::LatencyRecorder g_mc_wait_finish_latency_ns("merge_commit", "wait_finish");
+
 class AsyncAppendDataContext {
 public:
     AsyncAppendDataContext(StreamLoadContext* data_ctx) : _data_ctx(data_ctx), _latch(1) { data_ctx->ref(); }
@@ -180,6 +209,7 @@ Status IsomorphicBatchWrite::register_stream_load_pipe(StreamLoadContext* pipe_c
     if (_alive_stream_load_pipe_ctxs.emplace(pipe_ctx).second) {
         pipe_ctx->ref();
         _cv.notify_one();
+        g_mc_register_pipe_total << 1;
     }
     TRACE_BATCH_WRITE << "Register stream load pipe, txn_id: " << pipe_ctx->txn_id << ", label: " << pipe_ctx->label
                       << ", load_id: " << print_id(pipe_ctx->id) << ", " << _batch_write_id;
@@ -199,6 +229,7 @@ void IsomorphicBatchWrite::unregister_stream_load_pipe(StreamLoadContext* pipe_c
                       << ", load_id: " << print_id(pipe_ctx->id) << ", " << _batch_write_id << ", find: " << find;
     if (find) {
         StreamLoadContext::release(pipe_ctx);
+        g_mc_unregister_pipe_total << 1;
     }
 }
 
@@ -218,18 +249,45 @@ bool IsomorphicBatchWrite::is_pipe_alive(starrocks::StreamLoadContext* pipe_ctx)
 }
 
 Status IsomorphicBatchWrite::append_data(StreamLoadContext* data_ctx) {
+    g_mc_request_total << 1;
+    g_mc_request_bytes << data_ctx->receive_bytes;
+    bool success = false;
+    long start_time_ns = MonotonicNanos();
+    DeferOp defer([&] {
+        if (success) {
+            g_mc_success_total << 1;
+        } else {
+            g_mc_fail_total << 1;
+        }
+        g_mc_total_latency_ns << (MonotonicNanos() - start_time_ns);
+    });
     if (_stopped.load(std::memory_order_acquire)) {
         return Status::ServiceUnavailable("Batch write is stopped");
     }
+    RETURN_IF_ERROR(_create_and_wait_async_task(data_ctx));
+    if (_batch_write_async) {
+        success = true;
+        return Status::OK();
+    }
+    Status status = _wait_for_load_finish(data_ctx);
+    success = status.ok();
+    return status;
+}
+
+Status IsomorphicBatchWrite::_create_and_wait_async_task(starrocks::StreamLoadContext* data_ctx) {
     AsyncAppendDataContext* async_ctx = new AsyncAppendDataContext(data_ctx);
     async_ctx->ref();
     async_ctx->create_time_ts.store(MonotonicNanos());
+    g_mc_pending_total << 1;
+    g_mc_pending_bytes << data_ctx->receive_bytes;
     DeferOp defer([&] { AsyncAppendDataContext::release(async_ctx); });
     Task task{.context = async_ctx};
     // this reference is for async task
     async_ctx->ref();
     int r = bthread::execution_queue_execute(_queue_id, task);
     if (r != 0) {
+        g_mc_pending_total << -1;
+        g_mc_pending_bytes << -data_ctx->receive_bytes;
         AsyncAppendDataContext::release(async_ctx);
         LOG(ERROR) << "Fail to add task, " << _batch_write_id << ", user label: " << data_ctx->label << ", ret: " << r;
         return Status::InternalError(fmt::format("Failed to add task to execution queue, result: {}", r));
@@ -254,11 +312,7 @@ Status IsomorphicBatchWrite::append_data(StreamLoadContext* data_ctx) {
     data_ctx->mc_wait_plan_cost_nanos = async_ctx->wait_pipe_cost_ns + async_ctx->rpc_cost_ns;
     data_ctx->mc_write_data_cost_nanos = async_ctx->append_pipe_cost_ns;
     data_ctx->mc_left_merge_time_nanos = async_ctx->pipe_left_active_ns;
-    RETURN_IF_ERROR(async_ctx->get_status());
-    if (_batch_write_async) {
-        return Status::OK();
-    }
-    return _wait_for_load_finish(data_ctx);
+    return async_ctx->get_status();
 }
 
 int IsomorphicBatchWrite::_execute_tasks(void* meta, bthread::TaskIterator<Task>& iter) {
@@ -271,6 +325,9 @@ int IsomorphicBatchWrite::_execute_tasks(void* meta, bthread::TaskIterator<Task>
         int64_t start_ts = MonotonicNanos();
         AsyncAppendDataContext* ctx = iter->context;
         ctx->task_pending_cost_ns.store(MonotonicNanos() - ctx->create_time_ts);
+        g_mc_pending_total << -1;
+        g_mc_pending_bytes << -ctx->data_ctx()->receive_bytes;
+        g_mc_pending_latency_ns << ctx->task_pending_cost_ns;
         auto st = batch_write->_execute_write(ctx);
         ctx->finish_async(st);
         ctx->total_async_cost_ns.store(MonotonicNanos() - start_ts);
@@ -313,6 +370,7 @@ Status IsomorphicBatchWrite::_execute_write(AsyncAppendDataContext* async_ctx) {
         {
             SCOPED_RAW_TIMER(&rpc_cost_ns);
             st = _send_rpc_request(async_ctx->data_ctx());
+            g_mc_send_rpc_total << 1;
             if (!st.ok()) {
                 break;
             }
@@ -329,6 +387,8 @@ Status IsomorphicBatchWrite::_execute_write(AsyncAppendDataContext* async_ctx) {
     async_ctx->rpc_cost_ns.store(rpc_cost_ns);
     async_ctx->wait_pipe_cost_ns.store(wait_pipe_cost_ns);
     async_ctx->num_retries.store(num_retries);
+    g_mc_append_pipe_latency_ns << write_data_cost_ns;
+    g_mc_wait_plan_latency_ns << (rpc_cost_ns + wait_pipe_cost_ns);
     if (!st.ok()) {
         std::stringstream stream;
         stream << "Failed to write data to stream load pipe, num retry: " << num_retries
@@ -430,6 +490,7 @@ Status IsomorphicBatchWrite::_wait_for_load_finish(StreamLoadContext* data_ctx) 
     int64_t start_ts = MonotonicNanos();
     StatusOr<TxnState> status_or = subscriber->wait_finished_state(left_timeout_ms * 1000);
     data_ctx->mc_wait_finish_cost_nanos = MonotonicNanos() - start_ts;
+    g_mc_wait_finish_latency_ns << data_ctx->mc_wait_finish_cost_nanos;
     TRACE_BATCH_WRITE << "finish to wait load, " << _batch_write_id << ", user label: " << data_ctx->label
                       << ", txn_id: " << data_ctx->txn_id << ", load label: " << data_ctx->batch_write_label
                       << ", cost: " << (data_ctx->mc_wait_finish_cost_nanos / 1000)

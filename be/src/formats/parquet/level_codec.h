@@ -115,9 +115,11 @@ private:
             // NOTE(zc): Because RLE can only record elements that are multiples of 8,
             // it must be ensured that the incoming parameters cannot exceed the boundary.
             n = std::min((size_t)_num_levels, n);
-            auto num_decoded = _rle_decoder.GetBatch(levels, n);
-            _num_levels -= num_decoded;
-            return num_decoded;
+            if (PREDICT_FALSE(!_rle_decoder.GetBatch(levels, n))) {
+                return 0;
+            }
+            _num_levels -= n;
+            return n;
         } else if (_encoding == tparquet::Encoding::BIT_PACKED) {
             DCHECK(false);
         }
