@@ -10,6 +10,39 @@ displayed_sidebar: docs
 
 :::
 
+## 3.3.14
+
+发布日期：2025 年 5 月 14 日
+
+### 功能优化
+
+- 优化正则表达式解析失败时的报错信息。[#57904](https://github.com/StarRocks/starrocks/pull/57904)
+- 修复安全漏洞 [SNYK-JAVA-ORGJSON-5488379](https://snyk.io/vuln/SNYK-JAVA-ORGJSON-5488379) 及 [SNYK-JAVA-ORGJSON-5962464](https://snyk.io/vuln/SNYK-JAVA-ORGJSON-5962464)。[#58425](https://github.com/StarRocks/starrocks/pull/58425)
+
+### 问题修复
+
+修复了如下问题：
+
+- JSON 数据类型在 `first_value`/`last_value`/`lead`/`lag` 窗口函数中的问题。[#58697](https://github.com/StarRocks/starrocks/pull/58697)
+- 物化视图写入时，使因使用基表的表级别锁而导致死锁（修复后使用 DB 锁）。[#58615](https://github.com/StarRocks/starrocks/pull/58615)
+- 因表被删除而导致 INSERT 任务卡住。[#58603](https://github.com/StarRocks/starrocks/pull/58603)
+- 变更 List 分区的物化视图 active/inactive 状态失败。[#58575](https://github.com/StarRocks/starrocks/pull/58575)
+- `streaming_load_current_processing` 指标错误。[#58565](https://github.com/StarRocks/starrocks/pull/58565)
+- 持续的导入和副本克隆任务导致的数据版本更新错误。[#58513](https://github.com/StarRocks/starrocks/pull/58513)
+- 外表物化视图刷新失败。[#58506](https://github.com/StarRocks/starrocks/pull/58506)
+- ARM 架构下 `if()` 结果错误。[#58455](https://github.com/StarRocks/starrocks/pull/58455)
+- 物化视图改写生成错误的查询计划。[#58487](https://github.com/StarRocks/starrocks/pull/58487)
+- Iceberg 表元数据无法自动刷新。[#58490](https://github.com/StarRocks/starrocks/pull/58490)
+- `group_concat` 产生错误的查询计划。[#57908](https://github.com/StarRocks/starrocks/pull/57908)
+- 导入过程中异常未被正确处理而导致的大量 Tablet 加载失败。[#58393](https://github.com/StarRocks/starrocks/pull/58393)
+- 在生成列 List 分区裁剪中，因类型不匹配导致常量折叠失败（修复后添加隐式类型转换规则）。[#54543](https://github.com/StarRocks/starrocks/pull/54543)
+- 聚合函数返回的数据类型和聚合列原始定义的数据类型不一致导致的问题（修复后将列类型 `cast` 为函数输出的类型）。[#58407](https://github.com/StarRocks/starrocks/pull/58407)
+- `broadcast_row_limit` 设置为 0 或者小于 0 时无法规避生成 BROADCAST JOIN。[#58307](https://github.com/StarRocks/starrocks/pull/58307)
+- Broker Load 会使用已被列入黑名单中的 BE 节点。[#58350](https://github.com/StarRocks/starrocks/pull/58350)
+- 手动取消物化视图刷新任务后，异步任务仍旧在后台，无法清除。[#58310](https://github.com/StarRocks/starrocks/pull/58310)
+- 月、年粒度的表达式分区创建失败。[#58182](https://github.com/StarRocks/starrocks/pull/58182)
+- `ngram_search` 生成无效查询计划。[#58190](https://github.com/StarRocks/starrocks/pull/58190)
+
 ## 3.3.13
 
 发布日期：2025 年 4 月 22 日
