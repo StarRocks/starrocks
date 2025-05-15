@@ -196,6 +196,13 @@ public class Tracers {
         tracers.tracer(module, Mode.LOGS).log(func, args);
     }
 
+    // lazy log, use it if you want to avoid construct log string when log is disabled
+    public static void log(Tracers tracers, Module module, Function<Object[], String> func, Object... args) {
+        synchronized (tracers) {
+            tracers.tracer(module, Mode.LOGS).log(func, args);
+        }
+    }
+
     public static void log(String log, Object... args) {
         Tracers tracers = THREAD_LOCAL.get();
         tracers.tracer(Module.BASE, Mode.TIMER).log(log, args);

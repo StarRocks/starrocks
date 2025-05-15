@@ -3357,6 +3357,9 @@ public class Config extends ConfigBase {
             "materialized views(>10) or query is complex(multi table joins).")
     public static long mv_query_context_cache_max_size = 1000;
 
+    @ConfField(mutable = true)
+    public static boolean enable_materialized_view_concurrent_prepare = true;
+
     /**
      * Checking the connectivity of port opened by FE,
      * mainly used for checking edit log port currently.

@@ -670,6 +670,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_MATERIALIZED_VIEW_PLAN_CACHE = "enable_materialized_view_plan_cache";
 
+    public static final String ENABLE_MATERIALIZED_VIEW_CONCURRENT_PREPARE =
+            "enable_materialized_view_concurrent_prepare";
+
     public static final String ENABLE_VIEW_BASED_MV_REWRITE = "enable_view_based_mv_rewrite";
 
     public static final String ENABLE_CBO_VIEW_BASED_MV_REWRITE = "enable_cbo_view_based_mv_rewrite";
@@ -2180,6 +2183,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // whether to use materialized view plan context cache to reduce mv rewrite time cost
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_PLAN_CACHE, flag = VariableMgr.INVISIBLE)
     private boolean enableMaterializedViewPlanCache = true;
+
+    // whether to use materialized view concurrent prepare to reduce mv rewrite time cost
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_CONCURRENT_PREPARE)
+    private boolean enableMaterializedViewConcurrentPrepare = true;
 
     @VarAttr(name = ENABLE_VIEW_BASED_MV_REWRITE)
     private boolean enableViewBasedMvRewrite = true;
@@ -4235,6 +4242,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableMaterializedViewPlanCache() {
         return this.enableMaterializedViewPlanCache;
+    }
+
+    public void setEnableMaterializedViewConcurrentPrepare(boolean enableMaterializedViewConcurrentPrepare) {
+        this.enableMaterializedViewConcurrentPrepare = enableMaterializedViewConcurrentPrepare;
+    }
+
+    public boolean isEnableMaterializedViewConcurrentPrepare() {
+        return enableMaterializedViewConcurrentPrepare;
     }
 
     public void setEnableViewBasedMvRewrite(boolean enableViewBasedMvRewrite) {
