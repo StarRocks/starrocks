@@ -289,14 +289,12 @@ static Status collect_garbage_files(const TabletMetadataPB& metadata, const std:
             const auto& segment = rowset.segments(i);
             if (retain_files_set != nullptr && retain_files_set->find(segment) != retain_files_set->end()) {
                 skip_segment_size += rowset.segment_size(i);
-                LOG(INFO) << "skip file: " << segment;
                 continue;
             }
             RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, segment)));
         }
         for (const auto& del_file : rowset.del_files()) {
             if (retain_files_set != nullptr && retain_files_set->find(del_file.name()) != retain_files_set->end()) {
-                LOG(INFO) << "skip file: " << del_file.name();
                 continue;
             }
             RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, del_file.name())));
@@ -305,7 +303,6 @@ static Status collect_garbage_files(const TabletMetadataPB& metadata, const std:
     }
     for (const auto& file : metadata.orphan_files()) {
         if (retain_files_set != nullptr && retain_files_set->find(file.name()) != retain_files_set->end()) {
-            LOG(INFO) << "skip file: " << file.name();
             continue;
         }
         RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, file.name())));
