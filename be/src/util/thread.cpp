@@ -52,7 +52,6 @@
 #include "gutil/dynamic_annotations.h"
 #include "gutil/once.h"
 #include "gutil/strings/substitute.h"
-#include "storage/olap_define.h"
 #include "util/scoped_cleanup.h"
 
 namespace starrocks {

@@ -51,6 +51,7 @@ set(EXEC_FILES
     aggregator.cpp
     sorted_streaming_aggregator.cpp
     aggregate/agg_hash_variant.cpp
+    aggregate/compress_serializer.cpp
     aggregate/aggregate_base_node.cpp
     aggregate/aggregate_blocking_node.cpp
     aggregate/distinct_blocking_node.cpp
