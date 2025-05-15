@@ -354,7 +354,7 @@ Status RawColumnReader::_init_column_bloom_filter(int offset, int length, BloomF
         RETURN_IF_ERROR(_opts.file->read_at_fully(offset, bloom_filter_data.data(), length));
     } else {
         // if length is not set, read the header first;
-        bloom_filter_data.reserve(header_len);
+        bloom_filter_data.resize(header_len);
         RETURN_IF_ERROR(_opts.file->read_at_fully(offset, bloom_filter_data.data(), header_len));
     }
 
