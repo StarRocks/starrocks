@@ -1757,7 +1757,6 @@ public class TabletScheduler extends FrontendDaemon {
 
     private void releaseTabletCtx(TabletSchedCtx tabletCtx, TabletSchedCtx.State state) {
         tabletCtx.setState(state);
-        tabletCtx.resetDecommissionedReplicaState();
         tabletCtx.releaseResource(this);
         tabletCtx.setFinishedTime(System.currentTimeMillis());
     }
