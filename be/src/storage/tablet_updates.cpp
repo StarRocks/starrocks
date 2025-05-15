@@ -1324,6 +1324,9 @@ bool TabletUpdates::check_delta_column_generate_from_version(EditVersion begin_v
 }
 
 Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_info, const RowsetSharedPtr& rowset) {
+    if (config::hang_tablet_id == _tablet.tablet_id()) {
+        sleep(config::hang_apply_sec);
+    }
     CHECK_MEM_LIMIT("TabletUpdates::_apply_normal_rowset_commit");
     auto span = Tracer::Instance().start_trace_tablet("apply_rowset_commit", _tablet.tablet_id());
     auto scoped = trace::Scope(span);
