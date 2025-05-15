@@ -17,6 +17,7 @@
 #include <fmt/compile.h>
 
 #include <memory>
+#include <mutex>
 
 #include "common/statusor.h"
 #include "exec/olap_utils.h"
@@ -241,6 +242,7 @@ bool BucketSequenceMorselQueue::empty() const {
 }
 
 StatusOr<MorselPtr> BucketSequenceMorselQueue::try_get() {
+    std::lock_guard guard(_mutex);
     if (_unget_morsel != nullptr) {
         return std::move(_unget_morsel);
     }
@@ -262,6 +264,7 @@ std::string BucketSequenceMorselQueue::name() const {
 }
 
 StatusOr<bool> BucketSequenceMorselQueue::ready_for_next() const {
+    std::lock_guard guard(_mutex);
     if (_current_sequence < 0) {
         return true;
     }
