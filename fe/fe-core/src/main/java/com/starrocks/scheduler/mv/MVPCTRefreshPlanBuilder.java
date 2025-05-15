@@ -169,7 +169,9 @@ public class MVPCTRefreshPlanBuilder {
             // If there are multiple table relations, don't push down partition predicate into table relation
             // If `enable_mv_refresh_query_rewrite` is enabled, table relation should not set partition names
             // since it will deduce `hasTableHints` to true and causes rewrite failed.
-            boolean isPushDownBelowTable = (relations.size() == 1);
+            boolean isSameTable = relations.stream().allMatch(e ->
+                    e.getName().equals(relations.iterator().next().getName()));
+            boolean isPushDownBelowTable = (relations.size() == 1 || isSameTable);
             if (isPushDownBelowTable) {
                 boolean ret = pushDownPartitionPredicates(table, tableRelation, refTablePartitionSlotRefs,
                         tablePartitionNames, isEnableMVRefreshQueryRewrite);
