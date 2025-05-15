@@ -619,8 +619,7 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
     auto min_active_txn_id = request.min_active_txn_id();
     std::vector<int64_t> retain_versions;
     if (request.retain_versions_size() > 0) {
-        retain_versions =
-                std::move(std::vector<int64_t>(request.retain_versions().begin(), request.retain_versions().end()));
+        retain_versions = std::vector<int64_t>(request.retain_versions().begin(), request.retain_versions().end());
     }
 
     int64_t vacuumed_files = 0;
