@@ -733,7 +733,7 @@ public class BrokerLoadJobTest {
         TxnStateChangeCallback callback = globalTxnMgr.getCallbackFactory().getCallback(1);
         Assert.assertNotNull(callback);
 
-        // 2. The job will be discard when failure isn't timeout
+        // 2. The job will be discard when parse error
         new Expectations() {
             {
                 txnState.getTxnCommitAttachment();
@@ -741,7 +741,7 @@ public class BrokerLoadJobTest {
                 result = attachment;
                 txnState.getReason();
                 minTimes = 0;
-                result = "load_run_fail";
+                result = "parse error";
             }
         };
         brokerLoadJob.replayOnAborted(txnState);

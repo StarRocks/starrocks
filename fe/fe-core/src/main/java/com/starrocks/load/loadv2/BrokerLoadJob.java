@@ -371,7 +371,8 @@ public class BrokerLoadJob extends BulkLoadJob {
             }
 
             failMsg.setMsg(txnStatusChangeReason + ". Retry again");
-            LOG.warn("Retry load job. job: {}, remaining retryTime: {}", id, retryTime);
+            LOG.warn("broker load job {} with txn id {} failed. start retry, remaining retry time: {}",
+                    id, txnState.getTransactionId(), retryTime);
             retryTime--;
             unprotectedClearTasksBeforeRetry(failMsg);
             try {
@@ -404,7 +405,7 @@ public class BrokerLoadJob extends BulkLoadJob {
             failMsg = new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, txnState.getReason());
             finishTimestamp = txnState.getFinishTime();
             state = JobState.CANCELLED;
-            if (retryTime <= 0 || !failMsg.getMsg().contains("timeout") || !isTimeout()) {
+            if (!isRetryable(failMsg)) {
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
                 return;
             }
@@ -434,8 +435,8 @@ public class BrokerLoadJob extends BulkLoadJob {
         newLoadingTasks.clear();
         reset();
 
-        // set failMsg
-        this.failMsg = failMsg;
+        this.failMsg = null; // when retry, user should not see previous fail msg
+        this.progress = 0; // reset progress
         // cancel all running coordinators, so that the scheduler's worker thread will be released
         for (TUniqueId loadId : loadIds) {
             Coordinator coordinator = QeProcessorImpl.INSTANCE.getCoordinator(loadId);
