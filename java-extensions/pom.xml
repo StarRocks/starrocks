@@ -23,6 +23,7 @@
         <module>kudu-reader</module>
         <module>common-runtime</module>
         <module>hadoop-lib</module>
+        <module>redis-reader</module>
     </modules>
     <name>starrocks-java-extensions</name>
 
@@ -452,6 +453,20 @@
                 <artifactId>kryo-shaded</artifactId>
                 <version>${kryo.version}</version>
             </dependency>
+
+            <dependency>
+                <groupId>redis.clients</groupId>
+                <artifactId>jedis</artifactId>
+                <version>5.1.0</version>
+                <scope>compile</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>2.18.2</version>
+                <scope>compile</scope>
+            </dependency>
+
         </dependencies>
     </dependencyManagement>
 
