@@ -90,8 +90,10 @@ private:
     struct CacheValue {
         std::weak_ptr<std::string> key;
         std::shared_ptr<FileSystem> fs;
+        int64_t created_time_sec;
 
-        CacheValue(const std::weak_ptr<std::string>& key, const std::shared_ptr<FileSystem>& fs) : key(key), fs(fs) {}
+        CacheValue(const std::weak_ptr<std::string>& key, const std::shared_ptr<FileSystem>& fs)
+                : key(key), fs(fs), created_time_sec(MonotonicSeconds()) {}
     };
 
     // This function can be made static perfectly. The only reason to make it `virtual`
