@@ -13,7 +13,6 @@ concurrency:
   group: ${{ github.event.number }}
   cancel-in-progress: true
 
-
 jobs:
 
   basic-checker:
@@ -63,6 +62,62 @@ jobs:
         run: |
           cd ci-tool
           python3 scripts/get_pr_issue.py check_issue ${GITHUB_REPOSITORY} ${PR_NUMBER}
+      
+      - name: Get Title
+        id: get_title
+        run: |
+          PR_TITLE=$(gh pr view ${PR_NUMBER} -R ${GITHUB_REPOSITORY} --json  title -q '.title')
+          echo "PR_TITLE<<EOF" >> $GITHUB_OUTPUT
+          echo "${PR_TITLE}" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Check Title Format
+        id: check_title_format
+        env:
+          PR_TITLE: ${{ steps.get_title.outputs.PR_TITLE }}
+        run: |
+          case "${{ env.PR_TITLE }}" in
+            '[BugFix]'* | '[Enhancement]'* | '[Feature]'* | '[UT]'* | '[Doc]'* | '[Tool]'* | '[Refactor]'* | 'Revert'*)
+              exit 0
+              ;;
+            *)
+              echo "::error::Title format is incorrect, please check!"
+              exit 1
+              ;;
+          esac
+      
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Checkout PR
+        run: |
+          git remote add upstream https://github.com/${{ github.event.pull_request.base.repo.full_name }}.git
+          git fetch upstream
+          git merge upstream/${{ github.event.pull_request.base.ref }} --no-edit
+
+      - name: Branch Access Check
+        env:
+          PR_TITLE: ${{ steps.get_title.outputs.PR_TITLE }}
+        run: |
+          status=$(cat .github/.status || echo open)
+          if [[ "${PR_TITLE}" == *"[Tool]"* ]]; then
+            exit 0
+          elif [[ "${status}" == "feature-freeze" && "${PR_TITLE}" == *"[Feature]"* ]]; then
+            comment="⚠️ Branch in feature-freeze state, [Feature] PRs are not allowed!"
+          elif [[ "${status}" == "bugfix-only" ]] && [[ "${PR_TITLE}" == *"[Feature]"* || "${PR_TITLE}" == *"[Enhancement]"* ]]; then
+            comment="⚠️ Branch in bugfix-only state, [Feature] or [Enhancement] PRs are not allowed!"
+          elif [[ "${status}" == "code-freeze" ]] && [[ "${PR_TITLE}" != *"[Bugfix]"* || "${PR_TITLE}" != *"CVE"* ]]; then
+            comment="⚠️ Branch in code-freeze state, only PRs that fix CVE CVE are allowed!"
+          else
+            exit 0
+          fi
+
+          echo "::error::${comment}"
+          exit 1
 
   be-checker:
     runs-on: ubuntu-latest
