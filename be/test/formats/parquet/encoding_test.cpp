@@ -579,6 +579,14 @@ TEST_F(ParquetEncodingTest, DeltaBinaryPacked) {
             }
         }
 
+        // unaligned access.
+        T* buffer = values.data();
+        size_t size = values.size();
+        {
+            buffer += 3;
+            size -= 3;
+        }
+
         const EncodingInfo* encoding = nullptr;
         (void)EncodingInfo::get(PT, tparquet::Encoding::DELTA_BINARY_PACKED, &encoding);
         ASSERT_TRUE(encoding != nullptr);
@@ -593,23 +601,23 @@ TEST_F(ParquetEncodingTest, DeltaBinaryPacked) {
             st = encoding->create_encoder(&encoder);
             ASSERT_TRUE(st.ok()) << st.to_string();
 
-            st = encoder->append((uint8_t*)(&values[0]), values.size());
+            st = encoder->append((const uint8_t*)buffer, size);
             ASSERT_TRUE(st.ok()) << st.to_string();
 
             // simple verification.
             Slice encoded_data = encoder->build();
-            std::vector<T> check(values.size());
+            std::vector<T> check(size);
             st = decoder->set_data(encoded_data);
             ASSERT_TRUE(st.ok()) << st.to_string();
-            st = decoder->next_batch(values.size(), (uint8_t*)(&check[0]));
+            st = decoder->next_batch(size, (uint8_t*)(check.data()));
             ASSERT_TRUE(st.ok()) << st.to_string();
 
             for (int i = 0; i < check.size(); i++) {
-                ASSERT_EQ(check[i], values[i]);
+                ASSERT_EQ(check[i], buffer[i]);
             }
 
             // enhanced verification.
-            DecoderChecker<T, false>::check(values, encoded_data, decoder.get());
+            DecoderChecker<T, false>::check(check, encoded_data, decoder.get());
         }
     };
 
