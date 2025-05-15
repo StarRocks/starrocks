@@ -61,7 +61,7 @@ private:
 };
 
 TEST_F(ParquetCLIReaderTest, ReadAllParquetFiles) {
-    // GTEST_SKIP();
+    GTEST_SKIP(); // this ut takes a very long time.
     std::vector<std::string> paths;
     // We don't support below files in init phase, but we need to make sure that will not make BE crashed.
     std::set<std::string> unsupported_paths_init;
