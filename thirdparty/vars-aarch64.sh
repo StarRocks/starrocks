@@ -27,11 +27,11 @@ HADOOP_NAME="hadoop-3.4.0-aarch64.tar.gz"
 HADOOP_SOURCE="hadoop-3.4.0"
 HADOOP_MD5SUM="4cf40e127f27044310aae36dce23bdb1"
 
-# OPEN JDK FOR aarch64, provided by huawei kunpeng (https://www.hikunpeng.com/zh/developer/devkit/compiler)
-JDK_DOWNLOAD="https://mirror.iscas.ac.cn/kunpeng/archive/compiler/bisheng_jdk/bisheng-jdk-8u262-linux-aarch64.tar.gz"
-JDK_NAME="bisheng-jdk-8u262-linux-aarch64.tar.gz"
-JDK_SOURCE="bisheng-jdk1.8.0_262"
-JDK_MD5SUM="a1254dea3728e0a86e53a55d8debfbeb"
+# OPEN JDK FOR aarch64
+JDK_DOWNLOAD="https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.13%2B11/OpenJDK17U-jdk_aarch64_linux_hotspot_17.0.13_11.tar.gz"
+JDK_NAME="OpenJDK17U-jdk_aarch64_linux_hotspot_17.0.13_11.tar.gz"
+JDK_SOURCE="jdk-17.0.13+11"
+JDK_MD5SUM="2e942562e2ffa7378c4948041911c3bb"
 
 # HYPERSCAN for aarch64, provided by huawei kunpeng.
 HYPERSCAN_DOWNLOAD="https://github.com/kunpengcompute/hyperscan/archive/refs/tags/v5.3.0.aarch64.tar.gz"
