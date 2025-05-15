@@ -3291,6 +3291,10 @@ public class Config extends ConfigBase {
             "query the rewritten mv directly rather than original base table to improve query performance.")
     public static boolean enable_mv_refresh_query_rewrite = false;
 
+    @ConfField(mutable = true, comment = "Whether do reload flag check after FE's image loaded." +
+            " If one base mv has done reload, no need to do it again while other mv that related to it is reloading ")
+    public static boolean enable_mv_post_image_reload_cache = true;
+
     /**
      * Whether analyze the mv after refresh in async mode.
      */
