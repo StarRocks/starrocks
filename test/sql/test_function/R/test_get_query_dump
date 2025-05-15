@@ -55,7 +55,7 @@ E: (6013, 'SemanticException: Getting analyzing error. Detail message: Invalid p
 -- !result
 select get_query_dump('invalid-query');
 -- result:
-E: (6013, "SemanticException: Getting analyzing error. Detail message: Invalid parameter get_query_dump: execute query failed. Getting syntax error at line 1, column 0. Detail message: Unexpected input 'invalid', the most similar input is {'INSTALL', 'UNINSTALL', 'KILL', 'LOAD', 'ADMIN', '(', ';'}..")
+[REGEX].*SemanticException: Getting analyzing error. Detail message: Invalid parameter get_query_dump: execute query failed.*
 -- !result
 select get_query_dump(rtrim('select * from t1'));
 -- result:

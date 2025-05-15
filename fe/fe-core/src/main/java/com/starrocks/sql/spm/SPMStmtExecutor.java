@@ -17,6 +17,7 @@ package com.starrocks.sql.spm;
 import com.google.common.collect.Lists;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.sql.ast.spm.ControlBaselinePlanStmt;
 import com.starrocks.sql.ast.spm.CreateBaselinePlanStmt;
 import com.starrocks.sql.ast.spm.DropBaselinePlanStmt;
 import com.starrocks.sql.ast.spm.ShowBaselinePlanStmt;
@@ -64,5 +65,10 @@ public class SPMStmtExecutor {
             rows.add(row);
         });
         return new ShowResultSet(stmt.getMetaData(), rows);
+    }
+
+    public static void execute(ConnectContext context, ControlBaselinePlanStmt stmt) {
+        context.getGlobalStateMgr().getSqlPlanStorage().controlBaselinePlan(stmt.isEnable(), stmt.getBaseLineId());
+        context.getSqlPlanStorage().controlBaselinePlan(stmt.isEnable(), stmt.getBaseLineId());
     }
 }

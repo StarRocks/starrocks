@@ -32,4 +32,8 @@ public interface SQLPlanStorage {
     void dropAllBaselinePlans();
 
     default void replayBaselinePlan(BaselinePlan.Info info, boolean isCreate) {}
+
+    default void replayUpdateBaselinePlan(BaselinePlan.Info info, boolean isEnable) {}
+
+    void controlBaselinePlan(boolean isEnable, List<Long> baseLineIds);
 }
