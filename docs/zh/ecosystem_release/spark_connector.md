@@ -34,7 +34,27 @@ displayed_sidebar: docs
 
 ### 1.1
 
-### 1.1.2
+#### 1.1.3
+
+该版本主要包含一些新特性和改进。
+
+**新增特性**
+
+- Sink 支持 LZ4 压缩算法。[#110](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/110)
+
+**功能优化**
+
+- 支持读取和写入带有微秒的 StarRocks DATETIME 数据类型。[#123](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/123)
+- 支持配置写入操作的 Socket 超时时间。[#122](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/122)
+- 增大了 `jackson-core` 的最大字符串长度。[#129](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/129)
+
+**问题修复**
+
+- 修复了由于列名使用关键字导致的解析错误。（修复后，BuildScan 中会为列名添加引号。）[#103](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/103)
+- 修复了由于 `java.lang.String` 不是 DATE/TIMESTAMP 类型的有效外部类型而引发的异常。[#111](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/111)
+- 修复了 JSON 类型写入错误的问题。[#115](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/115)
+
+#### 1.1.2
 
 **新增特性**
 
