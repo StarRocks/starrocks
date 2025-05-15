@@ -1664,7 +1664,4 @@ CONF_mInt64(split_exchanger_buffer_chunk_num, "1000");
 CONF_mInt64(two_level_memory_threshold, "-1");
 
 CONF_mInt32(max_update_tablet_version_internal_ms, "5000");
-
-CONF_mInt64(hang_tablet_id, "0");
-CONF_mInt64(hang_apply_sec, "120");
 } // namespace starrocks::config
