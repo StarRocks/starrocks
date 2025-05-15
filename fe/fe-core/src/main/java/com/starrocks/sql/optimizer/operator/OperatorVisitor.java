@@ -40,6 +40,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOdpsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalRedisScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalSchemaScanOperator;
@@ -82,6 +83,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalOdpsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalRedisScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
@@ -240,6 +242,10 @@ public abstract class OperatorVisitor<R, C> {
         return visitOperator(node, context);
     }
 
+    public R visitLogicalRedisScan(LogicalRedisScanOperator node, C context) {
+        return visitLogicalTableScan(node, context);
+    }
+
     public R visitLogicalLimit(LogicalLimitOperator node, C context) {
         return visitOperator(node, context);
     }
@@ -352,6 +358,10 @@ public abstract class OperatorVisitor<R, C> {
     }
 
     public R visitPhysicalKuduScan(PhysicalKuduScanOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
+    public R visitPhysicalRedisScan(PhysicalRedisScanOperator node, C context) {
         return visitOperator(node, context);
     }
 
