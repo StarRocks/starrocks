@@ -1485,7 +1485,8 @@ TEST_P(LakeVacuumTest, test_vacuum_version_control) {
                     "00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e11.dat",
                     "00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b582.dat"
                 ],
-                "data_size": [100, 100]
+                "segment_size": [100, 100],
+                "data_size": 200
             }
         ],
         "delvec_meta": {
@@ -1516,7 +1517,8 @@ TEST_P(LakeVacuumTest, test_vacuum_version_control) {
                 }
             ]
         },
-        "prev_garbage_version": 1
+        "prev_garbage_version": 0,
+        "commit_time": 2
         }
         )DEL")));
 
@@ -1529,6 +1531,7 @@ TEST_P(LakeVacuumTest, test_vacuum_version_control) {
                 "segments": [
                     "00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b583.dat"
                 ],
+                "segment_size": [100],
                 "data_size": 100
             }
         ],
@@ -1538,7 +1541,8 @@ TEST_P(LakeVacuumTest, test_vacuum_version_control) {
                     "00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e11.dat",
                     "00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b582.dat"
                 ],
-                "data_size": [100, 100]
+                "segment_size": [100, 100],
+                "data_size": 200
             }
         ],
         "orphan_files": [
@@ -1551,28 +1555,28 @@ TEST_P(LakeVacuumTest, test_vacuum_version_control) {
                 "size": 24
             }
         ],
-        "prev_garbage_version": 2,
-        "commit_time": 1
+        "prev_garbage_version": 0,
+        "commit_time": 3
         }
         )DEL")));
 
     {
         VacuumRequest request;
         VacuumResponse response;
-        request.set_delete_txn_log(true);
+        request.set_delete_txn_log(false);
         request.add_tablet_ids(666);
-        request.set_min_retain_version(4);
+        request.set_min_retain_version(3);
         request.set_grace_timestamp(::time(nullptr) + 60);
         request.set_min_active_txn_id(12345);
-        //request.add_retain_versions(2);
+        request.add_retain_versions(2);
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
-        EXPECT_EQ(0, response.vacuumed_files());
+        EXPECT_EQ(1, response.vacuumed_files());
 
         EXPECT_FALSE(file_exist(tablet_metadata_filename(666, 1)));
         EXPECT_TRUE(file_exist(tablet_metadata_filename(666, 2)));
-        EXPECT_FALSE(file_exist(tablet_metadata_filename(666, 3)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(666, 3)));
 
         EXPECT_TRUE(file_exist("00000000000159e3_3ea06130-ccac-4110-9de8-4813512c60da.delvec"));
         EXPECT_TRUE(file_exist("00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e11.dat"));
