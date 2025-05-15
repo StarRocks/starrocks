@@ -3525,6 +3525,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 配置项描述: `object_storage_request_timeout_ms` 的别名。详细信息请参考配置项 [object_storage_request_timeout_ms](#object_storage_request_timeout_ms)。
 - 引入版本: v3.3.9
 
+##### starlet_filesystem_instance_cache_capacity
+
+- 默认值：10000
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 配置项描述: starlet filesystem 实例的缓存容量。
+- 引入版本: v3.2.16, v3.3.11, v3.4.1
+
+##### starlet_filesystem_instance_cache_ttl_sec
+
+- 默认值：86400
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 配置项描述: starlet filesystem 实例缓存的过期时间。
+- 引入版本: v3.3.15, 3.4.5
+
 ##### lake_compaction_stream_buffer_size_bytes
 
 - 默认值：1048576

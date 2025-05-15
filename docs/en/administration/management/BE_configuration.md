@@ -3566,6 +3566,24 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: An alias of `object_storage_request_timeout_ms`. Refer to [object_storage_request_timeout_ms](#object_storage_request_timeout_ms) for details.
 - Introduced in: v3.3.9
 
+##### starlet_filesystem_instance_cache_capacity
+
+- Default: 10000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The cache capacity of starlet filesystem instances.
+- Introduced in: v3.2.16, v3.3.11, v3.4.1
+
+##### starlet_filesystem_instance_cache_ttl_sec
+
+- Default: 86400
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The cache expiration time of starlet filesystem instances.
+- Introduced in: v3.3.15, 3.4.5
+
 ##### lake_compaction_stream_buffer_size_bytes
 
 - Default: 1048576
