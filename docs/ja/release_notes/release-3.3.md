@@ -10,6 +10,39 @@ StarRocks を v3.3 にアップグレードした後、直接 v3.2.0、v3.2.1、
 
 :::
 
+## 3.3.14
+
+リリース日： 2025年5月14日
+
+### 改善点
+
+- 正則式の解析失敗時のエラーメッセージを改善しました。 [#57904](https://github.com/StarRocks/starrocks/pull/57904)
+- セキュリティ脆弱性 [SNYK-JAVA-ORGJSON-5488379](https://snyk.io/vuln/SNYK-JAVA-ORGJSON-5488379) および [SNYK-JAVA-ORGJSON-5962464](https://snyk.io/vuln/SNYK-JAVA-ORGJSON-5962464) を修正しました。 [#58425](https://github.com/StarRocks/starrocks/pull/58425)
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- JSON データ型を使用した `first_value`/`last_value`/`lead`/`lag` ウィンドウ関数に関する問題。 [#58697](https://github.com/StarRocks/starrocks/pull/58697)
+- マテリアライズドビューへの書き込み時に、基になるテーブルのテーブルレベルロックが原因でデッドロックが発生（修正後は DB ロックを使用）。 [#58615](https://github.com/StarRocks/starrocks/pull/58615)
+- 削除されたテーブルへの INSERT タスクが停止してしまう問題。 [#58603](https://github.com/StarRocks/starrocks/pull/58603)
+- List パーティションにおけるマテリアライズドビューの active/inactive 状態の切り替えに失敗。 [#58575](https://github.com/StarRocks/starrocks/pull/58575)
+- `streaming_load_current_processing` メトリクスの誤り。 [#58565](https://github.com/StarRocks/starrocks/pull/58565)
+- インポートやレプリカのクローンタスクが連続するとデータバージョンの更新に失敗する問題。 [#58513](https://github.com/StarRocks/starrocks/pull/58513)
+- 外部テーブルのマテリアライズドビューが更新できない問題。 [#58506](https://github.com/StarRocks/starrocks/pull/58506)
+- ARM アーキテクチャ上での `if()` 関数の誤動作。 [#58455](https://github.com/StarRocks/starrocks/pull/58455)
+- マテリアライズドビューの書き換えによって誤ったクエリプランが生成される問題。 [#58487](https://github.com/StarRocks/starrocks/pull/58487)
+- Iceberg テーブルのメタデータが自動更新されない問題。 [#58490](https://github.com/StarRocks/starrocks/pull/58490)
+- `group_concat` による誤ったクエリプランの生成。 [#57908](https://github.com/StarRocks/starrocks/pull/57908)
+- インポート中の例外が正しく処理されず、Tablet の大量読み込み失敗を引き起こす問題。 [#58393](https://github.com/StarRocks/starrocks/pull/58393)
+- 生成列の List パーティションにおいて、型の不一致により定数畳み込みが失敗する問題（暗黙の型変換ルールを追加して修正）。 [#54543](https://github.com/StarRocks/starrocks/pull/54543)
+- 集約関数の戻り値の型と元の列定義の型が一致しないことで発生する問題（修正後は列の型を関数の出力型にキャスト）。 [#58407](https://github.com/StarRocks/starrocks/pull/58407)
+- `broadcast_row_limit` を 0 または 0 未満に設定した際に、BROADCAST JOIN の生成を回避できない問題。 [#58307](https://github.com/StarRocks/starrocks/pull/58307)
+- Broker Load がブラックリストに登録された BE ノードを使用してしまう問題。 [#58350](https://github.com/StarRocks/starrocks/pull/58350)
+- マテリアライズドビューの更新タスクを手動でキャンセルした後も、非同期タスクがバックグラウンドで残り続ける問題。 [#58310](https://github.com/StarRocks/starrocks/pull/58310)
+- 月単位や年単位の式によるパーティションの作成に失敗する問題。 [#58182](https://github.com/StarRocks/starrocks/pull/58182)
+- `ngram_search` によって無効なクエリプランが生成される問題。 [#58190](https://github.com/StarRocks/starrocks/pull/58190)
+
 ## 3.3.13
 
 リリース日: 2025年4月22日
