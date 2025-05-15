@@ -1717,6 +1717,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: `object_storage_request_timeout_ms` の別名。詳細は [object_storage_request_timeout_ms](#object_storage_request_timeout_ms) を参照してください。
 - 導入バージョン: v3.3.9
 
+##### starlet_filesystem_instance_cache_capacity
+
+- デフォルト: 10000
+- タイプ: Int
+- 単位: 秒
+- 可変: はい
+- 説明: starlet filesystem インスタンスのキャッシュ容量。
+- 導入バージョン: v3.2.16, v3.3.11, v3.4.1
+
+##### starlet_filesystem_instance_cache_ttl_sec
+
+- デフォルト: 86400
+- タイプ: Int
+- 単位: 秒
+- 可変: はい
+- 説明: starlet filesystem インスタンス キャッシュの有効期限。
+- 導入バージョン: v3.3.15, 3.4.5
+
 ##### lake_compaction_stream_buffer_size_bytes
 
 - デフォルト: 1048576
