@@ -27,7 +27,7 @@ HADOOP_NAME="hadoop-3.4.0-aarch64.tar.gz"
 HADOOP_SOURCE="hadoop-3.4.0"
 HADOOP_MD5SUM="4cf40e127f27044310aae36dce23bdb1"
 
-# OPEN JDK FOR aarch64, provided by huawei kunpeng (https://www.hikunpeng.com/zh/developer/devkit/compiler)
+# OPEN JDK FOR aarch64
 JDK_DOWNLOAD="http://cdn-thirdparty.starrocks.com/OpenJDK17U-jdk_aarch64_linux_hotspot_17.0.13_11.tar.gz"
 JDK_NAME="OpenJDK17U-jdk_aarch64_linux_hotspot_17.0.13_11.tar.gz"
 JDK_SOURCE="jdk-17.0.13+11"
