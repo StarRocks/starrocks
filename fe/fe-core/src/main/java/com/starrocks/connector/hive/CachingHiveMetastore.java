@@ -537,7 +537,7 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
                 List<HivePartitionName> needToRefresh = presentPartitionStatistics.stream()
                         .filter(x -> x.getPartitionNames().isPresent()
                                 && updatedPartitionKeys.contains(x.getPartitionNames().get()))
-                        .toList();
+                        .collect(Collectors.toList());
                 partitionStatsCache.getAll(needToRefresh);
             }
         }
