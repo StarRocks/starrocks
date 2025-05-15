@@ -281,7 +281,7 @@ public class AnalyzeStmtTest {
     }
 
     @Test
-    public void testStatisticsSqlBuilder() throws Exception {
+    public void testStatisticsSqlBuilder() {
         Database database = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) database.getTable("t0");
         System.out.println(table.getPartitions());
@@ -290,20 +290,20 @@ public class AnalyzeStmtTest {
         Column v1 = table.getColumn("v1");
         Column v2 = table.getColumn("v2");
 
-        Assert.assertEquals(String.format("SELECT cast(1 as INT), now(), " +
+        Assert.assertEquals(String.format("SELECT cast(10 as INT), now(), " +
                         "db_id, table_id, column_name," +
                         " sum(row_count), " +
                         "cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  " +
                         "cast(max(cast(max as bigint)) as string), " +
-                        "cast(min(cast(min as bigint)) as string) FROM column_statistics " +
+                        "cast(min(cast(min as bigint)) as string), cast(avg(collection_size) as bigint) FROM column_statistics " +
                         "WHERE table_id = %d and column_name in (\"v1\", \"v2\") " +
                         "GROUP BY db_id, table_id, column_name", table.getId()),
                 StatisticSQLBuilder.buildQueryFullStatisticsSQL(database.getId(), table.getId(),
                         Lists.newArrayList("v1", "v2"), Lists.newArrayList(v1.getType(), v2.getType())));
 
         Assert.assertEquals(String.format(
-                "SELECT cast(1 as INT), update_time, db_id, table_id, column_name, row_count, " +
-                        "data_size, distinct_count, null_count, max, min " +
+                "SELECT cast(10 as INT), update_time, db_id, table_id, column_name, row_count, " +
+                        "data_size, distinct_count, null_count, max, min, collection_size " +
                         "FROM table_statistic_v1 WHERE db_id = %d and table_id = %d and column_name in ('v1', 'v2')",
                         database.getId(), table.getId()),
                 StatisticSQLBuilder.buildQuerySampleStatisticsSQL(database.getId(),
@@ -434,14 +434,16 @@ public class AnalyzeStmtTest {
         Column kk1 = table.getColumn("kk1");
         Column kk2 = table.getColumn("kk2");
 
-        String pattern = String.format("SELECT cast(1 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
+        String pattern = String.format("SELECT cast(10 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
                 "cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  " +
-                "cast(max(cast(max as string)) as string), cast(min(cast(min as string)) as string) " +
+                "cast(max(cast(max as string)) as string), cast(min(cast(min as string)) as string), " +
+                "cast(avg(collection_size) as bigint) " +
                 "FROM column_statistics WHERE table_id = %d and column_name in (\"kk2\") " +
                 "GROUP BY db_id, table_id, column_name " +
-                "UNION ALL SELECT cast(1 as INT), now(), db_id, table_id, column_name, " +
+                "UNION ALL SELECT cast(10 as INT), now(), db_id, table_id, column_name, " +
                 "sum(row_count), cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  " +
-                "cast(max(cast(max as bigint)) as string), cast(min(cast(min as bigint)) as string) " +
+                "cast(max(cast(max as bigint)) as string), cast(min(cast(min as bigint)) as string), " +
+                "cast(avg(collection_size) as bigint) " +
                 "FROM column_statistics WHERE table_id = %d and column_name in (\"kk1\") " +
                 "GROUP BY db_id, table_id, column_name", table.getId(), table.getId());
         String content = StatisticSQLBuilder.buildQueryFullStatisticsSQL(database.getId(), table.getId(),

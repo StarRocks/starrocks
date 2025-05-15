@@ -14,58 +14,59 @@
 
 package com.starrocks.statistic.sample;
 
+import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.Type;
 
-import java.util.List;
-import java.util.stream.Collectors;
+public class CollectionTypeColumnStats extends ColumnStats {
+    private final long tableRowCount;
 
-public class SubFieldColumnStats extends ColumnStats {
-
-    public List<String> names;
-    public final ColumnStats columnStats;
-
-    public SubFieldColumnStats(List<String> names, Type columnType) {
-        super(names.stream().collect(Collectors.joining(".")), columnType);
-        this.names = names;
-        if (columnType.canStatistic() && !columnType.isCollectionType()) {
-            columnStats = new PrimitiveTypeColumnStats("name", columnType);
-        } else {
-            columnStats = new ComplexTypeColumnStats("name", columnType);
-        }
+    public CollectionTypeColumnStats(String columnName, Type columnType, long tableRowCount) {
+        super(columnName, columnType);
+        this.tableRowCount = tableRowCount <= 0 ? 1 : tableRowCount;
     }
 
     @Override
     public String getQuotedColumnName() {
-        return names.stream().map(e -> "`" + e + "`").collect(Collectors.joining("."));
+        return "`" + columnName + "`";
     }
 
     @Override
     public String getRowCount() {
-        return columnStats.getRowCount();
+        return tableRowCount + "";
     }
 
     @Override
     public String getDateSize() {
-        return columnStats.getDateSize();
+        long elementTypeSize = columnType.isArrayType() ? ((ArrayType) columnType).getItemType().getTypeSize() :
+                ((MapType) columnType).getKeyType().getTypeSize() + ((MapType) columnType).getValueType().getTypeSize();
+        return tableRowCount + " * " + elementTypeSize + " * " + getCollectionSize();
     }
 
     @Override
     public String getNullCount() {
-        return columnStats.getNullCount();
+        return "0";
     }
 
     @Override
     public String getMax() {
-        return columnStats.getMax();
+        return "''";
     }
 
     @Override
     public String getMin() {
-        return columnStats.getMin();
+        return "''";
     }
 
     @Override
     public String getDistinctCount(double rowSampleRatio) {
-        return columnStats.getDistinctCount(rowSampleRatio);
+        return "0";
     }
+
+    @Override
+    public String getCollectionSize() {
+        String collectionSizeFunction = columnType.isArrayType() ? "ARRAY_LENGTH" : "MAP_SIZE";
+        return "AVG(" + collectionSizeFunction + "(" + getQuotedColumnName() + ")) ";
+    }
+
 }
