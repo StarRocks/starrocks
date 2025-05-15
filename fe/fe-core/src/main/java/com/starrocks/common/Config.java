@@ -1890,6 +1890,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static String[] authentication_chain = {AUTHENTICATION_CHAIN_MECHANISM_NATIVE};
 
+    @ConfField(mutable = true)
+    public static boolean enable_create_ldap_security_integration = false;
+
     /**
      * ldap server host for authentication_ldap_simple
      */

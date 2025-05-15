@@ -24,13 +24,13 @@ import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class RoleMappingMetaMgr {
-    private static final Logger LOG = LogManager.getLogger(RoleMappingMetaMgr.class);
+    protected static final Logger LOG = LogManager.getLogger(RoleMappingMetaMgr.class);
 
     /**
      * role mapping name -> role mapping object
      */
     @SerializedName("nm")
-    private final Map<String, RoleMapping> nameToRoleMappingMap;
+    protected final Map<String, RoleMapping> nameToRoleMappingMap;
     /**
      * role name -> role mapping set
      */
@@ -41,7 +41,7 @@ public class RoleMappingMetaMgr {
      */
     @SerializedName("gm")
     private final Map<String, Map<String, List<String>>> groupToRolesMap;
-    private final ReentrantReadWriteLock lock;
+    protected final ReentrantReadWriteLock lock;
 
     public RoleMappingMetaMgr() {
         nameToRoleMappingMap = new HashMap<>();

@@ -19,6 +19,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.epack.authentication.AuthenticationMgrEPack;
 import com.starrocks.epack.authentication.LDAPGroupCacheMgr;
@@ -61,6 +62,7 @@ public class RoleMappingTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
+        Config.enable_create_ldap_security_integration = true;
         UtFrameUtils.createMinStarRocksCluster();
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);

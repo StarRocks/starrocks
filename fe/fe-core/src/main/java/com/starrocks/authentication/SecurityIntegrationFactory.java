@@ -16,11 +16,13 @@ package com.starrocks.authentication;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSortedSet;
+import com.starrocks.common.Config;
 import com.starrocks.epack.authentication.LDAPSecurityIntegration;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.Map;
+import java.util.Objects;
 
 public class SecurityIntegrationFactory {
     private static final ImmutableSortedSet<String> SUPPORTED_AUTH_MECHANISM =
@@ -39,6 +41,12 @@ public class SecurityIntegrationFactory {
 
     public static SecurityIntegration createSecurityIntegration(String name, Map<String, String> propertyMap) {
         String type = propertyMap.get(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY);
+        if (Objects.equals(type, SecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP) &&
+                !Config.enable_create_ldap_security_integration) {
+            throw new SemanticException("Not support create ldap security integration, " +
+                    "You can use AUTHENTICATION_LDAP_SIMPLE security integration and ldap group provider instead.");
+        }
+
         checkSecurityIntegrationIsSupported(type);
 
         SecurityIntegration securityIntegration = null;

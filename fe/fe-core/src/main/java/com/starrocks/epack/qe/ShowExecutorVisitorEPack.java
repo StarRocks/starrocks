@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package com.starrocks.epack.qe;
 
 import com.google.common.base.Joiner;
@@ -21,9 +22,6 @@ import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
-import com.starrocks.authorization.ObjectType;
-import com.starrocks.authorization.PrivilegeEntry;
-import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
@@ -64,9 +62,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.GrantRevokeClause;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
-import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.warehouse.ShowNodesStmt;
 import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
@@ -305,42 +301,6 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
         try {
             return new ShowResultSet(statement.getMetaData(), statement.getRows());
         } catch (AnalysisException e) {
-            throw new SemanticException(e.getMessage());
-        }
-    }
-
-    @Override
-    public ShowResultSet visitShowGrantsStatement(ShowGrantsStmt statement, ConnectContext context) {
-        AuthorizationMgr authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
-        try {
-            List<List<String>> infos = new ArrayList<>();
-            if (statement.getGroupOrRole() != null) {
-                List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForRole(statement.getGroupOrRole());
-                if (granteeRole != null) {
-                    infos.add(granteeRole);
-                }
-
-                Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList =
-                        authorizationManager.getTypeToPrivilegeEntryListByRole(statement.getGroupOrRole());
-                infos.addAll(privilegeToRowString(authorizationManager,
-                        new GrantRevokeClause(null, statement.getGroupOrRole()), typeToPrivilegeEntryList));
-            } else {
-                UserIdentity userIdentity = statement.getUserIdent();
-                List<String> granteeRole =
-                        authorizationManager.getGranteeRoleDetailsForUser(userIdentity);
-                if (granteeRole != null) {
-                    infos.add(granteeRole);
-                }
-
-                if (!userIdentity.isEphemeral()) {
-                    Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList =
-                            authorizationManager.getTypeToPrivilegeEntryListByUser(statement.getUserIdent());
-                    infos.addAll(privilegeToRowString(authorizationManager,
-                            new GrantRevokeClause(statement.getUserIdent(), null), typeToPrivilegeEntryList));
-                }
-            }
-            return new ShowResultSet(statement.getMetaData(), infos);
-        } catch (PrivilegeException e) {
             throw new SemanticException(e.getMessage());
         }
     }

@@ -932,6 +932,7 @@ public class ShowExecutor {
 
             return new ShowResultSet(statement.getMetaData(), rows);
         }
+
         @Override
         public ShowResultSet visitShowResourceGroupUsageStatement(ShowResourceGroupUsageStmt statement, ConnectContext context) {
             List<List<String>> rows = Lists.newArrayList();
@@ -2029,6 +2030,11 @@ public class ShowExecutor {
                             authorizationManager.getTypeToPrivilegeEntryListByRole(statement.getGroupOrRole());
                     infos.addAll(privilegeToRowString(authorizationManager,
                             new GrantRevokeClause(null, statement.getGroupOrRole()), typeToPrivilegeEntryList));
+                } else if (statement.getGrantType().equals(GrantType.GROUP)) {
+                    List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForGroup(statement.getGroupOrRole());
+                    if (granteeRole != null) {
+                        infos.add(granteeRole);
+                    }
                 } else {
                     UserIdentity userIdentity = statement.getUserIdent();
                     List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForUser(userIdentity);
@@ -2050,7 +2056,7 @@ public class ShowExecutor {
         }
 
         protected List<List<String>> privilegeToRowString(AuthorizationMgr authorizationManager, GrantRevokeClause userOrRoleName,
-                                                        Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList)
+                                                          Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList)
                 throws PrivilegeException {
             List<List<String>> infos = new ArrayList<>();
             for (Map.Entry<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntry

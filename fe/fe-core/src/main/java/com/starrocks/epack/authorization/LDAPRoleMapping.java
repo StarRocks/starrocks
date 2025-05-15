@@ -24,7 +24,9 @@ import java.util.stream.Collectors;
 
 /**
  * Define a mapping that maps groups of users in ldap to role in StarRocks.
+ * LDAP Role Mapping has been deprecated and will be removed in subsequent versions
  */
+@Deprecated
 public class LDAPRoleMapping extends RoleMapping {
     public static final String ROLE_MAPPING_PROPERTY_GROUP_LIST_KEY = "ldap_group_list";
 

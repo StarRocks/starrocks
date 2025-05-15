@@ -1306,7 +1306,7 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitAdminSetAutomatedSnapshotOnStatement(AdminSetAutomatedSnapshotOnStmt stmt,
-                                                                     ConnectContext context) {
+                                                                       ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getClusterSnapshotMgr().setAutomatedSnapshotOn(stmt);
             });

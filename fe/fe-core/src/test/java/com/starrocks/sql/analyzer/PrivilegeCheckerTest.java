@@ -154,6 +154,7 @@ public class PrivilegeCheckerTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
+        Config.enable_create_ldap_security_integration = true;
         FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.addMockBackend(10002);

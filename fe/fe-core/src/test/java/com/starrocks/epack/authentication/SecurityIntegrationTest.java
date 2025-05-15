@@ -67,6 +67,7 @@ public class SecurityIntegrationTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
+        Config.enable_create_ldap_security_integration = true;
         UtFrameUtils.createMinStarRocksCluster();
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
@@ -340,7 +341,7 @@ public class SecurityIntegrationTest {
 
         new MockUp<LDAPAuthProviderForExternal>() {
             @Mock
-            public void authenticate(ConnectContext context, String user, String host, byte[] authResponse)
+            public void authenticate(ConnectContext context, UserIdentity userIdentity, byte[] authResponse)
                     throws AuthenticationException {
             }
         };
