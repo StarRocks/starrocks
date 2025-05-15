@@ -877,6 +877,9 @@ struct TAggregationNode {
   29: optional bool enable_pipeline_share_limit = false
 
   30: optional list<RuntimeFilter.TRuntimeFilterDescription> build_runtime_filters
+
+  31: optional list<Exprs.TExpr> group_by_min_max
+
 }
 
 struct TRepeatNode {

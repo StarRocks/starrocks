@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include <new>
 #include <type_traits>
 
 #include "column/column.h"

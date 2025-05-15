@@ -191,6 +191,8 @@ public:
         _hash_table[static_cast<search_key_type>(key)] = 1;
     }
 
+    void insert(KeyType key) { emplace(key); }
+
     bool contains(KeyType key) { return _hash_table[static_cast<search_key_type>(key)]; }
 
     size_t dump_bound() { return hash_table_size; }

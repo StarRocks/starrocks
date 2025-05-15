@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <any>
+
 #include "column/column_hash.h"
 #include "column/column_helper.h"
 #include "column/hash_set.h"
@@ -758,6 +760,69 @@ struct AggHashSetOfSerializedKeyFixedSize : public AggHashSet<HashSet, AggHashSe
 
     int32_t _chunk_size;
     std::vector<size_t> hashes;
+};
+
+template <typename HashSet>
+struct AggHashSetCompressedFixedSize : public AggHashSet<HashSet, AggHashSetCompressedFixedSize<HashSet>> {
+    using Base = AggHashSet<HashSet, AggHashSetCompressedFixedSize<HashSet>>;
+    using Iterator = typename HashSet::iterator;
+    using KeyType = typename HashSet::key_type;
+    using FixedSizeSliceKey = typename HashSet::key_type;
+    using ResultVector = typename std::vector<FixedSizeSliceKey>;
+
+    bool has_null_column = false;
+    static constexpr size_t max_fixed_size = sizeof(FixedSizeSliceKey);
+
+    template <class... Args>
+    AggHashSetCompressedFixedSize(int32_t chunk_size, Args&&... args)
+            : Base(chunk_size, std::forward<Args>(args)...), _chunk_size(chunk_size) {
+        fixed_keys.reserve(chunk_size);
+    }
+
+    // When compute_and_allocate=false:
+    // Elements queried in HashSet will be added to HashSet
+    // elements that cannot be queried are not processed,
+    // and are mainly used in the first stage of two-stage aggregation when aggr reduction is low
+    template <bool compute_and_allocate>
+    void build_set(size_t chunk_size, const Columns& key_columns, MemPool* pool, Filter* not_founds) {
+        if constexpr (!compute_and_allocate) {
+            DCHECK(not_founds);
+            not_founds->assign(chunk_size, 0);
+        }
+
+        auto* buffer = reinterpret_cast<uint8_t*>(fixed_keys.data());
+        memset(buffer, 0x0, sizeof(FixedSizeSliceKey) * chunk_size);
+        bitcompress_serialize(key_columns, bases, offsets, chunk_size, sizeof(FixedSizeSliceKey), fixed_keys.data());
+        // auto* key = reinterpret_cast<FixedSizeSliceKey*>(buffer);
+        this->template build_set_noprefetch<compute_and_allocate>(chunk_size, pool, not_founds);
+    }
+
+    template <bool compute_and_allocate>
+    ALWAYS_NOINLINE void build_set_noprefetch(size_t chunk_size, MemPool* pool, Filter* not_founds) {
+        for (size_t i = 0; i < chunk_size; ++i) {
+            if constexpr (compute_and_allocate) {
+                this->hash_set.insert(fixed_keys[i]);
+            } else {
+                (*not_founds)[i] = !this->hash_set.contains(fixed_keys[i]);
+            }
+        }
+    }
+
+    void insert_keys_to_columns(ResultVector& keys, Columns& key_columns, int32_t chunk_size) {
+        bitcompress_deserialize(key_columns, bases, offsets, used_bits, chunk_size, sizeof(FixedSizeSliceKey),
+                                keys.data());
+    }
+
+    static constexpr bool has_single_null_key = false;
+    bool has_null_key = false;
+
+    std::vector<int> used_bits;
+    std::vector<int> offsets;
+    std::vector<std::any> bases;
+    std::vector<FixedSizeSliceKey> fixed_keys;
+    ResultVector results;
+
+    int32_t _chunk_size;
 };
 
 } // namespace starrocks
