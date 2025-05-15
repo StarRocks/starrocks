@@ -192,8 +192,11 @@ public class TabletInvertedIndex implements MemoryTrackable {
             return;
         }
         writeLock();
-        forceDeleteTablets.put(tabletId, backendIds);
-        writeUnlock();
+        try {
+            forceDeleteTablets.put(tabletId, backendIds);
+        } finally {
+            writeUnlock();
+        }
     }
 
     public void markTabletForceDelete(Tablet tablet) {
@@ -242,7 +245,8 @@ public class TabletInvertedIndex implements MemoryTrackable {
         }
     }
 
-    public  Map<Long, Map<Long, Replica>> getReplicaMetaTable() {
+    // Only for test
+    public Map<Long, Map<Long, Replica>> getReplicaMetaTable() {
         return replicaMetaTable;
     }
 
@@ -417,6 +421,7 @@ public class TabletInvertedIndex implements MemoryTrackable {
         }
     }
 
+    // The caller should hold readLock.
     public Map<Long, Replica> getReplicaMetaWithBackend(Long backendId) {
         return row(backingReplicaMetaTable, backendId);
     }
