@@ -30,6 +30,7 @@
 #include "gflags/gflags.h"
 #include "util/await.h"
 #include "util/debug_util.h"
+#include "util/defer_op.h"
 #include "util/lru_cache.h"
 #include "util/sha.h"
 #include "util/starrocks_metrics.h"
@@ -411,17 +412,24 @@ absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<fslib::Fi
         return absl::NotFoundError(key + " not found");
     }
 
+    DeferOp op([this, handle] { _fs_cache->release(handle); });
+
     auto value = static_cast<CacheValue*>(_fs_cache->value(handle));
+
+    auto fs_cache_ttl_sec = config::starlet_filesystem_instance_cache_ttl_sec;
+    if (fs_cache_ttl_sec >= 0) {
+        int32_t duration = MonotonicSeconds() - value->created_time_sec;
+        if (duration > fs_cache_ttl_sec) {
+            return absl::NotFoundError(key + " is expired");
+        }
+    }
+
     // The value->key may be expired in a very short critical moment.
     // At that moment, the value->key is not referenced by anyone but it's shared_ptr deleter haven't be executed,
     // so the item haven't be removed from cache yet.
     // In this situation, this function will return a null key and a valid fs instance.
     // So the caller cannot assume the returned key always valid.
-    auto ret = std::make_pair(value->key.lock(), value->fs);
-
-    _fs_cache->release(handle);
-
-    return ret;
+    return std::make_pair(value->key.lock(), value->fs);
 }
 
 Status to_status(const absl::Status& absl_status) {
