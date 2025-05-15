@@ -46,8 +46,8 @@ public class SPMStmtExecutor {
     }
 
     public static ShowResultSet execute(ConnectContext context, ShowBaselinePlanStmt stmt) {
-        List<BaselinePlan> baselines1 = context.getSqlPlanStorage().getAllBaselines();
-        List<BaselinePlan> baselines2 = context.getGlobalStateMgr().getSqlPlanStorage().getAllBaselines();
+        List<BaselinePlan> baselines1 = context.getSqlPlanStorage().getBaselines(stmt.getWhere());
+        List<BaselinePlan> baselines2 = context.getGlobalStateMgr().getSqlPlanStorage().getBaselines(stmt.getWhere());
         List<List<String>> rows = Lists.newArrayList();
 
         Stream.concat(baselines1.stream(), baselines2.stream()).forEach(baseline -> {

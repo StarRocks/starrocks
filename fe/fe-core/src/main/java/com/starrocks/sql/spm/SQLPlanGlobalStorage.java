@@ -23,6 +23,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
+import com.starrocks.analysis.Expr;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.SimpleExecutor;
@@ -88,19 +89,23 @@ class SQLPlanGlobalStorage implements SQLPlanStorage {
         if (hasInit) {
             return;
         }
-        List<BaselinePlan> bps = getAllBaselines();
+        List<BaselinePlan> bps = getBaselines(null);
         bps.forEach(bp -> cache.put(bp.getId(), bp));
         allBaselineIds.addAll(bps.stream().map(bp -> new BaselineId(bp.getId(), bp.getBindSqlHash())).toList());
         hasInit = true;
     }
 
     // only show stmt used, query be directly
-    public List<BaselinePlan> getAllBaselines() {
+    public List<BaselinePlan> getBaselines(Expr where) {
         if (!StatisticUtils.checkStatisticTables(List.of(StatsConstants.SPM_BASELINE_TABLE_NAME))) {
             return Collections.emptyList();
         }
         try {
-            List<TResultBatch> datas = executor.executeDQL(QUERY_SQL);
+            String sql = QUERY_SQL;
+            if (where != null) {
+                sql += " WHERE " + where.toMySql();
+            }
+            List<TResultBatch> datas = executor.executeDQL(sql);
             List<BaselinePlan> bps = castToBaselinePlan(datas);
             if (!hasInit) {
                 bps.forEach(bp -> cache.put(bp.getId(), bp));
