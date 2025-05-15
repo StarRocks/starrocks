@@ -247,7 +247,6 @@ void StorageEngine::start_schedule_apply_thread() {
     Thread::set_thread_name(_schedule_apply_thread, "schedule_apply");
 }
 
-
 void* StorageEngine::_fd_cache_clean_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
