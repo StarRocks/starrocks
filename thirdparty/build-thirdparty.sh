@@ -1388,19 +1388,6 @@ build_icu() {
     restore_compile_flags
 }
 
-<<<<<<< HEAD
-=======
-build_xsimd() {
-    check_if_source_exist $XSIMD_SOURCE
-    cd $TP_SOURCE_DIR/$XSIMD_SOURCE
-
-    # xsimd only has header files
-    ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
-        -DCMAKE_INSTALL_LIBDIR=lib \
-        -DCMAKE_INSTALL_PREFIX="$TP_INSTALL_DIR"
-    ${BUILD_SYSTEM} install
-}
-
 build_libxml2() {
     check_if_source_exist $LIBXML2_SOURCE
     cd $TP_SOURCE_DIR/$LIBXML2_SOURCE
@@ -1441,7 +1428,6 @@ build_azure() {
     unset PKG_CONFIG_LIBDIR
 }
 
->>>>>>> f2752d861e ([Enhancement] Add azure cpp sdk (#59016))
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
@@ -1538,12 +1524,8 @@ build_clucene
 build_simdutf
 build_poco
 build_icu
-<<<<<<< HEAD
-=======
-build_xsimd
 build_libxml2
 build_azure
->>>>>>> f2752d861e ([Enhancement] Add azure cpp sdk (#59016))
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad
