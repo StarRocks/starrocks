@@ -18,6 +18,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/page_cache.h"
+#include "util/await.h"
 #include "util/gc_helper.h"
 #include "util/thread.h"
 
@@ -35,7 +36,7 @@ namespace starrocks {
 
 void MemSpaceMonitor::start() {
     _adjust_datacache_thread = std::thread([this] { _adjust_datacache_callback(); });
-    Thread::set_thread_name(_adjust_datacache_thread, "adjust_datacache");
+    Thread::set_thread_name(_adjust_datacache_thread, "adjust_cache_mem");
 }
 
 void MemSpaceMonitor::stop() {
@@ -69,7 +70,14 @@ void MemSpaceMonitor::_adjust_datacache_callback() {
     std::unique_ptr<GCHelper> inc_advisor = std::make_unique<GCHelper>(cur_period, cur_interval, MonoTime::Now());
     auto* cache = _datacache->page_cache();
     while (!_stopped.load(std::memory_order_consume)) {
-        SLEEP_IN_BG_WORKER(cur_interval);
+        int64_t kWaitTimeout = cur_interval * 1000 * 1000;
+        static const int64_t kCheckInterval = 1000 * 1000;
+        auto cond = [this]() { return _stopped.load(std::memory_order_acquire); };
+        auto wait_ret = Awaitility().timeout(kWaitTimeout).interval(kCheckInterval).until(cond);
+        if (wait_ret) {
+            break;
+        }
+
         if (!config::enable_auto_adjust_pagecache) {
             continue;
         }
