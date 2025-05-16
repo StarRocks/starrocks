@@ -415,6 +415,10 @@ public interface AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    default R visitAdminShowBackendConfigStatement(AdminShowBackendConfigStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     default R visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement, C context) {
         return visitShowStatement(statement, context);
     }

@@ -144,6 +144,7 @@ import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowBackendConfigStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
@@ -2580,6 +2581,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new AdminShowConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, stringLiteral.getValue(), pos);
         }
         return new AdminShowConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, null, pos);
+    }
+
+    @Override
+    public ParseNode visitAdminShowBackendConfigStatement(StarRocksParser.AdminShowBackendConfigStatementContext context) {
+        NodePosition pos = createPos(context);
+        if (context.pattern != null) {
+            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
+            return new AdminShowBackendConfigStmt(AdminSetConfigStmt.ConfigType.BACKEND, stringLiteral.getValue(), pos);
+        }
+        return new AdminShowBackendConfigStmt(AdminSetConfigStmt.ConfigType.BACKEND, null, pos);
     }
 
     @Override

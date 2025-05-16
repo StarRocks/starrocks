@@ -15,13 +15,31 @@
 #include "command_executor.h"
 
 #include <rapidjson/document.h>
+#include <rapidjson/writer.h>
+#include <rapidjson/stringbuffer.h>
 
-#include "common/configbase.h"
+#include "common/config.h"
 #include "gutil/strings/substitute.h"
 #include "http/action/update_config_action.h"
 #include "script/script.h"
 
 namespace starrocks {
+
+void get_be_config_map(std::vector<std::pair<std::string, std::string>>* configs, const std::string& pattern = "") {
+    std::vector<config::ConfigInfo> config_infos = config::list_configs();
+    
+    for (const auto& info : config_infos) {
+        const std::string& name = info.name;
+
+        if (!pattern.empty()) {
+            if (name.find(pattern) == std::string::npos) {
+                continue;
+            }
+        }
+
+        configs->emplace_back(name, info.value);
+    }
+}
 
 Status handle_set_config(const string& params_str) {
     rapidjson::Document params;
@@ -42,10 +60,71 @@ Status handle_set_config(const string& params_str) {
     return update_config->update_config(name_itr->value.GetString(), value_itr->value.GetString());
 }
 
+Status handle_show_config(const string& params_str, std::string* result) {
+    rapidjson::Document params;
+    params.Parse(params_str.c_str());
+    std::string pattern;
+    auto pattern_itr = params.FindMember("pattern");
+    if (pattern_itr != params.MemberEnd() && pattern_itr->value.IsString()) {
+        pattern = pattern_itr->value.GetString();
+    }
+
+    rapidjson::Document doc;
+    doc.SetObject();
+    rapidjson::Document::AllocatorType& allocator = doc.GetAllocator();
+    
+    rapidjson::Value configs_array(rapidjson::kArrayType);
+
+    std::vector<std::pair<std::string, std::string>> configs;
+    get_be_config_map(&configs, pattern);
+
+    std::vector<config::ConfigInfo> config_infos = config::list_configs();
+    std::map<std::string, config::ConfigInfo> config_info_map;
+    for (const auto& info : config_infos) {
+        config_info_map[info.name] = info;
+    }
+    
+    for (const auto& config_item : configs) {
+        rapidjson::Value config_obj(rapidjson::kObjectType);
+        
+        const std::string& name = config_item.first;
+        const std::string& value = config_item.second;
+
+        config_obj.AddMember("key", rapidjson::Value(name.c_str(), allocator), allocator);
+
+        std::string type_name = "string";
+        bool is_mutable = true;
+
+        auto it = config_info_map.find(name);
+        if (it != config_info_map.end()) {
+            const auto& info = it->second;
+            type_name = info.type;
+            is_mutable = info.valmutable;
+        }
+        
+        config_obj.AddMember("value", rapidjson::Value(value.c_str(), allocator), allocator);
+        config_obj.AddMember("type", rapidjson::Value(type_name.c_str(), allocator), allocator);
+        config_obj.AddMember("is_mutable", is_mutable, allocator);
+        
+        configs_array.PushBack(config_obj, allocator);
+    }
+    
+    doc.AddMember("configs", configs_array, allocator);
+
+    rapidjson::StringBuffer buffer;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+    doc.Accept(writer);
+    
+    *result = buffer.GetString();
+    return Status::OK();
+}
+
 Status execute_command(const std::string& command, const std::string& params, std::string* result) {
     LOG(INFO) << "execute command: " << command << " params: " << params.substr(0, 2000);
     if (command == "set_config") {
         return handle_set_config(params);
+    } else if (command == "show_config") {
+        return handle_show_config(params, result);
     } else if (command == "execute_script") {
         return execute_script(params, *result);
     }
