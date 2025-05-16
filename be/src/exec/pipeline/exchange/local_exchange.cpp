@@ -298,14 +298,26 @@ Status KeyPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_d
     }
 
     std::unordered_map<std::vector<std::string>, std::vector<uint32_t>> key2indices;
+    std::unordered_map<std::vector<std::string>, std::vector<std::pair<TypeDescriptor, ColumnPtr>>> key2datum;
     for (int i = 0; i < num_rows; i++) {
         std::vector<std::string> partition_key;
+
         for (int j = 0; j < partition_columns.size(); j++) {
             auto type = _partition_expr_ctxs[j]->root()->type();
             ASSIGN_OR_RETURN(auto partition_value, connector::HiveUtils::column_value(type, partition_columns[j], i));
             partition_key.push_back(std::move(partition_value));
         }
         key2indices[partition_key].push_back(i);
+        //record the origin datum of partition key
+        if (key2datum.find(partition_key) == key2datum.end()) {
+            std::vector<std::pair<TypeDescriptor, ColumnPtr>> partition_datum;
+            for (int j = 0; j < partition_columns.size(); j++) {
+                auto column = partition_columns[j]->clone_empty();
+                column->append_datum(partition_columns[j]->get(i));
+                partition_datum.emplace_back(_partition_expr_ctxs[j]->root()->type(), column);
+            }
+            key2datum[partition_key] = std::move(partition_datum);
+        }
     }
 
     std::vector<uint32_t> hash_values(chunk->num_rows(), HashUtil::FNV_SEED);
@@ -317,7 +329,8 @@ Status KeyPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_d
         uint32_t shuffle_channel_id = hash_values[indices[0]] % source_op_cnt;
         auto partial_chunk = chunk->clone_empty_with_slot();
         partial_chunk->append_selective(*chunk, indices.data(), 0, indices.size());
-        RETURN_IF_ERROR(_source->get_sources()[shuffle_channel_id]->add_chunk(key, std::move(partial_chunk)));
+        RETURN_IF_ERROR(
+                _source->get_sources()[shuffle_channel_id]->add_chunk(key, key2datum[key], std::move(partial_chunk)));
     }
 
     return Status::OK();
