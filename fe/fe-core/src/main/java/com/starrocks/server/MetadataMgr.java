@@ -229,11 +229,11 @@ public class MetadataMgr {
         return ImmutableList.copyOf(dbNames.build());
     }
 
-    public void createDb(String catalogName, String dbName, Map<String, String> properties)
+    public void createDb(ConnectContext context, String catalogName, String dbName, Map<String, String> properties)
             throws DdlException, AlreadyExistsException {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         if (connectorMetadata.isPresent()) {
-            connectorMetadata.get().createDb(dbName, properties);
+            connectorMetadata.get().createDb(context, dbName, properties);
         }
     }
 
@@ -297,7 +297,7 @@ public class MetadataMgr {
                     }
                 }
             }
-            return connectorMetadata.get().createTable(stmt);
+            return connectorMetadata.get().createTable(context, stmt);
         } else {
             throw new DdlException("Invalid catalog " + catalogName + " , ConnectorMetadata doesn't exist");
         }
@@ -324,7 +324,7 @@ public class MetadataMgr {
         }
     }
 
-    public boolean createTemporaryTable(CreateTemporaryTableStmt stmt) throws DdlException {
+    public boolean createTemporaryTable(ConnectContext context, CreateTemporaryTableStmt stmt) throws DdlException {
         Preconditions.checkArgument(stmt.getSessionId() != null,
                 "session id should not be null in CreateTemporaryTableStmt");
         String catalogName = stmt.getCatalogName();
@@ -354,16 +354,16 @@ public class MetadataMgr {
                     ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
                 }
             }
-            return connectorMetadata.get().createTable(stmt);
+            return connectorMetadata.get().createTable(context, stmt);
         }
     }
 
-    public void createView(CreateViewStmt stmt) throws DdlException {
+    public void createView(ConnectContext context, CreateViewStmt stmt) throws DdlException {
         String catalogName = stmt.getCatalog();
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
 
         if (connectorMetadata.isPresent()) {
-            connectorMetadata.get().createView(stmt);
+            connectorMetadata.get().createView(context, stmt);
         }
     }
 
@@ -388,22 +388,22 @@ public class MetadataMgr {
         }
     }
 
-    public void alterView(AlterViewStmt stmt) throws StarRocksException {
+    public void alterView(ConnectContext context, AlterViewStmt stmt) throws StarRocksException {
         String catalogName = stmt.getCatalog();
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
 
         if (connectorMetadata.isPresent()) {
-            connectorMetadata.get().alterView(stmt);
+            connectorMetadata.get().alterView(context, stmt);
         }
     }
 
     public void dropTable(String catalogName, String dbName, String tblName) {
         TableName tableName = new TableName(catalogName, dbName, tblName);
         DropTableStmt dropTableStmt = new DropTableStmt(false, tableName, false);
-        dropTable(dropTableStmt);
+        dropTable(ConnectContext.get(), dropTableStmt);
     }
 
-    public void dropTable(DropTableStmt stmt) {
+    public void dropTable(ConnectContext context, DropTableStmt stmt) {
         String catalogName = stmt.getCatalogName();
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
@@ -411,7 +411,7 @@ public class MetadataMgr {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         connectorMetadata.ifPresent(metadata -> {
             try {
-                metadata.dropTable(stmt);
+                metadata.dropTable(context, stmt);
             } catch (DdlException e) {
                 LOG.error("Failed to drop table {}.{}.{}", catalogName, dbName, tableName, e);
                 throw new StarRocksConnectorException("Failed to drop table %s.%s.%s. msg: %s",
