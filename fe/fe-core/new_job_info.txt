@@ -1,0 +1,44 @@
+{
+    "backup_time": 1522231864000,
+    "name": "snapshot1",
+    "database": "db1",
+    "id": 10000,
+    "backup_result": "succeed",
+    "backup_objects": {
+        "table1": {
+            "partitions": {
+                "partition1": {
+                    "indexes": {
+                        "table1": {
+                            "id": 10001,
+                            "schema_hash": 444444,
+                            "tablets": {
+                                "10004": ["__10023_seg1.dat", "__10023_seg2.dat"],
+                                "10005": ["__10024_seg1.dat", "__10024_seg2.dat"]
+                            }
+                        }
+                    },
+                    "id": 10002,
+                    "version": 21,
+                    "subPartitions": {
+                        "10002": {
+                            "indexes": {
+                                "rollup1": {
+                                    "id": 10009,
+                                    "schema_hash": 333333,
+                                    "tablets": {
+                                        "10008": ["__10029_seg1.dat", "__10029_seg2.dat"],
+                                        "10007": ["__10029_seg1.dat", "__10029_seg2.dat"]
+                                    }
+                                },
+                            },
+                            "id": 10007,
+                            "version": 20
+                        }
+                    }
+                }
+            },
+            "id": 10001
+        }
+    }
+}

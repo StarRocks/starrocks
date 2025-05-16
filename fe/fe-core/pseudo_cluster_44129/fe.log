@@ -1,0 +1,319 @@
+2025-05-17 00:25:31.838+08:00 INFO (fe|75) [FrontendOptions.init():86] use configured address. /127.0.0.1
+2025-05-17 00:25:31.949+08:00 INFO (fe|75) [NodeMgr.getHelperNodes():647] get helper nodes: [127.0.0.1:9010]
+2025-05-17 00:25:31.974+08:00 INFO (fe|75) [NodeMgr.getClusterIdAndRoleOnStartup():314] very first time to start this node. role: FOLLOWER, node name: 127.0.0.1_9010_1747412731965
+2025-05-17 00:25:31.979+08:00 INFO (fe|75) [NodeMgr.getClusterIdAndRoleOnStartup():499] Current run_mode is shared_nothing
+2025-05-17 00:25:31.979+08:00 INFO (fe|75) [NodeMgr.getClusterIdAndRoleOnStartup():504] Got role: FOLLOWER, node name: 127.0.0.1_9010_1747412731965 and run_mode: shared_nothing
+2025-05-17 00:25:32.019+08:00 INFO (fe|75) [GlobalStateMgr.loadImage():1525] image does not exist: /root/starrocks/fe/fe-core/pseudo_cluster_44129/starrocks-meta/image/v2/image.0
+2025-05-17 00:25:32.037+08:00 WARN (fe|75) [StateChangeExecutor.notifyNewFETypeTransfer():62] notify new FE type transfer: LEADER
+2025-05-17 00:25:32.054+08:00 INFO (stateChangeExecutor|82) [StateChangeExecutor.runOneCycle():85] begin to transfer FE type from INIT to LEADER
+2025-05-17 00:25:32.056+08:00 INFO (stateChangeExecutor|82) [GlobalStateMgr.replayJournal():1927] skip replay journal because 0 <= 0
+2025-05-17 00:25:32.232+08:00 INFO (stateChangeExecutor|82) [CoordinatorBackendAssignerImpl.start():107] Start coordinator be assigner
+2025-05-17 00:25:32.232+08:00 INFO (coordinator-be-assigner-0|95) [CoordinatorBackendAssignerImpl.runSchedule():123] Disable periodical schedule because there is no load
+2025-05-17 00:25:32.232+08:00 INFO (stateChangeExecutor|82) [BatchWriteMgr.start():80] Start batch write manager
+2025-05-17 00:25:32.260+08:00 INFO (stateChangeExecutor|82) [GlobalStateMgr.startAllNodeTypeDaemonThreads():1449] global state mgr checkpoint worker thread started. thread id is 99
+2025-05-17 00:25:32.298+08:00 INFO (stateChangeExecutor|82) [GlobalStateMgr.transferToLeader():1302] leader finished to replay journal, can write now.
+2025-05-17 00:25:32.337+08:00 WARN (TableKeeper|81) [TableKeeper.run():63] database not exists: _statistics_
+2025-05-17 00:25:32.339+08:00 WARN (TableKeeper|81) [TableKeeper.run():63] database not exists: _statistics_
+2025-05-17 00:25:32.339+08:00 INFO (DynamicPartitionScheduler|60) [DynamicPartitionScheduler.findSchedulableTables():714] finished to find all schedulable tables, cost: 0ms, dynamic partition tables: {}, ttl partition tables: {}, scheduler enabled: true, scheduler interval: 600s
+2025-05-17 00:25:32.340+08:00 INFO (tablet checker|50) [TabletChecker.doCheck():384] finished to check tablets. isUrgent: true, unhealthy/total/added/in_sched/not_ready: 0/0/0/0/0, cost: 3 ms, in lock time: 0 ms, wait time: 0ms
+2025-05-17 00:25:32.341+08:00 WARN (Routine load task scheduler|58) [RoutineLoadTaskScheduler.process():117] no available be slot to scheduler tasks, wait for 10 seconds to scheduler again, you can set max_routine_load_task_num_per_be bigger in fe.conf, current value is 16
+2025-05-17 00:25:32.341+08:00 INFO (tablet checker|50) [TabletChecker.doCheck():384] finished to check tablets. isUrgent: false, unhealthy/total/added/in_sched/not_ready: 0/0/0/0/0, cost: 0 ms, in lock time: 0 ms, wait time: 0ms
+2025-05-17 00:25:32.341+08:00 INFO (global_state_checkpoint_controller|84) [CheckpointController.getCheckpointJournalIds():153] checkpoint imageJournalId 0, logJournalId 0
+2025-05-17 00:25:32.341+08:00 INFO (colocate group clone checker|93) [ColocateTableBalancer.matchGroups():939] finished to match colocate group. cost: 3 ms, in lock time: 0 ms
+2025-05-17 00:25:32.371+08:00 INFO (consistency checker|35) [ConsistencyChecker.checkTabletMetaConsistency():290] TabletMetaChecker has cleaned 0 invalid tablet(s), scanned 0 tablet(s) on 0 backend(s) in 4ms, total tablets in recycle bin: 0, total ignored tablets: 0, up to 20 of ignored tablets: [], backend tablet count info(format: backend_id=curr_tablet_count:recycle_tablet_count): {}
+2025-05-17 00:25:32.374+08:00 INFO (TaskCleaner|80) [TaskManager.dropTasks():392] drop tasks:[]
+2025-05-17 00:25:32.374+08:00 WARN (PipeScheduler|65) [PipeScheduler.process():67] Successfully recover all pipes
+2025-05-17 00:25:32.376+08:00 INFO (LoadLabelCleaner|78) [TaskManager.dropTasks():392] drop tasks:[]
+2025-05-17 00:25:32.377+08:00 INFO (stateChangeExecutor|82) [StateChangeExecutor.runOneCycle():179] finished to transfer FE type from INIT to LEADER
+2025-05-17 00:25:32.383+08:00 INFO (consistency checker|35) [ConsistencyChecker.chooseTablets():562] choose tablets from db[information_schema-1](with read lock held) took 0ms
+2025-05-17 00:25:32.383+08:00 INFO (consistency checker|35) [ConsistencyChecker.chooseTablets():562] choose tablets from db[sys-100](with read lock held) took 0ms
+2025-05-17 00:25:32.373+08:00 INFO (tablet checker|50) [TabletChecker.runAfterCatalogReady():221] TStat :
+TStat num of tablet check round: 1 (+1)
+TStat cost of tablet check(ms): 3 (+3)
+TStat num of tablet checked in tablet checker: 0 (+0)
+TStat num of unhealthy tablet checked in tablet checker: 0 (+0)
+TStat num of tablet being added to tablet scheduler: 0 (+0)
+TStat num of tablet schedule round: 0 (+0)
+TStat cost of tablet schedule(ms): 0 (+0)
+TStat num of tablet being scheduled: 0 (+0)
+TStat num of tablet being scheduled succeeded: 0 (+0)
+TStat num of tablet being scheduled failed: 0 (+0)
+TStat num of tablet being scheduled discard: 0 (+0)
+TStat num of tablet priority upgraded: 0 (+0)
+TStat num of clone task: 0 (+0)
+TStat num of clone task succeeded: 0 (+0)
+TStat num of clone task failed: 0 (+0)
+TStat num of clone task timeout: 0 (+0)
+TStat num of replica missing error: 0 (+0)
+TStat num of replica version missing error: 0 (+0)
+TStat num of replica unavailable error: 0 (+0)
+TStat num of replica location mismatch error: 0 (+0)
+TStat num of replica redundant error: 0 (+0)
+TStat num of replica missing in cluster error: 0 (+0)
+TStat num of balance scheduled: 0 (+0)
+TStat num of colocate replica mismatch: 0 (+0)
+TStat num of colocate replica redundant: 0 (+0)
+TStat num of colocate balancer running round: 0 (+0)
+
+2025-05-17 00:25:32.393+08:00 INFO (tablet stat mgr|44) [TabletStatMgr.updateLocalTabletStat():195] finished to get local tablet stat of all backends. cost: 0 ms
+2025-05-17 00:25:32.393+08:00 INFO (tablet stat mgr|44) [TabletStatMgr.runAfterCatalogReady():169] finished to update index row num of all databases. cost: 0 ms
+2025-05-17 00:25:32.403+08:00 WARN (ProcProfileCollector|70) [ProcProfileCollector.lambda$collectProfile$3():123] collect profile failed, reason: Cannot run program "/root/starrocks/bin/async-profiler/bin/asprof": error=2, No such file or directory
+2025-05-17 00:25:32.403+08:00 INFO (MemoryUsageTracker|69) [MemoryUsageTracker.initMemoryTracker():93] Memory usage tracker init success
+2025-05-17 00:25:32.407+08:00 WARN (Thread-45|71) [TemporaryTableCleaner.runAfterCatalogReady():88] listSessions return error from 127.0.0.1:9020, skip clean temporary tables
+org.apache.thrift.TException: java.net.ConnectException: Connection refused (Connection refused)
+	at com.starrocks.rpc.ThriftRPCRequestExecutor.call(ThriftRPCRequestExecutor.java:60) ~[classes/:?]
+	at com.starrocks.rpc.ThriftRPCRequestExecutor.call(ThriftRPCRequestExecutor.java:33) ~[classes/:?]
+	at com.starrocks.server.TemporaryTableCleaner.runAfterCatalogReady(TemporaryTableCleaner.java:70) ~[classes/:?]
+	at com.starrocks.common.util.FrontendDaemon.runOneCycle(FrontendDaemon.java:72) ~[classes/:?]
+	at com.starrocks.common.util.Daemon.run(Daemon.java:98) ~[classes/:?]
+2025-05-17 00:25:32.424+08:00 INFO (MemoryUsageTracker|69) [MemoryUsageTracker.trackMemory():161] (6ms) Module Agent - AgentTaskTracker estimated 0B of memory. Contains AgentTask with 0 object(s). 
+2025-05-17 00:25:32.426+08:00 INFO (MemoryUsageTracker|69) [MemoryUsageTracker.trackMemory():161] (0ms) Module Backup - BackupHandler estimated 0B of memory. Contains BackupOrRestoreJob with 0 object(s). 
+2025-05-17 00:25:32.427+08:00 INFO (MemoryUsageTracker|69) [MemoryUsageTracker.trackMemory():161] (0ms) Module Compaction - CompactionMgr estimated 0B of memory. Contains PartitionStats with 0 object(s). 
+2025-05-17 00:25:32.427+08:00 INFO (MemoryUsageTracker|69) [MemoryUsageTracker.trackMemory():161] (0ms) Module Coordinator - QeProcessorImpl estimated 0B of memory. Contains QueryCoordinator with 0 object(s). 
+2025-05-17 00:25:32.430+08:00 INFO (MemoryUsageTracker|69) [MemoryUsageTracker.trackMemory():161] (2ms) Module Delete - DeleteMgr estimated 0B of memory. Contains DeleteInfo with 0 object(s). DeleteJob with 0 object(s). 
+2025-05-17 00:25:32.435+08:00 INFO (MemoryUsageTracker|69) [MemoryUsageTracker.trackMemory():161] (5ms) Module Dict - CacheDictManager estimated 0B of memory. Contains ColumnDict with 0 object(s). 
+2025-05-17 00:25:32.436+08:00 INFO (MemoryUsageTracker|69) [MemoryUsageTracker.trackMemory():161] (0ms) Module Export - ExportMgr estimated 0B of memory. Contains ExportJob with 0 object(s). 
+2025-05-17 00:25:32.436+08:00 INFO (MemoryUsageTracker|69) [MemoryUsageTracker.trackMemory():161] (0ms) Module Load - InsertOverwriteJobMgr estimated 0B of memory. Contains insertOverwriteJobs with 0 object(s). 
+2025-05-17 00:25:32.436+08:00 INFO (MemoryUsageTracker|69) [MemoryUsageTracker.trackMemory():161] (0ms) Module Load - LoadMgr estimated 0B of memory. Contains LoadJob with 0 object(s). 
+2025-05-17 00:25:32.437+08:00 INFO (MemoryUsageTracker|69) [MemoryUsageTracker.trackMemory():161] (0ms) Module Load - RoutineLoadMgr estimated 0B of memory. Contains RoutineLoad with 0 object(s). 
+2025-05-17 00:25:32.437+08:00 INFO (MemoryUsageTracker|69) [MemoryUsageTracker.trackMemory():161] (0ms) Module Load - StreamLoadMgr estimated 0B of memory. Contains StreamLoad with 0 object(s). 
+2025-05-17 00:25:32.439+08:00 INFO (MemoryUsageTracker|69) [MemoryUsageTracker.trackMemory():161] (1ms) Module LocalMetastore - LocalMetastore estimated 0B of memory. Contains Partition with 0 object(s). 
+2025-05-17 00:25:32.439+08:00 INFO (MemoryUsageTracker|69) [MemoryUsageTracker.trackMemory():161] (0ms) Module Profile - ProfileManager estimated 0B of memory. Contains QueryProfile with 0 object(s). LoadProfile with 0 object(s). 
+2025-05-17 00:25:32.549+08:00 INFO (main|1) [PseudoCluster.build():440] start create and start backends
+2025-05-17 00:25:32.613+08:00 INFO (main|1) [PseudoCluster.build():454] add PseudoBackend 10001 127.0.0.10
+2025-05-17 00:25:33.380+08:00 INFO (tablet scheduler|49) [TabletScheduler.updateWorkingSlots():266] add new backend 10001 with slots num: 1
+2025-05-17 00:25:33.384+08:00 INFO (tablet checker|50) [TabletChecker.doCheck():384] finished to check tablets. isUrgent: true, unhealthy/total/added/in_sched/not_ready: 0/0/0/0/0, cost: 0 ms, in lock time: 0 ms, wait time: 0ms
+2025-05-17 00:25:33.384+08:00 INFO (tablet checker|50) [TabletChecker.doCheck():384] finished to check tablets. isUrgent: false, unhealthy/total/added/in_sched/not_ready: 0/0/0/0/0, cost: 0 ms, in lock time: 0 ms, wait time: 0ms
+2025-05-17 00:25:33.384+08:00 INFO (tablet checker|50) [TabletChecker.runAfterCatalogReady():221] TStat :
+TStat num of tablet check round: 2 (+1)
+TStat cost of tablet check(ms): 3 (+0)
+TStat num of tablet checked in tablet checker: 0 (+0)
+TStat num of unhealthy tablet checked in tablet checker: 0 (+0)
+TStat num of tablet being added to tablet scheduler: 0 (+0)
+TStat num of tablet schedule round: 2 (+2)
+TStat cost of tablet schedule(ms): 2 (+2)
+TStat num of tablet being scheduled: 0 (+0)
+TStat num of tablet being scheduled succeeded: 0 (+0)
+TStat num of tablet being scheduled failed: 0 (+0)
+TStat num of tablet being scheduled discard: 0 (+0)
+TStat num of tablet priority upgraded: 0 (+0)
+TStat num of clone task: 0 (+0)
+TStat num of clone task succeeded: 0 (+0)
+TStat num of clone task failed: 0 (+0)
+TStat num of clone task timeout: 0 (+0)
+TStat num of replica missing error: 0 (+0)
+TStat num of replica version missing error: 0 (+0)
+TStat num of replica unavailable error: 0 (+0)
+TStat num of replica location mismatch error: 0 (+0)
+TStat num of replica redundant error: 0 (+0)
+TStat num of replica missing in cluster error: 0 (+0)
+TStat num of balance scheduled: 0 (+0)
+TStat num of colocate replica mismatch: 0 (+0)
+TStat num of colocate replica redundant: 0 (+0)
+TStat num of colocate balancer running round: 0 (+0)
+
+2025-05-17 00:25:33.982+08:00 INFO (MemoryUsageTracker|69) [MemoryUsageTracker.trackMemory():161] (1543ms) Module Query - QueryTracker estimated 0B of memory. Contains QueryDetail with 0 object(s). 
+2025-05-17 00:25:33.983+08:00 INFO (MemoryUsageTracker|69) [MemoryUsageTracker.trackMemory():161] (1ms) Module Report - ReportHandler estimated 0B of memory. Contains PendingTask with 0 object(s). ReportQueue with 0 object(s). 
+2025-05-17 00:25:33.983+08:00 INFO (MemoryUsageTracker|69) [MemoryUsageTracker.trackMemory():161] (0ms) Module TabletInvertedIndex - TabletInvertedIndex estimated 0B of memory. Contains TabletMeta with 0 object(s). TabletCount with 0 object(s). ReplicateCount with 0 object(s). 
+2025-05-17 00:25:33.983+08:00 INFO (MemoryUsageTracker|69) [MemoryUsageTracker.trackMemory():161] (0ms) Module Task - TaskManager estimated 0B of memory. Contains Task with 0 object(s). 
+2025-05-17 00:25:33.984+08:00 INFO (MemoryUsageTracker|69) [MemoryUsageTracker.trackMemory():161] (0ms) Module Task - TaskRunManager estimated 0B of memory. Contains PendingTaskRun with 0 object(s). RunningTaskRun with 0 object(s). HistoryTaskRun with 0 object(s). 
+2025-05-17 00:25:33.984+08:00 INFO (MemoryUsageTracker|69) [MemoryUsageTracker.trackMemory():161] (0ms) Module Transaction - GlobalTransactionMgr estimated 0B of memory. Contains Txn with 0 object(s). TxnCallbackCount with 0 object(s). 
+2025-05-17 00:25:33.990+08:00 INFO (MemoryUsageTracker|69) [MemoryUsageTracker.trackMemory():108] total tracked memory: 0B, jvm: Process used: 986MB, heap used: 185MB, non heap used: 74.6MB, direct buffer used: 8KB
+2025-05-17 00:25:34.052+08:00 INFO (fe|75) [GlobalStateMgr.waitForReady():1214] wait globalStateMgr to be ready. FE type: LEADER. is ready: true
+2025-05-17 00:25:34.052+08:00 INFO (fe|75) [GlobalStateMgr.waitForReady():1208] globalStateMgr is ready. FE type: LEADER
+2025-05-17 00:25:34.077+08:00 INFO (fe|75) [Xnio.<clinit>():95] XNIO version 3.8.16.Final
+2025-05-17 00:25:34.095+08:00 INFO (fe|75) [NioXnio.<clinit>():58] XNIO NIO Implementation Version 3.8.16.Final
+2025-05-17 00:25:34.134+08:00 INFO (fe|75) [NMysqlServer.start():96] Open mysql server success on 44129
+2025-05-17 00:25:34.135+08:00 INFO (fe|75) [QeService.start():78] QE service start.
+2025-05-17 00:25:34.385+08:00 INFO (tablet checker|50) [TabletChecker.doCheck():384] finished to check tablets. isUrgent: true, unhealthy/total/added/in_sched/not_ready: 0/0/0/0/0, cost: 0 ms, in lock time: 0 ms, wait time: 0ms
+2025-05-17 00:25:34.385+08:00 INFO (tablet checker|50) [TabletChecker.doCheck():384] finished to check tablets. isUrgent: false, unhealthy/total/added/in_sched/not_ready: 0/0/0/0/0, cost: 0 ms, in lock time: 0 ms, wait time: 0ms
+2025-05-17 00:25:34.386+08:00 INFO (tablet checker|50) [TabletChecker.runAfterCatalogReady():221] TStat :
+TStat num of tablet check round: 3 (+1)
+TStat cost of tablet check(ms): 3 (+0)
+TStat num of tablet checked in tablet checker: 0 (+0)
+TStat num of unhealthy tablet checked in tablet checker: 0 (+0)
+TStat num of tablet being added to tablet scheduler: 0 (+0)
+TStat num of tablet schedule round: 3 (+1)
+TStat cost of tablet schedule(ms): 2 (+0)
+TStat num of tablet being scheduled: 0 (+0)
+TStat num of tablet being scheduled succeeded: 0 (+0)
+TStat num of tablet being scheduled failed: 0 (+0)
+TStat num of tablet being scheduled discard: 0 (+0)
+TStat num of tablet priority upgraded: 0 (+0)
+TStat num of clone task: 0 (+0)
+TStat num of clone task succeeded: 0 (+0)
+TStat num of clone task failed: 0 (+0)
+TStat num of clone task timeout: 0 (+0)
+TStat num of replica missing error: 0 (+0)
+TStat num of replica version missing error: 0 (+0)
+TStat num of replica unavailable error: 0 (+0)
+TStat num of replica location mismatch error: 0 (+0)
+TStat num of replica redundant error: 0 (+0)
+TStat num of replica missing in cluster error: 0 (+0)
+TStat num of balance scheduled: 0 (+0)
+TStat num of colocate replica mismatch: 0 (+0)
+TStat num of colocate replica redundant: 0 (+0)
+TStat num of colocate balancer running round: 0 (+0)
+
+2025-05-17 00:25:34.861+08:00 INFO (main|1) [LocalMetastore.createDb():390] createDb dbName = d1, id = 10001
+2025-05-17 00:25:34.896+08:00 INFO (main|1) [Database.checkDataSizeQuota():253] database[d1] data quota: left bytes: 8388608.000 TB / total: 8388608.000 TB
+2025-05-17 00:25:34.896+08:00 INFO (main|1) [Database.checkReplicaQuota():280] database[d1] replica quota: left number: 9223372036854775807 / total: 9223372036854775807
+2025-05-17 00:25:34.936+08:00 INFO (main|1) [LocalMetastore.buildPartitions():1792] start to build 1 partitions sequentially for table d1.t1 with 3 replicas
+2025-05-17 00:25:34.938+08:00 INFO (main|1) [TabletTaskExecutor.buildCreateReplicaTasks():216] build create replica tasks for index index id: 10004; index state: NORMAL; shardGroupId: -1; row count: 0; tablets size: 3; visibleTxnId: 0; tablets: [tablet: id=10006, tablet: id=10008, tablet: id=10010, ];  db 10001 table 10003 partition partitionId: 10005; partitionName: t1_10005; parentPartitionId: 10002; shardGroupId: -1; isImmutable: false; baseIndex: index id: 10004; index state: NORMAL; shardGroupId: -1; row count: 0; tablets size: 3; visibleTxnId: 0; tablets: [tablet: id=10006, tablet: id=10008, tablet: id=10010, ]; ; rollupCount: 0; visibleVersion: 1; visibleVersionTime: 1747412734930; committedVersion: 1; dataVersion: 1; committedDataVersion: 1; versionEpoch: 355626511090319360; versionTxnType: TXN_NORMAL; storageDataSize: 0; storageRowCount: 0; storageReplicaCount: 3; 
+2025-05-17 00:25:34.957+08:00 INFO (main|1) [TabletTaskExecutor.buildPartitionsSequentially():104] build partitions sequentially, send task one by one, all tasks timeout 180s
+2025-05-17 00:25:35.011+08:00 INFO (backend-worker-10001|105) [BeTabletManager.createTablet():63] created tablet 10006 
+2025-05-17 00:25:35.018+08:00 INFO (backend-worker-10001|105) [BeTabletManager.createTablet():63] created tablet 10008 
+2025-05-17 00:25:35.018+08:00 INFO (backend-worker-10001|105) [BeTabletManager.createTablet():63] created tablet 10010 
+2025-05-17 00:25:35.018+08:00 INFO (main|1) [TabletTaskExecutor.buildPartitionsSequentially():107] build partitions sequentially, all tasks finished, took 80ms
+2025-05-17 00:25:35.019+08:00 INFO (main|1) [LocalMetastore.onCreate():1908] Successfully create table: t1-10003, in database: d1-10001
+2025-05-17 00:25:35.115+08:00 INFO (main|1) [StdSchedulerFactory.instantiate():1220] Using default implementation for ThreadExecutor
+2025-05-17 00:25:35.119+08:00 INFO (main|1) [SimpleThreadPool.initialize():268] Job execution threads will use class loader of thread: main
+2025-05-17 00:25:35.142+08:00 INFO (main|1) [SchedulerSignalerImpl.<init>():61] Initialized Scheduler Signaller of type: class org.quartz.core.SchedulerSignalerImpl
+2025-05-17 00:25:35.143+08:00 INFO (main|1) [QuartzScheduler.<init>():229] Quartz Scheduler v.2.3.2 created.
+2025-05-17 00:25:35.144+08:00 INFO (main|1) [RAMJobStore.initialize():155] RAMJobStore initialized.
+2025-05-17 00:25:35.145+08:00 INFO (main|1) [QuartzScheduler.initialize():294] Scheduler meta-data: Quartz Scheduler (v2.3.2) 'DefaultQuartzScheduler' with instanceId 'NON_CLUSTERED'
+  Scheduler class: 'org.quartz.core.QuartzScheduler' - running locally.
+  NOT STARTED.
+  Currently in standby mode.
+  Number of jobs executed: 0
+  Using thread pool 'org.quartz.simpl.SimpleThreadPool' - with 10 threads.
+  Using job-store 'org.quartz.simpl.RAMJobStore' - which does not support persistence. and is not clustered.
+
+2025-05-17 00:25:35.145+08:00 INFO (main|1) [StdSchedulerFactory.instantiate():1374] Quartz scheduler 'DefaultQuartzScheduler' initialized from default resource file in Quartz package: 'quartz.properties'
+2025-05-17 00:25:35.145+08:00 INFO (main|1) [StdSchedulerFactory.instantiate():1378] Quartz scheduler version: 2.3.2
+2025-05-17 00:25:35.145+08:00 INFO (main|1) [QuartzScheduler.start():547] Scheduler DefaultQuartzScheduler_$_NON_CLUSTERED started.
+2025-05-17 00:25:35.162+08:00 INFO (main|1) [CompactionControlScheduler.updateTableForbiddenTimeRanges():83] Table 10003 has been removed from compaction control
+2025-05-17 00:25:35.165+08:00 INFO (main|1) [Database.checkDataSizeQuota():253] database[d1] data quota: left bytes: 8388608.000 TB / total: 8388608.000 TB
+2025-05-17 00:25:35.165+08:00 INFO (main|1) [Database.checkReplicaQuota():280] database[d1] replica quota: left number: 9223372036854775804 / total: 9223372036854775807
+2025-05-17 00:25:35.166+08:00 INFO (main|1) [LocalMetastore.buildPartitions():1792] start to build 1 partitions sequentially for table d1.t2 with 3 replicas
+2025-05-17 00:25:35.166+08:00 INFO (main|1) [TabletTaskExecutor.buildCreateReplicaTasks():216] build create replica tasks for index index id: 10014; index state: NORMAL; shardGroupId: -1; row count: 0; tablets size: 3; visibleTxnId: 0; tablets: [tablet: id=10016, tablet: id=10018, tablet: id=10020, ];  db 10001 table 10013 partition partitionId: 10015; partitionName: t2_10015; parentPartitionId: 10012; shardGroupId: -1; isImmutable: false; baseIndex: index id: 10014; index state: NORMAL; shardGroupId: -1; row count: 0; tablets size: 3; visibleTxnId: 0; tablets: [tablet: id=10016, tablet: id=10018, tablet: id=10020, ]; ; rollupCount: 0; visibleVersion: 1; visibleVersionTime: 1747412735166; committedVersion: 1; dataVersion: 1; committedDataVersion: 1; versionEpoch: 355626511585247232; versionTxnType: TXN_NORMAL; storageDataSize: 0; storageRowCount: 0; storageReplicaCount: 3; 
+2025-05-17 00:25:35.167+08:00 INFO (main|1) [TabletTaskExecutor.buildPartitionsSequentially():104] build partitions sequentially, send task one by one, all tasks timeout 180s
+2025-05-17 00:25:35.167+08:00 INFO (backend-worker-10001|105) [BeTabletManager.createTablet():63] created tablet 10016 
+2025-05-17 00:25:35.168+08:00 INFO (backend-worker-10001|105) [BeTabletManager.createTablet():63] created tablet 10018 
+2025-05-17 00:25:35.168+08:00 INFO (backend-worker-10001|105) [BeTabletManager.createTablet():63] created tablet 10020 
+2025-05-17 00:25:35.168+08:00 INFO (main|1) [TabletTaskExecutor.buildPartitionsSequentially():107] build partitions sequentially, all tasks finished, took 2ms
+2025-05-17 00:25:35.168+08:00 INFO (main|1) [LocalMetastore.onCreate():1908] Successfully create table: t2-10013, in database: d1-10001
+2025-05-17 00:25:35.171+08:00 INFO (main|1) [CompactionControlScheduler.updateTableForbiddenTimeRanges():83] Table 10013 has been removed from compaction control
+2025-05-17 00:25:35.184+08:00 INFO (main|1) [LeaderOpExecutor.forward():172] forward multi times: 31
+2025-05-17 00:25:35.184+08:00 WARN (main|1) [LeaderOpExecutor.forward():175] too many forward times, max allowed forward time is 30
+2025-05-17 00:25:35.306+08:00 INFO (starrocks-mysql-nio I/O-1|109) [AcceptListener.handleEvent():83] Connection established. remote=/127.0.0.1:34780, connectionId=0
+2025-05-17 00:25:35.308+08:00 INFO (starrocks-mysql-nio-pool-0|125) [AcceptListener.lambda$handleEvent$1():91] Connection scheduled to worker thread 125. remote=/127.0.0.1:34780, connectionId=0
+2025-05-17 00:25:35.388+08:00 INFO (tablet checker|50) [TabletChecker.doCheck():384] finished to check tablets. isUrgent: true, unhealthy/total/added/in_sched/not_ready: 0/0/0/0/0, cost: 2 ms, in lock time: 2 ms, wait time: 0ms
+2025-05-17 00:25:35.391+08:00 INFO (tablet checker|50) [TabletChecker.doCheck():384] finished to check tablets. isUrgent: false, unhealthy/total/added/in_sched/not_ready: 0/6/0/0/0, cost: 2 ms, in lock time: 2 ms, wait time: 0ms
+2025-05-17 00:25:35.392+08:00 INFO (tablet checker|50) [TabletChecker.runAfterCatalogReady():221] TStat :
+TStat num of tablet check round: 4 (+1)
+TStat cost of tablet check(ms): 7 (+4)
+TStat num of tablet checked in tablet checker: 6 (+6)
+TStat num of unhealthy tablet checked in tablet checker: 0 (+0)
+TStat num of tablet being added to tablet scheduler: 0 (+0)
+TStat num of tablet schedule round: 4 (+1)
+TStat cost of tablet schedule(ms): 2 (+0)
+TStat num of tablet being scheduled: 0 (+0)
+TStat num of tablet being scheduled succeeded: 0 (+0)
+TStat num of tablet being scheduled failed: 0 (+0)
+TStat num of tablet being scheduled discard: 0 (+0)
+TStat num of tablet priority upgraded: 0 (+0)
+TStat num of clone task: 0 (+0)
+TStat num of clone task succeeded: 0 (+0)
+TStat num of clone task failed: 0 (+0)
+TStat num of clone task timeout: 0 (+0)
+TStat num of replica missing error: 0 (+0)
+TStat num of replica version missing error: 0 (+0)
+TStat num of replica unavailable error: 0 (+0)
+TStat num of replica location mismatch error: 0 (+0)
+TStat num of replica redundant error: 0 (+0)
+TStat num of replica missing in cluster error: 0 (+0)
+TStat num of balance scheduled: 0 (+0)
+TStat num of colocate replica mismatch: 0 (+0)
+TStat num of colocate replica redundant: 0 (+0)
+TStat num of colocate balancer running round: 0 (+0)
+
+2025-05-17 00:25:35.471+08:00 INFO (starrocks-mysql-nio-pool-1|126) [ConnectScheduler.unregisterConnection():204] Connection closed. remote=127.0.0.1:34780, connectionId=0, qualifiedUser=root, user.currConn=0
+2025-05-17 00:25:35.478+08:00 INFO (starrocks-mysql-nio I/O-1|109) [AcceptListener.handleEvent():83] Connection established. remote=/127.0.0.1:34784, connectionId=1
+2025-05-17 00:25:35.479+08:00 INFO (starrocks-mysql-nio-pool-1|126) [AcceptListener.lambda$handleEvent$1():91] Connection scheduled to worker thread 126. remote=/127.0.0.1:34784, connectionId=1
+2025-05-17 00:25:35.666+08:00 INFO (main|1) [LeaderOpExecutor.forward():181] Forward statement 0 to Leader TNetworkAddress(hostname:127.0.0.1, port:9020)
+2025-05-17 00:25:35.671+08:00 INFO (main|1) [FrontendServiceImpl.forward():1145] receive forwarded stmt 0 from FE: unknown
+2025-05-17 00:25:35.686+08:00 INFO (main|1) [DatabaseTransactionMgr.beginTransaction():186] begin transaction: txn_id: 2 with label insert_64bd18de-3272-11f0-af84-02420aff0002 from coordinator FE: 127.0.0.1, listner id: -1
+2025-05-17 00:25:36.393+08:00 INFO (tablet checker|50) [TabletChecker.doCheck():384] finished to check tablets. isUrgent: true, unhealthy/total/added/in_sched/not_ready: 0/0/0/0/0, cost: 0 ms, in lock time: 0 ms, wait time: 0ms
+2025-05-17 00:25:36.394+08:00 INFO (tablet checker|50) [TabletChecker.doCheck():384] finished to check tablets. isUrgent: false, unhealthy/total/added/in_sched/not_ready: 0/6/0/0/0, cost: 0 ms, in lock time: 0 ms, wait time: 0ms
+2025-05-17 00:25:36.394+08:00 INFO (tablet checker|50) [TabletChecker.runAfterCatalogReady():221] TStat :
+TStat num of tablet check round: 5 (+1)
+TStat cost of tablet check(ms): 7 (+0)
+TStat num of tablet checked in tablet checker: 12 (+6)
+TStat num of unhealthy tablet checked in tablet checker: 0 (+0)
+TStat num of tablet being added to tablet scheduler: 0 (+0)
+TStat num of tablet schedule round: 5 (+1)
+TStat cost of tablet schedule(ms): 2 (+0)
+TStat num of tablet being scheduled: 0 (+0)
+TStat num of tablet being scheduled succeeded: 0 (+0)
+TStat num of tablet being scheduled failed: 0 (+0)
+TStat num of tablet being scheduled discard: 0 (+0)
+TStat num of tablet priority upgraded: 0 (+0)
+TStat num of clone task: 0 (+0)
+TStat num of clone task succeeded: 0 (+0)
+TStat num of clone task failed: 0 (+0)
+TStat num of clone task timeout: 0 (+0)
+TStat num of replica missing error: 0 (+0)
+TStat num of replica version missing error: 0 (+0)
+TStat num of replica unavailable error: 0 (+0)
+TStat num of replica location mismatch error: 0 (+0)
+TStat num of replica redundant error: 0 (+0)
+TStat num of replica missing in cluster error: 0 (+0)
+TStat num of balance scheduled: 0 (+0)
+TStat num of colocate replica mismatch: 0 (+0)
+TStat num of colocate replica redundant: 0 (+0)
+TStat num of colocate balancer running round: 0 (+0)
+
+2025-05-17 00:25:36.685+08:00 INFO (main|1) [TxnStateCallbackFactory.addCallback():40] add callback of txn state : 10024. current callback size: 1
+2025-05-17 00:25:36.712+08:00 INFO (main|1) [ResourceGroupMetricMgr.createQueryResourceGroupMetrics():123] Add resource_group_query_queue_total metric, resource group name is rg1
+2025-05-17 00:25:36.712+08:00 INFO (main|1) [ResourceGroupMetricMgr.createQueryResourceGroupMetrics():123] Add resource_group_query_queue_pending metric, resource group name is rg1
+2025-05-17 00:25:36.725+08:00 INFO (main|1) [DefaultCoordinator.prepareProfile():606] dispatch load job: 64bd18de-3272-11f0-af84-02420aff0002 to [10001]
+2025-05-17 00:25:36.887+08:00 INFO (PBackendService-10001|106) [PseudoBackend.execPlanFragmentWithReport():1232] per_driver_seq_scan_range not empty numTablets: 3
+
+2025-05-17 00:25:36.898+08:00 INFO (PBackendService-10001|106) [PseudoBackend.execPlanFragmentWithReport():1250] exec_plan_fragment query: 64bd18de-3272-11f0-af84-02420aff0002 fragment: 64bd18de-3272-11f0-af84-02420aff0003 #TabletScan: 3 sink: 10003 t1
+2025-05-17 00:25:36.916+08:00 INFO (backend-worker-10001|105) [Tablet.commitNextRowset():323] txn: 2 tablet:10006 rowset commit, version:2 rowset:1 #version:2 #rowset:1
+2025-05-17 00:25:36.917+08:00 INFO (backend-worker-10001|105) [Tablet.commitNextRowset():323] txn: 2 tablet:10008 rowset commit, version:2 rowset:1 #version:2 #rowset:1
+2025-05-17 00:25:36.918+08:00 INFO (backend-worker-10001|105) [Tablet.commitNextRowset():323] txn: 2 tablet:10010 rowset commit, version:2 rowset:1 #version:2 #rowset:1
+2025-05-17 00:25:36.918+08:00 INFO (backend-worker-10001|105) [BeTxnManager.publish():117] backend: 10001 txn: 2 publish version error:0 / total:3 
+2025-05-17 00:25:36.920+08:00 INFO (main|1) [DatabaseTransactionMgr.commitPreparedTransaction():469] transaction:[TransactionState. txn_id: 2, label: insert_64bd18de-3272-11f0-af84-02420aff0002, db id: 10001, table id list: 10003, callback id: 10024, coordinator: FE: 127.0.0.1, transaction status: COMMITTED, error replicas num: 0, replica ids: , prepare time: 1747412735718, write end time: 1747412736903, allow commit time: -1, commit time: 1747412736908, finish time: -1, write cost: 1190ms, reason:  attachment: com.starrocks.transaction.InsertTxnCommitAttachment@793b3a52 tabletCommitInfos size: 3] successfully committed
+2025-05-17 00:25:36.940+08:00 INFO (PUBLISH_VERSION|38) [DatabaseTransactionMgr.finishTransactionNew():1918] finish transaction TransactionState. txn_id: 2, label: insert_64bd18de-3272-11f0-af84-02420aff0002, db id: 10001, table id list: 10003, callback id: 10024, coordinator: FE: 127.0.0.1, transaction status: VISIBLE, error replicas num: 0, replica ids: , prepare time: 1747412735718, write end time: 1747412736903, allow commit time: -1, commit time: 1747412736908, finish time: 1747412736934, write cost: 1190ms, wait for publish cost: 4ms, publish rpc cost: 11ms, finish txn cost: 11ms, publish total cost: 26ms, total cost: 1216ms, reason: , newFinish attachment: com.starrocks.transaction.InsertTxnCommitAttachment@793b3a52 successfully
+2025-05-17 00:25:37.247+08:00 INFO (PBackendService-10001|106) [PseudoBackend.execPlanFragmentWithReport():1250] exec_plan_fragment query: 662b00cd-3272-11f0-af84-02420aff0002 fragment: 662b00cd-3272-11f0-af84-02420aff0003
+2025-05-17 00:25:37.253+08:00 INFO (PBackendService-10001|106) [PseudoBackend.execPlanFragmentWithReport():1250] exec_plan_fragment query: 662b00cd-3272-11f0-af84-02420aff0002 fragment: 662b00cd-3272-11f0-af84-02420aff0004 #TabletScan: 3
+2025-05-17 00:25:37.300+08:00 INFO (PBackendService-10001|106) [PseudoBackend.execPlanFragmentWithReport():1250] exec_plan_fragment query: 664eb56e-3272-11f0-af84-02420aff0002 fragment: 664eb56e-3272-11f0-af84-02420aff0003
+2025-05-17 00:25:37.304+08:00 INFO (PBackendService-10001|106) [PseudoBackend.execPlanFragmentWithReport():1250] exec_plan_fragment query: 664eb56e-3272-11f0-af84-02420aff0002 fragment: 664eb56e-3272-11f0-af84-02420aff0004 #TabletScan: 3
+2025-05-17 00:25:37.335+08:00 INFO (PBackendService-10001|106) [PseudoBackend.execPlanFragmentWithReport():1250] exec_plan_fragment query: 6656086f-3272-11f0-af84-02420aff0002 fragment: 6656086f-3272-11f0-af84-02420aff0003
+2025-05-17 00:25:37.338+08:00 INFO (PBackendService-10001|106) [PseudoBackend.execPlanFragmentWithReport():1250] exec_plan_fragment query: 6656086f-3272-11f0-af84-02420aff0002 fragment: 6656086f-3272-11f0-af84-02420aff0004 #TabletScan: 3
+2025-05-17 00:25:37.341+08:00 INFO (analyze-task-concurrency-pool-0|132) [StatisticExecutor.collectStatistics():361] execute statistics job successfully, duration=390.9 ms, job=FullStatisticsCollectJob{type=FULL, scheduleType=ONCE, db=com.starrocks.catalog.Database@2711, table=Table [id=10003, name=t1, type=OLAP], partitionIdList=[10002], columnNames=[k1, k2, k3], properties={}}
+2025-05-17 00:25:37.355+08:00 INFO (main|1) [TxnStateCallbackFactory.removeCallback():47] remove callback of txn state : 10024. current callback size: 0
+2025-05-17 00:25:37.365+08:00 INFO (main|1) [LeaderOpExecutor.execute():115] forwarding to master get result max journal id: 21
+2025-05-17 00:25:37.365+08:00 INFO (main|1) [JournalObservable.waitOn():49] waiting for the observer to replay journal to 21 with timeout: 0 ms
+2025-05-17 00:25:37.441+08:00 INFO (tablet checker|50) [TabletChecker.doCheck():384] finished to check tablets. isUrgent: true, unhealthy/total/added/in_sched/not_ready: 0/0/0/0/0, cost: 4 ms, in lock time: 4 ms, wait time: 0ms
+2025-05-17 00:25:37.442+08:00 INFO (tablet checker|50) [TabletChecker.doCheck():384] finished to check tablets. isUrgent: false, unhealthy/total/added/in_sched/not_ready: 0/6/0/0/0, cost: 0 ms, in lock time: 0 ms, wait time: 0ms
+2025-05-17 00:25:37.443+08:00 INFO (tablet checker|50) [TabletChecker.runAfterCatalogReady():221] TStat :
+TStat num of tablet check round: 6 (+1)
+TStat cost of tablet check(ms): 11 (+4)
+TStat num of tablet checked in tablet checker: 18 (+6)
+TStat num of unhealthy tablet checked in tablet checker: 0 (+0)
+TStat num of tablet being added to tablet scheduler: 0 (+0)
+TStat num of tablet schedule round: 6 (+1)
+TStat cost of tablet schedule(ms): 2 (+0)
+TStat num of tablet being scheduled: 0 (+0)
+TStat num of tablet being scheduled succeeded: 0 (+0)
+TStat num of tablet being scheduled failed: 0 (+0)
+TStat num of tablet being scheduled discard: 0 (+0)
+TStat num of tablet priority upgraded: 0 (+0)
+TStat num of clone task: 0 (+0)
+TStat num of clone task succeeded: 0 (+0)
+TStat num of clone task failed: 0 (+0)
+TStat num of clone task timeout: 0 (+0)
+TStat num of replica missing error: 0 (+0)
+TStat num of replica version missing error: 0 (+0)
+TStat num of replica unavailable error: 0 (+0)
+TStat num of replica location mismatch error: 0 (+0)
+TStat num of replica redundant error: 0 (+0)
+TStat num of replica missing in cluster error: 0 (+0)
+TStat num of balance scheduled: 0 (+0)
+TStat num of colocate replica mismatch: 0 (+0)
+TStat num of colocate replica redundant: 0 (+0)
+TStat num of colocate balancer running round: 0 (+0)
+
