@@ -600,19 +600,23 @@ public class TaskManager implements MemoryTrackable {
 
     public List<TaskRunStatus> getMatchedTaskRunStatus(TGetTasksParams params) {
         List<TaskRunStatus> taskRunList = Lists.newArrayList();
-        // pending task runs
-        List<TaskRun> pendingTaskRuns = taskRunScheduler.getCopiedPendingTaskRuns();
-        pendingTaskRuns.stream()
-                .map(TaskRun::getStatus)
-                .filter(t -> t.match(params))
-                .forEach(taskRunList::add);
+        // only include the RUNNING & PENDING in the first page
+        if (params == null || params.getPagination() == null ||
+                params.isSetPagination() && params.getPagination().getOffset() == 0) {
+            // pending task runs
+            List<TaskRun> pendingTaskRuns = taskRunScheduler.getCopiedPendingTaskRuns();
+            pendingTaskRuns.stream()
+                    .map(TaskRun::getStatus)
+                    .filter(t -> t.match(params))
+                    .forEach(taskRunList::add);
 
-        // running task runs
-        Set<TaskRun> runningTaskRuns = taskRunScheduler.getCopiedRunningTaskRuns();
-        runningTaskRuns.stream()
-                .map(TaskRun::getStatus)
-                .filter(t -> t.match(params))
-                .forEach(taskRunList::add);
+            // running task runs
+            Set<TaskRun> runningTaskRuns = taskRunScheduler.getCopiedRunningTaskRuns();
+            runningTaskRuns.stream()
+                    .map(TaskRun::getStatus)
+                    .filter(t -> t.match(params))
+                    .forEach(taskRunList::add);
+        }
 
         // history task runs
         taskRunList.addAll(taskRunManager.getTaskRunHistory().lookupHistory(params));

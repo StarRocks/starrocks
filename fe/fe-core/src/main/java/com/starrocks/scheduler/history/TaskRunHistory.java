@@ -36,6 +36,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class TaskRunHistory {
     private static final Logger LOG = LogManager.getLogger(TaskRunHistory.class);
@@ -119,9 +120,29 @@ public class TaskRunHistory {
     }
 
     public List<TaskRunStatus> lookupHistory(TGetTasksParams params) {
-        List<TaskRunStatus> result = getInMemoryHistory().stream()
-                .filter(x -> x.match(params))
-                .collect(Collectors.toList());
+        List<TaskRunStatus> memoryList = getInMemoryHistory().stream().filter(x -> x.match(params)).toList();
+        Stream<TaskRunStatus> stream = memoryList.stream().sorted(TaskRunStatus.COMPARATOR_BY_CREATE_TIME_DESC);
+        if (params != null && params.isSetPagination()) {
+            if (params.getPagination().getOffset() > 0) {
+                stream = stream.skip(params.getPagination().getOffset());
+            }
+            if (params.getPagination().getLimit() > 0) {
+                stream = stream.limit(params.getPagination().getLimit());
+            }
+        }
+        List<TaskRunStatus> result = stream.collect(Collectors.toList());
+
+        // calculate the new offset & limit for history table
+        if (params != null && params.isSetPagination()) {
+            long newOffset = params.getPagination().getOffset() - memoryList.size();
+            newOffset = Math.max(0, newOffset);
+            long newLimit = params.getPagination().getLimit() - result.size();
+            newLimit = Math.max(0, newLimit);
+
+            params.getPagination().setOffset(newOffset);
+            params.getPagination().setLimit(newLimit);
+        }
+
         if (isEnableArchiveHistory()) {
             result.addAll(historyTable.lookup(params));
         }

@@ -72,6 +72,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -337,7 +338,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
 
     private List<TaskRunStatus> waitingTaskFinish() {
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        List<TaskRunStatus> taskRuns = taskManager.getMatchedTaskRunStatus(null);
+        List<TaskRunStatus> taskRuns = taskManager.getMatchedTaskRunStatus(new TGetTasksParams());
         int retryCount = 0, maxRetry = 5;
         while (retryCount < maxRetry) {
             ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);

@@ -158,7 +158,7 @@ public class TaskRunHistoryTest {
         new Expectations() {
             {
                 repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
-                        "task_run_id = 'q1' LIMIT 100");
+                        "task_run_id = 'q1' ORDER BY `task_id`, `task_run_id`, `create_time` LIMIT 100");
             }
         };
         history.lookup(params);

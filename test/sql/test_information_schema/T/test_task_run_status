@@ -1,4 +1,4 @@
--- name: test_task_run_status
+-- name: test_task_run_status @sequential
 
 create database db_${uuid0};
 use db_${uuid0};
@@ -28,5 +28,23 @@ SELECT count(1) FROM information_schema.task_runs WHERE query_id= '${query_id}';
 
 [UC]state=SELECT `STATE` FROM information_schema.task_runs WHERE QUERY_ID = '${query_id}';
 SELECT count(1) FROM information_schema.task_runs WHERE `STATE` = '${state}' and task_name = '${task_name}' and QUERY_ID = '${query_id}';
+
+-- Generate a large number of fake task_run_history records for testing purposes
+INSERT INTO _statistics_.task_run_history 
+    (task_id, task_run_id, create_time, task_name, task_state, finish_time, expire_time, history_content_json)
+    SELECT 1, 'fake-query-id' || generate_series, now(), 'fake-name', 'FAILED', now(), now(), 
+        '{"dbName": "default_cluster:sys"}'
+    FROM table(generate_series(1, 10000));
+SELECT (SELECT count(*) FROM information_schema.task_runs) 
+    >= (SELECT count(*) FROM _statistics_.task_run_history);
+SELECT (SELECT count(*) FROM (SELECT * FROM information_schema.task_runs LIMIT 1) r) 
+    >= (SELECT count(*) FROM (SELECT * FROM _statistics_.task_run_history LIMIT 1) r);
+SELECT (SELECT count(*) FROM (SELECT * FROM information_schema.task_runs LIMIT 4096) r) 
+    >= (SELECT count(*) FROM (SELECT * FROM _statistics_.task_run_history LIMIT 4096) r);
+SELECT (SELECT count(*) FROM (SELECT * FROM information_schema.task_runs LIMIT 5000) r) 
+    >= (SELECT count(*) FROM (SELECT * FROM _statistics_.task_run_history LIMIT 5000) r);
+
+DELETE FROM _statistics_.task_run_history WHERE task_run_id like 'fake-query-id%';
+
 
 drop database db_${uuid0};
