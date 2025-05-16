@@ -34,6 +34,7 @@
 
 package com.starrocks.planner;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
@@ -851,6 +852,17 @@ public class OlapTableSink extends DataSink {
         return locationParam;
     }
 
+    @VisibleForTesting
+    public static int findPrimaryReplica(OlapTable table,
+                                         Map<Long, Long> bePrimaryMap,
+                                         SystemInfoService infoService,
+                                         MaterializedIndex index,
+                                         List<Long> selectedBackedIds,
+                                         List<Replica> replicas) {
+        return findPrimaryReplica(table, bePrimaryMap, infoService,
+                index, selectedBackedIds, 0, replicas);
+    }
+
     private static int findPrimaryReplica(OlapTable table,
                                           Map<Long, Long> bePrimaryMap,
                                           SystemInfoService infoService,
@@ -871,15 +883,23 @@ public class OlapTableSink extends DataSink {
         int lowUsageIndex = -1;
         for (int i = 0; i < replicas.size(); i++) {
             Replica replica = replicas.get(i);
-            if (lowUsageIndex == -1 && !replica.getLastWriteFail()
-                    && !infoService.getBackend(replica.getBackendId()).getLastWriteFail()) {
+            boolean isHealthy = !replica.getLastWriteFail()
+                    && !infoService.getBackend(replica.getBackendId()).getLastWriteFail();
+            
+            // The isAlive() flag indicates node availability during shutdown sequences.
+            // For single-replica configurations, we bypass node status checks to maintain
+            // loading operation continuity despite shutdown transitions.
+            if (replicas.size() > 1) {
+                isHealthy = isHealthy && infoService.getBackend(replica.getBackendId()).isAlive();
+            }
+            
+            if (lowUsageIndex == -1 && isHealthy) {
                 lowUsageIndex = i;
             }
             if (lowUsageIndex != -1
                     && bePrimaryMap.getOrDefault(replica.getBackendId(), (long) 0) < bePrimaryMap
                     .getOrDefault(replicas.get(lowUsageIndex).getBackendId(), (long) 0)
-                    && !replica.getLastWriteFail()
-                    && !infoService.getBackend(replica.getBackendId()).getLastWriteFail()) {
+                    && isHealthy) {
                 lowUsageIndex = i;
             }
         }
