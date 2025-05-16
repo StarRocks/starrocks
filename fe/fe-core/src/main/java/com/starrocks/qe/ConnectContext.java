@@ -1488,6 +1488,7 @@ public class ConnectContext {
             } else {
                 row.add(Boolean.toString(isPending));
             }
+            row.add(sessionVariable.getWarehouseName());
             return row;
         }
     }

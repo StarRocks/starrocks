@@ -3331,6 +3331,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         tConnectionInfo.setState(row.get(7));
         tConnectionInfo.setInfo(row.get(8));
         tConnectionInfo.setIsPending(row.get(9));
+        tConnectionInfo.setWarehouse(row.get(10));
         return tConnectionInfo;
     }
 }
