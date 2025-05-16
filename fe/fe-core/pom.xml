@@ -875,6 +875,13 @@ under the License.
             <groupId>org.jboss.byteman</groupId>
             <artifactId>byteman</artifactId>
         </dependency>
+
+        <!-- for xx_hash3_64 -->
+        <dependency>
+            <groupId>net.openhft</groupId>
+            <artifactId>zero-allocation-hashing</artifactId>
+            <version>0.16</version>
+        </dependency>
     </dependencies>
 
     <build>
