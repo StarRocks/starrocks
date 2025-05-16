@@ -1435,6 +1435,9 @@ build_azure() {
 
     ${BUILD_SYSTEM} -j "${PARALLEL}"
     ${BUILD_SYSTEM} install
+
+    unset AZURE_SDK_DISABLE_AUTO_VCPKG
+    unset PKG_CONFIG_LIBDIR
 }
 
 # restore cxxflags/cppflags/cflags to default one
