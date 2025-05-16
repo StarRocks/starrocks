@@ -76,6 +76,7 @@ under the License.
         <!-- https://stackoverflow.com/questions/66713254/spark-wasb-and-jetty-11 -->
         <jetty.version>9.4.57.v20241219</jetty.version>
         <byteman.version>4.0.24</byteman.version>
+        <fastutil.version>8.5.15</fastutil.version>
     </properties>
 
     <profiles>
@@ -1377,6 +1378,13 @@ under the License.
                 <groupId>org.jboss.byteman</groupId>
                 <artifactId>byteman</artifactId>
                 <version>${byteman.version}</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/it.unimi.dsi/fastutil -->
+            <dependency>
+                <groupId>it.unimi.dsi</groupId>
+                <artifactId>fastutil</artifactId>
+                <version>${fastutil.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
