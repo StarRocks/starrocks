@@ -47,7 +47,6 @@ public class ProcProfileCollector extends FrontendDaemon {
     private final SimpleDateFormat profileTimeFormat = new SimpleDateFormat("yyyyMMdd-HHmmss");
     private final String profileLogDir;
 
-    private long lastCollectTime = -1;
     private long lastLogTime = -1;
 
     public ProcProfileCollector() {
@@ -60,18 +59,12 @@ public class ProcProfileCollector extends FrontendDaemon {
         File file = new File(profileLogDir);
         file.mkdirs();
 
-        if (lastCollectTime == -1L
-                || (System.currentTimeMillis() - lastCollectTime > Config.proc_profile_collect_interval_s * 1000)) {
+        if (Config.proc_profile_cpu_enable) {
+            collectCPUProfile();
+        }
 
-            lastCollectTime = System.currentTimeMillis();
-
-            if (Config.proc_profile_cpu_enable) {
-                collectCPUProfile();
-            }
-
-            if (Config.proc_profile_mem_enable) {
-                collectMemProfile();
-            }
+        if (Config.proc_profile_mem_enable) {
+            collectMemProfile();
         }
 
         deleteExpiredFiles();
