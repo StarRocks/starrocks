@@ -25,6 +25,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
+#include "util/disk_info.h"
 #include "util/mem_info.h"
 
 namespace starrocks {
