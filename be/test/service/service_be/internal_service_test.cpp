@@ -20,6 +20,7 @@
 #include <memory>
 
 #include "cache/block_cache/test_cache_utils.h"
+#include "cache/datacache.h"
 #include "common/utils.h"
 #include "exec/tablet_sink_index_channel.h"
 #include "runtime/exec_env.h"
@@ -192,7 +193,7 @@ TEST_F(InternalServiceTest, test_fetch_datacache_via_brpc) {
         Status st = cache->write(cache_key, 0, cache_size, value.c_str());
         ASSERT_TRUE(st.ok());
 
-        CacheEnv* cache_env = CacheEnv::GetInstance();
+        DataCache* cache_env = DataCache::GetInstance();
         cache_env->_local_cache = cache->local_cache();
         cache_env->_block_cache = cache;
     }

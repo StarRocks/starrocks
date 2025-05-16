@@ -651,7 +651,6 @@ void StorageEngine::stop() {
 #endif
 
     JOIN_THREAD(_fd_cache_clean_thread)
-    JOIN_THREAD(_adjust_cache_thread)
 
     if (config::path_gc_check) {
         JOIN_THREADS(_path_scan_threads)

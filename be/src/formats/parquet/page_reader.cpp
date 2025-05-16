@@ -21,6 +21,7 @@
 #include <ostream>
 #include <vector>
 
+#include "cache/datacache.h"
 #include "cache/object_cache/object_cache.h"
 #include "common/compiler_util.h"
 #include "exec/hdfs_scanner.h"
@@ -47,7 +48,7 @@ PageReader::PageReader(io::SeekableInputStream* stream, uint64_t start_offset, u
           _opts(opts),
           _codec(codec) {
     if (_opts.use_file_pagecache) {
-        _cache = CacheEnv::GetInstance()->external_table_page_cache();
+        _cache = DataCache::GetInstance()->external_table_page_cache();
         _init_page_cache_key();
     }
     _compressed_buf = std::make_shared<std::vector<uint8_t>>();

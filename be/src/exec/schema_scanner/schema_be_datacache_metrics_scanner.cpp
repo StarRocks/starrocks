@@ -15,7 +15,7 @@
 #include "exec/schema_scanner/schema_be_datacache_metrics_scanner.h"
 
 #include "agent/master_info.h"
-#include "cache/local_cache.h"
+#include "cache/datacache.h"
 #include "column/datum.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
@@ -64,7 +64,7 @@ Status SchemaBeDataCacheMetricsScanner::get_next(ChunkPtr* chunk, bool* eos) {
 
     row.emplace_back(_be_id);
 
-    const LocalCache* cache = CacheEnv::GetInstance()->local_cache();
+    const LocalCache* cache = DataCache::GetInstance()->local_cache();
     if (cache != nullptr && cache->is_initialized()) {
         // retrieve different priority's used bytes from level = 2 metrics
         metrics = cache->cache_metrics(2);

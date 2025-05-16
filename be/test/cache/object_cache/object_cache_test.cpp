@@ -79,7 +79,7 @@ protected:
 
 void ObjectCacheTest::_init_local_cache() {
     CacheOptions options = TestCacheUtils::create_simple_options(256 * KB, _mem_quota);
-    options.disk_spaces.push_back({.path = _cache_dir, .size = 50 * MB});
+    options.dir_spaces.push_back({.path = _cache_dir, .size = 50 * MB});
 
     _local_cache = std::make_shared<StarCacheWrapper>();
     ASSERT_OK(_local_cache->init(options));

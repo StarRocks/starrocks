@@ -180,7 +180,7 @@ TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota) {
     _mock_fs->set_space(1, ".", space_info);
 
     auto space_monitor = std::make_shared<DiskSpaceMonitor>(local_cache.get(), _mock_fs);
-    ASSERT_OK(space_monitor->init(&options.disk_spaces));
+    ASSERT_OK(space_monitor->init(&options.dir_spaces));
     space_monitor->start();
 
     // Fill cache data
@@ -233,7 +233,7 @@ TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota_with_limit) {
     _mock_fs->set_space(1, ".", space_info);
 
     auto space_monitor = std::make_shared<DiskSpaceMonitor>(local_cache.get(), _mock_fs);
-    ASSERT_OK(space_monitor->init(&options.disk_spaces));
+    ASSERT_OK(space_monitor->init(&options.dir_spaces));
     space_monitor->start();
 
     // Fill cache data
@@ -286,7 +286,7 @@ TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota) {
     _mock_fs->set_space(1, ".", space_info);
 
     auto space_monitor = std::make_shared<DiskSpaceMonitor>(local_cache.get(), _mock_fs);
-    ASSERT_OK(space_monitor->init(&options.disk_spaces));
+    ASSERT_OK(space_monitor->init(&options.dir_spaces));
     space_monitor->start();
 
     // Fill cache data
@@ -338,7 +338,7 @@ TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota_to_zero) {
     _mock_fs->set_space(1, ".", space_info);
 
     auto space_monitor = std::make_shared<DiskSpaceMonitor>(local_cache.get(), _mock_fs);
-    ASSERT_OK(space_monitor->init(&options.disk_spaces));
+    ASSERT_OK(space_monitor->init(&options.dir_spaces));
     space_monitor->start();
 
     // Fill cache data
@@ -387,10 +387,10 @@ TEST_F(DiskSpaceMonitorTest, get_directory_capacity) {
     {
         insert_to_cache(block_cache.get(), 20);
 
-        auto& disk_spaces = options.disk_spaces;
+        auto& dir_spaces = options.dir_spaces;
         auto space_monitor = std::make_shared<DiskSpaceMonitor>(local_cache.get());
         size_t capacity = 0;
-        for (auto& space : disk_spaces) {
+        for (auto& space : dir_spaces) {
             ASSIGN_OR_ASSERT_FAIL(auto value, space_monitor->_fs->directory_size(space.path));
             capacity += value;
         }

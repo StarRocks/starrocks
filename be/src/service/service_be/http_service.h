@@ -42,7 +42,7 @@
 namespace starrocks {
 
 class ExecEnv;
-class CacheEnv;
+class DataCache;
 class EvHttpServer;
 class HttpHandler;
 class WebPageHandler;
@@ -50,7 +50,7 @@ class WebPageHandler;
 // HTTP service for StarRocks BE
 class HttpServiceBE {
 public:
-    HttpServiceBE(CacheEnv* cache_env, ExecEnv* env, int port, int num_threads);
+    HttpServiceBE(DataCache* cache_env, ExecEnv* env, int port, int num_threads);
     ~HttpServiceBE();
 
     Status start();
@@ -58,7 +58,7 @@ public:
     void join();
 
 private:
-    CacheEnv* _cache_env;
+    DataCache* _cache_env;
     ExecEnv* _env;
 
     std::unique_ptr<EvHttpServer> _ev_http_server;

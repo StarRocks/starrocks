@@ -20,6 +20,8 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/cache")
 
 set(CACHE_FILES
   disk_space_monitor.cpp
+  mem_space_monitor.cpp
+  datacache.cpp
   datacache_utils.cpp
   peer_cache_wrapper.cpp
   block_cache/block_cache.cpp

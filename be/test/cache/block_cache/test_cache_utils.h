@@ -36,7 +36,7 @@ public:
         CacheOptions options;
         options.mem_space_size = mem_quota;
         if (disk_quota > 0) {
-            options.disk_spaces.push_back({.path = "./block_disk_cache", .size = (size_t)disk_quota});
+            options.dir_spaces.push_back({.path = "./block_disk_cache", .size = (size_t)disk_quota});
         }
         options.engine = engine;
         options.enable_checksum = false;
