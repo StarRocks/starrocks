@@ -42,6 +42,7 @@ public class SPMStmtExecutor {
     }
 
     public static void execute(ConnectContext context, DropBaselinePlanStmt stmt) {
+        context.getSqlPlanStorage().dropBaselinePlan(stmt.getBaseLineId());
         context.getGlobalStateMgr().getSqlPlanStorage().dropBaselinePlan(stmt.getBaseLineId());
     }
 
