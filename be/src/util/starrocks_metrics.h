@@ -220,6 +220,15 @@ public:
     METRIC_DEFINE_INT_COUNTER(load_channel_add_chunks_wait_writer_duration_us, MetricUnit::MICROSECONDS);
     // Accumulated time that waiting replicas costs in LoadChannel#add_chunks
     METRIC_DEFINE_INT_COUNTER(load_channel_add_chunks_wait_replica_duration_us, MetricUnit::MICROSECONDS);
+    // The number of times the primary replica failed to cancel the secondary replica. Only available
+    // for shared-nothing, and replicated storage is enabled. Cancel happens when there is no data in
+    // the partition of the primary replica.
+    METRIC_DEFINE_INT_COUNTER(load_cancel_replica_fail_total, MetricUnit::OPERATIONS);
+    // The number of times the primary replica failed to sync segment to the secondary replica.
+    // Only available for shared-nothing, and replicated storage is enabled.
+    METRIC_DEFINE_INT_COUNTER(load_sync_replica_fail_total, MetricUnit::OPERATIONS);
+    // Number of secondary replicas that are waiting for the primary replica to sync data.
+    METRIC_DEFINE_INT_COUNTER(load_replica_waiting_num, MetricUnit::OPERATIONS);
 
     // Metrics for async delta writer
     // The number of AsyncDeltaWriter::_execute is accessed. Each execution may run multiple tasks

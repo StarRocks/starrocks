@@ -66,6 +66,9 @@ public:
 
     void update_profile() override;
 
+    void get_load_replica_status(const std::string& remote_ip, const PLoadReplicaStatusRequest* request,
+                                 PLoadReplicaStatusResult* response) override;
+
     MemTracker* mem_tracker() { return _mem_tracker; }
 
 private:
@@ -185,9 +188,6 @@ private:
     void _update_primary_replica_profile(DeltaWriter* writer, RuntimeProfile* profile);
     void _update_secondary_replica_profile(DeltaWriter* writer, RuntimeProfile* profile);
 
-    void _diagnose_primary_replica_stack_trace(int64_t tablet_id, const PUniqueId& load_id,
-                                               AsyncDeltaWriter* async_delta_writer);
-
     LoadChannel* _load_channel;
 
     TabletsChannelKey _key;
@@ -264,6 +264,32 @@ private:
 
     std::atomic<bool> _is_updating_profile{false};
     std::unique_ptr<RuntimeProfile> _tablets_profile;
+};
+
+class SecondaryReplicasWaiter {
+public:
+    SecondaryReplicasWaiter(PUniqueId load_id, int64_t txn_id, int64_t sink_id, int64_t timeout_ms, int64_t eos_time_ms,
+                            std::vector<AsyncDeltaWriter*> delta_writers);
+    ~SecondaryReplicasWaiter();
+    Status wait();
+
+private:
+    void _try_check_replica_status_on_primary(int unfinished_tablet_start_index);
+    void _send_replica_status_request(int unfinished_tablet_start_index);
+    void _process_replica_status_response(int unfinished_tablet_start_index);
+    void _try_diagnose_stack_strace_on_primary(int unfinished_tablet_start_index);
+    void _release_replica_status_closure();
+
+    PUniqueId _load_id;
+    int64_t _txn_id;
+    int64_t _sink_id;
+    int64_t _timeout_ns;
+    std::vector<AsyncDeltaWriter*> _delta_writers;
+    int64_t _eos_time_ms;
+    int64_t _last_get_replica_status_time_ms;
+    int64_t _replica_status_fail_num{0};
+    ReusableClosure<PLoadReplicaStatusResult>* _replica_status_closure{nullptr};
+    bool _diagnose_triggered{false};
 };
 
 std::shared_ptr<TabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,

@@ -45,17 +45,27 @@ public:
                          std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
                          std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos);
 
-    void cancel();
+    void cancel(const Status& status);
 
     int64_t node_id() { return _node_id; }
 
     std::string debug_string();
+
+    Status get_status() {
+        std::lock_guard l(_status_lock);
+        return _st;
+    }
 
 private:
     Status _init();
     void _send_request(SegmentPB* segment, butil::IOBuf& data, bool eos);
     Status _wait_response(std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
                           std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos);
+
+    void _set_status(const Status& status) {
+        std::lock_guard l(_status_lock);
+        if (_st.ok()) _st = status;
+    }
 
     std::unique_ptr<MemTracker> _mem_tracker;
 
@@ -68,6 +78,8 @@ private:
     std::shared_ptr<PInternalService_RecoverableStub> _stub;
 
     bool _inited = false;
+
+    mutable SpinLock _status_lock;
     Status _st = Status::OK();
 };
 
@@ -106,6 +118,14 @@ public:
         if (_status.ok()) _status = status;
     }
 
+    Status get_replica_status(int64_t node_id) const {
+        auto channel = _replicate_channels.find(node_id);
+        if (channel == _replicate_channels.end()) {
+            return Status::NotFound("replica node id not found");
+        }
+        return channel->second->get_status();
+    }
+
     std::string debug_string();
 
     const std::vector<std::unique_ptr<PTabletInfo>>* replicated_tablet_infos() const {
@@ -131,7 +151,7 @@ private:
 
     const DeltaWriterOptions* _opt;
 
-    std::vector<std::unique_ptr<ReplicateChannel>> _replicate_channels;
+    std::map<int64_t, std::unique_ptr<ReplicateChannel>> _replicate_channels;
 
     std::vector<std::unique_ptr<PTabletInfo>> _replicated_tablet_infos;
     std::vector<std::unique_ptr<PTabletInfo>> _failed_tablet_infos;
