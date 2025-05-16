@@ -49,6 +49,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.wildfly.common.Assert;
 
+import java.util.HashSet;
 import java.util.List;
 
 import static com.starrocks.catalog.Table.TableType.DELTALAKE;
@@ -298,6 +299,12 @@ public class UnifiedMetadataTest {
                 result = true;
                 times = 1;
             }
+
+            {
+                icebergMetadata.getDeleteFiles((IcebergTable) any, -1L, null, null);
+                result = new HashSet<>();
+                times = 1;
+            }
         };
 
         Table table = unifiedMetadata.getTable(new ConnectContext(), "test_db", "test_tbl");
@@ -318,6 +325,7 @@ public class UnifiedMetadataTest {
         Assert.assertTrue(unifiedMetadata.prepareMetadata(new MetaPreparationItem(icebergTable, null,
                 -1, TableVersionRange.empty()), null, null));
         Assert.assertNotNull(unifiedMetadata.getSerializedMetaSpec("test_db", "test_tbl", -1, null, null));
+        Assert.assertNotNull(unifiedMetadata.getDeleteFiles(new IcebergTable(), -1L, null, null));
     }
 
     @Test
