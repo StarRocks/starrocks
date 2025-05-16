@@ -24,7 +24,7 @@ class Cache;
 class LRUCacheModule final : public ObjectCache {
 public:
     LRUCacheModule() = delete;
-    LRUCacheModule(const ObjectCacheOptions& options);
+    LRUCacheModule(std::shared_ptr<Cache> cache);
 
     virtual ~LRUCacheModule();
 
@@ -62,7 +62,6 @@ public:
 private:
     bool _check_write(size_t charge, ObjectCacheWriteOptions* options) const;
 
-    ObjectCacheOptions _options;
     std::shared_ptr<Cache> _cache;
 };
 
