@@ -115,7 +115,7 @@ Flink が配置されているマシンが、StarRocks クラスターの FE ノ
 | connector                   | Yes      | STRING    | データを読み取るために使用するコネクタのタイプ。値を `starrocks` に設定します。                                |
 | scan-url                    | Yes      | STRING    | Web サーバーから FE に接続するために使用されるアドレス。形式: `<fe_host>:<fe_http_port>`。デフォルトポートは `8030`。複数のアドレスを指定することができ、カンマ（,）で区切る必要があります。例: `192.168.xxx.xxx:8030,192.168.xxx.xxx:8030`。 |
 | jdbc-url                    | Yes      | STRING    | FE の MySQL クライアントに接続するために使用されるアドレス。形式: `jdbc:mysql://<fe_host>:<fe_query_port>`。デフォルトのポート番号は `9030`。 |
-| username                    | Yes      | STRING    | StarRocks クラスターアカウントのユーザー名。読み取りたい StarRocks テーブルに対する読み取り権限を持っている必要があります。[ユーザー権限](../administration/user_privs/User_privilege.md) を参照してください。 |
+| username                    | Yes      | STRING    | StarRocks クラスターアカウントのユーザー名。読み取りたい StarRocks テーブルに対する読み取り権限を持っている必要があります。[ユーザー権限](../administration/user_privs/authorization/User_privilege.md) を参照してください。 |
 | password                    | Yes      | STRING    | StarRocks クラスターアカウントのパスワード。              |
 | database-name               | Yes      | STRING    | 読み取りたい StarRocks テーブルが属する StarRocks データベースの名前。 |
 | table-name                  | Yes      | STRING    | 読み取りたい StarRocks テーブルの名前。            |

@@ -1,15 +1,15 @@
 ---
 displayed_sidebar: docs
-sidebar_position: 60
+sidebar_position: 50
 ---
 
 # Privilege FAQ
 
 ## 必要なロールがユーザーに割り当てられているにもかかわらず、「no permission」というエラーメッセージが報告されるのはなぜですか？
 
-このエラーは、ロールがアクティブ化されていない場合に発生することがあります。`select current_role();` を実行して、現在のセッションでユーザーにアクティブ化されているロールを確認できます。必要なロールがアクティブ化されていない場合は、[SET ROLE](../../sql-reference/sql-statements/account-management/SET_ROLE.md) を実行してこのロールをアクティブ化し、このロールを使用して操作を行ってください。
+このエラーは、ロールがアクティブ化されていない場合に発生することがあります。`select current_role();` を実行して、現在のセッションでユーザーにアクティブ化されているロールを確認できます。必要なロールがアクティブ化されていない場合は、[SET ROLE](../../../sql-reference/sql-statements/account-management/SET_ROLE.md) を実行してこのロールをアクティブ化し、このロールを使用して操作を行ってください。
 
-ログイン時にロールを自動的にアクティブ化したい場合、`user_admin` ロールは [SET DEFAULT ROLE](../../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md) または [ALTER USER DEFAULT ROLE](../../sql-reference/sql-statements/account-management/ALTER_USER.md) を実行して、各ユーザーのデフォルトロールを設定できます。デフォルトロールが設定されると、ユーザーがログインしたときに自動的にアクティブ化されます。
+ログイン時にロールを自動的にアクティブ化したい場合、`user_admin` ロールは [SET DEFAULT ROLE](../../../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md) または [ALTER USER DEFAULT ROLE](../../../sql-reference/sql-statements/account-management/ALTER_USER.md) を実行して、各ユーザーのデフォルトロールを設定できます。デフォルトロールが設定されると、ユーザーがログインしたときに自動的にアクティブ化されます。
 
 すべてのユーザーに割り当てられたすべてのロールをログイン時に自動的にアクティブ化したい場合は、次のコマンドを実行できます。この操作には、システムレベルでの OPERATE 権限が必要です。
 
@@ -24,7 +24,7 @@ SET GLOBAL activate_all_roles_on_login = TRUE;
 
 このアプローチは、ユーザーに適切な権限を持つロールを割り当てるのに役立ち、意図しない操作のリスクを軽減します。
 
-[GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) を実行して、必要な権限やロールをユーザーに割り当てることができます。
+[GRANT](../../../sql-reference/sql-statements/account-management/GRANT.md) を実行して、必要な権限やロールをユーザーに割り当てることができます。
 
 ## データベース内のすべてのテーブルに対する権限をユーザーに付与しました（`GRANT ALL ON ALL TABLES IN DATABASE <db_name> TO USER <user_identity>;`）が、ユーザーがデータベース内でテーブルを作成できません。なぜですか？
 

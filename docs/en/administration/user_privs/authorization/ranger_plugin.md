@@ -21,6 +21,8 @@ In addition to the native RBAC privilege system, StarRocks v3.1.9 also supports 
 
 This topic describes the permission control methods and integration process of StarRocks and Apache Ranger. For information on how to create security policies on Ranger to manage data security, see the [Apache Ranger official website](https://ranger.apache.org/).
 
+From v3.5.0 onwards, StarRocks supports Group Provider to collect group information from external authentication systems for user group management. For more information, see [Authenticate User Groups](../group_provider.md).
+
 ## Permission control method
 
 StarRocks integrated with Apache Ranger provides the following permission control methods:
@@ -113,13 +115,13 @@ This step configures the StarRocks Service on Ranger so that users can perform a
 
 3. Access `http://<ranger-ip>:<ranger-host>/login.jsp` to log in to the Apache Ranger page. The STARROCKS service appears on the page.
 
-   ![home](../../_assets/ranger_home.png)
+   ![home](../../../_assets/ranger_home.png)
 
 4. Click the plus sign (`+`) after **STARROCKS** to configure StarRocks Service.
 
-   ![service detail](../../_assets/ranger_service_details.png)
+   ![service detail](../../../_assets/ranger_service_details.png)
 
-   ![property](../../_assets/ranger_properties.png)
+   ![property](../../../_assets/ranger_properties.png)
 
    - `Service Name`: You must enter a service name.
    - `Display Name`: The name you want to display for the service under STARROCKS. If it is not specified, `Service Name` will be displayed.
@@ -128,11 +130,11 @@ This step configures the StarRocks Service on Ranger so that users can perform a
 
    The following figure shows a configuration example.
 
-   ![example](../../_assets/ranger_show_config.png)
+   ![example](../../../_assets/ranger_show_config.png)
 
    The following figure shows the added service.
 
-   ![added service](../../_assets/ranger_added_service.png)
+   ![added service](../../../_assets/ranger_added_service.png)
 
 5. Click **Test connection** to test the connectivity, and save it after the connection is successful. If you didn't install ranger-starrocks-plugin, then you can skip test connection and create directly.
 6. On each FE machine of the StarRocks cluster, create [ranger-starrocks-security.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml) in the `fe/conf` folder and copy the content. You must modify the following two parameters and save the modifications:
