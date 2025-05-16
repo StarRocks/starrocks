@@ -4,7 +4,13 @@ displayed_sidebar: docs
 
 # get_json_string,get_json_object
 
-指定されたパス (`json_path`) から JSON 文字列を解析し、文字列を取得します。`json_string` または `json_path` の形式が間違っている場合、または一致する値が見つからない場合、この関数は NULL を返します。
+指定されたパス (`json_path`) から JSON 文字列を解析して文字列を取得します。`json_string` または `json_path` の形式が間違っている場合、または一致する値が見つからない場合、この関数は NULL を返します。
+
+:::tip
+すべての JSON 関数と演算子はナビゲーションと [overview page](../overview-of-json-functions-and-operators.md) に一覧されています。
+
+クエリを [生成列](../../../sql-statements/generated_columns.md) で高速化しましょう。
+:::
 
 エイリアスは get_json_object です。
 
@@ -17,11 +23,11 @@ VARCHAR get_json_string(VARCHAR json_str, VARCHAR json_path)
 ## パラメータ
 
 - `json_str`: JSON 文字列。サポートされているデータ型は VARCHAR です。
-- `json_path`: JSON パス。サポートされているデータ型は VARCHAR です。`json_path` は `$` で始まり、`.` をパス区切りとして使用します。`[ ]` は配列の添字として使用され、0 から始まります。例えば、`$."my.key"[1]` は要素 `my.key` の2番目の値を取得することを示します。
+- `json_path`: JSON パス。サポートされているデータ型は VARCHAR です。`json_path` は `$` で始まり、`.` をパスの区切りとして使用します。`[ ]` は配列の添字として使用され、0から始まります。例えば、`$."my.key"[1]` は要素 `my.key` から2番目の値を取得することを示します。
 
 ## 戻り値
 
-VARCHAR 型の値を返します。一致するオブジェクトが見つからない場合は、NULL を返します。
+VARCHAR 型の値を返します。一致するオブジェクトが見つからない場合は、NULL が返されます。
 
 ## 例
 
@@ -47,7 +53,7 @@ MySQL > SELECT get_json_object('[{"a":"123", "b": "456"},{"a":"23", "b": "56"}]'
 +------------------------------------------------------------------------------+
 ```
 
-例 3: 配列の中でキーが `my.key` の2番目の要素を取得します。
+例 3: 配列内のキーが `my.key` の2番目の要素を取得します。
 
 ```Plain Text
 MySQL > SELECT get_json_string('{"k1":"v1", "my.key":["e1", "e2", "e3"]}', '$."my.key"[1]');
@@ -58,7 +64,7 @@ MySQL > SELECT get_json_string('{"k1":"v1", "my.key":["e1", "e2", "e3"]}', '$."m
 +------------------------------------------------------------------------------+
 ```
 
-例 4: パスが `k1.key -> k2` の配列の最初の要素を取得します。
+例 4: パスが `k1.key -> k2` の配列内の最初の要素を取得します。
 
 ```Plain Text
 MySQL > SELECT get_json_string('{"k1.key":{"k2":["v1", "v2"]}}', '$."k1.key".k2[0]');
@@ -69,7 +75,7 @@ MySQL > SELECT get_json_string('{"k1.key":{"k2":["v1", "v2"]}}', '$."k1.key".k2[
 +-----------------------------------------------------------------------+
 ```
 
-例 5: 配列からキーが `k1` のすべての値を取得します。
+例 5: 配列内のキーが `k1` のすべての値を取得します。
 
 ```Plain Text
 MySQL > SELECT get_json_string('[{"k1":"v1"}, {"k2":"v2"}, {"k1":"v3"}, {"k1":"v4"}]', '$.k1');

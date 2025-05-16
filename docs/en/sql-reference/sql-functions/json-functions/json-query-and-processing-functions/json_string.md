@@ -4,9 +4,13 @@ displayed_sidebar: docs
 
 # json_string
 
-
-
 Converting JSON object to JSON string
+
+:::tip
+All of the JSON functions and operators are listed in the navigation and on the [overview page](../overview-of-json-functions-and-operators.md)
+
+Accelerate your queries with [generated columns](../../../sql-statements/generated_columns.md)
+:::
 
 ## Syntax
 
