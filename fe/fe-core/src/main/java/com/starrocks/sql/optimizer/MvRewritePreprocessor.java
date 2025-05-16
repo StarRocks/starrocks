@@ -22,6 +22,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -44,6 +45,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.mv.MVPlanValidationResult;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
@@ -83,12 +86,22 @@ import java.util.Optional;
 import java.util.PriorityQueue;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
+import static com.google.common.util.concurrent.MoreExecutors.newDirectExecutorService;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 
 public class MvRewritePreprocessor {
     private static final Logger LOG = LogManager.getLogger(MvRewritePreprocessor.class);
+
+    private static final Executor MV_PREPARE_EXECUTOR = Executors.newFixedThreadPool(
+            ThreadPoolManager.cpuIntensiveThreadPoolSize(),
+            new ThreadFactoryBuilder().setDaemon(true).setNameFormat("mv-prepare-%d").build());
+
     private final ConnectContext connectContext;
     private final ColumnRefFactory queryColumnRefFactory;
     private final OptimizerContext context;
@@ -661,9 +674,10 @@ public class MvRewritePreprocessor {
             return;
         }
 
+        List<Pair<MaterializedViewWrapper, MvUpdateInfo>> mvInfos =
+                Lists.newArrayListWithExpectedSize(mvWithPlanContexts.size());
         for (MaterializedViewWrapper wrapper : mvWithPlanContexts) {
             MaterializedView mv = wrapper.getMV();
-            MvPlanContext mvPlanContext = wrapper.getMvPlanContext();
             try {
                 // mv's partitions to refresh
                 MvUpdateInfo mvUpdateInfo = queryMaterializationContext.getOrInitMVTimelinessInfos(mv);
@@ -671,25 +685,28 @@ public class MvRewritePreprocessor {
                     OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "stale partitions {}", mvUpdateInfo);
                     continue;
                 }
-                Set<String> partitionNamesToRefresh = mvUpdateInfo.getMvToRefreshPartitionNames();
-                if (!checkMvPartitionNamesToRefresh(connectContext, mv, partitionNamesToRefresh, mvPlanContext)) {
-                    continue;
-                }
-                logMVPrepare(mv, "MV' partitions to refresh: {}/{}", partitionNamesToRefresh.size(),
-                        MvUtils.shrinkToSize(partitionNamesToRefresh, Config.max_mv_task_run_meta_message_values_length));
-
-                MaterializationContext materializationContext = buildMaterializationContext(context, mv, mvPlanContext,
-                        mvUpdateInfo, queryTables, wrapper.getLevel());
-                if (materializationContext == null) {
-                    continue;
-                }
-                queryMaterializationContext.addValidCandidateMV(materializationContext);
-                logMVPrepare(connectContext, mv, "Prepare MV {} success", mv.getName());
+                mvInfos.add(Pair.create(wrapper, mvUpdateInfo));
             } catch (Exception e) {
                 List<String> tableNames = queryTables.stream().map(Table::getName).collect(Collectors.toList());
                 logMVPrepare(connectContext, "Preprocess MV {} failed: {}", mv.getName(), DebugUtil.getStackTrace(e));
                 LOG.warn("Preprocess mv {} failed for query tables:{}", mv.getName(), tableNames, e);
             }
+        }
+        Tracers tracers = Tracers.get();
+        List<CompletableFuture<Void>> futures = Lists.newArrayListWithExpectedSize(mvWithPlanContexts.size());
+        Executor exec = Config.enable_materialized_view_concurrent_prepare &&
+                connectContext.getSessionVariable().isEnableMaterializedViewConcurrentPrepare() ? MV_PREPARE_EXECUTOR :
+                newDirectExecutorService();
+        for (Pair<MaterializedViewWrapper, MvUpdateInfo> mvInfo : mvInfos) {
+            futures.add(CompletableFuture.supplyAsync(
+                    () -> prepareMV(tracers, queryTables, mvInfo.first, mvInfo.second), exec)
+            );
+        }
+        try {
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).get();
+        } catch (InterruptedException | ExecutionException e) {
+            LOG.warn("Preprocess mv failed", e);
+            throw new RuntimeException(e);
         }
         // all base table related mvs
         List<String> relatedMvNames = mvWithPlanContexts.stream()
@@ -701,6 +718,29 @@ public class MvRewritePreprocessor {
                 .collect(Collectors.toList());
         logMVPrepare(connectContext, "RelatedMVs: {}, CandidateMVs: {}", relatedMvNames,
                 candidateMvNames);
+    }
+
+    private Void prepareMV(Tracers tracers, Set<Table> queryTables, MaterializedViewWrapper mvWithPlanContext,
+                           MvUpdateInfo mvUpdateInfo) {
+        MaterializedView mv = mvWithPlanContext.getMV();
+        MvPlanContext mvPlanContext = mvWithPlanContext.getMvPlanContext();
+        Set<String> partitionNamesToRefresh = mvUpdateInfo.getMvToRefreshPartitionNames();
+        if (!checkMvPartitionNamesToRefresh(connectContext, mv, partitionNamesToRefresh, mvPlanContext)) {
+            return null;
+        }
+        logMVPrepare(tracers, mv, "MV' partitions to refresh: {}/{}", partitionNamesToRefresh.size(),
+                MvUtils.shrinkToSize(partitionNamesToRefresh, Config.max_mv_task_run_meta_message_values_length));
+
+        MaterializationContext materializationContext = buildMaterializationContext(context, mv, mvPlanContext,
+                mvUpdateInfo, queryTables, mvWithPlanContext.getLevel());
+        if (materializationContext == null) {
+            return null;
+        }
+        synchronized (materializationContext) {
+            queryMaterializationContext.addValidCandidateMV(materializationContext);
+        }
+        logMVPrepare(tracers, connectContext, mv, "Prepare MV {} success", mv.getName());
+        return null;
     }
 
     /**
@@ -777,7 +817,9 @@ public class MvRewritePreprocessor {
         // Add mv info into dump info
         if (context.getDumpInfo() != null) {
             String dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId()).getFullName();
-            context.getDumpInfo().addTable(dbName, mv);
+            synchronized (context) {
+                context.getDumpInfo().addTable(dbName, mv);
+            }
         }
 
         List<Table> baseTables = MvUtils.getAllTables(mvPlan);
@@ -792,8 +834,11 @@ public class MvRewritePreprocessor {
                         mvPlanContext.getRefFactory(), baseTables, intersectingTables,
                         mvUpdateInfo, mvOutputColumns, level);
         // generate scan mv plan here to reuse it in rule applications
-        LogicalOlapScanOperator scanMvOp = createScanMvOperator(mv,
-                materializationContext.getQueryRefFactory(), mvUpdateInfo.getMvToRefreshPartitionNames());
+        LogicalOlapScanOperator scanMvOp;
+        synchronized (materializationContext.getQueryRefFactory()) {
+            scanMvOp = createScanMvOperator(mv, materializationContext.getQueryRefFactory(),
+                    mvUpdateInfo.getMvToRefreshPartitionNames());
+        }
         materializationContext.setScanMvOperator(scanMvOp);
         // should keep the sequence of schema
         List<ColumnRefOperator> scanMvOutputColumns = Lists.newArrayList();
