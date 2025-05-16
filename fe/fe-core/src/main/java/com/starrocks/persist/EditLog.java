@@ -48,7 +48,6 @@ import com.starrocks.authorization.UserPrivilegeCollectionV2;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
 import com.starrocks.backup.RestoreJob;
-import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Dictionary;
@@ -517,12 +516,12 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_ADD_BROKER_V2: {
-                    final BrokerMgr.ModifyBrokerInfo param = (BrokerMgr.ModifyBrokerInfo) journal.data();
+                    final ModifyBrokerInfo param = (ModifyBrokerInfo) journal.data();
                     globalStateMgr.getBrokerMgr().replayAddBrokers(param.brokerName, param.brokerAddresses);
                     break;
                 }
                 case OperationType.OP_DROP_BROKER_V2: {
-                    final BrokerMgr.ModifyBrokerInfo param = (BrokerMgr.ModifyBrokerInfo) journal.data();
+                    final ModifyBrokerInfo param = (ModifyBrokerInfo) journal.data();
                     globalStateMgr.getBrokerMgr().replayDropBrokers(param.brokerName, param.brokerAddresses);
                     break;
                 }
@@ -1596,11 +1595,11 @@ public class EditLog {
         logJsonObject(OperationType.OP_RENAME_PARTITION_V2, tableInfo);
     }
 
-    public void logAddBroker(BrokerMgr.ModifyBrokerInfo info) {
+    public void logAddBroker(ModifyBrokerInfo info) {
         logJsonObject(OperationType.OP_ADD_BROKER_V2, info);
     }
 
-    public void logDropBroker(BrokerMgr.ModifyBrokerInfo info) {
+    public void logDropBroker(ModifyBrokerInfo info) {
         logJsonObject(OperationType.OP_DROP_BROKER_V2, info);
     }
 

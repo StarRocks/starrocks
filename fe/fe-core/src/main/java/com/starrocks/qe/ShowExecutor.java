@@ -107,6 +107,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.SchemaConstants;
 import com.starrocks.common.proc.BackendsProcDir;
+import com.starrocks.common.proc.BrokerProcNode;
 import com.starrocks.common.proc.ComputeNodeProcDir;
 import com.starrocks.common.proc.FrontendsProcNode;
 import com.starrocks.common.proc.LakeTabletsProcDir;
@@ -1949,7 +1950,8 @@ public class ShowExecutor {
 
         @Override
         public ShowResultSet visitShowBrokerStatement(ShowBrokerStmt statement, ConnectContext context) {
-            List<List<String>> rowSet = GlobalStateMgr.getCurrentState().getBrokerMgr().getBrokersInfo();
+            BrokerProcNode procNode = new BrokerProcNode();
+            List<List<String>> rowSet = procNode.fetchResult().getRows();
 
             // Only success
             return new ShowResultSet(statement.getMetaData(), rowSet);
