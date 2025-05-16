@@ -113,13 +113,13 @@ Ranger クラスターを操作する権限がない場合や、この機能が�
 
 3. `http://<ranger-ip>:<ranger-host>/login.jsp` にアクセスして Apache Ranger ページにログインします。ページに STARROCKS サービスが表示されます。
 
-   ![home](../../_assets/ranger_home.png)
+   ![home](../../../_assets/ranger_home.png)
 
 4. **STARROCKS** の後のプラス記号 (`+`) をクリックして StarRocks Service を設定します。
 
-   ![service detail](../../_assets/ranger_service_details.png)
+   ![service detail](../../../_assets/ranger_service_details.png)
 
-   ![property](../../_assets/ranger_properties.png)
+   ![property](../../../_assets/ranger_properties.png)
 
    - `Service Name`: サービス名を入力する必要があります。
    - `Display Name`: STARROCKS の下に表示するサービスの名前。指定しない場合は `Service Name` が表示されます。
@@ -128,11 +128,11 @@ Ranger クラスターを操作する権限がない場合や、この機能が�
 
    以下の図は、設定例を示しています。
 
-   ![example](../../_assets/ranger_show_config.png)
+   ![example](../../../_assets/ranger_show_config.png)
 
    以下の図は、追加されたサービスを示しています。
 
-   ![added service](../../_assets/ranger_added_service.png)
+   ![added service](../../../_assets/ranger_added_service.png)
 
 5. **Test connection** をクリックして接続性をテストし、接続が成功したら保存します。ranger-starrocks-plugin をインストールしていない場合は、接続テストをスキップして直接作成できます。
 6. StarRocks クラスターの各 FE マシンで、`fe/conf` フォルダーに [ranger-starrocks-security.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml) を作成し、内容をコピーします。次の 2 つのパラメーターを変更し、変更を保存する必要があります。
