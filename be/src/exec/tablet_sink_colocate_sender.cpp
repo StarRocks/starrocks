@@ -252,10 +252,10 @@ Status TabletSinkColocateSender::close_wait(RuntimeState* state, Status close_st
         return TabletSinkColocateSender::close_wait(state, close_status, ts_profile, write_txn_log);
     }
     Status status = std::move(close_status);
+    // BE id -> add_batch method counter
+    std::unordered_map<int64_t, AddBatchCounter> node_add_batch_counter_map;
+    int64_t serialize_batch_ns = 0, actual_consume_ns = 0;
     if (status.ok()) {
-        // BE id -> add_batch method counter
-        std::unordered_map<int64_t, AddBatchCounter> node_add_batch_counter_map;
-        int64_t serialize_batch_ns = 0, actual_consume_ns = 0;
         {
             SCOPED_TIMER(ts_profile->close_timer);
             Status err_st = Status::OK();
@@ -285,33 +285,36 @@ Status TabletSinkColocateSender::close_wait(RuntimeState* state, Status close_st
                 for_each_node_channel(merge_txn_log);
                 status.update(_write_combined_txn_log());
             }
-            // only if status is ok can we call this _profile->total_time_counter().
-            // if status is not ok, this sink may not be prepared, so that _profile is null
-            SCOPED_TIMER(ts_profile->runtime_profile->total_time_counter());
-            COUNTER_SET(ts_profile->serialize_chunk_timer, serialize_batch_ns);
-            COUNTER_SET(ts_profile->send_rpc_timer, actual_consume_ns);
-            COUNTER_SET(ts_profile->serialize_chunk_timer, serialize_batch_ns);
-            COUNTER_SET(ts_profile->send_rpc_timer, actual_consume_ns);
-
-            int64_t total_server_rpc_time_us = 0;
-            int64_t total_server_wait_memtable_flush_time_us = 0;
-            // print log of add batch time of all node, for tracing load performance easily
-            std::stringstream ss;
-            ss << "Olap table sink statistics. load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id
-               << ", add chunk time(ms)/wait lock time(ms)/num: ";
-            for (auto const& pair : node_add_batch_counter_map) {
-                total_server_rpc_time_us += pair.second.add_batch_execution_time_us;
-                total_server_wait_memtable_flush_time_us += pair.second.add_batch_wait_memtable_flush_time_us;
-                ss << "{" << pair.first << ":(" << (pair.second.add_batch_execution_time_us / 1000) << ")("
-                   << (pair.second.add_batch_wait_lock_time_us / 1000) << ")(" << pair.second.add_batch_num << ")} ";
-            }
-            ts_profile->server_rpc_timer->update(total_server_rpc_time_us * 1000);
-            ts_profile->server_wait_flush_timer->update(total_server_wait_memtable_flush_time_us * 1000);
-            LOG(INFO) << ss.str();
         }
     } else {
-        for_each_node_channel([&status](NodeChannel* ch) { ch->cancel(status); });
+        for_each_index_channel(
+                [&status, &node_add_batch_counter_map, &serialize_batch_ns, &actual_consume_ns](NodeChannel* ch) {
+                    ch->cancel(status);
+                    ch->time_report(&node_add_batch_counter_map, &serialize_batch_ns, &actual_consume_ns);
+                });
     }
+
+    SCOPED_TIMER(ts_profile->runtime_profile->total_time_counter());
+    COUNTER_SET(ts_profile->serialize_chunk_timer, serialize_batch_ns);
+    COUNTER_SET(ts_profile->send_rpc_timer, actual_consume_ns);
+    COUNTER_SET(ts_profile->serialize_chunk_timer, serialize_batch_ns);
+    COUNTER_SET(ts_profile->send_rpc_timer, actual_consume_ns);
+
+    int64_t total_server_rpc_time_us = 0;
+    int64_t total_server_wait_memtable_flush_time_us = 0;
+    // print log of add batch time of all node, for tracing load performance easily
+    std::stringstream ss;
+    ss << "Olap table sink statistics. load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id
+       << ", add chunk time(ms)/wait lock time(ms)/num: ";
+    for (auto const& pair : node_add_batch_counter_map) {
+        total_server_rpc_time_us += pair.second.add_batch_execution_time_us;
+        total_server_wait_memtable_flush_time_us += pair.second.add_batch_wait_memtable_flush_time_us;
+        ss << "{" << pair.first << ":(" << (pair.second.add_batch_execution_time_us / 1000) << ")("
+           << (pair.second.add_batch_wait_lock_time_us / 1000) << ")(" << pair.second.add_batch_num << ")} ";
+    }
+    ts_profile->server_rpc_timer->update(total_server_rpc_time_us * 1000);
+    ts_profile->server_wait_flush_timer->update(total_server_wait_memtable_flush_time_us * 1000);
+    LOG(INFO) << ss.str();
 
     Expr::close(_output_expr_ctxs, state);
     if (_partition_params) {
