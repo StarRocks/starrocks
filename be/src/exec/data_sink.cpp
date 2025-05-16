@@ -363,7 +363,8 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
             // limit op
             if (t_stream_sink.limit != -1) {
                 ops.emplace_back(std::make_shared<LimitOperatorFactory>(
-                        context->next_operator_id(), upstream_plan_node_id, t_stream_sink.limit));
+                        context->next_operator_id(), upstream_plan_node_id, t_stream_sink.limit,
+                        true /*no_chunk_mutation*/));
             }
 
             // sink op

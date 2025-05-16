@@ -20,8 +20,10 @@ namespace starrocks::pipeline {
 class LimitOperator final : public Operator {
 public:
     LimitOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-                  std::atomic<int64_t>& limit)
-            : Operator(factory, id, "limit", plan_node_id, false, driver_sequence), _limit(limit) {}
+                  std::atomic<int64_t>& limit, bool no_chunk_mutation = false)
+            : Operator(factory, id, "limit", plan_node_id, false, driver_sequence),
+              _limit(limit),
+              _no_chunk_mutation(no_chunk_mutation)  {}
 
     ~LimitOperator() override = default;
 
@@ -48,23 +50,25 @@ private:
     bool _is_finished = false;
     std::atomic<int64_t>& _limit;
     ChunkPtr _cur_chunk = nullptr;
+    bool _no_chunk_mutation;
 };
 
 class LimitOperatorFactory final : public OperatorFactory {
 public:
-    LimitOperatorFactory(int32_t id, int32_t plan_node_id, int64_t limit)
-            : OperatorFactory(id, "limit", plan_node_id), _limit(limit) {}
+    LimitOperatorFactory(int32_t id, int32_t plan_node_id, int64_t limit, bool no_chunk_mutation = false)
+            : OperatorFactory(id, "limit", plan_node_id), _limit(limit), _no_chunk_mutation(no_chunk_mutation) {}
 
     ~LimitOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<LimitOperator>(this, _id, _plan_node_id, driver_sequence, _limit);
+        return std::make_shared<LimitOperator>(this, _id, _plan_node_id, driver_sequence, _limit, _no_chunk_mutation);
     }
 
     int64_t limit() const { return _limit; }
 
 private:
     std::atomic<int64_t> _limit;
+    bool _no_chunk_mutation;
 };
 
 } // namespace starrocks::pipeline
