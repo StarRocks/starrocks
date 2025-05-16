@@ -373,6 +373,25 @@ public class AnalyzeCreateTableTest {
 
         AnalyzeTestUtil.getConnectContext().setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
         AnalyzeTestUtil.getConnectContext().setDatabase("test");
+
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table" 
+                        + "(k1 int, k2 date) partition by year(k2)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table" 
+                        + "(k1 int, k2 date) partition by month(k2)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table" 
+                        + "(k1 int, k2 date) partition by day(k2)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table" 
+                        + "(k1 int, k2 datetime) partition by hour(k2)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table" 
+                        + "(k1 int, k2 int) partition by bucket(k2, 10)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table" 
+                        + "(k1 int, k2 varchar(10)) partition by truncate(k2, 1)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table" 
+                        + "(k1 int, k2 varbinary(10)) partition by truncate(k2, 1)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table" 
+                        + "(k1 int, k2 date) partition by bucket(k2, 1)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table" 
+                        + "(k1 int, k2 datetime) partition by bucket(k2, 1)");
     }
 
     @Test
