@@ -67,6 +67,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.PhysicalPartitionTableDbId;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
@@ -315,6 +316,7 @@ import com.starrocks.thrift.TOlapTablePartitionParam;
 import com.starrocks.thrift.TPartitionMeta;
 import com.starrocks.thrift.TPartitionMetaRequest;
 import com.starrocks.thrift.TPartitionMetaResponse;
+import com.starrocks.thrift.TPhysicalPartitionTableDbId;
 import com.starrocks.thrift.TQueryStatisticsInfo;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
@@ -3094,7 +3096,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         TStartCheckpointResponse response = new TStartCheckpointResponse();
         try {
-            worker.setNextCheckpoint(request.getEpoch(), request.getJournal_id());
+            worker.setNextCheckpoint(request.getEpoch(), request.getJournal_id(),
+                                     request.getNeed_native_table_checkpoint_versions());
             response.setStatus(new TStatus(OK));
             return response;
         } catch (CheckpointException e) {
@@ -3125,7 +3128,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         try {
             if (request.isIs_success()) {
-                controller.finishCheckpoint(request.getJournal_id(), request.getNode_name());
+                Map<PhysicalPartitionTableDbId, Long> nativeTableCheckpointVersions = new HashMap<>();
+                for (Map.Entry<TPhysicalPartitionTableDbId, Long> entry :
+                        request.getNative_table_checkpoint_versions().entrySet()) {
+                    nativeTableCheckpointVersions.put(PhysicalPartitionTableDbId.fromThrift(entry.getKey(), entry.getValue()));
+                }
+                controller.finishCheckpoint(request.getJournal_id(), request.getNode_name(), nativeTableCheckpointVersions);
             } else {
                 controller.cancelCheckpoint(request.getNode_name(), request.getMessage());
             }

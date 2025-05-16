@@ -14,6 +14,7 @@
 
 package com.starrocks.journal;
 
+import com.starrocks.catalog.PhysicalPartitionTableDbId;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.leader.MetaHelper;
 import com.starrocks.staros.StarMgrServer;
@@ -24,7 +25,8 @@ public class StarMgrCheckpointWorker extends CheckpointWorker {
     }
 
     @Override
-    void doCheckpoint(long epoch, long journalId) throws Exception {
+    void doCheckpoint(long epoch, long journalId,
+                      Map<PhysicalPartitionTableDbId, Long> nativeTableCheckpointVersions) throws Exception {
         LOG.info("begin to generate new image: image.{}", journalId);
         StarMgrServer starMgrServer = StarMgrServer.getCurrentState();
         try {

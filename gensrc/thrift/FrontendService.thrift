@@ -2020,10 +2020,17 @@ struct TStartCheckpointRequest {
     1: optional i64 epoch;
     2: optional i64 journal_id;
     3: optional bool is_global_state_mgr;
+    4: optional bool need_native_table_checkpoint_versions;
 }
 
 struct TStartCheckpointResponse {
     1: optional Status.TStatus status;
+}
+
+struct TPhysicalPartitionTableDbId {
+    1: optional i64 db_id;
+    2: optional i64 table_id;
+    3: optional i64 partition_id;
 }
 
 struct TFinishCheckpointRequest {
@@ -2032,6 +2039,7 @@ struct TFinishCheckpointRequest {
     3: optional bool is_success;
     4: optional string message;
     5: optional bool is_global_state_mgr;
+    6: optional map<TPhysicalPartitionTableDbId, i64> native_table_checkpoint_versions;
 }
 
 struct TFinishCheckpointResponse {
