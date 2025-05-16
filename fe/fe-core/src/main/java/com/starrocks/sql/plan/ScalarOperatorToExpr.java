@@ -56,6 +56,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.FeConstants;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.DictionaryGetExpr;
@@ -393,7 +394,7 @@ public class ScalarOperatorToExpr {
         public Expr visitCall(CallOperator call, FormatterContext context) {
             String fnName = call.getFnName();
             Expr callExpr;
-            if (SPMFunctions.isSPMFunctions(call)) {
+            if (!FeConstants.runningUnitTest && SPMFunctions.isSPMFunctions(call)) {
                 throw UnsupportedException.unsupportedException("spm function only used in create baseline stmt");
             }
             switch (fnName.toLowerCase()) {

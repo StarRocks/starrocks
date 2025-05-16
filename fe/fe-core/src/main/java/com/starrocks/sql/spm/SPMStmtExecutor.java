@@ -27,7 +27,7 @@ import java.util.List;
 import java.util.stream.Stream;
 
 public class SPMStmtExecutor {
-    public static void execute(ConnectContext context, CreateBaselinePlanStmt stmt) {
+    public static BaselinePlan execute(ConnectContext context, CreateBaselinePlanStmt stmt) {
         SPMPlanBuilder builder = new SPMPlanBuilder(context, stmt);
         BaselinePlan plan = builder.execute();
         plan.setEnable(true);
@@ -38,6 +38,7 @@ public class SPMStmtExecutor {
         } else {
             context.getSqlPlanStorage().storeBaselinePlan(List.of(plan));
         }
+        return plan;
     }
 
     public static void execute(ConnectContext context, DropBaselinePlanStmt stmt) {

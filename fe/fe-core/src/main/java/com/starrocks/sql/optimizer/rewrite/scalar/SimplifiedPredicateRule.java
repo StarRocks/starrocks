@@ -337,7 +337,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             return predicate;
         }
 
-        if (SPMFunctions.isSPMFunctions(predicate.getChild(1))) {
+        if (SPMFunctions.isSPMFunctions(predicate)) {
             return predicate;
         }
 

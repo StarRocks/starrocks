@@ -74,13 +74,6 @@ public class SPMPlanBuilder {
         this.planHints = stmt.getAllQueryScopeHints();
     }
 
-    public SPMPlanBuilder(ConnectContext session, QueryStatement planStmt) {
-        this.session = session;
-        this.planHints = planStmt.getAllQueryScopeHints();
-        this.planStmt = planStmt.getQueryRelation();
-        this.bindStmt = null;
-    }
-
     public BaselinePlan execute() {
         analyze();
         parameterizedStmt();
