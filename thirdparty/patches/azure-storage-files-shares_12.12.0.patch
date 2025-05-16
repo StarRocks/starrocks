@@ -1,0 +1,54 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index b88178f18..eafb0e7f7 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -162,7 +162,7 @@ add_subdirectory(sdk/appconfiguration)
+ add_subdirectory(sdk/attestation)
+ # AMQP doesn't work for UWP yet, and eventhubs depends on AMQP, so we cannot include eventhubs on UWP.
+ if (NOT BUILD_WINDOWS_UWP)
+-  add_subdirectory(sdk/eventhubs)
++  # add_subdirectory(sdk/eventhubs)
+ endif()
+ add_subdirectory(sdk/identity)
+ add_subdirectory(sdk/keyvault)
+diff --git a/sdk/core/CMakeLists.txt b/sdk/core/CMakeLists.txt
+index 8773255f3..b329ba65a 100644
+--- a/sdk/core/CMakeLists.txt
++++ b/sdk/core/CMakeLists.txt
+@@ -11,8 +11,8 @@ set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+ add_subdirectory(azure-core)
+ 
+ if (NOT BUILD_WINDOWS_UWP)
+-  message(STATUS "Including AMQP library")
+-  add_subdirectory(azure-core-amqp)
++  # message(STATUS "Including AMQP library")
++  # add_subdirectory(azure-core-amqp)
+ endif()
+ 
+ if (NOT DISABLE_AZURE_CORE_OPENTELEMETRY)
+diff --git a/sdk/storage/azure-storage-common/CMakeLists.txt b/sdk/storage/azure-storage-common/CMakeLists.txt
+index 76afb17a3..fdc7e78b0 100644
+--- a/sdk/storage/azure-storage-common/CMakeLists.txt
++++ b/sdk/storage/azure-storage-common/CMakeLists.txt
+@@ -101,7 +101,7 @@ if(WIN32)
+ else()
+     find_package(LibXml2 REQUIRED)
+     target_include_directories(azure-storage-common SYSTEM PRIVATE ${LIBXML2_INCLUDE_DIRS})
+-    target_link_libraries(azure-storage-common PRIVATE ${LIBXML2_LIBRARIES})
++    target_link_libraries(azure-storage-common PRIVATE LibXml2::LibXml2)
+     find_package(OpenSSL REQUIRED)
+     target_link_libraries(azure-storage-common PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+ endif()
+diff --git a/sdk/tables/azure-data-tables/CMakeLists.txt b/sdk/tables/azure-data-tables/CMakeLists.txt
+index fcc5b35fa..1883fec05 100644
+--- a/sdk/tables/azure-data-tables/CMakeLists.txt
++++ b/sdk/tables/azure-data-tables/CMakeLists.txt
+@@ -95,7 +95,7 @@ else()
+     target_link_libraries(azure-data-tables PRIVATE OpenSSL::SSL)
+     find_package(LibXml2 REQUIRED)
+     target_include_directories(azure-data-tables SYSTEM PRIVATE ${LIBXML2_INCLUDE_DIRS})
+-    target_link_libraries(azure-data-tables PRIVATE ${LIBXML2_LIBRARIES})
++    target_link_libraries(azure-data-tables PRIVATE LibXml2::LibXml2)
+ endif()
+ 
+ target_include_directories(
