@@ -734,7 +734,7 @@ public class FunctionAnalyzer {
             return fn;
         }
 
-        fn = SPMFunctions.getSPMFunction(node.getFnName().getFunction());
+        fn = SPMFunctions.getSPMFunction(node, Arrays.stream(argumentTypes).toList());
         if (fn != null) {
             return fn;
         }

@@ -122,7 +122,7 @@ public class SPMPlaceholderBuilder {
     private class PlaceholderInserter extends SPMUpdateExprVisitor<Expr> {
         @Override
         public ParseNode visitInPredicate(InPredicate node, Expr root) {
-            if (node.getChildren().stream().skip(1).anyMatch(SPMFunctions::isSPMFunctions)) {
+            if (SPMFunctions.isSPMFunctions(node)) {
                 return visitExpression(node, root);
             }
             if (!node.isConstantValues()) {
@@ -243,7 +243,7 @@ public class SPMPlaceholderBuilder {
 
         @Override
         public ParseNode visitInPredicate(InPredicate node, Expr root) {
-            if (node.getChildren().stream().skip(1).anyMatch(SPMFunctions::isSPMFunctions)) {
+            if (SPMFunctions.isSPMFunctions(node)) {
                 return visitExpression(node, root);
             }
             if (!node.isConstantValues()) {
