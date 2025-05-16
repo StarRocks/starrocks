@@ -16,7 +16,6 @@ package com.starrocks.sql.spm;
 import com.github.benmanes.caffeine.cache.CacheLoader;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -212,13 +211,10 @@ class SQLPlanGlobalStorage implements SQLPlanStorage {
     public void dropBaselinePlan(List<Long> baseLineIds) {
         try {
             List<BaselineId> ids = allBaselineIds.stream().filter(b -> baseLineIds.contains(b.id)).toList();
-            Preconditions.checkState(ids.size() == 1);
-
             for (BaselineId id : ids) {
                 allBaselineIds.remove(id);
                 cache.invalidate(id.id);
             }
-
             if (!StatisticUtils.checkStatisticTables(List.of(StatsConstants.SPM_BASELINE_TABLE_NAME))) {
                 return;
             }
