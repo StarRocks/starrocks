@@ -95,7 +95,7 @@ public class AuthenticationHandler {
 
             if (Config.enable_auth_check) {
                 //Throw an exception directly and feedback to the client
-                provider.authenticate(context, user, remoteHost, authResponse);
+                provider.authenticate(context, matchedUserIdentity.getKey(), authResponse);
             }
 
             return new AuthenticationResult(matchedUserIdentity.getKey(), List.of(Config.group_provider), null);
@@ -128,7 +128,7 @@ public class AuthenticationHandler {
 
             AuthenticationProvider provider = securityIntegration.getAuthenticationProvider();
             try {
-                provider.authenticate(context, user, remoteHost, authResponse);
+                provider.authenticate(context, UserIdentity.createEphemeralUserIdent(user, remoteHost), authResponse);
             } catch (AuthenticationException e) {
                 exceptions.add(new Pair<>(authMechanism, e));
                 continue;

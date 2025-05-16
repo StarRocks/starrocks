@@ -973,7 +973,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - タイプ: Int
 - 単位: バイト
 - 可変: いいえ
-- 説明: 行ソースマスクバッファの最大メモリサイズ。この値を超えると、データはディスク上の一時ファイルに保存されます。この値は `compaction_mem_limit` の値よりも低く設定する必要があります。
+- 説明: 行ソースマスクバッファの最大メモリサイズ。この値を超えると、データはディスク上の一時ファイルに保存されます。この値は `compaction_memory_limit_per_worker` の値よりも低く設定する必要があります。
 - 導入バージョン: -
 
 ##### memory_maintenance_sleep_time_s
@@ -1178,11 +1178,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### number_tablet_writer_threads
 
-- デフォルト: 16
+- デフォルト: 0
 - タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: Stream Load に使用されるスレッドの数。この設定は v3.1.7 以降、動的に変更されました。
+- 説明: インポート用の tablet writer のスレッド数，Stream Load、Broker Load、Insert などに使用されます。パラメータが 0 以下に設定されている場合、システムは CPU コア数の半分（最小で 16）を使用します。パラメータが 0 より大きい値に設定されている場合、システムはその値を使用します。この設定は v3.1.7 以降、動的に変更されました。
 - 導入バージョン: -
 
 ##### streaming_load_max_mb
@@ -1360,15 +1360,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: BE プロセスの最小ファイルディスクリプタ数。
 - 導入バージョン: -
 
-##### index_stream_cache_capacity
-
-- デフォルト: 10737418240
-- タイプ: Int
-- 単位: バイト
-- 可変: いいえ
-- 説明: BloomFilter、Min、Max の統計情報のキャッシュ容量。
-- 導入バージョン: -
-
 ##### storage_page_cache_limit
 
 - デフォルト: 20%
@@ -1390,6 +1381,33 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
   - `true` は PageCache を無効にすることを示します。
   - この項目のデフォルト値は StarRocks v2.4 以降、`true` から `false` に変更されました。
 - 導入バージョン: -
+
+##### enable_bitmap_index_memory_page_cache
+
+- デフォルト: true 
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明:Bitmap インデックスのメモリキャッシュを有効にするかどうか。Bitmap インデックスを使用してポイントクエリを高速化したい場合は、メモリキャッシュを使用することを推奨します。
+- 導入バージョン: v3.1
+
+##### enable_zonemap_index_memory_page_cache
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: ゾーンマップインデックスのメモリーキャッシュを有効にするかどうか。ゾーンマップインデックスを使用してスキャンを高速化したい場合は、メモリキャッシュを使用することを推奨します。
+- 導入バージョン: -
+
+##### enable_ordinal_index_memory_page_cache
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: オーディナルインデックスのメモリキャッシュを有効にするかどうか。オーディナルインデックスは行IDからデータページの位置へのマッピングであり、スキャンを高速化するために使用できる。
+- 導入バージョン:  -
 
 ##### fragment_pool_thread_num_min
 
@@ -1698,6 +1716,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: いいえ
 - 説明: `object_storage_request_timeout_ms` の別名。詳細は [object_storage_request_timeout_ms](#object_storage_request_timeout_ms) を参照してください。
 - 導入バージョン: v3.3.9
+
+##### starlet_filesystem_instance_cache_capacity
+
+- デフォルト: 10000
+- タイプ: Int
+- 単位: 秒
+- 可変: はい
+- 説明: starlet filesystem インスタンスのキャッシュ容量。
+- 導入バージョン: v3.2.16, v3.3.11, v3.4.1
+
+##### starlet_filesystem_instance_cache_ttl_sec
+
+- デフォルト: 86400
+- タイプ: Int
+- 単位: 秒
+- 可変: はい
+- 説明: starlet filesystem インスタンス キャッシュの有効期限。
+- 導入バージョン: v3.3.15, 3.4.5
 
 ##### lake_compaction_stream_buffer_size_bytes
 

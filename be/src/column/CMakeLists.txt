@@ -42,4 +42,6 @@ add_library(Column STATIC
         map_column.cpp
         struct_column.cpp
         stream_chunk.cpp
+        column_view/column_view_base.cpp
+        column_view/column_view_helper.cpp
 )

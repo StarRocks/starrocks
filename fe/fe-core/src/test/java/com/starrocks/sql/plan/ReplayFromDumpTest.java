@@ -507,6 +507,8 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
 
     @Test
     public void testCorrelatedPredicateRewrite() throws Exception {
+        connectContext.getSessionVariable().setSemiJoinDeduplicateMode(-1);
+        connectContext.getSessionVariable().setEnableInnerJoinToSemi(false);
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/union_with_subquery"), null, TExplainLevel.COSTS);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("1201:HASH JOIN\n" +
@@ -701,15 +703,15 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
 
         // tbl_mock_015
         Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
-                "     - filter_id = 4, probe_expr = (80: mock_004)"));
+                "     - filter_id = 4, probe_expr = (<slot 79> 79: mock_004)"));
         Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
-                "     - filter_id = 3, probe_expr = (62: mock_004)"));
+                "     - filter_id = 3, probe_expr = (<slot 62> 62: mock_004)"));
 
         // table: tbl_mock_001, rollup: tbl_mock_001
         Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
-                "     - filter_id = 1, probe_expr = (116: mock_004)"));
+                "     - filter_id = 1, probe_expr = (<slot 110> 110: mock_004)"));
         Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
-                "     - filter_id = 0, probe_expr = (98: mock_004)\n"));
+                "     - filter_id = 0, probe_expr = (<slot 96> 96: mock_004)\n"));
 
     }
 

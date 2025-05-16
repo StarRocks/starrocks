@@ -530,6 +530,14 @@ public class JobSpec {
         return isSyncStreamLoad;
     }
 
+    public boolean isJobNeedCheckQueue() {
+        // The queries only using schema meta will never been queued, because a MySQL client will
+        // query schema meta after the connection is established.
+        boolean notNeed =
+                this.scanNodes.isEmpty() || this.scanNodes.stream().allMatch(SchemaScanNode.class::isInstance);
+        return !notNeed;
+    }
+
     public static class Builder {
         private final JobSpec instance = new JobSpec();
 
@@ -653,13 +661,7 @@ public class JobSpec {
             if (!instance.connectContext.isNeedQueued()) {
                 return false;
             }
-
-            // The queries only using schema meta will never been queued, because a MySQL client will
-            // query schema meta after the connection is established.
-            boolean notNeed =
-                    instance.scanNodes.isEmpty() || instance.scanNodes.stream().allMatch(SchemaScanNode.class::isInstance);
-            return !notNeed;
+            return instance.isJobNeedCheckQueue();
         }
     }
-
 }

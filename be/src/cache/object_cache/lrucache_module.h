@@ -28,7 +28,7 @@ public:
 
     virtual ~LRUCacheModule();
 
-    Status insert(const std::string& key, void* value, size_t size, size_t charge, ObjectCacheDeleter deleter,
+    Status insert(const std::string& key, void* value, size_t size, ObjectCacheDeleter deleter,
                   ObjectCacheHandlePtr* handle, ObjectCacheWriteOptions* options) override;
 
     Status lookup(const std::string& key, ObjectCacheHandlePtr* handle, ObjectCacheReadOptions* options) override;

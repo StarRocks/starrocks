@@ -44,6 +44,7 @@ import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.builtins.VectorizedBuiltinFunctions;
 import com.starrocks.catalog.combinator.AggStateCombinator;
+import com.starrocks.catalog.combinator.AggStateIf;
 import com.starrocks.catalog.combinator.AggStateMergeCombinator;
 import com.starrocks.catalog.combinator.AggStateUnionCombinator;
 import com.starrocks.catalog.combinator.AggStateUtils;
@@ -440,6 +441,8 @@ public class FunctionSet {
     public static final String SQUARE = "square";
     public static final String TAN = "tan";
     public static final String TRUNCATE = "truncate";
+    public static final String ICEBERG_TRANSFORM_TRUNCATE = "__iceberg_transform_truncate";
+    public static final String ICEBERG_TRANSFORM_BUCKET = "__iceberg_transform_bucket";
 
     // Window functions:
     public static final String LEAD = "lead";
@@ -543,6 +546,7 @@ public class FunctionSet {
     public static final String AGG_STATE_SUFFIX = "_state";
     public static final String AGG_STATE_UNION_SUFFIX = "_union";
     public static final String AGG_STATE_MERGE_SUFFIX = "_merge";
+    public static final String AGG_STATE_IF_SUFFIX = "_if";
 
     private static final Logger LOGGER = LogManager.getLogger(FunctionSet.class);
 
@@ -1022,12 +1026,16 @@ public class FunctionSet {
     public void addBuiltin(AggregateFunction aggFunc) {
         addBuiltInFunction(aggFunc);
 
-        if (AggStateUtils.isSupportedAggStateFunction(aggFunc)) {
+        if (AggStateUtils.isSupportedAggStateFunction(aggFunc, false)) {
             // register `_state` combinator
             AggStateCombinator.of(aggFunc).stream().forEach(this::addBuiltInFunction);
             // register `_merge`/`_union` combinator for aggregate functions
             AggStateUnionCombinator.of(aggFunc).stream().forEach(this::addBuiltInFunction);
             AggStateMergeCombinator.of(aggFunc).stream().forEach(this::addBuiltInFunction);
+        }
+
+        if (AggStateUtils.isSupportedAggStateFunction(aggFunc, true)) {
+            AggStateIf.of(aggFunc).stream().forEach(this::addBuiltInFunction);
         }
     }
 
@@ -1043,6 +1051,10 @@ public class FunctionSet {
         return String.format("%s%s", name, AGG_STATE_MERGE_SUFFIX);
     }
 
+    public static String getAggStateIfName(String name) {
+        return String.format("%s%s", name, AGG_STATE_IF_SUFFIX);
+    }
+
     // Populate all the aggregate builtins in the globalStateMgr.
     // null symbols indicate the function does not need that step of the evaluation.
     // An empty symbol indicates a TODO for the BE to implement the function.
@@ -1050,9 +1062,6 @@ public class FunctionSet {
         // count(*)
         addBuiltin(AggregateFunction.createBuiltin(FunctionSet.COUNT,
                 new ArrayList<>(), Type.BIGINT, Type.BIGINT, false, true, true));
-
-        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.COUNT_IF,
-                Lists.newArrayList(Type.BOOLEAN), Type.BIGINT, Type.BIGINT, true, true, true));
 
         // EXCHANGE_BYTES/_SPEED with various arguments
         addBuiltin(AggregateFunction.createBuiltin(EXCHANGE_BYTES,
@@ -1214,7 +1223,7 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(BITMAP_UNION, Lists.newArrayList(Type.BITMAP),
                 Type.BITMAP,
                 Type.BITMAP,
-                true, false, true));
+                true, true, true));
 
         // Type.VARCHAR must before all other type, so bitmap_agg(varchar) can convert to bitmap_agg(bigint)
         addBuiltin(AggregateFunction.createBuiltin(BITMAP_AGG, Lists.newArrayList(Type.BIGINT),

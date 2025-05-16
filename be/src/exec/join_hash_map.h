@@ -286,6 +286,9 @@ struct HashTableParam {
     bool with_other_conjunct = false;
     bool enable_late_materialization = false;
     bool enable_partition_hash_join = false;
+    long column_view_concat_rows_limit = -1L;
+    long column_view_concat_bytes_limit = -1L;
+
     TJoinOp::type join_type = TJoinOp::INNER_JOIN;
     const RowDescriptor* build_row_desc = nullptr;
     const RowDescriptor* probe_row_desc = nullptr;

@@ -714,7 +714,7 @@ Example:
 
 #### Specify Common Partition Expression TTL
 
-From v3.4.1 onwards, StarRocks native tables support Common Partition Expression TTL.
+From v3.5.0 onwards, StarRocks native tables support Common Partition Expression TTL.
 
 `partition_retention_condition`: The expression that declares the partitions to be retained dynamically. Partitions that do not meet the condition in the expression will be dropped regularly.
 - The expression can only contain partition columns and constants. Non-partition columns are not supported.

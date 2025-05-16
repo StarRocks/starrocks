@@ -75,10 +75,10 @@ TEST_F(StoragePageCacheTest, normal) {
         PageCacheHandle handle;
 
         ASSERT_OK(_page_cache->insert(key, data, &handle, false));
-        ASSERT_EQ(handle.data().data, data.data);
+        ASSERT_EQ(((Slice*)handle.data().data)->data, data.data);
 
         ASSERT_TRUE(_page_cache->lookup(key, &handle));
-        ASSERT_EQ(data.data, handle.data().data);
+        ASSERT_EQ(data.data, ((Slice*)handle.data().data)->data);
     }
 
     {
@@ -88,7 +88,7 @@ TEST_F(StoragePageCacheTest, normal) {
         PageCacheHandle handle;
 
         ASSERT_OK(_page_cache->insert(memory_key, data, &handle, true));
-        ASSERT_EQ(handle.data().data, data.data);
+        ASSERT_EQ(((Slice*)handle.data().data)->data, data.data);
 
         ASSERT_TRUE(_page_cache->lookup(memory_key, &handle));
     }

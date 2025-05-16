@@ -17,10 +17,10 @@
 #include <cstdlib>
 #include <random>
 
-#include "cache/block_cache/block_cache.h"
-#include "cache/block_cache/cache_options.h"
+#include "cache/cache_options.h"
 #include "cache/object_cache/lrucache_module.h"
 #include "cache/object_cache/starcache_module.h"
+#include "cache/starcache_wrapper.h"
 #include "common/config.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -71,7 +71,7 @@ private:
     size_t _capacity = 100L * 1024 * 1024 * 1024;
     size_t _page_size = 1024;
 
-    std::shared_ptr<BlockCache> _block_cache;
+    std::shared_ptr<StarCacheWrapper> _local_cache;
     std::shared_ptr<LRUCacheModule> _lru_cache;
     std::shared_ptr<StarCacheModule> _star_cache;
 };
@@ -131,13 +131,13 @@ void ObjectCacheBench::init_cache(CacheType cache_type) {
         opt.engine = "starcache";
         opt.eviction_policy = config::datacache_eviction_policy;
 
-        _block_cache = std::make_shared<BlockCache>();
-        Status st = _block_cache->init(opt);
+        _local_cache = std::make_shared<StarCacheWrapper>();
+        Status st = _local_cache->init(opt);
         if (!st.ok()) {
             LOG(FATAL) << "init star cache failed: " << st;
         }
 
-        _star_cache = std::make_shared<StarCacheModule>(_block_cache->starcache_instance());
+        _star_cache = std::make_shared<StarCacheModule>(_local_cache->starcache_instance());
         LOG(INFO) << "init star cache succ";
     }
 }
@@ -150,7 +150,7 @@ void ObjectCacheBench::prepare_sequence_data(ObjectCache* cache, int64_t count) 
         *(int*)ptr = 1;
         ObjectCacheHandlePtr handle = nullptr;
         ObjectCacheWriteOptions options;
-        Status st = cache->insert(key, ptr, _page_size, _page_size, deleter, &handle, &options);
+        Status st = cache->insert(key, ptr, _page_size, deleter, &handle, &options);
         if (!st.ok()) {
             if (!st.is_already_exist()) {
                 LOG(FATAL) << "insert failed: " << st;
@@ -169,7 +169,7 @@ void ObjectCacheBench::prepare_data(ObjectCache* cache, int64_t count) {
         *(int*)ptr = 1;
         ObjectCacheHandlePtr handle = nullptr;
         ObjectCacheWriteOptions options;
-        Status st = cache->insert(key, ptr, _page_size, _page_size, deleter, &handle, &options);
+        Status st = cache->insert(key, ptr, _page_size, deleter, &handle, &options);
         if (!st.ok()) {
             if (!st.is_already_exist()) {
                 LOG(FATAL) << "insert failed: " << st;
@@ -236,7 +236,7 @@ void ObjectCacheBench::random_insert_multi_threads(benchmark::State* state, Obje
         *(int*)ptr = 1;
         ObjectCacheHandlePtr handle = nullptr;
         ObjectCacheWriteOptions options;
-        Status st = cache->insert(key, ptr, page_size, page_size, deleter, &handle, &options);
+        Status st = cache->insert(key, ptr, page_size, deleter, &handle, &options);
         if (!st.ok()) {
             if (!st.is_already_exist()) {
                 LOG(FATAL) << "insert failed: " << st;

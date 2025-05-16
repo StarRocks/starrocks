@@ -17,9 +17,11 @@ package com.starrocks.authentication;
 import com.google.common.base.Strings;
 import com.starrocks.mysql.security.LdapSecurity;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.UserIdentity;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import javax.naming.NamingException;
 
 public class LDAPAuthProviderForNative implements AuthenticationProvider {
     private final String ldapServerHost;
@@ -47,23 +49,24 @@ public class LDAPAuthProviderForNative implements AuthenticationProvider {
     }
 
     @Override
-    public void authenticate(ConnectContext context, String user, String host, byte[] authResponse)
+    public void authenticate(ConnectContext context, UserIdentity userIdentity, byte[] authResponse)
             throws AuthenticationException {
         //clear password terminate string
         byte[] clearPassword = authResponse;
         if (authResponse[authResponse.length - 1] == 0) {
             clearPassword = Arrays.copyOf(authResponse, authResponse.length - 1);
         }
-        if (!Strings.isNullOrEmpty(ldapUserDN)) {
-            if (!LdapSecurity.checkPassword(ldapUserDN, new String(clearPassword, StandardCharsets.UTF_8),
-                    ldapServerHost, ldapServerPort)) {
-                throw new AuthenticationException("Failed to authenticate for [user: " + user + "] by ldap");
+
+        try {
+            if (!Strings.isNullOrEmpty(ldapUserDN)) {
+                LdapSecurity.checkPassword(ldapUserDN, new String(clearPassword, StandardCharsets.UTF_8),
+                        ldapServerHost, ldapServerPort);
+            } else {
+                LdapSecurity.checkPasswordByRoot(userIdentity.getUser(), new String(clearPassword, StandardCharsets.UTF_8),
+                        ldapServerHost, ldapServerPort, ldapBindRootDN, ldapBindRootPwd, ldapBindBaseDN, ldapSearchFilter);
             }
-        } else {
-            if (!LdapSecurity.checkPasswordByRoot(user, new String(clearPassword, StandardCharsets.UTF_8),
-                    ldapServerHost, ldapServerPort, ldapBindRootDN, ldapBindRootPwd, ldapBindBaseDN, ldapSearchFilter)) {
-                throw new AuthenticationException("Failed to authenticate for [user: " + user + "] by ldap");
-            }
+        } catch (NamingException e) {
+            throw new AuthenticationException(e.getMessage());
         }
     }
 }

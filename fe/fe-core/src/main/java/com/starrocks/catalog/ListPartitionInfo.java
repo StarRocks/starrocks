@@ -362,6 +362,19 @@ public class ListPartitionInfo extends PartitionInfo {
 
     @Override
     public String toSql(OlapTable table, List<Long> partitionId) {
+        return toSql(table, automaticPartition, true);
+    }
+
+    /**
+     * Generate the SQL statement for creating a list partition
+     * @param table : table
+     * @param isAutomaticPartition : whether the partition type is automatic or by values. If true, only generate partition-by
+     *                             columns without partition values.
+     * @param useGeneratedColumnNameAsExpr : whether to use the generated column name as the expression, if false, use the
+     *                                     generated expression sql as the expression sql rather than the column name.
+     * @return : SQL statement for the list partition
+     */
+    public String toSql(OlapTable table, boolean isAutomaticPartition, boolean useGeneratedColumnNameAsExpr) {
         String replicationNumStr = table.getTableProperty()
                 .getProperties().get(PROPERTIES_REPLICATION_NUM);
         short tableReplicationNum = replicationNumStr == null ?
@@ -369,15 +382,22 @@ public class ListPartitionInfo extends PartitionInfo {
 
         StringBuilder sb = new StringBuilder();
         sb.append("PARTITION BY ");
-        if (!automaticPartition) {
+        if (!isAutomaticPartition) {
             sb.append("LIST");
         }
         sb.append("(");
         sb.append(MetaUtils.getColumnsByColumnIds(table, partitionColumnIds).stream()
-                .map(item -> "`" + item.getName() + "`")
+                .map(item -> {
+                    if (useGeneratedColumnNameAsExpr) {
+                        return  "`" + item.getName() + "`";
+                    } else {
+                        // if the column is generated, we need to use the expression sometimes, eg: mv's active/inactive.
+                        return MetaUtils.getPartitionColumnToSql(item);
+                    }
+                })
                 .collect(Collectors.joining(",")));
         sb.append(")");
-        if (!automaticPartition) {
+        if (!isAutomaticPartition) {
             List<Long> partitionIds = getPartitionIds(false);
             sb.append("(\n");
             if (!idToValues.isEmpty()) {

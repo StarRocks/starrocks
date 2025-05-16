@@ -92,7 +92,7 @@ public class LoadActionTest extends StarRocksHttpTestCase {
         };
 
         try (Response response = noRedirectClient.newCall(request).execute()) {
-            assertEquals(307, response.code());
+            assertEquals(response.message(), 307, response.code());
             String location = response.header("Location");
             assertTrue(redirectLocations.contains(location));
         }

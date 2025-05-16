@@ -359,6 +359,9 @@ void TabletUpdatesTest::test_writeread(bool enable_persistent_index) {
     auto rs2 = create_rowset(_tablet, keys, nullptr, true);
     ASSERT_TRUE(_tablet->rowset_commit(4, rs2).ok());
     ASSERT_EQ(4, _tablet->updates()->max_version());
+    ASSERT_TRUE(rs1->check_file_existence());
+    ASSERT_TRUE(rs2->check_file_existence());
+    ASSERT_TRUE(_tablet->updates()->rowset_check_file_existence());
 
     // read
     ASSERT_EQ(N, read_tablet(_tablet, 4));
@@ -470,8 +473,10 @@ void TabletUpdatesTest::test_writeread_with_delete(bool enable_persistent_index)
         keys.push_back(i);
     }
     // Insert [0, 1, 2 ... N)
-    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
+    auto r1 = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(2, r1).ok());
     ASSERT_EQ(2, _tablet->updates()->max_version());
+    ASSERT_TRUE(r1->check_file_existence());
 
     // Delete [0, 1, 2 ... N/2)
     Int64Column deletes;
@@ -479,6 +484,7 @@ void TabletUpdatesTest::test_writeread_with_delete(bool enable_persistent_index)
     ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, {}, &deletes)).ok());
     ASSERT_EQ(3, _tablet->updates()->max_version());
     ASSERT_EQ(N / 2, read_tablet(_tablet, 3));
+    ASSERT_TRUE(_tablet->updates()->rowset_check_file_existence());
 
     // Delete [0, 1, 2 ... N) and insert [N, N+1, N+2 ... 2*N)
     deletes.resize(0);
@@ -497,6 +503,27 @@ TEST_F(TabletUpdatesTest, writeread_with_delete) {
 
 TEST_F(TabletUpdatesTest, writeread_with_delete_with_persistent_index) {
     test_writeread_with_delete(true);
+}
+
+TEST_F(TabletUpdatesTest, test_rowset_file_existence) {
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(true);
+    // write
+    const int N = 8000;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    // Insert [0, 1, 2 ... N)
+    auto r1 = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(2, r1).ok());
+    ASSERT_EQ(2, _tablet->updates()->max_version());
+    ASSERT_TRUE(r1->check_file_existence());
+
+    // delete files from rs1 and rs2
+    r1->remove();
+    ASSERT_FALSE(r1->check_file_existence());
+    ASSERT_FALSE(_tablet->updates()->rowset_check_file_existence());
 }
 
 TEST_F(TabletUpdatesTest, writeread_with_delete_with_sort_key) {
@@ -4064,6 +4091,41 @@ TEST_F(TabletUpdatesTest, test_apply_breakpoint_check) {
 
 TEST_F(TabletUpdatesTest, test_apply_breakpoint_check_pindex) {
     test_apply_breakpoint_check(true);
+}
+
+TEST_F(TabletUpdatesTest, test_on_rowset_finished_lock_timeout) {
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(true);
+    std::vector<int64_t> keys;
+    int N = 100;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    {
+        auto rs0 = create_rowset(_tablet, keys);
+        int32_t version = 2;
+        auto st = _tablet->rowset_commit(version, rs0);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        ASSERT_EQ(version, _tablet->updates()->max_version());
+        ASSERT_EQ(version, _tablet->updates()->version_history_count());
+        ASSERT_EQ(N, read_tablet(_tablet, version));
+    }
+
+    {
+        int32_t version = 3;
+        std::vector<int32_t> column_indexes = {0, 1};
+        std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(_tablet->tablet_schema(), column_indexes);
+        RowsetSharedPtr partial_rowset = create_partial_rowset(_tablet, keys, column_indexes, partial_schema);
+        TEST_ENABLE_ERROR_POINT("TabletUpdates::get_rss_rowids_by_pk", Status::TimedOut("injected internal error"));
+        SyncPoint::GetInstance()->EnableProcessing();
+        StorageEngine::instance()->update_manager()->on_rowset_finished(_tablet.get(), partial_rowset.get());
+        TEST_DISABLE_ERROR_POINT("TabletUpdates::get_rss_rowids_by_pk");
+        SyncPoint::GetInstance()->DisableProcessing();
+        auto st = _tablet->rowset_commit(version, partial_rowset);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        ASSERT_EQ(N, read_tablet(_tablet, version));
+    }
 }
 
 } // namespace starrocks

@@ -727,6 +727,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Slot estimator strategy of queue based queries: MBE/PBE/MAX/MIN")
     public static String query_queue_slots_estimator_strategy = SlotEstimatorFactory.EstimatorPolicy.createDefault().name();
 
+    @ConfField(mutable = true, comment = "The max number of history allocated slots for a query queue")
+    public static int max_query_queue_history_slots_number = 0;
+
     /**
      * Used to estimate the number of slots of a query based on the cardinality of the Source Node. It is equal to the
      * cardinality of the Source Node divided by the configuration value and is limited to between [1, DOP*numBEs].
@@ -1415,22 +1418,16 @@ public class Config extends ConfigBase {
     public static boolean proc_profile_cpu_enable = true;
 
     /**
-     * The number of seconds between proc profile collections
-     */
-    @ConfField(mutable = true, comment = "The number of seconds between proc profile collections")
-    public static long proc_profile_collect_interval_s = 600;
-
-    /**
      * The number of seconds it takes to collect single proc profile
      */
     @ConfField(mutable = true, comment = "The number of seconds it takes to collect single proc profile")
-    public static long proc_profile_collect_time_s = 300;
+    public static long proc_profile_collect_time_s = 120;
 
     /**
      * The number of days to retain profile files
      */
     @ConfField(mutable = true, comment = "The number of days to retain profile files")
-    public static int proc_profile_file_retained_days = 2;
+    public static int proc_profile_file_retained_days = 1;
 
     /**
      * The number of bytes to retain profile files
@@ -1725,6 +1722,15 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static double tablet_sched_num_based_balance_threshold_ratio = 0.5;
 
+    /**
+     * Persistent index rebuild is triggered only when the partition has new ingestion recently after clone finish.
+     * currentTime - partition VisibleVersionTime < tablet_sched_pk_index_rebuild_threshold_seconds
+     *
+     * the default value is 2 days for T+1 ingestion.
+     */
+    @ConfField(mutable = true)
+    public static int tablet_sched_pk_index_rebuild_threshold_seconds = 172800;
+
     @ConfField(mutable = true, comment = "How much time we should wait before dropping the tablet from BE on tablet report")
     public static long tablet_report_drop_tablet_delay_sec = 120;
 
@@ -1960,6 +1966,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "The max depth that scalar operator optimization can be applied")
     public static int max_scalar_operator_optimize_depth = 256;
+
+    @ConfField(mutable = true, comment = "scalar operator maximum number of flat children.")
+    public static int max_scalar_operator_flat_children = 10000;
 
     /**
      * statistic collect flag
@@ -2711,6 +2720,16 @@ public class Config extends ConfigBase {
     public static String azure_adls2_shared_key = "";
     @ConfField
     public static String azure_adls2_sas_token = "";
+    @ConfField
+    public static boolean azure_adls2_oauth2_use_managed_identity = false;
+    @ConfField
+    public static String azure_adls2_oauth2_tenant_id = "";
+    @ConfField
+    public static String azure_adls2_oauth2_client_id = "";
+    @ConfField
+    public static String azure_adls2_oauth2_client_secret = "";
+    @ConfField
+    public static String azure_adls2_oauth2_oauth2_client_endpoint = "";
 
     @ConfField(mutable = true)
     public static int starmgr_grpc_timeout_seconds = 5;
@@ -3239,6 +3258,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Whether enable profile in refreshing materialized view or not by default")
     public static boolean enable_mv_refresh_collect_profile = false;
 
+    @ConfField(mutable = true, comment = "Whether enable adding extra materialized view name logging for better debug")
+    public static boolean enable_mv_refresh_extra_prefix_logging = true;
+
     @ConfField(mutable = true, comment = "The max length for mv task run extra message's values(set/map) to avoid " +
             "occupying too much meta memory")
     public static int max_mv_task_run_meta_message_values_length = 16;
@@ -3264,8 +3286,8 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Whether enable to cache mv query context or not")
     public static boolean enable_mv_query_context_cache = true;
 
-    @ConfField(mutable = true, comment = "Mv refresh fails if there is filtered data, false by default")
-    public static boolean mv_refresh_fail_on_filter_data = false;
+    @ConfField(mutable = true, comment = "Mv refresh fails if there is filtered data, true by default")
+    public static boolean mv_refresh_fail_on_filter_data = true;
 
     @ConfField(mutable = true, comment = "The default timeout for planner optimize when refresh materialized view, 30s by " +
             "default")
@@ -3274,6 +3296,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Whether enable to rewrite query in mv refresh or not so it can use " +
             "query the rewritten mv directly rather than original base table to improve query performance.")
     public static boolean enable_mv_refresh_query_rewrite = false;
+
+    @ConfField(mutable = true, comment = "Whether do reload flag check after FE's image loaded." +
+            " If one base mv has done reload, no need to do it again while other mv that related to it is reloading ")
+    public static boolean enable_mv_post_image_reload_cache = true;
 
     /**
      * Whether analyze the mv after refresh in async mode.
@@ -3328,6 +3354,9 @@ public class Config extends ConfigBase {
             "but may occupy some extra FE's memory. It's well-done when there are many relative " +
             "materialized views(>10) or query is complex(multi table joins).")
     public static long mv_query_context_cache_max_size = 1000;
+
+    @ConfField(mutable = true)
+    public static boolean enable_materialized_view_concurrent_prepare = true;
 
     /**
      * Checking the connectivity of port opened by FE,
@@ -3524,7 +3553,7 @@ public class Config extends ConfigBase {
      * The URL to a JWKS service or a local file in the conf dir
      */
     @ConfField(mutable = false)
-    public static String oidc_jwks_url = "";
+    public static String jwt_jwks_url = "";
 
     /**
      * String to identify the field in the JWT that identifies the subject of the JWT.
@@ -3532,21 +3561,21 @@ public class Config extends ConfigBase {
      * The value of this field must be the same as the user specified when logging into StarRocks.
      */
     @ConfField(mutable = false)
-    public static String oidc_principal_field = "sub";
+    public static String jwt_principal_field = "sub";
 
     /**
      * Specifies a list of string. One of that must match the value of the JWT’s issuer (iss) field in order to consider
      * this JWT valid. The iss field in the JWT identifies the principal that issued the JWT.
      */
     @ConfField(mutable = false)
-    public static String[] oidc_required_issuer = {};
+    public static String[] jwt_required_issuer = {};
 
     /**
      * Specifies a list of strings. For a JWT to be considered valid, the value of its 'aud' (Audience) field must match
      * at least one of these strings.
      */
     @ConfField(mutable = false)
-    public static String[] oidc_required_audience = {};
+    public static String[] jwt_required_audience = {};
 
     /**
      * The authorization URL. The URL a user’s browser will be redirected to in order to begin the OAuth2 authorization process
@@ -3640,7 +3669,7 @@ public class Config extends ConfigBase {
     public static int max_get_partitions_meta_result_count = 100000;
 
     @ConfField(mutable = false)
-    public static int max_spm_cache_baseline_size = 200;
+    public static int max_spm_cache_baseline_size = 1000;
 
     /**
      * The process must be stopped after the load balancing detection becomes Unhealthy,

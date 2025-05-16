@@ -57,6 +57,7 @@ import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -1803,7 +1804,8 @@ public class AuthorizationMgrTest {
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         DDLStmtExecutor.execute(stmt, ctx);
         ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%"));
-        ShowGrantsStmt showGrantsStmt = new ShowGrantsStmt("r_show_grants");
+        ShowGrantsStmt showGrantsStmt =
+                new ShowGrantsStmt("r_show_grants", GrantType.ROLE, NodePosition.ZERO);
 
         try {
             Authorizer.check(showGrantsStmt, ctx);

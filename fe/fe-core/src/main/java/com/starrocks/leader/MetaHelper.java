@@ -41,8 +41,10 @@ import com.starrocks.common.InvalidMetaDirException;
 import com.starrocks.common.io.IOUtils;
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.monitor.unit.ByteSizeValue;
+import com.starrocks.persist.ImageFormatVersion;
 import com.starrocks.persist.Storage;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.staros.StarMgrServer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -70,11 +72,6 @@ public class MetaHelper {
     private static final int BUFFER_BYTES = 8 * 1024;
     private static final int CHECKPOINT_LIMIT_BYTES = 30 * 1024 * 1024;
 
-    public static File getLeaderImageDir() {
-        String metaDir = GlobalStateMgr.getCurrentState().getImageDir();
-        return new File(metaDir);
-    }
-
     public static int getLimit() {
         return CHECKPOINT_LIMIT_BYTES;
     }
@@ -89,11 +86,11 @@ public class MetaHelper {
         return newFile;
     }
 
-    public static void downloadImageFile(String urlStr, int timeout, String version, File destDir)
+    public static void downloadImageFile(String urlStr, int timeout, String journalId, File destDir)
             throws IOException {
         HttpURLConnection conn = null;
         String checksum = null;
-        String destFilename = Storage.IMAGE + "." + version;
+        String destFilename = Storage.IMAGE + "." + journalId;
         File partFile = new File(destDir, destFilename + MetaHelper.PART_SUFFIX);
         // 1. download to a tmp file image.xxx.part
         try (OutputStream out = new FileOutputStream(partFile)) {
@@ -126,7 +123,7 @@ public class MetaHelper {
 
         // 2. write checksum if exists
         if (!Strings.isNullOrEmpty(checksum)) {
-            Files.writeString(Path.of(destDir.getAbsolutePath(), Storage.CHECKSUM + "." + version), checksum);
+            Files.writeString(Path.of(destDir.getAbsolutePath(), Storage.CHECKSUM + "." + journalId), checksum);
         }
 
         // 3. rename to image.xxx
@@ -250,7 +247,7 @@ public class MetaHelper {
             throw new InvalidMetaDirException();
         }
 
-        Path imageDir = Paths.get(GlobalStateMgr.getImageDirPath());
+        Path imageDir = Paths.get(MetaHelper.getImageFileDir(true));
         Path bdbDir = Paths.get(BDBEnvironment.getBdbDir());
         boolean haveImageData = false;
         if (Files.exists(imageDir)) {
@@ -269,6 +266,22 @@ public class MetaHelper {
                     "set start_with_incomplete_meta to true if you want to forcefully recover from image data, " +
                     "this may end with stale meta data, so please be careful.");
             throw new InvalidMetaDirException();
+        }
+    }
+
+    public static String getImageFileDir(boolean isGlobalStateMgr) {
+        if (isGlobalStateMgr) {
+            return getImageFileDir("", ImageFormatVersion.v2);
+        } else {
+            return getImageFileDir(StarMgrServer.IMAGE_SUBDIR, ImageFormatVersion.v1);
+        }
+    }
+
+    public static String getImageFileDir(String subDir, ImageFormatVersion imageFormatVersion) {
+        if (imageFormatVersion == ImageFormatVersion.v1) {
+            return GlobalStateMgr.getImageDirPath() + subDir;
+        } else {
+            return GlobalStateMgr.getImageDirPath() + subDir + "/" + imageFormatVersion;
         }
     }
 }

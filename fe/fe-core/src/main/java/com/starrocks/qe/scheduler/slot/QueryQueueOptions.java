@@ -15,6 +15,7 @@
 package com.starrocks.qe.scheduler.slot;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.server.GlobalStateMgr;
@@ -76,7 +77,10 @@ public class QueryQueueOptions {
             final Map<Long, Long> warehouseMemLimitBytesPerBe = BackendResourceStat.getInstance()
                     .getMemLimitBytesPerBeWithPred(beId -> computeNodeIds.contains(beId));
             final long avgMemLimitBytes = BackendResourceStat.getAvgMemLimitBytes(warehouseMemLimitBytesPerBe);
-            final V2 v2 = new V2(1,
+            // To avoid warehouse's cpu/mem usage too low, we can use concurrency level to scale up
+            // the total slots, the behavior is not changed by default.
+            final int concurrencyLevel = Math.max(1, Config.query_queue_v2_concurrency_level / 4);
+            final V2 v2 = new V2(concurrencyLevel,
                     computeNodeNum,
                     avgNumHardwareCoresOfBe,
                     avgMemLimitBytes,
@@ -141,14 +145,20 @@ public class QueryQueueOptions {
     }
 
     public static class V2 {
-        private static final V2 DEFAULT = new V2();
+        public static final V2 DEFAULT = new V2();
 
+        @SerializedName("NumWorkers")
         private final int numWorkers;
+        @SerializedName("NumRowsPerSlot")
         private final int numRowsPerSlot;
 
+        @SerializedName("TotalSlots")
         private final int totalSlots;
+        @SerializedName("MemBytesPerSlot")
         private final long memBytesPerSlot;
+        @SerializedName("CpuCostsPerSlot")
         private final long cpuCostsPerSlot;
+        @SerializedName("TotalSmallSlots")
         private final int totalSmallSlots;
 
         @VisibleForTesting

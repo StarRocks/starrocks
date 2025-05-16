@@ -107,6 +107,8 @@ import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.failpoint.FailPoint;
+import com.starrocks.failpoint.TriggerPolicy;
 import com.starrocks.http.BaseAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.http.rest.WarehouseInfosBuilder;
@@ -170,6 +172,7 @@ import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.staros.StarMgrServer;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
@@ -353,6 +356,8 @@ import com.starrocks.thrift.TTrackingLoadInfo;
 import com.starrocks.thrift.TTransactionStatus;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUpdateExportTaskStatusRequest;
+import com.starrocks.thrift.TUpdateFailPointRequest;
+import com.starrocks.thrift.TUpdateFailPointResponse;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUpdateResourceUsageResponse;
 import com.starrocks.thrift.TUserPrivDesc;
@@ -1256,6 +1261,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     private void checkPasswordAndLoadPriv(String user, String passwd, String db, String tbl,
                                           String clientIp) throws AuthenticationException {
+        if (checkIsInternalLoad(user, passwd, db, tbl, clientIp)) {
+            return;
+        }
         UserIdentity currentUser = AuthenticationHandler.authenticate(new ConnectContext(), user, clientIp,
                 passwd.getBytes(StandardCharsets.UTF_8));
         // check INSERT action on table
@@ -1268,6 +1276,18 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw new AuthenticationException(
                     "Access denied; you need (at least one of) the INSERT privilege(s) for this operation");
         }
+    }
+
+    private boolean checkIsInternalLoad(String user, String passwd, String db, String tbl,
+                                        String clientIp) {
+        for (Frontend fe : GlobalStateMgr.getCurrentState().getNodeMgr().getAllFrontends()) {
+            if (fe.getHost().equals(clientIp) && fe.isAlive() && fe.getHost().equals(user) &&
+                    fe.getNodeName().equals(passwd) && StatsConstants.STATISTICS_DB_NAME.equals(db) &&
+                    StatsConstants.QUERY_HISTORY_TABLE_NAME.equals(tbl)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
@@ -3104,7 +3124,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         try {
-            controller.finishCheckpoint(request.getJournal_id(), request.getNode_name());
+            if (request.isIs_success()) {
+                controller.finishCheckpoint(request.getJournal_id(), request.getNode_name());
+            } else {
+                controller.cancelCheckpoint(request.getNode_name(), request.getMessage());
+            }
             response.setStatus(new TStatus(OK));
             return response;
         } catch (CheckpointException e) {
@@ -3273,6 +3297,27 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return response;
     }
 
+    @Override
+    public TUpdateFailPointResponse updateFailPointStatus(TUpdateFailPointRequest request) {
+        TStatus status = new TStatus();
+        if (FailPoint.isEnabled()) {
+            if (request.isIs_enable()) {
+                FailPoint.setTriggerPolicy(request.getName(), TriggerPolicy.fromThrift(request));
+            } else {
+                FailPoint.removeTriggerPolicy(request.getName());
+            }
+            status.setStatus_code(OK);
+        } else {
+            status.setStatus_code(SERVICE_UNAVAILABLE);
+            status.setError_msgs(
+                    Lists.newArrayList("fail point is not enabled, please start fe with --failpoint option"));
+        }
+
+        TUpdateFailPointResponse response = new TUpdateFailPointResponse();
+        response.setStatus(status);
+        return response;
+    }
+
     @NotNull
     private static TConnectionInfo getTConnectionInfo(List<String> row) {
         TConnectionInfo tConnectionInfo = new TConnectionInfo();
@@ -3286,6 +3331,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         tConnectionInfo.setState(row.get(7));
         tConnectionInfo.setInfo(row.get(8));
         tConnectionInfo.setIsPending(row.get(9));
+        tConnectionInfo.setWarehouse(row.get(10));
         return tConnectionInfo;
     }
 }

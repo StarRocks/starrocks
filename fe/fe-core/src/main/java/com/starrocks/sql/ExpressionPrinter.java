@@ -46,6 +46,9 @@ public class ExpressionPrinter<C> extends ScalarOperatorVisitor<String, C> {
     }
 
     public String print(ScalarOperator scalarOperator) {
+        if (scalarOperator == null) {
+            return "";
+        }
         return scalarOperator.accept(this, null);
     }
 

@@ -59,6 +59,17 @@ public class AggStateDesc {
         this(aggFunc.functionName(), aggFunc.getReturnType(), Arrays.asList(aggFunc.getArgs()));
     }
 
+    public AggStateDesc(AggregateFunction aggFunc, boolean resultNullable) {
+        Preconditions.checkNotNull(aggFunc.functionName(), "functionName should not be null");
+        Preconditions.checkNotNull(aggFunc.getReturnType(), "returnType should not be null");
+        Preconditions.checkNotNull(aggFunc.getArgs(), "argTypes should not be null");
+        this.functionName = aggFunc.functionName();
+        this.returnType = aggFunc.getReturnType();
+        this.argTypes = Arrays.asList(aggFunc.getArgs());
+        this.resultNullable = resultNullable;
+    }
+
+
     public AggStateDesc(String functionName,
                         Type returnType,
                         List<Type> argTypes) {

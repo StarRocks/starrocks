@@ -93,10 +93,7 @@ public class CompactionJobTest {
         CompactionJob job = new CompactionJob(db, table, partition, 10010, true);
 
         Assert.assertTrue(job.getExecutionProfile().isEmpty());
-
-        List<CompactionTask> list = new ArrayList<>();
-        list.add(new CompactionTask(100));
-        job.setTasks(list);
+        job.setAggregateTask(new CompactionTask(100));
         job.finish();
         new MockUp<CompactionTask>() {
             @Mock
@@ -108,7 +105,10 @@ public class CompactionJobTest {
                 stat.readBytesRemote = 3L;
                 stat.readTimeLocal = 4L;
                 stat.readBytesLocal = 5L;
-                stat.inQueueTimeSec = 6;
+                stat.readSegmentCount = 6L;
+                stat.writeSegmentCount = 7L;
+                stat.writeSegmentBytes = 8L;
+                stat.inQueueTimeSec = 9;
                 list.add(stat);
                 return list;
             }

@@ -83,6 +83,8 @@ public:
     virtual Status visit(const ArrayViewColumn& column) {
         return Status::NotSupported("ArrayViewColumn is not supported");
     }
+
+    virtual Status visit(const ColumnView& column) { return Status::NotSupported("ColumnView is not supported"); }
 };
 
 } // namespace starrocks

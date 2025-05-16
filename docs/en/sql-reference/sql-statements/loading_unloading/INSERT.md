@@ -81,13 +81,7 @@ Query OK, 5 rows affected, 2 warnings (0.05 sec)
 | status        | Indicates if the loaded data is visible. `VISIBLE`: the data is successfully loaded and visible. `COMMITTED`: the data is successfully loaded but invisible for now. |
 | txnId         | The ID number corresponding to each INSERT transaction.      |
 
-## Usage notes
-
-- As for the current version, when StarRocks executes the INSERT INTO statement, if any row of data mismatches the destination table format (for example, the string is too long), the INSERT transaction fails by default. You can set the session variable `enable_insert_strict` to `false` so that the system filters out the data that mismatches the destination table format and continues to execute the transaction.
-
-- After INSERT OVERWRITE statement is executed, StarRocks creates temporary partitions for the partitions that store the original data, inserts data into the temporary partitions, and swaps the original partitions with the temporary partitions. All these operations are executed in the Leader FE node. Therefore, if the Leader FE node crashes while executing INSERT OVERWRITE statement, the whole load transaction fails, and the temporary partitions are deleted.
-
-### Dynamic Overwrite
+## Dynamic Overwrite
 
 From v3.4.0 onwards, StarRocks supports a new semantic - Dynamic Overwrite for INSERT OVERWRITE with partitioned tables.
 
@@ -118,6 +112,19 @@ Example:
 INSERT /*+set_var(dynamic_overwrite = true)*/ OVERWRITE insert_wiki_edit
 SELECT * FROM source_wiki_edit;
 ```
+
+## Usage notes
+
+- As for the current version, when StarRocks executes the INSERT INTO statement, if any row of data mismatches the destination table format (for example, the string is too long), the INSERT transaction fails by default. You can set the session variable `enable_insert_strict` to `false` so that the system filters out the data that mismatches the destination table format and continues to execute the transaction.
+
+- After INSERT OVERWRITE statement is executed, StarRocks creates temporary partitions for the partitions that store the original data, inserts data into the temporary partitions, and swaps the original partitions with the temporary partitions. All these operations are executed in the Leader FE node. Therefore, if the Leader FE node crashes while executing INSERT OVERWRITE statement, the whole load transaction fails, and the temporary partitions are deleted.
+
+- StarRocks supports writing into non-expression partitions via the INSERT OVERWRITE statement. However, when writing new data to a partition that did not previously exist, the system will not create the non-existing partition.
+
+**About Dynamic Overwrite**
+
+- Dynamic Overwrite only supports expression partitions. When writing new data to a partition that did not previously exist, the system will automatically create the non-existing partition.
+- Dynamic Overwrite supports partitions based on mixed expressions.
 
 ## Example
 

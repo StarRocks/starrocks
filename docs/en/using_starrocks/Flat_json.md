@@ -3,7 +3,11 @@ displayed_sidebar: docs
 sidebar_position: 110
 ---
 
-# [Preview] Flat JSON
+import Beta from '../_assets/commonMarkdown/_beta.mdx'
+
+# Flat JSON
+
+<Beta />
 
 This article introduces the basic concept of Flat JSON and how to use this feature.
 

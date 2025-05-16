@@ -273,6 +273,8 @@ public enum ErrorCode {
             "NOT allowed to read or write tables that have been subjected to DML operations before"),
     ERR_TXN_FORBID_CROSS_DB(5304, new byte[] {'2', '5', 'P', '0', '1'},
             "Cannot execute cross-database transactions. All DML target tables must belong to the same db"),
+    ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT(5305, new byte[] {'2', '5', 'P', '0', '1'},
+            "Explicit transaction only support insert statement"),
 
     /**
      * 5400 - 5499: Internal error
@@ -379,6 +381,8 @@ public enum ErrorCode {
     ERR_INVALID_WAREHOUSE_NAME(5906, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse name can not be null or empty"),
     ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_NOTHING_MODE(5907, new byte[] {'4', '2', '0', '0', '0'},
             "unsupported statement in shared_nothing mode"),
+    ERR_INVALID_CNGROUP_NAME(5911, new byte[] {'0', 'A', '0', '0', '0'}, "CNGroup name can not be null or empty"),
+    ERR_CNGROUP_NOT_IMPLEMENTED(5912, new byte[] {'0', 'A', '0', '0', '0'}, "CNGroup feature not implemented"),
 
     /**
      * 6000 - 6100: Planner

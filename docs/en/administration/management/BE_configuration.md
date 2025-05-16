@@ -1270,7 +1270,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Int
 - Unit: Bytes
 - Is mutable: No
-- Description: The maximum memory size of the row source mask buffer. When the buffer is larger than this value, data will be persisted to a temporary file on the disk. This value should be set lower than the value of `compaction_mem_limit`.
+- Description: The maximum memory size of the row source mask buffer. When the buffer is larger than this value, data will be persisted to a temporary file on the disk. This value should be set lower than the value of `compaction_memory_limit_per_worker`.
 - Introduced in: -
 
 ##### memory_maintenance_sleep_time_s
@@ -1685,11 +1685,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### number_tablet_writer_threads
 
-- Default: 16
+- Default: 0
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The number of threads used for Stream Load. This configuration is changed to dynamic from v3.1.7 onwards.
+- Description: The number of tablet writer threads used in ingestion, such as Stream Load, Broker Load and Insert. When the parameter is set to less than or equal to 0, the system uses half of the number of CPU cores, with a minimum of 16. When the parameter is set to greater than 0, the system uses that value. This configuration is changed to dynamic from v3.1.7 onwards.
 - Introduced in: -
 
 <!--
@@ -2087,15 +2087,6 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The minimum number of file descriptors in the BE process.
 - Introduced in: -
 
-##### index_stream_cache_capacity
-
-- Default: 10737418240
-- Type: Int
-- Unit: Bytes
-- Is mutable: No
-- Description: The cache capacity for the statistical information of BloomFilter, Min, and Max.
-- Introduced in: -
-
 ##### storage_page_cache_limit
 
 - Default: 20%
@@ -2118,49 +2109,32 @@ When this value is set to less than `0`, the system uses the product of its abso
   - The default value of this item has been changed from `true` to `false` since StarRocks v2.4.
 - Introduced in: -
 
-<!--
 ##### enable_bitmap_index_memory_page_cache
 
-- Default: false
+- Default: true 
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
 - Description: Whether to enable memory cache for Bitmap index. Memory cache is recommended if you want to use Bitmap indexes to accelerate point queries.
 - Introduced in: v3.1
--->
 
-<!--
 ##### enable_zonemap_index_memory_page_cache
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### enable_ordinal_index_memory_page_cache
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### disable_column_pool
 
 - Default: true
 - Type: Boolean
 - Unit: -
-- Is mutable: No
-- Description:
+- Is mutable: Yes
+- Description: Whether to enable memory cache for zonemap index. Memory cache is recommended if you want to use zonemap indexes to accelerate scan.
 - Introduced in: -
--->
+
+##### enable_ordinal_index_memory_page_cache
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable memory cache for ordinal index. Ordinal index is a mapping from row IDs to data page positions, and it can be used to accelerate scans.
+- Introduced in: -
 
 ##### fragment_pool_thread_num_min
 
@@ -3592,6 +3566,24 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: An alias of `object_storage_request_timeout_ms`. Refer to [object_storage_request_timeout_ms](#object_storage_request_timeout_ms) for details.
 - Introduced in: v3.3.9
 
+##### starlet_filesystem_instance_cache_capacity
+
+- Default: 10000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The cache capacity of starlet filesystem instances.
+- Introduced in: v3.2.16, v3.3.11, v3.4.1
+
+##### starlet_filesystem_instance_cache_ttl_sec
+
+- Default: 86400
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The cache expiration time of starlet filesystem instances.
+- Introduced in: v3.3.15, 3.4.5
+
 ##### lake_compaction_stream_buffer_size_bytes
 
 - Default: 1048576
@@ -4619,11 +4611,11 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### lake_enable_vertical_compaction_fill_data_cache
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to allow compaction tasks to cache data on local disks in a shared-data cluster.
+- Description: Whether to allow vertical compaction tasks to cache data on local disks in a shared-data cluster.
 - Introduced in: v3.1.7, v3.2.3
 
 <!--
@@ -5257,4 +5249,13 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Unit: Bytes
 - Is mutable: No
 - Description: The maximum length of input values for bitmap functions.
+- Introduced in: -
+
+##### report_exec_rpc_request_retry_num
+
+- Default: 10
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The retry times of rpc request to report exec rpc request to FE. The default value is 10, which means that the rpc request will be retried 10 times if it fails only if it's fragment instatnce finish rpc. Report exec rpc request is important for load job, if one fragment instance finish report failed, the load job will be hang until timeout.
 - Introduced in: -
