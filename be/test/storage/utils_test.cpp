@@ -57,4 +57,13 @@ TEST_F(TestUtils, test_is_tracker_hit_hard_limit) {
     ASSERT_TRUE(!is_tracker_hit_hard_limit(tracker.get(), 4));
 }
 
+TEST_F(TestUtils, test_valid_datetime) {
+    ASSERT_TRUE(valid_datetime("2020-01-01 00:00:00"));
+    ASSERT_TRUE(valid_datetime("2020-01-01 00:00:00.0"));
+    ASSERT_TRUE(valid_datetime("2020-01-01 00:00:00.01"));
+    ASSERT_TRUE(valid_datetime("2020-01-01 00:00:00.012345"));
+    ASSERT_TRUE(valid_datetime("2020-01-01 00:00:00.1230"));
+    ASSERT_FALSE(valid_datetime("2020-01-01 00:00:00.0123456"));
+}
+
 } // namespace starrocks
