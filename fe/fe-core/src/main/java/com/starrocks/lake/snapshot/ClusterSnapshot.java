@@ -22,7 +22,6 @@ import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.thrift.TClusterSnapshotsItem;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 public class ClusterSnapshot {
@@ -48,7 +47,7 @@ public class ClusterSnapshot {
     private long starMgrJournalId;
 
     @SerializedName(value = "snapshotVersions")
-    private Map<PhysicalPartitionTableDbId, List<Long>> snapshotVersions;
+    private Map<PhysicalPartitionTableDbId, Long> snapshotVersions;
 
     public ClusterSnapshot() {
     }
@@ -107,13 +106,13 @@ public class ClusterSnapshot {
         return type == ClusterSnapshotType.MANUAL;
     }
 
-    public void setSnapshotVersions(Map<PhysicalPartitionTableDbId, List<Long>> snapshotVersions) {
+    public void setSnapshotVersions(Map<PhysicalPartitionTableDbId, Long> snapshotVersions) {
         if (needSnapshotVersions()) {
             this.snapshotVersions = snapshotVersions;
         }
     }
 
-    public Map<PhysicalPartitionTableDbId, List<Long>> getSnapshotVersions() {
+    public Map<PhysicalPartitionTableDbId, Long> getSnapshotVersions() {
         return this.snapshotVersions;
     }
 

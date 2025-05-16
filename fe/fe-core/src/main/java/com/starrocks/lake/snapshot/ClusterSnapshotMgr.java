@@ -318,15 +318,15 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
 
         Set<Long> versionsSet = new HashSet<>();
         if (lastFinishedAutoSnapshotJob != null) {
-            List<Long> versions = lastFinishedAutoSnapshotJob.getSnapshotVersions().get(key);
-            if (versions != null) {
-                versionsSet.addAll(versions);
+            Long version = lastFinishedAutoSnapshotJob.getSnapshotVersions().get(key);
+            if (version != null) {
+                versionsSet.add(version);
             }
         }
         if (runningJob != null) {
-            List<Long> versions = runningJob.getSnapshotVersions().get(key);
-            if (versions != null) {
-                versionsSet.addAll(versions);
+            Long version = runningJob.getSnapshotVersions().get(key);
+            if (version != null) {
+                versionsSet.add(version);
             }
         }
 

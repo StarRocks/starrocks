@@ -28,7 +28,6 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.List;
 import java.util.Map;
 
 public class ClusterSnapshotJob implements Writable {
@@ -156,11 +155,11 @@ public class ClusterSnapshotJob implements Writable {
         this.detailInfo = detailInfo;
     }
 
-    public void setSnapshotVersions(Map<PhysicalPartitionTableDbId, List<Long>> snapshotVersions) {
+    public void setSnapshotVersions(Map<PhysicalPartitionTableDbId, Long> snapshotVersions) {
         snapshot.setSnapshotVersions(snapshotVersions);
     }
 
-    public Map<PhysicalPartitionTableDbId, List<Long>> getSnapshotVersions() {
+    public Map<PhysicalPartitionTableDbId, Long> getSnapshotVersions() {
         return snapshot.getSnapshotVersions();
     }
 
