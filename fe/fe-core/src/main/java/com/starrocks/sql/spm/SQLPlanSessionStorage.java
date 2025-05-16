@@ -36,8 +36,8 @@ class SQLPlanSessionStorage implements SQLPlanStorage {
         }
 
         List<BaselinePlan> bps = Lists.newArrayList();
+        Map<String, ScalarOperator> valuesMappings = Maps.newHashMap();
         for (BaselinePlan baselinePlan : baselinePlans) {
-            Map<String, ScalarOperator> valuesMappings = Maps.newHashMap();
             valuesMappings.put("id", ConstantOperator.createBigint(baselinePlan.getId()));
             valuesMappings.put("global", ConstantOperator.createBoolean(baselinePlan.isGlobal()));
             valuesMappings.put("enable", ConstantOperator.createBoolean(baselinePlan.isEnable()));

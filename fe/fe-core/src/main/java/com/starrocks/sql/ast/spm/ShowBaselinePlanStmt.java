@@ -56,6 +56,7 @@ public class ShowBaselinePlanStmt extends ShowStmt {
             .put("updatetime", Type.VARCHAR)
             .build();
 
+    // save where clause
     private final Expr where;
 
     public ShowBaselinePlanStmt(NodePosition pos, Expr where) {

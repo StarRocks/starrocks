@@ -560,4 +560,50 @@ public class SPMPlanBindTest extends PlanTestBase {
                     () -> executeShowBaselinePlan("show baseline where bindSQLDigest = ucase('%t1.v5, t0.v1%')"));
         }
     }
+
+    public ShowBaselinePlanStmt createShowBaselinePlan(String sql) {
+        List<StatementBase> statements = SqlParser.parse(sql, connectContext.getSessionVariable());
+        Preconditions.checkState(statements.size() == 1);
+        Preconditions.checkState(statements.get(0) instanceof ShowBaselinePlanStmt);
+        ShowBaselinePlanStmt s = (ShowBaselinePlanStmt) statements.get(0);
+        ShowStmtAnalyzer.analyze(s, connectContext);
+        return s;
+    }
+
+    @Test
+    public void testGlobalShowBaselineStmt() {
+        SQLPlanGlobalStorage storage = new SQLPlanGlobalStorage();
+        {
+            ShowBaselinePlanStmt s = createShowBaselinePlan("show baseline");
+            String result = storage.generateQuerySql(s.getWhere()).orElse("asdf");
+            assertContains(result, "SELECT * FROM spm_baselines");
+        }
+        {
+            ShowBaselinePlanStmt s = createShowBaselinePlan("show baseline where enable = true");
+            String result = storage.generateQuerySql(s.getWhere()).orElse("asdf");
+            assertContains(result, "WHERE is_enable");
+        }
+        {
+            ShowBaselinePlanStmt s = createShowBaselinePlan("show baseline where bindSQLDigest like '%asdf%'");
+            String result = storage.generateQuerySql(s.getWhere()).orElse("asdf");
+            assertContains(result, "WHERE bind_sql_digest LIKE '%asdf%'");
+
+        }
+        {
+            ShowBaselinePlanStmt s = createShowBaselinePlan("show baseline where global = false");
+            String result = storage.generateQuerySql(s.getWhere()).orElse("bad");
+            assertContains(result, "bad");
+
+        }
+        {
+            ShowBaselinePlanStmt s = createShowBaselinePlan("show baseline where plansql = 'asdf' and global = false");
+            String result = storage.generateQuerySql(s.getWhere()).orElse("bad");
+            assertContains(result, "bad");
+        }
+        {
+            ShowBaselinePlanStmt s = createShowBaselinePlan("show baseline where global = true and plansql = 'asdf'");
+            String result = storage.generateQuerySql(s.getWhere()).orElse("bad");
+            assertContains(result, "WHERE plan_sql = 'asdf'");
+        }
+    }
 }
