@@ -12,6 +12,8 @@ You only need to specify a simple partition expression at table creation. During
 
 From v3.4 onwards, expression partitioning is further optimized to unify all partitioning strategies and supported more complex solutions. It is recommended in most cases, and will replace the other partitioning strategies in future releases.
 
+From v3.5 onwards, StarRocks supports merging expression partitions based on time function for optimized storage efficiency and query performance. For detailed information, see [Merge expression partitions](#merge-expression-partitions).
+
 ## Partitioning based on a simple time function expression
 
 If you frequently query and manage data based on continuous time ranges, you only need to specify a date type (DATE or DATETIME) column as the partition column and specify year, month, day, or hour as the partition granularity in the time function expression. StarRocks will automatically create partitions and set the partitions' start and end dates or datetime based on the loaded data and partition expression.
@@ -314,6 +316,51 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 +-------------+-------------------+----------------+---------------------+--------------------+--------+--------------+-----------------------------+-----------------+---------+----------------+---------------+---------------------+--------------------------+----------+------------+----------+
 2 rows in set (0.00 sec)
 ```
+
+### Merge expression partitions
+
+In data management, partitioning based on different time granularity is crucial to optimizing queries and storage. To improve storage efficiency and query performance, StarRocks supports merging multiple expression partitions of a finer time granularity into one of a rougher time granularity, for example, merging partitions by day into one partition by month. By merging partitions that meet the specified condition (time range), StarRocks allows you to partition data on different time granularity.
+
+#### Syntax
+
+```SQL
+ALTER TABLE [<db_name>.]<table_name>
+PARTITION BY <time_expr>
+WHERE <time_range_column> BETWEEN <start_time> AND <end_time>
+```
+
+#### Parameters
+
+##### `PARTITION BY <time_expr>`
+
+**Required**: YES<br/>
+**Description**: Specifies the new time granularity for the partitioning strategy, for example, `PARTITION BY date_trunc('month', dt)`.
+
+##### `WHERE <time_range_column> BETWEEN <start_time> AND <end_time>`
+
+**Required**: YES<br/>
+**Description**: Specifies the time range of the partitions to be merged. Partitions within this range will be merged based on the rules defined in the `PARTITION BY` clause.
+
+#### Example
+
+Merge the partitions in the table `site_access1`, and change the partition time granularity from day to month. The time range of the partitions to be merged is from `2024-01-01` to `2024-03-31`.
+
+```SQL
+ALTER TABLE site_access1 PARTITION BY date_trunc('month', event_day)
+WHERE event_day BETWEEN '2024-01-01' AND '2024-03-31';
+```
+
+After merging:
+
+- Day-level partitions `2024-01-01` to `2024-01-31` are merged into a month-level partition of `2024-01`.
+- Day-level partitions `2024-02-01` to `2024-02-29` are merged into a month-level partition of `2024-02`.
+- Day-level partitions `2024-03-01` to `2024-03-31` are merged into a month-level partition of `2024-03`.
+
+#### Usage notes
+
+- Merging is supported only for expression partitions based a time function.
+- Merging partitions with multiple partition columns is not supported.
+- Parallel execution of merging and Schema Change/DML operations is not supported.
 
 ## Limits
 
