@@ -17,6 +17,7 @@ package com.starrocks.catalog;
 
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.proc.BrokerProcNode;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
@@ -48,7 +49,7 @@ public class BrokerMgrTest {
 
     @Test
     public void testIPTitle() {
-        Assert.assertTrue(BrokerMgr.BROKER_PROC_NODE_TITLE_NAMES.get(1).equals("IP"));
+        Assert.assertTrue(BrokerProcNode.BROKER_PROC_NODE_TITLE_NAMES.get(1).equals("IP"));
     }
 
     @Test
