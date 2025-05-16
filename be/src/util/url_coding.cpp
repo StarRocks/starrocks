@@ -22,6 +22,8 @@
 #include <exception>
 #include <memory>
 
+#include "gutil/strings/substitute.h"
+
 namespace starrocks {
 static void encode_base64_internal(const std::string& in, std::string* out, const unsigned char* basis, bool padding) {
     size_t len = in.size();
@@ -160,6 +162,40 @@ std::string url_encode(const std::string& decoded) {
     std::string result(encoded_value);
     curl_free(encoded_value);
     return result;
+}
+
+Status url_decode_slice(const char* value, size_t len, std::string* to) {
+    to->clear();
+    to->reserve(len);
+    for (size_t i = 0; i < len; i++) {
+        if (value[i] == '%') {
+            char l = value[i + 1];
+            char r = value[i + 2];
+            if ((l < 'A' || l > 'F') && (l < '0' || l > '9')) {
+                return Status::RuntimeError(
+                        strings::Substitute("decode string contains illegal hex chars: $0$1", l, r));
+            }
+            if ((r < 'A' || r > 'F') && (r < '0' || r > '9')) {
+                return Status::RuntimeError(
+                        strings::Substitute("decode string contains illegal hex chars: $0$1", l, r));
+            }
+            // if l in 'A'..'F', then l-'A' > 0; otherwise l-'A' < 0; we arithmetic shift right 8 bit
+            // yields mask, so all bits of mask are 0 if l in 'A'..'F', all bits are 1 if l in '0'..'9'
+            auto mask = (l - 'A') >> 8;
+            // so mask is all zeros, we choose l - '0'; otherwise we choose l - 'A' + 10; the result is the
+            // just the value that '0..9','A'..'F' represent in hexadecimal.
+            auto ch = ((l - 'A' + 10) & (~mask)) + ((l - '0') & mask);
+            // use the same way get the value of r in hexadecimal
+            mask = (r - 'A') >> 8;
+            // finally, high*16 + low is the value the string represent.
+            ch = (ch << 4) + ((r - 'A' + 10) & (~mask)) + ((r - '0') & mask);
+            to->push_back(ch);
+            i = i + 2;
+        } else {
+            to->push_back(value[i]);
+        }
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks
