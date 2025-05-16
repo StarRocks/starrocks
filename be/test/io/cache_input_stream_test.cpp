@@ -16,8 +16,8 @@
 
 #include <gtest/gtest.h>
 
-#include "cache/block_cache/block_cache.h"
 #include "cache/block_cache/test_cache_utils.h"
+#include "cache/datacache.h"
 #include "cache/starcache_wrapper.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
@@ -81,7 +81,7 @@ public:
 
         CacheOptions options = cache_options();
         auto block_cache = TestCacheUtils::create_cache(options);
-        CacheEnv::GetInstance()->set_block_cache(block_cache);
+        DataCache::GetInstance()->set_block_cache(block_cache);
     }
     void TearDown() override { config::datacache_auto_adjust_enable = _saved_enable_auto_adjust; }
 
@@ -320,10 +320,10 @@ TEST_F(CacheInputStreamTest, test_read_with_adaptor) {
 
     CacheOptions options = cache_options();
     // Because the cache adaptor only work for disk cache.
-    options.disk_spaces.push_back({.path = cache_dir, .size = 300 * 1024 * 1024});
+    options.dir_spaces.push_back({.path = cache_dir, .size = 300 * 1024 * 1024});
     options.enable_tiered_cache = false;
     auto block_cache = TestCacheUtils::create_cache(options);
-    CacheEnv::GetInstance()->set_block_cache(block_cache);
+    DataCache::GetInstance()->set_block_cache(block_cache);
 
     const int64_t block_count = 2;
 

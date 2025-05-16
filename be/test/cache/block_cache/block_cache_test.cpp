@@ -77,7 +77,7 @@ TEST_F(BlockCacheTest, hybrid_cache) {
 
     const size_t block_size = 256 * 1024;
     CacheOptions options = TestCacheUtils::create_simple_options(block_size, 2 * MB);
-    options.disk_spaces.push_back({.path = cache_dir, .size = 50 * MB});
+    options.dir_spaces.push_back({.path = cache_dir, .size = 50 * MB});
     auto cache = TestCacheUtils::create_cache(options);
 
     const size_t batch_size = block_size;
@@ -158,7 +158,7 @@ TEST_F(BlockCacheTest, read_cache_with_adaptor) {
 
     const size_t block_size = 1024 * 1024;
     CacheOptions options = TestCacheUtils::create_simple_options(block_size, 0);
-    options.disk_spaces.push_back({.path = cache_dir, .size = 500 * MB});
+    options.dir_spaces.push_back({.path = cache_dir, .size = 500 * MB});
     options.skip_read_factor = 1;
     auto cache = TestCacheUtils::create_cache(options);
 
@@ -222,7 +222,7 @@ TEST_F(BlockCacheTest, update_cache_quota) {
     const size_t block_size = 256 * 1024;
     size_t quota = 50 * MB;
     CacheOptions options = TestCacheUtils::create_simple_options(block_size, 1 * MB);
-    options.disk_spaces.push_back({.path = cache_dir, .size = quota});
+    options.dir_spaces.push_back({.path = cache_dir, .size = quota});
     auto cache = TestCacheUtils::create_cache(options);
     auto local_cache = cache->local_cache();
 
@@ -258,7 +258,7 @@ TEST_F(BlockCacheTest, clear_residual_blockfiles) {
 
     const size_t block_size = 256 * 1024;
     CacheOptions options = TestCacheUtils::create_simple_options(block_size, 0);
-    options.disk_spaces.push_back({.path = cache_dir, .size = 50 * MB});
+    options.dir_spaces.push_back({.path = cache_dir, .size = 50 * MB});
     auto cache = TestCacheUtils::create_cache(options);
 
     // write cache

@@ -463,7 +463,6 @@ private:
 
     // threads to clean all file descriptor not actively in use
     std::thread _fd_cache_clean_thread;
-    std::thread _adjust_cache_thread;
     std::vector<std::thread> _path_gc_threads;
     // threads to scan disk paths
     std::vector<std::thread> _path_scan_threads;

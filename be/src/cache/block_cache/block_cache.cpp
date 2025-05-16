@@ -16,11 +16,10 @@
 
 #include <fmt/format.h>
 
+#include "cache/datacache.h"
 #include "cache/peer_cache_wrapper.h"
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/exec_env.h"
-#include "util/hash_util.hpp"
 
 namespace starrocks {
 
@@ -31,7 +30,7 @@ namespace fs = std::filesystem;
 const size_t BlockCache::MAX_BLOCK_SIZE = 2 * 1024 * 1024;
 
 BlockCache* BlockCache::instance() {
-    return CacheEnv::GetInstance()->block_cache();
+    return DataCache::GetInstance()->block_cache();
 }
 
 BlockCache::~BlockCache() {
