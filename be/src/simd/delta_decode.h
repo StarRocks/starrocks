@@ -145,7 +145,7 @@ MFV_AVX512F(__m512i prefix_and_accumulate_int32_avx512(int32_t* p, __m512i s, co
     x = _mm512_add_epi32(x, _mm512_alignr_epi32(x, v_zero, 16 - 8));
     // accumulate
     x = _mm512_add_epi32(s, x);
-    _mm512_storeu_si512((__m512i*)p, x);
+    _mm512_storeu_si512(p, x);
     // return last value.
     return _mm512_permutexvar_epi32(v_perm15, x);
 });
