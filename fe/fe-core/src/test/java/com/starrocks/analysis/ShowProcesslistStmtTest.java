@@ -124,6 +124,7 @@ public class ShowProcesslistStmtTest {
         tConnectionInfo.setState("OK");
         tConnectionInfo.setInfo("info");
         tConnectionInfo.setIsPending("false");
+        tConnectionInfo.setWarehouse("default_warehouse");
         tListConnectionResponse.addToConnections(tConnectionInfo);
 
         try (MockedStatic<ThriftRPCRequestExecutor> thriftConnectionPoolMockedStatic =
@@ -133,6 +134,9 @@ public class ShowProcesslistStmtTest {
                     .thenReturn(tListConnectionResponse);
             ShowResultSet showResultSet = ShowExecutor.execute(showProcesslistStmt, context);
             Assert.assertEquals(3, showResultSet.getResultRows().size());
+
+            List<List<String>> resultRows = showResultSet.getResultRows();
+            Assert.assertEquals("default_warehouse", resultRows.get(0).get(11));
         }
     }
 }

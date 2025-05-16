@@ -150,6 +150,7 @@ public class ConnectContextTest {
         Assert.assertEquals("OK", row.get(7));
         Assert.assertEquals("", row.get(8));
         Assert.assertEquals("false", row.get(9));
+        Assert.assertEquals("default_warehouse", row.get(10));
 
         // Start time
         ctx.setStartTime();
