@@ -1887,6 +1887,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description:: The execution time threshold for queries to trigger the analysis of Query Feedback.
 - Introduced in: v3.4.0
 
+##### low_cardinality_threshold
+
+- Default: 255
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: Threshold of low cardinality dictionary.
+- Introduced in: v3.5.0
+
 ### Loading and unloading
 
 ##### load_straggler_wait_second
