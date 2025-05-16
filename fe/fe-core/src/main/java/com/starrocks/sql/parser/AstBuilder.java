@@ -4426,7 +4426,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitCreateDictionaryStatement(StarRocksParser.CreateDictionaryStatementContext context) {
         String dictionaryName = getQualifiedName(context.dictionaryName().qualifiedName()).toString();
-        String queryableObject = getQualifiedName(context.qualifiedName()).toString();
+        QualifiedName qualifiedSrcName = getQualifiedName(context.qualifiedName());
+        TableName queryableObject = qualifiedNameToTableName(qualifiedSrcName);
 
         List<StarRocksParser.DictionaryColumnDescContext> dictionaryColumnDescs = context.dictionaryColumnDesc();
         List<String> dictionaryKeys = new ArrayList<>();
