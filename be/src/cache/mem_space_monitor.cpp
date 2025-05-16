@@ -22,16 +22,6 @@
 #include "util/gc_helper.h"
 #include "util/thread.h"
 
-#define SLEEP_IN_BG_WORKER(seconds)                                         \
-    int64_t left_seconds = (seconds);                                       \
-    while (!_stopped.load(std::memory_order_consume) && left_seconds > 0) { \
-        sleep(1);                                                           \
-        --left_seconds;                                                     \
-    }                                                                       \
-    if (_stopped.load(std::memory_order_consume)) {                         \
-        break;                                                              \
-    }
-
 namespace starrocks {
 
 void MemSpaceMonitor::start() {
