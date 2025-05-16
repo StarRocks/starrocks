@@ -54,16 +54,16 @@ CREATE USER tom IDENTIFIED WITH authentication_jwt AS
 
 ## MySQL クライアントから JWT で接続する
 
-MySQL クライアントから StarRocks に JWT を使用して接続するには、`authentication_jwt_client` プラグインを有効にし、必要なトークン（トークンファイルのパスを使用）を渡してマップされたユーザーを認証する必要があります。
+MySQL クライアントから StarRocks に JWT を使用して接続するには、`authentication_openid-connect_client` プラグインを有効にし、必要なトークン（トークンファイルのパスを使用）を渡してマップされたユーザーを認証する必要があります。
 
 構文:
 
 ```Bash
-mysql -h <hostname> -P <query_port> --authentication-jwt-client-id-token-file=<path_to_token_file> -u <username>
+mysql -h <hostname> -P <query_port> --authentication-openid-connect-client-id-token-file=<path_to_token_file> -u <username>
 ```
 
 例:
 
 ```Bash
-mysql -h 127.0.0.1 -P 9030 --authentication-jwt-client-id-token-file=/path/to/token/file -u tom
+mysql -h 127.0.0.1 -P 9030 --authentication-openid-connect-client-id-token-file=/path/to/token/file -u tom
 ```

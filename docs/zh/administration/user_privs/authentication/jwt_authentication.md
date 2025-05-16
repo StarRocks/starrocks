@@ -54,16 +54,16 @@ CREATE USER tom IDENTIFIED WITH authentication_jwt AS
 
 ## 使用 JWT 从 MySQL 客户端连接
 
-要使用 JWT 从 MySQL 客户端连接到 StarRocks，您需要启用 `authentication_jwt_client` 插件，并传递必要的令牌（使用令牌文件的路径）来认证映射的用户。
+要使用 JWT 从 MySQL 客户端连接到 StarRocks，您需要启用 `authentication_openid-connect_client` 插件，并传递必要的令牌（使用令牌文件的路径）来认证映射的用户。
 
 语法：
 
 ```Bash
-mysql -h <hostname> -P <query_port> --authentication-jwt-client-id-token-file=<path_to_token_file> -u <username>
+mysql -h <hostname> -P <query_port> --authentication-openid-connect-client-id-token-file=<path_to_token_file> -u <username>
 ```
 
 示例：
 
 ```Bash
-mysql -h 127.0.0.1 -P 9030 --authentication-jwt-client-id-token-file=/path/to/token/file -u tom
+mysql -h 127.0.0.1 -P 9030 --authentication-openid-connect-client-id-token-file=/path/to/token/file -u tom
 ```

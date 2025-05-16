@@ -54,16 +54,16 @@ CREATE USER tom IDENTIFIED WITH authentication_jwt AS
 
 ## Connect from MySQL client with JWT
 
-To connect from a MySQL client to StarRocks using JWT, you need to enable the `authentication_jwt_client` plugin, and pass the necessary token (using the path to the token file) to authenticate the mapped user.
+To connect from a MySQL client to StarRocks using JWT, you need to enable the `authentication_openid-connect_client` plugin, and pass the necessary token (using the path to the token file) to authenticate the mapped user.
 
 Syntax:
 
 ```Bash
-mysql -h <hostname> -P <query_port> --authentication-jwt-client-id-token-file=<path_to_token_file> -u <username>
+mysql -h <hostname> -P <query_port> --authentication-openid-connect-client-id-token-file=<path_to_token_file> -u <username>
 ```
 
 Example:
 
 ```Bash
-mysql -h 127.0.0.1 -P 9030 --authentication-jwt-client-id-token-file=/path/to/token/file -u tom
+mysql -h 127.0.0.1 -P 9030 --authentication-openid-connect-client-id-token-file=/path/to/token/file -u tom
 ```
