@@ -37,7 +37,20 @@ public:
             const std::vector<std::unique_ptr<ColumnEvaluator>>& column_evaluators, Chunk* chunk,
             bool support_null_partition);
 
+    static StatusOr<std::string> iceberg_make_partition_name(
+            const std::vector<std::string>& partition_column_names,
+            const std::vector<std::unique_ptr<ColumnEvaluator>>& column_evaluators,
+            const std::vector<std::string>& transform_exprs, Chunk* chunk, bool support_null_partition,
+            std::vector<bool>& field_is_null);
+
     static StatusOr<std::string> column_value(const TypeDescriptor& type_desc, const ColumnPtr& column, int idx);
+
+    static StatusOr<std::string> iceberg_column_value(const TypeDescriptor& type_desc, const ColumnPtr& column,
+                                                      const std::string& transform_expr, bool& is_null);
+    static std::string to_string_int128(int128_t value);
+
+    template <typename T>
+    static StatusOr<std::string> format_decimal_value(T value, int scale);
 };
 
 class IcebergUtils {
