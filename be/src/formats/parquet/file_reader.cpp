@@ -24,7 +24,7 @@
 #include <utility>
 #include <vector>
 
-#include "cache/local_cache.h"
+#include "cache/datacache.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
@@ -69,7 +69,7 @@ FileReader::~FileReader() = default;
 Status FileReader::init(HdfsScannerContext* ctx) {
     _scanner_ctx = ctx;
     if (ctx->use_file_metacache) {
-        _cache = CacheEnv::GetInstance()->external_table_meta_cache();
+        _cache = DataCache::GetInstance()->external_table_meta_cache();
     }
 
     // parse FileMetadata

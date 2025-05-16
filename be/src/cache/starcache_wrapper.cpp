@@ -29,7 +29,7 @@ namespace starrocks {
 Status StarCacheWrapper::init(const CacheOptions& options) {
     starcache::CacheOptions opt;
     opt.mem_quota_bytes = options.mem_space_size;
-    for (auto& dir : options.disk_spaces) {
+    for (auto& dir : options.dir_spaces) {
         opt.disk_dir_spaces.push_back({.path = dir.path, .quota_bytes = dir.size});
     }
     opt.block_size = options.block_size;
@@ -63,7 +63,7 @@ Status StarCacheWrapper::init(const CacheOptions& options) {
     _initialized.store(true, std::memory_order_relaxed);
 
     LOG(INFO) << "init starcache engine, block_size: " << options.block_size
-              << ", disk_spaces: " << DiskSpaceMonitor::to_string(options.disk_spaces);
+              << ", disk_spaces: " << DiskSpaceMonitor::to_string(options.dir_spaces);
     return Status::OK();
 }
 

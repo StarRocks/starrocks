@@ -49,7 +49,7 @@ struct DirSpace {
 struct CacheOptions {
     // basic
     size_t mem_space_size = 0;
-    std::vector<DirSpace> disk_spaces;
+    std::vector<DirSpace> dir_spaces;
     std::string meta_path;
 
     // advanced

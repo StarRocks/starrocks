@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "cache/block_cache/test_cache_utils.h"
+#include "cache/datacache.h"
 #include "cache/starcache_wrapper.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
@@ -45,9 +46,9 @@ TEST_F(UpdateConfigActionTest, update_datacache_disk_size) {
 
     auto cache = std::make_shared<StarCacheWrapper>();
     CacheOptions options = TestCacheUtils::create_simple_options(256 * KB, 0);
-    options.disk_spaces.push_back({.path = cache_dir, .size = 50 * MB});
+    options.dir_spaces.push_back({.path = cache_dir, .size = 50 * MB});
     ASSERT_OK(cache->init(options));
-    CacheEnv::GetInstance()->set_local_cache(cache);
+    DataCache::GetInstance()->set_local_cache(cache);
 
     UpdateConfigAction action(ExecEnv::GetInstance());
 
