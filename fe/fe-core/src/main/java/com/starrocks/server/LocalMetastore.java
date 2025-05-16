@@ -89,6 +89,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.PhysicalPartitionTableDbId;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
@@ -5246,5 +5247,41 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     }
                 }).sum();
         return ImmutableMap.of("Partition", totalCount);
+    }
+
+    public void getNativeTableVersions(Map<PhysicalPartitionTableDbId, Long> nativeTableCheckpointVersions) {
+        if (nativeTableCheckpointVersions == null) {
+            return;
+        }
+
+        nativeTableCheckpointVersions.clear();
+        List<Long> dbIds = getDbIds();
+        for (Long dbId : dbIds) {
+            Database db = getDb(dbId);
+            if (db == null) {
+                continue;
+            }
+
+            List<Table> tables = new ArrayList<>();
+            for (Table table : getTables(db.getId())) {
+                if (table.isCloudNativeTableOrMaterializedView()) {
+                    tables.add(table);
+                }
+            }
+
+            for (Table table : tables) {
+                Locker locker = new Locker();
+                locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+                try {
+                    OlapTable olapTable = (OlapTable) table;
+                    for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
+                        PhysicalPartitionTableDbId key = new PhysicalPartitionTableDbId(dbId, table.getId(), partition.getId());
+                        nativeTableCheckpointVersions.put(key, partition.getVisibleVersion());
+                    }
+                } finally {
+                    locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+                }
+            }
+        }
     }
 }

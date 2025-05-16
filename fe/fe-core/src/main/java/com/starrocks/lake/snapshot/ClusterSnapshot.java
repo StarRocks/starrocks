@@ -106,6 +106,10 @@ public class ClusterSnapshot {
         return type == ClusterSnapshotType.MANUAL;
     }
 
+    public void setType(ClusterSnapshotType type) {
+        this.type = type;
+    }
+
     public void setSnapshotVersions(Map<PhysicalPartitionTableDbId, Long> snapshotVersions) {
         if (needSnapshotVersions()) {
             this.snapshotVersions = snapshotVersions;

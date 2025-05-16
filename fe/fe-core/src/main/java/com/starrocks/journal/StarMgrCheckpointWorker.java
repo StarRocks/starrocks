@@ -19,6 +19,8 @@ import com.starrocks.leader.CheckpointController;
 import com.starrocks.leader.MetaHelper;
 import com.starrocks.staros.StarMgrServer;
 
+import java.util.Map;
+
 public class StarMgrCheckpointWorker extends CheckpointWorker {
     public StarMgrCheckpointWorker(Journal journal) {
         super("star_os_checkpoint_worker", journal);

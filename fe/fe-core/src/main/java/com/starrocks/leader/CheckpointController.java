@@ -111,6 +111,7 @@ public class CheckpointController extends FrontendDaemon {
         this.belongToGlobalStateMgr = Strings.isNullOrEmpty(subDir);
         nodesToPushImage = new HashSet<>();
         this.needNativeTableCheckpointVersions = false;
+        this.nativeTableCheckpointVersions = new HashMap<>();
     }
 
     public static void exclusiveLock() {

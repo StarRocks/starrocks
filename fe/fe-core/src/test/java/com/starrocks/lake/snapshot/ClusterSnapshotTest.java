@@ -14,7 +14,6 @@
 
 package com.starrocks.lake.snapshot;
 
-import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.AlterTest;
 import com.starrocks.alter.MaterializedViewHandler;
@@ -413,9 +412,9 @@ public class ClusterSnapshotTest {
         localClusterSnapshotMgr.setAutomatedSnapshotOff();
     }
 
-    /*
     @Test
     public void testRetainVersion() {
+        // 1. test get version info function
         long testDbId = 0;
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         for (Long dbId : dbIds) {
@@ -451,75 +450,53 @@ public class ClusterSnapshotTest {
             }
         };
 
-        ClusterSnapshotCheckpointScheduler scheduler = new ClusterSnapshotCheckpointScheduler(null, null);
-        Map<PhysicalPartitionTableDbId, List<Long>> snapshotVersionInfo = new HashMap<>();
-        scheduler.captureSnapshotVersionInfo(snapshotVersionInfo);
-        Assert.assertTrue(!snapshotVersionInfo.isEmpty());
-
+        Map<PhysicalPartitionTableDbId, Long> nativeTableCheckpointVersions = new HashMap<>();
+        GlobalStateMgr.getCurrentState().getLocalMetastore().getNativeTableVersions(nativeTableCheckpointVersions);
+        Assert.assertTrue(nativeTableCheckpointVersions != null && !nativeTableCheckpointVersions.isEmpty());
         for (Table tbl : dbTest.getTables()) {
             OlapTable olapTable = (OlapTable) tbl;
             for (PhysicalPartition part : olapTable.getPhysicalPartitions()) {
                 PhysicalPartitionTableDbId key = new PhysicalPartitionTableDbId(dbTest.getId(), olapTable.getId(), part.getId());
-                List<Long> value = snapshotVersionInfo.get(key);
-                Assert.assertTrue(value != null && value.size() == 1);
-                Assert.assertTrue(value.get(0) == part.getVisibleVersion());
+                Long value = nativeTableCheckpointVersions.get(key);
+                Assert.assertTrue(value != null && value == part.getVisibleVersion());
             }
         }
+        nativeTableCheckpointVersions = null;
+        GlobalStateMgr.getCurrentState().getLocalMetastore().getNativeTableVersions(nativeTableCheckpointVersions);
+        Assert.assertTrue(nativeTableCheckpointVersions == null);
 
+        // 2. test get vacuum version
         ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgr();
 
-        Map<PhysicalPartitionTableDbId, List<Long>> snapshotVersionInfoFinish = new HashMap<>();
-        List<Long> rangeFinish = Lists.newArrayList();
-        rangeFinish.add(1L);
-        rangeFinish.add(5L);
-        snapshotVersionInfoFinish.put(new PhysicalPartitionTableDbId(122L, 1222L, 12222L), rangeFinish);
+        Map<PhysicalPartitionTableDbId, Long> finishNativeTableCheckpointVersions = new HashMap<>();
+        finishNativeTableCheckpointVersions.put(new PhysicalPartitionTableDbId(122L, 1222L, 12222L), 3L);
         ClusterSnapshotJob jobFinish = new ClusterSnapshotJob(4534543, "testjob_1", "default", -1);
-        jobFinish.setFullEstimatedSnapshotVersions(snapshotVersionInfoFinish);
+        jobFinish.setSnapshotVersions(finishNativeTableCheckpointVersions);
         jobFinish.setState(ClusterSnapshotJobState.FINISHED);
         localClusterSnapshotMgr.addSnapshotJob(jobFinish);
-        snapshotVersionInfoFinish = jobFinish.getEstimatedSnapshotVersions();
-        Assert.assertTrue(snapshotVersionInfoFinish.size() == 1);
-        Assert.assertTrue(snapshotVersionInfoFinish.get(new PhysicalPartitionTableDbId(122L, 1222L, 12222L)) != null);
-        Assert.assertTrue(snapshotVersionInfoFinish.get(new PhysicalPartitionTableDbId(122L, 1222L, 12222L)).size() == 5);
-        List<Long> retainVersions = snapshotVersionInfoFinish.get(new PhysicalPartitionTableDbId(122L, 1222L, 12222L));
-        for (int i = 1; i < 5; ++i) {
-            Assert.assertTrue(retainVersions.get(i - 1) + 1 == retainVersions.get(i));
-        }
 
-        Map<PhysicalPartitionTableDbId, List<Long>> snapshotVersionInfoUnFinish = new HashMap<>();
-        List<Long> rangeUnFinish = Lists.newArrayList();
-        rangeUnFinish.add(3L);
-        rangeUnFinish.add(7L);
-        snapshotVersionInfoUnFinish.put(new PhysicalPartitionTableDbId(122L, 1222L, 12222L), rangeUnFinish);
+        Map<PhysicalPartitionTableDbId, Long> unFinishNativeTableCheckpointVersions = new HashMap<>();
+        unFinishNativeTableCheckpointVersions.put(new PhysicalPartitionTableDbId(122L, 1222L, 12222L), 6L);
         ClusterSnapshotJob jobUnFinish = new ClusterSnapshotJob(4534544, "testjob_2", "default", -1);
-        jobUnFinish.setFullEstimatedSnapshotVersions(snapshotVersionInfoUnFinish);
+        jobUnFinish.setSnapshotVersions(unFinishNativeTableCheckpointVersions);
         localClusterSnapshotMgr.addSnapshotJob(jobUnFinish);
-        snapshotVersionInfoUnFinish = jobUnFinish.getEstimatedSnapshotVersions();
-        Assert.assertTrue(snapshotVersionInfoUnFinish.size() == 1);
-        Assert.assertTrue(snapshotVersionInfoUnFinish.get(new PhysicalPartitionTableDbId(122L, 1222L, 12222L)) != null);
-        Assert.assertTrue(snapshotVersionInfoUnFinish.get(new PhysicalPartitionTableDbId(122L, 1222L, 12222L)).size() == 5);
-        retainVersions = snapshotVersionInfoUnFinish.get(new PhysicalPartitionTableDbId(122L, 1222L, 12222L));
-        for (int i = 1; i < 5; ++i) {
-            Assert.assertTrue(retainVersions.get(i - 1) + 1 == retainVersions.get(i));
-        }
 
         Assert.assertTrue(localClusterSnapshotMgr.getRetainVersionsForVacuum(122L, 1222L, 12222L) == null);
-
         jobUnFinish.setState(ClusterSnapshotJobState.SNAPSHOTING);
+        Assert.assertTrue(localClusterSnapshotMgr.getRetainVersionsForVacuum(122L, 1222L, 12222L) == null);
+        jobUnFinish.setState(ClusterSnapshotJobState.UPLOADING);
+        Assert.assertTrue(localClusterSnapshotMgr.getRetainVersionsForVacuum(122L, 1222L, 12222L).isEmpty());
 
-        retainVersions = localClusterSnapshotMgr.getRetainVersionsForVacuum(122L, 1222L, 12222L);
-        Assert.assertTrue(retainVersions.size() == 7);
-        for (int i = 1; i < 7; ++i) {
-            Assert.assertTrue(retainVersions.get(i - 1) + 1 == retainVersions.get(i));
-        }
+        jobFinish.getSnapshot().setType(ClusterSnapshot.ClusterSnapshotType.MANUAL);
+        jobFinish.setSnapshotVersions(finishNativeTableCheckpointVersions);
+        jobUnFinish.getSnapshot().setType(ClusterSnapshot.ClusterSnapshotType.MANUAL);
+        jobUnFinish.setSnapshotVersions(unFinishNativeTableCheckpointVersions);
 
+        List<Long> retainVersions = localClusterSnapshotMgr.getRetainVersionsForVacuum(122L, 1222L, 12222L);
+        Assert.assertTrue(retainVersions.size() == 2 && retainVersions.get(0) == 3L && retainVersions.get(1) == 6L);
         jobUnFinish.setState(ClusterSnapshotJobState.FINISHED);
         retainVersions = localClusterSnapshotMgr.getRetainVersionsForVacuum(122L, 1222L, 12222L);
-        Assert.assertTrue(retainVersions.size() == 5);
-        Assert.assertTrue(retainVersions.get(0) == 3);
-        for (int i = 1; i < 5; ++i) {
-            Assert.assertTrue(retainVersions.get(i - 1) + 1 == retainVersions.get(i));
-        }
+        Assert.assertTrue(retainVersions.size() == 1);
+        Assert.assertTrue(retainVersions.get(0) == 6L);
     }
-        */
 }

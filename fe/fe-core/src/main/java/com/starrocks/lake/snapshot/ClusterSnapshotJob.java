@@ -155,6 +155,10 @@ public class ClusterSnapshotJob implements Writable {
         this.detailInfo = detailInfo;
     }
 
+    public boolean needSnapshotVersions() {
+        return snapshot.needSnapshotVersions();
+    }
+
     public void setSnapshotVersions(Map<PhysicalPartitionTableDbId, Long> snapshotVersions) {
         snapshot.setSnapshotVersions(snapshotVersions);
     }

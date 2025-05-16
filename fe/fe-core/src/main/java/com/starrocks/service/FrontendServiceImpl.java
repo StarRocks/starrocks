@@ -3097,7 +3097,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TStartCheckpointResponse response = new TStartCheckpointResponse();
         try {
             worker.setNextCheckpoint(request.getEpoch(), request.getJournal_id(),
-                                     request.getNeed_native_table_checkpoint_versions());
+                                     request.isNeed_native_table_checkpoint_versions());
             response.setStatus(new TStatus(OK));
             return response;
         } catch (CheckpointException e) {
@@ -3131,7 +3131,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 Map<PhysicalPartitionTableDbId, Long> nativeTableCheckpointVersions = new HashMap<>();
                 for (Map.Entry<TPhysicalPartitionTableDbId, Long> entry :
                         request.getNative_table_checkpoint_versions().entrySet()) {
-                    nativeTableCheckpointVersions.put(PhysicalPartitionTableDbId.fromThrift(entry.getKey(), entry.getValue()));
+                    nativeTableCheckpointVersions.put(PhysicalPartitionTableDbId.fromThrift(entry.getKey()), entry.getValue());
                 }
                 controller.finishCheckpoint(request.getJournal_id(), request.getNode_name(), nativeTableCheckpointVersions);
             } else {

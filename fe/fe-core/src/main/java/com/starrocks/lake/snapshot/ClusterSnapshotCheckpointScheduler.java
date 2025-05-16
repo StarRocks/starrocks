@@ -80,13 +80,12 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
                 .createAutomatedSnapshotJob(); /* INITIALIZING state */
 
         do {
-            // step 1: capture consistent journal id and snapshot version info for checkpoint
+            // step 1: capture consistent journal id for checkpoint
             Pair<Long, Long> consistentIds = captureConsistentCheckpointIdBetweenFEAndStarMgr();
             if (consistentIds == null) {
                 errMsg = "failed to capture consistent journal id for checkpoint";
                 break;
             }
-            job.setFullEstimatedSnapshotVersions(estimatedSnapshotVersionInfo);
             job.setJournalIds(consistentIds.first, consistentIds.second);
             LOG.info(
                     "Successful capture consistent journal id, FE checkpoint journal Id: {}, StarMgr checkpoint journal Id: {}",

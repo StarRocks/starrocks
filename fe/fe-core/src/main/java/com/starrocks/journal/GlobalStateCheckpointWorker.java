@@ -14,19 +14,12 @@
 
 package com.starrocks.journal;
 
-import com.google.common.collect.Lists;
-import com.starrocks.catalog.Database;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.PhysicalPartitionTableDbId;
-import com.starrocks.catalog.Table;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 
 public class GlobalStateCheckpointWorker extends CheckpointWorker {
@@ -62,9 +55,8 @@ public class GlobalStateCheckpointWorker extends CheckpointWorker {
             }
             servingGlobalState.setImageJournalId(journalId);
 
-            if (nativeTableCheckpointVersions != null) {
-                getSnapshoVersions(globalStateMgr, nativeTableCheckpointVersions);
-            }
+            globalStateMgr.getLocalMetastore().getNativeTableVersions(nativeTableCheckpointVersions);
+
             LOG.info("checkpoint finished save image.{}", replayedJournalId);
         } finally {
             GlobalStateMgr.destroyCheckpoint();
@@ -79,34 +71,6 @@ public class GlobalStateCheckpointWorker extends CheckpointWorker {
     @Override
     boolean isBelongToGlobalStateMgr() {
         return true;
-    }
-
-    private void getSnapshoVersions(GlobalStateMgr globalStateMgr,
-                                    Map<PhysicalPartitionTableDbId, Long> nativeTableCheckpointVersions) {
-        // lock free to access metadata because global state from checkpoint worker can be accessed by single thread
-        List<Long> dbIds = globalStateMgr.getLocalMetastore().getDbIds();
-        for (Long dbId : dbIds) {
-            Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
-            if (db == null) {
-                continue;
-            }
-
-            List<Table> tables = new ArrayList<>();
-            for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
-                if (table.isCloudNativeTableOrMaterializedView()) {
-                    tables.add(table);
-                }
-            }
-
-            for (Table table : tables) {
-                OlapTable olapTable = (OlapTable) table;
-                for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
-                    PhysicalPartitionTableDbId key = new PhysicalPartitionTableDbId(dbId, table.getId(), partition.getId());
-                    nativeTableCheckpointVersions.computeIfAbsent(
-                                                  key, k -> Lists.newArrayList()).add(partition.getVisibleVersion());
-                }
-            }
-        }
     }
 
     private void checkEpoch(long epoch) throws CheckpointException {
