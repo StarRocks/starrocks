@@ -232,6 +232,10 @@ public class CreateTableStmt extends DdlStmt {
         return engineName.equalsIgnoreCase(EngineType.OLAP.name());
     }
 
+    public boolean isIcebergEngine() {
+        return engineName.equalsIgnoreCase(EngineType.ICEBERG.name());
+    }
+
     public String getCharsetName() {
         return charsetName;
     }

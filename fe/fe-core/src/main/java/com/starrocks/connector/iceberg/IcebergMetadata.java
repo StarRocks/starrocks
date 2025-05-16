@@ -274,9 +274,10 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         Schema schema = toIcebergApiSchema(stmt.getColumns());
         PartitionDesc partitionDesc = stmt.getPartitionDesc();
-        List<String> partitionColNames = partitionDesc == null ? Lists.newArrayList() :
-                ((ListPartitionDesc) partitionDesc).getPartitionColNames();
-        PartitionSpec partitionSpec = parsePartitionFields(schema, partitionColNames);
+        if (partitionDesc != null && !(partitionDesc instanceof ListPartitionDesc)) {
+            throw new DdlException("Only list partition is supported for iceberg table");
+        }
+        PartitionSpec partitionSpec = parsePartitionFields(schema, (ListPartitionDesc) partitionDesc);
         Map<String, String> properties = stmt.getProperties() == null ? new HashMap<>() : stmt.getProperties();
         String tableLocation = properties.get(LOCATION_PROPERTY);
         String comment = stmt.getComment();

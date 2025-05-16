@@ -52,7 +52,8 @@ public class DecimalV3FunctionAnalyzer {
     public static final Set<String> DECIMAL_IDENTICAL_TYPE_FUNCTION_SET =
             new ImmutableSortedSet.Builder<>(String::compareTo)
                     .add(FunctionSet.LEAST).add(FunctionSet.GREATEST).add(FunctionSet.NULLIF)
-                    .add(FunctionSet.IFNULL).add(FunctionSet.COALESCE).add(FunctionSet.MOD).build();
+                    .add(FunctionSet.IFNULL).add(FunctionSet.COALESCE).add(FunctionSet.MOD)
+                    .add(FunctionSet.ICEBERG_TRANSFORM_TRUNCATE).add(FunctionSet.ICEBERG_TRANSFORM_BUCKET).build();
 
     // For array agg functions, its return type should be arrayed of input type.
     public static final Set<String> DECIMAL_ARRAY_AGG_FUNCTION_SAME_TYPE =
