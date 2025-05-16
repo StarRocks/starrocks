@@ -120,6 +120,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOdpsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalRedisScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionOperator;
@@ -724,6 +725,9 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
         } else if (Table.TableType.TABLE_FUNCTION.equals(node.getTable().getType())) {
             scanOperator = new LogicalTableFunctionTableScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                     columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+        } else if (Table.TableType.REDIS.equals(node.getTable().getType())) {
+            scanOperator = new LogicalRedisScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
+                    columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
         } else {
             throw new StarRocksPlannerException("Not support table type: " + node.getTable().getType(),
                     ErrorType.UNSUPPORTED);
@@ -748,7 +752,8 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
         if (!sessionVariable.isEnableMaterializedViewRewriteForInsert()) {
             return false;
         }
-        if (node.getPartitionNames() != null && !CollectionUtils.isEmpty(node.getPartitionNames().getPartitionNames())) {
+        if (node.getPartitionNames() != null &&
+                !CollectionUtils.isEmpty(node.getPartitionNames().getPartitionNames())) {
             return false;
         }
         if (node.getPartitionPredicate() == null) {
@@ -775,7 +780,8 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
         if (!(result instanceof ConstantOperator)) {
             if (version.get() instanceof FunctionCallExpr) {
                 throw new SemanticException("Invalid datetime function: [type: %s, value: %s]. " +
-                        "The function requirement must be inferred in frontend.", type.toString(), version.get().toString());
+                        "The function requirement must be inferred in frontend.", type.toString(),
+                        version.get().toString());
             } else {
                 throw new SemanticException("Invalid version value. [type: %s, value: %s]",
                         type.toString(), version.get().toString());
