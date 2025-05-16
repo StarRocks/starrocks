@@ -5,28 +5,28 @@ sidebar_position: 20
 
 # Authenticate with Security Integration
 
-StarRocks をセキュリティ統合を使用して外部認証システムと統合します。
+StarRocks をセキュリティインテグレーションを使用して外部認証システムと統合します。
 
-StarRocks クラスター内でセキュリティ統合を作成することで、外部認証サービスへのアクセスを StarRocks に許可できます。セキュリティ統合を使用すると、StarRocks 内でユーザーを手動で作成する必要がありません。ユーザーが外部 ID を使用してログインしようとすると、StarRocks は `authentication_chain` の設定に従って対応するセキュリティ統合を使用してユーザーを認証します。認証が成功し、ユーザーがログインを許可された後、StarRocks はセッション内に仮想ユーザーを作成し、そのユーザーが後続の操作を実行できるようにします。
+StarRocks クラスター内でセキュリティインテグレーションを作成することで、外部認証サービスへのアクセスを StarRocks に許可できます。セキュリティインテグレーションを使用すると、StarRocks 内でユーザーを手動で作成する必要がありません。ユーザーが外部 ID を使用してログインしようとすると、StarRocks は `authentication_chain` の設定に従って対応するセキュリティインテグレーションを使用してユーザーを認証します。認証が成功し、ユーザーがログインを許可された後、StarRocks はセッション内に仮想ユーザーを作成し、そのユーザーが後続の操作を実行できるようにします。
 
-セキュリティ統合を使用して外部認証方法を構成する場合は、外部認可を有効にするために [StarRocks を Apache Ranger と統合](../authorization/ranger_plugin.md) する必要があることに注意してください。現在、セキュリティ統合を StarRocks ネイティブ認可と統合することはサポートされていません。
+セキュリティインテグレーションを使用して外部認証方法を構成する場合は、外部認可を有効にするために [StarRocks を Apache Ranger と統合](../authorization/ranger_plugin.md) する必要があることに注意してください。現在、セキュリティインテグレーションを StarRocks ネイティブ認可と統合することはサポートされていません。
 
 また、StarRocks に [Group Provider](../group_provider.md) を有効にして、外部認証システムのグループ情報にアクセスし、StarRocks でユーザーグループを作成、認証、および認可することができます。
 
 特定のコーナーケースでは、外部認証サービスを使用してユーザーを手動で作成および管理することもサポートされています。詳細な手順については、[See also](#see-also) を参照してください。
 
-## セキュリティ統合を作成する
+## セキュリティインテグレーションを作成する
 
-現在、StarRocks のセキュリティ統合は以下の認証システムをサポートしています:
+現在、StarRocks のセキュリティインテグレーションは以下の認証システムをサポートしています:
 - LDAP
-- OpenID Connect (OIDC)
+- OJSON Web Token（JWT）
 - OAuth 2.0
 
 :::note
-StarRocks はセキュリティ統合を作成する際に接続性チェックを提供しません。
+StarRocks はセキュリティインテグレーションを作成する際に接続性チェックを提供しません。
 :::
 
-### LDAP を使用したセキュリティ統合の作成
+### LDAP を使用したセキュリティインテグレーションの作成
 
 #### 構文
 
@@ -54,12 +54,12 @@ PROPERTIES (
 ##### security_integration_name
 
 - 必須: はい
-- 説明: セキュリティ統合の名前。<br />**注意**<br />セキュリティ統合名はグローバルに一意です。このパラメータを `native` として指定することはできません。
+- 説明: セキュリティインテグレーションの名前。<br />**注意**<br />セキュリティインテグレーション名はグローバルに一意です。このパラメータを `native` として指定することはできません。
 
 ##### type
 
 - 必須: はい
-- 説明: セキュリティ統合のタイプ。`ldap` として指定します。
+- 説明: セキュリティインテグレーションのタイプ。`ldap` として指定します。
 
 ##### ldap_server_host
 
@@ -119,7 +119,7 @@ PROPERTIES (
 ##### group_provider
 
 - 必須: いいえ
-- 説明: セキュリティ統合と組み合わせるグループプロバイダーの名前。複数のグループプロバイダーはカンマで区切られます。設定されると、StarRocks はログイン時に各指定プロバイダーの下でユーザーのグループ情報を記録します。v3.5 以降でサポートされています。Group Provider を有効にする詳細な手順については、[Authenticate User Groups](../group_provider.md) を参照してください。
+- 説明: セキュリティインテグレーションと組み合わせるグループプロバイダーの名前。複数のグループプロバイダーはカンマで区切られます。設定されると、StarRocks はログイン時に各指定プロバイダーの下でユーザーのグループ情報を記録します。v3.5 以降でサポートされています。Group Provider を有効にする詳細な手順については、[Authenticate User Groups](../group_provider.md) を参照してください。
 
 ##### authenticated_group_list
 
@@ -129,16 +129,16 @@ PROPERTIES (
 ##### comment
 
 - 必須: いいえ
-- 説明: セキュリティ統合の説明。
+- 説明: セキュリティインテグレーションの説明。
 
-### OIDC を使用したセキュリティ統合の作成
+### JWT を使用したセキュリティインテグレーションの作成
 
 #### 構文
 
 ```SQL
 CREATE SECURITY INTEGRATION <security_integration_name> 
 PROPERTIES (
-    "type" = "oidc",
+    "type" = "jwt",
     "jwks_url" = "",
     "principal_field" = "",
     "required_issuer" = "",
@@ -152,12 +152,12 @@ PROPERTIES (
 ##### security_integration_name
 
 - 必須: はい
-- 説明: セキュリティ統合の名前。<br />**注意**<br />セキュリティ統合名はグローバルに一意です。このパラメータを `native` として指定することはできません。
+- 説明: セキュリティインテグレーションの名前。<br />**注意**<br />セキュリティインテグレーション名はグローバルに一意です。このパラメータを `native` として指定することはできません。
 
 ##### type
 
 - 必須: はい
-- 説明: セキュリティ統合のタイプ。`oidc` として指定します。
+- 説明: セキュリティインテグレーションのタイプ。`jwt` として指定します。
 
 ##### jwks_url
 
@@ -182,9 +182,9 @@ PROPERTIES (
 ##### comment
 
 - 必須: いいえ
-- 説明: セキュリティ統合の説明。
+- 説明: セキュリティインテグレーションの説明。
 
-### OAuth 2.0 を使用したセキュリティ統合の作成
+### OAuth 2.0 を使用したセキュリティインテグレーションの作成
 
 #### 構文
 
@@ -210,7 +210,7 @@ PROPERTIES (
 ##### security_integration_name
 
 - 必須: はい
-- 説明: セキュリティ統合の名前。<br />**注意**<br />セキュリティ統合名はグローバルに一意です。このパラメータを `native` として指定することはできません。
+- 説明: セキュリティインテグレーションの名前。<br />**注意**<br />セキュリティインテグレーション名はグローバルに一意です。このパラメータを `native` として指定することはできません。
 
 ##### auth_server_url
 
@@ -240,7 +240,7 @@ PROPERTIES (
 ##### type
 
 - 必須: はい
-- 説明: セキュリティ統合のタイプ。`oauth2` として指定します。
+- 説明: セキュリティインテグレーションのタイプ。`oauth2` として指定します。
 
 ##### jwks_url
 
@@ -265,11 +265,11 @@ PROPERTIES (
 ##### comment
 
 - 必須: いいえ
-- 説明: セキュリティ統合の説明。
+- 説明: セキュリティインテグレーションの説明。
 
 ## 認証チェーンを構成する
 
-セキュリティ統合が作成されると、新しい認証方法として StarRocks クラスターに追加されます。`authentication_chain` という FE 動的構成項目を設定して、認証方法の順序を設定することでセキュリティ統合を有効にする必要があります。この場合、セキュリティ統合を優先認証方法として設定し、その後に StarRocks クラスターのネイティブ認証を設定します。
+セキュリティインテグレーションが作成されると、新しい認証方法として StarRocks クラスターに追加されます。`authentication_chain` という FE 動的構成項目を設定して、認証方法の順序を設定することでセキュリティインテグレーションを有効にする必要があります。この場合、セキュリティインテグレーションを優先認証方法として設定し、その後に StarRocks クラスターのネイティブ認証を設定します。
 
 ```SQL
 ADMIN SET FRONTEND CONFIG (
@@ -280,7 +280,7 @@ ADMIN SET FRONTEND CONFIG (
 :::note
 - `authentication_chain` が指定されていない場合、ネイティブ認証のみが有効になります。
 - `authentication_chain` が設定されると、StarRocks は最も優先される認証方法でユーザーログインを最初に検証します。優先認証方法でログインが失敗した場合、クラスターは指定された順序に従って次の認証方法を試みます。
-- OAuth 2.0 セキュリティ統合を除いて、`authentication_chain` に複数のセキュリティ統合を指定できます。複数の OAuth 2.0 セキュリティ統合を指定することや、他のセキュリティ統合と一緒に指定することはできません。
+- OAuth 2.0 セキュリティインテグレーションを除いて、`authentication_chain` に複数のセキュリティインテグレーションを指定できます。複数の OAuth 2.0 セキュリティインテグレーションを指定することや、他のセキュリティインテグレーションと一緒に指定することはできません。
 :::
 
 `authentication_chain` の値を確認するには、次のステートメントを使用します:
@@ -289,11 +289,11 @@ ADMIN SET FRONTEND CONFIG (
 ADMIN SHOW FRONTEND CONFIG LIKE 'authentication_chain';
 ```
 
-## セキュリティ統合を管理する
+## セキュリティインテグレーションを管理する
 
-### セキュリティ統合を変更する
+### セキュリティインテグレーションを変更する
 
-既存のセキュリティ統合の構成を変更するには、次のステートメントを使用します:
+既存のセキュリティインテグレーションの構成を変更するには、次のステートメントを使用します:
 
 ```SQL
 ALTER SECURITY INTEGRATION <security_integration_name> SET
@@ -303,20 +303,20 @@ ALTER SECURITY INTEGRATION <security_integration_name> SET
 ```
 
 :::note
-セキュリティ統合の `type` を変更することはできません。
+セキュリティインテグレーションの `type` を変更することはできません。
 :::
 
-### セキュリティ統合を削除する
+### セキュリティインテグレーションを削除する
 
-既存のセキュリティ統合を削除するには、次のステートメントを使用します:
+既存のセキュリティインテグレーションを削除するには、次のステートメントを使用します:
 
 ```SQL
 DROP SECURITY INTEGRATION <security_integration_name>
 ```
 
-### セキュリティ統合を表示する
+### セキュリティインテグレーションを表示する
 
-クラスター内のすべてのセキュリティ統合を表示するには、次のステートメントを使用します:
+クラスター内のすべてのセキュリティインテグレーションを表示するには、次のステートメントを使用します:
 
 ```SQL
 SHOW SECURITY INTEGRATIONS;
@@ -335,11 +335,11 @@ SHOW SECURITY INTEGRATIONS;
 
 | **Parameter** | **Description**                                              |
 | ------------- | ------------------------------------------------------------ |
-| Name          | セキュリティ統合の名前。                                      |
-| Type          | セキュリティ統合のタイプ。                                    |
-| Comment       | セキュリティ統合の説明。セキュリティ統合に説明が指定されていない場合、`NULL` が返されます。 |
+| Name          | セキュリティインテグレーションの名前。                                      |
+| Type          | セキュリティインテグレーションのタイプ。                                    |
+| Comment       | セキュリティインテグレーションの説明。セキュリティインテグレーションに説明が指定されていない場合、`NULL` が返されます。 |
 
-セキュリティ統合の詳細を確認するには、次のステートメントを使用します:
+セキュリティインテグレーションの詳細を確認するには、次のステートメントを使用します:
 
 ```SQL
 SHOW CREATE SECURITY INTEGRATION <integration_name>
@@ -374,7 +374,7 @@ SHOW CREATE SECURITY INTEGRATION LDAP1；
 
 ## See also
 
-- StarRocks で LDAP を使用してユーザーを手動で認証する方法については、[LDAP Authentication](./ldap_authentication.md) を参照してください。
-- StarRocks で OpenID Connect を使用してユーザーを手動で認証する方法については、[OpenID Connect Authentication](./oidc_authentication.md) を参照してください。
-- StarRocks で OAuth 2.0 を使用してユーザーを手動で認証する方法については、[OAuth 2.0 Authentication](./oauth2_authentication.md) を参照してください。
-- ユーザーグループを認証する方法については、[Authenticate User Groups](../group_provider.md) を参照してください。
+- StarRocks で LDAP を使用してユーザーを手動で認証する方法については、[LDAP 認証](./ldap_authentication.md) を参照してください。
+- StarRocks で JSON Web Token を使用してユーザーを手動で認証する方法については、[JSON Web Token 認証](./jwt_authentication.md) を参照してください。
+- StarRocks で OAuth 2.0 を使用してユーザーを手動で認証する方法については、[OAuth 2.0 認証](./oauth2_authentication.md) を参照してください。
+- ユーザーグループを認証する方法については、[ユーザーグループの認証](../group_provider.md) を参照してください。

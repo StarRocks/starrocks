@@ -19,7 +19,7 @@ Manually creating and managing users with external authentication services are a
 
 Currently, StarRocks' security integration supports the following authentication systems:
 - LDAP
-- OpenID Connect (OIDC)
+- JSON Web Token (JWT)
 - OAuth 2.0
 
 :::note
@@ -130,14 +130,14 @@ PROPERTIES (
 - Required: No
 - Description: The description of the security integration.
 
-### Create a security integration with OIDC
+### Create a security integration with JWT
 
 #### Syntax
 
 ```SQL
 CREATE SECURITY INTEGRATION <security_integration_name> 
 PROPERTIES (
-    "type" = "oidc",
+    "type" = "jwt",
     "jwks_url" = "",
     "principal_field" = "",
     "required_issuer" = "",
@@ -156,7 +156,7 @@ PROPERTIES (
 ##### type
 
 - Required: Yes
-- Description: The type of the security integration. Specify it as `oidc`.
+- Description: The type of the security integration. Specify it as `jwt`.
 
 ##### jwks_url
 
@@ -374,6 +374,6 @@ SHOW CREATE SECURITY INTEGRATION LDAP1；
 ## See also
 
 - For instructions on how to manually authenticate users via LDAP in StarRocks, see [LDAP Authentication](./ldap_authentication.md).
-- For instructions on how to manually authenticate users via OpenID Connect in StarRocks, see [OpenID Connect Authentication](./oidc_authentication.md).
+- For instructions on how to manually authenticate users via JSON Web Token in StarRocks, see [JSON Web Token Authentication](./jwt_authentication.md).
 - For instructions on how to manually authenticate users via OAuth 2.0 in StarRocks, see [OAuth 2.0 Authentication](./oauth2_authentication.md).
 - For instructions on how to authenticate user groups, see [Authenticate User Groups](../group_provider.md).

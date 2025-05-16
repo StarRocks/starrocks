@@ -16,7 +16,7 @@ StarRocks は、トークンと引き換えに認可コードを使用する [Au
 3. リクエストが承認されると、ブラウザは認可コードと共に StarRocks FE にリダイレクトされます。
 4. StarRocks のコーディネーターが認可コードをトークンと交換します。
 
-このトピックでは、StarRocks で OAuth 2.0 を使用してユーザーを手動で作成し、認証する方法を説明します。セキュリティ統合を使用して StarRocks を OAuth 2.0 サービスと統合する方法については、[Authenticate with Security Integration](./security_integration.md) を参照してください。OAuth 2.0 サービスでユーザーグループを認証する方法については、[Authenticate User Groups](../group_provider.md) を参照してください。
+このトピックでは、StarRocks で OAuth 2.0 を使用してユーザーを手動で作成し、認証する方法を説明します。セキュリティインテグレーションを使用して StarRocks を OAuth 2.0 サービスと統合する方法については、[Authenticate with Security Integration](./security_integration.md) を参照してください。OAuth 2.0 サービスでユーザーグループを認証する方法については、[Authenticate User Groups](../group_provider.md) を参照してください。
 
 ## 前提条件
 

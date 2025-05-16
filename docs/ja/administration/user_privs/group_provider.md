@@ -3,7 +3,7 @@ displayed_sidebar: docs
 sidebar_position: 30
 ---
 
-# Authenticate User Groups
+# ユーザーグループの認証
 
 StarRocks で Group Provider を有効にして、外部認証システムからユーザーグループを認証し、認可します。
 
@@ -206,9 +206,9 @@ PROPERTIES(
 
 上記の例では、`ldap_group_filter` を使用して `groupOfNames` objectClass と `cn` が `testgroup` のグループを検索します。したがって、`cn` はグループを識別するために `ldap_group_identifier_attr` に指定されます。`ldap_group_member_attr` は `member` に設定されており、`groupOfNames` objectClass でメンバーを識別するために `member` 属性が使用されます。`ldap_user_search_attr` は `uid=([^,]+)` という式に設定されており、`member` 属性内のユーザーを識別するために使用されます。
 
-## グループプロバイダーをセキュリティ統合と組み合わせる
+## グループプロバイダーをセキュリティインテグレーションと組み合わせる
 
-グループプロバイダーを作成した後、セキュリティ統合と組み合わせて、グループプロバイダーで指定されたユーザーが StarRocks にログインできるようにすることができます。セキュリティ統合の作成に関する詳細は、[Authenticate with Security Integration](./authentication/security_integration.md) を参照してください。
+グループプロバイダーを作成した後、セキュリティインテグレーションと組み合わせて、グループプロバイダーで指定されたユーザーが StarRocks にログインできるようにすることができます。セキュリティインテグレーションの作成に関する詳細は、[Authenticate with Security Integration](./authentication/security_integration.md) を参照してください。
 
 ### 構文
 
@@ -224,7 +224,7 @@ ALTER SECURITY INTEGRATION <security_integration_name> SET
 
 #### `group_provider`
 
-セキュリティ統合と組み合わせるグループプロバイダーの名前。複数のグループプロバイダーはカンマで区切られます。設定されると、StarRocks はログイン時に各指定されたプロバイダーの下でユーザーのグループ情報を記録します。
+セキュリティインテグレーションと組み合わせるグループプロバイダーの名前。複数のグループプロバイダーはカンマで区切られます。設定されると、StarRocks はログイン時に各指定されたプロバイダーの下でユーザーのグループ情報を記録します。
 
 #### `authenticated_group_list`
 
@@ -242,6 +242,6 @@ PROPERTIES(
 
 ## グループプロバイダーを外部認可システム (Apache Ranger) と組み合わせる
 
-セキュリティ統合で関連するグループプロバイダーを構成すると、StarRocks はログイン時にユーザーのグループ情報を記録します。このグループ情報は、Ranger との認可プロセスに自動的に含まれ、追加の構成が不要になります。
+セキュリティインテグレーションで関連するグループプロバイダーを構成すると、StarRocks はログイン時にユーザーのグループ情報を記録します。このグループ情報は、Ranger との認可プロセスに自動的に含まれ、追加の構成が不要になります。
 
 StarRocks と Ranger の統合に関する詳細な手順については、[Manage permissions with Apache Ranger](./authorization/ranger_plugin.md) を参照してください。

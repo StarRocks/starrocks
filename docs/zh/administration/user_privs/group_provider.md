@@ -3,9 +3,9 @@ displayed_sidebar: docs
 sidebar_position: 30
 ---
 
-# 验证用户组
+# 认证用户组
 
-在 StarRocks 中启用 Group Provider 以验证和授权来自外部认证系统的用户组。
+在 StarRocks 中启用 Group Provider 以认证和授权来自外部认证系统的用户组。
 
 从 v3.5.0 开始，StarRocks 支持 Group Provider 从外部认证系统收集组信息以进行用户组管理。
 

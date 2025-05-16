@@ -7,7 +7,7 @@ sidebar_position: 30
 
 StarRocks は、ネイティブなパスワードベースの認証に加えて、LDAP 認証もサポートしています。
 
-このトピックでは、StarRocks で LDAP を使用してユーザーを手動で作成し、認証する方法について説明します。セキュリティ統合を使用して StarRocks を LDAP サービスと統合する方法については、[Authenticate with Security Integration](./security_integration.md) を参照してください。LDAP サービスでユーザーグループを認証する方法については、[Authenticate User Groups](../group_provider.md) を参照してください。
+このトピックでは、StarRocks で LDAP を使用してユーザーを手動で作成し、認証する方法について説明します。セキュリティインテグレーションを使用して StarRocks を LDAP サービスと統合する方法については、[Authenticate with Security Integration](./security_integration.md) を参照してください。LDAP サービスでユーザーグループを認証する方法については、[Authenticate User Groups](../group_provider.md) を参照してください。
 
 ## LDAP 認証を有効にする
 

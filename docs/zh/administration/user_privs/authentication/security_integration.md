@@ -3,7 +3,7 @@ displayed_sidebar: docs
 sidebar_position: 20
 ---
 
-# Authenticate with Security Integration
+# 通过安全集成认证用户
 
 使用安全集成将 StarRocks 与外部身份验证系统集成。
 
@@ -13,13 +13,13 @@ sidebar_position: 20
 
 您还可以为 StarRocks 启用 [Group Provider](../group_provider.md)，以访问外部身份验证系统中的组信息，从而允许在 StarRocks 中创建、验证和授权用户组。
 
-在特定情况下，也支持使用外部身份验证服务手动创建和管理用户。有关更多说明，请参阅 [另见](#see-also)。
+在特定情况下，也支持使用外部身份验证服务手动创建和管理用户。有关更多说明，请参阅 [另见](#另见)。
 
 ## 创建安全集成
 
 目前，StarRocks 的安全集成支持以下身份验证系统：
 - LDAP
-- OpenID Connect (OIDC)
+- JSON Web Token（JWT）
 - OAuth 2.0
 
 :::note
@@ -131,14 +131,14 @@ PROPERTIES (
 - 必需：否
 - 描述：安全集成的描述。
 
-### 使用 OIDC 创建安全集成
+### 使用 JWT 认证创建安全集成
 
 #### 语法
 
 ```SQL
 CREATE SECURITY INTEGRATION <security_integration_name> 
 PROPERTIES (
-    "type" = "oidc",
+    "type" = "jwt",
     "jwks_url" = "",
     "principal_field" = "",
     "required_issuer" = "",
@@ -157,7 +157,7 @@ PROPERTIES (
 ##### type
 
 - 必需：是
-- 描述：安全集成的类型。指定为 `oidc`。
+- 描述：安全集成的类型。指定为 `jwt`。
 
 ##### jwks_url
 
@@ -374,7 +374,7 @@ SHOW CREATE SECURITY INTEGRATION LDAP1；
 
 ## 另见
 
-- 有关如何在 StarRocks 中通过 LDAP 手动验证用户的说明，请参阅 [LDAP Authentication](./ldap_authentication.md)。
-- 有关如何在 StarRocks 中通过 OpenID Connect 手动验证用户的说明，请参阅 [OpenID Connect Authentication](./oidc_authentication.md)。
-- 有关如何在 StarRocks 中通过 OAuth 2.0 手动验证用户的说明，请参阅 [OAuth 2.0 Authentication](./oauth2_authentication.md)。
-- 有关如何验证用户组的说明，请参阅 [Authenticate User Groups](../group_provider.md)。
+- 有关如何在 StarRocks 中通过 LDAP 手动验证用户的说明，请参阅 [LDAP 认证](./ldap_authentication.md)。
+- 有关如何在 StarRocks 中通过 SON Web Token 认证手动验证用户的说明，请参阅 [JSON Web Token 认证](./jwt_authentication.md)。
+- 有关如何在 StarRocks 中通过 OAuth 2.0 手动验证用户的说明，请参阅 [OAuth 2.0 认证](./oauth2_authentication.md)。
+- 有关如何验证用户组的说明，请参阅 [认证用户组](../group_provider.md)。
