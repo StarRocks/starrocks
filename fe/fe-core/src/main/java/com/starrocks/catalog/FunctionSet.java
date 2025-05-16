@@ -1028,14 +1028,15 @@ public class FunctionSet {
 
         if (AggStateUtils.isSupportedAggStateFunction(aggFunc, false)) {
             // register `_state` combinator
-            AggStateCombinator.of(aggFunc).stream().forEach(this::addBuiltInFunction);
+            AggStateCombinator.of(aggFunc).ifPresent(this::addBuiltInFunction);
             // register `_merge`/`_union` combinator for aggregate functions
-            AggStateUnionCombinator.of(aggFunc).stream().forEach(this::addBuiltInFunction);
-            AggStateMergeCombinator.of(aggFunc).stream().forEach(this::addBuiltInFunction);
+            AggStateUnionCombinator.of(aggFunc).ifPresent(this::addBuiltInFunction);
+            AggStateMergeCombinator.of(aggFunc).ifPresent(this::addBuiltInFunction);
         }
 
         if (AggStateUtils.isSupportedAggStateFunction(aggFunc, true)) {
-            AggStateIf.of(aggFunc).stream().forEach(this::addBuiltInFunction);
+            // register `_if` for aggregate functions
+            AggStateIf.of(aggFunc).ifPresent(this::addBuiltInFunction);
         }
     }
 

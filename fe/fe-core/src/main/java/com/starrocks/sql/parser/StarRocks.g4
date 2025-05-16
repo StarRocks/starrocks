@@ -2617,7 +2617,7 @@ functionCall
     | informationFunctionExpression                                                       #informationFunction
     | specialDateTimeExpression                                                           #specialDateTime
     | specialFunctionExpression                                                           #specialFunction
-    | aggregationFunction over?                                                           #aggregationFunctionCall
+    | aggregationFunction filter? over?                                                   #aggregationFunctionCall
     | windowFunction over                                                                 #windowFunctionCall
     | TRANSLATE '(' (expression (',' expression)*)? ')'                                   #translateFunctionCall
     | qualifiedName '(' (expression (',' expression)*)? ')'  over?                        #simpleFunctionCall
@@ -2705,6 +2705,10 @@ windowFunction
 
 whenClause
     : WHEN condition=expression THEN result=expression
+    ;
+
+filter
+    : FILTER '(' WHERE booleanExpression ')'
     ;
 
 over
