@@ -39,7 +39,6 @@ import org.apache.logging.log4j.Logger;
 import java.io.BufferedInputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
-import java.io.EOFException;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -225,8 +224,6 @@ public class StarMgrServer {
         DataInputStream in = new DataInputStream(new BufferedInputStream(new FileInputStream(curFile)));
         try {
             getStarMgr().loadMeta(in);
-        } catch (EOFException eof) {
-            LOG.warn("load star mgr image eof.");
         } finally {
             in.close();
         }
