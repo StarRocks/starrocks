@@ -183,6 +183,15 @@ public class AutovacuumDaemon extends FrontendDaemon {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
 
+        List<Long> snapshotRetainVersions =
+                        GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                                      .getRetainVersionsForVacuum(db.getId(), table.getId(), partition.getId());
+        if (snapshotRetainVersions == null) {
+            LOG.info("Skip vacuum for {}.{}.{}, because the retain versions info is not ready",
+                     db.getFullName(), table.getName(), partition.getId());
+            return;
+        }
+
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         Warehouse warehouse = warehouseManager.getBackgroundWarehouse();
         ComputeNode pickNode = null;
@@ -224,6 +233,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
             vacuumRequest.graceTimestamp = Math.min(vacuumRequest.graceTimestamp,
                     Math.max(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
                             .getSafeDeletionTimeMs() / MILLISECONDS_PER_SECOND, 1));
+            vacuumRequest.retainVersions = snapshotRetainVersions;
             vacuumRequest.minActiveTxnId = minActiveTxnId;
             vacuumRequest.partitionId = partition.getId();
             vacuumRequest.deleteTxnLog = needDeleteTxnLog;

@@ -15,10 +15,14 @@
 package com.starrocks.lake.snapshot;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.PhysicalPartitionTableDbId;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.thrift.TClusterSnapshotsItem;
+
+import java.util.HashMap;
+import java.util.Map;
 
 public class ClusterSnapshot {
     public enum ClusterSnapshotType {
@@ -42,6 +46,9 @@ public class ClusterSnapshot {
     @SerializedName(value = "starMgrJournal")
     private long starMgrJournalId;
 
+    @SerializedName(value = "snapshotVersions")
+    private Map<PhysicalPartitionTableDbId, Long> snapshotVersions;
+
     public ClusterSnapshot() {
     }
 
@@ -55,6 +62,7 @@ public class ClusterSnapshot {
         this.finishedTimeMs = finishedTimeMs;
         this.feJournalId = feJournalId;
         this.starMgrJournalId = starMgrJournalId;
+        this.snapshotVersions = new HashMap<>();
     }
 
     public void setJournalIds(long feJournalId, long starMgrJournalId) {
@@ -92,6 +100,24 @@ public class ClusterSnapshot {
 
     public long getId() {
         return id;
+    }
+
+    public boolean needSnapshotVersions() {
+        return type == ClusterSnapshotType.MANUAL;
+    }
+
+    public void setType(ClusterSnapshotType type) {
+        this.type = type;
+    }
+
+    public void setSnapshotVersions(Map<PhysicalPartitionTableDbId, Long> snapshotVersions) {
+        if (needSnapshotVersions()) {
+            this.snapshotVersions = snapshotVersions;
+        }
+    }
+
+    public Map<PhysicalPartitionTableDbId, Long> getSnapshotVersions() {
+        return this.snapshotVersions;
     }
 
     public TClusterSnapshotsItem getInfo() {

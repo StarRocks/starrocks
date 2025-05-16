@@ -15,6 +15,7 @@
 package com.starrocks.lake.snapshot;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.PhysicalPartitionTableDbId;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.ClusterSnapshotLog;
@@ -27,6 +28,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Map;
 
 public class ClusterSnapshotJob implements Writable {
     public static final Logger LOG = LogManager.getLogger(ClusterSnapshotJob.class);
@@ -125,6 +127,10 @@ public class ClusterSnapshotJob implements Writable {
         return state == ClusterSnapshotJobState.INITIALIZING;
     }
 
+    public boolean isUploading() {
+        return state == ClusterSnapshotJobState.UPLOADING;
+    }
+
     public boolean isError() {
         return state == ClusterSnapshotJobState.ERROR;
     }
@@ -147,6 +153,18 @@ public class ClusterSnapshotJob implements Writable {
 
     public void setDetailInfo(String detailInfo) {
         this.detailInfo = detailInfo;
+    }
+
+    public boolean needSnapshotVersions() {
+        return snapshot.needSnapshotVersions();
+    }
+
+    public void setSnapshotVersions(Map<PhysicalPartitionTableDbId, Long> snapshotVersions) {
+        snapshot.setSnapshotVersions(snapshotVersions);
+    }
+
+    public Map<PhysicalPartitionTableDbId, Long> getSnapshotVersions() {
+        return snapshot.getSnapshotVersions();
     }
 
     public void logJob() {

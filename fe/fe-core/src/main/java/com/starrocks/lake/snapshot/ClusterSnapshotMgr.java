@@ -17,6 +17,7 @@ package com.starrocks.lake.snapshot;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.catalog.PhysicalPartitionTableDbId;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob.ClusterSnapshotJobState;
@@ -40,10 +41,13 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.NavigableMap;
+import java.util.Set;
 import java.util.concurrent.ConcurrentSkipListMap;
 
 // only used for AUTOMATED snapshot for now
@@ -299,6 +303,49 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         for (Long removeId : removeIds) {
             automatedSnapshotJobs.remove(removeId);
         }
+    }
+
+    public List<Long> getRetainVersionsForVacuum(long dbId, long tableId, long partId) {
+        PhysicalPartitionTableDbId key = new PhysicalPartitionTableDbId(dbId, tableId, partId);
+        // we need to consider the following two job and merge all versions
+        ClusterSnapshotJob lastFinishedAutoSnapshotJob = getLastFinishedAutomatedClusterSnapshotJob();
+        ClusterSnapshotJob runningJob = getRunningJob();
+        if (runningJob != null && !runningJob.isUploading()) {
+            // we need to reject the retain version request because the runningJob is still trying to get
+            // the snapshot version and does not finish
+            return null;
+        }
+
+        Set<Long> versionsSet = new HashSet<>();
+        if (lastFinishedAutoSnapshotJob != null) {
+            LOG.warn("breakpoint 0.6");
+            Long version = lastFinishedAutoSnapshotJob.getSnapshotVersions().get(key);
+            if (version != null) {
+                LOG.warn("breakpoint 1");
+                versionsSet.add(version);
+            }
+        }
+        if (runningJob != null) {
+            LOG.warn("breakpoint 0.7");
+            Long version = runningJob.getSnapshotVersions().get(key);
+            if (version != null) {
+                LOG.warn("breakpoint 2");
+                versionsSet.add(version);
+            }
+        }
+
+        List<Long> versions = Lists.newArrayList(versionsSet);
+        Collections.sort(versions);
+        return versions;
+    }
+
+    public ClusterSnapshotJob getRunningJob() {
+        Entry<Long, ClusterSnapshotJob> entry = automatedSnapshotJobs.lastEntry();
+        if (entry != null && entry.getValue().isUnFinishedState()) {
+            return entry.getValue();
+        }
+
+        return null;
     }
 
     public void start() {

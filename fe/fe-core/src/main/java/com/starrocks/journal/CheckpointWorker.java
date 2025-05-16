@@ -14,6 +14,7 @@
 
 package com.starrocks.journal;
 
+import com.starrocks.catalog.PhysicalPartitionTableDbId;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.FrontendDaemon;
@@ -26,6 +27,7 @@ import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TFinishCheckpointRequest;
 import com.starrocks.thrift.TFinishCheckpointResponse;
+import com.starrocks.thrift.TPhysicalPartitionTableDbId;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
@@ -33,6 +35,8 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 public abstract class CheckpointWorker extends FrontendDaemon {
@@ -40,20 +44,24 @@ public abstract class CheckpointWorker extends FrontendDaemon {
 
     protected final Journal journal;
 
-    // the next checkpoint task(epoch, journalId) to do
+    // the next checkpoint task(epoch, journalId, needNativeTableCheckpointVersions) to do
     private final AtomicReference<NextPoint> nextPoint = new AtomicReference<>();
     protected GlobalStateMgr servingGlobalState;
+    // every time we begin creating image, the following map will be reset
+    private Map<PhysicalPartitionTableDbId, Long> nativeTableCheckpointVersions;
 
     public CheckpointWorker(String name, Journal journal) {
         super(name, FeConstants.checkpoint_interval_second * 1000L);
         this.journal = journal;
     }
 
-    abstract void doCheckpoint(long epoch, long journalId) throws Exception;
+    abstract void doCheckpoint(long epoch, long journalId,
+                               Map<PhysicalPartitionTableDbId, Long> nativeTableCheckpointVersions) throws Exception;
     abstract CheckpointController getCheckpointController();
     abstract boolean isBelongToGlobalStateMgr();
 
-    public void setNextCheckpoint(long epoch, long journalId) throws CheckpointException {
+    public void setNextCheckpoint(long epoch, long journalId,
+                                  boolean needNativeTableCheckpointVersions) throws CheckpointException {
         if (servingGlobalState == null) {
             throw new CheckpointException("worker not initialize");
         }
@@ -66,8 +74,9 @@ public abstract class CheckpointWorker extends FrontendDaemon {
                     journalId, journal.getMaxJournalId()));
         }
 
-        nextPoint.set(new NextPoint(epoch, journalId));
-        LOG.info("set next point to epoch:{}, journalId:{}", epoch, journalId);
+        nextPoint.set(new NextPoint(epoch, journalId, needNativeTableCheckpointVersions));
+        LOG.info("set next point to epoch:{}, journalId:{}, need native table VersionInfo: ",
+                 epoch, journalId, needNativeTableCheckpointVersions);
     }
 
     @Override
@@ -79,42 +88,45 @@ public abstract class CheckpointWorker extends FrontendDaemon {
             return;
         }
 
-        createImage(np.epoch, np.journalId);
+        createImage(np);
     }
 
     protected void init() {
         this.servingGlobalState = GlobalStateMgr.getServingState();
     }
 
-    private void createImage(long epoch, long journalId) {
-        if (!preCheckParamValid(epoch, journalId)) {
+    private void createImage(NextPoint np) {
+        if (!preCheckParamValid(np.epoch, np.journalId)) {
             return;
         }
 
+        // only used for globalstate
+        this.nativeTableCheckpointVersions = np.needNativeTableCheckpointVersions && isBelongToGlobalStateMgr() ?
+                                             new HashMap<>() : null;
         try {
-            doCheckpoint(epoch, journalId);
+            doCheckpoint(np.epoch, np.journalId, this.nativeTableCheckpointVersions);
         } catch (Exception e) {
             LOG.warn("create image failed", e);
-            finishCheckpoint(epoch, journalId, false, e.getMessage());
+            finishCheckpoint(np.epoch, np.journalId, false, e.getMessage(), null);
             return;
         }
 
         cleanOldImages();
 
-        finishCheckpoint(epoch, journalId, true, "success");
+        finishCheckpoint(np.epoch, np.journalId, true, "success", this.nativeTableCheckpointVersions);
     }
 
     protected boolean preCheckParamValid(long epoch, long journalId) {
         if (journalId < getImageJournalId()) {
-            finishCheckpoint(epoch, journalId, false, "journalId is too small");
+            finishCheckpoint(epoch, journalId, false, "journalId is too small", null);
             return false;
         }
         if (journalId == getImageJournalId()) {
-            finishCheckpoint(epoch, journalId, true, "success");
+            finishCheckpoint(epoch, journalId, true, "success", this.nativeTableCheckpointVersions);
             return false;
         }
         if (epoch != servingGlobalState.getEpoch()) {
-            finishCheckpoint(epoch, journalId, false, "epoch outdated");
+            finishCheckpoint(epoch, journalId, false, "epoch outdated", null);
             return false;
         }
         return true;
@@ -130,7 +142,8 @@ public abstract class CheckpointWorker extends FrontendDaemon {
         }
     }
 
-    private void finishCheckpoint(long epoch, long journalId, boolean isSuccess, String message) {
+    private void finishCheckpoint(long epoch, long journalId, boolean isSuccess, String message,
+                                  Map<PhysicalPartitionTableDbId, Long> nativeTableCheckpointVersions) {
         if (epoch != servingGlobalState.getEpoch()) {
             LOG.warn("epoch outdated, do not finish checkpoint");
             return;
@@ -141,7 +154,7 @@ public abstract class CheckpointWorker extends FrontendDaemon {
             CheckpointController controller = getCheckpointController();
             if (isSuccess) {
                 try {
-                    controller.finishCheckpoint(journalId, nodeName);
+                    controller.finishCheckpoint(journalId, nodeName, nativeTableCheckpointVersions);
                 } catch (CheckpointException e) {
                     LOG.warn("finish checkpoint failed", e);
                 }
@@ -155,6 +168,11 @@ public abstract class CheckpointWorker extends FrontendDaemon {
             request.setIs_success(isSuccess);
             request.setMessage(message);
             request.setIs_global_state_mgr(isBelongToGlobalStateMgr());
+            Map<TPhysicalPartitionTableDbId, Long> tNativeTableCheckpointVersions = new HashMap<>();
+            for (Map.Entry<PhysicalPartitionTableDbId, Long> entry : nativeTableCheckpointVersions.entrySet()) {
+                tNativeTableCheckpointVersions.put(entry.getKey().toThrift(), entry.getValue());
+            }
+            request.setNative_table_checkpoint_versions(tNativeTableCheckpointVersions);
 
             try {
                 TFinishCheckpointResponse response = ThriftRPCRequestExecutor.call(
@@ -189,10 +207,12 @@ public abstract class CheckpointWorker extends FrontendDaemon {
     static class NextPoint {
         private final long epoch;
         private final long journalId;
+        private final boolean needNativeTableCheckpointVersions;
 
-        public NextPoint(long epoch, long journalId) {
+        public NextPoint(long epoch, long journalId, boolean needNativeTableCheckpointVersions) {
             this.epoch = epoch;
             this.journalId = journalId;
+            this.needNativeTableCheckpointVersions = needNativeTableCheckpointVersions;
         }
     }
 }
