@@ -14,9 +14,12 @@
 
 package com.starrocks.sql.spm;
 
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -131,5 +134,60 @@ public class SPMPlan2SQLTest extends PlanTestBase {
         String newPlan = getFragmentPlan(newSql);
         assertContains(newPlan, "  2:TableValueFunction\n"
                 + "  |  tableFunctionName: unnest");
+    }
+
+    @Test
+    public void testSpmRangeFunctionError() {
+        {
+            String sql = "select t1.v4, t0.v2 from t0 join t1 on t0.v3 = t1.v6 "
+                    + "where t0.v2 = _spm_const_range(1, 0, 10);";
+            Assertions.assertThrows(UnsupportedException.class, () -> getFragmentPlan(sql));
+        }
+        {
+            String sql = "select t1.v4, t0.v2 from t0 join t1 on t0.v3 = t1.v6 "
+                    + "where t0.v2 = _spm_const_range(1, 0, 10, 23, 4);";
+            Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+        }
+        {
+            String sql = "select t1.v4, t0.v2 from t0 join t1 on t0.v3 = t1.v6 "
+                    + "where t0.v2 = _spm_const_range(1, 10, 1);";
+            Assertions.assertThrows(UnsupportedException.class, () -> getFragmentPlan(sql));
+        }
+        {
+            String sql = "select t1.v4, t0.v2 from t0 join t1 on t0.v3 = t1.v6 "
+                    + "where t0.v2 = _spm_const_range();";
+            Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+        }
+        {
+            String sql = "select t1.v4, t0.v2 from t0 join t1 on t0.v3 = t1.v6 "
+                    + "where t0.v2 = _spm_const_range(1, 1, 500000000000);";
+            Assertions.assertThrows(UnsupportedException.class, () -> getFragmentPlan(sql));
+        }
+    }
+
+    @Test
+    public void testSpmVarFunctionError() {
+        String sql = "select t1.v4, t0.v2 from t0 join t1 on t0.v3 = t1.v6 "
+                + "where t0.v2 = _spm_const_var(1, 0, 10);";
+        Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+    }
+
+    @Test
+    public void testSpmEnumFunctionError() {
+        {
+            String sql = "select t1.v4, t0.v2 from t0 join t1 on t0.v3 = t1.v6 "
+                    + "where t0.v2 = _spm_const_enum(1);";
+            Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+        }
+        {
+            String sql = "select t1.v4, t0.v2 from t0 join t1 on t0.v3 = t1.v6 "
+                    + "where t0.v2 = _spm_const_enum(1, 0);";
+            Assertions.assertThrows(UnsupportedException.class, () -> getFragmentPlan(sql));
+        }
+        {
+            String sql = "select t1.v4, t0.v2 from t0 join t1 on t0.v3 = t1.v6 "
+                    + "where t0.v2 = _spm_const_enum(1, 1, 2, 1000, 200000000);";
+            Assertions.assertThrows(UnsupportedException.class, () -> getFragmentPlan(sql));
+        }
     }
 }

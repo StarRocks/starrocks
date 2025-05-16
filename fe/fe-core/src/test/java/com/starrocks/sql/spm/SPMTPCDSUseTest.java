@@ -16,10 +16,11 @@ package com.starrocks.sql.spm;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.common.FeConstants;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.spm.CreateBaselinePlanStmt;
 import com.starrocks.sql.parser.SqlParser;
-import com.starrocks.sql.plan.TPCDSPlanTestBase;
+import com.starrocks.sql.plan.TPCDS1TTestBase;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.jupiter.api.AfterAll;
@@ -31,7 +32,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.List;
 
-public class SPMTPCDSUseTest extends TPCDSPlanTestBase {
+public class SPMTPCDSUseTest extends TPCDS1TTestBase {
     private static final Logger LOG = LogManager.getLogger(SPMTPCDSUseTest.class);
 
     private static final List<String> UNSUPPORTED = List.of();
@@ -87,5 +88,41 @@ public class SPMTPCDSUseTest extends TPCDSPlanTestBase {
         List<Arguments> list = Lists.newArrayList();
         getSqlMap().forEach((k, v) -> list.add(Arguments.of(k, v)));
         return list;
+    }
+
+    @Test
+    public void testSpmFunctionStatistics() throws Exception {
+        FeConstants.runningUnitTest = true;
+        try {
+            String sql = "select ss_ticket_number from store_sales "
+                    + "where ss_ticket_number = _spm_const_range(1, -1000, -10);";
+            String plan = getCostExplain(sql);
+            assertContains(plan, "cardinality: 12\n"
+                    + "     column statistics: \n"
+                    + "     * ss_ticket_number-->[NaN, NaN, 0.0, 4.0, 0.0] ESTIMATE");
+
+            sql = "select ss_ticket_number from store_sales "
+                    + "where ss_ticket_number = _spm_const_var(1, -78);";
+            plan = getCostExplain(sql);
+            assertContains(plan, "cardinality: 12\n"
+                    + "     column statistics: \n"
+                    + "     * ss_ticket_number-->[NaN, NaN, 0.0, 4.0, 0.0] ESTIMATE");
+
+            sql = "select ss_ticket_number from store_sales "
+                    + "where ss_ticket_number = _spm_const_enum(1, -1, 1, -2, 2);";
+            plan = getCostExplain(sql);
+            assertContains(plan, "cardinality: 12\n"
+                    + "     column statistics: \n"
+                    + "     * ss_ticket_number-->[1.0, 2.0, 0.0, 4.0, 1.0] ESTIMATE");
+
+            sql = "select ss_ticket_number from store_sales "
+                    + "where ss_ticket_number in (_spm_const_list(1, -1, 1, -2, 2));";
+            plan = getCostExplain(sql);
+            assertContains(plan, "cardinality: 48\n"
+                    + "     column statistics: \n"
+                    + "     * ss_ticket_number-->[1.0, 2.0, 0.0, 4.0, 4.0] ESTIMATE");
+        } finally {
+            FeConstants.runningUnitTest = false;
+        }
     }
 }
