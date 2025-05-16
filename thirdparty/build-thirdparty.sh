@@ -1400,6 +1400,46 @@ build_xsimd() {
     ${BUILD_SYSTEM} install
 }
 
+build_libxml2() {
+    check_if_source_exist $LIBXML2_SOURCE
+    cd $TP_SOURCE_DIR/$LIBXML2_SOURCE
+
+    ${CMAKE_CMD} -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DLIBXML2_WITH_ICONV=OFF \
+        -DLIBXML2_WITH_LZMA=OFF \
+        -DLIBXML2_WITH_PYTHON=OFF \
+        -DLIBXML2_WITH_ZLIB=OFF \
+        -DLIBXML2_WITH_TESTS=OFF
+
+    ${BUILD_SYSTEM} -j "${PARALLEL}"
+    ${BUILD_SYSTEM} install
+}
+
+build_azure() {
+    check_if_source_exist $AZURE_SOURCE
+    cd $TP_SOURCE_DIR/$AZURE_SOURCE
+
+    export AZURE_SDK_DISABLE_AUTO_VCPKG=true
+    export PKG_CONFIG_LIBDIR=$TP_INSTALL_DIR
+
+    ${CMAKE_CMD} -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DDISABLE_AZURE_CORE_OPENTELEMETRY=ON \
+        -DWARNINGS_AS_ERRORS=OFF \
+        -DCURL_INCLUDE_DIR=$TP_INSTALL_DIR/include \
+        -DCURL_LIBRARY=$TP_INSTALL_DIR/lib/libcurl.a \
+        -DOPENSSL_ROOT_DIR=$TP_INSTALL_DIR \
+        -DOPENSSL_USE_STATIC_LIBS=TRUE \
+        -DLibXml2_ROOT=$TP_INSTALL_DIR
+
+    ${BUILD_SYSTEM} -j "${PARALLEL}"
+    ${BUILD_SYSTEM} install
+
+    unset AZURE_SDK_DISABLE_AUTO_VCPKG
+    unset PKG_CONFIG_LIBDIR
+}
+
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
@@ -1497,6 +1537,8 @@ build_simdutf
 build_poco
 build_icu
 build_xsimd
+build_libxml2
+build_azure
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad

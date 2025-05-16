@@ -599,3 +599,14 @@ if [[ -d $TP_SOURCE_DIR/$BREAK_PAD_SOURCE ]] ; then
     cd -
     echo "Finished patching $BREAK_PAD_SOURCE"
 fi
+
+# patch azure
+if [[ -d $TP_SOURCE_DIR/$AZURE_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$AZURE_SOURCE
+    if [ ! -f "$PATCHED_MARK" ] && [[ $AZURE_SOURCE == "azure-storage-files-shares_12.12.0" ]] ; then
+        patch -p1 < "$TP_PATCH_DIR/azure-storage-files-shares_12.12.0.patch"
+        touch "$PATCHED_MARK"
+    fi
+    cd -
+    echo "Finished patching $AZURE_SOURCE"
+fi
