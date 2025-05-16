@@ -3031,7 +3031,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitDropResourceGroupStatement(StarRocksParser.DropResourceGroupStatementContext context) {
         Identifier identifier = (Identifier) visit(context.identifier());
-        return new DropResourceGroupStmt(identifier.getValue(), createPos(context));
+        boolean ifExists = context.IF() != null && context.EXISTS() != null;
+        return new DropResourceGroupStmt(ifExists, identifier.getValue(), createPos(context));
     }
 
     @Override
@@ -3094,7 +3095,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     public ParseNode visitDropResourceStatement(StarRocksParser.DropResourceStatementContext context) {
         Identifier identifier = (Identifier) visit(context.identifierOrString());
-        return new DropResourceStmt(identifier.getValue(), createPos(context));
+        boolean ifExists = context.IF() != null && context.EXISTS() != null;
+        return new DropResourceStmt(ifExists, identifier.getValue(), createPos(context));
     }
 
     public ParseNode visitAlterResourceStatement(StarRocksParser.AlterResourceStatementContext context) {
