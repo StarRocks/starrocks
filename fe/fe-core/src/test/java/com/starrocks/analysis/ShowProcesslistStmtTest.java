@@ -15,10 +15,8 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.Config;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
@@ -60,7 +58,7 @@ public class ShowProcesslistStmtTest {
         ShowProcesslistStmt stmt = (ShowProcesslistStmt) UtFrameUtils.parseStmtWithNewParser(originStmt, connectContext);
         ShowResultSetMetaData metaData = stmt.getMetaData();
         Assert.assertNotNull(metaData);
-        Assert.assertEquals(11, metaData.getColumnCount());
+        Assert.assertEquals(12, metaData.getColumnCount());
         Assert.assertEquals("ServerName", metaData.getColumn(0).getName());
         Assert.assertEquals("Id", metaData.getColumn(1).getName());
         Assert.assertEquals("User", metaData.getColumn(2).getName());
@@ -72,6 +70,7 @@ public class ShowProcesslistStmtTest {
         Assert.assertEquals("State", metaData.getColumn(8).getName());
         Assert.assertEquals("Info", metaData.getColumn(9).getName());
         Assert.assertEquals("IsPending", metaData.getColumn(10).getName());
+        Assert.assertEquals("Warehouse", metaData.getColumn(11).getName());
     }
 
     @Test
@@ -92,7 +91,6 @@ public class ShowProcesslistStmtTest {
                 return Lists.newArrayList(frontend1, frontend2);
             }
         };
-
 
         ConnectContext ctx1 = new ConnectContext();
         ctx1.setQualifiedUser("test");
@@ -126,6 +124,7 @@ public class ShowProcesslistStmtTest {
         tConnectionInfo.setState("OK");
         tConnectionInfo.setInfo("info");
         tConnectionInfo.setIsPending("false");
+        tConnectionInfo.setWarehouse("default_warehouse");
         tListConnectionResponse.addToConnections(tConnectionInfo);
 
         try (MockedStatic<ThriftRPCRequestExecutor> thriftConnectionPoolMockedStatic =
@@ -135,6 +134,9 @@ public class ShowProcesslistStmtTest {
                     .thenReturn(tListConnectionResponse);
             ShowResultSet showResultSet = ShowExecutor.execute(showProcesslistStmt, context);
             Assert.assertEquals(3, showResultSet.getResultRows().size());
+
+            List<List<String>> resultRows = showResultSet.getResultRows();
+            Assert.assertEquals("default_warehouse", resultRows.get(0).get(11));
         }
     }
 }
