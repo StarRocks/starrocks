@@ -238,8 +238,8 @@ TEST_F(PublishVersionManagerTest, test_publish_task) {
     auto rs1 = create_rowset(_tablet, keys);
     ASSERT_TRUE(_tablet->rowset_commit(3, rs1).ok());
 
+    auto tablet1 = create_tablet(rand(), rand());
     {
-        auto tablet1 = create_tablet(rand(), rand());
         auto rs0 = create_rowset(tablet1, keys);
         ASSERT_TRUE(tablet1->rowset_commit(2, rs0).ok());
         auto rs1 = create_rowset(tablet1, keys);
@@ -259,7 +259,7 @@ TEST_F(PublishVersionManagerTest, test_publish_task) {
         pair2.__set_tablet_id(tablet1->tablet_id());
         pair2.__set_version(3);
     }
-    
+
     config::max_update_tablet_version_internal_ms = 1000;
     _publish_version_manager->wait_publish_task_apply_finish(std::move(finish_task_requests));
     _finish_publish_version_cv.notify_one();

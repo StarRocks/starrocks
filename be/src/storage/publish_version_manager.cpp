@@ -201,7 +201,6 @@ void PublishVersionManager::finish_publish_version_task() {
                                 update_tablet_version(request.tablet_versions);
                                 TNetworkAddress master_addr = get_master_address();
                                 TUpdateTabletVersionResult result;
-#ifndef BE_TEST
                                 auto st = ThriftRpcHelper::rpc<FrontendServiceClient>(
                                         master_addr.hostname, master_addr.port,
                                         [&request, &result](FrontendServiceConnection& client) {
@@ -210,7 +209,6 @@ void PublishVersionManager::finish_publish_version_task() {
                                 if (!st.ok()) {
                                     LOG(WARNING) << "updateTabletVersion failed: " << st;
                                 }
-#endif
                             });
                     if (!st.ok()) {
                         LOG(WARNING) << "submit report tablet version task failed";

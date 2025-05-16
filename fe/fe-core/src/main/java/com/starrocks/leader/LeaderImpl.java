@@ -1445,6 +1445,7 @@ public class LeaderImpl {
     public TUpdateTabletVersionResult updateTabletVersion(TUpdateTabletVersionRequest request) {
         TUpdateTabletVersionResult result = new TUpdateTabletVersionResult();
         TStatus tStatus = new TStatus(TStatusCode.OK);
+        result.setStatus(tStatus);
         if (!GlobalStateMgr.getCurrentState().isLeader()) {
             LOG.warn("current node is not leader, update tablet version failed, signature: {}",
                     request.getSignature());
