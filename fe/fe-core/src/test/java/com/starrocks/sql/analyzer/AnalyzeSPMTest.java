@@ -18,6 +18,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeSPMTest {
@@ -38,5 +39,20 @@ public class AnalyzeSPMTest {
     public void testSPMFunctionSQL() {
         analyzeSuccess("select * from t0 where t0.v2 = _spm_const_var(1, 3)");
         analyzeSuccess("select * from t0 where t0.v2 in (_spm_const_list(1, 2, 4, 5, 3))");
+    }
+
+    @Test
+    public void testShowSPMFunctionSQL2() {
+        analyzeSuccess("show baseline");
+        analyzeSuccess("show baseline where id = 2");
+        analyzeSuccess("show baseline where id = 2 and bindSQLDigest = 'asdf'");
+        analyzeSuccess("show baseline where bindSQLDigest = 'asdf' or updateTime <= now()");
+        analyzeSuccess("show baseline where bindSQLDigest like 'asdf' or updateTime <= now()");
+
+        // error field
+        analyzeFail("show baseline where xxx = 'asdf'");
+
+        // unsupported function
+        analyzeFail("show baseline where bindSQLDigest = lpad('asdf')");
     }
 }

@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -225,6 +226,27 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
                                                      ScalarOperatorRewriteContext context) {
         if (hasNull(predicate.getChildren())) {
             return ConstantOperator.createNull(Type.BOOLEAN);
+        }
+        if (notAllConstant(predicate.getChildren()) || predicate.getLikeType() != LikePredicateOperator.LikeType.LIKE) {
+            return predicate;
+        }
+
+        String text = ((ConstantOperator) predicate.getChild(0)).getVarchar();
+        String pattern = ((ConstantOperator) predicate.getChild(1)).getVarchar();
+
+        if (pattern.matches("^[^_%]+$")) {
+            return ConstantOperator.createBoolean(text.equals(pattern));
+        }
+        if (pattern.matches("^%+[^_%]+$")) {
+            pattern = StringUtils.stripStart(pattern, "%");
+            return ConstantOperator.createBoolean(text.endsWith(pattern));
+        } else if (pattern.matches("^[^_%]+%+$")) {
+            pattern = StringUtils.stripEnd(pattern, "%");
+            return ConstantOperator.createBoolean(text.startsWith(pattern));
+        } else if (pattern.matches("^%+[^_%]+%+$")) {
+            pattern = StringUtils.stripStart(pattern, "%");
+            pattern = StringUtils.stripEnd(pattern, "%");
+            return ConstantOperator.createBoolean(text.contains(pattern));
         }
         return predicate;
     }

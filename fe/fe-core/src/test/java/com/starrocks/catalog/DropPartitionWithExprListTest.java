@@ -354,19 +354,6 @@ public class DropPartitionWithExprListTest extends MVTestBase {
                     {
                         try {
 
-                            String dropPartitionSql = String.format("alter table %s DROP PARTITIONS WHERE cast(str2date(dt, " +
-                                    "'%%Y-%%m-%%d') as string) like '2024%%';", tableName);
-                            starRocksAssert.alterTable(dropPartitionSql);
-                            Assert.fail();
-                        } catch (Exception e) {
-                            Assert.assertTrue(e.getMessage().contains("Failed to prune partitions with where expression"));
-                        }
-                        Assert.assertEquals(4, olapTable.getVisiblePartitions().size());
-                    }
-
-                    {
-                        try {
-
                             String dropPartitionSql = String.format("alter table %s DROP PARTITIONS WHERE str2date(dt, " +
                                     "'%%Y-%%m-%%d') >= current_date() ;", tableName);
                             starRocksAssert.alterTable(dropPartitionSql);
