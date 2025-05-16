@@ -60,11 +60,13 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.function.MetaFunctions;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.OperatorFunctionChecker;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
@@ -85,10 +87,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.rewrite.OptOlapPartitionPruner.doFurtherPartitionPrune;
 import static com.starrocks.sql.optimizer.rewrite.OptOlapPartitionPruner.isNeedFurtherPrune;
+import static com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner.buildDeducedConjunct;
+import static com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner.checkDeduceConjunct;
 
 public class PartitionSelector {
 
@@ -245,6 +251,71 @@ public class PartitionSelector {
             throw new SemanticException("Failed to prune partitions with where expression: " + whereExpr.toSql());
         }
         return selectedPartitionIds;
+    }
+
+    private void deduceGenerateColumns(ScalarOperator scalarOperator, List<ColumnRefOperator> partitionColumnRefs,
+                                       OlapTable olapTable) {
+        Map<String, ColumnRefOperator>  columnNameToColRefMap = Maps.newHashMap();
+        Function<SlotRef, ColumnRefOperator> slotRefResolver = (slot) -> {
+            return columnNameToColRefMap.get(slot.getColumnName());
+        };
+        // The GeneratedColumn doesn't have the correct type info, let's help it
+        Consumer<SlotRef> slotRefConsumer = (slot) -> {
+            ColumnRefOperator ref = columnNameToColRefMap.get(slot.getColumnName());
+            slot.setType(ref.getType());
+        };
+
+        // Build a map of c1 -> c3, in which c3=fn(c1)
+        Map<ColumnRefOperator, Pair<ColumnRefOperator, ScalarOperator>> refedGeneratedColumnMap = Maps.newHashMap();
+        for (ColumnRefOperator partitionColumn : partitionColumnRefs) {
+            Column column = olapTable.getColumn(partitionColumn.getName());
+            if (column != null && column.isGeneratedColumn()) {
+                Expr generatedExpr = column.getGeneratedColumnExpr(olapTable.getBaseSchema());
+                ExpressionAnalyzer.analyzeExpressionResolveSlot(generatedExpr, ConnectContext.get(), slotRefConsumer);
+                ScalarOperator call =
+                        SqlToScalarOperatorTranslator.translateWithSlotRef(generatedExpr, slotRefResolver);
+
+                if (call instanceof CallOperator &&
+                        OperatorFunctionChecker.onlyContainMonotonicFunctions((CallOperator) call).first) {
+                    List<ColumnRefOperator> columnRefOperatorList = Utils.extractColumnRef(call);
+
+                    for (ColumnRefOperator ref : columnRefOperatorList) {
+                        refedGeneratedColumnMap.put(ref, Pair.create(partitionColumn, call));
+                    }
+                }
+            }
+        }
+
+        // No GeneratedColumn with partition column
+        if (refedGeneratedColumnMap.isEmpty()) {
+            return;
+        }
+
+        ScalarOperatorVisitor<ScalarOperator, Void> visitor = new ScalarOperatorVisitor<>() {
+            @Override
+            public ScalarOperator visit(ScalarOperator scalarOperator, Void context) {
+                List<ScalarOperator> children = Lists.newArrayList(scalarOperator.getChildren());
+                for (int i = 0; i < children.size(); ++i) {
+                    ScalarOperator child = children.get(i);
+                    List<ColumnRefOperator> columnRefOperatorList = Utils.extractColumnRef(child);
+                    if (checkDeduceConjunct(partitionColumnRefs, child, columnRefOperatorList)) {
+                        ColumnRefOperator referenced = columnRefOperatorList.get(0);
+                        Pair<ColumnRefOperator, ScalarOperator> pair = refedGeneratedColumnMap.get(referenced);
+                        if (pair != null) {
+                            ColumnRefOperator generatedColumn = pair.first;
+                            ScalarOperator generatedExpr = pair.second;
+                            ScalarOperator result = buildDeducedConjunct(child, generatedExpr, generatedColumn);
+                            scalarOperator.setChild(i, result);
+                        }
+                    }
+                }
+                return scalarOperator;
+            }
+        };
+        ScalarOperator result = scalarOperator.accept(visitor, null);
+        if (result != null) {
+            scalarOperator = result;
+        }
     }
 
     private static List<Long> getPartitionsByRetentionCondition(Database db,
