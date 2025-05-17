@@ -504,12 +504,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             throw new LockTimeoutException("Failed to lock database in prepareRefreshPlan");
         }
 
-        MVPCTRefreshPlanBuilder planBuilder = new MVPCTRefreshPlanBuilder(mv, mvContext, mvRefreshPartitioner);
+        MVPCTRefreshPlanBuilder planBuilder = new MVPCTRefreshPlanBuilder(db, mv, mvContext, mvRefreshPartitioner);
         try {
             // 4. Analyze and prepare a partition & Rebuild insert statement by
             // considering to-refresh partitions of ref tables/ mv
             try (Timer ignored = Tracers.watchScope("MVRefreshAnalyzer")) {
-                insertStmt = planBuilder.analyzeAndBuildInsertPlan(insertStmt, refTablePartitionNames, ctx);
+                insertStmt = planBuilder.analyzeAndBuildInsertPlan(insertStmt,
+                        mvToRefreshedPartitions, refTablePartitionNames, ctx);
                 // Must set execution id before StatementPlanner.plan
                 ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
             }
