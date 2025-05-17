@@ -264,6 +264,7 @@ TEST_F(PublishVersionManagerTest, test_publish_task) {
     _publish_version_manager->wait_publish_task_apply_finish(std::move(finish_task_requests));
     _finish_publish_version_cv.notify_one();
 
+    std::this_thread::sleep_for(std::chrono::seconds(2));
     ASSERT_EQ(0, _publish_version_manager->finish_task_requests_size());
     ASSERT_EQ(1, _publish_version_manager->waitting_finish_task_requests_size());
     _tablet->updates()->stop_apply(false);
