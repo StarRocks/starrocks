@@ -674,7 +674,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Map<String, String> newProperties = Maps.newHashMap();
         for (Map.Entry<String, String> proEntry : properties.entrySet()) {
             // skip uncopyable properties: force/partition_values which only can be set specifically.
-            if (proEntry.getKey() == null || UNCOPYABLE_PROPERTIES.contains(proEntry.getKey())) {
+            if (proEntry.getValue() == null || UNCOPYABLE_PROPERTIES.contains(proEntry.getKey())) {
                 continue;
             }
             if (TASK_RUN_PROPERTIES.contains(proEntry.getKey())) {
