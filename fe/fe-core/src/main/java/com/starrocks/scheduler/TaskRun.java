@@ -69,14 +69,14 @@ public class TaskRun implements Comparable<TaskRun> {
     public static final Set<String> COMPARABLE_PROPERTIES = ImmutableSet.of(
             MV_ID, PARTITION_START, PARTITION_END, PARTITION_VALUES, FORCE);
     public static final String START_TASK_RUN_ID = "START_TASK_RUN_ID";
+    // Only used in FE's UT
+    public static final String IS_TEST = "__IS_TEST__";
     // All properties that can be set in TaskRun
     public static final Set<String> TASK_RUN_PROPERTIES = ImmutableSet.of(
-            MV_ID, PARTITION_START, PARTITION_END, FORCE, START_TASK_RUN_ID, PARTITION_VALUES, PROPERTIES_WAREHOUSE);
+            MV_ID, PARTITION_START, PARTITION_END, FORCE, START_TASK_RUN_ID, PARTITION_VALUES, PROPERTIES_WAREHOUSE, IS_TEST);
 
     public static final int INVALID_TASK_PROGRESS = -1;
 
-    // Only used in FE's UT
-    public static final String IS_TEST = "__IS_TEST__";
     private boolean isKilled = false;
 
     @SerializedName("taskId")
