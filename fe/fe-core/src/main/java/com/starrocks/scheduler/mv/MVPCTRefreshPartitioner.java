@@ -95,6 +95,13 @@ public abstract class MVPCTRefreshPartitioner {
                                                     Set<String> refBaseTablePartitionNames,
                                                     List<Expr> mvPartitionSlotRefs) throws AnalysisException;
 
+    /**
+     * Generate partition predicate for mv refresh based on the mv partition names.
+     * @param tableName: materialized view table name(db + name)
+     * @param mvPartitionNames: materialized view partition names to check.
+     * @return : partition predicate for mv refresh.
+     * @throws AnalysisException
+     */
     public abstract Expr generateMVPartitionPredicate(TableName tableName,
                                                       Set<String> mvPartitionNames) throws AnalysisException;
 

@@ -415,6 +415,12 @@ public class ListPartitionInfo extends PartitionInfo {
         return sb.toString();
     }
 
+    /**
+     * Get the partition expression for the partition info
+     * @param tableName: table name of the partitioned table
+     * @param idToColumn: map of column id to column
+     * @return: list of defined partition expressions for the table
+     */
     public List<Expr> getPartitionExprs(TableName tableName, Map<ColumnId, Column> idToColumn) {
         List<Expr> partitionExprs = Lists.newArrayList();
         for (Column column : MetaUtils.getColumnsByColumnIds(idToColumn, partitionColumnIds)) {

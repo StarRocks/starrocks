@@ -223,6 +223,8 @@ public class MVPCTRefreshPlanBuilder {
                     mv.getName(), numOfPushDownIntoTables);
             return insertStmt;
         } else if (numOfPushDownIntoTables != uniqueTableNames.size() || extraPartitionPredicates.isEmpty()) {
+            // Only generate partition predicates by mv's target partitions when ref base tables'
+            // predicates cannot be pushed down
             return generateMVPartitionPredicate(mvToRefreshedPartitions, queryStatement, insertStmt);
         } else {
             // TODO: merge with above code
@@ -256,6 +258,14 @@ public class MVPCTRefreshPlanBuilder {
         }
     }
 
+    /**
+     * Generate partition predicates by mv's target partitions.
+     * @param mvToRefreshedPartitions: to refresh partitions of materialized view
+     * @param queryStatement: the query statement of the insert stmt without partition predicates
+     * @param insertStmt: the insert statement of the mv refresh task
+     * @return the insert statement with partition predicates
+     * @throws AnalysisException
+     */
     private InsertStmt generateMVPartitionPredicate(Set<String> mvToRefreshedPartitions,
                                                     QueryStatement queryStatement,
                                                     InsertStmt insertStmt)
@@ -269,13 +279,11 @@ public class MVPCTRefreshPlanBuilder {
         tracePartitionPredicates(mvPartitionPredicate);
 
         // support to generate partition predicate for other query relation types
-        logger.warn("Generate mv partition predicate since , mv:{}", mv.getName());
+        logger.info("Generate mv partition predicate by mv's target partitions, mv:{}, predicate:{}",
+                mv.getName(), mvPartitionPredicate);
         SubqueryRelation newRelation = new SubqueryRelation(queryStatement);
         newRelation.setAlias(tableName);
 
-        // use `getColumnOutputNames` rather than `getOutputExpression` to avoid `getOutputExpression`
-        // referring original queryStatement's
-        // output expressions which may cause column missing if the original queryStatement's output contains alias.
         QueryRelation queryRelation = queryStatement.getQueryRelation();
         List<SelectListItem> items = queryRelation.getColumnOutputNames().stream()
                 .map(x -> new SlotRef(tableName, x))
