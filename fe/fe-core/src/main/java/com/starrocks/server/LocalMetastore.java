@@ -3767,9 +3767,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
         }
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
-            if (table.getColocateGroup() != null) {
-                throw new DdlException("Cannot set location for colocate table");
-            }
             String locations = PropertyAnalyzer.analyzeLocation(properties, true);
             results.put(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION, locations);
         }
