@@ -42,6 +42,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import static com.starrocks.common.MaterializedViewExceptions.INACTIVE_REASON_FOR_BASE_TABLE_OPTIMIZED;
+
 /**
  * A daemon thread that check the MV active status, try to activate the MV it's inactive.
  */
@@ -59,7 +61,10 @@ public class MVActiveChecker extends FrontendDaemon {
 
     // there are some reasons that we don't active mv automatically, eg: mv backup/restore which may cause to refresh all
     // mv's data behind which is not expected.
-    private static final Set<String> MV_NO_AUTOMATIC_ACTIVE_REASONS = ImmutableSet.of(MV_BACKUP_INACTIVE_REASON);
+    private static final Set<String> MV_NO_AUTOMATIC_ACTIVE_REASONS = ImmutableSet.of(
+            MV_BACKUP_INACTIVE_REASON,
+            INACTIVE_REASON_FOR_BASE_TABLE_OPTIMIZED
+    );
 
     @Override
     protected void runAfterCatalogReady() {
