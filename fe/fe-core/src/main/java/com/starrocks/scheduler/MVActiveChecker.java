@@ -128,7 +128,7 @@ public class MVActiveChecker extends FrontendDaemon {
         if (mv.isActive() || AlterJobMgr.MANUAL_INACTIVE_MV_REASON.equalsIgnoreCase(reason)) {
             return;
         }
-        if (MV_NO_AUTOMATIC_ACTIVE_REASONS.stream().anyMatch(x -> x.contains(reason))) {
+        if (MV_NO_AUTOMATIC_ACTIVE_REASONS.stream().anyMatch(x -> reason.contains(x))) {
             return;
         }
 
