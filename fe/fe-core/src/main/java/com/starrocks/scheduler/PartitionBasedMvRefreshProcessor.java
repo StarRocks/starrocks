@@ -105,6 +105,8 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
 import static com.starrocks.scheduler.TaskRun.MV_ID;
+import static com.starrocks.scheduler.TaskRun.TASK_RUN_PROPERTIES;
+import static com.starrocks.scheduler.TaskRun.UNCOPYABLE_PROPERTIES;
 
 /**
  * Core logic of mv refresh task run
@@ -671,7 +673,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         String taskName = TaskBuilder.getMvTaskName(mvId);
         Map<String, String> newProperties = Maps.newHashMap();
         for (Map.Entry<String, String> proEntry : properties.entrySet()) {
-            if (proEntry.getValue() != null) {
+            // skip uncopyable properties: force/partition_values which only can be set specifically.
+            if (UNCOPYABLE_PROPERTIES.contains(proEntry.getKey())) {
+                continue;
+            }
+            if (proEntry.getValue() != null && TASK_RUN_PROPERTIES.contains(proEntry.getKey())) {
                 newProperties.put(proEntry.getKey(), proEntry.getValue());
             }
         }

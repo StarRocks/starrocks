@@ -62,6 +62,12 @@ public class TaskRun implements Comparable<TaskRun> {
     // list partition values to be refreshed
     public static final String PARTITION_VALUES = "PARTITION_VALUES";
     public static final String FORCE = "FORCE";
+    // properties that are not allowed to be copied from one task run to another
+    public static final Set<String> UNCOPYABLE_PROPERTIES = ImmutableSet.of(
+            PARTITION_START, PARTITION_END, PARTITION_VALUES, FORCE);
+    // properties that are used to check equality of task runs
+    public static final Set<String> COMPARABLE_PROPERTIES = ImmutableSet.of(
+            MV_ID, PARTITION_START, PARTITION_END, PARTITION_VALUES, FORCE);
     public static final String START_TASK_RUN_ID = "START_TASK_RUN_ID";
     // All properties that can be set in TaskRun
     public static final Set<String> TASK_RUN_PROPERTIES = ImmutableSet.of(
