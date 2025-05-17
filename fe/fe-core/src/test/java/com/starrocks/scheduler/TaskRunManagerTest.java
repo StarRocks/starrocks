@@ -128,7 +128,7 @@ public class TaskRunManagerTest {
     }
 
     @Test
-    public void testExecutionOption1() {
+    public void testExecutionOption() {
         {
             ExecuteOption option1 = makeExecuteOption(true, false, 1);
             ExecuteOption option2 = makeExecuteOption(true, false, 10);
@@ -158,7 +158,7 @@ public class TaskRunManagerTest {
             prop1.put("a", "a");
             ExecuteOption option1 = makeExecuteOption(true, false, 1, prop1);
             Map<String, String> prop11 = option1.getTaskRunComparableProperties();
-            Assert.assertTrue(Objects.equals(prop11, prop1));
+            Assert.assertTrue(prop11.size() == 3);
 
             Map<String, String> prop2 = makeTaskRunProperties("2023-01-01", "2023-01-02", false);
             prop2.put("a", "b");

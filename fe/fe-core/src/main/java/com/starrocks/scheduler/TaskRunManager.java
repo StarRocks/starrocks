@@ -169,6 +169,8 @@ public class TaskRunManager implements MemoryTrackable {
                     // avoid the merge operation later.
                     // merge the old execution option into the new task run
                     if (!executeOption.isMergeableWith(oldExecuteOption)) {
+                        LOG.warn("failed to merge TaskRun, both TaskRun contains toMergeProperties, " +
+                                "oldTaskRun: {}, taskRun: {}", oldTaskRun, taskRun);
                         continue;
                     }
 

@@ -674,10 +674,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Map<String, String> newProperties = Maps.newHashMap();
         for (Map.Entry<String, String> proEntry : properties.entrySet()) {
             // skip uncopyable properties: force/partition_values which only can be set specifically.
-            if (UNCOPYABLE_PROPERTIES.contains(proEntry.getKey())) {
+            if (proEntry.getKey() == null || UNCOPYABLE_PROPERTIES.contains(proEntry.getKey())) {
                 continue;
             }
-            if (proEntry.getValue() != null && TASK_RUN_PROPERTIES.contains(proEntry.getKey())) {
+            if (TASK_RUN_PROPERTIES.contains(proEntry.getKey())) {
                 newProperties.put(proEntry.getKey(), proEntry.getValue());
             }
         }
@@ -709,8 +709,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 mvContext.executeOption.getPriority() : Constants.TaskRunPriority.HIGHER.value();
         ExecuteOption option = new ExecuteOption(priority, true, newProperties);
         logger.info("[MV] Generate a task to refresh next batches of partitions for MV {}-{}, start={}, end={}, " +
-                        "priority={}", mv.getName(), mv.getId(),
-                mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd(), priority);
+                        "priority={}, properties={}", mv.getName(), mv.getId(),
+                mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd(), priority, properties);
 
         if (properties.containsKey(TaskRun.IS_TEST) && properties.get(TaskRun.IS_TEST).equalsIgnoreCase("true")) {
             // for testing
