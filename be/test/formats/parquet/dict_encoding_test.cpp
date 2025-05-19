@@ -54,7 +54,7 @@ TEST(DictEncodingReadTest, BasicTest) {
     ASSERT_OK(decoder.set_dict(10, 10, &inner_decoder));
 
     // read dict code
-    size_t chunk_size = 4096;
+    size_t chunk_size = 4095;
     NullInfos infos;
     infos.reset_with_capacity(chunk_size);
     {
@@ -108,6 +108,18 @@ TEST(DictEncodingReadTest, BasicTest) {
         auto dst = ColumnHelper::create_column(type_desc, true);
         ASSERT_OK(decoder.next_batch_with_nulls(chunk_size, infos, ColumnContentType::DICT_CODE, dst.get(), nullptr));
         EXPECT_EQ(dst->debug_item(0), "5");
+        EXPECT_EQ(dst->debug_item(1), "NULL");
+        EXPECT_EQ(dst->debug_item(2), "NULL");
+        EXPECT_EQ(dst->size(), chunk_size);
+    }
+    {
+        TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
+        auto dst = ColumnHelper::create_column(type_desc, true);
+        auto filter = std::make_unique<uint8_t[]>(chunk_size);
+        memset(filter.get(), 0x01, chunk_size);
+        filter[0] = 0;
+        ASSERT_OK(decoder.next_batch_with_nulls(chunk_size, infos, ColumnContentType::VALUE, dst.get(), filter.get()));
+        EXPECT_EQ(dst->debug_item(0), "6");
         EXPECT_EQ(dst->debug_item(1), "NULL");
         EXPECT_EQ(dst->debug_item(2), "NULL");
         EXPECT_EQ(dst->size(), chunk_size);
