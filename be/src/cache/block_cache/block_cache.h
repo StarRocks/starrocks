@@ -16,7 +16,6 @@
 
 #include <atomic>
 
-#include "cache/disk_space_monitor.h"
 #include "cache/local_cache.h"
 #include "cache/remote_cache.h"
 #include "common/status.h"
