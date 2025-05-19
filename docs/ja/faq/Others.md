@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# Other FAQ
+# その他
 
 このトピックでは、一般的な質問への回答を提供します。
 

@@ -2,7 +2,13 @@
 displayed_sidebar: docs
 ---
 
+<<<<<<< HEAD
 # Translate Trino SQL
+=======
+import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+
+# トリノ SQL を変換
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
 
 v3.3.9 から、StarRocks は Trino SQL ステートメントを StarRocks SQL ステートメントに変換することをサポートしています。
 

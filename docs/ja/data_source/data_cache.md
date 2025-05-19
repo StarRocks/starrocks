@@ -97,7 +97,11 @@ mysql> explain verbose select col1 from hudi_table;
 
 `dataCacheOptions={populate: false}` は、クエリがすべてのパーティションをスキャンするため、キャッシュがポピュレートされないことを示しています。
 
+<<<<<<< HEAD
 Data Cache のポピュレーション動作を微調整するには、セッション変数 [populdate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode) を使用します。
+=======
+Data Cache のポピュレーションの動作をセッション変数 [populate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode) を使用して微調整することもできます。
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
 
 ### ポピュレーションモード
 
@@ -247,7 +251,7 @@ Data Cache は、次のシステム変数と BE パラメータを使用して�
 
 ### システム変数
 
-- [populdate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode)
+- [populate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode)
 - [enable_datacache_io_adaptor](../sql-reference/System_variable.md#enable_datacache_io_adaptor)
 - [enable_file_metacache](../sql-reference/System_variable.md#enable_file_metacache)
 - [enable_datacache_async_populate_mode](../sql-reference/System_variable.md)

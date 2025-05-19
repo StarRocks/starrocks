@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# テキストベースの Query Profile の可視化分析
+# テキストベースのクエリのプロファイルの可視化分析
 
 MySQL クライアントを通じてテキストベースの Query Profile を取得し、分析する方法。
 

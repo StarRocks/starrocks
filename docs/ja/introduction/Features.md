@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# Features
+# 機能
 
 StarRocks は、スケールに応じたデータに対して、非常に高速でリアルタイムな分析体験を提供する豊富な機能セットを備えています。
 

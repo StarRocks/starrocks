@@ -3,12 +3,25 @@ displayed_sidebar: docs
 toc_max_heading_level: 5
 ---
 
+<<<<<<< HEAD
 # 統合カタログ
+=======
+import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+
+# Unified catalog
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
 
 統合カタログは、StarRocks が v3.2 以降で提供する外部カタログの一種で、Apache Hive™、Apache Iceberg、Apache Hudi、Delta Lake、Apache Kudu のデータソースを取り込みなしで統合データソースとして扱います。統合カタログを使用すると、以下のことが可能です：
 
+<<<<<<< HEAD
 - Hive、Iceberg、Hudi、Delta Lake、Paimon、Kudu に保存されたデータを、手動でテーブルを作成することなく直接クエリできます。
 - [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) または非同期マテリアライズドビュー（v2.5 以降でサポート）を使用して、Hive、Iceberg、Hudi、Delta Lake、Paimon、Kudu に保存されたデータを処理し、そのデータを StarRocks にロードできます。
+=======
+Unified catalogは、StarRocks が v3.2 以降で提供する外部カタログの一種で、Apache Hive™、Apache Iceberg、Apache Hudi、Delta Lake、Apache Kudu のデータソースをインジェストなしで統合データソースとして扱います。Unified catalogを使用すると、次のことが可能です：
+
+- Hive、Iceberg、Hudi、Delta Lake、Paimon、Kudu に保存されたデータを手動でテーブルを作成することなく直接クエリできます。
+- [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) または非同期マテリアライズドビュー（v2.5 以降でサポート）を使用して、Hive、Iceberg、Hudi、Delta Lake、Paimon、Kudu に保存されたデータを処理し、StarRocks にデータをロードできます。
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
 - StarRocks 上で操作を行い、Hive および Iceberg のデータベースやテーブルを作成または削除できます。
 
 統合データソースでの SQL ワークロードを成功させるためには、StarRocks クラスターが統合データソースのストレージシステムおよびメタストアにアクセスできる必要があります。StarRocks は以下のストレージシステムおよびメタストアをサポートしています：
@@ -23,7 +36,11 @@ toc_max_heading_level: 5
 
 ## 制限事項
 
+<<<<<<< HEAD
 1 つの統合カタログは、単一のストレージシステムおよび単一のメタストアサービスとのみ統合できます。したがって、StarRocks と統合したいすべてのデータソースが同じストレージシステムおよびメタストアサービスを使用していることを確認してください。
+=======
+1 つのUnified catalogは、単一のストレージシステムと単一のメタストアサービスとのみ統合をサポートします。したがって、StarRocks と統合したいすべてのデータソースが同じストレージシステムとメタストアサービスを使用していることを確認してください。
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
 
 ## 使用上の注意
 
@@ -31,11 +48,15 @@ toc_max_heading_level: 5
 
 - 特定のテーブル形式に対してのみフォーマット固有の操作がサポートされています。例えば、[CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) と [DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) は Hive と Iceberg のみでサポートされており、[REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/table_bucket_part_index/REFRESH_EXTERNAL_TABLE.md) は Hive と Hudi のみでサポートされています。
 
-  統合カタログ内で [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) ステートメントを使用してテーブルを作成する場合、`ENGINE` パラメータを使用してテーブル形式（Hive または Iceberg）を指定してください。
+  Unified catalog内で [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) ステートメントを使用してテーブルを作成する場合、`ENGINE` パラメータを使用してテーブル形式（Hive または Iceberg）を指定してください。
 
 ## 統合準備
 
+<<<<<<< HEAD
 統合カタログを作成する前に、StarRocks クラスターが統合データソースのストレージシステムおよびメタストアと統合できることを確認してください。
+=======
+Unified catalogを作成する前に、StarRocks クラスターが統合データソースのストレージシステムとメタストアと統合できることを確認してください。
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
 
 ### AWS IAM
 
@@ -61,7 +82,7 @@ HDFS クラスターまたは Hive メタストアに Kerberos 認証が有効�
 - 各 FE および各 BE または CN で `kinit -kt keytab_path principal` コマンドを実行して、Key Distribution Center (KDC) から Ticket Granting Ticket (TGT) を取得します。このコマンドを実行するには、HDFS クラスターおよび Hive メタストアにアクセスする権限が必要です。このコマンドを使用して KDC にアクセスすることは時間に敏感です。したがって、このコマンドを定期的に実行するために cron を使用する必要があります。
 - 各 FE の **$FE_HOME/conf/fe.conf** ファイルおよび各 BE または CN の **$BE_HOME/conf/be.conf** ファイルに `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"` を追加します。この例では、`/etc/krb5.conf` は krb5.conf ファイルの保存パスです。必要に応じてパスを変更できます。
 
-## 統合カタログの作成
+## Unified catalogの作成
 
 ### 構文
 
@@ -83,14 +104,18 @@ PROPERTIES
 
 #### catalog_name
 
+<<<<<<< HEAD
 統合カタログの名前。命名規則は以下の通りです：
+=======
+Unified catalogの名前。命名規則は次の通りです：
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
 
 - 名前には文字、数字 (0-9)、アンダースコア (_) を含めることができます。文字で始まる必要があります。
 - 名前は大文字と小文字を区別し、長さは 1023 文字を超えてはなりません。
 
 #### comment
 
-統合カタログの説明。このパラメータはオプションです。
+Unified catalogの説明。このパラメータはオプションです。
 
 #### type
 
@@ -455,7 +480,11 @@ Kudu Catalog に接続する方法に関する一連のパラメータ。この�
 
 ### 例
 
+<<<<<<< HEAD
 以下の例では、使用するメタストアのタイプに応じて、`unified_catalog_hms` または `unified_catalog_glue` という名前の統合カタログを作成し、統合データソースからデータをクエリします。
+=======
+次の例は、使用するメタストアのタイプに応じて、`unified_catalog_hms` または `unified_catalog_glue` という名前のUnified catalogを作成し、統合データソースからデータをクエリします。
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
 
 #### HDFS
 
@@ -765,7 +794,7 @@ PROPERTIES
     );
     ```
 
-## 統合カタログの表示
+## Unified catalogの表示
 
 現在の StarRocks クラスター内のすべてのカタログをクエリするには、[SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) を使用できます：
 
@@ -773,17 +802,25 @@ PROPERTIES
 SHOW CATALOGS;
 ```
 
-外部カタログの作成ステートメントをクエリするには、[SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) を使用できます。次の例では、`unified_catalog_glue` という名前の統合カタログの作成ステートメントをクエリします：
+外部カタログの作成ステートメントをクエリするには、[SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) を使用できます。次の例では、`unified_catalog_glue` という名前のUnified catalogの作成ステートメントをクエリします：
 
 ```SQL
 SHOW CREATE CATALOG unified_catalog_glue;
 ```
 
+<<<<<<< HEAD
 ## 統合カタログおよびその中のデータベースへの切り替え
 
 統合カタログおよびその中のデータベースに切り替えるには、次のいずれかの方法を使用できます：
 
 - 現在のセッションで指定された統合カタログに切り替えるには [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) を使用し、その後、アクティブなデータベースを指定するには [USE](../../sql-reference/sql-statements/Database/USE.md) を使用します：
+=======
+## Unified catalogとその中のデータベースに切り替える
+
+Unified catalogとその中のデータベースに切り替えるには、次のいずれかの方法を使用できます：
+
+- 現在のセッションでUnified catalogを指定するには [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) を使用し、次にアクティブなデータベースを指定するには [USE](../../sql-reference/sql-statements/Database/USE.md) を使用します：
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
 
 ```SQL
   -- 現在のセッションで指定されたカタログに切り替える：
@@ -792,25 +829,39 @@ SHOW CREATE CATALOG unified_catalog_glue;
   USE <db_name>
   ```
 
+<<<<<<< HEAD
 - [USE](../../sql-reference/sql-statements/Database/USE.md) を直接使用して、統合カタログおよびその中のデータベースに切り替えます：
+=======
+- [USE](../../sql-reference/sql-statements/Database/USE.md) を直接使用して、Unified catalogとその中のデータベースに切り替えます：
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
 
   ```SQL
   USE <catalog_name>.<db_name>
   ```
 
+<<<<<<< HEAD
 ## 統合カタログの削除
+=======
+## Unified catalogを削除する
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
 
 外部カタログを削除するには、[DROP CATALOG](../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) を使用できます。
 
-次の例では、`unified_catalog_glue` という名前の統合カタログを削除します：
+次の例では、`unified_catalog_glue` という名前のUnified catalogを削除します：
 
 ```SQL
 DROP CATALOG unified_catalog_glue;
 ```
 
+<<<<<<< HEAD
 ## 統合カタログからのテーブルのスキーマを表示
 
 統合カタログからのテーブルのスキーマを表示するには、次のいずれかの構文を使用します：
+=======
+## Unified catalogからテーブルのスキーマを表示する
+
+Unified catalogからテーブルのスキーマを表示するには、次のいずれかの構文を使用します：
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
 
 - スキーマを表示
 
@@ -824,11 +875,15 @@ DROP CATALOG unified_catalog_glue;
   SHOW CREATE TABLE <catalog_name>.<database_name>.<table_name>
   ```
 
+<<<<<<< HEAD
 ## 統合カタログからデータをクエリ
+=======
+## Unified catalogからデータをクエリする
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
 
-統合カタログからデータをクエリするには、次の手順に従います：
+Unified catalogからデータをクエリするには、次の手順に従います：
 
-1. 統合カタログが関連付けられている統合データソース内のデータベースを表示するには、[SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) を使用します：
+1. Unified catalogが関連付けられている統合データソース内のデータベースを表示するには、[SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) を使用します：
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>
@@ -844,7 +899,11 @@ DROP CATALOG unified_catalog_glue;
 
 ## Hive、Iceberg、Hudi、Delta Lake、Kudu からデータをロード
 
+<<<<<<< HEAD
 Hive、Iceberg、Hudi、Delta Lake、Kudu テーブルのデータを統合カタログ内で作成された StarRocks テーブルにロードするには、[INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) を使用できます。
+=======
+[INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) を使用して、Unified catalog内に作成された StarRocks テーブルに Hive、Iceberg、Hudi、Delta Lake、または Kudu テーブルのデータをロードできます。
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
 
 次の例では、Hive テーブル `hive_table` のデータを統合カタログ `unified_catalog` に属するデータベース `test_database` に作成された StarRocks テーブル `test_tbl` にロードします：
 
@@ -852,17 +911,29 @@ Hive、Iceberg、Hudi、Delta Lake、Kudu テーブルのデータを統合カ�
 INSERT INTO unified_catalog.test_database.test_table SELECT * FROM hive_table
 ```
 
+<<<<<<< HEAD
 ## 統合カタログでデータベースを作成
 
 StarRocks の内部カタログと同様に、統合カタログで CREATE DATABASE 権限を持っている場合、そのカタログで CREATE DATABASE ステートメントを使用してデータベースを作成できます。
+=======
+## Unified catalogにデータベースを作成する
+
+StarRocks の内部カタログと同様に、Unified catalogで CREATE DATABASE 権限を持っている場合、そのカタログにデータベースを作成するために CREATE DATABASE ステートメントを使用できます。
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
 
 > **注意**
 >
 > [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) および [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) を使用して権限を付与および取り消すことができます。
 
+<<<<<<< HEAD
 StarRocks は、統合カタログで Hive および Iceberg データベースのみの作成をサポートしています。
 
 [統合カタログに切り替え](#switch-to-a-unified-catalog-and-a-database-in-it)、そのカタログでデータベースを作成するには、次のステートメントを使用します：
+=======
+StarRocks はUnified catalogで Hive および Iceberg データベースの作成のみをサポートしています。
+
+[Unified catalogに切り替えます](#switch-to-a-unified-catalog-and-a-database-in-it)、次にそのカタログにデータベースを作成するために次のステートメントを使用します：
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
 
 ```SQL
 CREATE DATABASE <database_name>
@@ -885,33 +956,57 @@ CREATE DATABASE <database_name>
 | Azure Data Lake Storage Gen2                               | <ul><li>ストレージアカウントが HTTP 経由でのアクセスを許可する場合、`prefix` は `abfs` です。</li><li>ストレージアカウントが HTTPS 経由でのアクセスを許可する場合、`prefix` は `abfss` です。</li></ul> |
 | AWS S3 または他の S3 互換ストレージ（例：MinIO） | `s3`                                                         |
 
+<<<<<<< HEAD
 ## 統合カタログからデータベースを削除
 
 StarRocks の内部データベースと同様に、統合カタログ内で作成されたデータベースに対して [DROP](../../administration/user_privs/privilege_overview.md#database) 権限を持っている場合、そのデータベースを削除するために [DROP DATABASE](../../sql-reference/sql-statements/Database/DROP_DATABASE.md) ステートメントを使用できます。空のデータベースのみを削除できます。
+=======
+## Unified catalogからデータベースを削除する
+
+StarRocks の内部データベースと同様に、Unified catalog内に作成されたデータベースに対して [DROP](../../administration/user_privs/user_privs.md#database) 権限を持っている場合、そのデータベースを削除するために [DROP DATABASE](../../sql-reference/sql-statements/Database/DROP_DATABASE.md) ステートメントを使用できます。空のデータベースのみを削除できます。
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
 
 > **注意**
 >
 > [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) および [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) を使用して権限を付与および取り消すことができます。
 
+<<<<<<< HEAD
 StarRocks は、統合カタログから Hive および Iceberg データベースのみの削除をサポートしています。
+=======
+StarRocks はUnified catalogから Hive および Iceberg データベースの削除のみをサポートしています。
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
 
-統合カタログからデータベースを削除する際、HDFS クラスターまたはクラウドストレージ上のデータベースのファイルパスはデータベースと共に削除されません。
+Unified catalogからデータベースを削除する際、HDFS クラスターまたはクラウドストレージ上のデータベースのファイルパスはデータベースと共に削除されません。
 
+<<<<<<< HEAD
 [統合カタログに切り替え](#switch-to-a-unified-catalog-and-a-database-in-it)、そのカタログでデータベースを削除するには、次のステートメントを使用します：
+=======
+[Unified catalogに切り替えます](#switch-to-a-unified-catalog-and-a-database-in-it)、次にそのカタログにデータベースを削除するために次のステートメントを使用します：
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
 
 ```SQL
 DROP DATABASE <database_name>
 ```
 
+<<<<<<< HEAD
 ## 統合カタログでテーブルを作成
 
 StarRocks の内部データベースと同様に、統合カタログ内で作成されたデータベースに対して [CREATE TABLE](../../administration/user_privs/privilege_overview.md#database) 権限を持っている場合、そのデータベースで [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) または [CREATE TABLE AS SELECT](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) ステートメントを使用してテーブルを作成できます。
+=======
+## Unified catalogにテーブルを作成する
+
+StarRocks の内部データベースと同様に、Unified catalog内に作成されたデータベースに対して [CREATE TABLE](../../administration/user_privs/user_privs.md#database) 権限を持っている場合、そのデータベースにテーブルを作成するために [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) または [CREATE TABLE AS SELECT ../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.mdELECT.md) ステートメントを使用できます。
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
 
 > **注意**
 >
 > [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) および [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) を使用して権限を付与および取り消すことができます。
 
+<<<<<<< HEAD
 StarRocks は、統合カタログで Hive および Iceberg テーブルのみの作成をサポートしています。
+=======
+StarRocks はUnified catalogで Hive および Iceberg テーブルの作成のみをサポートしています。
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
 
 [Hive Catalog およびその中のデータベースに切り替え](#switch-to-a-unified-catalog-and-a-database-in-it)。その後、[CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) を使用して、そのデータベースに Hive または Iceberg テーブルを作成します：
 
@@ -937,15 +1032,25 @@ ENGINE = hive
 PARTITION BY (id,dt);
 ```
 
+<<<<<<< HEAD
 ## 統合カタログのテーブルにデータをシンク
 
 StarRocks の内部テーブルと同様に、統合カタログ内で作成されたテーブルに対して [INSERT](../../administration/user_privs/privilege_overview.md#table) 権限を持っている場合、その Unified Catalog テーブルに StarRocks テーブルのデータをシンクするために [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) ステートメントを使用できます（現在、Parquet 形式の Unified Catalog テーブルのみがサポートされています）。
+=======
+## Unified catalogのテーブルにデータをシンクする
+
+StarRocks の内部テーブルと同様に、Unified catalog内に作成されたテーブルに対して [INSERT](../../administration/user_privs/user_privs.md#table) 権限を持っている場合、その Unified Catalog テーブルに StarRocks テーブルのデータをシンクするために [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) ステートメントを使用できます（現在、Parquet 形式の Unified Catalog テーブルのみがサポートされています）。
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
 
 > **注意**
 >
 > [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) および [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) を使用して権限を付与および取り消すことができます。
 
+<<<<<<< HEAD
 StarRocks は、統合カタログで Hive および Iceberg テーブルへのデータシンクのみをサポートしています。
+=======
+StarRocks はUnified catalogで Hive および Iceberg テーブルへのデータシンクのみをサポートしています。
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
 
 [Hive Catalog およびその中のデータベースに切り替え](#switch-to-a-unified-catalog-and-a-database-in-it)。その後、[INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) を使用して、そのデータベース内の Hive または Iceberg テーブルにデータを挿入します：
 
@@ -972,15 +1077,25 @@ VALUES
     ("buy", 3, "2023-09-03");
 ```
 
+<<<<<<< HEAD
 ## 統合カタログからテーブルを削除
 
 StarRocks の内部テーブルと同様に、統合カタログ内で作成されたテーブルに対して [DROP](../../administration/user_privs/privilege_overview.md#table) 権限を持っている場合、そのテーブルを削除するために [DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) ステートメントを使用できます。
+=======
+## Unified catalogからテーブルを削除する
+
+StarRocks の内部テーブルと同様に、Unified catalog内に作成されたテーブルに対して [DROP](../../administration/user_privs/user_privs.md#table) 権限を持っている場合、そのテーブルを削除するために [DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) ステートメントを使用できます。
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
 
 > **注意**
 >
 > [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) および [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) を使用して権限を付与および取り消すことができます。
 
+<<<<<<< HEAD
 StarRocks は、統合カタログから Hive および Iceberg テーブルのみの削除をサポートしています。
+=======
+StarRocks はUnified catalogから Hive および Iceberg テーブルの削除のみをサポートしています。
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
 
 [Hive Catalog およびその中のデータベースに切り替え](#switch-to-a-unified-catalog-and-a-database-in-it)。その後、[DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) を使用して、そのデータベース内の Hive または Iceberg テーブルを削除します：
 
