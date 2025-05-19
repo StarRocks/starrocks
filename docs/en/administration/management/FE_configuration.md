@@ -4821,7 +4821,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: mv plan cache (which is used for mv rewrite) expire interval in seconds, 1 day by default.
+- Description: The valid time of materialized view plan cache (which is used for materialized view rewrite) before expiry. The default value is 1 day.
 - Introduced in: v3.2
 
 ##### mv_plan_cache_thread_pool_size
@@ -4830,7 +4830,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The default thread pool size of mv plan cache (which is used for mv rewrite) 
+- Description: The default thread pool size of materialized view plan cache (which is used for materialized view rewrite).
 - Introduced in: v3.2
 
 ##### mv_plan_cache_max_size
@@ -4839,7 +4839,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Long
 - Unit:
 - Is mutable: Yes
-- Description: Max size of mv plan cache used for mv rewrite, if there are many materialized views which are used for transparent rewriting, you may increase this configuration, 1000 by default.
+- Description: The maximum size of materialized view plan cache (which is used for materialized view rewrite). If there are many materialized views used for transparent query rewrite, you may increase this value.
 - Introduced in: v3.2
 
 ##### enable_materialized_view_concurrent_prepare
@@ -4848,7 +4848,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Boolean
 - Unit:
 - Is mutable: Yes
-- Description: Prepare materialized view concurrently to improve performance
+- Description: Whether to prepare materialized view concurrently to improve performance.
 - Introduced in: v3.4.4
 
 ##### enable_mv_query_context_cache
@@ -4857,7 +4857,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether enable to cache mv query context or not per query.
+- Description: Whether to enable query-level materialized view rewrite cache to improve query rewrite performance.
 - Introduced in: v3.3
 
 ##### mv_query_context_cache_max_size
@@ -4866,7 +4866,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: -
 - Unit: -
 - Is mutable: Yes
-- Description: Max materialized view rewrite cache size during one query's lifecycle  so can avoid repeating compute to reduce optimizer time in materialized view rewrite,  but may occupy some extra FE's memory. It's well-done when there are many relative  materialized views(>10) or query is complex(multi table joins).
+- Description: The maximum materialized view rewrite cache size during one query's lifecycle. The cache can be used to avoid repeating compute to reduce optimizer time in materialized view rewrite, but it may occupy some extra FE's memory. It can bring better performance when there are many relative materialized views (more than 10) or query is complex (with joins on multiple tables).
 - Introduced in: v3.3
 
 <!--
@@ -5108,6 +5108,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Introduced in: -
 
 ##### mv_create_partition_batch_interval_ms
+
 - Default: 1000
 - Type: Int
 - Unit: ms
@@ -5121,7 +5122,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The max retry times for materialized view refresh retry times when faile
+- Description: The maximum retry times when materialized view fails to refresh.
 - Introduced in: v3.3.0
 
 ##### max_mv_refresh_try_lock_failure_retry_times
@@ -5130,7 +5131,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The max retry times when materialized view refresh try lock
+- Description: The maximum retry times of try lock when materialized view fails to refresh.
 - Introduced in: v3.3.0
 
 
@@ -5138,9 +5139,9 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 - Default: 30000
 - Type: Int
-- Unit: ms
+- Unit: Milliseconds
 - Is mutable: Yes
-- Description: The default try lock timeout(ms) for mv refresh to try base table/mv dbs' lock
+- Description: The default try lock timeout for materialized view refresh to try the DB lock of its base table/materialized view.
 - Introduced in: v3.3.0
 
 ##### enable_mv_refresh_collect_profile
@@ -5149,7 +5150,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether enable profile in refreshing materialized view or not by default for all mvs.
+- Description: Whether to enable profile in refreshing materialized view by default for all materialized views.
 - Introduced in: v3.3.0
 
 ##### max_mv_task_run_meta_message_values_length
@@ -5158,7 +5159,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: "The max length for mv task run extra message's values(set/map) to avoid occupying too much meta memory
+- Description: The maximum length for the "extra message" values (in set or map) in materialized view task run. You can set this item to avoid occupying too much meta memory.
 - Introduced in: v3.3.0
 
 ##### max_mv_check_base_table_change_retry_times
@@ -5167,7 +5168,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: -
 - Unit: -
 - Is mutable: Yes
-- Description: The max retry times for base table change when refreshing materialized view.
+- Description: The maximum retry times for detecting base table change when refreshing materialized views.
 - Introduced in: v3.3.0
 
 ##### mv_refresh_default_planner_optimize_timeout
@@ -5176,7 +5177,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: -
 - Unit: -
 - Is mutable: Yes
-- Description: The default timeout for planner optimize when refresh materialized view, 30s by default
+- Description: The default timeout for the planning phase of the optimizer when refresh materialized views.
 - Introduced in: v3.3.0
 
 ##### enable_mv_refresh_query_rewrite
@@ -5185,7 +5186,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether enable to rewrite query in mv refresh or not so it can use query the rewritten mv directly rather than original base table to improve query performance.
+- Description: Whether to enable rewrite query during materialized view refresh so that the query can use the rewritten mv directly rather than the base table to improve query performance.
 - Introduced in: v3.3
 
 ##### enable_mv_refresh_extra_prefix_logging
@@ -5194,7 +5195,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether enable adding extra materialized view name logging for better debug.
+- Description: Whether to enable prefixes with materialized view names in logs for better debug.
 - Introduced in: v3.4.0
 
 
@@ -5204,5 +5205,5 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether do reload flag check after FE's image loaded. If one base mv has done reload, no need to do it again while other mv that related to it is reloading.
+- Description: Whether to perform reload flag check after FE loaded an image. If the check is performed for a base materialized view, it is not needed for other materialized views that related to it.
 - Introduced in: v3.5.0
