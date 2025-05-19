@@ -42,6 +42,15 @@ Status DataCache::init(const std::vector<StorePath>& store_paths) {
     _global_env = GlobalEnv::GetInstance();
     _store_paths = store_paths;
 
+#if defined(WITH_STARCACHE)
+    if (!config::datacache_enable) {
+        config::block_cache_enable = false;
+    }
+#else
+    config::datacache_enable = false;
+    config::block_cache_enable = false;
+#endif
+
     RETURN_IF_ERROR(_init_datacache());
     RETURN_IF_ERROR(_init_starcache_based_object_cache());
     RETURN_IF_ERROR(_init_lru_base_object_cache());
@@ -78,6 +87,22 @@ void DataCache::destroy() {
     LOG(INFO) << "datacache shutdown successfully";
 }
 
+bool DataCache::adjust_mem_capacity(int64_t delta, size_t min_capacity) {
+    if (_lru_cache != nullptr) {
+        return _lru_cache->adjust_capacity(delta, min_capacity);
+    } else {
+        return false;
+    }
+}
+
+size_t DataCache::get_mem_capacity() const {
+    if (_lru_cache != nullptr) {
+        return _lru_cache->get_capacity();
+    } else {
+        return 0;
+    }
+}
+
 Status DataCache::_init_starcache_based_object_cache() {
 #ifdef WITH_STARCACHE
     if (_local_cache != nullptr && _local_cache->is_initialized()) {
@@ -89,12 +114,11 @@ Status DataCache::_init_starcache_based_object_cache() {
 }
 
 Status DataCache::_init_lru_base_object_cache() {
-    ObjectCacheOptions options;
     ASSIGN_OR_RETURN(int64_t storage_cache_limit, get_storage_page_cache_limit());
     storage_cache_limit = check_storage_page_cache_limit(storage_cache_limit);
-    options.capacity = storage_cache_limit;
 
-    _lru_based_object_cache = std::make_shared<LRUCacheModule>(options);
+    _lru_cache = std::make_shared<ShardedLRUCache>(storage_cache_limit);
+    _lru_based_object_cache = std::make_shared<LRUCacheModule>(_lru_cache);
     LOG(INFO) << "object cache init successfully";
     return Status::OK();
 }
@@ -108,22 +132,6 @@ Status DataCache::_init_page_cache() {
 
 Status DataCache::_init_datacache() {
     _block_cache = std::make_shared<BlockCache>();
-
-    // When configured old `block_cache` configurations, use the old items for compatibility.
-    if (config::block_cache_enable) {
-        config::datacache_enable = true;
-        config::datacache_mem_size = std::to_string(config::block_cache_mem_size);
-        config::datacache_disk_size = std::to_string(config::block_cache_disk_size);
-        LOG(WARNING) << "The configuration items prefixed with `block_cache_` will be deprecated soon"
-                     << ", you'd better use the configuration items prefixed `datacache` instead!";
-    }
-
-#if !defined(WITH_STARCACHE)
-    if (config::datacache_enable) {
-        LOG(WARNING) << "No valid engines supported, skip initializing datacache module";
-        config::datacache_enable = false;
-    }
-#endif
 
     if (config::datacache_enable) {
 #if defined(WITH_STARCACHE)
@@ -140,8 +148,9 @@ Status DataCache::_init_datacache() {
         _remote_cache = std::make_shared<PeerCacheWrapper>();
         RETURN_IF_ERROR(_remote_cache->init(cache_options));
 
-        // init block cache
-        RETURN_IF_ERROR(_block_cache->init(cache_options, _local_cache, _remote_cache));
+        if (config::block_cache_enable) {
+            RETURN_IF_ERROR(_block_cache->init(cache_options, _local_cache, _remote_cache));
+        }
 
         LOG(INFO) << "datacache init successfully";
 #endif

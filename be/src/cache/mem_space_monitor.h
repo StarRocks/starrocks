@@ -28,6 +28,7 @@ public:
 
 private:
     void _adjust_datacache_callback();
+    void _evict_datacache(int64_t bytes_to_dec);
 
     DataCache* _datacache = nullptr;
     std::thread _adjust_datacache_thread;

@@ -21,7 +21,10 @@
 namespace starrocks {
 class LRUCacheModuleTest : public ::testing::Test {
 protected:
-    void SetUp() override { _cache = std::make_shared<LRUCacheModule>(_cache_opt); }
+    void SetUp() override {
+        _lru_cache = std::make_shared<ShardedLRUCache>(_capacity);
+        _cache = std::make_shared<LRUCacheModule>(_lru_cache);
+    }
     void TearDown() override {}
 
 protected:
@@ -36,11 +39,12 @@ protected:
         return oss.str();
     }
 
+    std::shared_ptr<Cache> _lru_cache;
     std::shared_ptr<LRUCacheModule> _cache;
-    ObjectCacheOptions _cache_opt{.capacity = 16384};
     ObjectCacheWriteOptions _write_opt;
     ObjectCacheReadOptions _read_opt;
 
+    size_t _capacity = 16384;
     size_t _key_size = sizeof(LRUHandle) - 1 + 6;
     size_t _value_size = 4;
     size_t _kv_size = _key_size + _value_size;
@@ -74,7 +78,7 @@ void LRUCacheModuleTest::_check_found(int value) {
 }
 
 TEST_F(LRUCacheModuleTest, test_init) {
-    ASSERT_EQ(_cache->capacity(), _cache_opt.capacity);
+    ASSERT_EQ(_cache->capacity(), _capacity);
 }
 
 TEST_F(LRUCacheModuleTest, test_insert_lookup) {
@@ -114,7 +118,7 @@ TEST_F(LRUCacheModuleTest, test_set_capacity) {
     // insert
     _insert_data();
 
-    ASSERT_EQ(_cache->capacity(), _cache_opt.capacity);
+    ASSERT_EQ(_cache->capacity(), _capacity);
     ASSERT_EQ(_cache->usage(), _kv_size * 128);
 
     ASSERT_OK(_cache->set_capacity(8192));
@@ -133,7 +137,7 @@ TEST_F(LRUCacheModuleTest, test_adjust_capacity) {
     // insert
     _insert_data();
 
-    ASSERT_EQ(_cache->capacity(), _cache_opt.capacity);
+    ASSERT_EQ(_cache->capacity(), _capacity);
     ASSERT_EQ(_cache->usage(), _kv_size * 128);
 
     ASSERT_OK(_cache->adjust_capacity(-8192, 1024));
@@ -184,7 +188,7 @@ TEST_F(LRUCacheModuleTest, test_metrics) {
     ASSERT_EQ(metrics.lookup_count, 150);
     ASSERT_EQ(metrics.hit_count, 50);
     ASSERT_EQ(metrics.usage, _kv_size * 128);
-    ASSERT_EQ(metrics.capacity, _cache_opt.capacity);
+    ASSERT_EQ(metrics.capacity, _capacity);
     ASSERT_EQ(metrics.object_item_count, 0);
 }
 } // namespace starrocks

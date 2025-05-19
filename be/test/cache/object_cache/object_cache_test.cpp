@@ -22,6 +22,7 @@
 #include "cache/starcache_wrapper.h"
 #include "fs/fs_util.h"
 #include "testutil/assert.h"
+#include "util/lru_cache.h"
 
 namespace starrocks {
 class ObjectCacheTest : public ::testing::TestWithParam<ObjectCacheModuleType> {
@@ -32,13 +33,12 @@ protected:
             _value_size = 4;
             _kv_size = _key_size + _value_size;
             _mem_quota = 16384;
-            _cache_opt.capacity = _mem_quota;
-            _cache = std::make_shared<LRUCacheModule>(_cache_opt);
+            _lru_cache = std::make_shared<ShardedLRUCache>(_mem_quota);
+            _cache = std::make_shared<LRUCacheModule>(_lru_cache);
         } else {
             _value_size = 300 * 1024;
             _kv_size = _value_size;
             _mem_quota = 64 * 1024 * 1024;
-            _cache_opt.capacity = _mem_quota;
             ASSERT_OK(fs::create_directories(_cache_dir));
             _init_local_cache();
             _cache = std::make_shared<StarCacheModule>(_local_cache->starcache_instance());
@@ -67,8 +67,8 @@ protected:
     std::string _cache_dir = "./object_cache_test";
     int64_t _mem_quota = 0;
     std::shared_ptr<StarCacheWrapper> _local_cache;
+    std::shared_ptr<Cache> _lru_cache;
     std::shared_ptr<ObjectCache> _cache;
-    ObjectCacheOptions _cache_opt;
     ObjectCacheWriteOptions _write_opt;
     ObjectCacheReadOptions _read_opt;
 
@@ -116,7 +116,7 @@ void ObjectCacheTest::_check_found(int value) {
 TEST_P(ObjectCacheTest, test_init) {
     ASSERT_TRUE(_cache->initialized());
     ASSERT_TRUE(_cache->available());
-    ASSERT_EQ(_cache->capacity(), _cache_opt.capacity);
+    ASSERT_EQ(_cache->capacity(), _mem_quota);
 
     ASSERT_OK(_cache->set_capacity(0));
     ASSERT_FALSE(_cache->available());
@@ -159,7 +159,7 @@ TEST_P(ObjectCacheTest, test_set_capacity) {
     // insert
     _insert_data();
 
-    ASSERT_EQ(_cache->capacity(), _cache_opt.capacity);
+    ASSERT_EQ(_cache->capacity(), _mem_quota);
     ASSERT_EQ(_cache->usage(), _kv_size * 128);
 
     ASSERT_OK(_cache->set_capacity(_mem_quota / 2));
@@ -178,7 +178,7 @@ TEST_P(ObjectCacheTest, test_adjust_capacity) {
     // insert
     _insert_data();
 
-    ASSERT_EQ(_cache->capacity(), _cache_opt.capacity);
+    ASSERT_EQ(_cache->capacity(), _mem_quota);
     ASSERT_EQ(_cache->usage(), _kv_size * 128);
 
     ASSERT_OK(_cache->adjust_capacity(-_mem_quota / 2, 1024));
@@ -229,7 +229,7 @@ TEST_P(ObjectCacheTest, test_metrics) {
     ASSERT_EQ(metrics.lookup_count, 150);
     ASSERT_EQ(metrics.hit_count, 50);
     ASSERT_EQ(metrics.usage, _kv_size * 128);
-    ASSERT_EQ(metrics.capacity, _cache_opt.capacity);
+    ASSERT_EQ(metrics.capacity, _mem_quota);
     if (_mode == ObjectCacheModuleType::STARCACHE) {
         ASSERT_EQ(metrics.object_item_count, 128);
     } else {
