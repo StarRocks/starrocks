@@ -212,6 +212,31 @@ void LoadChannelMgr::cancel(brpc::Controller* cntl, const PTabletWriterCancelReq
     }
 }
 
+<<<<<<< HEAD
+=======
+void LoadChannelMgr::load_diagnose(brpc::Controller* cntl, const PLoadDiagnoseRequest* request,
+                                   PLoadDiagnoseResult* response, google::protobuf::Closure* done) {
+    ClosureGuard done_guard(done);
+    UniqueId load_id(request->id());
+    auto channel = _find_load_channel(load_id);
+    if (channel == nullptr) {
+        if (request->has_profile() && request->profile()) {
+            response->mutable_profile_status()->set_status_code(TStatusCode::NOT_FOUND);
+            response->mutable_profile_status()->add_error_msgs("can't find the load channel");
+        }
+        if (request->has_stack_trace() && request->stack_trace()) {
+            response->mutable_stack_trace_status()->set_status_code(TStatusCode::NOT_FOUND);
+            response->mutable_stack_trace_status()->add_error_msgs("can't find the load channel");
+        }
+    } else {
+        std::string remote_ip = butil::ip2str(cntl->remote_side().ip).c_str();
+        LOG(INFO) << "receive load diagnose, load_id: " << load_id << ", txn_id: " << request->txn_id()
+                  << ", remote: " << remote_ip;
+        channel->diagnose(remote_ip, request, response);
+    }
+}
+
+>>>>>>> af0a243e27 ([BugFix] NodeChannel should check the error of eos rpc asap  (#58852))
 void* LoadChannelMgr::load_channel_clean_bg_worker(void* arg) {
 #ifndef BE_TEST
     uint64_t interval = 60;

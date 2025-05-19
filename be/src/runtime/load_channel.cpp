@@ -436,6 +436,44 @@ void LoadChannel::report_profile(PTabletWriterAddBatchResult* result, bool print
     }
 
     _last_report_time_ns.store(now);
+<<<<<<< HEAD
+=======
+    Status status = _update_and_serialize_profile(result->mutable_load_channel_profile(), print_profile);
+    if (!status.ok()) {
+        result->clear_load_channel_profile();
+    }
+}
+
+void LoadChannel::diagnose(const std::string& remote_ip, const PLoadDiagnoseRequest* request,
+                           PLoadDiagnoseResult* result) {
+    if (request->has_profile() && request->profile()) {
+        Status st = _update_and_serialize_profile(result->mutable_profile_data(), config::pipeline_print_profile);
+        result->mutable_profile_status()->set_status_code(st.code());
+        result->mutable_profile_status()->add_error_msgs(st.to_string());
+        if (!st.ok()) {
+            result->clear_profile_data();
+        }
+        LOG(INFO) << "load channel diagnose profile, load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id
+                  << ", status: " << st;
+    }
+    if (request->has_stack_trace() && request->stack_trace()) {
+        DiagnoseRequest stack_trace_request;
+        stack_trace_request.type = DiagnoseType::STACK_TRACE;
+        stack_trace_request.context =
+                fmt::format("load_id: {}, txn_id: {}, remote: {}", print_id(_load_id), _txn_id, remote_ip);
+        Status st = ExecEnv::GetInstance()->diagnose_daemon()->diagnose(stack_trace_request);
+        if (!st.ok()) {
+            LOG(WARNING) << "failed to diagnose stack trace, load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id
+                         << ", status: " << st;
+        }
+        result->mutable_stack_trace_status()->set_status_code(st.code());
+        result->mutable_stack_trace_status()->add_error_msgs(st.to_string());
+        VLOG(2) << "load channel diagnose stack trace, " << stack_trace_request.context << ", status: " << st;
+    }
+}
+
+Status LoadChannel::_update_and_serialize_profile(std::string* result, bool print_profile) {
+>>>>>>> af0a243e27 ([BugFix] NodeChannel should check the error of eos rpc asap  (#58852))
     COUNTER_UPDATE(_profile_report_count, 1);
     SCOPED_TIMER(_profile_report_timer);
 
