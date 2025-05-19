@@ -258,7 +258,7 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
                 Preconditions.checkState(locations != null, "Location is null");
                 validateLocations(svType, locations);
                 newStorageVolume = new StorageVolume(oldStorageVolume.getId(), name, svType, locations, params,
-                        enabled.orElse(oldStorageVolume.getEnabled()), comment);
+                        enabled.orElse(oldStorageVolume.getEnabled()), comment, oldStorageVolume.getUniqueId());
                 locationChangedStorageVolumeId = newStorageVolume.getId();
             }
 
