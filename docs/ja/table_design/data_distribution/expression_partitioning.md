@@ -240,15 +240,15 @@ CREATE TABLE orders (
 PARTITION BY from_unixtime(ts,'%Y%m%d');
 ```
 
-例2: 各データ行に不規則なSTRING型のタイムスタンプを割り当て、日ごとにデータを頻繁にクエリする場合、テーブル作成時にタイムスタンプ列をcast()とdate_parse()関数とともに使用して、タイムスタンプをDATE型に変換し、パーティション列として設定し、パーティショングラニュラリティを1日に設定できます。各日のデータは1つのパーティションに保存され、パーティションプルーニングを使用してクエリ効率を向上させることができます。
+例2: 各データ行にINT型のタイムスタンプを割り当て、月単位でデータを保存する場合、テーブル作成時にタイムスタンプ列をcast()とstr_to_date()関数とともに使用して、タイムスタンプをDATE型に変換し、パーティション列として設定し、パーティショングラニュラリティを1月に設定できます。各月のデータは1つのパーティションに保存され、パーティションプルーニングを使用してクエリ効率を向上させることができます。
 
 ```SQL
 CREATE TABLE orders_new (
-    ts STRING NOT NULL,
+    ts INT NOT NULL,
     id BIGINT NOT NULL,
     city STRING NOT NULL
 )
-PARTITION BY CAST(DATE_PARSE(CAST(ts AS VARCHAR(100)),'%Y%m%d') AS DATE);
+PARTITION BY date_trunc('month', str_to_date(CAST(ts as STRING),'%Y%m%d'));
 ```
 
 ### 使用上の注意
@@ -256,7 +256,7 @@ PARTITION BY CAST(DATE_PARSE(CAST(ts AS VARCHAR(100)),'%Y%m%d') AS DATE);
 複雑な時間関数式に基づくパーティション化の場合、パーティションプルーニングが適用されます:
 
 - パーティションクロースが `PARTITION BY from_unixtime(ts)` の場合、`ts>1727224687` 形式のフィルタを持つクエリは対応するパーティションにプルーニングされます。
-- パーティションクロースが `PARTITION BY CAST(DATE_PARSE(CAST(ts AS VARCHAR(100)),'%Y%m%d') AS DATE)` の場合、`ts = "20240506"` 形式のフィルタを持つクエリはプルーニングされます。
+- パーティションクロースが `PARTITION BY str2date(CAST(ts AS string),'%Y%m')` の場合、`ts = "20240506"` 形式のフィルタを持つクエリはプルーニングされます。
 - 上記のケースは、[混合式に基づくパーティション化](#partitioning-based-on-the-mixed-expression-since-v34)にも適用されます。
 
 ## 混合式に基づくパーティション化（v3.4以降）

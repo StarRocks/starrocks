@@ -242,15 +242,15 @@ CREATE TABLE orders (
 PARTITION BY from_unixtime(ts,'%Y%m%d');
 ```
 
-Example 2: Suppose you assign an irregular STRING type timestamp to each data row and frequently query data by day. You can use the timestamp column with the functions cast() and date_parse() in the expression to transform the timestamp into the DATE type, set it as the partition column, and the partition granularity to a day at table creation. Data of each day is stored in one partition and partition pruning can be used to improve query efficiency.
+Example 2: Suppose you assign an INT type timestamp to each data row and store data on a monthly basis. You can use the timestamp column with the functions cast() and str_to_date() in the expression to transform the timestamp into the DATE type, set it as the partition column, and the partition granularity to a month using date_trunc() at table creation. Data of each month is stored in one partition and partition pruning can be used to improve query efficiency.
 
 ```SQL
 CREATE TABLE orders_new (
-    ts STRING NOT NULL,
+    ts INT NOT NULL,
     id BIGINT NOT NULL,
     city STRING NOT NULL
 )
-PARTITION BY CAST(DATE_PARSE(CAST(ts AS VARCHAR(100)),'%Y%m%d') AS DATE);
+PARTITION BY date_trunc('month', str_to_date(CAST(ts as STRING),'%Y%m%d'));
 ```
 
 ### Usage notes
@@ -258,7 +258,7 @@ PARTITION BY CAST(DATE_PARSE(CAST(ts AS VARCHAR(100)),'%Y%m%d') AS DATE);
 Partition pruning is applicable to cases of partitioning based on a complex time function expression:
 
 - If the partition clause is `PARTITION BY from_unixtime(ts)`, queries with filters in the format `ts>1727224687` can be pruned to corresponding partitions.
-- If the partition clause is `PARTITION BY CAST(DATE_PARSE(CAST(ts AS VARCHAR(100)),'%Y%m%d') AS DATE)`, queries with filters in the format `ts = "20240506"` can be pruned.
+- If the partition clause is `PARTITION BY str2date(CAST(ts AS string),'%Y%m')`, queries with filters in the format `ts = "20240506"` can be pruned.
 - The above cases are also applicable to [Partitioning based on mixed expression](#partitioning-based-on-the-mixed-expression-since-v34).
 
 ## Partitioning based on the mixed expression (since v3.4)

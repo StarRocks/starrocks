@@ -246,15 +246,15 @@ CREATE TABLE orders (
 PARTITION BY from_unixtime(ts,'%Y%m%d');
 ```
 
-示例二：假设您为每行数据分配了一个不规则的字符串类型时间戳，并且经常按天查询数据，则建表时可以使用 cast() 和 date_parse() 函数将时间戳转换为 DATE 类型作为分区列，并将分区粒度设置为为一天。将同一天的数据存储在一个分区中，利用分区裁剪可以显著提高查询效率。
+示例二：假设您为每行数据分配了一个 INT 类型时间戳，并且按月存储数据，则建表时可以使用 cast() 和 str_to_date() 函数将时间戳转换为 DATE 类型作为分区列，并使用 date_trunc() 将分区粒度设置为为一月。将同一月的数据存储在一个分区中，利用分区裁剪可以显著提高查询效率。
 
 ```SQL
 CREATE TABLE orders_new (
-    ts STRING NOT NULL,
+    ts INT NOT NULL,
     id BIGINT NOT NULL,
     city STRING NOT NULL
 )
-PARTITION BY CAST(DATE_PARSE(CAST(ts AS VARCHAR(100)),'%Y%m%d') AS DATE);
+PARTITION BY date_trunc('month', str_to_date(CAST(ts as STRING),'%Y%m%d'));
 ```
 
 ### 使用说明
@@ -262,7 +262,7 @@ PARTITION BY CAST(DATE_PARSE(CAST(ts AS VARCHAR(100)),'%Y%m%d') AS DATE);
 基于复杂时间函数表达式的分区支持分区裁剪，具体包括以下情况：
 
 - 如果分区子句为 `PARTITION BY from_unixtime(ts)`，则带有格式为 `ts > 1727224687` 条件的查询可以裁剪到相应的分区。
-- 如果分区子句为 `PARTITION BY CAST(DATE_PARSE(CAST(ts AS VARCHAR(100)),'%Y%m%d') AS DATE)`，则带有格式为 `ts = "20240506"` 条件的查询可以裁剪到相应的分区。
+- 如果分区子句为 `PARTITION BY str2date(CAST(ts AS string),'%Y%m')`，则带有格式为 `ts = "20240506"` 条件的查询可以裁剪到相应的分区。
 - 上述情况同样适用于 [混合表达式分区](#混合表达式分区-自-v34).
 
 ## 混合表达式分区 (自 v3.4)
