@@ -185,7 +185,7 @@ Status ReplicateChannel::_wait_response(std::vector<std::unique_ptr<PTabletInfo>
             return status;
         }
         status = _closure->result.status();
-        if (!_st.ok()) {
+        if (!status.ok()) {
             LOG(WARNING) << "Failed to send rpc to " << debug_string() << " err=" << status;
             _set_status(status);
             return status;

@@ -148,7 +148,7 @@ private:
     const DeltaWriterOptions* _opt;
 
     // node id -> channel
-    std::map<int64_t, std::unique_ptr<ReplicateChannel>> _replicate_channels;
+    std::unordered_map<int64_t, std::unique_ptr<ReplicateChannel>> _replicate_channels;
 
     std::vector<std::unique_ptr<PTabletInfo>> _replicated_tablet_infos;
     std::vector<std::unique_ptr<PTabletInfo>> _failed_tablet_infos;
