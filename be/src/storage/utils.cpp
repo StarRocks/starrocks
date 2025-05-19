@@ -365,14 +365,6 @@ bool valid_datetime(const string& value_str) {
             }
         }
 
-        if (what[8].length()) {
-            const string& ms_str = what[9].str();
-            if (ms_str.empty() || ms_str.size() > 6) {
-                LOG(WARNING) << "invalid milliseconds length " << ms_str.size();
-                return false;
-            }
-        }
-
         return true;
     } else {
         LOG(WARNING) << "datetime string does not match";
