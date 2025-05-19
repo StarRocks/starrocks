@@ -83,6 +83,7 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 
 public class StorageVolumeTest {
     private static ConnectContext connectContext;
+    private long uniqueId = 10001L;
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -98,7 +99,7 @@ public class StorageVolumeTest {
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
 
         StorageVolume sv = new StorageVolume("1", "test", "s3", Arrays.asList("s3://abc"),
-                storageParams, true, "");
+                storageParams, true, "", uniqueId);
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
         Assertions.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
         FileStoreInfo fileStore = cloudConfiguration.toFileStoreInfo();
@@ -122,7 +123,7 @@ public class StorageVolumeTest {
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false");
 
         StorageVolume sv = new StorageVolume("1", "test", "s3", Arrays.asList("s3://abc"),
-                storageParams, true, "");
+                storageParams, true, "", uniqueId);
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
         Assertions.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
         FileStoreInfo fileStore = cloudConfiguration.toFileStoreInfo();
@@ -148,7 +149,7 @@ public class StorageVolumeTest {
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false");
 
         StorageVolume sv = new StorageVolume("1", "test", "s3", Arrays.asList("s3://abc"),
-                storageParams, true, "");
+                storageParams, true, "", uniqueId);
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
         Assertions.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
         FileStoreInfo fileStore = cloudConfiguration.toFileStoreInfo();
@@ -173,7 +174,7 @@ public class StorageVolumeTest {
         storageParams.put(AWS_S3_EXTERNAL_ID, "iam_role_arn");
 
         StorageVolume sv = new StorageVolume("1", "test", "s3", Arrays.asList("s3://abc"),
-                storageParams, true, "");
+                storageParams, true, "", uniqueId);
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
         Assertions.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
         FileStoreInfo fileStore = cloudConfiguration.toFileStoreInfo();
@@ -200,7 +201,7 @@ public class StorageVolumeTest {
         storageParams.put(AWS_S3_EXTERNAL_ID, "iam_role_arn");
 
         Assertions.assertThrows(SemanticException.class, () ->
-                new StorageVolume("1", "test", "s3", Arrays.asList("s3://abc"), storageParams, true, "")
+                new StorageVolume("1", "test", "s3", Arrays.asList("s3://abc"), storageParams, true, "", uniqueId)
         );
     }
 
@@ -218,7 +219,7 @@ public class StorageVolumeTest {
                 "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider");
 
         StorageVolume sv = new StorageVolume("1", "test", "hdfs", Arrays.asList("hdfs://abc"),
-                storageParams, true, "");
+                storageParams, true, "", uniqueId);
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
         Assertions.assertEquals(CloudType.HDFS, cloudConfiguration.getCloudType());
         HDFSCloudConfiguration hdfsCloudConfiguration = (HDFSCloudConfiguration) cloudConfiguration;
@@ -245,7 +246,7 @@ public class StorageVolumeTest {
         storageParams1.put(HDFS_USERNAME, "username");
         storageParams1.put(HDFS_PASSWORD, "password");
         sv = new StorageVolume("2", "test", "hdfs", Arrays.asList("hdfs://abc"),
-                storageParams1, true, "");
+                storageParams1, true, "", uniqueId);
         cloudConfiguration = sv.getCloudConfiguration();
         Assertions.assertEquals(CloudType.HDFS, cloudConfiguration.getCloudType());
         hdfsCloudConfiguration = (HDFSCloudConfiguration) cloudConfiguration;
@@ -274,7 +275,7 @@ public class StorageVolumeTest {
                 "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider");
 
         StorageVolume sv = new StorageVolume("1", "test", "hdfs", Arrays.asList("hdfs://abc"),
-                storageParams, true, "");
+                storageParams, true, "", uniqueId);
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
         Assertions.assertEquals(CloudType.HDFS, cloudConfiguration.getCloudType());
         HDFSCloudConfiguration hdfsCloudConfiguration = (HDFSCloudConfiguration) cloudConfiguration;
@@ -300,7 +301,7 @@ public class StorageVolumeTest {
         storageParams.put(HDFS_AUTHENTICATION, HDFSCloudCredential.KERBEROS_AUTH);
         storageParams.put(HDFS_KERBEROS_TICKET_CACHE_PATH, "/path/to/ticket/cache/path");
         sv = new StorageVolume("1", "test", "hdfs", Arrays.asList("hdfs://abc"),
-                storageParams, true, "");
+                storageParams, true, "", uniqueId);
         cloudConfiguration = sv.getCloudConfiguration();
         Assertions.assertEquals(CloudType.HDFS, cloudConfiguration.getCloudType());
         hdfsCloudConfiguration = (HDFSCloudConfiguration) cloudConfiguration;
@@ -320,7 +321,7 @@ public class StorageVolumeTest {
     public void testHDFSEmptyCredential() throws DdlException {
         Map<String, String> storageParams = new HashMap<>();
         StorageVolume sv = new StorageVolume("1", "test", "hdfs", Arrays.asList("hdfs://abc"),
-                storageParams, true, "");
+                storageParams, true, "", uniqueId);
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
         Assertions.assertEquals(CloudType.HDFS, cloudConfiguration.getCloudType());
         HDFSCloudConfiguration hdfsCloudConfiguration = (HDFSCloudConfiguration) cloudConfiguration;
@@ -335,7 +336,7 @@ public class StorageVolumeTest {
         storageParams.put("fs.viewfs.mounttable.ClusterX.link./data", "hdfs://nn1-clusterx.example.com:8020/data");
         storageParams.put("fs.viewfs.mounttable.ClusterX.link./project", "hdfs://nn2-clusterx.example.com:8020/project");
         StorageVolume sv = new StorageVolume("1", "test", "hdfs", Arrays.asList("hdfs://abc"),
-                storageParams, true, "");
+                storageParams, true, "", uniqueId);
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
         Assertions.assertEquals(CloudType.HDFS, cloudConfiguration.getCloudType());
         FileStoreInfo fileStore = cloudConfiguration.toFileStoreInfo();
@@ -368,7 +369,7 @@ public class StorageVolumeTest {
         Map<String, String> storageParams = new HashMap<>();
         storageParams.put(HadoopExt.HADOOP_CONFIG_RESOURCES, confFile);
         StorageVolume sv = new StorageVolume("1", "test", "hdfs", Arrays.asList("hdfs://abc"),
-                storageParams, true, "");
+                storageParams, true, "", uniqueId);
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
         Assertions.assertEquals(CloudType.HDFS, cloudConfiguration.getCloudType());
         HDFSCloudConfiguration hdfsCloudConfiguration = (HDFSCloudConfiguration) cloudConfiguration;
@@ -387,7 +388,7 @@ public class StorageVolumeTest {
         storageParams.put(AZURE_BLOB_ENDPOINT, "endpoint");
         storageParams.put(AZURE_BLOB_SHARED_KEY, "shared_key");
         StorageVolume sv = new StorageVolume("1", "test", "azblob", Arrays.asList("azblob://aaa"),
-                storageParams, true, "");
+                storageParams, true, "", uniqueId);
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
         Assertions.assertEquals(CloudType.AZURE, cloudConfiguration.getCloudType());
         FileStoreInfo fileStore = cloudConfiguration.toFileStoreInfo();
@@ -397,7 +398,7 @@ public class StorageVolumeTest {
         Assertions.assertEquals("shared_key", azBlobFileStoreInfo.getCredential().getSharedKey());
 
         sv = new StorageVolume("1", "test", "azblob", Arrays.asList("azblob://aaa/bbb"),
-                storageParams, true, "");
+                storageParams, true, "", uniqueId);
         cloudConfiguration = sv.getCloudConfiguration();
         Assertions.assertEquals(CloudType.AZURE, cloudConfiguration.getCloudType());
         fileStore = cloudConfiguration.toFileStoreInfo();
@@ -413,7 +414,7 @@ public class StorageVolumeTest {
         storageParams.put(AZURE_BLOB_ENDPOINT, "endpoint");
         storageParams.put(AZURE_BLOB_SAS_TOKEN, "sas_token");
         StorageVolume sv = new StorageVolume("1", "test", "azblob", Arrays.asList("azblob://aaa"),
-                storageParams, true, "");
+                storageParams, true, "", uniqueId);
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
         Assertions.assertEquals(CloudType.AZURE, cloudConfiguration.getCloudType());
         FileStoreInfo fileStore = cloudConfiguration.toFileStoreInfo();
@@ -423,7 +424,7 @@ public class StorageVolumeTest {
         Assertions.assertEquals("sas_token", azBlobFileStoreInfo.getCredential().getSasToken());
 
         sv = new StorageVolume("1", "test", "azblob", Arrays.asList("azblob://aaa/bbb"),
-                storageParams, true, "");
+                storageParams, true, "", uniqueId);
         cloudConfiguration = sv.getCloudConfiguration();
         Assertions.assertEquals(CloudType.AZURE, cloudConfiguration.getCloudType());
         fileStore = cloudConfiguration.toFileStoreInfo();
@@ -437,7 +438,7 @@ public class StorageVolumeTest {
     public void testAzureBlobInvalidCredential() {
         Map<String, String> storageParams = new HashMap<>();
         Assertions.assertThrows(SemanticException.class, () ->
-                new StorageVolume("1", "test", "azblob", Arrays.asList("azblob://aaa"), storageParams, true, ""));
+                new StorageVolume("1", "test", "azblob", Arrays.asList("azblob://aaa"), storageParams, true, "", uniqueId));
     }
 
     @Test
@@ -446,7 +447,7 @@ public class StorageVolumeTest {
         storageParams.put(AZURE_ADLS2_ENDPOINT, "endpoint");
         storageParams.put(AZURE_ADLS2_SHARED_KEY, "shared_key");
         StorageVolume sv = new StorageVolume("1", "test", "adls2", Arrays.asList("adls2://aaa"),
-                storageParams, true, "");
+                storageParams, true, "", uniqueId);
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
         Assertions.assertEquals(CloudType.AZURE, cloudConfiguration.getCloudType());
         FileStoreInfo fileStore = cloudConfiguration.toFileStoreInfo();
@@ -456,7 +457,7 @@ public class StorageVolumeTest {
         Assertions.assertEquals("shared_key", adls2FileStoreInfo.getCredential().getSharedKey());
 
         sv = new StorageVolume("1", "test", "adls2", Arrays.asList("adls2://aaa/bbb"),
-                storageParams, true, "");
+                storageParams, true, "", uniqueId);
         cloudConfiguration = sv.getCloudConfiguration();
         Assertions.assertEquals(CloudType.AZURE, cloudConfiguration.getCloudType());
         fileStore = cloudConfiguration.toFileStoreInfo();
@@ -472,7 +473,7 @@ public class StorageVolumeTest {
         storageParams.put(AZURE_ADLS2_ENDPOINT, "endpoint");
         storageParams.put(AZURE_ADLS2_SAS_TOKEN, "sas_token");
         StorageVolume sv = new StorageVolume("1", "test", "adls2", Arrays.asList("adls2://aaa"),
-                storageParams, true, "");
+                storageParams, true, "", uniqueId);
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
         Assertions.assertEquals(CloudType.AZURE, cloudConfiguration.getCloudType());
         FileStoreInfo fileStore = cloudConfiguration.toFileStoreInfo();
@@ -482,7 +483,7 @@ public class StorageVolumeTest {
         Assertions.assertEquals("sas_token", adls2FileStoreInfo.getCredential().getSasToken());
 
         sv = new StorageVolume("1", "test", "adls2", Arrays.asList("adls2://aaa/bbb"),
-                storageParams, true, "");
+                storageParams, true, "", uniqueId);
         cloudConfiguration = sv.getCloudConfiguration();
         Assertions.assertEquals(CloudType.AZURE, cloudConfiguration.getCloudType());
         fileStore = cloudConfiguration.toFileStoreInfo();
@@ -501,7 +502,7 @@ public class StorageVolumeTest {
         storageParams.put(GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY, "-------xxxx------");
         storageParams.put(GCP_GCS_IMPERSONATION_SERVICE_ACCOUNT, "iuser@demo.com");
         StorageVolume sv = new StorageVolume("1", "test", "gs", Arrays.asList("gs://aaa"),
-                storageParams, true, "");
+                storageParams, true, "", uniqueId);
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
         Assertions.assertEquals(CloudType.GCP, cloudConfiguration.getCloudType());
         FileStoreInfo fileStore = cloudConfiguration.toFileStoreInfo();
@@ -515,7 +516,7 @@ public class StorageVolumeTest {
     public void testAzureADLS2InvalidCredential() {
         Map<String, String> storageParams = new HashMap<>();
         Assertions.assertThrows(SemanticException.class, () ->
-                new StorageVolume("1", "test", "adls2", Arrays.asList("adls2://aaa"), storageParams, true, ""));
+                new StorageVolume("1", "test", "adls2", Arrays.asList("adls2://aaa"), storageParams, true, "", uniqueId));
     }
 
     @Test
@@ -770,7 +771,7 @@ public class StorageVolumeTest {
         storageParams.put(AWS_S3_SECRET_KEY, awsSecretKey);
         storageParams.put(AWS_S3_ENDPOINT, "endpoint");
         Exception exception = Assertions.assertThrows(SemanticException.class, () -> new StorageVolume(
-                "1", "test", "obs", Collections.singletonList("s3://foobar"), storageParams, true, ""
+                "1", "test", "obs", Collections.singletonList("s3://foobar"), storageParams, true, "", uniqueId
         ));
         Assertions.assertFalse(exception.getMessage().contains(awsSecretKey));
         Assertions.assertTrue(exception.getMessage().contains(StorageVolume.CREDENTIAL_MASK));

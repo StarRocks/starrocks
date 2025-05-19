@@ -61,6 +61,13 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     @SerializedName("i")
     private String id;
 
+    // `uniqueId` is introduced as a globally unique identifier with long value. Its persistence is guranteed
+    // by the file store related to this storage volume.
+    // In scenarios like shared-data cluster replication, this `uniqueId` is needed to act as the virtual tablet id
+    // that point to storage infos on the source cluster.
+    @SerializedName("ui")
+    private long uniqueId;
+
     @SerializedName("n")
     private String name;
 
@@ -91,8 +98,9 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     }
 
     public StorageVolume(String id, String name, String svt, List<String> locations,
-                         Map<String, String> params, boolean enabled, String comment) throws DdlException {
+                         Map<String, String> params, boolean enabled, String comment, long uniqueId) throws DdlException {
         this.id = id;
+        this.uniqueId = uniqueId;
         this.name = name;
         this.svt = toStorageVolumeType(svt);
         this.locations = new ArrayList<>(locations);
@@ -110,6 +118,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     public StorageVolume(StorageVolume sv) throws DdlException {
         this.id = sv.id;
+        this.uniqueId = sv.uniqueId;
         this.name = sv.name;
         this.svt = sv.svt;
         this.locations = new ArrayList<>(sv.locations);
@@ -154,6 +163,14 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     public String getId() {
         return id;
+    }
+
+    public long getUniqueId() {
+        return uniqueId;
+    }
+
+    public void setUniqueId(long uniqueId) {
+        this.uniqueId = uniqueId;
     }
 
     public String getName() {
@@ -257,25 +274,31 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     public static FileStoreInfo createFileStoreInfo(String name, String svt,
                                                     List<String> locations, Map<String, String> params,
                                                     boolean enabled, String comment) throws DdlException {
-        StorageVolume sv = new StorageVolume("", name, svt, locations, params, enabled, comment);
+        long uniqueId = GlobalStateMgr.getCurrentState().getNextId();
+        StorageVolume sv = new StorageVolume("", name, svt, locations, params, enabled, comment, uniqueId);
         return sv.toFileStoreInfo();
     }
 
     public FileStoreInfo toFileStoreInfo() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("unique_id", String.valueOf(uniqueId));
         FileStoreInfo.Builder builder = cloudConfiguration.toFileStoreInfo().toBuilder();
         builder.setFsKey(id)
                 .setFsName(this.name)
                 .setComment(this.comment)
                 .setEnabled(this.enabled)
-                .addAllLocations(locations);
+                .addAllLocations(locations)
+                .putAllProperties(properties);
         return builder.build();
     }
 
     public static StorageVolume fromFileStoreInfo(FileStoreInfo fsInfo) throws DdlException {
         String svt = fsInfo.getFsType().toString();
         Map<String, String> params = getParamsFromFileStoreInfo(fsInfo);
+        String uniqueId = fsInfo.getPropertiesMap().get("unique_id");
         return new StorageVolume(fsInfo.getFsKey(), fsInfo.getFsName(), svt,
-                fsInfo.getLocationsList(), params, fsInfo.getEnabled(), fsInfo.getComment());
+                fsInfo.getLocationsList(), params, fsInfo.getEnabled(), fsInfo.getComment(),
+                uniqueId == null || uniqueId.isEmpty() ? -1L : Long.parseLong(uniqueId));
     }
 
     public static Map<String, String> getParamsFromFileStoreInfo(FileStoreInfo fsInfo) {
