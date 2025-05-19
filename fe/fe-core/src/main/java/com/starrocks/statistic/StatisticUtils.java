@@ -182,6 +182,16 @@ public class StatisticUtils {
     }
 
     public static boolean checkStatisticTableStateNormal() {
+<<<<<<< HEAD
+=======
+        List<String> tableNameList = Lists.newArrayList(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME,
+                StatsConstants.FULL_STATISTICS_TABLE_NAME, StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME,
+                StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME, StatsConstants.MULTI_COLUMN_STATISTICS_TABLE_NAME);
+        return checkStatisticTables(tableNameList);
+    }
+
+    public static boolean checkStatisticTables(List<String> tableNameList) {
+>>>>>>> d084a525a0 ([BugFix] Check multi_column_statistics table status before access (#58621))
         if (FeConstants.runningUnitTest) {
             return true;
         }
