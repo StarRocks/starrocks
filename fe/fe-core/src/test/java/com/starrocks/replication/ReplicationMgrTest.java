@@ -63,6 +63,7 @@ public class ReplicationMgrTest {
     private static StarRocksAssert starRocksAssert;
 
     private static Database db;
+    private static Database srcDb;
     private static OlapTable table;
     private static OlapTable srcTable;
     private static Partition partition;
@@ -78,6 +79,7 @@ public class ReplicationMgrTest {
         starRocksAssert.withDatabase("test").useDatabase("test");
 
         db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        srcDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("src_test");
 
         String sql = "create table single_partition_duplicate_key (key1 int, key2 varchar(10))\n" +
                 "distributed by hash(key1) buckets 1\n" +
@@ -110,7 +112,7 @@ public class ReplicationMgrTest {
         srcPartition.getDefaultPhysicalPartition().setDataVersion(98);
         srcPartition.getDefaultPhysicalPartition().setNextDataVersion(99);
 
-        job = new ReplicationJob(null, "test_token", db.getId(), table, srcTable,
+        job = new ReplicationJob(null, "test_token", db.getId(), srcDb.getId(), table, srcTable,
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
         replicationMgr = new ReplicationMgr();
         replicationMgr.addReplicationJob(job);
