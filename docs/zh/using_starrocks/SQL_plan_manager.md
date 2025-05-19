@@ -32,7 +32,7 @@ SQL Plan Manager 的工作流程如下：
 关于查询改写的注意事项：
 
 - SQL Plan Manager 主要依赖于 SQL 指纹匹配。它检查查询的 SQL 指纹是否与某个 Baseline 匹配。如果查询匹配某个 Baseline，则查询中的参数会自动替换到 Baseline 的执行计划中。
-- 在匹配过程中，如果查询匹配多个以及启用的 Baseline，优化器会评估并选择最佳 Baseline。
+- 在匹配过程中，如果查询能匹配多个状态为 `enable` 的 Baseline，优化器会评估并选择最佳 Baseline。
 - 在匹配过程中，SQL Plan Manager 会验证 Baseline 和查询是否匹配。如果匹配失败，则不会使用 Baseline 的查询计划。
 - 对于 SQL Plan Manager 改写的执行计划，`EXPLAIN` 语句将返回 `Using baseline plan[id]`。
 
@@ -615,16 +615,31 @@ group by i_item_id
 
 ### 自动捕获
 
-自动捕获会查询过去一段时间内的查询 SQL，并基于这些查询生成并保存对应的 baseline，生成 baseline 默认为 `disable` 状态，并不会立刻生效。在以下场景中：
+自动捕获会查询过去一段时间内(默认3小时)的查询 SQL，并基于这些查询生成并保存对应的 baseline，生成 baseline 默认为 `disable` 状态，并不会立刻生效。在以下场景中：
 * 升级后，执行计划变更，导致查询耗时变高
 * 导入数据后，统计信息变更，导致执行计划变更，进一步影响查询耗时变高
 
-可以通过`show baseline`查找历史的 baseline，并通过`enable baseline`的方式手动回滚Plan。
+可以通过`show baseline`查找历史生成的 baseline，并通过`enable baseline`的方式手动回滚Plan。
 
 自动捕获功能依赖存储查询历史功能，需要设置：
 ```SQL
 set global enable_query_history=true;
+```
+开启后查询历史存储在 `_statistics_.query_history` 表中。
+
+开启自动捕获功能：
+```SQL
 set global enable_plan_capture=true;
+```
+
+其他配置：
+```SQL
+-- 存储查询历史时长，单位为秒，默认为 3 天
+set global query_history_keep_seconds = 259200;
+-- 捕获SQL的间隔时间，单位为秒，默认为 3 小时
+set global plan_capture_interval=10800;
+-- 捕获SQL的正则检查，仅捕获匹配 plan_capture_include_pattern 的表名(db.table)，默认为.*，表示所有表
+set global plan_capture_include_pattern=".*";
 ```
 
 需要注意的是，存储查询历史&自动捕获在一定程度上会占用存储和计算资源，请根据自身场景合理设置。

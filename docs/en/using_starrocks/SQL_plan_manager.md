@@ -612,7 +612,7 @@ group by i_item_id
 
 ### Auto-Capture
 
-Auto-Capture queries the query SQL statements in the past period of time, and generates and saves the baseline based on these queries, and the generated baseline is in the 'disable' state by default and doesn't take effect immediately. 
+Auto-Capture queries the query SQL statements in the past period of time(default 3 hours), and generates and saves the baseline based on these queries, and the generated baseline is in the 'disable' state by default and doesn't take effect immediately. 
 In the following scenarios:
 * After the upgrade, the execution plan changes, resulting in a higher query time
 * After the data changed, and the statistics are changed, resulting in a change in the execution plan
@@ -622,7 +622,22 @@ You can find the historical baseline by 'show baseline' and manually roll back t
 The Auto-Capture feature depend on the save query history feature and requires the following settings:
 ```SQL
 set global enable_query_history=true;
+```
+The query history is stored in the '_statistics_.query_history' table.
+
+To enable automatic capture:
+```SQL
 set global enable_plan_capture=true;
+```
+
+Other configurations：
+```SQL
+-- The historical duration of the storage query history, unit: seconds, defaults to 3 days
+set global query_history_keep_seconds = 259200;
+-- The work interval of Auto-Capture, unit: seconds, defaults to 3 hours
+set global plan_capture_interval=10800;
+-- Captures regular checks for SQL tables, only captures SQL when table names(db.table) can match plan_capture_include_pattern, defaults .*, which represents all tables
+set global plan_capture_include_pattern=".*";
 ```
 
 Noted: save query history & Auto-Capture will cost some storage and computing resources, so please set it reasonably according to your own scenarios.
