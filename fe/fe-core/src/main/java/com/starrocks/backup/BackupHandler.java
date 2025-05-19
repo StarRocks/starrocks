@@ -812,10 +812,6 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
             // for example: In restore job, PENDING will transfer to SNAPSHOTING, not DOWNLOAD.
             job.replayRun();
         }
-        if (isJobExpired(job, System.currentTimeMillis())) {
-            LOG.warn("skip expired job {}", job);
-            return;
-        }
         dbIdToBackupOrRestoreJob.put(job.getDbId(), job);
         mvRestoreContext.addIntoMvBaseTableBackupInfo(job);
     }
