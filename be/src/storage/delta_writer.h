@@ -244,7 +244,6 @@ private:
     Status _build_current_tablet_schema(int64_t index_id, const POlapTableSchemaParam* table_schema_param,
                                         const TabletSchemaCSPtr& ori_tablet_schema);
 
-    const char* _replica_state_name(ReplicaState state) const;
     Status _fill_auto_increment_id(const Chunk& chunk);
     Status _check_partial_update_with_sort_key(const Chunk& chunk);
 
