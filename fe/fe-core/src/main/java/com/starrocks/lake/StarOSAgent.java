@@ -259,6 +259,17 @@ public class StarOSAgent {
         }
     }
 
+    public FilePathInfo allocateFilePath(String storageVolumeId, String rootDir) throws DdlException {
+        prepare();
+        try {
+            FilePathInfo pathInfo = client.allocateFilePath(serviceId, storageVolumeId, "", rootDir);
+            LOG.info("Allocate file path from starmgr: {}", pathInfo);
+            return pathInfo;
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to allocate file path from StarMgr, error: " + e.getMessage());
+        }
+    }
+
     public boolean registerAndBootstrapService() {
         try {
             client.registerService("starrocks");
@@ -473,6 +484,24 @@ public class StarOSAgent {
         return shardGroupInfos.stream().map(ShardGroupInfo::getGroupId).collect(Collectors.toList()).get(0);
     }
 
+    // Used only for shared-data cluster replication
+    public long createShardGroup() throws DdlException {
+        prepare();
+        List<ShardGroupInfo> shardGroupInfos;
+        try {
+            List<CreateShardGroupInfo> createShardGroupInfos = new ArrayList<>();
+            createShardGroupInfos.add(CreateShardGroupInfo.newBuilder()
+                    .setPolicy(PlacementPolicy.SPREAD)
+                    .putProperties("createTime", String.valueOf(System.currentTimeMillis()))
+                    .build());
+            shardGroupInfos = client.createShardGroup(serviceId, createShardGroupInfos);
+            Preconditions.checkState(shardGroupInfos.size() == 1);
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to create shard group. error: " + e.getMessage());
+        }
+        return shardGroupInfos.stream().map(ShardGroupInfo::getGroupId).collect(Collectors.toList()).get(0);
+    }
+
     public void deleteShardGroup(List<Long> groupIds) {
         prepare();
         try {
@@ -492,13 +521,20 @@ public class StarOSAgent {
         }
     }
 
+    public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId,
+                                   @Nullable List<Long> matchShardIds, @NotNull Map<String, String> properties,
+                                   ComputeResource computeResource)
+            throws DdlException {
+        return createShards(numShards, pathInfo, cacheInfo, groupId, matchShardIds, properties, computeResource, -1);
+    }
+
     // ATTN
     // (https://github.com/StarRocks/starrocks/pull/60073)
     // The partitionId in pathInfo of LakeRollup may be different in different version.
     // The partitionId should be physical partitionId but LakeRollup use logical partitonId before this pr.
     public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId,
                                    @Nullable List<Long> matchShardIds, @NotNull Map<String, String> properties,
-                                   ComputeResource computeResource)
+                                   ComputeResource computeResource, long shardId)
         throws DdlException {
         if (matchShardIds != null) {
             Preconditions.checkState(numShards == matchShardIds.size());
@@ -518,7 +554,7 @@ public class StarOSAgent {
                     .setScheduleToWorkerGroup(workerGroupId);
 
             for (int i = 0; i < numShards; ++i) {
-                builder.setShardId(GlobalStateMgr.getCurrentState().getNextId());
+                builder.setShardId(shardId == -1 ? GlobalStateMgr.getCurrentState().getNextId() : shardId);
                 if (matchShardIds != null) {
                     builder.clearPlacementPreferences();
                     PlacementPreference preference = PlacementPreference.newBuilder()
