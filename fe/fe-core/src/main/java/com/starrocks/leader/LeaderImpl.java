@@ -106,6 +106,7 @@ import com.starrocks.task.DropAutoIncrementMapTask;
 import com.starrocks.task.PublishVersionTask;
 import com.starrocks.task.PushTask;
 import com.starrocks.task.RemoteSnapshotTask;
+import com.starrocks.task.ReplicateLakeRemoteStorageTask;
 import com.starrocks.task.ReplicateSnapshotTask;
 import com.starrocks.task.SnapshotTask;
 import com.starrocks.task.TabletMetadataUpdateAgentTask;
@@ -347,6 +348,9 @@ public class LeaderImpl {
                 case UPDATE_SCHEMA:
                     finishUpdateSchemaTask(task, request);
                     break;
+                case REPLICATE_LAKE_REMOTE_STORAGE:
+                    finishReplicateLakeRemoteStorageTask(task, request);
+                    break;
                 default:
                     break;
             }
@@ -469,6 +473,15 @@ public class LeaderImpl {
         try {
             GlobalStateMgr.getCurrentState().getReplicationMgr().finishReplicateSnapshotTask(
                     (ReplicateSnapshotTask) task, request);
+        } finally {
+            AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
+        }
+    }
+
+    private void finishReplicateLakeRemoteStorageTask(AgentTask task, TFinishTaskRequest request) {
+        try {
+            GlobalStateMgr.getCurrentState().getReplicationMgr().finishReplicateLakeRemoteStorageTask(
+                    (ReplicateLakeRemoteStorageTask) task, request);
         } finally {
             AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
         }

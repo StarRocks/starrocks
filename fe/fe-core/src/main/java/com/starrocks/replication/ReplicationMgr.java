@@ -28,7 +28,9 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.task.RemoteSnapshotTask;
+import com.starrocks.task.ReplicateLakeRemoteStorageTask;
 import com.starrocks.task.ReplicateSnapshotTask;
 import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TTableReplicationRequest;
@@ -64,7 +66,9 @@ public class ReplicationMgr extends FrontendDaemon {
     }
 
     public void addReplicationJob(TTableReplicationRequest request) throws StarRocksException {
-        ReplicationJob job = new ReplicationJob(request);
+        LOG.info("Adding replication job, request: {}", request.toString());
+        ReplicationJob job = (request.src_cluster_run_mode == RunMode.toTRunMode(RunMode.SHARED_DATA)) ?
+                new LakeReplicationJob(request) : new ReplicationJob(request);
         addReplicationJob(job);
     }
 
@@ -152,6 +156,16 @@ public class ReplicationMgr extends FrontendDaemon {
         }
 
         job.finishReplicateSnapshotTask(task, request);
+    }
+
+    public void finishReplicateLakeRemoteStorageTask(ReplicateLakeRemoteStorageTask task, TFinishTaskRequest request) {
+        ReplicationJob job = runningJobs.get(task.getTableId());
+        if (job == null) {
+            LOG.warn("Replicate lake remote storage task {} is finished, but cannot find it in replication jobs", task);
+            return;
+        }
+
+        job.finishReplicateLakeRemoteStorageTask(task, request);
     }
 
     public void replayReplicationJob(ReplicationJob replicationJob) {

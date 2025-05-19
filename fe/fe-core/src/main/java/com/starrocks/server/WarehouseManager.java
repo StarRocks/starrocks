@@ -297,6 +297,10 @@ public class WarehouseManager implements Writable {
     }
 
     public Long getComputeNodeId(ComputeResource computeResource, LakeTablet tablet) {
+        return getComputeNodeId(computeResource, tablet.getId());
+    }
+
+    public Long getComputeNodeId(ComputeResource computeResource, long tabletId) {
         // check warehouse exists
         if (!warehouseExists(computeResource.getWarehouseId())) {
             throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
@@ -304,7 +308,7 @@ public class WarehouseManager implements Writable {
         }
         try {
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getPrimaryComputeNodeIdByShard(tablet.getShardId(), computeResource.getWorkerGroupId());
+                    .getPrimaryComputeNodeIdByShard(tabletId, computeResource.getWorkerGroupId());
         } catch (StarRocksException e) {
             return null;
         }
