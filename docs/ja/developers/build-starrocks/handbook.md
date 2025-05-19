@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# How to build StarRocks
+# StarRocksのビルド方法
 
 一般的に、StarRocks をビルドするには、次のコマンドを実行するだけです。
 

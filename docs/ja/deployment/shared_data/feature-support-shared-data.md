@@ -1,6 +1,10 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
 sidebar_label: "Feature Support"
+=======
+sidebar_label: 機能サポート
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
 ---
 
 # 機能サポート: 共有データクラスタ

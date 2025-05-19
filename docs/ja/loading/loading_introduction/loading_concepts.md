@@ -3,7 +3,11 @@ displayed_sidebar: docs
 toc_max_heading_level: 4
 ---
 
+<<<<<<< HEAD
 # ロードの概念
+=======
+# データロードに関する概念
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
 
 import InsertPrivNote from '../../_assets/commonMarkdown/insertPrivNote.md'
 

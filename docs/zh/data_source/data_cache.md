@@ -99,6 +99,58 @@ datacache_mem_size = 2147483648
 datacache_disk_size = 1288490188800
 ```
 
+<<<<<<< HEAD
+=======
+## 填充 Data Cache
+
+### 填充规则
+
+自 v3.3.2 起，为了提高 Data Cache 的缓存命中率，StarRocks 按照如下规则填充 Data Cache：
+
+- 对于非 SELECT 的查询， 不进行填充，比如 `ANALYZE TABLE`，`INSERT INTO SELECT` 等。
+- 扫描一个表的所有分区时，不进行填充。但如果该表仅有一个分区，默认进行填充。
+- 扫描一个表的所有列时，不进行填充。但如果该表仅有一个列，默认进行填充。
+- 对于非 Hive、Paimon、Delta Lake、Hudi 或 Iceberg 的表，不进行填充。
+
+您可以通过 `EXPLAIN VERBOSE` 命令查看指定查询的具体填充行为。
+
+示例：
+
+```sql
+mysql> explain verbose select col1 from hudi_table;
+|   0:HudiScanNode                        |
+|      TABLE: hudi_table                  |
+|      partitions=3/3                     |
+|      cardinality=9084                   |
+|      avgRowSize=2.0                     |
+|      dataCacheOptions={populate: false} |
+|      cardinality: 9084                  |
++-----------------------------------------+
+```
+
+其中 `dataCacheOptions={populate: false}` 即表明不填充 Data Cache，因为该查询会扫描全部分区。
+
+您还可以通过 Session Variable [populate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode) 进一步精细化管理该行为。
+
+### 填充方式
+
+Data Cache 支持以同步或异步的方式进行缓存填充。
+
+- 同步填充
+
+  使用同步填充方式时，会将当前查询所读取的远端数据都缓存在本地。同步方式填充效率较高，但由于缓存填充操作在数据读取时执行，可能会对首次查询效率带来影响。
+
+- 异步填充
+
+  使用异步填充方式时，系统会尝试在尽可能不影响读取性能的前提下在后台对访问到的数据进行缓存。异步方式能够减少缓存填充对首次读取性能的影响，但填充效率较低。通常单次查询不能保证将访问到的所以数据都缓存到本地，往往需要多次。
+
+自 v3.3.0 起，系统默认以异步方式进行缓存，您可以通过修改 Session 变量 [enable_datacache_async_populate_mode](../sql-reference/System_variable.md) 来修改填充方式。
+
+### 持久化
+
+Data Cache 当前默认会持久化磁盘缓存数据，BE 进程重启后，可直接复用先前磁盘缓存数据。
+
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
 ## 查看 Data Cache 命中情况
 
 您可以在 query profile 里观测当前 query 的 cache 命中情况。观测下述三个指标查看 Data Cache 的命中情况：
@@ -183,6 +235,74 @@ Data Cache 支持以同步或异步的方式进行缓存填充。
 
 - 为当前所有会话开启 Data Cache 异步填充。
 
+<<<<<<< HEAD
   ```sql
   SET GLOBAL enable_datacache_async_populate_mode = true;
   ```
+=======
+Data Cache 支持在不重启 BE 进程的情况下对缓存容量进行手动调整，并支持对磁盘空间的自动调整。
+
+### 手动扩缩容
+
+您可以通过动态修改 BE 配置项来修改缓存的内存或磁盘上限。
+
+示例：
+
+```SQL
+-- 调整特定 BE 实例的 Data Cache 内存上限。
+UPDATE be_configs SET VALUE="10G" WHERE NAME="datacache_mem_size" and BE_ID=10005;
+
+-- 调整所有 BE 实例的 Data Cache 内存比例上限。
+UPDATE be_configs SET VALUE="10%" WHERE NAME="datacache_mem_size";
+
+-- 调整所有 BE 实例的 Data Cache 磁盘上限。
+UPDATE be_configs SET VALUE="2T" WHERE NAME="datacache_disk_size";
+```
+
+> **注意**
+>
+> - 通过以上方式进行容量调整时一定要谨慎，注意不要遗漏 WHERE 字句避免修改其他配置项。
+> - 通过以上方式在线调整的缓存容量不会被持久化，待 BE 进程重启后会失效。因此，您可以先通过以上方式在线调整参数，再手动修改 BE 配置文件，保证下次重启后修改依然生效。
+
+### 自动扩缩容
+
+当前系统支持磁盘空间的自动调整。如果您未在 BE 配置中指定缓存磁盘路径和上限时，系统默认打开自动扩缩容功能。
+
+您也可通过在 BE 配置文件中添加以下配置项并重启 BE 进程来打开自动扩缩容功能：
+
+```Plain
+datacache_auto_adjust_enable=true
+```
+
+开启自动扩缩容后：
+
+- 当磁盘占用比例高于 BE 参数 `datacache_disk_high_level` 中规定的阈值（默认值 `80`, 即磁盘空间的 80%）时，系统自动淘汰缓存数据，释放磁盘空间。
+- 当磁盘占用比例在一定时间内持续低于 BE 参数 `datacache_disk_low_level` 中规定的阈值（默认值 `60`, 即磁盘空间的 60%），且当前磁盘用于缓存数据的空间已经写满时，系统将自动进行缓存扩容，增加缓存上限。
+- 当进行缓存自动扩容或缩容时，系统将以 BE 参数 `datacache_disk_safe_level` 中规定的阈值（默认值 `70`, 即磁盘空间的 70%）为目标，尽可能得调整缓存容量。
+
+## 相关参数
+
+您可以通过以下系统变量和 BE 参数配置 Data Cache。
+
+### 系统变量
+
+- [populate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode)
+- [enable_datacache_io_adaptor](../sql-reference/System_variable.md#enable_datacache_io_adaptor)
+- [enable_file_metacache](../sql-reference/System_variable.md#enable_file_metacache)
+- [enable_datacache_async_populate_mode](../sql-reference/System_variable.md)
+
+### BE 参数
+
+- [datacache_enable](../administration/management/BE_configuration.md#datacache_enable)
+- [datacache_mem_size](../administration/management/BE_configuration.md#datacache_mem_size)
+- [datacache_disk_size](../administration/management/BE_configuration.md#datacache_disk_size)
+- [datacache_auto_adjust_enable](../administration/management/BE_configuration.md#datacache_auto_adjust_enable)
+- [datacache_disk_high_level](../administration/management/BE_configuration.md#datacache_disk_high_level)
+- [datacache_disk_safe_level](../administration/management/BE_configuration.md#datacache_disk_safe_level)
+- [datacache_disk_low_level](../administration/management/BE_configuration.md#datacache_disk_low_level)
+- [datacache_disk_adjust_interval_seconds](../administration/management/BE_configuration.md#datacache_disk_adjust_interval_seconds)
+- [datacache_disk_idle_seconds_for_expansion](../administration/management/BE_configuration.md#datacache_disk_idle_seconds_for_expansion)
+- [datacache_min_disk_quota_for_adjustment](../administration/management/BE_configuration.md#datacache_min_disk_quota_for_adjustment)
+- [datacache_eviction_policy](../administration/management/BE_configuration.md#datacache_eviction_policy)
+- [datacache_inline_item_count_limit](../administration/management/BE_configuration.md#datacache_inline_item_count_limit)
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
