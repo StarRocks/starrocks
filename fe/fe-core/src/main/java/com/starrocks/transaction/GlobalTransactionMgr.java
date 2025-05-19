@@ -329,18 +329,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         TransactionState transactionState = getTransactionState(db.getId(), transactionId);
         List<Long> tableIdList = transactionState.getTableIdList();
 
-        Locker locker = new Locker();
-        if (!locker.tryLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE,
-                timeoutMillis, TimeUnit.MILLISECONDS)) {
-            String errMsg = String.format("get database write lock timeout, transactionId=%d, database=%s, timeoutMillis=%d",
-                    transactionId, db.getFullName(), timeoutMillis);
-            throw new StarRocksException(errMsg);
-        }
-        try {
-            waiter = getDatabaseTransactionMgr(db.getId()).commitPreparedTransaction(transactionId);
-        } finally {
-            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
-        }
+        waiter = getDatabaseTransactionMgr(db.getId()).commitPreparedTransaction(transactionId);
         if (waiter == null) {
             throw new TransactionCommitFailedException(String.format("transaction fail to commit, %s",
                     transactionState.toString()));
