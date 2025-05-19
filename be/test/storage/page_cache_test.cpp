@@ -49,6 +49,7 @@ protected:
     void SetUp() override;
     void create_obj_cache(size_t capacity);
 
+    std::shared_ptr<Cache> _lru_cache;
     std::shared_ptr<ObjectCache> _obj_cache;
     std::shared_ptr<StoragePageCache> _page_cache;
     size_t _capacity = kNumShards * 2048;
@@ -60,10 +61,8 @@ void StoragePageCacheTest::SetUp() {
 }
 
 void StoragePageCacheTest::create_obj_cache(size_t capacity) {
-    ObjectCacheOptions options;
-    options.capacity = capacity;
-
-    _obj_cache = std::make_shared<LRUCacheModule>(options);
+    _lru_cache = std::make_shared<ShardedLRUCache>(capacity);
+    _obj_cache = std::make_shared<LRUCacheModule>(_lru_cache);
 }
 
 // NOLINTNEXTLINE
@@ -149,7 +148,7 @@ TEST_F(StoragePageCacheTest, normal) {
         ASSERT_FALSE(_page_cache->adjust_capacity(-2 * kNumShards, 0));
     }
 
-    // set capactity = 0
+    // set capacity = 0
     {
         _page_cache->set_capacity(0);
         ASSERT_EQ(_page_cache->get_capacity(), 0);

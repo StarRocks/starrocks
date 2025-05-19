@@ -21,15 +21,8 @@
 
 namespace starrocks {
 
-LRUCacheModule::LRUCacheModule(const ObjectCacheOptions& options) : _options(options) {
-    _cache.reset(new_lru_cache(_options.capacity));
+LRUCacheModule::LRUCacheModule(std::shared_ptr<Cache> cache) : _cache(std::move(cache)) {
     _initialized.store(true, std::memory_order_release);
-}
-
-LRUCacheModule::~LRUCacheModule() {
-    if (_cache) {
-        _cache->prune();
-    }
 }
 
 Status LRUCacheModule::insert(const std::string& key, void* value, size_t size, ObjectCacheDeleter deleter,

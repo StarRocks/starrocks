@@ -72,6 +72,7 @@ private:
     size_t _page_size = 1024;
 
     std::shared_ptr<StarCacheWrapper> _local_cache;
+    std::shared_ptr<ShardedLRUCache> _shared_lru_cache;
     std::shared_ptr<LRUCacheModule> _lru_cache;
     std::shared_ptr<StarCacheModule> _star_cache;
 };
@@ -112,8 +113,8 @@ ObjectCache* ObjectCacheBench::get_object_cache(CacheType type) {
 
 void ObjectCacheBench::init_cache(CacheType cache_type) {
     if (cache_type == CacheType::LRU) {
-        ObjectCacheOptions opt{.capacity = _capacity};
-        _lru_cache = std::make_shared<LRUCacheModule>(opt);
+        _shared_lru_cache = std::make_shared<ShardedLRUCache>(_capacity);
+        _lru_cache = std::make_shared<LRUCacheModule>(_shared_lru_cache);
         LOG(ERROR) << "init lru cache success";
     } else {
         CacheOptions opt;

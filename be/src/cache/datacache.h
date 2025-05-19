@@ -29,6 +29,7 @@ class GlobalEnv;
 class DiskSpaceMonitor;
 class MemSpaceMonitor;
 class StoragePageCache;
+class Cache;
 
 class DataCache {
 public:
@@ -51,6 +52,9 @@ public:
     StatusOr<int64_t> get_storage_page_cache_limit();
     int64_t check_storage_page_cache_limit(int64_t storage_cache_limit);
 
+    bool adjust_mem_capacity(int64_t delta, size_t min_capacity);
+    size_t get_mem_capacity() const;
+
 private:
     StatusOr<CacheOptions> _init_cache_options();
     Status _init_datacache();
@@ -61,8 +65,10 @@ private:
     GlobalEnv* _global_env;
     std::vector<StorePath> _store_paths;
 
+    // cache engine
     std::shared_ptr<LocalCache> _local_cache;
     std::shared_ptr<RemoteCache> _remote_cache;
+    std::shared_ptr<Cache> _lru_cache;
 
     std::shared_ptr<BlockCache> _block_cache;
     std::shared_ptr<ObjectCache> _starcache_based_object_cache;
