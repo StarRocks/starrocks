@@ -222,6 +222,7 @@ public:
         if (num_non_nulls < count / 10) {
             size_t cnt = 0;
             size_t i = 0;
+#ifdef __AVX2__
             for (i = 0; i + 32 <= count; i += 32) {
                 // Load the next 32 elements of is_nulls into a mask
                 __m256i loaded = _mm256_loadu_si256((__m256i*)&nulls[i]);
@@ -231,6 +232,7 @@ public:
                     dst_data[i + idx] = src_data[cnt++];
                 }
             }
+#endif
             // process tail elements
             for (; i < count; ++i) {
                 dst_data[i] = src_data[cnt];
@@ -252,12 +254,12 @@ public:
         auto nullable_column = down_cast<NullableColumn*>(dst);
 
         size_t read_count = count - null_cnt;
-        uint32_t read_dict_data[read_count];
+        uint32_t read_dict_data[read_count + 1];
         if (read_count == 0) {
             return Status::OK();
         }
         auto decoded_num = _rle_batch_reader.GetBatch(read_dict_data, read_count);
-        if (decoded_num < count) {
+        if (decoded_num < read_count) {
             return Status::InternalError("didn't get enough data from dict-decoder");
         }
 
@@ -312,7 +314,7 @@ public:
                 cnt += !is_nulls[i];
             }
         } else {
-            T read_data[read_count];
+            T read_data[read_count + 1];
             auto ret = _rle_batch_reader.GetBatchWithDict(_dict.data(), _dict.size(), read_data, read_count);
             if (UNLIKELY(ret <= 0)) {
                 return Status::InternalError("DictDecoder GetBatchWithDict failed");

@@ -216,6 +216,7 @@ set(EXEC_FILES
         ./formats/parquet/parquet_cli_reader_test.cpp
         ./formats/parquet/parquet_ut_base.cpp
         ./formats/parquet/page_index_test.cpp
+        ./formats/parquet/dict_encoding_test.cpp
         ./formats/disk_range_test.cpp
         ./geo/geo_types_test.cpp
         ./geo/wkt_parse_test.cpp
