@@ -1316,27 +1316,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to strictly check the length consistency of data types when activating an inactive materialized view. When this item is set to `false`, the activation of the materialized view is not affected if the length of the data types has changed in the base table.
 - Introduced in: v3.3.4
 
-<!--
 ##### mv_active_checker_interval_seconds
 
 - Default: 60
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: When the background active_checker thread is enabled, the system will periodically detect and automatically reactivate materialized views that became Inactive due to schema changes or rebuilds of their base tables (or views). This parameter controls the scheduling interval of the checker thread, in seconds. The default value is system-defined.
+- Introduced in: v3.1.6
 
-<!--
 ##### default_mv_partition_refresh_number
 
 - Default: 1
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: When a materialized view refresh involves multiple partitions, this parameter controls how many partitions are refreshed in a single batch by default.
+Starting from version 3.3.0, the system defaults to refreshing one partition at a time to avoid potential out-of-memory (OOM) issues. In earlier versions, all partitions were refreshed at once by default, which could lead to memory exhaustion and task failure. However, note that when a materialized view refresh involves a large number of partitions, refreshing only one partition at a time may lead to excessive scheduling overhead, longer overall refresh time, and a large number of refresh records. In such cases, it is recommended to adjust this parameter appropriately to improve refresh efficiency and reduce scheduling costs.
+- Introduced in: v3.3.0
 
 <!--
 ##### mv_auto_analyze_async
@@ -4818,29 +4815,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Introduced in: -
 -->
 
-<!--
 ##### mv_plan_cache_expire_interval_sec
 
 - Default: 24 * 60 * 60
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: mv plan cache (which is used for mv rewrite) expire interval in seconds, 1 day by default.
+- Introduced in: v3.2
 
-<!--
+##### mv_plan_cache_thread_pool_size
+
+- Default: 3
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The default thread pool size of mv plan cache (which is used for mv rewrite) 
+- Introduced in: v3.2
+
 ##### mv_plan_cache_max_size
 
 - Default: 1000
 - Type: Long
 - Unit:
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: Max size of mv plan cache used for mv rewrite, if there are many materialized views which are used for transparent rewriting, you may increase this configuration, 1000 by default.
+- Introduced in: v3.2
 
-<!--
 ##### enable_materialized_view_concurrent_prepare
 
 - Default: true
@@ -4849,18 +4850,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: Prepare materialized view concurrently to improve performance
 - Introduced in: v3.4.4
--->
 
-<!--
+##### enable_mv_query_context_cache
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether enable to cache mv query context or not per query.
+- Introduced in: v3.3
+
 ##### mv_query_context_cache_max_size
 
 - Default: 1000
-- Type: Long
-- Unit:
+- Type: -
+- Unit: -
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: Max materialized view rewrite cache size during one query's lifecycle  so can avoid repeating compute to reduce optimizer time in materialized view rewrite,  but may occupy some extra FE's memory. It's well-done when there are many relative  materialized views(>10) or query is complex(multi table joins).
+- Introduced in: v3.3
 
 <!--
 ##### port_connectivity_check_interval_sec
@@ -5099,3 +5106,103 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: Mv refresh fails if there is filtered data in refreshing, true by default, otherwise return success by ignoring the filtered data.
 - Introduced in: -
+
+##### mv_create_partition_batch_interval_ms
+- Default: 1000
+- Type: Int
+- Unit: ms
+- Is mutable: Yes
+- Description: During materialized view refresh, if multiple partitions need to be created in bulk, the system divides them into batches of 64 partitions each. To reduce the risk of failures caused by frequent partition creation, a default interval (in milliseconds) is set between each batch to control the creation frequency.
+- Introduced in: v3.3
+
+##### max_mv_refresh_failure_retry_times
+
+- Default: 1
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The max retry times for materialized view refresh retry times when faile
+- Introduced in: v3.3.0
+
+##### max_mv_refresh_try_lock_failure_retry_times
+
+- Default: 3
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The max retry times when materialized view refresh try lock
+- Introduced in: v3.3.0
+
+
+##### mv_refresh_try_lock_timeout_ms
+
+- Default: 30000
+- Type: Int
+- Unit: ms
+- Is mutable: Yes
+- Description: The default try lock timeout(ms) for mv refresh to try base table/mv dbs' lock
+- Introduced in: v3.3.0
+
+##### enable_mv_refresh_collect_profile
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether enable profile in refreshing materialized view or not by default for all mvs.
+- Introduced in: v3.3.0
+
+##### max_mv_task_run_meta_message_values_length
+
+- Default: 16
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: "The max length for mv task run extra message's values(set/map) to avoid occupying too much meta memory
+- Introduced in: v3.3.0
+
+##### max_mv_check_base_table_change_retry_times
+
+- Default: 10
+- Type: -
+- Unit: -
+- Is mutable: Yes
+- Description: The max retry times for base table change when refreshing materialized view.
+- Introduced in: v3.3.0
+
+##### mv_refresh_default_planner_optimize_timeout
+
+- Default: 30000
+- Type: -
+- Unit: -
+- Is mutable: Yes
+- Description: The default timeout for planner optimize when refresh materialized view, 30s by default
+- Introduced in: v3.3.0
+
+##### enable_mv_refresh_query_rewrite
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether enable to rewrite query in mv refresh or not so it can use query the rewritten mv directly rather than original base table to improve query performance.
+- Introduced in: v3.3
+
+##### enable_mv_refresh_extra_prefix_logging
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether enable adding extra materialized view name logging for better debug.
+- Introduced in: v3.4.0
+
+
+##### enable_mv_post_image_reload_cache
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether do reload flag check after FE's image loaded. If one base mv has done reload, no need to do it again while other mv that related to it is reloading.
+- Introduced in: v3.5.0
