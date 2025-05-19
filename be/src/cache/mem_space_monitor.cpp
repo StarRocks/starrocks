@@ -41,7 +41,7 @@ void MemSpaceMonitor::_evict_datacache(int64_t bytes_to_dec) {
         int64_t bytes = bytes_to_dec;
         while (bytes >= GCBYTES_ONE_STEP) {
             // Evicting 1GB of data takes about 1 second, check if process have been canceled.
-            if (UNLIKELY(_stoped)) {
+            if (UNLIKELY(_stopped)) {
                 return;
             }
             _datacache->adjust_capacity(-GCBYTES_ONE_STEP, kcacheMinSize);
