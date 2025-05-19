@@ -226,12 +226,6 @@ SET enable_pipeline_engine = true;
 SET GLOBAL enable_pipeline_engine = true;
 ```
 
-对于导入任务，还需要开启 FE 配置项 `enable_pipeline_load` 来为导入任务启用 Pipeline 引擎。该参数自 v2.5.0 起支持。
-
-```sql
-ADMIN SET FRONTEND CONFIG ("enable_pipeline_load" = "true");
-```
-
 > **说明**
 >
 > 自 v3.1.0 起，默认启用资源组功能。会话变量 `enable_resource_group` 弃用。
