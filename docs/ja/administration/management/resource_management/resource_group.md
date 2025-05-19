@@ -202,12 +202,15 @@ SET enable_pipeline_engine = true;
 SET GLOBAL enable_pipeline_engine = true;
 ```
 
+<<<<<<< HEAD
 ロードタスクの場合、FE 設定項目 `enable_pipeline_load` を設定して、ロードタスク用の Pipeline エンジンを有効にする必要があります。この項目は v2.5.0 以降でサポートされています。
 
 ```sql
 ADMIN SET FRONTEND CONFIG ("enable_pipeline_load" = "true");
 ```
 
+=======
+>>>>>>> 241c9632ed ([Doc] Remove enable_pipeline_load in guide (#59091))
 > **注意**
 >
 > v3.1.0 以降、リソースグループはデフォルトで有効になっており、セッション変数 `enable_resource_group` は非推奨です。
