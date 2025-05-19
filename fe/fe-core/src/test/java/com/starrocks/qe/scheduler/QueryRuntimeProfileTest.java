@@ -95,10 +95,10 @@ public class QueryRuntimeProfileTest {
         profile.initFragmentProfiles(1);
         TReportExecStatusParams reportExecStatusParams = buildReportStatus(1L);
         profile.updateLoadChannelProfile(reportExecStatusParams);
-        RuntimeProfile runtimeProfile = profile.buildQueryProfile(true);
-        Assertions.assertNotNull(runtimeProfile);
-        Assertions.assertEquals(2, runtimeProfile.getChildMap().size());
-        Assertions.assertSame(profile.getFragmentProfiles().get(0), runtimeProfile.getChild("Fragment 0"));
+        RuntimeProfile runtimeProfile = profile.buildExecutionProfile(true);
+        Assert.assertNotNull(runtimeProfile);
+        Assert.assertEquals(2, runtimeProfile.getChildMap().size());
+        Assert.assertSame(profile.getFragmentProfiles().get(0), runtimeProfile.getChild("Fragment 0"));
         RuntimeProfile loadChannelProfile = runtimeProfile.getChild("LoadChannel");
         Assertions.assertNotNull(loadChannelProfile);
         verifyMergedLoadChannelProfile(loadChannelProfile);

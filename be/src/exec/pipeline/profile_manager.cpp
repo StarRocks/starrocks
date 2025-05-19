@@ -4,9 +4,12 @@
 
 #include "profile_manager.h"
 
+#include "runtime/client_cache.h"
+#include "util/thrift_rpc_helper.h"
+
 namespace starrocks::pipeline {
-RuntimeProfile* profile_manager::build_merged_instance_profile(FragmentProfileMaterial& fragment_profile_material) {
-    ObjectPool obj_pool;
+RuntimeProfile* profile_manager::build_merged_instance_profile(FragmentProfileMaterial& fragment_profile_material,
+                                                               ObjectPool* obj_pool) {
     RuntimeProfile* new_instance_profile = nullptr;
     RuntimeProfile* instance_profile = fragment_profile_material.query_profile.get();
     if (fragment_profile_material.profile_level >= TPipelineProfileLevel::type::DETAIL) {
@@ -46,7 +49,7 @@ RuntimeProfile* profile_manager::build_merged_instance_profile(FragmentProfileMa
             merged_driver_profiles.push_back(merged_driver_profile);
         }
 
-        new_instance_profile = obj_pool.add(new RuntimeProfile(instance_profile->name()));
+        new_instance_profile = obj_pool->add(new RuntimeProfile(instance_profile->name()));
         new_instance_profile->copy_all_info_strings_from(instance_profile);
         new_instance_profile->copy_all_counters_from(instance_profile);
         for (auto* merged_driver_profile : merged_driver_profiles) {
@@ -73,6 +76,86 @@ RuntimeProfile* profile_manager::build_merged_instance_profile(FragmentProfileMa
             "QueryExecutionWallTime", TUnit::TIME_NS,
             RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS, TCounterMergeType::SKIP_FIRST_MERGE));
     query_exec_wall_time->set(fragment_profile_material.lifetime);
+}
+
+profile_manager::profile_manager(const CpuUtil::CpuIds& cpuids) {
+    auto status = ThreadPoolBuilder("query_profile_merge") // exec state reporter
+                          .set_min_threads(1)
+                          .set_max_threads(2)
+                          .set_max_queue_size(1000)
+                          .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                          .set_cpuids(cpuids)
+                          .build(&_report_thread_pool);
+    if (!status.ok()) {
+        LOG(FATAL) << "Cannot create thread pool for profile_manager's query_profile_merge: error="
+                   << status.to_string();
+    }
+
+    status = ThreadPoolBuilder("query_profile_report") // priority exec state reporter with infinite queue
+                     .set_min_threads(1)
+                     .set_max_threads(2)
+                     .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                     .set_cpuids(cpuids)
+                     .build(&_merge_thread_pool);
+    if (!status.ok()) {
+        LOG(FATAL) << "Cannot create thread pool for query_profile_merge's query_profile_report: error="
+                   << status.to_string();
+    }
+}
+
+Status profile_manager::build_and_report_profile(std::shared_ptr<FragmentProfileMaterial> fragment_profile_material) {
+    auto profile_task = [=]() {
+        ObjectPool obj_pool;
+        RuntimeProfile* merged_instance_profile = build_merged_instance_profile(*fragment_profile_material);
+        std::shared_ptr<TFragmentProfile> params =
+                create_report_profile_params(fragment_profile_material, merged_instance_profile);
+        auto report_task = [params]() {
+            const auto& fe_addr = fragment_profile_material->fe_addr;
+            int max_retry_times = config::report_exec_rpc_request_retry_num;
+            while (retry_times++ < max_retry_times) {
+                Status rpc_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
+                        fe_addr.hostname, fe_addr.port,
+                        [&](FrontendServiceConnection& client) { client->asyncProfileReport(status, *params); });
+                if (!rpc_status.ok()) {
+                    if (rpc_status.is_not_found()) {
+                        VLOG(1) << "[Driver] Fail to report profile due to query not found";
+                    } else {
+                        // if it is done exec state report, we should retry
+                        if (params->__isset.done && params->done) {
+                            continue;
+                        }
+                    }
+                }
+                break;
+            }
+        };
+
+        _report_thread_pool->submit_func(std::move(report_task));
+    };
+
+    Status status = _merge_thread_pool->submit_func(std::move(profile_task));
+    if (!status.ok()) {
+        profile_task();
+    }
+}
+
+static std::unique_ptr<TFragmentProfile> profile_manager::create_report_profile_params(
+        std::shared_ptr<FragmentProfileMaterial> fragment_profile_material, RuntimeProfile* merged_instance_profile) {
+    auto res = std::make_unique<TFragmentProfile>();
+    TFragmentProfile& params = *res;
+    params.__set_query_id(fragment_profile_material.query_id);
+    params.__set_backend_num(fragment_profile_material.be_number);
+    params.__set_done(fragment_profile_material.instance_is_done);
+
+    merged_instance_profile->to_thrift(&params.profile);
+    params.__isset.profile = true;
+
+    if (fragment_profile_material.query_type == TQueryType::LOAD) {
+        fragment_profile_material.load_channel_profile->to_thrift(&params.load_channel_profile);
+        params.__isset.load_channel_profile = true;
+    }
+
+    return res;
 }
 
 } // namespace starrocks::pipeline

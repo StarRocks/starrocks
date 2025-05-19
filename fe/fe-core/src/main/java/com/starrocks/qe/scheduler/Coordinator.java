@@ -197,7 +197,7 @@ public abstract class Coordinator {
 
     public abstract void setExecPlan(ExecPlan execPlan);
 
-    public abstract RuntimeProfile buildQueryProfile(boolean needMerge);
+    public abstract RuntimeProfile buildExecutionProfile(boolean needMerge);
 
     public abstract RuntimeProfile getQueryProfile();
 
@@ -228,6 +228,8 @@ public abstract class Coordinator {
     public abstract List<QueryStatisticsItem.FragmentInstanceInfo> getFragmentInstanceInfos();
 
     public abstract DataCacheSelectMetrics getDataCacheSelectMetrics();
+
+    public abstract void registerProfileToRunningProfileManager();
 
     // ------------------------------------------------------------------------------------
     // Methods for audit.
