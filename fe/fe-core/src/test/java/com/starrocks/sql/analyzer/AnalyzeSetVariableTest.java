@@ -186,21 +186,17 @@ public class AnalyzeSetVariableTest {
     }
 
     @Test
-    public void testSetResourceGroupName() {
+    public void testSetResourceGroupName() throws Exception {
         String rg1Name = "rg1";
-        TWorkGroup rg1 = new TWorkGroup();
-        ResourceGroupMgr mgr = GlobalStateMgr.getCurrentState().getResourceGroupMgr();
-        new Expectations(mgr) {
-            {
-                mgr.chooseResourceGroupByName(rg1Name);
-                result = rg1;
-            }
 
-            {
-                mgr.chooseResourceGroupByName(anyString);
-                result = null;
-            }
-        };
+        String createRgSql = "create resource group rg1\n" +
+                "to (user='rg1_user1')\n" +
+                "   with (" +
+                "   'mem_limit' = '20%'," +
+                "   'cpu_core_limit' = '17'," +
+                "   'concurrency_limit' = '11'" +
+                "   );";
+        starRocksAssert.executeResourceGroupDdlSql(createRgSql);
 
         String sql;
 
