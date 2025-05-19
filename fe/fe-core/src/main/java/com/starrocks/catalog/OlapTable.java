@@ -3480,6 +3480,12 @@ public class OlapTable extends Table {
         if (!Strings.isNullOrEmpty(timeDriftConstraintSpec)) {
             properties.put(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT, timeDriftConstraintSpec);
         }
+
+        // partition_retention_condition
+        String partitionRetentionCondition = tableProperties.get(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION);
+        if (!Strings.isNullOrEmpty(partitionRetentionCondition)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, partitionRetentionCondition);
+        }
         return properties;
     }
 
@@ -3531,10 +3537,35 @@ public class OlapTable extends Table {
             properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE, storageType());
         }
 
+<<<<<<< HEAD
         // partition_retention_condition
         String partitionRetentionCondition = tableProperties.get(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION);
         if (!Strings.isNullOrEmpty(partitionRetentionCondition)) {
             properties.put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, partitionRetentionCondition);
+=======
+        // flat json enable
+        String flatJsonEnable = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE);
+        if (!Strings.isNullOrEmpty(flatJsonEnable)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, flatJsonEnable);
+        }
+
+        // flat json null factor
+        String flatJsonNullFactor = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR);
+        if (!Strings.isNullOrEmpty(flatJsonNullFactor)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, flatJsonNullFactor);
+        }
+
+        // flat json sparsity factor
+        String flatJsonSparsityFactor = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR);
+        if (!Strings.isNullOrEmpty(flatJsonSparsityFactor)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, flatJsonSparsityFactor);
+        }
+
+        // flat json column max
+        String flatJsonColumnMax = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX);
+        if (!Strings.isNullOrEmpty(flatJsonColumnMax)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, flatJsonColumnMax);
+>>>>>>> bf2afac4d4 ([BugFix] Avoid to reactive the mv if it's inactived by specific reasons (#59051))
         }
 
         return properties;
