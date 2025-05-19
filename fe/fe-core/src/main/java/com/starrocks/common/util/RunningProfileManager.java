@@ -1,0 +1,227 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+package com.starrocks.common.util;
+
+import com.google.common.collect.Maps;
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.qe.scheduler.QueryRuntimeProfile;
+import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
+import com.starrocks.thrift.TFragmentProfile;
+import com.starrocks.thrift.TStatus;
+import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TUniqueId;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
+
+import static com.starrocks.qe.scheduler.QueryRuntimeProfile.MARKED_COUNT_DOWN_VALUE;
+
+public class RunningProfileManager {
+    private static RunningProfileManager INSTANCE = null;
+    private static final Logger LOG = LogManager.getLogger(RunningProfileManager.class);
+
+    private final Map<TUniqueId, RunningProfile> profiles = Maps.newConcurrentMap();
+
+    private RunningProfileManager() {
+    }
+
+    public static RunningProfileManager getInstance() {
+        if (INSTANCE == null) {
+            INSTANCE = new RunningProfileManager();
+        }
+        return INSTANCE;
+    }
+
+    public RunningProfile getRunningProfile(TUniqueId queryId) {
+        return profiles.get(queryId);
+    }
+
+    public void registerProfile(TUniqueId queryId, RunningProfile queryProfile) {
+        profiles.putIfAbsent(queryId, queryProfile);
+    }
+
+    public TStatus asyncProfileReport(TFragmentProfile request) {
+        TStatus status;
+        final RunningProfile queryProfile = profiles.get(request.getQuery_id());
+        if (queryProfile == null) {
+            status = new TStatus(TStatusCode.NOT_FOUND);
+            status.addToError_msgs("query id " + DebugUtil.printId(request.getQuery_id()) + " not found");
+            return status;
+        }
+
+        final FragmentInstanceProfile fragmentInstanceProfile =
+                queryProfile.fragmentInstanceProfiles.get(request.getBackend_num());
+
+        if (fragmentInstanceProfile == null) {
+            status = new TStatus(TStatusCode.NOT_FOUND);
+            status.addToError_msgs("query id " + DebugUtil.printId(request.getQuery_id()) + ", fragment instance id " +
+                    request.backend_num + " not found");
+            return status;
+        }
+
+        boolean instanceIsDone = fragmentInstanceProfile.isDone.get();
+        if (instanceIsDone) {
+            status = new TStatus(TStatusCode.OK);
+            return status;
+        }
+
+        try {
+            queryProfile.tryToTriggerRuntimeProfileUpdate();
+            fragmentInstanceProfile.updateRunningProfile(request);
+            queryProfile.updateLoadChannelProfile(request);
+            if (instanceIsDone) {
+                queryProfile.finishInstance(request.getBackend_num());
+            }
+        } catch (Throwable e) {
+            LOG.warn("update profile failed {}", DebugUtil.printId(request.getQuery_id()), e);
+        }
+
+        return new TStatus(TStatusCode.NOT_FOUND);
+    }
+
+    public static class FragmentInstanceProfile {
+        // whether this fragment is done
+        private final AtomicBoolean isDone;
+        private final RuntimeProfile instanceProfile;
+
+        public FragmentInstanceProfile(RuntimeProfile instanceProfile) {
+            this.isDone = new AtomicBoolean(false);
+            this.instanceProfile = instanceProfile;
+        }
+
+        public void updateRunningProfile(TFragmentProfile request) {
+            if (request.isSetProfile()) {
+                instanceProfile.update(request.getProfile());
+            }
+        }
+    }
+
+    public static class RunningProfile {
+        private AtomicLong lastRuntimeProfileUpdateTime = new AtomicLong(System.currentTimeMillis());
+        private MarkedCountDownLatch<Integer, Long> profileDoneSignal;
+
+        private ProfilingExecPlan profilingExecPlan;
+
+        // topProfileSupplier is used for running profile to generate top level profile
+        // when query is done, topProfileSupplier is null
+        private Supplier<RuntimeProfile> topProfileSupplier;
+
+        private RuntimeProfile executionProfile;
+        private Map<Integer, FragmentInstanceProfile> fragmentInstanceProfiles;
+        private Optional<RuntimeProfile> loadChannelProfile;
+
+        private int runtimeProfileReportInterval;
+        private boolean needMergeProfile;
+        private boolean isBrokerLoad;
+        private TUniqueId queryId;
+
+        public RunningProfile(RuntimeProfile executionProfile, Optional<RuntimeProfile> loadChannelProfile,
+                              Supplier<RuntimeProfile> topProfileSupplier, ProfilingExecPlan profilingExecPlan,
+                              int runtimeProfileReportInterval, boolean needMergeProfile, boolean isisBrokerLoad,
+                              TUniqueId queryId) {
+            this.executionProfile = executionProfile;
+            this.loadChannelProfile = loadChannelProfile;
+            this.topProfileSupplier = topProfileSupplier;
+            this.profilingExecPlan = profilingExecPlan;
+            this.runtimeProfileReportInterval = runtimeProfileReportInterval;
+            this.needMergeProfile = needMergeProfile;
+            this.isBrokerLoad = isisBrokerLoad;
+        }
+
+        public void registerInstanceProfiles(Map<Integer, FragmentInstanceExecState> indexInJobToExecState) {
+            profileDoneSignal = new MarkedCountDownLatch<>(indexInJobToExecState.size());
+            indexInJobToExecState.forEach((index, execState) -> {
+                fragmentInstanceProfiles.putIfAbsent(index, new FragmentInstanceProfile(execState.getProfile()));
+                profileDoneSignal.addMark(index, MARKED_COUNT_DOWN_VALUE);
+            });
+
+        }
+
+        public void addListener(Runnable listener) {
+            profileDoneSignal.addListener(listener);
+        }
+
+        public synchronized void clearTopProfileSupplier() {
+            this.topProfileSupplier = null;
+        }
+
+        public void tryToTriggerRuntimeProfileUpdate() {
+            long now = System.currentTimeMillis();
+            long lastTime = lastRuntimeProfileUpdateTime.get();
+            Supplier<RuntimeProfile> topProfileSupplier = null;
+            synchronized (this) {
+                topProfileSupplier = this.topProfileSupplier;
+            }
+            if (topProfileSupplier != null && profileDoneSignal.getLeftMarks().size() > 1 &&
+                    now - lastTime > runtimeProfileReportInterval * 950L &&
+                    lastRuntimeProfileUpdateTime.compareAndSet(lastTime, now)) {
+                RuntimeProfile profile = topProfileSupplier.get();
+                profile.addChild(
+                        QueryRuntimeProfile.mergeExecutionProfile(needMergeProfile || isBrokerLoad, executionProfile,
+                                loadChannelProfile, profilingExecPlan, queryId));
+
+                synchronized (this) {
+                    // topProfileSupplier may be null when the query is finished.
+                    // And here to make sure that runtime profile won't overwrite the final profile
+                    if (topProfileSupplier == null) {
+                        return;
+                    }
+                }
+                ProfileManager.getInstance().pushProfile(profilingExecPlan, profile);
+            }
+        }
+
+        public boolean waitForProfileReported(long timeout, TimeUnit unit) {
+            boolean res = false;
+            try {
+                res = profileDoneSignal.await(timeout, unit);
+            } catch (InterruptedException e) { // NOSONAR
+                LOG.warn("profile signal await error", e);
+            }
+
+            return res;
+        }
+
+        public void updateLoadChannelProfile(TFragmentProfile request) {
+            if (request.isSetLoad_channel_profile() && loadChannelProfile.isPresent()) {
+                loadChannelProfile.get().update(request.load_channel_profile);
+                if (LOG.isDebugEnabled()) {
+                    StringBuilder builder = new StringBuilder();
+                    loadChannelProfile.get().prettyPrint(builder, "");
+                    LOG.debug("Load channel profile for query_id={} after reported by instance_id={}\n{}",
+                            DebugUtil.printId(request.getQuery_id()),
+                            request.backend_num,
+                            builder);
+                }
+            }
+        }
+
+        public void finishInstance(int indexInJob) {
+            profileDoneSignal.markedCountDown(indexInJob, MARKED_COUNT_DOWN_VALUE);
+        }
+
+        public RuntimeProfile buildExecutionProfile() {
+            return QueryRuntimeProfile.mergeExecutionProfile(needMergeProfile || isBrokerLoad, executionProfile,
+                    loadChannelProfile, profilingExecPlan, queryId);
+        }
+
+    }
+
+}

@@ -85,6 +85,7 @@ import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.ProfilingExecPlan;
+import com.starrocks.common.util.RunningProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.RuntimeProfileParser;
 import com.starrocks.common.util.SqlUtils;
@@ -1073,6 +1074,7 @@ public class StmtExecutor {
         TUniqueId executionId = context.getExecutionId();
         QueryDetail queryDetail = context.getQueryDetail();
         boolean needMerge = context.needMergeProfile();
+        boolean isShortCircuit = coord.isShortCircuit();
 
         // DO NOT use context int the async task, because the context is shared among consecutive queries.
         // profile of query1 maybe executed when query2 is under execution.
@@ -1081,7 +1083,9 @@ public class StmtExecutor {
             summaryProfile.addInfoString(ProfileManager.PROFILE_COLLECT_TIME,
                     DebugUtil.getPrettyStringMs(System.currentTimeMillis() - profileCollectStartTime));
             summaryProfile.addInfoString("IsProfileAsync", String.valueOf(isAsync));
-            profile.addChild(coord.buildQueryProfile(needMerge));
+            RunningProfileManager.RunningProfile runningProfile =
+                    RunningProfileManager.getInstance().getRunningProfile(executionId);
+            profile.addChild(runningProfile.buildExecutionProfile());
 
             // Update TotalTime to include the Profile Collect Time and the time to build the profile.
             long now = System.currentTimeMillis();
@@ -1093,7 +1097,7 @@ public class StmtExecutor {
             }
 
             ProfilingExecPlan profilingPlan;
-            if (coord.isShortCircuit()) {
+            if (isShortCircuit) {
                 profilingPlan = null;
             } else {
                 profilingPlan = plan == null ? null : plan.getProfilingPlan();
@@ -1353,6 +1357,7 @@ public class StmtExecutor {
         coord.execWithQueryDeployExecutor();
         coord.setTopProfileSupplier(this::buildTopLevelProfile);
         coord.setExecPlan(execPlan);
+        coord.registerProfileToRunningProfileManager();
 
         RowBatch batch = null;
         if (context instanceof HttpConnectContext) {
