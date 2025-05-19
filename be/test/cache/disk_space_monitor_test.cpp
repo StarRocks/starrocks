@@ -20,6 +20,7 @@
 
 #include "cache/block_cache/block_cache.h"
 #include "cache/block_cache/test_cache_utils.h"
+#include "cache/disk_space_monitor.h"
 #include "common/logging.h"
 #include "common/statusor.h"
 #include "fs/fs_util.h"
