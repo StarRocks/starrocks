@@ -184,7 +184,7 @@ public class TaskRunHistoryTable {
         }
         Iterator<Map.Entry<String, String>> iterator = properties.entrySet().iterator();
         while (iterator.hasNext()) {
-            if (!TaskRun.TASK_RUN_PROPERTIES.contains(iterator.next().getKey())) {
+            if (!TaskRun.RESERVED_HISTORY_TASK_RUN_PROPERTIES.contains(iterator.next().getKey())) {
                 iterator.remove();
             }
         }
