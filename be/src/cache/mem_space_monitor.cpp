@@ -44,11 +44,11 @@ void MemSpaceMonitor::_evict_datacache(int64_t bytes_to_dec) {
             if (UNLIKELY(_stopped)) {
                 return;
             }
-            _datacache->adjust_capacity(-GCBYTES_ONE_STEP, kcacheMinSize);
+            _datacache->adjust_mem_capacity(-GCBYTES_ONE_STEP, kcacheMinSize);
             bytes -= GCBYTES_ONE_STEP;
         }
         if (bytes > 0) {
-            _datacache->adjust_capacity(-bytes, kcacheMinSize);
+            _datacache->adjust_mem_capacity(-bytes, kcacheMinSize);
         }
     }
 }
@@ -102,7 +102,7 @@ void MemSpaceMonitor::_adjust_datacache_callback() {
         int64_t memory_high = memtracker->limit() * memory_high_level / 100;
         if (delta_urgent > 0) {
             // Memory usage exceeds memory_urgent_level, reduce size immediately.
-            _datacache->adjust_capacity(-delta_urgent, kcacheMinSize);
+            _datacache->adjust_mem_capacity(-delta_urgent, kcacheMinSize);
             size_t bytes_to_dec = dec_advisor->bytes_should_gc(MonoTime::Now(), memory_urgent - memory_high);
             _evict_datacache(static_cast<int64_t>(bytes_to_dec));
             continue;
@@ -126,7 +126,7 @@ void MemSpaceMonitor::_adjust_datacache_callback() {
             int64_t delta_cache = std::min(max_cache_size - cur_cache_size, std::abs(delta_high));
             size_t bytes_to_inc = inc_advisor->bytes_should_gc(MonoTime::Now(), delta_cache);
             if (bytes_to_inc > 0) {
-                _datacache->adjust_capacity(bytes_to_inc, kcacheMinSize);
+                _datacache->adjust_mem_capacity(bytes_to_inc, kcacheMinSize);
             }
         }
     }

@@ -87,7 +87,7 @@ void DataCache::destroy() {
     LOG(INFO) << "datacache shutdown successfully";
 }
 
-bool DataCache::adjust_capacity(int64_t delta, size_t min_capacity) {
+bool DataCache::adjust_mem_capacity(int64_t delta, size_t min_capacity) {
     if (_lru_cache != nullptr) {
         return _lru_cache->adjust_capacity(delta, min_capacity);
     } else {
