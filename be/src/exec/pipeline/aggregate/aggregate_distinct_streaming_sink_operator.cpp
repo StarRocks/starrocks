@@ -18,6 +18,7 @@
 
 #include "runtime/current_thread.h"
 #include "simd/simd.h"
+#include "util/defer_op.h"
 
 namespace starrocks::pipeline {
 
@@ -91,14 +92,16 @@ Status AggregateDistinctStreamingSinkOperator::push_chunk(RuntimeState* state, c
     RETURN_IF_ERROR(_aggregator->evaluate_groupby_exprs(chunk.get()));
 
     if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::FORCE_STREAMING) {
-        return _push_chunk_by_force_streaming(chunk);
+        RETURN_IF_ERROR(_push_chunk_by_force_streaming(chunk));
     } else if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::FORCE_PREAGGREGATION) {
-        return _push_chunk_by_force_preaggregation(chunk->num_rows());
+        RETURN_IF_ERROR(_push_chunk_by_force_preaggregation(chunk->num_rows()));
     } else if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::LIMITED_MEM) {
-        return _push_chunk_by_limited_memory(chunk, chunk_size);
+        RETURN_IF_ERROR(_push_chunk_by_limited_memory(chunk, chunk_size));
     } else {
-        return _push_chunk_by_auto(chunk, chunk->num_rows());
+        RETURN_IF_ERROR(_push_chunk_by_auto(chunk, chunk->num_rows()));
     }
+
+    return Status::OK();
 }
 
 Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_force_streaming(const ChunkPtr& chunk) {
@@ -169,6 +172,7 @@ Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_auto(const ChunkPt
 
     return Status::OK();
 }
+
 Status AggregateDistinctStreamingSinkOperator::reset_state(RuntimeState* state,
                                                            const std::vector<ChunkPtr>& refill_chunks) {
     _is_finished = false;
