@@ -3937,11 +3937,11 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### datacache_mem_size
 
-- Default: 10%
+- Default: 0
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: The maximum amount of data that can be cached in memory. You can set it as a percentage (for example, `10%`) or a physical limit (for example, `10G`, `21474836480`). It is recommended to set the value of this parameter to at least 10 GB.
+- Description: The maximum amount of data that can be cached in memory. You can set it as a percentage (for example, `10%`) or a physical limit (for example, `10G`, `21474836480`).
 - Introduced in: -
 
 ##### datacache_disk_size
