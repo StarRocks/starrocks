@@ -1353,6 +1353,9 @@ CONF_mInt32(pindex_load_thread_pool_num_max, "8");
 CONF_mInt32(pindex_rebuild_clone_wait_seconds, "120");
 // Max wait time to rebuild persistent index in load (preload update state)
 CONF_mInt32(pindex_rebuild_load_wait_seconds, "20");
+// Check if there is migration between different CPU architectures.
+// If true, the persistent index will be rebuilt when the CPU architecture is different.
+CONF_mBool(pindex_cpu_arch_migration_check, "false");
 
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");

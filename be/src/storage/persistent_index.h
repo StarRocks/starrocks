@@ -34,6 +34,20 @@ class Schema;
 class Column;
 class PrimaryKeyDump;
 
+#if defined(__i386__)
+static constexpr uint32_t CPU_ARCH_ID = 0x00000001; // x86 platform
+#elif defined(__x86_64__)
+static constexpr uint32_t CPU_ARCH_ID = 0x00000002; // x86_64 platform
+#elif defined(__powerpc64__)
+static constexpr uint32_t CPU_ARCH_ID = 0x00000003; // PowerPC64 platform
+#elif defined(__arm__)
+static constexpr uint32_t CPU_ARCH_ID = 0x00000004; // ARM platform
+#elif defined(__aarch64__)
+static constexpr uint32_t CPU_ARCH_ID = 0x00000005; // AArch64 platform
+#else
+static constexpr uint32_t CPU_ARCH_ID = 0x0000000F; // Unknown platform
+#endif
+
 class TabletLoader {
 public:
     virtual ~TabletLoader() = default;

@@ -3434,6 +3434,12 @@ bool PersistentIndex::_need_rebuild_index(const PersistentIndexMetaPB& index_met
         // Make sure l2 version equal to l2 version merged flag
         return true;
     }
+    if (index_meta.cpu_arch_id() != CPU_ARCH_ID && config::pindex_cpu_arch_migration_check) {
+        // If we found the migration between different CPU arch, we need to rebuild index.
+        LOG(WARNING) << "PersistentIndex need rebuild because cpu arch id not match, current: " << CPU_ARCH_ID
+                     << ", expect: " << index_meta.cpu_arch_id();
+        return true;
+    }
 
     return false;
 }
@@ -3590,6 +3596,9 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) 
         MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
         RETURN_IF_ERROR(_l0->commit(l0_meta, _version, kAppendWAL));
     }
+    uint32_t current_cpu_arch_id = CPU_ARCH_ID;
+    TEST_SYNC_POINT_CALLBACK("PersistentIndex::commit::1", &current_cpu_arch_id);
+    index_meta->set_cpu_arch_id(current_cpu_arch_id);
     if (stat != nullptr) {
         stat->reload_meta_cost += watch.elapsed_time();
     }

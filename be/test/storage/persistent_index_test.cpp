@@ -1564,6 +1564,23 @@ TEST_P(PersistentIndexTest, test_build_from_tablet_snapshot) {
     config::l0_max_mem_usage = 104857600;
 }
 
+TEST_P(PersistentIndexTest, test_build_from_tablet_snapshot_with_cpu_arch_check) {
+    auto manager = StorageEngine::instance()->update_manager();
+    config::l0_max_mem_usage = 104857600;
+    config::pindex_cpu_arch_migration_check = true;
+    manager->mem_tracker()->set_limit(-1);
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndex::commit::1",
+                                          [](void* arg) { *(uint32_t*)arg = 0x00000003; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("PersistentIndex::commit::1");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    build_persistent_index_from_tablet(1000);
+    config::pindex_cpu_arch_migration_check = false;
+    config::l0_max_mem_usage = 104857600;
+}
+
 TEST_P(PersistentIndexTest, test_build_from_tablet_wal) {
     auto manager = StorageEngine::instance()->update_manager();
     config::l0_max_mem_usage = 104857600;
