@@ -164,11 +164,11 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
             Map<String, String> properties, String comment) throws DdlException {
         Map<String, String> params = new HashMap<>();
         Optional<Boolean> enabled = parseProperties(properties, params);
-        updateStorageVolume(name, svType, locations, params, enabled, comment);
+        updateStorageVolume(name, svType, locations, params, enabled, comment, -1);
     }
 
     public void updateStorageVolume(String name, String svType, List<String> locations,
-            Map<String, String> params, Optional<Boolean> enabled, String comment) throws DdlException {
+            Map<String, String> params, Optional<Boolean> enabled, String comment, long uniqueId) throws DdlException {
         List<String> immutableProperties = Lists.newArrayList(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX,
                 CloudConfigurationConstants.AWS_S3_ENABLE_PARTITIONED_PREFIX);
         for (String param : immutableProperties) {
@@ -205,6 +205,10 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
 
             if (!params.isEmpty()) {
                 copied.setCloudConfiguration(params);
+            }
+
+            if (uniqueId != -1) {
+                copied.setUniqueId(uniqueId);
             }
 
             updateInternalNoLock(copied);
@@ -258,7 +262,7 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
                 Preconditions.checkState(locations != null, "Location is null");
                 validateLocations(svType, locations);
                 newStorageVolume = new StorageVolume(oldStorageVolume.getId(), name, svType, locations, params,
-                        enabled.orElse(oldStorageVolume.getEnabled()), comment);
+                        enabled.orElse(oldStorageVolume.getEnabled()), comment, oldStorageVolume.getUniqueId());
                 locationChangedStorageVolumeId = newStorageVolume.getId();
             }
 
@@ -268,6 +272,16 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
         if (locationChangedStorageVolumeId != null) {
             updateTableStorageInfo(locationChangedStorageVolumeId);
         }
+    }
+
+    public long resetStorageVolumeUniqueId(String name) throws DdlException {
+        StorageVolume sv = getStorageVolumeByName(name);
+        Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", name);
+        StorageVolume copied = new StorageVolume(sv);
+        // reset global unique id
+        copied.setUniqueId(GlobalStateMgr.getCurrentState().getNextId());
+        updateInternalNoLock(copied);
+        return copied.getUniqueId();
     }
 
     public void setDefaultStorageVolume(SetDefaultStorageVolumeStmt stmt) {
@@ -521,4 +535,9 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
     protected abstract List<List<Long>> getBindingsOfBuiltinStorageVolume();
 
     protected abstract void updateTableStorageInfo(String storageVolumeId) throws DdlException;
+
+    public abstract long getOrCreateVirtualTabletId(String storageVolumeName, String srcServiceId)
+            throws MetaNotFoundException;
+
+    public abstract boolean hasVirtualTabletIdBinded(long shardGroupId);
 }
