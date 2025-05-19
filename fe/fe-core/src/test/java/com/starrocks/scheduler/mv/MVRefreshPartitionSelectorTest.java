@@ -45,13 +45,13 @@ public class MVRefreshPartitionSelectorTest {
 
     @Test
     public void testFirstPartitionAlwaysAllowed() {
-        MVRefreshPartitionSelector selector = new MVRefreshPartitionSelector(1000, 10000);
+        MVRefreshPartitionSelector selector = new MVRefreshPartitionSelector(1000, 10000, 10);
         Assert.assertTrue(selector.canAddPartition(mockPartitionSet(2000, 20000)));
     }
 
     @Test
     public void testCanAddWithinThreshold() {
-        MVRefreshPartitionSelector selector = new MVRefreshPartitionSelector(1000, 10000);
+        MVRefreshPartitionSelector selector = new MVRefreshPartitionSelector(1000, 10000, 10);
         selector.addPartition(mockPartitionSet(500, 5000)); // First one always allowed
 
         Assert.assertTrue(selector.canAddPartition(mockPartitionSet(400, 4000)));
@@ -59,7 +59,7 @@ public class MVRefreshPartitionSelectorTest {
 
     @Test
     public void testExceedRowLimit() {
-        MVRefreshPartitionSelector selector = new MVRefreshPartitionSelector(1000, 10000);
+        MVRefreshPartitionSelector selector = new MVRefreshPartitionSelector(1000, 10000, 10);
         selector.addPartition(mockPartitionSet(900, 5000));
 
         Assert.assertFalse(selector.canAddPartition(mockPartitionSet(200, 1000))); // 900+200 > 1000
@@ -67,15 +67,32 @@ public class MVRefreshPartitionSelectorTest {
 
     @Test
     public void testExceedByteLimit() {
-        MVRefreshPartitionSelector selector = new MVRefreshPartitionSelector(1000, 10000);
+        MVRefreshPartitionSelector selector = new MVRefreshPartitionSelector(1000, 10000, 10);
         selector.addPartition(mockPartitionSet(800, 9000));
 
         Assert.assertFalse(selector.canAddPartition(mockPartitionSet(100, 2000))); // 9000+2000 > 10000
     }
 
     @Test
+    public void testExceedPartitionLimit() {
+        MVRefreshPartitionSelector selector = new MVRefreshPartitionSelector(1000, 10000, 10);
+        selector.addPartition(mockPartitionSet(10, 200));
+        selector.addPartition(mockPartitionSet(10, 200));
+        selector.addPartition(mockPartitionSet(10, 200));
+        selector.addPartition(mockPartitionSet(10, 200));
+        selector.addPartition(mockPartitionSet(10, 200));
+        selector.addPartition(mockPartitionSet(10, 200));
+        selector.addPartition(mockPartitionSet(10, 200));
+        selector.addPartition(mockPartitionSet(10, 200));
+        selector.addPartition(mockPartitionSet(10, 200));
+        selector.addPartition(mockPartitionSet(10, 200));
+
+        Assert.assertFalse(selector.canAddPartition(mockPartitionSet(10, 200)));
+    }
+
+    @Test
     public void testAddPartitionAccumulatesUsage() {
-        MVRefreshPartitionSelector selector = new MVRefreshPartitionSelector(1000, 10000);
+        MVRefreshPartitionSelector selector = new MVRefreshPartitionSelector(1000, 10000, 10);
         selector.addPartition(mockPartitionSet(300, 3000));
         selector.addPartition(mockPartitionSet(400, 4000));
 

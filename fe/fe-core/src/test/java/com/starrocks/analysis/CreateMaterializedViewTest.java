@@ -5158,7 +5158,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "REFRESH DEFERRED MANUAL \n" +
                 "properties (\n" +
                 "'replication_num' = '1',\n" +
-                "'partition_refresh_strategy' = 'default'" +
+                "'partition_refresh_strategy' = 'strict'" +
                 ") \n" +
                 "as select dt, province, age, sum(id) from t3 group by dt, province, age;");
         MaterializedView mv = starRocksAssert.getMv("test", "mv1");

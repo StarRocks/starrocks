@@ -24,16 +24,19 @@ public class MVRefreshPartitionSelector {
 
     private long currentTotalRows = 0;
     private long currentTotalBytes = 0;
+    private int currentTotalSelectedPartitions = 0;
 
     private final long maxRowsThreshold;
     private final long maxBytesThreshold;
+    private final int maxSelectedPartitions;
 
     // ensure that at least one partition is selected
     private boolean isFirstPartition = true;
 
-    public MVRefreshPartitionSelector(long maxRowsThreshold, long maxBytesThreshold) {
+    public MVRefreshPartitionSelector(long maxRowsThreshold, long maxBytesThreshold, int maxPartitionNum) {
         this.maxRowsThreshold = maxRowsThreshold;
         this.maxBytesThreshold = maxBytesThreshold;
+        this.maxSelectedPartitions = maxPartitionNum;
     }
 
     /**
@@ -43,6 +46,10 @@ public class MVRefreshPartitionSelector {
     public boolean canAddPartition(Map<Table, Set<String>> partitionSet) {
         if (isFirstPartition) {
             return true;
+        }
+
+        if (currentTotalSelectedPartitions >= maxSelectedPartitions) {
+            return false;
         }
 
         long[] usage = estimatePartitionUsage(partitionSet);
@@ -62,6 +69,7 @@ public class MVRefreshPartitionSelector {
         currentTotalRows += usage[0];
         currentTotalBytes += usage[1];
         isFirstPartition = false;
+        currentTotalSelectedPartitions++;
     }
 
     /**

@@ -541,7 +541,8 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
 
         Map<String, Map<Table, Set<String>>> mvToBaseNameRefs = mvContext.getMvRefBaseTableIntersectedPartitions();
         MVRefreshPartitionSelector mvRefreshPartitionSelector =
-                new MVRefreshPartitionSelector(Config.mv_max_rows_per_refresh, Config.mv_max_bytes_per_refresh);
+                new MVRefreshPartitionSelector(Config.mv_max_rows_per_refresh, Config.mv_max_bytes_per_refresh,
+                        Config.mv_max_partitions_num_per_refresh);
 
         int adaptiveRefreshNumber = 0;
         while (partitionNameIter.hasNext()) {
