@@ -45,6 +45,7 @@ import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.KafkaUtil;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
@@ -72,7 +73,6 @@ import org.junit.Test;
 
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 public class RoutineLoadJobTest {
     @Test
@@ -145,7 +145,7 @@ public class RoutineLoadJobTest {
                 result = Lists.newArrayList();
                 routineLoadTaskInfo.getId();
                 minTimes = 0;
-                result = UUID.randomUUID();
+                result = UUIDUtil.genUUID();
                 routineLoadMgr.getJob(anyLong);
                 minTimes = 0;
                 result = routineLoadJob;
@@ -214,7 +214,7 @@ public class RoutineLoadJobTest {
                 result = Lists.newArrayList();
                 routineLoadTaskInfo.getId();
                 minTimes = 0;
-                result = UUID.randomUUID();
+                result = UUIDUtil.genUUID();
                 routineLoadMgr.getJob(anyLong);
                 minTimes = 0;
                 result = routineLoadJob;
@@ -811,7 +811,7 @@ public class RoutineLoadJobTest {
                 result = txnId;
                 routineLoadTaskInfo.getId();
                 minTimes = 0;
-                result = UUID.randomUUID();
+                result = UUIDUtil.genUUID();
             }
         };
 
