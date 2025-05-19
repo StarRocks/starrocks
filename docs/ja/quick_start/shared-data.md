@@ -3,7 +3,11 @@ description: 計算とストレージの分離
 displayed_sidebar: docs
 ---
 
+<<<<<<< HEAD
 # ストレージとコンピュートの分離
+=======
+# ストレージとコンピュートを分離
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
 
 import DDL from '../_assets/quick-start/_DDL.mdx'
 import Clients from '../_assets/quick-start/_clientsCompose.mdx'

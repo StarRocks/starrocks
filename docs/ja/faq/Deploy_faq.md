@@ -2,7 +2,11 @@
 displayed_sidebar: docs
 ---
 
+<<<<<<< HEAD
 # デプロイ
+=======
+# デプロイメント
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
 
 このトピックでは、デプロイに関するよくある質問への回答を提供します。
 

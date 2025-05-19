@@ -2,7 +2,11 @@
 displayed_sidebar: docs
 ---
 
+<<<<<<< HEAD
 # その他のFAQ
+=======
+# その他
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
 
 このトピックでは、一般的な質問への回答を提供します。
 

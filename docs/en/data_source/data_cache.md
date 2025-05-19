@@ -103,6 +103,58 @@ block_cache_mem_size = 2147483648
 block_cache_disk_size = 1288490188800
 ```
 
+<<<<<<< HEAD
+=======
+## Populate data cache
+
+### Population rules
+
+Since v3.3.2, in order to improve the cache hit rate of Data Cache, StarRocks populates Data Cache according to the following rules:
+
+- The cache will not be populated for statements that are not `SELECT`, for example, `ANALYZE TABLE` and `INSERT INTO SELECT`.
+- Queries that scan all partitions of a table will not populate the cache. However, if the table has only one partition, population is performed by default.
+- Queries that scan all columns of a table will not populate the cache. However, if the table has only one column, population is performed by default.
+- The cache will not be populated for tables that are not Hive, Paimon, Delta Lake, Hudi, or Iceberg.
+
+You can view the population behavior for a specific query with the `EXPLAIN VERBOSE` command.
+
+Example:
+
+```sql
+mysql> explain verbose select col1 from hudi_table;
+|   0:HudiScanNode                        |
+|      TABLE: hudi_table                  |
+|      partitions=3/3                     |
+|      cardinality=9084                   |
+|      avgRowSize=2.0                     |
+|      dataCacheOptions={populate: false} |
+|      cardinality: 9084                  |
++-----------------------------------------+
+```
+
+`dataCacheOptions={populate: false}` indicates that the cache will not be populated because the query will scan all partitions.
+
+You can also fine tune the population behavior of Data Cache via the Session Variable [populate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode).
+
+### Population mode
+
+StarRocks supports populating Data Cache in synchronous or asynchronous mode.
+
+- Synchronous cache population
+
+  In synchronous population mode, all the remote data read by the current query is cached locally. Synchronous population is efficient but may affect the performance of initial queries because it happens during data reading.
+
+- Asynchronous cache population
+
+  In asynchronous population mode, the system tries to cache the accessed data in the background, in order to minimize the impact on read performance. Asynchronous population can reduce the performance impact of cache population on initial reads, but the population efficiency is lower than synchronous population. Typically, a single query cannot guarantee that all the accessed data can be cached. Multiple attempts may be needed to cache all the accessed data.
+
+From v3.3.0, asynchronous cache population is enabled by default. You can change the population mode by setting the session variable [enable_datacache_async_populate_mode](../sql-reference/System_variable.md).
+
+### Persistence
+
+The cached data in disks can be persistent by default, and these data can be reused after BE restarts.
+
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))
 ## Check whether a query hits data cache
 
 You can check whether a query hits data cache by analyzing the following metrics in the query profile:
@@ -162,3 +214,100 @@ Table: lineitem
  - __MAX_OF_BytesRead: 194.99 MB
  - __MIN_OF_BytesRead: 81.25 MB
 ```
+<<<<<<< HEAD
+=======
+
+## Footer Cache
+
+In addition to caching data from files in remote storage during queries against data lakes, StarRocks also supports caching the metadata (Footer) parsed from files. Footer Cache directly caches the parsed Footer object in memory. When the same file's Footer is accessed in subsequent queries, the object descriptor can be obtained directly from the cache, avoiding repetitive parsing.
+
+Currently, StarRocks supports caching Parquet Footer objects.
+
+You can enable Footer Cache by setting the following system variable:
+
+```SQL
+SET GLOBAL enable_file_metacache=true;
+```
+
+> **NOTE**
+>
+> Footer Cache uses the memory module of the Data Cache for data caching. Therefore, you must ensure that the BE parameter `datacache_enable` is set to `true` and configure a reasonable value for `datacache_mem_size`.
+
+## I/O Adaptor
+
+To prevent significant tail latency in disk access due to high cache disk I/O load, which can lead to negative optimization of the cache system, Data Cache provides the I/O adaptor feature. This feature routes some cache requests to remote storage when disk load is high, utilizing both local cache and remote storage to improve I/O throughput. This feature is enabled by default.
+
+You can enable I/O Adaptor by setting the following system variable:
+
+```SQL
+SET GLOBAL enable_datacache_io_adaptor=true;
+```
+
+## Dynamic Scaling
+
+Data Cache supports manual adjustment of cache capacity without restarting the BE process, and also supports automatic adjustment of cache capacity.
+
+### Manual Scaling
+
+You can modify Data Cache's memory limit or disk capacity by dynamically adjusting BE configuration items.
+
+Examples:
+
+```SQL
+-- Adjust the Data Cache memory limit for a specific BE instance.
+UPDATE be_configs SET VALUE="10G" WHERE NAME="datacache_mem_size" and BE_ID=10005;
+
+-- Adjust the Data Cache memory ratio limit for all BE instances.
+UPDATE be_configs SET VALUE="10%" WHERE NAME="datacache_mem_size";
+
+-- Adjust the Data Cache disk limit for all BE instances.
+UPDATE be_configs SET VALUE="2T" WHERE NAME="datacache_disk_size";
+```
+
+> **NOTE**
+>
+> - Be cautious when adjusting capacities in this way. Make sure not to omit the WHERE clause to avoid modifying irrelevant configuration items.
+> - Cache capacity adjustments made this way will not be persisted and will be lost after the BE process restarts. Therefore, you can first adjust the parameters dynamically as described above, and then manually modify the BE configuration file to ensure that the changes take effect after the next restart.
+
+### Automatic Scaling
+
+StarRocks currently supports automatic scaling of disk capacity. If you do not specify the cache disk path and capacity limit in the BE configuration, automatic scaling is enabled by default.
+
+You can also enable automatic scaling by adding the following configuration item to the BE configuration file and restarting the BE process:
+
+```Plain
+datacache_auto_adjust_enable=true
+```
+
+After automatic scaling is enabled:
+
+- When the disk usage exceeds the threshold specified by the BE parameter `datacache_disk_high_level` (default value is `80`, that is, 80% of disk space), the system will automatically evict cache data to free up disk space.
+- When the disk usage is consistently below the threshold specified by the BE parameter `datacache_disk_low_level` (default value is `60`, that is, 60% of disk space), and the current disk space used by Data Cache is full, the system will automatically expand the cache capacity.
+- When automatically scaling the cache capacity, the system will aim to adjust the cache capacity to the level specified by the BE parameter `datacache_disk_safe_level` (default value is `70`, that is, 70% of disk space).
+
+## Configurations and variables
+
+You can configure Data Cache using the following system variables and BE parameters.
+
+### System variables
+
+- [populate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode)
+- [enable_datacache_io_adaptor](../sql-reference/System_variable.md#enable_datacache_io_adaptor)
+- [enable_file_metacache](../sql-reference/System_variable.md#enable_file_metacache)
+- [enable_datacache_async_populate_mode](../sql-reference/System_variable.md)
+
+### BE Parameters
+
+- [datacache_enable](../administration/management/BE_configuration.md#datacache_enable)
+- [datacache_mem_size](../administration/management/BE_configuration.md#datacache_mem_size)
+- [datacache_disk_size](../administration/management/BE_configuration.md#datacache_disk_size)
+- [datacache_auto_adjust_enable](../administration/management/BE_configuration.md#datacache_auto_adjust_enable)
+- [datacache_disk_high_level](../administration/management/BE_configuration.md#datacache_disk_high_level)
+- [datacache_disk_safe_level](../administration/management/BE_configuration.md#datacache_disk_safe_level)
+- [datacache_disk_low_level](../administration/management/BE_configuration.md#datacache_disk_low_level)
+- [datacache_disk_adjust_interval_seconds](../administration/management/BE_configuration.md#datacache_disk_adjust_interval_seconds)
+- [datacache_disk_idle_seconds_for_expansion](../administration/management/BE_configuration.md#datacache_disk_idle_seconds_for_expansion)
+- [datacache_min_disk_quota_for_adjustment](../administration/management/BE_configuration.md#datacache_min_disk_quota_for_adjustment)
+- [datacache_eviction_policy](../administration/management/BE_configuration.md#datacache_eviction_policy)
+- [datacache_inline_item_count_limit](../administration/management/BE_configuration.md#datacache_inline_item_count_limit)
+>>>>>>> 9ea9323e39 ([Doc] Fix translation in Ja Doc sidebar (#59099))

@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 50
-sidebar_label: Feature Support
+sidebar_label: 機能サポート
 ---
 
 # 機能サポート: データ分散
