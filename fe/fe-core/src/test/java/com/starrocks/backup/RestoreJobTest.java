@@ -927,4 +927,64 @@ public class RestoreJobTest {
         Assert.assertEquals(Status.OK, job.getStatus());
         Assert.assertEquals(RestoreJobState.FINISHED, job.getState());
     }
+<<<<<<< HEAD
 }
+=======
+
+    @Test
+    public void testRestoreAddFunction() {
+        backupMeta = new BackupMeta(Lists.newArrayList());
+        Function f1 = new Function(new FunctionName(db.getFullName(), "test_function"),
+                new Type[] {Type.INT}, new String[] {"argName"}, Type.INT, false);
+
+        backupMeta.setFunctions(Lists.newArrayList(f1));
+        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
+                new BackupJobInfo(), false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+
+        job.addRestoredFunctions(db);
+    }
+
+    @Test
+    public void testRestoreAddCatalog() {
+        backupMeta = new BackupMeta(Lists.newArrayList());
+        Catalog catalog = new Catalog(1111111, "test_catalog", Maps.newHashMap(), "");
+
+        backupMeta.setCatalogs(Lists.newArrayList(catalog));
+        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
+                new BackupJobInfo(), false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+        job.setRepo(repo);
+        job.addRestoredFunctions(db);
+        job.run();
+        job.run();
+    }
+
+    @Test
+    public void testReplayAddExpiredJob() {
+        RestoreJob job1 = new RestoreJob(label, "2018-01-01 01:01:01", db.getId() + 999, db.getFullName() + "xxx",
+                new BackupJobInfo(), false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+
+        BackupJobInfo jobInfo = new BackupJobInfo();
+        BackupTableInfo tblInfo = new BackupTableInfo();
+        tblInfo.id = CatalogMocker.TEST_TBL2_ID;
+        tblInfo.name = CatalogMocker.TEST_TBL2_NAME;
+        jobInfo.tables.put(tblInfo.name, tblInfo);
+        RestoreJob job3 = new RestoreJob(label, "2018-01-01 01:01:01", db.getId() + 999, db.getFullName() + "xxx",
+                jobInfo, false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+
+        BackupHandler localBackupHandler = new BackupHandler();
+        job1.setState(RestoreJob.RestoreJobState.PENDING);
+        localBackupHandler.replayAddJob(job1);
+        Assert.assertTrue(localBackupHandler.getJob(db.getId() + 999).isPending());
+        int oldVal = Config.history_job_keep_max_second;
+        Config.history_job_keep_max_second = 0;
+        job3.setState(RestoreJob.RestoreJobState.FINISHED);
+        localBackupHandler.replayAddJob(job3);
+        Config.history_job_keep_max_second = oldVal;
+        Assert.assertTrue(localBackupHandler.getJob(db.getId() + 999).isDone());
+    }
+}
+>>>>>>> 17d98fbcdd ([BugFix] Fix miss update job state when replaying restore log may cause restored table lost after FE restart (#59056))
