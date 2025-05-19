@@ -30,7 +30,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MaterializedView.PartitionRefreshMode;
+import com.starrocks.catalog.MaterializedView.PartitionRefreshStrategy;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -305,18 +305,18 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             //  not support base tables that contain external tables. However, support for this scenario will be added in the future.
             boolean hasExternalTable = mv.getBaseTableTypes().stream().anyMatch(type -> type != Table.TableType.OLAP);
             if (hasExternalTable) {
-                logger.warn("materialized view {} has external table. so choose default refresh mode", mv.getId());
+                logger.warn("materialized view {} has external table. so choose default refresh strategy", mv.getId());
                 filterPartitionByRefreshNumber(mvToRefreshedPartitions, mvPotentialPartitionNames, mv,
                         tentative);
             } else {
-                PartitionRefreshMode partitionRefreshMode =
-                        PartitionRefreshMode.valueOf(mv.getTableProperty().getPartitionRefreshMode().trim().toUpperCase());
-                switch (partitionRefreshMode) {
-                    case SMART:
+                PartitionRefreshStrategy partitionRefreshStrategy = PartitionRefreshStrategy.valueOf(
+                        mv.getTableProperty().getPartitionRefreshStrategy().trim().toUpperCase());
+                switch (partitionRefreshStrategy) {
+                    case ADAPTIVE:
                         filterPartitionByAdaptiveRefreshNumber(mvToRefreshedPartitions, mvPotentialPartitionNames, mv,
                                 tentative);
                         break;
-                    case DEFAULT:
+                    case STRICT:
                     default:
                         // Only refresh the first partition refresh number partitions, other partitions will generate new tasks
                         filterPartitionByRefreshNumber(mvToRefreshedPartitions, mvPotentialPartitionNames, mv,

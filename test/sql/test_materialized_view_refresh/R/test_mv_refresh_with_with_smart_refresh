@@ -183,7 +183,7 @@ PARTITION BY date_trunc('week', `dt`)
 DISTRIBUTED BY HASH(`dt`)
 REFRESH DEFERRED MANUAL
 PROPERTIES (
-    "partition_refresh_mode" = "smart"
+    "partition_refresh_strategy" = "adaptive"
 )
 AS select dt, sum(id) as s1 from u1 group by dt;
 -- result:
@@ -193,7 +193,7 @@ PARTITION BY date_trunc('week', `dt`)
 DISTRIBUTED BY HASH(`dt`)
 REFRESH DEFERRED MANUAL
 PROPERTIES (
-    "partition_refresh_mode" = "default"
+    "partition_refresh_strategy" = "strict"
 )
 AS select dt, sum(id) as s1 from u2 group by dt;
 -- result:
@@ -203,7 +203,7 @@ PARTITION BY date_trunc('week', `dt`)
 DISTRIBUTED BY HASH(`dt`)
 REFRESH DEFERRED MANUAL
 PROPERTIES (
-    "partition_refresh_mode" = "smart"
+    "partition_refresh_strategy" = "adaptive"
 )
 AS select dt, sum(id) as s1 from u3 group by dt;
 -- result:
@@ -213,7 +213,7 @@ PARTITION BY date_trunc('week', `dt`)
 DISTRIBUTED BY HASH(`dt`)
 REFRESH DEFERRED MANUAL
 PROPERTIES (
-    "partition_refresh_mode" = "default"
+    "partition_refresh_strategy" = "strict"
 )
 AS select dt, sum(id) as s1 from u4 group by dt;
 -- result:
@@ -223,7 +223,7 @@ PARTITION BY date_trunc('week', `dt`)
 DISTRIBUTED BY HASH(`dt`)
 REFRESH DEFERRED MANUAL
 PROPERTIES (
-    "partition_refresh_mode" = "default"
+    "partition_refresh_strategy" = "strict"
 )
 AS select dt, sum(id) as s1 from u5 group by dt;
 -- result:
@@ -233,7 +233,7 @@ PARTITION BY date_trunc('week', `dt`)
 DISTRIBUTED BY HASH(`dt`)
 REFRESH DEFERRED MANUAL
 PROPERTIES (
-    "partition_refresh_mode" = "smart"
+    "partition_refresh_strategy" = "adaptive"
 )
 AS select dt, sum(id) as s1 from u6 group by dt;
 -- result:
@@ -243,7 +243,7 @@ partition by dt
 REFRESH DEFERRED MANUAL
 distributed by hash(dt, province) buckets 10
 PROPERTIES (
-"partition_refresh_mode" = "smart",
+"partition_refresh_strategy" = "adaptive",
 "replication_num" = "1"
 )
 as select dt, province, sum(age) from u7 group by dt, province order by dt, province;

@@ -5121,7 +5121,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "REFRESH DEFERRED MANUAL \n" +
                 "properties (\n" +
                 "'replication_num' = '1',\n" +
-                "'partition_refresh_mode' = 'smart'" +
+                "'partition_refresh_strategy' = 'adaptive'" +
                 ") \n" +
                 "as select dt, province, age, sum(id) from t3 group by dt, province, age;");
         MaterializedView mv = starRocksAssert.getMv("test", "mv1");
@@ -5130,7 +5130,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         Assert.assertEquals("province", mvPartitionCols.get(0).getName());
         Assert.assertEquals("dt", mvPartitionCols.get(1).getName());
         Assert.assertEquals("age", mvPartitionCols.get(2).getName());
-        String alterTableSql = "ALTER MATERIALIZED VIEW mv1 SET ('partition_refresh_mode' = 'default')";
+        String alterTableSql = "ALTER MATERIALIZED VIEW mv1 SET ('partition_refresh_strategy' = 'strict')";
         starRocksAssert.alterMvProperties(alterTableSql);
 
         starRocksAssert.dropMaterializedView("mv1");
@@ -5158,7 +5158,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "REFRESH DEFERRED MANUAL \n" +
                 "properties (\n" +
                 "'replication_num' = '1',\n" +
-                "'partition_refresh_mode' = 'default'" +
+                "'partition_refresh_strategy' = 'default'" +
                 ") \n" +
                 "as select dt, province, age, sum(id) from t3 group by dt, province, age;");
         MaterializedView mv = starRocksAssert.getMv("test", "mv1");
@@ -5168,7 +5168,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         Assert.assertEquals("dt", mvPartitionCols.get(1).getName());
         Assert.assertEquals("age", mvPartitionCols.get(2).getName());
 
-        String alterTableSql = "ALTER MATERIALIZED VIEW mv1 SET ('partition_refresh_mode' = 'smart')";
+        String alterTableSql = "ALTER MATERIALIZED VIEW mv1 SET ('partition_refresh_strategy' = 'adaptive')";
         starRocksAssert.alterMvProperties(alterTableSql);
         starRocksAssert.dropMaterializedView("mv1");
         starRocksAssert.dropTable("t3");

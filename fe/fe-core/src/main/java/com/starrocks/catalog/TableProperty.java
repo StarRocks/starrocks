@@ -211,7 +211,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     // This property only applies to materialized views
     // It represents the mode selected to determine the number of partitions to refresh
-    private String partitionRefreshMode = Config.default_mv_partition_refresh_mode;
+    private String partitionRefreshStrategy = Config.default_mv_partition_refresh_strategy;
 
     // This property only applies to materialized views
     // When using the system to automatically refresh, the maximum range of the most recent partitions will be refreshed.
@@ -423,7 +423,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public TableProperty buildMvProperties() {
         buildPartitionTTL();
         buildPartitionRefreshNumber();
-        buildMVPartitionRefreshMode();
+        buildMVPartitionRefreshStrategy();
         buildAutoRefreshPartitionsLimit();
         buildExcludedTriggerTables();
         buildResourceGroup();
@@ -536,9 +536,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
-    public TableProperty buildMVPartitionRefreshMode() {
-        partitionRefreshMode = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_MODE,
-                Config.default_mv_partition_refresh_mode);
+    public TableProperty buildMVPartitionRefreshStrategy() {
+        partitionRefreshStrategy = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY,
+                Config.default_mv_partition_refresh_strategy);
         return this;
     }
 
@@ -929,16 +929,16 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return partitionRefreshNumber;
     }
 
-    public String getPartitionRefreshMode() {
-        return partitionRefreshMode;
+    public String getPartitionRefreshStrategy() {
+        return partitionRefreshStrategy;
     }
 
     public void setPartitionRefreshNumber(int partitionRefreshNumber) {
         this.partitionRefreshNumber = partitionRefreshNumber;
     }
 
-    public void setPartitionRefreshMode(String partitionRefreshMode) {
-        this.partitionRefreshMode = partitionRefreshMode;
+    public void setPartitionRefreshStrategy(String partitionRefreshStrategy) {
+        this.partitionRefreshStrategy = partitionRefreshStrategy;
     }
 
     public void setResourceGroup(String resourceGroup) {
