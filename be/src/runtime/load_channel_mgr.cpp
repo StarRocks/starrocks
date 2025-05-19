@@ -293,7 +293,7 @@ void LoadChannelMgr::get_load_replica_status(brpc::Controller* cntl, const PLoad
             auto replica_status = response->add_replica_statuses();
             replica_status->set_tablet_id(tablet_id);
             replica_status->set_state(LoadReplicaStatePB::NOT_PRESENT);
-            replica_status->set_message("can't find the load channel");
+            replica_status->set_message("can't find load channel");
         }
     } else {
         std::string remote_ip = butil::ip2str(cntl->remote_side().ip).c_str();

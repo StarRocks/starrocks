@@ -336,7 +336,7 @@ message PLoadReplicaStatus {
 }
 
 message PLoadReplicaStatusResult {
-    repeated PLoadReplicaStatus replica_statuses = 2;
+    repeated PLoadReplicaStatus replica_statuses = 1;
 }
 
 message PLoadDiagnoseRequest {

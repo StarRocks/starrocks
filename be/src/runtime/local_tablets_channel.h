@@ -72,12 +72,8 @@ public:
 
     MemTracker* mem_tracker() { return _mem_tracker; }
 
-    std::vector<AsyncDeltaWriter*> TEST_async_delta_writers() {
-        std::vector<AsyncDeltaWriter*> writers;
-        for (auto& [tablet_id, writer] : _delta_writers) {
-            writers.push_back(writer.get());
-        }
-        return writers;
+    const std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>>& TEST_delta_writers() const {
+        return _delta_writers;
     }
 
 private:

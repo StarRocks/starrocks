@@ -56,7 +56,6 @@
 namespace starrocks {
 
 DEFINE_FAIL_POINT(tablets_channel_add_chunk_wait_write_block);
-DEFINE_FAIL_POINT(tablets_channel_wait_secondary_replica_block);
 DEFINE_FAIL_POINT(tablets_channel_abort_replica_failure);
 
 std::atomic<uint64_t> LocalTabletsChannel::_s_tablet_writer_count;
@@ -1133,11 +1132,11 @@ void LocalTabletsChannel::get_load_replica_status(const std::string& remote_ip,
                         replica_state = LoadReplicaStatePB::SUCCESS;
                     } else {
                         replica_state = LoadReplicaStatePB::FAILED;
-                        message = "primary replica is committed, but replica failed, error: " + status.to_string();
+                        message = "primary replica is committed, but replica failed, " + status.to_string();
                     }
                 } else if (writer_state == kAborted) {
                     replica_state = LoadReplicaStatePB::FAILED;
-                    message = "primary replica is aborted, error: " + writer->get_err_status().to_string();
+                    message = "primary replica is aborted, " + writer->get_err_status().to_string();
                 } else {
                     replica_state = LoadReplicaStatePB::IN_PROCESSING;
                     message = fmt::format("primary replica state is {}", DeltaWriter::state_name(writer_state));
@@ -1268,16 +1267,10 @@ Status SecondaryReplicasWaiter::wait() {
             bthread_usleep(10 * USECS_PER_MILLIS);
             _try_check_replica_status_on_primary(i);
             _try_diagnose_stack_strace_on_primary(i);
-            FAIL_POINT_TRIGGER_EXECUTE(tablets_channel_wait_secondary_replica_block, {
-                int32_t timeout_ms = config::load_fp_tablets_channel_wait_secondary_replica_block_ms;
-                if (timeout_ms > 0) {
-                    bthread_usleep(timeout_ms * USECS_PER_MILLIS);
-                }
-            });
             if (watch.elapsed_time() > _timeout_ns) {
                 break;
             }
-            if (watch.elapsed_time() - last_log_time > 60 * NANOSECS_PER_SEC) {
+            if (watch.elapsed_time() - last_log_time > 30 * NANOSECS_PER_SEC) {
                 last_log_time = watch.elapsed_time();
                 LOG(WARNING) << "waiting secondary replicas too long, load_id: " << print_id(_load_id)
                              << ", txn_id: " << _txn_id << ", timeout: " << _timeout_ns / NANOSECS_PER_MILLIS
@@ -1335,7 +1328,7 @@ void SecondaryReplicasWaiter::_send_replica_status_request(int unfinished_tablet
     SET_IGNORE_OVERCROWDED(_replica_status_closure->cntl, load);
     PLoadReplicaStatusRequest request;
     request.mutable_load_id()->set_hi(_load_id.hi());
-    request.mutable_load_id()->set_hi(_load_id.lo());
+    request.mutable_load_id()->set_lo(_load_id.lo());
     request.set_txn_id(_txn_id);
     request.set_index_id(delta_writer->writer()->index_id());
     request.set_sink_id(_sink_id);
