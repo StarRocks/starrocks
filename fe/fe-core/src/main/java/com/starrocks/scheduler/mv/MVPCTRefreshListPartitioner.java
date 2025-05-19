@@ -19,14 +19,17 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.common.util.concurrent.Uninterruptibles;
 import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
@@ -43,7 +46,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.DistributionDesc;
+import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
+import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.ListPartitionDiffer;
@@ -54,6 +59,7 @@ import com.starrocks.sql.common.PartitionDiffResult;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.Nullable;
 
@@ -172,6 +178,81 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         }
         return genPartitionPredicate(refBaseTable, refBaseTablePartitionNames, mvPartitionSlotRefs,
                 refPartitionColumns, baseListPartitionMap);
+    }
+
+    @Override
+    public Expr generateMVPartitionPredicate(TableName tableName,
+                                             Set<String> mvPartitionNames) throws AnalysisException {
+        Map<String, PCell> mvToCellMap = mvContext.getMVToCellMap();
+        if (mvToCellMap.isEmpty()) {
+            return new BoolLiteral(true);
+        }
+        PartitionInfo partitionInfo = mv.getPartitionInfo();
+        Preconditions.checkArgument(partitionInfo instanceof ListPartitionInfo);
+
+        ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+        List<Expr> mvPartitionExprs = listPartitionInfo.getPartitionExprs(tableName, mv.getIdToColumn());
+        List<Column> mvPartitionCols = mv.getPartitionColumns();
+        Preconditions.checkArgument(mvPartitionExprs.size() == mvPartitionCols.size());
+        if (mvPartitionCols.size() == 1) {
+            boolean isContainsNullPartition = false;
+            Column refPartitionColumn = mvPartitionCols.get(0);
+            List<Expr> selectedPartitionValues = Lists.newArrayList();
+            Type partitionType = refPartitionColumn.getType();
+            for (String tablePartitionName : mvPartitionNames) {
+                PListCell cell = (PListCell) mvToCellMap.get(tablePartitionName);
+                for (List<String> values : cell.getPartitionItems()) {
+                    if (mvPartitionCols.size() != values.size()) {
+                        return null;
+                    }
+                    LiteralExpr partitionValue = new PartitionValue(values.get(0)).getValue(partitionType);
+                    if (partitionValue.isConstantNull()) {
+                        isContainsNullPartition = true;
+                        continue;
+                    }
+                    selectedPartitionValues.add(partitionValue);
+                }
+            }
+            Expr mvPartitionExpr = mvPartitionExprs.get(0);
+            Expr inPredicate = MvUtils.convertToInPredicate(mvPartitionExpr, selectedPartitionValues);
+            // NOTE: If target partition values contain `null partition`, the generated predicate should
+            // contain `is null` predicate rather than `in (null) or = null` because the later one is not correct.
+            if (isContainsNullPartition) {
+                IsNullPredicate isNullPredicate = new IsNullPredicate(mvPartitionExpr, false);
+                return Expr.compoundOr(Lists.newArrayList(inPredicate, isNullPredicate));
+            } else {
+                return inPredicate;
+            }
+        } else {
+            List<Expr> partitionPredicates = Lists.newArrayList();
+            for (String tablePartitionName : mvPartitionNames) {
+                PListCell cell = (PListCell) mvToCellMap.get(tablePartitionName);
+                for (List<String> values : cell.getPartitionItems()) {
+                    if (mvPartitionCols.size() != values.size()) {
+                        return null;
+                    }
+                    List<Expr> predicates = Lists.newArrayList();
+                    for (int i = 0; i < mvPartitionCols.size(); i++) {
+                        Column refPartitionColumn = mvPartitionCols.get(i);
+                        Type partitionType = refPartitionColumn.getType();
+                        LiteralExpr partitionValue = new PartitionValue(values.get(i)).getValue(partitionType);
+                        Expr mvPartitionByExpr = mvPartitionExprs.get(i);
+                        Expr predicate;
+                        if (partitionValue.isConstantNull()) {
+                            // NOTE: If target partition values contain `null partition`, the generated predicate should
+                            // contain `is null` predicate rather than `in (null) or = null` because the later one is not correct.
+                            predicate = new IsNullPredicate(mvPartitionByExpr, false);
+                        } else {
+                            predicate = MvUtils.convertToInPredicate(mvPartitionByExpr,
+                                    Lists.newArrayList(partitionValue));
+                        }
+                        predicates.add(predicate);
+                    }
+                    partitionPredicates.add(Expr.compoundAnd(predicates));
+                }
+            }
+            return Expr.compoundOr(partitionPredicates);
+        }
     }
 
     private static Expr getRefBaseTablePartitionPredicateExpr(Table table,
@@ -413,7 +494,8 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
             return;
         }
 
-        // TODO: support to add partitions by batch
+        // support to add partitions by batch
+        List<PartitionDesc> partitionDescs = Lists.newArrayList();
         for (Map.Entry<String, PCell> addEntry : adds.entrySet()) {
             String mvPartitionName = addEntry.getKey();
             PListCell partitionCell = (PListCell) addEntry.getValue();
@@ -421,8 +503,13 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
             // the order is not guaranteed
             MultiItemListPartitionDesc multiItemListPartitionDesc =
                     new MultiItemListPartitionDesc(false, mvPartitionName, partitionItems, partitionProperties);
+            partitionDescs.add(multiItemListPartitionDesc);
+        }
+
+        for (List<PartitionDesc> batch : ListUtils.partition(partitionDescs, CREATE_PARTITION_BATCH_SIZE)) {
+            ListPartitionDesc listPartitionDesc = new ListPartitionDesc(mv.getPartitionColumnNames(), batch);
             AddPartitionClause addPartitionClause =
-                    new AddPartitionClause(multiItemListPartitionDesc, distributionDesc, partitionProperties, false);
+                    new AddPartitionClause(listPartitionDesc, distributionDesc, partitionProperties, false);
             AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(mv);
             analyzer.analyze(mvContext.getCtx(), addPartitionClause);
             try {
@@ -432,6 +519,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
                 throw new DmlException("add list partition failed: %s, db: %s, table: %s", e, e.getMessage(),
                         database.getFullName(), mv.getName());
             }
+            Uninterruptibles.sleepUninterruptibly(Config.mv_create_partition_batch_interval_ms, TimeUnit.MILLISECONDS);
         }
     }
 }
