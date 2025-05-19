@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# Overview
+# 概要
 
 このトピックでは、catalog とは何か、そして catalog を使用して内部データと外部データを管理およびクエリする方法について説明します。
 

@@ -10,7 +10,7 @@ import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.md'
 
 import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.md'
 
-# BE Configuration
+# BE 設定
 
 <BEConfigMethod />
 

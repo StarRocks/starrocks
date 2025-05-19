@@ -11,7 +11,7 @@ import Clients from '../_assets/quick-start/_clientsAllin1.mdx'
 import SQL from '../_assets/quick-start/_SQL.mdx'
 import Curl from '../_assets/quick-start/_curl.mdx'
 
-# StarRocks with Helm
+# Helm で StarRocks をデプロイ
 
 ## 目的
 

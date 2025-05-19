@@ -98,7 +98,7 @@ mysql> explain verbose select col1 from hudi_table;
 
 其中 `dataCacheOptions={populate: false}` 即表明不填充 Data Cache，因为该查询会扫描全部分区。
 
-您还可以通过 Session Variable [populdate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode) 进一步精细化管理该行为。
+您还可以通过 Session Variable [populate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode) 进一步精细化管理该行为。
 
 ### 填充方式
 
@@ -252,7 +252,7 @@ datacache_auto_adjust_enable=true
 
 ### 系统变量
 
-- [populdate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode)
+- [populate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode)
 - [enable_datacache_io_adaptor](../sql-reference/System_variable.md#enable_datacache_io_adaptor)
 - [enable_file_metacache](../sql-reference/System_variable.md#enable_file_metacache)
 - [enable_datacache_async_populate_mode](../sql-reference/System_variable.md)

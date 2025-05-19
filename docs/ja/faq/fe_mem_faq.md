@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-sidebar_label: FE Memory FAQ
+sidebar_label: FE メモリ
 ---
 
 # FE ヒープメモリのトラブルシューティング

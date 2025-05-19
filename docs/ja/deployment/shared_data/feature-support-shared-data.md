@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-sidebar_label: Feature Support
+sidebar_label: 機能サポート
 ---
 
 # 機能サポート: 共有データクラスタ

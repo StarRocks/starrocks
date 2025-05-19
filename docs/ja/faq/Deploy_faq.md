@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# Deployment
+# デプロイメント
 
 このトピックでは、デプロイメントに関するよくある質問への回答を提供します。
 

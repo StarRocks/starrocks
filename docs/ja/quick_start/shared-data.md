@@ -3,7 +3,7 @@ description: コンピュートとストレージの分離
 displayed_sidebar: docs
 ---
 
-# Separate storage and compute
+# ストレージとコンピュートを分離
 
 import DDL from '../_assets/quick-start/_DDL.mdx'
 import Clients from '../_assets/quick-start/_clientsCompose.mdx'
