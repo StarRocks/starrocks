@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-sidebar_label: Cluster Snapshot
+sidebar_label: クラスタースナップショット
 keywords: ['backup', 'restore', 'shared data', 'snapshot']
 ---
 
