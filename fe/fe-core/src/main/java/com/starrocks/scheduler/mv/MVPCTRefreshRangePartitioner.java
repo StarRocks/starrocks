@@ -20,12 +20,15 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.util.concurrent.Uninterruptibles;
+import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionInfo;
@@ -75,7 +78,6 @@ import static com.starrocks.sql.common.SyncPartitionUtils.createRange;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.getStr2DateExpr;
 
 public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner {
-    private static final int CREATE_PARTITION_BATCH_SIZE = 64;
     private final Logger logger;
 
     private final RangePartitionDiffer differ;
@@ -196,6 +198,46 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
             partitionPredicates.add(isNullPredicate);
         }
 
+        return Expr.compoundOr(partitionPredicates);
+    }
+
+    @Override
+    public Expr generateMVPartitionPredicate(TableName tableName,
+                                             Set<String> mvPartitionNames) throws AnalysisException {
+        if (mvPartitionNames.isEmpty()) {
+            return new BoolLiteral(true);
+        }
+        PartitionInfo partitionInfo = mv.getPartitionInfo();
+        if (!(partitionInfo instanceof ExpressionRangePartitionInfo)) {
+            logger.warn("Cannot generate mv refresh partition predicate because mvPartitionExpr is invalid");
+            return null;
+        }
+        ExpressionRangePartitionInfo rangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+        List<Expr> mvPartitionExprs = rangePartitionInfo.getPartitionExprs(mv.getIdToColumn());
+        if (mvPartitionExprs.size() != 1) {
+            logger.warn("Cannot generate mv refresh partition predicate because mvPartitionExpr's size is not 1");
+            return null;
+        }
+        Expr partitionExpr = mvPartitionExprs.get(0);
+
+        List<Range<PartitionKey>> mvPartitionRange = Lists.newArrayList();
+        Map<String, PCell> mvToCellMap = mvContext.getMVToCellMap();
+        for (String partitionName : mvPartitionNames) {
+            Preconditions.checkArgument(mvToCellMap.containsKey(partitionName));
+            PRangeCell rangeCell = (PRangeCell) mvToCellMap.get(partitionName);
+            mvPartitionRange.add(rangeCell.getRange());
+        }
+        mvPartitionRange = MvUtils.mergeRanges(mvPartitionRange);
+
+        List<Expr> partitionPredicates =
+                MvUtils.convertRange(partitionExpr, mvPartitionRange);
+        // range contains the min value could be null value
+        Optional<Range<PartitionKey>> nullRange = mvPartitionRange.stream().
+                filter(range -> range.lowerEndpoint().isMinValue()).findAny();
+        if (nullRange.isPresent()) {
+            Expr isNullPredicate = new IsNullPredicate(partitionExpr, false);
+            partitionPredicates.add(isNullPredicate);
+        }
         return Expr.compoundOr(partitionPredicates);
     }
 

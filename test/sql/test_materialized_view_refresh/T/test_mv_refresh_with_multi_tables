@@ -1,0 +1,221 @@
+
+-- name: test_range_mv_with_multi_tables1 
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE non_partition_table (dt2 date, int2 int, str2 string);
+INSERT INTO non_partition_table VALUES ("2025-05-16",1, "a"),("2025-05-17",1, "b"),("2025-05-18",1,null),(null,null,null);
+CREATE TABLE partition_table (
+  dt1 date,
+  int1 int(11),
+  str1 string
+) ENGINE=OLAP 
+PARTITION BY date_trunc('day', dt1);
+INSERT INTO partition_table VALUES ("2025-05-16",1, "a"),("2025-05-17",1, "b"),("2025-05-18",1,null),(null,null,null);
+
+-- case1: mv1 with union all
+CREATE MATERIALIZED VIEW test_mv1 
+PARTITION BY (dt1) 
+REFRESH DEFERRED MANUAL
+PROPERTIES ("partition_refresh_number"="1")
+AS SELECT dt1,sum(int1) from partition_table group by dt1 union all
+SELECT dt2,sum(int2) from non_partition_table group by dt2;
+REFRESH MATERIALIZED VIEW test_mv1;
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1")
+SELECT COUNT(1) FROM test_mv1;
+SELECT * FROM test_mv1 ORDER BY dt1 LIMIT 5;
+DROP MATERIALIZED VIEW test_mv1;
+
+-- case2: mv1 with union all with date_trunc
+CREATE MATERIALIZED VIEW test_mv1 
+PARTITION BY (date_trunc('day', dt1))
+REFRESH DEFERRED MANUAL
+PROPERTIES ("partition_refresh_number"="1")
+AS SELECT dt1,sum(int1) from partition_table group by dt1 union all
+SELECT dt2,sum(int2) from non_partition_table group by dt2;
+REFRESH MATERIALIZED VIEW test_mv1;
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1")
+SELECT COUNT(1) FROM test_mv1;
+SELECT * FROM test_mv1 ORDER BY dt1 LIMIT 5;
+DROP MATERIALIZED VIEW test_mv1;
+
+-- case3: mv1 with join
+CREATE MATERIALIZED VIEW test_mv1 
+PARTITION BY (dt1) 
+REFRESH DEFERRED MANUAL
+PROPERTIES ("partition_refresh_number"="1")
+AS 
+SELECT dt1, dt2, sum(int1), sum(int2) 
+from partition_table t1
+join non_partition_table t2 on t1.dt1 = t2.dt2 
+group by dt1, dt2;
+REFRESH MATERIALIZED VIEW test_mv1;
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1")
+SELECT COUNT(1) FROM test_mv1;
+SELECT * FROM test_mv1 ORDER BY dt1 LIMIT 5;
+DROP database db_${uuid0};
+
+-- name: test_range_mv_with_multi_tables2
+create database db_${uuid0};
+use db_${uuid0};
+CREATE TABLE non_partition_table (dt2 date, int2 int, str2 string);
+INSERT INTO non_partition_table VALUES ("2025-05-16",1, "a"),("2025-05-17",1, "b"),("2025-05-18",1,null),(null,null,null);
+
+CREATE TABLE partition_table (
+  dt1 date,
+  int1 int(11),
+  str1  string
+) ENGINE=OLAP 
+PARTITION BY RANGE(dt1)
+(
+  PARTITION p1 VALUES [("2024-03-10"), ("2025-05-16")),
+  PARTITION p2 VALUES [("2025-05-16"), ("2025-05-17")),
+  PARTITION p3 VALUES [("2025-05-17"), ("2025-05-18")),
+  PARTITION p4 VALUES [("2025-05-18"), ("2025-05-19"))
+);
+INSERT INTO partition_table VALUES ("2025-05-16",1, "a"),("2025-05-17",1, "b"),("2025-05-18",1,null);
+
+-- case1: mv1 with union all
+CREATE MATERIALIZED VIEW test_mv1 
+PARTITION BY (dt1) 
+REFRESH DEFERRED MANUAL
+PROPERTIES ("partition_refresh_number"="1")
+AS SELECT dt1,sum(int1) from partition_table group by dt1 union all
+SELECT dt2,sum(int2) from non_partition_table group by dt2;
+REFRESH MATERIALIZED VIEW test_mv1;
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1")
+SELECT COUNT(1) FROM test_mv1;
+SELECT * FROM test_mv1 ORDER BY dt1 LIMIT 5;
+DROP MATERIALIZED VIEW test_mv1;
+
+-- case2: mv1 with union all with date_trunc
+CREATE MATERIALIZED VIEW test_mv1 
+PARTITION BY (date_trunc('day', dt1))
+REFRESH DEFERRED MANUAL
+PROPERTIES ("partition_refresh_number"="1")
+AS SELECT dt1,sum(int1) from partition_table group by dt1 union all
+SELECT dt2,sum(int2) from non_partition_table group by dt2;
+REFRESH MATERIALIZED VIEW test_mv1;
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1")
+SELECT COUNT(1) FROM test_mv1;
+SELECT * FROM test_mv1 ORDER BY dt1 LIMIT 5;
+DROP MATERIALIZED VIEW test_mv1;
+
+-- case3: mv1 with join
+CREATE MATERIALIZED VIEW test_mv1 
+PARTITION BY (dt1) 
+REFRESH DEFERRED MANUAL
+PROPERTIES ("partition_refresh_number"="1")
+AS 
+SELECT dt1, dt2, sum(int1), sum(int2) 
+from partition_table t1
+join non_partition_table t2 on t1.dt1 = t2.dt2 
+group by dt1, dt2;
+REFRESH MATERIALIZED VIEW test_mv1;
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1")
+SELECT COUNT(1) FROM test_mv1;
+SELECT * FROM test_mv1 ORDER BY dt1 LIMIT 5;
+
+DROP database db_${uuid0};
+
+-- name: test_range_mv_with_multi_tables3
+create external catalog mv_hive_${uuid0}
+properties
+(
+    "type" = "hive",
+    "hive.catalog.type" = "hive",
+    "hive.metastore.uris" = "${hive_metastore_uris}"
+);
+set catalog mv_hive_${uuid0};
+create database mv_hive_db_${uuid0};
+use mv_hive_db_${uuid0};
+CREATE TABLE partition_table (
+  int1 int,
+  str1 string,
+  dt1 string
+)
+PARTITION BY (dt1);
+INSERT INTO partition_table VALUES (1, "a", "2025-05-16"),(1, "b","2025-05-17"),(1,null,"2025-05-19");
+set catalog default_catalog;
+create database db_${uuid0};
+use db_${uuid0};
+CREATE TABLE non_partition_table (dt2 date, int2 int, str2 string);
+INSERT INTO non_partition_table VALUES ("2025-05-16",1, "a"),("2025-05-17",1, "b"),("2025-05-18",1,null),(null,null,null);
+
+-- case1: mv1 with union all
+CREATE MATERIALIZED VIEW test_mv1 
+PARTITION BY str2date(dt1, '%Y-%m-%d')
+REFRESH DEFERRED MANUAL
+PROPERTIES ("partition_refresh_number"="1")
+AS SELECT dt1,sum(int1) from mv_hive_${uuid0}.mv_hive_db_${uuid0}.partition_table group by dt1 union all
+SELECT dt2,sum(int2) from non_partition_table group by dt2;
+REFRESH MATERIALIZED VIEW test_mv1;
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1")
+SELECT COUNT(1) FROM test_mv1;
+SELECT * FROM test_mv1 ORDER BY dt1 LIMIT 5;
+DROP MATERIALIZED VIEW test_mv1;
+
+-- case2: mv1 with union all with date_trunc
+CREATE MATERIALIZED VIEW test_mv1 
+PARTITION BY (date_trunc('day', dt))
+REFRESH DEFERRED MANUAL
+PROPERTIES ("partition_refresh_number"="1")
+AS SELECT str2date(dt1, '%Y-%m-%d') as dt,sum(int1) from mv_hive_${uuid0}.mv_hive_db_${uuid0}.partition_table group by dt1 union all
+SELECT dt2 as dt,sum(int2) from non_partition_table group by dt2;
+REFRESH MATERIALIZED VIEW test_mv1;
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1")
+SELECT COUNT(1) FROM test_mv1;
+SELECT * FROM test_mv1 ORDER BY dt LIMIT 5;
+DROP MATERIALIZED VIEW test_mv1;
+
+-- case3: mv1 with join
+CREATE MATERIALIZED VIEW test_mv1 
+PARTITION BY (dt1) 
+REFRESH DEFERRED MANUAL
+PROPERTIES ("partition_refresh_number"="1")
+AS 
+SELECT dt1, dt2, sum(int1), sum(int2) 
+from mv_hive_${uuid0}.mv_hive_db_${uuid0}.partition_table t1
+join non_partition_table t2 on t1.dt1 = t2.dt2 
+group by dt1, dt2;
+REFRESH MATERIALIZED VIEW test_mv1;
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1")
+SELECT COUNT(1) FROM test_mv1;
+SELECT * FROM test_mv1 ORDER BY dt1 LIMIT 5;
+
+DROP database db_${uuid0};
+DROP table mv_hive_${uuid0}.mv_hive_db_${uuid0}.partition_table force;
+DROP database mv_hive_${uuid0}.mv_hive_db_${uuid0} force;
+DROP CATALOG mv_hive_${uuid0};
+
+-- name: test_range_mv_with_multi_tables4
+create database db_${uuid0};
+use db_${uuid0};
+CREATE TABLE non_partition_table (dt2 date, int2 int, str2 string);
+INSERT INTO non_partition_table VALUES ("2025-05-16",1, "a"),("2025-05-17",1, "b"),("2025-05-18",1,null),(null,null,null);
+
+CREATE TABLE partition_table (
+  dt1 string,
+  int1 int(11),
+  str1  string
+) ENGINE=OLAP 
+PARTITION BY str2date(dt1, '%Y-%m-%d'), int1;
+INSERT INTO partition_table VALUES ("2025-05-16",1, "a"),("2025-05-17",1, "b"),("2025-05-18",1,null);
+
+-- case3: mv1 with join
+CREATE MATERIALIZED VIEW test_mv1 
+PARTITION BY (str2date(dt1, '%Y-%m-%d'), int1)
+REFRESH DEFERRED MANUAL
+PROPERTIES ("partition_refresh_number"="1")
+AS 
+SELECT dt1, int1, sum(int2) 
+from partition_table t1
+join non_partition_table t2 on t1.dt1 = t2.dt2 
+group by dt1, int1;
+
+REFRESH MATERIALIZED VIEW test_mv1;
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1")
+SELECT COUNT(1) FROM test_mv1;
+SELECT * FROM test_mv1 ORDER BY dt1 LIMIT 5;
+
+DROP database db_${uuid0};

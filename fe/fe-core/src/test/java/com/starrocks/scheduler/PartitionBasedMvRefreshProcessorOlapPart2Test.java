@@ -133,7 +133,6 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                             assertPlanWithoutPushdownBelowScan(mvName);
                         });
                     }
-                    ;
                 });
     }
 
@@ -240,15 +239,15 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
         String plan = execPlan.getExplainString(StatementBase.ExplainLevel.NORMAL);
         PlanTestBase.assertContains(plan, "     TABLE: tt1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 1: k1 > 1\n" +
+                "     PREDICATES: 1: k1 > 1, 4: dt IS NOT NULL\n" +
                 "     partitions=1/3");
         PlanTestBase.assertContains(plan, "     TABLE: tt1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 5: k1 > 2\n" +
+                "     PREDICATES: 5: k1 > 2, 8: dt IS NOT NULL\n" +
                 "     partitions=1/3");
         PlanTestBase.assertContains(plan, "     TABLE: tt1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 9: k1 > 3\n" +
+                "     PREDICATES: 9: k1 > 3, 12: dt IS NOT NULL\n" +
                 "     partitions=1/3");
     }
 
@@ -664,5 +663,93 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                     String tableName = (String) obj;
                     testMVRefreshWithTTLCondition(tableName);
                 });
+    }
+
+    @Test
+    public void testMVRefreshWithMultiTables() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE t1 (dt1 date, int1 int)\n" +
+                "PARTITION BY RANGE(dt1)\n" +
+                "(\n" +
+                "PARTITION p202006 VALUES LESS THAN (\"2020-07-01\"),\n" +
+                "PARTITION p202007 VALUES LESS THAN (\"2020-08-01\"),\n" +
+                "PARTITION p202008 VALUES LESS THAN (\"2020-09-01\")\n" +
+                ");");
+        starRocksAssert.withTable("CREATE TABLE t2 (dt2 date, int2 int);");
+        executeInsertSql("INSERT INTO t2 VALUES (\"2020-06-23\",1),(\"2020-07-23\",1),(\"2020-07-23\",1)" +
+                ",(\"2020-08-23\",1),(null,null);\n");
+        executeInsertSql("INSERT INTO t1 VALUES (\"2020-06-23\",1);\n");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv2 PARTITION BY dt1 " +
+                "REFRESH DEFERRED MANUAL PROPERTIES (\"partition_refresh_number\"=\"1\")\n" +
+                "AS SELECT dt1,sum(int1) from t1 group by dt1 union all\n" +
+                "SELECT dt2,sum(int2) from t2 group by dt2;");
+        String mvName = "mv2";
+        MaterializedView mv = starRocksAssert.getMv("test", mvName);
+        ExecuteOption executeOption = new ExecuteOption(70, false, new HashMap<>());
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).setExecuteOption(executeOption).build();
+        initAndExecuteTaskRun(taskRun);
+        PartitionBasedMvRefreshProcessor processor =
+                (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
+        MvTaskRunContext mvTaskRunContext = processor.getMvContext();
+        Assert.assertTrue(mvTaskRunContext.getExecPlan() != null);
+        ExecPlan execPlan = mvTaskRunContext.getExecPlan();
+        assertPlanContains(execPlan, "     TABLE: t2\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: (4: dt2 < '2020-07-01') OR (4: dt2 IS NULL)");
+        assertPlanContains(execPlan, "     TABLE: t1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: (1: dt1 < '2020-07-01') OR (1: dt1 IS NULL)\n" +
+                "     partitions=1/3");
+    }
+
+    @Test
+    public void testMVRefreshWithMultiTables2() throws Exception {
+        String partitionTable = "CREATE TABLE partition_table (dt1 date, int1 int)\n" +
+                "PARTITION BY RANGE(dt1)\n" +
+                "(\n" +
+                "PARTITION p202006 VALUES LESS THAN (\"2020-07-01\"),\n" +
+                "PARTITION p202007 VALUES LESS THAN (\"2020-08-01\"),\n" +
+                "PARTITION p202008 VALUES LESS THAN (\"2020-09-01\")\n" +
+                ");";
+        String partitionTableValue = "INSERT INTO partition_table VALUES (\"2020-06-23\",1);\n";
+        String mvQuery = "CREATE MATERIALIZED VIEW mv2 " +
+                "PARTITION BY date_trunc('day', dt1) " +
+                "REFRESH DEFERRED MANUAL PROPERTIES (\"partition_refresh_number\"=\"1\")\n" +
+                "AS SELECT dt1,sum(int1) from partition_table group by dt1 union all\n" +
+                "SELECT dt2,sum(int2) from non_partition_table group by dt2;";
+        testMVRefreshWithOnePartitionAndOneUnPartitionTable(partitionTable, partitionTableValue, mvQuery,
+                "     TABLE: partition_table\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: (1: dt1 < '2020-07-01') OR (1: dt1 IS NULL)\n" +
+                        "     partitions=1/3",
+                "     TABLE: non_partition_table\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: (4: dt2 < '2020-07-01') OR (4: dt2 IS NULL)\n" +
+                        "     partitions=1/1");
+    }
+
+    @Test
+    public void testMVRefreshWithMultiTables1() throws Exception {
+        String partitionTable = "CREATE TABLE partition_table (dt1 date, int1 int)\n" +
+                "PARTITION BY date_trunc('day', dt1)";
+        starRocksAssert.withTable(partitionTable);
+        addRangePartition("partition_table", "p1", "2024-01-04", "2024-01-05");
+
+        String partitionTableValue = "INSERT INTO partition_table VALUES (\"2024-01-04\",1);\n";
+        String mvQuery = "CREATE MATERIALIZED VIEW mv2 " +
+                "PARTITION BY date_trunc('day', dt1) " +
+                "REFRESH DEFERRED MANUAL PROPERTIES (\"partition_refresh_number\"=\"1\")\n" +
+                "AS SELECT dt1,sum(int1) from partition_table group by dt1 union all\n" +
+                "SELECT dt2,sum(int2) from non_partition_table group by dt2;";
+
+        testMVRefreshWithOnePartitionAndOneUnPartitionTable("", partitionTableValue, mvQuery,
+                "     TABLE: non_partition_table\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 4: dt2 >= '2024-01-04', 4: dt2 < '2024-01-05'\n" +
+                        "     partitions=1/1",
+                "     TABLE: partition_table\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     partitions=1/1");
     }
 }

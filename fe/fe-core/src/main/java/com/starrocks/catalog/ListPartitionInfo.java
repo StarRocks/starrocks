@@ -20,7 +20,10 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
@@ -410,6 +413,24 @@ public class ListPartitionInfo extends PartitionInfo {
             sb.append("\n)");
         }
         return sb.toString();
+    }
+
+    /**
+     * Get the partition expression for the partition info
+     * @param tableName: table name of the partitioned table
+     * @param idToColumn: map of column id to column
+     * @return: list of defined partition expressions for the table
+     */
+    public List<Expr> getPartitionExprs(TableName tableName, Map<ColumnId, Column> idToColumn) {
+        List<Expr> partitionExprs = Lists.newArrayList();
+        for (Column column : MetaUtils.getColumnsByColumnIds(idToColumn, partitionColumnIds)) {
+            if (column.isGeneratedColumn()) {
+                partitionExprs.add(column.getGeneratedColumnExpr(idToColumn));
+            } else {
+                partitionExprs.add(new SlotRef(tableName, column.getName()));
+            }
+        }
+        return partitionExprs;
     }
 
     private String singleListPartitionSql(OlapTable table, List<Long> partitionIds, short tableReplicationNum) {
