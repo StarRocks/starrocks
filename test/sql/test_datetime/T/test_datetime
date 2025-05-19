@@ -23,3 +23,15 @@ insert into test_datetime values
 (13, '2020-01-01 00:00:00.123450');
 
 select * from test_datetime order by c1;
+
+delete from test_datetime where c2 = '2020-01-01 00:00:00';
+delete from test_datetime where c2 = '2020-01-01 00:00:00.0';
+delete from test_datetime where c2 = '2020-01-01 00:00:00.012';
+
+select * from test_datetime order by c1;
+
+delete from test_datetime where c2 = '2020-01-01 00:00:00.1';
+delete from test_datetime where c2 = '2020-01-01 00:00:00.123';
+delete from test_datetime where c2 = '2020-01-01 00:00:00.123450';
+
+select * from test_datetime order by c1;
