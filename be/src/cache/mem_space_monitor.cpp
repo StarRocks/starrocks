@@ -36,19 +36,19 @@ void MemSpaceMonitor::stop() {
     }
 }
 
-void evict_pagecache(DataCache* cache, int64_t bytes_to_dec, std::atomic<bool>& stoped) {
+void MemSpaceMonitor::_evict_datacache(int64_t bytes_to_dec) {
     if (bytes_to_dec > 0) {
         int64_t bytes = bytes_to_dec;
         while (bytes >= GCBYTES_ONE_STEP) {
             // Evicting 1GB of data takes about 1 second, check if process have been canceled.
-            if (UNLIKELY(stoped)) {
+            if (UNLIKELY(_stoped)) {
                 return;
             }
-            cache->adjust_capacity(-GCBYTES_ONE_STEP, kcacheMinSize);
+            _datacache->adjust_capacity(-GCBYTES_ONE_STEP, kcacheMinSize);
             bytes -= GCBYTES_ONE_STEP;
         }
         if (bytes > 0) {
-            cache->adjust_capacity(-bytes, kcacheMinSize);
+            _datacache->adjust_capacity(-bytes, kcacheMinSize);
         }
     }
 }
@@ -104,14 +104,14 @@ void MemSpaceMonitor::_adjust_datacache_callback() {
             // Memory usage exceeds memory_urgent_level, reduce size immediately.
             _datacache->adjust_capacity(-delta_urgent, kcacheMinSize);
             size_t bytes_to_dec = dec_advisor->bytes_should_gc(MonoTime::Now(), memory_urgent - memory_high);
-            evict_pagecache(_datacache, static_cast<int64_t>(bytes_to_dec), _stopped);
+            _evict_datacache(static_cast<int64_t>(bytes_to_dec));
             continue;
         }
 
         int64_t delta_high = memtracker->consumption() - memory_high;
         if (delta_high > 0) {
             size_t bytes_to_dec = dec_advisor->bytes_should_gc(MonoTime::Now(), delta_high);
-            evict_pagecache(_datacache, static_cast<int64_t>(bytes_to_dec), _stopped);
+            _evict_datacache(static_cast<int64_t>(bytes_to_dec));
         } else {
             auto ret = _datacache->get_storage_page_cache_limit();
             if (!ret.ok()) {
