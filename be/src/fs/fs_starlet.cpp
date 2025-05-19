@@ -275,7 +275,10 @@ private:
 
 class StarletFileSystem : public FileSystem {
 public:
-    StarletFileSystem() { staros::starlet::fslib::register_builtin_filesystems(); }
+    StarletFileSystem(std::shared_ptr<staros::starlet::fslib::FileSystem> shard_fs = nullptr)
+            : _shard_fs(std::move(shard_fs)) {
+        staros::starlet::fslib::register_builtin_filesystems();
+    }
     ~StarletFileSystem() override = default;
 
     StarletFileSystem(const StarletFileSystem&) = delete;
@@ -585,15 +588,33 @@ public:
 
 private:
     absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> get_shard_filesystem(int64_t shard_id) {
+        if (_shard_fs != nullptr) {
+            LOG(WARNING) << "shard_fs provided, return directly, shard_id: " << shard_id;
+            return _shard_fs;
+        }
         return g_worker->get_shard_filesystem(shard_id, _conf);
     }
 
 private:
     staros::starlet::fslib::Configuration _conf;
+    std::shared_ptr<staros::starlet::fslib::FileSystem> _shard_fs;
 };
 
 std::unique_ptr<FileSystem> new_fs_starlet() {
     return std::make_unique<StarletFileSystem>();
+}
+
+std::shared_ptr<FileSystem> new_fs_starlet_with_shard_fs(int64_t shard_id) {
+    staros::starlet::fslib::Configuration conf;
+    bool enable_datacache;
+    absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> fs_st =
+            g_worker->get_shard_filesystem(shard_id, conf, &enable_datacache);
+    if (!fs_st.ok()) {
+        LOG(WARNING) << "Failed to get shard filesystem, shard_id: " << shard_id << ", " << fs_st.status();
+        return nullptr;
+    }
+    LOG(INFO) << "Get shard filesystem succeed, shard_id: " << shard_id;
+    return std::make_shared<StarletFileSystem>(fs_st.value());
 }
 } // namespace starrocks
 

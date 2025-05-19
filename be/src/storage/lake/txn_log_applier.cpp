@@ -329,6 +329,11 @@ private:
             return Status::Corruption("Invalid txn meta state: " + ReplicationTxnStatePB_Name(txn_meta.txn_state()));
         }
 
+        // for shared_data_source, we treat it as full replication
+        if (txn_meta.shared_data_source()) {
+            return apply_shared_data_source_replication_log(op_replication, txn_id);
+        }
+
         if (txn_meta.data_version() == 0) {
             if (txn_meta.snapshot_version() != _new_version) {
                 LOG(WARNING) << "Fail to apply replication log, mismatched snapshot version and new version"
@@ -381,6 +386,44 @@ private:
                       << ", base_version: " << _base_version << ", new_version: " << _new_version
                       << ", txn_id: " << txn_id;
         }
+
+        if (op_replication.has_source_schema()) {
+            _metadata->mutable_source_schema()->CopyFrom(op_replication.source_schema());
+        }
+
+        return Status::OK();
+    }
+
+    Status apply_shared_data_source_replication_log(const TxnLogPB_OpReplication& op_replication, int64_t txn_id) {
+        // todo check version
+        auto old_rowsets = std::move(*_metadata->mutable_rowsets());
+        _metadata->mutable_rowsets()->Clear();
+        _metadata->mutable_delvec_meta()->Clear();
+
+        auto new_next_rowset_id = _metadata->next_rowset_id();
+        for (const auto& op_write : op_replication.op_writes()) {
+            auto rowset = _metadata->add_rowsets();
+            rowset->CopyFrom(op_write.rowset());
+            const auto new_rowset_id = rowset->id() + _metadata->next_rowset_id();
+            rowset->set_id(new_rowset_id);
+            new_next_rowset_id =
+                    std::max<uint32_t>(new_next_rowset_id, new_rowset_id + std::max(1, rowset->segments_size()));
+        }
+
+        for (const auto& [segment_id, delvec_data] : op_replication.delvecs()) {
+            auto delvec = std::make_shared<DelVector>();
+            RETURN_IF_ERROR(delvec->load(_new_version, delvec_data.data().data(), delvec_data.data().size()));
+            _builder.append_delvec(delvec, segment_id + _metadata->next_rowset_id());
+        }
+
+        _metadata->set_next_rowset_id(new_next_rowset_id);
+        _metadata->set_cumulative_point(0);
+        old_rowsets.Swap(_metadata->mutable_compaction_inputs());
+
+        _tablet.update_mgr()->unload_primary_index(_tablet.id());
+
+        LOG(INFO) << "Apply pk full replication log finish. tablet_id: " << _tablet.id()
+                  << ", base_version: " << _base_version << ", new_version: " << _new_version << ", txn_id: " << txn_id;
 
         if (op_replication.has_source_schema()) {
             _metadata->mutable_source_schema()->CopyFrom(op_replication.source_schema());
@@ -615,6 +658,11 @@ private:
             return Status::Corruption("Invalid txn meta state: " + ReplicationTxnStatePB_Name(txn_meta.txn_state()));
         }
 
+        // for shared_data_source, we treat it as full replication
+        if (txn_meta.shared_data_source()) {
+            return apply_shared_data_source_replication_log(op_replication, txn_meta.txn_id());
+        }
+
         if (txn_meta.data_version() == 0) {
             if (txn_meta.snapshot_version() != _new_version) {
                 LOG(WARNING) << "Fail to apply replication log, mismatched snapshot version and new version"
@@ -652,6 +700,28 @@ private:
                       << ", txn_id: " << txn_meta.txn_id();
         }
 
+        if (op_replication.has_source_schema()) {
+            _metadata->mutable_source_schema()->CopyFrom(op_replication.source_schema());
+        }
+
+        return Status::OK();
+    }
+
+    Status apply_shared_data_source_replication_log(const TxnLogPB_OpReplication& op_replication, int64_t txn_id) {
+        // todo check version
+        auto old_rowsets = std::move(*_metadata->mutable_rowsets());
+        _metadata->mutable_rowsets()->Clear();
+
+        for (const auto& op_write : op_replication.op_writes()) {
+            RETURN_IF_ERROR(apply_write_log(op_write));
+        }
+
+        _metadata->set_cumulative_point(0);
+        old_rowsets.Swap(_metadata->mutable_compaction_inputs());
+
+        LOG(INFO) << "Apply full replication log finish. tablet_id: " << _tablet.id()
+                  << ", base_version: " << _metadata->version() << ", new_version: " << _new_version
+                  << ", txn_id: " << txn_id;
         if (op_replication.has_source_schema()) {
             _metadata->mutable_source_schema()->CopyFrom(op_replication.source_schema());
         }

@@ -225,7 +225,7 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
     }
     {
         std::unique_lock l(_mtx);
-        auto shard_iter = _shards.find(id);
+        auto shard_iter = _shards.find(shard_id);
         // could be possibly shards removed or fs get created during unlock-lock
         if (shard_iter == _shards.end()) {
             return fs_or->second;
