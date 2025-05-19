@@ -72,12 +72,7 @@ NodeChannel::~NodeChannel() noexcept {
         _rpc_request.mutable_requests(i)->release_id();
     }
     _rpc_request.release_id();
-    if (_diagnose_closure) {
-        if (_diagnose_closure->unref()) {
-            delete _diagnose_closure;
-        }
-        _diagnose_closure = nullptr;
-    }
+    _release_diagnose_closure();
 }
 
 Status NodeChannel::init(RuntimeState* state) {
@@ -758,9 +753,9 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
                     &_add_batch_closures[_current_request_index]->cntl, request.mutable_requests(0),
                     &_add_batch_closures[_current_request_index]->result, _add_batch_closures[_current_request_index]);
 #else
-            std::pair<PTabletWriterAddChunksRequest*, ReusableClosure<PTabletWriterAddBatchResult>*> rpc_pair{
-                    &request, _add_batch_closures[_current_request_index]};
-            TEST_SYNC_POINT_CALLBACK("NodeChannel::rpc::add_chunk_send", &rpc_pair);
+            std::tuple<int64_t, PTabletWriterAddChunksRequest*, ReusableClosure<PTabletWriterAddBatchResult>*>
+                    rpc_tuple{_node_id, &request, _add_batch_closures[_current_request_index]};
+            TEST_SYNC_POINT_CALLBACK("NodeChannel::rpc::add_chunk_send", &rpc_tuple);
 #endif
         }
     }
@@ -904,6 +899,7 @@ Status NodeChannel::_wait_all_prev_request() {
     if (_next_packet_seq == 0) {
         return Status::OK();
     }
+
     for (auto closure : _add_batch_closures) {
         RETURN_IF_ERROR(_wait_request(closure));
     }
@@ -969,21 +965,38 @@ Status NodeChannel::_wait_one_prev_request() {
     return Status::OK();
 }
 
-Status NodeChannel::try_close() {
-    if (_cancelled || _closed) {
+Status NodeChannel::_try_send_eos_and_process_all_response() {
+    if (_cancelled) {
         return _err_st;
     }
 
-    if (_check_prev_request_done()) {
-        auto st = _send_request(true /* eos */, false /* finished */);
-        if (!st.ok()) {
-            _cancelled = true;
-            _err_st = st;
-            return _err_st;
+    if (!_closed) {
+        if (_check_prev_request_done()) {
+            auto st = _send_request(true /* eos */, false /* finished */);
+            if (!st.ok()) {
+                _cancelled = true;
+                _err_st = st;
+            }
         }
+        return _err_st;
     }
 
-    return Status::OK();
+    // check the result of requests, and fail the channel if error happens as soon as possible
+    if (_check_all_prev_request_done() && !_all_response_processed) {
+        _all_response_processed = true;
+        auto st = _wait_all_prev_request();
+        if (!_cancelled && !st.ok()) {
+            _cancelled = true;
+            _err_st = st;
+        }
+    }
+    return _err_st;
+}
+
+Status NodeChannel::try_close() {
+    auto st = _try_send_eos_and_process_all_response();
+    // if the error triggers a diagnose, should return the error until the diagnose finishes
+    return _is_diagnose_done() ? st : Status::OK();
 }
 
 Status NodeChannel::try_finish() {
@@ -1004,7 +1017,7 @@ Status NodeChannel::try_finish() {
 }
 
 bool NodeChannel::is_close_done() {
-    return ((_closed && _check_all_prev_request_done()) || _cancelled) && _is_diagnose_done();
+    return (_all_response_processed || _cancelled) && _is_diagnose_done();
 }
 
 bool NodeChannel::is_finished() {
@@ -1016,14 +1029,6 @@ Status NodeChannel::close_wait(RuntimeState* state) {
     if (_cancelled) {
         return _err_st;
     }
-
-    // 1. send eos request to commit write util finish
-    while (!_closed) {
-        RETURN_IF_ERROR(_send_request(true /* eos */));
-    }
-
-    // 2. wait eos request finish
-    RETURN_IF_ERROR(_wait_all_prev_request());
 
     // assign tablet dict infos
     if (!_tablet_commit_infos.empty()) {
@@ -1052,6 +1057,10 @@ Status NodeChannel::close_wait(RuntimeState* state) {
 
 void NodeChannel::cancel(const Status& err_st) {
     if (_cancel_finished) return;
+
+    if (_is_diagnose_done()) {
+        _wait_diagnose(_runtime_state);
+    }
 
     // cancel rpc request, accelerate the release of related resources
     for (auto closure : _add_batch_closures) {
@@ -1117,13 +1126,14 @@ void NodeChannel::_try_diagnose(const std::string& error_text) {
 #ifndef BE_TEST
     _stub->load_diagnose(&_diagnose_closure->cntl, &request, &_diagnose_closure->result, _diagnose_closure);
 #else
-    std::pair<PLoadDiagnoseRequest*, RefCountClosure<PLoadDiagnoseResult>*> rpc_pair{&request, _diagnose_closure};
-    TEST_SYNC_POINT_CALLBACK("NodeChannel::rpc::load_diagnose_send", &rpc_pair);
+    std::tuple<int64_t, PLoadDiagnoseRequest*, RefCountClosure<PLoadDiagnoseResult>*> rpc_tuple{_node_id, &request,
+                                                                                                _diagnose_closure};
+    TEST_SYNC_POINT_CALLBACK("NodeChannel::rpc::load_diagnose_send", &rpc_tuple);
 #endif
     request.release_id();
-    VLOG(2) << "NodeChannel[" << _load_info << "] send diagnose request to [" << _node_info->host << ":"
-            << _node_info->brpc_port << "], rpc_timeout_ms: " << _rpc_timeout_ms
-            << ", enable_profile: " << enable_profile << ", enable_stack_trace: " << enable_stack_trace;
+    LOG(INFO) << "NodeChannel[" << _load_info << "] send diagnose request to [" << _node_info->host << ":"
+              << _node_info->brpc_port << "], rpc_timeout_ms: " << _rpc_timeout_ms
+              << ", enable_profile: " << enable_profile << ", enable_stack_trace: " << enable_stack_trace;
 }
 
 bool NodeChannel::_is_diagnose_done() {
@@ -1134,6 +1144,7 @@ void NodeChannel::_wait_diagnose(RuntimeState* state) {
     if (_diagnose_closure == nullptr) {
         return;
     }
+    DeferOp defer([&]() { _release_diagnose_closure(); });
 #ifndef BE_TEST
     _diagnose_closure->join();
 #else
@@ -1156,8 +1167,8 @@ void NodeChannel::_wait_diagnose(RuntimeState* state) {
             has_stack_trace = true;
         }
     }
-    VLOG(2) << "NodeChannel[" << _load_info << "] diagnose success, node: [" << _node_info->host << ":"
-            << _node_info->brpc_port << "], has_profile: " << has_profile << ", has_stack_trace: " << has_stack_trace;
+    LOG(INFO) << "NodeChannel[" << _load_info << "] diagnose success, node: [" << _node_info->host << ":"
+              << _node_info->brpc_port << "], has_profile: " << has_profile << ", has_stack_trace: " << has_stack_trace;
 }
 
 bool NodeChannel::_process_diagnose_profile(RuntimeState* state, PLoadDiagnoseResult& result) {
@@ -1193,6 +1204,15 @@ bool NodeChannel::_process_diagnose_profile(RuntimeState* state, PLoadDiagnoseRe
         has_profile = true;
     }
     return has_profile;
+}
+
+void NodeChannel::_release_diagnose_closure() {
+    if (_diagnose_closure) {
+        if (_diagnose_closure->unref()) {
+            delete _diagnose_closure;
+        }
+        _diagnose_closure = nullptr;
+    }
 }
 
 IndexChannel::~IndexChannel() {

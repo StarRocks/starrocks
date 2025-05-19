@@ -299,8 +299,8 @@ void LoadChannelMgr::load_diagnose(brpc::Controller* cntl, const PLoadDiagnoseRe
         }
     } else {
         std::string remote_ip = butil::ip2str(cntl->remote_side().ip).c_str();
-        VLOG(2) << "receive load diagnose, load_id: " << load_id << ", txn_id: " << request->txn_id()
-                << ", remote: " << remote_ip;
+        LOG(INFO) << "receive load diagnose, load_id: " << load_id << ", txn_id: " << request->txn_id()
+                  << ", remote: " << remote_ip;
         channel->diagnose(remote_ip, request, response);
     }
 }
