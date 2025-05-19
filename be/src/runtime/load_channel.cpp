@@ -440,8 +440,8 @@ void LoadChannel::diagnose(const std::string& remote_ip, const PLoadDiagnoseRequ
         if (!st.ok()) {
             result->clear_profile_data();
         }
-        VLOG(2) << "load channel diagnose profile, load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id
-                << ", status: " << st;
+        LOG(INFO) << "load channel diagnose profile, load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id
+                  << ", status: " << st;
     }
     if (request->has_stack_trace() && request->stack_trace()) {
         DiagnoseRequest stack_trace_request;
