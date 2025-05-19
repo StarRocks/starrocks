@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# Keywords
+# キーワード
 
 このトピックでは、非予約キーワードと予約キーワードについて説明します。StarRocks の予約キーワードのリストを提供します。
 

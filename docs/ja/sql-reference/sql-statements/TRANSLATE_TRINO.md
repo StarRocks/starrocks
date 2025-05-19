@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'
 
-# Translate Trino SQL
+# トリノ SQL を変換
 
 <Beta />
 

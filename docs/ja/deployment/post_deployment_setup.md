@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# Post-deployment setup
+# デプロイ後のセットアップ
 
 このトピックでは、StarRocks をデプロイした後に実行すべきタスクについて説明します。
 

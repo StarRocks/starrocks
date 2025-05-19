@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# Configure a time zone
+# タイムゾーンの設定
 
 このトピックでは、タイムゾーンの設定方法とその影響について説明します。
 
