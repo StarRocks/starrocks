@@ -146,17 +146,17 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
         *handle = PageHandle(std::move(cache_handle));
         opts.stats->cached_pages_num++;
         // parse body and footer
-        Slice page_slice = handle->data();
-        uint32_t footer_length_offset = page_slice.size - Column::APPEND_OVERFLOW_MAX_SIZE - 4;
-        uint32_t footer_size = decode_fixed32_le((uint8_t*)page_slice.data + footer_length_offset);
+        const auto* page = handle->data();
+        uint32_t footer_length_offset = page->size() - 4;
+        uint32_t footer_size = decode_fixed32_le(page->data() + footer_length_offset);
         uint32_t footer_offset = footer_length_offset - footer_size;
-        std::string_view footer_buf{page_slice.data + footer_offset, footer_size};
+        std::string_view footer_buf{(const char*)page->data() + footer_offset, footer_size};
         if (!footer->ParseFromArray(footer_buf.data(), footer_buf.size())) {
             return Status::Corruption(
                     strings::Substitute("Bad page: invalid footer, read from page cache, file=$0, footer_size=$1",
                                         opts.read_file->filename(), footer_size));
         }
-        *body = Slice(page_slice.data, footer_offset);
+        *body = Slice(page->data(), footer_offset);
         return Status::OK();
     }
 
@@ -170,7 +170,7 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
     // hold compressed page at first, reset to decompressed page later
     // Allocate APPEND_OVERFLOW_MAX_SIZE more bytes to make append_strings_overflow work
     std::unique_ptr<std::vector<uint8_t>> page(new std::vector<uint8_t>());
-    raw::stl_vector_resize_uninitialized(page.get(), page_size + Column::APPEND_OVERFLOW_MAX_SIZE);
+    raw::stl_vector_resize_uninitialized(page.get(), page_size + Column::APPEND_OVERFLOW_MAX_SIZE, page_size);
     Slice page_slice(page->data(), page_size);
     {
         SCOPED_RAW_TIMER(&opts.stats->io_ns);
@@ -212,8 +212,10 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
         SCOPED_RAW_TIMER(&opts.stats->decompress_ns);
         // Allocate APPEND_OVERFLOW_MAX_SIZE more bytes to make append_strings_overflow work
         std::unique_ptr<std::vector<uint8_t>> decompressed_page(new std::vector<uint8_t>());
-        raw::stl_vector_resize_uninitialized(decompressed_page.get(), footer->uncompressed_size() + footer_size + 4 +
-                                                                              Column::APPEND_OVERFLOW_MAX_SIZE);
+        uint32_t decompressed_page_size = footer->uncompressed_size() + footer_size + 4;
+        raw::stl_vector_resize_uninitialized(decompressed_page.get(),
+                                             decompressed_page_size + Column::APPEND_OVERFLOW_MAX_SIZE,
+                                             decompressed_page_size);
 
         // decompress page body
         Slice compressed_body(page_slice.data, body_size);
@@ -228,7 +230,7 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
         memcpy(decompressed_body.data + decompressed_body.size, page_slice.data + body_size, footer_size + 4);
         // free memory of compressed page
         page = std::move(decompressed_page);
-        page_slice = Slice(page->data(), footer->uncompressed_size() + footer_size + 4);
+        page_slice = Slice(page->data(), decompressed_page_size);
         opts.stats->uncompressed_bytes_read += page_slice.size;
     } else {
         opts.stats->uncompressed_bytes_read += page_size;
@@ -240,9 +242,9 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
     if (opts.use_page_cache) {
         // insert this page into cache and return the cache handle
         Status st = cache->insert(cache_key, page.get(), &cache_handle, opts.kept_in_memory);
-        *handle = st.ok() ? PageHandle(std::move(cache_handle)) : PageHandle(page_slice);
+        *handle = st.ok() ? PageHandle(std::move(cache_handle)) : PageHandle(page.get());
     } else {
-        *handle = PageHandle(page_slice);
+        *handle = PageHandle(page.get());
     }
     page.release(); // memory now managed by handle
     return Status::OK();
