@@ -78,6 +78,7 @@ arrow::Result<std::unique_ptr<arrow::flight::FlightDataStream>> ArrowFlightSqlSe
 
     const std::string query_id = pair.first;
     const std::string result_fragment_id = pair.second;
+    LOG(INFO) << "[Flight] DoGetStatement(), query_id = " << query_id << ", result_id = " << result_fragment_id;
     TUniqueId queryid;
     if (!parse_id(query_id, &queryid)) {
         return arrow::Status::Invalid("Invalid query ID format:", query_id);

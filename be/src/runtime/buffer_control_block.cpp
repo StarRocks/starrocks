@@ -141,6 +141,10 @@ Status BufferControlBlock::add_batch(TFetchDataResult* result, bool need_free) {
 }
 
 Status BufferControlBlock::add_arrow_batch(std::shared_ptr<arrow::RecordBatch>& result) {
+    LOG(INFO) << "[Flight] BufferControlBlock::add_arrow_batch() called, this = " << this
+              << ", rows = " << result->num_rows()
+              << ", _arrow_batch_queue.size = " << _arrow_batch_queue.size()
+              << ", _arrow_rows = " << _arrow_rows;
     if (_is_cancelled) {
         return Status::Cancelled("Cancelled BufferControlBlock::add_arrow_batch");
     }
@@ -231,6 +235,12 @@ bool BufferControlBlock::is_full() const {
         return true;
     }
     if ((_arrow_batch_queue.size() > _buffer_limit || _arrow_rows > _arrow_rows_limit) && !_is_cancelled) {
+        LOG(INFO) << "[Flight] BufferControlBlock::is_full() = true, arrow_batch_queue.size = "
+                  << _arrow_batch_queue.size()
+                  << ", _buffer_limit = " << _buffer_limit
+                  << ", _arrow_rows = " << _arrow_rows
+                  << ", _arrow_rows_limit = " << _arrow_rows_limit
+                  << ", this = " << this;
         return true;
     }
     if (_is_cancelled) {
@@ -328,6 +338,11 @@ void BufferControlBlock::get_batch(GetResultBatchCtx* ctx) {
 }
 
 Status BufferControlBlock::get_arrow_batch(std::shared_ptr<arrow::RecordBatch>* result) {
+    auto notify = defer_notify();
+    LOG(INFO) << "[Flight] BufferControlBlock::get_arrow_batch(), this = " << this
+              << ", is_close = " << _is_close
+              << ", is_cancelled = " << _is_cancelled
+              << ", queue size = " << _arrow_batch_queue.size();
     std::unique_lock<std::mutex> l(_lock);
     if (!_status.ok()) {
         return _status;
@@ -338,6 +353,8 @@ Status BufferControlBlock::get_arrow_batch(std::shared_ptr<arrow::RecordBatch>* 
     }
 
     while (_arrow_batch_queue.empty() && !_is_close && !_is_cancelled) {
+        LOG(INFO) << "[Flight] BufferControlBlock::get_arrow_batch(), waiting, is_close = " << _is_close
+                  << ", is_cancelled = " << _is_cancelled << ", queue size = " << _arrow_batch_queue.size();
         _data_arriaval.wait(l);
     }
 
@@ -351,10 +368,22 @@ Status BufferControlBlock::get_arrow_batch(std::shared_ptr<arrow::RecordBatch>* 
         _arrow_batch_queue.pop_front();
         _arrow_rows -= batch->num_rows();
         _data_removal.notify_one();
+        LOG(INFO) << "[Flight] BufferControlBlock::get_arrow_batch() return batch, rows = " << batch->num_rows()
+                  << ", _arrow_batch_queue.size = " << _arrow_batch_queue.size()
+                  << ", _arrow_rows = " << _arrow_rows
+                  << ", this = " << this;
         return Status::OK();
     }
 
+    if (*result) {
+        LOG(INFO) << "[Flight] BufferControlBlock::get_arrow_batch(), got batch rows = " << (*result)->num_rows();
+    } else {
+        LOG(INFO) << "[Flight] BufferControlBlock::get_arrow_batch(), got nullptr, stream end";
+    }
+
     if (_is_close) {
+        LOG(INFO) << "[Flight] BufferControlBlock::get_arrow_batch() return nullptr, because is_close = true, this = " << this;
+        *result = nullptr;
         return Status::OK();
     }
 
