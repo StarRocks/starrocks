@@ -35,6 +35,7 @@
 package com.starrocks.http;
 
 import com.starrocks.rpc.ConfigurableSerDesFactory;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TQueryPlanInfo;
 import okhttp3.Request;
 import okhttp3.RequestBody;
@@ -52,6 +53,7 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
 
     private static final String PATH_URI = "/_query_plan";
     protected static String ES_TABLE_URL;
+    protected static String WAREHOUSE_KEY = "warehouse";
 
     @Override
     protected void doSetUp() throws Exception {
@@ -66,6 +68,7 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
         Request request = new Request.Builder()
                 .post(body)
                 .addHeader("Authorization", rootAuth)
+                .addHeader(WAREHOUSE_KEY,  WarehouseManager.DEFAULT_WAREHOUSE_NAME)
                 .url(URI + PATH_URI)
                 .build();
         try (Response response = networkClient.newCall(request).execute()) {
@@ -180,6 +183,28 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
         try (Response response = networkClient.newCall(request).execute()) {
             String respStr = Objects.requireNonNull(response.body()).string();
             Assert.assertEquals("{\"partitions\":{},\"opaqued_query_plan\":\"\",\"status\":200}", respStr);
+        }
+    }
+
+    @Test
+    public void testInvalidWarehouseFailure() throws IOException {
+        RequestBody body =
+                RequestBody.create(JSON, "{ \"sql\" :  \" select k1 as alias_1,k2 from " + DB_NAME + "." + TABLE_NAME + " \" }");
+        Request request = new Request.Builder()
+                .post(body)
+                .addHeader("Authorization", rootAuth)
+                .addHeader(WAREHOUSE_KEY,  "non_existed_warehouse")
+                .url(URI + PATH_URI)
+                .build();
+        try (Response response = networkClient.newCall(request).execute()) {
+            String respStr = Objects.requireNonNull(response.body()).string();
+            Assert.assertNotNull(respStr);
+            expectThrowsNoException(() -> new JSONObject(respStr));
+            JSONObject jsonObject = new JSONObject(respStr);
+            Assert.assertEquals(400, jsonObject.getInt("status"));
+            String exception = jsonObject.getString("exception");
+            Assert.assertNotNull(exception);
+            Assert.assertEquals("The warehouse parameter [non_existed_warehouse] is invalid", exception);
         }
     }
 }
