@@ -24,8 +24,7 @@ ArrowFlightBatchReader::ArrowFlightBatchReader(const TUniqueId& query_id) : _que
 }
 
 arrow::Status ArrowFlightBatchReader::ReadNext(std::shared_ptr<arrow::RecordBatch>* out) {
-    LOG(INFO) << "[Flight] ArrowFlightBatchReader::ReadNext(), query ID = "
-              << print_id(_query_id);
+    LOG(INFO) << "[Flight] ArrowFlightBatchReader::ReadNext(), query ID = " << print_id(_query_id);
     if (!_schema) {
         return arrow::Status::IOError("Failed to fetch schema for query ID ", print_id(_query_id));
     }
