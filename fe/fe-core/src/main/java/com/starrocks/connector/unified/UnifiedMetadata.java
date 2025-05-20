@@ -168,6 +168,12 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<String> partitionNames) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        return metadata.getRemoteFileInfos(table, partitionNames);
+    }
+
+    @Override
     public SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName,
                                              long snapshotId, String serializedPredicate) {
         ConnectorMetadata metadata = metadataOfTable(dbName, tableName);
