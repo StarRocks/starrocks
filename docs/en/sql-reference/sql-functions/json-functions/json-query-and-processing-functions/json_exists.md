@@ -4,9 +4,18 @@ displayed_sidebar: docs
 
 # json_exists
 
+<<<<<<< HEAD
 ## Description
 
+=======
+>>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
 Checks whether a JSON object contains an element that can be located by the `json_path` expression. If the element exists, the JSON_EXISTS function returns `1`. Otherwise, the JSON_EXISTS function returns `0`.
+
+:::tip
+All of the JSON functions and operators are listed in the navigation and on the [overview page](../overview-of-json-functions-and-operators.md)
+
+Accelerate your queries with [generated columns](../../../sql-statements/generated_columns.md)
+:::
 
 ## Syntax
 

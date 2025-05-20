@@ -4,9 +4,18 @@ displayed_sidebar: docs
 
 # Arrow function
 
+<<<<<<< HEAD
 ## Description
 
+=======
+>>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
 Queries an element that can be located by the `json_path` expression in a JSON object and returns a JSON value. The arrow function `->` is more compact and easier to use than the [json_query](json_query.md) function.
+
+:::tip
+All of the JSON functions and operators are listed in the navigation and on the [overview page](../overview-of-json-functions-and-operators.md)
+
+Accelerate your queries with [generated columns](../../../sql-statements/generated_columns.md)
+:::
 
 ## Syntax
 

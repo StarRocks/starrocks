@@ -8,6 +8,15 @@ displayed_sidebar: docs
 
 値を JSON 型と SQL 型の間で変換します。
 
+<<<<<<< HEAD
+=======
+:::tip
+すべての JSON 関数と演算子はナビゲーションと [overview page](../overview-of-json-functions-and-operators.md) に一覧されています。
+
+クエリを [生成列](../../../sql-statements/generated_columns.md) で高速化しましょう。
+:::
+
+>>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
 ## Syntax
 
 - JSON から SQL への変換

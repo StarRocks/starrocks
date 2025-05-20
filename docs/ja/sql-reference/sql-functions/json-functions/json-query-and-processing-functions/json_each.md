@@ -4,9 +4,19 @@ displayed_sidebar: docs
 
 # json_each
 
+<<<<<<< HEAD
 ## 説明
 
 JSON オブジェクトの最外層の要素をキーと値のペアに展開し、各要素に対して1行のテーブルを返します。
+=======
+JSON オブジェクトの最外層の要素をキーと値のペアに展開し、各要素ごとに1行のテーブルを返します。
+
+:::tip
+すべての JSON 関数と演算子はナビゲーションと [overview page](../overview-of-json-functions-and-operators.md) に一覧されています。
+
+クエリを [生成列](../../../sql-statements/generated_columns.md) で高速化しましょう。
+:::
+>>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
 
 ## 構文
 
@@ -24,7 +34,11 @@ json_each(json_object_expr)
 
 ## 使用上の注意
 
+<<<<<<< HEAD
 json_each 関数はテーブル関数であり、テーブルを返します。返されるテーブルは複数の行からなる結果セットです。したがって、元のテーブルに返されたテーブルをジョインするためには、FROM 句で lateral join を使用する必要があります。lateral join は必須ですが、LATERAL キーワードはオプションです。json_each 関数は SELECT 句で使用することはできません。
+=======
+json_each 関数はテーブル関数であり、テーブルを返します。返されるテーブルは複数行からなる結果セットです。そのため、元のテーブルに返されたテーブルを結合するために lateral join を FROM 句で使用する必要があります。lateral join は必須ですが、LATERAL キーワードはオプションです。json_each 関数は SELECT 句で使用することはできません。
+>>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
 
 ## 例
 
@@ -38,7 +52,11 @@ mysql> SELECT * FROM tj;
 |    3 | {"a": 3}         |
 +------+------------------+
 
+<<<<<<< HEAD
 -- tj テーブルの j カラムをキーと値で2つのカラムに展開し、複数の行からなる結果セットを取得します。この例では、LATERAL キーワードを使用して結果セットを tj テーブルにジョインしています。
+=======
+-- tj テーブルの j カラムをキーと値で2つのカラムに展開し、複数行からなる結果セットを取得します。この例では、LATERAL キーワードを使用して結果セットを tj テーブルに結合しています。
+>>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
 
 mysql> SELECT * FROM tj, LATERAL json_each(j);
 +------+------------------+------+-------+

@@ -4,9 +4,18 @@ displayed_sidebar: docs
 
 # json_length
 
+<<<<<<< HEAD
 ## Description
 
+=======
+>>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
  Returns the length of a JSON document. If a path is specified, this function returns the length of the value identified by the path.
+
+:::tip
+All of the JSON functions and operators are listed in the navigation and on the [overview page](../overview-of-json-functions-and-operators.md)
+
+Accelerate your queries with [generated columns](../../../sql-statements/generated_columns.md)
+:::
 
 The length of a document is determined according to the following rules:
 

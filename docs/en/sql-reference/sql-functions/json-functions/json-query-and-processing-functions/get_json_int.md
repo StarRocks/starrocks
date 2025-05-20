@@ -4,9 +4,18 @@ displayed_sidebar: docs
 
 # get_json_int
 
+<<<<<<< HEAD
 ## Description
 
+=======
+>>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
 This function analyzes and gets the integer value from a specified path in json string.
+
+:::tip
+All of the JSON functions and operators are listed in the navigation and on the [overview page](../overview-of-json-functions-and-operators.md)
+
+Accelerate your queries with [generated columns](../../../sql-statements/generated_columns.md)
+:::
 
 json_path must start with `$` and use `.` as the path separator.
 

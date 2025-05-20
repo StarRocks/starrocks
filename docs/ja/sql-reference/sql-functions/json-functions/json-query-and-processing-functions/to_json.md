@@ -4,7 +4,17 @@ displayed_sidebar: docs
 
 # to_json
 
+<<<<<<< HEAD
 ## 説明
+=======
+Map または Struct の値を JSON 文字列に変換します。入力値が NULL の場合、NULL が返されます。
+
+:::tip
+すべての JSON 関数と演算子はナビゲーションと [overview page](../overview-of-json-functions-and-operators.md) に一覧されています。
+
+クエリを [生成列](../../../sql-statements/generated_columns.md) で高速化しましょう。
+:::
+>>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
 
 Map または Struct の値を JSON 文字列に変換します。入力値が NULL の場合、NULL が返されます。
 
@@ -20,7 +30,11 @@ to_json(any_value)
 
 ## パラメータ
 
+<<<<<<< HEAD
 `any_value`: 変換したい Map または Struct の式です。入力値が無効な場合、エラーが返されます。Map または Struct の各キーと値のペアの値は nullable です。最後の例を参照してください。
+=======
+`any_value`: 変換したい Map または Struct 式。入力値が無効な場合、エラーが返されます。Map または Struct 値の各キーと値のペアの値は nullable です。最後の例を参照してください。
+>>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
 
 ## 戻り値
 

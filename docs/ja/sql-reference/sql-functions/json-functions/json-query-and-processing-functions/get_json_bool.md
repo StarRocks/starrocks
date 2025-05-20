@@ -4,11 +4,21 @@ displayed_sidebar: docs
 
 # get_json_bool
 
+<<<<<<< HEAD
 ## 説明
 
 指定された JSON パスからブール値を解析して取得します。
+=======
+指定された JSON パスから JSON 文字列内のブール値を解析して取得します。
+>>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
 
-`json_str` または `json_path` の形式が無効である場合、または一致する内容が見つからない場合、この関数は NULL を返します。
+:::tip
+すべての JSON 関数と Operator はナビゲーションと [overview page](../overview-of-json-functions-and-operators.md) に一覧されています。
+
+クエリを [生成列](../../../sql-statements/generated_columns.md) で高速化しましょう。
+:::
+
+`json_str` または `json_path` の形式が無効である場合、または一致するコンテンツが見つからない場合、この関数は NULL を返します。
 
 この関数は v3.3 からサポートされています。
 
@@ -23,7 +33,11 @@ BOOLEAN get_json_bool(VARCHAR json_str, VARCHAR json_path)
 - `json_str`: JSON 文字列。サポートされているデータ型は VARCHAR です。
 - `json_path`: JSON パス。サポートされているデータ型は VARCHAR です。
    
+<<<<<<< HEAD
   - `json_path` は `$` で始まり、パス区切りとして `.` を使用する必要があります。パスに `.` が含まれる場合は、`"` で囲むことができます。
+=======
+  - `json_path` は `$` で始まり、`.` をパスの区切り文字として使用する必要があります。パスに `.` が含まれる場合は、`"` で囲むことができます。
+>>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
   - `[ ]` は配列の添字として使用され、0 から始まります。
 
 ## 例

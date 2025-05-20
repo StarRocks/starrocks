@@ -4,9 +4,18 @@ displayed_sidebar: docs
 
 # json_keys
 
+<<<<<<< HEAD
 ## Description
 
+=======
+>>>>>>> 6cd234eef0 ([Doc] add link to overview (#58805))
 Returns the top-level keys from a JSON object as a JSON array, or, if a `path` is specified, the top-level keys from the path.
+
+:::tip
+All of the JSON functions and operators are listed in the navigation and on the [overview page](../overview-of-json-functions-and-operators.md)
+
+Accelerate your queries with [generated columns](../../../sql-statements/generated_columns.md)
+:::
 
 ## Syntax
 
