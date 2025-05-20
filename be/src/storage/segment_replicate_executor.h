@@ -116,6 +116,8 @@ public:
 
     const std::vector<int64_t> replica_node_ids() const { return _replica_node_ids; }
 
+    const std::set<int64_t> failed_node_ids() const { return _failed_node_id; }
+
     const SegmentReplicateStat& get_stat() const { return _stat; }
 
 private:
