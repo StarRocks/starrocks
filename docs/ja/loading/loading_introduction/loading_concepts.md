@@ -3,7 +3,7 @@ displayed_sidebar: docs
 toc_max_heading_level: 4
 ---
 
-# Loading concepts
+# データロードに関する概念
 
 import InsertPrivNote from '../../_assets/commonMarkdown/insertPrivNote.md'
 

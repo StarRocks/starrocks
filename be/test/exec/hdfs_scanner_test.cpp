@@ -20,6 +20,7 @@
 
 #include "cache/block_cache/block_cache.h"
 #include "cache/block_cache/test_cache_utils.h"
+#include "cache/datacache.h"
 #include "cache/starcache_wrapper.h"
 #include "column/column_helper.h"
 #include "exec/hdfs_scanner_orc.h"
@@ -2044,7 +2045,7 @@ TEST_F(HdfsScannerTest, TestCSVWithoutEndDelemeter) {
 #if defined(WITH_STARCACHE)
         auto cache_options = TestCacheUtils::create_simple_options(config::datacache_block_size, 50 * MB);
         auto block_cache = TestCacheUtils::create_cache(cache_options);
-        CacheEnv::GetInstance()->set_block_cache(block_cache);
+        DataCache::GetInstance()->set_block_cache(block_cache);
 #endif
         build_hive_column_names(param, tuple_desc, true);
         auto scanner = std::make_shared<HdfsTextScanner>();

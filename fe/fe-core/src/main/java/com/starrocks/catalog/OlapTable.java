@@ -3523,6 +3523,12 @@ public class OlapTable extends Table {
         if (!Strings.isNullOrEmpty(timeDriftConstraintSpec)) {
             properties.put(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT, timeDriftConstraintSpec);
         }
+
+        // partition_retention_condition
+        String partitionRetentionCondition = tableProperties.get(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION);
+        if (!Strings.isNullOrEmpty(partitionRetentionCondition)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, partitionRetentionCondition);
+        }
         return properties;
     }
 
@@ -3596,12 +3602,6 @@ public class OlapTable extends Table {
         String flatJsonColumnMax = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX);
         if (!Strings.isNullOrEmpty(flatJsonColumnMax)) {
             properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, flatJsonColumnMax);
-        }
-
-        // partition_retention_condition
-        String partitionRetentionCondition = tableProperties.get(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION);
-        if (!Strings.isNullOrEmpty(partitionRetentionCondition)) {
-            properties.put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, partitionRetentionCondition);
         }
 
         return properties;
