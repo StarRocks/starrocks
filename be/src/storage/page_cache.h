@@ -146,7 +146,9 @@ public:
     }
 
     ObjectCache* cache() const { return _cache; }
-    Slice data() const { return _cache->value_slice(_handle); }
+    const std::vector<uint8_t>* data() const {
+        return reinterpret_cast<const std::vector<uint8_t>*>(_cache->value(_handle));
+    }
 
 private:
     ObjectCache* _cache = nullptr;

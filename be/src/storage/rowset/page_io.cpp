@@ -147,14 +147,16 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
         opts.stats->cached_pages_num++;
         // parse body and footer
         Slice page_slice = handle->data();
-        uint32_t footer_size = decode_fixed32_le((uint8_t*)page_slice.data + page_slice.size - 4);
-        std::string_view footer_buf{page_slice.data + page_slice.size - 4 - footer_size, footer_size};
+        uint32_t footer_length_offset = page_slice.size - Column::APPEND_OVERFLOW_MAX_SIZE - 4;
+        uint32_t footer_size = decode_fixed32_le((uint8_t*)page_slice.data + footer_length_offset);
+        uint32_t footer_offset = footer_length_offset - footer_size;
+        std::string_view footer_buf{page_slice.data + footer_offset, footer_size};
         if (!footer->ParseFromArray(footer_buf.data(), footer_buf.size())) {
             return Status::Corruption(
                     strings::Substitute("Bad page: invalid footer, read from page cache, file=$0, footer_size=$1",
                                         opts.read_file->filename(), footer_size));
         }
-        *body = Slice(page_slice.data, page_slice.size - 4 - footer_size);
+        *body = Slice(page_slice.data, footer_offset);
         return Status::OK();
     }
 
@@ -237,7 +239,7 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
     *body = Slice(page_slice.data, page_slice.size - 4 - footer_size);
     if (opts.use_page_cache) {
         // insert this page into cache and return the cache handle
-        Status st = cache->insert(cache_key, page_slice, &cache_handle, opts.kept_in_memory);
+        Status st = cache->insert(cache_key, page.get(), &cache_handle, opts.kept_in_memory);
         *handle = st.ok() ? PageHandle(std::move(cache_handle)) : PageHandle(page_slice);
     } else {
         *handle = PageHandle(page_slice);

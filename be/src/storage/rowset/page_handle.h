@@ -54,7 +54,7 @@ public:
     explicit PageHandle(const Slice& data) : _is_data_owner(true), _data(data) {}
 
     // This class will take the content of cache data, and will make input
-    // cache_data to a invalid cache handle.
+    // cache_data to an invalid cache handle.
     explicit PageHandle(PageCacheHandle&& cache_data)
             : _data(static_cast<uint8_t*>(nullptr), 0), _cache_data(std::move(cache_data)) {}
 
@@ -91,8 +91,7 @@ public:
         if (_is_data_owner) {
             return _data;
         }
-        Slice* item = (Slice*)_cache_data.data().data;
-        return Slice{item->data, item->size};
+        return Slice{_cache_data.data()->data(), _cache_data.data()->size()};
     }
 
     int64_t mem_usage() const {
