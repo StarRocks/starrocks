@@ -1839,7 +1839,7 @@ public class Config extends ConfigBase {
      * Whether CauthzAuthorizer for access control should fail open
      */
     @ConfField(mutable = true)
-    public static String cauthz_fail_open = false;
+    public static boolean cauthz_fail_open = false;
 
     /**
      * The authentication_chain configuration specifies the sequence of security integrations
