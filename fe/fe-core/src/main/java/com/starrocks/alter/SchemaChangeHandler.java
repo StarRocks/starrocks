@@ -2128,6 +2128,7 @@ public class SchemaChangeHandler extends AlterHandler {
         return alterMetaJob;
     }
 
+    // used for alter persistent index only by now
     public ShowResultSet processLakeTableAlterMeta(AlterClause alterClause, Database db, OlapTable olapTable)
             throws StarRocksException {
         AlterJobV2 alterMetaJob = createAlterMetaJob(alterClause, db, olapTable);
