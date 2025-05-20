@@ -124,5 +124,20 @@ TEST(DictEncodingReadTest, BasicTest) {
         EXPECT_EQ(dst->debug_item(2), "NULL");
         EXPECT_EQ(dst->size(), chunk_size);
     }
+    {
+        // all null
+        for (size_t i = 0; i < chunk_size; ++i) {
+            infos.nulls_data()[i] = 1;
+        }
+        infos.num_nulls = chunk_size;
+        TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
+        auto dst = ColumnHelper::create_column(type_desc, true);
+        auto filter = std::make_unique<uint8_t[]>(chunk_size);
+        ASSERT_OK(decoder.next_batch_with_nulls(chunk_size, infos, ColumnContentType::VALUE, dst.get(), filter.get()));
+        EXPECT_EQ(dst->debug_item(0), "NULL");
+        EXPECT_EQ(dst->debug_item(1), "NULL");
+        EXPECT_EQ(dst->debug_item(2), "NULL");
+        EXPECT_EQ(dst->size(), chunk_size);
+    }
 }
 } // namespace starrocks::parquet

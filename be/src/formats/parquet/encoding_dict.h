@@ -254,6 +254,11 @@ public:
         auto nullable_column = down_cast<NullableColumn*>(dst);
 
         size_t read_count = count - null_cnt;
+        Int32Column* data_column = down_cast<Int32Column*>(nullable_column->data_column().get());
+        // resize data
+        data_column->resize_uninitialized(cur_size + count);
+        int32_t* __restrict__ data = data_column->get_data().data() + cur_size;
+
         uint32_t read_dict_data[read_count + 1];
         if (read_count == 0) {
             return Status::OK();
@@ -263,9 +268,6 @@ public:
             return Status::InternalError("didn't get enough data from dict-decoder");
         }
 
-        Int32Column* data_column = down_cast<Int32Column*>(nullable_column->data_column().get());
-        data_column->resize_uninitialized(cur_size + count);
-        int32_t* __restrict__ data = data_column->get_data().data() + cur_size;
         assign_data_with_nulls(count, read_count, null_infos.nulls_data(), (int32_t*)read_dict_data, data);
 
         return Status::OK();
@@ -279,16 +281,15 @@ public:
         size_t null_cnt = null_infos.num_nulls;
         auto nullable_column = down_cast<NullableColumn*>(dst);
         FixedLengthColumn<T>* data_column = down_cast<FixedLengthColumn<T>*>(nullable_column->data_column().get());
+        // resize data
+        data_column->resize_uninitialized(cur_size + count);
+        T* __restrict__ data = data_column->get_data().data() + cur_size;
 
         size_t read_count = count - null_cnt;
 
         if (read_count == 0) {
             return Status::OK();
         }
-
-        // resize data
-        data_column->resize_uninitialized(cur_size + count);
-        T* __restrict__ data = data_column->get_data().data() + cur_size;
 
         if (filter) {
             _indexes.reserve(read_count);
