@@ -478,7 +478,8 @@ public class CompactionSchedulerTest {
 
         new MockUp<CompactionScheduler>() {
             @Mock
-            protected CompactionJob startCompaction(PartitionStatisticsSnapshot partitionStatisticsSnapshot) {
+            protected CompactionJob startCompaction(PartitionStatisticsSnapshot partitionStatisticsSnapshot,
+                                                    long warehouseId) {
                 Database db = new Database();
                 Table table = new LakeTable();
                 long partitionId = partitionStatisticsSnapshot.getPartition().getPartitionId();

@@ -19,7 +19,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.proto.CompactStat;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.VisibleStateWaiter;
 import org.apache.logging.log4j.LogManager;
@@ -49,8 +49,7 @@ public class CompactionJob {
     // For test only
     public CompactionJob(Database db, Table table, PhysicalPartition partition, long txnId,
             boolean allowPartialSuccess) {
-        this(db, table, partition, txnId, allowPartialSuccess,
-                GlobalStateMgr.getCurrentState().getWarehouseMgr().getCompactionWarehouseID());
+        this(db, table, partition, txnId, allowPartialSuccess, WarehouseManager.DEFAULT_WAREHOUSE_ID);
     }
 
     public CompactionJob(Database db, Table table, PhysicalPartition partition, long txnId,
