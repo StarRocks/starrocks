@@ -97,14 +97,18 @@ protected:
         location.tablets.resize(1);
         location.tablets[0].tablet_id = 0;
         location.tablets[0].node_ids.push_back(0);
+        location.tablets[0].node_ids.push_back(1);
+        location.tablets[0].node_ids.push_back(2);
 
         TNodesInfo& nodes_info = table_sink.nodes_info;
         nodes_info.version = 0;
-        nodes_info.nodes.resize(1);
-        nodes_info.nodes[0].id = 0;
-        nodes_info.nodes[0].option = 0;
-        nodes_info.nodes[0].host = "10.128.8.78";
-        nodes_info.nodes[0].async_internal_port = 8060;
+        nodes_info.nodes.resize(3);
+        for (int i = 0; i < 3; i++) {
+            nodes_info.nodes[i].id = i;
+            nodes_info.nodes[i].option = 0;
+            nodes_info.nodes[i].host = fmt::format("10.128.8.{}", i);
+            nodes_info.nodes[i].async_internal_port = 8060;
+        }
 
         TDataSink data_sink;
         data_sink.__set_olap_table_sink(table_sink);
@@ -210,6 +214,72 @@ TEST_F(TabletSinkIndexChannelTest, pipeline_load_channel_profile) {
     expect_config.set_big_query_profile_threshold_ns(10 * 1e9);
     expect_config.set_runtime_profile_report_interval_ns(5 * 1e9);
     test_load_channel_profile_base(runtime_state.get(), expect_config);
+}
+
+using RpcOpenPair = std::pair<PTabletWriterOpenRequest*, RefCountClosure<PTabletWriterOpenResult>*>;
+using RpcAddChunkTuple =
+        std::tuple<int64_t, PTabletWriterAddChunksRequest*, ReusableClosure<PTabletWriterAddBatchResult>*>;
+
+TEST_F(TabletSinkIndexChannelTest, primary_replica_node_not_connected) {
+    TQueryOptions query_options;
+    query_options.__set_batch_size(4096);
+    query_options.__set_query_timeout(3600);
+    auto runtime_state = _build_runtime_state(query_options);
+    DescriptorTbl* desc_tbl = nullptr;
+    ASSERT_OK(DescriptorTbl::create(runtime_state.get(), _object_pool.get(), _desc_tbl, &desc_tbl,
+                                    config::vector_chunk_size));
+    runtime_state->set_desc_tbl(desc_tbl);
+    auto sink = std::make_unique<OlapTableSink>(_object_pool.get(), std::vector<TExpr>(), nullptr, runtime_state.get());
+    ASSERT_OK(sink->init(_data_sink, runtime_state.get()));
+    ASSERT_OK(sink->prepare(runtime_state.get()));
+
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::open_send");
+        SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::open_join");
+        SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::add_chunk_send");
+        SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::add_chunk_join");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::open_send", [&](void* arg) {
+        RpcOpenPair* rpc_pair = (RpcOpenPair*)arg;
+        RefCountClosure<PTabletWriterOpenResult>* closure = rpc_pair->second;
+        closure->result.mutable_status()->set_status_code(TStatusCode::OK);
+        closure->Run();
+    });
+    SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::open_join", [&](void* arg) {
+        RefCountClosure<PTabletWriterOpenResult>* closure = (RefCountClosure<PTabletWriterOpenResult>*)arg;
+        EXPECT_FALSE(closure->cntl.Failed());
+        EXPECT_EQ(TStatusCode::OK, closure->result.status().status_code());
+    });
+    SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::add_chunk_send", [&](void* arg) {
+        RpcAddChunkTuple* rpc_tuple = (RpcAddChunkTuple*)arg;
+        // simulate the case where secondary replicas are waiting for the primary replica,
+        // so will not reponse to the cooridnator be
+        if (std::get<0>(*rpc_tuple) != 0) {
+            return;
+        }
+        ReusableClosure<PTabletWriterAddBatchResult>* closure = std::get<2>(*rpc_tuple);
+        closure->cntl.SetFailed("[R1][E112]Not connected to [10.128.8.0:8060]");
+        closure->Run();
+    });
+    SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::add_chunk_join", [&](void* arg) {
+        std::pair<ReusableClosure<PTabletWriterAddBatchResult>*, bool*>* rpc_pair =
+                (std::pair<ReusableClosure<PTabletWriterAddBatchResult>*, bool*>*)arg;
+        ReusableClosure<PTabletWriterAddBatchResult>* closure = rpc_pair->first;
+        EXPECT_TRUE(closure->cntl.Failed());
+        *rpc_pair->second = true;
+    });
+
+    ASSERT_OK(sink->open(runtime_state.get()));
+    auto tuple_desc = runtime_state->desc_tbl().get_tuple_descriptor(_desc_tbl.tupleDescriptors[0].id);
+    ChunkUniquePtr chunk = ChunkHelper::new_chunk(*tuple_desc, 1);
+    chunk->get_column_by_index(0)->append_datum(Datum(1));
+    ASSERT_OK(sink->send_chunk(runtime_state.get(), chunk.get()));
+    Status status = sink->close(runtime_state.get(), Status::OK());
+    ASSERT_FALSE(status.ok());
+    ASSERT_TRUE(status.message().find("[R1][E112]Not connected to [10.128.8.0:8060]") != std::string::npos);
 }
 
 } // namespace starrocks
