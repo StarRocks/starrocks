@@ -28,6 +28,7 @@
 #include "serde/protobuf_serde.h"
 #include "util/brpc_stub_cache.h"
 #include "util/compression/compression_utils.h"
+#include "util/failpoint/fail_point.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/thrift_util.h"
 
@@ -236,7 +237,13 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
         res.value()->tablet_writer_open(&open_closure->cntl, &request, &open_closure->result, open_closure);
         VLOG(2) << "NodeChannel::_open() issue a http rpc, request size = " << request.ByteSizeLong();
     } else {
+#ifndef BE_TEST
         _stub->tablet_writer_open(&open_closure->cntl, &request, &open_closure->result, open_closure);
+#else
+        std::pair<PTabletWriterOpenRequest*, RefCountClosure<PTabletWriterOpenResult>*> rpc_pair{&request,
+                                                                                                 open_closure};
+        TEST_SYNC_POINT_CALLBACK("NodeChannel::rpc::open_send", &rpc_pair);
+#endif
     }
     request.release_id();
     request.release_schema();
@@ -288,7 +295,11 @@ Status NodeChannel::_open_wait(RefCountClosure<PTabletWriterOpenResult>* open_cl
     if (open_closure == nullptr) {
         return _err_st;
     }
+#ifndef BE_TEST
     open_closure->join();
+#else
+    TEST_SYNC_POINT_CALLBACK("NodeChannel::rpc::open_join", open_closure);
+#endif
     if (open_closure->cntl.Failed()) {
         _cancelled = true;
         _err_st = Status::InternalError(open_closure->cntl.ErrorText());
@@ -723,9 +734,15 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
             VLOG(2) << "NodeChannel::_send_request() issue a http rpc, request size = "
                     << closure->cntl.request_attachment().size();
         } else {
+#ifndef BE_TEST
             _stub->tablet_writer_add_chunk(
                     &_add_batch_closures[_current_request_index]->cntl, request.mutable_requests(0),
                     &_add_batch_closures[_current_request_index]->result, _add_batch_closures[_current_request_index]);
+#else
+            std::tuple<int64_t, PTabletWriterAddChunksRequest*, ReusableClosure<PTabletWriterAddBatchResult>*>
+                    rpc_tuple{_node_id, &request, _add_batch_closures[_current_request_index]};
+            TEST_SYNC_POINT_CALLBACK("NodeChannel::rpc::add_chunk_send", &rpc_tuple);
+#endif
         }
     }
     _next_packet_seq++;
@@ -737,9 +754,18 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
 }
 
 Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* closure) {
+#ifndef BE_TEST
     if (!closure->join()) {
         return Status::OK();
     }
+#else
+    bool result;
+    std::pair<ReusableClosure<PTabletWriterAddBatchResult>*, bool*> rpc_pair{closure, &result};
+    TEST_SYNC_POINT_CALLBACK("NodeChannel::rpc::add_chunk_join", &rpc_pair);
+    if (!result) {
+        return Status::OK();
+    }
+#endif
     _mem_tracker->release(closure->request_size);
 
     _ts_profile->client_rpc_timer->update(closure->latency());
@@ -922,20 +948,31 @@ Status NodeChannel::_wait_one_prev_request() {
 }
 
 Status NodeChannel::try_close() {
-    if (_cancelled || _closed) {
+    if (_cancelled) {
         return _err_st;
     }
 
-    if (_check_prev_request_done()) {
-        auto st = _send_request(true /* eos */, false /* finished */);
-        if (!st.ok()) {
-            _cancelled = true;
-            _err_st = st;
-            return _err_st;
+    if (!_closed) {
+        if (_check_prev_request_done()) {
+            auto st = _send_request(true /* eos */, false /* finished */);
+            if (!st.ok()) {
+                _cancelled = true;
+                _err_st = st;
+            }
         }
+        return _err_st;
     }
 
-    return Status::OK();
+    // check the result of requests, and fail the channel if error happens as soon as possible
+    if (_check_all_prev_request_done() && !_all_response_processed) {
+        _all_response_processed = true;
+        auto st = _wait_all_prev_request();
+        if (!_cancelled && !st.ok()) {
+            _cancelled = true;
+            _err_st = st;
+        }
+    }
+    return _err_st;
 }
 
 Status NodeChannel::try_finish() {
@@ -956,7 +993,7 @@ Status NodeChannel::try_finish() {
 }
 
 bool NodeChannel::is_close_done() {
-    return (_closed && _check_all_prev_request_done()) || _cancelled;
+    return _all_response_processed || _cancelled;
 }
 
 bool NodeChannel::is_finished() {
@@ -967,14 +1004,6 @@ Status NodeChannel::close_wait(RuntimeState* state) {
     if (_cancelled) {
         return _err_st;
     }
-
-    // 1. send eos request to commit write util finish
-    while (!_closed) {
-        RETURN_IF_ERROR(_send_request(true /* eos */));
-    }
-
-    // 2. wait eos request finish
-    RETURN_IF_ERROR(_wait_all_prev_request());
 
     // assign tablet dict infos
     if (!_tablet_commit_infos.empty()) {
