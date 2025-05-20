@@ -1619,9 +1619,10 @@ struct TQueryStatisticsInfo {
     10: optional i64 memUsageBytes
     11: optional i64 spillBytes
     12: optional i64 execTime
-    13: optional string wareHouseName
-    14: optional string customQueryId
-    15: optional string resourceGroupName
+    13: optional string execProgress
+    14: optional string wareHouseName
+    15: optional string customQueryId
+    16: optional string resourceGroupName
 }
 
 struct TGetQueryStatisticsResponse {
@@ -1960,6 +1961,7 @@ struct TConnectionInfo {
     8: optional string state;
     9: optional string info;
     10: optional string isPending;
+    11: optional string warehouse;
 }
 
 struct TListConnectionResponse {

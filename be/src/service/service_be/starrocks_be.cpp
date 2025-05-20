@@ -22,6 +22,7 @@
 #include "agent/heartbeat_server.h"
 #include "backend_service.h"
 #include "cache/block_cache/block_cache.h"
+#include "cache/datacache.h"
 #include "cache/starcache_wrapper.h"
 #include "common/config.h"
 #include "common/daemon.h"
@@ -107,7 +108,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     auto* storage_engine = init_storage_engine(global_env, paths, as_cn);
     LOG(INFO) << process_name << " start step " << start_step++ << ": storage engine init successfully";
 
-    auto* cache_env = CacheEnv::GetInstance();
+    auto* cache_env = DataCache::GetInstance();
     EXIT_IF_ERROR(cache_env->init(paths));
     LOG(INFO) << process_name << " start step " << start_step++ << ": cache env init successfully";
 

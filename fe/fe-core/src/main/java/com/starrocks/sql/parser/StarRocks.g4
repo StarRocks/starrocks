@@ -353,6 +353,8 @@ statement
     | createBaselinePlanStatement
     | dropBaselinePlanStatement
     | showBaselinePlanStatement
+    | disableBaselinePlanStatement
+    | enableBaselinePlanStatement
 
     // Unsupported Statement
     | unsupportedStatement
@@ -1421,7 +1423,16 @@ dropBaselinePlanStatement
     ;
 
 showBaselinePlanStatement
-    : SHOW BASELINE
+    : SHOW BASELINE (WHERE expression)?
+
+    ;
+
+disableBaselinePlanStatement
+    : DISABLE BASELINE INTEGER_VALUE (',' INTEGER_VALUE)*
+    ;
+
+enableBaselinePlanStatement
+    : ENABLE BASELINE INTEGER_VALUE (',' INTEGER_VALUE)*
     ;
 
 // ------------------------------------------- Work Group Statement ----------------------------------------------------

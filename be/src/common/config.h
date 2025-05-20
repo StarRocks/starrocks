@@ -60,17 +60,12 @@ CONF_Int32(brpc_max_connections_per_server, "1");
 CONF_String(priority_networks, "");
 CONF_Bool(net_use_ipv6_when_priority_networks_empty, "false");
 
-CONF_mBool(enable_auto_adjust_pagecache, "true");
 // Memory urget water level, if the memory usage exceeds this level, reduce the size of
 // the Pagecache immediately, it should be between (memory_high_level, 100].
 CONF_mInt64(memory_urgent_level, "85");
 // Memory high water level, if the memory usage exceeds this level, reduce the size of
 // the Pagecache slowly, it should be between [1, memory_urgent_level).
 CONF_mInt64(memory_high_level, "75");
-// Pagecache size adjust period, default 20, it should be between [1, 180].
-CONF_mInt64(pagecache_adjust_period, "20");
-// Sleep time in seconds between pagecache adjust iterations.
-CONF_mInt64(auto_adjust_pagecache_interval_seconds, "10");
 
 // process memory limit specified as number of bytes
 // ('<int>[bB]?'), megabytes ('<float>[mM]'), gigabytes ('<float>[gG]'),
@@ -419,7 +414,9 @@ CONF_mBool(enable_load_channel_rpc_async, "true");
 CONF_mInt32(load_channel_rpc_thread_pool_num, "-1");
 // The queue size for Load channel rpc thread pool
 CONF_Int32(load_channel_rpc_thread_pool_queue_size, "1024000");
-CONF_mInt32(number_tablet_writer_threads, "16");
+// Number of thread for async delta writer.
+// Default value is max(cpucores/2, 16)
+CONF_mInt32(number_tablet_writer_threads, "0");
 CONF_mInt64(max_queueing_memtable_per_tablet, "2");
 // when memory limit exceed and memtable last update time exceed this time, memtable will be flushed
 // 0 means disable
@@ -1102,6 +1099,7 @@ CONF_mInt32(starlet_fslib_s3client_connect_timeout_ms, "1000");
 CONF_Alias(object_storage_request_timeout_ms, starlet_fslib_s3client_request_timeout_ms);
 CONF_mInt32(starlet_delete_files_max_key_in_batch, "1000");
 CONF_mInt32(starlet_filesystem_instance_cache_capacity, "10000");
+CONF_mInt32(starlet_filesystem_instance_cache_ttl_sec, "86400");
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
@@ -1254,15 +1252,16 @@ CONF_Bool(datacache_persistence_enable, "true");
 CONF_String(datacache_engine, "");
 // The interval time (millisecond) for agent report datacache metrics to FE.
 CONF_mInt32(report_datacache_metrics_interval_ms, "60000");
-// Whether enable automatically adjust cache space quota.
-// If true, the cache will choose an appropriate quota based on the current remaining space as the quota.
-// and the quota also will be changed dynamiclly.
+
+// Whether enable automatically adjust data cache disk space quota.
+// If true, the cache will choose an appropriate quota based on the current remaining disk space as the quota.
+// and the quota also will be changed dynamically.
 // Once the disk space usage reach the high level, the quota will be decreased to keep the disk usage
 // around the disk safe level.
 // On the other hand, if the cache is full and the disk usage falls below the disk low level for a long time,
 // which is configured by `datacache_disk_idle_seconds_for_expansion`, the cache quota will be increased to keep the
 // disk usage around the disk safe level.
-CONF_mBool(datacache_auto_adjust_enable, "true");
+CONF_mBool(enable_datacache_disk_auto_adjust, "true");
 // The high disk usage level, which trigger the cache eviction and quota decreased.
 CONF_mInt64(datacache_disk_high_level, "90");
 // The safe disk usage level, the cache quota will be decreased to this level once it reach the high level.
@@ -1278,10 +1277,17 @@ CONF_mInt64(datacache_disk_idle_seconds_for_expansion, "7200");
 // cache quota will be reset to zero to avoid overly frequent population and eviction.
 // Default: 100G
 CONF_mInt64(datacache_min_disk_quota_for_adjustment, "107374182400");
-// The maxmum inline cache item count in datacache.
-// When a cache item has a really small data size, we will try to cache it inline with its metadata
+// The maximum inline cache item count in datacache.
+// When a cache item has a tiny data size, we will try to cache it inline with its metadata
 // to optimize the io performance and reduce disk waste.
 // Set the parameter to `0` will turn off this optimization.
+
+CONF_mBool(enable_datacache_mem_auto_adjust, "true");
+// Datacache size adjust period, default 20, it should be between [1, 180].
+CONF_mInt64(datacache_mem_adjust_period, "20");
+// Sleep time in seconds between datacache adjust iterations.
+CONF_mInt64(datacache_mem_adjust_interval_seconds, "10");
+
 CONF_Int32(datacache_inline_item_count_limit, "130172");
 // Whether use an unified datacache instance.
 CONF_Bool(datacache_unified_instance_enable, "true");
@@ -1290,12 +1296,14 @@ CONF_Bool(datacache_unified_instance_enable, "true");
 // * slru: segment lru eviction policies, which can better reduce cache pollution problem.
 CONF_String(datacache_eviction_policy, "slru");
 
-// The following configurations will be deprecated, and we use the `datacache` prefix instead.
-// But it is temporarily necessary to keep them for a period of time to be compatible with
-// the old configuration files.
-CONF_Bool(block_cache_enable, "false");
-CONF_Int64(block_cache_disk_size, "0");
-CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
+// The BlockCache stores the raw data blocks of external tables and shared-data internal tables.
+// It shares the same limit (datacache_disk_size, datacache_mem_size) with the PageCache.
+// Currently, the disk space used by BlockCache cannot be individually configured
+// using block_cache_disk_size and block_cache_mem_size.
+// However, these two configuration items are retained for future support.
+CONF_Bool(block_cache_enable, "true");
+CONF_mString(block_cache_disk_size, "-1");
+CONF_mInt64(block_cache_mem_size, "0");
 CONF_Alias(datacache_block_size, block_cache_block_size);
 CONF_Alias(datacache_max_concurrent_inserts, block_cache_max_concurrent_inserts);
 CONF_Alias(datacache_checksum_enable, block_cache_checksum_enable);
@@ -1383,6 +1391,15 @@ CONF_String(exception_stack_black_list, "apache::thrift::,ue2::,arangodb::");
 CONF_String(rocksdb_cf_options_string, "block_based_table_factory={block_cache={capacity=256M;num_shard_bits=0}}");
 
 CONF_String(rocksdb_db_options_string, "create_if_missing=true;create_missing_column_families=true");
+
+// It is the memory percent of write buffer for meta in rocksdb.
+// default is 5% of system memory.
+// However, aside from this, the final calculated size of the write buffer memory
+// will not be less than 64MB nor exceed 1GB (rocksdb_max_write_buffer_memory_bytes).
+CONF_Int64(rocksdb_write_buffer_memory_percent, "5");
+// It is the max size of the write buffer for meta in rocksdb.
+// default is 1GB.
+CONF_Int64(rocksdb_max_write_buffer_memory_bytes, "1073741824");
 
 // limit local exchange buffer's memory size per driver
 CONF_Int64(local_exchange_buffer_mem_limit_per_driver, "134217728"); // 128MB

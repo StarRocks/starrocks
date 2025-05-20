@@ -91,7 +91,9 @@ public class SPMAst2SQLBuilder {
 
         @Override
         protected String printWithParentheses(ParseNode node) {
-            if (node instanceof SlotRef || node instanceof LiteralExpr || SPMFunctions.isSPMFunctions((Expr) node)) {
+            if (node instanceof SlotRef || node instanceof LiteralExpr) {
+                return visit(node);
+            } else if (node instanceof FunctionCallExpr && (SPMFunctions.isSPMFunctions((Expr) node))) {
                 return visit(node);
             } else {
                 return "(" + visit(node) + ")";
@@ -170,8 +172,7 @@ public class SPMAst2SQLBuilder {
 
         @Override
         public String visitInPredicate(InPredicate node, Void context) {
-            if ((node.getChildren().stream().skip(1).anyMatch(SPMFunctions::isSPMFunctions) || node.isConstantValues())
-                    && enableDigest) {
+            if ((SPMFunctions.isSPMFunctions(node) || node.isConstantValues()) && enableDigest) {
                 StringBuilder strBuilder = new StringBuilder();
                 String notStr = (node.isNotIn()) ? "NOT " : "";
                 strBuilder.append(printWithParentheses(node.getChild(0))).append(" ").append(notStr).append("IN ");

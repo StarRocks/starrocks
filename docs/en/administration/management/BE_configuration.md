@@ -1685,11 +1685,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### number_tablet_writer_threads
 
-- Default: 16
+- Default: 0
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The number of threads used for Stream Load. This configuration is changed to dynamic from v3.1.7 onwards.
+- Description: The number of tablet writer threads used in ingestion, such as Stream Load, Broker Load and Insert. When the parameter is set to less than or equal to 0, the system uses half of the number of CPU cores, with a minimum of 16. When the parameter is set to greater than 0, the system uses that value. This configuration is changed to dynamic from v3.1.7 onwards.
 - Introduced in: -
 
 <!--
@@ -2837,6 +2837,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: A boolean value to control whether to enable the pageindex of Parquet file to improve performance. `true` indicates enabling pageindex, and `false` indicates disabling it.
 - Introduced in: v3.3
 
+##### parquet_reader_bloom_filter_enable
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: A boolean value to control whether to enable the bloom filter of Parquet file to improve performance. `true` indicates enabling the bloom filter, and `false` indicates disabling it. You can also control this behavior on session level using the system variable `enable_parquet_reader_bloom_filter`. Bloom filters in Parquet are maintained **at the column level within each row group**. If a Parquet file contains bloom filters for certain columns, queries can use predicates on those columns to efficiently skip row groups.
+- Introduced in: v3.5
+
 <!--
 ##### io_coalesce_read_max_buffer_size
 
@@ -3566,6 +3575,24 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: An alias of `object_storage_request_timeout_ms`. Refer to [object_storage_request_timeout_ms](#object_storage_request_timeout_ms) for details.
 - Introduced in: v3.3.9
 
+##### starlet_filesystem_instance_cache_capacity
+
+- Default: 10000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The cache capacity of starlet filesystem instances.
+- Introduced in: v3.2.16, v3.3.11, v3.4.1
+
+##### starlet_filesystem_instance_cache_ttl_sec
+
+- Default: 86400
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The cache expiration time of starlet filesystem instances.
+- Introduced in: v3.3.15, 3.4.5
+
 ##### lake_compaction_stream_buffer_size_bytes
 
 - Default: 1048576
@@ -3919,11 +3946,11 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### datacache_mem_size
 
-- Default: 10%
+- Default: 0
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: The maximum amount of data that can be cached in memory. You can set it as a percentage (for example, `10%`) or a physical limit (for example, `10G`, `21474836480`). It is recommended to set the value of this parameter to at least 10 GB.
+- Description: The maximum amount of data that can be cached in memory. You can set it as a percentage (for example, `10%`) or a physical limit (for example, `10G`, `21474836480`).
 - Introduced in: -
 
 ##### datacache_disk_size
@@ -4053,6 +4080,24 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: No
 - Description: The maximum memory that the Query Pool can use. It is expressed as a percentage of the Process memory limit.
 - Introduced in: v3.1.0
+
+##### rocksdb_write_buffer_memory_percent
+
+- Default: 5
+- Type: Int64
+- Unit: -
+- Is mutable: No
+- Description: It is the memory percent of write buffer for meta in rocksdb. default is 5% of system memory. However, aside from this, the final calculated size of the write buffer memory will not be less than 64MB nor exceed 1G (rocksdb_max_write_buffer_memory_bytes)
+- Introduced in: v3.5.0
+
+##### rocksdb_max_write_buffer_memory_bytes
+
+- Default: 1073741824
+- Type: Int64
+- Unit: -
+- Is mutable: No
+- Description: It is the max size of the write buffer for meta in rocksdb. Default is 1GB.
+- Introduced in: v3.5.0
 
 <!--
 ##### datacache_block_size

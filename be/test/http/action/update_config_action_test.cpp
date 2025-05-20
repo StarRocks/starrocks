@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "cache/block_cache/test_cache_utils.h"
+#include "cache/datacache.h"
 #include "cache/starcache_wrapper.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
@@ -25,6 +26,7 @@
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
 #include "testutil/scoped_updater.h"
+#include "util/bthreads/executor.h"
 
 namespace starrocks {
 
@@ -38,15 +40,15 @@ public:
 };
 
 TEST_F(UpdateConfigActionTest, update_datacache_disk_size) {
-    SCOPED_UPDATE(bool, config::datacache_auto_adjust_enable, false);
+    SCOPED_UPDATE(bool, config::enable_datacache_disk_auto_adjust, false);
     const std::string cache_dir = "./block_cache_for_update_config";
     ASSERT_TRUE(fs::create_directories(cache_dir).ok());
 
     auto cache = std::make_shared<StarCacheWrapper>();
     CacheOptions options = TestCacheUtils::create_simple_options(256 * KB, 0);
-    options.disk_spaces.push_back({.path = cache_dir, .size = 50 * MB});
+    options.dir_spaces.push_back({.path = cache_dir, .size = 50 * MB});
     ASSERT_OK(cache->init(options));
-    CacheEnv::GetInstance()->set_local_cache(cache);
+    DataCache::GetInstance()->set_local_cache(cache);
 
     UpdateConfigAction action(ExecEnv::GetInstance());
 
@@ -68,6 +70,25 @@ TEST_F(UpdateConfigActionTest, test_update_pindex_load_thread_pool_num_max) {
 
     auto* load_pool = StorageEngine::instance()->update_manager()->get_pindex_load_executor()->TEST_get_load_pool();
     ASSERT_EQ(16, load_pool->max_threads());
+}
+
+TEST_F(UpdateConfigActionTest, test_update_number_tablet_writer_threads) {
+    UpdateConfigAction action(ExecEnv::GetInstance());
+    auto* executor =
+            static_cast<bthreads::ThreadPoolExecutor*>(StorageEngine::instance()->async_delta_writer_executor());
+    auto* pool = executor->get_thread_pool();
+
+    {
+        auto st = action.update_config("number_tablet_writer_threads", "8");
+        CHECK_OK(st);
+        ASSERT_EQ(8, pool->max_threads());
+    }
+
+    {
+        auto st = action.update_config("number_tablet_writer_threads", "0");
+        CHECK_OK(st);
+        ASSERT_EQ(CpuInfo::num_cores() / 2, pool->max_threads());
+    }
 }
 
 } // namespace starrocks

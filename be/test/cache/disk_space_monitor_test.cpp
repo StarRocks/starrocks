@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "cache/disk_space_monitor.h"
+
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
@@ -111,7 +113,7 @@ void DiskSpaceMonitorTest::insert_to_cache(BlockCache* cache, size_t count) {
 }
 
 TEST_F(DiskSpaceMonitorTest, adjust_for_empty_cache_dir) {
-    SCOPED_UPDATE(bool, config::datacache_auto_adjust_enable, true);
+    SCOPED_UPDATE(bool, config::enable_datacache_disk_auto_adjust, true);
     SCOPED_UPDATE(int64_t, config::datacache_disk_safe_level, 70);
     SCOPED_UPDATE(int64_t, config::datacache_min_disk_quota_for_adjustment, 0);
 
@@ -135,7 +137,7 @@ TEST_F(DiskSpaceMonitorTest, adjust_for_empty_cache_dir) {
 }
 
 TEST_F(DiskSpaceMonitorTest, adjust_for_dirty_cache_dir) {
-    SCOPED_UPDATE(bool, config::datacache_auto_adjust_enable, true);
+    SCOPED_UPDATE(bool, config::enable_datacache_disk_auto_adjust, true);
     SCOPED_UPDATE(int64_t, config::datacache_min_disk_quota_for_adjustment, 0);
     SCOPED_UPDATE(int64_t, config::datacache_disk_high_level, 80);
     SCOPED_UPDATE(int64_t, config::datacache_disk_safe_level, 70);
@@ -164,7 +166,7 @@ TEST_F(DiskSpaceMonitorTest, adjust_for_dirty_cache_dir) {
 
 TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota) {
     SCOPED_UPDATE(bool, config::datacache_enable, true);
-    SCOPED_UPDATE(bool, config::datacache_auto_adjust_enable, false);
+    SCOPED_UPDATE(bool, config::enable_datacache_disk_auto_adjust, false);
     SCOPED_UPDATE(int64_t, config::datacache_min_disk_quota_for_adjustment, 0);
     SCOPED_UPDATE(int64_t, config::datacache_disk_adjust_interval_seconds, 1);
     SCOPED_UPDATE(int64_t, config::datacache_disk_idle_seconds_for_expansion, 300);
@@ -180,7 +182,7 @@ TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota) {
     _mock_fs->set_space(1, ".", space_info);
 
     auto space_monitor = std::make_shared<DiskSpaceMonitor>(local_cache.get(), _mock_fs);
-    ASSERT_OK(space_monitor->init(&options.disk_spaces));
+    ASSERT_OK(space_monitor->init(&options.dir_spaces));
     space_monitor->start();
 
     // Fill cache data
@@ -197,7 +199,7 @@ TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota) {
     }
 
     {
-        config::datacache_auto_adjust_enable = true;
+        config::enable_datacache_disk_auto_adjust = true;
         sleep(3);
         auto metrics = local_cache->cache_metrics(0);
         ASSERT_EQ(metrics.disk_quota_bytes, 20 * MB);
@@ -215,7 +217,7 @@ TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota) {
 
 TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota_with_limit) {
     SCOPED_UPDATE(bool, config::datacache_enable, true);
-    SCOPED_UPDATE(bool, config::datacache_auto_adjust_enable, false);
+    SCOPED_UPDATE(bool, config::enable_datacache_disk_auto_adjust, false);
     SCOPED_UPDATE(int64_t, config::datacache_min_disk_quota_for_adjustment, 0);
     SCOPED_UPDATE(int64_t, config::datacache_disk_adjust_interval_seconds, 1);
     SCOPED_UPDATE(int64_t, config::datacache_disk_idle_seconds_for_expansion, 300);
@@ -233,7 +235,7 @@ TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota_with_limit) {
     _mock_fs->set_space(1, ".", space_info);
 
     auto space_monitor = std::make_shared<DiskSpaceMonitor>(local_cache.get(), _mock_fs);
-    ASSERT_OK(space_monitor->init(&options.disk_spaces));
+    ASSERT_OK(space_monitor->init(&options.dir_spaces));
     space_monitor->start();
 
     // Fill cache data
@@ -250,7 +252,7 @@ TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota_with_limit) {
     }
 
     {
-        config::datacache_auto_adjust_enable = true;
+        config::enable_datacache_disk_auto_adjust = true;
         sleep(3);
         auto metrics = local_cache->cache_metrics(0);
         ASSERT_EQ(metrics.disk_quota_bytes, 20 * MB);
@@ -270,7 +272,7 @@ TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota_with_limit) {
 
 TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota) {
     SCOPED_UPDATE(bool, config::datacache_enable, true);
-    SCOPED_UPDATE(bool, config::datacache_auto_adjust_enable, false);
+    SCOPED_UPDATE(bool, config::enable_datacache_disk_auto_adjust, false);
     SCOPED_UPDATE(int64_t, config::datacache_min_disk_quota_for_adjustment, 0);
     SCOPED_UPDATE(int64_t, config::datacache_disk_adjust_interval_seconds, 3);
     SCOPED_UPDATE(int64_t, config::datacache_disk_idle_seconds_for_expansion, 300);
@@ -286,7 +288,7 @@ TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota) {
     _mock_fs->set_space(1, ".", space_info);
 
     auto space_monitor = std::make_shared<DiskSpaceMonitor>(local_cache.get(), _mock_fs);
-    ASSERT_OK(space_monitor->init(&options.disk_spaces));
+    ASSERT_OK(space_monitor->init(&options.dir_spaces));
     space_monitor->start();
 
     // Fill cache data
@@ -303,12 +305,12 @@ TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota) {
     }
 
     {
-        config::datacache_auto_adjust_enable = true;
+        config::enable_datacache_disk_auto_adjust = true;
         size_t new_quota = 0;
         for (int i = 0; i < 6; ++i) {
             auto metrics = local_cache->cache_metrics(0);
             if (metrics.disk_quota_bytes > 0 && metrics.disk_quota_bytes != 50 * MB) {
-                config::datacache_auto_adjust_enable = false;
+                config::enable_datacache_disk_auto_adjust = false;
                 new_quota = metrics.disk_quota_bytes;
                 break;
             }
@@ -322,7 +324,7 @@ TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota) {
 
 TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota_to_zero) {
     SCOPED_UPDATE(bool, config::datacache_enable, true);
-    SCOPED_UPDATE(bool, config::datacache_auto_adjust_enable, false);
+    SCOPED_UPDATE(bool, config::enable_datacache_disk_auto_adjust, false);
     SCOPED_UPDATE(int64_t, config::datacache_min_disk_quota_for_adjustment, 40 * MB);
     SCOPED_UPDATE(int64_t, config::datacache_disk_adjust_interval_seconds, 2);
     SCOPED_UPDATE(int64_t, config::datacache_disk_idle_seconds_for_expansion, 300);
@@ -338,7 +340,7 @@ TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota_to_zero) {
     _mock_fs->set_space(1, ".", space_info);
 
     auto space_monitor = std::make_shared<DiskSpaceMonitor>(local_cache.get(), _mock_fs);
-    ASSERT_OK(space_monitor->init(&options.disk_spaces));
+    ASSERT_OK(space_monitor->init(&options.dir_spaces));
     space_monitor->start();
 
     // Fill cache data
@@ -355,12 +357,12 @@ TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota_to_zero) {
     }
 
     {
-        config::datacache_auto_adjust_enable = true;
+        config::enable_datacache_disk_auto_adjust = true;
         size_t new_quota = 0;
         for (int i = 0; i < 6; ++i) {
             auto metrics = local_cache->cache_metrics(0);
             if (metrics.disk_quota_bytes > 0 && metrics.disk_quota_bytes != 50 * MB) {
-                config::datacache_auto_adjust_enable = false;
+                config::enable_datacache_disk_auto_adjust = false;
                 new_quota = metrics.disk_quota_bytes;
                 break;
             }
@@ -377,7 +379,7 @@ TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota_to_zero) {
 
 TEST_F(DiskSpaceMonitorTest, get_directory_capacity) {
     SCOPED_UPDATE(bool, config::datacache_enable, true);
-    SCOPED_UPDATE(bool, config::datacache_auto_adjust_enable, false);
+    SCOPED_UPDATE(bool, config::enable_datacache_disk_auto_adjust, false);
 
     auto options = TestCacheUtils::create_simple_options(kBlockSize, 0, 20 * MB);
     auto block_cache = TestCacheUtils::create_cache(options);
@@ -387,10 +389,10 @@ TEST_F(DiskSpaceMonitorTest, get_directory_capacity) {
     {
         insert_to_cache(block_cache.get(), 20);
 
-        auto& disk_spaces = options.disk_spaces;
+        auto& dir_spaces = options.dir_spaces;
         auto space_monitor = std::make_shared<DiskSpaceMonitor>(local_cache.get());
         size_t capacity = 0;
-        for (auto& space : disk_spaces) {
+        for (auto& space : dir_spaces) {
             ASSIGN_OR_ASSERT_FAIL(auto value, space_monitor->_fs->directory_size(space.path));
             capacity += value;
         }

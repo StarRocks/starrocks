@@ -35,10 +35,10 @@ protected:
     static void TearDownTestCase() {}
 
     void SetUp() override {
-        _saved_enable_auto_adjust = config::datacache_auto_adjust_enable;
-        config::datacache_auto_adjust_enable = false;
+        _saved_enable_auto_adjust = config::enable_datacache_disk_auto_adjust;
+        config::enable_datacache_disk_auto_adjust = false;
     }
-    void TearDown() override { config::datacache_auto_adjust_enable = _saved_enable_auto_adjust; }
+    void TearDown() override { config::enable_datacache_disk_auto_adjust = _saved_enable_auto_adjust; }
 
     bool _saved_enable_auto_adjust = false;
 };
@@ -77,7 +77,7 @@ TEST_F(BlockCacheTest, hybrid_cache) {
 
     const size_t block_size = 256 * 1024;
     CacheOptions options = TestCacheUtils::create_simple_options(block_size, 2 * MB);
-    options.disk_spaces.push_back({.path = cache_dir, .size = 50 * MB});
+    options.dir_spaces.push_back({.path = cache_dir, .size = 50 * MB});
     auto cache = TestCacheUtils::create_cache(options);
 
     const size_t batch_size = block_size;
@@ -158,7 +158,7 @@ TEST_F(BlockCacheTest, read_cache_with_adaptor) {
 
     const size_t block_size = 1024 * 1024;
     CacheOptions options = TestCacheUtils::create_simple_options(block_size, 0);
-    options.disk_spaces.push_back({.path = cache_dir, .size = 500 * MB});
+    options.dir_spaces.push_back({.path = cache_dir, .size = 500 * MB});
     options.skip_read_factor = 1;
     auto cache = TestCacheUtils::create_cache(options);
 
@@ -176,13 +176,13 @@ TEST_F(BlockCacheTest, read_cache_with_adaptor) {
 
     const int kAdaptorWindowSize = 50;
 
-    // record read latencyr to ensure cache latency > remote latency
+    // record read latency to ensure cache latency > remote latency
     for (size_t i = 0; i < kAdaptorWindowSize; ++i) {
         cache->record_read_local_cache(batch_size, 1000000000);
         cache->record_read_remote_storage(batch_size, 10, true);
     }
 
-    // all reads will be reject by cache adaptor
+    // all reads will be rejected by cache adaptor
     for (size_t i = 0; i < rounds; ++i) {
         char ch = 'a' + i % 26;
         std::string expect_value(batch_size, ch);
@@ -222,7 +222,7 @@ TEST_F(BlockCacheTest, update_cache_quota) {
     const size_t block_size = 256 * 1024;
     size_t quota = 50 * MB;
     CacheOptions options = TestCacheUtils::create_simple_options(block_size, 1 * MB);
-    options.disk_spaces.push_back({.path = cache_dir, .size = quota});
+    options.dir_spaces.push_back({.path = cache_dir, .size = quota});
     auto cache = TestCacheUtils::create_cache(options);
     auto local_cache = cache->local_cache();
 
@@ -258,7 +258,7 @@ TEST_F(BlockCacheTest, clear_residual_blockfiles) {
 
     const size_t block_size = 256 * 1024;
     CacheOptions options = TestCacheUtils::create_simple_options(block_size, 0);
-    options.disk_spaces.push_back({.path = cache_dir, .size = 50 * MB});
+    options.dir_spaces.push_back({.path = cache_dir, .size = 50 * MB});
     auto cache = TestCacheUtils::create_cache(options);
 
     // write cache

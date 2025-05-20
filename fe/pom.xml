@@ -1012,6 +1012,10 @@ under the License.
                         <groupId>org.apache.hbase</groupId>
                         <artifactId>hbase-http</artifactId>
                     </exclusion>
+                    <exclusion>
+                        <groupId>org.apache.hbase.thirdparty</groupId>
+                        <artifactId>hbase-shaded-jetty</artifactId>
+                    </exclusion>
                 </exclusions>
             </dependency>
 

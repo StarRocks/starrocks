@@ -875,6 +875,7 @@ public class ShowExecutor {
                             row.add(tConnectionInfo.getState());
                             row.add(tConnectionInfo.getInfo());
                             row.add(tConnectionInfo.getIsPending());
+                            row.add(tConnectionInfo.getWarehouse());
 
                             rowSet.add(row);
                         }
