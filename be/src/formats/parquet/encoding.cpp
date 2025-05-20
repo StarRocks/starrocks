@@ -29,6 +29,29 @@
 
 namespace starrocks::parquet {
 
+Status Decoder::next_batch_with_nulls(size_t count, const NullInfos& null_infos, ColumnContentType content_type,
+                                      Column* dst, const FilterData* filter) {
+    const uint8_t* __restrict is_nulls = null_infos.nulls_data();
+    size_t idx = 0;
+    size_t off = 0;
+    while (idx < count) {
+        bool is_null = is_nulls[idx++];
+        size_t run = 1;
+        while (idx < count && is_nulls[idx] == is_null) {
+            idx++;
+            run++;
+        }
+        if (is_null) {
+            dst->append_nulls(run);
+        } else {
+            const FilterData* forward_filter = filter ? filter + off : filter;
+            RETURN_IF_ERROR(this->next_batch(run, content_type, dst, forward_filter));
+        }
+        off += run;
+    }
+    return Status::OK();
+}
+
 using TypeEncodingPair = std::pair<tparquet::Type::type, tparquet::Encoding::type>;
 
 struct EncodingMapHash {
