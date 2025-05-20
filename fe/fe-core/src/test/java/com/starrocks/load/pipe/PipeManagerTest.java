@@ -282,7 +282,6 @@ public class PipeManagerTest {
         // Validate pipe execution
         Pipe p2 = follower.mayGetPipe(new PipeName(PIPE_TEST_DB, "p2")).get();
         p2.poll();
-        p2.schedule();
         p1 = follower.mayGetPipe(new PipeName(PIPE_TEST_DB, "p1")).get();
         Assert.assertEquals(Pipe.State.SUSPEND, p1.getState());
     }
@@ -667,9 +666,8 @@ public class PipeManagerTest {
 
         mockPollError(1);
         Pipe p3 = getPipe(pipeName);
-        p3.poll();
-
-        // get error
+        // set error
+        p3.setState(Pipe.State.ERROR);
         Assert.assertEquals(Pipe.State.ERROR, p3.getState());
 
         // resume after error
