@@ -34,9 +34,8 @@ import java.util.function.Supplier;
 import static com.starrocks.qe.scheduler.QueryRuntimeProfile.MARKED_COUNT_DOWN_VALUE;
 
 public class RunningProfileManager {
-    private static RunningProfileManager INSTANCE = null;
     private static final Logger LOG = LogManager.getLogger(RunningProfileManager.class);
-
+    private static RunningProfileManager INSTANCE = null;
     private final Map<TUniqueId, RunningProfile> profiles = Maps.newConcurrentMap();
 
     private RunningProfileManager() {
@@ -76,17 +75,23 @@ public class RunningProfileManager {
             return status;
         }
 
-        boolean instanceIsDone = fragmentInstanceProfile.isDone.get();
+        Boolean instanceIsDone = fragmentInstanceProfile.isDone.get();
         if (instanceIsDone) {
             status = new TStatus(TStatusCode.OK);
             return status;
         }
 
+        if (request.isDone()) {
+            fragmentInstanceProfile.isDone.set(true);
+        }
+
         try {
+            LOG.warn("asyncProfileReport, queryid: {}, instanceIndex: {}, isDone:{}",
+                    DebugUtil.printId(request.getQuery_id()), request.backend_num, instanceIsDone.toString());
             queryProfile.tryToTriggerRuntimeProfileUpdate();
             fragmentInstanceProfile.updateRunningProfile(request);
             queryProfile.updateLoadChannelProfile(request);
-            if (instanceIsDone) {
+            if (fragmentInstanceProfile.isDone.get()) {
                 queryProfile.finishInstance(request.getBackend_num());
             }
         } catch (Throwable e) {
@@ -114,22 +119,18 @@ public class RunningProfileManager {
     }
 
     public static class RunningProfile {
-        private AtomicLong lastRuntimeProfileUpdateTime = new AtomicLong(System.currentTimeMillis());
+        private final AtomicLong lastRuntimeProfileUpdateTime = new AtomicLong(System.currentTimeMillis());
+        private final ProfilingExecPlan profilingExecPlan;
+        private final RuntimeProfile executionProfile;
+        private final Optional<RuntimeProfile> loadChannelProfile;
+        private final int runtimeProfileReportInterval;
+        private final boolean needMergeProfile;
+        private final boolean isBrokerLoad;
         private MarkedCountDownLatch<Integer, Long> profileDoneSignal;
-
-        private ProfilingExecPlan profilingExecPlan;
-
         // topProfileSupplier is used for running profile to generate top level profile
         // when query is done, topProfileSupplier is null
         private Supplier<RuntimeProfile> topProfileSupplier;
-
-        private RuntimeProfile executionProfile;
         private Map<Integer, FragmentInstanceProfile> fragmentInstanceProfiles;
-        private Optional<RuntimeProfile> loadChannelProfile;
-
-        private int runtimeProfileReportInterval;
-        private boolean needMergeProfile;
-        private boolean isBrokerLoad;
         private TUniqueId queryId;
 
         public RunningProfile(RuntimeProfile executionProfile, Optional<RuntimeProfile> loadChannelProfile,
@@ -147,6 +148,7 @@ public class RunningProfileManager {
 
         public void registerInstanceProfiles(Map<Integer, FragmentInstanceExecState> indexInJobToExecState) {
             profileDoneSignal = new MarkedCountDownLatch<>(indexInJobToExecState.size());
+            fragmentInstanceProfiles = Maps.newConcurrentMap();
             indexInJobToExecState.forEach((index, execState) -> {
                 fragmentInstanceProfiles.putIfAbsent(index, new FragmentInstanceProfile(execState.getProfile()));
                 profileDoneSignal.addMark(index, MARKED_COUNT_DOWN_VALUE);
