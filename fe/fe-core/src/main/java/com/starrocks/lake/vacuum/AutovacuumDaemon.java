@@ -102,7 +102,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         long current = System.currentTimeMillis();
         long staleTime = current - Config.lake_autovacuum_stale_partition_threshold * MILLISECONDS_PER_HOUR;
 
-        if (partition.getVisibleVersionTime() <= staleTime) {
+        if (partition.getVisibleVersionTime() <= staleTime && partition.getMetadataSwitchVersion() == 0) {
             return false;
         }
         // empty parition
@@ -112,10 +112,6 @@ public class AutovacuumDaemon extends FrontendDaemon {
         // prevent vacuum too frequent
         if (current < partition.getLastVacuumTime() + Config.lake_autovacuum_partition_naptime_seconds * 1000) {
             return false;
-        }
-
-        if (partition.getMetadataSwitchVersion() > 0) {
-            return true;
         }
 
         if (Config.lake_autovacuum_detect_vaccumed_version) {
@@ -301,7 +297,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
             // the vacuumedVersion isthe minimum success vacuum version among all tablets within the partition which
             // means that all the garbage files before the vacuumVersion have been deleted.
             partition.setLastSuccVacuumVersion(vacuumedVersion);
-            if (partition.getMetadataSwitchVersion() != 0 && vacuumedVersion > partition.getMetadataSwitchVersion()) {
+            if (partition.getMetadataSwitchVersion() != 0 && vacuumedVersion >= partition.getMetadataSwitchVersion()) {
                 partition.setMetadataSwitchVersion(0);
             }
             long incrementExtraFileSize = partition.getExtraFileSize() - preExtraFileSize;
