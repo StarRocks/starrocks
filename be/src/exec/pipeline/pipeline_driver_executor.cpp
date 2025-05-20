@@ -47,6 +47,7 @@ GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_
                   new PipelineDriverPoller(name, _driver_queue.get(), cpuids, metrics->get_poller_metrics())),
           _exec_state_reporter(new ExecStateReporter(cpuids)),
           _audit_statistics_reporter(new AuditStatisticsReporter()),
+          _profile_manager(new profile_manager(cpuids)),
           _metrics(metrics->get_driver_executor_metrics()) {}
 
 void GlobalDriverExecutor::close() {
@@ -325,17 +326,15 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
                 done, query_ctx->query_id(), fragment_ctx->runtime_state()->be_number(),
                 fragment_ctx->runtime_state()->query_options().query_type, fe_addr);
 
-        auto st = profile_manager::build_and_report_profile(fragment_profile_material);
+        auto st = _profile_manager->build_and_report_profile(fragment_profile_material);
     }
 
     // Load channel profile will be merged on FE
-    auto* load_channel_profile = fragment_ctx->runtime_state()->load_channel_profile();
     std::shared_ptr<TReportExecStatusParams> params;
     {
         // move profile memory to process, similar with SinkBuffer. the params will be released in ExecStateReporter
         int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
-        params = ExecStateReporter::create_report_exec_status_params(query_ctx, fragment_ctx, profile,
-                                                                     load_channel_profile, status, done);
+        params = ExecStateReporter::create_report_exec_status_params(query_ctx, fragment_ctx, status, done);
         int64_t delta = CurrentThread::current().get_consumed_bytes() - before_bytes;
 
         CurrentThread::current().mem_release(delta);

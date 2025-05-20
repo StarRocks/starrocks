@@ -151,6 +151,7 @@ static std::unique_ptr<TFragmentProfile> profile_manager::create_report_profile_
     params.__isset.profile = true;
 
     if (fragment_profile_material.query_type == TQueryType::LOAD) {
+        // Load channel profile will be merged on FE
         fragment_profile_material.load_channel_profile->to_thrift(&params.load_channel_profile);
         params.__isset.load_channel_profile = true;
     }

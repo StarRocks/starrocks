@@ -1,6 +1,16 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
 //
-// Created by femi on 2025/5/14.
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 #include <memory>
@@ -41,7 +51,7 @@ struct FragmentProfileMaterial {
         total_cpu_cost_ns = total_cpu_cost_ns;
         total_spill_bytes = total_spill_bytes;
         lifetime = lifetime;
-        instance_is_done = instance_is_downinstance_is_done;
+        instance_is_done = instance_is_done;
         query_id = query_id;
         be_number = be_number;
         query_type = query_type;
@@ -52,7 +62,7 @@ struct FragmentProfileMaterial {
 class profile_manager {
 public:
     explicit profile_manager(const CpuUtil::CpuIds& cpuids);
-    Status static build_and_report_profile(std::shared_ptr<FragmentProfileMaterial> fragment_profile_material);
+    Status build_and_report_profile(std::shared_ptr<FragmentProfileMaterial> fragment_profile_material);
 
 private:
     static RuntimeProfile* build_merged_instance_profile(FragmentProfileMaterial& fragment_profile,
