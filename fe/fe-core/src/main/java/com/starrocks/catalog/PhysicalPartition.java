@@ -104,7 +104,15 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     private TransactionType versionTxnType;
 
     /**
-     * metadataSwitchVersion is non-zero: Tablets with versions below this value maintain independent metadata.
+     * metadataSwitchVersion is non-zero: The metadata format differs before and after this version.
+     * Therefore, vacuum operations cannot be executed across `metadataSwitchVersion`
+     * e.g.
+     *  the tablet under this partition has five versions: 1, 2, 3, 4, 5 and the metadataSwitchVersion is 3
+     *  the vacuum is run as the following:
+     *      1. Set minRetainVersion to 3 in the vacuumRequest.
+     *      2. The BE will delete tablet metadata where the version is less than 3.
+     *      3. If all tablets execute successfully and there are no metadata entries in two different formats, 
+     *      set metadataSwitchVersion to 0.
      */
     @SerializedName(value = "metadataSwitchVersion")
     private long metadataSwitchVersion;

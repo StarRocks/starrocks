@@ -114,6 +114,7 @@ public class PartitionsProcDir implements ProcDirInterface {
                     .add("PartitionName")
                     .add("CompactVersion")
                     .add("VisibleVersion")
+                    .add("MetaSwitchVersion")
                     .add("NextVersion")
                     .add("State")
                     .add("PartitionKey")
@@ -394,6 +395,7 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(partition.getName()); // PartitionName
         partitionInfo.add(statistics != null ? statistics.getCompactionVersion().getVersion() : 0); // CompactVersion
         partitionInfo.add(physicalPartition.getVisibleVersion()); // VisibleVersion
+        partitionInfo.add(physicalPartition.getMetadataSwitchVersion()); // MetaSwitchVersion
         partitionInfo.add(physicalPartition.getNextVersion()); // NextVersion
         partitionInfo.add(partition.getState()); // State
         partitionInfo.add(Joiner.on(", ").join(tblPartitionInfo.getPartitionColumns(table.getIdToColumn())
@@ -414,7 +416,6 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(physicalPartition.getDataVersion()); // DataVersion
         partitionInfo.add(physicalPartition.getVersionEpoch()); // VersionEpoch
         partitionInfo.add(physicalPartition.getVersionTxnType()); // VersionTxnType
-
         return partitionInfo;
     }
 

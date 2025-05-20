@@ -282,9 +282,16 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                             "Property " + PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION +
                                     " only support cloud native table");
             }
-            // TODO(zhangqiang)
-            // reject alter partition_aggregate request if the table contains metadata with two different types
+
+            boolean enablePartitionAggregation = properties.get(
+                            PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION).equalsIgnoreCase("true");
             OlapTable olapTable = (OlapTable) table;
+            if (enablePartitionAggregation == olapTable.enablePartitionAggregation()) {
+                String msg = String.format("table: %s enable_partition_aggregation is %s, nothing need to do",
+                        olapTable.getName(), enablePartitionAggregation);
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, msg);
+            }
+            
             if (!olapTable.allowUpdatePartitionAggregation()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                             "Property " + PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION +
