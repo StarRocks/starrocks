@@ -6,7 +6,13 @@ displayed_sidebar: docs
 
 値を JSON 型と SQL 型の間で変換します。
 
-## 構文
+:::tip
+すべての JSON 関数と演算子はナビゲーションと [overview page](../overview-of-json-functions-and-operators.md) に一覧されています。
+
+クエリを [生成列](../../../sql-statements/generated_columns.md) で高速化しましょう。
+:::
+
+## Syntax
 
 - JSON から SQL への変換
 
@@ -20,7 +26,7 @@ cast(json_expr AS sql_data_type)
 cast(sql_expr AS JSON)
 ```
 
-## パラメータ
+## Parameters
 
 - `json_expr`: SQL 値に変換したい JSON 値を表す式。
 
@@ -28,13 +34,13 @@ cast(sql_expr AS JSON)
 
 - `sql_expr`: JSON 値に変換したい SQL 値を表す式。このパラメータは、`sql_data_type` パラメータでサポートされているすべての SQL データ型をサポートします。
 
-## 戻り値
+## Return value
 
 - `cast(json_expr AS sql_data_type)` 構文を使用した場合、キャスト関数は `sql_data_type` パラメータで指定された SQL データ型の値を返します。
 
 - `cast(sql_expr AS JSON)` 構文を使用した場合、キャスト関数は JSON 値を返します。
 
-## 使用上の注意
+## Usage notes
 
 - SQL から JSON への変換
 
@@ -54,9 +60,9 @@ cast(sql_expr AS JSON)
 
   - JSON 文字列を VARCHAR 値に変換すると、関数は二重引用符 (") で囲まれていない VARCHAR 値を返します。
 
-## 例
+## Examples
 
-例 1: JSON 値を SQL 値に変換します。
+Example 1: JSON 値を SQL 値に変換します。
 
 ```plaintext
 -- JSON 値を INT 値に変換します。
@@ -93,7 +99,7 @@ mysql> select cast(parse_json('[1,2,3]') as varchar);
 +----------------------------------------+
 ```
 
-例 2: SQL 値を JSON 値に変換します。
+Example 2: SQL 値を JSON 値に変換します。
 
 ```plaintext
 -- INT 値を JSON 値に変換します。
