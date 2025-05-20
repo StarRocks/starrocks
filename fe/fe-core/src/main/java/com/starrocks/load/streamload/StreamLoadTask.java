@@ -22,6 +22,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
+import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
@@ -356,6 +357,15 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                     break;
                 }
             }
+        } catch (DuplicatedRequestException e) {
+            // this is a duplicate request, considered a normal request,
+            LOG.info("duplicate request for stream load. request id: {}, txn_id: {}", e.getDuplicatedRequestId(),
+                    e.getTxnId());
+            // only begin state will throw duplciate request exception
+            resp.addResultEntry("Label", this.label);
+            resp.addResultEntry("TxnId", this.txnId);
+            resp.addResultEntry("BeginChannel", channelNum);
+            resp.addResultEntry("BeginTxnTimeMs", this.beforeLoadTimeMs - this.createTimeMs);
         } catch (Exception e) {
             exception = e;
         } finally {
