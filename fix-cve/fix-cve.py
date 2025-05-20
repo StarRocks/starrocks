@@ -58,7 +58,7 @@ def get_pom_files():
     return pom_files
 
 
-def patch_jar_file(jar_file, pom_files):
+def patch_jar_file(jar_exec_path, jar_file, pom_files):
     jar_file = os.path.abspath(jar_file)
     new_jar_file = jar_file.replace(".jar", "-cve-patched.jar")
     print("=" * 80)
@@ -70,7 +70,7 @@ def patch_jar_file(jar_file, pom_files):
         shutil.rmtree(work_dir, ignore_errors=True)
         os.makedirs(work_dir, exist_ok=True)
         os.chdir(work_dir)
-        ret = subprocess.run(["jar", "xf", jar_file], stdout=None, stderr=None)
+        ret = subprocess.run([jar_exec_path, "xf", jar_file], stdout=None, stderr=None)
         if not ret.returncode == 0:
             raise Exception(f"Failed to extract {jar_file}")
 
@@ -80,7 +80,9 @@ def patch_jar_file(jar_file, pom_files):
                 print(f"Copy {pom_file} to {pom_in_jar}")
                 shutil.copy(os.path.join(cwd, "pom", pom_file), pom_in_jar)
 
-        ret = subprocess.run(["jar", "cf", new_jar_file, "."], stdout=None, stderr=None)
+        ret = subprocess.run(
+            [jar_exec_path, "cf", new_jar_file, "."], stdout=None, stderr=None
+        )
         if not ret.returncode == 0:
             raise Exception(f"Failed to update {jar_file}")
 
@@ -90,14 +92,26 @@ def patch_jar_file(jar_file, pom_files):
         shutil.rmtree(work_dir, ignore_errors=True)
 
 
-def patch_jars(output_dir, pom_files):
+def patch_jars(jar_exec_path, output_dir, pom_files):
     for f in glob.glob(output_dir + "/**/*.jar", recursive=True):
         if f.split("/")[-1] in fixed_jars:
-            patch_jar_file(f, pom_files)
+            patch_jar_file(jar_exec_path, f, pom_files)
 
 
 def main():
-    output_dir = sys.argv[1] if len(sys.argv) > 1 else None
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Patch jars with fixed pom files")
+    parser.add_argument(
+        "--jar-exec-path", type=str, default="jar", help="Path to jar executable"
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default=".",
+        help="Directory to search for jars to patch",
+    )
+    args = parser.parse_args()
     script_dir = os.path.dirname(os.path.abspath(__file__))
     os.chdir(script_dir)
 
@@ -106,9 +120,10 @@ def main():
     print("Available pom files:")
     print(pom_files)
 
-    if output_dir:
-        print('Patch jars in "{}"'.format(output_dir))
-        patch_jars(output_dir, pom_files)
+    if args.output_dir:
+        print('Jar exec path "{}"'.format(args.jar_exec_path))
+        print('Patch jars in "{}"'.format(args.output_dir))
+        patch_jars(args.jar_exec_path, args.output_dir, pom_files)
 
 
 if __name__ == "__main__":
