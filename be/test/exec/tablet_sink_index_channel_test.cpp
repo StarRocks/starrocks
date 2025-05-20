@@ -216,6 +216,10 @@ TEST_F(TabletSinkIndexChannelTest, pipeline_load_channel_profile) {
     test_load_channel_profile_base(runtime_state.get(), expect_config);
 }
 
+using RpcOpenPair = std::pair<PTabletWriterOpenRequest*, RefCountClosure<PTabletWriterOpenResult>*>;
+using RpcAddChunkTuple =
+        std::tuple<int64_t, PTabletWriterAddChunksRequest*, ReusableClosure<PTabletWriterAddBatchResult>*>;
+
 TEST_F(TabletSinkIndexChannelTest, primary_replica_node_not_connected) {
     TQueryOptions query_options;
     query_options.__set_batch_size(4096);
