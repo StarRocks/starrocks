@@ -980,6 +980,10 @@ under the License.
                         <groupId>org.apache.hadoop</groupId>
                         <artifactId>hadoop-hdfs</artifactId>
                     </exclusion>
+                    <exclusion>
+                        <groupId>org.apache.hbase.thirdparty</groupId>
+                        <artifactId>hbase-shaded-jetty</artifactId>
+                    </exclusion>
                 </exclusions>
             </dependency>
 
