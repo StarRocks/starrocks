@@ -642,7 +642,10 @@ set global plan_capture_interval=10800;
 set global plan_capture_include_pattern=".*";
 ```
 
-需要注意的是，存储查询历史&自动捕获在一定程度上会占用存储和计算资源，请根据自身场景合理设置。
+:::note
+存储查询历史&自动捕获在一定程度上会占用存储和计算资源，请根据自身场景合理设置。
+:::
+
 
 ## 未来计划
 

@@ -32,7 +32,7 @@ Notes on Baseline creation:
 Notes on query rewrite:
 
 - SQL Plan Manager primarily relies on SQL fingerprint matching. It checks whether the SQL fingerprint of the query matches a that of a Baseline. If a query matches a Baseline, the parameters in the query are automatically substituted into the Baseline’s execution plan.
-- During the matching process, if a query matches multiple Baselines which the status is `enable`, the optimizer evaluates and selects the optimal Baseline.
+- During the matching process, if a query matches multiple Baselines with status `enable`, the optimizer evaluates and selects the optimal Baseline.
 - During the matching process, SQL Plan Manager validates whether the Baseline and the query match. If the match fails, the Baseline’s query plan will not be used.
 - For execution plans rewritten by SQL Plan Manager, the `EXPLAIN` statement will return `Using baseline plan[id]`.
 
@@ -612,14 +612,14 @@ group by i_item_id
 
 ### Auto-Capture
 
-Auto-Capture queries the query SQL statements in the past period of time(default 3 hours), and generates and saves the baseline based on these queries, and the generated baseline is in the 'disable' state by default and doesn't take effect immediately. 
+Auto-Capture queries the query SQL statements in the past period of time (default 3 hours), and generates and saves the baseline based on these queries, and the generated baseline is in the 'disable' state by default and doesn't take effect immediately. 
 In the following scenarios:
 * After the upgrade, the execution plan changes, resulting in a higher query time
 * After the data changed, and the statistics are changed, resulting in a change in the execution plan
 
-You can find the historical baseline by 'show baseline' and manually roll back the plan by 'enable baseline'.
+You can find the historical baseline with `show baseline` and manually roll back the plan with `enable baseline`.
 
-The Auto-Capture feature depend on the save query history feature and requires the following settings:
+The Auto-Capture feature depends on the save query history feature and requires the following settings:
 ```SQL
 set global enable_query_history=true;
 ```
@@ -640,7 +640,9 @@ set global plan_capture_interval=10800;
 set global plan_capture_include_pattern=".*";
 ```
 
-Noted: save query history & Auto-Capture will cost some storage and computing resources, so please set it reasonably according to your own scenarios.
+:::note
+Save query history and Auto-Capture will cost some storage and computing resources, so please set it reasonably according to your own scenarios.
+:::
 
 ## Future Plans
 
