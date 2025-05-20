@@ -24,6 +24,7 @@
 #include "cache/datacache.h"
 #include "cache/object_cache/object_cache.h"
 #include "common/compiler_util.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "exec/hdfs_scanner.h"
 #include "formats/parquet/column_reader.h"
@@ -82,7 +83,7 @@ Status PageReader::_deal_page_with_cache() {
     } else {
         _cache_buf = std::make_shared<std::vector<uint8_t>>();
         RETURN_IF_ERROR(_read_and_deserialize_header(true));
-        if (config::parquet_page_cache_skip_over_threshold && !_cache_decompressed_data()) {
+        if (config::enable_adjustment_page_cache_skip && !_cache_decompressed_data()) {
             _skip_page_cache = true;
             return Status::OK();
         }
