@@ -361,6 +361,11 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             // this is a duplicate request, considered a normal request,
             LOG.info("duplicate request for stream load. request id: {}, txn_id: {}", e.getDuplicatedRequestId(),
                     e.getTxnId());
+            // only begin state will throw duplciate request exception
+            resp.addResultEntry("Label", this.label);
+            resp.addResultEntry("TxnId", this.txnId);
+            resp.addResultEntry("BeginChannel", channelNum);
+            resp.addResultEntry("BeginTxnTimeMs", this.beforeLoadTimeMs - this.createTimeMs);
         } catch (Exception e) {
             exception = e;
         } finally {
