@@ -93,9 +93,9 @@ bool StoragePageCache::adjust_capacity(int64_t delta, size_t min_capacity) {
     return true;
 }
 
-bool StoragePageCache::lookup(const CacheKey& key, PageCacheHandle* handle) {
+bool StoragePageCache::lookup(const std::string& key, PageCacheHandle* handle) {
     ObjectCacheHandle* obj_handle = nullptr;
-    Status st = _cache->lookup(key.encode(), &obj_handle);
+    Status st = _cache->lookup(key, &obj_handle);
     if (!st.ok()) {
         return false;
     }
@@ -103,7 +103,7 @@ bool StoragePageCache::lookup(const CacheKey& key, PageCacheHandle* handle) {
     return true;
 }
 
-Status StoragePageCache::insert(const CacheKey& key, std::vector<uint8_t>* data, PageCacheHandle* handle,
+Status StoragePageCache::insert(const std::string& key, std::vector<uint8_t>* data, PageCacheHandle* handle,
                                 bool in_memory) {
 #ifndef BE_TEST
     int64_t mem_size = malloc_usable_size(data->data()) + sizeof(*data);
@@ -124,7 +124,7 @@ Status StoragePageCache::insert(const CacheKey& key, std::vector<uint8_t>* data,
     ObjectCacheHandle* obj_handle = nullptr;
     // Use mem size managed by memory allocator as this record charge size.
     // At the same time, we should record this record size for data fetching when lookup.
-    Status st = _cache->insert(key.encode(), (void*)data, mem_size, deleter, &obj_handle, &options);
+    Status st = _cache->insert(key, (void*)data, mem_size, deleter, &obj_handle, &options);
     if (st.ok()) {
         *handle = PageCacheHandle(_cache, obj_handle);
     }

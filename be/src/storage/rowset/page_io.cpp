@@ -129,6 +129,20 @@ Status PageIO::write_page(WritableFile* wfile, const std::vector<Slice>& body, c
     return Status::OK();
 }
 
+// The unique key identifying entries in the page cache.
+// Each cached page corresponds to a specific offset within
+// a file.
+//
+// TODO(zc): Now we use file name(std::string) as a part of
+// key, which is not efficient. We should make it better later
+std::string encode_cache_key(const std::string& fname, int64_t offset) {
+    std::string str;
+    str.reserve(fname.size() + sizeof(offset));
+    str.append(fname);
+    str.append((char*)&offset, sizeof(offset));
+    return str;
+}
+
 Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle* handle, Slice* body,
                                         PageFooterPB* footer) {
     // the function will be used by query or load, current load is not allowed to fail when memory reach the limit,
@@ -140,7 +154,7 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
 
     auto cache = StoragePageCache::instance();
     PageCacheHandle cache_handle;
-    StoragePageCache::CacheKey cache_key(opts.read_file->filename(), opts.page_pointer.offset);
+    std::string cache_key = encode_cache_key(opts.read_file->filename(), opts.page_opointer.offset);
     if (opts.use_page_cache && cache->lookup(cache_key, &cache_handle)) {
         // we find page in cache, use it
         *handle = PageHandle(std::move(cache_handle));
