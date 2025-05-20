@@ -557,7 +557,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     }
     setenv(staros::starlet::fslib::kFslibCacheDir.c_str(), config::starlet_cache_dir.c_str(), 1);
 
-    std::unique_ptr<ThreadPool> put_aggregate_metadata_thread_pool;
     int32_t max_thread_count = config::transaction_publish_version_worker_count;
     if (max_thread_count <= 0) {
         max_thread_count = CpuInfo::num_cores();
@@ -567,6 +566,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_max_threads(std::max(1, max_thread_count))
                             .set_max_queue_size(std::numeric_limits<int>::max())
                             .build(&_put_aggregate_metadata_thread_pool));
+    REGISTER_THREAD_POOL_METRICS("put_aggregate_metadata_pool", _put_aggregate_metadata_thread_pool);
 
 #elif defined(BE_TEST)
     _lake_location_provider = std::make_shared<lake::FixedLocationProvider>(_store_paths.front().path);
