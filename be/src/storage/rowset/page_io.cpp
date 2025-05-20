@@ -227,7 +227,7 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
         page_slice = Slice(page.get(), footer->uncompressed_size() + footer_size + 4);
         opts.stats->uncompressed_bytes_read += page_slice.size;
     } else {
-        opts.stats->uncompressed_bytes_read += body_size;
+        opts.stats->uncompressed_bytes_read += page_size;
     }
 
     RETURN_IF_ERROR(StoragePageDecoder::decode_page(footer, footer_size + 4, opts.encoding_type, &page, &page_slice));
