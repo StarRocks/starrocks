@@ -329,13 +329,6 @@ public class PaimonMetadata implements ConnectorMetadata {
                 recordCount, fileSizeInBytes, fileCount);
     }
 
-    private Long convertToSystemDefaultTime(Timestamp lastUpdateTime) {
-        LocalDateTime localDateTime = lastUpdateTime.toLocalDateTime();
-        ZoneId zoneId = ZoneId.systemDefault();
-        ZonedDateTime zonedDateTime = localDateTime.atZone(zoneId);
-        return zonedDateTime.toInstant().toEpochMilli();
-    }
-
     @Override
     public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
         Identifier identifier = new Identifier(databaseName, tableName);
@@ -643,6 +636,13 @@ public class PaimonMetadata implements ConnectorMetadata {
         return hdfsEnvironment.getCloudConfiguration();
     }
 
+    private Long convertToSystemDefaultTime(Timestamp lastUpdateTime) {
+        LocalDateTime localDateTime = lastUpdateTime.toLocalDateTime();
+        ZoneId zoneId = ZoneId.systemDefault();
+        ZonedDateTime zonedDateTime = localDateTime.atZone(zoneId);
+        return zonedDateTime.toInstant().toEpochMilli();
+    }
+
     public long getTableUpdateTime(String dbName, String tblName) {
         Identifier snapshotsTableIdentifier = new Identifier(dbName, String.format("%s%s", tblName, "$snapshots"));
         RecordReaderIterator<InternalRow> iterator = null;
@@ -900,10 +900,25 @@ public class PaimonMetadata implements ConnectorMetadata {
             return true;
         }
 
-        List<ColumnRefOperator> columnRefOperators = predicate.getColumnRefs();
+        List<ScalarOperator> scalarOperators = Utils.extractConjuncts(predicate);
+
+        List<String> predicateColumns = new ArrayList<>();
+        for (ScalarOperator operator : scalarOperators) {
+            String columnName = null;
+            if (operator.getChild(0) instanceof ColumnRefOperator) {
+                columnName = ((ColumnRefOperator) operator.getChild(0)).getName();
+            }
+
+            if (columnName == null || columnName.isEmpty()) {
+                return false;
+            }
+
+            predicateColumns.add(columnName);
+        }
+
         List<String> partitionColNames = table.getPartitionColumnNames();
-        for (ColumnRefOperator c : columnRefOperators) {
-            if (!partitionColNames.contains(c.getName())) {
+        for (String columnName : predicateColumns) {
+            if (!partitionColNames.contains(columnName)) {
                 return false;
             }
         }

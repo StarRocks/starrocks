@@ -53,11 +53,6 @@ public class LogicalPaimonScanOperator extends LogicalScanOperator {
         return this.predicates;
     }
 
-    @Override
-    public boolean isEmptyOutputRows() {
-        return !table.isUnPartitioned() && predicates.getSelectedPartitionIds().isEmpty();
-    }
-
     public boolean hasUnknownColumn() {
         return hasUnknownColumn;
     }
