@@ -2020,10 +2020,35 @@ struct TStartCheckpointRequest {
     1: optional i64 epoch;
     2: optional i64 journal_id;
     3: optional bool is_global_state_mgr;
+    4: optional bool need_cluster_snapshot_info;
 }
 
 struct TStartCheckpointResponse {
     1: optional Status.TStatus status;
+}
+
+struct TPhysicalPartitionSnapshotInfo {
+    1: optional i64 physical_part_id;
+    2: optional i64 version;
+}
+
+struct TPartitionSnapshotInfo {
+    1: optional i64 partition_id;
+    2: optional map<i64, TPhysicalPartitionSnapshotInfo> physical_part_infos;
+}
+
+struct TTableSnapshotInfo {
+    1: optional i64 table_id;
+    2: optional map<i64, TPartitionSnapshotInfo> part_infos;
+}
+
+struct TDatabaseSnapshotInfo {
+    1: optional i64 db_id;
+    2: optional map<i64, TTableSnapshotInfo> table_infos;
+}
+
+struct TClusterSnapshotInfo {
+    1: optional map<i64, TDatabaseSnapshotInfo> db_infos;
 }
 
 struct TFinishCheckpointRequest {
@@ -2032,6 +2057,7 @@ struct TFinishCheckpointRequest {
     3: optional bool is_success;
     4: optional string message;
     5: optional bool is_global_state_mgr;
+    6: optional TClusterSnapshotInfo cluster_snapshot_info;
 }
 
 struct TFinishCheckpointResponse {

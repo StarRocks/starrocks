@@ -130,6 +130,7 @@ import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StorageInfo;
+import com.starrocks.lake.snapshot.ClusterSnapshotInfo;
 import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.mv.MVMetaVersionRepairer;
@@ -5246,5 +5247,41 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     }
                 }).sum();
         return ImmutableMap.of("Partition", totalCount);
+    }
+
+    public void getNativeTableVersions(ClusterSnapshotInfo clusterSnapshotInfo) {
+        if (clusterSnapshotInfo == null) {
+            return;
+        }
+
+        clusterSnapshotInfo.reset();
+        List<Long> dbIds = getDbIds();
+        for (Long dbId : dbIds) {
+            Database db = getDb(dbId);
+            if (db == null) {
+                continue;
+            }
+
+            List<Table> tables = new ArrayList<>();
+            for (Table table : getTables(db.getId())) {
+                if (table.isCloudNativeTableOrMaterializedView()) {
+                    tables.add(table);
+                }
+            }
+
+            for (Table table : tables) {
+                Locker locker = new Locker();
+                locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+                try {
+                    OlapTable olapTable = (OlapTable) table;
+                    for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
+                        clusterSnapshotInfo.putVersion(dbId, table.getId(), partition.getParentId(),
+                                                       partition.getId(), partition.getVisibleVersion());
+                    }
+                } finally {
+                    locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+                }
+            }
+        }
     }
 }

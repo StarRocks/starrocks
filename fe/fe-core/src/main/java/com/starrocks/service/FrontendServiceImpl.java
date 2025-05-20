@@ -117,6 +117,7 @@ import com.starrocks.journal.CheckpointWorker;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.CompactionMgr;
+import com.starrocks.lake.snapshot.ClusterSnapshotInfo;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.load.EtlJobType;
@@ -3094,7 +3095,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         TStartCheckpointResponse response = new TStartCheckpointResponse();
         try {
-            worker.setNextCheckpoint(request.getEpoch(), request.getJournal_id());
+            worker.setNextCheckpoint(request.getEpoch(), request.getJournal_id(),
+                                     request.isNeed_cluster_snapshot_info());
             response.setStatus(new TStatus(OK));
             return response;
         } catch (CheckpointException e) {
@@ -3125,7 +3127,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         try {
             if (request.isIs_success()) {
-                controller.finishCheckpoint(request.getJournal_id(), request.getNode_name());
+                controller.finishCheckpoint(request.getJournal_id(), request.getNode_name(),
+                                            ClusterSnapshotInfo.fromThrift(request.getCluster_snapshot_info()));
             } else {
                 controller.cancelCheckpoint(request.getNode_name(), request.getMessage());
             }

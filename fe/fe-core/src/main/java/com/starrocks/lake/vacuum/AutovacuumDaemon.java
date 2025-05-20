@@ -185,10 +185,11 @@ public class AutovacuumDaemon extends FrontendDaemon {
 
         List<Long> snapshotRetainVersions =
                         GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
-                                      .getRetainVersionsForVacuum(db.getId(), table.getId(), partition.getId());
+                                      .getRetainVersionsForVacuum(
+                                            db.getId(), table.getId(), partition.getParentId(), partition.getId());
         if (snapshotRetainVersions == null) {
-            LOG.info("Skip vacuum for {}.{}.{}, because the retain versions info is not ready",
-                     db.getFullName(), table.getName(), partition.getId());
+            LOG.info("Skip vacuum for {}.{}.{}.{}, because the retain versions info is not ready",
+                     db.getFullName(), table.getName(), partition.getParentId(), partition.getId());
             return;
         }
 
@@ -230,6 +231,9 @@ public class AutovacuumDaemon extends FrontendDaemon {
             vacuumRequest.minRetainVersion = minRetainVersion;
             vacuumRequest.graceTimestamp =
                     startTime / MILLISECONDS_PER_SECOND - Config.lake_autovacuum_grace_period_minutes * 60;
+            vacuumRequest.graceTimestamp = Math.min(vacuumRequest.graceTimestamp,
+                    Math.max(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                            .getSafeDeletionTimeMs() / MILLISECONDS_PER_SECOND, 1));
             vacuumRequest.retainVersions = snapshotRetainVersions;
             vacuumRequest.minActiveTxnId = minActiveTxnId;
             vacuumRequest.partitionId = partition.getId();

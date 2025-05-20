@@ -14,9 +14,7 @@
 
 package com.starrocks.lake.snapshot;
 
-import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.ClusterSnapshotLog;
@@ -29,9 +27,6 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 public class ClusterSnapshotJob implements Writable {
     public static final Logger LOG = LogManager.getLogger(ClusterSnapshotJob.class);
@@ -130,6 +125,10 @@ public class ClusterSnapshotJob implements Writable {
         return state == ClusterSnapshotJobState.INITIALIZING;
     }
 
+    public boolean isUploading() {
+        return state == ClusterSnapshotJobState.UPLOADING;
+    }
+
     public boolean isError() {
         return state == ClusterSnapshotJobState.ERROR;
     }
@@ -154,20 +153,16 @@ public class ClusterSnapshotJob implements Writable {
         this.detailInfo = detailInfo;
     }
 
-    public void setFullEstimatedSnapshotVersions(Map<Pair<Long, Pair<Long, Long>>, List<Long>> estimatedSnapshotVersionInfo) {
-        Map<Pair<Long, Pair<Long, Long>>, List<Long>> estimatedSnapshotVersions = new HashMap<>();
-        for (Map.Entry<Pair<Long, Pair<Long, Long>>, List<Long>> entry : estimatedSnapshotVersionInfo.entrySet()) {
-            List<Long> versions = Lists.newArrayList();
-            for (long curVersion = entry.getValue().get(0); curVersion <= entry.getValue().get(1); curVersion++) {
-                versions.add(curVersion);
-            }
-            estimatedSnapshotVersions.put(entry.getKey(), versions);
-        }
-        snapshot.setEstimatedSnapshotVersions(estimatedSnapshotVersions);
+    public boolean needClusterSnapshotInfo() {
+        return snapshot.needClusterSnapshotInfo();
     }
 
-    public Map<Pair<Long, Pair<Long, Long>>, List<Long>> getEstimatedSnapshotVersions() {
-        return snapshot.getEstimatedSnapshotVersions();
+    public void setClusterSnapshotInfo(ClusterSnapshotInfo clusterSnapshotInfo) {
+        snapshot.setClusterSnapshotInfo(clusterSnapshotInfo);
+    }
+
+    public long getSnapshotVersion(long dbId, long tableId, long partId, long physicalPartId) {
+        return snapshot.getSnapshotVersion(dbId, tableId, partId, physicalPartId);
     }
 
     public void logJob() {

@@ -15,15 +15,10 @@
 package com.starrocks.lake.snapshot;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.thrift.TClusterSnapshotsItem;
-
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 public class ClusterSnapshot {
     public enum ClusterSnapshotType {
@@ -46,10 +41,8 @@ public class ClusterSnapshot {
     private long feJournalId;
     @SerializedName(value = "starMgrJournal")
     private long starMgrJournalId;
-
-    // (DB id, table id, partition id) -> List(visible_version)
-    @SerializedName(value = "estimatedSnapshotVersions")
-    private Map<Pair<Long, Pair<Long, Long>>, List<Long>> estimatedSnapshotVersions;
+    @SerializedName(value = "clusterSnapshotInfo")
+    private ClusterSnapshotInfo clusterSnapshotInfo;
 
     public ClusterSnapshot() {
     }
@@ -64,7 +57,7 @@ public class ClusterSnapshot {
         this.finishedTimeMs = finishedTimeMs;
         this.feJournalId = feJournalId;
         this.starMgrJournalId = starMgrJournalId;
-        this.estimatedSnapshotVersions = new HashMap<>();
+        this.clusterSnapshotInfo = new ClusterSnapshotInfo();
     }
 
     public void setJournalIds(long feJournalId, long starMgrJournalId) {
@@ -104,12 +97,23 @@ public class ClusterSnapshot {
         return id;
     }
 
-    public void setEstimatedSnapshotVersions(Map<Pair<Long, Pair<Long, Long>>, List<Long>> estimatedSnapshotVersions) {
-        this.estimatedSnapshotVersions = estimatedSnapshotVersions;
+    public boolean needClusterSnapshotInfo() {
+        return type == ClusterSnapshotType.MANUAL;
     }
 
-    public Map<Pair<Long, Pair<Long, Long>>, List<Long>> getEstimatedSnapshotVersions() {
-        return this.estimatedSnapshotVersions;
+    // for UT
+    public void setType(ClusterSnapshotType type) {
+        this.type = type;
+    }
+
+    public void setClusterSnapshotInfo(ClusterSnapshotInfo clusterSnapshotInfo) {
+        if (needClusterSnapshotInfo()) {
+            this.clusterSnapshotInfo = clusterSnapshotInfo;
+        }
+    }
+
+    public long getSnapshotVersion(long dbId, long tableId, long partId, long physicalPartId) {
+        return clusterSnapshotInfo.getVersion(dbId, tableId, partId, physicalPartId);
     }
 
     public TClusterSnapshotsItem getInfo() {

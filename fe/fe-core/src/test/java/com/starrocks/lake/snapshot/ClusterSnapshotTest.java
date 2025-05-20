@@ -14,7 +14,6 @@
 
 package com.starrocks.lake.snapshot;
 
-import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.AlterTest;
 import com.starrocks.alter.MaterializedViewHandler;
@@ -414,6 +413,7 @@ public class ClusterSnapshotTest {
 
     @Test
     public void testRetainVersion() {
+        // 1. test get version info function
         long testDbId = 0;
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         for (Long dbId : dbIds) {
@@ -449,74 +449,52 @@ public class ClusterSnapshotTest {
             }
         };
 
-        ClusterSnapshotCheckpointScheduler scheduler = new ClusterSnapshotCheckpointScheduler(null, null);
-        Map<Pair<Long, Pair<Long, Long>>, List<Long>> snapshotVersionInfo = new HashMap<>();
-        scheduler.captureSnapshotVersionInfo(snapshotVersionInfo);
-        Assert.assertTrue(!snapshotVersionInfo.isEmpty());
-
+        ClusterSnapshotInfo clusterSnapshotInfo = new ClusterSnapshotInfo();
+        GlobalStateMgr.getCurrentState().getLocalMetastore().getNativeTableVersions(clusterSnapshotInfo);
+        Assert.assertTrue(clusterSnapshotInfo != null);
         for (Table tbl : dbTest.getTables()) {
             OlapTable olapTable = (OlapTable) tbl;
             for (PhysicalPartition part : olapTable.getPhysicalPartitions()) {
-                Pair<Long, Pair<Long, Long>> key = Pair.create(dbTest.getId(), Pair.create(olapTable.getId(), part.getId()));
-                List<Long> value = snapshotVersionInfo.get(key);
-                Assert.assertTrue(value != null && value.size() == 1);
-                Assert.assertTrue(value.get(0) == part.getVisibleVersion());
+                long value = clusterSnapshotInfo.getVersion(dbTest.getId(), olapTable.getId(), part.getParentId(), part.getId());
+                Assert.assertTrue(value != 0 && value == part.getVisibleVersion());
             }
         }
+        clusterSnapshotInfo = null;
+        GlobalStateMgr.getCurrentState().getLocalMetastore().getNativeTableVersions(clusterSnapshotInfo);
+        Assert.assertTrue(clusterSnapshotInfo == null);
 
+        // 2. test get vacuum version
         ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgr();
 
-        Map<Pair<Long, Pair<Long, Long>>, List<Long>> snapshotVersionInfoFinish = new HashMap<>();
-        List<Long> rangeFinish = Lists.newArrayList();
-        rangeFinish.add(1L);
-        rangeFinish.add(5L);
-        snapshotVersionInfoFinish.put(Pair.create(122L, Pair.create(1222L, 12222L)), rangeFinish);
+        ClusterSnapshotInfo finishClusterSnapshotInfo = new ClusterSnapshotInfo();
+        finishClusterSnapshotInfo.putVersion(122L, 1222L, 12222L, 122222L, 3L);
         ClusterSnapshotJob jobFinish = new ClusterSnapshotJob(4534543, "testjob_1", "default", -1);
-        jobFinish.setFullEstimatedSnapshotVersions(snapshotVersionInfoFinish);
+        jobFinish.setClusterSnapshotInfo(finishClusterSnapshotInfo);
         jobFinish.setState(ClusterSnapshotJobState.FINISHED);
         localClusterSnapshotMgr.addSnapshotJob(jobFinish);
-        snapshotVersionInfoFinish = jobFinish.getEstimatedSnapshotVersions();
-        Assert.assertTrue(snapshotVersionInfoFinish.size() == 1);
-        Assert.assertTrue(snapshotVersionInfoFinish.get(Pair.create(122L, Pair.create(1222L, 12222L))) != null);
-        Assert.assertTrue(snapshotVersionInfoFinish.get(Pair.create(122L, Pair.create(1222L, 12222L))).size() == 5);
-        List<Long> retainVersions = snapshotVersionInfoFinish.get(Pair.create(122L, Pair.create(1222L, 12222L)));
-        for (int i = 1; i < 5; ++i) {
-            Assert.assertTrue(retainVersions.get(i - 1) + 1 == retainVersions.get(i));
-        }
 
-        Map<Pair<Long, Pair<Long, Long>>, List<Long>> snapshotVersionInfoUnFinish = new HashMap<>();
-        List<Long> rangeUnFinish = Lists.newArrayList();
-        rangeUnFinish.add(3L);
-        rangeUnFinish.add(7L);
-        snapshotVersionInfoUnFinish.put(Pair.create(122L, Pair.create(1222L, 12222L)), rangeUnFinish);
+        ClusterSnapshotInfo unFinishClusterSnapshotInfo = new ClusterSnapshotInfo();
+        unFinishClusterSnapshotInfo.putVersion(122L, 1222L, 12222L, 122222L, 6L);
         ClusterSnapshotJob jobUnFinish = new ClusterSnapshotJob(4534544, "testjob_2", "default", -1);
-        jobUnFinish.setFullEstimatedSnapshotVersions(snapshotVersionInfoUnFinish);
+        jobUnFinish.setClusterSnapshotInfo(unFinishClusterSnapshotInfo);
         localClusterSnapshotMgr.addSnapshotJob(jobUnFinish);
-        snapshotVersionInfoUnFinish = jobUnFinish.getEstimatedSnapshotVersions();
-        Assert.assertTrue(snapshotVersionInfoUnFinish.size() == 1);
-        Assert.assertTrue(snapshotVersionInfoUnFinish.get(Pair.create(122L, Pair.create(1222L, 12222L))) != null);
-        Assert.assertTrue(snapshotVersionInfoUnFinish.get(Pair.create(122L, Pair.create(1222L, 12222L))).size() == 5);
-        retainVersions = snapshotVersionInfoUnFinish.get(Pair.create(122L, Pair.create(1222L, 12222L)));
-        for (int i = 1; i < 5; ++i) {
-            Assert.assertTrue(retainVersions.get(i - 1) + 1 == retainVersions.get(i));
-        }
 
-        Assert.assertTrue(localClusterSnapshotMgr.getRetainVersionsForVacuum(122L, 1222L, 12222L) == null);
-
+        Assert.assertTrue(localClusterSnapshotMgr.getRetainVersionsForVacuum(122L, 1222L, 12222L, 122222L) == null);
         jobUnFinish.setState(ClusterSnapshotJobState.SNAPSHOTING);
+        Assert.assertTrue(localClusterSnapshotMgr.getRetainVersionsForVacuum(122L, 1222L, 12222L, 122222L) == null);
+        jobUnFinish.setState(ClusterSnapshotJobState.UPLOADING);
+        Assert.assertTrue(localClusterSnapshotMgr.getRetainVersionsForVacuum(122L, 1222L, 12222L, 122222L).isEmpty());
 
-        retainVersions = localClusterSnapshotMgr.getRetainVersionsForVacuum(122L, 1222L, 12222L);
-        Assert.assertTrue(retainVersions.size() == 7);
-        for (int i = 1; i < 7; ++i) {
-            Assert.assertTrue(retainVersions.get(i - 1) + 1 == retainVersions.get(i));
-        }
+        jobFinish.getSnapshot().setType(ClusterSnapshot.ClusterSnapshotType.MANUAL);
+        jobFinish.setClusterSnapshotInfo(finishClusterSnapshotInfo);
+        jobUnFinish.getSnapshot().setType(ClusterSnapshot.ClusterSnapshotType.MANUAL);
+        jobUnFinish.setClusterSnapshotInfo(unFinishClusterSnapshotInfo);
 
+        List<Long> retainVersions = localClusterSnapshotMgr.getRetainVersionsForVacuum(122L, 1222L, 12222L, 122222L);
+        Assert.assertTrue(retainVersions.size() == 2 && retainVersions.get(0) == 3L && retainVersions.get(1) == 6L);
         jobUnFinish.setState(ClusterSnapshotJobState.FINISHED);
-        retainVersions = localClusterSnapshotMgr.getRetainVersionsForVacuum(122L, 1222L, 12222L);
-        Assert.assertTrue(retainVersions.size() == 5);
-        Assert.assertTrue(retainVersions.get(0) == 3);
-        for (int i = 1; i < 5; ++i) {
-            Assert.assertTrue(retainVersions.get(i - 1) + 1 == retainVersions.get(i));
-        }
+        retainVersions = localClusterSnapshotMgr.getRetainVersionsForVacuum(122L, 1222L, 12222L, 122222L);
+        Assert.assertTrue(retainVersions.size() == 1);
+        Assert.assertTrue(retainVersions.get(0) == 6L);
     }
 }
