@@ -455,21 +455,22 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         if (context.outputStringColumns.isEmpty()) {
             return DecodeInfo.EMPTY;
         }
-        DistributionSpec dist = optExpression.getOutputProperty().getDistributionProperty().getSpec();
+        DistributionSpec dist = optExpression.getRequiredProperties().get(0).getDistributionProperty().getSpec();
         if (!(dist instanceof HashDistributionSpec)) {
             return visit(optExpression, context);
         }
         PhysicalSetOperation setOp = optExpression.getOp().cast();
         DecodeInfo result = context.createOutputInfo();
+        result.decodeStringColumns.except(result.outputStringColumns);
+        result.outputStringColumns.getStream().forEach(c -> disableRewriteStringColumns.union(c));
+        result.outputStringColumns.clear();
+
         ColumnRefSet shuffleColumnIds = ColumnRefSet.of();
         for (int i = 0; i < optExpression.arity(); ++i) {
             OptExpression child = optExpression.inputAt(i);
             DistributionSpec childDistSpec = child.getOutputProperty().getDistributionProperty().getSpec();
             Preconditions.checkState(childDistSpec instanceof HashDistributionSpec);
             HashDistributionSpec childHashDistSpec = (HashDistributionSpec) childDistSpec;
-            if (childHashDistSpec.getHashDistributionDesc().isLocal()) {
-                continue;
-            }
             int childIdx = i;
             EquivalentDescriptor childEqvDesc = childHashDistSpec.getEquivDesc();
             childHashDistSpec.getShuffleColumns().forEach(shuffleCol -> setOp.getChildOutputColumns().get(childIdx)
@@ -482,7 +483,6 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             return result;
         }
         shuffleColumnIds.getStream().forEach(c -> disableRewriteStringColumns.union(c));
-        result.outputStringColumns.except(shuffleColumnIds);
         result.decodeStringColumns.except(disableRewriteStringColumns);
         result.inputStringColumns.except(disableRewriteStringColumns);
         return result;

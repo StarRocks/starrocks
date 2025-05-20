@@ -141,6 +141,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.EquivalentDescriptor;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.OrderSpec;
@@ -229,6 +230,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
@@ -3231,6 +3233,35 @@ public class PlanFragmentBuilder {
                     ((HashDistributionSpec) spec).getHashDistributionDesc().isLocal();
             PlanFragment setOperationFragment =
                     new PlanFragment(context.getNextFragmentId(), setOperationNode, DataPartition.RANDOM);
+
+            if (isColocate) {
+                List<List<Expr>> localPartitionByExprsList = Lists.newArrayList();
+                List<List<DistributionCol>> childOutputDistColsList = setOperation.getChildOutputColumns()
+                        .stream()
+                        .map(childCols -> childCols.stream()
+                                .map(col -> new DistributionCol(col.getId(), true))
+                                .collect(Collectors.toList()))
+                        .collect(Collectors.toList());
+
+                for (int i = 0; i < optExpr.getRequiredProperties().size(); ++i) {
+                    HashDistributionSpec childDistSpec = (HashDistributionSpec) optExpr.getRequiredProperties()
+                            .get(i).getDistributionProperty().getSpec();
+                    List<DistributionCol> childOutputDistCols = childOutputDistColsList.get(i);
+                    List<Expr> childResultExprs = materializedResultExprLists.get(i);
+                    EquivalentDescriptor eqDesc = childDistSpec.getEquivDesc();
+                    List<Expr> childLocalPartitionExprs = childDistSpec.getHashDistributionDesc().getDistributionCols()
+                            .stream().map(distCol -> IntStream.range(0, childOutputDistCols.size())
+                                    .boxed()
+                                    .filter(idx -> eqDesc.isConnected(distCol, childOutputDistCols.get(idx)))
+                                    .findFirst()
+                                    .map(childResultExprs::get)
+                                    .orElse(null)
+                            ).collect(Collectors.toList());
+                    Preconditions.checkState(childLocalPartitionExprs.stream().allMatch(Objects::nonNull));
+                    localPartitionByExprsList.add(childLocalPartitionExprs);
+                }
+                setOperationNode.setLocalPartitionByExprsList(localPartitionByExprsList);
+            }
 
             ExecGroup execGroup = execGroups.newExecGroup();
             // TODO(by satanson): only all children of Set operator are colocate branch, we turn on execGroup.

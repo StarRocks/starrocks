@@ -103,6 +103,9 @@ public:
                                                          OpFactories& pred_operators,
                                                          const PartitionExprsGenerator& self_partition_exprs_generator);
 
+    OpFactories maybe_interpolate_local_bucket_shuffle_exchange(RuntimeState* state, int32_t plan_node_id,
+                                                                OpFactories& pred_operators,
+                                                                const std::vector<ExprContext*>& partition_expr_ctxs);
     // The intput data is already ordered by partition_exprs. Then we can use a simply approach to split them into different channels
     // as long as the data of the same partition_exprs are in the same channel.
     OpFactories maybe_interpolate_local_ordered_partition_exchange(
@@ -115,6 +118,10 @@ public:
     OpFactories interpolate_grouped_exchange(int32_t plan_node_id, OpFactories& pred_operators);
     OpFactories maybe_interpolate_grouped_exchange(int32_t plan_node_id, OpFactories& pred_operators);
 
+    OpFactories interpolate_grouped_exchange(int32_t plan_node_id, OpFactories& pred_operators,
+                                             const std::vector<ExprContext*>& partition_by_exprs);
+    OpFactories maybe_interpolate_grouped_exchange(int32_t plan_node_id, OpFactories& pred_operators,
+                                                   const std::vector<ExprContext*>& partition_by_exprs);
     // Uses local exchange to gather the output chunks of multiple predecessor pipelines
     // into a new pipeline, which the successor operator belongs to.
     // Append a LocalExchangeSinkOperator to the tail of each pipeline.

@@ -59,6 +59,15 @@ Status UnionNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _child_expr_lists.push_back(ctxs);
     }
 
+    if (tnode.union_node.__isset.local_partition_by_exprs) {
+        auto& local_partition_by_exprs = tnode.union_node.local_partition_by_exprs;
+        for (auto& texprs : local_partition_by_exprs) {
+            std::vector<ExprContext*> ctxs;
+            RETURN_IF_ERROR(Expr::create_expr_trees(_pool, texprs, &ctxs, state));
+            _local_partition_by_exprs.push_back(ctxs);
+        }
+    }
+
     if (tnode.union_node.__isset.pass_through_slot_maps) {
         for (const auto& item : tnode.union_node.pass_through_slot_maps) {
             _convert_pass_through_slot_map(item);
@@ -380,7 +389,11 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
     // ProjectOperatorFactory is used for the materialized sub-node.
     for (; i < _children.size(); i++) {
         auto child_ops = child(i)->decompose_to_pipeline(context);
-        child_ops = context->maybe_interpolate_grouped_exchange(_id, child_ops);
+        std::vector<ExprContext*> partition_by_exprs;
+        if (!_local_partition_by_exprs.empty()) {
+            partition_by_exprs = _local_partition_by_exprs[i];
+        }
+        child_ops = context->maybe_interpolate_grouped_exchange(_id, child_ops, partition_by_exprs);
         operators_list.emplace_back(child_ops);
 
         const auto& dst_tuple_desc =
