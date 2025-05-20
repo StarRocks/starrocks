@@ -79,7 +79,7 @@ public:
 
     void reset() {
         if (_is_data_owner) {
-            delete[] _data;
+            delete _data;
             _is_data_owner = false;
         }
         _data = nullptr;
