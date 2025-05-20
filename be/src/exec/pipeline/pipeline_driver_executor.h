@@ -31,6 +31,7 @@
 #include "util/threadpool.h"
 
 namespace starrocks::pipeline {
+class profile_manager;
 
 class DriverExecutor;
 using DriverExecutorPtr = std::shared_ptr<DriverExecutor>;
@@ -116,6 +117,7 @@ private:
     PipelineDriverPollerPtr _blocked_driver_poller;
     std::unique_ptr<ExecStateReporter> _exec_state_reporter;
     std::unique_ptr<AuditStatisticsReporter> _audit_statistics_reporter;
+    std::unique_ptr<profile_manager> _profile_manager;
 
     std::atomic<int> _next_id = 0;
     std::atomic_int64_t _schedule_count = 0;
