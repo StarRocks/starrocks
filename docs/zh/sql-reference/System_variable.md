@@ -303,6 +303,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：true
 * 引入版本：v2.5.13，v3.0.7，v3.1.4，v3.2.0，v3.3.0
 
+### enable_parquet_reader_bloom_filter
+
+* 描述：是否启用 Parquet 文件的 Bloom Filter 以提高性能。`true` 表示启用 Bloom Filter，`false` 表示禁用。还可以使用 BE 参数 `parquet_reader_bloom_filter_enable` 在 Session 级别上控制这一行为。Parquet 中的 Bloom Filter 是在**每个行组的列级维护的**。如果 Parquet 文件包含某些列的 Bloom Filter，查询就可以使用这些列上的谓词来有效地跳过行组。
+* 默认值：true
+* 引入版本：v3.5
+
 ### enable_plan_advisor
 
 * 描述：是否为慢查询或手动标记查询开启 Query Feedback 功能。

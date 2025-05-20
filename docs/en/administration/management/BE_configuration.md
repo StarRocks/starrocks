@@ -2837,6 +2837,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: A boolean value to control whether to enable the pageindex of Parquet file to improve performance. `true` indicates enabling pageindex, and `false` indicates disabling it.
 - Introduced in: v3.3
 
+##### parquet_reader_bloom_filter_enable
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: A boolean value to control whether to enable the bloom filter of Parquet file to improve performance. `true` indicates enabling the bloom filter, and `false` indicates disabling it. You can also control this behavior on session level using the system variable `enable_parquet_reader_bloom_filter`. Bloom filters in Parquet are maintained **at the column level within each row group**. If a Parquet file contains bloom filters for certain columns, queries can use predicates on those columns to efficiently skip row groups.
+- Introduced in: v3.5
+
 <!--
 ##### io_coalesce_read_max_buffer_size
 
