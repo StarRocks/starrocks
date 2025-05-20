@@ -16,6 +16,8 @@
 
 #include <string>
 
+#include "common/status.h"
+
 namespace starrocks {
 class CloudCredential {
 public:
@@ -56,6 +58,25 @@ public:
     }
 };
 
+// Currently only supported for Azure Blob Storage
+class AzureCloudCredential final : public CloudCredential {
+public:
+    std::string shared_key;
+    std::string sas_token;
+    std::string client_id;
+
+    Status validate() const {
+        if (shared_key.empty() && sas_token.empty() && client_id.empty()) {
+            return Status::InvalidArgument("Azure credential invalid: all fields are empty");
+        }
+        return Status::OK();
+    }
+
+    bool operator==(const AzureCloudCredential& rhs) const {
+        return shared_key == rhs.shared_key && sas_token == rhs.sas_token && client_id == rhs.client_id;
+    }
+};
+
 class CloudConfiguration {
 public:
     virtual ~CloudConfiguration() = default;
@@ -79,4 +100,14 @@ public:
     }
     AliyunCloudCredential aliyun_cloud_credential;
 };
+
+class AzureCloudConfiguration final : public CloudConfiguration {
+public:
+    bool operator==(const AzureCloudConfiguration& rhs) const {
+        return azure_cloud_credential == rhs.azure_cloud_credential;
+    }
+
+    AzureCloudCredential azure_cloud_credential;
+};
+
 } // namespace starrocks
