@@ -86,12 +86,14 @@ public class UDFTest extends PlanTestBase {
         explain = getVerboseExplain(sql);
         Assert.assertTrue(explain.contains("  1:Project"));
         Assert.assertTrue(explain.contains("  |  output columns:\n" +
-                "  |  17 <-> cast([4: c_0_3, BOOLEAN, false] as VARCHAR)"));
+                "  |  17 <-> if[([4: c_0_3, BOOLEAN, false], '1', '0'); " +
+                "args: BOOLEAN,VARCHAR,VARCHAR; result: VARCHAR; args nullable: false; result nullable: true]"));
 
         sql = "select table_function from tab0, table_function(c_0_3 + 3)";
         explain = getVerboseExplain(sql);
         Assert.assertTrue(
-                explain.contains("  |  17 <-> cast(cast([4: c_0_3, BOOLEAN, false] as SMALLINT) + 3 as VARCHAR)"));
+                explain.contains("  |  17 <-> cast(if[([4: c_0_3, BOOLEAN, false], 1, 0); args: BOOLEAN,SMALLINT,SMALLINT; " +
+                        "result: SMALLINT; args nullable: false; result nullable: true] + 3 as VARCHAR)"));
 
         sql = "select v1,v2,v3,t.unnest,o.unnest from t0,unnest([1,2,3]) t, unnest([4,5,6]) o ";
         explain = getFragmentPlan(sql);
