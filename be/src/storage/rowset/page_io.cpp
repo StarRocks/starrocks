@@ -167,8 +167,9 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
 
     // hold compressed page at first, reset to decompressed page later
     // Allocate APPEND_OVERFLOW_MAX_SIZE more bytes to make append_strings_overflow work
-    std::unique_ptr<char[]> page(new char[page_size + Column::APPEND_OVERFLOW_MAX_SIZE]);
-    Slice page_slice(page.get(), page_size);
+    std::unique_ptr<std::vector<uint8_t>> page(new std::vector<uint8_t>());
+    raw::stl_vector_resize_uninitialized(page.get(), page_size + Column::APPEND_OVERFLOW_MAX_SIZE);
+    Slice page_slice(page->data(), page_size);
     {
         SCOPED_RAW_TIMER(&opts.stats->io_ns);
         // todo override is_cache_hit
@@ -208,12 +209,13 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
         }
         SCOPED_RAW_TIMER(&opts.stats->decompress_ns);
         // Allocate APPEND_OVERFLOW_MAX_SIZE more bytes to make append_strings_overflow work
-        std::unique_ptr<char[]> decompressed_page(
-                new char[footer->uncompressed_size() + footer_size + 4 + Column::APPEND_OVERFLOW_MAX_SIZE]);
+        std::unique_ptr<std::vector<uint8_t>> decompressed_page(new std::vector<uint8_t>());
+        raw::stl_vector_resize_uninitialized(decompressed_page.get(), footer->uncompressed_size() + footer_size + 4 +
+                                                                              Column::APPEND_OVERFLOW_MAX_SIZE);
 
         // decompress page body
         Slice compressed_body(page_slice.data, body_size);
-        Slice decompressed_body(decompressed_page.get(), footer->uncompressed_size());
+        Slice decompressed_body(decompressed_page->data(), footer->uncompressed_size());
         RETURN_IF_ERROR(opts.codec->decompress(compressed_body, &decompressed_body));
         if (decompressed_body.size != footer->uncompressed_size()) {
             return Status::Corruption(strings::Substitute(
@@ -224,7 +226,7 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
         memcpy(decompressed_body.data + decompressed_body.size, page_slice.data + body_size, footer_size + 4);
         // free memory of compressed page
         page = std::move(decompressed_page);
-        page_slice = Slice(page.get(), footer->uncompressed_size() + footer_size + 4);
+        page_slice = Slice(page->data(), footer->uncompressed_size() + footer_size + 4);
         opts.stats->uncompressed_bytes_read += page_slice.size;
     } else {
         opts.stats->uncompressed_bytes_read += page_size;
