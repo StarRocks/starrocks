@@ -1416,7 +1416,8 @@ dropBaselinePlanStatement
     ;
 
 showBaselinePlanStatement
-    : SHOW BASELINE
+    : SHOW BASELINE (WHERE expression)?
+
     ;
 
 disableBaselinePlanStatement

@@ -8469,7 +8469,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitShowBaselinePlanStatement(StarRocksParser.ShowBaselinePlanStatementContext ctx) {
-        return new ShowBaselinePlanStmt(createPos(ctx));
+        Expr where = null;
+        if (ctx.WHERE() != null) {
+            where = (Expr) visit(ctx.expression());
+        }
+        return new ShowBaselinePlanStmt(createPos(ctx), where);
     }
 
     @Override
