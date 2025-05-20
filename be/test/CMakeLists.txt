@@ -33,6 +33,7 @@ set(EXEC_FILES
         ./connector_sink/iceberg_chunk_sink_test.cpp
         ./connector_sink/file_chunk_sink_test.cpp
         ./connector_sink/async_flush_output_stream_test.cpp
+        ./fs/credential/cloud_configuration_factory_test.cpp
         ./fs/fs_broker_test.cpp
         ./fs/fs_hdfs_test.cpp
         ./fs/fs_posix_test.cpp
