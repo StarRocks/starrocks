@@ -90,7 +90,12 @@ public:
         return new_size;
     }
 
-    bool zone_map_filter(const ZoneMapDetail& detail) const override { return true; }
+    bool zone_map_filter(const ZoneMapDetail& detail) const override {
+        if (detail.min_or_null_value() == detail.max_value()) {
+            if (_values.contains(detail.max_value().get<ValueType>())) return false;
+        }
+        return true;
+    }
 
     bool support_bitmap_filter() const override { return false; }
 
