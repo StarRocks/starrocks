@@ -35,10 +35,10 @@ protected:
     static void TearDownTestCase() {}
 
     void SetUp() override {
-        _saved_enable_auto_adjust = config::datacache_auto_adjust_enable;
-        config::datacache_auto_adjust_enable = false;
+        _saved_enable_auto_adjust = config::enable_datacache_disk_auto_adjust;
+        config::enable_datacache_disk_auto_adjust = false;
     }
-    void TearDown() override { config::datacache_auto_adjust_enable = _saved_enable_auto_adjust; }
+    void TearDown() override { config::enable_datacache_disk_auto_adjust = _saved_enable_auto_adjust; }
 
     bool _saved_enable_auto_adjust = false;
 };
@@ -176,13 +176,13 @@ TEST_F(BlockCacheTest, read_cache_with_adaptor) {
 
     const int kAdaptorWindowSize = 50;
 
-    // record read latencyr to ensure cache latency > remote latency
+    // record read latency to ensure cache latency > remote latency
     for (size_t i = 0; i < kAdaptorWindowSize; ++i) {
         cache->record_read_local_cache(batch_size, 1000000000);
         cache->record_read_remote_storage(batch_size, 10, true);
     }
 
-    // all reads will be reject by cache adaptor
+    // all reads will be rejected by cache adaptor
     for (size_t i = 0; i < rounds; ++i) {
         char ch = 'a' + i % 26;
         std::string expect_value(batch_size, ch);

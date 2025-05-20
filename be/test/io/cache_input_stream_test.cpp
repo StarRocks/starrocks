@@ -76,14 +76,14 @@ public:
     }
 
     void SetUp() override {
-        _saved_enable_auto_adjust = config::datacache_auto_adjust_enable;
-        config::datacache_auto_adjust_enable = false;
+        _saved_enable_auto_adjust = config::enable_datacache_disk_auto_adjust;
+        config::enable_datacache_disk_auto_adjust = false;
 
         CacheOptions options = cache_options();
         auto block_cache = TestCacheUtils::create_cache(options);
         DataCache::GetInstance()->set_block_cache(block_cache);
     }
-    void TearDown() override { config::datacache_auto_adjust_enable = _saved_enable_auto_adjust; }
+    void TearDown() override { config::enable_datacache_disk_auto_adjust = _saved_enable_auto_adjust; }
 
     static void read_stream_data(io::SeekableInputStream* stream, int64_t offset, int64_t size, char* data) {
         ASSERT_OK(stream->seek(offset));

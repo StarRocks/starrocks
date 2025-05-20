@@ -54,8 +54,8 @@ void MemSpaceMonitor::_evict_datacache(int64_t bytes_to_dec) {
 }
 
 void MemSpaceMonitor::_adjust_datacache_callback() {
-    int64_t cur_period = config::pagecache_adjust_period;
-    int64_t cur_interval = config::auto_adjust_pagecache_interval_seconds;
+    int64_t cur_period = config::datacache_mem_adjust_period;
+    int64_t cur_interval = config::datacache_mem_adjust_interval_seconds;
     std::unique_ptr<GCHelper> dec_advisor = std::make_unique<GCHelper>(cur_period, cur_interval, MonoTime::Now());
     std::unique_ptr<GCHelper> inc_advisor = std::make_unique<GCHelper>(cur_period, cur_interval, MonoTime::Now());
     while (!_stopped.load(std::memory_order_consume)) {
@@ -67,7 +67,7 @@ void MemSpaceMonitor::_adjust_datacache_callback() {
             break;
         }
 
-        if (!config::enable_auto_adjust_pagecache) {
+        if (!config::enable_datacache_mem_auto_adjust) {
             continue;
         }
         if (config::disable_storage_page_cache) {
@@ -77,10 +77,10 @@ void MemSpaceMonitor::_adjust_datacache_callback() {
         if (memtracker == nullptr || !memtracker->has_limit()) {
             continue;
         }
-        if (UNLIKELY(cur_period != config::pagecache_adjust_period ||
-                     cur_interval != config::auto_adjust_pagecache_interval_seconds)) {
-            cur_period = config::pagecache_adjust_period;
-            cur_interval = config::auto_adjust_pagecache_interval_seconds;
+        if (UNLIKELY(cur_period != config::datacache_mem_adjust_period ||
+                     cur_interval != config::datacache_mem_adjust_interval_seconds)) {
+            cur_period = config::datacache_mem_adjust_period;
+            cur_interval = config::datacache_mem_adjust_interval_seconds;
             dec_advisor = std::make_unique<GCHelper>(cur_period, cur_interval, MonoTime::Now());
             inc_advisor = std::make_unique<GCHelper>(cur_period, cur_interval, MonoTime::Now());
             // We re-initialized advisor, just continue.
