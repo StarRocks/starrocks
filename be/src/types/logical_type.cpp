@@ -56,6 +56,7 @@ LogicalType string_to_logical_type(const std::string& type_str) {
     if (upper_type_str == "DECIMAL32") return TYPE_DECIMAL32;
     if (upper_type_str == "DECIMAL64") return TYPE_DECIMAL64;
     if (upper_type_str == "DECIMAL128") return TYPE_DECIMAL128;
+    if (upper_type_str == "DECIMAL256") return TYPE_DECIMAL256;
     if (upper_type_str == "JSON") return TYPE_JSON;
     if (upper_type_str == "VARBINARY") return TYPE_VARBINARY;
     LOG(WARNING) << "invalid type string. [type='" << type_str << "']";
@@ -108,6 +109,8 @@ const char* logical_type_to_string(LogicalType type) {
         return "DECIMAL64";
     case TYPE_DECIMAL128:
         return "DECIMAL128";
+    case TYPE_DECIMAL256:
+        return "DECIMAL256";
     case TYPE_VARCHAR:
         return "VARCHAR";
     case TYPE_BOOLEAN:

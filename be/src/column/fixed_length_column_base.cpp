@@ -342,6 +342,26 @@ void FixedLengthColumnBase<T>::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t 
     }
 }
 
+template <>
+void FixedLengthColumnBase<int256_t>::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
+    // 获取精度和标度
+    const auto* decimal_column = down_cast<const DecimalV3Column<int256_t>*>(this);
+    int precision = decimal_column->precision();
+    int scale = decimal_column->scale();
+
+    // 创建 DecimalType<int256_t> 对象
+    DecimalType<int256_t> decimal_value(_data[idx]);
+
+    // 显式指定模板参数 T 为 int256_t
+    std::string s = DecimalV3Cast::to_string<int256_t>(decimal_value, precision, scale);
+    if (is_binary_protocol) {
+        buf->push_decimal(Slice(s));
+    } else {
+        buf->push_string(s.c_str(), s.size());
+    }
+}
+
+
 template <typename T>
 void FixedLengthColumnBase<T>::remove_first_n_values(size_t count) {
     size_t remain_size = _data.size() - count;
@@ -411,6 +431,7 @@ template class FixedLengthColumnBase<int32_t>;
 template class FixedLengthColumnBase<int64_t>;
 template class FixedLengthColumnBase<int96_t>;
 template class FixedLengthColumnBase<int128_t>;
+template class FixedLengthColumnBase<int256_t>;
 
 template class FixedLengthColumnBase<float>;
 template class FixedLengthColumnBase<double>;

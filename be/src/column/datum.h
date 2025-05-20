@@ -23,6 +23,7 @@
 #include "storage/decimal12.h"
 #include "storage/uint24.h"
 #include "types/date_value.hpp"
+#include "types/int256.h"
 #include "types/timestamp_value.h"
 #include "util/int96.h"
 #include "util/slice.h"
@@ -45,7 +46,7 @@ class Datum;
 using DatumArray = std::vector<Datum>;
 
 using DatumKey = std::variant<std::monostate, int8_t, uint8_t, int16_t, uint16_t, uint24_t, int32_t, uint32_t, int64_t,
-                              uint64_t, int96_t, int128_t, Slice, decimal12_t, DecimalV2Value, float, double>;
+                              uint64_t, int96_t, int128_t, Slice, decimal12_t, DecimalV2Value, float, double, int256_t>;
 using DatumMap = std::map<DatumKey, Datum>;
 using DatumStruct = std::vector<Datum>;
 
@@ -170,6 +171,7 @@ public:
                            [](const uint64_t& arg) { return DatumKey(arg); },
                            [](const int96_t& arg) { return DatumKey(arg); },
                            [](const int128_t& arg) { return DatumKey(arg); },
+                                    [](const int256_t& arg) { return DatumKey(arg); },
                            [](const Slice& arg) { return DatumKey(arg); },
                            [](const decimal12_t& arg) { return DatumKey(arg); },
                            [](const DecimalV2Value& arg) { return DatumKey(arg); },
@@ -195,7 +197,7 @@ private:
     using Variant =
             std::variant<std::monostate, int8_t, uint8_t, int16_t, uint16_t, uint24_t, int32_t, uint32_t, int64_t,
                          uint64_t, int96_t, int128_t, Slice, decimal12_t, DecimalV2Value, float, double, DatumArray,
-                         DatumMap, HyperLogLog*, BitmapValue*, PercentileValue*, JsonValue*>;
+                         DatumMap, HyperLogLog*, BitmapValue*, PercentileValue*, JsonValue*, int256_t>;
     Variant _value;
 };
 

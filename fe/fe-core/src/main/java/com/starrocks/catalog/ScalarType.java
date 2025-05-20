@@ -196,6 +196,9 @@ public class ScalarType extends Type implements Cloneable {
             // and casted to decimal64 before expression evaluations are performed on it in BE, so
             // decimal32 has a performance penalty.
             PrimitiveType pt = precision <= 18 ? PrimitiveType.DECIMAL64 : PrimitiveType.DECIMAL128;
+            if (precision > 38) {
+                pt = PrimitiveType.DECIMAL256;
+            }
             return createDecimalV3Type(pt, precision, scale);
         } else {
             return createDecimalV2Type(precision, scale);
@@ -218,7 +221,7 @@ public class ScalarType extends Type implements Cloneable {
     }
 
     public static ScalarType createDecimalV3Type(PrimitiveType type, int precision, int scale) {
-        int maxPrecision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128);
+        int maxPrecision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL256);
         ConnectContext ctx = ConnectContext.get();
         if (ctx == null ||
                 ctx.getSessionVariable() == null ||

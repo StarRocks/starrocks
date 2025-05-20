@@ -59,6 +59,7 @@ public:
     virtual Status visit(const FixedLengthColumn<int96_t>& column);
     virtual Status visit(const FixedLengthColumn<uint24_t>& column);
     virtual Status visit(const FixedLengthColumn<decimal12_t>& column);
+    virtual Status visit(const FixedLengthColumn<int256_t>& column);
 
     // NOTE: Inherited classes normally don't need to implement the following methods, they are
     // defined here mainly for successful compiling.
@@ -79,6 +80,7 @@ public:
     virtual Status visit(const FixedLengthColumnBase<int96_t>& column);
     virtual Status visit(const FixedLengthColumnBase<uint24_t>& column);
     virtual Status visit(const FixedLengthColumnBase<decimal12_t>& column);
+    virtual Status visit(const FixedLengthColumnBase<int256_t>& column);
     virtual Status visit(const ObjectColumn<JsonValue>& column);
     virtual Status visit(const ArrayViewColumn& column) {
         return Status::NotSupported("ArrayViewColumn is not supported");

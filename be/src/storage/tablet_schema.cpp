@@ -94,6 +94,8 @@ uint32_t TabletColumn::get_field_length_by_type(LogicalType type, uint32_t strin
     case TYPE_DECIMALV2:
     case TYPE_DECIMAL128:
         return 16;
+    case TYPE_DECIMAL256:  // 添加对 TYPE_DECIMAL256 的处理
+        return 32;
     case TYPE_CHAR:
         return string_length;
     case TYPE_VARCHAR:

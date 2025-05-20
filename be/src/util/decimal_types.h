@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <limits>
 #include <type_traits>
+#include "types/int256.h"
 
 namespace starrocks {
 
@@ -31,6 +32,8 @@ template <>
 inline constexpr bool is_underlying_type_of_decimal<int64_t> = true;
 template <>
 inline constexpr bool is_underlying_type_of_decimal<int128_t> = true;
+template <>
+inline constexpr bool is_underlying_type_of_decimal<int256_t> = true;
 
 template <typename T>
 inline constexpr int decimal_precision_limit = -1;
@@ -40,6 +43,8 @@ template <>
 inline constexpr int decimal_precision_limit<int64_t> = 18;
 template <>
 inline constexpr int decimal_precision_limit<int128_t> = 38;
+template <>
+inline constexpr int decimal_precision_limit<int256_t> = 76;
 
 template <typename T, int n>
 struct EXP10 {

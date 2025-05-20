@@ -103,7 +103,12 @@ int64_t DecimalV3Column<T>::xor_checksum(uint32_t from, uint32_t to) const {
     const T* src = reinterpret_cast<const T*>(data.data());
 
     for (size_t i = from; i < to; ++i) {
-        if constexpr (std::is_same_v<T, int128_t>) {
+        if constexpr (std::is_same_v<T, int256_t>) {
+            xor_checksum ^= static_cast<int64_t>(src[i].high >> 64);
+            xor_checksum ^= static_cast<int64_t>(src[i].high & ULLONG_MAX);
+            xor_checksum ^= static_cast<int64_t>(src[i].low >> 64);
+            xor_checksum ^= static_cast<int64_t>(src[i].low & ULLONG_MAX);
+        } else if constexpr (std::is_same_v<T, int128_t>) {
             xor_checksum ^= static_cast<int64_t>(src[i] >> 64);
             xor_checksum ^= static_cast<int64_t>(src[i] & ULLONG_MAX);
         } else {
@@ -117,4 +122,5 @@ int64_t DecimalV3Column<T>::xor_checksum(uint32_t from, uint32_t to) const {
 template class DecimalV3Column<int32_t>;
 template class DecimalV3Column<int64_t>;
 template class DecimalV3Column<int128_t>;
+template class DecimalV3Column<int256_t>;
 } // namespace starrocks

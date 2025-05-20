@@ -645,6 +645,8 @@ ColumnPredicate* new_column_in_predicate_generic(const TypeInfoPtr& type_info, C
         SetType values = predicate_internal::strings_to_decimal_set<TYPE_DECIMAL128>(scale, strs);
         return new ColumnInPredicate<TYPE_DECIMAL128, SetType>(type_info, id, std::move(values));
     }
+    case TYPE_DECIMAL256:  // 添加对 TYPE_DECIMAL256 的处理
+        return nullptr;
     case TYPE_CHAR:
         return new BinaryColumnInPredicate<TYPE_CHAR>(type_info, id, strs);
     case TYPE_VARCHAR:
