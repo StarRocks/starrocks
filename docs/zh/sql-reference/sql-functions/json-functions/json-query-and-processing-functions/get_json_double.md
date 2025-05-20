@@ -4,29 +4,31 @@ displayed_sidebar: docs
 
 # get_json_double
 
+此函数用于分析并从 JSON 字符串中指定路径获取浮点值。json_path 必须以 `$` 开头，并使用 `.` 作为路径分隔符。
 
+:::tip
+所有的 JSON 函数和操作符都列在导航栏和[概览页面](../overview-of-json-functions-and-operators.md)
 
-解析并获取 `json_str` 内 `json_path` 的浮点型内容。如果 `json_str` 格式不对或 `json_path` 格式不对，或者无法找到匹配项，则返回 NULL。
+通过[生成列](../../../sql-statements/generated_columns.md)加速查询
+:::
+
+如果路径中包含 `.`，可以用 `"` 和 `"` 包围。
+
+`[ ]` 用作数组下标，从 0 开始。
+
+路径中的内容不应包含 `"` 、`[` 和 `]`。
+
+如果 json_string 或 json_path 的格式错误，此函数将返回 NULL。
 
 ## 语法
 
 ```Haskell
-get_json_double(json_str, json_path)
+DOUBLE get_json_double(VARCHAR json_str, VARCHAR json_path)
 ```
-
-## 参数说明
-
-`json_str`: json 字符串，支持的数据类型为 VARCHAR。
-
-`json_path`: 指定的路径，支持的数据类型为 VARCHAR，其中 json_path 必须以 $ 符号作为开头，使用 . 作为路径分割符，如果路径中包含 `.`，则可以使用双引号包围。使用 [ ] 表示数组下标，从 0 开始，path 的内容不能包含 ", [ 和 ]。
-
-## 返回值说明
-
-返回值的数据类型为 DOUBLE。
 
 ## 示例
 
-1. 获取 key 为 "k1" 的 value
+1. 获取键为 "k1" 的值
 
     ```Plain Text
     MySQL > SELECT get_json_double('{"k1":1.3, "k2":"2"}', "$.k1");
@@ -37,7 +39,7 @@ get_json_double(json_str, json_path)
     +-------------------------------------------------+
     ```
 
-2. 获取 key 为 "my.key" 的数组中第二个元素
+2. 获取键为 "my.key" 的数组中的第二个元素
 
     ```Plain Text
     MySQL > SELECT get_json_double('{"k1":"v1", "my.key":[1.1, 2.2, 3.3]}', '$."my.key"[1]');
@@ -48,7 +50,7 @@ get_json_double(json_str, json_path)
     +---------------------------------------------------------------------------+
     ```
 
-3. 获取二级路径为 k1.key -> k2 的数组中，第一个元素
+3. 获取路径为 k1.key -> k2 的数组中的第一个元素。
 
     ```Plain Text
     MySQL > SELECT get_json_double('{"k1.key":{"k2":[1.1, 2.2]}}', '$."k1.key".k2[0]');
@@ -58,3 +60,7 @@ get_json_double(json_str, json_path)
     |                                                                 1.1 |
     +---------------------------------------------------------------------+
     ```
+
+## 关键字
+
+GET_JSON_DOUBLE,GET,JSON,DOUBLE

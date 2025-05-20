@@ -10,6 +10,12 @@ StarRocks supports the following JSON comparison operators: `<`, `<=`, `>`, `>=`
 
 - > If one operand of an operator is a JSON value while the other is not, the operand that is not a JSON value is converted to a JSON value during the arithmetic operation. For more information about the conversion rules, see [CAST](./json-query-and-processing-functions/cast.md).
 
+:::tip
+All of the JSON functions and operators are listed in the navigation and on the [overview page](./overview-of-json-functions-and-operators.md)
+
+Accelerate your queries with [generated columns](../../sql-statements/generated_columns.md)
+:::
+
 ## Arithmetic rules
 
 JSON operators comply with the following arithmetic rules:
