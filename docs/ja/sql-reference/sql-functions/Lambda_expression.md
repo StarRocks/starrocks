@@ -3,7 +3,7 @@ displayed_sidebar: docs
 sidebar_position: 0.9
 ---
 
-# Lambda expression
+# ラムダ式
 
 ラムダ式は、匿名関数であり、高階 SQL 関数のパラメータとして渡すことができます。ラムダ式を使用すると、より簡潔でエレガント、かつ拡張性のあるコードを開発できます。
 

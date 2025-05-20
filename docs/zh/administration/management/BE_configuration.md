@@ -2798,6 +2798,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：是否使用 Parquet Pageindex 信息优化读性能。
 - 引入版本：v3.3
 
+##### parquet_page_index_enable
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否启用 Parquet 文件的 Bloom Filter 以提高性能。`true` 表示启用 Bloom Filter，`false` 表示禁用。还可以使用系统变量 `enable_parquet_reader_bloom_filter` 在 Session 级别上控制这一行为。Parquet 中的 Bloom Filter 是在**每个行组的列级维护的**。如果 Parquet 文件包含某些列的 Bloom Filter，查询就可以使用这些列上的谓词来有效地跳过行组。
+- 引入版本：v3.5
+
 <!--
 ##### io_coalesce_read_max_buffer_size
 
@@ -3896,11 +3905,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### datacache_mem_size
 
-- 默认值：10%
+- 默认值：0
 - 类型：String
 - 单位：-
 - 是否动态：否
-- 描述：内存缓存数据量的上限，可设为比例上限（如 `10%`）或物理上限（如 `10G`, `21474836480` 等）。默认值为 `10%`。推荐将该参数值最低设置成 10 GB。
+- 描述：内存缓存数据量的上限，可设为比例上限（如 `10%`）或物理上限（如 `10G`, `21474836480` 等）。
 - 引入版本：-
 
 ##### datacache_disk_size
@@ -4030,6 +4039,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：否
 - 描述：Query Pool 能够使用的最大内存上限。以 Process 内存上限的百分比来表示。
 - 引入版本：v3.1.0
+
+##### rocksdb_write_buffer_memory_percent
+
+- 默认值：5
+- 类型：Int64
+- 单位：-
+- 是否动态：否
+- 描述：rocksdb中write buffer可以使用的内存占比。默认值是百分之5，最终取值不会小于64MB，也不会大于1GB。
+- 引入版本：v3.5.0
+
+##### rocksdb_max_write_buffer_memory_bytes
+
+- 默认值：1073741824
+- 类型：Int64
+- 单位：-
+- 是否动态：否
+- 描述：rocksdb中write buffer内存的最大上限。
+- 引入版本：v3.5.0
 
 <!--
 ##### datacache_block_size

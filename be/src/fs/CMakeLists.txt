@@ -27,6 +27,7 @@ set(EXEC_FILES
     fs_memory.cpp
     fs_s3.cpp
     azure/azblob_uri.cpp
+    credential/cloud_configuration_factory.cpp
     hdfs/fs_hdfs.cpp
     hdfs/hdfs_fs_cache.cpp
     s3/poco_http_client_factory.cpp
