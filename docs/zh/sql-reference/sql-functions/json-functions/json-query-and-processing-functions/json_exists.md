@@ -4,68 +4,60 @@ displayed_sidebar: docs
 
 # json_exists
 
+检查一个 JSON 对象是否包含可以通过 `json_path` 表达式定位的元素。如果元素存在，JSON_EXISTS 函数返回 `1`。否则，JSON_EXISTS 函数返回 `0`。
 
+:::tip
+所有的 JSON 函数和操作符都列在导航栏和[概述页面](../overview-of-json-functions-and-operators.md)上。
 
-查询 JSON 对象中指定路径（`json_path`）是否存在满足特定条件的值。如果值存在，则返回 `1`；如果值不存在，则返回 `0`。
+通过[生成列](../../../sql-statements/generated_columns.md)加速查询。
+:::
 
 ## 语法
 
-```Plain Text
-JSON_EXISTS(json_object_expr, json_path)
+```Haskell
+json_exists(json_object_expr, json_path)
 ```
 
-## 参数说明
+## 参数
 
-- `json_object_expr`：JSON 对象的表达式，可以是 JSON 类型的列，或者 PARSE_JSON 等 JSON 函数构造的 JSON 对象。
+- `json_object_expr`：表示 JSON 对象的表达式。该对象可以是一个 JSON 列，或是由 JSON 构造函数如 PARSE_JSON 生成的 JSON 对象。
 
-- `json_path`: 查询 JSON 对象时的路径。支持的数据类型为字符串。StarRocks 支持的 JSON Path 的语法，请参见 [JSON Path 语法](../overview-of-json-functions-and-operators.md#json-path)。
+- `json_path`：表示 JSON 对象中元素路径的表达式。此参数的值是一个字符串。有关 StarRocks 支持的 JSON 路径语法的更多信息，请参见 [JSON 函数和操作符概述](../overview-of-json-functions-and-operators.md)。
 
-## 返回值说明
+## 返回值
 
-返回 BOOLEAN 类型的值。
+返回一个 BOOLEAN 值。
 
 ## 示例
 
-示例一：查询 JSON 对象中路径表达式（`'$.a.b'` ）指定的值。由于值存在，因此返回 `1`。
+示例 1：检查指定的 JSON 对象是否包含可以通过 `'$.a.b'` 表达式定位的元素。在此示例中，元素存在于 JSON 对象中。因此，json_exists 函数返回 `1`。
 
-```Plain Text
-SELECT JSON_EXISTS(PARSE_JSON('{"a": {"b": 1}}'), '$.a.b');
-+-----------------------------------------------------+
-| json_exists(parse_json('{"a": {"b": 1}}'), '$.a.b') |
-+-----------------------------------------------------+
-|                                                   1 |
-+-----------------------------------------------------+
+```plaintext
+mysql> SELECT json_exists(PARSE_JSON('{"a": {"b": 1}}'), '$.a.b') ;
+
+       -> 1
 ```
 
-示例二：查询 JSON 对象中路径表达式（`'$.a.c'` ）指定的值。由于值不存在，因此返回 `0`。
+示例 2：检查指定的 JSON 对象是否包含可以通过 `'$.a.c'` 表达式定位的元素。在此示例中，元素不存在于 JSON 对象中。因此，json_exists 函数返回 `0`。
 
-```Plain Text
-SELECT JSON_EXISTS(PARSE_JSON('{"a": {"b": 1}}'), '$.a.c');
- +-----------------------------------------------------+
-| json_exists(parse_json('{"a": {"b": 1}}'), '$.a.c') |
-+-----------------------------------------------------+
-|                                                   0 |
-+-----------------------------------------------------+
+```plaintext
+mysql> SELECT json_exists(PARSE_JSON('{"a": {"b": 1}}'), '$.a.c') ;
+
+       -> 0
 ```
 
-示例三：查询 JSON 对象中路径表达式 `'$.a[2]'` （a 数组的第 2 个元素）指定的值。由于 a 数组中存在第 2 个元素，因此返回 `1`。
+示例 3：检查指定的 JSON 对象是否包含可以通过 `'$.a[2]'` 表达式定位的元素。在此示例中，JSON 对象是一个名为 a 的数组，包含索引 2 处的元素。因此，json_exists 函数返回 `1`。
 
-```Plain Text
-SELECT JSON_EXISTS(PARSE_JSON('{"a": [1,2,3]}'), '$.a[2]');
-+-----------------------------------------------------+
-| json_exists(parse_json('{"a": [1,2,3]}'), '$.a[2]') |
-+-----------------------------------------------------+
-|                                                   1 |
-+-----------------------------------------------------+
+```plaintext
+mysql> SELECT json_exists(PARSE_JSON('{"a": [1,2,3]}'), '$.a[2]') ;
+
+       -> 1
 ```
 
-示例四：查询 JSON 对象中路径表达式 `'$.a[3]'` （a 数组的第 3 个元素）指定的值。由于 a 数组中不存在第 3 个元素，因此返回 `0`。
+示例 4：检查指定的 JSON 对象是否包含可以通过 `'$.a[3]'` 表达式定位的元素。在此示例中，JSON 对象是一个名为 a 的数组，不包含索引 3 处的元素。因此，json_exists 函数返回 `0`。
 
-```Plain Text
-SELECT JSON_EXISTS(PARSE_JSON('{"a": [1,2,3]}'), '$.a[3]');
-+-----------------------------------------------------+
-| json_exists(parse_json('{"a": [1,2,3]}'), '$.a[3]') |
-+-----------------------------------------------------+
-|                                                   0 |
-+-----------------------------------------------------+
+```plaintext
+mysql> SELECT json_exists(PARSE_JSON('{"a": [1,2,3]}'), '$.a[3]') ;
+
+       -> 0
 ```
