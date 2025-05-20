@@ -19,7 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.analysis.HintNode;
-import com.starrocks.sql.ExpressionPrinter;
+import com.starrocks.sql.Expr2SQLPrinter;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -45,10 +45,8 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -742,7 +740,7 @@ public class SPMPlan2SQLBuilder {
         }
     }
 
-    private static class ExprSQLBuilder extends ExpressionPrinter<SQLRelation> {
+    private static class ExprSQLBuilder extends Expr2SQLPrinter<SQLRelation> {
         @Override
         public String print(ScalarOperator scalarOperator) {
             UnsupportedException.unsupportedException("SQLPlanManager doesn't support: " + scalarOperator);
@@ -760,21 +758,6 @@ public class SPMPlan2SQLBuilder {
         @Override
         public String visitVariableReference(ColumnRefOperator variable, SQLRelation context) {
             return context.columnNames.get(variable.getId());
-        }
-
-        @Override
-        public String visitArray(ArrayOperator array, SQLRelation context) {
-            String child = array.getChildren().stream().map(p -> print(p, context)).collect(Collectors.joining(", "));
-            return array.getType().toTypeString() + "[" + child + "]";
-        }
-
-        @Override
-        public String visitConstant(ConstantOperator literal, SQLRelation context) {
-            String x = super.visitConstant(literal, context);
-            if (literal.getType().isDateType()) {
-                return "'" + x + "'";
-            }
-            return x;
         }
 
         @Override

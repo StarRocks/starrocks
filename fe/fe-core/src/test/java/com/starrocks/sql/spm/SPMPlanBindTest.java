@@ -16,8 +16,11 @@ package com.starrocks.sql.spm;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.ShowStmtAnalyzer;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.spm.CreateBaselinePlanStmt;
+import com.starrocks.sql.ast.spm.ShowBaselinePlanStmt;
+import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.jupiter.api.Assertions;
@@ -506,5 +509,101 @@ public class SPMPlanBindTest extends PlanTestBase {
         assertContains(generator.getPlanStmtSQL(), "SELECT c_1, c_2, c_6, c_4 FROM "
                 + "(SELECT v1 AS c_1, v2 AS c_2, sum(v3) AS c_4, GROUPING(v1, v2) AS c_6 "
                 + "FROM t0 GROUP BY GROUPING SETS((), (v1, v2))) t1");
+    }
+
+    public List<BaselinePlan> executeShowBaselinePlan(String sql) {
+        List<StatementBase> statements = SqlParser.parse(sql, connectContext.getSessionVariable());
+        Preconditions.checkState(statements.size() == 1);
+        Preconditions.checkState(statements.get(0) instanceof ShowBaselinePlanStmt);
+        ShowBaselinePlanStmt s = (ShowBaselinePlanStmt) statements.get(0);
+        ShowStmtAnalyzer.analyze(s, connectContext);
+        return connectContext.getSqlPlanStorage().getBaselines(s.getWhere());
+    }
+
+    @Test
+    public void testShowBaselineStmt() {
+        BaselinePlan p1 = SPMStmtExecutor.execute(connectContext,
+                createBaselinePlanStmt("select t1.v4, t0.v2 from t0 join t1 on t0.v3 = t1.v6 where t0.v2 = 1"));
+        BaselinePlan p2 = SPMStmtExecutor.execute(connectContext,
+                createBaselinePlanStmt("select t1.v5, t0.v1 from t0 join t1 on t0.v3 = t1.v6 where t0.v2 = 1"));
+        BaselinePlan p3 = SPMStmtExecutor.execute(connectContext,
+                createBaselinePlanStmt("select * from t0 join t1 on t0.v3 = t1.v6 where t0.v2 = 1"));
+        p3.setEnable(false);
+
+        {
+            List<BaselinePlan> k = executeShowBaselinePlan("show baseline");
+            Assertions.assertEquals(3, k.size());
+        }
+        {
+            List<BaselinePlan> k = executeShowBaselinePlan("show baseline where enable = true");
+            Assertions.assertEquals(2, k.size());
+        }
+        {
+            List<BaselinePlan> k =
+                    executeShowBaselinePlan("show baseline where bindSQLDigest like '" + p2.getBindSqlDigest() + "'");
+            Assertions.assertEquals(1, k.size());
+            Assertions.assertEquals(p2.getId(), k.get(0).getId());
+        }
+        {
+            List<BaselinePlan> k = executeShowBaselinePlan(
+                    "show baseline where plansql = '" + p1.getPlanSql() + "' and global = false");
+            Assertions.assertEquals(1, k.size());
+            Assertions.assertEquals(p1.getId(), k.get(0).getId());
+        }
+        {
+            List<BaselinePlan> k =
+                    executeShowBaselinePlan("show baseline where date(updatetime) = date(now())");
+            Assertions.assertEquals(3, k.size());
+        }
+        {
+            Assertions.assertThrows(UnsupportedException.class,
+                    () -> executeShowBaselinePlan("show baseline where bindSQLDigest = ucase('%t1.v5, t0.v1%')"));
+        }
+    }
+
+    public ShowBaselinePlanStmt createShowBaselinePlan(String sql) {
+        List<StatementBase> statements = SqlParser.parse(sql, connectContext.getSessionVariable());
+        Preconditions.checkState(statements.size() == 1);
+        Preconditions.checkState(statements.get(0) instanceof ShowBaselinePlanStmt);
+        ShowBaselinePlanStmt s = (ShowBaselinePlanStmt) statements.get(0);
+        ShowStmtAnalyzer.analyze(s, connectContext);
+        return s;
+    }
+
+    @Test
+    public void testGlobalShowBaselineStmt() {
+        SQLPlanGlobalStorage storage = new SQLPlanGlobalStorage();
+        {
+            ShowBaselinePlanStmt s = createShowBaselinePlan("show baseline");
+            String result = storage.generateQuerySql(s.getWhere()).orElse("asdf");
+            assertContains(result, "SELECT * FROM spm_baselines");
+        }
+        {
+            ShowBaselinePlanStmt s = createShowBaselinePlan("show baseline where enable = true");
+            String result = storage.generateQuerySql(s.getWhere()).orElse("asdf");
+            assertContains(result, "WHERE is_enable");
+        }
+        {
+            ShowBaselinePlanStmt s = createShowBaselinePlan("show baseline where bindSQLDigest like '%asdf%'");
+            String result = storage.generateQuerySql(s.getWhere()).orElse("asdf");
+            assertContains(result, "WHERE bind_sql_digest LIKE '%asdf%'");
+
+        }
+        {
+            ShowBaselinePlanStmt s = createShowBaselinePlan("show baseline where global = false");
+            String result = storage.generateQuerySql(s.getWhere()).orElse("bad");
+            assertContains(result, "bad");
+
+        }
+        {
+            ShowBaselinePlanStmt s = createShowBaselinePlan("show baseline where plansql = 'asdf' and global = false");
+            String result = storage.generateQuerySql(s.getWhere()).orElse("bad");
+            assertContains(result, "bad");
+        }
+        {
+            ShowBaselinePlanStmt s = createShowBaselinePlan("show baseline where global = true and plansql = 'asdf'");
+            String result = storage.generateQuerySql(s.getWhere()).orElse("bad");
+            assertContains(result, "WHERE plan_sql = 'asdf'");
+        }
     }
 }
