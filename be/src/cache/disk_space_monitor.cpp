@@ -41,7 +41,7 @@ Status DiskSpace::init_spaces(const std::vector<DirSpace>& dir_spaces) {
 
     // We check this switch after some information are initialized, because even if it is off now,
     // we still need this information once the switch is turn on online.
-    if (!config::datacache_auto_adjust_enable) {
+    if (!config::enable_datacache_disk_auto_adjust) {
         return st;
     }
 
@@ -184,11 +184,11 @@ size_t DiskSpace::_check_cache_limit(int64_t cache_quota) {
 size_t DiskSpace::_check_cache_low_limit(int64_t cache_quota) {
     if (cache_quota < _disk_opts.cache_lower_limit) {
         if (_disabled) {
-            // If the cache quata is already disabled, skip adjusting it repeatedly.
+            // If the cache quota is already disabled, skip adjusting it repeatedly.
             VLOG(1) << "Skip updating the disk cache quota because the target quota is less than"
                     << " `datacache_min_disk_quota_for_adjustment`, path: " << _path;
         } else {
-            // This warning log only be printed when the cache disk quota is adjust from a non-zero integer to zero.
+            // This warning log only be printed when the cache disk quota is adjusted from a non-zero integer to zero.
             LOG(WARNING) << "The current available disk space is too small, so disable the disk cache directly."
                          << " If you still need it, you could reduce the value of"
                          << " `datacache_min_disk_quota_for_adjustment`, path: " << _path;
@@ -292,7 +292,7 @@ bool DiskSpaceMonitor::is_stopped() {
 void DiskSpaceMonitor::_adjust_datacache_callback() {
     while (!is_stopped()) {
         std::unique_lock<std::mutex> lck(_mutex);
-        if (_cache->is_initialized() && config::datacache_auto_adjust_enable &&
+        if (_cache->is_initialized() && config::enable_datacache_disk_auto_adjust &&
             !_updating.load(std::memory_order_acquire)) {
             if (_adjust_spaces_by_disk_usage()) {
                 auto dir_spaces = all_dir_spaces();
