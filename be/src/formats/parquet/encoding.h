@@ -79,6 +79,8 @@ public:
     // It will return ERROR if caller wants to read out-of-bound data.
     virtual Status next_batch(size_t count, ColumnContentType content_type, Column* dst,
                               const FilterData* filter = nullptr) = 0;
+    virtual Status next_batch_with_nulls(size_t count, const NullInfos& null_infos, ColumnContentType content_type,
+                                         Column* dst, const FilterData* filter);
 
     virtual Status skip(size_t values_to_skip) = 0;
 
