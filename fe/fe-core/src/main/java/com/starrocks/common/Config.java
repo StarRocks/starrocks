@@ -1836,6 +1836,12 @@ public class Config extends ConfigBase {
     public static String cauthz_authorization_class_name = "";
 
     /**
+     * Whether CauthzAuthorizer for access control should fail open
+     */
+    @ConfField(mutable = true)
+    public static String cauthz_fail_open = false;
+
+    /**
      * The authentication_chain configuration specifies the sequence of security integrations
      * that will be used to authenticate a user. Each security integration in the chain will be
      * tried in the order they are defined until one of them successfully authenticates the user.
