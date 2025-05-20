@@ -4,9 +4,13 @@ displayed_sidebar: docs
 
 # json_each
 
-
-
 Expands the outermost elements of a JSON object into a set of key-value pairs held in two columns and returns a table that consists of one row for each element.
+
+:::tip
+All of the JSON functions and operators are listed in the navigation and on the [overview page](../overview-of-json-functions-and-operators.md)
+
+Accelerate your queries with [generated columns](../../../sql-statements/generated_columns.md)
+:::
 
 ## Syntax
 
