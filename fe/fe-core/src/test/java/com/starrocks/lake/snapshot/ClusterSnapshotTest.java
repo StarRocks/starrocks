@@ -450,8 +450,20 @@ public class ClusterSnapshotTest {
         };
 
         ClusterSnapshotInfo clusterSnapshotInfo = new ClusterSnapshotInfo();
-        GlobalStateMgr.getCurrentState().getLocalMetastore().getNativeTableVersions(clusterSnapshotInfo);
-        Assert.assertTrue(clusterSnapshotInfo != null);
+        {
+            GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+            Assert.assertTrue(globalStateMgr.getLocalMetastore().getNativeTableVersions() == null);
+            new Expectations(globalStateMgr) {
+                {
+                    globalStateMgr.isCheckpointThread();
+                    minTimes = 0;
+                    result = true;
+    
+                }
+            };
+            clusterSnapshotInfo = globalStateMgr.getLocalMetastore().getNativeTableVersions();
+            Assert.assertTrue(!clusterSnapshotInfo.isEmpty());
+        }
         for (Table tbl : dbTest.getTables()) {
             OlapTable olapTable = (OlapTable) tbl;
             for (PhysicalPartition part : olapTable.getPhysicalPartitions()) {
@@ -460,8 +472,6 @@ public class ClusterSnapshotTest {
             }
         }
         clusterSnapshotInfo = null;
-        GlobalStateMgr.getCurrentState().getLocalMetastore().getNativeTableVersions(clusterSnapshotInfo);
-        Assert.assertTrue(clusterSnapshotInfo == null);
 
         // 2. test get vacuum version
         ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgr();

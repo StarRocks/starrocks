@@ -5249,12 +5249,12 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         return ImmutableMap.of("Partition", totalCount);
     }
 
-    public void getNativeTableVersions(ClusterSnapshotInfo clusterSnapshotInfo) {
-        if (clusterSnapshotInfo == null) {
-            return;
+    public ClusterSnapshotInfo getNativeTableVersions() {
+        if (!isCheckpointThread()) {
+            return null;
         }
 
-        clusterSnapshotInfo.reset();
+        ClusterSnapshotInfo clusterSnapshotInfo = new ClusterSnapshotInfo();
         List<Long> dbIds = getDbIds();
         for (Long dbId : dbIds) {
             Database db = getDb(dbId);
@@ -5270,18 +5270,13 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
 
             for (Table table : tables) {
-                Locker locker = new Locker();
-                locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
-                try {
-                    OlapTable olapTable = (OlapTable) table;
-                    for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
-                        clusterSnapshotInfo.putVersion(dbId, table.getId(), partition.getParentId(),
-                                                       partition.getId(), partition.getVisibleVersion());
-                    }
-                } finally {
-                    locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+                OlapTable olapTable = (OlapTable) table;
+                for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
+                    clusterSnapshotInfo.putVersion(dbId, table.getId(), partition.getParentId(), partition.getId(),
+                                                   partition.getVisibleVersion());
                 }
             }
         }
+        return clusterSnapshotInfo;
     }
 }

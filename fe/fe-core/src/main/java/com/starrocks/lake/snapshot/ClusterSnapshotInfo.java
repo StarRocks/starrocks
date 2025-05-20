@@ -37,6 +37,10 @@ public class ClusterSnapshotInfo {
         this.dbInfos = dbInfos != null ? dbInfos : new HashMap<>();
     }
 
+    public boolean isEmpty() {
+        return this.dbInfos.isEmpty();
+    }
+
     public void reset() {
         this.dbInfos.clear();
     }

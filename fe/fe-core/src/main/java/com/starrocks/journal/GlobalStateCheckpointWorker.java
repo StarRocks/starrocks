@@ -14,7 +14,6 @@
 
 package com.starrocks.journal;
 
-import com.starrocks.lake.snapshot.ClusterSnapshotInfo;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
@@ -27,7 +26,7 @@ public class GlobalStateCheckpointWorker extends CheckpointWorker {
     }
 
     @Override
-    void doCheckpoint(long epoch, long journalId, ClusterSnapshotInfo clusterSnapshotInfo) throws Exception {
+    void doCheckpoint(long epoch, long journalId, boolean needClusterSnapshotInfo) throws Exception {
         long replayedJournalId = -1;
         // generate new image file
         LOG.info("begin to generate new image: image.{}", journalId);
@@ -52,7 +51,10 @@ public class GlobalStateCheckpointWorker extends CheckpointWorker {
             }
             servingGlobalState.setImageJournalId(journalId);
 
-            globalStateMgr.getLocalMetastore().getNativeTableVersions(clusterSnapshotInfo);
+            if (needClusterSnapshotInfo) {
+                this.clusterSnapshotInfo = globalStateMgr.getLocalMetastore().getNativeTableVersions();
+                LOG.info("get cluster snapshot info successfully");
+            }
 
             LOG.info("checkpoint finished save image.{}", replayedJournalId);
         } finally {

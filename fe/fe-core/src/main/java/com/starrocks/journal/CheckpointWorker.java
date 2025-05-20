@@ -45,15 +45,14 @@ public abstract class CheckpointWorker extends FrontendDaemon {
     private final AtomicReference<NextPoint> nextPoint = new AtomicReference<>();
     protected GlobalStateMgr servingGlobalState;
     // every time we begin creating image, it will be reset
-    private ClusterSnapshotInfo clusterSnapshotInfo = new ClusterSnapshotInfo();
+    protected ClusterSnapshotInfo clusterSnapshotInfo = new ClusterSnapshotInfo();
 
     public CheckpointWorker(String name, Journal journal) {
         super(name, FeConstants.checkpoint_interval_second * 1000L);
         this.journal = journal;
     }
 
-    abstract void doCheckpoint(long epoch, long journalId,
-                               ClusterSnapshotInfo clusterSnapshotInfo) throws Exception;
+    abstract void doCheckpoint(long epoch, long journalId, boolean needClusterSnapshotInfo) throws Exception;
     abstract CheckpointController getCheckpointController();
     abstract boolean isBelongToGlobalStateMgr();
 
@@ -99,8 +98,7 @@ public abstract class CheckpointWorker extends FrontendDaemon {
 
         this.clusterSnapshotInfo.reset();
         try {
-            doCheckpoint(np.epoch, np.journalId, np.needClusterSnapshotInfo && isBelongToGlobalStateMgr() ?
-                                                 this.clusterSnapshotInfo : null); // only used for globalstate
+            doCheckpoint(np.epoch, np.journalId, np.needClusterSnapshotInfo && isBelongToGlobalStateMgr()); // only used for globalstate
         } catch (Exception e) {
             LOG.warn("create image failed", e);
             finishCheckpoint(np.epoch, np.journalId, false, e.getMessage());
