@@ -40,7 +40,7 @@ public:
 };
 
 TEST_F(UpdateConfigActionTest, update_datacache_disk_size) {
-    SCOPED_UPDATE(bool, config::datacache_auto_adjust_enable, false);
+    SCOPED_UPDATE(bool, config::enable_datacache_disk_auto_adjust, false);
     const std::string cache_dir = "./block_cache_for_update_config";
     ASSERT_TRUE(fs::create_directories(cache_dir).ok());
 
