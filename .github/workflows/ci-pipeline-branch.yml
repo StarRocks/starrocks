@@ -73,19 +73,24 @@ jobs:
           esac
 
       - name: Checkout code
+        id: checkout_code
+        if: github.base_ref != 'main'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.ref }}
+          ref: refs/pull/${{ github.event.pull_request.number }}/head
 
       - name: Checkout PR
+        id: checkout_pr
+        if: steps.checkout_code.outcome == 'success'
         run: |
           git remote add upstream https://github.com/${{ github.event.pull_request.base.repo.full_name }}.git
           git fetch upstream
           git merge upstream/${{ github.event.pull_request.base.ref }} --no-edit
           
       - name: Branch Access Check
+        id: branch_access_check
+        if: steps.checkout_pr.outcome =='success'
         env:
           PR_TITLE: ${{ steps.get_title.outputs.PR_TITLE }}
         run: |
@@ -101,9 +106,17 @@ jobs:
           else
             exit 0
           fi
+          echo "check_res=false" >> $GITHUB_OUTPUT
+          echo "comment=${comment}" >> $GITHUB_OUTPUT
 
-          echo "::error::${comment}"
-          exit 1
+      - name: Check Approve
+        if: steps.branch_access_check.outputs.check_res == 'false'
+        env:
+          TEAM: feature-reviewer
+          PRE_COMMENT: ${{ steps.branch_access_check.outputs.comment }}
+        run: |
+          cd ci-tool
+          ./scripts/check-approve.sh
 
   be-checker:
     runs-on: ubuntu-latest
