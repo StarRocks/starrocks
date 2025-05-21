@@ -30,6 +30,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaterializedView.PartitionRefreshStrategy;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -300,10 +301,29 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 logger.info("no partitions to refresh for materialized view");
                 return mvToRefreshedPartitions;
             }
+            // TODO(Hongkun Xu) Because non-OLAP tables cannot directly obtain partition information, currently SMART mode does
+            //  not support base tables that contain external tables. However, support for this scenario will be added in the future.
+            boolean hasExternalTable = mv.getBaseTableTypes().stream().anyMatch(type -> type != Table.TableType.OLAP);
+            if (hasExternalTable) {
+                logger.warn("materialized view {} has external table. so choose default refresh strategy", mv.getId());
+                filterPartitionByRefreshNumber(mvToRefreshedPartitions, mvPotentialPartitionNames, mv,
+                        tentative);
+            } else {
+                PartitionRefreshStrategy partitionRefreshStrategy = PartitionRefreshStrategy.valueOf(
+                        mv.getTableProperty().getPartitionRefreshStrategy().trim().toUpperCase());
+                switch (partitionRefreshStrategy) {
+                    case ADAPTIVE:
+                        filterPartitionByAdaptiveRefreshNumber(mvToRefreshedPartitions, mvPotentialPartitionNames, mv,
+                                tentative);
+                        break;
+                    case STRICT:
+                    default:
+                        // Only refresh the first partition refresh number partitions, other partitions will generate new tasks
+                        filterPartitionByRefreshNumber(mvToRefreshedPartitions, mvPotentialPartitionNames, mv,
+                                tentative);
+                }
+            }
 
-            // Only refresh the first partition refresh number partitions, other partitions will generate new tasks
-            filterPartitionByRefreshNumber(mvToRefreshedPartitions, mvPotentialPartitionNames, mv,
-                    tentative);
             int partitionRefreshNumber = mv.getTableProperty().getPartitionRefreshNumber();
             logger.info("filter partitions to refresh partitionRefreshNumber={}, partitionsToRefresh:{}, " +
                             "mvPotentialPartitionNames:{}, next start:{}, next end:{}, next list values:{}",
@@ -663,6 +683,30 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
         // do filter actions
         mvRefreshPartitioner.filterPartitionByRefreshNumber(partitionsToRefresh, mvPotentialPartitionNames, tentative);
+    }
+
+    @VisibleForTesting
+    public void filterPartitionByAdaptiveRefreshNumber(Set<String> partitionsToRefresh,
+                                                       Set<String> mvPotentialPartitionNames,
+                                                       MaterializedView mv) {
+        filterPartitionByAdaptiveRefreshNumber(partitionsToRefresh, mvPotentialPartitionNames, mv, false);
+    }
+
+    public void filterPartitionByAdaptiveRefreshNumber(Set<String> partitionsToRefresh,
+                                                       Set<String> mvPotentialPartitionNames,
+                                                       MaterializedView mv,
+                                                       boolean tentative) {
+        // refresh all partition when it's a sync refresh, otherwise updated partitions may be lost.
+        if (mvContext.executeOption != null && mvContext.executeOption.getIsSync()) {
+            return;
+        }
+        // ignore if mv is not partitioned.
+        if (!mv.isPartitionedTable()) {
+            return;
+        }
+
+        // do filter actions
+        mvRefreshPartitioner.filterPartitionByAdaptiveRefreshNumber(partitionsToRefresh, mvPotentialPartitionNames, tentative);
     }
 
     private void generateNextTaskRun() {
