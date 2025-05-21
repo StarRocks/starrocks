@@ -28,6 +28,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -48,12 +49,10 @@ public class RewriteLeftJoinToInnerJoinRule extends TransformationRule {
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
-        // This rule only applies to LEFT OUTER JOIN
         if (joinOperator.getJoinType() != JoinOperator.LEFT_OUTER_JOIN) {
             return false;
         }
 
-        // Check if the ON predicate involves a foreign key and the foreign key columns are NOT NULL.
         LogicalOlapScanOperator leftScan = (LogicalOlapScanOperator) input.inputAt(0).getOp();
         LogicalOlapScanOperator rightScan = (LogicalOlapScanOperator) input.inputAt(1).getOp();
 
@@ -65,7 +64,6 @@ public class RewriteLeftJoinToInnerJoinRule extends TransformationRule {
         }
 
         OlapTable leftOlapTable = (OlapTable) leftTable;
-
         List<ForeignKeyConstraint> fkConstraints = leftOlapTable.getForeignKeyConstraints();
         if (fkConstraints == null || fkConstraints.isEmpty()) {
             return false;
@@ -74,20 +72,18 @@ public class RewriteLeftJoinToInnerJoinRule extends TransformationRule {
         List<ScalarOperator> onPredicates = Utils.extractConjuncts(joinOperator.getOnPredicate());
 
         for (ForeignKeyConstraint fk : fkConstraints) {
-            if (fk.getParentTableInfo() == null) {
+            if (fk.getParentTableInfo() == null || fk.getParentTableInfo().getTableId() == 0) {
                 continue;
             }
-            // Check if the referenced table in FK is the right table of the join
             if (fk.getParentTableInfo().getTableId() != rightTable.getId()) {
                 continue;
             }
 
-            // Map column IDs from FK constraint to ColumnRefOperators in the ON predicate
             Map<Integer, ColumnRefOperator> leftJoinColumnRefs = leftScan.getColRefToColumnMetaMap().entrySet().stream()
                     .collect(Collectors.toMap(e -> e.getValue().getColumnId().asInt(), Map.Entry::getKey));
             Map<Integer, ColumnRefOperator> rightJoinColumnRefs = rightScan.getColRefToColumnMetaMap().entrySet().stream()
                     .collect(Collectors.toMap(e -> e.getValue().getColumnId().asInt(), Map.Entry::getKey));
-            
+
             boolean allFkColumnsMatchOnPredicate = true;
             boolean allFkColumnsNotNull = true;
 
@@ -96,20 +92,19 @@ public class RewriteLeftJoinToInnerJoinRule extends TransformationRule {
                 ColumnRefOperator rightFkColRef = rightJoinColumnRefs.get(fkColPair.second.asInt());
 
                 if (leftFkColRef == null || rightFkColRef == null) {
-                    allFkColumnsMatchOnPredicate = false; // Should not happen if FK is valid
+                    allFkColumnsMatchOnPredicate = false;
                     break;
                 }
 
-                // Check if this FK pair is part of the ON predicate
                 boolean foundInOnPredicate = false;
                 for (ScalarOperator onConjunct : onPredicates) {
                     if (onConjunct instanceof BinaryPredicateOperator) {
                         BinaryPredicateOperator binaryPred = (BinaryPredicateOperator) onConjunct;
-                        if (binaryPred.getBinaryType() == BinaryPredicateOperator.BinaryType.EQ) {
+                        if (binaryPred.getBinaryType() == BinaryType.EQ) { // Corrected enum usage
                             ScalarOperator predChild0 = binaryPred.getChild(0);
                             ScalarOperator predChild1 = binaryPred.getChild(1);
                             if ((predChild0.equals(leftFkColRef) && predChild1.equals(rightFkColRef)) ||
-                                (predChild0.equals(rightFkColRef) && predChild1.equals(leftFkColRef))) {
+                                    (predChild0.equals(rightFkColRef) && predChild1.equals(leftFkColRef))) {
                                 foundInOnPredicate = true;
                                 break;
                             }
@@ -121,7 +116,6 @@ public class RewriteLeftJoinToInnerJoinRule extends TransformationRule {
                     break;
                 }
 
-                // Check if the left FK column is NOT NULL
                 Column leftColumn = leftOlapTable.getColumn(fkColPair.first);
                 if (leftColumn == null || leftColumn.isAllowNull()) {
                     allFkColumnsNotNull = false;
@@ -130,7 +124,7 @@ public class RewriteLeftJoinToInnerJoinRule extends TransformationRule {
             }
 
             if (allFkColumnsMatchOnPredicate && allFkColumnsNotNull) {
-                return true; // Conditions met for one of the FK constraints
+                return true;
             }
         }
         return false;
@@ -143,10 +137,8 @@ public class RewriteLeftJoinToInnerJoinRule extends TransformationRule {
         LogicalJoinOperator.Builder builder = new LogicalJoinOperator.Builder();
         builder.withOperator(currentJoinOperator);
         builder.setJoinType(JoinOperator.INNER_JOIN);
-        // The ON predicate remains the same
         builder.setOnPredicate(currentJoinOperator.getOnPredicate());
         builder.setOriginalOnPredicate(currentJoinOperator.getOriginalOnPredicate());
-
 
         OptExpression result = OptExpression.create(builder.build(), input.getInputs());
         return Lists.newArrayList(result);
