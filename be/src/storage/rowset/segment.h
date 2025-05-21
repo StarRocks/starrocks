@@ -274,6 +274,9 @@ private:
                  const LakeIOOptions& lake_io_opts);
     Status _create_column_readers(SegmentFooterPB* footer);
 
+    Status _check_column_unique_id_uniqueness(SegmentFooterPB* footer,
+                                              std::unordered_map<uint32_t, uint32_t>& column_id_to_footer_ordinal);
+
     StatusOr<ChunkIteratorPtr> _new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
 
     bool _use_segment_zone_map_filter(const SegmentReadOptions& read_options);

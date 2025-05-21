@@ -369,17 +369,38 @@ public class CreateLakeTableTest {
                         "distributed by hash(c0) buckets 2\n" +
                         "properties('enable_persistent_index' = 'true', 'persistent_index_type' = 'cloud_native');"));
         LakeTable lakeTable = getLakeTable("lake_test", "test_unique_id");
-        // Clear unique id first
-        lakeTable.setMaxColUniqueId(-1);
-        for (Column column : lakeTable.getColumns()) {
-            column.setUniqueId(-1);
+        {
+            // case 1:
+            // table created on version v3.2, then upgraded to v3.3 upwards,
+            // all unique ids include max unique id is -1
+            lakeTable.setMaxColUniqueId(-1);
+            for (Column column : lakeTable.getColumns()) {
+                column.setUniqueId(-1);
+            }
+            lakeTable.gsonPostProcess();
+            Assert.assertEquals(3, lakeTable.getMaxColUniqueId());
+            Assert.assertEquals(0, lakeTable.getColumn("c0").getUniqueId());
+            Assert.assertEquals(1, lakeTable.getColumn("c1").getUniqueId());
+            Assert.assertEquals(2, lakeTable.getColumn("c2").getUniqueId());
+            Assert.assertEquals(3, lakeTable.getColumn("c3").getUniqueId());
         }
-        lakeTable.gsonPostProcess();
-        Assert.assertEquals(3, lakeTable.getMaxColUniqueId());
-        Assert.assertEquals(0, lakeTable.getColumn("c0").getUniqueId());
-        Assert.assertEquals(1, lakeTable.getColumn("c1").getUniqueId());
-        Assert.assertEquals(2, lakeTable.getColumn("c2").getUniqueId());
-        Assert.assertEquals(3, lakeTable.getColumn("c3").getUniqueId());
+
+        {
+            // case 1:
+            // 1. table created on version v3.3
+            // 2. cluster downgraded to v3.2
+            // 3. add one column on version v3.2, the column's unique id is -1
+            // 4. cluster upgraded to v3.3
+            lakeTable.setMaxColUniqueId(2);
+            lakeTable.getColumns().get(3).setUniqueId(-1);
+
+            lakeTable.gsonPostProcess();
+            Assert.assertEquals(3, lakeTable.getMaxColUniqueId());
+            Assert.assertEquals(0, lakeTable.getColumn("c0").getUniqueId());
+            Assert.assertEquals(1, lakeTable.getColumn("c1").getUniqueId());
+            Assert.assertEquals(2, lakeTable.getColumn("c2").getUniqueId());
+            Assert.assertEquals(3, lakeTable.getColumn("c3").getUniqueId());
+        }
     }
 
     @Test

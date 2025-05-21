@@ -16,9 +16,12 @@ package com.starrocks.lake;
 
 import com.google.common.collect.Lists;
 import com.staros.proto.ShardGroupInfo;
+import com.starrocks.catalog.AggregateType;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -26,12 +29,17 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PhysicalPartitionImpl;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.thrift.TStorageType;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -43,6 +51,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -163,5 +172,84 @@ public class LakeTableHelperTest {
 
         LakeTableHelper.deleteShardGroupMeta(partition);
         Assert.assertEquals(0, shardGroupInfos.size());
+    }
+
+    @Test
+    public void testRestoreColumnUniqueIdIfNeeded() throws Exception {
+        String sql = "create table test_lake_table_helper.test_tb (k1 int, k2 int, k3 varchar)";
+        LakeTable table = createTable(sql);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+
+        // add one more index meta
+        long indexId = 1000L;
+        long partitionId = 1001L;
+        KeysType keysType = KeysType.DUP_KEYS;
+        Column c0 = new Column("c0", Type.INT, true, AggregateType.NONE, false, null, null);
+        Column c1 = new Column("c1", Type.INT, true, AggregateType.NONE, false, null, null);
+
+        DistributionInfo dist = new HashDistributionInfo(10, Arrays.asList(c0, c1));
+        MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+        Partition partition = new Partition(partitionId, "t0", index, dist);
+        TStorageMedium storage = TStorageMedium.HDD;
+        TabletMeta tabletMeta =
+                new TabletMeta(db.getId(), table.getId(), partition.getId(), index.getId(), 0, storage, true);
+        for (int i = 0; i < 10; i++) {
+            Tablet tablet = new LakeTablet(GlobalStateMgr.getCurrentState().getNextId());
+            index.addTablet(tablet, tabletMeta);
+        }
+        table.addPartition(partition);
+        table.setIndexMeta(index.getId(), "t0", Arrays.asList(c0, c1), 0, 0, (short) 1, TStorageType.COLUMN,
+                keysType);
+        List<Column> newIndexSchema = table.getSchemaByIndexId(indexId);
+        List<Column> baseSchema = table.getBaseSchema();
+
+        {
+            // reset column unique id to invalid value
+            c0.setUniqueId(-1);
+            c1.setUniqueId(0);
+            Assert.assertEquals(2, table.getIndexIdToSchema().size());
+
+            // base schema is fine
+            Assert.assertFalse(LakeTableHelper.restoreColumnUniqueId(baseSchema));
+            // index schema needs to be restored
+            Assert.assertTrue(LakeTableHelper.restoreColumnUniqueId(newIndexSchema));
+            Assert.assertEquals(0, c0.getUniqueId());
+            Assert.assertEquals(1, c1.getUniqueId());
+            for (int ordinal = 0; ordinal < baseSchema.size(); ordinal++) {
+                Column column = baseSchema.get(ordinal);
+                Assert.assertEquals(ordinal, column.getUniqueId());
+            }
+        }
+
+        {
+            // reset column unique id to invalid value
+            c0.setUniqueId(-1);
+            c1.setUniqueId(0);
+            // case for restoring table
+            LakeTableHelper.restoreColumnUniqueIdIfNeeded(table);
+            Assert.assertEquals(0, c0.getUniqueId());
+            Assert.assertEquals(1, c1.getUniqueId());
+            baseSchema = table.getBaseSchema();
+            for (int ordinal = 0; ordinal < baseSchema.size(); ordinal++) {
+                Column column = baseSchema.get(ordinal);
+                Assert.assertEquals(ordinal, column.getUniqueId());
+            }
+        }
+
+        {
+            // reset column unique id to invalid value
+            c0.setUniqueId(-1);
+            c1.setUniqueId(0);
+            baseSchema.get(2).setUniqueId(-1);
+            // case for restoring table
+            LakeTableHelper.restoreColumnUniqueIdIfNeeded(table);
+            Assert.assertEquals(0, c0.getUniqueId());
+            Assert.assertEquals(1, c1.getUniqueId());
+            baseSchema = table.getBaseSchema();
+            for (int ordinal = 0; ordinal < baseSchema.size(); ordinal++) {
+                Column column = baseSchema.get(ordinal);
+                Assert.assertEquals(ordinal, column.getUniqueId());
+            }
+        }
     }
 }
