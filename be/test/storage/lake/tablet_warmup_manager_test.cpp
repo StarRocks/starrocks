@@ -205,18 +205,18 @@ TEST_F(TabletWarmupManagerTest, test_init_and_stop) {
 TEST_F(TabletWarmupManagerTest, test_need_warmup) {
     int64_t tablet_id = 9527;
     // tablet info not exist
-    EXPECT_FALSE(staros_need_warmup_tablet(tablet_id));
+    EXPECT_FALSE(staros_need_warmup_tablet(tablet_id).ok());
     auto shardInfo = generateShardInfo(tablet_id, false);
     auto st = g_worker->add_shard(shardInfo);
     EXPECT_TRUE(st.ok()) << st;
     // still not need warmup because of shardInfo
-    EXPECT_FALSE(staros_need_warmup_tablet(tablet_id));
+    EXPECT_FALSE(staros_need_warmup_tablet(tablet_id).ok());
 
     shardInfo = generateShardInfo(tablet_id, true);
     st = g_worker->add_shard(shardInfo);
     EXPECT_TRUE(st.ok()) << st;
     // need warmup
-    EXPECT_TRUE(staros_need_warmup_tablet(tablet_id));
+    EXPECT_TRUE(staros_need_warmup_tablet(tablet_id).ok());
 }
 
 TEST_F(TabletWarmupManagerTest, test_manager_stopped) {
@@ -225,7 +225,7 @@ TEST_F(TabletWarmupManagerTest, test_manager_stopped) {
     auto future = _warmup_mgr->warmup_tablet2(1324);
     auto st = future.get();
     EXPECT_TRUE(st.is_aborted());
-    EXPECT_EQ("Warmup manager stopped!", st.message());
+    EXPECT_EQ("warmup manager stopped!", st.message());
 }
 
 TEST_F(TabletWarmupManagerTest, test_tablet_abnormal_path) {
@@ -236,9 +236,9 @@ TEST_F(TabletWarmupManagerTest, test_tablet_abnormal_path) {
     }
     { // the tablet is not found the from worker
         auto future = _warmup_mgr->warmup_tablet2(1L);
-        EXPECT_FALSE(staros_need_warmup_tablet(1L));
+        EXPECT_FALSE(staros_need_warmup_tablet(1L).ok());
         auto st = future.get();
-        EXPECT_TRUE(st.ok()) << st;
+        EXPECT_TRUE(st.is_not_found()) << st;
     }
     {
         int64_t tablet_id = 1024;

@@ -55,7 +55,8 @@ TabletWarmupManager::WarmupContext::~WarmupContext() {
     }
     auto st = _future.get();
     if (!st.ok()) {
-        LOG_EVERY_N(INFO, 100) << "warmup failed for tablet: " << _tablet_id << ", error:" << st;
+        VLOG(3) << "warmup failed for tablet: " << _tablet_id << ", error:" << st;
+        g_lake_warmup_tablet_fail_count << 1;
     }
 }
 
@@ -118,7 +119,7 @@ void TabletWarmupManager::warmup_tablet(uint64_t tablet_id) {
 std::shared_future<Status> TabletWarmupManager::warmup_tablet2(uint64_t tablet_id) {
     if (_stopped) {
         auto promise = std::promise<Status>();
-        promise.set_value(Status::Aborted("Warmup manager stopped!"));
+        promise.set_value(Status::Aborted("warmup manager stopped!"));
         return promise.get_future().share();
     }
     std::scoped_lock lock(_mutex);
@@ -127,7 +128,21 @@ std::shared_future<Status> TabletWarmupManager::warmup_tablet2(uint64_t tablet_i
 }
 
 void TabletWarmupManager::loop_schedule() {
+    LOG(INFO) << "start tablet warmup manager schedule thread.";
     while (!_stopped.load()) {
+#ifndef BE_TEST
+        if (!_fe_leader_exist) {
+            TNetworkAddress master_addr = get_master_address();
+            if (!(master_addr.hostname.size() > 0 && master_addr.port > 0)) {
+                LOG_EVERY_N(INFO, 10) << "can not get fe leader info.";
+                std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                continue;
+            } else {
+                _fe_leader_exist = true;
+            }
+        }
+#endif
+
         // report back to starmgr if any
         std::set<uint64_t> tmp_set_report;
         {
@@ -139,7 +154,7 @@ void TabletWarmupManager::loop_schedule() {
             auto st = _thread_pool->submit_func(
                     std::bind(&TabletWarmupManager::batch_report_tablet_replica_status, this, std::move(ids)));
             if (!st.ok()) {
-                VLOG(3) << "batch report tablet replica status failed: " << st;
+                LOG(INFO) << "batch report tablet replica status submit task failed: " << st;
             }
             tmp_set_report.clear();
         }
@@ -171,12 +186,13 @@ void TabletWarmupManager::loop_schedule() {
             // give up copying the _tablet_id_list into a temp list and passes into batch_prepare_warmup() as parameter
             auto st = _thread_pool->submit_func([this] { this->batch_prepare_warmup(); });
             if (!st.ok()) {
-                VLOG(3) << "Failed to prepare warmup for tablets, error: " << st;
+                LOG(INFO) << "Failed to prepare warmup for tablets, error: " << st;
             }
         }
         // TODO: configurable sleep interval
         std::this_thread::sleep_for(std::chrono::milliseconds(_schedule_sleep_ms));
     }
+    LOG(INFO) << "exit tablet warmup manager schedule thread.";
 }
 
 void TabletWarmupManager::batch_prepare_warmup() {
@@ -191,8 +207,9 @@ void TabletWarmupManager::batch_prepare_warmup() {
             ctx->abort(Status::InvalidArgument("Invalid tablet_id"));
             continue;
         }
-        if (!staros_need_warmup_tablet(ctx->_tablet_id)) {
-            ctx->done();
+        auto s = staros_need_warmup_tablet(ctx->_tablet_id);
+        if (!s.ok()) {
+            ctx->abort(s);
             continue;
         }
 
@@ -278,7 +295,7 @@ void TabletWarmupManager::batch_get_partitions_meta_from_frontend(const std::vec
         auto iter = id_meta_index.find(id);
         if (iter == id_meta_index.end()) {
             // if meta is not found in FE, consider warmup succeed
-            done_warmup(id, staros::WarmupLevel::WARMUP_NOTHING, true /* report */);
+            done_warmup(id, staros::WarmupLevel::WARMUP_NOTHING, 0 /* read_size */, true /* report */);
             continue;
         }
         auto version = response.partition_metas.at(iter->second).visible_version;
@@ -299,16 +316,17 @@ void TabletWarmupManager::abort_warmup(int64_t tablet_id, Status status) {
         _tablet_in_progress.erase(iter);
         g_lake_warmup_tablet_processing_count << -1;
     }
-    g_lake_warmup_tablet_fail_count << 1;
     // unlike `done_warmup`, fail log is printed in `WarmupContext::~WarmupContext`
 }
 
-void TabletWarmupManager::done_warmup(int64_t tablet_id, staros::WarmupLevel level, bool report) {
+void TabletWarmupManager::done_warmup(int64_t tablet_id, staros::WarmupLevel level, size_t read_remote_size,
+                                      bool report) {
     std::unique_ptr<WarmupContext> ctx;
     {
         std::scoped_lock lock(_mutex_inprogress);
         auto iter = _tablet_in_progress.find(tablet_id);
         if (iter == _tablet_in_progress.end()) {
+            LOG(INFO) << "Fail to find tablet " << tablet_id << "after warmup.";
             return;
         } else {
             ctx = std::move(iter->second);
@@ -322,19 +340,20 @@ void TabletWarmupManager::done_warmup(int64_t tablet_id, staros::WarmupLevel lev
         std::scoped_lock lock(_mutex_batch_report);
         _tablet_id_report.insert(static_cast<uint64_t>(tablet_id));
         g_lake_warmup_tablet_success_count << 1;
-        VLOG(3) << "Successfully warm up tablet: " << tablet_id << ", level: " << level << ".";
     }
+    VLOG(3) << "Successfully warmup tablet: " << tablet_id << ", level: " << level
+            << ", read remote size: " << read_remote_size << ", report: " << report;
 }
 
 void TabletWarmupManager::do_warmup_tablet(int64_t tablet_id, int64_t version) {
     staros::WarmupLevel warmup_level = staros_worker_warmup_level();
     if (warmup_level == staros::WarmupLevel::WARMUP_NOT_SET || warmup_level == staros::WarmupLevel::WARMUP_NOTHING) {
-        done_warmup(tablet_id, staros::WarmupLevel::WARMUP_NOTHING, false /* report */);
+        done_warmup(tablet_id, staros::WarmupLevel::WARMUP_NOTHING, 0 /* read_size */, false /* report */);
         return;
     }
 
     if (version <= 1) {
-        done_warmup(tablet_id, warmup_level, true /* report */);
+        done_warmup(tablet_id, warmup_level, 0 /* read_size */, true /* report */);
         return;
     }
 
@@ -348,12 +367,12 @@ void TabletWarmupManager::do_warmup_tablet(int64_t tablet_id, int64_t version) {
         return;
     }
     if (warmup_level == staros::WarmupLevel::WARMUP_META) {
-        done_warmup(tablet_id, warmup_level, true /* report */);
+        done_warmup(tablet_id, warmup_level, 0 /* read_size */, true /* report */);
         return;
     }
     // check stop point
     if (_stopped.load()) {
-        abort_warmup(tablet_id, Status::Aborted("aborted"));
+        abort_warmup(tablet_id, Status::Aborted("warmup manager stopped!"));
         return;
     }
 
@@ -383,13 +402,13 @@ void TabletWarmupManager::do_warmup_tablet(int64_t tablet_id, int64_t version) {
         return;
     }
     if (warmup_level == staros::WarmupLevel::WARMUP_INDEX) {
-        done_warmup(tablet_id, warmup_level, true /* report */);
+        done_warmup(tablet_id, warmup_level, 0 /* read_size */, true /* report */);
         reader->close();
         return;
     }
     // check stop point
     if (_stopped.load()) {
-        abort_warmup(tablet_id, Status::Aborted("aborted"));
+        abort_warmup(tablet_id, Status::Aborted("warmup manager stopped!"));
         reader->close();
         return;
     }
@@ -408,16 +427,18 @@ void TabletWarmupManager::do_warmup_tablet(int64_t tablet_id, int64_t version) {
             break;
         }
         if (_stopped.load()) {
-            abort_warmup(tablet_id, Status::Aborted("aborted"));
+            abort_warmup(tablet_id, Status::Aborted("warmup manager stopped!"));
             break;
         }
     } while (true);
 
-    g_lake_warmup_read_remote_bytes << reader->stats().compressed_bytes_read_remote;
-
     reader->close();
 
-    done_warmup(tablet_id, warmup_level, true /* report */);
+    // after reader is closed, statistics will be collected
+    size_t read_remote_size = reader->stats().compressed_bytes_read_remote;
+    g_lake_warmup_read_remote_bytes << read_remote_size;
+
+    done_warmup(tablet_id, warmup_level, read_remote_size, true /* report */);
 }
 
 void TabletWarmupManager::batch_report_tablet_replica_status(const std::vector<uint64_t>& tablet_ids) {
@@ -425,7 +446,7 @@ void TabletWarmupManager::batch_report_tablet_replica_status(const std::vector<u
     TEST_SYNC_POINT_CALLBACK("TabletWarmupManager::batch_report_status.starlet_report",
                              const_cast<std::vector<uint64_t>*>(&tablet_ids));
     if (!update_st.ok()) {
-        VLOG(3) << "update tablet replica info failed. err:" << update_st;
+        LOG(INFO) << "batch report tablet replica status failed, err:" << update_st;
     }
 }
 

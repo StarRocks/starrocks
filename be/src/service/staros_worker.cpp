@@ -471,16 +471,19 @@ absl::Status StarOSWorker::batch_update_shard_replica_info(const std::vector<Sha
     return g_starlet->batch_update_shard_replica_info(shard_ids);
 }
 
-bool StarOSWorker::need_warmup_shard(ShardId id) const {
+Status StarOSWorker::need_warmup_shard(ShardId id) const {
     auto info_or = get_shard_info(id);
     if (!info_or.ok()) {
-        return false;
+        return to_status(info_or.status());
     }
     auto info = std::move(info_or.value());
     if (!need_enable_cache(info)) {
-        return false;
+        return Status::InvalidArgument(fmt::format("cache is not enabled for shard {}", id));
     }
-    return info.replica_warmup_enabled(worker_id());
+    if (!info.replica_warmup_enabled(worker_id())) {
+        return Status::InvalidArgument(fmt::format("warm up is not enabled for shard {}", id));
+    }
+    return Status::OK();
 }
 
 Status to_status(const absl::Status& absl_status) {
@@ -587,7 +590,7 @@ Status batch_update_tablet_replica_info(const std::vector<uint64_t>& tablet_ids)
     return to_status(StarOSWorker::batch_update_shard_replica_info(tablet_ids));
 }
 
-bool staros_need_warmup_tablet(int64_t tablet_id) {
+Status staros_need_warmup_tablet(int64_t tablet_id) {
     return g_worker->need_warmup_shard(static_cast<uint64_t>(tablet_id));
 }
 

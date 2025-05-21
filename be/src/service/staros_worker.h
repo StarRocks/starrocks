@@ -91,7 +91,7 @@ public:
 
     static absl::Status batch_update_shard_replica_info(const std::vector<ShardId>& shard_ids);
 
-    bool need_warmup_shard(ShardId id) const;
+    Status need_warmup_shard(ShardId id) const;
 
 private:
     struct ShardInfoDetails {
@@ -159,7 +159,7 @@ void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache)
 void shutdown_staros_worker();
 void update_staros_starcache();
 Status batch_update_tablet_replica_info(const std::vector<uint64_t>& tablet_ids);
-bool staros_need_warmup_tablet(int64_t tablet_id);
+Status staros_need_warmup_tablet(int64_t tablet_id);
 staros::WarmupLevel staros_worker_warmup_level();
 
 } // namespace starrocks

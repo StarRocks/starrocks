@@ -96,7 +96,7 @@ private:
     void batch_report_tablet_replica_status(const std::vector<uint64_t>& tablet_ids);
     void do_warmup_tablet(int64_t tablet_id, int64_t version);
     void abort_warmup(int64_t tablet_id, Status status);
-    void done_warmup(int64_t tablet_id, staros::WarmupLevel level, bool report);
+    void done_warmup(int64_t tablet_id, staros::WarmupLevel level, size_t read_remote_size, bool report);
 
     static int64_t get_partition_id_from_shard_info(staros::starlet::ShardInfo& info);
 
@@ -120,6 +120,7 @@ private:
     std::thread _schedule_thread;
 
     std::atomic<bool> _stopped = true;
+    std::atomic<bool> _fe_leader_exist = false;
 
     FixedFIFOCache<int64_t, int64_t> _partition_version_cache;
 
