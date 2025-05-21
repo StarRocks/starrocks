@@ -1,13 +1,13 @@
 ---
 displayed_sidebar: docs
-sidebar_position: 5
+sidebar_position: 10
 ---
 
 # Overview of privileges
 
 This topic describes the basic concepts of StarRocks' privilege system. Privileges determine which users can perform which operations on which objects, so that you can more securely manage data and resources in a fine-grained manner.
 
-> NOTE: The privileges described in this topic are available only from v3.0. The privilege framework and syntax in v3.0 are not backward compatible with those in earlier versions. After an upgrade to v3.0, most of your original privileges are still retained except those for specific operations. For the detailed differences, see [Upgrade notes] in [Privileges supported in StarRocks](privilege_item.md).
+> NOTE: The privileges described in this topic are available only from v3.0. The privilege framework and syntax in v3.0 are not backward compatible with those in earlier versions. After an upgrade to v3.0, most of your original privileges are still retained except those for specific operations. For the detailed differences, see [Upgrade notes] in [Privileges supported in StarRocks](./privilege_item.md).
 
 StarRocks adopts two privilege models:
 
@@ -18,7 +18,7 @@ Therefore, the maximum privilege scope of each user identity is the union of its
 
 **Basic concepts** for understanding StarRocks' privilege system:
 
-- **Object**: An entity to which access can be granted. Unless allowed by a grant, access is denied. Examples of objects include CATALOG, DATABASE, TABLE, and VIEW. For more information, see [Privileges supported in StarRocks](privilege_item.md).
+- **Object**: An entity to which access can be granted. Unless allowed by a grant, access is denied. Examples of objects include CATALOG, DATABASE, TABLE, and VIEW. For more information, see [Privileges supported in StarRocks](./privilege_item.md).
 - **Privilege**: A defined level of access to an object. Multiple privileges can be used to control the granularity of access granted on an object. Privileges are object-specific. Different objects may have different privileges. Examples of privileges include SELECT, ALTER, and DROP.
 - **User identity**: the unique identity of a user and also the entity to which privileges can be granted. User identity is represented as `username@'userhost'`, consisting of username and the IP from which the user logs in. Use identity simplifies attribute configuration. User identities that share the same user name share the same attribute. If you configure an attribute for a username, this attribute takes effect on all user identities that share this username.
 - **Role**: An entity to which privileges can be granted. Roles are an abstract collection of privileges. Roles can in turn assigned to users. Roles can also be assigned to other roles, creating a role hierarchy. To facilitate data management, StarRocks provides system-defined roles. To allow for more flexibility, you can also create custom roles according to business requirements.
@@ -27,15 +27,15 @@ The following figure shows an example of privilege management under the RBAC and
 
 In the models, access to objects is allowed through privileges assigned to roles and users. Roles are in turn assigned to other roles or users.
 
-![privilege management](../../_assets/privilege-manage.png)
+![privilege management](../../../_assets/privilege-manage.png)
 
 ## Objects and privileges
 
 Objects have a logical hierarchy, which is related to the concept they represent. For example, Database is contained in Catalog, and Table, View, Materialized View, and Function are contained in Database. The following figure shows the object hierarchy in the StarRocks system.
 
-![privilege objects](../../_assets/privilege-object.png)
+![privilege objects](../../../_assets/privilege-object.png)
 
-Each object has a set of privilege items that can be granted. These privileges define which operations can be performed on these objects. You can grant and revoke privileges from roles or users through the [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) commands.
+Each object has a set of privilege items that can be granted. These privileges define which operations can be performed on these objects. You can grant and revoke privileges from roles or users through the [GRANT](../../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../../sql-reference/sql-statements/account-management/REVOKE.md) commands.
 
 ## Users
 
@@ -63,7 +63,7 @@ After a role is activated, users can perform operations that are authorized by t
 
 StarRocks provides several types of system-defined roles.
 
-![roles](../../_assets/privilege-role.png)
+![roles](../../../_assets/privilege-role.png)
 
 - `root`: has global privileges. By default, the `root` user has the `root` role.
    After a StarRocks cluster is created, the system automatically generates a root user with root privileges. Because the root user and role have all privileges of the system, we recommend that you create new users and roles for subsequent operations to prevent any risky operations. Keep the password of the root user properly.
@@ -88,7 +88,7 @@ The following figure shows an example of privilege inheritance.
 
 > Note: The maximum number of inheritance levels for a role is 16 by default. The inheritance relationship cannot be bidirectional.
 
-![role inheritance](../../_assets/privilege-role_inheri.png)
+![role inheritance](../../../_assets/privilege-role_inheri.png)
 
 As shown in the figure:
 
@@ -98,13 +98,13 @@ As shown in the figure:
 
 ### Active roles
 
-Active roles allow users to apply the privileges of the role under the current session. You can use `SELECT CURRENT_ROLE();` to view active roles in the current session. For more information, see [current_role](../../sql-reference/sql-functions/utility-functions/current_role.md).
+Active roles allow users to apply the privileges of the role under the current session. You can use `SELECT CURRENT_ROLE();` to view active roles in the current session. For more information, see [current_role](../../../sql-reference/sql-functions/utility-functions/current_role.md).
 
 #### Default roles
 
-Default roles are automatically activated when the user logs in to the cluster. It can be a role owned by one or more users. The administrator can set default roles using the `DEFAULT ROLE` keyword in [CREATE USER](../../sql-reference/sql-statements/account-management/CREATE_USER.md) and can change default roles using [ALTER USER](../../sql-reference/sql-statements/account-management/ALTER_USER.md).
+Default roles are automatically activated when the user logs in to the cluster. It can be a role owned by one or more users. The administrator can set default roles using the `DEFAULT ROLE` keyword in [CREATE USER](../../../sql-reference/sql-statements/account-management/CREATE_USER.md) and can change default roles using [ALTER USER](../../../sql-reference/sql-statements/account-management/ALTER_USER.md).
 
-Users can also change their default roles using [SET DEFAULT ROLE](../../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md).
+Users can also change their default roles using [SET DEFAULT ROLE](../../../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md).
 
 Default roles provide basic privilege protection for users. For example, User A has `role_query` and `role_delete`, which has query and delete privilege respectively. We recommend that you only use `role_query` as the default role to prevent data loss caused by high-risk operations such as `DELETE` or `TRUNCATE`. If you need to perform these operations, you can do it after manually setting active roles.
 
@@ -112,11 +112,11 @@ A user who does not have a default role still has the `public` role, which is au
 
 #### Manually activate roles
 
-In addition to default roles, users can also manually activate one or more existing roles within a session. You can use [SHOW GRANTS](../../sql-reference/sql-statements/account-management/SHOW_GRANTS.md) to view the privileges and roles that can be activated, and use [SET ROLE](../../sql-reference/sql-statements/account-management/SET_ROLE.md) to configure active roles that are effective in the current session.
+In addition to default roles, users can also manually activate one or more existing roles within a session. You can use [SHOW GRANTS](../../../sql-reference/sql-statements/account-management/SHOW_GRANTS.md) to view the privileges and roles that can be activated, and use [SET ROLE](../../../sql-reference/sql-statements/account-management/SET_ROLE.md) to configure active roles that are effective in the current session.
 
 Note that the SET ROLE command overwrites each other. For example, after a user logs in, the `default_role` is activated by default. Then the user runs `SET ROLE role_s`. At this time, the user has only the privileges of `role_s` and their own privileges. `default_role` is overwritten.
 
 ## References
 
-- [Privileges supported by StarRocks](privilege_item.md)
-- [Manage user privileges](User_privilege.md)
+- [Privileges supported by StarRocks](./privilege_item.md)
+- [Manage user privileges](./User_privilege.md)

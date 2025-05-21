@@ -899,7 +899,7 @@ GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE hive_role_table;
 
 ## Create a Hive database
 
-Similar to the internal catalog of StarRocks, if you have the [CREATE DATABASE](../../administration/user_privs/privilege_item.md#catalog) privilege on a Hive catalog, you can use the [CREATE DATABASE](../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) statement to create a database in that Hive catalog. This feature is supported from v3.2 onwards.
+Similar to the internal catalog of StarRocks, if you have the [CREATE DATABASE](../../administration/user_privs/authorization/privilege_item.md#catalog) privilege on a Hive catalog, you can use the [CREATE DATABASE](../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) statement to create a database in that Hive catalog. This feature is supported from v3.2 onwards.
 
 :::note
 
@@ -932,7 +932,7 @@ The `prefix` varies based on the storage system you use:
 
 ## Drop a Hive database
 
-Similar to the internal databases of StarRocks, if you have the [DROP](../../administration/user_privs/privilege_item.md#database) privilege on a Hive database, you can use the [DROP DATABASE](../../sql-reference/sql-statements/Database/DROP_DATABASE.md) statement to drop that Hive database. This feature is supported from v3.2 onwards. You can only drop empty databases.
+Similar to the internal databases of StarRocks, if you have the [DROP](../../administration/user_privs/authorization/privilege_item.md#database) privilege on a Hive database, you can use the [DROP DATABASE](../../sql-reference/sql-statements/Database/DROP_DATABASE.md) statement to drop that Hive database. This feature is supported from v3.2 onwards. You can only drop empty databases.
 
 :::note
 
@@ -950,7 +950,7 @@ DROP DATABASE <database_name>
 
 ## Create a Hive table
 
-Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../administration/user_privs/privilege_item.md#database) privilege on a Hive database, you can use the [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md), [CREATE TABLE AS SELECT ../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.mdELECT.md), or [CREATE TABL../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_LIKE.md_LIKE.md) statement to create a managed table in that Hive database.
+Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../administration/user_privs/authorization/privilege_item.md#database) privilege on a Hive database, you can use the [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md), [CREATE TABLE AS SELECT ../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.mdELECT.md), or [CREATE TABL../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_LIKE.md_LIKE.md) statement to create a managed table in that Hive database.
 
 This feature is supported since v3.2 in which version StarRocks only supports creating Parquet-formatted Hive tables. From v3.3 onwards, StarRocks also supports creating ORC- and Textfile-formatted Hive tables.
 
@@ -1058,7 +1058,7 @@ The following DDLs use the default file format Parquet as an example.
 
 ## Sink data to a Hive table
 
-Similar to the internal tables of StarRocks, if you have the [INSERT](../../administration/user_privs/privilege_item.md#table) privilege on a Hive table (which can be a managed table or an external table), you can use the [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) statement to sink the data of a StarRocks table to that Hive table.
+Similar to the internal tables of StarRocks, if you have the [INSERT](../../administration/user_privs/authorization/privilege_item.md#table) privilege on a Hive table (which can be a managed table or an external table), you can use the [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) statement to sink the data of a StarRocks table to that Hive table.
 
 This feature is supported since v3.2 in which version data can be sunk only to Parquet-formatted Hive tables. From v3.3 onwards, StarRocks also supports sinking data to ORC- and Textfile-formatted Hive tables.
 
@@ -1156,7 +1156,7 @@ The following DMLs use the default file format Parquet as an example.
 
 ## Drop a Hive table
 
-Similar to the internal tables of StarRocks, if you have the [DROP](../../administration/user_privs/privilege_item.md#table) privilege on a Hive table, you can use the [DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) statement to drop that Hive table. This feature is supported from v3.1 onwards. Note that currently StarRocks supports dropping only managed tables of Hive.
+Similar to the internal tables of StarRocks, if you have the [DROP](../../administration/user_privs/authorization/privilege_item.md#table) privilege on a Hive table, you can use the [DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) statement to drop that Hive table. This feature is supported from v3.1 onwards. Note that currently StarRocks supports dropping only managed tables of Hive.
 
 :::note
 

@@ -899,7 +899,7 @@ GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE hive_role_table;
 
 ## Hive データベースの作成
 
-StarRocks の内部カタログと同様に、Hive catalog に対する [CREATE DATABASE](../../administration/user_privs/privilege_item.md#catalog) 権限を持っている場合、[CREATE DATABASE](../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) ステートメントを使用してその Hive catalog にデータベースを作成できます。この機能は v3.2 以降でサポートされています。
+StarRocks の内部カタログと同様に、Hive catalog に対する [CREATE DATABASE](../../administration/user_privs/authorization/privilege_item.md#catalog) 権限を持っている場合、[CREATE DATABASE](../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) ステートメントを使用してその Hive catalog にデータベースを作成できます。この機能は v3.2 以降でサポートされています。
 
 :::note
 
@@ -932,7 +932,7 @@ CREATE DATABASE <database_name>
 
 ## Hive データベースの削除
 
-StarRocks の内部データベースと同様に、Hive データベースに対する [DROP](../../administration/user_privs/privilege_item.md#database) 権限を持っている場合、[DROP DATABASE](../../sql-reference/sql-statements/Database/DROP_DATABASE.md) ステートメントを使用してその Hive データベースを削除できます。この機能は v3.2 以降でサポートされています。空のデータベースのみを削除できます。
+StarRocks の内部データベースと同様に、Hive データベースに対する [DROP](../../administration/user_privs/authorization/privilege_item.md#database) 権限を持っている場合、[DROP DATABASE](../../sql-reference/sql-statements/Database/DROP_DATABASE.md) ステートメントを使用してその Hive データベースを削除できます。この機能は v3.2 以降でサポートされています。空のデータベースのみを削除できます。
 
 :::note
 
@@ -950,7 +950,7 @@ DROP DATABASE <database_name>
 
 ## Hive テーブルの作成
 
-StarRocks の内部データベースと同様に、Hive データベースに対する [CREATE TABLE](../../administration/user_privs/privilege_item.md#database) 権限を持っている場合、[CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)、[CREATE TABLE AS SELECT](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md)、または [CREATE TABLE LIKE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_LIKE.md) ステートメントを使用してその Hive データベースに管理テーブルを作成できます。
+StarRocks の内部データベースと同様に、Hive データベースに対する [CREATE TABLE](../../administration/user_privs/authorization/privilege_item.md#database) 権限を持っている場合、[CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)、[CREATE TABLE AS SELECT](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md)、または [CREATE TABLE LIKE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_LIKE.md) ステートメントを使用してその Hive データベースに管理テーブルを作成できます。
 
 この機能は v3.2 以降でサポートされており、そのバージョンでは StarRocks は Parquet 形式の Hive テーブルの作成のみをサポートしています。v3.3 以降、StarRocks は ORC および Textfile 形式の Hive テーブルの作成もサポートしています。
 
@@ -1058,7 +1058,7 @@ PARTITION BY (par_col1[, par_col2...])
 
 ## Hive テーブルへのデータのシンク
 
-StarRocks の内部テーブルと同様に、Hive テーブル（管理テーブルまたは外部テーブル）に対する [INSERT](../../administration/user_privs/privilege_item.md#table) 権限を持っている場合、[INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) ステートメントを使用して StarRocks テーブルのデータをその Hive テーブルにシンクできます。
+StarRocks の内部テーブルと同様に、Hive テーブル（管理テーブルまたは外部テーブル）に対する [INSERT](../../administration/user_privs/authorization/privilege_item.md#table) 権限を持っている場合、[INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) ステートメントを使用して StarRocks テーブルのデータをその Hive テーブルにシンクできます。
 
 この機能は v3.2 以降でサポートされており、そのバージョンではデータは Parquet 形式の Hive テーブルにのみシンクできます。v3.3 以降、StarRocks は ORC および Textfile 形式の Hive テーブルへのデータのシンクもサポートしています。
 
@@ -1156,7 +1156,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 ## Hive テーブルの削除
 
-StarRocks の内部テーブルと同様に、Hive テーブルに対する [DROP](../../administration/user_privs/privilege_item.md#table) 権限を持っている場合、[DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) ステートメントを使用してその Hive テーブルを削除できます。この機能は v3.1 以降でサポートされています。現在、StarRocks は Hive の管理テーブルのみを削除することをサポートしています。
+StarRocks の内部テーブルと同様に、Hive テーブルに対する [DROP](../../administration/user_privs/authorization/privilege_item.md#table) 権限を持っている場合、[DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) ステートメントを使用してその Hive テーブルを削除できます。この機能は v3.1 以降でサポートされています。現在、StarRocks は Hive の管理テーブルのみを削除することをサポートしています。
 
 :::note
 

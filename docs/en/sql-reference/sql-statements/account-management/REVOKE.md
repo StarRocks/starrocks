@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 ## Description
 
-Revokes specific privileges or roles from a user or a role. For the privileges supported by StarRocks, see [Privileges supported by StarRocks](../../../administration/user_privs/user_privs.md).
+Revokes specific privileges or roles from a user or a role. For the privileges supported by StarRocks, see [Privileges supported by StarRocks](../../../administration/user_privs/authorization/user_privs.md).
 
 :::tip
 
