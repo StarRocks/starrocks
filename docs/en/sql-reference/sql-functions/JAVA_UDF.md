@@ -553,12 +553,10 @@ Only non-nested Arrays/Maps are now supported.
 
 ## Parameter settings
 
-Configure the following environment variable in the **be/conf/be.conf** file of each Java virtual machine (JVM) in your StarRocks cluster to control memory usage. If you use JDK 8, configure `JAVA_OPTS`. If you use JDK 9 or later, configure `JAVA_OPTS_FOR_JDK_9_AND_LATER`.
+Configure the following environment variable in the **be/conf/be.conf** file of each Java virtual machine (JVM) in your StarRocks cluster to control memory usage.
 
 ```Bash
 JAVA_OPTS="-Xmx12G"
-
-JAVA_OPTS_FOR_JDK_9_AND_LATER="-Xmx12G"
 ```
 
 ## FAQ

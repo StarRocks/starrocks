@@ -40,20 +40,8 @@ StarRocks は、Red Hat Enterprise Linux 7.9、CentOS Linux 7.9、または Ubun
 
 ## Software
 
-StarRocks を実行するには、サーバーに JDK 8 をインストールする必要があります。バージョン 2.5 以降では、JDK 11 が推奨されます。
+StarRocks バージョン 3.5 以降を実行するには、サーバーに JDK 17 をインストールする必要があります。
 
 > **注意**
 >
-> - StarRocks は JRE をサポートしていません。
-> - Ubuntu 22.04 に StarRocks をインストールする場合は、JDK 11 をインストールする必要があります。
-
-JDK 8 をインストールする手順は次のとおりです。
-
-1. JDK インストール用のパスに移動します。
-2. 次のコマンドを実行して JDK をダウンロードします。
-
-   ```Bash
-   wget --no-check-certificate --no-cookies \
-       --header "Cookie: oraclelicense=accept-securebackup-cookie"  \
-       http://download.oracle.com/otn-pub/java/jdk/8u131-b11/d54c1d3a095b4ff2b6607d096fa80163/jdk-8u131-linux-x64.tar.gz
-   ```
+> StarRocks は JRE をサポートしていません。
