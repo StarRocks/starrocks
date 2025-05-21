@@ -30,8 +30,8 @@ StarRocks はクラスター作成時に `root` ユーザーに空のパスワ�
    ```
 
 :::note
-- パスワードをリセットした後は、適切に保管してください。パスワードを忘れた場合は、[Reset lost root password](../administration/user_privs/User_privilege.md#reset-lost-root-password) を参照して詳細な手順を確認してください。
-- ポストデプロイメントのセットアップが完了したら、新しいユーザーとロールを作成してチーム内の権限を管理できます。詳細な手順は [Manage user privileges](../administration/user_privs/User_privilege.md) を参照してください。
+- パスワードをリセットした後は、適切に保管してください。パスワードを忘れた場合は、[Reset lost root password](../administration/user_privs/authorization/User_privilege.md#reset-lost-root-password) を参照して詳細な手順を確認してください。
+- ポストデプロイメントのセットアップが完了したら、新しいユーザーとロールを作成してチーム内の権限を管理できます。詳細な手順は [Manage user privileges](../administration/user_privs/authorization/User_privilege.md) を参照してください。
 :::
 
 ## 必要なシステム変数の設定

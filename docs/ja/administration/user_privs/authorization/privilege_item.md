@@ -7,7 +7,7 @@ sidebar_position: 20
 
 ユーザーまたはロールに付与された権限は、そのユーザーまたはロールが特定のオブジェクトに対してどの操作を実行できるかを決定します。権限は、データセキュリティを保護するためのきめ細かいアクセス制御を実装するために使用できます。
 
-このトピックでは、StarRocks が異なるオブジェクトに提供する権限とその意味について説明します。権限は [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) と [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) を使用して付与および取り消されます。オブジェクトに付与できる権限は、オブジェクトのタイプに特有です。たとえば、テーブルの権限はデータベースの権限とは異なります。
+このトピックでは、StarRocks が異なるオブジェクトに提供する権限とその意味について説明します。権限は [GRANT](../../../sql-reference/sql-statements/account-management/GRANT.md) と [REVOKE](../../../sql-reference/sql-statements/account-management/REVOKE.md) を使用して付与および取り消されます。オブジェクトに付与できる権限は、オブジェクトのタイプに特有です。たとえば、テーブルの権限はデータベースの権限とは異なります。
 
 > 注: このトピックで説明する権限は v3.0 から利用可能です。v3.0 の権限フレームワークと構文は、以前のバージョンとは互換性がありません。v3.0 にアップグレードした後、特定の操作に関するものを除いて、元の権限のほとんどは保持されます。詳細な違いについては、このトピックの最後にある [アップグレードノート](#upgrade-notes) を参照してください。
 

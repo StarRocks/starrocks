@@ -636,7 +636,7 @@ You can optimize the performance of BACKUP or RESTORE jobs by modifying the foll
 
 ## Usage notes
 
-- Performing backup and restore operations on global, database, table, and partition levels requires different privileges. For detailed information, see [Customize roles based on scenarios](../user_privs/User_privilege.md#customize-roles-based-on-scenarios).
+- Performing backup and restore operations on global, database, table, and partition levels requires different privileges. For detailed information, see [Customize roles based on scenarios](../user_privs/authorization/User_privilege.md#customize-roles-based-on-scenarios).
 - In each database, only one running BACKUP or RESTORE job is allowed each time. Otherwise, StarRocks returns an error.
 - Because BACKUP and RESTORE jobs occupy many resources of your StarRocks cluster, you can back up and restore your data while your StarRocks cluster is not heavily loaded.
 - StarRocks does not support specifying data compression algorithms for data backup.
