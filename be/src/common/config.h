@@ -50,7 +50,7 @@ CONF_Int32(brpc_port, "8060");
 CONF_Int32(brpc_num_threads, "-1");
 
 // The max number of single connections maintained by the brpc client and each server.
-// Theses connections are created during the first few access and will be used thereafter
+// These connections are created during the first few access and will be used thereafter
 CONF_Int32(brpc_max_connections_per_server, "1");
 
 // Declare a selection strategy for those servers have many ips.
