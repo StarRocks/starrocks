@@ -22,19 +22,17 @@ The overall idea is to write code on the MacBook,  then automatically synchroniz
 
 ### MacBook Setup
 
-#### Thrift 0.13
-
-There is no 0.13 version of Thrift in the official brew repository; one of our committers created a version in their repo to install. 
+#### Thrift 0.20
 
 ```bash
-brew install alberttwong/thrift/thrift@0.13
+brew install cartman-kai/thrift/thrift@0.20
 ```
 
 You can check whether Thrift is installed successfully with the following command:
 
 ```bash
 $ thrift -version
-Thrift version 0.13.0
+Thrift version 0.20.0
 ```
 
 #### Protobuf
@@ -51,10 +49,10 @@ brew install protobuf
 brew install maven
 ```
 
-#### OpenJDK 1.8 or 11
+#### OpenJDK 17
 
 ```bash
-brew install openjdk@11
+brew install openjdk@17
 ```
 
 #### Python3
@@ -81,13 +79,13 @@ sudo apt update
 ```
 
 ```bash
-sudo apt install gcc g++ maven openjdk-11-jdk python3 python-is-python3 unzip cmake bzip2 ccache byacc ccache flex automake libtool bison binutils-dev libiberty-dev build-essential ninja-build
+sudo apt install gcc g++ maven openjdk-17-jdk python3 python-is-python3 unzip cmake bzip2 ccache byacc ccache flex automake libtool bison binutils-dev libiberty-dev build-essential ninja-build
 ```
 
 Setup `JAVA_HOME` env
 
 ```bash
-export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 ```
 
 #### Do a compilation of StarRocks
@@ -111,7 +109,9 @@ Then you can use IDEA to open `fe` folder directly, everything is ok.
 
 #### Local debug
 
-The same as other Java applications.
+The same as other Java applications. You might face OOM error while compiling StarRocks on Intellij IDEA, you can go to Build, Execution, Deployment -> Compiler -> Increase Heap size to a larger value.
+
+```bash
 
 #### Remote debug
 
@@ -140,7 +140,7 @@ In `Settings` / `Deployment`. Change folder `mappings`.
 In `Settings` / `Cmake`. Change Toolchain to be the remote toolchain just added. Add the following environment variables:
 
 ```bash
-JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 STARROCKS_GCC_HOME=/usr/
 STARROCKS_THIRDPARTY=/root/starrocks/thirdparty
 ```
