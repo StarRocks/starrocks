@@ -87,7 +87,6 @@ Status PageReader::_deal_page_with_cache() {
             return Status::OK();
         }
         RETURN_IF_ERROR(_read_and_decompress_internal(&cache_buf, true));
-        auto deleter = [](const CacheKey& key, void* value) { delete (BufferPtr*)value; };
         auto st = _cache->insert(page_cache_key, cache_buf.get(), &cache_handle, false);
         _page_handle = st.ok() ? PageHandle(std::move(cache_handle)) : PageHandle(cache_buf.get());
         cache_buf.release();
