@@ -5249,7 +5249,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         return ImmutableMap.of("Partition", totalCount);
     }
 
-    public ClusterSnapshotInfo getNativeTableVersions() {
+    public ClusterSnapshotInfo getClusterSnapshotInfo() {
         if (!isCheckpointThread()) {
             return null;
         }

@@ -156,7 +156,6 @@ public class CheckpointController extends FrontendDaemon {
 
         // Step 1: create image
         Pair<Boolean, String> createImageRet = Pair.create(false, "");
-        this.clusterSnapshotInfo.reset();
         if (imageJournalId < maxJournalId) {
             this.journalId = maxJournalId;
             createImageRet = createImage();
@@ -224,11 +223,11 @@ public class CheckpointController extends FrontendDaemon {
                 return Pair.create(false, workerNodeName);
             }
 
-            // download Image
-            downloadImage();
-
             // set cluter snapshot versions info
             this.clusterSnapshotInfo = ret.clusterSnapshotInfo;
+
+            // download Image
+            downloadImage();
             return Pair.create(true, workerNodeName);
         } catch (Exception e) {
             LOG.warn("create image failed", e);
@@ -307,6 +306,9 @@ public class CheckpointController extends FrontendDaemon {
     }
 
     private boolean doCheckpoint(Frontend frontend) {
+        // reset the cluster snapshot info before sending the checkpoint request
+        this.clusterSnapshotInfo.reset();
+
         String selfName = GlobalStateMgr.getServingState().getNodeMgr().getNodeName();
         long epoch = GlobalStateMgr.getCurrentState().getEpoch();
         if (selfName.equals(frontend.getNodeName())) {

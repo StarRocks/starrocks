@@ -52,7 +52,7 @@ public class GlobalStateCheckpointWorker extends CheckpointWorker {
             servingGlobalState.setImageJournalId(journalId);
 
             if (needClusterSnapshotInfo) {
-                this.clusterSnapshotInfo = globalStateMgr.getLocalMetastore().getNativeTableVersions();
+                this.clusterSnapshotInfo = globalStateMgr.getLocalMetastore().getClusterSnapshotInfo();
                 LOG.info("get cluster snapshot info successfully");
             }
 

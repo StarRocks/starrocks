@@ -452,7 +452,7 @@ public class ClusterSnapshotTest {
         ClusterSnapshotInfo clusterSnapshotInfo = new ClusterSnapshotInfo();
         {
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-            Assert.assertTrue(globalStateMgr.getLocalMetastore().getNativeTableVersions() == null);
+            Assert.assertTrue(globalStateMgr.getLocalMetastore().getClusterSnapshotInfo() == null);
             new Expectations(globalStateMgr) {
                 {
                     globalStateMgr.isCheckpointThread();
