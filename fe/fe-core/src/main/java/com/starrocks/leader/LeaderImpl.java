@@ -1450,7 +1450,7 @@ public class LeaderImpl {
             LOG.warn("current node is not leader, update tablet version failed, signature: {}",
                     request.getSignature());
             tStatus.setStatus_code(TStatusCode.CANCELLED);
-            tStatus.setError_msgs(Lists.newArrayList("current fe is not master"));
+            tStatus.setError_msgs(Lists.newArrayList("current fe is not leader"));
             result.setStatus(tStatus);
             return result;
         }
@@ -1490,14 +1490,14 @@ public class LeaderImpl {
         List<TabletMeta> tabletMetaList = tablets.getTabletMetaList(tabletIds);
         Long dbId = null;
         Long tableId = null;
-        if (tabletMetaList == null || tabletMetaList.isEmpty()) {
+        if (tabletMetaList.isEmpty()) {
             tStatus.setStatus_code(TStatusCode.CANCELLED);
             tStatus.setError_msgs(Lists.newArrayList("no tabletMeta found"));
             result.setStatus(tStatus);
             return result;
         }
         for (TabletMeta tabletMeta : tabletMetaList) {
-            if (tabletMeta == null) {
+            if (tabletMeta == null || tabletMeta == TabletInvertedIndex.NOT_EXIST_TABLET_META) {
                 continue;
             }
             if (dbId == null) {

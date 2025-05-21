@@ -207,7 +207,8 @@ void PublishVersionManager::finish_publish_version_task() {
                                             client->updateTabletVersion(result, request);
                                         });
                                 if (!st.ok()) {
-                                    LOG(WARNING) << "updateTabletVersion failed: " << st;
+                                    LOG(WARNING) << "updateTabletVersion failed: " << st
+                                                 << ", signature: " << request.signature;
                                 }
                             });
                     if (!st.ok()) {
