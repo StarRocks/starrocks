@@ -87,6 +87,7 @@ jobs:
           esac
       
       - name: Checkout code
+        id: checkout_code
         if: github.base_ref != 'main'
         uses: actions/checkout@v4
         with:
@@ -94,7 +95,8 @@ jobs:
           ref: refs/pull/${{ github.event.pull_request.number }}/head
 
       - name: Checkout PR
-        if: success()
+        id: checkout_pr
+        if: steps.checkout_code.outcome == 'success'
         run: |
           git remote add upstream https://github.com/${{ github.event.pull_request.base.repo.full_name }}.git
           git fetch upstream
@@ -102,6 +104,7 @@ jobs:
 
       - name: Branch Access Check
         id: branch_access_check
+        if: steps.checkout_pr.outcome =='success'
         env:
           PR_TITLE: ${{ steps.get_title.outputs.PR_TITLE }}
         run: |
