@@ -71,14 +71,8 @@ import com.starrocks.thrift.TLoadTxnCommitRequest;
 import com.starrocks.thrift.TLoadTxnCommitResult;
 import com.starrocks.thrift.TMergeCommitRequest;
 import com.starrocks.thrift.TMergeCommitResult;
-<<<<<<< HEAD
-=======
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.thrift.TPartitionMeta;
-import com.starrocks.thrift.TPartitionMetaRequest;
-import com.starrocks.thrift.TPartitionMetaResponse;
 import com.starrocks.thrift.TPlanFragmentExecParams;
->>>>>>> c5266861fa ([BugFix] Stream load failed because  receive duplicate stream load put request (#59181))
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
@@ -1212,9 +1206,19 @@ public class FrontendServiceImplTest {
     }
 
     @Test
-<<<<<<< HEAD
     public void testStreamLoadPutTimeout() throws UserException, TException, LockTimeoutException {
-=======
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TStreamLoadPutRequest request = new TStreamLoadPutRequest();
+        request.db = "test";
+        request.tbl = "tbl_test";
+        request.txnId = 1001L;
+        request.setAuth_code(100);
+        doThrow(new LockTimeoutException("get database read lock timeout")).when(impl).streamLoadPutImpl(any());
+        TStreamLoadPutResult result = impl.streamLoadPut(request);
+        Assert.assertEquals(TStatusCode.TIMEOUT, result.status.status_code);
+    }
+
+    @Test
     public void testStreamLoadPutDuplicateRequest() throws Exception {
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TLoadTxnBeginRequest request = new TLoadTxnBeginRequest();
@@ -1264,20 +1268,6 @@ public class FrontendServiceImplTest {
         loadRequest.setAuth_code(100);
         TStreamLoadPutResult loadResult1 = impl.streamLoadPut(loadRequest);
         TStreamLoadPutResult loadResult2 = impl.streamLoadPut(loadRequest);
-    }
-
-    @Test
-    public void testStreamLoadPutTimeout() throws StarRocksException, TException, LockTimeoutException {
->>>>>>> c5266861fa ([BugFix] Stream load failed because  receive duplicate stream load put request (#59181))
-        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
-        TStreamLoadPutRequest request = new TStreamLoadPutRequest();
-        request.db = "test";
-        request.tbl = "tbl_test";
-        request.txnId = 1001L;
-        request.setAuth_code(100);
-        doThrow(new LockTimeoutException("get database read lock timeout")).when(impl).streamLoadPutImpl(any());
-        TStreamLoadPutResult result = impl.streamLoadPut(request);
-        Assert.assertEquals(TStatusCode.TIMEOUT, result.status.status_code);
     }
 
     @Test
