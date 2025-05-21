@@ -33,15 +33,14 @@ namespace starrocks {
 using BlobContainerClient = Azure::Storage::Blobs::BlobContainerClient;
 using BlobContainerClientPtr = std::shared_ptr<BlobContainerClient>;
 using BlockBlobClient = Azure::Storage::Blobs::BlockBlobClient;
+using BlockBlobClientUniquePtr = std::unique_ptr<Azure::Storage::Blobs::BlockBlobClient>;
 
 // ------ input stream ------
 
 class AzBlobInputStream : public io::SeekableInputStream {
 public:
-    explicit AzBlobInputStream(BlobContainerClientPtr client, AzBlobURI uri)
-            : _container_client(std::move(client)),
-              _uri(std::move(uri)),
-              _blob_client(_container_client->GetBlockBlobClient(_uri.blob_name())) {}
+    explicit AzBlobInputStream(BlockBlobClientUniquePtr client, AzBlobURI uri)
+            : _blob_client(std::move(client)), _uri(std::move(uri)) {}
     ~AzBlobInputStream() override = default;
 
     AzBlobInputStream(const AzBlobInputStream&) = delete;
@@ -56,9 +55,8 @@ public:
     void set_size(int64_t size) override { _size = size; }
 
 private:
-    BlobContainerClientPtr _container_client;
+    BlockBlobClientUniquePtr _blob_client;
     AzBlobURI _uri;
-    BlockBlobClient _blob_client;
     int64_t _offset{0};
     int64_t _size{-1};
 };
@@ -84,7 +82,7 @@ StatusOr<int64_t> AzBlobInputStream::read(void* data, int64_t count) {
 
     int64_t size = 0;
     try {
-        auto response = _blob_client.DownloadTo(reinterpret_cast<uint8_t*>(data), count, options);
+        auto response = _blob_client->DownloadTo(reinterpret_cast<uint8_t*>(data), count, options);
         if (!response.Value.ContentRange.Length.HasValue()) {
             return Status::InternalError(fmt::format("Download blob object %s error: read length in response is empty",
                                                      _uri.get_blob_uri()));
@@ -106,7 +104,7 @@ StatusOr<int64_t> AzBlobInputStream::read(void* data, int64_t count) {
 StatusOr<int64_t> AzBlobInputStream::get_size() {
     if (_size == -1) {
         try {
-            auto response = _blob_client.GetProperties();
+            auto response = _blob_client->GetProperties();
             _size = response.Value.BlobSize;
         } catch (const Azure::Core::RequestFailedException& e) {
             return azure_error_to_status(
@@ -133,10 +131,8 @@ Status AzBlobInputStream::seek(int64_t offset) {
 
 class AzBlobOutputStream : public io::OutputStream {
 public:
-    explicit AzBlobOutputStream(BlobContainerClientPtr client, AzBlobURI uri)
-            : _container_client(std::move(client)),
-              _uri(std::move(uri)),
-              _blob_client(_container_client->GetBlockBlobClient(_uri.blob_name())) {}
+    explicit AzBlobOutputStream(BlockBlobClientUniquePtr client, AzBlobURI uri)
+            : _blob_client(std::move(client)), _uri(std::move(uri)) {}
     ~AzBlobOutputStream() override = default;
 
     AzBlobOutputStream(const AzBlobOutputStream&) = delete;
@@ -172,9 +168,8 @@ private:
     // Upload part size if multiupload enabled.
     uint64_t _min_upload_part_size = 5UL << 20;
 
-    BlobContainerClientPtr _container_client;
+    BlockBlobClientUniquePtr _blob_client;
     AzBlobURI _uri;
-    BlockBlobClient _blob_client;
 
     bool _multipart_upload{false};
     std::string _buffer;
@@ -216,7 +211,7 @@ Status AzBlobOutputStream::create_multipart_upload() {
 
 Status AzBlobOutputStream::singlepart_upload() {
     try {
-        _blob_client.UploadFrom(reinterpret_cast<const uint8_t*>(_buffer.data()), _buffer.size());
+        _blob_client->UploadFrom(reinterpret_cast<const uint8_t*>(_buffer.data()), _buffer.size());
     } catch (const Azure::Core::RequestFailedException& e) {
         return azure_error_to_status(e.StatusCode,
                                      fmt::format("Upload blob object {} error: {}", _uri.get_blob_uri(), e.what()),
@@ -243,7 +238,7 @@ Status AzBlobOutputStream::multipart_upload() {
     try {
         std::string block_id = get_block_id(_block_ids.size());
         Azure::Core::IO::MemoryBodyStream body_stream(reinterpret_cast<const uint8_t*>(_buffer.data()), _buffer.size());
-        _blob_client.StageBlock(block_id, body_stream);
+        _blob_client->StageBlock(block_id, body_stream);
         _block_ids.push_back(block_id);
     } catch (const Azure::Core::RequestFailedException& e) {
         return azure_error_to_status(e.StatusCode,
@@ -258,7 +253,7 @@ Status AzBlobOutputStream::multipart_upload() {
 
 Status AzBlobOutputStream::complete_multipart_upload() {
     try {
-        _blob_client.CommitBlockList(_block_ids);
+        _blob_client->CommitBlockList(_block_ids);
     } catch (const Azure::Core::RequestFailedException& e) {
         return azure_error_to_status(
                 e.StatusCode,
@@ -465,7 +460,8 @@ private:
         return &factory;
     }
 
-    StatusOr<BlobContainerClientPtr> new_blob_client(const AzBlobURI& uri);
+    StatusOr<BlobContainerClientPtr> new_blob_container_client(const AzBlobURI& uri);
+    StatusOr<BlockBlobClientUniquePtr> new_blob_client(const AzBlobURI& uri);
 
     FSOptions _options;
     AzBlobClientFactory* _factory;
@@ -474,7 +470,7 @@ private:
 AzBlobFileSystem::AzBlobFileSystem(const FSOptions& options)
         : _options(std::move(options)), _factory(blob_client_factory()) {}
 
-StatusOr<BlobContainerClientPtr> AzBlobFileSystem::new_blob_client(const AzBlobURI& uri) {
+StatusOr<BlobContainerClientPtr> AzBlobFileSystem::new_blob_container_client(const AzBlobURI& uri) {
     // Create azure cloud credential from TCloudConfiguration.cloud_properties
     const auto* t_cloud_configuration = _options.get_cloud_configuration();
     if (t_cloud_configuration == nullptr) {
@@ -486,6 +482,11 @@ StatusOr<BlobContainerClientPtr> AzBlobFileSystem::new_blob_client(const AzBlobU
     RETURN_IF_ERROR(azure_cloud_credential.validate());
 
     return _factory->new_blob_container_client(azure_cloud_credential, uri);
+}
+
+StatusOr<BlockBlobClientUniquePtr> AzBlobFileSystem::new_blob_client(const AzBlobURI& uri) {
+    ASSIGN_OR_RETURN(auto container_client, new_blob_container_client(uri));
+    return std::make_unique<BlockBlobClient>(container_client->GetBlockBlobClient(uri.blob_name()));
 }
 
 StatusOr<std::unique_ptr<RandomAccessFile>> AzBlobFileSystem::new_random_access_file(
