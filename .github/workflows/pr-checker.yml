@@ -255,6 +255,7 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/check-pr-changelist.sh
+<<<<<<< HEAD
 
   backport-feature-enhancement-check:
     runs-on: [ self-hosted, normal ]
@@ -272,3 +273,5 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/check-pr-backport-review-necessary.sh
+=======
+>>>>>>> 2aaebfac37 ([Tool] Optimize the approval strategy for branch merging (#59196))
