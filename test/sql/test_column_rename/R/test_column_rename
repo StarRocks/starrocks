@@ -328,7 +328,7 @@ alter table t_rename_column_unused_output_column_name rename column d to new_d;
 SELECT a, e FROM t_rename_column_unused_output_column_name WHERE t_rename_column_unused_output_column_name.new_d IS NOT NULL LIMIT 9;
 -- result:
 1	1
--- result:
+-- !result
 insert into t_rename_column_unused_output_column_name values(2, 2, 2, 2, 2, ["1", "1"]);
 -- result:
 -- !result
@@ -336,7 +336,7 @@ SELECT a, e FROM t_rename_column_unused_output_column_name WHERE t_rename_column
 -- result:
 1	1
 2	2
--- result:
+-- !result
 drop table t_rename_column_unused_output_column_name force;
 -- result:
 -- !result
