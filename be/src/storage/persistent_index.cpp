@@ -60,6 +60,12 @@ constexpr size_t kPackSize = 16;
 constexpr size_t kBucketSizeMax = 256;
 constexpr size_t kFixedMaxKeySize = 128;
 constexpr size_t kBatchBloomFilterReadSize = 4ULL << 20;
+/*
+The introduction of this magic number serves two purposes:
+1. To detect endianness mismatches in cross-platform scenarios
+2. To identify the new snapshot encoding format
+*/
+constexpr uint32_t kSnapshotMagicNum = 0xF2345678;
 
 const char* const kIndexFileMagic = "IDX1";
 
@@ -963,9 +969,22 @@ public:
     }
 
     Status load_snapshot(phmap::BinaryInputArchive& ar) override {
-        bool succ = false;
-        TRY_CATCH_BAD_ALLOC(succ = _map.load(ar));
-        RETURN_IF(!succ, Status::InternalError("load snapshot failed"));
+        size_t size = 0;
+        RETURN_IF(!ar.load(&size), Status::Corruption("FixedMutableIndex load snapshot size failed"));
+        RETURN_IF(size == 0, Status::OK());
+        TRY_CATCH_BAD_ALLOC(reserve(size));
+        for (auto i = 0; i < size; ++i) {
+            KeyType key;
+            IndexValue value;
+            RETURN_IF((!ar.load(key.data(), key.size())),
+                      Status::Corruption("FixedMutableIndex load snapshot failed because load key failed"));
+            RETURN_IF((!ar.load(reinterpret_cast<char*>(&value), sizeof(IndexValue))),
+                      Status::Corruption("FixedMutableIndex load snapshot failed because load value failed"));
+            uint64_t hash = FixedKeyHash<KeySize>()(key);
+            if (auto [it, inserted] = _map.emplace_with_hash(hash, key, value); !inserted) {
+                it->second = value;
+            }
+        }
         return Status::OK();
     }
 
@@ -1008,7 +1027,26 @@ public:
     // will use `sizeof(size_t)` as return value.
     size_t dump_bound() override { return _map.empty() ? sizeof(size_t) : _map.dump_bound(); }
 
-    bool dump(phmap::BinaryOutputArchive& ar) override { return _map.dump(ar); }
+    bool dump(phmap::BinaryOutputArchive& ar) override {
+        if (!ar.dump(size())) {
+            LOG(ERROR) << "FixedMutableIndex dump snapshot size failed";
+            return false;
+        }
+        if (size() == 0) {
+            return true;
+        }
+        for (const auto& each : _map) {
+            if (!ar.dump(reinterpret_cast<const char*>(each.first.data), sizeof(KeyType))) {
+                LOG(ERROR) << "FixedMutableIndex dump key failed";
+                return false;
+            }
+            if (!ar.dump(reinterpret_cast<const char*>(&each.second), sizeof(IndexValue))) {
+                LOG(ERROR) << "FixedMutableIndex dump value failed";
+                return false;
+            }
+        }
+        return true;
+    }
 
     Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb) override {
         for (const auto& each : _map) {
@@ -1966,6 +2004,13 @@ Status ShardByLengthMutableIndex::append_wal(const Slice* keys, const IndexValue
 }
 
 Status ShardByLengthMutableIndex::load_snapshot(phmap::BinaryInputArchive& ar, const std::set<uint32_t>& idxes) {
+    uint32_t magic_num = 0;
+    RETURN_IF(!ar.load(&magic_num), Status::Corruption("ShardByLengthMutableIndex load snapshot magic num failed"));
+    if (magic_num != kSnapshotMagicNum) {
+        return Status::Corruption(
+                fmt::format("ShardByLengthMutableIndex load snapshot magic num failed, expect {}, but got {}",
+                            kSnapshotMagicNum, magic_num));
+    }
     for (const auto idx : idxes) {
         RETURN_IF_ERROR(_shards[idx]->load_snapshot(ar));
     }
@@ -1980,6 +2025,9 @@ size_t ShardByLengthMutableIndex::dump_bound() {
 }
 
 bool ShardByLengthMutableIndex::dump(phmap::BinaryOutputArchive& ar_out, std::set<uint32_t>& dumped_shard_idxes) {
+    if (!ar_out.dump(kSnapshotMagicNum)) {
+        return false;
+    }
     for (uint32_t i = 0; i < _shards.size(); ++i) {
         const auto& shard = _shards[i];
         if (shard->size() > 0) {
