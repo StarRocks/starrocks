@@ -329,7 +329,8 @@ public class OlapScanNode extends ScanNode {
                 continue;
             }
             if (unUsedOutputColumnIds.contains(slot.getId().asInt())) {
-                unUsedOutputStringColumns.add(slot.getColumn().getName());
+                Column col = slot.getColumn();
+                unUsedOutputStringColumns.add(col.isShadowColumn() ? col.getName() : col.getColumnId().getId());
             }
         }
     }
