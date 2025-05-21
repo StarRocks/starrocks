@@ -1,13 +1,13 @@
 ---
 displayed_sidebar: docs
-sidebar_position: 5
+sidebar_position: 10
 ---
 
 # 権限の概要
 
 このトピックでは、StarRocks の権限システムの基本概念について説明します。権限は、どのユーザーがどのオブジェクトに対してどの操作を実行できるかを決定し、データとリソースをより細かく安全に管理できるようにします。
 
-> 注意: このトピックで説明する権限は v3.0 以降でのみ利用可能です。v3.0 の権限フレームワークと構文は、以前のバージョンとは互換性がありません。v3.0 へのアップグレード後、特定の操作に関するものを除き、元の権限のほとんどは保持されます。詳細な違いについては、[Privileges supported in StarRocks](privilege_item.md) の [Upgrade notes] を参照してください。
+> 注意: このトピックで説明する権限は v3.0 以降でのみ利用可能です。v3.0 の権限フレームワークと構文は、以前のバージョンとは互換性がありません。v3.0 へのアップグレード後、特定の操作に関するものを除き、元の権限のほとんどは保持されます。詳細な違いについては、[Privileges supported in StarRocks](./privilege_item.md) の [Upgrade notes] を参照してください。
 
 StarRocks は、次の 2 つの権限モデルを採用しています。
 
@@ -18,7 +18,7 @@ StarRocks は、次の 2 つの権限モデルを採用しています。
 
 StarRocks の権限システムを理解するための**基本概念**:
 
-- **オブジェクト**: アクセスを許可できるエンティティ。許可されていない限り、アクセスは拒否されます。オブジェクトの例には CATALOG、DATABASE、TABLE、VIEW などがあります。詳細については、[Privileges supported in StarRocks](privilege_item.md) を参照してください。
+- **オブジェクト**: アクセスを許可できるエンティティ。許可されていない限り、アクセスは拒否されます。オブジェクトの例には CATALOG、DATABASE、TABLE、VIEW などがあります。詳細については、[Privileges supported in StarRocks](./privilege_item.md) を参照してください。
 - **権限**: オブジェクトへのアクセスの定義されたレベル。複数の権限を使用して、オブジェクトに付与されるアクセスの粒度を制御できます。権限はオブジェクト固有です。異なるオブジェクトには異なる権限がある場合があります。権限の例には SELECT、ALTER、DROP などがあります。
 - **ユーザーアイデンティティ**: ユーザーの一意のアイデンティティであり、権限を付与できるエンティティでもあります。ユーザーアイデンティティは `username@'userhost'` として表され、ユーザー名とユーザーがログインする IP で構成されます。ユーザーアイデンティティは属性設定を簡素化します。同じユーザー名を共有するユーザーアイデンティティは同じ属性を共有します。ユーザー名に属性を設定すると、この属性はそのユーザー名を共有するすべてのユーザーアイデンティティに適用されます。
 - **ロール**: 権限を付与できるエンティティ。ロールは権限の抽象的な集合です。ロールはユーザーに割り当てることができ、他のロールに割り当てることもでき、ロール階層を作成します。データ管理を容易にするために、StarRocks はシステム定義のロールを提供します。ビジネス要件に応じてカスタムロールを作成することもできます。
@@ -27,15 +27,15 @@ StarRocks の権限システムを理解するための**基本概念**:
 
 これらのモデルでは、オブジェクトへのアクセスは、ロールおよびユーザーに割り当てられた権限を通じて許可されます。ロールは、他のロールまたはユーザーに割り当てられます。
 
-![privilege management](../../_assets/privilege-manage.png)
+![privilege management](../../../_assets/privilege-manage.png)
 
 ## オブジェクトと権限
 
 オブジェクトには、それが表す概念に関連する論理的な階層があります。たとえば、Database は Catalog に含まれ、Table、View、マテリアライズドビュー、Function は Database に含まれます。以下の図は、StarRocks システム内のオブジェクト階層を示しています。
 
-![privilege objects](../../_assets/privilege-object.png)
+![privilege objects](../../../_assets/privilege-object.png)
 
-各オブジェクトには、付与可能な権限項目のセットがあります。これらの権限は、これらのオブジェクトに対して実行できる操作を定義します。権限は、[GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) および [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) コマンドを通じて、ロールまたはユーザーに付与および取り消すことができます。
+各オブジェクトには、付与可能な権限項目のセットがあります。これらの権限は、これらのオブジェクトに対して実行できる操作を定義します。権限は、[GRANT](../../../sql-reference/sql-statements/account-management/GRANT.md) および [REVOKE](../../../sql-reference/sql-statements/account-management/REVOKE.md) コマンドを通じて、ロールまたはユーザーに付与および取り消すことができます。
 
 ## ユーザー
 
@@ -63,7 +63,7 @@ StarRocks では、各ユーザーは一意のユーザー ID で識別されま
 
 StarRocks は、いくつかの種類のシステム定義のロールを提供しています。
 
-![roles](../../_assets/privilege-role.png)
+![roles](../../../_assets/privilege-role.png)
 
 - `root`: グローバルな権限を持ちます。デフォルトで、`root` ユーザーは `root` ロールを持ちます。
    StarRocks クラスターが作成されると、システムは自動的に root 権限を持つ root ユーザーを生成します。root ユーザーとロールはシステムのすべての権限を持っているため、新しいユーザーとロールを作成して、リスクのある操作を防ぐことをお勧めします。root ユーザーのパスワードを適切に管理してください。
@@ -88,7 +88,7 @@ StarRocks は、いくつかの種類のシステム定義のロールを提供�
 
 > 注意: ロールの継承レベルの最大数はデフォルトで 16 です。継承関係は双方向にはできません。
 
-![role inheritance](../../_assets/privilege-role_inheri.png)
+![role inheritance](../../../_assets/privilege-role_inheri.png)
 
 図に示されているように:
 
@@ -98,13 +98,13 @@ StarRocks は、いくつかの種類のシステム定義のロールを提供�
 
 ### アクティブロール
 
-アクティブロールを使用すると、ユーザーは現在のセッションでロールの権限を適用できます。現在のセッションでアクティブなロールを表示するには、`SELECT CURRENT_ROLE();` を使用します。詳細については、[current_role](../../sql-reference/sql-functions/utility-functions/current_role.md) を参照してください。
+アクティブロールを使用すると、ユーザーは現在のセッションでロールの権限を適用できます。現在のセッションでアクティブなロールを表示するには、`SELECT CURRENT_ROLE();` を使用します。詳細については、[current_role](../../../sql-reference/sql-functions/utility-functions/current_role.md) を参照してください。
 
 #### デフォルトロール
 
-デフォルトロールは、ユーザーがクラスターにログインすると自動的にアクティブ化されます。これは、1 人以上のユーザーが所有するロールである可能性があります。管理者は、[CREATE USER](../../sql-reference/sql-statements/account-management/CREATE_USER.md) の `DEFAULT ROLE` キーワードを使用してデフォルトロールを設定し、[ALTER USER](../../sql-reference/sql-statements/account-management/ALTER_USER.md) を使用してデフォルトロールを変更できます。
+デフォルトロールは、ユーザーがクラスターにログインすると自動的にアクティブ化されます。これは、1 人以上のユーザーが所有するロールである可能性があります。管理者は、[CREATE USER](../../../sql-reference/sql-statements/account-management/CREATE_USER.md) の `DEFAULT ROLE` キーワードを使用してデフォルトロールを設定し、[ALTER USER](../../../sql-reference/sql-statements/account-management/ALTER_USER.md) を使用してデフォルトロールを変更できます。
 
-ユーザーは [SET DEFAULT ROLE](../../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md) を使用してデフォルトロールを変更することもできます。
+ユーザーは [SET DEFAULT ROLE](../../../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md) を使用してデフォルトロールを変更することもできます。
 
 デフォルトロールは、ユーザーに基本的な権限保護を提供します。たとえば、ユーザー A は `role_query` と `role_delete` を持ち、それぞれクエリと削除の権限を持っています。`DELETE` や `TRUNCATE` などの高リスク操作によるデータ損失を防ぐために、デフォルトロールとして `role_query` のみを使用することをお勧めします。これらの操作を実行する必要がある場合は、アクティブロールを手動で設定した後に実行できます。
 
@@ -112,11 +112,11 @@ StarRocks は、いくつかの種類のシステム定義のロールを提供�
 
 #### ロールの手動アクティブ化
 
-デフォルトロールに加えて、ユーザーはセッション内で 1 つ以上の既存のロールを手動でアクティブ化することもできます。[SHOW GRANTS](../../sql-reference/sql-statements/account-management/SHOW_GRANTS.md) を使用してアクティブ化可能な権限とロールを表示し、[SET ROLE](../../sql-reference/sql-statements/account-management/SET_ROLE.md) を使用して現在のセッションで有効なアクティブロールを設定できます。
+デフォルトロールに加えて、ユーザーはセッション内で 1 つ以上の既存のロールを手動でアクティブ化することもできます。[SHOW GRANTS](../../../sql-reference/sql-statements/account-management/SHOW_GRANTS.md) を使用してアクティブ化可能な権限とロールを表示し、[SET ROLE](../../../sql-reference/sql-statements/account-management/SET_ROLE.md) を使用して現在のセッションで有効なアクティブロールを設定できます。
 
 SET ROLE コマンドは互いに上書きされることに注意してください。たとえば、ユーザーがログインした後、`default_role` がデフォルトでアクティブ化されます。その後、ユーザーが `SET ROLE role_s` を実行します。この時点で、ユーザーは `role_s` の権限と自身の権限のみを持ちます。`default_role` は上書きされます。
 
 ## 参考文献
 
-- [Privileges supported by StarRocks](privilege_item.md)
-- [Manage user privileges](User_privilege.md)
+- [Privileges supported by StarRocks](./privilege_item.md)
+- [Manage user privileges](./User_privilege.md)
