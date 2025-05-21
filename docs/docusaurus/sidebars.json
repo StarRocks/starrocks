@@ -190,6 +190,7 @@
                     ]
                 },
                 "loading/InsertInto",
+                "loading/SQL_transaction",
                 "loading/Stream_Load_transaction_interface",
                 "loading/Flink_cdc_load",
                 "loading/Flink-connector-starrocks",
