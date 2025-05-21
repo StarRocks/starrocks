@@ -875,6 +875,11 @@ under the License.
             <groupId>org.jboss.byteman</groupId>
             <artifactId>byteman</artifactId>
         </dependency>
+
+        <dependency>
+            <groupId>tools.profiler</groupId>
+            <artifactId>async-profiler</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
