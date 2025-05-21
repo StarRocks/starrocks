@@ -116,26 +116,3 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           ./scripts/check-approve.sh
-
-  feature-enhancement-backport-review:
-    needs: info
-    runs-on: [ self-hosted, normal ]
-    if: >
-      github.event_name == 'pull_request_review' && 
-      needs.info.outputs.BASE_REF != 'main' && 
-      !contains(needs.info.outputs.LABELS, 'sync') &&
-      (startsWith(needs.info.outputs.TITLE, '[Feature]') || startsWith(needs.info.outputs.TITLE, '[Enhancement]')) &&
-      needs.info.outputs.DIFF_LINES > 100
-    name: FEATURE-ENHANCEMENT-BACKPORT-REVIEW
-
-    env:
-      PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
-      REPO: ${{ github.repository }}
-      TEAM: feature-reviewer
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    steps:
-      - name: APPROVE-REVIEW
-        run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
-          ./scripts/check-approve.sh
