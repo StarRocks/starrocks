@@ -36,6 +36,7 @@ import com.starrocks.load.batchwrite.BatchWriteMgr;
 import com.starrocks.load.batchwrite.RequestLoadResult;
 import com.starrocks.load.batchwrite.TableId;
 import com.starrocks.load.streamload.StreamLoadKvParams;
+import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.GlobalVariable;
@@ -52,6 +53,7 @@ import com.starrocks.thrift.TCreatePartitionRequest;
 import com.starrocks.thrift.TCreatePartitionResult;
 import com.starrocks.thrift.TDescribeTableParams;
 import com.starrocks.thrift.TDescribeTableResult;
+import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TGetDictQueryParamRequest;
 import com.starrocks.thrift.TGetDictQueryParamResponse;
@@ -71,9 +73,11 @@ import com.starrocks.thrift.TLoadTxnCommitRequest;
 import com.starrocks.thrift.TLoadTxnCommitResult;
 import com.starrocks.thrift.TMergeCommitRequest;
 import com.starrocks.thrift.TMergeCommitResult;
+import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPartitionMeta;
 import com.starrocks.thrift.TPartitionMetaRequest;
 import com.starrocks.thrift.TPartitionMetaResponse;
+import com.starrocks.thrift.TPlanFragmentExecParams;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
@@ -123,7 +127,6 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.spy;
 
 public class FrontendServiceImplTest {
-
     @Mocked
     ExecuteEnv exeEnv;
 
@@ -1217,6 +1220,58 @@ public class FrontendServiceImplTest {
         doThrow(new StarRocksException("injected error")).when(impl).loadTxnCommitImpl(any(), any());
         TLoadTxnCommitResult result = impl.loadTxnCommit(request);
         Assert.assertEquals(TStatusCode.ANALYSIS_ERROR, result.status.status_code);
+    }
+
+    @Test
+    public void testStreamLoadPutDuplicateRequest() throws Exception {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TLoadTxnBeginRequest request = new TLoadTxnBeginRequest();
+        request.setLabel("test_label1");
+        request.setDb("test");
+        request.setTbl("site_access_auto");
+        request.setUser("root");
+        request.setPasswd("");
+
+        new MockUp<SessionVariable>() {
+            @Mock
+            public boolean isEnableLoadProfile() {
+                return true;
+            }
+        };
+
+        TLoadTxnBeginResult result = impl.loadTxnBegin(request);
+        Assert.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+
+        TUniqueId queryId = new TUniqueId(2, 3);
+        new MockUp<StreamLoadPlanner>() {
+            @Mock
+            public TExecPlanFragmentParams plan(TUniqueId loadId) {
+                return new TExecPlanFragmentParams().setParams(
+                        new TPlanFragmentExecParams().setFragment_instance_id(queryId));
+            }
+
+            @Mock
+            public TExecPlanFragmentParams getExecPlanFragmentParams() {
+                return new TExecPlanFragmentParams().setParams(
+                        new TPlanFragmentExecParams().setFragment_instance_id(queryId));
+            }
+        };
+
+        new MockUp<FrontendServiceImpl>() {
+            @Mock
+            public TNetworkAddress getClientAddr() {
+                return new TNetworkAddress("localhost", 8000);
+            }
+        };
+
+        TStreamLoadPutRequest loadRequest = new TStreamLoadPutRequest();
+        loadRequest.db = "test";
+        loadRequest.tbl = "site_access_auto";
+        loadRequest.txnId = result.getTxnId();
+        loadRequest.loadId = queryId;
+        loadRequest.setAuth_code(100);
+        TStreamLoadPutResult loadResult1 = impl.streamLoadPut(loadRequest);
+        TStreamLoadPutResult loadResult2 = impl.streamLoadPut(loadRequest);
     }
 
     @Test
