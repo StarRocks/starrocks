@@ -68,7 +68,7 @@ CONF_mInt64(memory_urgent_level, "85");
 // Currently, only support release memory of data cache.
 CONF_mInt64(memory_high_level, "75");
 
-// The high disk usage level, which trigger to release of disk space immediately to disk_high_level,
+// The high disk usage level, which trigger to release of disk space immediately to disk_safe_level,
 // currently only support release disk space of data cache.
 CONF_mInt64(disk_high_level, "90");
 // The safe disk usage level.
