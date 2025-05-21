@@ -43,6 +43,7 @@ public:
 
 protected:
     bool _has_empty_compaction = false;
+    bool _skip_write_tablet_metadata = false;
 };
 
 std::unique_ptr<TxnLogApplier> new_txn_log_applier(const Tablet& tablet, MutableTabletMetadataPtr metadata,

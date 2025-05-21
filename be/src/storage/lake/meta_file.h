@@ -53,7 +53,7 @@ public:
     // |txn_id| the maximum applied transaction ID, used to construct the delvec file name, and
     // the garbage collection module relies on this value to check if a delvec file can be safely
     // deleted.
-    Status finalize(int64_t txn_id);
+    Status finalize(int64_t txn_id, bool skip_write_tablet_metadata = false);
     // find delvec in builder's buffer, used for batch txn log precess.
     StatusOr<bool> find_delvec(const TabletSegmentId& tsid, DelVectorPtr* pdelvec) const;
 
