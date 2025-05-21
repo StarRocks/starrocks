@@ -117,11 +117,7 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
         }
         final QueryInfo result = coordinatorMap.putIfAbsent(queryId, info);
         if (result != null) {
-<<<<<<< HEAD
-            throw new UserException("queryId " + queryId + " already exists");
-=======
             throw new AlreadyExistsException("queryId " + queryId + " already exists");
->>>>>>> c5266861fa ([BugFix] Stream load failed because  receive duplicate stream load put request (#59181))
         }
     }
 
