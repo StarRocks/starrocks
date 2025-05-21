@@ -70,7 +70,7 @@ Status PageReader::_deal_page_with_cache() {
     std::string& page_cache_key = _current_page_cache_key();
     PageCacheHandle cache_handle;
     bool ret = _cache->lookup(page_cache_key, &cache_handle);
-    if (true) {
+    if (ret) {
         _hit_cache = true;
         auto* cache_buf = cache_handle.data();
         _page_handle = PageHandle(std::move(cache_handle));
