@@ -45,6 +45,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.StarRocksHttpException;
 import com.starrocks.common.util.NetUtils;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.ActionController;
@@ -75,7 +76,6 @@ import com.starrocks.thrift.TPlanFragment;
 import com.starrocks.thrift.TQueryPlanInfo;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TTabletVersionInfo;
-import com.starrocks.thrift.TUniqueId;
 import com.starrocks.warehouse.Warehouse;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -91,7 +91,6 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * This class responsible for parse the sql and generate the query plan fragment for a (only one) table{@see OlapTable}
@@ -317,8 +316,7 @@ public class TableQueryPlanAction extends RestBaseAction {
         tQueryPlanInfo.plan_fragment = tPlanFragment;
         tQueryPlanInfo.desc_tbl = execPlan.getDescTbl().toThrift();
         // set query_id
-        UUID uuid = UUID.randomUUID();
-        tQueryPlanInfo.query_id = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+        tQueryPlanInfo.query_id = UUIDUtil.genTUniqueId();
 
         Map<Long, TTabletVersionInfo> tabletInfo = new HashMap<>();
         // acquire resolved tablet distribution

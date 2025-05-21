@@ -34,7 +34,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicLong;
@@ -221,8 +220,8 @@ public class MergeCommitJob implements MergeCommitTaskCallback {
                 backendIds.add(backendId);
             }
 
-            String label = LABEL_PREFIX + DebugUtil.printId(UUIDUtil.toTUniqueId(UUID.randomUUID()));
-            TUniqueId loadId = UUIDUtil.toTUniqueId(UUID.randomUUID());
+            TUniqueId loadId = UUIDUtil.genTUniqueId();
+            String label = LABEL_PREFIX + DebugUtil.printId(loadId);
             MergeCommitTask mergeCommitTask = new MergeCommitTask(
                     tableId, label, loadId, streamLoadInfo, batchWriteIntervalMs, loadParameters,
                     backendIds, queryCoordinatorFactory, this);

@@ -44,6 +44,7 @@ import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.PulsarUtil;
 import com.starrocks.common.util.SmallFileMgr;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.Load;
@@ -64,7 +65,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * PulsarRoutineLoadJob is a kind of RoutineLoadJob which fetch data from pulsar.
@@ -208,7 +208,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
                         }
                     }
                     long timeToExecuteMs = System.currentTimeMillis() + taskSchedIntervalS * 1000;
-                    PulsarTaskInfo pulsarTaskInfo = new PulsarTaskInfo(UUID.randomUUID(), this,
+                    PulsarTaskInfo pulsarTaskInfo = new PulsarTaskInfo(UUIDUtil.genUUID(), this,
                             taskSchedIntervalS * 1000, timeToExecuteMs, partitions,
                             initialPositions, getTaskTimeoutSecond() * 1000);
                     pulsarTaskInfo.setWarehouseId(warehouseId);

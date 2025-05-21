@@ -64,6 +64,7 @@ import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.SmallFileMgr;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.Load;
@@ -292,7 +293,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                         }
                     }
                     long timeToExecuteMs = System.currentTimeMillis() + taskSchedIntervalS * 1000;
-                    KafkaTaskInfo kafkaTaskInfo = new KafkaTaskInfo(UUID.randomUUID(), this,
+                    KafkaTaskInfo kafkaTaskInfo = new KafkaTaskInfo(UUIDUtil.genUUID(), this,
                             taskSchedIntervalS * 1000,
                             timeToExecuteMs, taskKafkaProgress, taskTimeoutSecond * 1000);
                     kafkaTaskInfo.setWarehouseId(warehouseId);

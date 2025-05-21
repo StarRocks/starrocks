@@ -24,6 +24,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.PulsarUtil;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TFileFormatType;
@@ -50,7 +51,7 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
     }
 
     public PulsarTaskInfo(long timeToExecuteMs, PulsarTaskInfo pulsarTaskInfo, Map<String, Long> initialPositions) {
-        super(UUID.randomUUID(), pulsarTaskInfo.getJob(), pulsarTaskInfo.getTaskScheduleIntervalMs(),
+        super(UUIDUtil.genUUID(), pulsarTaskInfo.getJob(), pulsarTaskInfo.getTaskScheduleIntervalMs(),
                 timeToExecuteMs, pulsarTaskInfo.getBeId(), pulsarTaskInfo.getTimeoutMs());
         this.partitions = pulsarTaskInfo.getPartitions();
         this.initialPositions.putAll(initialPositions);

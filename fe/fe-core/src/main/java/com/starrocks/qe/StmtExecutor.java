@@ -673,11 +673,10 @@ public class StmtExecutor {
                     try {
                         //reset query id for each retry
                         if (i > 0) {
-                            uuid = UUID.randomUUID();
+                            uuid = UUIDUtil.genUUID();
                             LOG.info("transfer QueryId: {} to {}", DebugUtil.printId(context.getQueryId()),
                                     DebugUtil.printId(uuid));
-                            context.setExecutionId(
-                                    new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()));
+                            context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
                         }
 
                         handleQueryStmt(retryContext.getExecPlan());

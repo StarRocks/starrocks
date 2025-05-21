@@ -54,6 +54,7 @@ import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.ThreadUtil;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.BrokerFileGroup;
@@ -89,7 +90,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * There are 3 steps in BrokerLoadJob: BrokerPendingTask, LoadLoadingTask, CommitAndPublishTxn.
@@ -283,8 +283,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                 } else if (partialUpdateMode.equals("row")) {
                     mode = TPartialUpdateMode.ROW_MODE;
                 }
-                UUID uuid = UUID.randomUUID();
-                TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+                TUniqueId loadId = UUIDUtil.genTUniqueId();
 
                 LoadLoadingTask task = new LoadLoadingTask.Builder()
                         .setDb(db)

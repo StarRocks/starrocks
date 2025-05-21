@@ -15,6 +15,7 @@
 package com.starrocks.load.streamload;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
@@ -33,8 +34,6 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.UUID;
-
 public class ShowStreamLoadTest {
     private static final Logger LOG = LogManager.getLogger(ShowStreamLoadTest.class);
     private static ConnectContext connectContext;
@@ -52,7 +51,7 @@ public class ShowStreamLoadTest {
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.setDatabase("test_db");
-        connectContext.setQueryId(UUID.randomUUID());
+        connectContext.setQueryId(UUIDUtil.genUUID());
 
         // create database
         String createDbStmtStr = "create database test_db;";
