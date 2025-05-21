@@ -142,7 +142,7 @@ displayed_sidebar: docs
 - 使用 `Files` 函数导出数据时，支持向 Parquet 文件导出 JSON 数据类型。[#56406](https://github.com/StarRocks/starrocks/pull/56406)
 - 提升存算分离集群中云原生表 Data Cache 预热性能。[#56190](https://github.com/StarRocks/starrocks/pull/56190)
 - Trino 语法兼容 AT TIME ZONE 表达式和 `from_iso8601_timestamp` 函数。[#56311](https://github.com/StarRocks/starrocks/pull/56311) [#55573](https://github.com/StarRocks/starrocks/pull/55573)
-- 存算分离集群中主键表的部份列更新支持条件更新。[#56132](https://github.com/StarRocks/starrocks/pull/56132)
+- 存算分离集群中主键表的部分列更新支持条件更新。[#56132](https://github.com/StarRocks/starrocks/pull/56132)
 - 进一步支持所有类型语句的统计信息收集。[#56257](https://github.com/StarRocks/starrocks/pull/56257)
 - `SHOW PROC '/transaction'` 语句支持配置返回的最大行数。[#55933](https://github.com/StarRocks/starrocks/pull/55933)
 - 支持基于 Oracle 类型 JDBC Catalog 表上创建异步物化视图。[#55372](https://github.com/StarRocks/starrocks/pull/55372)
