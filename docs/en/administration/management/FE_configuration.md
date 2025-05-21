@@ -4842,9 +4842,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The maximum size of materialized view plan cache (which is used for materialized view rewrite). If there are many materialized views used for transparent query rewrite, you may increase this value.
 - Introduced in: v3.2
 
-<<<<<<< HEAD
-<!--
-=======
 ##### enable_materialized_view_concurrent_prepare
 
 - Default: true
@@ -4863,7 +4860,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to enable query-level materialized view rewrite cache to improve query rewrite performance.
 - Introduced in: v3.3
 
->>>>>>> 3fcc6eb279 ([Doc] Update MV FE Configuration docs (#59063))
 ##### mv_query_context_cache_max_size
 
 - Default: 1000
