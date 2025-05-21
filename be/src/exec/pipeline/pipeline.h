@@ -65,6 +65,8 @@ public:
     size_t degree_of_parallelism() const;
 
     RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
+    std::shared_ptr<RuntimeProfile> runtime_profile_ptr() { return _runtime_profile; }
+
     void setup_pipeline_profile(RuntimeState* runtime_state);
     void setup_drivers_profile(const DriverPtr& driver);
 

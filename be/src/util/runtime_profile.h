@@ -38,6 +38,7 @@
 #include <sys/time.h> // NOLINT
 
 #include <atomic>
+#include <boost/container/vector.hpp>
 #include <functional>
 #include <iostream>
 #include <mutex>
@@ -392,6 +393,10 @@ public:
     // already be added to the profile.
     void add_child(RuntimeProfile* child, bool indent, RuntimeProfile* location);
 
+    void add_child(std::shared_ptr<RuntimeProfile> child, bool indent, RuntimeProfile* location);
+
+    void reserve_child_holder(size_t child_num);
+
     // Creates a new child profile with the given 'name'.
     // If 'prepend' is true, prepended before other child profiles, otherwise appended
     // after other child profiles.
@@ -627,7 +632,9 @@ private:
     ChildMap _child_map;
 
     ChildVector _children;
-    mutable std::mutex _children_lock; // protects _child_map and _children
+
+    std::vector<std::shared_ptr<RuntimeProfile>> _childre_holder;
+    mutable std::mutex _children_lock; // protects _child_map, _children and _childre_holder
 
     typedef std::map<std::string, std::string> InfoStrings;
     InfoStrings _info_strings;

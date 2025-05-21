@@ -10,11 +10,11 @@
 namespace starrocks::pipeline {
 RuntimeProfile* ProfileManager::build_merged_instance_profile(
         std::shared_ptr<FragmentProfileMaterial> fragment_profile_material, ObjectPool* obj_pool) {
-    LOG(WARNING) << "Before task - fragment_profile_material content: "
-                 << " total_cpu_cost_ns=" << fragment_profile_material->total_cpu_cost_ns
-                 << " total_spill_bytes=" << fragment_profile_material->total_spill_bytes
-                 << " instance_is_done=" << fragment_profile_material->instance_is_done
-                 << " be_number=" << fragment_profile_material->be_number;
+    // LOG(WARNING) << "Before task - fragment_profile_material content: "
+    //              << " total_cpu_cost_ns=" << fragment_profile_material->total_cpu_cost_ns
+    //              << " total_spill_bytes=" << fragment_profile_material->total_spill_bytes
+    //              << " instance_is_done=" << fragment_profile_material->instance_is_done
+    //              << " be_number=" << fragment_profile_material->be_number;
     RuntimeProfile* new_instance_profile = nullptr;
     RuntimeProfile* instance_profile = fragment_profile_material->instance_profile.get();
     if (fragment_profile_material->profile_level >= TPipelineProfileLevel::type::DETAIL) {
@@ -111,12 +111,12 @@ ProfileManager::ProfileManager(const CpuUtil::CpuIds& cpuids) {
 }
 
 void ProfileManager::build_and_report_profile(std::shared_ptr<FragmentProfileMaterial> fragment_profile_material) {
-    LOG(WARNING) << "Before task - fragment_profile_material content: "
-                 << " total_cpu_cost_ns=" << fragment_profile_material->total_cpu_cost_ns
-                 << " total_spill_bytes=" << fragment_profile_material->total_spill_bytes
-                 << " instance_is_done=" << fragment_profile_material->instance_is_done
-                 << " be_number=" << fragment_profile_material->be_number
-                 << " queryId=" << print_id(fragment_profile_material->query_id);
+    // LOG(WARNING) << "Before task - fragment_profile_material content: "
+    //              << " total_cpu_cost_ns=" << fragment_profile_material->total_cpu_cost_ns
+    //              << " total_spill_bytes=" << fragment_profile_material->total_spill_bytes
+    //              << " instance_is_done=" << fragment_profile_material->instance_is_done
+    //              << " be_number=" << fragment_profile_material->be_number
+    //              << " queryId=" << print_id(fragment_profile_material->query_id);
     auto profile_task = [=, fragment_profile_material = fragment_profile_material]() {
         ObjectPool obj_pool;
         RuntimeProfile* merged_instance_profile = build_merged_instance_profile(fragment_profile_material, &obj_pool);

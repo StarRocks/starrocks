@@ -188,6 +188,7 @@ public:
     static const int32_t s_pseudo_plan_node_id_for_final_sink;
 
     RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
+    std::shared_ptr<RuntimeProfile> runtime_profile_ptr() { return _runtime_profile; }
     RuntimeProfile* common_metrics() { return _common_metrics.get(); }
     RuntimeProfile* unique_metrics() { return _unique_metrics.get(); }
 

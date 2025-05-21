@@ -86,8 +86,8 @@ public class RunningProfileManager {
         }
 
         try {
-            LOG.warn("asyncProfileReport, queryid: {}, instanceIndex: {}, isDone:{}",
-                    DebugUtil.printId(request.getQuery_id()), request.backend_num, instanceIsDone.toString());
+            //            LOG.warn("asyncProfileReport, queryid: {}, instanceIndex: {}, isDone:{}",
+            //                    DebugUtil.printId(request.getQuery_id()), request.backend_num, instanceIsDone.toString());
             queryProfile.tryToTriggerRuntimeProfileUpdate();
             fragmentInstanceProfile.updateRunningProfile(request);
             queryProfile.updateLoadChannelProfile(request);

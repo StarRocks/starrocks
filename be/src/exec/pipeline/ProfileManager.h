@@ -24,6 +24,8 @@ namespace starrocks::pipeline {
 
 struct FragmentProfileMaterial {
     std::shared_ptr<RuntimeProfile> instance_profile;
+    // pipeline profile/driver profile/operator profile
+    std::vector<std::shared_ptr<RuntimeProfile>> profiles_holders;
     std::shared_ptr<RuntimeProfile> load_channel_profile;
     TPipelineProfileLevel::type profile_level;
 
