@@ -74,6 +74,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.delete.LakeDeleteJob;
@@ -117,7 +118,6 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
@@ -259,7 +259,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         }
 
         // generate label
-        String label = "delete_" + UUID.randomUUID();
+        String label = "delete_" + UUIDUtil.genUUID().toString();
         long jobId = GlobalStateMgr.getCurrentState().getNextId();
         stmt.setJobId(jobId);
 

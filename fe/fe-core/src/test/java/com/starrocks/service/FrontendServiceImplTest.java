@@ -30,6 +30,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.load.batchwrite.BatchWriteMgr;
@@ -113,7 +114,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -1095,8 +1095,7 @@ public class FrontendServiceImplTest {
     public void testGetLoadTxnStatus() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_day");
-        UUID uuid = UUID.randomUUID();
-        TUniqueId requestId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+        TUniqueId requestId = UUIDUtil.genTUniqueId();
         long transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(db.getId(),
                     Lists.newArrayList(table.getId()), "1jdc689-xd232", requestId,
                     new TxnCoordinator(TxnSourceType.BE, "1.1.1.1"),
