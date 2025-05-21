@@ -68,3 +68,14 @@ The minor version status will change with some baseline triggers, as shown below
 2. When the minor version is released, it becomes `feature-freeze`.
 3. When the next minor version is released, the previous minor version becomes `bugfix-only`.
 4. The minor version stays as `bugfix-only` until three more minor versions are released, and then becomes `code-freeze`.
+
+### Example
+
+- branch-5.1 is created, this branch is in the `open` state until it passes through release candidate and is publicly released.
+- Once version 5.1 is publicly released it enters the `feature-freeze` state.
+- Once version 5.2 is publicly released 5.1 switches to `bugfix-only`.
+- When versions 5.1, 5.2, 5.3, and 5.4 are all released:
+  - 5.4 is in the `feature-freeze` state
+  - 5.3 is in the `bugfix-only` state
+  - 5.2 is also in the `bugfix-only` state
+  - 5.1 is in the `code-freeze` state
