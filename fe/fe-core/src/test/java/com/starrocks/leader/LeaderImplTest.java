@@ -123,7 +123,7 @@ public class LeaderImplTest {
         TUpdateTabletVersionResult result = new TUpdateTabletVersionResult();
         result = leader.updateTabletVersion(request);
         Assert.assertEquals(result.status.getStatus_code(), TStatusCode.CANCELLED);
-        Assert.assertEquals("current fe is not master", result.status.getError_msgs().get(0));
+        Assert.assertEquals("current fe is not leader", result.status.getError_msgs().get(0));
 
         new MockUp<GlobalStateMgr>() {
             @Mock
