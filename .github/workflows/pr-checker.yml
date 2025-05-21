@@ -255,20 +255,3 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/check-pr-changelist.sh
-
-  backport-feature-enhancement-check:
-    runs-on: [ self-hosted, normal ]
-    needs: sync-checker
-    if: >
-      github.event.action != 'synchronize' &&
-      github.base_ref != 'main' &&
-      (startsWith(github.event.pull_request.title, '[Feature]') || startsWith(github.event.pull_request.title, '[Enhancement]')) &&
-      !contains(github.event.pull_request.labels.*.name, 'backport_approval')
-    env:
-      PR_NUMBER: ${{ github.event.number }}
-      GH_TOKEN: ${{ secrets.PAT }}
-    steps:
-      - name: CHECK NECESSARY
-        run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/check-pr-backport-review-necessary.sh
