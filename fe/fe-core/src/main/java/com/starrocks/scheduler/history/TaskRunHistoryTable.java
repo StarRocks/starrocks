@@ -210,8 +210,11 @@ public class TaskRunHistoryTable {
             predicates.add(" task_state = " + Strings.quote(params.getState()));
         }
         sql += Joiner.on(" AND ").join(predicates);
+        // If user explicitly specify the LIMIT in sql, we don't apply default limit
         if (params.isSetPagination() && params.getPagination().getLimit() > 0) {
             sql += " LIMIT " + params.getPagination().getLimit();
+        } else if (Config.task_runs_max_history_number > 0) {
+            sql += " ORDER BY create_time DESC LIMIT " + Config.task_runs_max_history_number;
         }
 
         List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(sql);
