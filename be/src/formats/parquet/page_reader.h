@@ -24,6 +24,8 @@
 #include "gen_cpp/parquet_types.h"
 #include "io/seekable_input_stream.h"
 #include "util/slice.h"
+#include "storage/rowset/page_handle.h"
+#include "storage/page_cache.h"
 
 namespace starrocks {
 class ObjectCache;
@@ -68,6 +70,8 @@ public:
     StatusOr<Slice> read_and_decompress_page_data();
 
 private:
+    using BufferPtr = std::unique_ptr<std::vector<uint8_t>>;
+
     // Must call this function after next_header called. The total read size
     // after one next_header can not exceed the page's compressed_page_size.
     Status _read_bytes(void* buffer, size_t size);
@@ -84,8 +88,8 @@ private:
     void _init_page_cache_key();
     std::string& _current_page_cache_key();
     Status _deal_page_with_cache();
-    Status _read_and_deserialize_header(bool need_fill_cache);
-    Status _read_and_decompress_internal(bool need_fill_cache);
+    Status _read_and_deserialize_header(BufferPtr* cache_buf, bool need_fill_cache);
+    Status _read_and_decompress_internal(BufferPtr* cache_buf, bool need_fill_cache);
     bool _cache_decompressed_data();
     Status _decompress_page(Slice& input, Slice* output);
 
@@ -104,18 +108,18 @@ private:
     size_t _page_num = 0xffffffff;
     size_t _next_read_page_idx = 0;
 
-    ObjectCache* _cache = nullptr;
+    StoragePageCache* _cache = nullptr;
     std::string _page_cache_key;
 
     const tparquet::CompressionCodec::type _codec;
     const BlockCompressionCodec* _compress_codec = nullptr;
 
-    using BufferPtr = std::shared_ptr<std::vector<uint8_t>>;
     BufferPtr _compressed_buf;
     BufferPtr _uncompressed_buf;
     BufferPtr _cache_buf;
     bool _hit_cache = false;
     bool _skip_page_cache = false;
+    PageHandle _page_handle;
 
     Slice _uncompressed_data;
 };
