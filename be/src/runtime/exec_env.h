@@ -80,10 +80,6 @@ class RuntimeFilterWorker;
 class RuntimeFilterCache;
 class ProfileReportWorker;
 class QuerySpillManager;
-class BlockCache;
-class ObjectCache;
-class LocalCache;
-class StoragePageCache;
 struct RfTracePoint;
 
 class BackendServiceClient;
@@ -241,43 +237,6 @@ private:
     std::shared_ptr<MemTracker> _poco_connection_pool_mem_tracker;
 
     std::map<MemTrackerType, std::shared_ptr<MemTracker>> _mem_tracker_map;
-};
-
-class CacheEnv {
-public:
-    static CacheEnv* GetInstance();
-
-    Status init(const std::vector<StorePath>& store_paths);
-    void destroy();
-
-    void try_release_resource_before_core_dump();
-
-    void set_local_cache(std::shared_ptr<LocalCache> local_cache) { _local_cache = std::move(local_cache); }
-
-    LocalCache* local_cache() { return _local_cache.get(); }
-    BlockCache* block_cache() const { return _block_cache.get(); }
-    ObjectCache* external_table_meta_cache() const { return _starcache_based_object_cache.get(); }
-    ObjectCache* external_table_page_cache() const { return _starcache_based_object_cache.get(); }
-    StoragePageCache* page_cache() const { return _page_cache.get(); }
-
-    StatusOr<int64_t> get_storage_page_cache_limit();
-    int64_t check_storage_page_cache_limit(int64_t storage_cache_limit);
-
-private:
-    Status _init_datacache();
-    Status _init_starcache_based_object_cache();
-    Status _init_lru_base_object_cache();
-    Status _init_page_cache();
-
-    GlobalEnv* _global_env;
-    std::vector<StorePath> _store_paths;
-
-    std::shared_ptr<LocalCache> _local_cache;
-
-    std::shared_ptr<BlockCache> _block_cache;
-    std::shared_ptr<ObjectCache> _starcache_based_object_cache;
-    std::shared_ptr<ObjectCache> _lru_based_object_cache;
-    std::shared_ptr<StoragePageCache> _page_cache;
 };
 
 // Execution environment for queries/plan fragments.

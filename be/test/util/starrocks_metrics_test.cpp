@@ -36,6 +36,7 @@
 
 #include <gtest/gtest.h>
 
+#include "cache/datacache.h"
 #include "common/config.h"
 #include "storage/page_cache.h"
 #include "testutil/assert.h"
@@ -49,7 +50,7 @@ public:
     ~StarRocksMetricsTest() override = default;
 
 protected:
-    void SetUp() override { _page_cache = CacheEnv::GetInstance()->page_cache(); }
+    void SetUp() override { _page_cache = DataCache::GetInstance()->page_cache(); }
 
     void TearDown() override {}
 

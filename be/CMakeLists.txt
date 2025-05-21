@@ -878,7 +878,7 @@ set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
 
 set(JAVA_HOME ${THIRDPARTY_DIR}/open_jdk/)
 add_library(jvm SHARED IMPORTED)
-FILE(GLOB_RECURSE LIB_JVM ${JAVA_HOME}/jre/lib/*/libjvm.so)
+FILE(GLOB_RECURSE LIB_JVM ${JAVA_HOME}/lib/*/libjvm.so)
 set_target_properties(jvm PROPERTIES IMPORTED_LOCATION ${LIB_JVM})
 include_directories(${JAVA_HOME}/include)
 include_directories(${JAVA_HOME}/include/linux)
@@ -1053,7 +1053,7 @@ set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
 
 # link gcov if WITH_GCOV is on
 if (WITH_GCOV)
-    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -lgcov)
+    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} --coverage)
 endif()
 
 # Set libraries for test

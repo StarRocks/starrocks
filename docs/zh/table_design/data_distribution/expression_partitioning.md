@@ -12,6 +12,8 @@ sidebar_position: 10
 
 从 v3.4 开始，表达式分区方式进一步得到优化，统一所有分区策略，并支持更复杂的解决方案。在大多数情况下，建议您使用表达式分区。表达式分区将在未来版本中逐渐取代其他分区策略。
 
+从 v3.5 开始，StarRocks 支持根据时间函数合并表达式分区，以优化存储效率和查询性能。详细信息请参阅 [表达式分区合并](#表达式分区合并)。
+
 ## 简单时间函数表达式分区
 
 如果您经常按照连续日期范围来查询和管理数据，则只需要在时间函数分区表达式中，指定一个日期类型（DATE 或者 DATETIME ）的分区列，以及指定分区粒度（年、月、日或小时）。StarRocks 会根据导入的数据和分区表达式，自动创建分区并且设置分区的起止时间。
@@ -246,15 +248,15 @@ CREATE TABLE orders (
 PARTITION BY from_unixtime(ts,'%Y%m%d');
 ```
 
-示例二：假设您为每行数据分配了一个不规则的字符串类型时间戳，并且经常按天查询数据，则建表时可以使用 cast() 和 date_parse() 函数将时间戳转换为 DATE 类型作为分区列，并将分区粒度设置为为一天。将同一天的数据存储在一个分区中，利用分区裁剪可以显著提高查询效率。
+示例二：假设您为每行数据分配了一个 INT 类型时间戳，并且按月存储数据，则建表时可以使用 cast() 和 str_to_date() 函数将时间戳转换为 DATE 类型作为分区列，并使用 date_trunc() 将分区粒度设置为为一月。将同一月的数据存储在一个分区中，利用分区裁剪可以显著提高查询效率。
 
 ```SQL
 CREATE TABLE orders_new (
-    ts STRING NOT NULL,
+    ts INT NOT NULL,
     id BIGINT NOT NULL,
     city STRING NOT NULL
 )
-PARTITION BY CAST(DATE_PARSE(CAST(ts AS VARCHAR(100)),'%Y%m%d') AS DATE);
+PARTITION BY date_trunc('month', str_to_date(CAST(ts as STRING),'%Y%m%d'));
 ```
 
 ### 使用说明
@@ -262,7 +264,7 @@ PARTITION BY CAST(DATE_PARSE(CAST(ts AS VARCHAR(100)),'%Y%m%d') AS DATE);
 基于复杂时间函数表达式的分区支持分区裁剪，具体包括以下情况：
 
 - 如果分区子句为 `PARTITION BY from_unixtime(ts)`，则带有格式为 `ts > 1727224687` 条件的查询可以裁剪到相应的分区。
-- 如果分区子句为 `PARTITION BY CAST(DATE_PARSE(CAST(ts AS VARCHAR(100)),'%Y%m%d') AS DATE)`，则带有格式为 `ts = "20240506"` 条件的查询可以裁剪到相应的分区。
+- 如果分区子句为 `PARTITION BY str2date(CAST(ts AS string),'%Y%m')`，则带有格式为 `ts = "20240506"` 条件的查询可以裁剪到相应的分区。
 - 上述情况同样适用于 [混合表达式分区](#混合表达式分区-自-v34).
 
 ## 混合表达式分区 (自 v3.4)
@@ -318,6 +320,53 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 +-------------+-------------------+----------------+---------------------+--------------------+--------+--------------+-----------------------------+-----------------+---------+----------------+---------------+---------------------+--------------------------+----------+------------+----------+
 2 rows in set (0.00 sec)
 ```
+
+### 表达式分区合并
+
+在数据管理中，基于不同时间粒度分区对于优化查询和存储至关重要。为了提高存储效率和查询性能，StarRocks 支持将多个细时间粒度的表达分区合并为一个粗时间粒度的分区，例如，将按日划分的分区合并为按月划分的分区。通过合并符合指定条件（时间范围）的分区，StarRocks 允许按不同的时间粒度对数据进行分区。
+
+#### 语法
+
+```sql
+PARTITION BY expression
+...
+ALTER TABLE [<db_name>.]<table_name>
+PARTITION BY <time_expr>
+WHERE <time_range_column> BETWEEN <start_time> AND <end_time>
+```
+
+#### 参数解释
+
+##### `PARTITION BY <time_expr>`
+
+- 必填：是
+- 说明：指定分区策略的新时间粒度，例如，`PARTITION BY date_trunc('month', dt)`。
+
+##### `WHERE <time_range_column> BETWEEN <start_time> AND <end_time>`
+
+- 必填：是
+- 说明：指定要合并的分区的时间范围。该范围内的分区将根据 `PARTITION BY` 子句中定义的规则进行合并。
+
+#### 示例
+
+合并表 `site_access1` 中的分区，并将分区时间粒度从日改为月。合并分区的时间范围从 `2024-01-01` 到 `2024-03-31`。
+
+```SQL
+ALTER TABLE site_access1 PARTITION BY date_trunc('month', event_day)
+WHERE event_day BETWEEN '2024-01-01' AND '2024-03-31';
+```
+
+合并后：
+
+- 日级分区 `2024-01-01` 至 `2024-01-31` 合并为月级分区 `2024-01`。
+- 日级分区 `2024-02-01` 至 `2024-02-29` 合并为月级分区 `2024-02`。
+- 日级分区 `2024-03-01` 至 `2024-03-31` 合并为月级分区 `2024-03`。
+
+#### 使用说明
+
+- 只支持合并基于时间函数的表达式分区。
+- 不支持合并具有多个分区列的分区。
+- 不支持合并与 Schema Change/DML 并行执行。
 
 ## 使用限制
 

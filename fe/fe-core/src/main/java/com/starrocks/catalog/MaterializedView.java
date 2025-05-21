@@ -39,6 +39,7 @@ import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.GlobalConstraintManager;
 import com.starrocks.catalog.mv.MVPlanValidationResult;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MaterializedViewExceptions;
@@ -111,7 +112,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 import static com.starrocks.backup.mv.MVRestoreUpdater.checkMvDefinedQuery;
 import static com.starrocks.backup.mv.MVRestoreUpdater.restoreBaseTableInfoIfNoRestored;
@@ -738,7 +738,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.queryOutputIndices = queryOutputIndices;
     }
 
-    public boolean isReloaded() {
+    public boolean hasReloaded() {
         return reloaded;
     }
 
@@ -1070,9 +1070,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             LOG.error("reload mv failed: {}", this, e);
             setInactiveAndReason("reload failed: " + e.getMessage());
         }
-        if (postLoadImage) {
-            reloaded = true;
-        }
     }
 
     /**
@@ -1149,12 +1146,19 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 continue;
             } else if (table.isMaterializedView()) {
                 MaterializedView baseMV = (MaterializedView) table;
-                // skip reloading only when postLoadImage is true
-                if (postLoadImage && baseMV.isReloaded()) {
-                    continue;
+                // only consider skipping reload when postLoadImage is true
+                if (Config.enable_mv_post_image_reload_cache && postLoadImage) {
+                    if (!baseMV.hasReloaded()) {
+                        // recursive reload MV, to guarantee the order of hierarchical MV
+                        baseMV.onReload(postLoadImage);
+                        baseMV.setReloaded(true);
+                    } else {
+                        LOG.info("baseMv: {} has reloaded before, skip reload it again", baseMV.getName());
+                    }
+                } else {
+                    // recursive reload MV, to guarantee the order of hierarchical MV
+                    baseMV.onReload(postLoadImage);
                 }
-                // recursive reload MV, to guarantee the order of hierarchical MV
-                baseMV.onReload(postLoadImage);
                 if (!baseMV.isActive()) {
                     LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
                             baseTableInfo.getTableName(), id);
@@ -1340,11 +1344,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         StringBuilder sb = new StringBuilder();
         sb.append("CREATE MATERIALIZED VIEW `").append(getName()).append("` (");
         List<String> colDef = Lists.newArrayList();
-        List<Integer> outputIndices =
-                CollectionUtils.isNotEmpty(queryOutputIndices) ? queryOutputIndices :
-                        IntStream.range(0, getBaseSchema().size()).boxed().collect(Collectors.toList());
-        for (int index : outputIndices) {
-            Column column = getBaseSchema().get(index);
+
+        // NOTE: only output non-generated columns
+        // use ordered columns to keep the same order as the original create statement
+        List<Column> orderedColumns = getOrderedOutputColumns();
+        for (Column column : orderedColumns) {
             StringBuilder colSb = new StringBuilder();
             // Since mv supports complex expressions as the output column, add `` to support to replay it.
             colSb.append("`" + column.getName() + "`");
@@ -1376,7 +1380,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             // If isAutoMaticPartition is false, it may generate bad partition sql which will cause error in replay.
             if (partitionInfo instanceof ListPartitionInfo) {
                 ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
-                String sql = listPartitionInfo.toSql(this, true);
+                String sql = listPartitionInfo.toSql(this, true, false);
                 sb.append("\n").append(sql);
             } else {
                 sb.append("\n").append(partitionInfo.toSql(this, null));

@@ -41,6 +41,7 @@
 #include <string>
 
 #include "fs/fs_util.h"
+#include "runtime/mem_tracker.h"
 #include "storage/olap_define.h"
 
 #ifndef BE_TEST
@@ -153,6 +154,21 @@ TEST_F(KVStoreTest, TestOpDeleteRange) {
         std::string value_get;
         ASSERT_TRUE(_kv_store->get(META_COLUMN_FAMILY_INDEX, key, &value_get).is_not_found());
     }
+}
+
+TEST_F(KVStoreTest, calc_rocksdb_write_buffer_size_test) {
+    MemTracker mem_tracker(4294967296);
+
+    // case1: only one path
+    auto size = KVStore::calc_rocksdb_write_buffer_size(&mem_tracker);
+    ASSERT_EQ(size, 4294967296 * config::rocksdb_write_buffer_memory_percent / 100 / 2);
+
+    // case2: two paths
+    std::string old_val2 = config::storage_root_path;
+    config::storage_root_path = "/storage;/storage2";
+    auto size2 = KVStore::calc_rocksdb_write_buffer_size(&mem_tracker);
+    ASSERT_EQ(size2, 67108864L);
+    config::storage_root_path = old_val2;
 }
 
 } // namespace starrocks

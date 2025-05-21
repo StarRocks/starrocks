@@ -68,6 +68,10 @@ public class CompactionJob {
         this.tasks = Objects.requireNonNull(tasks, "tasks is null");
     }
 
+    public void setAggregateTask(CompactionTask task) {
+        this.tasks = Collections.singletonList(task);
+    }
+
     public String getFailMessage() {
         CompactionTask task = tasks.stream().filter(t ->
                 t.getResult() != CompactionTask.TaskResult.ALL_SUCCESS).findAny().orElse(null);

@@ -145,7 +145,7 @@ MFV_AVX512F(__m512i prefix_and_accumulate_int32_avx512(int32_t* p, __m512i s, co
     x = _mm512_add_epi32(x, _mm512_alignr_epi32(x, v_zero, 16 - 8));
     // accumulate
     x = _mm512_add_epi32(s, x);
-    _mm512_storeu_si512((__m512i*)p, x);
+    _mm512_storeu_si512(p, x);
     // return last value.
     return _mm512_permutexvar_epi32(v_perm15, x);
 });
@@ -205,9 +205,31 @@ MFV_AVX2(void delta_decode_chain_int32(int32_t* buf, int n, int32_t min_delta, i
     return delta_decode_chain_int32_avx2(buf, n, min_delta, last_value);
 });
 
+// https://github.com/llvm/llvm-project/issues/91565
+// In ASAN mode, this function will cause SIGSEGV because of touching redzone.
+// But according to ChatGPT's explanation, it's a bug of ASAN. ASAN allocas stack space aligned to 32 bytes not 64 bytes,
+// so when spill zmm registers, it will touch redzone. and assembly code is like following:
+/*
+   0x0000000029b7382e <+331>:   je     0x29b7383d <starrocks::delta_decode_chain_int32_avx512(int32_t*, int, int32_t, int32_t&)+346>
+   0x0000000029b73830 <+333>:   mov    $0x40,%esi
+   0x0000000029b73835 <+338>:   mov    %rax,%rdi
+   0x0000000029b73838 <+341>:   call   0x19824bf0 <__asan_report_store_n>
+=> 0x0000000029b7383d <+346>:   vmovdqa64 %zmm0,-0x180(%r13)
+   0x0000000029b73844 <+353>:   vpxor  %xmm0,%xmm0,%xmm0
+   0x0000000029b73848 <+357>:   lea    -0x100(%r13),%rax
+   0x0000000029b7384f <+364>:   mov    %rax,%rdx
+   0x0000000029b73852 <+367>:   shr    $0x3,%rdx
+   0x0000000029b73856 <+371>:   add    $0x7fff8000,%rdx
+   */
+// to resolve this problem, we have to force stack alignment to 64 bytes, which is not supported in our compiler right now.
+
+#if !defined(ADDRESS_SANITIZER)
+
 MFV_AVX512F(void delta_decode_chain_int32(int32_t* buf, int n, int32_t min_delta, int32_t& last_value) {
     return delta_decode_chain_int32_avx512(buf, n, min_delta, last_value);
 });
+
+#endif
 
 MFV_DEFAULT(void delta_decode_chain_int32(int32_t* buf, int n, int32_t min_delta, int32_t& last_value) {
     return delta_decode_chain_scalar_prefetch<int32_t>(buf, n, min_delta, last_value);
@@ -256,9 +278,13 @@ MFV_AVX512F(void delta_decode_chain_int64_avx512(int64_t* buf, int n, int64_t mi
     }
 });
 
+#if !defined(ADDRESS_SANITIZER)
+
 MFV_AVX512F(void delta_decode_chain_int64(int64_t* buf, int n, int64_t min_delta, int64_t& last_value) {
     return delta_decode_chain_int64_avx512(buf, n, min_delta, last_value);
 });
+
+#endif
 
 MFV_DEFAULT(void delta_decode_chain_int64(int64_t* buf, int n, int64_t min_delta, int64_t& last_value) {
     return delta_decode_chain_scalar_prefetch<int64_t>(buf, n, min_delta, last_value);

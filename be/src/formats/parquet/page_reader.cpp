@@ -21,6 +21,7 @@
 #include <ostream>
 #include <vector>
 
+#include "cache/datacache.h"
 #include "cache/object_cache/object_cache.h"
 #include "common/compiler_util.h"
 #include "exec/hdfs_scanner.h"
@@ -47,7 +48,7 @@ PageReader::PageReader(io::SeekableInputStream* stream, uint64_t start_offset, u
           _opts(opts),
           _codec(codec) {
     if (_opts.use_file_pagecache) {
-        _cache = CacheEnv::GetInstance()->external_table_page_cache();
+        _cache = DataCache::GetInstance()->external_table_page_cache();
         _init_page_cache_key();
     }
     _compressed_buf = std::make_shared<std::vector<uint8_t>>();
@@ -57,6 +58,7 @@ PageReader::PageReader(io::SeekableInputStream* stream, uint64_t start_offset, u
 Status PageReader::next_page() {
     if (_opts.use_file_pagecache) {
         _cache_buf.reset();
+        _hit_cache = false;
     }
     return seek_to_offset(_next_header_pos);
 }
@@ -66,6 +68,7 @@ Status PageReader::_deal_page_with_cache() {
     ObjectCacheHandle* cache_handle = nullptr;
     Status st = _cache->lookup(page_cache_key, &cache_handle);
     if (st.ok()) {
+        _hit_cache = true;
         _opts.stats->page_cache_read_counter += 1;
         _cache_buf = *(static_cast<const BufferPtr*>(_cache->value(cache_handle)));
         _cache->release(cache_handle);
@@ -243,10 +246,14 @@ StatusOr<Slice> PageReader::read_and_decompress_page_data() {
         return _uncompressed_data;
     } else {
         if (_cache_decompressed_data()) {
-            _opts.stats->page_cache_read_decompressed_counter += 1;
+            if (_hit_cache) {
+                _opts.stats->page_cache_read_decompressed_counter += 1;
+            }
             _uncompressed_data = Slice(_cache_buf->data() + _header_length, _cache_buf->size() - _header_length);
         } else {
-            _opts.stats->page_cache_read_compressed_counter += 1;
+            if (_hit_cache) {
+                _opts.stats->page_cache_read_compressed_counter += 1;
+            }
             Slice input = Slice(_cache_buf->data() + _header_length, _cache_buf->size() - _header_length);
             TRY_CATCH_BAD_ALLOC(
                     raw::stl_vector_resize_uninitialized(_uncompressed_buf.get(), _cur_header.uncompressed_page_size));
@@ -336,16 +343,18 @@ Status PageReader::_read_and_decompress_internal(bool need_fill_cache) {
     // if it's compressed, we have to uncompress page
     // otherwise we just assign slice.
     if (is_compressed) {
-        if (need_fill_cache && _cache_decompressed_data()) {
+        if (!need_fill_cache) {
+            TRY_CATCH_BAD_ALLOC(raw::stl_vector_resize_uninitialized(_uncompressed_buf.get(), uncompressed_size));
+            _uncompressed_data = Slice(_uncompressed_buf->data(), uncompressed_size);
+            return _decompress_page(read_data, &_uncompressed_data);
+        } else if (_cache_decompressed_data()) {
             auto original_size = _cache_buf->size();
             TRY_CATCH_BAD_ALLOC(
                     raw::stl_vector_resize_uninitialized(_cache_buf.get(), uncompressed_size + original_size));
             _uncompressed_data = Slice(_cache_buf->data() + original_size, uncompressed_size);
-        } else {
-            TRY_CATCH_BAD_ALLOC(raw::stl_vector_resize_uninitialized(_uncompressed_buf.get(), uncompressed_size));
-            _uncompressed_data = Slice(_uncompressed_buf->data(), uncompressed_size);
+            return _decompress_page(read_data, &_uncompressed_data);
         }
-        return _decompress_page(read_data, &_uncompressed_data);
+        // if we cache compressed data, we can decompress it later.
     } else {
         _uncompressed_data = read_data;
     }

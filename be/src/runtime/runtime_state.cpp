@@ -50,6 +50,7 @@
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
 #endif
+#include "cache/datacache.h"
 #include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -513,7 +514,7 @@ void RuntimeState::update_load_datacache_metrics(TReportExecStatusParams* load_p
         }
 #endif // USE_STAROS
     } else {
-        const LocalCache* cache = CacheEnv::GetInstance()->local_cache();
+        const LocalCache* cache = DataCache::GetInstance()->local_cache();
         if (cache != nullptr && cache->is_initialized()) {
             TDataCacheMetrics t_metrics{};
             DataCacheUtils::set_metrics_from_thrift(t_metrics, cache->cache_metrics(0));

@@ -496,6 +496,7 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+import com.starrocks.sql.ast.spm.ControlBaselinePlanStmt;
 import com.starrocks.sql.ast.spm.CreateBaselinePlanStmt;
 import com.starrocks.sql.ast.spm.DropBaselinePlanStmt;
 import com.starrocks.sql.ast.spm.ShowBaselinePlanStmt;
@@ -6028,6 +6029,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 joinType = JoinOperator.LEFT_OUTER_JOIN;
             } else if (context.outerAndSemiJoinType().SEMI() != null) {
                 joinType = JoinOperator.LEFT_SEMI_JOIN;
+            } else if (context.outerAndSemiJoinType().AWARE() != null) {
+                joinType = JoinOperator.NULL_AWARE_LEFT_ANTI_JOIN;
             } else if (context.outerAndSemiJoinType().ANTI() != null) {
                 joinType = JoinOperator.LEFT_ANTI_JOIN;
             } else {
@@ -6206,7 +6209,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitSubqueryWithAlias(StarRocksParser.SubqueryWithAliasContext context) {
         QueryRelation queryRelation = (QueryRelation) visit(context.subquery());
-        SubqueryRelation subqueryRelation = new SubqueryRelation(new QueryStatement(queryRelation));
+        QueryStatement qs = new QueryStatement(queryRelation);
+        SubqueryRelation subqueryRelation = new SubqueryRelation(qs, context.ASSERT_ROWS() != null, qs.getPos());
 
         if (context.alias != null) {
             Identifier identifier = (Identifier) visit(context.alias);
@@ -8568,7 +8572,33 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitShowBaselinePlanStatement(StarRocksParser.ShowBaselinePlanStatementContext ctx) {
-        return new ShowBaselinePlanStmt(createPos(ctx));
+        Expr where = null;
+        if (ctx.WHERE() != null) {
+            where = (Expr) visit(ctx.expression());
+        }
+        return new ShowBaselinePlanStmt(createPos(ctx), where);
+    }
+
+    @Override
+    public ParseNode visitDisableBaselinePlanStatement(StarRocksParser.DisableBaselinePlanStatementContext ctx) {
+        if (ctx.INTEGER_VALUE() == null) {
+            throw new ParsingException("Invalid number of statement arguments");
+        }
+        List<Long> ids = ctx.INTEGER_VALUE().stream()
+                .map(ParseTree::getText)
+                .map(Long::parseLong).toList();
+        return new ControlBaselinePlanStmt(false, ids, createPos(ctx));
+    }
+
+    @Override
+    public ParseNode visitEnableBaselinePlanStatement(StarRocksParser.EnableBaselinePlanStatementContext ctx) {
+        if (ctx.INTEGER_VALUE() == null) {
+            throw new ParsingException("Invalid number of statement arguments");
+        }
+        List<Long> ids = ctx.INTEGER_VALUE().stream()
+                .map(ParseTree::getText)
+                .map(Long::parseLong).toList();
+        return new ControlBaselinePlanStmt(true, ids, createPos(ctx));
     }
 
     @Override
@@ -8811,7 +8841,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     "function", aggFuncName, argTypes), createPos(context));
         }
         AggregateFunction aggFunc = (AggregateFunction) result;
-        if (!AggStateUtils.isSupportedAggStateFunction(aggFunc)) {
+        if (!AggStateUtils.isSupportedAggStateFunction(aggFunc, false)) {
             throw new ParsingException(String.format("AggStateType function %s with input %s is not supported yet.",
                     aggFuncName, argTypes), createPos(context));
         }

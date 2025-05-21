@@ -106,6 +106,8 @@ public class FeConstants {
 
     public static final String GENERATED_PARTITION_COLUMN_PREFIX = "__generated_partition_column_";
 
+    public static final String ICEBERG_TRANSFORM_EXPRESSION_PREFIX = "__iceberg_transform_";
+
     // Max counter num of TOP K function
     public static final int MAX_COUNTER_NUM_OF_TOP_K = 100000;
 
