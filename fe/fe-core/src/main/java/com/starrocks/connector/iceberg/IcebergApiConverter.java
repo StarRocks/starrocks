@@ -329,7 +329,24 @@ public class IcebergApiConverter {
         return tIcebergSchemaField;
     }
 
-    public static Metrics buildDataFileMetrics(TIcebergDataFile dataFile) {
+    public static void reverseBuffer(ByteBuffer buf) {
+        if (buf == null || buf.remaining() <= 1) {
+            return; // nothing to reverse
+        }
+        int lo = buf.position();
+        int hi = buf.limit() - 1;
+
+        while (lo < hi) {
+            byte bLo = buf.get(lo);
+            byte bHi = buf.get(hi);
+            buf.put(lo, bHi);
+            buf.put(hi, bLo);
+            lo++;
+            hi--;
+        }
+    }
+
+    public static Metrics buildDataFileMetrics(TIcebergDataFile dataFile, org.apache.iceberg.Table nativeTable) {
         Map<Integer, Long> columnSizes = new HashMap<>();
         Map<Integer, Long> valueCounts = new HashMap<>();
         Map<Integer, Long> nullValueCounts = new HashMap<>();
@@ -351,6 +368,14 @@ public class IcebergApiConverter {
             }
             if (stats.isSetUpper_bounds()) {
                 upperBounds = stats.upper_bounds;
+            }
+        }
+
+        for (Types.NestedField field : nativeTable.schema().columns()) {
+            if (field.type() instanceof Types.DecimalType || field.type() == Types.UUIDType.get()) {
+                //change to BigEndian
+                reverseBuffer(lowerBounds.get(field.fieldId()));
+                reverseBuffer(upperBounds.get(field.fieldId()));
             }
         }
 
