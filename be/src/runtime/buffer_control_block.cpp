@@ -348,8 +348,6 @@ Status BufferControlBlock::get_arrow_batch(std::shared_ptr<arrow::RecordBatch>* 
     }
 
     while (_arrow_batch_queue.empty() && !_is_close && !_is_cancelled) {
-        LOG(INFO) << "[Flight] BufferControlBlock::get_arrow_batch(), waiting, is_close = " << _is_close
-                  << ", is_cancelled = " << _is_cancelled << ", queue size = " << _arrow_batch_queue.size();
         _data_arriaval.wait(l);
     }
 

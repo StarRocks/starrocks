@@ -227,6 +227,35 @@ TEST_F(BufferControlBlockTest, is_full_arrow_batch_queue) {
     ASSERT_TRUE(control_block.is_full());
 }
 
+TEST_F(BufferControlBlockTest, get_arrow_batch_simple) {
+    BufferControlBlock control_block(TUniqueId(), 1024);
+    ASSERT_TRUE(control_block.init().ok());
+
+    arrow::Int32Builder builder;
+    ASSERT_TRUE(builder.Append(100).ok());
+    ASSERT_TRUE(builder.Append(200).ok());
+
+    std::shared_ptr<arrow::Array> array;
+    ASSERT_TRUE(builder.Finish(&array).ok());
+
+    auto schema = arrow::schema({arrow::field("int_col", arrow::int32())});
+    auto record_batch = arrow::RecordBatch::Make(schema, 2, {array});
+
+    ASSERT_TRUE(control_block.add_arrow_batch(record_batch).ok());
+
+    std::shared_ptr<arrow::RecordBatch> result;
+    Status st = control_block.get_arrow_batch(&result);
+
+    ASSERT_TRUE(st.ok());
+    ASSERT_TRUE(result != nullptr);
+    ASSERT_EQ(result->num_rows(), 2);
+    ASSERT_EQ(result->num_columns(), 1);
+
+    auto int_array = std::static_pointer_cast<arrow::Int32Array>(result->column(0));
+    ASSERT_EQ(int_array->Value(0), 100);
+    ASSERT_EQ(int_array->Value(1), 200);
+}
+
 } // namespace starrocks
 
 /* vim: set ts=4 sw=4 sts=4 tw=100 noet: */
