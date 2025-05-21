@@ -349,6 +349,27 @@ void RuntimeProfile::add_child(RuntimeProfile* child, bool indent, RuntimeProfil
     }
 }
 
+void RuntimeProfile::add_child(std::shared_ptr<RuntimeProfile> child, bool indent, RuntimeProfile* location) {
+    std::lock_guard<std::mutex> l(_children_lock);
+    if (location == nullptr || _children.empty()) {
+        add_child_unlock(child.get(), indent, _children.end());
+    } else {
+        auto f = [location](const std::pair<RuntimeProfile*, bool>& pair) { return pair.first == location; };
+        auto pos = std::find_if(_children.begin(), _children.end(), f);
+        DCHECK(pos != _children.end());
+        add_child_unlock(child.get(), indent, ++pos);
+    }
+
+    _childre_holder.emplace_back(std::move(child));
+}
+
+void RuntimeProfile::reserve_child_holder(size_t child_num) {
+    DCHECK(child_num > 0);
+    std::lock_guard<std::mutex> l(_children_lock);
+    _childre_holder.reserve(child_num);
+}
+
+
 RuntimeProfile* RuntimeProfile::get_child(const std::string& name) {
     std::lock_guard<std::mutex> l(_children_lock);
     auto it = _child_map.find(name);
