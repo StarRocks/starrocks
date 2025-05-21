@@ -3251,6 +3251,15 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "The default try lock timeout for mv refresh to try base table/mv dbs' lock")
     public static int mv_refresh_try_lock_timeout_ms = 30 * 1000;
 
+    @ConfField(mutable = true, comment = "materialized view can refresh at most 10 partition at a time")
+    public static int mv_max_partitions_num_per_refresh = 10;
+
+    @ConfField(mutable = true, comment = "materialized view can refresh at most 100_000_000 rows of data at a time")
+    public static long mv_max_rows_per_refresh = 100_000_000L;
+
+    @ConfField(mutable = true, comment = "materialized view can refresh at most 20GB of data at a time")
+    public static long mv_max_bytes_per_refresh = 21474836480L;
+
     @ConfField(mutable = true, comment = "Whether enable to refresh materialized view in sync mode mergeable or not")
     public static boolean enable_mv_refresh_sync_refresh_mergeable = false;
 
@@ -3273,6 +3282,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int default_mv_partition_refresh_number = 1;
+
+    @ConfField(mutable = true)
+    public static String default_mv_partition_refresh_strategy = "strict";
 
     @ConfField(mutable = true, comment = "Check the schema of materialized view's base table strictly or not")
     public static boolean enable_active_materialized_view_schema_strict_check = true;

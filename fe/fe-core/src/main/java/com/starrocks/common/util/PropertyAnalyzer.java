@@ -207,6 +207,7 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_TIME_DRIFT_CONSTRAINT = "time_drift_constraint";
 
     public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT = "auto_refresh_partitions_limit";
+    public static final String PROPERTIES_PARTITION_REFRESH_STRATEGY = "partition_refresh_strategy";
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
     public static final String PROPERTIES_EXCLUDED_REFRESH_TABLES = "excluded_refresh_tables";
@@ -649,6 +650,21 @@ public class PropertyAnalyzer {
             properties.remove(PROPERTIES_PARTITION_REFRESH_NUMBER);
         }
         return partitionRefreshNumber;
+    }
+
+    public static String analyzePartitionRefreshStrategy(Map<String, String> properties) {
+        String partitionRefreshStrategy = null;
+        if (properties != null && properties.containsKey(PROPERTIES_PARTITION_REFRESH_STRATEGY)) {
+            partitionRefreshStrategy = properties.get(PROPERTIES_PARTITION_REFRESH_STRATEGY);
+            try {
+                MaterializedView.PartitionRefreshStrategy.valueOf(partitionRefreshStrategy.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Invalid partition_refresh_strategy: " + partitionRefreshStrategy +
+                        ". Only 'strict' or 'adaptive' are supported.");
+            }
+            properties.remove(PROPERTIES_PARTITION_REFRESH_STRATEGY);
+        }
+        return partitionRefreshStrategy;
     }
 
     public static List<TableName> analyzeExcludedTables(Map<String, String> properties,
@@ -1647,6 +1663,17 @@ public class PropertyAnalyzer {
                 materializedView.getTableProperty().setPartitionRefreshNumber(number);
                 if (isNonPartitioned) {
                     throw new AnalysisException(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER
+                            + " does not support non-partitioned materialized view.");
+                }
+            }
+            // partition refresh strategy
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY)) {
+                String strategy = PropertyAnalyzer.analyzePartitionRefreshStrategy(properties);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY, strategy);
+                materializedView.getTableProperty().setPartitionRefreshStrategy(strategy);
+                if (isNonPartitioned) {
+                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY
                             + " does not support non-partitioned materialized view.");
                 }
             }
