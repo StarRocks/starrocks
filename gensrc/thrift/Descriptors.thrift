@@ -589,6 +589,13 @@ struct TPaimonTable {
     6: optional list<string> partition_keys
     7: optional i32 bucket_num
     8: optional list<string> bucket_keys
+
+    // Partition columns
+    9: optional list<TColumn> partition_columns
+    // Map from partition id to partition metadata.
+    10: optional map<i64, THdfsPartition> partitions
+    // The prefixes of locations of partitions in this table
+    11: optional list<string> partition_prefixes
 }
 
 struct TFlussTable {

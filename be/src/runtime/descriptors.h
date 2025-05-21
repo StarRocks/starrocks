@@ -310,7 +310,7 @@ class PaimonTableDescriptor : public HiveTableDescriptor {
 public:
     PaimonTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
     ~PaimonTableDescriptor() override = default;
-    bool has_partition() const override { return false; }
+    bool has_partition() const override { return _partition_columns.size() != 0; }
     const std::string& get_paimon_native_table() const;
     const std::string& get_time_zone() const;
     const TIcebergSchema* get_paimon_schema() const { return &_t_paimon_schema; }

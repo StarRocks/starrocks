@@ -153,9 +153,9 @@ public class PaimonScanNodeTest {
         PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
 
         DeletionFile deletionFile = new DeletionFile("dummy", 1, 2, 2L);
-        scanNode.splitRawFileScanRangeLocations(rawFile, deletionFile, 0L);
-        scanNode.splitScanRangeLocations(rawFile, 0, 256 * 1024 * 1024, 64 * 1024 * 1024, null, 0L);
-        scanNode.addSplitScanRangeLocations(split, null, 256 * 1024 * 1024, false);
+        scanNode.splitRawFileScanRangeLocations(rawFile, deletionFile, 0L, 0L);
+        scanNode.splitScanRangeLocations(rawFile, 0, 256 * 1024 * 1024, 64 * 1024 * 1024, null, 0L, 0L);
+        scanNode.addSplitScanRangeLocations(split, null, 256 * 1024 * 1024, false, 0L);
         Assertions.assertEquals(6, scanNode.getScanRangeLocations(10).size());
     }
 
@@ -179,7 +179,7 @@ public class PaimonScanNodeTest {
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
         PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
-        scanNode.addSplitScanRangeLocations(split, null, 256 * 1024 * 1024, false);
+        scanNode.addSplitScanRangeLocations(split, null, 256 * 1024 * 1024, false, -1);
         Assertions.assertEquals(1, scanNode.getScanRangeLocations(10).size());
         TScanRangeLocations tScanRangeLocations = scanNode.getScanRangeLocations(10).get(0);
         Assertions.assertEquals(THdfsFileFormat.UNKNOWN, tScanRangeLocations.getScan_range().getHdfs_scan_range().getFile_format());

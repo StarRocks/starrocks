@@ -24,7 +24,11 @@ import com.aliyun.datalake.paimon.table.DlfPaimonTable;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.util.DlfUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.CatalogConnector;
@@ -33,6 +37,9 @@ import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.connector.paimon.PaimonUtils;
 import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TColumn;
+import com.starrocks.thrift.THdfsPartition;
+import com.starrocks.thrift.THdfsPartitionLocation;
 import com.starrocks.thrift.TPaimonTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
@@ -52,6 +59,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
@@ -74,6 +82,7 @@ public class PaimonTable extends Table {
     private List<String> partColumnNames;
     private List<String> paimonFieldNames;
     private Map<String, String> properties;
+    private final AtomicLong partitionIdGen = new AtomicLong(0L);
 
     public PaimonTable() {
         super(TableType.PAIMON);
@@ -280,6 +289,32 @@ public class PaimonTable extends Table {
                 LOG.warn("Cannot find data token file " + dataTokenPath);
             }
         }
+        Set<String> partitionColumnNames = Sets.newHashSet();
+        List<TColumn> tPartitionColumns = Lists.newArrayList();
+        for (Column column : getPartitionColumns()) {
+            tPartitionColumns.add(column.toThrift());
+            partitionColumnNames.add(column.getName());
+        }
+        if (!tPartitionColumns.isEmpty()) {
+            tPaimonTable.setPartition_columns(tPartitionColumns);
+        }
+
+        for (DescriptorTable.ReferencedPartitionInfo info : partitions) {
+            PartitionKey key = info.getKey();
+            long partitionId = info.getId();
+
+            THdfsPartition tPartition = new THdfsPartition();
+
+            List<LiteralExpr> keys = key.getKeys();
+            tPartition.setPartition_key_exprs(keys.stream().map(Expr::treeToThrift).collect(Collectors.toList()));
+
+            THdfsPartitionLocation tPartitionLocation = new THdfsPartitionLocation();
+            tPartitionLocation.setPrefix_index(-1);
+            tPartitionLocation.setSuffix(info.getPath());
+            tPartition.setLocation(tPartitionLocation);
+            tPaimonTable.putToPartitions(partitionId, tPartition);
+        }
+
         String encodedTable = PaimonScanNode.encodeObjectToString(paimonNativeTable);
 
         Map<String, String> originalOptions = new HashMap<>(paimonNativeTable.options());
@@ -327,5 +362,9 @@ public class PaimonTable extends Table {
     @Override
     public int hashCode() {
         return Objects.hash(catalogName, databaseName, tableName, getTableIdentifier());
+    }
+
+    public long nextPartitionId() {
+        return partitionIdGen.getAndIncrement();
     }
 }

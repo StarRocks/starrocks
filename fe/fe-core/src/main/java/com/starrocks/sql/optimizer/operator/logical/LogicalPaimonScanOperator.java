@@ -25,6 +25,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class LogicalPaimonScanOperator extends LogicalScanOperator {
     private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
@@ -37,6 +38,8 @@ public class LogicalPaimonScanOperator extends LogicalScanOperator {
         super(OperatorType.LOGICAL_PAIMON_SCAN, table, colRefToColumnMetaMap, columnMetaToColRefMap, limit,
                 predicate, null);
         Preconditions.checkState(table instanceof PaimonTable);
+        PaimonTable paimonTable = (PaimonTable) table;
+        partitionColumns.addAll(paimonTable.getPartitionColumns().stream().map(x -> x.getName()).collect(Collectors.toList()));
     }
 
     private LogicalPaimonScanOperator() {
