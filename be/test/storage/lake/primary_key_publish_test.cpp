@@ -1966,6 +1966,52 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_with_lazy_load) {
     }
 }
 
+TEST_P(LakePrimaryKeyPublishTest, test_aggregate_publish_version) {
+    const size_t N = 100;
+    auto [chunk0, indexes] = gen_data_and_index(N, 0, true, true);
+    auto version = 1;
+    std::vector<int64_t> tablet_ids;
+    // tablet 1
+    auto tablet_id1 = _tablet_metadata->id();
+    tablet_ids.push_back(tablet_id1);
+    // tablet 2
+    _tablet_metadata->set_id(next_id());
+    auto tablet_id2 = _tablet_metadata->id();
+    tablet_ids.push_back(tablet_id2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    // tablet 3
+    _tablet_metadata->set_id(next_id());
+    auto tablet_id3 = _tablet_metadata->id();
+    tablet_ids.push_back(tablet_id3);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    int64_t txn_id = next_id();
+    for (int i = 0; i < tablet_ids.size(); i++) {
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_ids[i])
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+    {
+        ASSERT_OK(aggregate_publish_version(tablet_ids, version + 1, txn_id));
+        version++;
+    }
+
+    // check result.
+    for (int i = 0; i < tablet_ids.size(); i++) {
+        ASSERT_EQ(N, read_rows(tablet_ids[i], version));
+    }
+}
+
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyPublishTest, LakePrimaryKeyPublishTest,
                          ::testing::Values(PrimaryKeyParam{true}, PrimaryKeyParam{false},
                                            PrimaryKeyParam{true, PersistentIndexTypePB::CLOUD_NATIVE},
