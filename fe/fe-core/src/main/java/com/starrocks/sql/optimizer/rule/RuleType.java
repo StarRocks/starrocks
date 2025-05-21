@@ -215,6 +215,7 @@ public enum RuleType {
     TF_HOIST_HEAVY_COST_UPON_TOPN,
     TF_OR_TO_UNION_ALL_JOIN,
 
+    TF_REWRITE_LEFT_JOIN_TO_INNER_JOIN,
     TF_INNER_TO_SEMI,
 
     // The following are implementation rules:
