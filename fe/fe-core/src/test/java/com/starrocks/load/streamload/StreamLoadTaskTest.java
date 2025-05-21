@@ -210,7 +210,7 @@ public class StreamLoadTaskTest {
     }
 
     @Test
-    public void testDuplicateBeginTxn() throws StarRocksException {
+    public void testDuplicateBeginTxn() throws UserException {
         TransactionResult resp = new TransactionResult();
         TUniqueId requestId = new TUniqueId(100056, 560001);
         StreamLoadTask streamLoadTask1 = Mockito.spy(new StreamLoadTask(0, new Database(), new OlapTable(), 
