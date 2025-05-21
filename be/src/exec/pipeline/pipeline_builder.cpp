@@ -213,6 +213,10 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(
 OpFactories PipelineBuilderContext::maybe_interpolate_local_bucket_shuffle_exchange(
         RuntimeState* state, int32_t plan_node_id, OpFactories& pred_operators,
         const std::vector<ExprContext*>& partition_expr_ctxs) {
+    auto* source_op = source_operator(pred_operators);
+    if (!source_op->could_local_shuffle()) {
+        return pred_operators;
+    }
     return _do_maybe_interpolate_local_shuffle_exchange(state, plan_node_id, pred_operators, partition_expr_ctxs,
                                                         TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED);
 }
