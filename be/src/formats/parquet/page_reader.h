@@ -70,6 +70,7 @@ public:
     StatusOr<Slice> read_and_decompress_page_data();
 
 private:
+    using PageBuffer = std::vector<uint8_t>;
     using BufferPtr = std::unique_ptr<std::vector<uint8_t>>;
 
     // Must call this function after next_header called. The total read size
@@ -88,7 +89,7 @@ private:
     void _init_page_cache_key();
     std::string& _current_page_cache_key();
     Status _deal_page_with_cache();
-    Status _read_and_deserialize_header(BufferPtr* cache_buf, bool need_fill_cache);
+    Status _read_and_deserialize_header(PageBuffer* cache_buf, bool need_fill_cache);
     Status _read_and_decompress_internal(BufferPtr* cache_buf, bool need_fill_cache);
     bool _cache_decompressed_data();
     Status _decompress_page(Slice& input, Slice* output);
