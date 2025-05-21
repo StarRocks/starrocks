@@ -103,11 +103,13 @@ jobs:
             exit 0
           fi
           echo "check_res=false" >> $GITHUB_OUTPUT
+          echo "comment=${comment}" >> $GITHUB_OUTPUT
 
       - name:
         if: steps.branch_access_check.outputs.check_res == 'false'
         env:
           TEAM: feature-reviewer
+          PRE_COMMENT: ${{ steps.branch_access_check.outputs.comment }}
         run: |
           cd ci-tool
           ./scripts/check-approve.sh
