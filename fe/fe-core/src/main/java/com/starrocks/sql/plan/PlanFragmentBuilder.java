@@ -3181,7 +3181,14 @@ public class PlanFragmentBuilder {
                 currentExecGroup = execGroups.newExecGroup();
                 inputFragments.add(inputFragment);
                 inputExecGroups.add(inputExecGroup);
+                setOperationNode.addChild(inputFragment.getPlanRoot());
             }
+
+            PlanFragment setOperationFragment =
+                    new PlanFragment(context.getNextFragmentId(), setOperationNode, DataPartition.RANDOM);
+            setOperationFragment.setPlanRoot(setOperationNode);
+            // reset column is nullable, for handle union select xx join select xxx...
+            setOperationNode.setHasNullableGenerateChild();
 
             List<List<Expr>> materializedResultExprLists = Lists.newArrayList();
             ScalarOperatorToExpr.FormatterContext formatterContext =
@@ -3231,8 +3238,6 @@ public class PlanFragmentBuilder {
             DistributionSpec spec = optExpr.getRequiredProperties().get(0).getDistributionProperty().getSpec();
             boolean isColocate = (spec instanceof HashDistributionSpec) &&
                     ((HashDistributionSpec) spec).getHashDistributionDesc().isLocal();
-            PlanFragment setOperationFragment =
-                    new PlanFragment(context.getNextFragmentId(), setOperationNode, DataPartition.RANDOM);
 
             if (isColocate) {
                 List<List<Expr>> localPartitionByExprsList = Lists.newArrayList();
@@ -3271,7 +3276,6 @@ public class PlanFragmentBuilder {
             for (int i = 0; i < optExpr.arity(); ++i) {
                 PlanFragment inputFragment = inputFragments.get(i);
                 context.getFragments().remove(inputFragment);
-                setOperationNode.addChild(inputFragment.getPlanRoot());
                 setOperationFragment.addChildren(inputFragment.getChildren());
                 setOperationFragment.mergeQueryDictExprs(inputFragment.getQueryGlobalDictExprs());
                 setOperationFragment.mergeQueryGlobalDicts(inputFragment.getQueryGlobalDicts());
@@ -3292,12 +3296,8 @@ public class PlanFragmentBuilder {
                 }
             }
 
-            setOperationFragment.setPlanRoot(setOperationNode);
-            // reset column is nullable, for handle union select xx join select xxx...
-            setOperationNode.setHasNullableGenerateChild();
             context.getFragments().add(setOperationFragment);
             execGroup.add(setOperationNode);
-
 
             setOperationNode.setColocate(isColocate);
             if (canExecGroup && isColocate && ConnectContext.get().getSessionVariable().isEnableGroupExecution()) {

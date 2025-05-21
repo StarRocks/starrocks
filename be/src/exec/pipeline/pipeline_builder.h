@@ -118,10 +118,6 @@ public:
     OpFactories interpolate_grouped_exchange(int32_t plan_node_id, OpFactories& pred_operators);
     OpFactories maybe_interpolate_grouped_exchange(int32_t plan_node_id, OpFactories& pred_operators);
 
-    OpFactories interpolate_grouped_exchange(int32_t plan_node_id, OpFactories& pred_operators,
-                                             const std::vector<ExprContext*>& partition_by_exprs);
-    OpFactories maybe_interpolate_grouped_exchange(int32_t plan_node_id, OpFactories& pred_operators,
-                                                   const std::vector<ExprContext*>& partition_by_exprs);
     // Uses local exchange to gather the output chunks of multiple predecessor pipelines
     // into a new pipeline, which the successor operator belongs to.
     // Append a LocalExchangeSinkOperator to the tail of each pipeline.

@@ -213,6 +213,10 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(
 OpFactories PipelineBuilderContext::maybe_interpolate_local_bucket_shuffle_exchange(
         RuntimeState* state, int32_t plan_node_id, OpFactories& pred_operators,
         const std::vector<ExprContext*>& partition_expr_ctxs) {
+    auto* source_op = source_operator(pred_operators);
+    if (!source_op->could_local_shuffle()) {
+        return pred_operators;
+    }
     return _do_maybe_interpolate_local_shuffle_exchange(state, plan_node_id, pred_operators, partition_expr_ctxs,
                                                         TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED);
 }
@@ -311,10 +315,6 @@ void PipelineBuilderContext::interpolate_spill_process(size_t plan_node_id,
 }
 
 OpFactories PipelineBuilderContext::interpolate_grouped_exchange(int32_t plan_node_id, OpFactories& pred_operators) {
-    return interpolate_grouped_exchange(plan_node_id, pred_operators, {});
-}
-OpFactories PipelineBuilderContext::interpolate_grouped_exchange(int32_t plan_node_id, OpFactories& pred_operators,
-                                                                 const std::vector<ExprContext*>& partition_by_exprs) {
     size_t physical_dop = degree_of_parallelism();
     auto* source_op = source_operator(pred_operators);
     int logical_dop = source_op->degree_of_parallelism();
@@ -327,15 +327,7 @@ OpFactories PipelineBuilderContext::interpolate_grouped_exchange(int32_t plan_no
 
     auto local_shuffle_source =
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), plan_node_id, mem_mgr);
-
-    std::shared_ptr<LocalExchanger> local_exchanger;
-    if (partition_by_exprs.empty()) {
-        local_exchanger = std::make_shared<PassthroughExchanger>(mem_mgr, local_shuffle_source.get());
-    } else {
-        local_exchanger = std::make_shared<PartitionExchanger>(mem_mgr, local_shuffle_source.get(),
-                                                               TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED,
-                                                               partition_by_exprs);
-    }
+    auto local_exchanger = std::make_shared<PassthroughExchanger>(mem_mgr, local_shuffle_source.get());
     auto group_exchange_sink = std::make_shared<GroupedExecutionSinkFactory>(next_operator_id(), plan_node_id,
                                                                              local_exchanger, _current_execution_group);
     pred_operators.emplace_back(std::move(group_exchange_sink));
@@ -355,13 +347,8 @@ OpFactories PipelineBuilderContext::interpolate_grouped_exchange(int32_t plan_no
 
 OpFactories PipelineBuilderContext::maybe_interpolate_grouped_exchange(int32_t plan_node_id,
                                                                        OpFactories& pred_operators) {
-    return maybe_interpolate_grouped_exchange(plan_node_id, pred_operators, {});
-}
-
-OpFactories PipelineBuilderContext::maybe_interpolate_grouped_exchange(
-        int32_t plan_node_id, OpFactories& pred_operators, const std::vector<ExprContext*>& partition_by_expr) {
     if (dynamic_cast<ColocateExecutionGroup*>(_current_execution_group) != nullptr) {
-        return interpolate_grouped_exchange(plan_node_id, pred_operators, partition_by_expr);
+        return interpolate_grouped_exchange(plan_node_id, pred_operators);
     }
     return pred_operators;
 }
