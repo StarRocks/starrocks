@@ -111,6 +111,8 @@ inline LogicalType delegate_type(LogicalType type) {
         return TYPE_BIGINT;
     case TYPE_DECIMAL128:
         return TYPE_LARGEINT;
+    case TYPE_DECIMAL256:
+        return TYPE_DECIMAL256;
     default:
         return type;
     }
@@ -159,6 +161,7 @@ inline bool is_scalar_field_type(LogicalType type) {
     case TYPE_DECIMAL32:
     case TYPE_DECIMAL64:
     case TYPE_DECIMAL128:
+    case TYPE_DECIMAL256:
         return false;
     default:
         return true;

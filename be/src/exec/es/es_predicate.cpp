@@ -128,6 +128,8 @@ std::string VExtLiteral::_value_to_string(ColumnPtr& column) {
                         res = std::string(arg.data, arg.size);
                     } else if constexpr (std::is_same_v<T, __int128_t>) {
                         res = LargeIntValue::to_string(arg);
+                    } else if constexpr (std::is_same_v<T, boost::multiprecision::int256_t>) {
+                        res = starrocks::to_string(arg);
                     } else {
                         res = std::to_string(arg);
                     }

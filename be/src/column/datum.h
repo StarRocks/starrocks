@@ -89,6 +89,7 @@ public:
     const BitmapValue* get_bitmap() const { return get<BitmapValue*>(); }
     const PercentileValue* get_percentile() const { return get<PercentileValue*>(); }
     const JsonValue* get_json() const { return get<JsonValue*>(); }
+    int256_t get_int256() const { return get<int256_t>(); }
 
     void set_int8(int8_t v) { set<decltype(v)>(v); }
     void set_uint8(uint8_t v) { set<decltype(v)>(v); }
@@ -105,6 +106,7 @@ public:
     void set_timestamp(TimestampValue v) { set<decltype(v)>(v); }
     void set_date(DateValue v) { set<decltype(v)>(v); }
     void set_int128(const int128_t& v) { set<decltype(v)>(v); }
+    void set_int256(int256_t value) { set<decltype(value)>(value); }
     void set_slice(const Slice& v) { set<decltype(v)>(v); }
     void set_decimal12(const decimal12_t& v) { set<decltype(v)>(v); }
     void set_decimal(const DecimalV2Value& v) { set<decltype(v)>(v); }
@@ -113,6 +115,7 @@ public:
     void set_bitmap(BitmapValue* v) { set<decltype(v)>(v); }
     void set_percentile(PercentileValue* v) { set<decltype(v)>(v); }
     void set_json(JsonValue* v) { set<decltype(v)>(v); }
+
 
     template <typename T>
     const T& get() const {

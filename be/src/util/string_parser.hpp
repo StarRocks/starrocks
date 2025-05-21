@@ -736,8 +736,14 @@ inline T StringParser::string_to_decimal(const char* s, int len, int type_precis
                 if (LIKELY(divisor >= 0)) {
                     T remainder = value % divisor;
                     value /= divisor;
-                    if (std::abs(remainder) >= (divisor >> 1)) {
-                        value += 1;
+                    if constexpr (std::is_same_v<T, boost::multiprecision::int256_t>) {
+                        if (boost::multiprecision::abs(remainder) >= (divisor >> 1)) {
+                            value += 1;
+                        }
+                    } else {
+                        if (std::abs(remainder) >= (divisor >> 1)) {
+                            value += 1;
+                        }
                     }
                 } else {
                     DCHECK(divisor == -1); // //DCHECK_EQ doesn't work with __int128.
@@ -757,6 +763,10 @@ inline T StringParser::string_to_decimal(const char* s, int len, int type_precis
     }
 
     return is_negative ? -value : value;
+}
+
+inline boost::multiprecision::int256_t abs(const boost::multiprecision::int256_t& x) {
+    return boost::multiprecision::abs(x);
 }
 
 } // namespace starrocks

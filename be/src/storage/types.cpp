@@ -58,6 +58,7 @@
 #include "util/slice.h"
 #include "util/string_parser.hpp"
 #include "util/unaligned_access.h"
+#include <boost/multiprecision/cpp_int.hpp>
 
 namespace starrocks {
 
@@ -338,7 +339,7 @@ TypeInfoPtr get_type_info(const TabletColumn& col) {
 TypeInfoPtr get_type_info(LogicalType field_type, [[maybe_unused]] int precision, [[maybe_unused]] int scale) {
     if (is_scalar_field_type(field_type)) {
         return get_type_info(field_type);
-    } else if (field_type == TYPE_DECIMAL32 || field_type == TYPE_DECIMAL64 || field_type == TYPE_DECIMAL128) {
+    } else if (field_type == TYPE_DECIMAL32 || field_type == TYPE_DECIMAL64 || field_type == TYPE_DECIMAL128 || field_type == TYPE_DECIMAL256) {
         return get_decimal_type_info(field_type, precision, scale);
     } else {
         return nullptr;
@@ -981,7 +982,7 @@ struct ScalarTypeInfoImpl<TYPE_VARCHAR> : public ScalarTypeInfoImpl<TYPE_CHAR> {
             src_type->type() == TYPE_BIGINT || src_type->type() == TYPE_LARGEINT || src_type->type() == TYPE_FLOAT ||
             src_type->type() == TYPE_DOUBLE || src_type->type() == TYPE_DECIMAL || src_type->type() == TYPE_DECIMALV2 ||
             src_type->type() == TYPE_DECIMAL32 || src_type->type() == TYPE_DECIMAL64 ||
-            src_type->type() == TYPE_DECIMAL128) {
+            src_type->type() == TYPE_DECIMAL128 || src_type->type() == TYPE_DECIMAL256) {
             auto result = src_type->to_string(src);
             auto slice = reinterpret_cast<Slice*>(dest);
             slice->data = reinterpret_cast<char*>(mem_pool->allocate(result.size()));
@@ -1054,5 +1055,53 @@ int TypeComparator<ftype>::cmp(const void* lhs, const void* rhs) {
 #define M(ftype) template struct TypeComparator<ftype>;
 APPLY_FOR_SUPPORTED_FIELD_TYPE(M)
 #undef M
+
+template <>
+struct ScalarTypeInfoImpl<TYPE_DECIMAL256> : public ScalarTypeInfoImplBase<TYPE_DECIMAL256> {
+    static Status from_string(void* buf, const std::string& scan_key) {
+        CppType value;
+        if (!scan_key.empty()) {
+            value = static_cast<CppType>(strtol(scan_key.c_str(), nullptr, 10));
+        }
+        new (buf) CppType(value);
+        return Status::OK();
+    }
+    static std::string to_string(const void* src) {
+        const CppType* val = reinterpret_cast<const CppType*>(src);
+        std::stringstream stream;
+        stream << *val;
+        return stream.str();
+    }
+    static void set_to_max(void* buf) {
+        new (buf) CppType(std::numeric_limits<CppType>::max());
+    }
+    static void set_to_min(void* buf) {
+        new (buf) CppType(std::numeric_limits<CppType>::lowest());
+    }
+    static int datum_cmp(const Datum& left, const Datum& right) {
+        const CppType& v1 = left.get<CppType>();
+        const CppType& v2 = right.get<CppType>();
+        return (v1 < v2) ? -1 : (v1 > v2) ? 1 : 0;
+    }
+    static void shallow_copy(void* dest, const void* src) {
+        new (dest) CppType(*reinterpret_cast<const CppType*>(src));
+    }
+    static void deep_copy(void* dest, const void* src, MemPool*) {
+        new (dest) CppType(*reinterpret_cast<const CppType*>(src));
+    }
+    static void direct_copy(void* dest, const void* src) {
+        new (dest) CppType(*reinterpret_cast<const CppType*>(src));
+    }
+};
+
+template <>
+inline boost::multiprecision::int256_t unaligned_load<boost::multiprecision::int256_t>(const void* p) {
+    return *reinterpret_cast<const boost::multiprecision::int256_t*>(p);
+}
+
+template <>
+inline void unaligned_store<boost::multiprecision::int256_t>(void* p, boost::multiprecision::int256_t value) {
+    new (p) boost::multiprecision::int256_t(value);
+}
 
 } // namespace starrocks

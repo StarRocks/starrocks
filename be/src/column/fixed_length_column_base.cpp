@@ -115,9 +115,23 @@ void FixedLengthColumnBase<T>::update_rows(const Column& src, const uint32_t* in
 
 template <typename T>
 size_t FixedLengthColumnBase<T>::filter_range(const Filter& filter, size_t from, size_t to) {
-    auto size = ColumnHelper::filter_range<T>(filter, _data.data(), from, to);
-    this->resize(size);
-    return size;
+    if constexpr (std::is_same_v<T, boost::multiprecision::int256_t>) {
+        size_t result_offset = from;
+        for (size_t i = from; i < to; ++i) {
+            if (filter[i]) {
+                if (result_offset != i) {
+                    _data[result_offset] = _data[i];
+                }
+                ++result_offset;
+            }
+        }
+        this->resize(result_offset);
+        return result_offset;
+    } else {
+        auto size = ColumnHelper::filter_range<T>(filter, _data.data(), from, to);
+        this->resize(size);
+        return size;
+    }
 }
 
 template <typename T>
@@ -203,18 +217,28 @@ size_t FixedLengthColumnBase<T>::serialize_batch_at_interval(uint8_t* dst, size_
 
 template <typename T>
 const uint8_t* FixedLengthColumnBase<T>::deserialize_and_append(const uint8_t* pos) {
-    T value{};
-    memcpy(&value, pos, sizeof(T));
-    _data.emplace_back(value);
+    if constexpr (std::is_same_v<T, boost::multiprecision::int256_t>) {
+        T value;
+        value = *reinterpret_cast<const T*>(pos);
+        _data.push_back(value);
+    } else {
+        T value;
+        memcpy(&value, pos, sizeof(T));
+        _data.push_back(value);
+    }
     return pos + sizeof(T);
 }
 
 template <typename T>
 void FixedLengthColumnBase<T>::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) {
-    raw::make_room(&_data, chunk_size);
-    for (size_t i = 0; i < chunk_size; ++i) {
-        memcpy(&_data[i], srcs[i].data, sizeof(T));
-        srcs[i].data = srcs[i].data + sizeof(T);
+    if constexpr (std::is_same_v<T, int256_t>) {
+        for (size_t i = 0; i < chunk_size; ++i) {
+            _data.push_back(*reinterpret_cast<const T*>(srcs[i].data));
+        }
+    } else {
+        for (size_t i = 0; i < chunk_size; ++i) {
+            memcpy(&_data[i], srcs[i].data, sizeof(T));
+        }
     }
 }
 
@@ -298,31 +322,31 @@ void FixedLengthColumnBase<T>::crc32_hash_selective(uint32_t* hash, uint16_t* se
 template <typename T>
 int64_t FixedLengthColumnBase<T>::xor_checksum(uint32_t from, uint32_t to) const {
     int64_t xor_checksum = 0;
-    if constexpr (IsDate<T>) {
-        for (size_t i = from; i < to; ++i) {
-            xor_checksum ^= _data[i].to_date_literal();
+    if constexpr (std::is_same_v<T, boost::multiprecision::int256_t>) {
+        for (uint32_t i = from; i < to; ++i) {
+            xor_checksum ^= static_cast<int64_t>(_data[i].backend().limbs()[0]);
         }
-    } else if constexpr (IsTimestamp<T>) {
-        for (size_t i = from; i < to; ++i) {
-            xor_checksum ^= _data[i].to_timestamp_literal();
+    } else if constexpr (std::is_same_v<T, int96_t>) {
+        for (uint32_t i = from; i < to; ++i) {
+            xor_checksum ^= static_cast<int64_t>(_data[i].lo);
         }
-    } else if constexpr (IsDecimal<T>) {
-        for (size_t i = from; i < to; ++i) {
-            xor_checksum ^= _data[i].int_value();
-            xor_checksum ^= _data[i].frac_value();
+    } else if constexpr (std::is_same_v<T, decimal12_t>) {
+        for (uint32_t i = from; i < to; ++i) {
+            xor_checksum ^= static_cast<int64_t>(_data[i].integer);
         }
-    } else if constexpr (is_signed_integer<T>) {
-        const T* src = reinterpret_cast<const T*>(_data.data());
-        for (size_t i = from; i < to; ++i) {
-            if constexpr (std::is_same_v<T, int128_t>) {
-                xor_checksum ^= static_cast<int64_t>(src[i] >> 64);
-                xor_checksum ^= static_cast<int64_t>(src[i] & ULLONG_MAX);
-            } else {
-                xor_checksum ^= src[i];
-            }
+    } else if constexpr (std::is_same_v<T, TimestampValue>) {
+        for (uint32_t i = from; i < to; ++i) {
+            xor_checksum ^= static_cast<int64_t>(_data[i].timestamp());
+        }
+    } else if constexpr (std::is_same_v<T, DateValue>) {
+        for (uint32_t i = from; i < to; ++i) {
+            xor_checksum ^= static_cast<int64_t>(_data[i].julian());
+        }
+    } else {
+        for (uint32_t i = from; i < to; ++i) {
+            xor_checksum ^= static_cast<int64_t>(_data[i]);
         }
     }
-
     return xor_checksum;
 }
 
@@ -344,15 +368,12 @@ void FixedLengthColumnBase<T>::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t 
 
 template <>
 void FixedLengthColumnBase<int256_t>::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
-    // 获取精度和标度
     const auto* decimal_column = down_cast<const DecimalV3Column<int256_t>*>(this);
     int precision = decimal_column->precision();
     int scale = decimal_column->scale();
 
-    // 创建 DecimalType<int256_t> 对象
     DecimalType<int256_t> decimal_value(_data[idx]);
 
-    // 显式指定模板参数 T 为 int256_t
     std::string s = DecimalV3Cast::to_string<int256_t>(decimal_value, precision, scale);
     if (is_binary_protocol) {
         buf->push_decimal(Slice(s));
@@ -361,12 +382,19 @@ void FixedLengthColumnBase<int256_t>::put_mysql_row_buffer(MysqlRowBuffer* buf, 
     }
 }
 
-
 template <typename T>
 void FixedLengthColumnBase<T>::remove_first_n_values(size_t count) {
-    size_t remain_size = _data.size() - count;
-    memmove(_data.data(), _data.data() + count, remain_size * sizeof(T));
-    _data.resize(remain_size);
+    if constexpr (std::is_same_v<T, boost::multiprecision::int256_t>) {
+        std::vector<T, ColumnAllocator<T>> new_data;
+        new_data.reserve(_data.size() - count);
+        for (size_t i = count; i < _data.size(); ++i) {
+            new_data.push_back(_data[i]);
+        }
+        _data.swap(new_data);
+    } else {
+        memmove(_data.data(), _data.data() + count, (_data.size() - count) * sizeof(T));
+        _data.resize(_data.size() - count);
+    }
 }
 
 template <typename T>

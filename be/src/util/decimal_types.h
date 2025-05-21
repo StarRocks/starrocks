@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <limits>
 #include <type_traits>
+
 #include "types/int256.h"
 
 namespace starrocks {
@@ -96,6 +97,89 @@ inline constexpr int128_t exp10_int128(int n) {
     return values[n];
 }
 
+inline constexpr int256_t exp10_int256(int n) {
+    constexpr int256_t values[] = {
+        EXP10<int256_t, 0>::value,   // 1
+        EXP10<int256_t, 1>::value,   // 10
+        EXP10<int256_t, 2>::value,   // 100
+        EXP10<int256_t, 3>::value,   // 1000
+        EXP10<int256_t, 4>::value,   // 10000
+        EXP10<int256_t, 5>::value,   // 100000
+        EXP10<int256_t, 6>::value,   // 1000000
+        EXP10<int256_t, 7>::value,   // 10000000
+        EXP10<int256_t, 8>::value,   // 100000000
+        EXP10<int256_t, 9>::value,   // 1000000000
+        EXP10<int256_t, 10>::value,  // 10000000000
+        EXP10<int256_t, 11>::value,  // 10000000000
+        EXP10<int256_t, 12>::value,  // 10000000000
+        EXP10<int256_t, 13>::value,  // 10000000000
+        EXP10<int256_t, 14>::value,  // 10000000000
+        EXP10<int256_t, 15>::value,  // 10000000000
+        EXP10<int256_t, 16>::value,  // 10000000000
+        EXP10<int256_t, 17>::value,  // 10000000000
+        EXP10<int256_t, 18>::value,  // 10000000000
+        EXP10<int256_t, 19>::value,  // 10000000000
+        EXP10<int256_t, 20>::value,  // 10000000000
+        EXP10<int256_t, 21>::value,  // 10000000000
+        EXP10<int256_t, 22>::value,  // 10000000000
+        EXP10<int256_t, 23>::value,  // 10000000000
+        EXP10<int256_t, 24>::value,  // 10000000000
+        EXP10<int256_t, 25>::value,  // 10000000000
+        EXP10<int256_t, 26>::value,  // 10000000000
+        EXP10<int256_t, 27>::value,  // 10000000000
+        EXP10<int256_t, 28>::value,  // 10000000000
+        EXP10<int256_t, 29>::value,  // 10000000000
+        EXP10<int256_t, 30>::value,  // 10000000000
+        EXP10<int256_t, 31>::value,  // 10000000000
+        EXP10<int256_t, 32>::value,  // 10000000000
+        EXP10<int256_t, 33>::value,  // 10000000000
+        EXP10<int256_t, 34>::value,  // 10000000000
+        EXP10<int256_t, 35>::value,  // 10000000000
+        EXP10<int256_t, 36>::value,  // 10000000000
+        EXP10<int256_t, 37>::value,  // 10000000000
+        EXP10<int256_t, 38>::value,  // 10000000000
+        EXP10<int256_t, 39>::value,  // 10000000000
+        EXP10<int256_t, 40>::value,  // 10000000000
+        EXP10<int256_t, 41>::value,  // 10000000000
+        EXP10<int256_t, 42>::value,  // 10000000000
+        EXP10<int256_t, 43>::value,  // 10000000000
+        EXP10<int256_t, 44>::value,  // 10000000000
+        EXP10<int256_t, 45>::value,  // 10000000000
+        EXP10<int256_t, 46>::value,  // 10000000000
+        EXP10<int256_t, 47>::value,  // 10000000000
+        EXP10<int256_t, 48>::value,  // 10000000000
+        EXP10<int256_t, 49>::value,  // 10000000000
+        EXP10<int256_t, 50>::value,  // 10000000000
+        EXP10<int256_t, 51>::value,  // 10000000000
+        EXP10<int256_t, 52>::value,  // 10000000000
+        EXP10<int256_t, 53>::value,  // 10000000000
+        EXP10<int256_t, 54>::value,  // 10000000000
+        EXP10<int256_t, 55>::value,  // 10000000000
+        EXP10<int256_t, 56>::value,  // 10000000000
+        EXP10<int256_t, 57>::value,  // 10000000000
+        EXP10<int256_t, 58>::value,  // 10000000000
+        EXP10<int256_t, 59>::value,  // 10000000000
+        EXP10<int256_t, 60>::value,  // 10000000000
+        EXP10<int256_t, 61>::value,  // 10000000000
+        EXP10<int256_t, 62>::value,  // 10000000000
+        EXP10<int256_t, 63>::value,  // 10000000000
+        EXP10<int256_t, 64>::value,  // 10000000000
+        EXP10<int256_t, 65>::value,  // 10000000000
+        EXP10<int256_t, 66>::value,  // 10000000000
+        EXP10<int256_t, 67>::value,  // 10^67
+        EXP10<int256_t, 68>::value,  // 10^68
+        EXP10<int256_t, 69>::value,  // 10^69
+        EXP10<int256_t, 70>::value,  // 10^70
+        EXP10<int256_t, 71>::value,  // 10^71
+        EXP10<int256_t, 72>::value,  // 10^72
+        EXP10<int256_t, 73>::value,  // 10^73
+        EXP10<int256_t, 74>::value,  // 10^74
+        EXP10<int256_t, 75>::value,  // 10^75
+        EXP10<int256_t, 76>::value   // 10000000000000000000000000000000000000000000000000000000000000000000000000000
+    };
+    return values[n];
+}
+
 template <typename T>
 inline constexpr T get_scale_factor(int n) {
     if constexpr (std::is_same_v<T, int32_t>)
@@ -104,6 +188,8 @@ inline constexpr T get_scale_factor(int n) {
         return exp10_int64(n);
     else if constexpr (std::is_same_v<T, int128_t>)
         return exp10_int128(n);
+    else if constexpr (std::is_same_v<T, int256_t>)
+        return exp10_int256(n);
     else {
         static_assert(is_underlying_type_of_decimal<T>, "Underlying type of decimal must be int32_t/int64_t/int128_t");
         return T(0);
@@ -129,15 +215,13 @@ template <typename T>
 inline constexpr T get_min_decimal() {
     return -get_max_decimal<T>();
 }
-
-static const uint128_t UINT128_MAX = uint128_t(int128_t(-1L));
-static const int128_t INT128_MAX = UINT128_MAX >> 1;
-static const int128_t INT128_MIN = -INT128_MAX - 1;
-
+    
 template <typename T>
 inline constexpr T get_max() {
     if constexpr (std::is_same_v<T, int128_t>) {
-        return INT128_MAX;
+        return std::numeric_limits<int128_t>::max();
+    } else if constexpr (std::is_same_v<T, int256_t>) {
+        return boost::multiprecision::int256_t(boost::multiprecision::uint256_t(-1) >> 1);
     } else {
         return std::numeric_limits<T>::max();
     }
@@ -146,14 +230,18 @@ inline constexpr T get_max() {
 template <typename T>
 inline constexpr T get_min() {
     if constexpr (std::is_same_v<T, int128_t>) {
-        return INT128_MIN;
+        return std::numeric_limits<int128_t>::lowest();
+    } else if constexpr (std::is_same_v<T, int256_t>) {
+        return -get_max<int256_t>() - 1;
     } else {
         return std::numeric_limits<T>::lowest();
     }
 }
 
 template <typename T>
-constexpr bool is_signed_integer = (std::is_integral_v<T> && std::is_signed_v<T>) || std::is_same_v<T, int128_t>;
+constexpr bool is_signed_integer = (std::is_integral_v<T> && std::is_signed_v<T>) || 
+                                 std::is_same_v<T, int128_t> || 
+                                 std::is_same_v<T, int256_t>;
 
 template <typename T>
 using DecimalType = std::enable_if_t<is_underlying_type_of_decimal<T>, T>;
