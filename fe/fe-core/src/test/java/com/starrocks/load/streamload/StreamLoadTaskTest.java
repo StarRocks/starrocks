@@ -17,9 +17,11 @@ package com.starrocks.load.streamload;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
@@ -35,10 +37,12 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import java.util.Map;
 
 import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -203,6 +207,19 @@ public class StreamLoadTaskTest {
         boolean txnOperated = true;
         streamLoadTask.afterCommitted(txnState, txnOperated);
         Assert.assertEquals(0, QeProcessorImpl.INSTANCE.getCoordinatorCount());
+    }
 
+    @Test
+    public void testDuplicateBeginTxn() throws StarRocksException {
+        TransactionResult resp = new TransactionResult();
+        TUniqueId requestId = new TUniqueId(100056, 560001);
+        StreamLoadTask streamLoadTask1 = Mockito.spy(new StreamLoadTask(0, new Database(), new OlapTable(), 
+                                                                        "", "", "", 10, 10, false, 1));
+        doThrow(new DuplicatedRequestException("Duplicate request", 0L, ""))
+                .when(streamLoadTask1).unprotectedBeginTxn(false, true, requestId);
+        streamLoadTask1.beginTxn(0, 1, requestId, true, resp);
+        Assert.assertTrue(resp.stateOK());
+        streamLoadTask1.beginTxn(0, 1, requestId, true, resp);
+        Assert.assertTrue(resp.stateOK());
     }
 }
