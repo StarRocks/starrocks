@@ -634,10 +634,11 @@ private:
 template <typename HashVariantType>
 class HashVariantResolver {
 public:
+    using RetType = typename HashVariantType::Type;
     HashVariantResolver();
     static HashVariantResolver& instance();
 
-    HashVariantType::Type get_unary_type(AggrPhase phase, LogicalType ltype, bool nullable) {
+    RetType get_unary_type(AggrPhase phase, LogicalType ltype, bool nullable) {
         if (auto iter = _types.find({phase, ltype, nullable}); iter != _types.end()) {
             return iter->second;
         }
