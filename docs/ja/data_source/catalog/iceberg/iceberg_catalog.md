@@ -1171,7 +1171,7 @@ Iceberg テーブルのスキーマを表示するには、次のいずれかの
 
 ### Iceberg データベースの作成
 
-StarRocks の内部 catalog と同様に、Iceberg catalog に対して [CREATE DATABASE](../../../administration/user_privs/privilege_item.md#catalog) 権限を持っている場合、その Iceberg catalog 内でデータベースを作成するために [CREATE DATABASE](../../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) ステートメントを使用できます。この機能は v3.1 以降でサポートされています。
+StarRocks の内部 catalog と同様に、Iceberg catalog に対して [CREATE DATABASE](../../../administration/user_privs/authorization/privilege_item.md#catalog) 権限を持っている場合、その Iceberg catalog 内でデータベースを作成するために [CREATE DATABASE](../../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) ステートメントを使用できます。この機能は v3.1 以降でサポートされています。
 
 :::tip
 
@@ -1224,7 +1224,7 @@ CREATE DATABASE <database_name>
 
 ### Iceberg データベースの削除
 
-StarRocks の内部データベースと同様に、Iceberg データベースに対して [DROP](../../../administration/user_privs/privilege_item.md#database) 権限を持っている場合、その Iceberg データベースを削除するために [DROP DATABASE](../../../sql-reference/sql-statements/Database/DROP_DATABASE.md) ステートメントを使用できます。この機能は v3.1 以降でサポートされています。空のデータベースのみを削除できます。
+StarRocks の内部データベースと同様に、Iceberg データベースに対して [DROP](../../../administration/user_privs/authorization/privilege_item.md#database) 権限を持っている場合、その Iceberg データベースを削除するために [DROP DATABASE](../../../sql-reference/sql-statements/Database/DROP_DATABASE.md) ステートメントを使用できます。この機能は v3.1 以降でサポートされています。空のデータベースのみを削除できます。
 
 Iceberg データベースを削除すると、HDFS クラスターまたはクラウドストレージ上のデータベースのファイルパスはデータベースと共に削除されません。
 
@@ -1238,7 +1238,7 @@ DROP DATABASE <database_name>;
 
 ### Iceberg テーブルの作成
 
-StarRocks の内部データベースと同様に、Iceberg データベースに対して [CREATE TABLE](../../../administration/user_privs/privilege_item.md#database) 権限を持っている場合、その Iceberg データベース内でテーブルを作成するために [CREATE TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) または [CREATE TABLE AS SELECT ../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.mdELECT.md) ステートメントを使用できます。この機能は v3.1 以降でサポートされています。
+StarRocks の内部データベースと同様に、Iceberg データベースに対して [CREATE TABLE](../../../administration/user_privs/authorization/privilege_item.md#database) 権限を持っている場合、その Iceberg データベース内でテーブルを作成するために [CREATE TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) または [CREATE TABLE AS SELECT ../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.mdELECT.md) ステートメントを使用できます。この機能は v3.1 以降でサポートされています。
 
 [Iceberg catalog とそのデータベースに切り替える](#switch-to-an-iceberg-catalog-and-a-database-in-it) してから、そのデータベース内で Iceberg テーブルを作成するための次の構文を使用します。
 
@@ -1344,7 +1344,7 @@ PARTITION BY (par_col1[, par_col2...])
 
 ### Iceberg テーブルへのデータシンク
 
-StarRocks の内部テーブルと同様に、Iceberg テーブルに対して [INSERT](../../../administration/user_privs/privilege_item.md#table) 権限を持っている場合、StarRocks テーブルのデータをその Iceberg テーブルにシンクするために [INSERT](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) ステートメントを使用できます（現在は Parquet 形式の Iceberg テーブルのみがサポートされています）。この機能は v3.1 以降でサポートされています。
+StarRocks の内部テーブルと同様に、Iceberg テーブルに対して [INSERT](../../../administration/user_privs/authorization/privilege_item.md#table) 権限を持っている場合、StarRocks テーブルのデータをその Iceberg テーブルにシンクするために [INSERT](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) ステートメントを使用できます（現在は Parquet 形式の Iceberg テーブルのみがサポートされています）。この機能は v3.1 以降でサポートされています。
 
 [Iceberg catalog とそのデータベースに切り替える](#switch-to-an-iceberg-catalog-and-a-database-in-it) してから、次の構文を使用して StarRocks テーブルのデータをそのデータベース内の Parquet 形式の Iceberg テーブルにシンクします。
 
@@ -1451,7 +1451,7 @@ Iceberg テーブルにロードされるクエリステートメントの結果
 
 ### Iceberg テーブルの削除
 
-StarRocks の内部テーブルと同様に、Iceberg テーブルに対して [DROP](../../../administration/user_privs/privilege_item.md#table) 権限を持っている場合、その Iceberg テーブルを削除するために [DROP TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) ステートメントを使用できます。この機能は v3.1 以降でサポートされています。
+StarRocks の内部テーブルと同様に、Iceberg テーブルに対して [DROP](../../../administration/user_privs/authorization/privilege_item.md#table) 権限を持っている場合、その Iceberg テーブルを削除するために [DROP TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) ステートメントを使用できます。この機能は v3.1 以降でサポートされています。
 
 Iceberg テーブルを削除すると、HDFS クラスターまたはクラウドストレージ上のテーブルのファイルパスとデータはテーブルと共に削除されません。
 
