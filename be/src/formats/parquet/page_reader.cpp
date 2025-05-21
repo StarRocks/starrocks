@@ -50,11 +50,11 @@ PageReader::PageReader(io::SeekableInputStream* stream, uint64_t start_offset, u
           _opts(opts),
           _codec(codec) {
     if (_opts.use_file_pagecache) {
-        _cache = DataCache::GetInstance()->external_table_page_cache();
+        _cache = DataCache::GetInstance()->page_cache();
         _init_page_cache_key();
     }
-    _compressed_buf = std::make_shared<std::vector<uint8_t>>();
-    _uncompressed_buf = std::make_shared<std::vector<uint8_t>>();
+    _compressed_buf = std::make_unique<std::vector<uint8_t>>();
+    _uncompressed_buf = std::make_unique<std::vector<uint8_t>>();
 }
 
 Status PageReader::next_page() {
@@ -69,8 +69,8 @@ Status PageReader::next_page() {
 Status PageReader::_deal_page_with_cache() {
     std::string& page_cache_key = _current_page_cache_key();
     PageCacheHandle cache_handle;
-    Status st = _cache->lookup(page_cache_key, &cache_handle);
-    if (st.ok()) {
+    bool ret = _cache->lookup(page_cache_key, &cache_handle);
+    if (true) {
         _hit_cache = true;
         auto* cache_buf = cache_handle.data();
         _page_handle = PageHandle(std::move(cache_handle));
@@ -81,13 +81,14 @@ Status PageReader::_deal_page_with_cache() {
         RETURN_IF_ERROR(_skip_bytes(_header_length + _data_length()));
     } else {
         auto cache_buf = std::make_unique<std::vector<uint8_t>>();
-        RETURN_IF_ERROR(_read_and_deserialize_header(&cache_buf, true));
+        RETURN_IF_ERROR(_read_and_deserialize_header(cache_buf.get(), true));
         if (config::enable_adjustment_page_cache_skip && !_cache_decompressed_data()) {
             _skip_page_cache = true;
             return Status::OK();
+        }
         RETURN_IF_ERROR(_read_and_decompress_internal(&cache_buf, true));
         auto deleter = [](const CacheKey& key, void* value) { delete (BufferPtr*)value; };
-        st = _cache->insert(page_cache_key, cache_buf.get(), &cache_handle, false);
+        auto st = _cache->insert(page_cache_key, cache_buf.get(), &cache_handle, false);
         _page_handle = st.ok() ? PageHandle(std::move(cache_handle)) : PageHandle(cache_buf.get());
         cache_buf.release();
     }
@@ -95,19 +96,21 @@ Status PageReader::_deal_page_with_cache() {
     return Status::OK();
 }
 
-Status PageReader::_read_and_deserialize_header(BufferPtr* cache_buf, bool need_fill_cache) {
+Status PageReader::_read_and_deserialize_header(PageBuffer* cache_buf, bool need_fill_cache) {
     size_t allowed_page_size = kDefaultPageHeaderSize;
     size_t remaining = _finish_offset - _offset;
     _header_length = 0;
 
     RETURN_IF_ERROR(_stream->seek(_offset));
 
-    BufferPtr page_buffer;
+    BufferPtr tmp_page_buffer;
+    PageBuffer* page_buffer;
     if (need_fill_cache) {
         DCHECK(cache_buf);
-        page_buffer = _cache_buf;
+        page_buffer = cache_buf;
     } else {
-        page_buffer = std::make_shared<std::vector<uint8_t>>();
+        tmp_page_buffer = std::make_unique<std::vector<uint8_t>>();
+        page_buffer = tmp_page_buffer.get();
     }
 
     do {
@@ -122,7 +125,7 @@ Status PageReader::_read_and_deserialize_header(BufferPtr* cache_buf, bool need_
                 page_buf = (const uint8_t*)st.value().data();
                 peek_mode = true;
             } else {
-                TRY_CATCH_BAD_ALLOC(raw::stl_vector_resize_uninitialized(page_buffer.get(), allowed_page_size));
+                TRY_CATCH_BAD_ALLOC(raw::stl_vector_resize_uninitialized(page_buffer, allowed_page_size));
                 RETURN_IF_ERROR(_stream->read_at_fully(_offset, page_buffer->data(), allowed_page_size));
                 page_buf = page_buffer->data();
                 auto st = _stream->peek(allowed_page_size);
@@ -180,7 +183,7 @@ Status PageReader::next_header() {
     if (_opts.use_file_pagecache) {
         RETURN_IF_ERROR(_deal_page_with_cache());
     } else {
-        RETURN_IF_ERROR(_read_and_deserialize_header(false));
+        RETURN_IF_ERROR(_read_and_deserialize_header(nullptr, false));
     }
 
     if (_cur_header.type == tparquet::PageType::DATA_PAGE) {
@@ -236,8 +239,13 @@ std::string& PageReader::_current_page_cache_key() {
 
 StatusOr<Slice> PageReader::read_and_decompress_page_data() {
     _opts.stats->page_read_counter += 1;
+<<<<<<< HEAD
     if (!_opts.use_file_pagecache || _skip_page_cache) {
         RETURN_IF_ERROR(_read_and_decompress_internal(false));
+=======
+    if (!_opts.use_file_pagecache) {
+        RETURN_IF_ERROR(_read_and_decompress_internal(nullptr, false));
+>>>>>>> f482e78f61... fix
         return _uncompressed_data;
     } else {
         if (_cache_decompressed_data()) {
