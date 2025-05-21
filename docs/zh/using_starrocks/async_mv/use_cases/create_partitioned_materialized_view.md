@@ -340,7 +340,7 @@ SELECT * FROM iceberg_catalog.test_db.lineitem_days;
 
 - **刷新粒度**
 
-  您可以使用 `partition_refresh_number` 属性来指定每次刷新操作的粒度。`partition_refresh_number` 控制在单次刷新中，最多刷新的分区数量。如果需要刷新的分区数量超过该值，StarRocks 将拆分这次刷新任务，并分批完成。分区按照时间由远至近的顺序进行刷新（不包括提前创建的未来分区）。`partition_refresh_number` 的默认值为 `-1`，表示不拆分刷新任务。
+  您可以使用 `partition_refresh_number` 属性来指定每次刷新操作的粒度。`partition_refresh_number` 控制在单次刷新中，最多刷新的分区数量。如果需要刷新的分区数量超过该值，StarRocks 将拆分这次刷新任务，并分批完成。分区按照时间由远至近的顺序进行刷新（不包括提前创建的未来分区）。当值为 `-1` 时，将不会拆分刷新任务。自 v3.3 起，默认值由 `-1` 变为 `1`，表示 StarRocks 每次只刷新一个分区。
 
 - **物化范围**
 
