@@ -88,7 +88,6 @@ jobs:
       
       - name: Checkout code
         id: checkout_code
-        if: github.base_ref != 'main'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
