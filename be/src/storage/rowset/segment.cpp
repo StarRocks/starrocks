@@ -394,16 +394,7 @@ bool Segment::has_loaded_index() const {
 
 Status Segment::_create_column_readers(SegmentFooterPB* footer) {
     std::unordered_map<uint32_t, uint32_t> column_id_to_footer_ordinal;
-    for (uint32_t ordinal = 0, sz = footer->columns().size(); ordinal < sz; ++ordinal) {
-        const auto& column_pb = footer->columns(ordinal);
-        auto [it, ok] = column_id_to_footer_ordinal.emplace(column_pb.unique_id(), ordinal);
-        if (UNLIKELY(!ok)) {
-            LOG(ERROR) << "Duplicate column id=" << column_pb.unique_id() << " found between column '"
-                       << footer->columns(it->second).name() << "' and column '" << column_pb.name() << "'";
-            return Status::InternalError("Duplicate column id");
-        }
-    }
-
+    RETURN_IF_ERROR(_check_column_unique_id_uniqueness(footer, column_id_to_footer_ordinal));
     for (uint32_t ordinal = 0, sz = _tablet_schema->num_columns(); ordinal < sz; ++ordinal) {
         const auto& column = _tablet_schema->column(ordinal);
         auto iter = column_id_to_footer_ordinal.find(column.unique_id());
@@ -416,6 +407,33 @@ Status Segment::_create_column_readers(SegmentFooterPB* footer) {
             return res.status();
         }
         _column_readers.emplace(column.unique_id(), std::move(res).value());
+    }
+    return Status::OK();
+}
+
+Status Segment::_check_column_unique_id_uniqueness(
+        SegmentFooterPB* footer, std::unordered_map<uint32_t, uint32_t>& column_id_to_footer_ordinal) {
+    // check uniqueness of column ids in footer
+    for (uint32_t ordinal = 0, sz = footer->columns().size(); ordinal < sz; ++ordinal) {
+        const auto& column_pb = footer->columns(ordinal);
+        auto [it, ok] = column_id_to_footer_ordinal.emplace(column_pb.unique_id(), ordinal);
+        if (UNLIKELY(!ok)) {
+            LOG(ERROR) << "Duplicate column id=" << column_pb.unique_id() << " found in segment footer between column '"
+                       << footer->columns(it->second).name() << "' and column '" << column_pb.name() << "'";
+            return Status::InternalError("Duplicate column id found in segment footer");
+        }
+    }
+
+    // check uniqueness of column ids in tablet schema
+    std::unordered_map<uint32_t, uint32_t> column_id_to_tablet_schema_ordinal;
+    for (uint32_t ordinal = 0, sz = _tablet_schema->num_columns(); ordinal < sz; ++ordinal) {
+        const auto& column = _tablet_schema->column(ordinal);
+        auto [it, ok] = column_id_to_tablet_schema_ordinal.emplace(column.unique_id(), ordinal);
+        if (UNLIKELY(!ok)) {
+            LOG(ERROR) << "Duplicate column id=" << column.unique_id() << " found in tablet schema between column '"
+                       << footer->columns(it->second).name() << "' and column '" << column.name() << "'";
+            return Status::InternalError("Duplicate column id found in tablet schema");
+        }
     }
     return Status::OK();
 }

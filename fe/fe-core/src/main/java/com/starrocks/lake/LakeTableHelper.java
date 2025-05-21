@@ -207,6 +207,57 @@ public class LakeTableHelper {
     }
 
     /**
+     * For version compatibility reason, we should restore column unique id and table's max unique id if needed.
+     */
+    public static void restoreColumnUniqueIdPostLoadImage(OlapTable table) {
+        if (needRestoreColumnUniqueId(table)) {
+            int maxId = LakeTableHelper.restoreColumnUniqueId(table);
+            table.setMaxColUniqueId(maxId);
+            LOG.info("Table {}'s column unique id has been restored, maxColUniqueId is: {}", table.getName(), maxId);
+        }
+    }
+
+    /**
+     * For tables created in the old version of StarRocks cluster, such as v3.2, the column unique id in FE might
+     * have default value -1. When upgrading from old version to v3.3 upwards, the unique id of columns might introduce
+     * compatibility issues. This method is used to check if the column list need to restore their column unique id.
+     */
+    public static void restoreColumnUniqueId(String tableName, long indexId, List<Column> columns) {
+        boolean needRestore = hasNegativeUniqueId(columns);
+        if (needRestore) {
+            for (int i = 0; i < columns.size(); i++) {
+                Column col = columns.get(i);
+                col.setUniqueId(i);
+            }
+            LOG.info("Columns of index {} in table {} has reset all unique ids, column size: {}",
+                    indexId, tableName, columns.size());
+        }
+    }
+
+    /**
+     * For tables created in the old version of StarRocks cluster, such as v3.2, the column unique id in FE might
+     * have default value -1. When upgrading from old version to v3.3 upwards, the unique id of columns might introduce
+     * compatibility issues. This method is used to check if the table needs to restore the column unique id.
+     */
+    private static boolean needRestoreColumnUniqueId(OlapTable table) {
+        boolean needRestore = false;
+        for (MaterializedIndexMeta indexMeta : table.getIndexIdToMeta().values()) {
+            List<Column> columns = indexMeta.getSchema();
+            needRestore = hasNegativeUniqueId(columns);
+        }
+        return needRestore;
+    }
+
+    private static boolean hasNegativeUniqueId(List<Column> columns) {
+        for (Column column : columns) {
+            if (column.getUniqueId() < 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * For tables created in the old version of StarRocks cluster, the column unique id is generated on BE and
      * is not saved in FE catalog. For these tables, we want to be able to record their column unique id in the
      * catalog after the upgrade, and the column unique id recorded must be consistent with the one on BE.
@@ -224,7 +275,6 @@ public class LakeTableHelper {
             maxId = Math.max(maxId, columnCount - 1);
             for (int i = 0; i < columnCount; i++) {
                 Column col = indexMeta.getSchema().get(i);
-                Preconditions.checkState(col.getUniqueId() <= 0, col.getUniqueId());
                 col.setUniqueId(i);
             }
         }

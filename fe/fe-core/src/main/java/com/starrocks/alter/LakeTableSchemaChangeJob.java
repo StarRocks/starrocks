@@ -55,6 +55,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.journal.JournalTask;
+import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.persist.EditLog;
@@ -245,7 +246,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             // If upgraded from an old version and do schema change,
             // the schema saved in indexSchemaMap is the schema in the old version, whose uniqueId is -1,
             // so here we initialize column uniqueId here.
-            restoreColumnUniqueIdIfNeed(indexSchemaMap.get(shadowIdxId));
+            LakeTableHelper.restoreColumnUniqueId(table.getName(), shadowIdxId, indexSchemaMap.get(shadowIdxId));
 
             table.setIndexMeta(shadowIdxId, indexIdToName.get(shadowIdxId), indexSchemaMap.get(shadowIdxId), 0, 0,
                     indexShortKeyMap.get(shadowIdxId), TStorageType.COLUMN,
