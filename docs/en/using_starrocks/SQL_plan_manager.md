@@ -3,7 +3,11 @@ displayed_sidebar: docs
 sidebar_position: 11
 ---
 
-# [Preview] SQL Plan Manager
+import Beta from '../_assets/commonMarkdown/_beta.mdx'
+
+# SQL Plan Manager
+
+<Beta />
 
 This topic introduces the basic concepts and usage scenarios of the SQL Plan Manager feature, as well as how to use SQL Plan Manager to regularize query plans.
 

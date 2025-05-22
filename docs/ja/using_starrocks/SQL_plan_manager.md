@@ -3,7 +3,11 @@ displayed_sidebar: docs
 sidebar_position: 11
 ---
 
-# [プレビュー] SQL Plan Manager
+import Beta from '../_assets/commonMarkdown/_beta.mdx'
+
+# SQL Plan Manager
+
+<Beta />
 
 このトピックでは、SQL Plan Manager 機能の基本概念と使用シナリオ、およびクエリプランを正規化するために SQL Plan Manager を使用する方法を紹介します。
 
