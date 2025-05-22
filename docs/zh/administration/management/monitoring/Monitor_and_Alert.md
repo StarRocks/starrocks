@@ -319,11 +319,9 @@ wget https://dl.grafana.com/enterprise/release/grafana-enterprise-10.0.3-1.x86_6
 
 1. 请根据您的 StarRocks 版本下载对应的 Dashboard 模板。
 
-   - [StarRocks-1.19.0 之前版本 Dashboard 模版](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Overview.json)
-   - [StarRocks-1.19.0 开始到 StarRocks-2.4.0 之前版本 Dashboard 模版](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Overview-19.json)
-   - [StarRocks-2.4.0 及其之后版本 Dashboard 模版](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Overview-24-new.json)
-   - [存算分离 Dashboard 模版 - General](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Shared_data-General.json)
-   - [存算分离 Dashboard 模版 - Starlet](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Shared_data-Starlet.json)
+   - [全架构 Dashboard 模版](https://releases.starrocks.io/resources/Dashboard-All-2.4.json)
+   - [存算分离 Dashboard 模版 - General](https://releases.starrocks.io/resources/Dashboard-Shared-data-General-3.5.json)
+   - [存算分离 Dashboard 模版 - Starlet](https://releases.starrocks.io/resources/Dashboard-Shared-data-Starlet-3.5.json)
 
    > **注意**
    >
