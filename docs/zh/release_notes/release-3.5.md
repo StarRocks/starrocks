@@ -8,6 +8,13 @@ displayed_sidebar: docs
 
 发布日期：2025 年 5 月 21 日
 
+### 升级注意事项
+
+- 从 StarRocks v3.5.0 起，需使用 JDK 17 或更高版本。
+  - 如从 v3.4 或更早版本升级集群，需先升级 JDK，并在 FE 配置文件 **fe.conf** 中移除 `JAVA_OPTS` 中与 JDK 17 不兼容的参数（如 CMS 和 GC 参数）。
+  - 对于使用 External Catalog 的集群，需要在 BE 配置文件 **be.conf** 的配置项 `JAVA_OPTS` 中添加 `--add-opens=java.base/java.util=ALL-UNNAMED`。
+  - 此外，自 v3.5.0 起，StarRocks 不再提供特定 JDK 版本的 JVM 配置，所有 JDK 版本统一使用 `JAVA_OPTS`。
+
 ### 存算分离
 
 - 存算分离集群支持生成列。[#53526](https://github.com/StarRocks/starrocks/pull/53526)
@@ -72,8 +79,3 @@ displayed_sidebar: docs
   - [`array_flatten()`](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/array-functions/array_flatten/) [#50080](https://github.com/StarRocks/starrocks/pull/50080)
   - [`inet_aton()`](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/string-functions/inet_aton/) [#51883](https://github.com/StarRocks/starrocks/pull/51883)
   - `percentile_approx_weight()` [#57410](https://github.com/StarRocks/starrocks/pull/57410)
-
-### 升级注意事项
-
-- 从 StarRocks v3.5.0 起，需使用 JDK 17 或更高版本。如从 v3.4 或更早版本升级集群，需先升级 JDK，并在 FE 配置文件 **fe.conf** 中移除 `JAVA_OPTS` 中与 JDK 17 不兼容的参数（如 CMS 和 GC 参数）。此外，自 v3.5.0 起，StarRocks 不再提供特定 JDK 版本的 JVM 配置，所有 JDK 版本统一使用 `JAVA_OPTS`。
-

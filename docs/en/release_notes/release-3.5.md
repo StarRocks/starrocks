@@ -8,6 +8,13 @@ displayed_sidebar: docs
 
 Release Date: May 21, 2025
 
+### Upgrade Notes
+
+- JDK 17 or later is required from StarRocks v3.5.0 onwards.
+  - To upgrade a cluster from v3.4 or earlier, you must upgrade the version of JDK that StarRocks depends, and remove the options that are incompatible with JDK 17 in the configuration item `JAVA_OPTS` in the FE configuration file **fe.conf**, for example, options that involve CMS and GC.
+  - For clusters using external catalogs, you need to add `--add-opens=java.base/java.util=ALL-UNNAMED` to the `JAVA_OPTS` configuration item in the BE configuration file **be.conf**.
+  - In addition, as of v3.5.0, StarRocks no longer provides JVM configurations for specific JDK versions. All versions of JDK use `JAVA_OPTS`.
+
 ### Shared-data Enhancement
 
 - Shared-data clusters support generated columns. [#53526](https://github.com/StarRocks/starrocks/pull/53526)
@@ -72,8 +79,3 @@ Release Date: May 21, 2025
   - [`array_flatten()`](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_flatten/) [#50080](https://github.com/StarRocks/starrocks/pull/50080)
   - [`inet_aton()`](https://docs.starrocks.io/docs/sql-reference/sql-functions/string-functions/inet_aton/) [#51883](https://github.com/StarRocks/starrocks/pull/51883)
   - `percentile_approx_weight()` [#57410](https://github.com/StarRocks/starrocks/pull/57410)
-
-### Upgrade Notes
-
-- JDK 17 or later is required from StarRocks v3.5.0 onwards. To upgrade a cluster from v3.4 or earlier, you must upgrade the version of JDK that StarRocks depends, and remove the options that are incompatible with JDK 17 in the configuration item `JAVA_OPTS` in the FE configuration file **fe.conf**, for example, options that involve CMS and GC. In addition, as of v3.5.0, StarRocks no longer provides JVM configurations for specific JDK versions. All versions of JDK use `JAVA_OPTS`.
-
