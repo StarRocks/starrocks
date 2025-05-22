@@ -284,7 +284,7 @@ public:
         TEST_SYNC_POINT_CALLBACK("BinaryInputArchive::load::1", &ret);
         if (!ret) return ret;
         ifs_.read(p, sz);
-        return true;
+        return !ifs_.fail();
     }
 
     template <typename V>
@@ -293,7 +293,7 @@ public:
         TEST_SYNC_POINT_CALLBACK("BinaryInputArchive::load::2", &ret);
         if (!ret) return ret;
         ifs_.read(reinterpret_cast<char*>(v), sizeof(V));
-        return true;
+        return !ifs_.fail();
     }
 
 private:
