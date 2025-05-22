@@ -220,6 +220,9 @@ public class QueryRuntimeProfile {
     public synchronized void setTopProfileSupplier(Supplier<RuntimeProfile> topProfileSupplier) {
         this.topProfileSupplier = topProfileSupplier;
         if (topProfileSupplier == null) {
+            if (runningProfile == null) {
+                LOG.warn("clearTopProfileSupplier meet npe, {}", DebugUtil.printId(jobSpec.getQueryId()));
+            }
             runningProfile.clearTopProfileSupplier();
         }
     }
@@ -258,6 +261,12 @@ public class QueryRuntimeProfile {
     public void finishInstance(TUniqueId instanceId) {
         if (fragmentInstanceDownSignal != null) {
             fragmentInstanceDownSignal.markedCountDown(instanceId, MARKED_COUNT_DOWN_VALUE);
+        }
+    }
+
+    public void finishInstanceProfile(int indexInJob) {
+        if (runningProfile != null) {
+            runningProfile.finishInstance(indexInJob);
         }
     }
 

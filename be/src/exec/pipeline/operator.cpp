@@ -53,11 +53,12 @@ Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32
     _runtime_profile = std::make_shared<RuntimeProfile>(profile_name);
     _runtime_profile->set_metadata(_id);
 
+    _runtime_profile->reserve_child_holder(2);
     _common_metrics = std::make_shared<RuntimeProfile>("CommonMetrics");
-    _runtime_profile->add_child(_common_metrics.get(), true, nullptr);
+    _runtime_profile->add_child(_common_metrics, true, nullptr);
 
     _unique_metrics = std::make_shared<RuntimeProfile>("UniqueMetrics");
-    _runtime_profile->add_child(_unique_metrics.get(), true, nullptr);
+    _runtime_profile->add_child(_unique_metrics, true, nullptr);
     if (!_is_subordinate && _plan_node_id == s_pseudo_plan_node_id_for_final_sink) {
         _common_metrics->add_info_string("IsFinalSink");
     }

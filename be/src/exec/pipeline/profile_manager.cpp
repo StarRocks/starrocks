@@ -2,13 +2,14 @@
 // Created by femi on 2025/5/14.
 //
 
-#include "ProfileManager.h"
+#include "profile_manager.h"
 
 #include "runtime/client_cache.h"
+#include "util/starrocks_metrics.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks::pipeline {
-RuntimeProfile* ProfileManager::build_merged_instance_profile(
+RuntimeProfile* profile_manager::build_merged_instance_profile(
         std::shared_ptr<FragmentProfileMaterial> fragment_profile_material, ObjectPool* obj_pool) {
     // LOG(WARNING) << "Before task - fragment_profile_material content: "
     //              << " total_cpu_cost_ns=" << fragment_profile_material->total_cpu_cost_ns
@@ -85,11 +86,13 @@ RuntimeProfile* ProfileManager::build_merged_instance_profile(
     return new_instance_profile;
 }
 
-ProfileManager::ProfileManager(const CpuUtil::CpuIds& cpuids) {
+profile_manager::profile_manager(const CpuUtil::CpuIds& cpuids) {
+    int max_merger = config::async_profile_merge_thread_max_num == 0 ? CpuInfo::num_cores() / 2
+                                                                     : config::async_profile_merge_thread_max_num;
     auto status = ThreadPoolBuilder("query_profile_merge")
                           .set_min_threads(1)
-                          .set_max_threads(20)
-                          .set_max_queue_size(1000)
+                          .set_max_threads(max_merger)
+                          .set_max_queue_size(100)
                           .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                           .set_cpuids(cpuids)
                           .build(&_report_thread_pool);
@@ -97,6 +100,8 @@ ProfileManager::ProfileManager(const CpuUtil::CpuIds& cpuids) {
         LOG(FATAL) << "Cannot create thread pool for profile_manager's query_profile_merge: error="
                    << status.to_string();
     }
+
+    REGISTER_THREAD_POOL_METRICS(async_profile_merge, _report_thread_pool);
 
     status = ThreadPoolBuilder("query_profile_report")
                      .set_min_threads(1)
@@ -108,9 +113,11 @@ ProfileManager::ProfileManager(const CpuUtil::CpuIds& cpuids) {
         LOG(FATAL) << "Cannot create thread pool for query_profile_merge's query_profile_report: error="
                    << status.to_string();
     }
+
+    REGISTER_THREAD_POOL_METRICS(async_profile_report, _merge_thread_pool);
 }
 
-void ProfileManager::build_and_report_profile(std::shared_ptr<FragmentProfileMaterial> fragment_profile_material) {
+void profile_manager::build_and_report_profile(std::shared_ptr<FragmentProfileMaterial> fragment_profile_material) {
     // LOG(WARNING) << "Before task - fragment_profile_material content: "
     //              << " total_cpu_cost_ns=" << fragment_profile_material->total_cpu_cost_ns
     //              << " total_spill_bytes=" << fragment_profile_material->total_spill_bytes
@@ -155,7 +162,7 @@ void ProfileManager::build_and_report_profile(std::shared_ptr<FragmentProfileMat
     }
 }
 
-std::unique_ptr<TFragmentProfile> ProfileManager::create_report_profile_params(
+std::unique_ptr<TFragmentProfile> profile_manager::create_report_profile_params(
         std::shared_ptr<FragmentProfileMaterial> fragment_profile_material, RuntimeProfile* merged_instance_profile) {
     auto res = std::make_unique<TFragmentProfile>();
     TFragmentProfile& params = *res;

@@ -56,6 +56,10 @@ public class RunningProfileManager {
         profiles.putIfAbsent(queryId, queryProfile);
     }
 
+    public void removeProfile(TUniqueId queryId) {
+        profiles.remove(queryId);
+    }
+
     public TStatus asyncProfileReport(TFragmentProfile request) {
         TStatus status;
         final RunningProfile queryProfile = profiles.get(request.getQuery_id());
