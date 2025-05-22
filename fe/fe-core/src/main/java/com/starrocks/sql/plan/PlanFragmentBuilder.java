@@ -3531,9 +3531,8 @@ public class PlanFragmentBuilder {
                     .map(ColumnRefOperator::getId).distinct().collect(Collectors.toList()));
             exchangeNode.setDataPartition(cteFragment.getDataPartition());
             exchangeNode.forceCollectExecStats();
-            if (ConnectContext.get().getSessionVariable().isEnableMultiCastLimitPushDown() && consume.hasLimit()) {
-                exchangeNode.setLimit(consume.getLimit());
-            }
+
+
 
             PlanFragment consumeFragment = new PlanFragment(context.getNextFragmentId(), exchangeNode,
                     cteFragment.getDataPartition());
@@ -3559,8 +3558,13 @@ public class PlanFragmentBuilder {
             }
 
             // set limit
-            if (!ConnectContext.get().getSessionVariable().isEnableMultiCastLimitPushDown() && consume.hasLimit()) {
-                consumeFragment.getPlanRoot().setLimit(consume.getLimit());
+            if (consume.hasLimit()) {
+                if (ConnectContext.get().getSessionVariable().isEnableMultiCastLimitPushDown()
+                        && consume.getPredicate() == null) {
+                    exchangeNode.setLimit(consume.getLimit());
+                } else {
+                    consumeFragment.getPlanRoot().setLimit(consume.getLimit());
+                }
             }
 
             cteFragment.getDestNodeList().add(exchangeNode);
