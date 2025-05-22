@@ -28,6 +28,7 @@
 #include "exprs/unary_function.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
+#include "util/stack_util.h"
 
 #ifdef STARROCKS_JIT_ENABLE
 #include <llvm/IR/IRBuilder.h>
@@ -69,6 +70,7 @@ public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedArithmeticExpr);
 
     StatusOr<ColumnPtr> evaluate_decimal_fast_mul(ExprContext* context, Chunk* chunk) {
+        LOG(ERROR) << "evaluate_decimal_fast_mul||" << get_stack_trace();
         auto lhs_lt_opt = eliminate_trivial_cast_for_decimal_mul(_children[0]);
         auto rhs_lt_opt = eliminate_trivial_cast_for_decimal_mul(_children[1]);
         if (lhs_lt_opt.has_value() && rhs_lt_opt.has_value()) {
@@ -173,7 +175,7 @@ public:
         if constexpr (is_intdiv_op<Op> && lt_is_bigint<Type>) {
 #define EVALUATE_CHECKED_OVERFLOW(Mode)                                                   \
     using CastFunction = VectorizedUnaryFunction<DecimalTo<Mode>>;                        \
-    switch (_children[0]->type().type) {                                                  \
+    switch (_children[0]->type().type) { \
     case TYPE_DECIMAL32: {                                                                \
         ASSIGN_OR_RETURN(auto column, evaluate_internal<TYPE_DECIMAL32>(context, ptr));   \
         return CastFunction::evaluate<TYPE_DECIMAL32, LogicalType::TYPE_BIGINT>(column);  \
@@ -185,6 +187,10 @@ public:
     case TYPE_DECIMAL128: {                                                               \
         ASSIGN_OR_RETURN(auto column, evaluate_internal<TYPE_DECIMAL128>(context, ptr));  \
         return CastFunction::evaluate<TYPE_DECIMAL128, LogicalType::TYPE_BIGINT>(column); \
+    }                                                                                     \
+    case TYPE_DECIMAL256: {                                                               \
+        ASSIGN_OR_RETURN(auto column, evaluate_internal<TYPE_DECIMAL256>(context, ptr));  \
+        return CastFunction::evaluate<TYPE_DECIMAL256, LogicalType::TYPE_BIGINT>(column); \
     }                                                                                     \
     default:                                                                              \
         return evaluate_internal<Type>(context, ptr);                                     \
@@ -258,6 +264,7 @@ private:
     StatusOr<ColumnPtr> evaluate_internal(ExprContext* context, Chunk* ptr) {
         ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
+        LOG(ERROR) << "0000000000000000000000000000000000000" << debug_string();
         if constexpr (lt_is_decimal<LType>) {
             if (context != nullptr && context->error_if_overflow()) {
                 using VectorizedDiv = VectorizedUnstrictDecimalBinaryFunction<LType, DivOp, OverflowMode::REPORT_ERROR>;
@@ -280,6 +287,7 @@ class VectorizedModArithmeticExpr final : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedModArithmeticExpr);
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+        LOG(ERROR) << "VectorizedModArithmeticExpr.evaluate_checked" << get_stack_trace();
         ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
 
@@ -409,6 +417,8 @@ class VectorizedBitShiftArithmeticExpr final : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedBitShiftArithmeticExpr);
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+        LOG(ERROR) << "====================================================================" << std::endl;
+        LOG(ERROR) << "VectorizedBitShiftArithmeticExpr.evaluate_checked" << get_stack_trace();
         auto l = _children[0]->evaluate(context, ptr);
         auto r = _children[1]->evaluate(context, ptr);
 
@@ -489,7 +499,8 @@ public:
 #define CASE_DECIMAL_V3_TYPE(OP)  \
     CASE_TYPE(TYPE_DECIMAL32, OP) \
     CASE_TYPE(TYPE_DECIMAL64, OP) \
-    CASE_TYPE(TYPE_DECIMAL128, OP)
+    CASE_TYPE(TYPE_DECIMAL128, OP) \
+    CASE_TYPE(TYPE_DECIMAL256, OP)
 
 #define SWITCH_INT_TYPE(OP)                                                   \
     switch (resultType) {                                                     \

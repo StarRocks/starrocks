@@ -445,6 +445,7 @@ bool NodeChannel::is_full() {
 }
 
 void NodeChannel::_reset_cur_chunk(Chunk* input) {
+    LOG(ERROR) << "2222222222|" << input->debug_row(0) << "|22222222222";
     int64_t before_consumed_bytes = CurrentThread::current().get_consumed_bytes();
     _cur_chunk = input->clone_empty_with_slot();
     int64_t after_consumed_bytes = CurrentThread::current().get_consumed_bytes();

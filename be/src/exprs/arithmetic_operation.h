@@ -20,6 +20,7 @@
 #include "runtime/decimalv3.h"
 #include "types/logical_type.h"
 #include "util/guard.h"
+#include "util/stack_util.h"
 
 #ifdef STARROCKS_JIT_ENABLE
 #include <llvm/IR/Constants.h>
@@ -127,6 +128,7 @@ template <typename Op, LogicalType Type, typename = guard::Guard, typename = gua
 struct ArithmeticBinaryOperator {
     template <typename LType, typename RType, typename ResultType>
     static inline ReturnType<Type, ResultType> apply(const LType& l, const RType& r) {
+        LOG(ERROR) << "1111111111111111111111111111111111111111111111|" << std::endl << get_stack_trace();
         if constexpr (is_add_op<Op>) {
             return l + r;
         } else if constexpr (is_sub_op<Op>) {
@@ -600,6 +602,7 @@ struct ArithmeticBinaryOperator<Op, Type, DecimalFastMulOpGuard<Op>, DecimalLTGu
     template <bool check_overflow, bool adjust_left, typename LType, typename RType, typename ResultType>
     static inline bool apply(const LType& l, const RType& r, ResultType* result,
                              [[maybe_unused]] const RType& scale_factor) {
+        LOG(ERROR) << "4444444444444444444444444444444444|" << std::endl << get_stack_trace();
         if constexpr (lt_is_decimal128<Type>) {
             *result = i64_x_i64_produce_i128(l, r);
         } else {

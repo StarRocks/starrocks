@@ -141,6 +141,10 @@ public class ArithmeticExpr extends Expr {
                 Operator.DIVIDE.getName(),
                 Lists.<Type>newArrayList(Type.DECIMAL128, Type.DECIMAL128),
                 Type.DECIMAL128));
+        functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
+                Operator.DIVIDE.getName(),
+                Lists.<Type>newArrayList(Type.DECIMAL256, Type.DECIMAL256),
+                Type.DECIMAL256));
 
         // MOD(), FACTORIAL(), BITAND(), BITOR(), BITXOR(), and BITNOT() are registered as
         // builtins, see starrocks_functions.py
@@ -148,7 +152,7 @@ public class ArithmeticExpr extends Expr {
             functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
                     Operator.INT_DIVIDE.getName(), Lists.newArrayList(t, t), t));
         }
-        for (Type t : Arrays.asList(Type.DECIMAL32, Type.DECIMAL64, Type.DECIMAL128)) {
+        for (Type t : Arrays.asList(Type.DECIMAL32, Type.DECIMAL64, Type.DECIMAL128, Type.DECIMAL256)) {
             functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
                     Operator.INT_DIVIDE.getName(), Lists.newArrayList(t, t), Type.BIGINT));
         }
@@ -214,7 +218,7 @@ public class ArithmeticExpr extends Expr {
         int retPrecision = maxIntLength + Math.max(lhsScale, rhsScale) + 1;
         int retScale = Math.max(lhsScale, rhsScale);
         // precision
-        retPrecision = Math.min(retPrecision, 38);
+        retPrecision = Math.min(retPrecision, 76);
         PrimitiveType decimalType = PrimitiveType.getDecimalPrimitiveType(retPrecision);
         decimalType = PrimitiveType.getWiderDecimalV3Type(decimalType, lhsType.getPrimitiveType());
         decimalType = PrimitiveType.getWiderDecimalV3Type(decimalType, rhsType.getPrimitiveType());
@@ -257,7 +261,7 @@ public class ArithmeticExpr extends Expr {
             case MULTIPLY:
                 returnScale = lhsScale + rhsScale;
                 returnPrecision = lhsPrecision + rhsPrecision;
-                final int maxDecimalPrecision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128);
+                final int maxDecimalPrecision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL256);
                 if (returnPrecision <= maxDecimalPrecision) {
                     // returnPrecision <= 38, result never overflows, use the narrowest decimal type that can holds the result.
                     // for examples:
@@ -279,14 +283,14 @@ public class ArithmeticExpr extends Expr {
                     // for examples:
                     // decimal128(23,5) * decimal64(18,4) => decimal128(38, 9).
                     result.returnType =
-                            ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, maxDecimalPrecision, returnScale);
+                            ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, maxDecimalPrecision, returnScale);
                     result.lhsTargetType =
-                            ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, lhsPrecision, lhsScale);
+                            ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, lhsPrecision, lhsScale);
                     result.rhsTargetType =
-                            ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, rhsPrecision, rhsScale);
+                            ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, rhsPrecision, rhsScale);
                     return result;
                 } else {
-                    // returnScale > 38, so it is cannot be represented as decimal.
+                    // returnScale > 76, so it is cannot be represented as decimal.
                     throw new SemanticException(
                             String.format(
                                     "Return scale(%d) exceeds maximum value(%d), please cast decimal type to low-precision one",
@@ -480,6 +484,7 @@ public class ArithmeticExpr extends Expr {
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
+            case DECIMAL256:
                 return t;
             default:
                 return Type.INVALID;
