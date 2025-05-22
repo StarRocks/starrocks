@@ -1059,6 +1059,7 @@ CONF_String(query_debug_trace_dir, "${STARROCKS_HOME}/query_debug_trace");
 #ifdef USE_STAROS
 CONF_Int32(starlet_port, "9070");
 CONF_mInt32(starlet_cache_thread_num, "16");
+CONF_mInt32(starlet_cache_replication_timeout_ms, "5000");
 // Root dir used for cache if cache enabled.
 CONF_String(starlet_cache_dir, "");
 // @Deprecated

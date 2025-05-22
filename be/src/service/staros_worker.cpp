@@ -539,6 +539,7 @@ void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache)
         FLAGS_fslib_s3client_request_timeout_ms = static_cast<int32_t>(config::object_storage_request_timeout_ms);
     }
     fslib::FLAGS_delete_files_max_key_in_batch = config::starlet_delete_files_max_key_in_batch;
+    fslib::FLAGS_write_cache_rpc_timeout_ms = config::starlet_cache_replication_timeout_ms;
 
     fslib::FLAGS_use_star_cache = config::starlet_use_star_cache;
     fslib::FLAGS_star_cache_async_init = config::starlet_star_cache_async_init;
