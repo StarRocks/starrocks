@@ -93,8 +93,6 @@ StatusOr<TFetchDataResultPtrs> ArrowResultWriter::process_chunk(Chunk* chunk) {
     std::shared_ptr<arrow::RecordBatch> result;
     RETURN_IF_ERROR(convert_chunk_to_arrow_batch(chunk, _output_expr_ctxs, _arrow_schema, arrow::default_memory_pool(),
                                                  &result));
-    LOG(INFO) << "[Flight] ArrowResultWriter::process_chunk(), chunk rows = " << chunk->num_rows()
-              << ", arrow rows = " << result->num_rows();
     RETURN_IF_ERROR(_sinker->add_arrow_batch(result));
     return TFetchDataResultPtrs{};
 }
