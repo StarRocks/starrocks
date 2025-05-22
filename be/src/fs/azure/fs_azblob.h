@@ -14,18 +14,10 @@
 
 #pragma once
 
-#include <azure/core/http/http_status_code.hpp>
-
-#include "common/status.h"
+#include "fs/fs.h"
 
 namespace starrocks {
 
-const std::string kSchemeSeparator("://");
-const std::string kHttpScheme("http");
-const std::string kHttpsScheme("https");
-const std::string kWasbScheme("wasb");
-const std::string kWasbsScheme("wasbs");
-
-Status azure_error_to_status(Azure::Core::Http::HttpStatusCode code, std::string_view message, std::string_view object);
+std::unique_ptr<FileSystem> new_fs_azblob(const FSOptions& options);
 
 } // namespace starrocks

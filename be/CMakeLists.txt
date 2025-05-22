@@ -407,6 +407,24 @@ set_target_properties(serdes PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/
 add_library(opentelemetry_exporter_jaeger_trace STATIC IMPORTED GLOBAL)
 set_target_properties(opentelemetry_exporter_jaeger_trace PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_exporter_jaeger_trace.a)
 
+add_library(libxml2 STATIC IMPORTED GLOBAL)
+set_target_properties(libxml2 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libxml2.a)
+
+add_library(azure-core STATIC IMPORTED GLOBAL)
+set_target_properties(azure-core PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libazure-core.a)
+
+add_library(azure-identity STATIC IMPORTED GLOBAL)
+set_target_properties(azure-identity PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libazure-identity.a)
+
+add_library(azure-storage-common STATIC IMPORTED GLOBAL)
+set_target_properties(azure-storage-common PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libazure-storage-common.a)
+
+add_library(azure-storage-blobs STATIC IMPORTED GLOBAL)
+set_target_properties(azure-storage-blobs PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libazure-storage-blobs.a)
+
+add_library(azure-storage-files-datalake STATIC IMPORTED GLOBAL)
+set_target_properties(azure-storage-files-datalake PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libazure-storage-files-datalake.a)
+
 set(absl_DIR "${THIRDPARTY_DIR}/lib/cmake/absl" CACHE PATH "absl search path" FORCE)
 find_package(absl CONFIG REQUIRED)
 set(gRPC_DIR "${THIRDPARTY_DIR}/lib/cmake/grpc" CACHE PATH "grpc search path")
@@ -469,12 +487,12 @@ if ("${USE_STAROS}" STREQUAL "ON")
     add_library(rocksdb::rocksdb ALIAS rocksdb)
     add_library(starcache::starcache ALIAS starcache)
     add_library(Snappy::snappy ALIAS snappy)
-
-    # required by azure-*
-    set(LIBXML2_INCLUDE_DIR "${STARLET_INSTALL_DIR}/third_party/include/libxml2" CACHE PATH "libxml2 include path")
-    set(LIBXML2_LIBRARY "${STARLET_INSTALL_DIR}/third_party/lib/libxml2.a" CACHE FILEPATH "libxml2 static library")
-    add_library(libxml2 STATIC IMPORTED GLOBAL)
-    set_target_properties(libxml2 PROPERTIES IMPORTED_LOCATION ${LIBXML2_LIBRARY})
+    add_library(libxml2::libxml2 ALIAS libxml2)
+    add_library(Azure::azure-core ALIAS azure-core)
+    add_library(Azure::azure-identity ALIAS azure-identity)
+    add_library(Azure::azure-storage-common ALIAS azure-storage-common)
+    add_library(Azure::azure-storage-blobs ALIAS azure-storage-blobs)
+    add_library(Azure::azure-storage-files-datalake ALIAS azure-storage-files-datalake)
 
     set(prometheus-cpp_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/prometheus-cpp" CACHE PATH "prometheus cpp client search path")
     find_package (prometheus-cpp CONFIG REQUIRED)
@@ -482,18 +500,6 @@ if ("${USE_STAROS}" STREQUAL "ON")
     message(STATUS "Using prometheus-cpp")
     message(STATUS "  include: ${prometheus-cpp_INCLUDE_DIR}")
     include_directories(SYSTEM ${prometheus-cpp_INCLUDE_DIR})
-
-    set(azure-core-cpp_DIR "${STARLET_INSTALL_DIR}/third_party/share/azure-core-cpp" CACHE PATH "azure core cpp search path")
-    find_package(azure-core-cpp CONFIG REQUIRED)
-    set(azure-identity-cpp_DIR "${STARLET_INSTALL_DIR}/third_party/share/azure-identity-cpp" CACHE PATH "azure identity cpp search path")
-    find_package(azure-identity-cpp CONFIG REQUIRED)
-    set(azure-storage-common-cpp_DIR "${STARLET_INSTALL_DIR}/third_party/share/azure-storage-common-cpp" CACHE PATH "azure storage common search path")
-    find_package(azure-storage-common-cpp CONFIG REQUIRED)
-    set(azure-storage-blobs-cpp_DIR "${STARLET_INSTALL_DIR}/third_party/share/azure-storage-blobs-cpp" CACHE PATH "azure storage blobs search path")
-    find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
-    set(azure-storage-files-datalake-cpp_DIR "${STARLET_INSTALL_DIR}/third_party/share/azure-storage-files-datalake-cpp" CACHE PATH "azure storage file datalake search path")
-    find_package(azure-storage-files-datalake-cpp CONFIG REQUIRED)
-    set(AZURE_SDK_LIB Azure::azure-identity Azure::azure-storage-blobs Azure::azure-storage-files-datalake Azure::azure-core Azure::azure-storage-common)
 
     # gcp cloud storage related dependencies
     set(ZLIB_INCLUDE_DIR "${THIRDPARTY_DIR}/include")
@@ -963,6 +969,12 @@ set(STARROCKS_DEPENDENCIES
     opentelemetry_resources
     opentelemetry_common
     opentelemetry_exporter_jaeger_trace
+    libxml2
+    azure-core
+    azure-identity
+    azure-storage-common
+    azure-storage-blobs
+    azure-storage-files-datalake
     jansson
     avro
     avrocpp
