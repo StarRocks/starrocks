@@ -1359,7 +1359,6 @@ public class StmtExecutor {
 
         coord.setTopProfileSupplier(this::buildTopLevelProfile);
         coord.setExecPlan(execPlan);
-        coord.registerProfileToRunningProfileManager();
         coord.execWithQueryDeployExecutor();
 
         RowBatch batch = null;
@@ -2500,7 +2499,6 @@ public class StmtExecutor {
 
             coord.setTopProfileSupplier(this::buildTopLevelProfile);
             coord.setExecPlan(execPlan);
-            coord.registerProfileToRunningProfileManager();
             coord.exec();
 
             int timeout = getExecTimeout();

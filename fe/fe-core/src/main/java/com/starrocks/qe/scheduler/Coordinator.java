@@ -229,8 +229,6 @@ public abstract class Coordinator {
 
     public abstract DataCacheSelectMetrics getDataCacheSelectMetrics();
 
-    public abstract void registerProfileToRunningProfileManager();
-
     // ------------------------------------------------------------------------------------
     // Methods for audit.
     // ------------------------------------------------------------------------------------

@@ -468,8 +468,4 @@ public class FeExecuteCoordinator extends Coordinator {
         sb.append(String.format("%02d:%02d:%02d", hour + day * 24, minute, second));
         return sb.toString();
     }
-
-    public void registerProfileToRunningProfileManager() {
-    }
-
 }
