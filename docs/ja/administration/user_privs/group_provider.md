@@ -13,7 +13,7 @@ v3.5.0 以降、StarRocks は Group Provider をサポートしており、外�
 
 LDAP、OpenID Connect、OAuth 2.0、Apache Ranger などの外部ユーザー認証および認可システムとの統合を深めるために、StarRocks はユーザーグループ情報を収集し、集団的なユーザー管理をより良い体験にします。
 
-グループプロバイダーを使用すると、外部ユーザーシステムから異なる目的でグループ情報を取得できます。グループ情報は独立しており、認証、認可、またはその他のプロセスに柔軟に統合でき、特定のワークフローに厳密に結びつけられることはありません。
+Group Provider を使用すると、外部ユーザーシステムから異なる目的でグループ情報を取得できます。グループ情報は独立しており、認証、認可、またはその他のプロセスに柔軟に統合でき、特定のワークフローに厳密に結びつけられることはありません。
 
 Group Provider は、ユーザーとグループの間のマッピングです。グループ情報を必要とするプロセスは、このマッピングを必要に応じてクエリできます。
 
@@ -23,9 +23,9 @@ Group Provider は、ユーザーとグループの間のマッピングです�
 
 ![Group Provider](../../_assets/group_provider.png)
 
-## グループプロバイダーを作成する
+## Group Provider を作成する
 
-StarRocks は 3 種類のグループプロバイダーをサポートしています:
+StarRocks は 3 種類の Group Provider をサポートしています:
 - **LDAP group provider**: LDAP サービス内のユーザーとグループを検索して一致させます
 - **Unix group provider**: オペレーティングシステム内のユーザーとグループを検索して一致させます
 - **File group provider**: ファイルで定義されたユーザーとグループを検索して一致させます
@@ -81,7 +81,7 @@ PROPERTIES (
 
 #### `type`
 
-作成するグループプロバイダーのタイプ。 有効な値:
+作成する Group Provider のタイプ。 有効な値:
 - `ldap`: LDAP group provider を作成します。この値が設定されている場合、`ldap_info`、`ldap_search_group_arg`、`ldap_search_user_arg`、およびオプションで `ldap_cache_arg` を指定する必要があります。
 - `unix`: Unix group provider を作成します。
 - `file`: File group provider を作成します。この値が設定されている場合、`group_file_url` を指定する必要があります。
@@ -206,9 +206,9 @@ PROPERTIES(
 
 上記の例では、`ldap_group_filter` を使用して `groupOfNames` objectClass と `cn` が `testgroup` のグループを検索します。したがって、`cn` はグループを識別するために `ldap_group_identifier_attr` に指定されます。`ldap_group_member_attr` は `member` に設定されており、`groupOfNames` objectClass でメンバーを識別するために `member` 属性が使用されます。`ldap_user_search_attr` は `uid=([^,]+)` という式に設定されており、`member` 属性内のユーザーを識別するために使用されます。
 
-## グループプロバイダーをセキュリティインテグレーションと組み合わせる
+## Group Provider をセキュリティインテグレーションと組み合わせる
 
-グループプロバイダーを作成した後、セキュリティインテグレーションと組み合わせて、グループプロバイダーで指定されたユーザーが StarRocks にログインできるようにすることができます。セキュリティインテグレーションの作成に関する詳細は、[Authenticate with Security Integration](./authentication/security_integration.md) を参照してください。
+Group Provider を作成した後、セキュリティインテグレーションと組み合わせて、Group Provider で指定されたユーザーが StarRocks にログインできるようにすることができます。セキュリティインテグレーションの作成に関する詳細は、[Authenticate with Security Integration](./authentication/security_integration.md) を参照してください。
 
 ### 構文
 
@@ -224,11 +224,11 @@ ALTER SECURITY INTEGRATION <security_integration_name> SET
 
 #### `group_provider`
 
-セキュリティインテグレーションと組み合わせるグループプロバイダーの名前。複数のグループプロバイダーはカンマで区切られます。設定されると、StarRocks はログイン時に各指定されたプロバイダーの下でユーザーのグループ情報を記録します。
+セキュリティインテグレーションと組み合わせる Group Provider の名前。複数の Group Provider はカンマで区切られます。設定されると、StarRocks はログイン時に各指定されたプロバイダーの下でユーザーのグループ情報を記録します。
 
 #### `authenticated_group_list`
 
-オプション。StarRocks にログインすることが許可されているグループの名前。複数のグループはカンマで区切られます。指定されたグループが組み合わせたグループプロバイダーによって取得できることを確認してください。
+オプション。StarRocks にログインすることが許可されているグループの名前。複数のグループはカンマで区切られます。指定されたグループが組み合わせた Group Provider によって取得できることを確認してください。
 
 ### 例
 
@@ -240,8 +240,8 @@ PROPERTIES(
 );
 ```
 
-## グループプロバイダーを外部認可システム (Apache Ranger) と組み合わせる
+## Group Provider を外部認可システム (Apache Ranger) と組み合わせる
 
-セキュリティインテグレーションで関連するグループプロバイダーを構成すると、StarRocks はログイン時にユーザーのグループ情報を記録します。このグループ情報は、Ranger との認可プロセスに自動的に含まれ、追加の構成が不要になります。
+セキュリティインテグレーションで関連する Group Provider を構成すると、StarRocks はログイン時にユーザーのグループ情報を記録します。このグループ情報は、Ranger との認可プロセスに自動的に含まれ、追加の構成が不要になります。
 
 StarRocks と Ranger の統合に関する詳細な手順については、[Manage permissions with Apache Ranger](./authorization/ranger_plugin.md) を参照してください。
