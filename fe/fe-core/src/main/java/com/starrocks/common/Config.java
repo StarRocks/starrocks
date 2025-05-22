@@ -2880,9 +2880,11 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "True to start warehouse idle checker")
     public static boolean warehouse_idle_check_enable = false;
 
-    // e.g. "tableId1;tableId2"
-    @ConfField(mutable = true)
-    public static String lake_compaction_disable_tables = "";
+    // e.g. "tableId1;partitionId2"
+    // both table id and partition id are supported
+    @ConfField(mutable = true, comment = "disable table or partition compaction, format:'id1;id2'",
+            aliases = {"lake_compaction_disable_tables"})
+    public static String lake_compaction_disable_ids = "";
 
     @ConfField(mutable = true, comment = "the max number of threads for lake table publishing version")
     public static int lake_publish_version_max_threads = 512;

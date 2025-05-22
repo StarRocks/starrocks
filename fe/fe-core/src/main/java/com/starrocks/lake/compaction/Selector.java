@@ -23,5 +23,5 @@ import javax.validation.constraints.NotNull;
 public interface Selector {
     @NotNull
     List<PartitionStatisticsSnapshot> select(@NotNull Collection<PartitionStatistics> statistics,
-                                             @NotNull Set<Long> excludeTables);
+                                             @NotNull Set<Long> excludeTableOrPartition);
 }
