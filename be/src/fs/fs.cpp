@@ -155,6 +155,19 @@ const THdfsProperties* FSOptions::hdfs_properties() const {
     return nullptr;
 }
 
+const TCloudConfiguration* FSOptions::get_cloud_configuration() const {
+    if (cloud_configuration != nullptr) {
+        return cloud_configuration;
+    }
+
+    const THdfsProperties* t_hdfs_properties = hdfs_properties();
+    if (t_hdfs_properties != nullptr) {
+        return &(t_hdfs_properties->cloud_configuration);
+    }
+
+    return nullptr;
+}
+
 static std::deque<FileWriteStat> file_write_history;
 static std::unordered_map<uint64_t, FileWriteStat> file_writes;
 static std::mutex file_writes_mutex;
