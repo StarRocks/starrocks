@@ -16,7 +16,6 @@
 
 #include <memory>
 
-#include "exec/pipeline/ProfileManager.h"
 #include "exec/pipeline/audit_statistics_reporter.h"
 #include "exec/pipeline/exec_state_reporter.h"
 #include "exec/pipeline/pipeline_driver.h"
@@ -24,13 +23,14 @@
 #include "exec/pipeline/pipeline_driver_queue.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/pipeline_metrics.h"
+#include "exec/pipeline/profile_manager.h"
 #include "runtime/runtime_state.h"
 #include "util/factory_method.h"
 #include "util/limit_setter.h"
 #include "util/threadpool.h"
 
 namespace starrocks::pipeline {
-class ProfileManager;
+class profile_manager;
 
 class DriverExecutor;
 using DriverExecutorPtr = std::shared_ptr<DriverExecutor>;
@@ -116,7 +116,7 @@ private:
     PipelineDriverPollerPtr _blocked_driver_poller;
     std::unique_ptr<ExecStateReporter> _exec_state_reporter;
     std::unique_ptr<AuditStatisticsReporter> _audit_statistics_reporter;
-    std::unique_ptr<ProfileManager> _profile_manager;
+    std::unique_ptr<profile_manager> _profile_manager;
 
     std::atomic<int> _next_id = 0;
     std::atomic_int64_t _schedule_count = 0;

@@ -242,6 +242,7 @@ public class LoadLoadingTask extends LoadTask {
         curCoordinator.setLoadJobType(loadJobType);
         curCoordinator.setExecPlan(loadPlanner.getExecPlan());
         curCoordinator.setTopProfileSupplier(this::buildRunningTopLevelProfile);
+        curCoordinator.registerProfileToRunningProfileManager();
 
         long beginTimeInNanoSecond = TimeUtils.getStartTime();
         try {

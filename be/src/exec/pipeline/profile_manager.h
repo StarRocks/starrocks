@@ -60,9 +60,9 @@ struct FragmentProfileMaterial {
               fe_addr(fe_addr) {}
 };
 
-class ProfileManager {
+class profile_manager {
 public:
-    explicit ProfileManager(const CpuUtil::CpuIds& cpuids);
+    explicit profile_manager(const CpuUtil::CpuIds& cpuids);
     void build_and_report_profile(std::shared_ptr<FragmentProfileMaterial> fragment_profile_material);
 
 private:

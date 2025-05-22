@@ -1075,12 +1075,16 @@ public class DefaultCoordinator extends Coordinator {
             if (!execState.cancelFragmentInstance(cancelReason) &&
                     (!execState.hasBeenDeployed() || execState.isFinished())) {
                 queryProfile.finishInstance(execState.getInstanceId());
+                queryProfile.finishInstanceProfile(execState.getIndexInJob());
             }
         }
 
         executionDAG.getInstances().stream()
                 .filter(instance -> executionDAG.getExecution(instance.getIndexInJob()) == null)
-                .forEach(instance -> queryProfile.finishInstance(instance.getInstanceId()));
+                .forEach(instance -> {
+                    queryProfile.finishInstance(instance.getInstanceId());
+                    queryProfile.finishInstanceProfile(instance.getIndexInJob());
+                });
     }
 
     @Override
@@ -1440,6 +1444,7 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     public void registerProfileToRunningProfileManager() {
+        LOG.warn("register profile to running profile manager, {}", DebugUtil.printId(jobSpec.getQueryId()));
         RunningProfileManager.RunningProfile runningProfile = queryProfile.createRunningProfile();
         runningProfile.registerInstanceProfiles(executionDAG.getIndexInJobToExecState());
 

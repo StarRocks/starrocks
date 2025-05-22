@@ -1108,6 +1108,7 @@ public class StmtExecutor {
             }
             QeProcessorImpl.INSTANCE.unMonitorQuery(executionId);
             QeProcessorImpl.INSTANCE.unregisterQuery(executionId);
+            RunningProfileManager.getInstance().removeProfile(executionId);
             if (Config.enable_collect_query_detail_info && Config.enable_profile_log) {
                 String jsonString = GSON.toJson(queryDetail);
                 if (Config.enable_profile_log_compress) {
@@ -1354,10 +1355,10 @@ public class StmtExecutor {
             return;
         }
 
-        coord.execWithQueryDeployExecutor();
         coord.setTopProfileSupplier(this::buildTopLevelProfile);
         coord.setExecPlan(execPlan);
         coord.registerProfileToRunningProfileManager();
+        coord.execWithQueryDeployExecutor();
 
         RowBatch batch = null;
         if (context instanceof HttpConnectContext) {
@@ -2493,9 +2494,10 @@ public class StmtExecutor {
                 return;
             }
 
-            coord.exec();
             coord.setTopProfileSupplier(this::buildTopLevelProfile);
             coord.setExecPlan(execPlan);
+            coord.registerProfileToRunningProfileManager();
+            coord.exec();
 
             int timeout = getExecTimeout();
             long jobDeadLineMs = System.currentTimeMillis() + timeout * 1000;

@@ -16,12 +16,12 @@
 
 #include <memory>
 
-#include "ProfileManager.h"
 #include "agent/master_info.h"
 #include "exec/pipeline/pipeline_metrics.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/workgroup/work_group.h"
 #include "gutil/strings/substitute.h"
+#include "profile_manager.h"
 #include "runtime/current_thread.h"
 #include "util/debug/query_trace.h"
 #include "util/defer_op.h"
@@ -47,7 +47,7 @@ GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_
                   new PipelineDriverPoller(name, _driver_queue.get(), cpuids, metrics->get_poller_metrics())),
           _exec_state_reporter(new ExecStateReporter(cpuids)),
           _audit_statistics_reporter(new AuditStatisticsReporter()),
-          _profile_manager(new ProfileManager(cpuids)),
+          _profile_manager(new profile_manager(cpuids)),
           _metrics(metrics->get_driver_executor_metrics()) {}
 
 void GlobalDriverExecutor::close() {
