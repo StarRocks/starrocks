@@ -1541,6 +1541,9 @@ public:
 
     template <typename InputArchive>
     bool load(InputArchive&);
+
+    template <typename InputArchive>
+    bool completeness_check(InputArchive& ar);
 #endif
 
     void rehash(size_t n) {

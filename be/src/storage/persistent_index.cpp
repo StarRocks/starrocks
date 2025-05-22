@@ -60,11 +60,11 @@ constexpr size_t kPackSize = 16;
 constexpr size_t kBucketSizeMax = 256;
 constexpr size_t kFixedMaxKeySize = 128;
 constexpr size_t kBatchBloomFilterReadSize = 4ULL << 20;
-/*
-The introduction of this magic number serves two purposes:
-1. To detect endianness mismatches in cross-platform scenarios
-2. To identify the new snapshot encoding format
-*/
+constexpr uint32_t kMutableIndexFormatVersion1 = 1;
+constexpr uint32_t kMutableIndexFormatVersion2 = 2;
+// The introduction of this magic number serves two purposes:
+// 1. To detect endianness mismatches in cross-platform scenarios
+// 2. To identify the new snapshot encoding format
 constexpr uint32_t kSnapshotMagicNum = 0xF2345678;
 
 const char* const kIndexFileMagic = "IDX1";
@@ -969,21 +969,31 @@ public:
     }
 
     Status load_snapshot(phmap::BinaryInputArchive& ar) override {
-        size_t size = 0;
-        RETURN_IF(!ar.load(&size), Status::Corruption("FixedMutableIndex load snapshot size failed"));
-        RETURN_IF(size == 0, Status::OK());
-        TRY_CATCH_BAD_ALLOC(reserve(size));
-        for (auto i = 0; i < size; ++i) {
-            KeyType key;
-            IndexValue value;
-            RETURN_IF((!ar.load(reinterpret_cast<char*>(&key), sizeof(KeyType))),
-                      Status::Corruption("FixedMutableIndex load snapshot failed because load key failed"));
-            RETURN_IF((!ar.load(reinterpret_cast<char*>(&value), sizeof(IndexValue))),
-                      Status::Corruption("FixedMutableIndex load snapshot failed because load value failed"));
-            uint64_t hash = FixedKeyHash<KeySize>()(key);
-            if (auto [it, inserted] = _map.emplace_with_hash(hash, key, value); !inserted) {
-                it->second = value;
+        if (format_version == kMutableIndexFormatVersion1) {
+            bool succ = false;
+            TRY_CATCH_BAD_ALLOC(succ = _map.load(ar));
+            if (!succ) {
+                return Status::Corruption("FixedMutableIndex load snapshot failed");
             }
+        } else if (format_version == kMutableIndexFormatVersion2) {
+            size_t size = 0;
+            RETURN_IF(!ar.load(&size), Status::Corruption("FixedMutableIndex load snapshot size failed"));
+            RETURN_IF(size == 0, Status::OK());
+            TRY_CATCH_BAD_ALLOC(reserve(size));
+            for (auto i = 0; i < size; ++i) {
+                KeyType key;
+                IndexValue value;
+                RETURN_IF((!ar.load(reinterpret_cast<char*>(&key), sizeof(KeyType))),
+                          Status::Corruption("FixedMutableIndex load snapshot failed because load key failed"));
+                RETURN_IF((!ar.load(reinterpret_cast<char*>(&value), sizeof(IndexValue))),
+                          Status::Corruption("FixedMutableIndex load snapshot failed because load value failed"));
+                uint64_t hash = FixedKeyHash<KeySize>()(key);
+                if (auto [it, inserted] = _map.emplace_with_hash(hash, key, value); !inserted) {
+                    it->second = value;
+                }
+            }
+        } else {
+            return Status::Corruption("FixedMutableIndex load snapshot failed because format version is not supported");
         }
         return Status::OK();
     }
@@ -1027,25 +1037,37 @@ public:
     // will use `sizeof(size_t)` as return value.
     size_t dump_bound() override { return _map.empty() ? sizeof(size_t) : _map.dump_bound(); }
 
-    bool dump(phmap::BinaryOutputArchive& ar) override {
+    Status completeness_check(phmap::BinaryInputArchive& ar) override {
+        RETURN_IF(!_map.completeness_check(ar), Status::InternalError("FixedMutableIndex completeness check failed"));
+        return Status::OK();
+    }
+
+    Status dump(phmap::BinaryOutputArchive& ar) override {
+        bool use_old_format = false;
+        TEST_SYNC_POINT_CALLBACK("FixedMutableIndex::dump::1", &use_old_format);
+        if (UNLIKELY(use_old_format)) {
+            // For UT only.
+            if (!_map.dump(ar)) {
+                return Status::InternalError("FixedMutableIndex dump snapshot failed");
+            }
+            return Status::OK();
+        }
+
         if (!ar.dump(size())) {
-            LOG(ERROR) << "FixedMutableIndex dump snapshot size failed";
-            return false;
+            return Status::InternalError("FixedMutableIndex dump size failed");
         }
         if (size() == 0) {
-            return true;
+            return Status::OK();
         }
         for (const auto& each : _map) {
             if (!ar.dump(reinterpret_cast<const char*>(each.first.data), sizeof(KeyType))) {
-                LOG(ERROR) << "FixedMutableIndex dump key failed";
-                return false;
+                return Status::InternalError("FixedMutableIndex dump key failed");
             }
             if (!ar.dump(reinterpret_cast<const char*>(&each.second), sizeof(IndexValue))) {
-                LOG(ERROR) << "FixedMutableIndex dump value failed";
-                return false;
+                return Status::InternalError("FixedMutableIndex dump value failed");
             }
         }
-        return true;
+        return Status::OK();
     }
 
     Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb) override {
@@ -1098,8 +1120,11 @@ public:
 
     size_t memory_usage() override { return _map.capacity() * (1 + (KeySize + 3) / 4 * 4 + kIndexValueSize); }
 
+    void set_format_version(uint32_t ver) override { format_version = ver; }
+
 private:
     phmap::flat_hash_map<KeyType, IndexValue, FixedKeyHash<KeySize>> _map;
+    uint32_t format_version = kMutableIndexFormatVersion2;
 };
 
 std::tuple<size_t, size_t, size_t> MutableIndex::estimate_nshard_and_npage(const size_t total_kv_pairs_usage,
@@ -1386,32 +1411,48 @@ public:
     //  |total num|| data size ||  data    | ... | data size ||  data    |
     size_t dump_bound() override { return sizeof(size_t) * (1 + size()) + _total_kv_pairs_usage; }
 
-    bool dump(phmap::BinaryOutputArchive& ar) override {
+    Status dump(phmap::BinaryOutputArchive& ar) override {
         if (!ar.dump(size())) {
-            LOG(ERROR) << "Pindex dump snapshot size failed";
-            return false;
+            return Status::Corruption("SliceMutableIndex dump size failed");
         }
         if (size() == 0) {
-            return true;
+            return Status::OK();
         }
         for (const auto& composite_key : _set) {
             if (!ar.dump(static_cast<size_t>(composite_key.size()))) {
-                LOG(ERROR) << "Pindex dump compose_key_size failed";
-                return false;
+                return Status::Corruption("SliceMutableIndex dump composite_key size failed");
             }
             if (composite_key.size() == 0) {
                 continue;
             }
             if (!ar.dump(composite_key.data(), composite_key.size())) {
-                LOG(ERROR) << "Pindex dump composite_key failed.";
-                return false;
+                return Status::Corruption("SliceMutableIndex dump composite_key failed");
             }
         }
-        return true;
+        return Status::OK();
 
         // TODO: construct a large buffer and write instead of one by one.
         // TODO: dive in phmap internal detail and implement dump of std::string type inside, use ctrl_&slot_ directly to improve performance
         // return _set.dump(ar);
+    }
+
+    Status completeness_check(phmap::BinaryInputArchive& ar) override {
+        size_t size = 0;
+        RETURN_IF(!ar.load(&size), Status::Corruption("Pindex load snapshot size failed"));
+        RETURN_IF(size == 0, Status::OK());
+        for (auto i = 0; i < size; ++i) {
+            size_t compose_key_size = 0;
+            RETURN_IF(!ar.load(&compose_key_size),
+                      Status::Corruption("Pindex load snapshot failed because load compose_key_size failed"));
+            if (compose_key_size == 0) {
+                continue;
+            }
+            std::string composite_key;
+            TRY_CATCH_BAD_ALLOC(raw::stl_string_resize_uninitialized(&composite_key, compose_key_size));
+            RETURN_IF((!ar.load(composite_key.data(), composite_key.size())),
+                      Status::Corruption("Pindex load snapshot failed because load composite_key failed"));
+        }
+        return Status::OK();
     }
 
     Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb) override {
@@ -1545,6 +1586,8 @@ public:
         }
         return ret;
     }
+
+    void set_format_version(uint32_t ver) override {}
 
 private:
     friend ShardByLengthMutableIndex;
@@ -2003,13 +2046,43 @@ Status ShardByLengthMutableIndex::append_wal(const Slice* keys, const IndexValue
     return Status::OK();
 }
 
+Status ShardByLengthMutableIndex::check_snapshot_file(phmap::BinaryInputArchive& ar, const std::set<uint32_t>& idxes) {
+    // Check if this file is generated by old version of SR. There could be two types based on whether support SSE.
+    // https://github.com/StarRocks/starrocks/blob/0d19cb4f9bc58d0cab5237a469b9e4bd30c0eb31/be/src/util/phmap/phmap.h#L447
+    // So, at first we need to identify the file type.
+    auto check_arch_fn = [&]() {
+        ar.reset();
+        for (const auto idx : idxes) {
+            if (!_shards[idx]->completeness_check(ar).ok()) {
+                return false;
+            }
+        }
+        // Must reach the end of the file.
+        return ar.eof();
+    };
+
+    if (!check_arch_fn()) {
+        return Status::Corruption(fmt::format(
+                "ShardByLengthMutableIndex snapshot file {} is generated by different arch, will rebuild.", _path));
+    }
+
+    return Status::OK();
+}
+
 Status ShardByLengthMutableIndex::load_snapshot(phmap::BinaryInputArchive& ar, const std::set<uint32_t>& idxes) {
     uint32_t magic_num = 0;
     RETURN_IF(!ar.load(&magic_num), Status::Corruption("ShardByLengthMutableIndex load snapshot magic num failed"));
     if (magic_num != kSnapshotMagicNum) {
-        return Status::Corruption(
-                fmt::format("ShardByLengthMutableIndex load snapshot magic num failed, expect {}, but got {}",
-                            kSnapshotMagicNum, magic_num));
+        // There are two possible reasons:
+        // 1. This file is corrupted.
+        // 2. This file was generated by a old version of SR.
+        RETURN_IF_ERROR(check_snapshot_file(ar, idxes));
+        // keep load snapshot using old format.
+        LOG(INFO) << "keep load snapshot using old format";
+        for (const auto idx : idxes) {
+            _shards[idx]->set_format_version(kMutableIndexFormatVersion1);
+        }
+        ar.reset();
     }
     for (const auto idx : idxes) {
         RETURN_IF_ERROR(_shards[idx]->load_snapshot(ar));
@@ -2024,20 +2097,22 @@ size_t ShardByLengthMutableIndex::dump_bound() {
                            [](size_t s, const auto& e) { return e->size() > 0 ? s + e->dump_bound() : s; });
 }
 
-bool ShardByLengthMutableIndex::dump(phmap::BinaryOutputArchive& ar_out, std::set<uint32_t>& dumped_shard_idxes) {
-    if (!ar_out.dump(kSnapshotMagicNum)) {
-        return false;
+Status ShardByLengthMutableIndex::dump(phmap::BinaryOutputArchive& ar_out, std::set<uint32_t>& dumped_shard_idxes) {
+    bool use_old_format = false;
+    TEST_SYNC_POINT_CALLBACK("ShardByLengthMutableIndex::dump::1", &use_old_format);
+    if (LIKELY(!use_old_format)) {
+        if (!ar_out.dump(kSnapshotMagicNum)) {
+            return Status::InternalError("ShardByLengthMutableIndex dump snapshot magic num failed");
+        }
     }
     for (uint32_t i = 0; i < _shards.size(); ++i) {
         const auto& shard = _shards[i];
         if (shard->size() > 0) {
-            if (!shard->dump(ar_out)) {
-                return false;
-            }
+            RETURN_IF_ERROR(shard->dump(ar_out));
             dumped_shard_idxes.insert(i);
         }
     }
-    return true;
+    return Status::OK();
 }
 
 Status ShardByLengthMutableIndex::pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb) {
@@ -2096,11 +2171,7 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
             // closed. So the archive object needed to be destroyed before reopen the file and assigned it
             // to _index_file. Otherwise some data of file maybe overwrite in future append.
             phmap::BinaryOutputArchive ar_out(file_name.data());
-            if (!dump(ar_out, dumped_shard_idxes)) {
-                std::string err_msg = strings::Substitute("failed to dump snapshot to file $0", file_name);
-                LOG(WARNING) << err_msg;
-                return Status::InternalError(err_msg);
-            }
+            RETURN_IF_ERROR(dump(ar_out, dumped_shard_idxes));
             if (!ar_out.close()) {
                 std::string err_msg =
                         strings::Substitute("failed to dump snapshot to file $0, because of close", file_name);
