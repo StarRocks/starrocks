@@ -326,9 +326,14 @@ public class OlapScanNode extends ScanNode {
             if (!slot.isMaterialized()) {
                 continue;
             }
+<<<<<<< HEAD
             if (unUsedOutputColumnIds.contains(slot.getId().asInt()) &&
                     !aggOrPrimaryKeyTableValueColumnNames.contains(slot.getColumn().getName())) {
                 unUsedOutputStringColumns.add(slot.getColumn().getName());
+=======
+            if (unUsedOutputColumnIds.contains(slot.getId().asInt())) {
+                unUsedOutputStringColumns.add(slot.getColumn().getColumnId().getId());
+>>>>>>> c10cd64967 ([BugFix] Fix query fail after rename column name if scan node contain unused output column name (#59178))
             }
         }
     }
