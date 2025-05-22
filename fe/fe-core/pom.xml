@@ -875,6 +875,11 @@ under the License.
             <groupId>org.jboss.byteman</groupId>
             <artifactId>byteman</artifactId>
         </dependency>
+
+        <dependency>
+            <groupId>it.unimi.dsi</groupId>
+            <artifactId>fastutil</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
