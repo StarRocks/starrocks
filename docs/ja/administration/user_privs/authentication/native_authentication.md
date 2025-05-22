@@ -7,7 +7,7 @@ sidebar_position: 10
 
 StarRocks 内で SQL コマンドを使用して、ネイティブ認証を通じてユーザーを作成および管理します。
 
-StarRocks のネイティブ認証は、パスワードベースの認証方法です。加えて、StarRocks は LDAP、OpenID Connect、OAuth 2.0 などの外部認証システムとの統合もサポートしています。詳細な手順については、[Authenticate with Security Integration](./security_integration.md) を参照してください。
+StarRocks のネイティブ認証は、パスワードベースの認証方法です。加えて、StarRocks は LDAP、OpenID Connect、OAuth 2.0 などの外部認証システムとの統合もサポートしています。詳細な手順については、[セキュリティインテグレーションで認証](./security_integration.md) を参照してください。
 
 :::note
 
@@ -30,7 +30,7 @@ CREATE USER jack@'172.10.1.10' IDENTIFIED BY '12345' DEFAULT ROLE 'example_role'
 - ユーザー作成時にデフォルトのロールが指定されていない場合、システム定義のデフォルトロール `PUBLIC` がユーザーに割り当てられます。
 :::
 
-ユーザーのデフォルトロールは、ユーザーが StarRocks に接続すると自動的にアクティブになります。接続後にユーザーのすべてのロール（デフォルトおよび付与された）を有効にする方法については、[Enable all roles](../authorization/User_privilege.md#enable-all-roles) を参照してください。
+ユーザーのデフォルトロールは、ユーザーが StarRocks に接続すると自動的にアクティブになります。接続後にユーザーのすべてのロール（デフォルトおよび付与された）を有効にする方法については、[すべてのロールを有効にする](../authorization/User_privilege.md#すべてのロールを有効にする) を参照してください。
 
 ユーザーの作成に関する詳細情報と高度な手順については、[CREATE USER](../../../sql-reference/sql-statements/account-management/CREATE_USER.md) を参照してください。
 
@@ -38,7 +38,7 @@ CREATE USER jack@'172.10.1.10' IDENTIFIED BY '12345' DEFAULT ROLE 'example_role'
 
 ユーザーのパスワード、デフォルトロール、またはプロパティを変更できます。
 
-ユーザーのデフォルトロールを変更する方法については、[Alter default role](../authorization/User_privilege.md#alter-the-default-role-of-a-user) を参照してください。
+ユーザーのデフォルトロールを変更する方法については、[ユーザーのデフォルトロールを変更する](../authorization/User_privilege.md#ユーザーのデフォルトロールを変更する) を参照してください。
 
 ### ユーザーのプロパティの変更
 
