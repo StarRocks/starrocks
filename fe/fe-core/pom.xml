@@ -870,6 +870,16 @@ under the License.
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>bundle</artifactId>
         </dependency>
+
+        <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-storage-blob</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-identity</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

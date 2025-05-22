@@ -17,6 +17,7 @@ package com.starrocks.credential;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.aws.AwsCloudCredential;
 import com.starrocks.thrift.TCloudConfiguration;
+import com.starrocks.thrift.TCloudType;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.iceberg.aws.AwsClientProperties;
@@ -115,25 +116,73 @@ public class CloudConfigurationFactoryTest {
 
     @Test
     public void testAzureBlobCloudConfiguration() {
-        Map<String, String> map = new HashMap<String, String>() {
-            {
-                put(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, "XX");
-                put(CloudConfigurationConstants.AZURE_BLOB_CONTAINER, "XX");
-                put(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, "XX");
-                put(CloudConfigurationConstants.AZURE_BLOB_STORAGE_ACCOUNT, "XX");
-                put(CloudConfigurationConstants.AZURE_BLOB_ENDPOINT, "XX");
-            }
-        };
-        CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
-        Assert.assertEquals(cc.getCloudType(), CloudType.AZURE);
-        TCloudConfiguration tc = new TCloudConfiguration();
-        cc.toThrift(tc);
-        Configuration conf = new Configuration();
-        cc.applyToConfiguration(conf);
-        cc.toFileStoreInfo();
-        Assert.assertEquals(cc.toConfString(),
-                "AzureCloudConfiguration{resources='', jars='', hdpuser='', cred=AzureBlobCloudCredential{endpoint='XX', " +
-                        "storageAccount='XX', sharedKey='XX', container='XX', sasToken='XX'}}");
+        {
+            Map<String, String> map = new HashMap<String, String>() {
+                {
+                    put(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, "XX0");
+                    put(CloudConfigurationConstants.AZURE_BLOB_CONTAINER, "XX1");
+                    put(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, "XX2");
+                    put(CloudConfigurationConstants.AZURE_BLOB_STORAGE_ACCOUNT, "XX3");
+                    put(CloudConfigurationConstants.AZURE_BLOB_ENDPOINT, "XX4");
+                    put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID, "XX5");
+                }
+            };
+            CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
+            Assert.assertEquals(cc.getCloudType(), CloudType.AZURE);
+            TCloudConfiguration tc = new TCloudConfiguration();
+            cc.toThrift(tc);
+            Assert.assertEquals(TCloudType.AZURE, tc.getCloud_type());
+
+            Configuration conf = new Configuration();
+            cc.applyToConfiguration(conf);
+            cc.toFileStoreInfo();
+            Assert.assertEquals(cc.toConfString(),
+                    "AzureCloudConfiguration{resources='', jars='', hdpuser='', cred=AzureBlobCloudCredential{endpoint='XX4', " +
+                            "storageAccount='XX3', sharedKey='XX0', container='XX1', sasToken='XX2', clientId='XX5'}}");
+        }
+
+        // For azure native sdk
+        {
+            Map<String, String> map = new HashMap<String, String>() {
+                {
+                    put(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, "shared_key_xxx");
+                }
+            };
+
+            CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
+            TCloudConfiguration tc = new TCloudConfiguration();
+            cc.toThrift(tc);
+            Map<String, String> cloudProperties = tc.getCloud_properties();
+            Assert.assertEquals("shared_key_xxx", cloudProperties.get(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY));
+        }
+
+        {
+            Map<String, String> map = new HashMap<String, String>() {
+                {
+                    put(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, "sas_token_xxx");
+                }
+            };
+
+            CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
+            TCloudConfiguration tc = new TCloudConfiguration();
+            cc.toThrift(tc);
+            Map<String, String> cloudProperties = tc.getCloud_properties();
+            Assert.assertEquals("sas_token_xxx", cloudProperties.get(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN));
+        }
+
+        {
+            Map<String, String> map = new HashMap<String, String>() {
+                {
+                    put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID, "client_id_xxx");
+                }
+            };
+
+            CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
+            TCloudConfiguration tc = new TCloudConfiguration();
+            cc.toThrift(tc);
+            Map<String, String> cloudProperties = tc.getCloud_properties();
+            Assert.assertEquals("client_id_xxx", cloudProperties.get(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID));
+        }
     }
 
     @Test
