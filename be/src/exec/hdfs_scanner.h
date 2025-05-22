@@ -211,7 +211,7 @@ struct HdfsScannerParams {
     std::vector<ExprContext*> scanner_conjunct_ctxs;
     std::unordered_set<SlotId> slots_in_conjunct;
     // slot used by conjunct_ctxs
-    std::unordered_set<SlotId> slots_of_mutli_slot_conjunct;
+    std::unordered_set<SlotId> slots_of_multi_field_conjunct;
 
     // conjunct ctxs grouped by slot.
     std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
