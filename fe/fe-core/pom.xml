@@ -870,13 +870,6 @@ under the License.
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>bundle</artifactId>
         </dependency>
-<<<<<<< HEAD
-=======
-
-        <dependency>
-            <groupId>org.jboss.byteman</groupId>
-            <artifactId>byteman</artifactId>
-        </dependency>
 
         <dependency>
             <groupId>com.azure</groupId>
@@ -887,7 +880,6 @@ under the License.
             <groupId>com.azure</groupId>
             <artifactId>azure-identity</artifactId>
         </dependency>
->>>>>>> b75be32e93 ([Enhancement] Add azure blob file system in frontend (#59160))
     </dependencies>
 
     <build>
