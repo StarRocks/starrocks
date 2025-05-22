@@ -91,4 +91,12 @@ TEST_F(UpdateConfigActionTest, test_update_number_tablet_writer_threads) {
     }
 }
 
+TEST_F(UpdateConfigActionTest, test_update_transaction_publish_version_worker_count) {
+    UpdateConfigAction action(ExecEnv::GetInstance());
+
+    auto st = action.update_config("transaction_publish_version_worker_count", "8");
+    CHECK_OK(st);
+    ASSERT_EQ(8, ExecEnv::GetInstance()->put_aggregate_metadata_thread_pool()->max_threads());
+}
+
 } // namespace starrocks
