@@ -405,6 +405,10 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id
                     get_tablet_metadata(tablet_initial_metadata_location(tablet_id), fill_cache, expected_gtid, fs);
         } else {
             tablet_metadata_or = get_single_tablet_metadata(tablet_id, version, fill_cache, expected_gtid, fs);
+            if (tablet_metadata_or.status().is_not_found()) {
+                tablet_metadata_or = get_tablet_metadata(tablet_metadata_location(tablet_id, version), fill_cache,
+                                                         expected_gtid, fs);
+            }
         }
     } else {
         tablet_metadata_or =
@@ -442,6 +446,9 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
     auto [tablet_id, version] = parse_tablet_metadata_filename(basename(path));
     if (_metacache->lookup_aggregation_partition(tablet_metadata_root_location(tablet_id))) {
         metadata_or = get_single_tablet_metadata(tablet_id, version, fill_cache, expected_gtid, fs);
+        if (metadata_or.status().is_not_found()) {
+            metadata_or = load_tablet_metadata(path, fill_cache, expected_gtid, fs);
+        }
     } else {
         metadata_or = load_tablet_metadata(path, fill_cache, expected_gtid, fs);
         if (metadata_or.status().is_not_found()) {
