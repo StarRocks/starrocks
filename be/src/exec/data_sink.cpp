@@ -276,8 +276,14 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
                                                            result_sink->get_file_opts(), dop, fragment_ctx);
         } else {
             op = std::make_shared<ResultSinkOperatorFactory>(
+<<<<<<< HEAD
                     context->next_operator_id(), result_sink->get_sink_type(), result_sink->isBinaryFormat(),
                     result_sink->get_format_type(), result_sink->get_output_exprs(), fragment_ctx);
+=======
+                    context->next_operator_id(), dop, result_sink->get_sink_type(), result_sink->isBinaryFormat(),
+                    result_sink->get_format_type(), result_sink->get_output_exprs(), fragment_ctx,
+                    result_sink->get_row_desc());
+>>>>>>> 0ccc3065bc ([BugFix] Fix result queue capacity of result sink (#59153))
         }
         // Add result sink operator to last pipeline
         prev_operators.emplace_back(op);
