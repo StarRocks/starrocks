@@ -359,12 +359,13 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
                     context->next_operator_id(), upstream_plan_node_id, i, mcast_local_exchanger);
             context->inherit_upstream_source_properties(source_op.get(), upstream_source);
             source_op->set_degree_of_parallelism(dop);
+            ops.emplace_back(source_op);
 
             // limit op
-            if (t_stream_sink.limit != -1) {
+            auto limit = t_stream_sink.limit;
+            if (limit != -1) {
                 ops.emplace_back(std::make_shared<LimitOperatorFactory>(
-                        context->next_operator_id(), upstream_plan_node_id, t_stream_sink.limit,
-                        true /*no_chunk_mutation*/));
+                        context->next_operator_id(), upstream_plan_node_id, limit, false /*limit_chunk_in_place*/));
             }
 
             // sink op
