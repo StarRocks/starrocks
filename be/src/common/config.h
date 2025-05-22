@@ -970,7 +970,8 @@ CONF_mBool(parquet_push_down_filter_to_decoder_enable, "true");
 CONF_mBool(parquet_cache_aware_dict_decoder_enable, "true");
 
 CONF_mBool(parquet_reader_enable_adpative_bloom_filter, "true");
-CONF_Double(parquet_page_cache_decompress_threshold, "2.0");
+CONF_Double(parquet_page_cache_decompress_threshold, "1.5");
+CONF_mBool(enable_adjustment_page_cache_skip, "true");
 
 CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
 CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
