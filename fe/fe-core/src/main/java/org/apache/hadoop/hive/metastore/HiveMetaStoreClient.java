@@ -164,6 +164,7 @@ import org.apache.thrift.transport.TTransportException;
 import org.apache.thrift.transport.layered.TFramedTransport;
 
 import java.io.IOException;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -201,6 +202,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     // Keep a copy of HiveConf so if Session conf changes, we may need to get a new HMS client.
     private String tokenStrForm;
     private final boolean localMetaStore;
+    private final MetaStoreFilterHook filterHook;
     private final URIResolverHook uriResolverHook;
 
     private Map<String, String> currentMetaVars;
@@ -247,7 +249,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
         HadoopExt.getInstance().rewriteConfiguration(this.conf);
 
         version = MetastoreConf.getBoolVar(conf, ConfVars.HIVE_IN_TEST) ? TEST_VERSION : VERSION;
-
+        this.filterHook = this.loadFilterHooks();
         uriResolverHook = loadUriResolverHook();
 
         String msUri = MetastoreConf.getVar(conf, ConfVars.THRIFT_URIS);
@@ -346,6 +348,18 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
             throw (e);
         } catch (Exception e) {
             MetaStoreUtils.logAndThrowMetaException(e);
+        }
+    }
+
+    private MetaStoreFilterHook loadFilterHooks() throws IllegalStateException {
+        Class<? extends MetaStoreFilterHook> authProviderClass = MetastoreConf.getClass(this.conf, ConfVars.FILTER_HOOK, DefaultMetaStoreFilterHookImpl.class, MetaStoreFilterHook.class);
+        String msg = "Unable to create instance of " + authProviderClass.getName() + ": ";
+
+        try {
+            Constructor<? extends MetaStoreFilterHook> constructor = authProviderClass.getConstructor(Configuration.class);
+            return (MetaStoreFilterHook)constructor.newInstance(this.conf);
+        } catch (SecurityException | IllegalAccessException | InstantiationException | IllegalArgumentException | InvocationTargetException | NoSuchMethodException e) {
+            throw new IllegalStateException(msg + ((Exception)e).getMessage(), e);
         }
     }
 
@@ -868,27 +882,36 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     }
 
     @Override
-    public List<String> getTables(String dbName, String tablePattern)
-            throws MetaException, TException, UnknownDBException {
-        throw new TException("method not implemented");
+    public List<String> getTables(String dbName, String tablePattern) throws MetaException {
+        try {
+            return this.getTables(MetaStoreUtils.getDefaultCatalog(this.conf), dbName, tablePattern);
+        } catch (Exception e) {
+            MetaStoreUtils.logAndThrowMetaException(e);
+            return null;
+        }
     }
 
     @Override
-    public List<String> getTables(String catName, String dbName, String tablePattern)
-            throws MetaException, TException, UnknownDBException {
-        throw new TException("method not implemented");
+    public List<String> getTables(String catName, String dbName, String tablePattern) throws TException {
+        return this.filterHook.filterTableNames(catName, dbName,
+                this.client.get_tables(MetaStoreUtils.prependCatalogToDbName(catName, dbName, this.conf), tablePattern));
     }
 
     @Override
-    public List<String> getTables(String dbName, String tablePattern, TableType tableType)
-            throws MetaException, TException, UnknownDBException {
-        throw new TException("method not implemented");
+    public List<String> getTables(String dbName, String tablePattern, TableType tableType) throws MetaException {
+        try {
+            return this.getTables(MetaStoreUtils.getDefaultCatalog(this.conf), dbName, tablePattern, tableType);
+        } catch (Exception e) {
+            MetaStoreUtils.logAndThrowMetaException(e);
+            return null;
+        }
     }
 
     @Override
-    public List<String> getTables(String catName, String dbName, String tablePattern, TableType tableType)
-            throws MetaException, TException, UnknownDBException {
-        throw new TException("method not implemented");
+    public List<String> getTables(String catName, String dbName, String tablePattern, TableType tableType) throws TException {
+        return this.filterHook.filterTableNames(catName, dbName,
+                this.client.get_tables_by_type(
+                        MetaStoreUtils.prependCatalogToDbName(catName, dbName, this.conf), tablePattern, tableType.toString()));
     }
 
     @Override
