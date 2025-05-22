@@ -3,7 +3,7 @@ displayed_sidebar: docs
 sidebar_position: 20
 ---
 
-# Authenticate with Security Integration
+# セキュリティインテグレーションで認証
 
 StarRocks をセキュリティインテグレーションを使用して外部認証システムと統合します。
 
@@ -119,12 +119,12 @@ PROPERTIES (
 ##### group_provider
 
 - 必須: いいえ
-- 説明: セキュリティインテグレーションと組み合わせるグループプロバイダーの名前。複数のグループプロバイダーはカンマで区切られます。設定されると、StarRocks はログイン時に各指定プロバイダーの下でユーザーのグループ情報を記録します。v3.5 以降でサポートされています。Group Provider を有効にする詳細な手順については、[Authenticate User Groups](../group_provider.md) を参照してください。
+- 説明: セキュリティインテグレーションと組み合わせる Group Provider の名前。複数の Group Provider はカンマで区切られます。設定されると、StarRocks はログイン時に各指定プロバイダーの下でユーザーのグループ情報を記録します。v3.5 以降でサポートされています。Group Provider を有効にする詳細な手順については、[Authenticate User Groups](../group_provider.md) を参照してください。
 
 ##### authenticated_group_list
 
 - 必須: いいえ
-- 説明: StarRocks にログインを許可されるグループの名前。複数のグループはカンマで区切られます。指定されたグループが結合されたグループプロバイダーによって取得できることを確認してください。v3.5 以降でサポートされています。
+- 説明: StarRocks にログインを許可されるグループの名前。複数のグループはカンマで区切られます。指定されたグループが結合された Group Provider によって取得できることを確認してください。v3.5 以降でサポートされています。
 
 ##### comment
 
