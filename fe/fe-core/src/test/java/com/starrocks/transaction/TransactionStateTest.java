@@ -24,12 +24,9 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
-<<<<<<< HEAD
-=======
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
->>>>>>> 21acb8e40e ([BugFix] Fix query version not found error (#59194))
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.proto.TxnFinishStatePB;
 import com.starrocks.thrift.TUniqueId;
@@ -152,18 +149,6 @@ public class TransactionStateTest {
     }
 
     @Test
-<<<<<<< HEAD
-    public void testCommitInfos() {
-        UUID uuid = UUID.randomUUID();
-        TransactionState transactionState = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
-                3000, "label123", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
-                LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
-                60 * 1000L);
-        Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(1001, 1001, ReplicaState.NORMAL));
-        TabletCommitInfo info1 = new TabletCommitInfo(10001, 10001);
-        TabletCommitInfo info2 = new TabletCommitInfo(10001, 10002);
-        TabletCommitInfo info3 = new TabletCommitInfo(10002, 10002);
-=======
     public void testCheckReplicaNeedSkip() {
         TransactionState state = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L), 3000, "label123",
                 UUIDUtil.genTUniqueId(), LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"),
@@ -178,7 +163,6 @@ public class TransactionStateTest {
         TabletCommitInfo info1 = new TabletCommitInfo(10001L, 10001L);
         TabletCommitInfo info2 = new TabletCommitInfo(10001L, 10002L);
         TabletCommitInfo info3 = new TabletCommitInfo(10002L, 10002L);
->>>>>>> 21acb8e40e ([BugFix] Fix query version not found error (#59194))
         List<TabletCommitInfo> infos = new ArrayList<>();
         infos.add(info1);
         infos.add(info2);
