@@ -1581,7 +1581,10 @@ CONF_mBool(enable_core_file_size_optimization, "true");
 // 9. wg_driver_executor
 // use commas to separate:
 // * means release all above
-CONF_mString(try_release_resource_before_core_dump, "data_cache");
+// TODO(zhangqiang)
+// can not set data_cache right now because release datacache may cause BE hang
+// https://github.com/StarRocks/starrocks/issues/59226
+CONF_mString(try_release_resource_before_core_dump, "");
 
 // Experimental feature, this configuration will be removed after testing is complete.
 CONF_mBool(lake_enable_alter_struct, "true");
