@@ -263,26 +263,15 @@ public class LowCardinalityTest extends PlanTestBase {
                 "select cte1.L_SHIPMODE, cte1.L_COMMENT from cte1 join[broadcast] cte2 on cte1.L_SHIPMODE = cte2.P_COMMENT";
 
         String plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan, plan.contains("  3:Decode\n" +
+        Assert.assertTrue(plan, plan.contains("  4:Decode\n" +
                 "  |  <dict id 50> : <string id 18>\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
-                "  2:AGGREGATE (update finalize)\n" +
-                "  |  aggregate: max[([49: L_COMMENT, INT, false]); args: INT; result: INT; " +
-                "args nullable: false; result nullable: true]\n" +
-                "  |  group by: [15: L_SHIPMODE, CHAR, false]\n" +
-                "  |  cardinality: 1\n" +
-                "  |  \n" +
-                "  1:OlapScanNode\n" +
-                "     table: lineitem, rollup: lineitem\n" +
-                "     preAggregation: on\n" +
-                "     dict_col=L_COMMENT\n" +
-                "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
-                "     tabletList=\n" +
-                "     actualRows=0, avgRowSize=54.0\n" +
+                "  3:EXCHANGE\n" +
+                "     distribution type: ROUND_ROBIN\n" +
                 "     cardinality: 1\n" +
                 "     probe runtime filters:\n" +
-                "     - filter_id = 0, probe_expr = (15: L_SHIPMODE)"));
+                "     - filter_id = 0, probe_expr = (<slot 15>)"));
     }
 
     @Test
@@ -1979,7 +1968,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "   w1 t1 \n" +
                 "   JOIN [broadcast] part_v2 t2 ON t1.P_NAME2 = t2.P_NAME AND t1.P_NAME = t2.P_NAME;";
         String plan = getCostExplain(sql);
-        assertContains(plan, "  3:Decode\n" +
+        assertContains(plan, "  4:Decode\n" +
                 "  |  <dict id 38> : <string id 2>\n" +
                 "  |  cardinality: 1\n" +
                 "  |  probe runtime filters:\n" +
@@ -1989,21 +1978,11 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  * P_BRAND-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
                 "  |  * cast-->[-Infinity, Infinity, 0.0, 16.0, 3.0] ESTIMATE\n" +
                 "  |  \n" +
-                "  2:Project\n" +
-                "  |  output columns:\n" +
-                "  |  12 <-> CASE WHEN DictDecode(38: P_NAME, [<place-holder> = 'a']) THEN 'a1' " +
-                "WHEN DictDecode(39: P_BRAND, [<place-holder> = 'b']) THEN 'b1' ELSE 'c1' END\n" +
-                "  |  38 <-> [38: P_NAME, INT, false]\n" +
-                "  |  cardinality: 1\n" +
-                "  |  probe runtime filters:\n" +
-                "  |  - filter_id = 0, probe_expr = (<slot 12>)\n" +
-                "  |  column statistics: \n" +
-                "  |  * cast-->[-Infinity, Infinity, 0.0, 16.0, 3.0] ESTIMATE\n" +
-                "  |  \n" +
-                "  1:OlapScanNode\n" +
-                "     table: part_v2, rollup: part_v2\n" +
-                "     preAggregation: on\n" +
-                "     dict_col=P_NAME,P_BRAND");
+                "  3:EXCHANGE\n" +
+                "     distribution type: ROUND_ROBIN\n" +
+                "     cardinality: 1\n" +
+                "     probe runtime filters:\n" +
+                "     - filter_id = 0, probe_expr = (<slot 12>)");
         System.out.println(plan);
     }
 

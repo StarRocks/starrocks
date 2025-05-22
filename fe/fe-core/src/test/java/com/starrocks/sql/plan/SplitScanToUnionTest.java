@@ -166,14 +166,14 @@ class SplitScanToUnionTest extends DistributedEnvPlanTestBase {
         list.add(arguments);
 
         sql = "select max(p_type) from part where p_name = 'a' or p_size = 1 group by p_name";
-        arguments = Arguments.of(sql, ImmutableList.of("UNION", "7:Decode", "3:Decode"));
+        arguments = Arguments.of(sql, ImmutableList.of("UNION", "8:Decode", "4:Decode"));
         list.add(arguments);
 
         sql = "select max(p_type) from part left semi join (" +
                 "select * from orders where O_COMMENT != 'c' and (O_CUSTKEY in (1, 100, 1000) or O_CLERK = 'a' )" +
                 " " +
                 ") t on p_size = O_ORDERKEY where p_type > 'a' and (p_name = 'a' or p_size = 1)";
-        arguments = Arguments.of(sql, ImmutableList.of("UNION", "3:Decode", "7:Decode"));
+        arguments = Arguments.of(sql, ImmutableList.of("UNION", "4:Decode", "8:Decode"));
         list.add(arguments);
 
         return list.stream();

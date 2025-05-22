@@ -141,6 +141,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.EquivalentDescriptor;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.OrderSpec;
@@ -229,6 +230,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
@@ -3159,9 +3161,7 @@ public class PlanFragmentBuilder {
             }
 
             SetOperationNode setOperationNode;
-            boolean isUnion = false;
             if (operatorType.equals(OperatorType.PHYSICAL_UNION)) {
-                isUnion = true;
                 setOperationNode = new UnionNode(context.getNextNodeId(), setOperationTuple.getId());
                 setOperationNode.setFirstMaterializedChildIdx_(optExpr.arity());
             } else if (operatorType.equals(OperatorType.PHYSICAL_EXCEPT)) {
@@ -3171,12 +3171,41 @@ public class PlanFragmentBuilder {
             } else {
                 throw new StarRocksPlannerException("Unsupported set operation", INTERNAL_ERROR);
             }
-            currentExecGroup.add(setOperationNode, true);
+
+            List<PlanFragment> inputFragments = Lists.newArrayListWithCapacity(optExpr.arity());
+            List<ExecGroup> inputExecGroups = Lists.newArrayListWithCapacity(optExpr.arity());
+            for (int i = 0; i < optExpr.arity(); ++i) {
+                PlanFragment inputFragment = visit(optExpr.inputAt(i), context);
+                inputFragment.getPlanRoot().forceCollectExecStats();
+                ExecGroup inputExecGroup = currentExecGroup;
+                currentExecGroup = execGroups.newExecGroup();
+                inputFragments.add(inputFragment);
+                inputExecGroups.add(inputExecGroup);
+                setOperationNode.addChild(inputFragment.getPlanRoot());
+            }
+
+            PlanFragment setOperationFragment =
+                    new PlanFragment(context.getNextFragmentId(), setOperationNode, DataPartition.RANDOM);
+            setOperationFragment.setPlanRoot(setOperationNode);
+            // reset column is nullable, for handle union select xx join select xxx...
+            setOperationNode.setHasNullableGenerateChild();
+
+            List<List<Expr>> materializedResultExprLists = Lists.newArrayList();
+            ScalarOperatorToExpr.FormatterContext formatterContext =
+                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
 
             List<Map<Integer, Integer>> outputSlotIdToChildSlotIdMaps = new ArrayList<>();
             for (int childIdx = 0; childIdx < optExpr.arity(); ++childIdx) {
                 Map<Integer, Integer> slotIdMap = new HashMap<>();
                 List<ColumnRefOperator> childOutput = setOperation.getChildOutputColumns().get(childIdx);
+
+                List<Expr> materializedExpressions = Lists.newArrayList();
+                // keep output column order
+                for (ColumnRefOperator ref : childOutput) {
+                    materializedExpressions.add(ScalarOperatorToExpr.buildExecExpression(ref, formatterContext));
+                }
+                materializedResultExprLists.add(materializedExpressions);
+
                 Preconditions.checkState(childOutput.size() == setOperation.getOutputColumnRefOp().size());
                 for (int columnIdx = 0; columnIdx < setOperation.getOutputColumnRefOp().size(); ++columnIdx) {
                     Integer resultColumnIdx = setOperation.getOutputColumnRefOp().get(columnIdx).getId();
@@ -3186,57 +3215,8 @@ public class PlanFragmentBuilder {
                 Preconditions.checkState(slotIdMap.size() == setOperation.getOutputColumnRefOp().size());
             }
             setOperationNode.setOutputSlotIdToChildSlotIdMaps(outputSlotIdToChildSlotIdMaps);
-
             Preconditions.checkState(optExpr.getInputs().size() == setOperation.getChildOutputColumns().size());
 
-            PlanFragment setOperationFragment =
-                    new PlanFragment(context.getNextFragmentId(), setOperationNode, DataPartition.RANDOM);
-            List<List<Expr>> materializedResultExprLists = Lists.newArrayList();
-
-            ScalarOperatorToExpr.FormatterContext formatterContext =
-                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
-            List<PlanFragment> childFragments = Lists.newArrayList();
-            for (int i = 0; i < optExpr.getInputs().size(); i++) {
-                List<ColumnRefOperator> childOutput = setOperation.getChildOutputColumns().get(i);
-                ExecGroup setExecGroup = this.currentExecGroup;
-                this.currentExecGroup = execGroups.newExecGroup();
-                PlanFragment fragment = visit(optExpr.getInputs().get(i), context);
-                this.currentExecGroup = setExecGroup;
-
-                List<Expr> materializedExpressions = Lists.newArrayList();
-
-                // keep output column order
-                for (ColumnRefOperator ref : childOutput) {
-                    materializedExpressions.add(ScalarOperatorToExpr.buildExecExpression(ref, formatterContext));
-                }
-
-                materializedResultExprLists.add(materializedExpressions);
-
-                if (isUnion) {
-                    fragment.setOutputPartition(DataPartition.RANDOM);
-                } else {
-                    fragment.setOutputPartition(DataPartition.hashPartitioned(materializedExpressions));
-                }
-
-                // nothing distribute can satisfy set-operator, must shuffle data
-                ExchangeNode exchangeNode =
-                        new ExchangeNode(context.getNextNodeId(), fragment.getPlanRoot(), fragment.getDataPartition());
-                this.currentExecGroup.add(exchangeNode, true);
-
-                childFragments.add(fragment);
-                exchangeNode.setFragment(setOperationFragment);
-                setOperationNode.addChild(exchangeNode);
-            }
-
-            // keep the fragment child order with execution order
-            // for intersect and except. child(0) is build node.
-            for (int i = setOperationNode.getChildren().size() - 1; i >= 0; i--) {
-                final PlanFragment planFragment = childFragments.get(i);
-                planFragment.setDestination((ExchangeNode) setOperationNode.getChild(i));
-            }
-
-            // reset column is nullable, for handle union select xx join select xxx...
-            setOperationNode.setHasNullableGenerateChild();
             List<Expr> setOutputList = Lists.newArrayList();
             for (int index = 0; index < setOperation.getOutputColumnRefOp().size(); index++) {
                 ColumnRefOperator columnRefOperator = setOperation.getOutputColumnRefOp().get(index);
@@ -3251,13 +3231,81 @@ public class PlanFragmentBuilder {
                 setOutputList.add(new SlotRef(String.valueOf(columnRefOperator.getId()), slotDesc));
             }
             setOperationTuple.computeMemLayout();
-
             setOperationNode.setSetOperationOutputList(setOutputList);
             setOperationNode.setMaterializedResultExprLists_(materializedResultExprLists);
             setOperationNode.setLimit(setOperation.getLimit());
             setOperationNode.computeStatistics(optExpr.getStatistics());
+            DistributionSpec spec = optExpr.getRequiredProperties().get(0).getDistributionProperty().getSpec();
+            boolean isColocate = (spec instanceof HashDistributionSpec) &&
+                    ((HashDistributionSpec) spec).getHashDistributionDesc().isLocal();
+
+            if (isColocate) {
+                List<List<Expr>> localPartitionByExprsList = Lists.newArrayList();
+                List<List<DistributionCol>> childOutputDistColsList = setOperation.getChildOutputColumns()
+                        .stream()
+                        .map(childCols -> childCols.stream()
+                                .map(col -> new DistributionCol(col.getId(), true))
+                                .collect(Collectors.toList()))
+                        .collect(Collectors.toList());
+
+                for (int i = 0; i < optExpr.getRequiredProperties().size(); ++i) {
+                    HashDistributionSpec childDistSpec = (HashDistributionSpec) optExpr.getRequiredProperties()
+                            .get(i).getDistributionProperty().getSpec();
+                    List<DistributionCol> childOutputDistCols = childOutputDistColsList.get(i);
+                    List<Expr> childResultExprs = materializedResultExprLists.get(i);
+                    EquivalentDescriptor eqDesc = childDistSpec.getEquivDesc();
+                    List<Expr> childLocalPartitionExprs = childDistSpec.getHashDistributionDesc().getDistributionCols()
+                            .stream().map(distCol -> IntStream.range(0, childOutputDistCols.size())
+                                    .boxed()
+                                    .filter(idx -> eqDesc.isConnected(distCol, childOutputDistCols.get(idx)))
+                                    .findFirst()
+                                    .map(childResultExprs::get)
+                                    .orElse(null)
+                            ).collect(Collectors.toList());
+                    Preconditions.checkState(childLocalPartitionExprs.stream().allMatch(Objects::nonNull));
+                    localPartitionByExprsList.add(childLocalPartitionExprs);
+                }
+                setOperationNode.setLocalPartitionByExprsList(localPartitionByExprsList);
+            }
+
+            ExecGroup execGroup = execGroups.newExecGroup();
+            // TODO(by satanson): only all children of Set operator are colocate branch, we turn on execGroup.
+            //  if colocate set operator has bucket-shuffle branch, BE need tackle this situation to avoid
+            //  query hanging forever.
+            boolean canExecGroup = true;
+            for (int i = 0; i < optExpr.arity(); ++i) {
+                PlanFragment inputFragment = inputFragments.get(i);
+                context.getFragments().remove(inputFragment);
+                setOperationFragment.addChildren(inputFragment.getChildren());
+                setOperationFragment.mergeQueryDictExprs(inputFragment.getQueryGlobalDictExprs());
+                setOperationFragment.mergeQueryGlobalDicts(inputFragment.getQueryGlobalDicts());
+                ExecGroup inputExecGroup = inputExecGroups.get(i);
+                execGroups.remove(inputExecGroup);
+                if (inputFragment.getPlanRoot() instanceof ExchangeNode) {
+                    canExecGroup = false;
+                    if (isColocate) {
+                        inputFragment.getChildren().forEach(fragment -> {
+                            fragment.setOutputPartition(
+                                    new DataPartition(TPartitionType.BUCKET_SHUFFLE_HASH_PARTITIONED,
+                                            fragment.getOutputPartition().getPartitionExprs()));
+                        });
+                    }
+                } else {
+                    execGroup.merge(inputExecGroup);
+                    execGroups.remove(inputExecGroup);
+                }
+            }
 
             context.getFragments().add(setOperationFragment);
+            execGroup.add(setOperationNode);
+
+            setOperationNode.setColocate(isColocate);
+            if (canExecGroup && isColocate && ConnectContext.get().getSessionVariable().isEnableGroupExecution()) {
+                execGroup.setColocateGroup();
+            } else {
+                execGroup.disableColocateGroup(setOperationNode);
+            }
+            currentExecGroup = execGroup;
             return setOperationFragment;
         }
 
@@ -3979,7 +4027,7 @@ public class PlanFragmentBuilder {
             splitConsumeFragment.setQueryGlobalDicts(splitProduceFragment.getQueryGlobalDicts());
             splitConsumeFragment.setQueryGlobalDictExprs(splitProduceFragment.getQueryGlobalDictExprs());
             splitConsumeFragment.setLoadGlobalDicts(splitProduceFragment.getLoadGlobalDicts());
-            
+
             if (consumerOperator.hasLimit()) {
                 splitConsumeFragment.getPlanRoot().setLimit(consumerOperator.getLimit());
             }

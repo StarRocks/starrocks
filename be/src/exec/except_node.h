@@ -73,6 +73,7 @@ private:
     const TupleDescriptor* _tuple_desc;
     // Exprs materialized by this node. The i-th result expr list refers to the i-th child.
     std::vector<std::vector<ExprContext*>> _child_expr_lists;
+    std::vector<std::vector<ExprContext*>> _local_partition_by_exprs;
 
     struct ExceptColumnTypes {
         TypeDescriptor result_type;

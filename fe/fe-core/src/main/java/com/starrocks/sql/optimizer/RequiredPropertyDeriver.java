@@ -29,6 +29,7 @@ import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.base.RoundRobinDistributionSpec;
 import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -42,6 +43,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNestLoopJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
@@ -57,6 +59,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, ExpressionContext> {
     private final ColumnRefFactory columnRefFactory;
@@ -316,12 +319,20 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
 
     private void processSetOperationChildProperty(ExpressionContext context) {
         List<PhysicalPropertySet> childProperty = new ArrayList<>();
-        for (int i = 0; i < context.arity(); ++i) {
-            childProperty.add(PhysicalPropertySet.EMPTY);
+        PhysicalSetOperation setOp = context.getOp().cast();
+
+        // Union all use random distribution
+        if (setOp instanceof PhysicalUnionOperator && ((PhysicalUnionOperator) setOp).isUnionAll()) {
+            childProperty = IntStream.range(0, context.arity()).mapToObj(i -> new RoundRobinDistributionSpec())
+                    .map(DistributionProperty::createProperty)
+                    .map(PhysicalPropertySet::new)
+                    .collect(Collectors.toList());
+            requiredProperties.add(childProperty);
+            return;
         }
 
-        // Use Any to forbidden enforce some property, will add shuffle in FragmentBuilder
-        requiredProperties.add(childProperty);
+        // union distinct, intersect and except use hash distribution
+        requiredProperties.add(computeShuffleSetRequiredProperties(setOp));
     }
 
     @Override

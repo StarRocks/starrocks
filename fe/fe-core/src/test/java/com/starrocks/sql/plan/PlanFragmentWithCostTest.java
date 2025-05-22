@@ -669,15 +669,10 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  0:INTERSECT\n" +
                 "  |  \n" +
-                "  |----4:EXCHANGE\n" +
+                "  |----3:EXCHANGE\n" +
                 "  |    \n" +
-                "  |----6:EXCHANGE\n" +
+                "  |----5:EXCHANGE\n" +
                 "  |    \n" +
-                "  2:EXCHANGE\n");
-        assertContains(plan, "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 02\n" +
-                "    HASH_PARTITIONED: 4: v7\n" +
-                "\n" +
                 "  1:OlapScanNode\n" +
                 "     TABLE: t2");
         setTableStatistics(t0, 10000);
