@@ -269,12 +269,12 @@ public class HdfsFsManager {
     private static final String OBS_SCHEME = "obs";
     private static final String TOS_SCHEME = "tos";
 
-    private static final String ABFS_SCHEMA = "abfs";
-    private static final String ABFSS_SCHEMA = "abfss";
-    private static final String ADL_SCHEMA = "adl";
-    private static final String WASB_SCHEMA = "wasb";
-    private static final String WASBS_SCHEMA = "wasbs";
-    private static final String GCS_SCHEMA = "gs";
+    private static final String ABFS_SCHEME = "abfs";
+    private static final String ABFSS_SCHEME = "abfss";
+    private static final String ADL_SCHEME = "adl";
+    public static final String WASB_SCHEME = "wasb";
+    public static final String WASBS_SCHEME = "wasbs";
+    private static final String GCS_SCHEME = "gs";
     private static final String USER_NAME_KEY = "username";
     private static final String PASSWORD_KEY = "password";
     // arguments for ha hdfs
@@ -403,13 +403,13 @@ public class HdfsFsManager {
                 return getOBSFileSystem(path, loadProperties, tProperties);
             case TOS_SCHEME:
                 return getTOSFileSystem(path, loadProperties, tProperties);
-            case ABFS_SCHEMA:
-            case ABFSS_SCHEMA:
-            case ADL_SCHEMA:
-            case WASB_SCHEMA:
-            case WASBS_SCHEMA:
+            case ABFS_SCHEME:
+            case ABFSS_SCHEME:
+            case ADL_SCHEME:
+            case WASB_SCHEME:
+            case WASBS_SCHEME:
                 return getAzureFileSystem(path, loadProperties, tProperties);
-            case GCS_SCHEMA:
+            case GCS_SCHEME:
                 return getGoogleFileSystem(path, loadProperties, tProperties);
             default:
                 // If all above match fails, then we will read the settings from hdfs-site.xml, core-site.xml of FE,
