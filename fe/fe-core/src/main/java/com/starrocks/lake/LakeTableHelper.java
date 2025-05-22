@@ -207,13 +207,22 @@ public class LakeTableHelper {
     }
 
     /**
-     * For version compatibility reason, we should restore column unique id and table's max unique id if needed.
+     * For tables created in the old version of StarRocks cluster, such as v3.2, the column unique id in FE might
+     * have default value -1. When upgrading from old version to v3.3 upwards, the unique id of columns might introduce
+     * compatibility issues. This method is used to check if the table needs to restore the column unique id.
      */
-    public static void restoreColumnUniqueIdPostLoadImage(OlapTable table) {
-        if (needRestoreColumnUniqueId(table)) {
-            int maxId = LakeTableHelper.restoreColumnUniqueId(table);
-            table.setMaxColUniqueId(maxId);
-            LOG.info("Table {}'s column unique id has been restored, maxColUniqueId is: {}", table.getName(), maxId);
+    public static void restoreColumnUniqueIdIfNeeded(OlapTable table) {
+        boolean needRestore = false;
+        for (MaterializedIndexMeta indexMeta : table.getIndexIdToMeta().values()) {
+            List<Column> columns = indexMeta.getSchema();
+            if (hasInvalidUniqueId(columns)) {
+                needRestore = true;
+                break;
+            }
+        }
+        if (needRestore) {
+            LakeTableHelper.restoreColumnUniqueId(table);
+            LOG.info("Column unique ids in table {} have been restored", table.getName());
         }
     }
 
@@ -222,34 +231,20 @@ public class LakeTableHelper {
      * have default value -1. When upgrading from old version to v3.3 upwards, the unique id of columns might introduce
      * compatibility issues. This method is used to check if the column list need to restore their column unique id.
      */
-    public static void restoreColumnUniqueId(String tableName, long indexId, List<Column> columns) {
-        boolean needRestore = hasNegativeUniqueId(columns);
-        if (needRestore) {
+    public static boolean restoreColumnUniqueIdIfNeeded(List<Column> columns) {
+        if (hasInvalidUniqueId(columns)) {
             for (int i = 0; i < columns.size(); i++) {
                 Column col = columns.get(i);
                 col.setUniqueId(i);
             }
-            LOG.info("Columns of index {} in table {} has reset all unique ids, column size: {}",
-                    indexId, tableName, columns.size());
+            return true;
         }
+        return false;
     }
 
-    /**
-     * For tables created in the old version of StarRocks cluster, such as v3.2, the column unique id in FE might
-     * have default value -1. When upgrading from old version to v3.3 upwards, the unique id of columns might introduce
-     * compatibility issues. This method is used to check if the table needs to restore the column unique id.
-     */
-    private static boolean needRestoreColumnUniqueId(OlapTable table) {
-        boolean needRestore = false;
-        for (MaterializedIndexMeta indexMeta : table.getIndexIdToMeta().values()) {
-            List<Column> columns = indexMeta.getSchema();
-            needRestore = hasNegativeUniqueId(columns);
-        }
-        return needRestore;
-    }
-
-    private static boolean hasNegativeUniqueId(List<Column> columns) {
+    private static boolean hasInvalidUniqueId(List<Column> columns) {
         for (Column column : columns) {
+            // The default value of column unique id in previous version (such as v3.2) is -1
             if (column.getUniqueId() < 0) {
                 return true;
             }
@@ -266,19 +261,15 @@ public class LakeTableHelper {
      * id of each column.
      *
      * @param table the table to restore column unique id
-     * @return the max column unique id
      */
-    public static int restoreColumnUniqueId(OlapTable table) {
-        int maxId = 0;
+    public static void restoreColumnUniqueId(OlapTable table) {
         for (MaterializedIndexMeta indexMeta : table.getIndexIdToMeta().values()) {
             final int columnCount = indexMeta.getSchema().size();
-            maxId = Math.max(maxId, columnCount - 1);
             for (int i = 0; i < columnCount; i++) {
                 Column col = indexMeta.getSchema().get(i);
                 col.setUniqueId(i);
             }
         }
-        return maxId;
     }
 
     public static boolean supportCombinedTxnLog(TransactionState.LoadJobSourceType sourceType) {
