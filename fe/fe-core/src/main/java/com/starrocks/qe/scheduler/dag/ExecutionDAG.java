@@ -419,6 +419,14 @@ public class ExecutionDAG {
         return false;
     }
 
+    private boolean needScheduleByLocalBucketShuffleSet(ExecutionFragment destFragment, DataSink sourceSink) {
+        if (destFragment.isColocateSet() && sourceSink instanceof DataStreamSink) {
+            DataStreamSink streamSink = (DataStreamSink) sourceSink;
+            return streamSink.getOutputPartition().isBucketShuffle();
+        }
+        return false;
+    }
+
     private void connectMultiCastFragmentToDestFragments(ExecutionFragment execFragment, MultiCastPlanFragment fragment)
             throws SchedulerException {
         Preconditions.checkState(fragment.getSink() instanceof MultiCastDataSink);
@@ -497,7 +505,8 @@ public class ExecutionDAG {
         });
 
         // We can only handle unpartitioned (= broadcast) and hash-partitioned output at the moment.
-        if (needScheduleByLocalBucketShuffleJoin(destExecFragment, sink)) {
+        if (needScheduleByLocalBucketShuffleJoin(destExecFragment, sink) ||
+                needScheduleByLocalBucketShuffleSet(destExecFragment, sink)) {
             Map<Integer, FragmentInstance> bucketSeqToDestInstance = Maps.newHashMap();
             for (FragmentInstance destInstance : destExecFragment.getInstances()) {
                 for (int bucketSeq : destInstance.getBucketSeqs()) {
