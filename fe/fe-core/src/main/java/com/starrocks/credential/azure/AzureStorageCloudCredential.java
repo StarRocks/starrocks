@@ -21,6 +21,7 @@ import com.staros.proto.AzBlobCredentialInfo;
 import com.staros.proto.AzBlobFileStoreInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudCredential;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.adl.AdlConfKeys;
@@ -71,18 +72,22 @@ class AzureBlobCloudCredential extends AzureStorageCloudCredential {
     private final String sharedKey;
     private final String container;
     private final String sasToken;
+    private final String clientId;
 
-    AzureBlobCloudCredential(String endpoint, String storageAccount, String sharedKey, String container, String sasToken) {
+    AzureBlobCloudCredential(String endpoint, String storageAccount, String sharedKey, String container, String sasToken,
+                             String clientId) {
         Preconditions.checkNotNull(endpoint);
         Preconditions.checkNotNull(storageAccount);
         Preconditions.checkNotNull(sharedKey);
         Preconditions.checkNotNull(container);
         Preconditions.checkNotNull(sasToken);
+        Preconditions.checkNotNull(clientId);
         this.endpoint = endpoint;
         this.storageAccount = storageAccount;
         this.sharedKey = sharedKey;
         this.container = container;
         this.sasToken = sasToken;
+        this.clientId = clientId;
         tryGenerateConfigurationMap();
     }
 
@@ -108,6 +113,15 @@ class AzureBlobCloudCredential extends AzureStorageCloudCredential {
                 generatedConfigurationMap.put(key, sasToken);
             }
         }
+
+        // For azure native sdk
+        if (!sharedKey.isEmpty()) {
+            generatedConfigurationMap.put(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, sharedKey);
+        } else if (!sasToken.isEmpty()) {
+            generatedConfigurationMap.put(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, sasToken);
+        } else if (!clientId.isEmpty()) {
+            generatedConfigurationMap.put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID, clientId);
+        }
     }
 
     @Override
@@ -118,6 +132,7 @@ class AzureBlobCloudCredential extends AzureStorageCloudCredential {
                 ", sharedKey='" + sharedKey + '\'' +
                 ", container='" + container + '\'' +
                 ", sasToken='" + sasToken + '\'' +
+                ", clientId='" + clientId + '\'' +
                 '}';
     }
 
