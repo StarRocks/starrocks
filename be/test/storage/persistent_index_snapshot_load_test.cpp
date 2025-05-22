@@ -73,11 +73,6 @@ public:
                 idxes.push_back(i);
             }
         }
-        ASSIGN_OR_ABORT(auto idx, MutableIndex::create(GetParam().fixed_key_size ? sizeof(Key) : 0));
-        if (!load_only) {
-            ASSERT_OK(idx->insert(key_slices.data(), values.data(), idxes));
-        }
-
         auto check_fn = [&](MutableIndex* idx) {
             vector<IndexValue> get_values(keys.size());
             KeysInfo get_not_found;
@@ -89,8 +84,13 @@ public:
                 ASSERT_EQ(values[i], get_values[i]);
             }
         };
-        // check the index after insert
-        check_fn(idx.get());
+
+        ASSIGN_OR_ABORT(auto idx, MutableIndex::create(GetParam().fixed_key_size ? sizeof(Key) : 0));
+        if (!load_only) {
+            ASSERT_OK(idx->insert(key_slices.data(), values.data(), idxes));
+            // check the index after insert
+            check_fn(idx.get());
+        }
 
         // dump to file
         std::string file_name = "";
@@ -112,6 +112,8 @@ public:
         ASSERT_TRUE(new_idx->load_snapshot(ar_in).ok());
         // check the index after load
         check_fn(new_idx.get());
+        // clean files
+        (void)FileSystem::Default()->delete_file(file_name);
     }
 };
 

@@ -976,7 +976,7 @@ public:
         for (auto i = 0; i < size; ++i) {
             KeyType key;
             IndexValue value;
-            RETURN_IF((!ar.load(key.data(), key.size())),
+            RETURN_IF((!ar.load(reinterpret_cast<char*>(&key), sizeof(KeyType))),
                       Status::Corruption("FixedMutableIndex load snapshot failed because load key failed"));
             RETURN_IF((!ar.load(reinterpret_cast<char*>(&value), sizeof(IndexValue))),
                       Status::Corruption("FixedMutableIndex load snapshot failed because load value failed"));
