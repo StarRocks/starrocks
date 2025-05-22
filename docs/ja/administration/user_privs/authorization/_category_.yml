@@ -1,5 +1,5 @@
 position: 20 # float position is supported
-label: '権限'
+label: 'Authorization'
 collapsible: true
 collapsed: true
 link:
