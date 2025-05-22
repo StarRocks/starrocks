@@ -48,11 +48,11 @@ PageReader::PageReader(io::SeekableInputStream* stream, uint64_t start_offset, u
           _opts(opts),
           _codec(codec) {
     if (_opts.use_file_pagecache) {
-        _cache = DataCache::GetInstance()->external_table_page_cache();
+        _cache = DataCache::GetInstance()->page_cache();
         _init_page_cache_key();
     }
-    _compressed_buf = std::make_shared<std::vector<uint8_t>>();
-    _uncompressed_buf = std::make_shared<std::vector<uint8_t>>();
+    _compressed_buf = std::make_unique<std::vector<uint8_t>>();
+    _uncompressed_buf = std::make_unique<std::vector<uint8_t>>();
 }
 
 Status PageReader::next_page() {
@@ -65,54 +65,44 @@ Status PageReader::next_page() {
 
 Status PageReader::_deal_page_with_cache() {
     std::string& page_cache_key = _current_page_cache_key();
-    ObjectCacheHandle* cache_handle = nullptr;
-    Status st = _cache->lookup(page_cache_key, &cache_handle);
-    if (st.ok()) {
+    PageCacheHandle cache_handle;
+    bool ret = _cache->lookup(page_cache_key, &cache_handle);
+    if (ret) {
         _hit_cache = true;
-        _opts.stats->page_cache_read_counter += 1;
-        _cache_buf = *(static_cast<const BufferPtr*>(_cache->value(cache_handle)));
-        _cache->release(cache_handle);
+        auto* cache_buf = cache_handle.data();
+        _page_handle = PageHandle(std::move(cache_handle));
         _header_length = _cache_buf->size();
-        auto st = deserialize_thrift_msg(_cache_buf->data(), &_header_length, TProtocolType::COMPACT, &_cur_header);
+        auto st = deserialize_thrift_msg(cache_buf->data(), &_header_length, TProtocolType::COMPACT, &_cur_header);
         DCHECK(st.ok());
         _next_header_pos = _offset + _header_length + _data_length();
         RETURN_IF_ERROR(_skip_bytes(_header_length + _data_length()));
     } else {
-        _cache_buf = std::make_shared<std::vector<uint8_t>>();
-        RETURN_IF_ERROR(_read_and_deserialize_header(true));
-        RETURN_IF_ERROR(_read_and_decompress_internal(true));
-        BufferPtr* capture = new BufferPtr(_cache_buf);
-        Status st = Status::InternalError("write file page cache failed");
-        int64_t page_cache_size = sizeof(BufferPtr) + sizeof(*_cache_buf) + _cache_buf->size();
-        DeferOp op([&st, this, capture, &cache_handle]() {
-            if (st.ok()) {
-                _opts.stats->page_cache_write_counter += 1;
-                _cache->release(cache_handle);
-            } else {
-                delete capture;
-            }
-        });
-        auto deleter = [](const CacheKey& key, void* value) { delete (BufferPtr*)value; };
-        ObjectCacheWriteOptions options;
-        options.evict_probability = _opts.datacache_options->datacache_evict_probability;
-        st = _cache->insert(page_cache_key, capture, page_cache_size, deleter, &cache_handle, &options);
+        auto cache_buf = std::make_unique<std::vector<uint8_t>>();
+        RETURN_IF_ERROR(_read_and_deserialize_header(cache_buf.get(), true));
+        RETURN_IF_ERROR(_read_and_decompress_internal(&cache_buf, true));
+        auto st = _cache->insert(page_cache_key, cache_buf.get(), &cache_handle, false);
+        _page_handle = st.ok() ? PageHandle(std::move(cache_handle)) : PageHandle(cache_buf.get());
+        cache_buf.release();
     }
 
     return Status::OK();
 }
 
-Status PageReader::_read_and_deserialize_header(bool need_fill_cache) {
+Status PageReader::_read_and_deserialize_header(PageBuffer* cache_buf, bool need_fill_cache) {
     size_t allowed_page_size = kDefaultPageHeaderSize;
     size_t remaining = _finish_offset - _offset;
     _header_length = 0;
 
     RETURN_IF_ERROR(_stream->seek(_offset));
-    BufferPtr page_buffer;
+
+    BufferPtr tmp_page_buffer;
+    PageBuffer* page_buffer;
     if (need_fill_cache) {
-        DCHECK(_cache_buf);
-        page_buffer = _cache_buf;
+        DCHECK(cache_buf);
+        page_buffer = cache_buf;
     } else {
-        page_buffer = std::make_shared<std::vector<uint8_t>>();
+        tmp_page_buffer = std::make_unique<std::vector<uint8_t>>();
+        page_buffer = tmp_page_buffer.get();
     }
 
     do {
@@ -127,7 +117,7 @@ Status PageReader::_read_and_deserialize_header(bool need_fill_cache) {
                 page_buf = (const uint8_t*)st.value().data();
                 peek_mode = true;
             } else {
-                TRY_CATCH_BAD_ALLOC(raw::stl_vector_resize_uninitialized(page_buffer.get(), allowed_page_size));
+                TRY_CATCH_BAD_ALLOC(raw::stl_vector_resize_uninitialized(page_buffer, allowed_page_size));
                 RETURN_IF_ERROR(_stream->read_at_fully(_offset, page_buffer->data(), allowed_page_size));
                 page_buf = page_buffer->data();
                 auto st = _stream->peek(allowed_page_size);
@@ -185,7 +175,7 @@ Status PageReader::next_header() {
     if (_opts.use_file_pagecache) {
         RETURN_IF_ERROR(_deal_page_with_cache());
     } else {
-        RETURN_IF_ERROR(_read_and_deserialize_header(false));
+        RETURN_IF_ERROR(_read_and_deserialize_header(nullptr, false));
     }
 
     if (_cur_header.type == tparquet::PageType::DATA_PAGE) {
@@ -242,7 +232,7 @@ std::string& PageReader::_current_page_cache_key() {
 StatusOr<Slice> PageReader::read_and_decompress_page_data() {
     _opts.stats->page_read_counter += 1;
     if (!_opts.use_file_pagecache) {
-        RETURN_IF_ERROR(_read_and_decompress_internal(false));
+        RETURN_IF_ERROR(_read_and_decompress_internal(nullptr, false));
         return _uncompressed_data;
     } else {
         if (_cache_decompressed_data()) {
@@ -291,7 +281,7 @@ Status PageReader::_decompress_page(starrocks::Slice& input, starrocks::Slice* o
     return Status::OK();
 }
 
-Status PageReader::_read_and_decompress_internal(bool need_fill_cache) {
+Status PageReader::_read_and_decompress_internal(BufferPtr* cache_buf, bool need_fill_cache) {
     bool is_compressed = true;
     if (_cur_header.type == tparquet::PageType::DATA_PAGE_V2) {
         const auto& page_header = _cur_header.data_page_header_v2;
