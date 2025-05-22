@@ -300,3 +300,43 @@ select * from bill_detail where bill = "JT2921712368984";
 -- result:
 JT2921712368984
 -- !result
+-- name: test_column_rename_failed_with_unused_output_column
+CREATE TABLE `t_rename_column_unused_output_column_name` (
+  `a` bigint(20) NOT NULL COMMENT "",
+  `b` varchar(20) NULL COMMENT "",
+  `c` boolean NULL COMMENT "",
+  `d` varchar(255) NULL COMMENT "",
+  `e` varchar(255) NULL COMMENT "",
+  `f` array<varchar(255)> NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`a`)
+DISTRIBUTED BY HASH(`a`) BUCKETS 1
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t_rename_column_unused_output_column_name values(1, 1, 1, 1, 1, ["1", "1"]);
+-- result:
+-- !result
+alter table t_rename_column_unused_output_column_name rename column d to new_d;
+-- result:
+-- !result
+SELECT a, e FROM t_rename_column_unused_output_column_name WHERE t_rename_column_unused_output_column_name.new_d IS NOT NULL LIMIT 9;
+-- result:
+1	1
+-- !result
+insert into t_rename_column_unused_output_column_name values(2, 2, 2, 2, 2, ["1", "1"]);
+-- result:
+-- !result
+SELECT a, e FROM t_rename_column_unused_output_column_name WHERE t_rename_column_unused_output_column_name.new_d IS NOT NULL LIMIT 9;
+-- result:
+1	1
+2	2
+-- !result
+drop table t_rename_column_unused_output_column_name force;
+-- result:
+-- !result
