@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -39,9 +40,11 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
@@ -53,8 +56,10 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -70,8 +75,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.google.common.base.Preconditions.checkState;
+import static com.starrocks.sql.optimizer.base.HashDistributionDesc.SourceType.LOCAL;
 import static com.starrocks.sql.optimizer.base.HashDistributionDesc.SourceType.SHUFFLE_AGG;
 import static com.starrocks.sql.optimizer.base.HashDistributionDesc.SourceType.SHUFFLE_JOIN;
 
@@ -203,6 +210,87 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         }
 
         return physicalPropertySet;
+    }
+
+    @Override
+    public PhysicalPropertySet visitPhysicalUnion(PhysicalUnionOperator node, ExpressionContext context) {
+        return processPhysicalSetOperation(node, context);
+    }
+
+    @Override
+    public PhysicalPropertySet visitPhysicalExcept(PhysicalExceptOperator node, ExpressionContext context) {
+        return processPhysicalSetOperation(node, context);
+    }
+
+    @Override
+    public PhysicalPropertySet visitPhysicalIntersect(PhysicalIntersectOperator node, ExpressionContext context) {
+        return processPhysicalSetOperation(node, context);
+    }
+
+    private PhysicalPropertySet processPhysicalSetOperation(PhysicalSetOperation node, ExpressionContext context) {
+        DistributionSpec inputDistSpec = childrenOutputProperties.get(0).getDistributionProperty().getSpec();
+        if (inputDistSpec.getType().equals(DistributionSpec.DistributionType.ROUND_ROBIN)) {
+            return visitOperator(node, context);
+        }
+
+        if (!(inputDistSpec instanceof HashDistributionSpec)) {
+            return visitOperator(node, context);
+        }
+
+        HashDistributionSpec inputHashDistSpec = (HashDistributionSpec) inputDistSpec;
+        HashDistributionDesc inputHashDistDesc = inputHashDistSpec.getHashDistributionDesc();
+
+        if (inputHashDistDesc.isLocal()) {
+            List<DistributionCol> inputColumns = node.getChildOutputColumns().get(0)
+                    .stream()
+                    .map(col -> new DistributionCol(col.getId(), true))
+                    .collect(Collectors.toList());
+
+            List<DistributionCol> outputColumns = node.getOutputColumnRefOp()
+                    .stream()
+                    .map(col -> new DistributionCol(col.getId(), true))
+                    .collect(Collectors.toList());
+
+            List<List<DistributionCol>> outputShuffleColumns = Lists.newArrayList();
+            for (int i = 0; i < inputHashDistDesc.getDistributionCols().size(); ++i) {
+                DistributionCol inputCol = inputHashDistDesc.getDistributionCols().get(i);
+                List<DistributionCol> outputShuffleCols = IntStream.range(0, inputColumns.size())
+                        .filter(k -> inputHashDistSpec.getEquivDesc().isConnected(inputCol, inputColumns.get(k)))
+                        .mapToObj(outputColumns::get)
+                        .collect(Collectors.toList());
+                outputShuffleColumns.add(outputShuffleCols);
+            }
+            Preconditions.checkArgument(outputShuffleColumns.stream().allMatch(cols -> cols.size() > 0));
+            List<Integer> columnIds = outputShuffleColumns.stream()
+                    .map(cols -> cols.get(0).getColId())
+                    .collect(Collectors.toList());
+
+            HashDistributionDesc hashDistDesc = new HashDistributionDesc(columnIds, LOCAL);
+            EquivalentDescriptor equivalentDescriptor = new EquivalentDescriptor(
+                    inputHashDistSpec.getEquivDesc().getTableId(), inputHashDistSpec.getEquivDesc().getPartitionIds());
+
+            List<DistributionCol> shuffleColumns = outputShuffleColumns.stream()
+                    .map(cols -> cols.get(0))
+                    .collect(Collectors.toList());
+
+            equivalentDescriptor.initDistributionUnionFind(shuffleColumns);
+            outputShuffleColumns.forEach(columns -> columns.stream().skip(1)
+                    .forEach(col -> equivalentDescriptor.unionDistributionCols(columns.get(0), col)));
+
+            HashDistributionSpec hashDistSpec = new HashDistributionSpec(hashDistDesc, equivalentDescriptor);
+            PhysicalPropertySet propertySet =
+                    new PhysicalPropertySet(DistributionProperty.createProperty(hashDistSpec));
+            return mergeCTEProperty(propertySet);
+        } else {
+            List<Integer> columnIds = node.getOutputColumnRefOp().stream()
+                    .map(ColumnRefOperator::getId)
+                    .collect(Collectors.toList());
+            HashDistributionDesc hashDistDesc = new HashDistributionDesc(columnIds, SHUFFLE_JOIN);
+            HashDistributionSpec hashDistSpec = DistributionSpec.createHashDistributionSpec(hashDistDesc);
+            PhysicalPropertySet propertySet =
+                    new PhysicalPropertySet(DistributionProperty.createProperty(hashDistSpec));
+            return mergeCTEProperty(propertySet);
+        }
     }
 
     @Override

@@ -598,6 +598,7 @@ public class PlanTestNoneDBBase {
                     actualSchedulerPlan =
                             UtFrameUtils.getPlanAndStartScheduling(connectContext, sql.toString()).first;
                 } catch (Exception ex) {
+                    ex.printStackTrace();
                     if (!exceptString.toString().isEmpty()) {
                         Assert.assertEquals(exceptString.toString(), ex.getMessage());
                         return true;

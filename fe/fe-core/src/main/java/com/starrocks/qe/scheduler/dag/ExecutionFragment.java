@@ -27,6 +27,7 @@ import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.SetOperationNode;
 import com.starrocks.qe.ColocatedBackendSelector;
 import com.starrocks.qe.CoordinatorPreprocessor;
 import com.starrocks.qe.FragmentScanRangeAssignment;
@@ -84,6 +85,8 @@ public class ExecutionFragment {
     private Boolean cachedIsColocated = null;
     private Boolean cachedIsReplicated = null;
     private Boolean cachedIsLocalBucketShuffleJoin = null;
+
+    private Boolean cachedIsColocateSet = null;
 
     private boolean isRightOrFullBucketShuffle = false;
     // used for phased schedule
@@ -307,6 +310,23 @@ public class ExecutionFragment {
 
         cachedIsLocalBucketShuffleJoin = isLocalBucketShuffleJoin(planFragment.getPlanRoot());
         return cachedIsLocalBucketShuffleJoin;
+    }
+
+    private boolean isColocateSet(PlanNode root) {
+        if (root instanceof ExchangeNode) {
+            return false;
+        }
+        if (root instanceof SetOperationNode) {
+            return root.isColocate();
+        }
+        return root.getChildren().stream().anyMatch(this::isColocateSet);
+    }
+
+    public boolean isColocateSet() {
+        if (cachedIsColocateSet == null) {
+            cachedIsColocateSet = isColocateSet(planFragment.getPlanRoot());
+        }
+        return cachedIsColocateSet;
     }
 
     public boolean isRightOrFullBucketShuffle() {

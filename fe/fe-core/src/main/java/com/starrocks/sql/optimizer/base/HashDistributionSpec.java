@@ -116,8 +116,10 @@ public class HashDistributionSpec extends DistributionSpec {
             return true;
         }
 
-        if (spec.type.equals(DistributionType.ROUND_ROBIN)) {
-            return true;
+        // For union operator(not union distinct), if its children is colocate ScanOperator, an
+        // round-robin distribution enforcer is required to generate a random-shuffle ExchangeNode
+        if (this.getHashDistributionDesc().isLocal() && spec.type.equals(DistributionType.ROUND_ROBIN)) {
+            return false;
         }
 
         if (!spec.type.equals(DistributionType.SHUFFLE)) {

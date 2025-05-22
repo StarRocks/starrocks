@@ -112,7 +112,7 @@ public class SchedulerTestBase extends SchedulerTestNoneDBBase {
                 "    \"replication_num\" = \"1\"\n" +
                 ");\n");
 
-        starRocksAssert.withTable("CREATE TABLE `lineitem_partition` (\n" +
+        String lineItemSql = "CREATE TABLE `lineitem_partition` (\n" +
                 "  `L_ORDERKEY` int(11) NOT NULL COMMENT \"\",\n" +
                 "  `L_PARTKEY` int(11) NOT NULL COMMENT \"\",\n" +
                 "  `L_SUPPKEY` int(11) NOT NULL COMMENT \"\",\n" +
@@ -144,7 +144,14 @@ public class SchedulerTestBase extends SchedulerTestNoneDBBase {
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
                 "    \"colocate_with\" = \"" + tpchGroup + "\"\n" +
-                ");");
+                ");";
+        starRocksAssert.withTable(lineItemSql);
+        starRocksAssert.withTable(lineItemSql.replace("lineitem_partition", "lineitem0"));
+        starRocksAssert.withTable(lineItemSql.replace("lineitem_partition", "lineitem1"));
+        starRocksAssert.withTable(
+                lineItemSql.replace("lineitem_partition", "lineitem2").replace(tpchGroup, tpchGroup + "xx"));
+        starRocksAssert.withTable(
+                lineItemSql.replace("lineitem_partition", "lineitem3").replace(tpchGroup, tpchGroup + "xx"));
 
         starRocksAssert.withTable("CREATE TABLE customer (\n" +
                 "    c_custkey       INT NOT NULL,\n" +

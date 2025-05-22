@@ -272,26 +272,15 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "select cte1.L_SHIPMODE, cte1.L_COMMENT from cte1 join[broadcast] cte2 on cte1.L_SHIPMODE = cte2.P_COMMENT";
 
         String plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan, plan.contains("  3:Decode\n" +
+        Assert.assertTrue(plan, plan.contains("  4:Decode\n" +
                 "  |  <dict id 51> : <string id 18>\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
-                "  2:AGGREGATE (update finalize)\n" +
-                "  |  aggregate: max[([49: L_COMMENT, INT, false]); args: INT; result: INT; " +
-                "args nullable: false; result nullable: true]\n" +
-                "  |  group by: [15: L_SHIPMODE, CHAR, false]\n" +
-                "  |  cardinality: 1\n" +
-                "  |  \n" +
-                "  1:OlapScanNode\n" +
-                "     table: lineitem, rollup: lineitem\n" +
-                "     preAggregation: on\n" +
-                "     dict_col=L_COMMENT\n" +
-                "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
-                "     tabletList=\n" +
-                "     actualRows=0, avgRowSize=54.0\n" +
+                "  3:EXCHANGE\n" +
+                "     distribution type: ROUND_ROBIN\n" +
                 "     cardinality: 1\n" +
                 "     probe runtime filters:\n" +
-                "     - filter_id = 0, probe_expr = (15: L_SHIPMODE)"));
+                "     - filter_id = 0, probe_expr = (<slot 15>)"));
     }
 
     @Test
@@ -2107,18 +2096,22 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "WHERE c_mr IN ('02', '03') AND D_DATE>concat(year(str_to_date('2023-03-26', '%Y-%m-%d'))-1, '1231') " +
                 "AND d_date<='2023-03-26' GROUP BY c_mr;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  10:Project\n" +
-                "  |  <slot 28> : '2023-03-26'\n" +
-                "  |  <slot 29> : DictDecode(55: c_mr, [if(<place-holder> = '01', '部', '户部')])\n" +
-                "  |  <slot 30> : '门'\n" +
-                "  |  <slot 31> : '3'\n" +
-                "  |  <slot 32> : '入'\n" +
-                "  |  <slot 33> : '2'\n" +
-                "  |  <slot 34> : 'KPI2'\n" +
-                "  |  <slot 35> : ifnull(round(27: sum / 100000000, 5), 0)\n" +
-                "  |  <slot 36> : 56: expr\n" +
-                "  |  <slot 37> : DictDecode(55: c_mr, [<place-holder>])\n" +
-                "  |  <slot 38> : DictDecode(55: c_mr, [<place-holder>])");
+        assertContains(plan, "  0:UNION\n" +
+                "  |  \n" +
+                "  |----12:Decode\n" +
+                "  |    |  <dict id 56> : <string id 36>\n" +
+                "  |    |  <dict id 57> : <string id 37>\n" +
+                "  |    |  <dict id 58> : <string id 38>\n" +
+                "  |    |  <dict id 59> : <string id 29>\n" +
+                "  |    |  \n" +
+                "  |    11:EXCHANGE\n" +
+                "  |    \n" +
+                "  6:Decode\n" +
+                "  |  <dict id 50> : <string id 2>\n" +
+                "  |  <dict id 51> : <string id 3>\n" +
+                "  |  <dict id 52> : <string id 4>\n" +
+                "  |  \n" +
+                "  5:EXCHANGE\n");
     }
 
     @Test

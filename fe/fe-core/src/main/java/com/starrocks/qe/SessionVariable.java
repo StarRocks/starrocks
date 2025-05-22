@@ -192,6 +192,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CHUNK_SIZE = "chunk_size";
     public static final String STREAMING_PREAGGREGATION_MODE = "streaming_preaggregation_mode";
     public static final String DISABLE_COLOCATE_JOIN = "disable_colocate_join";
+    public static final String DISABLE_COLOCATE_SET = "disable_colocate_set";
     public static final String DISABLE_BUCKET_JOIN = "disable_bucket_join";
     public static final String PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM = "parallel_fragment_exec_instance_num";
     public static final String MAX_PARALLEL_SCAN_INSTANCE_NUM = "max_parallel_scan_instance_num";
@@ -1172,6 +1173,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = DISABLE_COLOCATE_JOIN)
     private boolean disableColocateJoin = false;
 
+    @VariableMgr.VarAttr(name = DISABLE_COLOCATE_SET)
+    private boolean disableColocateSet = false;
     @VariableMgr.VarAttr(name = CBO_USE_CORRELATED_JOIN_ESTIMATE, flag = VariableMgr.INVISIBLE)
     private boolean useCorrelatedJoinEstimate = true;
 
@@ -3088,6 +3091,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isDisableColocateJoin() {
         return disableColocateJoin;
+    }
+
+    public boolean isDisableColocateSet() {
+        return disableColocateSet;
+    }
+
+    public void setDisableColocateSet(boolean value) {
+        disableColocateSet = value;
     }
 
     public int getParallelExecInstanceNum() {

@@ -245,12 +245,14 @@ public class SetTest extends PlanTestBase {
                 "  |  cardinality: 2\n" +
                 "  |  \n" +
                 "  |----11:EXCHANGE\n" +
+                "  |       distribution type: ROUND_ROBIN\n" +
                 "  |       cardinality: 1\n" +
                 "  |    \n" +
                 "  2:EXCHANGE\n" +
+                "     distribution type: ROUND_ROBIN\n" +
                 "     cardinality: 1\n" +
                 "\n" +
-                "PLAN FRAGMENT 1(F02)\n" +
+                "PLAN FRAGMENT 1(F06)\n" +
                 "\n" +
                 "  Input Partition: RANDOM\n" +
                 "  OutPut Partition: RANDOM\n" +
@@ -268,7 +270,8 @@ public class SetTest extends PlanTestBase {
                 "  |      [12, INT, true] | [13, BIGINT, true] | [14, BIGINT, true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [7: cast, INT, true] | [5: v5, BIGINT, true] | [6: v6, BIGINT, true]\n" +
-                "  |      [11: cast, INT, true] | [9: v8, BIGINT, true] | [10: v9, BIGINT, true]");
+                "  |      [11: cast, INT, true] | [9: v8, BIGINT, true] | [10: v9, BIGINT, true]\n" +
+                "  |  cardinality: 1");
     }
 
     @Test
