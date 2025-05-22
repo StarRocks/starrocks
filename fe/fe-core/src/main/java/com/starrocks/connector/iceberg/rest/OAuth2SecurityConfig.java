@@ -48,8 +48,6 @@ public class OAuth2SecurityConfig {
 
     public static String OAUTH2_AUDIENCE = "oauth2.audience";
 
-    public static String TOKEN_REFRESH_ENABLED = "token-refresh-enabled";
-
     public IcebergRESTCatalog.Security getSecurity() {
         return security;
     }
@@ -144,7 +142,7 @@ class OAuth2SecurityConfigBuilder {
                 .setScope(properties.get(OAuth2SecurityConfig.OAUTH2_SCOPE))
                 .setToken(properties.get(OAuth2SecurityConfig.OAUTH2_TOKEN))
                 .setAudience(properties.get(OAuth2SecurityConfig.OAUTH2_AUDIENCE))
-                .setTokenRefreshEnabled(Boolean.valueOf(properties.get(OAuth2SecurityConfig.TOKEN_REFRESH_ENABLED)));
+                .setTokenRefreshEnabled(Boolean.valueOf(properties.get(OAuth2Properties.TOKEN_REFRESH_ENABLED)));
 
         String serverUri = properties.get(OAuth2SecurityConfig.SERVER_URI);
         if (serverUri != null) {
