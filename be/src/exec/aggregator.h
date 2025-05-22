@@ -151,7 +151,6 @@ struct ColumnType {
     bool is_nullable;
 };
 
-enum AggrPhase { AggrPhase1, AggrPhase2 };
 enum AggrMode {
     AM_DEFAULT, // normal mode(cache feature turn off)
     // A blocking operator is split into a pair {blocking operator(before cache), blocking operator(after cache)]

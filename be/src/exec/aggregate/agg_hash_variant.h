@@ -26,8 +26,11 @@
 #include "exec/aggregate/agg_hash_set.h"
 #include "exec/aggregate/agg_profile.h"
 #include "types/logical_type.h"
+#include "util/phmap/phmap.h"
 
 namespace starrocks {
+
+enum AggrPhase { AggrPhase1, AggrPhase2 };
 
 #define APPLY_FOR_AGG_VARIANT_ALL(M) \
     M(phase1_uint8)                  \
@@ -487,6 +490,7 @@ struct AggHashMapVariant {
         phase2_slice_fx4,
         phase2_slice_fx8,
         phase2_slice_fx16,
+
     };
 
     detail::AggHashMapWithKeyPtr hash_map_with_key;
@@ -595,6 +599,7 @@ struct AggHashSetVariant {
         phase2_slice_fx4,
         phase2_slice_fx8,
         phase2_slice_fx16,
+
     };
 
     detail::AggHashSetWithKeyPtr hash_set_with_key;
@@ -624,6 +629,24 @@ struct AggHashSetVariant {
 private:
     Type _type = Type::phase1_slice;
     AggStatistics* _agg_stat = nullptr;
+};
+
+template <typename HashVariantType>
+class HashVariantResolver {
+public:
+    using RetType = typename HashVariantType::Type;
+    HashVariantResolver();
+    static HashVariantResolver& instance();
+
+    RetType get_unary_type(AggrPhase phase, LogicalType ltype, bool nullable) {
+        if (auto iter = _types.find({phase, ltype, nullable}); iter != _types.end()) {
+            return iter->second;
+        }
+        return phase == AggrPhase1 ? HashVariantType::Type::phase1_slice : HashVariantType::Type::phase2_slice;
+    }
+
+private:
+    phmap::flat_hash_map<std::tuple<AggrPhase, LogicalType, bool>, typename HashVariantType::Type> _types;
 };
 
 } // namespace starrocks
