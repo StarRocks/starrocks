@@ -64,7 +64,7 @@ struct TypeDescriptor {
     int scale{-1};
 
     /// Must be kept in sync with FE's max precision/scale.
-    static const int MAX_PRECISION = 38;
+    static const int MAX_PRECISION = 76;
     static const int MAX_SCALE = MAX_PRECISION;
 
     /// The maximum precision representable by a 4-byte decimal (Decimal4Value)
@@ -170,7 +170,7 @@ struct TypeDescriptor {
     }
 
     static TypeDescriptor create_decimalv3_type(LogicalType type, int precision, int scale) {
-        DCHECK(type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 || type == TYPE_DECIMAL128);
+        DCHECK(type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 || type == TYPE_DECIMAL128 || type == TYPE_DECIMAL256);
         DCHECK_LE(precision, MAX_PRECISION);
         DCHECK_LE(scale, MAX_SCALE);
         DCHECK_GE(precision, 0);
@@ -208,6 +208,8 @@ struct TypeDescriptor {
             return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, precision, scale);
         case TYPE_DECIMAL128:
             return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, precision, scale);
+        case TYPE_DECIMAL256:
+            return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL256, precision, scale);
         case TYPE_JSON:
             return TypeDescriptor::create_json_type();
         case TYPE_OBJECT:
@@ -289,7 +291,7 @@ struct TypeDescriptor {
     inline bool is_date_type() const { return type == TYPE_DATE || type == TYPE_DATETIME; }
 
     inline bool is_decimalv3_type() const {
-        return (type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 || type == TYPE_DECIMAL128);
+        return (type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 || type == TYPE_DECIMAL128 || type == TYPE_DECIMAL256);
     }
 
     inline bool is_decimal_type() const {

@@ -40,7 +40,8 @@ namespace starrocks {
     M(TYPE_DOUBLE)                   \
     M(TYPE_DECIMAL32)                \
     M(TYPE_DECIMAL64)                \
-    M(TYPE_DECIMAL128)
+    M(TYPE_DECIMAL128)               \
+    M(TYPE_DECIMAL256)
 
 #define APPLY_FOR_ALL_SCALAR_TYPE(M) \
     APPLY_FOR_ALL_NUMBER_TYPE(M)     \
@@ -96,6 +97,7 @@ namespace starrocks {
     M(DECIMAL32)                        \
     M(DECIMAL64)                        \
     M(DECIMAL128)                       \
+    M(DECIMAL256)                       \
     M(FUNCTION)                         \
     M(BINARY)                           \
     M(VARBINARY)                        \

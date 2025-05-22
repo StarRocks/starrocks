@@ -88,7 +88,7 @@ public:
     static int64_t find_first_not_equal(const Column* column, int64_t target, int64_t start, int64_t end);
 
     template <LogicalType Type>
-    static inline ColumnPtr create_const_column(const RunTimeCppType<Type>& value, size_t chunk_size) {
+    static ColumnPtr create_const_column(const RunTimeCppType<Type>& value, size_t chunk_size) {
         static_assert(!lt_is_decimal<Type>,
                       "Decimal column can not created by this function because of missing "
                       "precision and scale param");
@@ -103,8 +103,7 @@ public:
     }
 
     template <LogicalType LT>
-    static inline ColumnPtr create_const_decimal_column(RunTimeCppType<LT> value, int precision, int scale,
-                                                        size_t size) {
+    static ColumnPtr create_const_decimal_column(RunTimeCppType<LT> value, int precision, int scale, size_t size) {
         static_assert(lt_is_decimal<LT>);
         using ColumnType = RunTimeColumnType<LT>;
         auto data_column = ColumnType::create(precision, scale, 1);
