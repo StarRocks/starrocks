@@ -133,8 +133,8 @@ Status HdfsScanner::_build_scanner_context() {
             column.slot_desc = slot;
             column.idx_in_chunk = _scanner_params.materialize_index_in_chunk[i];
             column.decode_needed =
-                    slot->is_output_column() || _scanner_params.slots_of_mutli_slot_conjunct.find(slot->id()) !=
-                                                        _scanner_params.slots_of_mutli_slot_conjunct.end();
+                    slot->is_output_column() || _scanner_params.slots_of_multi_field_conjunct.find(slot->id()) !=
+                                                        _scanner_params.slots_of_multi_field_conjunct.end();
             ctx.materialized_columns.emplace_back(std::move(column));
         }
     }
