@@ -217,7 +217,7 @@ public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, V
             return null;
         }
 
-        return operator.accept(new PaimonPredicateConverter.ExtractLiteralValue(), dataType);
+        return operator.accept(new ExtractLiteralValue(), dataType);
     }
 
     private static class ExtractLiteralValue extends ScalarOperatorVisitor<Object, DataType> {
@@ -246,7 +246,7 @@ public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, V
                 case BIGINT:
                     return operator.getBigint();
                 case FLOAT:
-                    return operator.getFloat();
+                    return (float) operator.getFloat();
                 case DOUBLE:
                     return operator.getDouble();
                 case DECIMALV2:
@@ -329,7 +329,7 @@ public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, V
     }
 
     // Support both 0/1 and true/false for boolean type
-    private static Object convertBoolLiteralValue(Object literalValue) {
+    private Object convertBoolLiteralValue(Object literalValue) {
         try {
             return new BoolLiteral(String.valueOf(literalValue)).getValue();
         } catch (Exception e) {
