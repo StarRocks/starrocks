@@ -875,6 +875,16 @@ under the License.
             <groupId>org.jboss.byteman</groupId>
             <artifactId>byteman</artifactId>
         </dependency>
+
+        <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-storage-blob</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-identity</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
