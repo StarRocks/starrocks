@@ -50,7 +50,7 @@ CONF_Int32(brpc_port, "8060");
 CONF_Int32(brpc_num_threads, "-1");
 
 // The max number of single connections maintained by the brpc client and each server.
-// Theses connections are created during the first few access and will be used thereafter
+// These connections are created during the first few access and will be used thereafter
 CONF_Int32(brpc_max_connections_per_server, "1");
 
 // Declare a selection strategy for those servers have many ips.
@@ -60,12 +60,22 @@ CONF_Int32(brpc_max_connections_per_server, "1");
 CONF_String(priority_networks, "");
 CONF_Bool(net_use_ipv6_when_priority_networks_empty, "false");
 
-// Memory urget water level, if the memory usage exceeds this level, reduce the size of
-// the Pagecache immediately, it should be between (memory_high_level, 100].
+// Memory urged water level, if the memory usage exceeds this level,
+// be will free up some memory immediately to ensure the system runs smoothly.
+// Currently, only support to release memory of data cache and lake memtable.
 CONF_mInt64(memory_urgent_level, "85");
-// Memory high water level, if the memory usage exceeds this level, reduce the size of
-// the Pagecache slowly, it should be between [1, memory_urgent_level).
+// Memory high water level, if the memory usage exceeds this level, be will free up some memory slowly
+// Currently, only support release memory of data cache.
 CONF_mInt64(memory_high_level, "75");
+
+// The high disk usage level, which trigger to release of disk space immediately to disk_safe_level,
+// currently only support release disk space of data cache.
+CONF_mInt64(disk_high_level, "90");
+// The safe disk usage level.
+CONF_mInt64(disk_safe_level, "80");
+// The low disk usage level, which triggers increasing the quota for some components,
+// currently only supports data cache.
+CONF_mInt64(disk_low_level, "60");
 
 // process memory limit specified as number of bytes
 // ('<int>[bB]?'), megabytes ('<float>[mM]'), gigabytes ('<float>[gG]'),
@@ -1263,12 +1273,7 @@ CONF_mInt32(report_datacache_metrics_interval_ms, "60000");
 // which is configured by `datacache_disk_idle_seconds_for_expansion`, the cache quota will be increased to keep the
 // disk usage around the disk safe level.
 CONF_mBool(enable_datacache_disk_auto_adjust, "true");
-// The high disk usage level, which trigger the cache eviction and quota decreased.
-CONF_mInt64(datacache_disk_high_level, "90");
-// The safe disk usage level, the cache quota will be decreased to this level once it reach the high level.
-CONF_mInt64(datacache_disk_safe_level, "80");
-// The low disk usage level, which trigger the cache expansion and quota increased.
-CONF_mInt64(datacache_disk_low_level, "60");
+
 // The interval seconds to check the disk usage and trigger adjustment.
 CONF_mInt64(datacache_disk_adjust_interval_seconds, "10");
 // The silent period, only when the disk usage falls bellow the low level for a time longer than this period,
