@@ -330,6 +330,28 @@ struct AggregatePublishContext {
             latch->wait();
         }
     }
+
+    void put_aggregate_metadata(ExecEnv* env) {
+        if (!has_failure) {
+            auto thread_pool = env->put_aggregate_metadata_thread_pool();
+            if (UNLIKELY(thread_pool == nullptr)) {
+                publish_status = Status::InternalError("can not find put_aggregate_metadata thread pool");
+            } else {
+                auto latch = BThreadCountDownLatch(1);
+                auto task = std::make_shared<AutoCleanRunnable>(
+                        [&] {
+                            publish_status = env->lake_tablet_manager()->put_aggregate_tablet_metadata(tablet_metas);
+                        },
+                        [&] { latch.count_down(); });
+                Status submit_st = thread_pool->submit(std::move(task));
+                if (!submit_st.ok()) {
+                    LOG(WARNING) << "Fail to submit put_aggregate_tablet_metadata task";
+                    publish_status = submit_st;
+                }
+                latch.wait();
+            }
+        }
+    }
 };
 
 static void aggregate_publish_cb(brpc::Controller* cntl, PublishVersionResponse* resp, AggregatePublishContext* ctx) {
@@ -390,14 +412,12 @@ void LakeServiceImpl::aggregate_publish_version(::google::protobuf::RpcControlle
                               brpc::NewCallback(aggregate_publish_cb, node_cntl, node_resp, &ctx));
     }
 
+    // wait for publish task finish
     ctx.wait();
-    // TODO(zhangqiang)
-    // submit put_aggregate_tablet_metadata to thread pool to avoid block brpc thread.
-    Status final_status =
-            ctx.has_failure
-                    ? ctx.publish_status
-                    : ExecEnv::GetInstance()->lake_tablet_manager()->put_aggregate_tablet_metadata(ctx.tablet_metas);
-    final_status.to_protobuf(response->mutable_status());
+    // write aggregate metadata
+    ctx.put_aggregate_metadata(_env);
+
+    ctx.publish_status.to_protobuf(response->mutable_status());
 }
 
 void LakeServiceImpl::_submit_publish_log_version_task(const int64_t* tablet_ids, size_t tablet_size,
@@ -968,7 +988,26 @@ struct AggregateCompactContext {
         }
     }
 
-    Status write_combined_txn_log() { return starrocks::write_combined_txn_log(combined_txn_log); }
+    void write_combined_txn_log(ExecEnv* env) {
+        if (final_status.ok()) {
+            VLOG(2) << "Write combined txn log. pb=" << combined_txn_log.ShortDebugString();
+            auto thread_pool = env->put_combined_txn_log_thread_pool();
+            if (UNLIKELY(thread_pool == nullptr)) {
+                final_status = Status::InternalError("can not find put_combined_txn_log thread pool");
+            } else {
+                auto latch = BThreadCountDownLatch(1);
+                auto task = std::make_shared<AutoCleanRunnable>(
+                        [&] { final_status = starrocks::write_combined_txn_log(combined_txn_log); },
+                        [&] { latch.count_down(); });
+                Status submit_st = thread_pool->submit(std::move(task));
+                if (!submit_st.ok()) {
+                    LOG(WARNING) << "Fail to submit write combined_txn_log task";
+                    final_status = submit_st;
+                }
+                latch.wait();
+            }
+        }
+    }
 };
 
 static void aggregate_compact_cb(brpc::Controller* cntl, CompactResponse* response,
@@ -1050,10 +1089,7 @@ void LakeServiceImpl::aggregate_compact(::google::protobuf::RpcController* contr
     ac_context.wait();
 
     // write combined txn log
-    // TODO // submit write_combined_txn_log to thread pool to avoid block brpc thread.
-    if (ac_context.final_status.ok()) {
-        ac_context.final_status = ac_context.write_combined_txn_log();
-    }
+    ac_context.write_combined_txn_log(_env);
 
     // fill response
     ac_context.final_status.to_protobuf(response->mutable_status());
