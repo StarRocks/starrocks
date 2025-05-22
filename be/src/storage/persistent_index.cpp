@@ -976,6 +976,9 @@ public:
                 return Status::Corruption("FixedMutableIndex load snapshot failed");
             }
         } else if (format_version == kMutableIndexFormatVersion2) {
+            // We introduced the new format specifically to address cross-platform compatibility issues with snapshot files.
+            // In previous format, we met issue when migrate from x86 to arm64.
+            // https://github.com/StarRocks/starrocks/issues/57952
             size_t size = 0;
             RETURN_IF(!ar.load(&size), Status::Corruption("FixedMutableIndex load snapshot size failed"));
             RETURN_IF(size == 0, Status::OK());
