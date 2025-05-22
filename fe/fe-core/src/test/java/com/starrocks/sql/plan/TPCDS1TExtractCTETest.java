@@ -198,4 +198,123 @@ public class TPCDS1TExtractCTETest extends TPCDS1TTestBase {
                 "    EXCHANGE ID: 13\n" +
                 "    RANDOM");
     }
+
+    @Test
+    public void testFallbackAggIf() throws Exception {
+        String sql = "select\n" +
+                "  BITMAP_AND(\n" +
+                "    (\n" +
+                "      select\n" +
+                "        BITMAP_AND(\n" +
+                "          (\n" +
+                "            select\n" +
+                "              BITMAP_AND(\n" +
+                "                (\n" +
+                "                  select\n" +
+                "                    bmp\n" +
+                "                  from\n" +
+                "                    (\n" +
+                "                      select\n" +
+                "                        '1' as bmp_order,\n" +
+                "                        bitmap_union(to_bitmap(c_customer_id)) as bmp,\n" +
+                "                        '0' as agg_type\n" +
+                "                      from\n" +
+                "                        customer\n" +
+                "                      where\n" +
+                "                        c_birth_country = 'USA1'\n" +
+                "                        and (c_birth_year = 2011)\n" +
+                "                    ) as t1\n" +
+                "                ),\n" +
+                "                (\n" +
+                "                  select\n" +
+                "                    bmp\n" +
+                "                  from\n" +
+                "                    (\n" +
+                "                      select\n" +
+                "                        '2' as bmp_order,\n" +
+                "                        bitmap_union(to_bitmap(c_customer_id)) as bmp,\n" +
+                "                        '2' as agg_type\n" +
+                "                      from\n" +
+                "                        customer\n" +
+                "                      where\n" +
+                "                        c_birth_country = 'USA'\n" +
+                "                        and (c_birth_year = 1995)\n" +
+                "                    ) as t2\n" +
+                "                )\n" +
+                "              )\n" +
+                "          ),\n" +
+                "          (\n" +
+                "            select\n" +
+                "              bmp\n" +
+                "            from\n" +
+                "              (\n" +
+                "                select\n" +
+                "                  '3' as bmp_order,\n" +
+                "                  bitmap_union(to_bitmap(c_customer_id)) as bmp,\n" +
+                "                  '2' as agg_type\n" +
+                "                from\n" +
+                "                  customer\n" +
+                "                where\n" +
+                "                  c_birth_country = 'USA'\n" +
+                "                  and (\n" +
+                "                    c_birth_year BETWEEN 1990 and 2000\n" +
+                "                  )\n" +
+                "              ) as t3\n" +
+                "          )\n" +
+                "        )\n" +
+                "    ),\n" +
+                "    (\n" +
+                "      select\n" +
+                "        bmp\n" +
+                "      from\n" +
+                "        (\n" +
+                "          select\n" +
+                "            '4' as bmp_order,\n" +
+                "            bitmap_union(to_bitmap(c_customer_id)) as bmp,\n" +
+                "            '2' as agg_type\n" +
+                "          from\n" +
+                "            customer\n" +
+                "          where\n" +
+                "            c_birth_country = 'USA'\n" +
+                "            and (c_birth_year = '1993')\n" +
+                "        ) as t4\n" +
+                "    )\n" +
+                "  );\n";
+        String plan = getFragmentPlan(sql);
+        assertCContains(plan, "MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 08\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 15\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 26\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 37\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  4:AGGREGATE (merge finalize)\n" +
+                "  |  output: bitmap_union(130: bitmap_union), bitmap_union(124: bitmap_union), " +
+                "bitmap_union(126: bitmap_union), bitmap_union(128: bitmap_union)\n" +
+                "  |  group by: ");
+        assertCContains(plan, "  2:AGGREGATE (update serialize)\n" +
+                "  |  output: bitmap_union(if((132: expr) AND (104: c_birth_year = 1993), 131: to_bitmap, NULL))," +
+                " bitmap_union(if((101: c_birth_country = 'USA1') AND " +
+                "(104: c_birth_year = 2011), 131: to_bitmap, NULL)), " +
+                "bitmap_union(if((132: expr) AND (104: c_birth_year = 1995), 131: to_bitmap, NULL)), " +
+                "bitmap_union(if(((132: expr) AND (104: c_birth_year >= 1990)) AND " +
+                "(104: c_birth_year <= 2000), 131: to_bitmap, NULL))\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 101> : 101: c_birth_country\n" +
+                "  |  <slot 104> : 104: c_birth_year\n" +
+                "  |  <slot 131> : 131: to_bitmap\n" +
+                "  |  <slot 132> : 132: expr\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 131> : to_bitmap(108: c_customer_id)\n" +
+                "  |  <slot 132> : 101: c_birth_country = 'USA'");
+    }
 }

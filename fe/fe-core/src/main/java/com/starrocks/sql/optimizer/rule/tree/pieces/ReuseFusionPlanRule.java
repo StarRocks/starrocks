@@ -348,8 +348,7 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
                 aggFunc = call.getFunction();
             }
 
-            // since agg_If doens't support distinct right now
-            if (hasDistinct) {
+            java.util.function.Function<CallOperator, CallOperator> fallbackAggIfBuilder = aggCall -> {
                 Function f = Expr.getBuiltinFunction(FunctionSet.IF,
                         new Type[] {Type.BOOLEAN, child.getType(), child.getType()}, Function.CompareMode.IS_IDENTICAL);
                 CallOperator ifNull = new CallOperator("if", child.getType(),
@@ -359,12 +358,18 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
                 }
                 return new CallOperator(call.getFnName(), call.getType(), List.of(filterProject.get(ifNull)),
                         aggFunc, call.isDistinct());
+            };
+            // since agg_If doens't support distinct right now
+            if (hasDistinct) {
+                return fallbackAggIfBuilder.apply(call);
             } else {
                 Preconditions.checkState(aggFunc instanceof AggregateFunction);
                 Function aggStateIf = Expr.getBuiltinFunction(aggFunc.functionName() + FunctionSet.AGG_STATE_IF_SUFFIX,
                         new Type[] {child.getType(), Type.BOOLEAN}, Function.CompareMode.IS_IDENTICAL);
 
-                Preconditions.checkState(aggStateIf != null);
+                if (aggStateIf == null) {
+                    return fallbackAggIfBuilder.apply(call);
+                }
 
                 if (!filterProject.containsKey(filter)) {
                     filterProject.put(filter, factory.create(filter, Type.BOOLEAN, true));
