@@ -39,6 +39,7 @@
 #include "runtime/decimalv2_value.h"
 #include "storage/collection.h"
 #include "storage/olap_common.h"
+#include "types/int256.h"
 #include "types/logical_type.h"
 #include "util/slice.h"
 
@@ -194,6 +195,17 @@ struct CppTypeTraits<TYPE_VARBINARY> {
 template <>
 struct CppTypeTraits<TYPE_ARRAY> {
     using CppType = Collection;
+};
+
+template <>
+struct CppTypeTraits<TYPE_DECIMAL256> {
+    using CppType = int256_t;
+    using UnsignedCppType = int256_t;
+};
+
+template <>
+struct CppTypeTraits<TYPE_INT256> {
+    using CppType = starrocks::int256_t;
 };
 
 // Instantiate this template to get static access to the type traits.

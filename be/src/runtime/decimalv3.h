@@ -19,6 +19,8 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <iomanip>
+#include <sstream>
 #include <string>
 #include <type_traits>
 
@@ -30,10 +32,39 @@
 typedef unsigned __int128 uint128_t;
 
 namespace starrocks {
+
+inline std::ostream& operator<<(std::ostream& os, const uint128_t& value) {
+    if (value == 0) {
+        return os << "0";
+    }
+    
+    char buffer[40];  // Enough for 128-bit number
+    char* end = buffer + sizeof(buffer);
+    char* p = end;
+    
+    uint128_t n = value;
+    while (n > 0) {
+        *--p = '0' + (n % 10);
+        n /= 10;
+    }
+    
+    return os << std::string(p, end - p);
+}
+
+// Add operator<< overload for int128_t
+inline std::ostream& operator<<(std::ostream& os, const int128_t& value) {
+    if (value < 0) {
+        os << "-";
+        return os << static_cast<uint128_t>(-value);
+    }
+    return os << static_cast<uint128_t>(value);
+}
+
 TYPE_GUARD(Decimal32Guard, is_decimal32, int32_t)
 TYPE_GUARD(Decimal64Guard, is_decimal64, int64_t)
 TYPE_GUARD(Decimal128Guard, is_decimal128, int128_t)
-TYPE_GUARD(DecimalGuard, is_decimal, int32_t, int64_t, int128_t)
+TYPE_GUARD(Decimal256Guard, is_decimal256, int256_t)
+TYPE_GUARD(DecimalGuard, is_decimal, int32_t, int64_t, int128_t, int256_t)
 
 template <typename ST>
 struct unsigned_type {
@@ -42,6 +73,11 @@ struct unsigned_type {
 template <>
 struct unsigned_type<int128_t> {
     using type = uint128_t;
+};
+
+template <>
+struct unsigned_type<int256_t> {
+    using type = int256_t;
 };
 
 template <typename T, bool check_overflow>
@@ -89,7 +125,7 @@ public:
         // case 2: |b| is even. if [|b|/2] <= |r|, then add carry; otherwise add 0. here
         // [b/2] == r means round half to up.
         // carry depends on sign of a^b.
-        Type carry = ((a ^ b) >> (sizeof(Type) * 8 - 1)) | 1;
+        Type carry = ((a < 0) != (b < 0)) ? -1 : 1;
         Type abs_b = std::abs(b);
         Type abs_r = std::abs(r);
         bool need_carry = ((abs_b >> 1) + (abs_b & 1)) <= abs_r;
@@ -152,7 +188,7 @@ public:
     }
 
     template <typename ST>
-    static inline std::string to_string(DecimalType<ST> const& value, int precision, int scale) {
+    static std::string to_string(DecimalType<ST> const& value, int precision, int scale) {
         using T = typename unsigned_type<ST>::type;
         static constexpr size_t str_decimal_max_len = decimal_precision_limit<ST> + 10;
         const T scale_factor = get_scale_factor<ST>(scale);
@@ -210,29 +246,22 @@ public:
     template <typename T>
     static constexpr T float_upper_overflow_indicator = std::numeric_limits<T>::min();
 
-    template <typename From, typename To>
+    template <typename From, typename To, bool check_overflow = true>
     static inline bool from_float(FloatType<From> value, DecimalType<To> const& scale_factor,
                                   DecimalType<To>* dec_value) {
-        double delta = value >= 0 ? 0.5 : -0.5; // go to the nearest integer
-        *dec_value = static_cast<To>(scale_factor * static_cast<double>(value) + delta);
-        if constexpr (is_decimal32<To> || is_decimal64<To>) {
-            // Depending on the compiler implement, std::numeric_limits<T>::max() or std::numeric_limits<T>::max() both could be returned,
-            // when overflow is happenning in casting.
-
-            // With GCC-10.3.0, the cast on aarch64 uses fcvtzs instruction, behaving as "carries all overflows to the output precision’s largest finite number with the sign of the result before rounding".
-            // (https://developer.arm.com/documentation/ddi0487/latest)
-
-            // Meanwhile, the cast on x86_64 uses cvttsd2siq instruction, behaving as "the indefinite integer value (80000000H) is returned".
-            // (https://www.felixcloutier.com/x86/cvttsd2si)
-            return (*dec_value == float_lower_overflow_indicator<To>) ||
-                   (*dec_value == float_upper_overflow_indicator<To>);
-        } else if constexpr (is_decimal128<To>) {
-            // std::abs(value)<1.0 -> 0: Acceptable
-            // std::abs(value)>=1.0 -> 0 or different sign: Overflow!!
-            return std::abs(value) >= From(1) && (*dec_value == To(0) || ((value < From(0)) ^ (*dec_value < To(0))));
-        } else {
-            static_assert(is_decimal<To>, "invalid decimal type");
+        if (std::abs(value) < 1) {
+            *dec_value = 0;
+            return false;
         }
+        if (std::abs(value) >= 1) {
+            double from_value = static_cast<double>(value);
+            double scaled_value = from_value * static_cast<double>(scale_factor);
+            *dec_value = static_cast<To>(scaled_value);
+            if (*dec_value == 0 || ((value < 0) != (*dec_value < 0))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     template <typename From, typename To, bool check_overflow>

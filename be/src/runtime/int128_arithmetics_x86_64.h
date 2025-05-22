@@ -24,6 +24,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <type_traits>
+#include <glog/logging.h>
+
+#include "util/stack_util.h"
 typedef __int128 int128_t;
 typedef unsigned __int128 uint128_t;
 
@@ -146,6 +149,7 @@ static int64_t asm_mul32(int32_t x, int32_t y) {
 }
 
 static inline bool asm_add_overflow(int128_t x, int128_t y, int128_t* z) {
+    LOG(ERROR) << "=======================asm_add_overflow" << std::endl << get_stack_trace();
     auto& xw = reinterpret_cast<Int128Wrapper&>(x);
     auto& yw = reinterpret_cast<Int128Wrapper&>(y);
     auto& zw = reinterpret_cast<Int128Wrapper&>(*z);

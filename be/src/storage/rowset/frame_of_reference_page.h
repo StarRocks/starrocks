@@ -166,7 +166,7 @@ public:
     }
 
     Status next_batch(const SparseRange<>& range, Column* dst) override {
-        DCHECK(_parsed) << "Must call init() firstly";
+        DCHECK(_parsed) << "Must calil init() firstly";
         if (PREDICT_FALSE(range.span_size() == 0 || _cur_index >= _num_elements)) {
             return Status::OK();
         }
@@ -184,7 +184,8 @@ public:
                       Type == TYPE_DECIMALV2 ||
                       Type == TYPE_DECIMAL32 ||
                       Type == TYPE_DECIMAL64 ||
-                      Type == TYPE_DECIMAL128,
+                      Type == TYPE_DECIMAL128 ||
+                      Type == TYPE_DECIMAL256,
                       "unexpected field type");
         // clang-format on
         size_t to_read =

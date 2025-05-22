@@ -782,6 +782,7 @@ InsitializeColumnValueRange(DecimalV2Value);
 InsitializeColumnValueRange(bool);
 InsitializeColumnValueRange(DateValue);
 InsitializeColumnValueRange(TimestampValue);
+InsitializeColumnValueRange(int256_t);
 
 #undef InsitializeColumnValueRange
 

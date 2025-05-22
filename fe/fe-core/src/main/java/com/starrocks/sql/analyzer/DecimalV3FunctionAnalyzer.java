@@ -419,11 +419,11 @@ public class DecimalV3FunctionAnalyzer {
                 commonType = argumentTypes[0];
             } else if (DECIMAL_AGG_FUNCTION_WIDER_TYPE.contains(fnName) && argumentTypes[0].isDecimalV3()) {
                 ScalarType argScalarType = (ScalarType) argumentTypes[0];
-                int precision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128);
+                int precision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL256);
                 int scale = argScalarType.getScalarScale();
                 // TODO(by satanson): Maybe accumulating narrower decimal types to wider decimal types directly w/o
                 //  casting the narrower type to the wider type is sound and efficient.
-                commonType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, precision, scale);
+                commonType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, precision, scale);
             }
 
             Type argType = argumentTypes[0];

@@ -147,7 +147,7 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
                                                  HASH_MURMUR3_X64_64));
         }
     }
-    if (is_scalar_field_type(delegate_type(_column_type))) {
+    if (_column_type == TYPE_DECIMAL256 || is_scalar_field_type(delegate_type(_column_type))) {
         RETURN_IF_ERROR(EncodingInfo::get(delegate_type(_column_type), meta->encoding(), &_encoding_info));
         RETURN_IF_ERROR(get_block_compression_codec(meta->compression(), &_compress_codec));
 
@@ -716,6 +716,8 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
     if (_column_type == LogicalType::TYPE_JSON) {
         return _new_json_iterator(path, column);
     } else if (is_scalar_field_type(delegate_type(_column_type))) {
+        return std::make_unique<ScalarColumnIterator>(this);
+    } else if (_column_type == TYPE_DECIMAL256) {
         return std::make_unique<ScalarColumnIterator>(this);
     } else if (_column_type == LogicalType::TYPE_ARRAY) {
         size_t col = 0;

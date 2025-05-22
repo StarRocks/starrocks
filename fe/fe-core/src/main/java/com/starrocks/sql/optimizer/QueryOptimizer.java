@@ -965,7 +965,7 @@ public class QueryOptimizer extends Optimizer {
         result = new PruneSubfieldsForComplexType().rewrite(result, rootTaskContext);
         result = new InlineCteProjectPruneRule().rewrite(result, rootTaskContext);
         // This rule should be last
-        result = new ScalarOperatorsReuseRule().rewrite(result, rootTaskContext);
+//        result = new ScalarOperatorsReuseRule().rewrite(result, rootTaskContext);
         // Reorder predicates
         result = new PredicateReorderRule(rootTaskContext.getOptimizerContext().getSessionVariable()).rewrite(result,
                 rootTaskContext);

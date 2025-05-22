@@ -196,6 +196,9 @@ public class ScalarType extends Type implements Cloneable {
             // and casted to decimal64 before expression evaluations are performed on it in BE, so
             // decimal32 has a performance penalty.
             PrimitiveType pt = precision <= 18 ? PrimitiveType.DECIMAL64 : PrimitiveType.DECIMAL128;
+            if (precision > 38) {
+                pt = PrimitiveType.DECIMAL256;
+            }
             return createDecimalV3Type(pt, precision, scale);
         } else {
             return createDecimalV2Type(precision, scale);
@@ -218,7 +221,7 @@ public class ScalarType extends Type implements Cloneable {
     }
 
     public static ScalarType createDecimalV3Type(PrimitiveType type, int precision, int scale) {
-        int maxPrecision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128);
+        int maxPrecision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL256);
         ConnectContext ctx = ConnectContext.get();
         if (ctx == null ||
                 ctx.getSessionVariable() == null ||
@@ -292,11 +295,12 @@ public class ScalarType extends Type implements Cloneable {
         final int decimal32MaxPrecision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL32);
         final int decimal64MaxPrecision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL64);
         final int decimal128MaxPrecision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128);
+        final int decimal256MaxPrecision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL256);
         if (0 < precision && precision <= decimal32MaxPrecision) {
             return createDecimalV3Type(PrimitiveType.DECIMAL32, precision, scale);
         } else if (decimal32MaxPrecision < precision && precision <= decimal64MaxPrecision) {
             return createDecimalV3Type(PrimitiveType.DECIMAL64, precision, scale);
-        } else if (decimal64MaxPrecision < precision && precision <= decimal128MaxPrecision) {
+        } else if (decimal64MaxPrecision < precision) {
             return createDecimalV3Type(PrimitiveType.DECIMAL128, precision, scale);
         } else {
             Preconditions.checkState(false,
@@ -645,7 +649,8 @@ public class ScalarType extends Type implements Cloneable {
             case DECIMALV2:
             case DECIMAL32:
             case DECIMAL64:
-            case DECIMAL128: {
+            case DECIMAL128:
+            case DECIMAL256: {
                 node.setType(TTypeNodeType.SCALAR);
                 TScalarType scalarType = new TScalarType();
                 scalarType.setType(type.toThrift());

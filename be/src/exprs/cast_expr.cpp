@@ -1459,7 +1459,9 @@ private:
         }                                                                   \
     }
 
-#define SWITCH_ALL_FROM_TYPE(TO_TYPE, ALLOWTHROWEXCEPTION)                          \
+#define SWITCH_ALL_FROM_TYPE(TO_TYPE, ALLOWTHROWEXCEPTION) \
+LOG(ERROR) << "CAST===================CAST================CAST ||| from type: " << type_to_string(from_type) \
+                                      << " to type: " << type_to_string(to_type) << std::endl;   \
     switch (from_type) {                                                            \
         CASE_FROM_TYPE(TYPE_BOOLEAN, TO_TYPE, ALLOWTHROWEXCEPTION);                 \
         CASE_FROM_TYPE(TYPE_TINYINT, TO_TYPE, ALLOWTHROWEXCEPTION);                 \
@@ -1477,6 +1479,7 @@ private:
         CASE_FROM_TYPE(TYPE_DECIMAL32, TO_TYPE, ALLOWTHROWEXCEPTION);               \
         CASE_FROM_TYPE(TYPE_DECIMAL64, TO_TYPE, ALLOWTHROWEXCEPTION);               \
         CASE_FROM_TYPE(TYPE_DECIMAL128, TO_TYPE, ALLOWTHROWEXCEPTION);              \
+        CASE_FROM_TYPE(TYPE_DECIMAL256, TO_TYPE, ALLOWTHROWEXCEPTION);              \
     default:                                                                        \
         LOG(WARNING) << "Not support cast from type: " << type_to_string(from_type) \
                      << " to type: " << type_to_string(to_type);                    \
@@ -1758,6 +1761,7 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
             CASE_TO_TYPE(TYPE_DECIMAL32, allow_throw_exception);
             CASE_TO_TYPE(TYPE_DECIMAL64, allow_throw_exception);
             CASE_TO_TYPE(TYPE_DECIMAL128, allow_throw_exception);
+            CASE_TO_TYPE(TYPE_DECIMAL256, allow_throw_exception);
         default:
             LOG(WARNING) << "Not support cast " << type_to_string(from_type) << " to " << type_to_string(to_type);
             return nullptr;

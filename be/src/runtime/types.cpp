@@ -355,6 +355,10 @@ int TypeDescriptor::get_slot_size() const {
     case TYPE_DECIMALV2:
     case TYPE_DECIMAL128:
         return 16;
+    case TYPE_DECIMAL256:
+        return 32;
+    case TYPE_INT256:
+        return 32;
     case TYPE_ARRAY:
     case TYPE_MAP:
         return sizeof(void*); // sizeof(Collection*)

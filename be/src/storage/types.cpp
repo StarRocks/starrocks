@@ -31,7 +31,6 @@
 // KIND, either express or implied.  See the License for the
 // specific language governing permissions and limitations
 // under the License.
-
 #include "storage/types.h"
 
 #include "gutil/strings/numbers.h"
@@ -56,6 +55,7 @@
 #include "util/mem_util.hpp"
 #include "util/mysql_global.h"
 #include "util/slice.h"
+#include "util/stack_util.h"
 #include "util/string_parser.hpp"
 #include "util/unaligned_access.h"
 
@@ -338,7 +338,8 @@ TypeInfoPtr get_type_info(const TabletColumn& col) {
 TypeInfoPtr get_type_info(LogicalType field_type, [[maybe_unused]] int precision, [[maybe_unused]] int scale) {
     if (is_scalar_field_type(field_type)) {
         return get_type_info(field_type);
-    } else if (field_type == TYPE_DECIMAL32 || field_type == TYPE_DECIMAL64 || field_type == TYPE_DECIMAL128) {
+    } else if (field_type == TYPE_DECIMAL32 || field_type == TYPE_DECIMAL64 || field_type == TYPE_DECIMAL128 ||
+               field_type == TYPE_DECIMAL256) {
         return get_decimal_type_info(field_type, precision, scale);
     } else {
         return nullptr;
@@ -981,7 +982,7 @@ struct ScalarTypeInfoImpl<TYPE_VARCHAR> : public ScalarTypeInfoImpl<TYPE_CHAR> {
             src_type->type() == TYPE_BIGINT || src_type->type() == TYPE_LARGEINT || src_type->type() == TYPE_FLOAT ||
             src_type->type() == TYPE_DOUBLE || src_type->type() == TYPE_DECIMAL || src_type->type() == TYPE_DECIMALV2 ||
             src_type->type() == TYPE_DECIMAL32 || src_type->type() == TYPE_DECIMAL64 ||
-            src_type->type() == TYPE_DECIMAL128) {
+            src_type->type() == TYPE_DECIMAL128 || src_type->type() == TYPE_DECIMAL256) {
             auto result = src_type->to_string(src);
             auto slice = reinterpret_cast<Slice*>(dest);
             slice->data = reinterpret_cast<char*>(mem_pool->allocate(result.size()));
@@ -1054,5 +1055,71 @@ int TypeComparator<ftype>::cmp(const void* lhs, const void* rhs) {
 #define M(ftype) template struct TypeComparator<ftype>;
 APPLY_FOR_SUPPORTED_FIELD_TYPE(M)
 #undef M
+
+template <>
+struct ScalarTypeInfoImplBase<TYPE_INT256> {
+    using CppType = starrocks::int256_t;
+
+    static const LogicalType type = TYPE_INT256;
+    static const int32_t size = sizeof(CppType);
+
+    static bool equal(const void* left, const void* right) {
+        auto l_value = unaligned_load<CppType>(left);
+        auto r_value = unaligned_load<CppType>(right);
+        return l_value == r_value;
+    }
+
+    static int cmp(const void* left, const void* right) {
+        auto l_value = unaligned_load<CppType>(left);
+        auto r_value = unaligned_load<CppType>(right);
+        if (l_value < r_value) return -1;
+        if (l_value > r_value) return 1;
+        return 0;
+    }
+
+    static void shallow_copy(void* dest, const void* src) {
+        unaligned_store<CppType>(dest, unaligned_load<CppType>(src));
+    }
+
+    static void deep_copy(void* dest, const void* src, MemPool* mem_pool __attribute__((unused))) {
+        unaligned_store<CppType>(dest, unaligned_load<CppType>(src));
+    }
+
+    static void direct_copy(void* dest, const void* src) {
+        unaligned_store<CppType>(dest, unaligned_load<CppType>(src));
+    }
+
+    static Status convert_from(void* dest __attribute__((unused)), const void* src __attribute__((unused)),
+                               const TypeInfoPtr& src_type __attribute__((unused)),
+                               MemPool* mem_pool __attribute__((unused))) {
+        return Status::NotSupported("Not supported function");
+    }
+
+    static void set_to_max(void* buf) { unaligned_store<CppType>(buf, INT256_MAX); }
+
+    static void set_to_min(void* buf) { unaligned_store<CppType>(buf, INT256_MIN); }
+
+    static std::string to_string(const void* src) {
+        auto value = unaligned_load<CppType>(src);
+        return starrocks::to_string(value);
+    }
+
+    static Status from_string(void* buf, const std::string& scan_key) {
+        try {
+            CppType value = starrocks::parse_int256(scan_key);
+            unaligned_store<CppType>(buf, value);
+            return Status::OK();
+        } catch (const std::exception& e) {
+            return Status::InternalError(
+                    fmt::format("Fail to cast to int256 from string: {} ({})", scan_key, e.what()));
+        }
+    }
+
+    static int datum_cmp(const Datum& left, const Datum& right) {
+        const CppType& v1 = left.get_int256();
+        const CppType& v2 = right.get_int256();
+        return (v1 < v2) ? -1 : (v2 < v1) ? 1 : 0;
+    }
+};
 
 } // namespace starrocks

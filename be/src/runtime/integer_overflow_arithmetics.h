@@ -15,6 +15,7 @@
 #pragma once
 
 #include <runtime/int128_arithmetics_x86_64.h>
+#include "runtime/int256_arithmetics_x86_64.h"
 #include <util/decimal_types.h>
 
 namespace starrocks {
@@ -51,6 +52,19 @@ inline bool add_overflow(int128_t a, int128_t b, int128_t* c) {
 #endif
 }
 
+template <>
+inline bool add_overflow(int256_t a, int256_t b, int256_t* c) {
+#if defined(__x86_64__) && defined(__GNUC__)
+    return asm_add(a, b, *c);
+#else
+    *c = a + b;
+    bool a_negative = a < 0;
+    bool b_negative = b < 0;
+    bool result_negative = *c < 0;
+    return (a_negative == b_negative) && (a_negative != result_negative);
+#endif
+}
+
 template <typename T>
 inline bool sub_overflow(T a, T b, T* c) {
     return __builtin_sub_overflow(a, b, c);
@@ -82,6 +96,17 @@ inline bool sub_overflow(int128_t a, int128_t b, int128_t* c) {
     return int128_sub_overflow(a, b, c);
 #endif
 }
+
+template <>
+inline bool sub_overflow(int256_t a, int256_t b, int256_t* c) {
+#if defined(__x86_64__) && defined(__GNUC__)
+    return asm_sub(a, b, *c);
+#else
+    *c = a - b;
+    return ((a < 0) == (0 < b)) && ((*c < 0) != (a < 0));
+#endif
+}
+
 
 template <typename T>
 inline bool mul_overflow(T a, T b, T* c) {
@@ -124,5 +149,71 @@ inline bool mul_overflow(int128_t a, int128_t b, int128_t* c) {
     return int128_mul_overflow(a, b, c);
 #endif
 }
+
+inline int count_bits(int256_t x) noexcept {
+    if (x == 0) return 0;
+    if (x >> 192) return 256 - __builtin_clzll(x >> 192) + 192;
+    if (x >> 128) return 128 - __builtin_clzll(x >> 128) + 128;
+    if (x >> 64)  return 64 - __builtin_clzll(x >> 64) + 64;
+    return 64 - __builtin_clzll(static_cast<uint64_t>(x));
+}
+
+template <>
+inline bool mul_overflow(int256_t a, int256_t b, int256_t* c) {
+#if defined(__x86_64__) && defined(__GNUC__)
+    return mul_256(a, b, *c);
+#else
+    constexpr int256_t MIN = std::numeric_limits<int256_t>::min();
+    constexpr int256_t MAX = std::numeric_limits<int256_t>::max();
+    constexpr uint256_t UMAX = static_cast<uint256_t>(INT256_MAX);
+
+    if (a == 0 || b == 0) {
+        result = int256_t(0);
+        return false;
+    }
+
+    if (a == INT256_MAX) return (b != int256_t(1));
+    if (b == INT256_MIN) return (a != int256_t(1));
+
+    const bool negative = (a.high < 0) ^ (b.high < 0);
+    const uint256_t abs_a = (a.high < 0) ? -static_cast<uint256_t>(a) : static_cast<uint256_t>(a);
+    const uint256_t abs_b = (b.high < 0) ? -static_cast<uint256_t>(b) : static_cast<uint256_t>(b);
+
+    const bool a_small = (abs_a >> 128) == 0;
+    const bool b_small = (abs_b >> 128) == 0;
+    if (a_small && b_small) {
+        const uint256_t product = abs_a * abs_b;
+        if (product <= UMAX) {
+            result = negative ? -static_cast<int256_t>(product)
+                              : static_cast<int256_t>(product);
+            return false;
+        }
+        return true;
+    }
+
+    const int bits_a = count_bits(abs_a);
+    const int bits_b = count_bits(abs_b);
+    if (bits_a + bits_b < 255) {
+        const uint256_t product = abs_a * abs_b;
+        result = negative ? -static_cast<int256_t>(product)
+                          : static_cast<int256_t>(product);
+        return false;
+    }
+    if (bits_a + bits_b > 255) {
+        return true;
+    }
+
+    const uint256_t max_div_b = UMAX / abs_b;
+    if (abs_a > max_div_b) {
+        return true;
+    }
+
+    const uint256_t product = abs_a * abs_b;
+    result = negative ? -static_cast<int256_t>(product)
+                      : static_cast<int256_t>(product);
+    return false;
+#endif
+}
+
 
 } // namespace starrocks

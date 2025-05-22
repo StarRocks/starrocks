@@ -74,7 +74,9 @@ enum LogicalType {
 
     // max value of LogicalType, newly-added type should not exceed this value.
     // used to create a fixed-size hash map.
-    TYPE_MAX_VALUE = 55
+    TYPE_MAX_VALUE = 55,
+    TYPE_DECIMAL256 = 56,
+    TYPE_INT256 = 57
 };
 
 // TODO(lism): support varbinary for zone map.
@@ -99,6 +101,8 @@ template <>
 inline constexpr LogicalType DelegateType<TYPE_DECIMAL64> = TYPE_BIGINT;
 template <>
 inline constexpr LogicalType DelegateType<TYPE_DECIMAL128> = TYPE_LARGEINT;
+template <>
+inline constexpr LogicalType DelegateType<TYPE_DECIMAL256> = TYPE_INT256;
 
 inline LogicalType delegate_type(LogicalType type) {
     switch (type) {
@@ -132,7 +136,7 @@ constexpr bool is_object_type(LogicalType type) {
 }
 
 inline bool is_decimalv3_field_type(LogicalType type) {
-    return type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 || type == TYPE_DECIMAL128;
+    return type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 || type == TYPE_DECIMAL128 || type == TYPE_DECIMAL256;
 }
 
 LogicalType string_to_logical_type(const std::string& type_str);
@@ -156,6 +160,7 @@ inline bool is_scalar_field_type(LogicalType type) {
     case TYPE_DECIMAL32:
     case TYPE_DECIMAL64:
     case TYPE_DECIMAL128:
+    case TYPE_DECIMAL256:
         return false;
     default:
         return true;
@@ -242,6 +247,7 @@ constexpr bool is_scalar_logical_type(LogicalType ltype) {
     case TYPE_DECIMAL32:  /* 24 */
     case TYPE_DECIMAL64:  /* 25 */
     case TYPE_DECIMAL128: /* 26 */
+    case TYPE_DECIMAL256: /* 27 */
     case TYPE_JSON:
         return true;
     default:
@@ -311,7 +317,9 @@ VALUE_GUARD(LogicalType, FloatLTGuard, lt_is_float, TYPE_FLOAT, TYPE_DOUBLE)
 VALUE_GUARD(LogicalType, Decimal32LTGuard, lt_is_decimal32, TYPE_DECIMAL32)
 VALUE_GUARD(LogicalType, Decimal64LTGuard, lt_is_decimal64, TYPE_DECIMAL64)
 VALUE_GUARD(LogicalType, Decimal128LTGuard, lt_is_decimal128, TYPE_DECIMAL128)
-VALUE_GUARD(LogicalType, DecimalLTGuard, lt_is_decimal, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128)
+VALUE_GUARD(LogicalType, Decimal256LTGuard, lt_is_decimal255, TYPE_DECIMAL256)
+VALUE_GUARD(LogicalType, DecimalLTGuard, lt_is_decimal, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128,
+            TYPE_DECIMAL256)
 VALUE_GUARD(LogicalType, SumDecimal64LTGuard, lt_is_sum_decimal64, TYPE_DECIMAL32, TYPE_DECIMAL64)
 VALUE_GUARD(LogicalType, HllLTGuard, lt_is_hll, TYPE_HLL)
 VALUE_GUARD(LogicalType, ObjectLTGuard, lt_is_object, TYPE_OBJECT)
@@ -329,7 +337,7 @@ VALUE_GUARD(LogicalType, DateTimeLTGuard, lt_is_datetime, TYPE_DATETIME)
 VALUE_GUARD(LogicalType, TimeLTGuard, lt_is_time, TYPE_TIME)
 VALUE_GUARD(LogicalType, DecimalV2LTGuard, lt_is_decimalv2, TYPE_DECIMALV2)
 VALUE_GUARD(LogicalType, DecimalOfAnyVersionLTGuard, lt_is_decimal_of_any_version, TYPE_DECIMALV2, TYPE_DECIMAL32,
-            TYPE_DECIMAL64, TYPE_DECIMAL128)
+            TYPE_DECIMAL64, TYPE_DECIMAL128, TYPE_DECIMAL256)
 VALUE_GUARD(LogicalType, DateOrDateTimeLTGuard, lt_is_date_or_datetime, TYPE_DATE, TYPE_DATETIME)
 VALUE_GUARD(LogicalType, CollectionLTGuard, lt_is_collection, TYPE_ARRAY, TYPE_MAP, TYPE_STRUCT)
 

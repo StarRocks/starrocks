@@ -56,6 +56,7 @@ LogicalType string_to_logical_type(const std::string& type_str) {
     if (upper_type_str == "DECIMAL32") return TYPE_DECIMAL32;
     if (upper_type_str == "DECIMAL64") return TYPE_DECIMAL64;
     if (upper_type_str == "DECIMAL128") return TYPE_DECIMAL128;
+    if (upper_type_str == "DECIMAL256") return TYPE_DECIMAL256;
     if (upper_type_str == "JSON") return TYPE_JSON;
     if (upper_type_str == "VARBINARY") return TYPE_VARBINARY;
     LOG(WARNING) << "invalid type string. [type='" << type_str << "']";
@@ -108,6 +109,8 @@ const char* logical_type_to_string(LogicalType type) {
         return "DECIMAL64";
     case TYPE_DECIMAL128:
         return "DECIMAL128";
+    case TYPE_DECIMAL256:
+        return "DECIMAL256";
     case TYPE_VARCHAR:
         return "VARCHAR";
     case TYPE_BOOLEAN:
@@ -142,6 +145,8 @@ const char* logical_type_to_string(LogicalType type) {
         return "MAX_VALUE";
     case TYPE_VARBINARY:
         return "VARBINARY";
+    case TYPE_INT256:
+        return "INT256";
     }
     return "";
 }
@@ -183,6 +188,8 @@ TPrimitiveType::type to_thrift(LogicalType ltype) {
         return TPrimitiveType::INVALID_TYPE;
     case TYPE_NULL:
         return TPrimitiveType::NULL_TYPE;
+    case TYPE_INT256:
+        return TPrimitiveType::DECIMAL256;
 
 #define M(thrift_name)       \
     case TYPE_##thrift_name: \
@@ -213,6 +220,8 @@ std::string type_to_string(LogicalType t) {
         return "INVALID";
     case TYPE_NULL:
         return "NULL";
+    case TYPE_INT256:
+        return "INT256";
 #define M(ttype)       \
     case TYPE_##ttype: \
         return #ttype;

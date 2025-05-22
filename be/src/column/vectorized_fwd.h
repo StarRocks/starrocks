@@ -17,7 +17,9 @@
 #include <memory>
 #include <vector>
 
+#include "runtime/int128_arithmetics_x86_64.h"
 #include "runtime/memory/column_allocator.h"
+#include "types/int256.h"
 
 namespace starrocks {
 
@@ -82,6 +84,7 @@ using TimestampColumn = FixedLengthColumn<TimestampValue>;
 using Decimal32Column = DecimalV3Column<int32_t>;
 using Decimal64Column = DecimalV3Column<int64_t>;
 using Decimal128Column = DecimalV3Column<int128_t>;
+using Decimal256Column = DecimalV3Column<int256_t>;
 using BinaryColumn = BinaryColumnBase<uint32_t>;
 using LargeBinaryColumn = BinaryColumnBase<uint64_t>;
 

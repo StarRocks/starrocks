@@ -24,6 +24,7 @@
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "types/constexpr.h"
+#include "types/int256.h"
 #include "types/logical_type.h"
 #include "util/json.h"
 
@@ -53,7 +54,12 @@ template <>
 inline constexpr bool IsDateTime<DateValue> = true;
 
 template <typename T>
-using is_starrocks_arithmetic = std::integral_constant<bool, std::is_arithmetic_v<T> || IsDecimal<T>>;
+constexpr bool IsInt256 = false;
+template <>
+inline constexpr bool IsInt256<int256_t> = true;
+
+template <typename T>
+using is_starrocks_arithmetic = std::integral_constant<bool, std::is_arithmetic_v<T> || IsDecimal<T> || IsInt256<T>>;
 
 // If isArithmeticLT is true, means this type support +,-,*,/
 template <LogicalType logical_type>
@@ -310,6 +316,19 @@ struct RunTimeTypeTraits<TYPE_ARRAY> {
     using ProxyContainerType = void;
 };
 
+template <>
+struct RunTimeTypeTraits<TYPE_INT256> {
+    using CppType = starrocks::int256_t;
+    using ColumnType = FixedLengthColumn<starrocks::int256_t>;
+};
+
+template <>
+struct RunTimeTypeTraits<TYPE_DECIMAL256> {
+    using CppType = int256_t;
+    using ColumnType = Decimal256Column;
+    using ProxyContainerType = ColumnType::Container;
+};
+
 template <LogicalType Type>
 using RunTimeCppType = typename RunTimeTypeTraits<Type>::CppType;
 
@@ -401,6 +420,11 @@ struct ColumnTraits<TimestampValue> {
     using ColumnType = TimestampColumn;
 };
 
+template <>
+struct ColumnTraits<int256_t> {
+    using ColumnType = Decimal256Column;
+};
+
 // Length of fixed-length type, 0 for dynamic-length type
 template <LogicalType ltype, typename = guard::Guard>
 struct RunTimeFixedTypeLength {
@@ -483,5 +507,18 @@ struct RunTimeTypeLimits<TYPE_JSON> {
     static value_type min_value() { return JsonValue{vpack::Slice::minKeySlice()}; }
     static value_type max_value() { return JsonValue{vpack::Slice::maxKeySlice()}; }
 };
+//
+// template <>
+// struct RunTimeTypeLimits<TYPE_DECIMAL256> {
+//     using value_type = int256_t;
+//
+//     static constexpr value_type min_value() {
+//         return MIN_INT256;
+//     }
+//
+//     static constexpr value_type max_value() {
+//         return MAX_INT256;
+//     }
+// };
 
 } // namespace starrocks
