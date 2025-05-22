@@ -354,7 +354,7 @@ public class GlueMetastoreClientDelegate {
 
         try {
             Table table = glueMetastore.getTable(dbName, tableName);
-            MetastoreClientUtils.validateGlueTable(table);
+            MetastoreClientUtils.validateGlueTable(table, glueMetastore);
             return CatalogToHiveConverter.convertTable(table, dbName);
         } catch (SdkException e) {
             throw CatalogToHiveConverter.wrapInHiveException(e);
