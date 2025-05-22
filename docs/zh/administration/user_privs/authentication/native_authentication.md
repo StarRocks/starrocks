@@ -3,7 +3,7 @@ displayed_sidebar: docs
 sidebar_position: 10
 ---
 
-# Native Authentication
+# 本地身份验证
 
 通过 SQL 命令在 StarRocks 中使用本地身份验证创建和管理用户。
 
@@ -15,7 +15,7 @@ StarRocks 本地身份验证是一种基于密码的身份验证方法。此外�
 
 :::
 
-## Create user
+## 创建用户
 
 您可以通过指定用户身份、身份验证方法以及可选的默认角色来创建用户。要为用户启用本地身份验证，您需要明确指定明文或密文密码。
 
@@ -30,17 +30,17 @@ CREATE USER jack@'172.10.1.10' IDENTIFIED BY '12345' DEFAULT ROLE 'example_role'
 - 如果在创建用户时未指定默认角色，则会为用户分配系统定义的默认角色 `PUBLIC`。
 :::
 
-用户的默认角色在连接到 StarRocks 时会自动激活。有关如何在连接后为用户启用所有（默认和授予的）角色的说明，请参见[Enable all roles](../authorization/User_privilege.md#enable-all-roles)。
+用户的默认角色在连接到 StarRocks 时会自动激活。有关如何在连接后为用户启用所有（默认和授予的）角色的说明，请参见[启用所有角色](../authorization/User_privilege.md#启用所有角色)。
 
 有关创建用户的更多信息和高级说明，请参见[CREATE USER](../../../sql-reference/sql-statements/account-management/CREATE_USER.md)。
 
-## Alter user
+## 变更用户
 
 您可以更改用户的密码、默认角色或属性。
 
-有关如何更改用户默认角色的说明，请参见[Alter default role](../authorization/User_privilege.md#alter-the-default-role-of-a-user)。
+有关如何更改用户默认角色的说明，请参见[更改用户的默认角色](../authorization/User_privilege.md#更改用户的默认角色)。
 
-### Alter the property of a user
+### 变更用户属性
 
 您可以使用 [ALTER USER](../../../sql-reference/sql-statements/account-management/ALTER_USER.md) 设置用户的属性。
 
@@ -52,14 +52,14 @@ CREATE USER jack@'172.10.1.10' IDENTIFIED BY '12345' DEFAULT ROLE 'example_role'
 ALTER USER 'jack' SET PROPERTIES ("max_user_connections" = "1000");
 ```
 
-### Reset password for a user
+### 重置用户密码
 
 您可以使用 [SET PASSWORD](../../../sql-reference/sql-statements/account-management/SET_PASSWORD.md) 或 [ALTER USER](../../../sql-reference/sql-statements/account-management/ALTER_USER.md) 重置用户的密码。
 
 > **NOTE**
 >
 > - 任何用户都可以在不需要任何权限的情况下重置自己的密码。
-> - 只有 `root` 用户本身可以设置其密码。如果您丢失了其密码并且无法连接到 StarRocks，请参见[Reset lost root password](#reset-lost-root-password) 获取更多说明。
+> - 只有 `root` 用户本身可以设置其密码。如果您丢失了其密码并且无法连接到 StarRocks，请参见[重置遗失的 root 用户密码](#重置遗失的-root-用户密码) 获取更多说明。
 
 以下两个示例都将 `jack` 的密码重置为 `54321`：
 
@@ -75,7 +75,7 @@ ALTER USER 'jack' SET PROPERTIES ("max_user_connections" = "1000");
   ALTER USER jack@'172.10.1.10' IDENTIFIED BY '54321';
   ```
 
-#### Reset lost root password
+#### 重置遗失的 root 用户密码
 
 如果您丢失了 `root` 用户的密码并且无法连接到 StarRocks，可以通过以下步骤重置：
 
@@ -123,7 +123,7 @@ ALTER USER 'jack' SET PROPERTIES ("max_user_connections" = "1000");
    mysql -h <fe_ip_or_fqdn> -P<fe_query_port> -uroot -p<xxxxxx>
    ```
 
-## Drop a user
+## 删除用户
 
 您可以使用 [DROP USER](../../../sql-reference/sql-statements/account-management/DROP_USER.md) 删除用户。
 
@@ -133,7 +133,7 @@ ALTER USER 'jack' SET PROPERTIES ("max_user_connections" = "1000");
 DROP USER jack@'172.10.1.10';
 ```
 
-## View users
+## 查看用户
 
 您可以使用 SHOW USERS 查看 StarRocks 集群中的所有用户。
 
@@ -141,7 +141,7 @@ DROP USER jack@'172.10.1.10';
 SHOW USERS;
 ```
 
-## View user property
+## 查看用户属性
 
 您可以使用 [SHOW PROPERTY](../../../sql-reference/sql-statements/account-management/SHOW_PROPERTY.md) 查看用户的属性。
 

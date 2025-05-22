@@ -328,8 +328,6 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 #### 语法
 
 ```sql
-PARTITION BY expression
-...
 ALTER TABLE [<db_name>.]<table_name>
 PARTITION BY <time_expr>
 WHERE <time_range_column> BETWEEN <start_time> AND <end_time>
