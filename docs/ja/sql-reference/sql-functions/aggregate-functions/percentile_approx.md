@@ -15,7 +15,7 @@ displayed_sidebar: docs
 ## Syntax
 
 ```Haskell
-PERCENTILE_APPROX(expr, DOUBLE p[, DOUBLE compression])
+DOUBLE PERCENTILE_APPROX(expr, DOUBLE p[, DOUBLE compression])
 ```
 
 ## Examples
