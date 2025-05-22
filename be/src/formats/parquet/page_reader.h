@@ -114,7 +114,8 @@ private:
     BufferPtr _compressed_buf;
     BufferPtr _uncompressed_buf;
     BufferPtr _cache_buf;
-    bool _hit_cache;
+    bool _hit_cache = false;
+    bool _skip_page_cache = false;
 
     Slice _uncompressed_data;
 };

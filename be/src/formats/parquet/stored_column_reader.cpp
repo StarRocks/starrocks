@@ -560,6 +560,7 @@ bool RepeatedStoredColumnReader::_cur_page_selected(size_t row_readed, const Fil
 Status StoredColumnReaderImpl::load_specific_page(size_t cur_page_idx, uint64_t offset, uint64_t first_row) {
     _reader->set_next_read_page_idx(cur_page_idx);
     RETURN_IF_ERROR(_reader->seek_to_offset(offset));
+    RETURN_IF_ERROR(_reader->next_page());
     RETURN_IF_ERROR(_reader->load_header());
     _cur_page_loaded = false;
     _num_values_left_in_cur_page = _reader->num_values();
