@@ -957,7 +957,7 @@ under the License.
             <dependency>
                 <groupId>com.fasterxml.uuid</groupId>
                 <artifactId>java-uuid-generator</artifactId>
-                <version>4.0</version>
+                <version>5.1.0</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.hudi/hudi-common -->
