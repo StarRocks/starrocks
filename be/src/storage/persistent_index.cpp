@@ -963,7 +963,9 @@ public:
     }
 
     Status load_snapshot(phmap::BinaryInputArchive& ar) override {
-        TRY_CATCH_BAD_ALLOC(_map.load(ar));
+        bool succ = false;
+        TRY_CATCH_BAD_ALLOC(succ = _map.load(ar));
+        RETURN_IF(!succ, Status::InternalError("load snapshot failed"));
         return Status::OK();
     }
 

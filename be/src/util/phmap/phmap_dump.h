@@ -280,14 +280,20 @@ public:
     explicit BinaryInputArchive(const char* file_path) { ifs_.open(file_path, std::ios_base::binary); }
 
     bool load(char* p, size_t sz) {
+        bool ret = true;
+        TEST_SYNC_POINT_CALLBACK("BinaryInputArchive::load::1", &ret);
+        if (!ret) return ret;
         ifs_.read(p, sz);
-        return true;
+        return !ifs_.fail();
     }
 
     template <typename V>
     typename std::enable_if<type_traits_internal::IsTriviallyCopyable<V>::value, bool>::type load(V* v) {
+        bool ret = true;
+        TEST_SYNC_POINT_CALLBACK("BinaryInputArchive::load::2", &ret);
+        if (!ret) return ret;
         ifs_.read(reinterpret_cast<char*>(v), sizeof(V));
-        return true;
+        return !ifs_.fail();
     }
 
 private:
