@@ -176,9 +176,9 @@ public class ConfigTest {
 
     @Test
     void testLdapConfigDefaults() {
-        assertEquals("ldap", Config.authentication_ldap_simple_server_protocol);
-        assertNull(Config.authentication_ldaps_trust_store_path);
-        assertNull(Config.authentication_ldaps_trust_store_password);
+        Assert.assertEquals("ldap", Config.authentication_ldap_simple_server_protocol);
+        Assert.assertNull(Config.authentication_ldaps_trust_store_path);
+        Assert.assertNull(Config.authentication_ldaps_trust_store_password);
     }
 
     @Test
@@ -186,8 +186,8 @@ public class ConfigTest {
         Config.authentication_ldap_simple_server_protocol = "ldaps";
         Config.authentication_ldaps_trust_store_path = "/tmp/test.jks";
         Config.authentication_ldaps_trust_store_password = "password";
-        assertEquals("ldaps", Config.authentication_ldap_simple_server_protocol);
-        assertEquals("/tmp/test.jks", Config.authentication_ldaps_trust_store_path);
-        assertEquals("password", Config.authentication_ldaps_trust_store_password);
+        Assert.assertEquals("ldaps", Config.authentication_ldap_simple_server_protocol);
+        Assert.assertEquals("/tmp/test.jks", Config.authentication_ldaps_trust_store_path);
+        Assert.assertEquals("password", Config.authentication_ldaps_trust_store_password);
     }
 }
