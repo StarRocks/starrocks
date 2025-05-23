@@ -91,7 +91,6 @@ Status AggregateStreamingSinkOperator::push_chunk(RuntimeState* state, const Chu
     } else {
         RETURN_IF_ERROR(_push_chunk_by_auto(chunk, chunk->num_rows()));
     }
-    RETURN_IF_ERROR(_build_topn_runtime_filter(state));
     RETURN_IF_ERROR(_aggregator->check_has_error());
     return Status::OK();
 }
@@ -317,27 +316,6 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_limited_memory(const Chunk
     } else {
         RETURN_IF_ERROR(_push_chunk_by_auto(chunk, chunk_size));
     }
-    return Status::OK();
-}
-
-Status AggregateStreamingSinkOperator::_build_topn_runtime_filter(RuntimeState* state) {
-    const auto& rf_build_descs = factory()->build_runtime_filters();
-    if (rf_build_descs.empty()) return Status::OK();
-
-    std::list<RuntimeFilterBuildDescriptor*> build_descs(rf_build_descs.begin(), rf_build_descs.end());
-    _topn_rf_builders.resize(rf_build_descs.size());
-    for (size_t i = 0; i < rf_build_descs.size(); ++i) {
-        ASSIGN_OR_RETURN(auto rf, _aggregator->build_topn_filters(state, rf_build_descs[i], &_topn_rf_builders[i]));
-        if (rf == nullptr) continue;
-        rf_build_descs[i]->set_or_intersect_filter(rf);
-        VLOG(2) << "runtime filter version:" << rf->rf_version() << "," << rf->debug_string() << rf;
-    }
-
-    if (std::all_of(build_descs.begin(), build_descs.end(),
-                    [](auto* desc) { return desc->runtime_filter() != nullptr; })) {
-        state->runtime_filter_port()->publish_runtime_filters(build_descs);
-    }
-
     return Status::OK();
 }
 

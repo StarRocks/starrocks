@@ -25,22 +25,6 @@
 
 namespace starrocks {
 class Aggregator;
-class HeapBuilder;
-class AggTopNRuntimeFilterBuilder {
-public:
-    AggTopNRuntimeFilterBuilder(RuntimeFilterBuildDescriptor* build_desc, LogicalType type)
-            : _build_desc(build_desc), _type(type) {}
-    RuntimeFilter* init_build(Aggregator* aggretator, ObjectPool* pool);
-    RuntimeFilter* update(const Column* column, ObjectPool* pool);
-    void close();
-    RuntimeFilter* runtime_filter();
-
-private:
-    RuntimeFilterBuildDescriptor* _build_desc;
-    LogicalType _type{};
-    std::shared_ptr<HeapBuilder> _heap_builder;
-    RuntimeFilter* _runtime_filter = nullptr;
-};
 
 class AggInRuntimeFilterBuilder {
 public:
