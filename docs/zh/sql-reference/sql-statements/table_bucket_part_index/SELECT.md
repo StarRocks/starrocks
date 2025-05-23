@@ -252,29 +252,15 @@ select  *  from  sales_record  order by  employee_id  nulls first;
 
 ### GROUP BY
 
-GROUP BY 子句通常和聚合函数（例如 COUNT(), SUM(), AVG(), MIN()和 MAX()）一起使用。
+GROUP BY 子句通常和聚合函数一起使用。GROUP BY 指定的列不会参加聚合操作。
 
-GROUP BY 指定的列不会参加聚合操作。GROUP BY 子句可以加入 HAVING 子句来过滤聚合函数产出的结果。例如：
-
-```sql
-select tiny_column, sum(short_column)
-from small_table 
-group by tiny_column;
-```
-
-```sql
-+-------------+---------------------+
-| tiny_column |  sum('short_column')|
-+-------------+---------------------+
-|      1      |        2            |
-|      2      |        1            |
-+-------------+---------------------+
-```
-
-## 语法
+#### 语法
 
   ```sql
-  SELECT ...
+  SELECT
+  ...
+  aggregate_function() [ FILTER ( where boolean_expression ) ]
+  ...
   FROM ...
   [ ... ]
   GROUP BY [
@@ -286,127 +272,118 @@ group by tiny_column;
   [ ... ]
   ```
 
-### Parameters
+#### 参数
 
-- `groupSet` 表示 select list 中的列，别名或者表达式组成的集合 `groupSet ::= { ( expr  [ , expr [ , ... ] ] )}`。
+- `FILTER` 与聚合函数共同使用，仅有被筛选出来的行才会参与聚合函数的实际运算。
+  > 注意：
+  > FILTER 语句仅支持在 AVG, COUNT, MAX, MIN, SUM, ARRAY_AGG, and ARRAY_AGG_DISTINCT 函数后使用。
+  > 不支持 COUNT DISTINCT。
+  > ARRAY_AGG 和 ARRAY_AGG_DISTINCT 不支持在函数中使用 ORDER BY。
 
-- `expr`  表示 select list 中的列，别名或者表达式。
+- `GROUPING SETS` ｜ `CUBE` ｜ `ROLLUP` 是对 GROUP BY 子句的扩展，它能够在一个 GROUP BY 子句中实现多个集合的分组的聚合。其结果等价于将多个相应 GROUP BY 子句进行 UNION 操作。
 
-### Note
+#### 示例
 
-StarRocks 支持类似 PostgreSQL 语法，语法实例如下：
+例1: `FILTER`
 
-  ```sql
-  SELECT a, b, SUM( c ) FROM tab1 GROUP BY GROUPING SETS ( (a, b), (a), (b), ( ) );
-  SELECT a, b,c, SUM( d ) FROM tab1 GROUP BY ROLLUP(a,b,c)
-  SELECT a, b,c, SUM( d ) FROM tab1 GROUP BY CUBE(a,b,c)
-  ```
-
-`ROLLUP(a,b,c)` 等价于如下 `GROUPING SETS` 语句。
+  下述两个查询例子等价。
 
   ```sql
-  GROUPING SETS (
-  (a,b,c),
-  (a,b  ),
-  (a    ),
-  (     )
-  )
+  SELECT
+    COUNT(*) AS total_users,
+    SUM(CASE WHEN gender = 'M' THEN 1 ELSE 0 END) AS male_users,
+    SUM(CASE WHEN gender = 'F' THEN 1 ELSE 0 END) AS female_users
+  FROM users;
   ```
-
-`CUBE (a, b, c)` 等价于如下 `GROUPING SETS` 语句。
-
+  
   ```sql
-  GROUPING SETS (
-  ( a, b, c ),
-  ( a, b    ),
-  ( a,    c ),
-  ( a       ),
-  (    b, c ),
-  (    b    ),
-  (       c ),
-  (         )
-  )
+  SELECT
+    COUNT(*) AS total_users,
+    COUNT(*) FILTER (WHERE gender = 'M') AS male_users,
+    COUNT(*) FILTER (WHERE gender = 'F') AS female_users
+  FROM users;
   ```
 
-## 示例
+例2:  `GROUPING SETS` ｜ `CUBE` ｜ `ROLLUP`
 
-下面是一个实际数据的例子:
-
-  ```sql
-  SELECT * FROM t;
-  +------+------+------+
-  | k1   | k2   | k3   |
-  +------+------+------+
-  | a    | A    |    1 |
-  | a    | A    |    2 |
-  | a    | B    |    1 |
-  | a    | B    |    3 |
-  | b    | A    |    1 |
-  | b    | A    |    4 |
-  | b    | B    |    1 |
-  | b    | B    |    5 |
-  +------+------+------+
-  8 rows in set (0.01 sec)
-
-  SELECT k1, k2, SUM(k3) FROM t
-  GROUP BY GROUPING SETS ( (k1, k2), (k2), (k1), ( ) );
-  +------+------+-----------+
-  | k1   | k2   | sum(`k3`) |
-  +------+------+-----------+
-  | b    | B    |         6 |
-  | a    | B    |         4 |
-  | a    | A    |         3 |
-  | b    | A    |         5 |
-  | NULL | B    |        10 |
-  | NULL | A    |         8 |
-  | a    | NULL |         7 |
-  | b    | NULL |        11 |
-  | NULL | NULL |        18 |
-  +------+------+-----------+
-  9 rows in set (0.06 sec)
-
-  SELECT k1, k2, GROUPING_ID(k1,k2), SUM(k3) FROM t
-  GROUP BY GROUPING SETS ((k1, k2), (k1), (k2), ());
-  +------+------+---------------+----------------+
-  | k1   | k2   | grouping_id(k1,k2) | sum(`k3`) |
-  +------+------+---------------+----------------+
-  | a    | A    |             0 |              3 |
-  | a    | B    |             0 |              4 |
-  | a    | NULL |             1 |              7 |
-  | b    | A    |             0 |              5 |
-  | b    | B    |             0 |              6 |
-  | b    | NULL |             1 |             11 |
-  | NULL | A    |             2 |              8 |
-  | NULL | B    |             2 |             10 |
-  | NULL | NULL |             3 |             18 |
-  +------+------+---------------+----------------+
-  9 rows in set (0.02 sec)
-  ```
-
-GROUP BY `GROUPING SETS` ｜ `CUBE` ｜ `ROLLUP` 是对 GROUP BY 子句的扩展，它能够在一个 GROUP BY 子句中实现多个集合的分组的聚合。其结果等价于将多个相应 GROUP BY 子句进行 UNION 操作。
-
-  GROUP BY 子句是只含有一个元素的 GROUP BY GROUPING SETS 的特例。
-  例如，GROUPING SETS 语句：
-
-  ```sql
-  SELECT a, b, SUM( c ) FROM tab1 GROUP BY GROUPING SETS ( (a, b), (a), (b), ( ) );
-  ```
-
-  其查询结果等价于：
-
-  ```sql
-  SELECT a, b, SUM( c ) FROM tab1 GROUP BY a, b
-  UNION
-  SELECT a, null, SUM( c ) FROM tab1 GROUP BY a
-  UNION
-  SELECT null, b, SUM( c ) FROM tab1 GROUP BY b
-  UNION
-  SELECT null, null, SUM( c ) FROM tab1
-  ```
-
-  `GROUPING(expr)` 指示一个列是否为聚合列，如果是聚合列为 0，否则为 1。
-
-  `GROUPING_ID(expr  [ , expr [ , ... ] ])` 与 GROUPING 类似，GROUPING_ID 根据指定的 column 顺序，计算出一个列列表的 bitmap 值，每一位为 GROUPING 的值. GROUPING_ID()函数返回位向量的十进制值。
+  `ROLLUP(a,b,c)` 等价于如下 `GROUPING SETS` 语句。
+  
+    ```sql
+    GROUPING SETS (
+    (a,b,c),
+    (a,b  ),
+    (a    ),
+    (     )
+    )
+    ```
+  
+  `CUBE (a, b, c)` 等价于如下 `GROUPING SETS` 语句。
+  
+    ```sql
+    GROUPING SETS (
+    ( a, b, c ),
+    ( a, b    ),
+    ( a,    c ),
+    ( a       ),
+    (    b, c ),
+    (    b    ),
+    (       c ),
+    (         )
+    )
+    ```
+  
+  带入实际数据的例子:
+  
+    ```sql
+    SELECT * FROM t;
+    +------+------+------+
+    | k1   | k2   | k3   |
+    +------+------+------+
+    | a    | A    |    1 |
+    | a    | A    |    2 |
+    | a    | B    |    1 |
+    | a    | B    |    3 |
+    | b    | A    |    1 |
+    | b    | A    |    4 |
+    | b    | B    |    1 |
+    | b    | B    |    5 |
+    +------+------+------+
+    8 rows in set (0.01 sec)
+  
+    SELECT k1, k2, SUM(k3) FROM t
+    GROUP BY GROUPING SETS ( (k1, k2), (k2), (k1), ( ) );
+    +------+------+-----------+
+    | k1   | k2   | sum(`k3`) |
+    +------+------+-----------+
+    | b    | B    |         6 |
+    | a    | B    |         4 |
+    | a    | A    |         3 |
+    | b    | A    |         5 |
+    | NULL | B    |        10 |
+    | NULL | A    |         8 |
+    | a    | NULL |         7 |
+    | b    | NULL |        11 |
+    | NULL | NULL |        18 |
+    +------+------+-----------+
+    9 rows in set (0.06 sec)
+  
+    SELECT k1, k2, GROUPING_ID(k1,k2), SUM(k3) FROM t
+    GROUP BY GROUPING SETS ((k1, k2), (k1), (k2), ());
+    +------+------+---------------+----------------+
+    | k1   | k2   | grouping_id(k1,k2) | sum(`k3`) |
+    +------+------+---------------+----------------+
+    | a    | A    |             0 |              3 |
+    | a    | B    |             0 |              4 |
+    | a    | NULL |             1 |              7 |
+    | b    | A    |             0 |              5 |
+    | b    | B    |             0 |              6 |
+    | b    | NULL |             1 |             11 |
+    | NULL | A    |             2 |              8 |
+    | NULL | B    |             2 |             10 |
+    | NULL | NULL |             3 |             18 |
+    +------+------+---------------+----------------+
+    9 rows in set (0.02 sec)
+    ```
 
 ### HAVING
 
@@ -555,7 +532,7 @@ mysql> select varchar_column from big_table order by varchar_column limit 1 offs
 >
 > 在没有 ORDER BY 的情况下使用 OFFSET 语法是允许的，但是此时 OFFSET 无意义。这种情况只取 LIMIT 的值，忽略 OFFSET 的值。因此在没有 ORDER BY 的情况下，OFFSET 超过结果集的最大行数依然是有结果的。**建议使用 OFFSET 时一定带上 ORDER BY。**
 
-### **UNION**
+### UNION
 
 UNION 子句用于合并多个查询的结果，即获取并集。
 
@@ -681,7 +658,7 @@ limit 3;
 3 rows in set (0.01 sec)
 ```
 
-### **INTERSECT**
+### INTERSECT
 
 INTERSECT 子句用于返回多个查询结果之间的交集，即每个结果中都有的数据，并对结果集进行去重。
 
@@ -722,7 +699,7 @@ order by id;
 +------+-------+
 ```
 
-### **EXCEPT/MINUS**
+### EXCEPT/MINUS
 
 EXCEPT/MINUS 子句用于返回多个查询结果之间的补集，即返回左侧查询中在右侧查询中不存在的数据，并对结果集去重。EXCEPT 和 MINUS 功能对等。
 
