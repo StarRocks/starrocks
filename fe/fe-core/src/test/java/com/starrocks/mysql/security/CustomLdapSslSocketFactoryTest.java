@@ -23,8 +23,7 @@ import java.security.KeyStore;
 import javax.net.SocketFactory;
 
 import org.junit.AfterClass;
-import org.junit.Assert.assertSame;
-import org.junit.Assert.assertTrue;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
