@@ -284,6 +284,7 @@ TEST_F(StarRocksMetricsTest, PageCacheMetrics) {
             auto data = std::make_unique<std::vector<uint8_t>>(1024);
             ASSERT_OK(_page_cache->insert(key, data.get(), &handle, false));
             ASSERT_TRUE(_page_cache->lookup(key, &handle));
+            data.release();
         }
         for (int i = 0; i < 1024; i++) {
             PageCacheHandle handle;
