@@ -17,13 +17,13 @@
 
 package com.starrocks.mysql.security;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import org.junit.jupiter.api.Test;
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
 
-class CustomLdapSslSocketFactoryExceptionTest {
+public class CustomLdapSslSocketFactoryExceptionTest {
 
     @Test
-    void testExceptionMessageAndCause() {
+    public void testExceptionMessageAndCause() {
         Throwable cause = new RuntimeException("root");
         CustomLdapSslSocketFactoryException ex =
                 new CustomLdapSslSocketFactoryException("test message", cause);
