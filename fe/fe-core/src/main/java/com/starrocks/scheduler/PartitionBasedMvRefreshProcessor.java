@@ -820,20 +820,15 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             }
 
             Table newTable = optNewTable.get();
-            if ((newTable instanceof HiveTable)
-                    && ((HiveTable) newTable).getHiveTableType() == HiveTable.HiveTableType.EXTERNAL_TABLE) {
+            // only collect to-repair tables when the table is not the same as the old one by checking the table identifier
+            if (!baseTableInfo.getTableIdentifier().equals(table.getTableIdentifier())) {
                 toRepairTables.add(Pair.create(newTable, baseTableInfo));
-            } else {
-                logger.info("Table:{} is not an hive external table, no need to repair", baseTableInfo.getTableInfoStr());
             }
         }
 
         // do repair if needed
         if (!toRepairTables.isEmpty()) {
-            MVPCTMetaRepairer repairer = new MVPCTMetaRepairer(db, mv);
-            for (Pair<Table, BaseTableInfo> pair : toRepairTables) {
-                repairer.repairTableIfNeeded(pair.first, pair.second);
-            }
+            MVPCTMetaRepairer.repairMetaIfNeeded(db, mv, toRepairTables);
         }
     }
 
