@@ -19,8 +19,10 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
 import com.starrocks.persist.gson.GsonUtils;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.Map;
+import java.util.Objects;
 
 public class ExecuteOption {
 
@@ -106,34 +108,37 @@ public class ExecuteOption {
         isReplay = replay;
     }
 
-    private boolean containsKey(String key) {
-        return taskRunProperties.containsKey(key) && taskRunProperties.get(key) != null;
+    /**
+     * Check if the current ExecuteOption can be merged with the given option:
+     * - Only all taskRunProperties are empty or the same with specific keys, we can merge two pending task runs.
+     */
+    public boolean isMergeableWith(ExecuteOption other) {
+        if (!isMergeRedundant || !other.isMergeRedundant) {
+            return false;
+        }
+        if (CollectionUtils.sizeIsEmpty(this.taskRunProperties)
+                && CollectionUtils.sizeIsEmpty(other.taskRunProperties)) {
+            return true;
+        }
+        return Objects.equals(this.getTaskRunComparableProperties(), other.getTaskRunComparableProperties());
     }
 
     /**
-     * If the execute option contains the properties that need to be merged into the task run, eg: it's an internal partition
-     * refresh, needs to merge it into the newer task run.
-     * task in mv refresh
-     * @return
+     * See @{code TaskRun#MV_COMPARABLE_PROPERTIES} for more details.
+     * @return a map of task run properties that are comparable for merging.
      */
-    public boolean containsToMergeProperties() {
-        if (taskRunProperties == null) {
-            return false;
+    public Map<String, String> getTaskRunComparableProperties() {
+        // For non-mv task, we don't need to check the task run properties.
+        if (taskRunProperties == null || !taskRunProperties.containsKey(TaskRun.MV_ID)) {
+            return taskRunProperties;
         }
-        if (containsKey(TaskRun.PARTITION_START) || containsKey(TaskRun.PARTITION_END)
-                || containsKey(TaskRun.START_TASK_RUN_ID) || containsKey(TaskRun.PARTITION_VALUES)) {
-            return true;
-        }
-        return false;
-    }
-
-    public void mergeProperties(ExecuteOption option) {
-        if (option.taskRunProperties != null) {
-            if (taskRunProperties == null) {
-                taskRunProperties = Maps.newHashMap();
+        Map<String, String> result = Maps.newHashMap();
+        for (Map.Entry<String, String> e : taskRunProperties.entrySet()) {
+            if (TaskRun.MV_COMPARABLE_PROPERTIES.contains(e.getKey())) {
+                result.put(e.getKey(), e.getValue());
             }
-            taskRunProperties.putAll(option.taskRunProperties);
         }
+        return result;
     }
 
     @Override
