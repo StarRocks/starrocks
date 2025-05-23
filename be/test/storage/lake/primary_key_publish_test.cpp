@@ -2034,6 +2034,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_data_file_sharing) {
         std::unique_ptr<SharedWritableFileContext> context = std::make_unique<SharedWritableFileContext>();
         context->init(true);
         int64_t txn_id = next_id();
+        std::vector<std::unique_ptr<DeltaWriter>> delta_writers;
         for (int64_t tid : tablet_ids) {
             ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
                                                        .set_tablet_manager(_tablet_mgr.get())
@@ -2046,11 +2047,13 @@ TEST_P(LakePrimaryKeyPublishTest, test_data_file_sharing) {
                                                        .set_shared_writable_file_context(context.get())
                                                        .build());
             ASSERT_OK(delta_writer->open());
+            delta_writers.push_back(std::move(delta_writer));
+        }
+        for (auto& delta_writer : delta_writers) {
             ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
             ASSERT_OK(delta_writer->finish_with_txnlog());
             delta_writer->close();
         }
-        ASSERT_OK(context->close());
         // Publish version
         for (int64_t tid : tablet_ids) {
             ASSERT_OK(publish_single_version(tid, version + 1, txn_id).status());

@@ -18,19 +18,10 @@
 
 namespace starrocks {
 
-struct SharedWritableFileContext {
-    // shared file
-    std::unique_ptr<WritableFile> shared_file;
-    // mutex for shared file write
-    std::mutex shared_file_mutex;
-    // should enable shared file. There are 2 cases that we shouldn't enable shared file:
-    // 1. disable by config
-    // 2. more than 1 add chunk request to this channel.
-    bool enable_shared_file = false;
-    bool is_inited = false;
-    // The number of active writers to this file.
-    uint32_t active_writers = 0;
-
+class SharedWritableFileContext {
+public:
+    SharedWritableFileContext() = default;
+    ~SharedWritableFileContext() = default;
     // Called when the first chunk is added to the channel.
     void init(bool eos);
 
@@ -38,9 +29,29 @@ struct SharedWritableFileContext {
 
     Status close();
 
+    // Called when writer is prepared to write.
     void increase_active_writers();
     // last writer will close the shared file.
     Status decrease_active_writers();
+
+    bool enable_shared_file() const { return _enable_shared_file.load(); }
+    const std::string& filename() const { return _filename; }
+
+    // Append slices to the shared file, and return the first offset of the slices.
+    StatusOr<int64_t> appendv(const std::vector<Slice>& slices, const FileEncryptionInfo& info);
+
+private:
+    // shared file
+    std::unique_ptr<WritableFile> _shared_file;
+    // mutex for shared file write
+    std::mutex _shared_file_mutex;
+    // It will be disable when more than 1 add chunk request to this channel.
+    std::atomic<bool> _enable_shared_file{false};
+    bool _is_inited = false;
+    // The number of active writers to this file.
+    uint32_t _active_writers = 0;
+    // filename, init when create shared file.
+    std::string _filename;
 };
 
 class SharedWritableFile : public WritableFile {
@@ -62,7 +73,7 @@ public:
 
     uint64_t size() const override { return _local_buffer_file_size; }
 
-    const std::string& filename() const override { return _context->shared_file->filename(); }
+    const std::string& filename() const override { return _context->filename(); }
 
     int64_t shared_file_offset() const override { return _shared_file_offset; }
 

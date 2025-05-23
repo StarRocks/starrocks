@@ -106,7 +106,7 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer() {
             return fs::new_writable_file(wopts, _tablet_mgr->segment_location(_tablet_id, name));
         }
     };
-    if (_shared_file_context != nullptr && _shared_file_context->enable_shared_file) {
+    if (_shared_file_context != nullptr && _shared_file_context->enable_shared_file()) {
         RETURN_IF_ERROR(_shared_file_context->try_create_shared_file(create_file_fn));
         of = std::make_unique<SharedWritableFile>(_shared_file_context, wopts.encryption_info);
     } else {

@@ -20,18 +20,19 @@
 namespace starrocks {
 
 void SharedWritableFileContext::init(bool eos) {
-    std::lock_guard<std::mutex> l(shared_file_mutex);
-    if (!is_inited && eos) {
-        enable_shared_file = true;
+    std::lock_guard<std::mutex> l(_shared_file_mutex);
+    if (!_is_inited && eos) {
+        _enable_shared_file = true;
     }
-    is_inited = true;
+    _is_inited = true;
 }
 
 Status SharedWritableFileContext::try_create_shared_file(
         const std::function<StatusOr<std::unique_ptr<WritableFile>>()>& create_file_fn) {
-    std::lock_guard<std::mutex> l(shared_file_mutex);
-    if (shared_file == nullptr) {
-        ASSIGN_OR_RETURN(shared_file, create_file_fn());
+    std::lock_guard<std::mutex> l(_shared_file_mutex);
+    if (_shared_file == nullptr) {
+        ASSIGN_OR_RETURN(_shared_file, create_file_fn());
+        _filename = _shared_file->filename();
     } else {
         // If the shared file is already created, we don't need to create it again.
         // Just return OK.
@@ -40,29 +41,40 @@ Status SharedWritableFileContext::try_create_shared_file(
 }
 
 Status SharedWritableFileContext::close() {
-    if (shared_file) {
-        RETURN_IF_ERROR(shared_file->close());
+    if (_shared_file) {
+        RETURN_IF_ERROR(_shared_file->close());
     }
     return Status::OK();
 }
 
 void SharedWritableFileContext::increase_active_writers() {
-    std::lock_guard<std::mutex> l(shared_file_mutex);
-    active_writers++;
+    std::lock_guard<std::mutex> l(_shared_file_mutex);
+    _active_writers++;
 }
 
 Status SharedWritableFileContext::decrease_active_writers() {
     bool is_last_writer = false;
     {
-        std::lock_guard<std::mutex> l(shared_file_mutex);
-        active_writers--;
-        is_last_writer = (active_writers == 0);
+        std::lock_guard<std::mutex> l(_shared_file_mutex);
+        _active_writers--;
+        is_last_writer = (_active_writers == 0);
     }
     if (is_last_writer) {
         // If there are no active writers, we can close the shared file.
         RETURN_IF_ERROR(close());
     }
     return Status::OK();
+}
+
+StatusOr<int64_t> SharedWritableFileContext::appendv(const std::vector<Slice>& slices, const FileEncryptionInfo& info) {
+    // Use lock to make sure each thread will write to the shared file in order.
+    std::lock_guard<std::mutex> l(_shared_file_mutex);
+    // Get the offset of current file in the shared file.
+    int64_t shared_file_offset = _shared_file->size();
+    // Append the slices to the shared file.
+    _shared_file->set_encryption_info(info);
+    RETURN_IF_ERROR(_shared_file->appendv(slices.data(), slices.size()));
+    return shared_file_offset;
 }
 
 Status SharedWritableFile::append(const Slice& data) {
@@ -83,13 +95,13 @@ Status SharedWritableFile::appendv(const Slice* data, size_t cnt) {
 
 Status SharedWritableFile::close() {
     if (_local_buffer_file_size > 0) {
-        // Use lock to make sure each thread will write to the shared file in order.
-        std::lock_guard<std::mutex> l(_context->shared_file_mutex);
-        // Get the offset of current file in the shared file.
-        _shared_file_offset = _context->shared_file->size();
-        // Append the local buffer to the shared file.
-        _context->shared_file->set_encryption_info(_encryption_info);
-        RETURN_IF_ERROR(_context->shared_file->appendv(_slices.data(), _slices.size()));
+        ASSIGN_OR_RETURN(_shared_file_offset, _context->appendv(_slices, _encryption_info));
+        // Clear the local buffer.
+        _slices.clear();
+        _buffers.clear();
+        _slices.shrink_to_fit();
+        _buffers.shrink_to_fit();
+        _local_buffer_file_size = 0;
     }
     return Status::OK();
 }
