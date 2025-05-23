@@ -223,3 +223,64 @@ None	None	None
 7	77777	7
 8	88888	8
 -- !result
+set streaming_preaggregation_mode="force_streaming";
+-- result:
+-- !result
+create table t6 (
+    c0 int,
+    c1 float,
+    c2 string,
+    c3 int
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t6 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  100000));
+-- result:
+-- !result
+select count(*) from (select sum(c3) from t6 group by c1, c2 limit 10) t;
+-- result:
+10
+-- !result
+select count(*) from (select sum(c3) from t6 group by c1, c2, c3 limit 10) t;
+-- result:
+10
+-- !result
+select count(*) from (select sum(c3) from t6 group by c2, c1 limit 10) t;
+-- result:
+10
+-- !result
+create table tempty (
+    c0 int,
+    c1 float,
+    c2 string,
+    c3 int
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 3 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+select sum(c3) from tempty group by c1, c2 limit 10;
+-- result:
+-- !result
+select sum(c3) from tempty group by c1, c2, c3 limit 10;
+-- result:
+-- !result
+select sum(c3) from tempty group by c2, c1 limit 10;
+-- result:
+-- !result
+create table tarray (
+    c0 int,
+    c1 array<int>,
+    c3 int
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 3 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into tarray SELECT generate_series, [generate_series], generate_series FROM TABLE(generate_series(1,  100000));
+-- result:
+-- !result
+select count(*) from (select sum(c3) from tarray group by c1, c3 limit 10) t;
+-- result:
+10
+-- !result
+select count(*) from (select sum(c3) from tarray group by c1 limit 10) t;
+-- result:
+10
+-- !result
