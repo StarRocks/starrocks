@@ -38,7 +38,7 @@ struct AggInRuntimeFilterBuilderImpl {
         hash_map_variant.visit([&](auto& variant_value) {
             auto& hash_map_with_key = *variant_value;
             using HashMapWithKey = std::remove_reference_t<decltype(hash_map_with_key)>;
-            using ResultVector = HashMapWithKey::ResultVector;
+            using ResultVector = typename HashMapWithKey::ResultVector;
             auto& hash_map = hash_map_with_key.hash_map;
             const size_t hash_map_size = hash_map_variant.size();
             Columns group_by_columns = aggregator->create_group_by_columns(hash_map_size);
