@@ -66,12 +66,12 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.BrokerUtil;
+import com.starrocks.fs.FileSystem;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.Load;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TBrokerFileStatus;
@@ -296,9 +296,18 @@ public class FileScanNode extends LoadScanNode {
             if (filePaths.size() == 0) {
                 throw new DdlException("filegroup number=" + fileGroups.size() + " is illegal");
             }
-            THdfsProperties hdfsProperties = new THdfsProperties();
-            HdfsUtil.getTProperties(filePaths.get(0), brokerDesc, hdfsProperties);
-            params.setHdfs_properties(hdfsProperties);
+
+            String path = filePaths.get(0);
+            if (fileScanType == TFileScanType.LOAD) {
+                THdfsProperties hdfsProperties = new THdfsProperties();
+                HdfsUtil.getTProperties(path, brokerDesc, hdfsProperties);
+                params.setHdfs_properties(hdfsProperties);
+            } else {
+                // FILES_INSERT, FILES_QUERY
+                FileSystem fs = FileSystem.getFileSystem(path, brokerDesc.getProperties());
+                THdfsProperties hdfsProperties = fs.getHdfsProperties(path);
+                params.setHdfs_properties(hdfsProperties);
+            }
         }
         byte[] column_separator = fileGroup.getColumnSeparator().getBytes(StandardCharsets.UTF_8);
         byte[] row_delimiter = fileGroup.getRowDelimiter().getBytes(StandardCharsets.UTF_8);

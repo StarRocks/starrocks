@@ -81,6 +81,7 @@ public:
 
     const THdfsProperties* hdfs_properties() const;
     const TCloudConfiguration* get_cloud_configuration() const;
+    bool azure_use_native_sdk() const;
 
     const TBrokerScanRangeParams* scan_range_params;
     const TExportSink* export_sink;
