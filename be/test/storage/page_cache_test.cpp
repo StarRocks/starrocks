@@ -75,10 +75,10 @@ TEST_F(StoragePageCacheTest, normal) {
 
         ASSERT_OK(_page_cache->insert(key, data.get(), &handle, false));
         ASSERT_EQ(handle.data(), data.get());
-        data.release();
+        auto* check_data = data.release();
 
         ASSERT_TRUE(_page_cache->lookup(key, &handle));
-        ASSERT_EQ(handle.data(), data.get());
+        ASSERT_EQ(handle.data(), check_data);
     }
 
     {
