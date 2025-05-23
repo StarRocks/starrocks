@@ -372,7 +372,7 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
             return false;
         }
 
-        if (!couldBound(probeExpr, descripftion, descTbl)) {
+        if (!couldBound(probeExpr, description, descTbl)) {
             return false;
         }
 

@@ -902,19 +902,6 @@ Status Aggregator::compute_batch_agg_states_with_selection(Chunk* chunk, size_t 
     return Status::OK();
 }
 
-StatusOr<RuntimeFilter*> Aggregator::build_topn_filters(RuntimeState* state, RuntimeFilterBuildDescriptor* desc,
-                                                        std::shared_ptr<AggTopNRuntimeFilterBuilder>* builder) {
-    int expr_order = desc->build_expr_order();
-    const auto& group_type_type = _group_by_types[expr_order].result_type.type;
-    auto& topn_builder = *builder;
-    if (size() < desc->limit()) return nullptr;
-    if (topn_builder == nullptr) {
-        topn_builder = std::make_shared<AggTopNRuntimeFilterBuilder>(desc, group_type_type);
-        return topn_builder->init_build(this, state->obj_pool());
-    }
-    return topn_builder->update(_group_by_columns[expr_order].get(), state->obj_pool());
-}
-
 RuntimeFilter* Aggregator::build_in_filters(RuntimeState* state, RuntimeFilterBuildDescriptor* desc) {
     int expr_order = desc->build_expr_order();
     const auto& group_type_type = _group_by_types[expr_order].result_type.type;

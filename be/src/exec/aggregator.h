@@ -347,8 +347,6 @@ public:
     Status compute_batch_agg_states(Chunk* chunk, size_t chunk_size);
     Status compute_batch_agg_states_with_selection(Chunk* chunk, size_t chunk_size);
 
-    StatusOr<RuntimeFilter*> build_topn_filters(RuntimeState* state, RuntimeFilterBuildDescriptor* desc,
-                                                std::shared_ptr<AggTopNRuntimeFilterBuilder>* builder);
     RuntimeFilter* build_in_filters(RuntimeState* state, RuntimeFilterBuildDescriptor* desc);
     // Convert one row agg states to chunk
     Status convert_to_chunk_no_groupby(ChunkPtr* chunk);
