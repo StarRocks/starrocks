@@ -14,10 +14,15 @@
 
 #include "connector/utils.h"
 
+#include "arrow/util/decimal.h"
+#include "column/chunk_extra_data.h"
 #include "column/column.h"
+#include "column/column_viewer.h"
 #include "column/datum.h"
+#include "exprs/base64.h"
 #include "exprs/expr.h"
 #include "formats/parquet/parquet_file_writer.h"
+#include "util/integer_util.h"
 #include "util/url_coding.h"
 
 namespace starrocks::connector {
@@ -38,6 +43,123 @@ StatusOr<std::string> HiveUtils::make_partition_name(
         ss << column_names[i] << "=" << value << "/";
     }
     return ss.str();
+}
+
+template <typename T>
+StatusOr<std::string> HiveUtils::format_decimal_value(T value, int scale) {
+    if (scale < 0) {
+        return Status::InvalidArgument("scale must be non-negative");
+    }
+
+    bool is_negative = value < 0;
+    std::string res = integer_to_string(value);
+    if (is_negative) {
+        res = res.substr(1);
+    }
+    if (scale >= res.length()) {
+        res.insert(0, scale - res.length() + 1, '0');
+    }
+
+    int position = res.length() - scale;
+    res.insert(position, ".");
+
+    if (is_negative) {
+        res.insert(0, "-");
+    }
+    return res;
+}
+
+template StatusOr<std::string> HiveUtils::format_decimal_value<int32_t>(int32_t value, int scale);
+template StatusOr<std::string> HiveUtils::format_decimal_value<int64_t>(int64_t value, int scale);
+template StatusOr<std::string> HiveUtils::format_decimal_value<int128_t>(int128_t value, int scale);
+
+StatusOr<std::string> HiveUtils::iceberg_make_partition_name(
+        const std::vector<std::string>& partition_column_names,
+        const std::vector<std::unique_ptr<ColumnEvaluator>>& column_evaluators,
+        const std::vector<std::string>& transform_exprs, Chunk* chunk, bool support_null_partition,
+        std::vector<int8_t>& field_is_null) {
+    DCHECK_EQ(partition_column_names.size(), transform_exprs.size());
+    std::stringstream ss;
+    field_is_null.resize(partition_column_names.size(), false);
+    if (chunk->has_extra_data()) {
+        const auto& extra_data = down_cast<ChunkExtraColumnsData*>(chunk->get_extra_data().get());
+        const auto& metadatas = extra_data->chunk_data_metas();
+        const auto& columns = extra_data->columns();
+        DCHECK_EQ(columns.size(), partition_column_names.size());
+        for (size_t i = 0; i < columns.size(); i++) {
+            const auto& meta = metadatas.at(i);
+            auto column = columns[i];
+            ASSIGN_OR_RETURN(std::string value,
+                             iceberg_column_value(meta.type, column, transform_exprs[i], field_is_null[i]));
+            if (!support_null_partition && field_is_null[i]) {
+                return Status::NotSupported("Partition value can't be null.");
+            }
+            ss << partition_column_names[i] << "=" << value << "/";
+        }
+    } else {
+        for (size_t i = 0; i < column_evaluators.size(); i++) {
+            ASSIGN_OR_RETURN(auto column, column_evaluators[i]->evaluate(chunk));
+            auto type = column_evaluators[i]->type();
+            ASSIGN_OR_RETURN(std::string value,
+                             iceberg_column_value(type, column, transform_exprs[i], field_is_null[i]));
+            if (!support_null_partition && field_is_null[i]) {
+                return Status::NotSupported("Partition value can't be null.");
+            }
+            ss << partition_column_names[i] << "=" << value << "/";
+        }
+    }
+    return ss.str();
+}
+
+StatusOr<std::string> HiveUtils::iceberg_column_value(const TypeDescriptor& type_desc, const ColumnPtr& column,
+                                                      const std::string& transform_expr, int8_t& is_null) {
+    std::string value;
+    is_null = false;
+    if (column->size() < 1) {
+        return Status::InternalError("column size of extra chunk in make partition name is less than one");
+    } else if (column->is_null(0)) {
+        value = "null";
+        is_null = true;
+    } else if (transform_expr == "void") {
+        value = "null";
+        is_null = true;
+    } else if (transform_expr == "year") {
+        const auto years_from_epoch = ColumnViewer<TYPE_BIGINT>(column).value(0);
+        value = std::to_string(years_from_epoch + 1970);
+    } else if (transform_expr == "month") {
+        const auto months_from_epoch = ColumnViewer<TYPE_BIGINT>(column).value(0);
+        int year = 1970 + months_from_epoch / 12;
+        int month = months_from_epoch % 12 + 1;
+        std::tm timeinfo = {};
+        timeinfo.tm_year = year - 1900;
+        timeinfo.tm_mon = month - 1;
+        char buffer[10];
+        std::strftime(buffer, sizeof(buffer), "%Y-%m", &timeinfo);
+        value = std::string(buffer);
+    } else if (transform_expr == "day") {
+        const auto days_from_epoch = ColumnViewer<TYPE_BIGINT>(column).value(0);
+        std::time_t seconds = static_cast<std::time_t>(days_from_epoch) * 86400;
+        std::tm* gmt = std::gmtime(&seconds);
+        char buffer[20];
+        std::strftime(buffer, sizeof(buffer), "%Y-%m-%d", gmt);
+        value = std::string(buffer);
+    } else if (transform_expr == "hour") {
+        const auto hours_from_epoch = ColumnViewer<TYPE_BIGINT>(column).value(0);
+        std::time_t seconds = static_cast<std::time_t>(hours_from_epoch) * 3600;
+        std::tm* gmt = std::gmtime(&seconds);
+        char buffer[20];
+        std::strftime(buffer, sizeof(buffer), "%Y-%m-%d-%H", gmt);
+        value = std::string(buffer);
+    } else if (transform_expr.compare(0, 8, "truncate") == 0) {
+        ASSIGN_OR_RETURN(value, column_value(type_desc, column, 0));
+    } else if (transform_expr.compare(0, 6, "bucket") == 0) {
+        ASSIGN_OR_RETURN(value, column_value(type_desc, column, 0));
+    } else if (transform_expr == "identity") {
+        ASSIGN_OR_RETURN(value, column_value(type_desc, column, 0));
+    } else {
+        return Status::InternalError("Unsupported type for iceberg partition transform:" + transform_expr);
+    }
+    return value;
 }
 
 std::vector<formats::FileColumnId> IcebergUtils::generate_parquet_field_ids(
@@ -90,8 +212,47 @@ StatusOr<std::string> HiveUtils::column_value(const TypeDescriptor& type_desc, c
     case TYPE_VARCHAR: {
         return url_encode(datum.get_slice().to_string());
     }
+    case TYPE_BINARY: {
+        // No secnario will reach here now, use TYPE_VARBINARY instead
+        /*
+            std::string origin_str = datum.get_slice().to_string();
+            if (origin_str.length() < type_desc.len) {
+                origin_str.append(type_desc.len - origin_str.length(), ' ');
+            }
+            std::string base_encode;
+            base64_encode(origin_str, &base_encode);
+            return url_encode(base_encode);
+        */
+    }
+    case TYPE_VARBINARY: {
+        int len = (size_t)(4.0 * ceil((double)datum.get_slice().get_size() / 3.0)) + 1;
+        std::string base_encode;
+        base_encode.resize(len + 1);
+        size_t res_len = base64_encode2((const unsigned char*)datum.get_slice().get_data(),
+                                        datum.get_slice().get_size(), (unsigned char*)base_encode.data());
+        if (res_len <= 0) {
+            base_encode.resize(0);
+        }
+        base_encode.resize(res_len);
+        return url_encode(base_encode);
+    }
+    case TYPE_DECIMAL32: {
+        auto value = datum.get_int32();
+        arrow::Decimal128 decimal_value(integer_to_string(value));
+        return decimal_value.ToString(type_desc.scale);
+    }
+    case TYPE_DECIMAL64: {
+        auto value = datum.get_int64();
+        arrow::Decimal128 decimal_value(integer_to_string(value));
+        return decimal_value.ToString(type_desc.scale);
+    }
+    case TYPE_DECIMAL128: {
+        auto value = datum.get_int128();
+        arrow::Decimal128 decimal_value(integer_to_string(value));
+        return decimal_value.ToString(type_desc.scale);
+    }
     default: {
-        return Status::InvalidArgument("unsupported partition column type" + type_desc.debug_string());
+        return Status::InvalidArgument("unsupported partition column type for column value" + type_desc.debug_string());
     }
     }
 }

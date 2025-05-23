@@ -110,6 +110,7 @@ import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.iceberg.NullOrder;
+import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.SortDirection;
 import org.apache.iceberg.SortField;
 import org.apache.iceberg.SortOrder;
@@ -984,12 +985,25 @@ public class InsertPlanner {
         return skip;
     }
 
-    private boolean isKeyPartitionStaticInsert(InsertStmt insertStmt, QueryRelation queryRelation) {
-        if (!(queryRelation instanceof SelectRelation)) {
-            return false;
+    private boolean checkPartitionInsertValid(Table targetTable) {
+        if (targetTable instanceof IcebergTable) {
+            IcebergTable icebergTable = (IcebergTable) targetTable;
+            if (icebergTable.isPartitioned()) {
+                PartitionSpec partitionSpec = icebergTable.getNativeTable().spec();
+                boolean isInvalid = partitionSpec.fields().stream().anyMatch(field -> !field.transform().isIdentity());
+                if (isInvalid) {
+                    throw new SemanticException("Staitc insert into Iceberg table %s is not supported" + 
+                            " for not partitioned by identity transform", icebergTable.getName());
+                }
+            }
         }
 
+        return true;
+    }
+
+    private boolean isKeyPartitionStaticInsert(InsertStmt insertStmt, QueryRelation queryRelation) {
         Table targetTable = insertStmt.getTargetTable();
+
         if (!(targetTable.isHiveTable() || targetTable.isIcebergTable())) {
             return false;
         }
@@ -999,7 +1013,12 @@ public class InsertPlanner {
         }
 
         if (insertStmt.isSpecifyKeyPartition()) {
+            checkPartitionInsertValid(targetTable);
             return true;
+        }
+
+        if (!(queryRelation instanceof SelectRelation)) {
+            return false;
         }
 
         SelectRelation selectRelation = (SelectRelation) queryRelation;
@@ -1028,6 +1047,7 @@ public class InsertPlanner {
                 }
             }
         }
+        checkPartitionInsertValid(targetTable);
         return true;
     }
 }

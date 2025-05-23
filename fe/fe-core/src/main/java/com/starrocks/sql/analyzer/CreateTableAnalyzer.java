@@ -662,7 +662,7 @@ public class CreateTableAnalyzer {
                 boolean isMatched = desc.getPartitionColNames().stream()
                         .anyMatch(partitionColName -> partitionColName.equalsIgnoreCase(column.getName()));
                 if (!isMatched) {
-                    throw new SemanticException("Iceberg generated column are not illegal");
+                    throw new SemanticException("Iceberg generated column are illegal");
                 }
                 Expr expr = column.getGeneratedColumnExpr(columns);
                 if (expr instanceof FunctionCallExpr) {

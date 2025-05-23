@@ -18,7 +18,7 @@
 
 namespace starrocks::connector {
 
-void SinkOperatorMemoryManager::init(std::unordered_map<std::string, WriterStreamPair>* writer_stream_pairs,
+void SinkOperatorMemoryManager::init(std::map<PartitionKey, WriterStreamPair>* writer_stream_pairs,
                                      AsyncFlushStreamPoller* io_poller, CommitFunc commit_func) {
     _candidates = writer_stream_pairs;
     _commit_func = std::move(commit_func);
@@ -31,7 +31,7 @@ bool SinkOperatorMemoryManager::kill_victim() {
     }
 
     // find file writer with the largest file size
-    std::string partition;
+    PartitionKey partition;
     WriterStreamPair* victim = nullptr;
     for (auto& [key, writer_and_stream] : *_candidates) {
         if (victim && victim->first->get_written_bytes() > writer_and_stream.first->get_written_bytes()) {

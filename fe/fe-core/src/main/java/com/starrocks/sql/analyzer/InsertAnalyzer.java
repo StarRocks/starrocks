@@ -39,6 +39,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.connector.hive.HiveWriteUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
@@ -54,6 +55,7 @@ import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.MetaUtils;
+import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.SnapshotRef;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -202,15 +204,26 @@ public class InsertAnalyzer {
             } else if (insertStmt.isStaticKeyPartitionInsert()) {
                 checkStaticKeyPartitionInsert(insertStmt, table, targetPartitionNames);
             }
-
-            List<Column> partitionColumns = tablePartitionColumnNames.stream()
-                    .map(table::getColumn)
-                    .collect(Collectors.toList());
-
-            for (Column column : partitionColumns) {
-                if (isUnSupportedPartitionColumnType(column.getType())) {
-                    throw new SemanticException("Unsupported partition column type [%s] for %s table sink",
-                            column.getType().canonicalName(), table.getType());
+            if (!table.isIcebergTable()) {
+                List<Column> partitionColumns = tablePartitionColumnNames.stream()
+                        .map(table::getColumn)
+                        .collect(Collectors.toList());
+                for (Column column : partitionColumns) {
+                    if (isUnSupportedPartitionColumnType(column.getType())) {
+                        throw new SemanticException("Unsupported partition column type [%s] for %s table sink",
+                                column.getType().canonicalName(), table.getType());
+                    }
+                }
+            } else {
+                for (PartitionField field : ((IcebergTable) table).getNativeTable().spec().fields()) {
+                    org.apache.iceberg.types.Type type = ((IcebergTable) table).getNativeTable()
+                            .schema().findType(field.sourceId());
+                    if (type instanceof org.apache.iceberg.types.Types.TimestampType) {
+                        if (((org.apache.iceberg.types.Types.TimestampType) type).shouldAdjustToUTC()) {
+                            throw new SemanticException("Partition column %s with timezone is not supported for sink now",
+                                    field.name());
+                        }
+                    }
                 }
             }
         }
@@ -244,6 +257,15 @@ public class InsertAnalyzer {
                 targetColumns = new ArrayList<>(olapTable.getBaseSchemaWithoutGeneratedColumn());
                 mentionedColumns.addAll(olapTable.getBaseSchemaWithoutGeneratedColumn().stream().map(Column::getName)
                         .collect(Collectors.toSet()));
+            } else if (table instanceof IcebergTable) {
+                IcebergTable icebergTable = (IcebergTable) table;
+                targetColumns = new ArrayList<>();
+                icebergTable.getFullSchema().forEach(column -> {
+                    if (!column.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+                        targetColumns.add(column);
+                    }
+                });
+                mentionedColumns.addAll(targetColumns.stream().map(Column::getName).collect(Collectors.toSet()));
             } else {
                 targetColumns = new ArrayList<>(table.getBaseSchema());
                 mentionedColumns.addAll(table.getBaseSchema().stream().map(Column::getName).collect(Collectors.toSet()));

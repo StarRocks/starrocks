@@ -73,6 +73,7 @@ import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -133,8 +134,10 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -1178,14 +1181,19 @@ public class IcebergMetadata implements ConnectorMetadata {
                             .withRecordCount(dataFile.record_count)
                             .withFileSizeInBytes(dataFile.file_size_in_bytes)
                             .withSplitOffsets(dataFile.split_offsets);
-
+            String nullFingerprint = "";
+            if (!dataFile.isSetPartition_null_fingerprint()) {
+                nullFingerprint = "0".repeat(partitionSpec.fields().size());
+            } else {
+                nullFingerprint = dataFile.getPartition_null_fingerprint();
+            }
             if (partitionSpec.isPartitioned()) {
                 String relativePartitionLocation = getIcebergRelativePartitionPath(
                         nativeTbl.location(), dataFile.partition_path);
-
                 PartitionData partitionData = partitionDataFromPath(
-                        relativePartitionLocation, partitionSpec);
+                        relativePartitionLocation, nullFingerprint, partitionSpec, nativeTbl);
                 builder.withPartition(partitionData);
+                // builder.withPartitionPath(relativePartitionLocation);
             }
             batchWrite.addFile(builder.build());
         }
@@ -1227,27 +1235,100 @@ public class IcebergMetadata implements ConnectorMetadata {
         return isOverwrite ? new DynamicOverwrite(transaction) : new Append(transaction);
     }
 
-    public static PartitionData partitionDataFromPath(String relativePartitionPath, PartitionSpec spec) {
+    public PartitionData partitionDataFromPath(String relativePartitionPath, 
+            String partitionNullFingerprint, PartitionSpec spec, org.apache.iceberg.Table table) {
         PartitionData data = new PartitionData(spec.fields().size());
         String[] partitions = relativePartitionPath.split("/", -1);
         List<PartitionField> partitionFields = spec.fields();
-
+        if (partitions.length != partitionNullFingerprint.length()) {
+            throw new InternalError("Invalid partition and fingerprint size, partition:" + relativePartitionPath + 
+                    " partition size:" + String.valueOf(partitions.length) + " fingerprint:" + partitionNullFingerprint);
+        }
         for (int i = 0; i < partitions.length; i++) {
             PartitionField field = partitionFields.get(i);
             String[] parts = partitions[i].split("=", 2);
             Preconditions.checkArgument(parts.length == 2 && parts[0] != null &&
                     field.name().equals(parts[0]), "Invalid partition: %s", partitions[i]);
-
-            org.apache.iceberg.types.Type sourceType = spec.partitionType().fields().get(i).type();
-            // apply url decoding for string/fixed type
-            if (sourceType.typeId() == Type.TypeID.STRING || sourceType.typeId() == Type.TypeID.FIXED) {
-                parts[1] = URLDecoder.decode(parts[1], StandardCharsets.UTF_8);
+            org.apache.iceberg.types.Type resultType = spec.partitionType().fields().get(i).type();
+            // org.apache.iceberg.types.Type sourceType = table.schema().findType(field.sourceId());
+            // NOTICE:
+            // The behavior here should match the make_partition_path method in be, 
+            // and revert the String path value to the origin value and type of transform expr for the metastore.
+            // otherwise, if we use the api of iceberg to filter the scan files, the result may be incorrect!
+            if (partitionNullFingerprint.charAt(i) == '0') { //'0' means not null, '1' means null
+                // apply date decoding for date type
+                String transform = field.transform().toString();
+                if (transform.equals("year") || transform.equals("month") 
+                        || transform.equals("day") || transform.equals("hour")) {
+                    Integer year = org.apache.iceberg.util.DateTimeUtil.EPOCH.getYear();
+                    Integer month = org.apache.iceberg.util.DateTimeUtil.EPOCH.getMonthValue();
+                    Integer day = org.apache.iceberg.util.DateTimeUtil.EPOCH.getDayOfMonth();
+                    Integer hour = org.apache.iceberg.util.DateTimeUtil.EPOCH.getHour();
+                    String[] dateParts = parts[1].split("-");
+                    if (dateParts.length > 0) {
+                        year = Integer.parseInt(dateParts[0]);
+                    }
+                    if (dateParts.length > 1) {
+                        month = Integer.parseInt(dateParts[1]);
+                    }
+                    if (dateParts.length > 2) {
+                        day = Integer.parseInt(dateParts[2]);
+                    }
+                    if (dateParts.length > 3) {
+                        hour = Integer.parseInt(dateParts[3]);
+                    }
+                    LocalDateTime target = LocalDateTime.of(year, month, day, hour, 0);
+                    if (transform.equals("year")) {
+                        //iceberg stores the result of transform as metadata.
+                        parts[1] = String.valueOf(
+                                ChronoUnit.YEARS.between(org.apache.iceberg.util.DateTimeUtil.EPOCH_DAY, target));
+                    } else if (transform.equals("month")) {
+                        parts[1] = String.valueOf(
+                                ChronoUnit.MONTHS.between(org.apache.iceberg.util.DateTimeUtil.EPOCH_DAY, target));
+                    } else if (transform.equals("day")) {
+                        //The reuslt of day transform is a date type.
+                        //It is diffrent from other date transform exprs, however other's result is a integer.
+                        //do nothing
+                    } else if (transform.equals("hour")) {
+                        parts[1] = String.valueOf(
+                                ChronoUnit.HOURS.between(org.apache.iceberg.util.DateTimeUtil.EPOCH_DAY.atTime(0, 0), target));
+                    }
+                } else if (transform.startsWith("truncate")) {
+                    //the result type of truncate is the same as the truncate column
+                    if (parts[1].length() == 0) {
+                        //do nothing
+                    } else if (resultType.typeId() == Type.TypeID.STRING || resultType.typeId() == Type.TypeID.FIXED) {
+                        parts[1] = URLDecoder.decode(parts[1], StandardCharsets.UTF_8);
+                    } else if (resultType.typeId() == Type.TypeID.BINARY) {
+                        parts[1] = URLDecoder.decode(parts[1], StandardCharsets.UTF_8);
+                        //Do not convert the byte array to utf-8, because some byte is not valid in utf-8.
+                        //like 0xE6 is not valid in utf8. If the convert failed, utf-8 will transfer the byte to 0xFFFD as default
+                        //we should just read and store the byte in latin, and thus not change the byte array value.
+                        parts[1] = new String(Base64.getDecoder().decode(parts[1]), StandardCharsets.ISO_8859_1);
+                    }
+                } else if (transform.startsWith("bucket")) {
+                    //the result type of bucket is integer.
+                    //do nothing
+                } else if (transform.equals("identity")) {
+                    if (parts[1].length() == 0) {
+                        //do nothing
+                    } else if (resultType.typeId() == Type.TypeID.STRING || resultType.typeId() == Type.TypeID.FIXED) {
+                        parts[1] = URLDecoder.decode(parts[1], StandardCharsets.UTF_8);
+                    } else if (resultType.typeId() == Type.TypeID.BINARY) {
+                        parts[1] = URLDecoder.decode(parts[1], StandardCharsets.UTF_8);
+                        parts[1] = new String(Base64.getDecoder().decode(parts[1]), StandardCharsets.ISO_8859_1);
+                    }
+                } else {
+                    throw new DmlException("Unsupported partition transform: %s", transform);
+                }
             }
 
-            if (parts[1].equals("null")) {
+            if (partitionNullFingerprint.charAt(i) == '1') {
                 data.set(i, null);
+            } else if (resultType.typeId() == Type.TypeID.BINARY) {
+                data.set(i, parts[1].getBytes(StandardCharsets.ISO_8859_1));
             } else {
-                data.set(i, Conversions.fromPartitionString(sourceType, parts[1]));
+                data.set(i, Conversions.fromPartitionString(resultType, parts[1]));
             }
         }
         return data;
@@ -1368,7 +1449,11 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         @Override
         public <T> T get(int pos, Class<T> javaClass) {
-            return javaClass.cast(values[pos]);
+            Object value = values[pos];
+            if (javaClass == ByteBuffer.class && value instanceof byte[]) {
+                value = ByteBuffer.wrap((byte[]) value);
+            }
+            return javaClass.cast(value);
         }
 
         @Override

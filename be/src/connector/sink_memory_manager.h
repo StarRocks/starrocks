@@ -28,7 +28,7 @@ class SinkOperatorMemoryManager {
 public:
     SinkOperatorMemoryManager() = default;
 
-    void init(std::unordered_map<std::string, WriterStreamPair>* writer_stream_pairs, AsyncFlushStreamPoller* io_poller,
+    void init(std::map<PartitionKey, WriterStreamPair>* writer_stream_pairs, AsyncFlushStreamPoller* io_poller,
               CommitFunc commit_func);
 
     // return true if a victim is found and killed, otherwise return false
@@ -45,7 +45,7 @@ public:
     int64_t writer_occupied_memory() { return _writer_occupied_memory.load(); }
 
 private:
-    std::unordered_map<std::string, WriterStreamPair>* _candidates = nullptr; // reference, owned by sink operator
+    std::map<PartitionKey, WriterStreamPair>* _candidates = nullptr; // reference, owned by sink operator
     CommitFunc _commit_func;
     AsyncFlushStreamPoller* _io_poller;
     std::atomic_int64_t _releasable_memory{0};
