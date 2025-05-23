@@ -140,7 +140,6 @@ public class TaskRunManager implements MemoryTrackable {
             // If the task run is sync-mode, it will hang forever if the task run is merged because
             // user's using `future.get()` to wait and the future will not be set forever.
             ExecuteOption executeOption = taskRun.getExecuteOption();
-            boolean isTaskRunContainsToMergeProperties = executeOption.containsToMergeProperties();
             if (taskRuns != null && executeOption.isMergeRedundant()) {
                 for (TaskRun oldTaskRun : taskRuns) {
                     if (oldTaskRun == null) {
@@ -167,16 +166,11 @@ public class TaskRunManager implements MemoryTrackable {
                     // TODO: Here we always merge the older task run to the newer task run which it can
                     // record the history of the task run. But we can also reject the newer task run directly to
                     // avoid the merge operation later.
-                    boolean isOldTaskRunContainsToMergeProperties = oldExecuteOption.containsToMergeProperties();
-                    // this should not happen since one task only can one task run in the running queue
-                    if (isTaskRunContainsToMergeProperties && isOldTaskRunContainsToMergeProperties) {
-                        LOG.warn("failed to merge TaskRun, both TaskRun contains toMergeProperties, " +
-                                        "oldTaskRun: {}, taskRun: {}", oldTaskRun, taskRun);
-                        continue;
-                    }
                     // merge the old execution option into the new task run
-                    if (isOldTaskRunContainsToMergeProperties && !isTaskRunContainsToMergeProperties) {
-                        executeOption.mergeProperties(oldExecuteOption);
+                    if (!executeOption.isMergeableWith(oldExecuteOption)) {
+                        LOG.warn("failed to merge TaskRun, both TaskRun contains toMergeProperties, " +
+                                "oldTaskRun: {}, taskRun: {}", oldTaskRun, taskRun);
+                        continue;
                     }
 
                     // prefer higher priority to be better scheduler
