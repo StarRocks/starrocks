@@ -16,6 +16,7 @@ package com.starrocks.connector.paimon;
 
 import com.google.common.base.Strings;
 import com.starrocks.common.util.DlfUtil;
+import com.starrocks.common.util.Util;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
@@ -217,7 +218,8 @@ public class PaimonConnector implements Connector {
                         throw new StarRocksConnectorException("Failed to find a valid RAM user from {} and {}.",
                                 qualifiedUser, user);
                     } else {
-                        if (!this.ramUser.isEmpty() && this.ramUser.equals(ramUser) &&
+                        // ignore root and cache native catalog
+                        if (!Util.isRootUser(ramUser) && !this.ramUser.isEmpty() && this.ramUser.equals(ramUser) &&
                                 paimonOptions.get(DLF_AUTH_USER_NAME).equals(ramUser) && paimonNativeCatalog != null) {
                             return paimonNativeCatalog;
                         } else {

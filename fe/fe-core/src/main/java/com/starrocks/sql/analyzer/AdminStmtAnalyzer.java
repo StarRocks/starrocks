@@ -22,11 +22,11 @@ import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
-import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Replica;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.Util;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
@@ -160,9 +160,7 @@ public class AdminStmtAnalyzer {
                 throw new SemanticException("Only support setting Frontend configs now", stmt.getPos());
             }
             // emr product restrictions
-            if (Config.enable_emr_product_restrictions
-                    && session.getCurrentUserIdentity() != null
-                    && !session.getCurrentUserIdentity().getUser().equals(AuthenticationMgr.ROOT_USER)) {
+            if (Config.enable_emr_product_restrictions && !Util.isRootUser(session.getCurrentUserIdentity())) {
                 throw new SemanticException(
                     "EMR Serverless StarRocks policies: Only support setting configs on EMR StarRocks Manager.");
             }

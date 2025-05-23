@@ -36,6 +36,7 @@ package com.starrocks.common.util;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MapType;
@@ -50,6 +51,7 @@ import com.starrocks.http.WebUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -168,6 +170,14 @@ public class Util {
                 }
             }
         }
+    }
+
+    public static boolean isRootUser(UserIdentity currentUser) {
+        return currentUser != null && currentUser.equals(UserIdentity.ROOT);
+    }
+
+    public static boolean isRootUser(String currentUser) {
+        return !Strings.isNullOrEmpty(currentUser) && currentUser.equalsIgnoreCase(AuthenticationMgr.ROOT_USER);
     }
 
     public static CommandResult executeCommand(String cmd, String[] envp) throws TimeoutException {

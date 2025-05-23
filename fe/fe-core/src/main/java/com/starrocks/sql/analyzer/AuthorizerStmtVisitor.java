@@ -20,7 +20,6 @@ import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.SetVarHint;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
-import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.ColumnPrivilege;
@@ -44,6 +43,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.ExportJob;
@@ -1410,9 +1410,7 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
         for (Pair<String, String> list : statement.getPropertyPairList()) {
             if (list.first.equalsIgnoreCase(PROP_RAM_USER)) {
                 // emr product restrictions
-                if (Config.enable_emr_product_restrictions
-                        && context.getCurrentUserIdentity() != null
-                        && !context.getCurrentUserIdentity().getUser().equals(AuthenticationMgr.ROOT_USER)) {
+                if (Config.enable_emr_product_restrictions && !Util.isRootUser(context.getCurrentUserIdentity())) {
                     throw new SemanticException("EMR Serverless StarRocks policies: " +
                             "Only support setting RAM property for user on EMR StarRocks Manager.");
                 }
