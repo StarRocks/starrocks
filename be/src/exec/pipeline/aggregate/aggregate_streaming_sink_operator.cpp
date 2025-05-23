@@ -14,7 +14,6 @@
 
 #include "aggregate_streaming_sink_operator.h"
 
-#include <algorithm>
 #include <variant>
 
 #include "column/vectorized_fwd.h"

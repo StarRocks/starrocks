@@ -1546,8 +1546,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_TOPN_RUNTIME_FILTER)
     private boolean enableTopNRuntimeFilter = true;
 
-    @VariableMgr.VarAttr(name = AGG_IN_FILTER_LIMIT)
-    private int aggInFilterLimit = 40960;
+    @VariableMgr.VarAttr(name = AGG_IN_FILTER_LIMIT, flag = VariableMgr.INVISIBLE)
+    private int aggInFilterLimit = 1024;
 
     // Parameters to determine the usage of runtime filter
     // Either the build_max or probe_min equal to 0 would force use the filter,
