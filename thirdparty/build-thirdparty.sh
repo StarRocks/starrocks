@@ -1410,7 +1410,8 @@ build_libxml2() {
         -DLIBXML2_WITH_LZMA=OFF \
         -DLIBXML2_WITH_PYTHON=OFF \
         -DLIBXML2_WITH_ZLIB=OFF \
-        -DLIBXML2_WITH_TESTS=OFF
+        -DLIBXML2_WITH_TESTS=OFF \
+        -DCMAKE_INSTALL_LIBDIR=lib
 
     ${BUILD_SYSTEM} -j "${PARALLEL}"
     ${BUILD_SYSTEM} install
