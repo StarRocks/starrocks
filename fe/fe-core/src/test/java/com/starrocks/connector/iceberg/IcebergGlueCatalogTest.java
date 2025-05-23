@@ -17,6 +17,8 @@ package com.starrocks.connector.iceberg;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.connector.iceberg.glue.IcebergGlueCatalog;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
@@ -24,6 +26,7 @@ import org.apache.iceberg.aws.glue.GlueCatalog;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.Arrays;
@@ -32,6 +35,12 @@ import java.util.List;
 import java.util.Map;
 
 public class IcebergGlueCatalogTest {
+    public static ConnectContext connectContext;
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        connectContext = UtFrameUtils.createDefaultCtx();
+    }
 
     @Test
     public void testListAllDatabases(@Mocked GlueCatalog glueCatalog) {
@@ -46,7 +55,7 @@ public class IcebergGlueCatalogTest {
         Map<String, String> icebergProperties = new HashMap<>();
         IcebergGlueCatalog icebergGlueCatalog = new IcebergGlueCatalog(
                 "glue_native_catalog", new Configuration(), icebergProperties);
-        List<String> dbs = icebergGlueCatalog.listAllDatabases();
+        List<String> dbs = icebergGlueCatalog.listAllDatabases(connectContext);
         Assert.assertEquals(Arrays.asList("db1", "db2"), dbs);
     }
 
@@ -61,7 +70,7 @@ public class IcebergGlueCatalogTest {
         Map<String, String> icebergProperties = new HashMap<>();
         IcebergGlueCatalog icebergGlueCatalog = new IcebergGlueCatalog(
                 "glue_native_catalog", new Configuration(), icebergProperties);
-        Assert.assertTrue(icebergGlueCatalog.tableExists("db1", "tbl1"));
+        Assert.assertTrue(icebergGlueCatalog.tableExists(connectContext, "db1", "tbl1"));
     }
 
     @Test
@@ -75,8 +84,8 @@ public class IcebergGlueCatalogTest {
         Map<String, String> icebergProperties = new HashMap<>();
         IcebergGlueCatalog icebergGlueCatalog = new IcebergGlueCatalog(
                 "glue_native_catalog", new Configuration(), icebergProperties);
-        icebergGlueCatalog.renameTable("db", "tb1", "tb2");
-        boolean exists = icebergGlueCatalog.tableExists("db", "tbl2");
+        icebergGlueCatalog.renameTable(connectContext, "db", "tb1", "tb2");
+        boolean exists = icebergGlueCatalog.tableExists(connectContext, "db", "tbl2");
         Assert.assertTrue(exists);
     }
 }

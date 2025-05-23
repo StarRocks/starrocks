@@ -221,16 +221,16 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listDbNames(ConnectContext context) {
-        return icebergCatalog.listAllDatabases();
+        return icebergCatalog.listAllDatabases(context);
     }
 
     @Override
-    public void createDb(String dbName, Map<String, String> properties) throws AlreadyExistsException {
-        if (dbExists(new ConnectContext(), dbName)) {
+    public void createDb(ConnectContext context, String dbName, Map<String, String> properties) throws AlreadyExistsException {
+        if (dbExists(context, dbName)) {
             throw new AlreadyExistsException("Database Already Exists");
         }
 
-        icebergCatalog.createDB(dbName, properties);
+        icebergCatalog.createDB(context, dbName, properties);
     }
 
     @Override
@@ -241,7 +241,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             throw new StarRocksConnectorException("Database %s not empty", dbName);
         }
 
-        icebergCatalog.dropDB(dbName);
+        icebergCatalog.dropDB(context, dbName);
         databases.remove(dbName);
     }
 
@@ -252,7 +252,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
         Database db;
         try {
-            db = icebergCatalog.getDB(dbName);
+            db = icebergCatalog.getDB(context, dbName);
         } catch (NoSuchNamespaceException e) {
             LOG.error("Database {} not found", dbName, e);
             return null;
@@ -264,11 +264,11 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listTableNames(ConnectContext context, String dbName) {
-        return icebergCatalog.listTables(dbName);
+        return icebergCatalog.listTables(context, dbName);
     }
 
     @Override
-    public boolean createTable(CreateTableStmt stmt) throws DdlException {
+    public boolean createTable(ConnectContext context, CreateTableStmt stmt) throws DdlException {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
 
@@ -286,11 +286,12 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
         Map<String, String> createTableProperties = IcebergApiConverter.rebuildCreateTableProperties(properties);
 
-        return icebergCatalog.createTable(dbName, tableName, schema, partitionSpec, tableLocation, createTableProperties);
+        return icebergCatalog.createTable(context, dbName, tableName, schema, partitionSpec, tableLocation,
+                createTableProperties);
     }
 
     @Override
-    public void createView(CreateViewStmt stmt) throws DdlException {
+    public void createView(ConnectContext context, CreateViewStmt stmt) throws DdlException {
         String dbName = stmt.getDbName();
         String viewName = stmt.getTable();
 
@@ -299,7 +300,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
 
-        if (getView(dbName, viewName) != null) {
+        if (getView(context, dbName, viewName) != null) {
             if (stmt.isSetIfNotExists()) {
                 LOG.info("create view[{}] which already exists", viewName);
                 return;
@@ -311,11 +312,11 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         ConnectorViewDefinition viewDefinition = ConnectorViewDefinition.fromCreateViewStmt(stmt);
-        icebergCatalog.createView(catalogName, viewDefinition, stmt.isReplace());
+        icebergCatalog.createView(context, catalogName, viewDefinition, stmt.isReplace());
     }
 
     @Override
-    public void alterView(AlterViewStmt stmt) throws StarRocksException {
+    public void alterView(ConnectContext context, AlterViewStmt stmt) throws StarRocksException {
         String dbName = stmt.getDbName();
         String viewName = stmt.getTable();
 
@@ -323,14 +324,14 @@ public class IcebergMetadata implements ConnectorMetadata {
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
-        if (getView(dbName, viewName) == null) {
+        if (getView(context, dbName, viewName) == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, dbName + "." + viewName);
         }
 
         ConnectorViewDefinition viewDefinition = ConnectorViewDefinition.fromAlterViewStmt(stmt);
-        View currentView = icebergCatalog.getView(dbName, viewName);
+        View currentView = icebergCatalog.getView(context, dbName, viewName);
         if (!stmt.getProperties().isEmpty() || stmt.isAlterDialect()) {
-            icebergCatalog.alterView(currentView, viewDefinition);
+            icebergCatalog.alterView(context, currentView, viewDefinition);
         } else {
             throw new DdlException("ALTER VIEW <viewName> AS is not supported. Use CREATE OR REPLACE VIEW instead");
         }
@@ -340,7 +341,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     public void alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
-        org.apache.iceberg.Table table = icebergCatalog.getTable(dbName, tableName);
+        org.apache.iceberg.Table table = icebergCatalog.getTable(context, dbName, tableName);
 
         if (table == null) {
             throw new StarRocksConnectorException(
@@ -363,11 +364,11 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void dropTable(DropTableStmt stmt) {
+    public void dropTable(ConnectContext context, DropTableStmt stmt) {
         Table icebergTable = getTable(new ConnectContext(), stmt.getDbName(), stmt.getTableName());
 
         if (icebergTable != null && icebergTable.isIcebergView()) {
-            icebergCatalog.dropView(stmt.getDbName(), stmt.getTableName());
+            icebergCatalog.dropView(context, stmt.getDbName(), stmt.getTableName());
             return;
         }
 
@@ -375,7 +376,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             return;
         }
 
-        icebergCatalog.dropTable(stmt.getDbName(), stmt.getTableName(), stmt.isForceDrop());
+        icebergCatalog.dropTable(context, stmt.getDbName(), stmt.getTableName(), stmt.isForceDrop());
         tables.remove(TableIdentifier.of(stmt.getDbName(), stmt.getTableName()));
         StatisticUtils.dropStatisticsAfterDropTable(icebergTable);
         asyncRefreshOthersFeMetadataCache(stmt.getDbName(), stmt.getTableName());
@@ -399,7 +400,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             if (tables.containsKey(identifier)) {
                 icebergTable = tables.get(identifier);
             } else {
-                icebergTable = icebergCatalog.getTable(dbName, tblName);
+                icebergTable = icebergCatalog.getTable(context, dbName, tblName);
             }
 
             IcebergCatalogType catalogType = icebergCatalog.getIcebergCatalogType();
@@ -419,7 +420,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             LOG.error("Failed to get iceberg table {}", identifier, e);
             return null;
         } catch (NoSuchTableException e) {
-            return getView(dbName, tblName);
+            return getView(context, dbName, tblName);
         }
     }
 
@@ -487,9 +488,9 @@ public class IcebergMetadata implements ConnectorMetadata {
                 .snapshotId();
     }
 
-    public Table getView(String dbName, String viewName) {
+    public Table getView(ConnectContext context, String dbName, String viewName) {
         try {
-            View icebergView = icebergCatalog.getView(dbName, viewName);
+            View icebergView = icebergCatalog.getView(context, dbName, viewName);
             return IcebergApiConverter.toView(catalogName, dbName, icebergView);
         } catch (Exception e) {
             LOG.error("Failed to get iceberg view {}.{}", dbName, viewName, e);
@@ -518,7 +519,7 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public boolean tableExists(ConnectContext context, String dbName, String tblName) {
-        return icebergCatalog.tableExists(dbName, tblName);
+        return icebergCatalog.tableExists(context, dbName, tblName);
     }
 
     @Override

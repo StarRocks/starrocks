@@ -220,19 +220,15 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void createDb(String dbName) throws DdlException, AlreadyExistsException {
-        normal.createDb(dbName);
-    }
-
-    @Override
     public boolean dbExists(ConnectContext context, String dbName) {
         ConnectorMetadata metadata = metadataOfDb(dbName);
         return metadata.dbExists(context, dbName);
     }
 
     @Override
-    public void createDb(String dbName, Map<String, String> properties) throws DdlException, AlreadyExistsException {
-        normal.createDb(dbName, properties);
+    public void createDb(ConnectContext context, String dbName, Map<String, String> properties)
+            throws DdlException, AlreadyExistsException {
+        normal.createDb(context, dbName, properties);
     }
 
     @Override
@@ -247,13 +243,13 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public boolean createTable(CreateTableStmt stmt) throws DdlException {
-        return normal.createTable(stmt);
+    public boolean createTable(ConnectContext context, CreateTableStmt stmt) throws DdlException {
+        return normal.createTable(context, stmt);
     }
 
     @Override
-    public void dropTable(DropTableStmt stmt) throws DdlException {
-        normal.dropTable(stmt);
+    public void dropTable(ConnectContext context, DropTableStmt stmt) throws DdlException {
+        normal.dropTable(context, stmt);
     }
 
     @Override
@@ -341,13 +337,13 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void createView(CreateViewStmt stmt) throws DdlException {
-        normal.createView(stmt);
+    public void createView(ConnectContext context, CreateViewStmt stmt) throws DdlException {
+        normal.createView(context, stmt);
     }
 
     @Override
-    public void alterView(AlterViewStmt stmt) throws StarRocksException {
-        normal.alterView(stmt);
+    public void alterView(ConnectContext context, AlterViewStmt stmt) throws StarRocksException {
+        normal.alterView(context, stmt);
     }
 
     @Override
