@@ -370,7 +370,7 @@ private:
 };
 
 // A `RandomAccessFile` is an `io::SeekableInputStream` with a name.
-class RandomAccessFile : public io::SeekableInputStreamWrapper {
+class RandomAccessFile final : public io::SeekableInputStreamWrapper {
 public:
     explicit RandomAccessFile(std::shared_ptr<io::SeekableInputStream> stream, std::string name)
             : io::SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership),

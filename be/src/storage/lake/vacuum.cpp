@@ -186,6 +186,7 @@ public:
 
     explicit AsyncFileDeleter(int64_t batch_size) : _batch_size(batch_size) {}
     explicit AsyncFileDeleter(int64_t batch_size, DeleteCallback cb) : _batch_size(batch_size), _cb(std::move(cb)) {}
+    virtual ~AsyncFileDeleter() = default;
 
     virtual Status delete_file(std::string path) {
         _batch.emplace_back(std::move(path));
