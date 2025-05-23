@@ -94,7 +94,7 @@ public class MVPCTMetaRepairer {
      */
     @VisibleForTesting
     public static boolean isSupportedPCTRepairer(Table baseTable, BaseTableInfo baseTableInfo) {
-        if (baseTable == null) {
+        if (baseTable == null || baseTableInfo == null) {
             return false;
         }
         if (baseTable.getTableIdentifier().equals(baseTableInfo.getTableIdentifier())) {
