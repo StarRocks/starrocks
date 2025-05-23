@@ -1,4 +1,4 @@
--- name: test_arrow_v1
+-- name: test_flight
 arrow: DROP DATABASE IF EXISTS arrow_demo;
 
 arrow: CREATE DATABASE arrow_demo;
