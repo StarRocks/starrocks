@@ -672,7 +672,13 @@ public class ColumnTypeConverter {
             case DECIMAL:
                 int precision = ((Types.DecimalType) icebergType).precision();
                 int scale = ((Types.DecimalType) icebergType).scale();
-                return ScalarType.createUnifiedDecimalType(precision, scale);
+                if (precision <= 9) {
+                    return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, precision, scale);
+                } else if (precision <= 18) {
+                    return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, precision, scale);
+                } else {
+                    return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, precision, scale);
+                }
             case LIST:
                 Type type = convertToArrayTypeForIceberg(icebergType);
                 if (type.isArrayType()) {

@@ -65,7 +65,8 @@ StatusOr<std::string> column_to_string(const TypeDescriptor& type_desc, const Co
         return url_encode(datum.get_slice().to_string());
     }
     default: {
-        return Status::InvalidArgument("unsupported partition column type" + type_desc.debug_string());
+        return Status::InvalidArgument("unsupported partition column type in table function sink" +
+                                       type_desc.debug_string());
     }
     }
 }
