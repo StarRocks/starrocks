@@ -2320,14 +2320,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: 共有データクラスタでのパーティションの Compaction Score の上限。`0` は上限がないことを示します。この項目は `lake_enable_ingest_slowdown` が `true` に設定されている場合にのみ有効です。パーティションの Compaction Score がこの上限に達するか超えると、受信するロードタスクは拒否されます。v3.3.6 以降、デフォルト値は `0` から `2000` に変更されました。
 - 導入バージョン: v3.2.0
 
-##### lake_compaction_disable_tables
+##### lake_compaction_disable_ids
 
 - デフォルト: ""
 - タイプ: String
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データモードで Compaction が無効になっているテーブルのリスト。形式は `tableId1;tableId2` で、セミコロンで区切ります。例: `12345;98765`。
-- 導入バージョン: v3.1.11
+- 説明: 共有データモードでCompactionが無効になっているテーブルまたはパーティションのリスト。形式は `tableId1;partitionId2` で、セミコロンで区切ります。例: `12345;98765`。
+- 導入バージョン: v3.5.0
 
 ##### lake_enable_balance_tablets_between_workers
 

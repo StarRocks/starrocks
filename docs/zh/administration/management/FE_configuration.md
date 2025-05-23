@@ -3240,14 +3240,14 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：表分区的 Compaction Score 的上限, `0` 表示没有上限。只有当 `lake_enable_ingest_slowdown` 设置为 `true` 后，该配置项才会生效。当表分区 Compaction Score 达到或超过该上限后，新的导入会被拒绝。自 v3.3.6 起，默认值由 `0` 变为 `2000`。
 - 引入版本：v3.2.0
 
-##### lake_compaction_disable_tables
+##### lake_compaction_disable_ids
 
 - 默认值：""
 - 类型：String
 - 单位：-
 - 是否动态：是
-- 描述：禁止存算分离内表 compaction 的 table id 名单。格式为 `tableId1;tableId2`，table id 之间用分号隔开，例如 `12345;98765`。
-- 引入版本：v3.1.11
+- 描述：禁止存算分离内表 compaction 的 table 或 partition id 名单。格式为 `tableId1;partitionId2`，id 之间用分号隔开，例如 `12345;98765`。
+- 引入版本：v3.5.0
 
 ##### lake_enable_balance_tablets_between_workers
 
