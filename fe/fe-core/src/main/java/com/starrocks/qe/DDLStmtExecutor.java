@@ -227,7 +227,7 @@ public class DDLStmtExecutor {
             boolean isSetIfNotExists = stmt.isSetIfNotExists();
             ErrorReport.wrapWithRuntimeException(() -> {
                 try {
-                    context.getGlobalStateMgr().getMetadataMgr().createDb(catalogName, fullDbName, properties);
+                    context.getGlobalStateMgr().getMetadataMgr().createDb(context, catalogName, fullDbName, properties);
                 } catch (AlreadyExistsException e) {
                     if (isSetIfNotExists) {
                         LOG.info("create database[{}] which already exists", fullDbName);
@@ -306,7 +306,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateTemporaryTableStatement(CreateTemporaryTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getMetadataMgr().createTemporaryTable(stmt);
+                context.getGlobalStateMgr().getMetadataMgr().createTemporaryTable(context, stmt);
             });
             return null;
         }
@@ -324,7 +324,7 @@ public class DDLStmtExecutor {
                 CreateTemporaryTableLikeStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getMetadataMgr()
-                        .createTemporaryTable((CreateTemporaryTableStmt) stmt.getCreateTableStmt());
+                        .createTemporaryTable(context, (CreateTemporaryTableStmt) stmt.getCreateTableStmt());
             });
             return null;
         }
@@ -338,7 +338,7 @@ public class DDLStmtExecutor {
                     dropTemporaryTableStmt.setSessionId(context.getSessionId());
                     context.getGlobalStateMgr().getMetadataMgr().dropTemporaryTable(dropTemporaryTableStmt);
                 } else {
-                    context.getGlobalStateMgr().getMetadataMgr().dropTable(stmt);
+                    context.getGlobalStateMgr().getMetadataMgr().dropTable(context, stmt);
                 }
             });
             return null;
@@ -427,7 +427,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAlterViewStatement(AlterViewStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getMetadataMgr().alterView(stmt);
+                context.getGlobalStateMgr().getMetadataMgr().alterView(context, stmt);
             });
             return null;
         }
@@ -718,7 +718,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateViewStatement(CreateViewStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                GlobalStateMgr.getCurrentState().getMetadataMgr().createView(stmt);
+                GlobalStateMgr.getCurrentState().getMetadataMgr().createView(context, stmt);
             });
             return null;
         }

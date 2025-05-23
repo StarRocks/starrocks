@@ -43,12 +43,15 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.junit.BeforeClass;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.wildfly.common.Assert;
 
+import java.util.HashMap;
 import java.util.List;
 
 import static com.starrocks.catalog.Table.TableType.DELTALAKE;
@@ -85,6 +88,13 @@ public class UnifiedMetadataTest {
 
     private GetRemoteFilesParams getRemoteFilesParams;
 
+    public static ConnectContext connectContext;
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        connectContext = UtFrameUtils.createDefaultCtx();
+    }
+
     @BeforeEach
     public void setUp() {
         this.unifiedMetadata = new UnifiedMetadata(ImmutableMap.of(
@@ -115,12 +125,12 @@ public class UnifiedMetadataTest {
             }
 
             {
-                hiveMetadata.createDb("test_db");
+                hiveMetadata.createDb((ConnectContext) any, "test_db", new HashMap<>());
                 times = 1;
             }
 
             {
-                hiveMetadata.createDb("test_db", ImmutableMap.of("key", "value"));
+                hiveMetadata.createDb((ConnectContext) any, "test_db", ImmutableMap.of("key", "value"));
                 times = 1;
             }
 
@@ -142,14 +152,14 @@ public class UnifiedMetadataTest {
             }
         };
 
-        List<String> dbNames = unifiedMetadata.listDbNames(new ConnectContext());
+        List<String> dbNames = unifiedMetadata.listDbNames(connectContext);
         assertEquals(ImmutableList.of("test_db1", "test_db2"), dbNames);
-        List<String> tblNames = unifiedMetadata.listTableNames(new ConnectContext(), "test_db");
+        List<String> tblNames = unifiedMetadata.listTableNames(connectContext, "test_db");
         assertEquals(ImmutableList.of("test_tbl1", "test_tbl2"), tblNames);
-        unifiedMetadata.createDb("test_db");
-        unifiedMetadata.createDb("test_db", ImmutableMap.of("key", "value"));
-        assertTrue(unifiedMetadata.dbExists(new ConnectContext(), "test_db"));
-        unifiedMetadata.dropDb(new ConnectContext(), "test_db", false);
+        unifiedMetadata.createDb(connectContext, "test_db", new HashMap<>());
+        unifiedMetadata.createDb(connectContext, "test_db", ImmutableMap.of("key", "value"));
+        assertTrue(unifiedMetadata.dbExists(connectContext, "test_db"));
+        unifiedMetadata.dropDb(connectContext, "test_db", false);
         CloudConfiguration cloudConfiguration = unifiedMetadata.getCloudConfiguration();
         assertEquals(CloudType.DEFAULT, cloudConfiguration.getCloudType());
     }
@@ -200,7 +210,7 @@ public class UnifiedMetadataTest {
             }
 
             {
-                hiveMetadata.createTable(createTableStmt);
+                hiveMetadata.createTable((ConnectContext) any, createTableStmt);
                 result = true;
                 times = 1;
             }
@@ -221,7 +231,7 @@ public class UnifiedMetadataTest {
         unifiedMetadata.refreshTable("test_db", hiveTable, ImmutableList.of(), false);
         unifiedMetadata.finishSink("test_db", "test_tbl", ImmutableList.of(), null);
         createTableStmt.setEngineName("hive");
-        assertTrue(unifiedMetadata.createTable(createTableStmt));
+        assertTrue(unifiedMetadata.createTable(connectContext, createTableStmt));
     }
 
     @Test
@@ -288,7 +298,7 @@ public class UnifiedMetadataTest {
             }
 
             {
-                icebergMetadata.createTable(createTableStmt);
+                icebergMetadata.createTable((ConnectContext) any, createTableStmt);
                 result = true;
                 times = 1;
             }
@@ -314,7 +324,7 @@ public class UnifiedMetadataTest {
         unifiedMetadata.refreshTable("test_db", icebergTable, ImmutableList.of(), false);
         unifiedMetadata.finishSink("test_db", "test_tbl", ImmutableList.of(), null);
         createTableStmt.setEngineName("iceberg");
-        assertTrue(unifiedMetadata.createTable(createTableStmt));
+        assertTrue(unifiedMetadata.createTable(connectContext, createTableStmt));
         Assert.assertTrue(unifiedMetadata.prepareMetadata(new MetaPreparationItem(icebergTable, null,
                 -1, TableVersionRange.empty()), null, null));
         Assert.assertNotNull(unifiedMetadata.getSerializedMetaSpec("test_db", "test_tbl", -1, null, null));
@@ -372,7 +382,7 @@ public class UnifiedMetadataTest {
             }
 
             {
-                hudiMetadata.createTable(createTableStmt);
+                hudiMetadata.createTable((ConnectContext) any, createTableStmt);
                 result = true;
                 times = 1;
             }
@@ -392,7 +402,7 @@ public class UnifiedMetadataTest {
         unifiedMetadata.refreshTable("test_db", hudiTable, ImmutableList.of(), false);
         unifiedMetadata.finishSink("test_db", "test_tbl", ImmutableList.of(), null);
         createTableStmt.setEngineName("hudi");
-        assertTrue(unifiedMetadata.createTable(createTableStmt));
+        assertTrue(unifiedMetadata.createTable(connectContext, createTableStmt));
     }
 
     @Test
@@ -453,7 +463,7 @@ public class UnifiedMetadataTest {
             }
 
             {
-                deltaLakeMetadata.createTable(createTableStmt);
+                deltaLakeMetadata.createTable((ConnectContext) any, createTableStmt);
                 result = true;
                 times = 1;
             }
@@ -473,7 +483,7 @@ public class UnifiedMetadataTest {
         unifiedMetadata.refreshTable("test_db", deltaLakeTable, ImmutableList.of(), false);
         unifiedMetadata.finishSink("test_db", "test_tbl", ImmutableList.of(), null);
         createTableStmt.setEngineName("deltalake");
-        assertTrue(unifiedMetadata.createTable(createTableStmt));
+        assertTrue(unifiedMetadata.createTable(connectContext, createTableStmt));
     }
 
     @Test
