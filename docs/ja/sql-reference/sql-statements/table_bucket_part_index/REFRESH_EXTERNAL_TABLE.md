@@ -11,6 +11,10 @@ StarRocks にキャッシュされたメタデータを更新します。この�
 - **外部テーブル**: Apache Hive™ または Apache Hudi 内のデータをクエリするために Hive 外部テーブルまたは Hudi 外部テーブルを使用する場合、StarRocks にキャッシュされた Hive テーブルまたは Hudi テーブルのメタデータを更新するためにこのステートメントを実行できます。
 - **外部カタログ**: [Hive catalog](../../../data_source/catalog/hive_catalog.md)、[Hudi catalog](../../../data_source/catalog/hudi_catalog.md)、または [Delta Lake catalog](../../../data_source/catalog/deltalake_catalog.md) を使用して対応するデータソース内のデータをクエリする場合、StarRocks にキャッシュされたメタデータを更新するためにこのステートメントを実行できます。
 
+> **注意**
+>
+> この操作を実行できるのは、対応する外部テーブルのALTER権限を持つユーザーのみです。
+
 ## 基本概念
 
 - **Hive 外部テーブル**: StarRocks に作成および保存されます。Hive データをクエリするために使用できます。
