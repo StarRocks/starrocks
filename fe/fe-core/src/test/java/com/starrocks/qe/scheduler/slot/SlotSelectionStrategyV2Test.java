@@ -475,4 +475,59 @@ public class SlotSelectionStrategyV2Test {
         // reset concurrency limit
         GlobalVariable.setQueryQueueConcurrencyLimit(oldVal);
     }
+
+    @Test
+    public void testConcurrencyLimitWithLargeSlots() {
+        QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
+
+        GlobalVariable.setQueryQueueConcurrencyLimit(1);
+        LogicalSlot largeSlot1 = generateSlot(opts.v2().getTotalSlots() - 1);
+        LogicalSlot largeSlot2 = generateSlot(opts.v2().getTotalSlots() - 1);
+
+        slotTracker.requireSlot(largeSlot1);
+        List<LogicalSlot> peakSlots = strategy.peakSlotsToAllocate(slotTracker);
+        assertThat(peakSlots).containsExactly(largeSlot1);
+        slotTracker.allocateSlot(largeSlot1);
+
+        slotTracker.requireSlot(largeSlot2);
+        peakSlots = strategy.peakSlotsToAllocate(slotTracker);
+        assertThat(peakSlots).isEmpty();
+
+        slotTracker.releaseSlot(largeSlot1.getSlotId());
+
+        peakSlots = strategy.peakSlotsToAllocate(slotTracker);
+        assertThat(peakSlots).hasSize(1);
+        assertThat(peakSlots).containsExactly(largeSlot2);
+        slotTracker.releaseSlot(largeSlot2.getSlotId());
+        GlobalVariable.setQueryQueueConcurrencyLimit(-1);
+    }
+
+    @Test
+    public void testConcurrencyLimitWithSmallSlots() {
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
+
+        GlobalVariable.setQueryQueueConcurrencyLimit(1);
+        LogicalSlot smallSlot1 = generateSlot(1);
+        LogicalSlot smallSlot2 = generateSlot(1);
+
+        slotTracker.requireSlot(smallSlot1);
+        List<LogicalSlot> peakSlots = strategy.peakSlotsToAllocate(slotTracker);
+        assertThat(peakSlots).containsExactly(smallSlot1);
+        slotTracker.allocateSlot(smallSlot1);
+
+        slotTracker.requireSlot(smallSlot2);
+        peakSlots = strategy.peakSlotsToAllocate(slotTracker);
+        assertThat(peakSlots).isEmpty();
+
+        slotTracker.releaseSlot(smallSlot1.getSlotId());
+
+        peakSlots = strategy.peakSlotsToAllocate(slotTracker);
+        assertThat(peakSlots).hasSize(1);
+        assertThat(peakSlots).containsExactly(smallSlot2);
+        slotTracker.releaseSlot(smallSlot2.getSlotId());
+        GlobalVariable.setQueryQueueConcurrencyLimit(-1);
+    }
 }
