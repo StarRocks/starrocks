@@ -92,7 +92,7 @@ bool AggInRuntimeFilterMerger::merge(size_t seq, RuntimeFilterBuildDescriptor* d
                 total_size += down_cast<InRuntimeFilter<Type>*>(_target_filters[i])->size();
             }
         });
-        if (total_size > 1024) {
+        if (total_size > config::max_pushdown_conditions_per_column) {
             _always_true = true;
             return false;
         }

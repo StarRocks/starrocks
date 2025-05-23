@@ -126,7 +126,6 @@ Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const Chun
         }
     }
     TRY_CATCH_ALLOC_SCOPE_END()
-    // RETURN_IF_ERROR(_build_runtime_filters(state));
     _build_in_runtime_filters(state);
     _aggregator->update_num_input_rows(chunk_size);
     RETURN_IF_ERROR(_aggregator->check_has_error());

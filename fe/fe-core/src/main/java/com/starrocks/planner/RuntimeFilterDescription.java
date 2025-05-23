@@ -172,7 +172,7 @@ public class RuntimeFilterDescription {
         return this.topn;
     }
 
-        public PlanNode getBuildPlanNode() {
+    public PlanNode getBuildPlanNode() {
         return buildPlanNode;
     }
 
@@ -289,13 +289,6 @@ public class RuntimeFilterDescription {
         } else {
             return true;
         }
-    }
-
-    public boolean isClosedInterval() {
-        if (sortInfo != null) {
-            return sortInfo.getOrderingExprs().size() == 1 && sortInfo.getPartitionExprs().isEmpty();
-        }
-        return true;
     }
 
     public void enterExchangeNode() {
@@ -632,10 +625,6 @@ public class RuntimeFilterDescription {
 
         if (runtimeFilterType().isTopNFilter()) {
             t.setFilter_type(TRuntimeFilterBuildType.TOPN_FILTER);
-            t.setLimit(topn);
-            t.setIs_asc(isAscFilter());
-            t.setIs_nulls_first(isNullsFirst());
-            t.setIs_close_interval(isClosedInterval());
         } else if (runtimeFilterType().isAggInFilter()) {
             t.setFilter_type(TRuntimeFilterBuildType.AGG_FILTER);
         } else {

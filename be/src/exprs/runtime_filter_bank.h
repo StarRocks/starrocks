@@ -111,10 +111,6 @@ public:
     const std::vector<TNetworkAddress>& merge_nodes() const { return _merge_nodes; }
 
     TRuntimeFilterBuildType::type type() const { return _runtime_filter_type; }
-    bool is_asc() const { return _is_asc; }
-    bool is_nulls_first() const { return _is_nulls_first; }
-    bool is_close_interval() const { return _is_close_interval; }
-    size_t limit() const { return _limit; }
 
     void set_runtime_filter(RuntimeFilter* rf) { _runtime_filter = rf; }
     // used in TopN filter to intersect with other runtime filters.
@@ -169,12 +165,6 @@ private:
     int32_t _skew_shuffle_filter_id = -1;
 
     TRuntimeFilterBuildType::type _runtime_filter_type;
-
-    // field used in top-n runtime filter
-    bool _is_asc{};
-    bool _is_nulls_first{};
-    bool _is_close_interval{};
-    size_t _limit{};
 
     std::mutex _mutex;
 };
