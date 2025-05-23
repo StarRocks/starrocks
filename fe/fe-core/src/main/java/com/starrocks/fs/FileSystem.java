@@ -15,12 +15,13 @@
 package com.starrocks.fs;
 
 import com.google.common.base.Strings;
+import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.fs.azure.AzBlobFileSystem;
 import com.starrocks.fs.hdfs.HdfsFileSystemWrap;
 import com.starrocks.fs.hdfs.HdfsFsManager;
 import com.starrocks.fs.hdfs.WildcardURI;
-import com.starrocks.thrift.TCloudConfiguration;
+import com.starrocks.thrift.THdfsProperties;
 import org.apache.hadoop.fs.FileStatus;
 
 import java.util.List;
@@ -28,7 +29,7 @@ import java.util.Map;
 
 /**
  * A unified abstraction for different types of file systems (e.g., HDFS, Azure Blob).
- * This interface defines common operations like glob listing and retrieving cloud configuration used in the backend.
+ * This interface defines common operations like glob listing and retrieving HDFS properties used in the backend.
  */
 public interface FileSystem {
 
@@ -50,8 +51,9 @@ public interface FileSystem {
             throw new StarRocksException("Invalid path. scheme is null");
         }
 
-        if (scheme.equalsIgnoreCase(HdfsFsManager.WASB_SCHEME) || scheme.equalsIgnoreCase(HdfsFsManager.WASBS_SCHEME)) {
-            // Use native Azure SDK if enabled and the scheme is wasb/wasbs
+        if (Config.azure_use_native_sdk &&
+                (scheme.equalsIgnoreCase(HdfsFsManager.WASB_SCHEME) || scheme.equalsIgnoreCase(HdfsFsManager.WASBS_SCHEME))) {
+            // Use native Azure SDK is enabled and the scheme is wasb/wasbs
             return new AzBlobFileSystem(properties);
         } else {
             // HDFS-compatible implementation
@@ -71,12 +73,14 @@ public interface FileSystem {
     public List<FileStatus> globList(String path, boolean skipDir) throws StarRocksException;
 
     /**
-     * Get cloud configuration in thrift format used in the backend for the given path.
+     * Get HDFS properties in thrift format used in the backend for the given path.
+     *
+     * NOTE: THdfsProperties has some fields used by S3 file system, so we should not use TCloudConfiguration only.
      *
      * @param path Path for which properties are requested
-     * @return TCloudConfiguration used in the backend
+     * @return THdfsProperties used in the backend
      * @throws StarRocksException On resolution errors
      */
-    public TCloudConfiguration getCloudConfiguration(String path) throws StarRocksException;
+    public THdfsProperties getHdfsProperties(String path) throws StarRocksException;
 
 }

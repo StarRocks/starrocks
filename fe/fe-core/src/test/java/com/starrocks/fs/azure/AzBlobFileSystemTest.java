@@ -26,6 +26,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCloudType;
+import com.starrocks.thrift.THdfsProperties;
 import org.apache.hadoop.fs.FileStatus;
 import org.junit.Assert;
 import org.junit.Before;
@@ -188,8 +189,10 @@ public class AzBlobFileSystemTest {
         String path = "wasbs://container_name@account_name.blob.core.windows.net/blob_name";
 
         // Check TCloudConfiguration
-        TCloudConfiguration cc = fs.getCloudConfiguration(path);
+        THdfsProperties hdfsProperties = fs.getHdfsProperties(path);
+        TCloudConfiguration cc = hdfsProperties.getCloud_configuration();
         Assert.assertEquals(TCloudType.AZURE, cc.getCloud_type());
+        Assert.assertTrue(cc.isAzure_use_native_sdk());
         Map<String, String> cloudProperties = cc.getCloud_properties();
         Assert.assertEquals("client_id_xxx", cloudProperties.get(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID));
     }
