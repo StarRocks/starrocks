@@ -216,8 +216,14 @@ public class CompactionMgr implements MemoryTrackable {
             v.setNextCompactionTime(System.currentTimeMillis() + delayMs);
             return v;
         });
-        if (statistics != null && LOG.isDebugEnabled()) {
-            LOG.debug("Enable compaction after {}ms: {}", delayMs, statistics);
+        if (statistics != null) {
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Enable compaction after {}ms: {}", delayMs, statistics);
+            }
+            if (delayMs >= Config.lake_compaction_delay_time_warn_threshold_ms) {
+                LOG.warn("Compaction task for {} will be delayed to schedule after {}ms",
+                        partition.getPartitionId(), delayMs);
+            }
         }
     }
 
