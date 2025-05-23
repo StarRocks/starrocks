@@ -788,7 +788,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
             // refresh old table
             Table table = optTable.get();
-            if (table.isNativeTableOrMaterializedView() || table.isConnectorView()) {
+            if (table.isNativeTableOrMaterializedView() || table.isView()) {
                 logger.debug("No need to refresh table:{} because it is native table or mv or connector view",
                         baseTableInfo.getTableInfoStr());
                 continue;
