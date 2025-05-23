@@ -298,10 +298,17 @@ public class InsertAnalyzer {
                     }
                     if (targetColumns.size() < olapTable.getBaseSchemaWithoutGeneratedColumn().size()) {
                         insertStmt.setUsePartialUpdate();
-                        // mark if partial update for auto increment column
+                        // mark if partial update for auto increment column if and only if:
+                        // 1. There is auto increment defined in base schema
+                        // 2. targetColumns does not contain auto increment column
+                        // 3. auto increment column is not key column
                         if (olapTable.hasAutoIncrementColumn() &&
                                 !targetColumns.stream().anyMatch(col -> col.isAutoIncrement())) {
-                            insertStmt.setAutoIncrementPartialUpdate();
+                            Column autoIncrementColumn =
+                                        table.getBaseSchema().stream().filter(Column::isAutoIncrement).findFirst().get();
+                            if (!autoIncrementColumn.isKey()) {
+                                insertStmt.setAutoIncrementPartialUpdate();
+                            }
                         }
                     }
                 }
