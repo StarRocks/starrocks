@@ -18,8 +18,10 @@
 package com.starrocks.mysql.security;
 
 import com.starrocks.common.Config;
-import org.junit.jupiter.api.*;
-import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import javax.naming.Context;
 import java.util.Hashtable;
