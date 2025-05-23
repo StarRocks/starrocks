@@ -82,11 +82,11 @@ public class CompactionScheduler extends Daemon {
     private final ConcurrentHashMap<PartitionIdentifier, CompactionJob> runningCompactions;
     private final SynchronizedCircularQueue<CompactionRecord> history;
     private long lastPartitionCleanTime;
-    private Set<Long> disabledTables; // copy-on-write
+    private Set<Long> disabledIds; // copy-on-write, table id or partition id
 
     CompactionScheduler(@NotNull CompactionMgr compactionManager, @NotNull SystemInfoService systemInfoService,
                         @NotNull GlobalTransactionMgr transactionMgr, @NotNull GlobalStateMgr stateMgr,
-                        @NotNull String disableTablesStr) {
+                        @NotNull String disableIdsStr) {
         super("COMPACTION_DISPATCH", LOOP_INTERVAL_MS);
         this.compactionManager = compactionManager;
         this.systemInfoService = systemInfoService;
@@ -95,9 +95,9 @@ public class CompactionScheduler extends Daemon {
         this.runningCompactions = new ConcurrentHashMap<>();
         this.lastPartitionCleanTime = System.currentTimeMillis();
         this.history = new SynchronizedCircularQueue<>(Config.lake_compaction_history_size);
-        this.disabledTables = Collections.unmodifiableSet(new HashSet<>());
+        this.disabledIds = Collections.unmodifiableSet(new HashSet<>());
 
-        disableTables(disableTablesStr);
+        disableTableOrPartitionId(disableIdsStr);
     }
 
     @Override
@@ -191,7 +191,7 @@ public class CompactionScheduler extends Daemon {
         }
 
         List<PartitionStatisticsSnapshot> partitions = compactionManager.choosePartitionsToCompact(
-                runningCompactions.keySet(), disabledTables);
+                runningCompactions.keySet(), disabledIds);
         int index = 0;
         while (numRunningTasks < compactionLimit && index < partitions.size()) {
             PartitionStatisticsSnapshot partitionStatisticsSnapshot = partitions.get(index++);
@@ -581,24 +581,28 @@ public class CompactionScheduler extends Daemon {
     }
 
     public boolean isTableDisabled(Long tableId) {
-        return disabledTables.contains(tableId);
+        return disabledIds.contains(tableId);
     }
 
-    public void disableTables(String disableTablesStr) {
-        Set<Long> newDisabledTables = new HashSet<>();
-        if (!disableTablesStr.isEmpty()) {
-            String[] arr = disableTablesStr.split(";");
+    public boolean isPartitionDisabled(Long partitionId) {
+        return disabledIds.contains(partitionId);
+    }
+
+    public void disableTableOrPartitionId(String disableIdsStr) {
+        Set<Long> newDisabledIds = new HashSet<>();
+        if (!disableIdsStr.isEmpty()) {
+            String[] arr = disableIdsStr.split(";");
             for (String a : arr) {
                 try {
                     long l = Long.parseLong(a);
-                    newDisabledTables.add(l);
+                    newDisabledIds.add(l);
                 } catch (NumberFormatException e) {
-                    LOG.warn("Bad format of disable tables string: {}, now is {}, should be like \"tableId1;tableId2\"",
-                            e, disableTablesStr);
+                    LOG.warn("Bad format of disable string: {}, now is {}, should be like \"Id1;Id2\"",
+                            e, disableIdsStr);
                     return;
                 }
             }
         }
-        disabledTables = Collections.unmodifiableSet(newDisabledTables);
+        disabledIds = Collections.unmodifiableSet(newDisabledIds);
     }
 }
