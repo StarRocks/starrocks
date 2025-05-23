@@ -779,7 +779,7 @@ Status ImmutableIndexWriter::finish() {
             _meta.compression_type());
     _version.to_pb(_meta.mutable_version());
     _meta.set_size(_total);
-    _meta.set_format_version(PERSISTENT_INDEX_VERSION_6);
+    _meta.set_format_version(PERSISTENT_INDEX_VERSION_7);
     for (const auto& [key_size, shard_info] : _shard_info_by_length) {
         const auto [shard_offset, shard_num] = shard_info;
         auto info = _meta.add_shard_info();
@@ -969,13 +969,13 @@ public:
     }
 
     Status load_snapshot(phmap::BinaryInputArchive& ar) override {
-        if (format_version == kMutableIndexFormatVersion1) {
+        if (_format_version == kMutableIndexFormatVersion1) {
             bool succ = false;
             TRY_CATCH_BAD_ALLOC(succ = _map.load(ar));
             if (!succ) {
                 return Status::Corruption("FixedMutableIndex load snapshot failed");
             }
-        } else if (format_version == kMutableIndexFormatVersion2) {
+        } else if (_format_version == kMutableIndexFormatVersion2) {
             // We introduced the new format specifically to address cross-platform compatibility issues with snapshot files.
             // In previous format, we met issue when migrate from x86 to arm64.
             // https://github.com/StarRocks/starrocks/issues/57952
@@ -1040,10 +1040,7 @@ public:
     // will use `sizeof(size_t)` as return value.
     size_t dump_bound() override { return _map.empty() ? sizeof(size_t) : _map.dump_bound(); }
 
-    Status completeness_check(phmap::BinaryInputArchive& ar) override {
-        RETURN_IF(!_map.completeness_check(ar), Status::InternalError("FixedMutableIndex completeness check failed"));
-        return Status::OK();
-    }
+    Status completeness_check(phmap::BinaryInputArchive& ar) override { return _map.completeness_check(ar); }
 
     Status dump(phmap::BinaryOutputArchive& ar) override {
         bool use_old_format = false;
@@ -1123,11 +1120,11 @@ public:
 
     size_t memory_usage() override { return _map.capacity() * (1 + (KeySize + 3) / 4 * 4 + kIndexValueSize); }
 
-    void set_format_version(uint32_t ver) override { format_version = ver; }
+    void set_format_version(uint32_t ver) override { _format_version = ver; }
 
 private:
     phmap::flat_hash_map<KeyType, IndexValue, FixedKeyHash<KeySize>> _map;
-    uint32_t format_version = kMutableIndexFormatVersion2;
+    uint32_t _format_version = kMutableIndexFormatVersion2;
 };
 
 std::tuple<size_t, size_t, size_t> MutableIndex::estimate_nshard_and_npage(const size_t total_kv_pairs_usage,
@@ -2104,6 +2101,9 @@ size_t ShardByLengthMutableIndex::dump_bound() {
 Status ShardByLengthMutableIndex::dump(phmap::BinaryOutputArchive& ar_out, std::set<uint32_t>& dumped_shard_idxes) {
     bool use_old_format = false;
     TEST_SYNC_POINT_CALLBACK("ShardByLengthMutableIndex::dump::1", &use_old_format);
+    // We introduced the new format specifically to address cross-platform compatibility issues with snapshot files.
+    // In previous format, we met issue when migrate from x86 to arm64.
+    // https://github.com/StarRocks/starrocks/issues/57952
     if (LIKELY(!use_old_format)) {
         if (!ar_out.dump(kSnapshotMagicNum)) {
             return Status::InternalError("ShardByLengthMutableIndex dump snapshot magic num failed");
@@ -2158,7 +2158,7 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         // create a new empty _l0 file, set _offset to 0
         data->set_offset(0);
         data->set_size(0);
-        meta->set_format_version(PERSISTENT_INDEX_VERSION_6);
+        meta->set_format_version(PERSISTENT_INDEX_VERSION_7);
         _offset = 0;
         _page_size = 0;
         _checksum = 0;
@@ -2206,7 +2206,7 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         snapshot->mutable_dumped_shard_idxes()->Add(dumped_shard_idxes.begin(), dumped_shard_idxes.end());
         RETURN_IF_ERROR(checksum_of_file(l0_rfile.get(), 0, snapshot_size, &_checksum));
         snapshot->set_checksum(_checksum);
-        meta->set_format_version(PERSISTENT_INDEX_VERSION_6);
+        meta->set_format_version(PERSISTENT_INDEX_VERSION_7);
         _offset = snapshot_size;
         _page_size = 0;
         _checksum = 0;
@@ -2219,7 +2219,7 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         data->set_offset(_offset);
         data->set_size(_page_size);
         wal_pb->set_checksum(_checksum);
-        meta->set_format_version(PERSISTENT_INDEX_VERSION_6);
+        meta->set_format_version(PERSISTENT_INDEX_VERSION_7);
         _offset += _page_size;
         _page_size = 0;
         _checksum = 0;
@@ -2236,7 +2236,7 @@ Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
     auto format_version = meta.format_version();
     if (format_version != PERSISTENT_INDEX_VERSION_2 && format_version != PERSISTENT_INDEX_VERSION_3 &&
         format_version != PERSISTENT_INDEX_VERSION_4 && format_version != PERSISTENT_INDEX_VERSION_5 &&
-        format_version != PERSISTENT_INDEX_VERSION_6) {
+        format_version != PERSISTENT_INDEX_VERSION_6 && format_version != PERSISTENT_INDEX_VERSION_7) {
         std::string msg = strings::Substitute("different l0 format, should rebuid index. actual:$0, expect:$1",
                                               format_version, PERSISTENT_INDEX_VERSION_5);
         LOG(WARNING) << msg;
@@ -3140,10 +3140,10 @@ StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<R
     auto format_version = meta.format_version();
     if (format_version != PERSISTENT_INDEX_VERSION_2 && format_version != PERSISTENT_INDEX_VERSION_3 &&
         format_version != PERSISTENT_INDEX_VERSION_4 && format_version != PERSISTENT_INDEX_VERSION_5 &&
-        format_version != PERSISTENT_INDEX_VERSION_6) {
+        format_version != PERSISTENT_INDEX_VERSION_6 && format_version != PERSISTENT_INDEX_VERSION_7) {
         std::string msg =
                 strings::Substitute("different immutable index format, should rebuid index. actual:$0, expect:$1",
-                                    format_version, PERSISTENT_INDEX_VERSION_6);
+                                    format_version, PERSISTENT_INDEX_VERSION_7);
         LOG(WARNING) << msg;
         return Status::InternalError(msg);
     }
@@ -3693,7 +3693,7 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) 
         // update PersistentIndexMetaPB
         index_meta->set_size(_size);
         index_meta->set_usage(_usage);
-        index_meta->set_format_version(PERSISTENT_INDEX_VERSION_6);
+        index_meta->set_format_version(PERSISTENT_INDEX_VERSION_7);
         _version.to_pb(index_meta->mutable_version());
         _version.to_pb(index_meta->mutable_l1_version());
         MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
@@ -3703,14 +3703,14 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) 
     } else if (_dump_snapshot) {
         index_meta->set_size(_size);
         index_meta->set_usage(_usage);
-        index_meta->set_format_version(PERSISTENT_INDEX_VERSION_6);
+        index_meta->set_format_version(PERSISTENT_INDEX_VERSION_7);
         _version.to_pb(index_meta->mutable_version());
         MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
         RETURN_IF_ERROR(_l0->commit(l0_meta, _version, kSnapshot));
     } else {
         index_meta->set_size(_size);
         index_meta->set_usage(_usage);
-        index_meta->set_format_version(PERSISTENT_INDEX_VERSION_6);
+        index_meta->set_format_version(PERSISTENT_INDEX_VERSION_7);
         _version.to_pb(index_meta->mutable_version());
         MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
         RETURN_IF_ERROR(_l0->commit(l0_meta, _version, kAppendWAL));
@@ -4782,7 +4782,7 @@ Status PersistentIndex::_minor_compaction(PersistentIndexMetaPB* index_meta) {
     // 3. modify meta
     index_meta->set_size(_size);
     index_meta->set_usage(_usage);
-    index_meta->set_format_version(PERSISTENT_INDEX_VERSION_6);
+    index_meta->set_format_version(PERSISTENT_INDEX_VERSION_7);
     _version.to_pb(index_meta->mutable_version());
     _version.to_pb(index_meta->mutable_l1_version());
     MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
@@ -5225,7 +5225,7 @@ Status PersistentIndex::reset(Tablet* tablet, EditVersion version, PersistentInd
     index_meta->clear_l2_version_merged();
     index_meta->set_key_size(_key_size);
     index_meta->set_size(0);
-    index_meta->set_format_version(PERSISTENT_INDEX_VERSION_6);
+    index_meta->set_format_version(PERSISTENT_INDEX_VERSION_7);
     version.to_pb(index_meta->mutable_version());
     MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
     l0_meta->clear_wals();
@@ -5393,7 +5393,7 @@ Status PersistentIndex::_load_by_loader(TabletLoader* loader) {
     index_meta.clear_l2_version_merged();
     index_meta.set_key_size(_key_size);
     index_meta.set_size(0);
-    index_meta.set_format_version(PERSISTENT_INDEX_VERSION_6);
+    index_meta.set_format_version(PERSISTENT_INDEX_VERSION_7);
     applied_version.to_pb(index_meta.mutable_version());
     MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
     l0_meta->clear_wals();

@@ -145,35 +145,31 @@ bool raw_hash_set<Policy, Hash, Eq, Alloc>::load(InputArchive& ar) {
 
 template <class Policy, class Hash, class Eq, class Alloc>
 template <typename InputArchive>
-bool raw_hash_set<Policy, Hash, Eq, Alloc>::completeness_check(InputArchive& ar) {
+starrocks::Status raw_hash_set<Policy, Hash, Eq, Alloc>::completeness_check(InputArchive& ar) {
     static_assert(type_traits_internal::IsTriviallyCopyable<value_type>::value,
                   "value_type should be trivially copyable");
     raw_hash_set<Policy, Hash, Eq, Alloc>().swap(*this); // clear any existing content
     size_t size = 0;
     if (!ar.load(&size)) {
-        std::cerr << "Failed to load size" << std::endl;
-        return false;
+        return starrocks::Status::InternalError("Failed to load size");
     }
     if (size == 0) {
-        return true;
+        return starrocks::Status::OK();
     }
     size_t capacity = 0;
     if (!ar.load(&capacity)) {
-        std::cerr << "Failed to load capacity" << std::endl;
-        return false;
+        return starrocks::Status::InternalError("Failed to load capacity");
     }
 
     // skip ctrl
     if (!ar.skip(sizeof(ctrl_t) * (capacity + Group::kWidth + 1))) {
-        std::cerr << "Failed to skip ctrl" << std::endl;
-        return false;
+        return starrocks::Status::InternalError("Failed to skip ctrl");
     }
     // skip slot
     if (!ar.skip(sizeof(slot_type) * capacity)) {
-        std::cerr << "Failed to skip slot" << std::endl;
-        return false;
+        return starrocks::Status::InternalError("Failed to skip slot");
     }
-    return true;
+    return starrocks::Status::OK();
 }
 
 // ------------------------------------------------------------------------

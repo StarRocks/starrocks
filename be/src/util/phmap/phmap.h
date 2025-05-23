@@ -82,6 +82,7 @@
 #include <utility>
 #include <vector>
 
+#include "common/status.h"
 #include "phmap_base.h"
 #include "phmap_fwd_decl.h"
 #include "phmap_hash.h"
@@ -1543,7 +1544,7 @@ public:
     bool load(InputArchive&);
 
     template <typename InputArchive>
-    bool completeness_check(InputArchive& ar);
+    starrocks::Status completeness_check(InputArchive& ar);
 #endif
 
     void rehash(size_t n) {
