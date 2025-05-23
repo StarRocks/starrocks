@@ -17,26 +17,24 @@
 
 package com.starrocks.mysql.security;
 
-import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 
 import java.io.FileOutputStream;
 import java.security.KeyStore;
 
 import javax.net.SocketFactory;
 
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
+import org.junit.Test;
 
-class CustomLdapSslSocketFactoryTest {
-
+public class CustomLdapSslSocketFactoryTest {
     static String trustStorePath = "test-truststore.jks";
     static String trustStorePassword = "changeit";
-
-    @BeforeAll
-    static void setupTrustStore() throws Exception {
+    
+    @BeforeClass
+    public static void setupTrustStore() throws Exception {
         // Create an empty KeyStore for test purposes
         KeyStore ks = KeyStore.getInstance("JKS");
         ks.load(null, trustStorePassword.toCharArray());
@@ -48,23 +46,32 @@ class CustomLdapSslSocketFactoryTest {
         System.setProperty("custom.ldap.truststore.password", trustStorePassword);
         System.setProperty("custom.ldap.ssl.protocol", "TLS");
     }
-
-    @AfterAll
-    static void cleanup() {
+    
+    @AfterClass
+    public static void cleanup() {
         new java.io.File(trustStorePath).delete();
     }
-
+    
     @Test
-    void testSingletonInstance() {
+    public void testSingletonInstance() {
         SocketFactory factory1 = CustomLdapSslSocketFactory.getDefault();
         SocketFactory factory2 = CustomLdapSslSocketFactory.getDefault();
         assertSame(factory1, factory2);
     }
-
-    @Test
-    void testLoadTrustStoreWithInvalidPath() {
+    
+    @Test(expected = CustomLdapSslSocketFactoryException.class)
+    public void testLoadTrustStoreWithInvalidPath() {
         System.setProperty("custom.ldap.truststore.loc", "invalid.jks");
-        Exception ex = assertThrows(CustomLdapSslSocketFactoryException.class, CustomLdapSslSocketFactory::getDefault);
-        assertTrue(ex.getMessage().contains("Failed to create CustomSslSocketFactory"));
+        CustomLdapSslSocketFactory.getDefault();
+    }
+    
+    @Test
+    public void testLoadTrustStoreWithInvalidPathMessage() {
+        System.setProperty("custom.ldap.truststore.loc", "invalid.jks");
+        try {
+            CustomLdapSslSocketFactory.getDefault();
+        } catch (CustomLdapSslSocketFactoryException ex) {
+            assertTrue(ex.getMessage().contains("Failed to create CustomSslSocketFactory"));
+        }
     }
 }
