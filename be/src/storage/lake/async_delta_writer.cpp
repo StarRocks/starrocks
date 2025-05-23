@@ -26,6 +26,7 @@
 #include "storage/storage_engine.h"
 #include "testutil/sync_point.h"
 #include "util/stack_trace_mutex.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks::lake {
 
@@ -173,6 +174,8 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
     int num_tasks = 0;
     auto st = Status{};
     int64_t pending_time_ns = 0;
+    MonotonicStopWatch watch;
+    watch.start();
     for (; iter; ++iter) {
         // It's safe to run without checking `closed()` but doing so can make the task quit earlier on cancel/error.
         if (async_writer->closed()) {
@@ -225,6 +228,12 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
         }
     }
     async_writer->_writer->update_task_stat(num_tasks, pending_time_ns);
+    StarRocksMetrics::instance()->async_delta_writer_execute_total.increment(1);
+    StarRocksMetrics::instance()->async_delta_writer_task_total.increment(num_tasks);
+    StarRocksMetrics::instance()->async_delta_writer_task_execute_duration_us.increment(watch.elapsed_time() /
+                                                                                        NANOSECS_PER_USEC);
+    StarRocksMetrics::instance()->async_delta_writer_task_pending_duration_us.increment(pending_time_ns /
+                                                                                        NANOSECS_PER_USEC);
     return 0;
 }
 
