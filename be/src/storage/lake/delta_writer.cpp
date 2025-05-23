@@ -39,6 +39,7 @@
 #include "storage/memtable_sink.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/storage_engine.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks::lake {
 
@@ -334,6 +335,14 @@ inline Status DeltaWriterImpl::manual_flush() {
 
 inline Status DeltaWriterImpl::flush() {
     RETURN_IF_ERROR(flush_async());
+    MonotonicStopWatch watch;
+    watch.start();
+    DeferOp defer([&] {
+        ADD_COUNTER_RELAXED(_stats.write_wait_flush_time_ns, watch.elapsed_time());
+        StarRocksMetrics::instance()->delta_writer_wait_flush_task_total.increment(1);
+        StarRocksMetrics::instance()->delta_writer_wait_flush_duration_us.increment(watch.elapsed_time() /
+                                                                                    NANOSECS_PER_USEC);
+    });
     return _flush_token->wait();
 }
 
@@ -398,9 +407,17 @@ Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint3
     if (_mem_tracker->limit_exceeded()) {
         VLOG(2) << "Flushing memory table due to memory limit exceeded";
         st = flush();
+<<<<<<< HEAD
     } else if (_mem_tracker->parent() && _mem_tracker->parent()->limit_exceeded()) {
         VLOG(2) << "Flushing memory table due to parent memory limit exceeded";
         st = flush();
+=======
+        ADD_COUNTER_RELAXED(_stats.memory_exceed_count, 1);
+    } else if (_mem_tracker->parent() && _mem_tracker->parent()->limit_exceeded()) {
+        VLOG(2) << "Flushing memory table due to parent memory limit exceeded";
+        st = flush();
+        ADD_COUNTER_RELAXED(_stats.memory_exceed_count, 1);
+>>>>>>> 4d974ecb03 ([Enhancement] Add some load metrics for cloud-native (#59209))
     } else if (full) {
         st = flush_async();
     }
@@ -464,6 +481,25 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish(DeltaWriterFinishMode mode) {
     RETURN_IF_ERROR(build_schema_and_writer());
     RETURN_IF_ERROR(flush());
     RETURN_IF_ERROR(_tablet_writer->finish());
+<<<<<<< HEAD
+=======
+    return Status::OK();
+}
+
+StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mode) {
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    MonotonicStopWatch watch;
+    watch.start();
+    DeferOp defer([&] {
+        ADD_COUNTER_RELAXED(_stats.finish_time_ns, watch.elapsed_time());
+        StarRocksMetrics::instance()->delta_writer_commit_task_total.increment(1);
+    });
+    RETURN_IF_ERROR(finish());
+    auto wait_flush_ts = watch.elapsed_time();
+    ADD_COUNTER_RELAXED(_stats.finish_wait_flush_time_ns, wait_flush_ts);
+    StarRocksMetrics::instance()->delta_writer_wait_flush_task_total.increment(1);
+    StarRocksMetrics::instance()->delta_writer_wait_flush_duration_us.increment(wait_flush_ts / NANOSECS_PER_USEC);
+>>>>>>> 4d974ecb03 ([Enhancement] Add some load metrics for cloud-native (#59209))
 
     if (UNLIKELY(_txn_id < 0)) {
         return Status::InvalidArgument(fmt::format("negative txn id: {}", _txn_id));
@@ -559,10 +595,22 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish(DeltaWriterFinishMode mode) {
         auto cache_key = _tablet_manager->txn_log_location(_tablet_id, _txn_id);
         _tablet_manager->metacache()->cache_txn_log(cache_key, txn_log);
     }
+<<<<<<< HEAD
+=======
+    auto put_txn_log_ts = watch.elapsed_time();
+    auto commit_txn_duration_ns = put_txn_log_ts - prepare_txn_log_ts;
+    ADD_COUNTER_RELAXED(_stats.finish_put_txn_log_time_ns, commit_txn_duration_ns);
+    StarRocksMetrics::instance()->delta_writer_txn_commit_duration_us.increment(commit_txn_duration_ns /
+                                                                                NANOSECS_PER_USEC);
+>>>>>>> 4d974ecb03 ([Enhancement] Add some load metrics for cloud-native (#59209))
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && !skip_pk_preload) {
         // preload update state here to minimaze the cost when publishing.
         tablet.update_mgr()->preload_update_state(*txn_log, &tablet);
     }
+    auto pk_preload_duration_ns = watch.elapsed_time() - put_txn_log_ts;
+    ADD_COUNTER_RELAXED(_stats.finish_pk_preload_time_ns, pk_preload_duration_ns);
+    StarRocksMetrics::instance()->delta_writer_pk_preload_duration_us.increment(pk_preload_duration_ns /
+                                                                                NANOSECS_PER_USEC);
     return txn_log;
 }
 

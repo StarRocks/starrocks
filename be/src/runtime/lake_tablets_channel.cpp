@@ -497,6 +497,18 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     }
 
     auto wait_writer_ns = finish_wait_writer_ts - start_wait_writer_ts;
+<<<<<<< HEAD
+=======
+    StarRocksMetrics::instance()->load_channel_add_chunks_wait_memtable_duration_us.increment(
+            wait_memtable_flush_time_ns / NANOSECS_PER_USEC);
+    StarRocksMetrics::instance()->load_channel_add_chunks_wait_writer_duration_us.increment(wait_writer_ns /
+                                                                                            NANOSECS_PER_USEC);
+#ifndef BE_TEST
+    _table_metrics->load_rows.increment(total_row_num);
+    size_t chunk_size = chunk != nullptr ? chunk->bytes_usage() : 0;
+    _table_metrics->load_bytes.increment(chunk_size);
+#endif
+>>>>>>> 4d974ecb03 ([Enhancement] Add some load metrics for cloud-native (#59209))
     COUNTER_UPDATE(_add_chunk_counter, 1);
     COUNTER_UPDATE(_add_chunk_timer, watch.elapsed_time());
     COUNTER_UPDATE(_add_row_num, total_row_num);
