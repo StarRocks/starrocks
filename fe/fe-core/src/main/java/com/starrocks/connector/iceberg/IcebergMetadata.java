@@ -1172,7 +1172,7 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         PartitionSpec partitionSpec = nativeTbl.spec();
         for (TIcebergDataFile dataFile : dataFiles) {
-            Metrics metrics = IcebergApiConverter.buildDataFileMetrics(dataFile);
+            Metrics metrics = IcebergApiConverter.buildDataFileMetrics(dataFile, nativeTbl);
             DataFiles.Builder builder =
                     DataFiles.builder(partitionSpec)
                             .withMetrics(metrics)
