@@ -276,9 +276,9 @@ GROUP BY 子句通常和聚合函数一起使用。GROUP BY 指定的列不会�
 
 - `FILTER` 与聚合函数共同使用，仅有被筛选出来的行才会参与聚合函数的实际运算。
   > 注意：
-  > FILTER 语句仅支持在 AVG, COUNT, MAX, MIN, SUM, AGG_ARRAY, and ARRAY_AGG_DISTINCT 函数后使用。
+  > FILTER 语句仅支持在 AVG, COUNT, MAX, MIN, SUM, ARRAY_AGG, and ARRAY_AGG_DISTINCT 函数后使用。
   > 不支持 COUNT DISTINCT。
-  > AGG_ARRAY 和 ARRAY_AGG_DISTINCT 不支持在函数中使用 ORDER BY。
+  > ARRAY_AGG 和 ARRAY_AGG_DISTINCT 不支持在函数中使用 ORDER BY。
 
 - `GROUPING SETS` ｜ `CUBE` ｜ `ROLLUP` 是对 GROUP BY 子句的扩展，它能够在一个 GROUP BY 子句中实现多个集合的分组的聚合。其结果等价于将多个相应 GROUP BY 子句进行 UNION 操作。
 
