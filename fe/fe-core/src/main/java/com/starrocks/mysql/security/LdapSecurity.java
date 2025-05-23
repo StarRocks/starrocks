@@ -16,6 +16,7 @@ package com.starrocks.mysql.security;
 
 import com.google.common.base.Strings;
 import com.starrocks.authentication.AuthenticationException;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.NetUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
