@@ -75,6 +75,7 @@ TEST_F(StoragePageCacheTest, normal) {
 
         ASSERT_OK(_page_cache->insert(key, data.get(), &handle, false));
         ASSERT_EQ(handle.data(), data.get());
+        data.release();
 
         ASSERT_TRUE(_page_cache->lookup(key, &handle));
         ASSERT_EQ(handle.data(), data.get());
@@ -88,6 +89,7 @@ TEST_F(StoragePageCacheTest, normal) {
 
         ASSERT_OK(_page_cache->insert(key, data.get(), &handle, true));
         ASSERT_EQ(handle.data(), data.get());
+        data.release();
 
         ASSERT_TRUE(_page_cache->lookup(key, &handle));
     }
@@ -99,6 +101,7 @@ TEST_F(StoragePageCacheTest, normal) {
         auto data = std::make_unique<std::vector<uint8_t>>(1024);
         PageCacheHandle handle;
         ASSERT_OK(_page_cache->insert(key, data.get(), &handle, false));
+        data.release();
     }
 
     // cache miss
@@ -164,6 +167,7 @@ TEST_F(StoragePageCacheTest, metrics) {
         // Insert a piece of data, but the application layer does not release it.
         auto data = std::make_unique<std::vector<uint8_t>>(1024);
         ASSERT_OK(_page_cache->insert(key1, data.get(), &handle1, false));
+        data.release();
     }
 
     {
@@ -171,6 +175,7 @@ TEST_F(StoragePageCacheTest, metrics) {
         auto data = std::make_unique<std::vector<uint8_t>>(1024);
         PageCacheHandle handle2;
         ASSERT_OK(_page_cache->insert(key2, data.get(), &handle2, false));
+        data.release();
     }
 
     {
