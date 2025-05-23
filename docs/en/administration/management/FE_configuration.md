@@ -3277,14 +3277,14 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The upper limit of the Compaction Score for a partition in a shared-data cluster. `0` indicates no upper limit. This item only takes effect when `lake_enable_ingest_slowdown` is set to `true`. When the Compaction Score of a partition reaches or exceeds this upper limit, incoming loading tasks will be rejected. From v3.3.6 onwards, the default value is changed from `0` to `2000`.
 - Introduced in: v3.2.0
 
-##### lake_compaction_disable_tables
+##### lake_compaction_disable_ids
 
 - Default: ""
 - Type: String
 - Unit: -
 - Is mutable: Yes
-- Description: The table list of which compaction is disabled in shared-data mode. The format is `tableId1;tableId2`, seperated by semicolon, for example, `12345;98765`.
-- Introduced in: v3.1.11
+- Description: The table or partition list of which compaction is disabled in shared-data mode. The format is `tableId1;partitionId2`, seperated by semicolon, for example, `12345;98765`.
+- Introduced in: v3.5.0
 
 ##### lake_enable_balance_tablets_between_workers
 

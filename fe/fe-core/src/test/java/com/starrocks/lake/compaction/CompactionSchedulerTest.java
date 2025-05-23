@@ -69,23 +69,27 @@ public class CompactionSchedulerTest {
     private LakeAggregator lakeAggregator;
 
     @Test
-    public void testDisableTableCompaction() {
+    public void testDisableCompaction() {
+        Config.lake_compaction_disable_ids = "23456";
         CompactionMgr compactionManager = new CompactionMgr();
         CompactionScheduler compactionScheduler =
                 new CompactionScheduler(compactionManager, GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
-                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr(), GlobalStateMgr.getCurrentState(), "12345");
+                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr(), GlobalStateMgr.getCurrentState(),
+                        Config.lake_compaction_disable_ids);
 
-        Assert.assertTrue(compactionScheduler.isTableDisabled(12345L));
-
-        compactionScheduler.disableTables("23456;34567;45678");
-
-        Assert.assertFalse(compactionScheduler.isTableDisabled(12345L));
         Assert.assertTrue(compactionScheduler.isTableDisabled(23456L));
+        Assert.assertTrue(compactionScheduler.isPartitionDisabled(23456L));
+
+        compactionScheduler.disableTableOrPartitionId("34567;45678;56789");
+
+        Assert.assertFalse(compactionScheduler.isPartitionDisabled(23456L));
         Assert.assertTrue(compactionScheduler.isTableDisabled(34567L));
         Assert.assertTrue(compactionScheduler.isTableDisabled(45678L));
+        Assert.assertTrue(compactionScheduler.isPartitionDisabled(56789L));
 
-        compactionScheduler.disableTables("");
-        Assert.assertFalse(compactionScheduler.isTableDisabled(23456L));
+        compactionScheduler.disableTableOrPartitionId("");
+        Assert.assertFalse(compactionScheduler.isTableDisabled(34567L));
+        Config.lake_compaction_disable_ids = "";
     }
 
     @Test
