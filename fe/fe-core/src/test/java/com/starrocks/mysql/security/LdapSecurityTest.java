@@ -17,36 +17,35 @@
 
 package com.starrocks.mysql.security;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 
 import com.starrocks.common.Config;
 
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.Before;
+import org.junit.Test;
 
 import javax.naming.Context;
 import java.util.Hashtable;
 
-class LdapSecurityTest {
-
-    @BeforeEach
-    void setup() {
+public class LdapSecurityTest {
+    @Before
+    public void setup() {
         Config.authentication_ldap_simple_server_protocol = "ldaps";
         Config.authentication_ldaps_trust_store_path = "test.jks";
         Config.authentication_ldaps_trust_store_password = "changeit";
     }
-
+    
     @Test
-    void testStaticBlockSetsSystemProperties() {
+    public void testStaticBlockSetsSystemProperties() {
         assertEquals("JKS", System.getProperty("custom.ldap.truststore.type"));
         assertEquals("test.jks", System.getProperty("custom.ldap.truststore.loc"));
         assertEquals("changeit", System.getProperty("custom.ldap.truststore.password"));
         assertEquals("TLS", System.getProperty("custom.ldap.ssl.protocol"));
     }
-
+    
     @Test
-    void testLdapEnvForLdaps() {
+    public void testLdapEnvForLdaps() {
         // Simulate what LdapSecurity would do when in ldaps mode
         String url = Config.authentication_ldap_simple_server_protocol + "://localhost:389";
         Hashtable<String, String> env = new Hashtable<>();
@@ -58,9 +57,9 @@ class LdapSecurityTest {
         }
         assertEquals(CustomLdapSslSocketFactory.class.getName(), env.get("java.naming.ldap.factory.socket"));
     }
-
+    
     @Test
-    void testLdapEnvForLdap() {
+    public void testLdapEnvForLdap() {
         Config.authentication_ldap_simple_server_protocol = "ldap";
         Config.authentication_ldaps_trust_store_path = null;
         String url = Config.authentication_ldap_simple_server_protocol + "://localhost:389";
