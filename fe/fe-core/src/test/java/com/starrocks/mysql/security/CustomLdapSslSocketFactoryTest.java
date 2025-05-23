@@ -17,9 +17,6 @@
 
 package com.starrocks.mysql.security;
 
-import static org.junit.Assert.assertSame;
-import static org.junit.Assert.assertTrue;
-
 import java.io.FileOutputStream;
 import java.security.KeyStore;
 
@@ -28,6 +25,9 @@ import javax.net.SocketFactory;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 
 public class CustomLdapSslSocketFactoryTest {
     static String trustStorePath = "test-truststore.jks";
