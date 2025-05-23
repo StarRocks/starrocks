@@ -21,12 +21,15 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.FunctionParams;
 import com.starrocks.analysis.IntLiteral;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class DefaultExpr {
+    private static final Logger LOG = LogManager.getLogger(DefaultExpr.class);
     @SerializedName("expr")
     private String expr;
     private boolean hasArguments;
@@ -63,8 +66,21 @@ public class DefaultExpr {
         return matcher.matches();
     }
 
-    public static boolean isEmptyDefaultFunction(DefaultExpr expr) {
-        return isValidDefaultFunction(expr.getExpr()) && !expr.hasArgs();
+    public static boolean isValidDefaultTimeFunction(String expr) {
+        String[] defaultfunctions = {
+            "current_timestamp\\([0-6]?\\)",
+            "now\\([0-6]?\\)"
+        };
+
+        String combinedPattern = String.format("^(%s)$", String.join("|", defaultfunctions));
+        Pattern pattern = Pattern.compile(combinedPattern, Pattern.CASE_INSENSITIVE);
+
+        Matcher matcher = pattern.matcher(expr.trim());
+        return matcher.matches();
+    }
+
+    public static boolean isEmptyDefaultTimeFunction(DefaultExpr expr) {
+        return isValidDefaultTimeFunction(expr.getExpr()) && !expr.hasArgs();
     }
 
     public Expr obtainExpr() {
