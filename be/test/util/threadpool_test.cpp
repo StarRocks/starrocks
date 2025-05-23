@@ -68,6 +68,8 @@ static const char* kDefaultPoolName = "test";
 
 class ThreadPoolTest : public ::testing::Test {
 public:
+    static constexpr int64_t kThreadIdleTimeoutMs = 500; // 500ms
+
     void SetUp() override { ASSERT_TRUE(ThreadPoolBuilder(kDefaultPoolName).build(&_pool).ok()); }
 
     Status rebuild_pool_with_builder(const ThreadPoolBuilder& builder) { return builder.build(&_pool); }
@@ -137,7 +139,7 @@ TEST_F(ThreadPoolTest, TestThreadPoolWithNoMinimum) {
     ASSERT_TRUE(rebuild_pool_with_builder(ThreadPoolBuilder(kDefaultPoolName)
                                                   .set_min_threads(0)
                                                   .set_max_threads(3)
-                                                  .set_idle_timeout(MonoDelta::FromMilliseconds(1)))
+                                                  .set_idle_timeout(MonoDelta::FromMilliseconds(kThreadIdleTimeoutMs)))
                         .ok());
 
     // There are no threads to start with.
@@ -210,7 +212,7 @@ TEST_F(ThreadPoolTest, TestRace) {
     ASSERT_TRUE(rebuild_pool_with_builder(ThreadPoolBuilder(kDefaultPoolName)
                                                   .set_min_threads(0)
                                                   .set_max_threads(1)
-                                                  .set_idle_timeout(MonoDelta::FromMicroseconds(1)))
+                                                  .set_idle_timeout(MonoDelta::FromMicroseconds(kThreadIdleTimeoutMs)))
                         .ok());
 
     for (int i = 0; i < 500; i++) {
@@ -229,7 +231,7 @@ TEST_F(ThreadPoolTest, TestVariableSizeThreadPool) {
     ASSERT_TRUE(rebuild_pool_with_builder(ThreadPoolBuilder(kDefaultPoolName)
                                                   .set_min_threads(1)
                                                   .set_max_threads(4)
-                                                  .set_idle_timeout(MonoDelta::FromMilliseconds(1)))
+                                                  .set_idle_timeout(MonoDelta::FromMilliseconds(kThreadIdleTimeoutMs)))
                         .ok());
 
     // There is 1 thread to start with.
@@ -259,7 +261,7 @@ TEST_F(ThreadPoolTest, TestIncMaxThreadPool) {
     ASSERT_TRUE(rebuild_pool_with_builder(ThreadPoolBuilder(kDefaultPoolName)
                                                   .set_min_threads(1)
                                                   .set_max_threads(4)
-                                                  .set_idle_timeout(MonoDelta::FromMilliseconds(1)))
+                                                  .set_idle_timeout(MonoDelta::FromMilliseconds(kThreadIdleTimeoutMs)))
                         .ok());
 
     // There is 1 thread to start with.
@@ -312,7 +314,7 @@ TEST_F(ThreadPoolTest, TestIncMinThreadPool) {
     ASSERT_TRUE(rebuild_pool_with_builder(ThreadPoolBuilder(kDefaultPoolName)
                                                   .set_min_threads(0)
                                                   .set_max_threads(4)
-                                                  .set_idle_timeout(MonoDelta::FromMilliseconds(1)))
+                                                  .set_idle_timeout(MonoDelta::FromMilliseconds(kThreadIdleTimeoutMs)))
                         .ok());
     // There is 0 thread to start with.
     ASSERT_EQ(0, _pool->num_threads());
