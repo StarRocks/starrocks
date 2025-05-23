@@ -207,49 +207,20 @@ public class LakeTableHelper {
     }
 
     /**
-     * For tables created in the old version of StarRocks cluster, such as v3.2, the column unique id in FE might
-     * have default value -1. When upgrading from old version to v3.3 upwards, the unique id of columns might introduce
-     * compatibility issues. This method is used to check if the table needs to restore the column unique id.
+     * For version compatibility reason, check if column unique id is valid, and if finding any we should restore
+     * column unique id
+     *
+     * @param table the table to restore column unique id
      */
     public static void restoreColumnUniqueIdIfNeeded(OlapTable table) {
-        boolean needRestore = false;
         for (MaterializedIndexMeta indexMeta : table.getIndexIdToMeta().values()) {
-            List<Column> columns = indexMeta.getSchema();
-            if (hasInvalidUniqueId(columns)) {
-                needRestore = true;
-                break;
+            List<Column> indexMetaSchema = indexMeta.getSchema();
+            // check and restore column unique id for each schema
+            if (restoreColumnUniqueId(indexMetaSchema)) {
+                LOG.info("Column unique ids in table {} with index {} have been restored, columns size: {}",
+                        table.getName(), indexMeta.getIndexId(), indexMetaSchema.size());
             }
         }
-        if (needRestore) {
-            LakeTableHelper.restoreColumnUniqueId(table);
-            LOG.info("Column unique ids in table {} have been restored", table.getName());
-        }
-    }
-
-    /**
-     * For tables created in the old version of StarRocks cluster, such as v3.2, the column unique id in FE might
-     * have default value -1. When upgrading from old version to v3.3 upwards, the unique id of columns might introduce
-     * compatibility issues. This method is used to check if the column list need to restore their column unique id.
-     */
-    public static boolean restoreColumnUniqueIdIfNeeded(List<Column> columns) {
-        if (hasInvalidUniqueId(columns)) {
-            for (int i = 0; i < columns.size(); i++) {
-                Column col = columns.get(i);
-                col.setUniqueId(i);
-            }
-            return true;
-        }
-        return false;
-    }
-
-    private static boolean hasInvalidUniqueId(List<Column> columns) {
-        for (Column column : columns) {
-            // The default value of column unique id in previous version (such as v3.2) is -1
-            if (column.getUniqueId() < 0) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**
@@ -260,16 +231,20 @@ public class LakeTableHelper {
      * each column as their unique id, so here we just need to follow the same algorithm to calculate the unique
      * id of each column.
      *
-     * @param table the table to restore column unique id
+     * @param indexMetaSchema the columns to restore column unique id
+     * @return true if the column unique id is restored, false otherwise
      */
-    public static void restoreColumnUniqueId(OlapTable table) {
-        for (MaterializedIndexMeta indexMeta : table.getIndexIdToMeta().values()) {
-            final int columnCount = indexMeta.getSchema().size();
-            for (int i = 0; i < columnCount; i++) {
-                Column col = indexMeta.getSchema().get(i);
-                col.setUniqueId(i);
-            }
+    public static boolean restoreColumnUniqueId(List<Column> indexMetaSchema) {
+        // unique id should have a integer value greater than or equal to 0
+        boolean hasInvalidUniqueId = indexMetaSchema.stream().anyMatch(column -> column.getUniqueId() < 0);
+        if (!hasInvalidUniqueId) {
+            return false;
         }
+        for (int i = 0; i < indexMetaSchema.size(); i++) {
+            Column col = indexMetaSchema.get(i);
+            col.setUniqueId(i);
+        }
+        return true;
     }
 
     public static boolean supportCombinedTxnLog(TransactionState.LoadJobSourceType sourceType) {

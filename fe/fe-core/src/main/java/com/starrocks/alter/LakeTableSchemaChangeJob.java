@@ -247,7 +247,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             // the schema saved in indexSchemaMap is the schema in the old version, whose uniqueId is -1,
             // so here we initialize column uniqueId here.
             List<Column> columns = indexSchemaMap.get(shadowIdxId);
-            boolean restored = LakeTableHelper.restoreColumnUniqueIdIfNeeded(columns);
+            boolean restored = LakeTableHelper.restoreColumnUniqueId(columns);
             if (restored) {
                 LOG.info("Columns of index {} in table {} has reset all unique ids, column size: {}", shadowIdxId,
                         tableName, columns.size());
