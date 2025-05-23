@@ -237,7 +237,7 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
         if (queryQueueConcurrencyLimit <= 0) {
             return true;
         }
-        return slotTracker.getCurrentCurrency() <= queryQueueConcurrencyLimit;
+        return slotTracker.getCurrentCurrency() < queryQueueConcurrencyLimit;
     }
 
     private static boolean isSmallSlot(LogicalSlot slot) {
