@@ -117,7 +117,7 @@ const config = {
       navbar: {
         logo: {
           alt: "CelerData Enterprise logo",
-          src: "img/CelerDataEnterprise.png",
+          src: "img/CelerDataEnterprise.svg",
           href: "https://www.CelerData.com/",
         },
         items: [
