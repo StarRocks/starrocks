@@ -102,6 +102,7 @@ public class MVPCTMetaRepairerTest extends MVTestBase {
         starRocksAssert.useDatabase("test")
                 .withMaterializedView("CREATE MATERIALIZED VIEW `iceberg_mv1` " +
                         "REFRESH DEFERRED MANUAL\n" +
+                        "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\"" +
                         ")\n" +
                         "AS SELECT id, data, date  FROM `iceberg0`.`partitioned_db`.`t1` as a;");
@@ -135,7 +136,7 @@ public class MVPCTMetaRepairerTest extends MVTestBase {
                         "but it is not supported by MVPCTMetaRepairer");
             }
             assertThat(mv.isActive()).isFalse();
-            assertThat(mv.getInactiveReason().equals("base-table dropped: t1"));
+            assertThat(mv.getInactiveReason().equals("base-table changed: t1")).isTrue();
         }
 
         {

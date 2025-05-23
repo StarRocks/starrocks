@@ -71,7 +71,7 @@ public class MVPCTMetaRepairer {
         if (nonSupportedTableOpt.isPresent()) {
             Pair<Table, BaseTableInfo> nonSupportedTable = nonSupportedTableOpt.get();
             mv.setInactiveAndReason(
-                    MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(nonSupportedTable.second.getTableName()));
+                    MaterializedViewExceptions.inactiveReasonForBaseTableChanged(nonSupportedTable.second.getTableName()));
             throw new DmlException(String.format("Table %s is recreated and needed to be repaired, but it is not supported " +
                             "by MVPCTMetaRepairer: %s, set mv %s inactive",
                     nonSupportedTable.first.getName(), nonSupportedTable.second, mv.getName()));
