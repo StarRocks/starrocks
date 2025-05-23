@@ -17,8 +17,8 @@
 
 package com.starrocks.mysql.security;
 
+import org.junit.Assert;
 import org.junit.Test;
-import static org.junit.Assert.assertEquals;
 
 public class CustomLdapSslSocketFactoryExceptionTest {
 
@@ -27,7 +27,7 @@ public class CustomLdapSslSocketFactoryExceptionTest {
         Throwable cause = new RuntimeException("root");
         CustomLdapSslSocketFactoryException ex =
                 new CustomLdapSslSocketFactoryException("test message", cause);
-        assertEquals("test message", ex.getMessage());
-        assertEquals(cause, ex.getCause());
+        Assert.assertEquals("test message", ex.getMessage());
+        Assert.assertEquals(cause, ex.getCause());
     }
 }
