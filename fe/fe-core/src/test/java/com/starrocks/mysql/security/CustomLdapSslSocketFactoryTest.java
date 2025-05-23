@@ -22,11 +22,11 @@ import java.security.KeyStore;
 
 import javax.net.SocketFactory;
 
-import static org.junit.AfterClass;
-import static org.junit.Assert.assertSame;
-import static org.junit.Assert.assertTrue;
-import static org.junit.BeforeClass;
-import static org.junit.Test;
+import org.junit.AfterClass;
+import org.junit.Assert.assertSame;
+import org.junit.Assert.assertTrue;
+import org.junit.BeforeClass;
+import org.junit.Test;
 
 public class CustomLdapSslSocketFactoryTest {
     static String trustStorePath = "test-truststore.jks";
@@ -55,7 +55,7 @@ public class CustomLdapSslSocketFactoryTest {
     public void testSingletonInstance() {
         SocketFactory factory1 = CustomLdapSslSocketFactory.getDefault();
         SocketFactory factory2 = CustomLdapSslSocketFactory.getDefault();
-        assertSame(factory1, factory2);
+        Assert.assertSame(factory1, factory2);
     }
     
     @Test(expected = CustomLdapSslSocketFactoryException.class)
@@ -70,7 +70,7 @@ public class CustomLdapSslSocketFactoryTest {
         try {
             CustomLdapSslSocketFactory.getDefault();
         } catch (CustomLdapSslSocketFactoryException ex) {
-            assertTrue(ex.getMessage().contains("Failed to create CustomSslSocketFactory"));
+            Assert.assertTrue(ex.getMessage().contains("Failed to create CustomSslSocketFactory"));
         }
     }
 }
