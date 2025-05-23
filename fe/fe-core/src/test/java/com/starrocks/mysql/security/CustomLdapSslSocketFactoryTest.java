@@ -17,16 +17,16 @@
 
 package com.starrocks.mysql.security;
 
-import javax.net.SocketFactory;
-
 import java.io.FileOutputStream;
 import java.security.KeyStore;
 
+import javax.net.SocketFactory;
+
 import static org.junit.AfterClass;
-import static org.junit.BeforeClass;
-import static org.junit.Test;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.junit.BeforeClass;
+import static org.junit.Test;
 
 public class CustomLdapSslSocketFactoryTest {
     static String trustStorePath = "test-truststore.jks";
