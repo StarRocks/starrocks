@@ -17,16 +17,16 @@
 
 package com.starrocks.mysql.security;
 
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import javax.net.SocketFactory;
 import java.io.FileOutputStream;
 import java.security.KeyStore;
+import javax.net.SocketFactory;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 class CustomLdapSslSocketFactoryTest {
 
