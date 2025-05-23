@@ -24,6 +24,8 @@
 #include "cache/datacache.h"
 #include "cache/object_cache/object_cache.h"
 #include "common/compiler_util.h"
+#include "common/config.h"
+#include "common/status.h"
 #include "exec/hdfs_scanner.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/utils.h"
@@ -59,6 +61,7 @@ Status PageReader::next_page() {
     if (_opts.use_file_pagecache) {
         _cache_buf.reset();
         _hit_cache = false;
+        _skip_page_cache = false;
     }
     return seek_to_offset(_next_header_pos);
 }
@@ -80,6 +83,10 @@ Status PageReader::_deal_page_with_cache() {
     } else {
         _cache_buf = std::make_shared<std::vector<uint8_t>>();
         RETURN_IF_ERROR(_read_and_deserialize_header(true));
+        if (config::enable_adjustment_page_cache_skip && !_cache_decompressed_data()) {
+            _skip_page_cache = true;
+            return Status::OK();
+        }
         RETURN_IF_ERROR(_read_and_decompress_internal(true));
         BufferPtr* capture = new BufferPtr(_cache_buf);
         Status st = Status::InternalError("write file page cache failed");
@@ -241,7 +248,7 @@ std::string& PageReader::_current_page_cache_key() {
 
 StatusOr<Slice> PageReader::read_and_decompress_page_data() {
     _opts.stats->page_read_counter += 1;
-    if (!_opts.use_file_pagecache) {
+    if (!_opts.use_file_pagecache || _skip_page_cache) {
         RETURN_IF_ERROR(_read_and_decompress_internal(false));
         return _uncompressed_data;
     } else {

@@ -43,6 +43,48 @@ Status ConnectorChunkSink::init() {
     return Status::OK();
 }
 
+Status ConnectorChunkSink::write_partition_chunk(const std::string& partition,
+                                                 const std::vector<int8_t>& partition_field_null_list, Chunk* chunk) {
+    // partition_field_null_list is used to distinguish with the secenario like NULL and string "null"
+    // They are under the same dir path, but should not in the same data file.
+    // We should record them in different files so that each data file could has its own meta info.
+    // otherwise, the scanFileTask may filter data incorrectly.
+    auto it = _writer_stream_pairs.find(std::make_pair(partition, partition_field_null_list));
+    if (it != _writer_stream_pairs.end()) {
+        Writer* writer = it->second.first.get();
+        if (writer->get_written_bytes() >= _max_file_size) {
+            string null_fingerprint(partition_field_null_list.size(), '0');
+            std::transform(partition_field_null_list.begin(), partition_field_null_list.end(), null_fingerprint.begin(),
+                           [](int8_t b) { return b + '0'; });
+            callback_on_commit(writer->commit().set_extra_data(null_fingerprint));
+            _writer_stream_pairs.erase(it);
+            auto path =
+                    !_partition_column_names.empty() ? _location_provider->get(partition) : _location_provider->get();
+            ASSIGN_OR_RETURN(auto new_writer_and_stream, _file_writer_factory->create(path));
+            std::unique_ptr<Writer> new_writer = std::move(new_writer_and_stream.writer);
+            std::unique_ptr<Stream> new_stream = std::move(new_writer_and_stream.stream);
+            RETURN_IF_ERROR(new_writer->init());
+            RETURN_IF_ERROR(new_writer->write(chunk));
+            _writer_stream_pairs[std::make_pair(partition, partition_field_null_list)] =
+                    std::make_pair(std::move(new_writer), new_stream.get());
+            _io_poller->enqueue(std::move(new_stream));
+        } else {
+            RETURN_IF_ERROR(writer->write(chunk));
+        }
+    } else {
+        auto path = !_partition_column_names.empty() ? _location_provider->get(partition) : _location_provider->get();
+        ASSIGN_OR_RETURN(auto new_writer_and_stream, _file_writer_factory->create(path));
+        std::unique_ptr<Writer> new_writer = std::move(new_writer_and_stream.writer);
+        std::unique_ptr<Stream> new_stream = std::move(new_writer_and_stream.stream);
+        RETURN_IF_ERROR(new_writer->init());
+        RETURN_IF_ERROR(new_writer->write(chunk));
+        _writer_stream_pairs[std::make_pair(partition, partition_field_null_list)] =
+                std::make_pair(std::move(new_writer), new_stream.get());
+        _io_poller->enqueue(std::move(new_stream));
+    }
+    return Status::OK();
+}
+
 Status ConnectorChunkSink::add(Chunk* chunk) {
     std::string partition = DEFAULT_PARTITION;
     bool partitioned = !_partition_column_names.empty();
@@ -52,39 +94,17 @@ Status ConnectorChunkSink::add(Chunk* chunk) {
                                                         _support_null_partition));
     }
 
-    auto it = _writer_stream_pairs.find(partition);
-    if (it != _writer_stream_pairs.end()) {
-        Writer* writer = it->second.first.get();
-        if (writer->get_written_bytes() >= _max_file_size) {
-            callback_on_commit(writer->commit());
-            _writer_stream_pairs.erase(it);
-            auto path = partitioned ? _location_provider->get(partition) : _location_provider->get();
-            ASSIGN_OR_RETURN(auto new_writer_and_stream, _file_writer_factory->create(path));
-            std::unique_ptr<Writer> new_writer = std::move(new_writer_and_stream.writer);
-            std::unique_ptr<Stream> new_stream = std::move(new_writer_and_stream.stream);
-            RETURN_IF_ERROR(new_writer->init());
-            RETURN_IF_ERROR(new_writer->write(chunk));
-            _writer_stream_pairs[partition] = std::make_pair(std::move(new_writer), new_stream.get());
-            _io_poller->enqueue(std::move(new_stream));
-        } else {
-            RETURN_IF_ERROR(writer->write(chunk));
-        }
-    } else {
-        auto path = partitioned ? _location_provider->get(partition) : _location_provider->get();
-        ASSIGN_OR_RETURN(auto new_writer_and_stream, _file_writer_factory->create(path));
-        std::unique_ptr<Writer> new_writer = std::move(new_writer_and_stream.writer);
-        std::unique_ptr<Stream> new_stream = std::move(new_writer_and_stream.stream);
-        RETURN_IF_ERROR(new_writer->init());
-        RETURN_IF_ERROR(new_writer->write(chunk));
-        _writer_stream_pairs[partition] = std::make_pair(std::move(new_writer), new_stream.get());
-        _io_poller->enqueue(std::move(new_stream));
-    }
+    RETURN_IF_ERROR(
+            write_partition_chunk(partition, std::vector<int8_t>(_partition_column_evaluators.size(), 0), chunk));
     return Status::OK();
 }
 
 Status ConnectorChunkSink::finish() {
-    for (auto& [_, writer_and_stream] : _writer_stream_pairs) {
-        callback_on_commit(writer_and_stream.first->commit());
+    for (auto& [partition_key, writer_and_stream] : _writer_stream_pairs) {
+        string extra_data(partition_key.second.size(), '0');
+        std::transform(partition_key.second.begin(), partition_key.second.end(), extra_data.begin(),
+                       [](int8_t b) { return b + '0'; });
+        callback_on_commit(writer_and_stream.first->commit().set_extra_data(extra_data));
     }
     return Status::OK();
 }

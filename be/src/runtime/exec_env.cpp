@@ -557,6 +557,17 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     }
     setenv(staros::starlet::fslib::kFslibCacheDir.c_str(), config::starlet_cache_dir.c_str(), 1);
 
+    int32_t max_thread_count = config::transaction_publish_version_worker_count;
+    if (max_thread_count <= 0) {
+        max_thread_count = CpuInfo::num_cores();
+    }
+    RETURN_IF_ERROR(ThreadPoolBuilder("put_aggregate_metadata")
+                            .set_min_threads(1)
+                            .set_max_threads(std::max(1, max_thread_count))
+                            .set_max_queue_size(std::numeric_limits<int>::max())
+                            .build(&_put_aggregate_metadata_thread_pool));
+    REGISTER_THREAD_POOL_METRICS(put_aggregate_metadata, _put_aggregate_metadata_thread_pool);
+
 #elif defined(BE_TEST)
     _lake_location_provider = std::make_shared<lake::FixedLocationProvider>(_store_paths.front().path);
     _lake_update_manager =
@@ -564,6 +575,11 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _lake_tablet_manager =
             new lake::TabletManager(_lake_location_provider, _lake_update_manager, config::lake_metadata_cache_limit);
     _lake_replication_txn_manager = new lake::ReplicationTxnManager(_lake_tablet_manager);
+    RETURN_IF_ERROR(ThreadPoolBuilder("put_aggregate_metadata_pool")
+                            .set_min_threads(1)
+                            .set_max_threads(1)
+                            .set_max_queue_size(std::numeric_limits<int>::max())
+                            .build(&_put_aggregate_metadata_thread_pool));
 #endif
 
     _agent_server = new AgentServer(this, false);
@@ -629,6 +645,10 @@ void ExecEnv::stop() {
 
     if (_pipeline_sink_io_pool) {
         _pipeline_sink_io_pool->shutdown();
+    }
+
+    if (_put_aggregate_metadata_thread_pool) {
+        _put_aggregate_metadata_thread_pool->shutdown();
     }
 
     if (_agent_server) {
@@ -757,6 +777,7 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_diagnose_daemon);
     _dictionary_cache_pool.reset();
     _automatic_partition_pool.reset();
+    _put_aggregate_metadata_thread_pool.reset();
     _metrics = nullptr;
 }
 

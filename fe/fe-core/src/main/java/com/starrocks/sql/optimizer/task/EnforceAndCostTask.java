@@ -113,6 +113,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
     // 4. Add enforcer for node if it can not satisfy the requirements.
     @Override
     public void execute() {
+
         if (groupExpression.isUnused()) {
             return;
         }

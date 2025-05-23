@@ -24,11 +24,11 @@
     "description": "The label for category Preparation in sidebar docs"
   },
   "sidebar.docs.category.Shared-nothing deployment": {
-    "message": "Shared-nothing デプロイ",
+    "message": "共有なしデプロイ",
     "description": "The label for category Shared-nothing deployment in sidebar docs"
   },
   "sidebar.docs.category.Shared-data deployment": {
-    "message": "Shared-data デプロイ",
+    "message": "共有データデプロイ",
     "description": "The label for category Shared-data deployment in sidebar docs"
   },
   "sidebar.docs.category.Manage your deployment": {
@@ -80,7 +80,7 @@
     "description": "The label for category Data Lakes in sidebar docs"
   },
   "sidebar.docs.category.Catalog": {
-    "message": "カタログ",
+    "message": "Catalog",
     "description": "The label for category Catalog in sidebar docs"
   },
   "sidebar.docs.category.Iceberg": {
@@ -88,16 +88,20 @@
     "description": "The label for category Iceberg in sidebar docs"
   },
   "sidebar.docs.category.Data cache": {
-    "message": "データキャッシュ",
+    "message": "Data Cache",
     "description": "The label for category Data cache in sidebar docs"
   },
   "sidebar.docs.category.Query Acceleration": {
-    "message": "クエリ高速化",
+    "message": "加速クエリ",
     "description": "The label for category Query Acceleration in sidebar docs"
   },
   "sidebar.docs.category.Asynchronous materialized views": {
     "message": "非同期マテリアライズドビュー",
     "description": "The label for category Asynchronous materialized views in sidebar docs"
+  },
+  "sidebar.docs.category.Asynch Materialized view reference": {
+    "message": "リファレンス",
+    "description": "The label for category Asynch materialized view reference in sidebar docs"
   },
   "sidebar.docs.category.Use cases": {
     "message": "ユースケース",
@@ -170,6 +174,14 @@
   "sidebar.docs.category.User Privileges and Authentication": {
     "message": "ユーザー権限と認証",
     "description": "The label for category User Privileges and Authentication in sidebar docs"
+  },
+  "sidebar.docs.category.Authentication": {
+    "message": "認証",
+    "description": "The label for category Authentication in sidebar docs"
+  },
+  "sidebar.docs.category.Authorization": {
+    "message": "権限",
+    "description": "The label for category Authorization in sidebar docs"
   },
   "sidebar.docs.category.Performance Tuning": {
     "message": "パフォーマンスチューニング",
@@ -404,7 +416,7 @@
     "description": "The label for category dictionary in sidebar docs"
   },
   "sidebar.docs.category.Information Schema": {
-    "message": "情報スキーマ",
+    "message": "Information Schema",
     "description": "The label for category Information Schema in sidebar docs"
   },
   "sidebar.docs.category.System metadatabase": {

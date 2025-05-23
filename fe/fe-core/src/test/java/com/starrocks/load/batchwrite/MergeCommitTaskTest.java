@@ -55,7 +55,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -93,8 +92,8 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
 
     @Before
     public void setup() throws Exception {
-        label = "batch_write_" + DebugUtil.printId(UUIDUtil.toTUniqueId(UUID.randomUUID()));
-        loadId = UUIDUtil.toTUniqueId(UUID.randomUUID());
+        loadId = UUIDUtil.genTUniqueId();
+        label = "batch_write_" + DebugUtil.printId(loadId);
 
         Map<String, String> map = new HashMap<>();
         map.put(StreamLoadHttpHeader.HTTP_FORMAT, "json");

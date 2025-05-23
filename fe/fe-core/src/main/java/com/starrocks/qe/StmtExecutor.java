@@ -673,11 +673,10 @@ public class StmtExecutor {
                     try {
                         //reset query id for each retry
                         if (i > 0) {
-                            uuid = UUID.randomUUID();
+                            uuid = UUIDUtil.genUUID();
                             LOG.info("transfer QueryId: {} to {}", DebugUtil.printId(context.getQueryId()),
                                     DebugUtil.printId(uuid));
-                            context.setExecutionId(
-                                    new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()));
+                            context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
                         }
 
                         handleQueryStmt(retryContext.getExecPlan());
@@ -975,7 +974,7 @@ public class StmtExecutor {
             if (stmt instanceof CreateTemporaryTableAsSelectStmt) {
                 CreateTemporaryTableStmt createTemporaryTableStmt = (CreateTemporaryTableStmt) stmt.getCreateTableStmt();
                 createTemporaryTableStmt.setSessionId(context.getSessionId());
-                return context.getGlobalStateMgr().getMetadataMgr().createTemporaryTable(createTemporaryTableStmt);
+                return context.getGlobalStateMgr().getMetadataMgr().createTemporaryTable(context, createTemporaryTableStmt);
             } else {
                 return context.getGlobalStateMgr().getMetadataMgr().createTable(context, stmt.getCreateTableStmt());
             }

@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
@@ -24,6 +25,9 @@ import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
@@ -69,6 +73,25 @@ public abstract class PropertyDeriverBase<R, C> extends OperatorVisitor<R, C> {
             }
         }
     }
+
+    public static List<PhysicalPropertySet> computeShuffleSetRequiredProperties(PhysicalSetOperation node) {
+        Preconditions.checkArgument(
+                !((node instanceof PhysicalUnionOperator) && ((PhysicalUnionOperator) node).isUnionAll()));
+        List<PhysicalPropertySet> requiredProperties =
+                Lists.newArrayListWithCapacity(node.getChildOutputColumns().size());
+        for (int i = 0; i < node.getChildOutputColumns().size(); ++i) {
+            List<Integer> columns = node.getChildOutputColumns().get(i).stream().map(ColumnRefOperator::getId)
+                    .collect(Collectors.toList());
+            HashDistributionSpec distribution = DistributionSpec.createHashDistributionSpec(
+                    new HashDistributionDesc(columns, SHUFFLE_JOIN));
+
+            PhysicalPropertySet requiredPropertySet =
+                    new PhysicalPropertySet(DistributionProperty.createProperty(distribution));
+            requiredProperties.add(requiredPropertySet);
+        }
+        return requiredProperties;
+    }
+
 
 
     protected static Optional<HashDistributionDesc> getShuffleJoinHashDistributionDesc(

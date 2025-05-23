@@ -14,6 +14,10 @@
 
 #pragma once
 
+#include <azure/core/http/http_status_code.hpp>
+
+#include "common/status.h"
+
 namespace starrocks {
 
 const std::string kSchemeSeparator("://");
@@ -21,5 +25,7 @@ const std::string kHttpScheme("http");
 const std::string kHttpsScheme("https");
 const std::string kWasbScheme("wasb");
 const std::string kWasbsScheme("wasbs");
+
+Status azure_error_to_status(Azure::Core::Http::HttpStatusCode code, std::string_view message, std::string_view object);
 
 } // namespace starrocks
