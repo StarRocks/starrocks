@@ -75,7 +75,6 @@ Status ArrowResultWriter::append_chunk(Chunk* chunk) {
 }
 
 Status ArrowResultWriter::close() {
-    LOG(INFO) << "[Flight] ArrowResultWriter::close() called";
     if (_sinker != nullptr) {
         return _sinker->close(Status::OK());
     }
