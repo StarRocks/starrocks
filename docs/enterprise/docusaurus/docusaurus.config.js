@@ -243,6 +243,28 @@ const config = {
           "scss",
         ],
       },
+      algolia: {
+        // The application ID provided by Algolia
+	    // the default is for SANDBOX
+        appId: process.env.ALGOLIA_APPID || 'WR1QU4CYKE',
+  
+        // Public API key: it is safe to commit it
+	    // the default is for SANDBOX
+        apiKey: process.env.ALGOLIA_SEARCH_KEY || '83bf26ca88ddce9f0438d0e94db4e44a',
+  
+	    // the default is for SANDBOX
+        indexName: process.env.ALGOLIA_INDEX || 'docs-sandbox-celerdata-enterprise',
+  
+        // Set this to true ONLY if multiple languages or multiple versions of docs
+        // are published. On a single language single version set to `false`
+        contextualSearch: false,
+  
+        // Optional: Algolia search parameters
+        searchParameters: {},
+
+        // Optional: path for search page that enabled by default (`false` to disable it)
+        searchPagePath: 'search',
+      },
     }),
 };
 
