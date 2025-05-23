@@ -175,14 +175,14 @@ public class ConfigTest {
     }
 
     @Test
-    void testLdapConfigDefaults() {
+    public void testLdapConfigDefaults() throws Exception {
         Assert.assertEquals("ldap", Config.authentication_ldap_simple_server_protocol);
         Assert.assertNull(Config.authentication_ldaps_trust_store_path);
         Assert.assertNull(Config.authentication_ldaps_trust_store_password);
     }
 
     @Test
-    void testMutableLdapConfig() {
+    public void testMutableLdapConfig() throws Exception {
         Config.authentication_ldap_simple_server_protocol = "ldaps";
         Config.authentication_ldaps_trust_store_path = "/tmp/test.jks";
         Config.authentication_ldaps_trust_store_password = "password";
