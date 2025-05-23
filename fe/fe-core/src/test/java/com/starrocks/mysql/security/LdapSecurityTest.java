@@ -17,11 +17,9 @@
 
 package com.starrocks.mysql.security;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-
 import com.starrocks.common.Config;
 
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -38,10 +36,10 @@ public class LdapSecurityTest {
     
     @Test
     public void testStaticBlockSetsSystemProperties() {
-        assertEquals("JKS", System.getProperty("custom.ldap.truststore.type"));
-        assertEquals("test.jks", System.getProperty("custom.ldap.truststore.loc"));
-        assertEquals("changeit", System.getProperty("custom.ldap.truststore.password"));
-        assertEquals("TLS", System.getProperty("custom.ldap.ssl.protocol"));
+        Assert.assertEquals("JKS", System.getProperty("custom.ldap.truststore.type"));
+        Assert.assertEquals("test.jks", System.getProperty("custom.ldap.truststore.loc"));
+        Assert.assertEquals("changeit", System.getProperty("custom.ldap.truststore.password"));
+        Assert.assertEquals("TLS", System.getProperty("custom.ldap.ssl.protocol"));
     }
     
     @Test
@@ -55,7 +53,7 @@ public class LdapSecurityTest {
                 && Config.authentication_ldaps_trust_store_path != null) {
             env.put("java.naming.ldap.factory.socket", CustomLdapSslSocketFactory.class.getName());
         }
-        assertEquals(CustomLdapSslSocketFactory.class.getName(), env.get("java.naming.ldap.factory.socket"));
+        Assert.assertEquals(CustomLdapSslSocketFactory.class.getName(), env.get("java.naming.ldap.factory.socket"));
     }
     
     @Test
@@ -70,6 +68,6 @@ public class LdapSecurityTest {
                 && Config.authentication_ldaps_trust_store_path != null) {
             env.put("java.naming.ldap.factory.socket", CustomLdapSslSocketFactory.class.getName());
         }
-        assertNull(env.get("java.naming.ldap.factory.socket"));
+        Assert.assertNull(env.get("java.naming.ldap.factory.socket"));
     }
 }
