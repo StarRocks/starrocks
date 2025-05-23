@@ -138,7 +138,6 @@ TEST_F(PageIOTest, test_use_no_cache_compress) {
     PageFooterPB read_footer;
     ASSERT_OK(PageIO::read_and_decompress_page(read_opts, &handle, &body, &read_footer));
     ASSERT_EQ(_stats.uncompressed_bytes_read, uncompressed_size + footer.ByteSizeLong() + 4);
-    LOG(ERROR) << "SIZE: " << _stats.uncompressed_bytes_read;
 
     // check
     BitShufflePageDecoder<TYPE_INT> decoder(body);
@@ -179,7 +178,6 @@ TEST_F(PageIOTest, test_use_no_cache_uncompress) {
     PageFooterPB read_footer;
     ASSERT_OK(PageIO::read_and_decompress_page(read_opts, &handle, &body, &read_footer));
     ASSERT_EQ(_stats.uncompressed_bytes_read, uncompressed_size + footer.ByteSizeLong() + 4);
-    LOG(ERROR) << "SIZE: " << _stats.uncompressed_bytes_read;
 
     // check
     BitShufflePageDecoder<TYPE_INT> decoder(body);
@@ -224,7 +222,6 @@ TEST_F(PageIOTest, test_use_cache_hit) {
         PageFooterPB read_footer;
         ASSERT_OK(PageIO::read_and_decompress_page(read_opts, &handle, &body, &read_footer));
         ASSERT_EQ(_stats.uncompressed_bytes_read, uncompressed_size + footer.ByteSizeLong() + 4);
-        LOG(ERROR) << "SIZE: " << _stats.uncompressed_bytes_read;
         ASSERT_EQ(_stats.cached_pages_num, 0);
     }
 
