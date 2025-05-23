@@ -76,7 +76,8 @@ public:
     using CppType = RunTimeCppType<Type>;
     using ColumnType = RunTimeColumnType<Type>;
     using ContainerType = RunTimeProxyContainerType<Type>;
-    using HashSet = detail::LHashSet<Type>::LType;
+    using HashSet = typename detail::LHashSet<Type>::LType;
+    using ScopedPtr = typename butil::DoublyBufferedData<HashSet>::ScopedPtr;
 
     RuntimeFilterSerializeType type() const override { return RuntimeFilterSerializeType::IN_FILTER; }
 
@@ -94,34 +95,6 @@ public:
         auto* rf = pool->add(new InRuntimeFilter());
         rf->_always_true = true;
         return rf;
-    }
-
-    template <class Provider>
-    Status batch_insert(Provider&& provider) {
-        HashSet set;
-        using ScopedPtr = butil::DoublyBufferedData<HashSet>::ScopedPtr;
-        {
-            ScopedPtr ptr;
-            if (_values.Read(&ptr) != 0) {
-                return Status::InternalError("fail to read values from NotInRuntimeFilter");
-            }
-            for (auto v : *ptr) {
-                set.emplace(v);
-            }
-            std::optional<CppType> val;
-            val = provider();
-            while (val.has_value()) {
-                set.emplace(*val);
-                val = provider();
-            }
-        }
-
-        auto update = [&](auto& dst) {
-            dst = std::move(set);
-            return true;
-        };
-        _values.Modify(update);
-        return Status::OK();
     }
 
     void build(Column* column) {
@@ -155,7 +128,6 @@ public:
 
     std::set<CppType> get_set(ObjectPool* pool) const {
         std::set<CppType> set;
-        using ScopedPtr = butil::DoublyBufferedData<HashSet>::ScopedPtr;
         ScopedPtr ptr;
         if (_values.Read(&ptr) != 0) {
             return set;
@@ -180,7 +152,6 @@ public:
     void insert_null() { _has_null = true; }
 
     void merge(const RuntimeFilter* rf) override {
-        using ScopedPtr = butil::DoublyBufferedData<HashSet>::ScopedPtr;
         {
             ScopedPtr ptr;
             if (_values.Read(&ptr) != 0) {
@@ -201,7 +172,6 @@ public:
     void concat(RuntimeFilter* rf) override { merge(rf); }
 
     size_t size() const override {
-        using ScopedPtr = butil::DoublyBufferedData<HashSet>::ScopedPtr;
         ScopedPtr ptr;
         if (_values.Read(&ptr) != 0) {
             // unreachable path
@@ -229,7 +199,6 @@ public:
 
     size_t max_serialized_size() const override {
         size_t serialize_size = sizeof(Type);
-        using ScopedPtr = butil::DoublyBufferedData<HashSet>::ScopedPtr;
         ScopedPtr ptr;
         CHECK(_values.Read(&ptr) == 0);
         if constexpr (IsSlice<CppType>) {
@@ -250,7 +219,6 @@ public:
         memcpy(data + offset, &ltype, sizeof(ltype));
         offset += sizeof(ltype);
 
-        using ScopedPtr = butil::DoublyBufferedData<HashSet>::ScopedPtr;
         ScopedPtr ptr;
         CHECK(_values.Read(&ptr) == 0);
 
