@@ -27,6 +27,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.Map;
 
 public class TaskRunManagerTest {
 
@@ -45,8 +46,13 @@ public class TaskRunManagerTest {
     }
 
     private static ExecuteOption makeExecuteOption(boolean isMergeRedundant, boolean isSync, int priority) {
+        return makeExecuteOption(isMergeRedundant, isSync, priority, Maps.newHashMap());
+    }
+
+    private static ExecuteOption makeExecuteOption(boolean isMergeRedundant, boolean isSync, int priority,
+                                                   Map<String, String> properties) {
         ExecuteOption executeOption = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(), isMergeRedundant,
-                Maps.newHashMap());
+                properties);
         executeOption.setSync(isSync);
         executeOption.setPriority(priority);
         return executeOption;
@@ -107,6 +113,81 @@ public class TaskRunManagerTest {
                 Assert.assertTrue(scheduler.getRunningTaskRun(taskId) != null);
                 scheduler.removeRunningTask(taskId);
             }
+        }
+    }
+
+    private Map<String, String> makeTaskRunProperties(String partitionStart,
+                                                      String partitionEnd,
+                                                      boolean isForce) {
+        Map<String, String> result = Maps.newHashMap();
+        result.put(TaskRun.PARTITION_START, partitionStart);
+        result.put(TaskRun.PARTITION_END, partitionEnd);
+        result.put(TaskRun.FORCE, String.valueOf(isForce));
+        return result;
+    }
+
+    private Map<String, String> makeMVTaskRunProperties(String partitionStart,
+                                                      String partitionEnd,
+                                                      boolean isForce) {
+        Map<String, String> result = Maps.newHashMap();
+        result.put(TaskRun.PARTITION_START, partitionStart);
+        result.put(TaskRun.PARTITION_END, partitionEnd);
+        result.put(TaskRun.MV_ID, "1");
+        result.put(TaskRun.FORCE, String.valueOf(isForce));
+        return result;
+    }
+
+    @Test
+    public void testExecutionOption() {
+        {
+            ExecuteOption option1 = makeExecuteOption(true, false, 1);
+            ExecuteOption option2 = makeExecuteOption(true, false, 10);
+            Assert.assertTrue(option1.isMergeableWith(option2));
+        }
+        {
+            ExecuteOption option1 = makeExecuteOption(true, false, 1);
+            ExecuteOption option2 = makeExecuteOption(false, false, 10);
+            Assert.assertFalse(option1.isMergeableWith(option2));
+        }
+        {
+            Map<String, String> prop1 = makeTaskRunProperties("2023-01-01", "2023-01-02", false);
+            ExecuteOption option1 = makeExecuteOption(true, false, 1, prop1);
+            Map<String, String> prop2 = makeTaskRunProperties("2023-01-01", "2023-01-02", false);
+            ExecuteOption option2 = makeExecuteOption(true, false, 2, prop2);
+            Assert.assertTrue(option1.isMergeableWith(option2));
+        }
+        {
+            Map<String, String> prop1 = makeTaskRunProperties("2023-01-01", "2023-01-02", false);
+            ExecuteOption option1 = makeExecuteOption(true, false, 1, prop1);
+            Map<String, String> prop2 = makeTaskRunProperties("2023-01-01", "2023-01-02", true);
+            ExecuteOption option2 = makeExecuteOption(true, false, 2, prop2);
+            Assert.assertFalse(option1.isMergeableWith(option2));
+        }
+        {
+            Map<String, String> prop1 = makeMVTaskRunProperties("2023-01-01", "2023-01-02", false);
+            ExecuteOption option1 = makeExecuteOption(true, false, 1, prop1);
+            Map<String, String> prop2 = makeMVTaskRunProperties("2023-01-01", "2023-01-02", false);
+            ExecuteOption option2 = makeExecuteOption(true, false, 2, prop2);
+            Assert.assertTrue(option1.isMergeableWith(option2));
+        }
+        {
+            Map<String, String> prop1 = makeMVTaskRunProperties("2023-01-01", "2023-01-02", false);
+            ExecuteOption option1 = makeExecuteOption(true, false, 1, prop1);
+            Map<String, String> prop2 = makeMVTaskRunProperties("2023-01-01", "2023-01-02", true);
+            ExecuteOption option2 = makeExecuteOption(true, false, 2, prop2);
+            Assert.assertFalse(option1.isMergeableWith(option2));
+        }
+        {
+            Map<String, String> prop1 = makeMVTaskRunProperties("2023-01-01", "2023-01-02", false);
+            prop1.put("a", "a");
+            ExecuteOption option1 = makeExecuteOption(true, false, 1, prop1);
+            Map<String, String> prop11 = option1.getTaskRunComparableProperties();
+            Assert.assertTrue(prop11.size() == 4);
+
+            Map<String, String> prop2 = makeMVTaskRunProperties("2023-01-01", "2023-01-02", false);
+            prop2.put("a", "b");
+            ExecuteOption option2 = makeExecuteOption(true, false, 2, prop2);
+            Assert.assertTrue(option1.isMergeableWith(option2));
         }
     }
 }

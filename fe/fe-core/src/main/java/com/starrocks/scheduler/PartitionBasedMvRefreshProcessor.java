@@ -106,6 +106,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
 import static com.starrocks.scheduler.TaskRun.MV_ID;
+import static com.starrocks.scheduler.TaskRun.MV_UNCOPYABLE_PROPERTIES;
 
 /**
  * Core logic of mv refresh task run
@@ -716,9 +717,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         String taskName = TaskBuilder.getMvTaskName(mvId);
         Map<String, String> newProperties = Maps.newHashMap();
         for (Map.Entry<String, String> proEntry : properties.entrySet()) {
-            if (proEntry.getValue() != null) {
-                newProperties.put(proEntry.getKey(), proEntry.getValue());
+            // skip uncopyable properties: force/partition_values/... which only can be set specifically.
+            if (proEntry.getKey() == null || proEntry.getValue() == null
+                    || MV_UNCOPYABLE_PROPERTIES.contains(proEntry.getKey())) {
+                continue;
             }
+            newProperties.put(proEntry.getKey(), proEntry.getValue());
         }
         PartitionInfo partitionInfo = mv.getPartitionInfo();
         if (partitionInfo.isListPartition()) {
@@ -748,8 +752,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 mvContext.executeOption.getPriority() : Constants.TaskRunPriority.HIGHER.value();
         ExecuteOption option = new ExecuteOption(priority, true, newProperties);
         logger.info("[MV] Generate a task to refresh next batches of partitions for MV {}-{}, start={}, end={}, " +
-                        "priority={}", mv.getName(), mv.getId(),
-                mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd(), priority);
+                        "priority={}, properties={}", mv.getName(), mv.getId(),
+                mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd(), priority, properties);
 
         if (properties.containsKey(TaskRun.IS_TEST) && properties.get(TaskRun.IS_TEST).equalsIgnoreCase("true")) {
             // for testing
