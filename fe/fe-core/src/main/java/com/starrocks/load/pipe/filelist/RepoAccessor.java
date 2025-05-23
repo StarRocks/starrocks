@@ -170,9 +170,7 @@ public class RepoAccessor {
     protected String buildSqlAddFiles(List<PipeFileRecord> records) {
         StringBuilder sb = new StringBuilder();
         sb.append(FileListTableRepo.INSERT_FILES);
-        List<String> valueLists = records.stream().map(PipeFileRecord::toValueList).collect(Collectors.toList());
-        sb.append(valueLists.stream().map(
-                        valueList -> "(" + "DEFAULT, " + valueList.substring(1)).collect(Collectors.joining(",")));
+        sb.append(records.stream().map(PipeFileRecord::toValueList).collect(Collectors.joining(",")));
         return sb.toString();
     }
 

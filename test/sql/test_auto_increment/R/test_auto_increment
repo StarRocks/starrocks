@@ -687,5 +687,34 @@ SELECT k, v1 from t_auto_increment_insert_partial_update ORDER BY k;
 5	5
 -- !result
 DROP TABLE t_auto_increment_insert_partial_update force;
+CREATE TABLE `t_auto_increment_insert_partial_update` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT "",
+  `ts` bigint(20) NOT NULL COMMENT "",
+  `testString` String NOT NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`id`, `ts`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1 
+PROPERTIES (
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t_auto_increment_insert_partial_update (ts, testString) select 100, "abc";
+-- result:
+-- !result
+insert into t_auto_increment_insert_partial_update (ts, testString) select 100, "abc";
+-- result:
+-- !result
+insert into t_auto_increment_insert_partial_update (ts, testString) select 100, "abc";
+-- result:
+-- !result
+SELECT * FROM t_auto_increment_insert_partial_update order by id;
+-- result:
+1	100	abc
+2	100	abc
+3	100	abc
+-- !result
+DROP TABLE t_auto_increment_insert_partial_update force;
 -- result:
 -- !result
