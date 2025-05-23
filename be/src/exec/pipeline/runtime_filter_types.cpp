@@ -124,7 +124,7 @@ Status PartialRuntimeFilterMerger::merge_singleton_local_bloom_filters() {
     const size_t row_count = std::accumulate(_ht_row_counts.begin(), _ht_row_counts.end(), size_t{0});
 
     const auto join_mode = _bloom_filter_descriptors[0]->join_mode();
-    const bool is_version_v3 = _func_version >= RF_VERSION_V3;
+    const bool is_version_v3 = _func_version >= TFunctionVersion::type::RUNTIME_FILTER_SERIALIZE_VERSION_3;
     const bool maybe_use_bitset_filter =
             _enable_join_runtime_bitset_filter && is_version_v3 && row_count <= _global_rf_limit &&
             join_mode == TRuntimeFilterBuildJoinMode::BORADCAST && _partial_bloom_filter_build_params.size() == 1;
@@ -208,7 +208,7 @@ Status PartialRuntimeFilterMerger::merge_multi_partitioned_local_bloom_filters()
         row_count += count;
     }
 
-    const bool is_version_v3 = _func_version >= RF_VERSION_V3;
+    const bool is_version_v3 = _func_version >= TFunctionVersion::type::RUNTIME_FILTER_SERIALIZE_VERSION_3;
 
     for (auto& desc : _bloom_filter_descriptors) {
         desc->set_is_pipeline(true);
