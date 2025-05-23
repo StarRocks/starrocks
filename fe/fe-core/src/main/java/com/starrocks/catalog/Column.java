@@ -73,8 +73,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-import static com.starrocks.catalog.DefaultExpr.isEmptyDefaultFunction;
-import static com.starrocks.catalog.DefaultExpr.isValidDefaultFunction;
+import static com.starrocks.catalog.DefaultExpr.isEmptyDefaultTimeFunction;
+import static com.starrocks.catalog.DefaultExpr.isValidDefaultTimeFunction;
 import static com.starrocks.common.util.DateUtils.DATE_TIME_FORMATTER;
 
 /**
@@ -624,7 +624,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (defaultExpr == null && isAutoIncrement) {
             sb.append("AUTO_INCREMENT ");
         } else if (defaultExpr != null) {
-            if (isValidDefaultFunction(defaultExpr.getExpr())) {
+            if (isValidDefaultTimeFunction(defaultExpr.getExpr())) {
                 // compatible with mysql
                 if (defaultExpr.hasArgs()) {
                     sb.append("DEFAULT ").append(defaultExpr.getExpr()).append(" ");
@@ -659,7 +659,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public DefaultValueType getDefaultValueType() {
         if (defaultExpr != null) {
-            if (isEmptyDefaultFunction(defaultExpr)) {
+            if (isEmptyDefaultTimeFunction(defaultExpr)) {
                 return DefaultValueType.CONST;
             } else {
                 return DefaultValueType.VARY;
@@ -677,7 +677,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     // If the default value is uuid(), this function is not suitable.
     public String calculatedDefaultValue() {
         if (defaultExpr != null) {
-            if (isEmptyDefaultFunction(defaultExpr)) {
+            if (isEmptyDefaultTimeFunction(defaultExpr)) {
                 // current transaction time
                 if (ConnectContext.get() != null) {
                     LocalDateTime localDateTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime())
@@ -705,7 +705,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     // If the default value is uuid(), this function is not suitable.
     public String calculatedDefaultValueWithTime(long currentTimestamp) {
         if (defaultExpr != null) {
-            if (isEmptyDefaultFunction(defaultExpr)) {
+            if (isEmptyDefaultTimeFunction(defaultExpr)) {
                 LocalDateTime localDateTime = Instant.ofEpochMilli(currentTimestamp)
                         .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
                 return localDateTime.format(DATE_TIME_FORMATTER);
@@ -723,7 +723,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (defaultValue != null) {
             return defaultValue;
         } else if (defaultExpr != null) {
-            if (isEmptyDefaultFunction(defaultExpr)) {
+            if (isEmptyDefaultTimeFunction(defaultExpr)) {
                 if (extras != null) {
                     extras.add("DEFAULT_GENERATED");
                 }
@@ -757,7 +757,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                         .append("\" ");
             }
         } else {
-            if (isValidDefaultFunction(defaultExpr.getExpr())) {
+            if (isValidDefaultTimeFunction(defaultExpr.getExpr())) {
                 // compatible with mysql
                 if (defaultExpr.hasArgs()) {
                     sb.append("DEFAULT ").append(defaultExpr.getExpr()).append(" ");
