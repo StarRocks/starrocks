@@ -18,13 +18,12 @@
 package com.starrocks.mysql.security;
 
 import com.starrocks.common.Config;
-
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import javax.naming.Context;
 import java.util.Hashtable;
+import javax.naming.Context;
 
 public class LdapSecurityTest {
     @Before
