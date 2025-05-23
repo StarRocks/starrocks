@@ -246,15 +246,20 @@ public:
     const TIcebergSchema* get_iceberg_schema() const { return &_t_iceberg_schema; }
     bool is_unpartitioned_table() { return _partition_column_names.empty(); }
     const std::vector<std::string>& partition_column_names() { return _partition_column_names; }
+    const std::vector<TExpr>& get_partition_exprs() { return _partition_exprs; }
+    const std::vector<std::string>& get_transform_exprs() { return _transform_exprs; }
     const std::vector<std::string> full_column_names();
-    std::vector<int32_t> partition_index_in_schema();
+    std::vector<int32_t> partition_source_index_in_schema();
     bool has_base_path() const override { return true; }
 
     Status set_partition_desc_map(const TIcebergTable& thrift_table, ObjectPool* pool);
 
 private:
     TIcebergSchema _t_iceberg_schema;
+    std::vector<std::string> _source_column_names; // partition transform column's source column name
     std::vector<std::string> _partition_column_names;
+    std::vector<std::string> _transform_exprs;
+    std::vector<TExpr> _partition_exprs;
 };
 
 class FileTableDescriptor : public HiveTableDescriptor {

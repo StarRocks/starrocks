@@ -40,6 +40,7 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.iceberg.BaseTable;
+import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.hadoop.HadoopFileIO;
@@ -847,6 +848,9 @@ public class InsertPlanTest extends PlanTestBase {
                 nativeTable.io();
                 result = new HadoopFileIO();
                 minTimes = 0;
+
+                nativeTable.spec();
+                result = PartitionSpec.unpartitioned();
             }
         };
 

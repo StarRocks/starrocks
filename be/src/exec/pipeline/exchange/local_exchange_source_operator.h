@@ -49,6 +49,7 @@ class LocalExchangeSourceOperator final : public SourceOperator {
         std::queue<std::unique_ptr<Chunk>> queue;
         int64_t num_rows{0};
         size_t memory_usage{0};
+        std::vector<std::pair<TypeDescriptor, ColumnPtr>> partition_key_datum;
     };
 
 public:
@@ -64,7 +65,9 @@ public:
     Status add_chunk(ChunkPtr chunk, const std::shared_ptr<std::vector<uint32_t>>& indexes, uint32_t from,
                      uint32_t size, size_t memory_bytes);
 
-    Status add_chunk(const std::vector<std::string>& partition_key, std::unique_ptr<Chunk> chunk);
+    Status add_chunk(const std::vector<std::string>& partition_key,
+                     const std::vector<std::pair<TypeDescriptor, ColumnPtr>>& partition_datum,
+                     std::unique_ptr<Chunk> chunk);
 
     bool has_output() const override;
 
@@ -111,7 +114,8 @@ private:
 
     int64_t _key_partition_max_rows() const;
 
-    PartialChunks& _max_row_partition_chunks();
+    std::unordered_map<std::vector<std::string>, LocalExchangeSourceOperator::PartialChunks>::iterator
+    _max_row_partition_chunks();
 
     bool _local_buffer_almost_full() const { return _local_memory_usage >= _local_memory_limit; }
 

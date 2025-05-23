@@ -234,7 +234,6 @@ Status HiveDataSource::_init_conjunct_ctxs(RuntimeState* state) {
 
 Status HiveDataSource::_init_partition_values() {
     if (!(_hive_table != nullptr && _has_partition_columns)) return Status::OK();
-
     auto* partition_desc = _hive_table->get_partition(_scan_range.partition_id);
     if (partition_desc == nullptr) {
         return Status::InternalError(

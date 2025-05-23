@@ -19,6 +19,10 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
+import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.paimon.Partition;
 import com.starrocks.connector.partitiontraits.DefaultTraits;
@@ -33,6 +37,7 @@ import com.starrocks.connector.partitiontraits.OlapPartitionTraits;
 import com.starrocks.connector.partitiontraits.PaimonPartitionTraits;
 import mockit.Mock;
 import mockit.MockUp;
+import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -110,4 +115,23 @@ public class ConnectorPartitionTraitsTest {
         ConnectorPartitionTraits connectorPartitionTraits = ConnectorPartitionTraits.build(hudiTable);
         Assert.assertEquals(connectorPartitionTraits.getTableName(), "hudiTable");
     }
+
+    @Test
+    public void testIcebergTable(@Mocked org.apache.iceberg.Table nativeTable) {
+        IcebergTable icebergTable = new IcebergTable(0, "name", "iceberg_catalog", "resource_name", "icebergDb",
+                "icebergTable", "",
+                Lists.newArrayList(), nativeTable,
+                Maps.newHashMap());
+        ConnectorPartitionTraits connectorPartitionTraits = ConnectorPartitionTraits.build(icebergTable);
+        Assert.assertEquals(connectorPartitionTraits.getTableName(), "icebergTable");
+        try {
+            PartitionKey key = connectorPartitionTraits.createPartitionKeyWithType(Lists.newArrayList("123.3"), 
+                    Lists.newArrayList(ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6)));
+            Assert.assertEquals(key.getKeys().get(0).getType(), 
+                    ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6));
+        } catch (Exception e) {
+            throw new RuntimeException("createPartitionKeyWithType failed", e);
+        }
+    }
+    
 }
