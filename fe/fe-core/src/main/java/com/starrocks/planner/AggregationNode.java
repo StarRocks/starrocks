@@ -511,14 +511,6 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
         withRuntimeFilters = !buildRuntimeFilters.isEmpty();
     }
 
-    private boolean couldBoundGroupBys(Expr probeExpr) {
-        for (Expr groupingExpr : aggInfo.getGroupingExprs()) {
-            if (groupingExpr.equals(probeExpr)) {
-                return true;
-            }
-        }
-        return false;
-    }
     private int getProbeExprOrder(List<Expr> exprs, Expr probeExpr) {
         for (int i = 0; i < exprs.size(); i++) {
             if (exprs.get(i).equals(probeExpr)) {
@@ -526,19 +518,6 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
             }
         }
         return -1;
-    }
-
-    private void pushDownUnaryRuntimeFilter(RuntimeFilterPushDownContext context, Expr expr) {
-        final int exprOrder = getProbeExprOrder(aggInfo.getGroupingExprs(), expr);
-        RuntimeFilterDescription rf = context.getDescription();
-        rf.setExprOrder(exprOrder);
-        rf.setBuildPlanNodeId(getId().asInt());
-        for (PlanNode child : children) {
-            if (child.pushDownRuntimeFilters(context, expr, Lists.newArrayList())) {
-                this.buildRuntimeFilters.add(rf);
-            }
-        }
-        withRuntimeFilters = !buildRuntimeFilters.isEmpty();
     }
 
     private void pushDownUnaryAggInRuntimeFilter(IdGenerator<RuntimeFilterId> generator, Expr expr,
