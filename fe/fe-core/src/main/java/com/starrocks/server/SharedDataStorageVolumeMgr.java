@@ -564,6 +564,16 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 params.put(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY, Config.azure_adls2_shared_key);
                 params.put(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN, Config.azure_adls2_sas_token);
                 params.put(CloudConfigurationConstants.AZURE_ADLS2_ENDPOINT, Config.azure_adls2_endpoint);
+                params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY,
+                        String.valueOf(Config.azure_adls2_oauth2_use_managed_identity));
+                params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TENANT_ID,
+                        Config.azure_adls2_oauth2_tenant_id);
+                params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ID,
+                        Config.azure_adls2_oauth2_client_id);
+                params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET,
+                        Config.azure_adls2_oauth2_client_secret);
+                params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT,
+                        Config.azure_adls2_oauth2_oauth2_client_endpoint);
                 break;
             default:
                 return params;

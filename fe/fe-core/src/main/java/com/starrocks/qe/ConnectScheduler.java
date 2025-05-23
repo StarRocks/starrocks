@@ -42,6 +42,7 @@ import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.common.CloseableLock;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -67,6 +68,7 @@ public class ConnectScheduler {
     private final AtomicInteger numberConnection;
     private final ConnectionIdGenerator connectionIdGenerator;
 
+    // mysql connectContext/ http connectContext/ arrowFlight connextContext all stored in connectionMap
     private final Map<Long, ConnectContext> connectionMap = Maps.newConcurrentMap();
     private final Map<String, ArrowFlightSqlConnectContext> arrowFlightSqlConnectContextMap = Maps.newConcurrentMap();
 
@@ -225,38 +227,26 @@ public class ConnectScheduler {
         return connCountByUser;
     }
 
-    private List<ConnectContext.ThreadInfo> getAllConnThreadInfoByUser(ConnectContext connectContext,
-                                                                       String currUser,
-                                                                       String forUser) {
+    public List<ConnectContext.ThreadInfo> listConnection(ConnectContext currentContext, String forUser) {
         List<ConnectContext.ThreadInfo> infos = Lists.newArrayList();
-        ConnectContext currContext = connectContext == null ? ConnectContext.get() : connectContext;
-
-        for (ConnectContext ctx : connectionMap.values()) {
+        for (ConnectContext contextToShow : connectionMap.values()) {
             // Check authorization first.
-            if (!ctx.getQualifiedUser().equals(currUser)) {
+            if (!contextToShow.getQualifiedUser().equals(currentContext.getCurrentUserIdentity().getUser())) {
                 try {
-                    Authorizer.checkSystemAction(currContext, PrivilegeType.OPERATE);
+                    Authorizer.checkSystemAction(currentContext, PrivilegeType.OPERATE);
                 } catch (AccessDeniedException e) {
                     continue;
                 }
             }
 
             // Check whether it's the connection for the specified user.
-            if (forUser != null && !ctx.getQualifiedUser().equals(forUser)) {
+            if (forUser != null && !contextToShow.getQualifiedUser().equals(forUser)) {
                 continue;
             }
 
-            infos.add(ctx.toThreadInfo());
+            infos.add(contextToShow.toThreadInfo());
         }
         return infos;
-    }
-
-    public List<ConnectContext.ThreadInfo> listConnection(String currUser, String forUser) {
-        return getAllConnThreadInfoByUser(null, currUser, forUser);
-    }
-
-    public List<ConnectContext.ThreadInfo> listConnection(ConnectContext context, String currUser) {
-        return getAllConnThreadInfoByUser(context, currUser, null);
     }
 
     public Set<UUID> listAllSessionsId() {
@@ -281,6 +271,25 @@ public class ConnectScheduler {
                 }
             });
         }
+    }
+
+    public void printAllRunningQuery() {
+        connectionMap.values().stream().forEach(ctx -> {
+            if (ctx.getCommand() == MysqlCommand.COM_QUERY || ctx.getCommand() == MysqlCommand.COM_STMT_EXECUTE ||
+                    ctx.getCommand() == MysqlCommand.COM_STMT_PREPARE) {
+                if (ctx.getExecutor() != null && ctx.getExecutor().getParsedStmt() != null &&
+                        ctx.getExecutor().getParsedStmt().getOrigStmt() != null) {
+                    long threadId = ctx.getCurrentThreadId();
+                    long theadAllocatedBytes = 0;
+                    if (threadId != 0) {
+                        theadAllocatedBytes = ConnectProcessor.getThreadAllocatedBytes(threadId) -
+                                ctx.getCurrentThreadAllocatedMemory();
+                    }
+                    LOG.warn("FE ShutDown! Running Query:{},  QueryFEAllocatedMemory: {}",
+                            ctx.getExecutor().getParsedStmt().getOrigStmt().getOrigStmt(), theadAllocatedBytes);
+                }
+            }
+        });
     }
 
     /**

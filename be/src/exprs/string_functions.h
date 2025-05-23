@@ -399,6 +399,7 @@ public:
     // regex method
     static Status regexp_extract_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status regexp_replace_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status regexp_count_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status regexp_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
@@ -432,6 +433,13 @@ public:
      * @return: Array<BinaryColumn>
      */
     DEFINE_VECTORIZED_FN(regexp_split);
+
+    /**
+     * @param: [string_value, pattern_value]
+     * @paramType: [BinaryColumn, BinaryColumn]
+     * @return: BigIntColumn
+     */
+    DEFINE_VECTORIZED_FN(regexp_count);
 
     /**
      * @param: [string_value, pattern_value, replace_value]

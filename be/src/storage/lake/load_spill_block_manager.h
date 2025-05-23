@@ -78,7 +78,7 @@ public:
     bool is_initialized() const { return _initialized; }
 
     // acquire Block from BlockManager
-    StatusOr<spill::BlockPtr> acquire_block(size_t block_size);
+    StatusOr<spill::BlockPtr> acquire_block(size_t block_size, bool force_remote = false);
     // return Block to BlockManager
     Status release_block(spill::BlockPtr block);
 

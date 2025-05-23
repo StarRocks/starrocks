@@ -16,12 +16,16 @@ package com.starrocks.lake.compaction;
 
 import com.starrocks.proto.AbortCompactionRequest;
 import com.starrocks.proto.CompactRequest;
+import com.starrocks.proto.CompactResponse;
 import com.starrocks.rpc.LakeService;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.junit.Assert;
 import org.junit.Test;
 
+import java.lang.reflect.Field;
 import java.util.Arrays;
+import java.util.concurrent.Future;
 
 public class CompactionTaskTest {
 
@@ -58,5 +62,33 @@ public class CompactionTaskTest {
         };
 
         task.abort();
+    }
+
+    @Test
+    public void testGetSuccessCompactInputFileSizeSuccess(
+            @Mocked Future<CompactResponse> mockFuture,
+            @Mocked LakeService lakeService) throws Exception {
+        CompactRequest request = new CompactRequest();
+        request.tabletIds = Arrays.asList(1L);
+        request.txnId = 1000L;
+        request.version = 10L;
+        CompactionTask task = new CompactionTask(10043, lakeService, request);
+
+        CompactResponse mockResponse = new CompactResponse();
+        mockResponse.successCompactionInputFileSize = 100L;
+        Field field = task.getClass().getDeclaredField("responseFuture");
+        field.setAccessible(true);
+        field.set(task, mockFuture);
+        
+        new Expectations() {
+            {
+                mockFuture.get(); 
+                result = mockResponse;
+                mockFuture.isDone();
+                result = true;
+            }
+        };
+
+        Assert.assertEquals(100L, task.getSuccessCompactInputFileSize());
     }
 }

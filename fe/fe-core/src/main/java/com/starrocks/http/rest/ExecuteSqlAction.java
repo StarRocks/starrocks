@@ -247,7 +247,6 @@ public class ExecuteSqlAction extends RestBaseAction {
         context.setConnectionId(connectScheduler.getNextConnectionId());
         context.resetConnectionStartTime();
 
-        context.setConnectScheduler(connectScheduler);
         // mark as registered
         Pair<Boolean, String> result = connectScheduler.registerConnection(context);
         if (!result.first) {
@@ -262,7 +261,7 @@ public class ExecuteSqlAction extends RestBaseAction {
         LOG.info("Netty channel is closed");
         HttpConnectContext context = ctx.channel().attr(HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY).get();
         if (context.isInitialized()) {
-            context.getConnectScheduler().unregisterConnection(context);
+            ExecuteEnv.getInstance().getScheduler().unregisterConnection(context);
         }
     }
 

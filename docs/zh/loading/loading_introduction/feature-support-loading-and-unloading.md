@@ -344,7 +344,7 @@ sidebar_label: "能力边界"
         <td>CSV</td>
         <td rowspan="2">
             <ul>
-                <li>defalte</li>
+                <li>deflate</li>
                 <li>bzip2</li>
                 <li>gzip</li>
                 <li>lz4_frame</li>
@@ -420,7 +420,7 @@ sidebar_label: "能力边界"
         <td>CSV</td>
         <td>
             <ul>
-                <li>defalte</li>
+                <li>deflate</li>
                 <li>bzip2</li>
                 <li>gzip</li>
                 <li>lz4_frame</li>

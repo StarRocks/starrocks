@@ -88,6 +88,11 @@ struct HdfsScanStats {
     int64_t level_decode_ns = 0;
     int64_t value_decode_ns = 0;
     int64_t page_read_ns = 0;
+    int64_t page_read_counter = 0;
+    int64_t page_cache_read_counter = 0;
+    int64_t page_cache_write_counter = 0;
+    int64_t page_cache_read_decompressed_counter = 0;
+    int64_t page_cache_read_compressed_counter = 0;
     // reader init
     int64_t footer_read_ns = 0;
     int64_t footer_cache_read_ns = 0;
@@ -206,7 +211,7 @@ struct HdfsScannerParams {
     std::vector<ExprContext*> scanner_conjunct_ctxs;
     std::unordered_set<SlotId> slots_in_conjunct;
     // slot used by conjunct_ctxs
-    std::unordered_set<SlotId> slots_of_mutli_slot_conjunct;
+    std::unordered_set<SlotId> slots_of_multi_field_conjunct;
 
     // conjunct ctxs grouped by slot.
     std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
@@ -264,6 +269,7 @@ struct HdfsScannerParams {
 
     DataCacheOptions datacache_options{};
     bool use_file_metacache = false;
+    bool use_file_pagecache = false;
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
     bool can_use_any_column = false;
@@ -344,6 +350,7 @@ struct HdfsScannerContext {
     bool return_count_column = false;
 
     bool use_file_metacache = false;
+    bool use_file_pagecache = false;
 
     bool parquet_page_index_enable = false;
 

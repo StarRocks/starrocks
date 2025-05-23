@@ -64,7 +64,7 @@ StarRocks uses equi-height histograms, which are constructed on several buckets.
 
 **Histograms are applicable to columns with highly skewed data and frequent queries.If your table data is uniformly distributed, you do not need to create histograms. Histograms can be created only on columns of numeric, DATE, DATETIME, or string types.**
 
-Currently, StarRocks supports only manual collection of histograms. Histograms are stored in the `histogram_statistics` table of the `_statistics_` database. Following is an example of querying statistics data from this table:
+Histograms are stored in the `histogram_statistics` table of the `_statistics_` database. Following is an example of querying statistics data from this table:
 
 ```sql
 SELECT * FROM _statistics_.histogram_statistics\G
@@ -78,6 +78,28 @@ column_name: added
 update_time: 2023-12-01 15:17:10.274000
 ```
 
+### Multi-column joint statistics
+
+Since v3.5.0, StarRocks supports multi-column joint statistics collection. Currently, when StarRocks performs cardinality estimation, the optimizer in most scenarios assumes that multiple columns are completely independent of each other, that is, there is no correlation among them. However, if there is a correlation among columns, the current estimation method may lead to an incorrect result. This causes the optimizer to generate an incorrect execution plan. Currently, only multi-column joint NDV is supported, and it is mainly used in the following scenarios for cardinality estimation.
+
+- Evaluating multiple AND-joined equivalent predicates.
+- Evaluating Agg nodes.
+- Apply to the aggregate push-down strategy.
+
+Currently, multi-column joint statistics collection only supports manual collection. The default type is sampled collection. Multi-column statistics are stored in the `multi_column_statistics` table of the `_statistics_` database in each StarRocks cluster. A query will return information similar to the following:
+
+```sql
+mysql> select * from _statistics_.multi_column_statistics \G
+*************************** 1. row ***************************
+    table_id: 1695021
+  column_ids: 0#1
+       db_id: 110099
+  table_name: db.test_multi_col_stats
+column_names: id,name
+         ndv: 11
+ update_time: 2025-04-11 15:09:50
+```
+
 ## Collection types and methods
 
 Data size and data distribution constantly change in a table. Statistics must be updated regularly to represent that data change. Before creating a statistics collection task, you must choose a collection type and method that best suit your business requirements.
@@ -89,13 +111,39 @@ StarRocks supports full and sampled collection, both can be performed automatica
 | Full collection     | Automatic/manual      | Scans the full table to gather statistics.Statistics are collected partition. If a partition has no data change, data will not be collected from this partition, reducing resource consumption.Full statistics are stored in the `_statistics_.column_statistics` table. | Advantage: The statistics are accurate, which helps the CBO make accurate estimation.Disadvantage: It consumes system resources and is slow. From 2.5 onwards, StarRocks allows you to specify an automatic collection period, which reduces resource consumption. |
 | Sampled collection  | Automatic/manual      | Evenly extracts `N` rows of data from each partition of a table.Statistics are collected by table. Basic statistics of each column are stored as one record. Cardinality information (ndv) of a column is estimated based on the sampled data, which is not accurate. Sampled statistics are stored in the `_statistics_.table_statistic_v1` table. | Advantage: It consumes less system resources and is fast.Disadvantage: The statistics are not complete, which may affect the accuracy of cost estimation. |
 
+Since v3.5.0, both sampled and full collection statistics are stored in the `_statistics_.column_statistics` table. This is because the current optimizer will focus on the most recently collected statistics in the cardinality estimation, while each time the background automatically collects statistics, it may use a different collection method due to the different health status of the table. If there is data skew, the error rate of the sampled statistical information of the full table may be higher, and the same query may use different statistical information due to the different collection methods, which may cause the optimizer to generate an incorrect execution plan. Therefore, both sampled collection and full collection assume that the statistical information is collected at the partition level. You can adjust to the previous collection and storage method by modifying the FE configuration item `statistic_use_meta_statistics` to `false`.
+
+## Predicate Column
+
+Since v3.5.0, StarRocks supports collecting Predicate Column statistics.
+
+A Predicate Column is a column that is often used as a filter condition (WHERE clause, JOIN condition, GROUP BY column, DISTINCT column) in a query. StarRocks automatically records each Predicate Column for the table involved in a query and stores it in `_statistics_. predicate_columns` table. The query will return the following:
+
+```sql
+select * from _statistics_.predicate_columns \G
+*************************** 1. row ***************************
+      fe_id: 127.0.0.1_9011_1735874871718
+      db_id: 1684773
+   table_id: 1685786
+  column_id: 1
+      usage: normal,predicate,join,group_by
+  last_used: 2025-04-11 20:39:32
+    created: 2025-04-11 20:39:53
+```
+
+You can also query the `information_schema.column_stats_usage` view for more observable information. In extreme scenarios (with a large number of columns), there is a large overhead for full collection, whereas in reality, for a stable workload, you often do not need statistics for all columns, but only the columns involved in some key Filter, Join, and Aggregation. Therefore, in order to weigh the cost and accuracy, StarRocks supports collecting Predicate Column statistics manually, and collecting Predicate Column statistics according to the policy when collecting statistics automatically, avoiding collecting all column statistics in the table. Each FE node in the cluster synchronously updates the Predicate Column information to the FE cache at regular intervals to accelerate the usage.
+
 ## Collect statistics
 
 StarRocks offers flexible statistics collection methods. You can choose automatic, manual, or custom collection, whichever suits your business scenarios.
 
+By default, StarRocks automatically collects the full amount of statistics for a table on a periodic basis. The default interval is 10 minutes. If the system finds that the update ratio of the data meets the condition, the collection will be triggered automatically. **Collecting full statistics may consume a lot of system resources**. If you do not want to use automatic full statistics collection, you can set the FE configuration item `enable_collect_full_statistic` to `false`, and the periodic collection task will be changed from full statistics collection to sampled collection.
+
+Since v3.5.0, StarRocks will automatically change the full collection to sampled collection if it finds that the data of a table has changed a lot since the last collection to the current table during automatic collection. In the case of sampled collection is used, if there is a Predicate Column (PREDICATE/JOIN/GROUP BY/DISTINCT) in the table, StarRocks will convert the sampling task to full collection and collect the statistics of the Predicate Column to ensure the accuracy of the statistics, and will not collect the statistics of all columns in the table. It will not collect statistics from all columns in the table. You can configure this with the FE configuration item `statistic_auto_collect_use_full_predicate_column_for_sample`. In addition, StarRocks also switches from full collection of all columns to full collection of Predicate Columns if the number of columns in the table exceeds the FE configuration item `statistic_auto_collect_predicate_columns_threshold` when full collection is used.
+
 ### Automatic collection
 
-For basic statistics, StarRocks automatically collects full statistics of a table by default, without requiring manual operations. For tables on which no statistics have been collected, StarRocks automatically collects statistics within the scheduling period. For tables on which statistics have been collected, StarRocks updates the total number of rows and modified rows in the tables, and persists this information regularly for judging whether to trigger automatic collection.
+For basic statistics, StarRocks automatically collects full statistics of a table by default, without requiring manual operations. For tables on which no statistics have been collected, StarRocks automatically collects statistics within the scheduling period. For tables on which statistics have been collected, StarRocks updates the total number of rows and modified rows in the tables, and persists this information regularly for judging whether to trigger automatic collection. Histograms and multi-column joint statistics are not captured by the current automatic collection task.
 
 From 2.4.5 onwards, StarRocks allows you to specify a collection period for automatic full collection, which prevents cluster performance jitter caused by automatic full collection. This period is specified by FE parameters `statistic_auto_analyze_start_time` and `statistic_auto_analyze_end_time`.
 
@@ -111,8 +159,9 @@ Conditions that will trigger automatic collection:
 
 > Formula for calculating statistics health:
 >
-> If the number of partitions with data updated is less than 10, the formula is `1 - (Number of updated rows since previous collection/Total number of rows)`.
-> If the number of partitions with data updated is greater than or equal to 10, the formula is `1 - MIN(Number of updated rows since previous collection/Total number of rows, Number of updated partitions since previous collection/Total number of partitions)`.
+> 1. If the number of partitions with data updated is less than 10, the formula is `1 - (Number of updated rows since previous collection/Total number of rows)`.
+> 2. If the number of partitions with data updated is greater than or equal to 10, the formula is `1 - MIN(Number of updated rows since previous collection/Total number of rows, Number of updated partitions since previous collection/Total number of partitions)`.
+> 3. Since v3.5.0, in order to determine whether a partition is healthy or not, StarRocks no longer compares the statistic information collection time with the data update time, but rather the ratio of partition update rows. You can configure this via the FE configuration item `statistic_partition_health_v2_threshold`. Also, you can set the FE configuration item `statistic_partition_healthy_v2` to `false` to use to the previous health check behavior.
 
 In addition, StarRocks allows you to configure collection policies based on table size and table update frequency:
 
@@ -122,13 +171,17 @@ In addition, StarRocks allows you to configure collection policies based on tabl
 
   - The default collection interval is not less than 12 hours, which can be configured using `statistic_auto_collect_large_table_interval`.
 
-  - When the collection interval is met and the statistics health is lower than the threshold for automatic sampled collection (`statistic_auto_collect_sample_threshold`), sampled collection is triggered.
+  - When the collection interval is met and the statistics health is lower than the threshold for automatic sampled collection, sampled collection is triggered. You can configure this behavior using the FE configurartion item `statistic_auto_collect_sample_threshold`. Since v3.5.0, sampled collection is converted to full collection of Predicate Columns if all of the following conditions are met: 
+    - Predicate Column exists in the table, and the number of Predicate Columns is less than `statistic_auto_collect_max_predicate_column_size_on_sample_strategy`.
+    - The FE configuration `statistic_auto_collect_use_full_predicate_column_for_sample` is set to `true`.
 
   - When the collection interval is met and the statistics health is higher than the threshold for automatic sampled collection (`statistic_auto_collect_sample_threshold`) and lower than the automatic collection threshold (`statistic_auto_collect_ratio`), full collection is triggered.
 
   - When the size of partitions to collect data (`statistic_max_full_collect_data_size`) is greater than 100 GB, sampled collection is triggered.
 
   - Only statistics of partitions whose update time is later than the time of the previous collection task are collected. Statistics of partitions with no data change are not collected.
+
+- For tables that have a Predicate Column and the total number of columns exceeds the `statistic_auto_collect_predicate_columns_threshold`, statistics are only collected for the Predicate Column in the table.
 
 :::tip
 
@@ -141,9 +194,9 @@ The following table describes the default settings. If you need to modify them, 
 
 | **FE** **configuration item**         | **Type** | **Default value** | **Description**                                              |
 | ------------------------------------- | -------- | ----------------- | ------------------------------------------------------------ |
-| enable_statistic_collect              | BOOLEAN  | TRUE              | Whether to collect statistics. This switch is turned on by default. |
-| enable_collect_full_statistic         | BOOLEAN  | TRUE              | Whether to enable automatic full collection. This switch is turned on by default. |
-| statistic_collect_interval_sec        | LONG     | 300               | The interval for checking data updates during automatic collection. Unit: seconds. |
+| enable_statistic_collect              | BOOLEAN  | TRUE              | Whether to turn on the default and user-defined auto collection tasks. This switch is turned on by default. |
+| enable_collect_full_statistic         | BOOLEAN  | TRUE              | Whether to enable the default auto collection. This switch is turned on by default. |
+| statistic_collect_interval_sec        | LONG     | 600               | The interval for checking data updates during automatic collection. Unit: seconds. |
 | statistic_auto_analyze_start_time | STRING      | 00:00:00   | The start time of automatic collection. Value range: `00:00:00` - `23:59:59`. |
 | statistic_auto_analyze_end_time | STRING      | 23:59:59  | The end time of automatic collection. Value range: `00:00:00` - `23:59:59`. |
 | statistic_auto_collect_small_table_size     | LONG    | 5368709120   | The threshold for determining whether a table is a small table for automatic full collection. A table whose size is greater than this value is considered a large table, whereas a table whose size is less than or equal to this value is considered a small table. Unit: Byte. Default value: 5368709120 (5 GB).                         |
@@ -155,6 +208,11 @@ The following table describes the default settings. If you need to modify them, 
 | statistic_full_collect_buffer | LONG | 20971520 | The maximum buffer size taken by automatic collection tasks. Unit: Byte. Default value: 20971520 (20 MB). |
 | statistic_collect_max_row_count_per_query | INT  | 5000000000        | The maximum number of rows to query for a single analyze task. An analyze task will be split into multiple queries if this value is exceeded. |
 | statistic_collect_too_many_version_sleep | LONG | 600000 | The sleep time of automatic collection tasks if the table on which the collection task runs has too many data versions. Unit: ms. Default value: 600000 (10 minutes).  |
+| statistic_auto_collect_use_full_predicate_column_for_sample | BOOLEAN    | TRUE       | Whether to convert an automatic full collection task to full collection of a Predicate Column when it hits the sampled collection policy. |
+| statistic_auto_collect_max_predicate_column_size_on_sample_strategy | INT    | 16       | When the Auto Full Collection task hits the sampled collection policy, if the table has an unusually large number of Predicate Columns and exceeds this configuration item, the task will not switch to full collection of the Predicate Columns, but maintains  to be the sampled collection of all columns. This configuration item controls the maximum value of Predicate Column for this behavior. |
+| statistic_auto_collect_predicate_columns_threshold | INT     | 32       | If the number of columns in the table exceeds this configuration during automatic collection, only the column statistics for the Predicate Column will be collected. |
+| statistic_predicate_columns_persist_interval_sec   | LONG    | 60       | The interval at which FE synchronize and persists statistics of Predicate Column. |
+| statistic_predicate_columns_ttl_hours       | LONG    | 24       | The elimination time of the Predicate Column statistics cached in FE. |
 
 You can rely on automatic jobs for a majority of statistics collection, but if you have specific requirements, you can manually create a task by executing the ANALYZE TABLE statement or customize an automatic task by executing the CREATE ANALYZE  statement.
 
@@ -165,9 +223,15 @@ You can use ANALYZE TABLE to create a manual collection task. By default, manual
 #### Manually collect basic statistics
 
 ```SQL
-ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name])
-[WITH SYNC | ASYNC MODE]
-[PROPERTIES (property [,property])]
+ANALYZE [FULL|SAMPLE] TABLE tbl_name 
+    [( col_name [, col_name]... )
+    | col_name [, col_name]...
+    | ALL COLUMNS
+    | PREDICATE COLUMNS
+    | MULTIPLE COLUMNS ( col_name [, col_name]... )]
+[PARTITION (partition_name [, partition_name]...)]
+[WITH [SYNC | ASYNC] MODE]
+[PROPERTIES (property [, property]...)]
 ```
 
 Parameter description:
@@ -177,7 +241,11 @@ Parameter description:
   - SAMPLE: indicates sampled collection.
   - If no collection type is specified, full collection is used by default.
 
-- `col_name`: columns from which to collect statistics. Separate multiple columns with commas (`,`). If this parameter is not specified, the entire table is collected.
+- The type of the column from which to collect statistics:
+  - `col_name`: Columns from which to collect statistics. Separate multiple columns with commas (`,`). If this parameter is not specified, the entire table is collected.
+  - `ALL COLUMNS`: Collect statistics from all columns. Supported since v3.5.0.
+  - `PREDICATE COLUMNS`: Collect statistics from only Predicate Columns. Supported since v3.5.0.
+  - `MULTIPLE COLUMNS`: Collects joint statistics from the specified multiple columns. Currently, only manual synchronous collection of multiple columns is supported. The number of columns for manual statistics collection cannot exceed `statistics_max_multi_column_combined_num`, the default value is `10`. Supported since v3.5.0.
 
 - [WITH SYNC | ASYNC MODE]: whether to run the manual collection task in synchronous or asynchronous mode. Synchronous collection is used by default if you do not specify this parameter.
 
@@ -212,6 +280,26 @@ ANALYZE SAMPLE TABLE tbl_name;
 ANALYZE SAMPLE TABLE tbl_name (v1, v2, v3) PROPERTIES(
     "statistic_sample_collect_rows" = "1000000"
 );
+```
+
+- Manual collection of multi-column joint statistics
+
+```sql
+-- Manual sampled collection of multi-column joint statistics
+ANALYZE SAMPLE TABLE tbl_name MULTIPLE COLUMNS (v1, v2);
+
+-- Manual full collection of multi-column joint statistics
+ANALYZE FULL TABLE tbl_name MULTIPLE COLUMNS (v1, v2);
+```
+
+- Manual collection of Predicate Column
+
+```sql
+-- Manual sampled collection of Predicate Column
+ANALYZE SAMPLE TABLE tbl_name PREDICATE COLUMNS
+
+-- Manual full collection of Predicate Column
+ANALYZE FULL TABLE tbl_name PREDICATE COLUMNS
 ```
 
 #### Manually collect histograms
@@ -263,8 +351,9 @@ PROPERTIES(
 
 #### Customize an automatic collection task
 
-You can use the CREATE ANALYZE statement to customize an automatic collection task. You must have the INSERT and SELECT privileges on the coreesponding table to perform the ANALYZE TABLE operation.
+The default collection tasks provided by StarRocks automatically collect statistics for all databases and all tables according to the policy, and by default, you do not need to create custom collection tasks.
 
+If you want to customize an automatic collection task, you need to create it through the CREATE ANALYZE statement. To create a collection task, you need the INSERT and SELECT permissions for the table being collected.
 
 ```SQL
 -- Automatically collect stats of all databases.
@@ -276,6 +365,12 @@ CREATE ANALYZE [FULL|SAMPLE] DATABASE db_name
 
 -- Automatically collect stats of specified columns in a table.
 CREATE ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name])
+[PROPERTIES (property [,property])]
+
+-- Automatically collect histograms of specified columns in a table.
+CREATE ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON col_name [, col_name]
+[WITH SYNC | ASYNC MODE]
+[WITH N BUCKETS]
 [PROPERTIES (property [,property])]
 ```
 
@@ -293,7 +388,6 @@ Parameter description:
 | **PROPERTIES**                        | **Type** | **Default value** | **Description**                                              |
 | ------------------------------------- | -------- | ----------------- | ------------------------------------------------------------ |
 | statistic_auto_collect_ratio          | FLOAT    | 0.8               | The threshold for determining  whether the statistics for automatic collection are healthy. If the statistics health is below this threshold, automatic collection is triggered. |
-| statistics_max_full_collect_data_size | INT      | 100               | The size of the largest partition for automatic collection to collect data. Unit: GB.If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
 | statistic_sample_collect_rows         | INT      | 200000            | The minimum number of rows to collect.If the parameter value exceeds the actual number of rows in your table, full collection is performed. |
 | statistic_exclude_pattern             | String   | null              | The name of the database or table that needs to be excluded in the job. You can specify the database and table that do not collect statistics in the job. Note that this is a regular expression pattern, and the match content is `database.table`. |
 | statistic_auto_collect_interval       | LONG   |  0      | The interval for automatic collection. Unit: seconds. By default, StarRocks chooses `statistic_auto_collect_small_table_interval` or `statistic_auto_collect_large_table_interval` as the collection interval based on the table size. If you specified the `statistic_auto_collect_interval` property when you create an analyze job, this setting takes precedence over `statistic_auto_collect_small_table_interval` and `statistic_auto_collect_large_table_interval`. |
@@ -319,6 +413,9 @@ CREATE ANALYZE TABLE tbl_name(c1, c2, c3);
 CREATE ANALYZE ALL PROPERTIES (
    "statistic_exclude_pattern" = "db_name\."
 );
+
+-- Automatically collect histograms of specified database, table, or columns.
+CREATE ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON c1,c2;
 ```
 
 Automatic sampled collection
@@ -340,10 +437,44 @@ CREATE ANALYZE SAMPLE TABLE tbl_name(c1, c2, c3) PROPERTIES (
 
 ```
 
+**Instead of the auto collection task provided by StarRocks, use a user-defined collection task that does not collect the `db_name.tbl_name` table.**
+
+```sql
+ADMIN SET FRONTEND CONFIG("enable_auto_collect_statistics"="false");
+DROP ALL ANALYZE JOB;
+CREATE ANALYZE FULL ALL db_name PROPERTIES (
+   "statistic_exclude_pattern" = "db_name.tbl_name"
+);
+```
+
+### Collect statistics during data loading
+
+To ensure a good execution plan for queries immediately after data loading, StarRocks triggers an asynchronous statistic collection task at the end of the INSERT INTO/OVERWRITE DML statements, which by default waits for 30 seconds after the DML finishes. If the statistics collection task does not finish in 30 seconds, the DML execution result is returned.
+
+#### INSERT INTO
+
+- Statistics is collected only for the first import of data into the partition.
+- If the number of rows in this import is greater than `statistic_sample_collect_rows`, the sampled collection task is triggered, otherwise full collection is used.
+
+#### INSERT OVERWRITE
+
+- If the ratio of the change in the number of rows before and after the OVERWRITE is less than `statistic_sample_collect_ratio_threshold_of_first_load`, the statistics collection task is not triggered.
+- If the number of rows in this OVERWRITE operation is greater than `statistic_sample_collect_rows`, then a sampled collection task is triggered, otherwise full collection is used.
+
+The following properties (PROPERTIES) are used to create customized collection tasks for data loading. If not configured, the value of the corresponding FE configuration item is used.
+
+| **PROPERTIES**                            | **Type** | **Dedault** | **Description**                                                                           |
+|-------------------------------------------|----------|-------------|------------------------------------------------------------------------------------------ |
+| enable_statistic_collect_on_first_load    | BOOLEAN  | TRUE        | Whether to trigger the statistics collection task after executing INSERT INTO/OVERWRITE.  |
+| semi_sync_collect_statistic_await_seconds | LONG     | 30          | Maximum time to wait for statistics to be collected before returning results.             |
+| statistic_sample_collect_ratio_threshold_of_first_load | DOUBLE    | 0.1  | The ratio of data changes in OVERWRITE operations that will not trigger statistics collection tasks. |
+| statistic_sample_collect_rows             | LONG     | 200000      | When the total data rows loaded via DML statements exceeds this value, sampled collection is used for statistics collection. |
+
+
 #### View custom collection tasks
 
 ```SQL
-SHOW ANALYZE JOB [WHERE predicate]
+SHOW ANALYZE JOB [WHERE predicate][ORDER BY columns][LIMIT num]
 ```
 
 You can filter results by using the WHERE clause. The statement returns the following columns.
@@ -375,6 +506,7 @@ SHOW ANALYZE JOB where `database` = 'test';
 
 ```SQL
 DROP ANALYZE <ID>
+| DROP ALL ANALYZE JOB
 ```
 
 The task ID can be obtained by using the SHOW ANALYZE JOB statement.
@@ -383,6 +515,10 @@ Examples
 
 ```SQL
 DROP ANALYZE 266030;
+```
+
+```SQL
+DROP ALL ANALYZE JOB;
 ```
 
 ## View status of collection tasks
@@ -416,7 +552,7 @@ This statement returns the following columns.
 ### View metadata of basic statistics
 
 ```SQL
-SHOW STATS META [WHERE predicate]
+SHOW STATS META [WHERE predicate][ORDER BY columns][LIMIT num]
 ```
 
 This statement returns the following columns.
@@ -430,6 +566,10 @@ This statement returns the following columns.
 | UpdateTime | The latest statistics update time for the current table.     |
 | Properties | Custom parameters.                                           |
 | Healthy    | The health of statistical information.                       |
+| ColumnStats  | Column ANALYZE type.                                       |
+| TabletStatsReportTime | The time when the Tablet metadata for the table was updated in the FE. |
+| TableHealthyMetrics    | Metric of health in statistical information.     |
+| TableUpdateTime    | The time when the table was updated.                 |
 
 ### View metadata of histograms
 
@@ -454,8 +594,16 @@ You can delete statistical information you do not need. When you delete statisti
 
 ### Delete basic statistics
 
+The following statement deletes the statistics stored in the `default_catalog._statistics_.column_statistics` table, and the corresponding table statistics cached by FE will also be invalidated. Since v3.5.0, this statement also deletes multi-column joint statistics for this table.
+
 ```SQL
 DROP STATS tbl_name
+```
+
+The following statement deletes the multi-column joint statistics stored in the `default_catalog._statistics_.multi_column_statistics` table, and the multi-column joint statistics in the corresponding table cached by FE will also be invalidated. This statement does not delete the basic statistics of the table.
+
+```SQL
+DROP MULTIPLE COLUMNS STATS tbl_name
 ```
 
 ### Delete histograms

@@ -1,9 +1,15 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Cluster Snapshot"
+keywords: ['backup','restore','shared data','snapshot']
 ---
+<head><meta name="docsearch:pagerank" content="100"/></head>
+
+import Beta from '../_assets/commonMarkdown/_beta.mdx'
 
 # Automated Cluster Snapshot
+
+<Beta />
 
 This topic describes how to automate the cluster snapshot for disaster recovery on shared-data clusters.
 

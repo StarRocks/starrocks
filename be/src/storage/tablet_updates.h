@@ -246,7 +246,8 @@ public:
                         const std::string& err_msg_header = "");
 
     Status load_snapshot(const SnapshotMeta& snapshot_meta, bool restore_from_backup = false,
-                         bool save_source_schema = false);
+                         bool save_source_schema = false, bool need_rebuild_pk_index = false,
+                         int32_t rebuild_pk_index_wait_seconds = 0);
 
     Status get_latest_applied_version(EditVersion* latest_applied_version);
 
@@ -388,6 +389,8 @@ public:
 
     Status breakpoint_check();
     Status compaction_random(MemTracker* mem_tracker);
+
+    bool rowset_check_file_existence() const;
 
 private:
     friend class Tablet;

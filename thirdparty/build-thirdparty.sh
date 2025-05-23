@@ -242,7 +242,7 @@ build_llvm() {
 
     LLVM_TARGETS_TO_BUILD=(
         "LLVMBitstreamReader"
-        "LLVMRuntimeDyld" 
+        "LLVMRuntimeDyld"
         "LLVMOption"
         "LLVMAsmPrinter"
         "LLVMProfileData"
@@ -569,7 +569,7 @@ build_brpc() {
     cd $TP_SOURCE_DIR/$BRPC_SOURCE
     CMAKE_GENERATOR="Unix Makefiles"
     BUILD_SYSTEM='make'
-    PATH=$PATH:$TP_INSTALL_DIR/bin/ ./config_brpc.sh --headers="$TP_INSTALL_DIR/include" --libs="$TP_INSTALL_DIR/bin $TP_INSTALL_DIR/lib" --with-glog --with-thrift    
+    PATH=$PATH:$TP_INSTALL_DIR/bin/ ./config_brpc.sh --headers="$TP_INSTALL_DIR/include" --libs="$TP_INSTALL_DIR/bin $TP_INSTALL_DIR/lib" --with-glog --with-thrift
     make -j$PARALLEL
     cp -rf output/* ${TP_INSTALL_DIR}/
     if [ -f $TP_INSTALL_DIR/lib/libbrpc.a ]; then
@@ -1083,12 +1083,16 @@ build_jemalloc() {
     fi
     # build jemalloc with release
     CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g" \
-    ./configure --prefix=${TP_INSTALL_DIR}/jemalloc --with-jemalloc-prefix=je --enable-prof --disable-cxx --disable-libdl --disable-shared $addition_opts
+    ./configure --prefix=${TP_INSTALL_DIR}/jemalloc --with-jemalloc-prefix=je --enable-prof --disable-cxx --disable-libdl $addition_opts
     make -j$PARALLEL
     make install
+    mkdir -p ${TP_INSTALL_DIR}/jemalloc/lib-shared/
+    mkdir -p ${TP_INSTALL_DIR}/jemalloc/lib-static/
+    mv ${TP_INSTALL_DIR}/jemalloc/lib/*.so* ${TP_INSTALL_DIR}/jemalloc/lib-shared/
+    mv ${TP_INSTALL_DIR}/jemalloc/lib/*.a ${TP_INSTALL_DIR}/jemalloc/lib-static/
     # build jemalloc with debug options
     CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g" \
-    ./configure --prefix=${TP_INSTALL_DIR}/jemalloc-debug --with-jemalloc-prefix=je --enable-prof --enable-debug --enable-fill --enable-prof --disable-cxx --disable-libdl --disable-shared $addition_opts
+    ./configure --prefix=${TP_INSTALL_DIR}/jemalloc-debug --with-jemalloc-prefix=je --enable-prof --disable-static --enable-debug --enable-fill --enable-prof --disable-cxx --disable-libdl $addition_opts
     make -j$PARALLEL
     make install
 }
@@ -1164,6 +1168,20 @@ build_avro_c() {
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
     rm ${TP_INSTALL_DIR}/lib64/libavro.so*
+}
+
+# avro-cpp
+build_avro_cpp() {
+    check_if_source_exist $AVRO_SOURCE
+    cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c++
+    mkdir -p build
+    cd build
+    $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=Release -DBOOST_ROOT=${TP_INSTALL_DIR} -DBoost_USE_STATIC_RUNTIME=ON  -DCMAKE_PREFIX_PATH=${TP_INSTALL_DIR} -DSNAPPY_INCLUDE_DIR=${TP_INSTALL_DIR}/include -DSNAPPY_LIBRARIES=${TP_INSTALL_DIR}/lib
+    LIBRARY_PATH=${TP_INSTALL_DIR}/lib64:$LIBRARY_PATH LD_LIBRARY_PATH=${STARROCKS_GCC_HOME}/lib64:$LD_LIBRARY_PATH ${BUILD_SYSTEM} -j$PARALLEL
+
+    # cp include and lib
+    cp libavrocpp_s.a ${TP_INSTALL_DIR}/lib64/
+    cp -r ../include/avro ${TP_INSTALL_DIR}/include/avrocpp
 }
 
 # serders
@@ -1276,7 +1294,7 @@ build_absl() {
         -DCMAKE_INSTALL_LIBDIR=lib \
         -DCMAKE_INSTALL_PREFIX="$TP_INSTALL_DIR" \
         -DCMAKE_CXX_STANDARD=17
-    
+
     ${BUILD_SYSTEM} -j "${PARALLEL}"
     ${BUILD_SYSTEM} install
 }
@@ -1317,7 +1335,7 @@ build_grpc() {
         -DCARES_ROOT_DIR=$TP_SOURCE_DIR/$CARES_SOURCE/      \
         -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -static-libgcc" \
         -DCMAKE_CXX_STANDARD=17 ..
-        
+
     ${BUILD_SYSTEM} -j "${PARALLEL}"
     ${BUILD_SYSTEM} install
 }
@@ -1369,6 +1387,57 @@ build_icu() {
         make install
     )
     restore_compile_flags
+}
+
+build_xsimd() {
+    check_if_source_exist $XSIMD_SOURCE
+    cd $TP_SOURCE_DIR/$XSIMD_SOURCE
+
+    # xsimd only has header files
+    ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_INSTALL_PREFIX="$TP_INSTALL_DIR"
+    ${BUILD_SYSTEM} install
+}
+
+build_libxml2() {
+    check_if_source_exist $LIBXML2_SOURCE
+    cd $TP_SOURCE_DIR/$LIBXML2_SOURCE
+
+    ${CMAKE_CMD} -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DLIBXML2_WITH_ICONV=OFF \
+        -DLIBXML2_WITH_LZMA=OFF \
+        -DLIBXML2_WITH_PYTHON=OFF \
+        -DLIBXML2_WITH_ZLIB=OFF \
+        -DLIBXML2_WITH_TESTS=OFF
+
+    ${BUILD_SYSTEM} -j "${PARALLEL}"
+    ${BUILD_SYSTEM} install
+}
+
+build_azure() {
+    check_if_source_exist $AZURE_SOURCE
+    cd $TP_SOURCE_DIR/$AZURE_SOURCE
+
+    export AZURE_SDK_DISABLE_AUTO_VCPKG=true
+    export PKG_CONFIG_LIBDIR=$TP_INSTALL_DIR
+
+    ${CMAKE_CMD} -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DDISABLE_AZURE_CORE_OPENTELEMETRY=ON \
+        -DWARNINGS_AS_ERRORS=OFF \
+        -DCURL_INCLUDE_DIR=$TP_INSTALL_DIR/include \
+        -DCURL_LIBRARY=$TP_INSTALL_DIR/lib/libcurl.a \
+        -DOPENSSL_ROOT_DIR=$TP_INSTALL_DIR \
+        -DOPENSSL_USE_STATIC_LIBS=TRUE \
+        -DLibXml2_ROOT=$TP_INSTALL_DIR
+
+    ${BUILD_SYSTEM} -j "${PARALLEL}"
+    ${BUILD_SYSTEM} install
+
+    unset AZURE_SDK_DISABLE_AUTO_VCPKG
+    unset PKG_CONFIG_LIBDIR
 }
 
 # restore cxxflags/cppflags/cflags to default one
@@ -1457,6 +1526,7 @@ build_starcache
 build_streamvbyte
 build_jansson
 build_avro_c
+build_avro_cpp
 build_serdes
 build_datasketches
 build_async_profiler
@@ -1466,6 +1536,9 @@ build_clucene
 build_simdutf
 build_poco
 build_icu
+build_xsimd
+build_libxml2
+build_azure
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad

@@ -229,11 +229,20 @@ public class AstToSQLBuilder {
                 List<String> selectListString = new ArrayList<>();
                 for (SelectListItem item : stmt.getSelectList().getItems()) {
                     if (item.isStar()) {
+                        String tmp = "";
                         if (item.getTblName() != null) {
-                            selectListString.add(item.getTblName() + ".*");
+                            tmp = item.getTblName() + ".*";
                         } else {
-                            selectListString.add("*");
+                            tmp = "*";
                         }
+                        if (!item.getExcludedColumns().isEmpty()) {
+                            tmp += " EXCLUDE ( ";
+                            tmp += item.getExcludedColumns().stream()
+                                    .map(col -> "\"" + col + "\"")
+                                    .collect(Collectors.joining(","));
+                            tmp += " ) ";
+                        }
+                        selectListString.add(tmp);
                     } else if (item.getExpr() != null) {
                         Expr expr = item.getExpr();
                         String str = visit(expr);

@@ -18,10 +18,14 @@
 package com.starrocks.qe.scheduler.warehouse;
 
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.qe.scheduler.slot.QueryQueueOptions;
 import com.starrocks.thrift.TGetWarehouseQueriesResponseItem;
 import com.starrocks.thrift.TUniqueId;
+
+import java.util.Optional;
 
 public class WarehouseQueryMetrics {
     private final long warehouseId;
@@ -31,9 +35,11 @@ public class WarehouseQueryMetrics {
     private final long estCostsSlots;
     private final long allocateSlots;
     private final double queuedWaitSeconds;
-
+    private final String query;
+    private final Optional<LogicalSlot.ExtraMessage> extraMessage;
     public WarehouseQueryMetrics(long warehouseId, String warehouseName, TUniqueId queryId, LogicalSlot.State state,
-                                 long estCostsSlots, long allocateSlots, double queuedWaitSeconds) {
+                                 long estCostsSlots, long allocateSlots, double queuedWaitSeconds, String query,
+                                 Optional<LogicalSlot.ExtraMessage> extraMessage) {
         this.warehouseId = warehouseId;
         this.warehouseName = warehouseName;
         this.queryId = queryId;
@@ -41,18 +47,24 @@ public class WarehouseQueryMetrics {
         this.estCostsSlots = estCostsSlots;
         this.allocateSlots = allocateSlots;
         this.queuedWaitSeconds = queuedWaitSeconds;
+        this.query = query;
+        this.extraMessage = extraMessage;
     }
 
     public static WarehouseQueryMetrics empty() {
         return new WarehouseQueryMetrics(0, "", new TUniqueId(),
-                LogicalSlot.State.CREATED, 0, 0, 0);
+                LogicalSlot.State.CREATED, 0, 0, 0, "",
+                Optional.empty());
     }
 
     public static WarehouseQueryMetrics create(LogicalSlot slot) {
         long estCostsSlots = QueryQueueOptions.correctSlotNum(slot.getNumPhysicalSlots());
         long allocateSlots = slot.getAllocatedNumPhysicalSlots().map(s -> QueryQueueOptions.correctSlotNum(s)).orElse(0);
+
+        Optional<LogicalSlot.ExtraMessage> extraMessage = slot.getExtraMessage();
         return new WarehouseQueryMetrics(slot.getWarehouseId(), slot.getWarehouseName(),
-                slot.getSlotId(), slot.getState(), estCostsSlots, allocateSlots, slot.getQueuedWaitSeconds());
+                slot.getSlotId(), slot.getState(), estCostsSlots, allocateSlots,
+                slot.getQueuedWaitSeconds(), extraMessage.map(e -> e.getQuery()).orElse(""), extraMessage);
     }
 
     public TGetWarehouseQueriesResponseItem toThrift() {
@@ -64,6 +76,15 @@ public class WarehouseQueryMetrics {
         item.setEst_costs_slots(String.valueOf(estCostsSlots));
         item.setAllocate_slots(String.valueOf(allocateSlots));
         item.setQueued_wait_seconds(String.valueOf(queuedWaitSeconds));
+        item.setQuery(query);
+        // extra message
+        if (extraMessage != null && extraMessage.isPresent()) {
+            LogicalSlot.ExtraMessage extra = extraMessage.get();
+            item.setQuery_start_time(TimeUtils.longToTimeString(extra.getQueryStartTime()));
+            item.setQuery_end_time(TimeUtils.longToTimeString(extra.getQueryEndTime()));
+            item.setQuery_duration(String.valueOf(extra.getQueryDuration()));
+            item.setExtra_message(GsonUtils.GSON.toJson(extra));
+        }
         return item;
     }
 }

@@ -549,12 +549,10 @@ DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...]);
 
 ## パラメーター設定
 
-StarRocks クラスター内の各 Java 仮想マシン (JVM) の **be/conf/be.conf** ファイルで、次の環境変数を設定してメモリ使用量を制御します。JDK 8 を使用する場合は `JAVA_OPTS` を設定し、JDK 9 以降を使用する場合は `JAVA_OPTS_FOR_JDK_9_AND_LATER` を設定します。
+StarRocks クラスター内の各 Java 仮想マシン (JVM) の **be/conf/be.conf** ファイルで、次の環境変数を設定してメモリ使用量を制御します。
 
 ```Bash
 JAVA_OPTS="-Xmx12G"
-
-JAVA_OPTS_FOR_JDK_9_AND_LATER="-Xmx12G"
 ```
 
 ## FAQ

@@ -172,7 +172,6 @@ import com.starrocks.meta.SqlBlackList;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.EditLog;
-import com.starrocks.persist.ImageFormatVersion;
 import com.starrocks.persist.ImageHeader;
 import com.starrocks.persist.ImageLoader;
 import com.starrocks.persist.ImageWriter;
@@ -193,6 +192,7 @@ import com.starrocks.qe.JournalObservable;
 import com.starrocks.qe.QueryStatisticsInfo;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.GlobalSlotProvider;
@@ -224,6 +224,7 @@ import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.StatisticAutoCollector;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.statistic.columns.PredicateColumnsMgr;
+import com.starrocks.summary.QueryHistoryMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
@@ -281,12 +282,6 @@ public class GlobalStateMgr {
     // will break the loop and refresh in-memory data after at most 10w logs or at most 1 seconds
     private static final long REPLAYER_MAX_MS_PER_LOOP = 1000L;
     private static final long REPLAYER_MAX_LOGS_PER_LOOP = 100000L;
-
-    /**
-     * Meta and Image context
-     */
-    private String imageDir;
-    private volatile long epoch = 0;
 
     // Lock to perform atomic modification on map like 'idToDb' and 'fullNameToDb'.
     // These maps are all thread safe, we only use lock to perform atomic operations.
@@ -532,6 +527,7 @@ public class GlobalStateMgr {
     private final ReportHandler reportHandler;
     private final TabletCollector tabletCollector;
     private final SQLPlanStorage sqlPlanStorage;
+    private final QueryHistoryMgr queryHistoryMgr;
 
     private JwkMgr jwkMgr;
 
@@ -683,6 +679,7 @@ public class GlobalStateMgr {
         this.safeModeChecker = new SafeModeChecker();
         this.statisticStorage = new CachedStatisticStorage();
         this.sqlPlanStorage = SQLPlanStorage.create(true);
+        this.queryHistoryMgr = new QueryHistoryMgr();
 
         this.replayedJournalId = new AtomicLong(0L);
         this.synchronizedTimeMs = 0;
@@ -742,8 +739,6 @@ public class GlobalStateMgr {
 
         this.dynamicPartitionScheduler = new DynamicPartitionScheduler("DynamicPartitionScheduler",
                 Config.dynamic_partition_check_interval_seconds * 1000L);
-
-        setMetaDir();
 
         this.pluginMgr = new PluginMgr();
         this.auditEventProcessor = new AuditEventProcessor(this.pluginMgr);
@@ -917,6 +912,10 @@ public class GlobalStateMgr {
 
     public AnalyzeMgr getAnalyzeMgr() {
         return analyzeMgr;
+    }
+
+    public QueryHistoryMgr getQueryHistoryMgr() {
+        return queryHistoryMgr;
     }
 
     public AuthenticationMgr getAuthenticationMgr() {
@@ -1153,36 +1152,21 @@ public class GlobalStateMgr {
         return Config.meta_dir + IMAGE_DIR;
     }
 
-    public String getImageDir() {
-        return imageDir;
-    }
-
-    private void setMetaDir() {
-        this.imageDir = Config.meta_dir + IMAGE_DIR;
-        nodeMgr.setImageDir(imageDir);
-    }
-
-    public void initialize(String[] args) throws Exception {
-        // set meta dir first.
-        // we already set these variables in constructor. but GlobalStateMgr is a singleton class.
-        // so they may be set before Config is initialized.
-        // set them here again to make sure these variables use values in fe.conf.
-        setMetaDir();
-
+    public void initialize(String helpers) throws Exception {
         // must judge whether it is first time start here before initializing GlobalStateMgr.
         // Possibly remove clusterId and role to ensure that the system is not left in a half-initialized state.
         boolean isFirstTimeStart = nodeMgr.isVersionAndRoleFilesNotExist();
         try {
             // 0. get local node and helper node info
-            nodeMgr.initialize(args);
+            nodeMgr.initialize(helpers);
 
             // 1. create dirs and files
             if (Config.edit_log_type.equalsIgnoreCase("bdb")) {
-                File imageDir = new File(this.imageDir);
+                File imageDir = new File(getImageDirPath());
                 if (!imageDir.exists()) {
                     imageDir.mkdirs();
                 }
-                File imageV2Dir = new File(this.imageDir + "/v2");
+                File imageV2Dir = new File(getImageDirPath() + "/v2");
                 if (!imageV2Dir.exists()) {
                     imageV2Dir.mkdirs();
                 }
@@ -1200,7 +1184,7 @@ public class GlobalStateMgr {
 
             // 3. Load image first and replay edits
             initJournal();
-            loadImage(this.imageDir); // load image file
+            loadImage(); // load image file
 
             // 4. create load and export job label cleaner thread
             createLabelCleaner();
@@ -1518,6 +1502,7 @@ public class GlobalStateMgr {
         connectorTableTriggerAnalyzeMgr.start();
 
         PredicateColumnsMgr.getInstance().startDaemon();
+        SimpleScheduler.startAutoUpdate();
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {
@@ -1553,8 +1538,8 @@ public class GlobalStateMgr {
 
     // The manager that loads meta from image must be a member of GlobalStateMgr and cannot be SINGLETON,
     // since Checkpoint uses a separate memory.
-    public void loadImage(String imageDir) throws IOException {
-        ImageLoader imageLoader = new ImageLoader(imageDir);
+    public void loadImage() throws IOException {
+        ImageLoader imageLoader = new ImageLoader(getImageDirPath());
         File curFile = imageLoader.getImageFile();
         if (!curFile.exists()) {
             // image.0 may not exist
@@ -1700,16 +1685,27 @@ public class GlobalStateMgr {
         }
     }
 
-    private void processMvRelatedMeta() {
+    @VisibleForTesting
+    public void processMvRelatedMeta() {
         long startMillis = System.currentTimeMillis();
         for (Database db : localMetastore.getIdToDb().values()) {
             for (MaterializedView mv : db.getMaterializedViews()) {
-                mv.onReload();
+                // set `postLoadImage` flag to true to indicate that this is called after image loading
+                mv.onReload(true);
+            }
+        }
+
+        // we should reset reloaded flags after each round of reloading for all materializedViews
+        int count = 0;
+        for (Database db : localMetastore.getIdToDb().values()) {
+            for (MaterializedView mv : db.getMaterializedViews()) {
+                count++;
+                mv.setReloaded(false);
             }
         }
 
         long duration = System.currentTimeMillis() - startMillis;
-        LOG.info("finish processing all tables' related materialized views in {}ms", duration);
+        LOG.info("finish processing all tables' related materialized views in {}ms, total mv count: {}", duration, count);
     }
 
     public void loadHeader(DataInputStream dis) throws IOException {
@@ -1739,27 +1735,12 @@ public class GlobalStateMgr {
 
     // Only called by checkpoint thread
     public void saveImage() throws IOException {
-        try {
-            saveImage(ImageFormatVersion.v1);
-        } catch (Throwable t) {
-            // image v1 may fail because of byte[] size overflow, ignore
-            LOG.warn("save image v1 failed, ignore", t);
-        }
-        saveImage(ImageFormatVersion.v2);
-    }
-
-    public void saveImage(ImageFormatVersion formatVersion) throws IOException {
-        String destDir;
-        if (formatVersion == ImageFormatVersion.v1) {
-            destDir = this.imageDir;
-        } else {
-            destDir = this.imageDir + "/v2";
-        }
+        String destDir = getImageDirPath() + "/v2";
         // Write image.ckpt
         Storage storage = new Storage(destDir);
         File curFile = storage.getImageFile(replayedJournalId.get());
         File ckpt = new File(destDir, Storage.IMAGE_NEW);
-        saveImage(new ImageWriter(destDir, formatVersion, replayedJournalId.get()), ckpt);
+        saveImage(new ImageWriter(destDir, replayedJournalId.get()), ckpt);
 
         // Move image.ckpt to image.dataVersion
         LOG.info("Move " + ckpt.getAbsolutePath() + " to " + curFile.getAbsolutePath());
@@ -2610,7 +2591,7 @@ public class GlobalStateMgr {
             dumpFilePath = dumpFile.getAbsolutePath();
             try {
                 LOG.info("begin to dump {}", dumpFilePath);
-                saveImage(new ImageWriter(Config.meta_dir, ImageFormatVersion.v2, journalId), dumpFile);
+                saveImage(new ImageWriter(Config.meta_dir, journalId), dumpFile);
             } catch (IOException e) {
                 LOG.error("failed to dump image to {}", dumpFilePath, e);
             }

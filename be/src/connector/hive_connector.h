@@ -115,6 +115,7 @@ private:
     HdfsScanner* _scanner = nullptr;
     DataCacheOptions _datacache_options{};
     bool _use_file_metacache = false;
+    bool _use_file_pagecache = false;
     bool _enable_dynamic_prune_scan_range = true;
     bool _enable_split_tasks = false;
 
@@ -134,7 +135,7 @@ private:
     // used for reader to decide decode or not
     // if only used by filter(not output) and only used in conjunct_ctx_by_slot
     // there is no need to decode.
-    std::unordered_set<SlotId> _slots_of_mutli_slot_conjunct;
+    std::unordered_set<SlotId> _slots_of_multi_field_conjunct;
 
     // partition conjuncts of each partition slot.
     std::vector<ExprContext*> _partition_conjunct_ctxs;

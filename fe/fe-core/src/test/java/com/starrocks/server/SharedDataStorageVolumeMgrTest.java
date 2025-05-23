@@ -45,7 +45,6 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
-import com.starrocks.persist.ImageFormatVersion;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -802,7 +801,7 @@ public class SharedDataStorageVolumeMgrTest {
         // v4
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         DataOutputStream dos = new DataOutputStream(out);
-        ImageWriter imageWriter = new ImageWriter("", ImageFormatVersion.v2, 0);
+        ImageWriter imageWriter = new ImageWriter("", 0);
         imageWriter.setOutputStream(dos);
         svm.save(imageWriter);
 
@@ -985,7 +984,7 @@ public class SharedDataStorageVolumeMgrTest {
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         DataOutputStream dos = new DataOutputStream(out);
-        ImageWriter imageWriter = new ImageWriter("", ImageFormatVersion.v2, 0);
+        ImageWriter imageWriter = new ImageWriter("", 0);
         imageWriter.setOutputStream(dos);
         svm.save(imageWriter);
 

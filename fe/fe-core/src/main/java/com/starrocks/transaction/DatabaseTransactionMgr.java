@@ -184,6 +184,7 @@ public class DatabaseTransactionMgr {
 
         long tid = globalStateMgr.getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
         boolean combinedTxnLog = LakeTableHelper.supportCombinedTxnLog(sourceType);
+        boolean enablePartitionAggregation = LakeTableHelper.enablePartitionAggregation(dbId, tableIdList);
         LOG.info("begin transaction: txn_id: {} with label {} from coordinator {}, listner id: {}",
                 tid, label, coordinator, callbackId);
         TransactionState transactionState = new TransactionState(dbId, tableIdList, tid, label, requestId, sourceType,
@@ -191,7 +192,7 @@ public class DatabaseTransactionMgr {
 
         transactionState.setPrepareTime(System.currentTimeMillis());
         transactionState.setWarehouseId(warehouseId);
-        transactionState.setUseCombinedTxnLog(combinedTxnLog);
+        transactionState.setUseCombinedTxnLog(combinedTxnLog || enablePartitionAggregation);
         transactionState.writeLock();
         try {
             writeLock();
@@ -1249,6 +1250,23 @@ public class DatabaseTransactionMgr {
                                             physicalPartition.getVisibleVersion() + 1);
                                     transactionState.setErrorMsg(errMsg);
                                     hasError = true;
+                                }
+
+                                // collect unknown replicas
+                                long tabletId = tablet.getId();
+                                for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                                    long replicaId = replica.getId();
+                                    long backendId = replica.getBackendId();
+
+                                    if (errorReplicaIds.contains(replicaId)) {
+                                        continue;
+                                    }
+
+                                    if (transactionState.tabletCommitInfosContainsReplica(tabletId, backendId, replicaId)) {
+                                        continue;
+                                    }
+
+                                    transactionState.addUnknownReplica(replicaId);
                                 }
                             }
                         }

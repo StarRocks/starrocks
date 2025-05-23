@@ -43,6 +43,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -388,9 +389,9 @@ public class CreateLakeTableTest {
                         "properties('enable_persistent_index' = 'true', 'persistent_index_type' = 'cloud_native');"));
         LakeTable lakeTable = getLakeTable("lake_test", "test_unique_id");
         // Clear unique id first
-        lakeTable.setMaxColUniqueId(0);
+        lakeTable.setMaxColUniqueId(-1);
         for (Column column : lakeTable.getColumns()) {
-            column.setUniqueId(0);
+            column.setUniqueId(-1);
         }
         lakeTable.gsonPostProcess();
         Assert.assertEquals(3, lakeTable.getMaxColUniqueId());
@@ -435,5 +436,75 @@ public class CreateLakeTableTest {
         Map<String, String> nationProps = nation.getProperties();
         Assert.assertTrue(nationProps.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT));
         Assert.assertTrue(nationProps.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT));
+    }
+
+    @Test
+    public void testCreateTableWithPartitionAggregation() throws Exception {
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.dup_test_enable_partition_agg (key1 int, key2 varchar(10))\n" +
+                        "distributed by hash(key1) buckets 3\n" +
+                        "properties('replication_num' = '1', 'enable_partition_aggregation' = 'true');"));
+        checkLakeTable("lake_test", "dup_test_enable_partition_agg");
+
+        String sql = "show create table lake_test.dup_test_enable_partition_agg";
+        ShowCreateTableStmt showCreateTableStmt =
+                (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        ShowResultSet resultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
+        Assert.assertFalse(resultSet.getResultRows().isEmpty());
+    }
+
+    @Test
+    public void testRangeTableWithRetentionCondition2() throws Exception {
+        ExceptionChecker.expectThrowsNoException(() -> createTable("CREATE TABLE lake_test.r1 \n" +
+                "(\n" +
+                "    dt date,\n" +
+                "    k2 int,\n" +
+                "    v1 int \n" +
+                ")\n" +
+                "PARTITION BY RANGE(dt)\n" +
+                "(\n" +
+                "    PARTITION p0 values [('2024-01-29'),('2024-01-30')),\n" +
+                "    PARTITION p1 values [('2024-01-30'),('2024-01-31')),\n" +
+                "    PARTITION p2 values [('2024-01-31'),('2024-02-01')),\n" +
+                "    PARTITION p3 values [('2024-02-01'),('2024-02-02')) \n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "'replication_num' = '1',\n" +
+                "'partition_retention_condition' = 'dt > current_date() - interval 1 month'\n" +
+                ")"));
+        LakeTable r1 = getLakeTable("lake_test", "r1");
+        String retentionCondition = r1.getTableProperty().getPartitionRetentionCondition();
+        Assert.assertEquals("dt > current_date() - interval 1 month", retentionCondition);
+
+        String sql = "show create table lake_test.r1";
+        ShowCreateTableStmt showCreateTableStmt =
+                (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        ShowResultSet resultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
+        List<List<String>> result = resultSet.getResultRows();
+        Assert.assertTrue(result.size() == 1);
+        Assert.assertTrue(result.get(0).size() == 2);
+        final String expect = "CREATE TABLE `r1` (\n" +
+                "  `dt` date NULL COMMENT \"\",\n" +
+                "  `k2` int(11) NULL COMMENT \"\",\n" +
+                "  `v1` int(11) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`dt`, `k2`, `v1`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY RANGE(`dt`)\n" +
+                "(PARTITION p0 VALUES [(\"2024-01-29\"), (\"2024-01-30\")),\n" +
+                "PARTITION p1 VALUES [(\"2024-01-30\"), (\"2024-01-31\")),\n" +
+                "PARTITION p2 VALUES [(\"2024-01-31\"), (\"2024-02-01\")),\n" +
+                "PARTITION p3 VALUES [(\"2024-02-01\"), (\"2024-02-02\")))\n" +
+                "DISTRIBUTED BY HASH(`k2`) BUCKETS 3 \n" +
+                "PROPERTIES (\n" +
+                "\"compression\" = \"LZ4\",\n" +
+                "\"datacache.enable\" = \"true\",\n" +
+                "\"enable_async_write_back\" = \"false\",\n" +
+                "\"partition_retention_condition\" = \"dt > current_date() - interval 1 month\",\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_volume\" = \"builtin_storage_volume\"\n" +
+                ");";
+        Assert.assertTrue(result.get(0).get(1).equals(expect));
     }
 }

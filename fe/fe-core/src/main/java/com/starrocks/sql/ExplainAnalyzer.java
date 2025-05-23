@@ -18,7 +18,9 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.gson.JsonObject;
 import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.ProfilingExecPlan;
@@ -107,6 +109,12 @@ public class ExplainAnalyzer {
         }
         ExplainAnalyzer analyzer = new ExplainAnalyzer(plan, profile, planNodeIds, colorExplainOutput);
         return analyzer.analyze();
+    }
+
+    public static String analyze(ProfilingExecPlan plan, RuntimeProfile profile)
+            throws StarRocksException {
+        ExplainAnalyzer analyzer = new ExplainAnalyzer(plan, profile, null, false);
+        return analyzer.getQueryProgress();
     }
 
     private enum GraphElement {
@@ -199,6 +207,33 @@ public class ExplainAnalyzer {
         }
 
         return summaryBuffer.toString() + detailBuffer;
+    }
+
+    public String getQueryProgress() throws StarRocksException {
+        try {
+            //get total operator info
+            parseProfile();
+            long totalCount = allNodeInfos.size();
+            //calculate finished operator count and progress
+            long finishedCount = allNodeInfos.values().stream()
+                    .filter(nodeInfo -> nodeInfo.state.isFinished())
+                    .count();
+            String progress = (totalCount == 0L ? "0.00%" :
+                    String.format("%.2f%%", 100.0 * finishedCount / totalCount));
+
+            JsonObject progressInfo = new JsonObject();
+            progressInfo.addProperty("total_operator_num", totalCount);
+            progressInfo.addProperty("finished_operator_num", finishedCount);
+            progressInfo.addProperty("progress_percent", progress);
+
+            JsonObject result = new JsonObject();
+            result.addProperty("query_id", summaryProfile.getInfoString(ProfileManager.QUERY_ID));
+            result.addProperty("state", summaryProfile.getInfoString(ProfileManager.QUERY_STATE));
+            result.add("progress_info", progressInfo);
+            return result.toString();
+        } catch (Exception e) {
+            throw new StarRocksException("Failed to get query progress.");
+        }
     }
 
     private void parseProfile() {

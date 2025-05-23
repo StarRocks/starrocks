@@ -58,8 +58,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class SchedulerTestBase extends SchedulerTestNoneDBBase {
-    private static final String DB_NAME = "test";
-    private static final AtomicLong COLOCATE_GROUP_INDEX = new AtomicLong(0L);
+    protected static final String DB_NAME = "test";
+    protected static final AtomicLong COLOCATE_GROUP_INDEX = new AtomicLong(0L);
 
     protected static final List<Frontend> FRONTENDS = ImmutableList.of(
             new Frontend(FrontendNodeType.FOLLOWER, "fe-1", "127.0.0.1", 8030),
@@ -77,7 +77,11 @@ public class SchedulerTestBase extends SchedulerTestNoneDBBase {
         SchedulerTestNoneDBBase.beforeClass();
         starRocksAssert.getCtx().getSessionVariable().setCboPushDownAggregateMode(-1);
         starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
+        FeConstants.runningUnitTest = true;
+        prepareTables(starRocksAssert.getCtx());
+    }
 
+    protected static void prepareTables(ConnectContext connectContext) throws Exception {
         final String tpchGroup = "tpch_group_" + COLOCATE_GROUP_INDEX.getAndIncrement();
 
         // NOTE: Please do not change the order of the following create table statements.
@@ -108,7 +112,7 @@ public class SchedulerTestBase extends SchedulerTestNoneDBBase {
                 "    \"replication_num\" = \"1\"\n" +
                 ");\n");
 
-        starRocksAssert.withTable("CREATE TABLE `lineitem_partition` (\n" +
+        String lineItemSql = "CREATE TABLE `lineitem_partition` (\n" +
                 "  `L_ORDERKEY` int(11) NOT NULL COMMENT \"\",\n" +
                 "  `L_PARTKEY` int(11) NOT NULL COMMENT \"\",\n" +
                 "  `L_SUPPKEY` int(11) NOT NULL COMMENT \"\",\n" +
@@ -140,7 +144,14 @@ public class SchedulerTestBase extends SchedulerTestNoneDBBase {
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
                 "    \"colocate_with\" = \"" + tpchGroup + "\"\n" +
-                ");");
+                ");";
+        starRocksAssert.withTable(lineItemSql);
+        starRocksAssert.withTable(lineItemSql.replace("lineitem_partition", "lineitem0"));
+        starRocksAssert.withTable(lineItemSql.replace("lineitem_partition", "lineitem1"));
+        starRocksAssert.withTable(
+                lineItemSql.replace("lineitem_partition", "lineitem2").replace(tpchGroup, tpchGroup + "xx"));
+        starRocksAssert.withTable(
+                lineItemSql.replace("lineitem_partition", "lineitem3").replace(tpchGroup, tpchGroup + "xx"));
 
         starRocksAssert.withTable("CREATE TABLE customer (\n" +
                 "    c_custkey       INT NOT NULL,\n" +
@@ -256,7 +267,6 @@ public class SchedulerTestBase extends SchedulerTestNoneDBBase {
         connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(connectContext, 100));
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().clear();
 
-        FeConstants.runningUnitTest = true;
     }
 
     @AfterClass

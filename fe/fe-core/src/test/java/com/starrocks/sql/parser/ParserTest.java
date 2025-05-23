@@ -399,7 +399,7 @@ class ParserTest {
     void testWrongVariableName() {
         VariableMgr variableMgr = new VariableMgr();
         String res = variableMgr.findSimilarVarNames("disable_coloce_join");
-        assertContains(res, "{'disable_colocate_join', 'disable_join_reorder', 'disable_function_fold_constants'}");
+        assertContains(res, "{'disable_colocate_join', 'disable_colocate_set', 'disable_join_reorder'");
 
         res = variableMgr.findSimilarVarNames("SQL_AUTO_NULL");
         assertContains(res, "{'SQL_AUTO_IS_NULL', 'sql_dialect', 'spill_storage_volume'}");
@@ -467,16 +467,16 @@ class ParserTest {
 
         List<String> expects = Lists.newArrayList();
         expects.add("SELECT *\n" +
-                "FROM `t` PIVOT (sum(v1)\n" +
-                "FOR v2 IN (1, 2, 3)\n" +
+                "FROM `t` PIVOT (sum(v1) " +
+                "FOR v2 IN (1, 2, 3)" +
                 ")");
         expects.add("SELECT *\n" +
-                "FROM `t` PIVOT (sum(v1) AS s1\n" +
-                "FOR (v2, v3) IN ((1, 2) AS a, (3, 4) AS b, (5, 6) AS c)\n" +
+                "FROM `t` PIVOT (sum(v1) AS s1 " +
+                "FOR (v2, v3) IN ((1, 2) AS a, (3, 4) AS b, (5, 6) AS c)" +
                 ")");
         expects.add("SELECT *\n" +
-                "FROM `t` PIVOT (sum(v1) AS s1, count(v2) AS c1, avg(v3) AS c3\n" +
-                "FOR (v2, v3) IN ((1, 2) AS a, (3, 4) AS b, (5, 6) AS c)\n" +
+                "FROM `t` PIVOT (sum(v1) AS s1, count(v2) AS c1, avg(v3) AS c3 " +
+                "FOR (v2, v3) IN ((1, 2) AS a, (3, 4) AS b, (5, 6) AS c)" +
                 ")");
         for (String sql : sqls) {
             try {

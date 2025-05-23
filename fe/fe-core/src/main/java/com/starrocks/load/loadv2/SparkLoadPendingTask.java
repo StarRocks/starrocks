@@ -34,6 +34,7 @@
 
 package com.starrocks.load.loadv2;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -623,7 +624,8 @@ public class SparkLoadPendingTask extends LoadTask {
         }
     }
 
-    private void checkBitmapMapping(String columnName, Expr expr, boolean isLoadFromTable) throws LoadException {
+    @VisibleForTesting
+    void checkBitmapMapping(String columnName, Expr expr, boolean isLoadFromTable) throws LoadException {
         if (expr == null) {
             throw new LoadException("BITMAP column func is not assigned. column:" + columnName);
         }
@@ -638,6 +640,7 @@ public class SparkLoadPendingTask extends LoadTask {
         String functionName = fn.getFnName().getFunction();
         if (!functionName.equalsIgnoreCase(FunctionSet.TO_BITMAP)
                 && !functionName.equalsIgnoreCase(FunctionSet.BITMAP_HASH)
+                && !functionName.equalsIgnoreCase(FunctionSet.BITMAP_HASH64)
                 && !functionName.equalsIgnoreCase(FunctionSet.BITMAP_DICT)
                 && !functionName.equalsIgnoreCase(FunctionSet.BITMAP_FROM_BINARY)) {
             throw new LoadException(msg);

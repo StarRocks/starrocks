@@ -104,6 +104,7 @@ public abstract class SetOperationNode extends PlanNode {
 
     protected List<Map<Integer, Integer>> outputSlotIdToChildSlotIdMaps = Lists.newArrayList();
 
+    protected List<List<Expr>> localPartitionByExprsList = Lists.newArrayList();
     protected SetOperationNode(PlanNodeId id, TupleId tupleId, String planNodeName) {
         super(id, tupleId.asList(), planNodeName);
         setOpResultExprs_ = Lists.newArrayList();
@@ -148,6 +149,10 @@ public abstract class SetOperationNode extends PlanNode {
         this.outputSlotIdToChildSlotIdMaps = outputSlotIdToChildSlotIdMaps;
     }
 
+    public void setLocalPartitionByExprsList(List<List<Expr>> localPartitionByExprsList) {
+        this.localPartitionByExprsList = localPartitionByExprsList;
+    }
+
     public void setSetOperationOutputList(List<Expr> setOperationOutputList) {
         this.setOperationOutputList = setOperationOutputList;
     }
@@ -172,13 +177,21 @@ public abstract class SetOperationNode extends PlanNode {
     protected void toThrift(TPlanNode msg, TPlanNodeType nodeType) {
         Preconditions.checkState(materializedResultExprLists_.size() == children.size());
         List<List<TExpr>> texprLists = Lists.newArrayList();
+
         for (List<Expr> exprList : materializedResultExprLists_) {
             texprLists.add(Expr.treesToThrift(exprList));
         }
+
         List<List<TExpr>> constTexprLists = Lists.newArrayList();
         for (List<Expr> constTexprList : materializedConstExprLists_) {
             constTexprLists.add(Expr.treesToThrift(constTexprList));
         }
+
+        List<List<TExpr>> tlocalPartitionByExprsList = Lists.newArrayList();
+        for (List<Expr> localPartitionByExprs : localPartitionByExprsList) {
+            tlocalPartitionByExprsList.add(Expr.treesToThrift(localPartitionByExprs));
+        }
+
         Preconditions.checkState(firstMaterializedChildIdx_ <= children.size());
         switch (nodeType) {
             case UNION_NODE:
@@ -186,16 +199,25 @@ public abstract class SetOperationNode extends PlanNode {
                         tupleId_.asInt(), texprLists, constTexprLists, firstMaterializedChildIdx_);
                 msg.union_node.setPass_through_slot_maps(outputSlotIdToChildSlotIdMaps);
                 msg.node_type = TPlanNodeType.UNION_NODE;
+                if (!tlocalPartitionByExprsList.isEmpty()) {
+                    msg.union_node.setLocal_partition_by_exprs(tlocalPartitionByExprsList);
+                }
                 break;
             case INTERSECT_NODE:
                 msg.intersect_node = new TIntersectNode(
                         tupleId_.asInt(), texprLists, constTexprLists, firstMaterializedChildIdx_);
                 msg.node_type = TPlanNodeType.INTERSECT_NODE;
+                if (!tlocalPartitionByExprsList.isEmpty()) {
+                    msg.intersect_node.setLocal_partition_by_exprs(tlocalPartitionByExprsList);
+                }
                 break;
             case EXCEPT_NODE:
                 msg.except_node = new TExceptNode(
                         tupleId_.asInt(), texprLists, constTexprLists, firstMaterializedChildIdx_);
                 msg.node_type = TPlanNodeType.EXCEPT_NODE;
+                if (!tlocalPartitionByExprsList.isEmpty()) {
+                    msg.except_node.setLocal_partition_by_exprs(tlocalPartitionByExprsList);
+                }
                 break;
             default:
                 LOG.error("Node type: " + nodeType.toString() + " is invalid.");

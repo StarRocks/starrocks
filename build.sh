@@ -168,7 +168,6 @@ BUILD_FE=
 BUILD_SPARK_DPP=
 BUILD_HIVE_UDF=
 CLEAN=
-RUN_UT=
 WITH_GCOV=OFF
 WITH_BENCH=OFF
 WITH_CLANG_TIDY=OFF
@@ -206,9 +205,6 @@ if [[ -z ${USE_SSE4_2} ]]; then
 fi
 if [[ -z ${USE_BMI_2} ]]; then
     USE_BMI_2=ON
-fi
-if [[ -z ${JEMALLOC_DEBUG} ]]; then
-    JEMALLOC_DEBUG=OFF
 fi
 if [[ -z ${ENABLE_JIT} ]]; then
     ENABLE_JIT=ON
@@ -254,7 +250,6 @@ if [ $# == 1 ] ; then
     BUILD_HIVE_UDF=1
     BUILD_FORMAT_LIB=0
     CLEAN=0
-    RUN_UT=0
 elif [[ $OPTS =~ "-j " ]] && [ $# == 3 ]; then
     # default. `sh build.sh -j 32`
     BUILD_BE=1
@@ -263,7 +258,6 @@ elif [[ $OPTS =~ "-j " ]] && [ $# == 3 ]; then
     BUILD_HIVE_UDF=1
     BUILD_FORMAT_LIB=0
     CLEAN=0
-    RUN_UT=0
     PARALLEL=$2
 else
     BUILD_BE=0
@@ -272,7 +266,6 @@ else
     BUILD_SPARK_DPP=0
     BUILD_HIVE_UDF=0
     CLEAN=0
-    RUN_UT=0
     while true; do
         case "$1" in
             --be) BUILD_BE=1 ; shift ;;
@@ -281,7 +274,6 @@ else
             --spark-dpp) BUILD_SPARK_DPP=1 ; shift ;;
             --hive-udf) BUILD_HIVE_UDF=1 ; shift ;;
             --clean) CLEAN=1 ; shift ;;
-            --ut) RUN_UT=1   ; shift ;;
             --with-gcov) WITH_GCOV=ON; shift ;;
             --without-gcov) WITH_GCOV=OFF; shift ;;
             --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
@@ -333,7 +325,6 @@ echo "Get params:
     BUILD_HIVE_UDF              -- $BUILD_HIVE_UDF
     CCACHE                      -- ${CCACHE}
     CLEAN                       -- $CLEAN
-    RUN_UT                      -- $RUN_UT
     WITH_GCOV                   -- $WITH_GCOV
     WITH_BENCH                  -- $WITH_BENCH
     WITH_CLANG_TIDY             -- $WITH_CLANG_TIDY
@@ -344,7 +335,6 @@ echo "Get params:
     USE_AVX512                  -- $USE_AVX512
     USE_SSE4_2                  -- $USE_SSE4_2
     USE_BMI_2                   -- $USE_BMI_2
-    JEMALLOC_DEBUG              -- $JEMALLOC_DEBUG
     PARALLEL                    -- $PARALLEL
     ENABLE_QUERY_DEBUG_TRACE    -- $ENABLE_QUERY_DEBUG_TRACE
     ENABLE_FAULT_INJECTION      -- $ENABLE_FAULT_INJECTION
@@ -467,7 +457,6 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}              \
                   -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512         \
                   -DUSE_SSE4_2=$USE_SSE4_2 -DUSE_BMI_2=$USE_BMI_2       \
-                  -DJEMALLOC_DEBUG=$JEMALLOC_DEBUG                      \
                   -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE  \
                   -DWITH_BENCH=${WITH_BENCH}                            \
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
@@ -619,6 +608,10 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_HOME}/be/output/lib/starrocks_be ${STARROCKS_OUTPUT}/be/lib/
     cp -r -p ${STARROCKS_HOME}/be/output/lib/libmockjvm.so ${STARROCKS_OUTPUT}/be/lib/libjvm.so
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ${STARROCKS_OUTPUT}/be/bin
+    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc.so.2
+    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc-debug/lib/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc-dbg.so.2
+    ln -s ./libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc.so
+
     # format $BUILD_TYPE to lower case
     ibuildtype=`echo ${BUILD_TYPE} | tr 'A-Z' 'a-z'`
     if [ "${ibuildtype}" == "release" ] ; then

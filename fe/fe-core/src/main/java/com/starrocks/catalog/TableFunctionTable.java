@@ -86,6 +86,7 @@ public class TableFunctionTable extends Table {
     private static final String PARQUET = "parquet";
     private static final String ORC = "orc";
     private static final String CSV = "csv";
+    private static final String AVRO = "avro";
 
     private static final Set<String> SUPPORTED_FORMATS;
     static {
@@ -93,6 +94,7 @@ public class TableFunctionTable extends Table {
         SUPPORTED_FORMATS.add(PARQUET);
         SUPPORTED_FORMATS.add(ORC);
         SUPPORTED_FORMATS.add(CSV);
+        SUPPORTED_FORMATS.add(AVRO);
     }
 
     private static final List<Column> LIST_FILES_COLUMNS = new SchemaBuilder()

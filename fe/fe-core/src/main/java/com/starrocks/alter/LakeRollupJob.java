@@ -38,7 +38,6 @@ import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
-import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.proto.TxnInfoPB;
@@ -153,9 +152,10 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         AgentBatchTask batchTask = new AgentBatchTask();
         MarkedCountDownLatch<Long, Long> countDownLatch;
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
-            LakeTable table = getTableOrThrow(db, tableId);
+            OlapTable table = getTableOrThrow(db, tableId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.ROLLUP);
 
+            enableTabletCreationOptimization |= table.enablePartitionAggregation();
             if (enableTabletCreationOptimization) {
                 numTablets = physicalPartitionIdToRollupIndex.size();
             } else {
@@ -242,7 +242,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
 
         // Add shadow indexes to table.
         try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-            LakeTable table = getTableOrThrow(db, tableId);
+            OlapTable table = getTableOrThrow(db, tableId);
             if (table.getState() != OlapTable.OlapTableState.ROLLUP) {
                 throw new IllegalStateException("Table State doesn't equal to ROLLUP, it is " + table.getState() + ".");
             }
@@ -294,8 +294,11 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
 
         Map<Long, List<TColumn>> indexToThriftColumns = new HashMap<>();
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
-            LakeTable tbl = getTableOrThrow(db, tableId);
+            OlapTable tbl = getTableOrThrow(db, tableId);
             Preconditions.checkState(tbl.getState() == OlapTable.OlapTableState.ROLLUP);
+            // only needs to analyze once
+            AlterReplicaTask.RollupJobV2Params rollupJobV2Params =
+                    RollupJobV2.analyzeAndCreateRollupJobV2Params(tbl, rollupSchema, whereClause, db.getFullName());
             for (Map.Entry<Long, MaterializedIndex> entry : this.physicalPartitionIdToRollupIndex.entrySet()) {
                 long partitionId = entry.getKey();
                 PhysicalPartition partition = tbl.getPhysicalPartition(partitionId);
@@ -309,8 +312,6 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 for (Tablet rollupTablet : rollupIndex.getTablets()) {
                     long rollupTabletId = rollupTablet.getId();
                     long baseTabletId = tabletIdMap.get(rollupTabletId);
-                    AlterReplicaTask.RollupJobV2Params rollupJobV2Params =
-                            RollupJobV2.analyzeAndCreateRollupJobV2Params(tbl, rollupSchema, whereClause, db.getFullName());
 
                     ComputeNode computeNode = null;
                     try {
@@ -376,7 +377,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         }
 
         try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-            LakeTable table = getTableOrThrow(db, tableId);
+            OlapTable table = getTableOrThrow(db, tableId);
             commitVersionMap = new HashMap<>();
             for (long physicalPartitionId : physicalPartitionIdToRollupIndex.keySet()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
@@ -415,7 +416,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         }
 
         try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-            LakeTable table = (db != null) ? db.getTable(tableId) : null;
+            OlapTable table = (db != null) ? db.getTable(tableId) : null;
             if (table == null) {
                 LOG.info("database or table been dropped while doing schema change job {}", jobId);
                 return;
@@ -452,7 +453,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         }
 
         try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-            LakeTable table = (db != null) ? db.getTable(tableId) : null;
+            OlapTable table = (db != null) ? db.getTable(tableId) : null;
             if (table != null) {
                 removeRollupIndex(table);
             }
@@ -535,7 +536,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         }
 
         try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-            LakeTable table = (db != null) ? db.getTable(tableId) : null;
+            OlapTable table = (db != null) ? db.getTable(tableId) : null;
             if (table == null) {
                 return; // do nothing if the table has been dropped.
             }
@@ -606,7 +607,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         return GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid();
     }
 
-    void addRollIndexToCatalog(@NotNull LakeTable tbl) {
+    void addRollIndexToCatalog(@NotNull OlapTable tbl) {
         for (Partition partition : tbl.getPartitions()) {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 long partitionId = physicalPartition.getId();
@@ -616,6 +617,11 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 physicalPartition.createRollupIndex(rollupIndex);
             }
         }
+
+        // If upgraded from an old version and do roll up,
+        // the schema saved in indexSchemaMap is the schema in the old version, whose uniqueId is -1,
+        // so here we initialize column uniqueId here.
+        restoreColumnUniqueIdIfNeed(rollupSchema);
 
         tbl.setIndexMeta(rollupIndexId, rollupIndexName, rollupSchema, rollupSchemaVersion /* initial schema version */,
                 rollupSchemaHash, rollupShortKeyColumnCount, TStorageType.COLUMN, rollupKeysType, origStmt);
@@ -634,7 +640,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         }
     }
 
-    void updateNextVersion(@NotNull LakeTable table) {
+    void updateNextVersion(@NotNull OlapTable table) {
         for (long partitionId : physicalPartitionIdToRollupIndex.keySet()) {
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             long commitVersion = commitVersionMap.get(partitionId);
@@ -646,7 +652,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
 
     boolean readyToPublishVersion() throws AlterCancelException {
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
-            LakeTable table = getTableOrThrow(db, tableId);
+            OlapTable table = getTableOrThrow(db, tableId);
             for (long partitionId : physicalPartitionIdToRollupIndex.keySet()) {
                 PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                 Preconditions.checkState(partition != null, partitionId);
@@ -664,7 +670,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
 
     protected boolean lakePublishVersion() {
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
-            LakeTable table = getTableOrThrow(db, tableId);
+            OlapTable table = getTableOrThrow(db, tableId);
             for (long partitionId : physicalPartitionIdToRollupIndex.keySet()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
                 Preconditions.checkState(physicalPartition != null, partitionId);
@@ -704,7 +710,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         }
     }
 
-    void removeRollupIndex(@NotNull LakeTable table) {
+    void removeRollupIndex(@NotNull OlapTable table) {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (Long partitionId : physicalPartitionIdToRollupIndex.keySet()) {
             MaterializedIndex rollupIndex = physicalPartitionIdToRollupIndex.get(partitionId);

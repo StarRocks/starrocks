@@ -57,6 +57,7 @@ import com.starrocks.common.util.NetUtils;
 import com.starrocks.http.HttpMetricRegistry;
 import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.load.EtlJobType;
+import com.starrocks.load.batchwrite.MergeCommitMetricRegistry;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.load.routineload.KafkaProgress;
@@ -71,6 +72,7 @@ import com.starrocks.monitor.jvm.JvmStats;
 import com.starrocks.proto.PKafkaOffsetProxyRequest;
 import com.starrocks.proto.PKafkaOffsetProxyResult;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.staros.StarMgrServer;
@@ -188,6 +190,10 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_LAKE_SERVICE_RPC;
     public static LongCounterMetric COUNTER_BRPC_EXEC_PLAN_FRAGMENT;
     public static LongCounterMetric COUNTER_BRPC_EXEC_PLAN_FRAGMENT_ERROR;
+
+    // count file number and total size vacuumed for cloud native
+    public static LongCounterMetric COUNTER_VACUUM_FILES_NUMBER;
+    public static LongCounterMetric COUNTER_VACUUM_FILES_BYTES;
 
     public static Histogram HISTO_QUERY_LATENCY;
     public static Histogram HISTO_EDIT_LOG_WRITE_LATENCY;
@@ -463,6 +469,15 @@ public final class MetricRepo {
         };
         STARROCKS_METRIC_REGISTER.addMetric(gaugeReportQueueSize);
 
+        GaugeMetric<Long> totalTabletCount = new GaugeMetric<Long>(
+                "tablet_count", MetricUnit.NOUNIT, "total tablet count") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletCount();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(totalTabletCount);
+
         // 2. counter
         COUNTER_REQUEST_ALL = new LongCounterMetric("request_total", MetricUnit.REQUESTS, "total request");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_REQUEST_ALL);
@@ -589,6 +604,13 @@ public final class MetricRepo {
 
             }
         }
+
+        COUNTER_VACUUM_FILES_NUMBER = new LongCounterMetric("vacuum_files_count", MetricUnit.REQUESTS,
+                "total files have been vacuumed");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_VACUUM_FILES_NUMBER);
+        COUNTER_VACUUM_FILES_BYTES = new LongCounterMetric("vacuum_files_bytes", MetricUnit.BYTES,
+                "total file bytes have been vacuumed");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_VACUUM_FILES_BYTES);
 
         // 3. histogram
         HISTO_QUERY_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("query", "latency", "ms"));
@@ -887,6 +909,12 @@ public final class MetricRepo {
             collectMemoryUsageMetrics(visitor);
         }
 
+        // collect warehouse metrics
+        if (Config.enable_collect_warehouse_metrics) {
+            BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
+            slotManager.collectWarehouseMetrics(visitor);
+        }
+
         // collect http metrics
         HttpMetricRegistry.getInstance().visit(visitor);
 
@@ -902,6 +930,9 @@ public final class MetricRepo {
 
         // collect brpc pool metrics
         collectBrpcMetrics(visitor);
+
+        // collect merge commit metrics
+        MergeCommitMetricRegistry.getInstance().visit(visitor);
 
         // node info
         visitor.getNodeInfo();

@@ -36,6 +36,7 @@
 
 #include <gtest/gtest.h>
 
+#include "cache/datacache.h"
 #include "common/config.h"
 #include "storage/page_cache.h"
 #include "testutil/assert.h"
@@ -49,7 +50,7 @@ public:
     ~StarRocksMetricsTest() override = default;
 
 protected:
-    void SetUp() override { _page_cache = CacheEnv::GetInstance()->page_cache(); }
+    void SetUp() override { _page_cache = DataCache::GetInstance()->page_cache(); }
 
     void TearDown() override {}
 
@@ -343,6 +344,7 @@ TEST_F(StarRocksMetricsTest, test_metrics_register) {
     assert_threadpool_metrics_register("remote_snapshot", instance);
     assert_threadpool_metrics_register("replicate_snapshot", instance);
     assert_threadpool_metrics_register("load_channel", instance);
+    assert_threadpool_metrics_register("merge_commit", instance);
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_total"));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_eos_total"));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_duration_us"));

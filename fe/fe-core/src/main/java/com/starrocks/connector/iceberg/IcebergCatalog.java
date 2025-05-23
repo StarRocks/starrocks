@@ -14,7 +14,6 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
@@ -40,6 +39,7 @@ import org.apache.iceberg.TableScan;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchTableException;
+import org.apache.iceberg.exceptions.RESTException;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.util.StructProjection;
 import org.apache.iceberg.view.SQLViewRepresentation;
@@ -128,7 +128,14 @@ public interface IcebergCatalog extends MemoryTrackable {
                 .withLocation(defaultTableLocation(ns, definition.getViewName()));
 
         if (replace) {
-            viewBuilder.createOrReplace();
+            try {
+                viewBuilder.createOrReplace();
+            } catch (RESTException re) {
+                DEFAULT_LOGGER.error("Failed to create view using Iceberg Catalog, for dbName {} viewName {}",
+                        definition.getDatabaseName(), definition.getViewName(), re);
+                throw new StarRocksConnectorException("Failed to create view using Iceberg Catalog",
+                        new RuntimeException("Failed to create view using Iceberg Catalog, exception: " + re.getMessage(), re));
+            }
         } else {
             viewBuilder.create();
         }
@@ -245,13 +252,7 @@ public interface IcebergCatalog extends MemoryTrackable {
         PartitionsTable partitionsTable = (PartitionsTable) MetadataTableUtils.
                 createMetadataTableInstance(nativeTable, MetadataTableType.PARTITIONS);
         TableScan tableScan = partitionsTable.newScan();
-        // NOTE: if there is an exception raise because of snapshot id is not the latest one, it's expected
-        // using partition metadata table scan is more  efficient than doing file scan, but limitation is
-        // it only supports the latest snapshot id.
         if (snapshotId != -1) {
-            Preconditions.checkArgument(nativeTable.currentSnapshot().snapshotId() == snapshotId,
-                    "Ignore this error if snapshot id does not match. Iceberg partition metadata table only supports latest " +
-                            "snapshot. current = " + nativeTable.currentSnapshot().snapshotId() + ", expect = " + snapshotId);
             tableScan = tableScan.useSnapshot(snapshotId);
         }
         if (executorService != null) {

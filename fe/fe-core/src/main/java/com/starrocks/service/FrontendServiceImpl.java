@@ -84,6 +84,7 @@ import com.starrocks.catalog.system.sys.SysFeLocks;
 import com.starrocks.catalog.system.sys.SysFeMemoryUsage;
 import com.starrocks.catalog.system.sys.SysObjectDependencies;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.Config;
@@ -107,6 +108,8 @@ import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.failpoint.FailPoint;
+import com.starrocks.failpoint.TriggerPolicy;
 import com.starrocks.http.BaseAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.http.rest.WarehouseInfosBuilder;
@@ -170,6 +173,7 @@ import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.staros.StarMgrServer;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
@@ -197,6 +201,7 @@ import com.starrocks.thrift.TColumnStatsUsageReq;
 import com.starrocks.thrift.TColumnStatsUsageRes;
 import com.starrocks.thrift.TCommitRemoteTxnRequest;
 import com.starrocks.thrift.TCommitRemoteTxnResponse;
+import com.starrocks.thrift.TConnectionInfo;
 import com.starrocks.thrift.TCreatePartitionRequest;
 import com.starrocks.thrift.TCreatePartitionResult;
 import com.starrocks.thrift.TDBPrivDesc;
@@ -272,6 +277,8 @@ import com.starrocks.thrift.TGetWarehousesResponse;
 import com.starrocks.thrift.TImmutablePartitionRequest;
 import com.starrocks.thrift.TImmutablePartitionResult;
 import com.starrocks.thrift.TIsMethodSupportedRequest;
+import com.starrocks.thrift.TListConnectionRequest;
+import com.starrocks.thrift.TListConnectionResponse;
 import com.starrocks.thrift.TListMaterializedViewStatusResult;
 import com.starrocks.thrift.TListPipeFilesInfo;
 import com.starrocks.thrift.TListPipeFilesParams;
@@ -350,6 +357,8 @@ import com.starrocks.thrift.TTrackingLoadInfo;
 import com.starrocks.thrift.TTransactionStatus;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUpdateExportTaskStatusRequest;
+import com.starrocks.thrift.TUpdateFailPointRequest;
+import com.starrocks.thrift.TUpdateFailPointResponse;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUpdateResourceUsageResponse;
 import com.starrocks.thrift.TUserPrivDesc;
@@ -758,6 +767,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 ConnectContext context = new ConnectContext();
                 context.setCurrentUserIdentity(currentUser);
                 context.setCurrentRoleIds(currentUser);
+                if (item.getTable_database() == null || item.getTable_name() == null) {
+                    return true;
+                }
                 Authorizer.checkTableAction(context, item.getTable_database(), item.getTable_name(),
                         PrivilegeType.SELECT);
                 return false;
@@ -1250,8 +1262,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     private void checkPasswordAndLoadPriv(String user, String passwd, String db, String tbl,
                                           String clientIp) throws AuthenticationException {
+        if (checkIsInternalLoad(user, passwd, db, tbl, clientIp)) {
+            return;
+        }
         UserIdentity currentUser = AuthenticationHandler.authenticate(new ConnectContext(), user, clientIp,
-                passwd.getBytes(StandardCharsets.UTF_8), null);
+                passwd.getBytes(StandardCharsets.UTF_8));
         // check INSERT action on table
         try {
             ConnectContext context = new ConnectContext();
@@ -1262,6 +1277,18 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw new AuthenticationException(
                     "Access denied; you need (at least one of) the INSERT privilege(s) for this operation");
         }
+    }
+
+    private boolean checkIsInternalLoad(String user, String passwd, String db, String tbl,
+                                        String clientIp) {
+        for (Frontend fe : GlobalStateMgr.getCurrentState().getNodeMgr().getAllFrontends()) {
+            if (fe.getHost().equals(clientIp) && fe.isAlive() && fe.getHost().equals(user) &&
+                    fe.getNodeName().equals(passwd) && StatsConstants.STATISTICS_DB_NAME.equals(db) &&
+                    StatsConstants.QUERY_HISTORY_TABLE_NAME.equals(tbl)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
@@ -1313,7 +1340,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return result;
     }
 
-    private long loadTxnBeginImpl(TLoadTxnBeginRequest request, String clientIp) throws StarRocksException {
+    private long loadTxnBeginImpl(TLoadTxnBeginRequest request, String clientIp) throws Exception {
         checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
                 request.getTbl(), request.getUser_ip());
 
@@ -1364,7 +1391,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 request.getUser(), request.getUser_ip(), timeoutSecond * 1000, resp, false, warehouseId);
         if (!resp.stateOK()) {
             LOG.warn(resp.msg);
-            throw new StarRocksException(resp.msg);
+            throw resp.getException();
         }
 
         StreamLoadTask task = streamLoadManager.getTaskByLabel(request.getLabel());
@@ -1770,8 +1797,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
             Coordinator coord = getCoordinatorFactory().createSyncStreamLoadScheduler(planner, getClientAddr());
             streamLoadTask.setCoordinator(coord);
-
-            QeProcessorImpl.INSTANCE.registerQuery(streamLoadInfo.getId(), coord);
+            try {
+                QeProcessorImpl.INSTANCE.registerQuery(streamLoadInfo.getId(), coord);
+            } catch (AlreadyExistsException e) {
+                LOG.info("receive duplicate stream load put request: {}", request.getLoadId());
+            }
 
             plan.query_options.setLoad_job_type(TLoadJobType.STREAM_LOAD);
             // add table indexes to transaction state
@@ -2389,6 +2419,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 olapTable.lockCreatePartition(partitionName);
             }
 
+            // if the txn is already create partition failed, we should not create partition again
+            // because create partition failed will cause the txn to be aborted
+            if (txnState.getIsCreatePartitionFailed()) {
+                throw new StarRocksException("automatic create partition failed. error: txn " + request.getTxn_id() +
+                        " already create partition failed");
+            }
+
             // ingestion is top priority, if schema change or rollup is running, cancel it
             try {
                 String errMsg = "Alter job conflicts with partition creation, for more details please check "
@@ -2429,6 +2466,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             errorStatus.setError_msgs(Lists.newArrayList(
                     String.format("automatic create partition failed. error:%s", e.getMessage())));
             result.setStatus(errorStatus);
+            txnState.setIsCreatePartitionFailed(true);
             return result;
         } finally {
             for (String partitionName : creatingPartitionNames) {
@@ -3090,7 +3128,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         try {
-            controller.finishCheckpoint(request.getJournal_id(), request.getNode_name());
+            if (request.isIs_success()) {
+                controller.finishCheckpoint(request.getJournal_id(), request.getNode_name());
+            } else {
+                controller.cancelCheckpoint(request.getNode_name(), request.getMessage());
+            }
             response.setStatus(new TStatus(OK));
             return response;
         } catch (CheckpointException e) {
@@ -3234,5 +3276,66 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TGetWarehouseQueriesResponse getWarehouseQueries(TGetWarehouseQueriesRequest request) throws TException {
         return WarehouseQueryQueueMetrics.build(request);
+    }
+
+    @Override
+    public TListConnectionResponse listConnections(TListConnectionRequest request) {
+        TListConnectionResponse response = new TListConnectionResponse();
+
+        ConnectContext context = new ConnectContext();
+        context.setAuthInfoFromThrift(request.getAuth_info());
+        String forUser = request.getFor_user();
+        boolean showFull = request.isSetShow_full();
+
+        List<ConnectContext.ThreadInfo> threadInfos = ExecuteEnv.getInstance().getScheduler()
+                .listConnection(context, forUser);
+        long nowMs = System.currentTimeMillis();
+        for (ConnectContext.ThreadInfo info : threadInfos) {
+            List<String> row = info.toRow(nowMs, showFull);
+            if (row != null) {
+                TConnectionInfo tConnectionInfo = getTConnectionInfo(row);
+                response.addToConnections(tConnectionInfo);
+            }
+        }
+
+        return response;
+    }
+
+    @Override
+    public TUpdateFailPointResponse updateFailPointStatus(TUpdateFailPointRequest request) {
+        TStatus status = new TStatus();
+        if (FailPoint.isEnabled()) {
+            if (request.isIs_enable()) {
+                FailPoint.setTriggerPolicy(request.getName(), TriggerPolicy.fromThrift(request));
+            } else {
+                FailPoint.removeTriggerPolicy(request.getName());
+            }
+            status.setStatus_code(OK);
+        } else {
+            status.setStatus_code(SERVICE_UNAVAILABLE);
+            status.setError_msgs(
+                    Lists.newArrayList("fail point is not enabled, please start fe with --failpoint option"));
+        }
+
+        TUpdateFailPointResponse response = new TUpdateFailPointResponse();
+        response.setStatus(status);
+        return response;
+    }
+
+    @NotNull
+    private static TConnectionInfo getTConnectionInfo(List<String> row) {
+        TConnectionInfo tConnectionInfo = new TConnectionInfo();
+        tConnectionInfo.setConnection_id(row.get(0));
+        tConnectionInfo.setUser(row.get(1));
+        tConnectionInfo.setHost(row.get(2));
+        tConnectionInfo.setDb(row.get(3));
+        tConnectionInfo.setCommand(row.get(4));
+        tConnectionInfo.setConnection_start_time(row.get(5));
+        tConnectionInfo.setTime(row.get(6));
+        tConnectionInfo.setState(row.get(7));
+        tConnectionInfo.setInfo(row.get(8));
+        tConnectionInfo.setIsPending(row.get(9));
+        tConnectionInfo.setWarehouse(row.get(10));
+        return tConnectionInfo;
     }
 }

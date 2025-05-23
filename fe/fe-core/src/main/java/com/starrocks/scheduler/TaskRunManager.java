@@ -28,6 +28,7 @@ import com.starrocks.scheduler.history.TaskRunHistory;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -35,6 +36,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
@@ -42,7 +44,7 @@ public class TaskRunManager implements MemoryTrackable {
 
     private static final Logger LOG = LogManager.getLogger(TaskRunManager.class);
 
-    private final TaskRunScheduler taskRunScheduler = new TaskRunScheduler();
+    private final TaskRunScheduler taskRunScheduler;
 
     // include SUCCESS/FAILED/CANCEL taskRun
     private final TaskRunHistory taskRunHistory = new TaskRunHistory();
@@ -51,6 +53,10 @@ public class TaskRunManager implements MemoryTrackable {
     private final TaskRunExecutor taskRunExecutor = new TaskRunExecutor();
 
     private final QueryableReentrantLock taskRunLock = new QueryableReentrantLock(true);
+
+    public TaskRunManager(TaskRunScheduler taskRunScheduler) {
+        this.taskRunScheduler = taskRunScheduler;
+    }
 
     public SubmitResult submitTaskRun(TaskRun taskRun, ExecuteOption option) {
         LOG.info("submit task run:{}", taskRun);
@@ -87,19 +93,37 @@ public class TaskRunManager implements MemoryTrackable {
             return false;
         }
         try {
+            // mark killed
             taskRun.kill();
+
+            // set the future to be done to avoid the task run hanging
+            CompletableFuture<Constants.TaskRunState> future = taskRun.getFuture();
+            if (future != null && !future.completeExceptionally(new RuntimeException("TaskRun killed"))) {
+                LOG.warn("failed to complete future for task run: {}", taskRun);
+            }
+
+            // mark pending tasks as failed
+            Set<TaskRun> pendingTaskRuns = taskRunScheduler.getPendingTaskRunsByTaskId(taskId);
+            if (CollectionUtils.isNotEmpty(pendingTaskRuns)) {
+                for (TaskRun pendingTaskRun : pendingTaskRuns) {
+                    taskRunScheduler.removePendingTaskRun(pendingTaskRun, Constants.TaskRunState.FAILED);
+                }
+            }
+
+            // kill the task run
             ConnectContext runCtx = taskRun.getRunCtx();
             if (runCtx != null) {
                 runCtx.kill(false, "kill TaskRun");
                 return true;
             }
+            return false;
         } finally {
             // if it's force, remove it from running TaskRun map no matter it's killed or not
             if (force) {
+                // remove it from running TaskRun map
                 taskRunScheduler.removeRunningTask(taskRun.getTaskId());
             }
         }
-        return false;
     }
 
     // At present, only the manual and automatic tasks of the materialized view have different priorities.

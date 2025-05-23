@@ -24,9 +24,8 @@ StarCacheModule::StarCacheModule(std::shared_ptr<starcache::StarCache> star_cach
     _initialized.store(true, std::memory_order_release);
 }
 
-Status StarCacheModule::insert(const std::string& key, void* value, size_t size, size_t charge,
-                               ObjectCacheDeleter deleter, ObjectCacheHandlePtr* handle,
-                               ObjectCacheWriteOptions* options) {
+Status StarCacheModule::insert(const std::string& key, void* value, size_t size, ObjectCacheDeleter deleter,
+                               ObjectCacheHandlePtr* handle, ObjectCacheWriteOptions* options) {
     starcache::ObjectHandle* obj_hdl = new starcache::ObjectHandle;
     auto obj_deleter = [deleter, key, value] {
         // For temporary compatibility with old deleters.
@@ -35,14 +34,14 @@ Status StarCacheModule::insert(const std::string& key, void* value, size_t size,
     };
     Status st;
     if (!options) {
-        st = to_status(_cache->set_object(key, value, charge, obj_deleter, obj_hdl, nullptr));
+        st = to_status(_cache->set_object(key, value, size, obj_deleter, obj_hdl, nullptr));
     } else {
         starcache::WriteOptions opts;
         opts.priority = options->priority;
         opts.ttl_seconds = options->ttl_seconds;
         opts.overwrite = options->overwrite;
         opts.evict_probability = options->evict_probability;
-        st = to_status(_cache->set_object(key, value, charge, obj_deleter, obj_hdl, &opts));
+        st = to_status(_cache->set_object(key, value, size, obj_deleter, obj_hdl, &opts));
     }
     if (!st.ok()) {
         delete obj_hdl;

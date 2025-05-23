@@ -26,6 +26,7 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
@@ -230,7 +231,13 @@ public class ListPartitionDesc extends PartitionDesc {
             boolean found = false;
             for (ColumnDef columnDef : columnDefs) {
                 if (columnDef.getName().equals(partitionCol)) {
-                    if (columnDef.getType().isFloatingPointType() || columnDef.getType().isComplexType()
+                    if (engineName.equalsIgnoreCase(Table.TableType.ICEBERG.name())) {
+                        if (columnDef.getType().isFloatingPointType() || columnDef.getType().isComplexType()
+                                || columnDef.getType().isDecimalV2()) {
+                            throw new SemanticException(String.format("Invalid iceberg partition column '%s': %s",
+                                    columnDef.getName(), "invalid data type " + columnDef.getType()));
+                        }
+                    } else if (columnDef.getType().isFloatingPointType() || columnDef.getType().isComplexType()
                             || columnDef.getType().isDecimalOfAnyVersion()) {
                         throw new SemanticException(String.format("Invalid partition column '%s': %s",
                                 columnDef.getName(), "invalid data type " + columnDef.getType()));

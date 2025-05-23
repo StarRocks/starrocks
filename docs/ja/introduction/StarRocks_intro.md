@@ -18,6 +18,6 @@ StarRocks は MySQL プロトコルと互換性があり、MySQL クライアン
 
 ### 人気のトピック
 
-<FeatureList language="English" />
+<FeatureList language="Japanese" />
 
 ---

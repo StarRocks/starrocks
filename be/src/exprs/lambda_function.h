@@ -69,9 +69,14 @@ public:
     std::string debug_string() const override;
 
     struct ExtractContext {
-        std::unordered_set<SlotId> lambda_arguments;
-        // slot id of common sub expr inside lambda expr
-        std::unordered_set<SlotId> common_sub_expr_ids;
+        // lambda arguments id in the current scope
+        std::unordered_set<SlotId> current_lambda_arguments;
+        // lambda arguments id all seen
+        std::unordered_set<SlotId> all_lambda_arguments;
+        // slot ids of common sub expr inside lambda expr
+        std::unordered_set<SlotId> current_common_sub_expr_ids;
+        // slot ids of common sub exprs all seen
+        std::unordered_set<SlotId> all_common_sub_expr_ids;
         SlotId next_slot_id;
         std::map<SlotId, Expr*> outer_common_exprs;
     };

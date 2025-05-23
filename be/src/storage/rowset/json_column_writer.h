@@ -72,5 +72,6 @@ protected:
     bool _has_remain;
     std::shared_ptr<BloomFilter> _remain_filter;
     bool _is_flat = false;
+    const FlatJsonConfig* _flat_json_config = nullptr;
 };
 } // namespace starrocks

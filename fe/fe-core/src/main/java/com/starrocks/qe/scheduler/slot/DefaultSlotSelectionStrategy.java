@@ -48,7 +48,7 @@ public class DefaultSlotSelectionStrategy implements SlotSelectionStrategy {
     }
 
     @Override
-    public List<LogicalSlot> peakSlotsToAllocate(SlotTracker slotTracker) {
+    public List<LogicalSlot> peakSlotsToAllocate(BaseSlotTracker slotTracker) {
         sweepEmptyGroups();
 
         List<LogicalSlot> slotsToAllocate = Lists.newArrayList();

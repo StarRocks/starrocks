@@ -453,7 +453,13 @@ displayed_sidebar: docs
 - 从 3.1.4 版本开始，新搭建集群的主键表持久化索引在表创建时默认打开（如若从低版本升级到 3.1.4 版本则保持不变）。[#33374](https://github.com/StarRocks/starrocks/pull/33374)
 - 新增 FE 参数 `enable_sync_publish` 且默认开启。设置为 `true` 时，主键表导入的 Publish 过程会等 Apply 完成后才返回结果，这样，导入作业返回成功后数据立即可见，但可能会导致主键表导入比原来有延迟。（之前无此参数，导入时 Publish 过程中 Apply 是异步的）。[#27055](https://github.com/StarRocks/starrocks/pull/27055)
 
-## 3.1.3
+## 3.1.3（已下线）
+
+:::tip
+
+此版本已经下线。
+
+:::
 
 发布日期：2023 年 9 月 25 日
 

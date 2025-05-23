@@ -189,12 +189,14 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
 | iceberg.catalog.type       | 是      | Iceberg 集群所使用的元数据服务的类型。设置为 `rest`。           |
 | iceberg.catalog.uri        | 是      | REST 服务 Endpoint 的 URI，如 `https://api.tabular.io/ws`。      |
 | iceberg.catalog.security   | 否      | 要使用的授权协议类型。默认值：`NONE`。有效值：`OAUTH2`。使用 `OAUTH2` 需要指定 `token` 或 `credential`。 |
+| iceberg.catalog.view-endpoints-supported   | 否      | 当早期版本的 REST 服务不在 `CatalogConfig` 中返回 Endpoint 时，是否使用视图 Endpoint 来支持与视图相关的操作。该参数用于向后兼容早期版本的 REST 服务器。默认值：`false`。 |
 | iceberg.catalog.oauth2.token | 否    | 用于与服务器交互的 Bearer Token。使用 `OAUTH2` 需要指定 `token` 或 `credential`。示例：`AbCdEf123456`。 |
 | iceberg.catalog.oauth2.credential | 否  | 用于与服务器的 OAuth2 客户端 Credentials Flow 交换 Token 的 Credential。使用 `OAUTH2` 需要指定 `token` 或 `credential`。示例：`AbCdEf123456`。 |
 | iceberg.catalog.oauth2.scope | 否  | 与 REST Catalog 通信时使用的范围。仅在使用 `credential` 时适用。 |
 | iceberg.catalog.oauth2.server-uri | 否  | 从 OAuth2 服务器获取 Token 的端点。 |
 | iceberg.catalog.vended-credentials-enabled | 否  | 是否使用 REST 后端提供的 Credential 访问文件系统。默认：`true`。|
 | iceberg.catalog.warehouse  | 否      | Catalog 的仓库位置或标志符，如 `s3://my_bucket/warehouse_location` 或 `sandbox`。 |
+| iceberg.catalog.rest.nested-namespace-enabled  | 否      | 是否支持查询嵌套namespace下的数据。默认：`false`.     |
 
 例如，创建一个名为 `tabular` 的 Iceberg Catalog，使用 Tabular 作为元数据服务：
 
@@ -237,6 +239,11 @@ mysql> select * from smith_polaris.`ns1.ns2.tpch_namespace`.tbl;
 +------+
 3 rows in set (0.34 sec)
 ```
+
+#### S3 Tables
+
+详细信息，参考 [为 AWS S3 表创建 Iceberg REST Catalog](./iceberg_rest_s3.md)。
+
 
 ##### JDBC
 
@@ -957,7 +964,7 @@ DROP Catalog iceberg_catalog_glue;
 
 ## 创建 Iceberg 数据库
 
-同 StarRocks 内部数据目录 (Internal Catalog) 一致，如果您拥有 Iceberg Catalog 的 [CREATE DATABASE](../../../administration/user_privs/privilege_item.md#数据目录权限-catalog) 权限，那么您可以使用 [CREATE DATABASE](../../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) 在该 Iceberg Catalog 内创建数据库。本功能自 3.1 版本起开始支持。
+同 StarRocks 内部数据目录 (Internal Catalog) 一致，如果您拥有 Iceberg Catalog 的 [CREATE DATABASE](../../../administration/user_privs/authorization/privilege_item.md#数据目录权限-catalog) 权限，那么您可以使用 [CREATE DATABASE](../../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) 在该 Iceberg Catalog 内创建数据库。本功能自 3.1 版本起开始支持。
 
 > **说明**
 >
@@ -988,7 +995,7 @@ CREATE DATABASE <database_name>
 
 ## 删除 Iceberg 数据库
 
-同 StarRocks 内部数据库一致，如果您拥有 Iceberg 数据库的 [DROP](../../../administration/user_privs/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [DROP DATABASE](../../../sql-reference/sql-statements/Database/DROP_DATABASE.md) 来删除该 Iceberg 数据库。本功能自 3.1 版本起开始支持。仅支持删除空数据库。
+同 StarRocks 内部数据库一致，如果您拥有 Iceberg 数据库的 [DROP](../../../administration/user_privs/authorization/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [DROP DATABASE](../../../sql-reference/sql-statements/Database/DROP_DATABASE.md) 来删除该 Iceberg 数据库。本功能自 3.1 版本起开始支持。仅支持删除空数据库。
 
 > **说明**
 >
@@ -1004,7 +1011,7 @@ DROP DATABASE <database_name>;
 
 ## 创建 Iceberg 表
 
-同 StarRocks 内部数据库一致，如果您拥有 Iceberg 数据库的 [CREATE TABLE](../../../administration/user_privs/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) 或 [CREATE TABLE AS SELECT (CTAS)](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) 在该 Iceberg 数据库下创建表。本功能自 3.1 版本起开始支持。
+同 StarRocks 内部数据库一致，如果您拥有 Iceberg 数据库的 [CREATE TABLE](../../../administration/user_privs/authorization/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) 或 [CREATE TABLE AS SELECT (CTAS)](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) 在该 Iceberg 数据库下创建表。本功能自 3.1 版本起开始支持。
 
 > **说明**
 >
@@ -1104,7 +1111,7 @@ PARTITION BY (par_col1[, par_col2...])
 
 ## 向 Iceberg 表中插入数据
 
-同 StarRocks 内表一致，如果您拥有 Iceberg 表的 [INSERT](../../../administration/user_privs/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) 将 StarRocks 表数据写入到该 Iceberg 表中（当前仅支持写入到 Parquet 格式的 Iceberg 表）。本功能自 3.1 版本起开始支持。
+同 StarRocks 内表一致，如果您拥有 Iceberg 表的 [INSERT](../../../administration/user_privs/authorization/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) 将 StarRocks 表数据写入到该 Iceberg 表中（当前仅支持写入到 Parquet 格式的 Iceberg 表）。本功能自 3.1 版本起开始支持。
 
 > **说明**
 >
@@ -1193,7 +1200,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 ## 删除 Iceberg 表
 
-同 StarRocks 内表一致，在拥有 Iceberg 表的 [DROP](../../../administration/user_privs/privilege_item.md#表权限-table) 权限的情况下，您可以使用 [DROP TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) 来删除该 Iceberg 表。本功能自 3.1 版本起开始支持。
+同 StarRocks 内表一致，在拥有 Iceberg 表的 [DROP](../../../administration/user_privs/authorization/privilege_item.md#表权限-table) 权限的情况下，您可以使用 [DROP TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) 来删除该 Iceberg 表。本功能自 3.1 版本起开始支持。
 
 > **说明**
 >

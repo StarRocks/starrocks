@@ -4008,4 +4008,99 @@ TEST_F(TimeFunctionsTest, formatTimeTest) {
         EXPECT_EQ("14", std::string(result_viewer.value(3)));
     }
 }
+
+TEST_F(TimeFunctionsTest, IcbergTransTest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    {
+        Columns columns_const;
+        auto col1 = DateColumn::create();
+        col1->append(DateValue::create(2022, 2, 2));
+        columns_const.emplace_back(std::move(col1));
+
+        ColumnPtr result = TimeFunctions::iceberg_years_since_epoch_date(ctx.get(), columns_const).value();
+        ASSERT_TRUE(result->is_numeric());
+        ASSERT_FALSE(result->is_nullable());
+        auto v = ColumnHelper::as_column<Int64Column>(result);
+        ASSERT_EQ(2022 - 1970, v->get_data()[0]);
+    }
+
+    {
+        Columns columns_const;
+        auto col1 = DateColumn::create();
+        col1->append(DateValue::create(1970, 2, 28));
+        columns_const.emplace_back(std::move(col1));
+
+        ColumnPtr result = TimeFunctions::iceberg_months_since_epoch_date(ctx.get(), columns_const).value();
+        ASSERT_TRUE(result->is_numeric());
+        ASSERT_FALSE(result->is_nullable());
+        auto v = ColumnHelper::as_column<Int64Column>(result);
+        ASSERT_EQ(1, v->get_data()[0]);
+    }
+
+    {
+        Columns columns_const;
+        auto col1 = TimestampColumn::create();
+        col1->append(TimestampValue::create(2022, 2, 2, 12, 22, 22));
+        columns_const.emplace_back(std::move(col1));
+
+        ColumnPtr result = TimeFunctions::iceberg_years_since_epoch_datetime(ctx.get(), columns_const).value();
+        ASSERT_TRUE(result->is_numeric());
+        ASSERT_FALSE(result->is_nullable());
+        auto v = ColumnHelper::as_column<Int64Column>(result);
+        ASSERT_EQ(2022 - 1970, v->get_data()[0]);
+    }
+
+    {
+        Columns columns_const;
+        auto col1 = TimestampColumn::create();
+        col1->append(TimestampValue::create(1970, 2, 2, 12, 22, 22));
+        columns_const.emplace_back(std::move(col1));
+
+        ColumnPtr result = TimeFunctions::iceberg_months_since_epoch_datetime(ctx.get(), columns_const).value();
+        ASSERT_TRUE(result->is_numeric());
+        ASSERT_FALSE(result->is_nullable());
+        auto v = ColumnHelper::as_column<Int64Column>(result);
+        ASSERT_EQ(1, v->get_data()[0]);
+    }
+
+    {
+        Columns columns_const;
+        auto col1 = TimestampColumn::create();
+        col1->append(TimestampValue::create(1970, 1, 2, 23, 22, 22));
+        columns_const.emplace_back(std::move(col1));
+
+        ColumnPtr result = TimeFunctions::iceberg_days_since_epoch_datetime(ctx.get(), columns_const).value();
+        ASSERT_TRUE(result->is_numeric());
+        ASSERT_FALSE(result->is_nullable());
+        auto v = ColumnHelper::as_column<Int64Column>(result);
+        ASSERT_EQ(1, v->get_data()[0]);
+    }
+
+    {
+        Columns columns_const;
+        auto col1 = TimestampColumn::create();
+        col1->append(TimestampValue::create(1970, 1, 1, 23, 22, 22));
+        columns_const.emplace_back(std::move(col1));
+
+        ColumnPtr result = TimeFunctions::iceberg_hours_since_epoch_datetime(ctx.get(), columns_const).value();
+        ASSERT_TRUE(result->is_numeric());
+        ASSERT_FALSE(result->is_nullable());
+        auto v = ColumnHelper::as_column<Int64Column>(result);
+        ASSERT_EQ(23, v->get_data()[0]);
+    }
+
+    {
+        Columns columns_const;
+        auto col1 = DateColumn::create();
+        col1->append(DateValue::create(1970, 1, 2));
+        columns_const.emplace_back(std::move(col1));
+
+        ColumnPtr result = TimeFunctions::iceberg_days_since_epoch_date(ctx.get(), columns_const).value();
+        ASSERT_TRUE(result->is_numeric());
+        ASSERT_FALSE(result->is_nullable());
+        auto v = ColumnHelper::as_column<Int64Column>(result);
+        ASSERT_EQ(1, v->get_data()[0]);
+    }
+}
 } // namespace starrocks

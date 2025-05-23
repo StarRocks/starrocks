@@ -30,6 +30,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaterializedView.PartitionRefreshStrategy;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -150,8 +151,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private TaskRun nextTaskRun = null;
 
     public PartitionBasedMvRefreshProcessor() {
-        // to avoid NPE in some test cases
-        this.logger = MVTraceUtils.getLogger(null, PartitionBasedMvRefreshProcessor.class);
     }
 
     @VisibleForTesting
@@ -302,10 +301,29 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 logger.info("no partitions to refresh for materialized view");
                 return mvToRefreshedPartitions;
             }
+            // TODO(Hongkun Xu) Because non-OLAP tables cannot directly obtain partition information, currently SMART mode does
+            //  not support base tables that contain external tables. However, support for this scenario will be added in the future.
+            boolean hasExternalTable = mv.getBaseTableTypes().stream().anyMatch(type -> type != Table.TableType.OLAP);
+            if (hasExternalTable) {
+                logger.warn("materialized view {} has external table. so choose default refresh strategy", mv.getId());
+                filterPartitionByRefreshNumber(mvToRefreshedPartitions, mvPotentialPartitionNames, mv,
+                        tentative);
+            } else {
+                PartitionRefreshStrategy partitionRefreshStrategy = PartitionRefreshStrategy.valueOf(
+                        mv.getTableProperty().getPartitionRefreshStrategy().trim().toUpperCase());
+                switch (partitionRefreshStrategy) {
+                    case ADAPTIVE:
+                        filterPartitionByAdaptiveRefreshNumber(mvToRefreshedPartitions, mvPotentialPartitionNames, mv,
+                                tentative);
+                        break;
+                    case STRICT:
+                    default:
+                        // Only refresh the first partition refresh number partitions, other partitions will generate new tasks
+                        filterPartitionByRefreshNumber(mvToRefreshedPartitions, mvPotentialPartitionNames, mv,
+                                tentative);
+                }
+            }
 
-            // Only refresh the first partition refresh number partitions, other partitions will generate new tasks
-            filterPartitionByRefreshNumber(mvToRefreshedPartitions, mvPotentialPartitionNames, mv,
-                    tentative);
             int partitionRefreshNumber = mv.getTableProperty().getPartitionRefreshNumber();
             logger.info("filter partitions to refresh partitionRefreshNumber={}, partitionsToRefresh:{}, " +
                             "mvPotentialPartitionNames:{}, next start:{}, next end:{}, next list values:{}",
@@ -506,12 +524,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             throw new LockTimeoutException("Failed to lock database in prepareRefreshPlan");
         }
 
-        MVPCTRefreshPlanBuilder planBuilder = new MVPCTRefreshPlanBuilder(mv, mvContext, mvRefreshPartitioner);
+        MVPCTRefreshPlanBuilder planBuilder = new MVPCTRefreshPlanBuilder(db, mv, mvContext, mvRefreshPartitioner);
         try {
             // 4. Analyze and prepare a partition & Rebuild insert statement by
             // considering to-refresh partitions of ref tables/ mv
             try (Timer ignored = Tracers.watchScope("MVRefreshAnalyzer")) {
-                insertStmt = planBuilder.analyzeAndBuildInsertPlan(insertStmt, refTablePartitionNames, ctx);
+                insertStmt = planBuilder.analyzeAndBuildInsertPlan(insertStmt,
+                        mvToRefreshedPartitions, refTablePartitionNames, ctx);
                 // Must set execution id before StatementPlanner.plan
                 ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
             }
@@ -587,7 +606,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             mvSessionVariable.setInsertMaxFilterRatio(Config.mv_refresh_fail_on_filter_data ? 0 : 1);
         }
         // enable profile by default for mv refresh task
-        if (!isMVPropertyContains(SessionVariable.ENABLE_PROFILE)) {
+        if (!isMVPropertyContains(SessionVariable.ENABLE_PROFILE) && !mvSessionVariable.isEnableProfile()) {
             mvSessionVariable.setEnableProfile(Config.enable_mv_refresh_collect_profile);
         }
         // set the default new_planner_optimize_timeout for mv refresh
@@ -664,6 +683,30 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
         // do filter actions
         mvRefreshPartitioner.filterPartitionByRefreshNumber(partitionsToRefresh, mvPotentialPartitionNames, tentative);
+    }
+
+    @VisibleForTesting
+    public void filterPartitionByAdaptiveRefreshNumber(Set<String> partitionsToRefresh,
+                                                       Set<String> mvPotentialPartitionNames,
+                                                       MaterializedView mv) {
+        filterPartitionByAdaptiveRefreshNumber(partitionsToRefresh, mvPotentialPartitionNames, mv, false);
+    }
+
+    public void filterPartitionByAdaptiveRefreshNumber(Set<String> partitionsToRefresh,
+                                                       Set<String> mvPotentialPartitionNames,
+                                                       MaterializedView mv,
+                                                       boolean tentative) {
+        // refresh all partition when it's a sync refresh, otherwise updated partitions may be lost.
+        if (mvContext.executeOption != null && mvContext.executeOption.getIsSync()) {
+            return;
+        }
+        // ignore if mv is not partitioned.
+        if (!mv.isPartitionedTable()) {
+            return;
+        }
+
+        // do filter actions
+        mvRefreshPartitioner.filterPartitionByAdaptiveRefreshNumber(partitionsToRefresh, mvPotentialPartitionNames, tentative);
     }
 
     private void generateNextTaskRun() {
@@ -855,12 +898,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     @Override
     public void prepare(TaskRunContext context) throws Exception {
         Map<String, String> properties = context.getProperties();
-        logger.info("prepare refresh mv, properties:{}", properties);
         // NOTE: mvId is set in Task's properties when creating
         long mvId = Long.parseLong(properties.get(MV_ID));
         this.db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(context.ctx.getDatabase());
         if (db == null) {
-            logger.warn("database {} do not exist when refreshing materialized view:{}", context.ctx.getDatabase(), mvId);
             throw new DmlException("database " + context.ctx.getDatabase() + " do not exist.");
         }
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId);
@@ -1363,7 +1404,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 logger.debug("Collect olap base table {}'s refreshed partition infos: {}", baseTable.getName(), partitionInfos);
             }
             return partitionInfos;
-        } else if (ConnectorPartitionTraits.isSupportPCTRefresh(baseTable.getType())) {
+        } else if (MVPCTRefreshPartitioner.isPartitionRefreshSupported(baseTable)) {
             return getSelectedPartitionInfos(baseTable, Lists.newArrayList(refreshedPartitionNames), baseTableInfo);
         } else {
             // FIXME: base table does not support partition-level refresh and does not update the meta

@@ -229,7 +229,6 @@ HashTableParam JoinHashMapTest::create_table_param_int(TJoinOp::type join_type, 
 
     HashTableParam param;
     param.with_other_conjunct = false;
-    param.mor_reader_mode = false;
     param.join_type = join_type;
     param.search_ht_timer = ADD_TIMER(_runtime_profile, "SearchHashTableTime");
     param.output_build_column_timer = ADD_TIMER(_runtime_profile, "OutputBuildColumnTime");
@@ -2400,7 +2399,6 @@ TEST_F(JoinHashMapTest, EmptyHashMapTestLazyFilter) {
     JoinHashTable ht;
 
     HashTableParam param;
-    param.mor_reader_mode = false;
     param.enable_late_materialization = true;
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
@@ -2456,7 +2454,6 @@ TEST_F(JoinHashMapTest, EmptyHashMapTestLazyOutputAll) {
     JoinHashTable ht;
 
     HashTableParam param;
-    param.mor_reader_mode = false;
     param.enable_late_materialization = true;
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
@@ -2801,7 +2798,6 @@ TEST_F(JoinHashMapTest, TestOutputSlotsEmpty) {
     JoinHashTable ht;
 
     HashTableParam param;
-    param.mor_reader_mode = false;
     param.enable_late_materialization = false;
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
@@ -2829,7 +2825,6 @@ TEST_F(JoinHashMapTest, TestOutputSlotsNormal) {
     JoinHashTable ht;
 
     HashTableParam param;
-    param.mor_reader_mode = false;
     param.enable_late_materialization = false;
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
@@ -2860,7 +2855,6 @@ TEST_F(JoinHashMapTest, TestLazyOutputSlotsEmpty) {
     JoinHashTable ht;
 
     HashTableParam param;
-    param.mor_reader_mode = false;
     param.enable_late_materialization = true;
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
@@ -2888,7 +2882,6 @@ TEST_F(JoinHashMapTest, TestLazyPredicateSlotsEmpty) {
     JoinHashTable ht;
 
     HashTableParam param;
-    param.mor_reader_mode = false;
     param.enable_late_materialization = true;
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
@@ -2919,7 +2912,6 @@ TEST_F(JoinHashMapTest, TestLazyPredicateSlotsNormal) {
     JoinHashTable ht;
 
     HashTableParam param;
-    param.mor_reader_mode = false;
     param.enable_late_materialization = true;
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
@@ -2937,33 +2929,4 @@ TEST_F(JoinHashMapTest, TestLazyPredicateSlotsNormal) {
     check_lazy_build_output_slot_ids(*ht.table_items(), {4});
     check_not_output_slot_ids(*ht.table_items(), {0, 3});
 }
-
-// NOLINTNEXTLINE
-TEST_F(JoinHashMapTest, TestMorRead) {
-    TDescriptorTableBuilder row_desc_builder;
-    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 3);
-    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 3);
-
-    auto probe_row_desc = create_probe_desc(&row_desc_builder);
-    auto build_row_desc = create_build_desc(&row_desc_builder);
-
-    JoinHashTable ht;
-
-    HashTableParam param;
-    param.mor_reader_mode = true;
-    param.enable_late_materialization = false;
-    param.probe_row_desc = probe_row_desc.get();
-    param.build_row_desc = build_row_desc.get();
-    param.probe_output_slots = {1};
-    param.build_output_slots = {4};
-    param.predicate_slots = {2, 5};
-
-    ht.create(param);
-
-    ASSERT_EQ(ht.get_probe_column_count(), 6);
-    ASSERT_EQ(ht.get_build_column_count(), 3);
-    check_lazy_probe_output_slot_ids(*ht.table_items(), {});
-    check_lazy_build_output_slot_ids(*ht.table_items(), {});
-}
-
 } // namespace starrocks

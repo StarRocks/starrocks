@@ -16,6 +16,7 @@
 
 #include <filesystem>
 
+#include "common/config.h"
 #include "connector/hive_chunk_sink.h"
 #include "exec/cache_select_scanner.h"
 #include "exec/exec_node.h"
@@ -97,7 +98,7 @@ Status HiveDataSource::open(RuntimeState* state) {
     RETURN_IF_ERROR(_check_all_slots_nullable());
 
     // Check that the system meets the requirements for enabling DataCache
-    if (config::datacache_enable && BlockCache::instance()->available()) {
+    if (BlockCache::instance()->available()) {
         // setup priority & ttl seconds
         int8_t datacache_priority = 0;
         int64_t datacache_ttl_seconds = 0;
@@ -161,10 +162,19 @@ Status HiveDataSource::open(RuntimeState* state) {
         _scan_range.datacache_options.priority == -1) {
         _datacache_options.enable_datacache = false;
     }
-    _use_file_metacache = config::datacache_enable && BlockCache::instance()->has_mem_cache();
+
+    // Only support file metacache in starcache engine
+#ifdef WITH_STARCACHE
     if (state->query_options().__isset.enable_file_metacache) {
-        _use_file_metacache &= state->query_options().enable_file_metacache;
+        _use_file_metacache = state->query_options().enable_file_metacache;
     }
+    _use_file_metacache &= BlockCache::instance()->mem_cache_available();
+
+    if (state->query_options().__isset.enable_file_pagecache) {
+        _use_file_pagecache = state->query_options().enable_file_pagecache;
+    }
+    _use_file_pagecache &= BlockCache::instance()->mem_cache_available();
+#endif
 
     if (state->query_options().__isset.enable_dynamic_prune_scan_range) {
         _enable_dynamic_prune_scan_range = state->query_options().enable_dynamic_prune_scan_range;
@@ -428,10 +438,23 @@ Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
                 break;
             }
         }
-        if (!single_slot || slot_ids.empty()) {
+
+        bool single_field = true;
+        if (!slot_ids.empty() && single_slot) {
+            std::vector<std::vector<std::string>> subfields;
+            root_expr->get_subfields(&subfields);
+
+            for (int i = 1; i < subfields.size(); i++) {
+                if (subfields[i] != subfields[0]) {
+                    single_field = false;
+                    break;
+                }
+            }
+        }
+        if (!single_slot || slot_ids.empty() || !single_field) {
             _scanner_conjunct_ctxs.emplace_back(ctx);
             for (SlotId slot_id : slot_ids) {
-                _slots_of_mutli_slot_conjunct.insert(slot_id);
+                _slots_of_multi_field_conjunct.insert(slot_id);
             }
             continue;
         }
@@ -673,7 +696,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 
     scanner_params.conjunct_ctxs_by_slot = _conjunct_ctxs_by_slot;
     scanner_params.slots_in_conjunct = _slots_in_conjunct;
-    scanner_params.slots_of_mutli_slot_conjunct = _slots_of_mutli_slot_conjunct;
+    scanner_params.slots_of_multi_field_conjunct = _slots_of_multi_field_conjunct;
     scanner_params.min_max_conjunct_ctxs = _min_max_conjunct_ctxs;
     scanner_params.min_max_tuple_desc = _min_max_tuple_desc;
     scanner_params.hive_column_names = &_hive_column_names;
@@ -712,6 +735,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     // setup options for datacache
     scanner_params.datacache_options = _datacache_options;
     scanner_params.use_file_metacache = _use_file_metacache;
+    scanner_params.use_file_pagecache = _use_file_pagecache;
 
     scanner_params.can_use_any_column = _can_use_any_column;
     scanner_params.can_use_min_max_count_opt = _can_use_min_max_count_opt;

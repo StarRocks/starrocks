@@ -46,7 +46,7 @@
 #include "agent/publish_version.h"
 #include "agent/task_worker_pool.h"
 #include "brpc/errno.pb.h"
-#include "cache/block_cache/block_cache.h"
+#include "cache/datacache.h"
 #include "column/stream_chunk.h"
 #include "common/closure_guard.h"
 #include "common/config.h"
@@ -566,7 +566,7 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
                         "FragmentContext already destroyed: query_id=$0, fragment_instance_id=$1", print_id(query_id),
                         print_id(tid));
             } else {
-                fragment_ctx->cancel(Status::Cancelled(reason_string));
+                fragment_ctx->cancel(Status::Cancelled(reason_string), true);
             }
         }
     } else {
@@ -631,7 +631,7 @@ void PInternalServiceImplBase<T>::_fetch_datacache(google::protobuf::RpcControll
                << ", cache_key: " << HashUtil::hash(request->cache_key().data(), request->cache_key().size(), 0)
                << ", offset: " << request->offset() << ", size: " << request->size();
 
-    BlockCache* block_cache = CacheEnv::GetInstance()->block_cache();
+    BlockCache* block_cache = DataCache::GetInstance()->block_cache();
     if (!block_cache || !block_cache->available()) {
         st = Status::ServiceUnavailable("block cache is unavailable");
     } else {

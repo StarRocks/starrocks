@@ -320,9 +320,9 @@ After the configuration is complete, click **Save & Test** to save and test the 
 
 1. Download the corresponding Dashboard template based on your StarRocks version.
 
-   - [Dashboard template for StarRocks-2.4.0 and later](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Overview-24-new.json)
-   - [Shared-data dashboard template - General](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Shared_data-General.json)
-   - [Shared-data dashboard template - Starlet](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Shared_data-Starlet.json)
+   - [Dashboard template for All Architecture](https://releases.starrocks.io/resources/Dashboard-All-2.4.json)
+   - [Dashboard template for Shared-data Cluster - General](https://releases.starrocks.io/resources/Dashboard-Shared-data-General-3.5.json)
+   - [Dashboard template for Shared-data Cluster - Starlet](https://releases.starrocks.io/resources/Dashboard-Shared-data-Starlet-3.5.json)
 
    > **NOTE**
    >

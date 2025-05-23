@@ -17,6 +17,7 @@
 
 #include "util/json_flattener.h"
 
+#include <storage/flat_json_config.h>
 #include <sys/types.h>
 
 #include <algorithm>
@@ -50,6 +51,7 @@
 #include "util/bloom_filter.h"
 #include "util/json.h"
 #include "util/json_converter.h"
+#include "util/phmap/phmap.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -71,6 +73,41 @@ void extract_number(const vpack::Slice* json, NullableColumn* result) {
         } else if (json->isBool()) {
             result->null_column()->append(0);
             down_cast<RunTimeColumnType<TYPE>*>(result->data_column().get())->append(json->getBool());
+        } else {
+            result->append_nulls(1);
+        }
+    } catch (const vpack::Exception& e) {
+        result->append_nulls(1);
+    }
+}
+
+void extract_bool(const vpack::Slice* json, NullableColumn* result) {
+    try {
+        if (json->isNone() || json->isNull()) {
+            result->append_nulls(1);
+        } else if (json->isBool()) {
+            result->null_column()->append(0);
+            auto res = json->getBool();
+            down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(res);
+        } else if (json->isString()) {
+            vpack::ValueLength len;
+            const char* str = json->getStringUnchecked(len);
+            StringParser::ParseResult parseResult;
+            auto r = StringParser::string_to_int<int32_t>(str, len, &parseResult);
+            if (parseResult != StringParser::PARSE_SUCCESS || std::isnan(r) || std::isinf(r)) {
+                bool b = StringParser::string_to_bool(str, len, &parseResult);
+                if (parseResult != StringParser::PARSE_SUCCESS) {
+                    result->append_nulls(1);
+                } else {
+                    down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(b);
+                }
+            } else {
+                down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(r != 0);
+            }
+        } else if (json->isNumber()) {
+            result->null_column()->append(0);
+            auto res = json->getNumber<double>();
+            down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(res != 0);
         } else {
             result->append_nulls(1);
         }
@@ -155,6 +192,19 @@ static const FlatJsonHashMap<vpack::ValueType, uint8_t> JSON_TYPE_BITS {
         {vpack::ValueType::String, 16},    //  00010000, 16
 };
 
+// json base type
+static const phmap::flat_hash_set<vpack::ValueType> JSON_BASE_TYPE {
+        vpack::ValueType::None,
+        vpack::ValueType::Null,
+        vpack::ValueType::Bool,
+        vpack::ValueType::SmallInt,
+        vpack::ValueType::Int,
+        vpack::ValueType::UInt,
+        vpack::ValueType::Double,
+        vpack::ValueType::String,
+        vpack::ValueType::Binary,
+};
+
 // starrocks json fucntio only support read as bigint/string/bool/double, smallint will cast to bigint, so we save as bigint directly
 static const FlatJsonHashMap<uint8_t, LogicalType> JSON_BITS_TO_LOGICAL_TYPE {
     {JSON_TYPE_BITS.at(vpack::ValueType::None),        LogicalType::TYPE_TINYINT},
@@ -180,6 +230,7 @@ static const FlatJsonHashMap<LogicalType, JsonFlatExtractFunc> JSON_EXTRACT_FUNC
     {LogicalType::TYPE_BIGINT,          &extract_number<LogicalType::TYPE_BIGINT>},
     {LogicalType::TYPE_LARGEINT,        &extract_number<LogicalType::TYPE_LARGEINT>},
     {LogicalType::TYPE_DOUBLE,          &extract_number<LogicalType::TYPE_DOUBLE>},
+    {LogicalType::TYPE_BOOLEAN,         &extract_bool},
     {LogicalType::TYPE_VARCHAR,         &extract_string},
     {LogicalType::TYPE_CHAR,            &extract_string},
     {LogicalType::TYPE_JSON,            &extract_json},
@@ -204,6 +255,7 @@ inline uint8_t get_compatibility_type(vpack::ValueType type1, uint8_t type2) {
 } // namespace flat_json
 
 static const double FILTER_TEST_FPP[]{0.05, 0.1, 0.15, 0.2, 0.25, 0.3};
+static const uint64_t FILTER_MAX_ELEMNT_NUMS = 1024;
 
 double estimate_filter_fpp(uint64_t element_nums) {
     uint32_t bytes[6];
@@ -279,7 +331,7 @@ void JsonFlatPath::set_root(const std::string_view& new_root_path, JsonFlatPath*
     }
 }
 
-StatusOr<size_t> check_null_factor(const std::vector<const Column*>& json_datas) {
+StatusOr<size_t> JsonPathDeriver::check_null_factor(const std::vector<const Column*>& json_datas) {
     size_t total_rows = 0;
     size_t null_count = 0;
 
@@ -295,9 +347,9 @@ StatusOr<size_t> check_null_factor(const std::vector<const Column*>& json_datas)
     }
 
     // more than half of null
-    if (null_count > total_rows * config::json_flat_null_factor) {
+    if (null_count > total_rows * _max_json_null_factor) {
         VLOG(8) << "flat json, null_count[" << null_count << "], row[" << total_rows
-                << "], null_factor: " << config::json_flat_null_factor;
+                << "], null_factor: " << _max_json_null_factor;
         return Status::InternalError("json flat null factor too high");
     }
 
@@ -311,6 +363,18 @@ JsonPathDeriver::JsonPathDeriver(const std::vector<std::string>& paths, const st
         auto* leaf = JsonFlatPath::normalize_from_path(_paths[i], _path_root.get());
         leaf->type = types[i];
         leaf->index = i;
+    }
+}
+
+void JsonPathDeriver::init_flat_json_config(const FlatJsonConfig* flat_json_config) {
+    if (flat_json_config != nullptr) {
+        _max_json_null_factor = flat_json_config->get_flat_json_null_factor();
+        _min_json_sparsity_factory = flat_json_config->get_flat_json_sparsity_factor();
+        _max_column = flat_json_config->get_flat_json_max_column_max();
+    } else {
+        _max_json_null_factor = config::json_flat_null_factor;
+        _min_json_sparsity_factory = config::json_flat_sparsity_factor;
+        _max_column = config::json_flat_column_max;
     }
 }
 
@@ -478,25 +542,35 @@ void JsonPathDeriver::_derived(const Column* col, size_t mark_row) {
         // if the number of missed rows exceeds (1 - _min_json_sparsity_factor) * total_rows, then the path must not be extracted.
         if (((mark_row + i) % check_batch) == 0) {
             size_t hits_min = mark_row + i > ignore_max ? mark_row + i - ignore_max : 0;
-            _clean_sparsity_path(_path_root.get(), hits_min);
+            _clean_sparsity_path("", _path_root.get(), hits_min);
         }
     }
 }
 
-void JsonPathDeriver::_clean_sparsity_path(JsonFlatPath* node, size_t check_hits_min) {
+void JsonPathDeriver::_clean_sparsity_path(const std::string_view& name, JsonFlatPath* node, size_t check_hits_min) {
     for (auto& [key, child] : node->children) {
-        _clean_sparsity_path(child.get(), check_hits_min);
+        _clean_sparsity_path(key, child.get(), check_hits_min);
     }
     auto iter = node->children.begin();
     while (iter != node->children.end()) {
         auto desc = _derived_maps[iter->second.get()];
         if (desc.hits < check_hits_min) {
+            if (_generate_filter) {
+                _remain_keys.insert(iter->first);
+            }
             node->remain = true;
             _derived_maps.erase(iter->second.get());
             iter = node->children.erase(iter);
         } else {
             iter++;
         }
+    }
+    if (_generate_filter && node->remain) {
+        _remain_keys.insert(name);
+    }
+    if (_remain_keys.size() > FILTER_MAX_ELEMNT_NUMS) {
+        _generate_filter = false;
+        _remain_keys.clear();
     }
 }
 
@@ -526,6 +600,7 @@ void JsonPathDeriver::_visit_json_paths(const vpack::Slice& value, JsonFlatPath*
             auto desc = &_derived_maps[child];
             vpack::ValueType json_type = v.type();
             desc->type = flat_json::get_compatibility_type(json_type, desc->type);
+            desc->base_type_count += flat_json::JSON_BASE_TYPE.count(json_type);
             if (json_type == vpack::ValueType::UInt) {
                 desc->max = std::max(desc->max, v.getUIntUnchecked());
             }
@@ -555,7 +630,10 @@ uint32_t JsonPathDeriver::_dfs_finalize(JsonFlatPath* node, const std::string& a
         // leaf node or all children is remain
         // check sparsity, same key may appear many times in json, so we need avoid duplicate compute hits
         auto desc = _derived_maps[node];
-        if (desc.multi_times <= 0 && desc.hits >= _total_rows * _min_json_sparsity_factory) {
+
+        bool is_base_type = desc.base_type_count >= desc.hits - (desc.hits * config::json_flat_complex_type_factor);
+        bool type_check = config::enable_json_flat_complex_type || is_base_type;
+        if (type_check && desc.multi_times <= 0 && desc.hits >= _total_rows * _min_json_sparsity_factory) {
             hit_leaf->emplace_back(node, absolute_path);
             node->type = flat_json::JSON_BITS_TO_LOGICAL_TYPE.at(desc.type);
             node->remain = false;
@@ -569,8 +647,7 @@ uint32_t JsonPathDeriver::_dfs_finalize(JsonFlatPath* node, const std::string& a
         return 1;
     }
 }
-
-void dfs_add_remain_keys(JsonFlatPath* node, std::set<std::string_view>* remain_keys) {
+void dfs_add_remain_keys(JsonFlatPath* node, std::unordered_set<std::string_view>* remain_keys) {
     auto iter = node->children.begin();
     while (iter != node->children.end()) {
         auto child = iter->second.get();
@@ -601,7 +678,7 @@ void JsonPathDeriver::_finalize() {
         auto desc_b = _derived_maps[b.first];
         return desc_a.hits > desc_b.hits;
     });
-    size_t limit = config::json_flat_column_max > 0 ? config::json_flat_column_max : std::numeric_limits<size_t>::max();
+    size_t limit = _max_column > 0 ? _max_column : std::numeric_limits<size_t>::max();
     for (size_t i = limit; i < hit_leaf.size(); i++) {
         if (!hit_leaf[i].first->remain && _derived_maps[hit_leaf[i].first].hits >= _total_rows) {
             limit++;
@@ -620,23 +697,29 @@ void JsonPathDeriver::_finalize() {
         _types.emplace_back(node->type);
     }
 
-    std::set<std::string_view> remain_keys;
-    dfs_add_remain_keys(_path_root.get(), &remain_keys);
+    dfs_add_remain_keys(_path_root.get(), &_remain_keys);
     _has_remain |= _path_root->remain;
     if (_has_remain && _generate_filter) {
-        double fpp = estimate_filter_fpp(remain_keys.size());
+        if (_remain_keys.size() > FILTER_MAX_ELEMNT_NUMS) {
+            _generate_filter = false;
+            _remain_keys.clear();
+            return;
+        }
+        double fpp = estimate_filter_fpp(_remain_keys.size());
         if (fpp < 0) {
+            _remain_keys.clear();
             return;
         }
         std::unique_ptr<BloomFilter> bf;
         Status st = BloomFilter::create(BLOCK_BLOOM_FILTER, &bf);
         DCHECK(st.ok());
-        st = bf->init(remain_keys.size(), fpp, HASH_MURMUR3_X64_64);
+        st = bf->init(_remain_keys.size(), fpp, HASH_MURMUR3_X64_64);
         DCHECK(st.ok());
-        for (const auto& key : remain_keys) {
+        for (const auto& key : _remain_keys) {
             bf->add_bytes(key.data(), key.size());
         }
         _remain_filter = std::move(bf);
+        _remain_keys.clear();
     }
 }
 

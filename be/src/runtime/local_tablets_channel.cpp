@@ -47,6 +47,7 @@
 #include "storage/txn_manager.h"
 #include "util/brpc_stub_cache.h"
 #include "util/compression/block_compression.h"
+#include "util/disposable_closure.h"
 #include "util/failpoint/fail_point.h"
 #include "util/faststring.h"
 #include "util/starrocks_metrics.h"
@@ -336,9 +337,8 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     });
     auto finish_wait_writer_ts = watch.elapsed_time();
 
-    // Abort tablets which primary replica already failed
-    if (response->status().status_code() != TStatusCode::OK) {
-        _abort_replica_tablets(request, response->status().error_msgs()[0], node_id_to_abort_tablets);
+    if (!node_id_to_abort_tablets.empty()) {
+        _abort_replica_tablets(request, "primary replica failed to sync data", node_id_to_abort_tablets);
     }
 
     // We need wait all secondary replica commit before we close the channel
@@ -373,7 +373,8 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
                     if (elapse_time_ms > request.timeout_ms()) {
                         LOG(INFO) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
                                   << " wait tablet " << tablet_id << " secondary replica finish timeout "
-                                  << request.timeout_ms() << "ms still in state " << state;
+                                  << request.timeout_ms() << "ms still in state " << state
+                                  << ", primary replica: " << delta_writer->replicas()[0].host();
                         timeout = true;
                         break;
                     }
@@ -381,7 +382,8 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
                     if (i % 6000 == 0) {
                         LOG(INFO) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
                                   << " wait tablet " << tablet_id << " secondary replica finish already "
-                                  << elapse_time_ms << "ms still in state " << state;
+                                  << elapse_time_ms << "ms still in state " << state
+                                  << ", primary replica: " << delta_writer->replicas()[0].host();
                     }
                 } while (true);
             }
@@ -588,15 +590,37 @@ void LocalTabletsChannel::_abort_replica_tablets(
         cancel_request.set_reason(abort_reason);
         cancel_request.set_sink_id(request.sink_id());
 
-        auto closure = new ReusableClosure<PTabletWriterCancelResult>();
-
-        closure->ref();
-        closure->cntl.set_timeout_ms(request.timeout_ms());
-
         string node_abort_tablet_id_list_str;
         JoinInts(tablet_ids, ",", &node_abort_tablet_id_list_str);
 
+        struct Context {
+            PUniqueId load_id;
+            int64_t txn_id;
+            std::string host;
+            std::string tablets;
+        };
+        auto closure = new DisposableClosure<PTabletWriterCancelResult, Context>(
+                {request.id(), _txn_id, endpoint.host(), node_abort_tablet_id_list_str});
+        closure->cntl.set_timeout_ms(request.timeout_ms());
+        SET_IGNORE_OVERCROWDED(closure->cntl, load);
+        closure->addSuccessHandler([](const Context& ctx, const PTabletWriterCancelResult& result) {
+            VLOG(2) << "Success to cancel secondary replicas, txn_id: " << ctx.txn_id
+                    << ", load_id: " << print_id(ctx.load_id) << ", replica_node: " << ctx.host
+                    << ", tablets: " << ctx.tablets;
+        });
+        closure->addFailedHandler([](const Context& ctx, std::string_view rpc_error_msg) {
+            LOG(ERROR) << "Failed to cancel secondary replicas, txn_id: " << ctx.txn_id
+                       << ", load_id: " << print_id(ctx.load_id) << ", replica_node: " << ctx.host
+                       << ", error: " << rpc_error_msg << ", tablets: " << ctx.tablets;
+        });
+
+#ifndef BE_TEST
         stub->tablet_writer_cancel(&closure->cntl, &cancel_request, &closure->result, closure);
+#else
+        std::tuple<PTabletWriterCancelRequest*, google::protobuf::Closure*, brpc::Controller*> rpc_tuple{
+                &cancel_request, closure, &closure->cntl};
+        TEST_SYNC_POINT_CALLBACK("LocalTabletsChannel::rpc::tablet_writer_cancel", &rpc_tuple);
+#endif
 
         VLOG(2) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id()) << " Cancel "
                 << tablet_ids.size() << " tablets " << node_abort_tablet_id_list_str << " request to "
@@ -1022,6 +1046,11 @@ void LocalTabletsChannel::WriteCallback::run(const Status& st, const CommittedRo
             for (const auto& synced_tablet_info : *replicated_tablet_infos) {
                 _context->add_committed_tablet_info(synced_tablet_info.get());
             }
+
+            auto failed_replica_node_ids = committed_info->replicate_token->failed_node_ids();
+            for (auto& node_id : failed_replica_node_ids) {
+                _context->add_failed_replica_node_id(node_id, committed_info->tablet->tablet_id());
+            }
         }
     }
     delete this;
@@ -1078,7 +1107,7 @@ void LocalTabletsChannel::update_profile() {
         auto* merged_profile = RuntimeProfile::merge_isomorphic_profiles(&obj_pool, peer_or_primary_replica_profiles);
         RuntimeProfile* final_profile = _profile->create_child(replicated_storage ? "PrimaryReplicas" : "PeerReplicas");
         auto* tablets_counter = ADD_COUNTER(final_profile, "TabletsNum", TUnit::UNIT);
-        COUNTER_UPDATE(tablets_counter, peer_or_primary_replica_profiles.size());
+        COUNTER_SET(tablets_counter, static_cast<int64_t>(peer_or_primary_replica_profiles.size()));
         final_profile->copy_all_info_strings_from(merged_profile);
         final_profile->copy_all_counters_from(merged_profile);
     }
@@ -1087,12 +1116,13 @@ void LocalTabletsChannel::update_profile() {
         auto* merged_profile = RuntimeProfile::merge_isomorphic_profiles(&obj_pool, secondary_replica_profiles);
         RuntimeProfile* final_profile = _profile->create_child("SecondaryReplicas");
         auto* tablets_counter = ADD_COUNTER(final_profile, "TabletsNum", TUnit::UNIT);
-        COUNTER_UPDATE(tablets_counter, peer_or_primary_replica_profiles.size());
+        COUNTER_SET(tablets_counter, static_cast<int64_t>(secondary_replica_profiles.size()));
         final_profile->copy_all_info_strings_from(merged_profile);
         final_profile->copy_all_counters_from(merged_profile);
     }
 }
 
+#define ADD_AND_SET_COUNTER(profile, name, type, val) (ADD_COUNTER(profile, name, type))->set(val)
 #define ADD_AND_UPDATE_COUNTER(profile, name, type, val) (ADD_COUNTER(profile, name, type))->update(val)
 #define ADD_AND_UPDATE_TIMER(profile, name, val) (ADD_TIMER(profile, name))->update(val)
 
@@ -1116,8 +1146,8 @@ void LocalTabletsChannel::_update_peer_replica_profile(DeltaWriter* writer, Runt
 
     const FlushStatistic& flush_stat = writer->get_flush_stats();
     ADD_AND_UPDATE_COUNTER(profile, "MemtableFlushedCount", TUnit::UNIT, flush_stat.flush_count);
-    ADD_AND_UPDATE_COUNTER(profile, "MemtableFlushingCount", TUnit::UNIT, flush_stat.cur_flush_count);
-    ADD_AND_UPDATE_COUNTER(profile, "MemtableQueueCount", TUnit::UNIT, flush_stat.queueing_memtable_num);
+    ADD_AND_SET_COUNTER(profile, "MemtableFlushingCount", TUnit::UNIT, flush_stat.cur_flush_count);
+    ADD_AND_SET_COUNTER(profile, "MemtableQueueCount", TUnit::UNIT, flush_stat.queueing_memtable_num);
     ADD_AND_UPDATE_TIMER(profile, "FlushTaskPendingTime", flush_stat.pending_time_ns);
     auto& memtable_stat = flush_stat.memtable_stats;
     ADD_AND_UPDATE_COUNTER(profile, "MemtableInsertCount", TUnit::UNIT, memtable_stat.insert_count);
@@ -1140,8 +1170,10 @@ void LocalTabletsChannel::_update_primary_replica_profile(DeltaWriter* writer, R
         return;
     }
     auto& replicate_stat = replicate_token->get_stat();
-    ADD_AND_UPDATE_COUNTER(profile, "ReplicatePendingTaskCount", TUnit::UNIT, replicate_stat.num_pending_tasks);
-    ADD_AND_UPDATE_COUNTER(profile, "ReplicateExecutingTaskCount", TUnit::UNIT, replicate_stat.num_running_tasks);
+    ADD_AND_SET_COUNTER(profile, "ReplicatePendingTaskCount", TUnit::UNIT,
+                        static_cast<int64_t>(replicate_stat.num_pending_tasks));
+    ADD_AND_SET_COUNTER(profile, "ReplicateExecutingTaskCount", TUnit::UNIT,
+                        static_cast<int64_t>(replicate_stat.num_running_tasks));
     ADD_AND_UPDATE_COUNTER(profile, "ReplicateFinishedTaskCount", TUnit::UNIT, replicate_stat.num_finished_tasks);
     ADD_AND_UPDATE_TIMER(profile, "ReplicateTaskPendingTime", replicate_stat.pending_time_ns);
     ADD_AND_UPDATE_TIMER(profile, "ReplicateTaskExecuteTime", replicate_stat.execute_time_ns);
@@ -1164,8 +1196,8 @@ void LocalTabletsChannel::_update_secondary_replica_profile(DeltaWriter* writer,
         return;
     }
     auto& stat = segment_flush_token->get_stat();
-    ADD_AND_UPDATE_COUNTER(profile, "FlushPendingTaskCount", TUnit::UNIT, stat.num_pending_tasks);
-    ADD_AND_UPDATE_COUNTER(profile, "FlushExecutingTaskCount", TUnit::UNIT, stat.num_running_tasks);
+    ADD_AND_SET_COUNTER(profile, "FlushPendingTaskCount", TUnit::UNIT, static_cast<int64_t>(stat.num_pending_tasks));
+    ADD_AND_SET_COUNTER(profile, "FlushExecutingTaskCount", TUnit::UNIT, static_cast<int64_t>(stat.num_running_tasks));
     ADD_AND_UPDATE_COUNTER(profile, "FlushFinishedTaskCount", TUnit::UNIT, stat.num_finished_tasks);
     ADD_AND_UPDATE_TIMER(profile, "FlushTaskPendingTime", stat.pending_time_ns);
     ADD_AND_UPDATE_TIMER(profile, "FlushTaskExecuteTime", stat.execute_time_ns);

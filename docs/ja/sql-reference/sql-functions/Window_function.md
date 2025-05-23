@@ -6,39 +6,6 @@ keywords: ['analytic']
 
 # ウィンドウ関数
 
-- [ウィンドウ関数](#window-functions)
-  - [背景](#background)
-  - [使用法](#usage)
-    - [構文](#syntax)
-    - [PARTITION BY句](#partition-by-clause)
-    - [ORDER BY句](#order-by-clause)
-    - [ウィンドウ句](#window-clause)
-  - [ウィンドウ関数のサンプルテーブル](#window-function-sample-table)
-  - [関数の例](#function-examples)
-    - [AVG()](#avg)
-    - [COUNT()](#count)
-    - [CUME\_DIST()](#cume_dist)
-    - [DENSE\_RANK()](#dense_rank)
-    - [FIRST\_VALUE()](#first_value)
-    - [LAST\_VALUE()](#last_value)
-    - [LAG()](#lag)
-    - [LEAD()](#lead)
-    - [MAX()](#max)
-    - [MIN()](#min)
-    - [NTILE()](#ntile)
-    - [PERCENT\_RANK()](#percent_rank)
-    - [RANK()](#rank)
-    - [ROW\_NUMBER()](#row_number)
-    - [QUALIFY()](#qualify)
-    - [SUM()](#sum)
-    - [VARIANCE, VAR\_POP, VARIANCE\_POP](#variance-var_pop-variance_pop)
-    - [VAR\_SAMP, VARIANCE\_SAMP](#var_samp-variance_samp)
-    - [STD, STDDEV, STDDEV\_POP](#std-stddev-stddev_pop)
-    - [STDDEV\_SAMP](#stddev_samp)
-    - [COVAR\_SAMP](#covar_samp)
-    - [COVAR\_POP](#covar_pop)
-    - [CORR](#corr)
-
 ## 背景
 
 ウィンドウ関数は、特別なクラスの組み込み関数です。集計関数と同様に、複数の入力行に対して計算を行い、単一のデータ値を取得します。違いは、ウィンドウ関数が特定のウィンドウ内で入力データを処理することであり、「group by」メソッドを使用するのではありません。各ウィンドウ内のデータは、over()句を使用してソートおよびグループ化できます。ウィンドウ関数は、各行に対して個別の値を計算するため、グループごとに1つの値を計算するのではありません。この柔軟性により、ユーザーはselect句に追加の列を追加し、結果セットをさらにフィルタリングすることができます。ウィンドウ関数は、selectリストと句の最外部の位置にのみ表示されることができます。クエリの最後に効果を発揮し、つまり、`join`、`where`、および`group by`操作が実行された後に適用されます。ウィンドウ関数は、トレンドの分析、外れ値の計算、大規模データのバケッティング分析にしばしば使用されます。

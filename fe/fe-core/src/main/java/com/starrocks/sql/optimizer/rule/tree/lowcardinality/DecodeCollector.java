@@ -37,12 +37,18 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.DistributionCol;
+import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.EquivalentDescriptor;
+import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -431,6 +437,58 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     }
 
     @Override
+    public DecodeInfo visitPhysicalUnion(OptExpression optExpression, DecodeInfo context) {
+        return visitPhysicalSetOperation(optExpression, context);
+    }
+
+    @Override
+    public DecodeInfo visitPhysicalIntersect(OptExpression optExpression, DecodeInfo context) {
+        return visitPhysicalSetOperation(optExpression, context);
+    }
+
+    @Override
+    public DecodeInfo visitPhysicalExcept(OptExpression optExpression, DecodeInfo context) {
+        return visitPhysicalSetOperation(optExpression, context);
+    }
+
+    private DecodeInfo visitPhysicalSetOperation(OptExpression optExpression, DecodeInfo context) {
+        if (context.outputStringColumns.isEmpty()) {
+            return DecodeInfo.EMPTY;
+        }
+        DistributionSpec dist = optExpression.getRequiredProperties().get(0).getDistributionProperty().getSpec();
+        if (!(dist instanceof HashDistributionSpec)) {
+            return visit(optExpression, context);
+        }
+        PhysicalSetOperation setOp = optExpression.getOp().cast();
+        DecodeInfo result = context.createOutputInfo();
+        result.decodeStringColumns.except(result.outputStringColumns);
+        result.outputStringColumns.getStream().forEach(c -> disableRewriteStringColumns.union(c));
+        result.outputStringColumns.clear();
+
+        ColumnRefSet shuffleColumnIds = ColumnRefSet.of();
+        for (int i = 0; i < optExpression.arity(); ++i) {
+            OptExpression child = optExpression.inputAt(i);
+            DistributionSpec childDistSpec = child.getOutputProperty().getDistributionProperty().getSpec();
+            Preconditions.checkState(childDistSpec instanceof HashDistributionSpec);
+            HashDistributionSpec childHashDistSpec = (HashDistributionSpec) childDistSpec;
+            int childIdx = i;
+            EquivalentDescriptor childEqvDesc = childHashDistSpec.getEquivDesc();
+            childHashDistSpec.getShuffleColumns().forEach(shuffleCol -> setOp.getChildOutputColumns().get(childIdx)
+                    .stream()
+                    .filter(colRef -> childEqvDesc.isConnected(shuffleCol, new DistributionCol(colRef.getId(), true)))
+                    .forEach(shuffleColumnIds::union));
+        }
+
+        if (!result.inputStringColumns.containsAny(shuffleColumnIds)) {
+            return result;
+        }
+        shuffleColumnIds.getStream().forEach(c -> disableRewriteStringColumns.union(c));
+        result.decodeStringColumns.except(disableRewriteStringColumns);
+        result.inputStringColumns.except(disableRewriteStringColumns);
+        return result;
+    }
+
+    @Override
     public DecodeInfo visitPhysicalHashAggregate(OptExpression optExpression, DecodeInfo context) {
         if (context.outputStringColumns.isEmpty()) {
             return DecodeInfo.EMPTY;
@@ -608,9 +666,20 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         return info;
     }
 
-    private Pair<Boolean, Optional<ColumnDict>> checkConnectorGlobalDict(Table table, ColumnRefOperator column) {
+    private boolean banArrayColumnWithPredicate(PhysicalScanOperator scan, ColumnRefOperator column) {
+        return column.getType().isArrayType() &&
+                scan.getPredicate() != null && scan.getPredicate().getColumnRefs().contains(column);
+    }
+
+    private Pair<Boolean, Optional<ColumnDict>> checkConnectorGlobalDict(PhysicalScanOperator scan, Table table,
+                                                                         ColumnRefOperator column) {
         // Condition 1:
         if (!supportAndEnabledLowCardinality(column.getType())) {
+            return new Pair<>(false, Optional.empty());
+        }
+
+        // Condition 1.1:
+        if (banArrayColumnWithPredicate(scan, column)) {
             return new Pair<>(false, Optional.empty());
         }
 
@@ -667,7 +736,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 continue;
             }
 
-            Pair<Boolean, Optional<ColumnDict>> res = checkConnectorGlobalDict(table, column);
+            Pair<Boolean, Optional<ColumnDict>> res = checkConnectorGlobalDict(scan, table, column);
             if (!res.first) {
                 continue;
             }
@@ -704,7 +773,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 continue;
             }
 
-            Pair<Boolean, Optional<ColumnDict>> res = checkConnectorGlobalDict(table, column);
+            Pair<Boolean, Optional<ColumnDict>> res = checkConnectorGlobalDict(scan, table, column);
             if (!res.first) {
                 continue;
             }

@@ -38,7 +38,7 @@
 #include <string>
 #include <utility>
 
-#include "cache/object_cache/object_cache.h"
+#include "cache/datacache.h"
 #include "gutil/macros.h" // for DISALLOW_COPY
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -81,7 +81,7 @@ public:
 
     // Return global instance.
     // Client should call create_global_cache before.
-    static StoragePageCache* instance() { return CacheEnv::GetInstance()->page_cache(); }
+    static StoragePageCache* instance() { return DataCache::GetInstance()->page_cache(); }
 
     StoragePageCache(ObjectCache* obj_cache) : _cache(obj_cache) {}
 

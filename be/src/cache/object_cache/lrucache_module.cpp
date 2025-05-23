@@ -21,24 +21,16 @@
 
 namespace starrocks {
 
-LRUCacheModule::LRUCacheModule(const ObjectCacheOptions& options) : _options(options) {
-    _cache.reset(new_lru_cache(_options.capacity));
+LRUCacheModule::LRUCacheModule(std::shared_ptr<Cache> cache) : _cache(std::move(cache)) {
     _initialized.store(true, std::memory_order_release);
 }
 
-LRUCacheModule::~LRUCacheModule() {
-    if (_cache) {
-        _cache->prune();
-    }
-}
-
-Status LRUCacheModule::insert(const std::string& key, void* value, size_t size, size_t charge,
-                              ObjectCacheDeleter deleter, ObjectCacheHandlePtr* handle,
-                              ObjectCacheWriteOptions* options) {
-    if (!_check_write(charge, options)) {
+Status LRUCacheModule::insert(const std::string& key, void* value, size_t size, ObjectCacheDeleter deleter,
+                              ObjectCacheHandlePtr* handle, ObjectCacheWriteOptions* options) {
+    if (!_check_write(size, options)) {
         return Status::InternalError("cache insertion is rejected");
     }
-    auto* lru_handle = _cache->insert(key, value, size, charge, deleter, static_cast<CachePriority>(options->priority));
+    auto* lru_handle = _cache->insert(key, value, size, deleter, static_cast<CachePriority>(options->priority));
     if (handle) {
         *handle = reinterpret_cast<ObjectCacheHandlePtr>(lru_handle);
     }

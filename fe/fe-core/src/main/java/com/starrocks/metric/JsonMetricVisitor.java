@@ -57,6 +57,7 @@ public class JsonMetricVisitor extends MetricVisitor {
     private static final String TYPE = "type";
     private static final String STATUS = "status";
     private static final String TOTAL = "total";
+    private static final String ALIVE = "alive";
     private static final String FE_NODE_NUM = "fe_node_num";
     private static final String BE_NODE_NUM = "be_node_num";
     private static final String CN_NODE_NUM = "cn_node_num";
@@ -206,10 +207,12 @@ public class JsonMetricVisitor extends MetricVisitor {
 
         buildMetric(NODE_INFO, NOUNIT, String.valueOf(nodeMgr.getFrontends(null).size()),
                 Arrays.asList(new MetricLabel(TYPE, FE_NODE_NUM), new MetricLabel(STATUS, TOTAL)));
+        buildMetric(NODE_INFO, NOUNIT, String.valueOf(nodeMgr.getAliveFrontendsCnt()),
+                Arrays.asList(new MetricLabel(TYPE, FE_NODE_NUM), new MetricLabel(STATUS, ALIVE)));
         buildMetric(NODE_INFO, NOUNIT, String.valueOf(systemInfoService.getTotalBackendNumber()),
                 Arrays.asList(new MetricLabel(TYPE, BE_NODE_NUM), new MetricLabel(STATUS, TOTAL)));
         buildMetric(NODE_INFO, NOUNIT, String.valueOf(systemInfoService.getAliveBackendNumber()),
-                Arrays.asList(new MetricLabel(TYPE, BE_NODE_NUM), new MetricLabel(STATUS, "alive")));
+                Arrays.asList(new MetricLabel(TYPE, BE_NODE_NUM), new MetricLabel(STATUS, ALIVE)));
         buildMetric(NODE_INFO, NOUNIT,
                 String.valueOf(systemInfoService.getDecommissionedBackendIds().size()),
                 Arrays.asList(new MetricLabel(TYPE, BE_NODE_NUM), new MetricLabel(STATUS, "decommissioned")));

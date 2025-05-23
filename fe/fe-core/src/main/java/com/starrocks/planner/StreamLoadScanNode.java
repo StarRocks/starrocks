@@ -59,6 +59,7 @@ import com.starrocks.common.CsvFormat;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.Load;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.server.GlobalStateMgr;
@@ -86,7 +87,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
-import java.util.UUID;
 
 import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
 
@@ -408,8 +408,7 @@ public class StreamLoadScanNode extends LoadScanNode {
                 case FILE_STREAM:
                     rangeDesc.setPath("Invalid Path");
                     if (needAssignBE) {
-                        UUID uuid = UUID.randomUUID();
-                        rangeDesc.setLoad_id(new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()));
+                        rangeDesc.setLoad_id(UUIDUtil.genTUniqueId());
                     } else {
                         rangeDesc.setLoad_id(loadId);
                     }
@@ -419,7 +418,7 @@ public class StreamLoadScanNode extends LoadScanNode {
             }
             rangeDesc.setStart_offset(0);
             rangeDesc.setSize(-1);
-            rangeDesc.setNum_of_columns_from_file(paramCreateContext.tupleDescriptor.getSlots().size());
+            rangeDesc.setNum_of_columns_from_file(paramCreateContext.params.getSrc_slot_idsSize());
             rangeDesc.setCompression_type(streamLoadInfo.getPayloadCompressionType());
             brokerScanRange.addToRanges(rangeDesc);
             brokerScanRange.setBroker_addresses(Lists.newArrayList());

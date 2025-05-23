@@ -43,6 +43,7 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.Version;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.Util;
+import com.starrocks.failpoint.FailPoint;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.StateChangeExecutor;
 import com.starrocks.http.HttpServer;
@@ -124,9 +125,9 @@ public class StarRocksFE {
             // init config
             new Config().init(starRocksDir + "/conf/fe.conf");
 
-            // check command line options
+            // run command line options
             // NOTE: do it before init log4jConfig to avoid unnecessary stdout messages
-            checkCommandLineOptions(cmdLineOpts);
+            runCommandLineOptions(cmdLineOpts);
 
             Log4jConfig.initLogging();
             // We have already output the caffine's error message to Log4j2.
@@ -136,25 +137,24 @@ public class StarRocksFE {
             // set dns cache ttl
             java.security.Security.setProperty("networkaddress.cache.ttl", "60");
 
-            RestoreClusterSnapshotMgr.init(starRocksDir + "/conf/cluster_snapshot.yaml", args);
+            RestoreClusterSnapshotMgr.init(starRocksDir + "/conf/cluster_snapshot.yaml", cmdLineOpts.isStartFromSnapshot());
 
             // check meta dir
             MetaHelper.checkMetaDir();
 
             LOG.info("StarRocks FE starting, version: {}-{}", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH);
 
-            FrontendOptions.init(args);
+            FrontendOptions.init(cmdLineOpts.getHostType());
             ExecuteEnv.setup();
 
             // init globalStateMgr
-            GlobalStateMgr.getCurrentState().initialize(args);
+            GlobalStateMgr.getCurrentState().initialize(cmdLineOpts.getHelpers());
 
             if (RunMode.isSharedDataMode()) {
                 Journal journal = GlobalStateMgr.getCurrentState().getJournal();
                 if (journal instanceof BDBJEJournal) {
                     BDBEnvironment bdbEnvironment = ((BDBJEJournal) journal).getBdbEnvironment();
-                    StarMgrServer.getCurrentState().initialize(bdbEnvironment,
-                            GlobalStateMgr.getCurrentState().getImageDir());
+                    StarMgrServer.getCurrentState().initialize(bdbEnvironment, GlobalStateMgr.getImageDirPath());
                 } else {
                     LOG.error("journal type should be BDBJE for star mgr!");
                     System.exit(-1);
@@ -368,12 +368,17 @@ public class StarRocksFE {
      *          -m --metaversion
      *              Specify the meta version to decode log value, separated by ',', first
      *              is community meta version, second is StarRocks meta version
-     *
+     * -rs --cluster_snapshot
+     *      Specify fe start to restore from a cluster snapshot
+     * -ht --host_type
+     *      Specify fe start use ip or fqdn
+     * -fp --failpoint
+     *      Enable fail point
      */
-    private static CommandLineOptions parseArgs(String[] args) {
+    protected static CommandLineOptions parseArgs(String[] args) {
         CommandLineParser commandLineParser = new BasicParser();
         Options options = new Options();
-        options.addOption("ht", "host_type", false, "Specify fe start use ip or fqdn");
+        options.addOption("ht", "host_type", true, "Specify fe start use ip or fqdn");
         options.addOption("rs", "cluster_snapshot", false, "Specify fe start to restore from a cluster snapshot");
         options.addOption("v", "version", false, "Print the version of StarRocks Frontend");
         options.addOption("h", "helper", true, "Specify the helper node when joining a bdb je replication group");
@@ -386,6 +391,7 @@ public class StarRocksFE {
         options.addOption("m", "metaversion", true,
                 "Specify the meta version to decode log value, separated by ',', first is community meta" +
                         " version, second is StarRocks meta version");
+        options.addOption("fp", "failpoint", false, "enable fail point");
 
         CommandLine cmd = null;
         try {
@@ -396,14 +402,17 @@ public class StarRocksFE {
             System.exit(-1);
         }
 
-        // version
+        CommandLineOptions commandLineOptions = new CommandLineOptions();
+        // -v --version
         if (cmd.hasOption('v') || cmd.hasOption("version")) {
-            return new CommandLineOptions(true, null);
-        } else if (cmd.hasOption('b') || cmd.hasOption("bdb")) {
+            commandLineOptions.setVersion(true);
+        }
+        // -b --bdb
+        if (cmd.hasOption('b') || cmd.hasOption("bdb")) {
             if (cmd.hasOption('l') || cmd.hasOption("listdb")) {
                 // list bdb je databases
                 BDBToolOptions bdbOpts = new BDBToolOptions(true, "", false, "", "", 0, 0);
-                return new CommandLineOptions(false, bdbOpts);
+                commandLineOptions.setBdbToolOpts(bdbOpts);
             } else if (cmd.hasOption('d') || cmd.hasOption("db")) {
                 // specify a database
                 String dbName = cmd.getOptionValue("db");
@@ -414,7 +423,7 @@ public class StarRocksFE {
 
                 if (cmd.hasOption('s') || cmd.hasOption("stat")) {
                     BDBToolOptions bdbOpts = new BDBToolOptions(false, dbName, true, "", "", 0, 0);
-                    return new CommandLineOptions(false, bdbOpts);
+                    commandLineOptions.setBdbToolOpts(bdbOpts);
                 } else {
                     String fromKey = "";
                     String endKey = "";
@@ -453,25 +462,44 @@ public class StarRocksFE {
                     BDBToolOptions bdbOpts =
                             new BDBToolOptions(false, dbName, false, fromKey, endKey, metaVersion,
                                     starrocksMetaVersion);
-                    return new CommandLineOptions(false, bdbOpts);
+                    commandLineOptions.setBdbToolOpts(bdbOpts);
                 }
             } else {
                 System.err.println("Invalid options when running bdb je tools");
                 System.exit(-1);
             }
-        } else if (cmd.hasOption('h') || cmd.hasOption("helper")) {
+        }
+        // -h --helper
+        if (cmd.hasOption('h') || cmd.hasOption("helper")) {
             String helperNode = cmd.getOptionValue("helper");
             if (Strings.isNullOrEmpty(helperNode)) {
-                System.err.println("Missing helper node");
+                System.err.println("Missing helper node value");
                 System.exit(-1);
             }
+            commandLineOptions.setHelpers(helperNode);
+        }
+        // -ht --host_type
+        if (cmd.hasOption("ht") || cmd.hasOption("host_type")) {
+            String hostType = cmd.getOptionValue("host_type");
+            if (Strings.isNullOrEmpty(hostType)) {
+                System.err.println("Missing host type value");
+                System.exit(-1);
+            }
+            commandLineOptions.setHostType(hostType);
+        }
+        // -rs --cluster_snapshot
+        if (cmd.hasOption("rs") || cmd.hasOption("cluster_snapshot")) {
+            commandLineOptions.setStartFromSnapshot(true);
+        }
+        // -fp --failpoint
+        if (cmd.hasOption("fp") || cmd.hasOption("failpoint")) {
+            commandLineOptions.setEnableFailPoint(true);
         }
 
-        // helper node is null, means no helper node is specified
-        return new CommandLineOptions(false, null);
+        return commandLineOptions;
     }
 
-    private static void checkCommandLineOptions(CommandLineOptions cmdLineOpts) {
+    private static void runCommandLineOptions(CommandLineOptions cmdLineOpts) {
         if (cmdLineOpts.isVersion()) {
             System.out.println("Build version: " + Version.STARROCKS_VERSION);
             System.out.println("Commit hash: " + Version.STARROCKS_COMMIT_HASH);
@@ -482,7 +510,8 @@ public class StarRocksFE {
             System.out.println("Build user: " + Version.STARROCKS_BUILD_USER + "@" + Version.STARROCKS_BUILD_HOST);
             System.out.println("Java compile version: " + Version.STARROCKS_JAVA_COMPILE_VERSION);
             System.exit(0);
-        } else if (cmdLineOpts.runBdbTools()) {
+        }
+        if (cmdLineOpts.getBdbToolOpts() != null) {
 
             BDBTool bdbTool = new BDBTool(BDBEnvironment.getBdbDir(), cmdLineOpts.getBdbToolOpts());
             if (bdbTool.run()) {
@@ -490,6 +519,11 @@ public class StarRocksFE {
             } else {
                 System.exit(-1);
             }
+        }
+
+        if (cmdLineOpts.isEnableFailPoint()) {
+            LOG.info("failpoint is enabled");
+            FailPoint.enable();
         }
 
         // go on
@@ -526,7 +560,27 @@ public class StarRocksFE {
     // Currently, only one log is printed to distinguish whether it is a normal exit or killed by the operating system.
     private static void addShutdownHook() {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            LOG.info("FE shutdown");
+            LOG.info("start to execute shutdown hook");
+            try {
+                Thread t = new Thread(() -> {
+                    try {
+                        ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
+                        connectScheduler.printAllRunningQuery();
+                    } catch (Throwable e) {
+                        LOG.warn("printing running query failed when fe shut down", e);
+                    }
+                });
+
+                t.start();
+
+                // it is necessary to set shutdown timeout,
+                // because in addition to kill by user, System.exit(-1) will trigger the shutdown hook too,
+                // if no timeout and shutdown hook blocked indefinitely, Fe will fall into a catastrophic state.
+                t.join(30000);
+            } catch (Throwable e) {
+                LOG.warn("shut down hook failed", e);
+            }
+            LOG.info("shutdown hook end");
         }));
     }
 }

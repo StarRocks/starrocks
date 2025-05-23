@@ -292,34 +292,9 @@ public class ExchangeNode extends PlanNode {
     private boolean pushCrossExchange(RuntimeFilterPushDownContext context, Expr probeExpr,
                                       List<Expr> partitionByExprs) {
         RuntimeFilterDescription description = context.getDescription();
-        if (!description.canPushAcrossExchangeNode()) {
+        if (!description.canPushAcrossExchangeNode() ||
+                !canCrossExchangeNode(description, probeExpr, partitionByExprs)) {
             return false;
-        }
-
-        boolean crossExchange = false;
-        // TODO: remove this later when multi columns on grf is default on.
-        // broadcast or only one RF, always can be cross exchange
-        if (description.isBroadcastJoin() || description.getEqualCount() == 1) {
-            crossExchange = true;
-        } else if (description.getEqualCount() > 1 && partitionByExprs.size() == 1) {
-            // RF nums > 1 and only partition by one column, only send the RF which RF's column equals partition column
-            Expr pExpr = partitionByExprs.get(0);
-            if (probeExpr instanceof SlotRef && pExpr instanceof SlotRef &&
-                    ((SlotRef) probeExpr).getSlotId().asInt() == ((SlotRef) pExpr).getSlotId().asInt()) {
-                crossExchange = true;
-            }
-        }
-
-        if (!crossExchange) {
-            // If partitionByExprs's size is 1 and it is not the probeExpr, don't push down it
-            // because multi GRFs will cause performance decrease which multi GRFs will increase
-            // scan's wait time.
-            if (description.getEqualCount() > 1 && partitionByExprs.size() == 1) {
-                return false;
-            }
-            if (!ConnectContext.get().getSessionVariable().isEnableMultiColumnsOnGlobbalRuntimeFilter()) {
-                return false;
-            }
         }
 
         boolean accept = false;
@@ -332,6 +307,36 @@ public class ExchangeNode extends PlanNode {
         }
         description.exitExchangeNode();
         return accept;
+    }
+
+    private boolean canCrossExchangeNode(RuntimeFilterDescription description,
+                                         Expr probeExpr,
+                                         List<Expr> partitionByExprs) {
+        // broadcast or only one RF, always can be cross exchange
+        if (description.isBroadcastJoin() || description.getEqualCount() == 1) {
+            return true;
+        }
+
+        if (partitionByExprs.size() == 1 && description.getEqualCount() > 1) {
+            // TODO(lism): support non-slot-ref partition by exprs later
+            // RF nums > 1 and only partition by one column, only send the RF which RF's column equals partition column
+            return isPartitionByExprSlotRef(probeExpr, partitionByExprs.get(0));
+        } else {
+            // TODO(lism): support non-slot-ref partition by exprs later
+            if (partitionByExprs.stream().anyMatch(expr -> !(expr instanceof SlotRef)) ||
+                    partitionByExprs.stream().noneMatch(expr -> isPartitionByExprSlotRef(probeExpr, expr))) {
+                return false;
+            }
+            return ConnectContext.get().getSessionVariable().isEnableMultiColumnsOnGlobbalRuntimeFilter();
+        }
+    }
+
+    private boolean isPartitionByExprSlotRef(Expr probeExpr, Expr partitionByExpr) {
+        if (probeExpr instanceof SlotRef && partitionByExpr instanceof SlotRef) {
+            return ((SlotRef) probeExpr).getSlotId().asInt() == ((SlotRef) partitionByExpr).getSlotId().asInt();
+        } else {
+            return false;
+        }
     }
 
     @Override

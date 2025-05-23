@@ -70,6 +70,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
@@ -153,6 +154,7 @@ import com.starrocks.persist.DropPartitionsInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.ListPartitionPersistInfo;
+import com.starrocks.persist.ModifyColumnCommentLog;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
@@ -1549,6 +1551,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 partition.getId(), indexMap.get(olapTable.getBaseIndexId()));
         // set ShardGroupId to partition for rollback to old version
         physicalPartition.setShardGroupId(shardGroupId);
+        physicalPartition.setBucketNum(distributionInfo.getBucketNum());
 
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         short replicationNum = partitionInfo.getReplicationNum(partitionId);
@@ -1733,6 +1736,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 logicalPartition.generatePhysicalPartitionName(physicalPartitionId),
                 partitionId,
                 indexMap.get(table.getBaseIndexId()));
+        physicalPartition.setBucketNum(distributionInfo.getBucketNum());
 
         logicalPartition.addSubPartition(physicalPartition);
 
@@ -1802,8 +1806,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
 
         TabletTaskExecutor.CreateTabletOption option = new TabletTaskExecutor.CreateTabletOption();
+        // Enable `tablet_creation_optimization` creates only one shared tablet metadata for all tablets under a partition. 
+        // Enable `enable_partition_aggregation` reuses the optimization logic.
+        // These two configure only use in shared-data mode
         option.setEnableTabletCreationOptimization(table.isCloudNativeTableOrMaterializedView()
-                && Config.lake_enable_tablet_creation_optimization);
+                && (Config.lake_enable_tablet_creation_optimization || table.enablePartitionAggregation()));
         option.setGtid(GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid());
 
         try {
@@ -3727,9 +3734,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
             String partitionRetentionCondition = PropertyAnalyzer.analyzePartitionRetentionCondition(
                     db, table, properties, true, null);
-            if (Strings.isNullOrEmpty(partitionRetentionCondition)) {
-                throw new DdlException("Invalid partition retention condition");
-            }
             results.put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, partitionRetentionCondition);
         }
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT)) {
@@ -3898,6 +3902,19 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 new ModifyTablePropertyOperationLog(db.getId(), table.getId(), properties);
         GlobalStateMgr.getCurrentState().getEditLog().logModifyEnablePersistentIndex(info);
 
+    }
+
+    public void modifyFlatJsonMeta(Database db, OlapTable table, FlatJsonConfig flatJsonConfig) {
+        Locker locker = new Locker();
+        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
+        table.setFlatJsonConfig(flatJsonConfig);
+
+        ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(
+                db.getId(),
+                table.getId(),
+                flatJsonConfig.toProperties()
+        );
+        GlobalStateMgr.getCurrentState().getEditLog().logModifyFlatJsonConfig(info);
     }
 
     public void modifyBinlogMeta(Database db, OlapTable table, BinlogConfig binlogConfig) {
@@ -4159,6 +4176,23 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             table.setNewFullSchema(columns);
         } finally {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
+        }
+    }
+
+    public void replayModifyColumnComment(short opCode, ModifyColumnCommentLog info) {
+        OlapTable table = (OlapTable) getTable(info.getDbId(), info.getTableId());
+        if (table == null) {
+            return;
+        }
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(info.getDbId(), info.getTableId(), LockType.WRITE);
+        try {
+            Column olapColumn = table.getColumn(info.getColumnName());
+            if (olapColumn != null) {
+                olapColumn.setComment(info.getComment());
+            }
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(info.getDbId(), info.getTableId(), LockType.WRITE);
         }
     }
 
@@ -5165,7 +5199,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
     @Override
     public void handleMVRepair(Database db, Table table, List<MVRepairHandler.PartitionRepairInfo> partitionRepairInfos) {
-        MVMetaVersionRepairer.repairBaseTableVersionChanges(db, table, partitionRepairInfos);
+        MVMetaVersionRepairer.repairBaseTableVersionChanges(table, partitionRepairInfos);
     }
 
     @Override

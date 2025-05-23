@@ -199,6 +199,8 @@ public:
     TPlanNodeId probe_plan_node_id() const { return _probe_plan_node_id; }
     void set_probe_plan_node_id(TPlanNodeId id) { _probe_plan_node_id = id; }
     int8_t join_mode() const { return _join_mode; };
+    // runtime filter's partition-by-exprs's size
+    const size_t num_partition_by_exprs() const { return _partition_by_exprs_contexts.size(); }
     const std::vector<ExprContext*>* partition_by_expr_contexts() const { return &_partition_by_exprs_contexts; }
 
     const RuntimeFilter* runtime_filter(int32_t driver_sequence) const {

@@ -121,6 +121,7 @@ public class PartitionsProcDir implements ProcDirInterface {
                     .add("DistributionKey")
                     .add("Buckets")
                     .add("DataSize")
+                    .add("StorageSize")
                     .add("RowCount")
                     .add("EnableDataCache")
                     .add("AsyncWrite")
@@ -148,6 +149,7 @@ public class PartitionsProcDir implements ProcDirInterface {
                     .add("CooldownTime")
                     .add("LastConsistencyCheckTime")
                     .add("DataSize")
+                    .add("StorageSize")
                     .add("IsInMemory")
                     .add("RowCount")
                     .add("DataVersion")
@@ -355,18 +357,21 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(findRangeOrListValues(tblPartitionInfo, partition.getId()));
         DistributionInfo distributionInfo = partition.getDistributionInfo();
         partitionInfo.add(distributionKeyAsString(table, distributionInfo));
-        partitionInfo.add(distributionInfo.getBucketNum());
+        partitionInfo.add(physicalPartition.getBucketNum() > 0 ?
+                physicalPartition.getBucketNum() : distributionInfo.getBucketNum());
 
         short replicationNum = tblPartitionInfo.getReplicationNum(partition.getId());
         partitionInfo.add(String.valueOf(replicationNum));
 
         long dataSize = physicalPartition.storageDataSize();
+        long extraFileSize = physicalPartition.getExtraFileSize();
         ByteSizeValue byteSizeValue = new ByteSizeValue(dataSize);
         DataProperty dataProperty = tblPartitionInfo.getDataProperty(partition.getId());
         partitionInfo.add(dataProperty.getStorageMedium().name());
         partitionInfo.add(TimeUtils.longToTimeString(dataProperty.getCooldownTimeMs()));
         partitionInfo.add(TimeUtils.longToTimeString(partition.getLastCheckTime()));
         partitionInfo.add(byteSizeValue);
+        partitionInfo.add(new ByteSizeValue(dataSize + extraFileSize));
         partitionInfo.add(tblPartitionInfo.getIsInMemory(partition.getId()));
         partitionInfo.add(physicalPartition.storageRowCount());
 
@@ -397,6 +402,8 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(distributionKeyAsString(table, partition.getDistributionInfo())); // DistributionKey
         partitionInfo.add(partition.getDistributionInfo().getBucketNum()); // Buckets
         partitionInfo.add(new ByteSizeValue(physicalPartition.storageDataSize())); // DataSize
+        long storageSize = physicalPartition.storageDataSize() + physicalPartition.getExtraFileSize();
+        partitionInfo.add(new ByteSizeValue(storageSize)); // StorageSize
         partitionInfo.add(physicalPartition.storageRowCount()); // RowCount
         partitionInfo.add(cacheInfo.isEnabled()); // EnableCache
         partitionInfo.add(cacheInfo.isAsyncWriteBack()); // AsyncWrite

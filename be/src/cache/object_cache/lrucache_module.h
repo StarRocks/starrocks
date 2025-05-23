@@ -24,11 +24,11 @@ class Cache;
 class LRUCacheModule final : public ObjectCache {
 public:
     LRUCacheModule() = delete;
-    LRUCacheModule(const ObjectCacheOptions& options);
+    LRUCacheModule(std::shared_ptr<Cache> cache);
 
-    virtual ~LRUCacheModule();
+    virtual ~LRUCacheModule() = default;
 
-    Status insert(const std::string& key, void* value, size_t size, size_t charge, ObjectCacheDeleter deleter,
+    Status insert(const std::string& key, void* value, size_t size, ObjectCacheDeleter deleter,
                   ObjectCacheHandlePtr* handle, ObjectCacheWriteOptions* options) override;
 
     Status lookup(const std::string& key, ObjectCacheHandlePtr* handle, ObjectCacheReadOptions* options) override;
@@ -62,7 +62,6 @@ public:
 private:
     bool _check_write(size_t charge, ObjectCacheWriteOptions* options) const;
 
-    ObjectCacheOptions _options;
     std::shared_ptr<Cache> _cache;
 };
 

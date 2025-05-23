@@ -48,6 +48,8 @@ Status FlatJsonColumnCompactor::_compact_columns(Columns& json_datas) {
         vc.emplace_back(js.get());
     }
     deriver.set_generate_filter(true);
+    deriver.init_flat_json_config(_flat_json_config);
+
     deriver.derived(vc);
 
     _flat_paths = deriver.flat_paths();

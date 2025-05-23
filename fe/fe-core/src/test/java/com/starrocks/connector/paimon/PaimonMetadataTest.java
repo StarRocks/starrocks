@@ -40,6 +40,7 @@ import com.starrocks.credential.CloudType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -92,7 +93,6 @@ import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.source.Split;
 import org.apache.paimon.table.source.TableScan;
 import org.apache.paimon.table.system.ManifestsTable;
-import org.apache.paimon.table.system.SchemasTable;
 import org.apache.paimon.table.system.SnapshotsTable;
 import org.apache.paimon.types.BigIntType;
 import org.apache.paimon.types.BooleanType;
@@ -188,12 +188,6 @@ public class PaimonMetadataTest {
         List<DataField> fields = new ArrayList<>();
         fields.add(new DataField(1, "col2", new IntType(true)));
         fields.add(new DataField(2, "col3", new DoubleType(false)));
-        new MockUp<PaimonMetadata>() {
-            @Mock
-            public long getTableCreateTime(String dbName, String tblName) {
-                return 0L;
-            }
-        };
         new Expectations() {
             {
                 paimonNativeCatalog.getTable((Identifier) any);
@@ -204,6 +198,8 @@ public class PaimonMetadataTest {
                 result = new ArrayList<>(Collections.singleton("col1"));
                 paimonNativeTable.location().toString();
                 result = "hdfs://127.0.0.1:10000/paimon";
+                paimonNativeTable.primaryKeys();
+                result = List.of("col2");
             }
         };
         com.starrocks.catalog.Table table = metadata.getTable(connectContext, "db1", "tbl1");
@@ -211,6 +207,13 @@ public class PaimonMetadataTest {
         Assert.assertTrue(metadata.tableExists(connectContext, "db1", "tbl1"));
         Assert.assertEquals("db1", paimonTable.getCatalogDBName());
         Assert.assertEquals("tbl1", paimonTable.getCatalogTableName());
+        Assert.assertEquals("CREATE TABLE `tbl1` (\n" +
+                        "  `col2` int(11) DEFAULT NULL,\n" +
+                        "  `col3` double DEFAULT NULL\n" +
+                        ")\n" +
+                        "PARTITION BY (col1)\n" +
+                        "PROPERTIES (\"primary-key\" = \"col2\");",
+                AstToStringBuilder.getExternalCatalogTableDdlStmt(paimonTable));
         Assert.assertEquals(Lists.newArrayList("col1"), paimonTable.getPartitionColumnNames());
         Assert.assertEquals("hdfs://127.0.0.1:10000/paimon", paimonTable.getTableLocation());
         Assert.assertEquals(ScalarType.INT, paimonTable.getBaseSchema().get(0).getType());
@@ -218,7 +221,7 @@ public class PaimonMetadataTest {
         Assert.assertEquals(ScalarType.DOUBLE, paimonTable.getBaseSchema().get(1).getType());
         Assert.assertTrue(paimonTable.getBaseSchema().get(1).isAllowNull());
         Assert.assertEquals("paimon_catalog", paimonTable.getCatalogName());
-        Assert.assertEquals("paimon_catalog.db1.tbl1.0", paimonTable.getUUID());
+        Assert.assertEquals("paimon_catalog.db1.tbl1.null", paimonTable.getUUID());
     }
 
     @Test
@@ -326,12 +329,6 @@ public class PaimonMetadataTest {
                                    @Mocked ReadBuilder readBuilder,
                                    @Mocked InnerTableScan scan)
             throws Catalog.TableNotExistException {
-        new MockUp<PaimonMetadata>() {
-            @Mock
-            public long getTableCreateTime(String dbName, String tblName) {
-                return 0L;
-            }
-        };
         new Expectations() {
             {
                 paimonNativeCatalog.getTable((Identifier) any);
@@ -534,63 +531,6 @@ public class PaimonMetadataTest {
     }
 
     @Test
-    public void testGetCreateTime(@Mocked SchemasTable schemasTable,
-                                  @Mocked RecordReader<InternalRow> recordReader) throws Exception {
-        RowType rowType = new RowType(Arrays.asList(
-                new DataField(0, "schema_id", new BigIntType(false)),
-                new DataField(1, "fields", SerializationUtils.newStringType(false)),
-                new DataField(2, "partition_keys", SerializationUtils.newStringType(false)),
-                new DataField(3, "primary_keys", SerializationUtils.newStringType(false)),
-                new DataField(4, "options", SerializationUtils.newStringType(false)),
-                new DataField(5, "comment", SerializationUtils.newStringType(true)),
-                new DataField(6, "update_time", new TimestampType(false, 3))));
-
-        GenericRow row1 = new GenericRow(2);
-        row1.setField(0, (long) 0);
-        row1.setField(1, Timestamp.fromLocalDateTime(LocalDateTime.of(2023, 1, 1, 0, 0, 0, 0)));
-
-        GenericRow row2 = new GenericRow(2);
-        row2.setField(1, (long) 1);
-        row2.setField(1, Timestamp.fromLocalDateTime(LocalDateTime.of(2023, 2, 1, 0, 0, 0, 0)));
-
-        new MockUp<RecordReaderIterator>() {
-            private int callCount;
-            private final GenericRow[] elements = {row1, row2};
-            private final boolean[] hasNextOutputs = {true, true, false};
-
-            @Mock
-            public boolean hasNext() {
-                if (callCount < hasNextOutputs.length) {
-                    return hasNextOutputs[callCount];
-                }
-                return false;
-            }
-
-            @Mock
-            public InternalRow next() {
-                if (callCount < elements.length) {
-                    return elements[callCount++];
-                }
-                return null;
-            }
-        };
-        new Expectations() {
-            {
-                paimonNativeCatalog.getTable((Identifier) any);
-                result = schemasTable;
-                schemasTable.rowType();
-                result = rowType;
-                schemasTable.newReadBuilder().withProjection((int[]) any)
-                        .withFilter((Predicate) any).newRead().createReader((TableScan.Plan) any);
-                result = recordReader;
-            }
-        };
-
-        long createTime = metadata.getTableCreateTime("db1", "tbl1");
-        Assert.assertEquals(1672531200000L, createTime);
-    }
-
-    @Test
     public void testGetUpdateTime(@Mocked SnapshotsTable snapshotsTable,
                                   @Mocked RecordReader<InternalRow> recordReader) throws Exception {
         RowType rowType = new RowType(Arrays.asList(
@@ -653,12 +593,6 @@ public class PaimonMetadataTest {
                         .setFiles(Lists.newArrayList(PaimonRemoteFileDesc.createPaimonRemoteFileDesc(
                                 new PaimonSplitsInfo(null, Lists.newArrayList((Split) splits.get(0))))))
                         .build());
-            }
-        };
-        new MockUp<PaimonMetadata>() {
-            @Mock
-            public long getTableCreateTime(String dbName, String tblName) {
-                return 0L;
             }
         };
 
@@ -781,7 +715,7 @@ public class PaimonMetadataTest {
             }
         };
         PaimonTable paimonTable =
-                new PaimonTable("paimon", "db1", "tbl1", Lists.newArrayList(), nativeTable, 1723081832L);
+                new PaimonTable("paimon", "db1", "tbl1", Lists.newArrayList(), nativeTable);
         optimizerContext.getSessionVariable().setEnablePaimonColumnStatistics(true);
 
         Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<ColumnRefOperator, Column>();
@@ -805,6 +739,5 @@ public class PaimonMetadataTest {
                 metadata.getTableStatistics(optimizerContext, paimonTable, colRefToColumnMetaMap,
                         null, null, -1, null);
         Assert.assertEquals(tableStatistics.getColumnStatistics().size(), colRefToColumnMetaMap.size());
-
     }
 }
