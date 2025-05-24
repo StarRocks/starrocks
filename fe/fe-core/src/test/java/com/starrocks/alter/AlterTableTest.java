@@ -416,14 +416,15 @@ public class AlterTableTest {
 
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(testDb.getFullName(), "test_location_colocate_alter1");
-        Assert.assertNull(olapTable.getLocation());
+        Assert.assertNotNull(olapTable.getLocation());
 
         sql = "ALTER TABLE test.`test_location_colocate_alter1` SET ('" +
                     PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "' = 'rack:*');";
         try {
-            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, connectContext), connectContext);
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, connectContext),
+                    connectContext);
         } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("Cannot set location for colocate table"));
+            Assert.assertTrue(e.getMessage().contains("loc label cannot be changed"));
         }
     }
 
@@ -458,13 +459,12 @@ public class AlterTableTest {
                     .getTable(testDb.getFullName(), "test_location_colocate_alter2");
         Assert.assertTrue(olapTable.getLocation().containsKey("*"));
 
-        sql = "ALTER TABLE test.`test_location_colocate_alter1` SET ('" +
+        sql = "ALTER TABLE test.`test_location_colocate_alter2` SET ('" +
                     PropertyAnalyzer.PROPERTIES_COLOCATE_WITH + "' = 'cg1');";
-        try {
-            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, connectContext), connectContext);
-        } catch (DdlException e) {
-            System.out.println(e.getMessage());
-            Assert.assertTrue(e.getMessage().contains("table has location property and cannot be colocated"));
-        }
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, connectContext), connectContext);
+        Assert.assertEquals("cg1", ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "test_location_colocate_alter2"))
+                .getColocateGroup());
     }
 }

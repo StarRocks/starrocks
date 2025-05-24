@@ -35,6 +35,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Multimap;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.common.DdlException;
@@ -62,16 +63,24 @@ public class ColocateGroupSchema implements Writable {
     private int bucketsNum;
     @SerializedName("rn")
     private short replicationNum;
+    @SerializedName(("lctn"))
+    private Multimap<String, String> locationMap;
 
     private ColocateGroupSchema() {
 
     }
 
     public ColocateGroupSchema(GroupId groupId, List<Column> distributionCols, int bucketsNum, short replicationNum) {
+        this(groupId, distributionCols, bucketsNum, replicationNum, null);
+    }
+
+    public ColocateGroupSchema(GroupId groupId, List<Column> distributionCols, int bucketsNum,
+                               short replicationNum, Multimap<String, String> locationMap) {
         this.groupId = groupId;
         this.distributionColTypes = distributionCols.stream().map(c -> c.getType()).collect(Collectors.toList());
         this.bucketsNum = bucketsNum;
         this.replicationNum = replicationNum;
+        this.locationMap = locationMap;
     }
 
     public GroupId getGroupId() {
@@ -90,9 +99,41 @@ public class ColocateGroupSchema implements Writable {
         return distributionColTypes;
     }
 
+    public Multimap<String, String> getLocationMap() {
+        return locationMap;
+    }
+
     public void checkColocateSchema(OlapTable tbl) throws DdlException {
         checkDistribution(tbl.getIdToColumn(), tbl.getDefaultDistributionInfo());
         checkReplicationNum(tbl.getPartitionInfo());
+        checkLocation(tbl.getLocation());
+    }
+
+    /**
+     * Checks if group schema label matching with given location label, Throws exception otherwise
+     * @param tblLocationMap
+     * @throws DdlException
+     */
+    private void checkLocation(Multimap<String, String> tblLocationMap) throws DdlException {
+        // If there is no label for table
+        if (tblLocationMap == null) {
+            // throw error if colocate group has location label
+            if (locationMap != null) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_COLOCATE_TABLE_MUST_HAS_SAME_LOCATION_LABEL, null, locationMap);
+            }
+        } else {
+            // Need to match location map
+            if (locationMap != null) {
+                // Both have location label, throw error if not same
+                if (!locationMap.equals(tblLocationMap)) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_COLOCATE_TABLE_MUST_HAS_SAME_LOCATION_LABEL,
+                            null, locationMap);
+                }
+            } else {
+                // Table has label but group schema doesn't have label
+                ErrorReport.reportDdlException(ErrorCode.ERR_COLOCATE_TABLE_MUST_HAS_SAME_LOCATION_LABEL, null, locationMap);
+            }
+        }
     }
 
     public void checkDistribution(Map<ColumnId, Column> idToColumn, DistributionInfo distributionInfo)
