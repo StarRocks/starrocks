@@ -69,48 +69,51 @@ void StoragePageCacheTest::create_obj_cache(size_t capacity) {
 TEST_F(StoragePageCacheTest, normal) {
     {
         // insert normal page
-        StoragePageCache::CacheKey key("abc", 0);
-        Slice data(new char[1024], 1024);
+        std::string key("abc0");
+        auto data = std::make_unique<std::vector<uint8_t>>(1024);
         PageCacheHandle handle;
 
-        ASSERT_OK(_page_cache->insert(key, data, &handle, false));
-        ASSERT_EQ(((Slice*)handle.data().data)->data, data.data);
+        ASSERT_OK(_page_cache->insert(key, data.get(), &handle, false));
+        ASSERT_EQ(handle.data(), data.get());
+        auto* check_data = data.release();
 
         ASSERT_TRUE(_page_cache->lookup(key, &handle));
-        ASSERT_EQ(data.data, ((Slice*)handle.data().data)->data);
+        ASSERT_EQ(handle.data(), check_data);
     }
 
     {
         // insert in_memory page
-        StoragePageCache::CacheKey memory_key("mem", 0);
-        Slice data(new char[1024], 1024);
+        std::string key("mem0");
+        auto data = std::make_unique<std::vector<uint8_t>>(1024);
         PageCacheHandle handle;
 
-        ASSERT_OK(_page_cache->insert(memory_key, data, &handle, true));
-        ASSERT_EQ(((Slice*)handle.data().data)->data, data.data);
+        ASSERT_OK(_page_cache->insert(key, data.get(), &handle, true));
+        ASSERT_EQ(handle.data(), data.get());
+        data.release();
 
-        ASSERT_TRUE(_page_cache->lookup(memory_key, &handle));
+        ASSERT_TRUE(_page_cache->lookup(key, &handle));
     }
 
     // put too many page to eliminate first page
     for (int i = 0; i < 10 * kNumShards; ++i) {
-        StoragePageCache::CacheKey key("bcd", i);
-        Slice data(new char[1024], 1024);
+        std::string key("bcd");
+        key.append(std::to_string(i));
+        auto data = std::make_unique<std::vector<uint8_t>>(1024);
         PageCacheHandle handle;
-        ASSERT_OK(_page_cache->insert(key, data, &handle, false));
+        ASSERT_OK(_page_cache->insert(key, data.get(), &handle, false));
+        data.release();
     }
 
     // cache miss
     {
         PageCacheHandle handle;
-        StoragePageCache::CacheKey miss_key("abc", 1);
-        auto found = _page_cache->lookup(miss_key, &handle);
-        ASSERT_FALSE(found);
+        std::string miss_key("abc1");
+        ASSERT_FALSE(_page_cache->lookup(miss_key, &handle));
     }
 
     // cache miss for eliminated key
     {
-        StoragePageCache::CacheKey key("abc", 0);
+        std::string key("abc0");
         PageCacheHandle handle;
         ASSERT_FALSE(_page_cache->lookup(key, &handle));
     }
@@ -156,21 +159,23 @@ TEST_F(StoragePageCacheTest, normal) {
 }
 
 TEST_F(StoragePageCacheTest, metrics) {
-    StoragePageCache::CacheKey key1("abc", 0);
-    StoragePageCache::CacheKey key2("def", 0);
+    std::string key1("abc0");
+    std::string key2("def0");
     PageCacheHandle handle1;
 
     {
         // Insert a piece of data, but the application layer does not release it.
-        Slice data(new char[1024], 1024);
-        ASSERT_OK(_page_cache->insert(key1, data, &handle1, false));
+        auto data = std::make_unique<std::vector<uint8_t>>(1024);
+        ASSERT_OK(_page_cache->insert(key1, data.get(), &handle1, false));
+        data.release();
     }
 
     {
         // Insert another piece of data and release it from the application layer.
-        Slice data(new char[1024], 1024);
+        auto data = std::make_unique<std::vector<uint8_t>>(1024);
         PageCacheHandle handle2;
-        ASSERT_OK(_page_cache->insert(key2, data, &handle2, false));
+        ASSERT_OK(_page_cache->insert(key2, data.get(), &handle2, false));
+        data.release();
     }
 
     {
@@ -186,7 +191,8 @@ TEST_F(StoragePageCacheTest, metrics) {
         // Test the cache miss
         for (int i = 0; i < 1024; i++) {
             PageCacheHandle handle;
-            StoragePageCache::CacheKey key(std::to_string(i), 0);
+            std::string key(std::to_string(i));
+            key.append("0");
             ASSERT_FALSE(_page_cache->lookup(key, &handle));
         }
 

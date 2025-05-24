@@ -52,30 +52,11 @@ class MemTracker;
 // Page cache min size is 256MB
 static constexpr int64_t kcacheMinSize = 268435456;
 
-// Warpper around Cache, and used for cache page of column datas
-// in Segment.
+// Wrapper around Cache, and used for cache page of column datas in Segment.
 // TODO(zc): We should add some metric to see cache hit/miss rate.
 class StoragePageCache {
 public:
     virtual ~StoragePageCache() = default;
-    // The unique key identifying entries in the page cache.
-    // Each cached page corresponds to a specific offset within
-    // a file.
-    //
-    // TODO(zc): Now we use file name(std::string) as a part of
-    // key, which is not efficient. We should make it better later
-    struct CacheKey {
-        CacheKey(std::string fname_, int64_t offset_) : fname(std::move(fname_)), offset(offset_) {}
-        std::string fname;
-        int64_t offset;
-
-        // Encode to a flat binary which can be used as LRUCache's key
-        std::string encode() const {
-            std::string key_buf(fname);
-            key_buf.append((char*)&offset, sizeof(offset));
-            return key_buf;
-        }
-    };
 
     void init_metrics();
 
@@ -92,14 +73,14 @@ public:
     // destructs.
     //
     // Return true if entry is found, otherwise return false.
-    bool lookup(const CacheKey& key, PageCacheHandle* handle);
+    bool lookup(const std::string& key, PageCacheHandle* handle);
 
     // Insert a page with key into this cache.
-    // Given hanlde will be set to valid reference.
+    // Given handle will be set to valid reference.
     // This function is thread-safe, and when two clients insert two same key
     // concurrently, this function can assure that only one page is cached.
     // The in_memory page will have higher priority.
-    Status insert(const CacheKey& key, const Slice& data, PageCacheHandle* handle, bool in_memory = false);
+    Status insert(const std::string& key, std::vector<uint8_t>* data, PageCacheHandle* handle, bool in_memory = false);
 
     size_t memory_usage() const { return _cache->usage(); }
 
@@ -145,7 +126,9 @@ public:
     }
 
     ObjectCache* cache() const { return _cache; }
-    Slice data() const { return _cache->value_slice(_handle); }
+    const std::vector<uint8_t>* data() const {
+        return reinterpret_cast<const std::vector<uint8_t>*>(_cache->value(_handle));
+    }
 
 private:
     ObjectCache* _cache = nullptr;

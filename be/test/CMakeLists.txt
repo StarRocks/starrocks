@@ -328,6 +328,7 @@ set(EXEC_FILES
         ./storage/rowset/series_column_iterator_test.cpp
         ./storage/rowset/index_page_test.cpp
         ./storage/rowset/metadata_cache_test.cpp
+        ./storage/rowset/page_io_test.cpp
         ./storage/index/vector_index_test.cpp
         ./storage/index/vector_search_test.cpp
         ./storage/snapshot_meta_test.cpp
