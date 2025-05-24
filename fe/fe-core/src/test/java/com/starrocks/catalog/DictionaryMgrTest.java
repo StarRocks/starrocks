@@ -15,6 +15,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.TableName;
 import com.starrocks.persist.DictionaryMgrInfo;
 import com.starrocks.proto.PProcessDictionaryCacheResult;
 import com.starrocks.server.GlobalStateMgr;
@@ -56,7 +57,8 @@ public class DictionaryMgrTest {
         dictionaryKeys.add("key");
         dictionaryValues.add("value");
         Dictionary dictionary =
-                    new Dictionary(1, "dict", "t", "default_catalog", "testDb", dictionaryKeys, dictionaryValues, null);
+                    new Dictionary(1, "dict", new TableName("testDb", "t"), "default_catalog", "testDb",
+                            dictionaryKeys, dictionaryValues, null);
         Map<Long, Dictionary> dictionariesMapById = new HashMap<>();
         dictionariesMapById.put(1L, dictionary);
 
