@@ -4,7 +4,7 @@ toc_max_heading_level: 5
 keywords:
   - broker
   - load
-  - "broker load"
+  - broker load
 ---
 
 <head><meta name="docsearch:pagerank" content="100"/></head>

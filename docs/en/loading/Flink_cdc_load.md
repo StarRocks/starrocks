@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: docs
+keywords:
+  - MySql
+  - mysql
+  - sync
+  - Flink CDC
 ---
 
 # Realtime synchronization from MySQL
