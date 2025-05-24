@@ -136,6 +136,8 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadFunctionalExprProvider;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.meta.BlackListSql;
+import com.starrocks.proto.ExecuteCommandRequestPB;
+import com.starrocks.proto.ExecuteCommandResultPB;
 import com.starrocks.proto.FailPointTriggerModeType;
 import com.starrocks.proto.PFailPointInfo;
 import com.starrocks.proto.PFailPointTriggerMode;
@@ -165,6 +167,7 @@ import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AdminShowBackendConfigStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
@@ -277,6 +280,9 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -2280,6 +2286,76 @@ public class ShowExecutor {
                 throw new SemanticException(e.getMessage());
             }
             return new ShowResultSet(statement.getMetaData(), results);
+        }
+
+        @Override
+        public ShowResultSet visitAdminShowBackendConfigStatement(AdminShowBackendConfigStmt statement, ConnectContext context) {
+            List<List<String>> rows = Lists.newArrayList();
+
+            SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            
+            List<Long> backendIds = clusterInfoService.getBackendIds(true);
+            if (backendIds == null || backendIds.isEmpty()) {
+                return new ShowResultSet(statement.getMetaData(), rows);
+            }
+
+            List<Pair<Backend, Future<ExecuteCommandResultPB>>> futures = Lists.newArrayList();
+            for (long backendId : backendIds) {
+                Backend backend = clusterInfoService.getBackend(backendId);
+                if (backend == null) {
+                    continue;
+                }
+
+                try {
+                    ExecuteCommandRequestPB request = new ExecuteCommandRequestPB();
+                    request.command = "show_config";
+                    if (statement.getPattern() != null) {
+                        request.params = "{\"pattern\":\"" + statement.getPattern() + "\"}";
+                    }
+                    futures.add(Pair.create(backend,
+                            BackendServiceClient.getInstance().executeCommand(backend.getBrpcAddress(), request)));
+                } catch (RpcException e) {
+                    LOG.warn("Failed to send show_config request to backend: {}", backend.getHost(), e);
+                }
+            }
+
+            for (Pair<Backend, Future<ExecuteCommandResultPB>> future : futures) {
+                try {
+                    Backend backend = future.first;
+                    ExecuteCommandResultPB result = future.second.get(10, TimeUnit.SECONDS);
+                    if (result == null || result.status.statusCode != TStatusCode.OK.getValue()) {
+                        String errorMsg = result != null && !result.status.errorMsgs.isEmpty() ?
+                                String.join(",", result.status.errorMsgs) : "Unknown error";
+                        LOG.warn("Failed to get config from backend {}: {}", backend.getHost(), errorMsg);
+                        continue;
+                    }
+
+                    try {
+                        JSONObject jsonObject = new JSONObject(result.result);
+                        JSONArray configEntries = jsonObject.getJSONArray("configs");
+
+                        for (int i = 0; i < configEntries.length(); i++) {
+                            JSONObject entry = configEntries.getJSONObject(i);
+                            List<String> row = Lists.newArrayList();
+                            row.add(backend.getHost() + ":" + backend.getHeartbeatPort());
+                            row.add(entry.getString("key"));
+                            row.add(entry.getString("value"));
+                            row.add(entry.getString("type"));
+                            row.add(entry.getBoolean("is_mutable") ? "true" : "false");
+                            rows.add(row);
+                        }
+                    } catch (JSONException e) {
+                        LOG.warn("Failed to parse config JSON from backend: {}", backend.getHost(), e);
+                    }
+                } catch (Exception e) {
+                    LOG.warn("Failed to process config response from backend: {}", backend.getHost(), e);
+                }
+            }
+
+            rows.sort(Comparator.comparing((List<String> row) -> row.get(0))
+                    .thenComparing(row -> row.get(1)));
+
+            return new ShowResultSet(statement.getMetaData(), rows);
         }
 
         @Override
