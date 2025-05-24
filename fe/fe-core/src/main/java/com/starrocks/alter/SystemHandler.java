@@ -36,6 +36,7 @@ package com.starrocks.alter;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
@@ -285,7 +286,20 @@ public class SystemHandler extends AlterHandler {
         @Override
         public Void visitModifyBrokerClause(ModifyBrokerClause clause, Void context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                GlobalStateMgr.getCurrentState().getBrokerMgr().execute(clause);
+                BrokerMgr brokerMgr = GlobalStateMgr.getCurrentState().getBrokerMgr();
+                switch (clause.getOp()) {
+                    case OP_ADD:
+                        brokerMgr.addBrokers(clause.getBrokerName(), clause.getHostPortPairs());
+                        break;
+                    case OP_DROP:
+                        brokerMgr.dropBrokers(clause.getBrokerName(), clause.getHostPortPairs());
+                        break;
+                    case OP_DROP_ALL:
+                        brokerMgr.dropAllBroker(clause.getBrokerName());
+                        break;
+                    default:
+                        break;
+                }
             });
             return null;
         }
