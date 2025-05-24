@@ -87,6 +87,7 @@ import com.starrocks.http.rest.ShowDataAction;
 import com.starrocks.http.rest.ShowMetaInfoAction;
 import com.starrocks.http.rest.ShowProcAction;
 import com.starrocks.http.rest.ShowRuntimeInfoAction;
+import com.starrocks.http.rest.StarManagerHttpServiceAction;
 import com.starrocks.http.rest.StopFeAction;
 import com.starrocks.http.rest.StorageTypeCheckAction;
 import com.starrocks.http.rest.StreamLoadMetaAction;
@@ -100,6 +101,7 @@ import com.starrocks.http.rest.v2.TablePartitionAction;
 import com.starrocks.metric.GaugeMetric;
 import com.starrocks.metric.GaugeMetricImpl;
 import com.starrocks.metric.Metric;
+import com.starrocks.server.RunMode;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
@@ -205,7 +207,9 @@ public class HttpServer {
         // for stop FE
         StopFeAction.registerAction(controller);
         ExecuteSqlAction.registerAction(controller);
-
+        if (RunMode.isSharedDataMode()) {
+            StarManagerHttpServiceAction.registerAction(controller);
+        }
         // meta service action
         ImageAction.registerAction(controller);
         InfoAction.registerAction(controller);
