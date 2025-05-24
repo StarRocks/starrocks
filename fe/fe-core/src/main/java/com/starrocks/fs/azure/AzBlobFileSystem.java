@@ -16,6 +16,8 @@ package com.starrocks.fs.azure;
 
 import com.azure.core.http.rest.PagedIterable;
 import com.azure.core.http.rest.PagedResponse;
+import com.azure.identity.ClientSecretCredential;
+import com.azure.identity.ClientSecretCredentialBuilder;
 import com.azure.identity.DefaultAzureCredential;
 import com.azure.identity.DefaultAzureCredentialBuilder;
 import com.azure.identity.ManagedIdentityCredential;
@@ -83,8 +85,17 @@ public class AzBlobFileSystem implements FileSystem {
             return new BlobContainerClientBuilder().endpoint(containerUrl).buildClient();
         }
 
-        // managed identity
+        // client secret service principal
         String clientId = properties.get(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID);
+        String clientSecret = properties.get(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_SECRET);
+        String tenantId = properties.get(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_TENANT_ID);
+        if (!Strings.isNullOrEmpty(clientId) && !Strings.isNullOrEmpty(clientSecret) && !Strings.isNullOrEmpty(tenantId)) {
+            ClientSecretCredential credential =
+                    new ClientSecretCredentialBuilder().clientId(clientId).clientSecret(clientSecret).tenantId(tenantId).build();
+            return new BlobContainerClientBuilder().endpoint(containerUrl).credential(credential).buildClient();
+        }
+
+        // user assigned managed identity
         if (!Strings.isNullOrEmpty(clientId)) {
             ManagedIdentityCredential credential = new ManagedIdentityCredentialBuilder().clientId(clientId).build();
             return new BlobContainerClientBuilder().endpoint(containerUrl).credential(credential).buildClient();
