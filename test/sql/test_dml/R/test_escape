@@ -1,0 +1,34 @@
+-- name: test_escape
+create external catalog hive_catalog_${uuid0} PROPERTIES ("type"="hive", 
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}");
+-- result:
+-- !result
+create database hive_catalog_${uuid0}.hive_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/hive_db_${uuid0}/test_escape/${uuid0}"
+);
+-- result:
+-- !result
+CREATE TABLE hive_catalog_${uuid0}.hive_db_${uuid0}.hive_lineorder_par(
+      lo_orderkey int,
+       lo_orderpriority varchar(16))
+       partition by(lo_orderpriority);
+-- result:
+-- !result
+insert into hive_catalog_${uuid0}.hive_db_${uuid0}.hive_lineorder_par values(1, "4-NOT SPECI");
+-- result:
+-- !result
+insert into hive_catalog_${uuid0}.hive_db_${uuid0}.hive_lineorder_par values(2, "4-NOT SPECI");
+-- result:
+-- !result
+drop table hive_catalog_${uuid0}.hive_db_${uuid0}.hive_lineorder_par force;
+-- result:
+-- !result
+drop database hive_catalog_${uuid0}.hive_db_${uuid0};
+-- result:
+-- !result
+drop catalog hive_catalog_${uuid0};
+-- result:
+-- !result
