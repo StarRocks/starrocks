@@ -207,6 +207,23 @@ public class LakeTableHelper {
     }
 
     /**
+     * For version compatibility reason, check if column unique id is valid, and if finding any we should restore
+     * column unique id
+     *
+     * @param table the table to restore column unique id
+     */
+    public static void restoreColumnUniqueIdIfNeeded(OlapTable table) {
+        for (MaterializedIndexMeta indexMeta : table.getIndexIdToMeta().values()) {
+            List<Column> indexMetaSchema = indexMeta.getSchema();
+            // check and restore column unique id for each schema
+            if (restoreColumnUniqueId(indexMetaSchema)) {
+                LOG.info("Column unique ids in table {} with index {} have been restored, columns size: {}",
+                        table.getName(), indexMeta.getIndexId(), indexMetaSchema.size());
+            }
+        }
+    }
+
+    /**
      * For tables created in the old version of StarRocks cluster, the column unique id is generated on BE and
      * is not saved in FE catalog. For these tables, we want to be able to record their column unique id in the
      * catalog after the upgrade, and the column unique id recorded must be consistent with the one on BE.
@@ -214,21 +231,20 @@ public class LakeTableHelper {
      * each column as their unique id, so here we just need to follow the same algorithm to calculate the unique
      * id of each column.
      *
-     * @param table the table to restore column unique id
-     * @return the max column unique id
+     * @param indexMetaSchema the columns to restore column unique id
+     * @return true if the column unique id is restored, false otherwise
      */
-    public static int restoreColumnUniqueId(OlapTable table) {
-        int maxId = 0;
-        for (MaterializedIndexMeta indexMeta : table.getIndexIdToMeta().values()) {
-            final int columnCount = indexMeta.getSchema().size();
-            maxId = Math.max(maxId, columnCount - 1);
-            for (int i = 0; i < columnCount; i++) {
-                Column col = indexMeta.getSchema().get(i);
-                Preconditions.checkState(col.getUniqueId() <= 0, col.getUniqueId());
-                col.setUniqueId(i);
-            }
+    public static boolean restoreColumnUniqueId(List<Column> indexMetaSchema) {
+        // unique id should have a integer value greater than or equal to 0
+        boolean hasInvalidUniqueId = indexMetaSchema.stream().anyMatch(column -> column.getUniqueId() < 0);
+        if (!hasInvalidUniqueId) {
+            return false;
         }
-        return maxId;
+        for (int i = 0; i < indexMetaSchema.size(); i++) {
+            Column col = indexMetaSchema.get(i);
+            col.setUniqueId(i);
+        }
+        return true;
     }
 
     public static boolean supportCombinedTxnLog(TransactionState.LoadJobSourceType sourceType) {

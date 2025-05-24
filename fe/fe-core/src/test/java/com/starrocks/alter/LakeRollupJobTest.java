@@ -14,7 +14,6 @@
 
 package com.starrocks.alter;
 
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
@@ -200,16 +199,5 @@ public class LakeRollupJobTest {
         });
         Assert.assertTrue(exception.getMessage().contains("No alive backend"));
         Assert.assertEquals(AlterJobV2.JobState.PENDING, lakeRollupJob3.getJobState());
-    }
-
-    @Test
-    public void testRestoreColumnUniqueIdIfNeed() {
-        Column a = new Column();
-        Column b = new Column();
-        List<Column> columns = List.of(a, b);
-
-        lakeRollupJob.restoreColumnUniqueIdIfNeed(columns);
-        Assert.assertEquals(a.getUniqueId(), 0);
-        Assert.assertEquals(b.getUniqueId(), 1);
     }
 }
