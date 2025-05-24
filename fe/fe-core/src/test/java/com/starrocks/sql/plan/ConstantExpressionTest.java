@@ -19,6 +19,7 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.parser.ParsingException;
@@ -103,6 +104,14 @@ public class ConstantExpressionTest extends PlanTestBase {
                 () -> testFragmentPlanContains("select inspect_hive_part_info('not_exist_catalog.no_db.no_table')",
                         ""));
         testFragmentPlanContains("select inspect_hive_part_info('hive0.partitioned_db.lineitem_par')", "Project");
+    }
+
+    @Test void testMaxPartition() throws Exception {
+        FeConstants.runningUnitTest = true;
+        Assert.assertThrows(StarRocksPlannerException.class,
+                () -> testFragmentPlanContains("select max_partition('not_exist_catalog.no_db.no_table')",
+                        ""));
+        testFragmentPlanContains("select max_partition('default_catalog.test.lineitem_partition')", "Project");
     }
 
     @Test
