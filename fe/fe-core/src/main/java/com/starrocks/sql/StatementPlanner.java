@@ -171,7 +171,7 @@ public class StatementPlanner {
         } catch (Throwable e) {
             if (stmt instanceof DmlStmt) {
                 //If it is an explicit transaction, the transaction will not be aborted automatically.
-                if (session.getExplicitTxnState() == null) {
+                if (session.getTxnId() == 0) {
                     abortTransaction((DmlStmt) stmt, session, e.getMessage());
                 }
             }
@@ -465,8 +465,8 @@ public class StatementPlanner {
     private static void beginTransaction(DmlStmt stmt, ConnectContext session)
             throws BeginTransactionException, RunningTxnExceedException, AnalysisException, LabelAlreadyUsedException,
             DuplicatedRequestException {
-        if (session.getExplicitTxnState() != null) {
-            stmt.setTxnId(session.getExplicitTxnState().getTransactionState().getTransactionId());
+        if (session.getTxnId() != 0) {
+            stmt.setTxnId(session.getTxnId());
             return;
         }
 

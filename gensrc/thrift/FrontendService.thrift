@@ -830,6 +830,7 @@ struct TMasterOpRequest {
     34: optional i32 forward_times
     35: optional string session_id
     36: optional i32 connectionId
+    37: optional i64 txn_id;
 
     101: optional i64 warehouse_id    // begin from 101, in case of conflict with other's change
 }
@@ -862,6 +863,7 @@ struct TMasterOpResult {
     6: optional string resource_group_name;
     7: optional TAuditStatistics audit_statistics;
     8: optional string errorMsg;
+    9: optional i64 txn_id;
 }
 
 struct TIsMethodSupportedRequest {
