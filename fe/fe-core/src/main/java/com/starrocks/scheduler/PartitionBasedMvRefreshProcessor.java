@@ -408,7 +408,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
         // throw the last exception if all retries failed
         String errorMsg = MvUtils.shrinkToSize(DebugUtil.getRootStackTrace(lastException), MAX_FIELD_VARCHAR_LENGTH);
-        throw new DmlException("Refresh mv %s failed after %s/%s times, error-msg : " +
+        throw new DmlException("Refresh mv %s failed after %s times, try lock failed: %s, error-msg : " +
                 "%s", lastException, mv.getName(), refreshFailedTimes, lockFailedTimes, errorMsg);
     }
 
@@ -792,7 +792,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
             // refresh old table
             Table table = optTable.get();
-            if (table.isNativeTableOrMaterializedView() || table.isConnectorView()) {
+            if (table.isNativeTableOrMaterializedView() || table.isView()) {
                 logger.debug("No need to refresh table:{} because it is native table or mv or connector view",
                         baseTableInfo.getTableInfoStr());
                 continue;
@@ -824,20 +824,15 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             }
 
             Table newTable = optNewTable.get();
-            if ((newTable instanceof HiveTable)
-                    && ((HiveTable) newTable).getHiveTableType() == HiveTable.HiveTableType.EXTERNAL_TABLE) {
+            // only collect to-repair tables when the table is not the same as the old one by checking the table identifier
+            if (!baseTableInfo.getTableIdentifier().equals(table.getTableIdentifier())) {
                 toRepairTables.add(Pair.create(newTable, baseTableInfo));
-            } else {
-                logger.info("Table:{} is not an hive external table, no need to repair", baseTableInfo.getTableInfoStr());
             }
         }
 
         // do repair if needed
         if (!toRepairTables.isEmpty()) {
-            MVPCTMetaRepairer repairer = new MVPCTMetaRepairer(db, mv);
-            for (Pair<Table, BaseTableInfo> pair : toRepairTables) {
-                repairer.repairTableIfNeeded(pair.first, pair.second);
-            }
+            MVPCTMetaRepairer.repairMetaIfNeeded(db, mv, toRepairTables);
         }
     }
 
