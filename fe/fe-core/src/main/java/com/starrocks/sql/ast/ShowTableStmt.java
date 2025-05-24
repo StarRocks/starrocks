@@ -33,6 +33,7 @@ import com.starrocks.sql.parser.NodePosition;
 public class ShowTableStmt extends ShowStmt {
     private static final String NAME_COL_PREFIX = "Tables_in_";
     private static final String TYPE_COL = "Table_type";
+    private static final String COMMENT_COL = "Table_comment";
     private static final TableName TABLE_NAME = new TableName(InfoSchemaDb.DATABASE_NAME, "tables");
     private String db;
     private final boolean isVerbose;
@@ -95,6 +96,10 @@ public class ShowTableStmt extends ShowStmt {
             item = new SelectListItem(new SlotRef(TABLE_NAME, "TABLE_TYPE"), TYPE_COL);
             selectList.addItem(item);
             aliasMap.put(new SlotRef(null, TYPE_COL), item.getExpr().clone(null));
+
+            item = new SelectListItem(new SlotRef(TABLE_NAME, "TABLE_COMMENT"), COMMENT_COL);
+            selectList.addItem(item);
+            aliasMap.put(new SlotRef(null, "Comment"), item.getExpr().clone(null));
         }
         where = where.substitute(aliasMap);
         // where databases_name = currentdb
@@ -118,6 +123,7 @@ public class ShowTableStmt extends ShowStmt {
                 new Column(NAME_COL_PREFIX + db, ScalarType.createVarchar(20)));
         if (isVerbose) {
             builder.addColumn(new Column(TYPE_COL, ScalarType.createVarchar(20)));
+            builder.addColumn(new Column(COMMENT_COL, ScalarType.createVarchar(20)));
         }
         return builder.build();
     }
