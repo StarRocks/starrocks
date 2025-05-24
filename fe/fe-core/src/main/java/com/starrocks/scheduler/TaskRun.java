@@ -85,13 +85,8 @@ public class TaskRun implements Comparable<TaskRun> {
     public static final Set<String> RESERVED_HISTORY_TASK_RUN_PROPERTIES = ImmutableSet.of(
             MV_ID, PARTITION_START, PARTITION_END, FORCE, START_TASK_RUN_ID, PARTITION_VALUES, PROPERTIES_WAREHOUSE, IS_TEST);
 
-<<<<<<< HEAD
-    // Only used in FE's UT
-    public static final String IS_TEST = "__IS_TEST__";
-=======
     public static final int INVALID_TASK_PROGRESS = -1;
 
->>>>>>> 742ef97de1 ([BugFix] Avoid polluting task run properties in multi task runs (#59052))
     private boolean isKilled = false;
 
     @SerializedName("taskId")
