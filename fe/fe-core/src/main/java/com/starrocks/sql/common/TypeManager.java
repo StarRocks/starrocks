@@ -188,6 +188,11 @@ public class TypeManager {
             return Type.JSON;
         }
 
+        BiFunction<Type, Type, Boolean> isDataAndString =
+                (a, b) -> a.isDateType() && (b.isStringType() || b.isDateType());
+        if (isDataAndString.apply(t1, t2) || isDataAndString.apply(t2, t1)) {
+            return Type.DATETIME;
+        }
 
         PrimitiveType t1ResultType = t1.getResultType().getPrimitiveType();
         PrimitiveType t2ResultType = t2.getResultType().getPrimitiveType();
