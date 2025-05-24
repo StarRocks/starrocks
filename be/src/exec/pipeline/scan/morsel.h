@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <mutex>
 #include <optional>
 
 #include "exec/query_cache/ticket_checker.h"
@@ -423,10 +424,11 @@ public:
 
 private:
     StatusOr<int64_t> _peek_sequence_id() const;
+    mutable std::mutex _mutex;
 
-    int64_t _current_sequence = -1;
     MorselQueuePtr _morsel_queue;
     query_cache::TicketCheckerPtr _ticket_checker;
+    int64_t _current_sequence = -1;
 };
 
 class SplitMorselQueue : public MorselQueue {
