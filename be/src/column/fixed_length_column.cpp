@@ -26,6 +26,7 @@ template class FixedLengthColumn<int32_t>;
 template class FixedLengthColumn<int64_t>;
 template class FixedLengthColumn<int96_t>;
 template class FixedLengthColumn<int128_t>;
+template class FixedLengthColumn<int256_t>;
 
 template class FixedLengthColumn<float>;
 template class FixedLengthColumn<double>;

@@ -81,5 +81,7 @@ public:
     virtual Status visit(ObjectColumn<JsonValue>* column);
     virtual Status visit(ArrayViewColumn* column) { return Status::NotSupported("ArrayViewColumn is not supported"); }
     virtual Status visit(ColumnView* column) { return Status::NotSupported("ColumnView is not supported"); }
+    virtual Status visit(FixedLengthColumn<int256_t>* column);
+    virtual Status visit(FixedLengthColumnBase<int256_t>* column);
 };
 } // namespace starrocks

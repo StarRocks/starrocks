@@ -15,12 +15,14 @@
 #pragma once
 
 #include <fmt/format.h>
+#include <iomanip>
+#include <sstream>
+#include <string>
+#include <type_traits>
 
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <string>
-#include <type_traits>
 
 #include "runtime/integer_overflow_arithmetics.h"
 #include "util/decimal_types.h"
@@ -151,58 +153,68 @@ public:
         return false;
     }
 
-    template <typename ST>
-    static inline std::string to_string(DecimalType<ST> const& value, int precision, int scale) {
-        using T = typename unsigned_type<ST>::type;
-        static constexpr size_t str_decimal_max_len = decimal_precision_limit<ST> + 10;
-        const T scale_factor = get_scale_factor<ST>(scale);
-        std::string s;
-        raw::make_room(&s, str_decimal_max_len);
-        char* str_decimal = s.data();
-        int len = 0;
-
-        T abs_value = value;
-
-        if (value < 0) {
+    template <typename T>
+    static inline std::string to_string(const DecimalType<T>& value, int precision, int scale) {
+        DecimalType<T> abs_value = value;
+        bool is_negative = value < 0;
+        if (is_negative) {
             abs_value = -value;
-            str_decimal[len++] = '-';
         }
-        // divmod optimization
-        T int_part = abs_value / scale_factor;
-        T frac_part = abs_value % scale_factor;
-
-        auto end = fmt::format_to(str_decimal + len, "{}", int_part);
-        len = end - str_decimal;
-
-        int low_scale = 0;
-        int high_scale = scale;
-        // bin search speedup computation for the number of dec-digits of the fraction part;
-        while (low_scale < high_scale) {
-            int mid_scale = (high_scale + low_scale) >> 1;
-            T mid_scale_factor = get_scale_factor<ST>(mid_scale);
-            if (mid_scale_factor <= frac_part) {
-                low_scale = mid_scale + 1;
+        
+        T integer_part = abs_value / DecimalType<T>(1);
+        T fractional_part = abs_value % DecimalType<T>(1);
+        
+        T divisor = 1;
+        for (int i = 0; i < scale; i++) {
+            divisor *= 10;
+        }
+        fractional_part = (fractional_part * divisor) / DecimalType<T>(1);
+        
+        std::stringstream ss;
+        if (is_negative) {
+            ss << "-";
+        }
+        
+        if constexpr (std::is_same_v<T, int256_t> || std::is_same_v<T, __int128>) {
+            std::string int_str;
+            if (integer_part == 0) {
+                int_str = "0";
             } else {
-                high_scale = mid_scale;
+                DecimalType<T> temp = integer_part;
+                DecimalType<T> ten(10);
+                while (temp != 0) {
+                    int_str = std::to_string(static_cast<int64_t>(temp % ten)) + int_str;
+                    temp /= ten;
+                }
             }
+            ss << int_str;
+        } else {
+            ss << integer_part;
         }
-        // case 1: low_scale = scale, no zeros between decimal point and first non-zero dec-digit
-        //         of fraction part.
-        // case 2: low_scale < scale, (scale-low_scale) zeros are interpolated into str_decimal.
-        if (scale) {
-            str_decimal[len++] = '.';
-            const size_t zeros_interpolated = scale - low_scale;
-            for (size_t i = 0; i < zeros_interpolated; ++i) {
-                str_decimal[len++] = '0';
+        
+        ss << ".";
+        
+        if constexpr (std::is_same_v<T, int256_t> || std::is_same_v<T, __int128>) {
+            std::string frac_str;
+            if (fractional_part == 0) {
+                frac_str = std::string(scale, '0');
+            } else {
+                DecimalType<T> temp = fractional_part;
+                DecimalType<T> ten(10);
+                while (temp != 0) {
+                    frac_str = std::to_string(static_cast<int64_t>(temp % ten)) + frac_str;
+                    temp /= ten;
+                }
+                while (frac_str.length() < scale) {
+                    frac_str = "0" + frac_str;
+                }
             }
-            if (frac_part) {
-                end = fmt::format_to(str_decimal + len, "{}", frac_part);
-                len = end - str_decimal;
-            }
+            ss << frac_str;
+        } else {
+            ss << std::setw(scale) << std::setfill('0') << fractional_part;
         }
-
-        s.resize(len);
-        return s;
+        
+        return ss.str();
     }
 
     template <typename T>
@@ -219,7 +231,7 @@ public:
             // Depending on the compiler implement, std::numeric_limits<T>::max() or std::numeric_limits<T>::max() both could be returned,
             // when overflow is happenning in casting.
 
-            // With GCC-10.3.0, the cast on aarch64 uses fcvtzs instruction, behaving as "carries all overflows to the output precision’s largest finite number with the sign of the result before rounding".
+            // With GCC-10.3.0, the cast on aarch64 uses fcvtzs instruction, behaving as "carries all overflows to the output precision's largest finite number with the sign of the result before rounding".
             // (https://developer.arm.com/documentation/ddi0487/latest)
 
             // Meanwhile, the cast on x86_64 uses cvttsd2siq instruction, behaving as "the indefinite integer value (80000000H) is returned".

@@ -135,13 +135,22 @@ public:
     }
 
     size_t append_numbers(const void* buff, size_t length) override {
-        DCHECK(length % sizeof(ValueType) == 0);
-        const size_t count = length / sizeof(ValueType);
-        size_t dst_offset = _data.size();
-        raw::stl_vector_resize_uninitialized(&_data, _data.size() + count);
-        T* dst = _data.data() + dst_offset;
-        memcpy(dst, buff, length);
-        return count;
+        if constexpr (std::is_same_v<T, boost::multiprecision::int256_t>) {
+            const T* src = reinterpret_cast<const T*>(buff);
+            size_t count = length / sizeof(T);
+            for (size_t i = 0; i < count; ++i) {
+                _data.push_back(src[i]);
+            }
+            return count;
+        } else {
+            DCHECK(length % sizeof(ValueType) == 0);
+            const size_t count = length / sizeof(ValueType);
+            size_t dst_offset = _data.size();
+            raw::stl_vector_resize_uninitialized(&_data, _data.size() + count);
+            T* dst = _data.data() + dst_offset;
+            memcpy(dst, buff, length);
+            return count;
+        }
     }
 
     void append_value_multiple_times(const void* value, size_t count) override {
