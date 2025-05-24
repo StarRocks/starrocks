@@ -969,13 +969,13 @@ public:
     }
 
     Status load_snapshot(phmap::BinaryInputArchive& ar) override {
-        if (_format_version == kMutableIndexFormatVersion1) {
+        if (_mutable_index_format_version == kMutableIndexFormatVersion1) {
             bool succ = false;
             TRY_CATCH_BAD_ALLOC(succ = _map.load(ar));
             if (!succ) {
                 return Status::Corruption("FixedMutableIndex load snapshot failed");
             }
-        } else if (_format_version == kMutableIndexFormatVersion2) {
+        } else if (_mutable_index_format_version == kMutableIndexFormatVersion2) {
             // We introduced the new format specifically to address cross-platform compatibility issues with snapshot files.
             // In previous format, we met issue when migrate from x86 to arm64.
             // https://github.com/StarRocks/starrocks/issues/57952
@@ -1120,11 +1120,11 @@ public:
 
     size_t memory_usage() override { return _map.capacity() * (1 + (KeySize + 3) / 4 * 4 + kIndexValueSize); }
 
-    void set_format_version(uint32_t ver) override { _format_version = ver; }
+    void set_mutable_index_format_version(uint32_t ver) override { _mutable_index_format_version = ver; }
 
 private:
     phmap::flat_hash_map<KeyType, IndexValue, FixedKeyHash<KeySize>> _map;
-    uint32_t _format_version = kMutableIndexFormatVersion2;
+    uint32_t _mutable_index_format_version = kMutableIndexFormatVersion2;
 };
 
 std::tuple<size_t, size_t, size_t> MutableIndex::estimate_nshard_and_npage(const size_t total_kv_pairs_usage,
@@ -1587,7 +1587,7 @@ public:
         return ret;
     }
 
-    void set_format_version(uint32_t ver) override {}
+    void set_mutable_index_format_version(uint32_t ver) override {}
 
 private:
     friend ShardByLengthMutableIndex;
@@ -2081,7 +2081,7 @@ Status ShardByLengthMutableIndex::load_snapshot(phmap::BinaryInputArchive& ar, c
         RETURN_IF_ERROR(check_snapshot_file(ar, idxes));
         // keep load snapshot using old format.
         for (const auto idx : idxes) {
-            _shards[idx]->set_format_version(kMutableIndexFormatVersion1);
+            _shards[idx]->set_mutable_index_format_version(kMutableIndexFormatVersion1);
         }
         ar.reset();
     }

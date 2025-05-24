@@ -282,7 +282,7 @@ public:
 
     virtual Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb) = 0;
 
-    virtual void set_format_version(uint32_t ver) = 0;
+    virtual void set_mutable_index_format_version(uint32_t ver) = 0;
 
     virtual Status completeness_check(phmap::BinaryInputArchive& ar) = 0;
 
