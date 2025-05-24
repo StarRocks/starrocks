@@ -130,6 +130,12 @@ public class PhysicalPartitionImplTest {
         p.setLastVacuumTime(1);
         Assert.assertEquals(1, p.getLastVacuumTime());
 
+        p.setMinRetainVersion(3);
+        p.setMetadataSwitchVersion(1);
+        Assert.assertEquals(1, p.getMinRetainVersion());
+        p.setMetadataSwitchVersion(0);
+        Assert.assertEquals(3, p.getMinRetainVersion());
+
         p.setDataVersion(0);
         p.setNextDataVersion(0);
         p.setVersionEpoch(0);

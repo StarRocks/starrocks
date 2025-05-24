@@ -269,6 +269,35 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                         "Property " + PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE +
                                 " must be CLOUD_NATIVE or LOCAL");
             }
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION)) {
+            if (!properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION).equalsIgnoreCase("true") &&
+                    !properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION).equalsIgnoreCase("false")) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Property " + PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION +
+                                " must be bool type(false/true)");
+            }
+
+            if (!table.isCloudNativeTable()) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Property " + PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION +
+                                    " only support cloud native table");
+            }
+
+            boolean enablePartitionAggregation = properties.get(
+                            PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION).equalsIgnoreCase("true");
+            OlapTable olapTable = (OlapTable) table;
+            if (enablePartitionAggregation == olapTable.enablePartitionAggregation()) {
+                String msg = String.format("table: %s enable_partition_aggregation is %s, nothing need to do",
+                        olapTable.getName(), enablePartitionAggregation);
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, msg);
+            }
+            
+            if (!olapTable.allowUpdatePartitionAggregation()) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Property " + PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION +
+                                    " cannot be updated now because this table contains mixed metadata types "  + 
+                                    "(both split and aggregate). Please wait until old metadata versions are vacuumed");
+            }
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
             if (!properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE).equalsIgnoreCase("true") &&
                     !properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE).equalsIgnoreCase("false")) {
