@@ -19,6 +19,8 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <iomanip>
+#include <sstream>
 #include <string>
 #include <type_traits>
 
@@ -42,6 +44,11 @@ struct unsigned_type {
 template <>
 struct unsigned_type<int128_t> {
     using type = uint128_t;
+};
+
+template <>
+struct unsigned_type<int256_t> {
+    using type = int256_t;
 };
 
 template <typename T, bool check_overflow>
@@ -152,7 +159,7 @@ public:
     }
 
     template <typename ST>
-    static inline std::string to_string(DecimalType<ST> const& value, int precision, int scale) {
+    static std::string to_string(DecimalType<ST> const& value, int precision, int scale) {
         using T = typename unsigned_type<ST>::type;
         static constexpr size_t str_decimal_max_len = decimal_precision_limit<ST> + 10;
         const T scale_factor = get_scale_factor<ST>(scale);
@@ -219,7 +226,7 @@ public:
             // Depending on the compiler implement, std::numeric_limits<T>::max() or std::numeric_limits<T>::max() both could be returned,
             // when overflow is happenning in casting.
 
-            // With GCC-10.3.0, the cast on aarch64 uses fcvtzs instruction, behaving as "carries all overflows to the output precision’s largest finite number with the sign of the result before rounding".
+            // With GCC-10.3.0, the cast on aarch64 uses fcvtzs instruction, behaving as "carries all overflows to the output precision's largest finite number with the sign of the result before rounding".
             // (https://developer.arm.com/documentation/ddi0487/latest)
 
             // Meanwhile, the cast on x86_64 uses cvttsd2siq instruction, behaving as "the indefinite integer value (80000000H) is returned".

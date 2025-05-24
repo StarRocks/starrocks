@@ -76,6 +76,7 @@ public enum PrimitiveType {
     DECIMAL32("DECIMAL32", 4, TPrimitiveType.DECIMAL32),
     DECIMAL64("DECIMAL64", 8, TPrimitiveType.DECIMAL64),
     DECIMAL128("DECIMAL128", 16, TPrimitiveType.DECIMAL128),
+    DECIMAL256("DECIMAL256", 32, TPrimitiveType.DECIMAL256),
 
     JSON("JSON", 16, TPrimitiveType.JSON),
 
@@ -98,7 +99,7 @@ public enum PrimitiveType {
             ImmutableList.of(TINYINT, SMALLINT, INT, BIGINT, LARGEINT);
 
     public static final ImmutableList<PrimitiveType> FLOAT_TYPE_LIST =
-            ImmutableList.of(FLOAT, DOUBLE, DECIMALV2, DECIMAL32, DECIMAL64, DECIMAL128);
+            ImmutableList.of(FLOAT, DOUBLE, DECIMALV2, DECIMAL32, DECIMAL64, DECIMAL128, DECIMAL256);
 
     public static final ImmutableList<PrimitiveType> NUMBER_TYPE_LIST =
             ImmutableList.<PrimitiveType>builder()
@@ -150,6 +151,7 @@ public enum PrimitiveType {
                     .add(PrimitiveType.DECIMAL32.toString())
                     .add(PrimitiveType.DECIMAL64.toString())
                     .add(PrimitiveType.DECIMAL128.toString())
+                    .add(PrimitiveType.DECIMAL256.toString())
                     .add("DECIMAL") // generic name for all decimal types
                     .build();
 
@@ -180,7 +182,7 @@ public enum PrimitiveType {
         builder.putAll(CHAR, BASIC_TYPE_LIST);
 
         // Decimal
-        for (PrimitiveType decimalType : Arrays.asList(DECIMALV2, DECIMAL32, DECIMAL64, DECIMAL128)) {
+        for (PrimitiveType decimalType : Arrays.asList(DECIMALV2, DECIMAL32, DECIMAL64, DECIMAL128, DECIMAL256)) {
             builder.putAll(decimalType, BOOLEAN);
             builder.putAll(decimalType, NUMBER_TYPE_LIST);
             builder.putAll(decimalType, STRING_TYPE_LIST);
@@ -270,6 +272,8 @@ public enum PrimitiveType {
                 return DECIMAL64;
             case DECIMAL128:
                 return DECIMAL128;
+            case DECIMAL256:
+                return DECIMAL256;
             case DATE:
                 return DATE;
             case DATETIME:
@@ -316,8 +320,16 @@ public enum PrimitiveType {
             return t2;
         } else if (t2.equals(DECIMAL64)) {
             return t1;
+        } else if (t1.equals(DECIMAL128)) {
+            return t2;
+        } else if (t2.equals(DECIMAL128)) {
+            return t1;
+        } else if (t1.equals(DECIMAL256)) {
+            return t2;
+        } else if (t2.equals(DECIMAL256)) {
+            return t1;
         } else {
-            return DECIMAL128;
+            return DECIMAL256;
         }
     }
 
@@ -331,6 +343,8 @@ public enum PrimitiveType {
                 return 18;
             case DECIMAL128:
                 return 38;
+            case DECIMAL256:
+                return 76;
             default:
                 Preconditions.checkState(t.isDecimalOfAnyVersion());
                 return -1;
@@ -347,6 +361,8 @@ public enum PrimitiveType {
                 return 18;
             case DECIMAL128:
                 return 38;
+            case DECIMAL256:
+                return 76;
             default:
                 Preconditions.checkState(t.isDecimalOfAnyVersion());
                 return -1;
@@ -361,6 +377,8 @@ public enum PrimitiveType {
             return DECIMAL64;
         } else if (precision <= getMaxPrecisionOfDecimal(DECIMAL128)) {
             return DECIMAL128;
+        } else if (precision <= getMaxPrecisionOfDecimal(DECIMAL256)) {
+            return DECIMAL256;
         }
         Preconditions.checkState(type.isDecimalOfAnyVersion());
         return type;
@@ -421,6 +439,9 @@ public enum PrimitiveType {
             case DECIMAL128:
                 typeSize = 16;
                 break;
+            case DECIMAL256:
+                typeSize = 32;
+                break;
             case CHAR:
             case VARCHAR:
             case VARBINARY:
@@ -477,7 +498,7 @@ public enum PrimitiveType {
     }
 
     public boolean isDecimalV3Type() {
-        return this == DECIMAL32 || this == DECIMAL64 || this == DECIMAL128;
+        return this == DECIMAL32 || this == DECIMAL64 || this == DECIMAL128 || this == DECIMAL256;
     }
 
     public boolean isNumericType() {
@@ -553,6 +574,7 @@ public enum PrimitiveType {
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
+            case DECIMAL256:
                 return MysqlColType.MYSQL_TYPE_NEWDECIMAL;
             case VARCHAR:
                 return MysqlColType.MYSQL_TYPE_VAR_STRING;

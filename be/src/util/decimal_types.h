@@ -18,6 +18,8 @@
 #include <limits>
 #include <type_traits>
 
+#include "types/int256.h"
+
 namespace starrocks {
 
 typedef __int128 int128_t;
@@ -31,6 +33,8 @@ template <>
 inline constexpr bool is_underlying_type_of_decimal<int64_t> = true;
 template <>
 inline constexpr bool is_underlying_type_of_decimal<int128_t> = true;
+template <>
+inline constexpr bool is_underlying_type_of_decimal<int256_t> = true;
 
 template <typename T>
 inline constexpr int decimal_precision_limit = -1;
@@ -40,17 +44,17 @@ template <>
 inline constexpr int decimal_precision_limit<int64_t> = 18;
 template <>
 inline constexpr int decimal_precision_limit<int128_t> = 38;
+template <>
+inline constexpr int decimal_precision_limit<int256_t> = 76;
 
 template <typename T, int n>
 struct EXP10 {
-    using type = std::enable_if_t<is_underlying_type_of_decimal<T>, T>;
-    static constexpr type value = EXP10<T, n - 1>::value * static_cast<type>(10);
+    static constexpr T value = EXP10<T, n - 1>::value * static_cast<T>(10);
 };
 
 template <typename T>
 struct EXP10<T, 0> {
-    using type = std::enable_if_t<is_underlying_type_of_decimal<T>, T>;
-    static constexpr type value = static_cast<type>(1);
+    static constexpr T value = static_cast<T>(1);
 };
 
 inline constexpr int32_t exp10_int32(int n) {
@@ -91,6 +95,16 @@ inline constexpr int128_t exp10_int128(int n) {
     return values[n];
 }
 
+inline int256_t exp10_int256(int n) {
+    int256_t result = int256_t(1);
+
+    for (int i = 0; i < n; ++i) {
+        result = result * int256_t(10);
+    }
+
+    return result;
+}
+
 template <typename T>
 inline constexpr T get_scale_factor(int n) {
     if constexpr (std::is_same_v<T, int32_t>)
@@ -100,7 +114,8 @@ inline constexpr T get_scale_factor(int n) {
     else if constexpr (std::is_same_v<T, int128_t>)
         return exp10_int128(n);
     else {
-        static_assert(is_underlying_type_of_decimal<T>, "Underlying type of decimal must be int32_t/int64_t/int128_t");
+        static_assert(is_underlying_type_of_decimal<T>,
+                      "Underlying type of decimal must be int32_t/int64_t/int128_t/int256_t");
         return T(0);
     }
 }
@@ -156,5 +171,10 @@ template <typename T>
 using FloatType = std::enable_if_t<std::is_floating_point_v<T>, T>;
 template <typename T>
 using IntegerType = std::enable_if_t<is_signed_integer<T>, T>;
+
+template <>
+inline int256_t get_scale_factor<int256_t>(int n) {
+    return exp10_int256(n);
+}
 
 } // namespace starrocks
