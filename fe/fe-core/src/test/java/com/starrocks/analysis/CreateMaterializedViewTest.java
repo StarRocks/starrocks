@@ -4190,6 +4190,13 @@ public class CreateMaterializedViewTest extends MVTestBase {
     }
 
     @Test
+    public void createPaimonMV() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view mv_paimon " +
+                " refresh manual" +
+                " as select * from paimon0.pmn_db1.unpartitioned_table");
+    }
+
+    @Test
     public void testCreateMvWithUnsupportedStr2date() {
         {
             String sql = "create materialized view mv1 " +
