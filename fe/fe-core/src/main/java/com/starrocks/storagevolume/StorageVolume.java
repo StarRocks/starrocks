@@ -25,6 +25,7 @@ import com.staros.proto.AwsCredentialInfo;
 import com.staros.proto.AzBlobCredentialInfo;
 import com.staros.proto.AzBlobFileStoreInfo;
 import com.staros.proto.FileStoreInfo;
+import com.staros.proto.GSFileStoreInfo;
 import com.staros.proto.HDFSFileStoreInfo;
 import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.common.DdlException;
@@ -54,7 +55,8 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         S3,
         HDFS,
         AZBLOB,
-        ADLS2
+        ADLS2,
+        GS
     }
 
     // Without id, the scenario like "create storage volume 'a', drop storage volume 'a', create storage volume 'a'"
@@ -207,6 +209,8 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                 return StorageVolumeType.AZBLOB;
             case "adls2":
                 return StorageVolumeType.ADLS2;
+            case "gs":
+                return StorageVolumeType.GS;
             default:
                 return StorageVolumeType.UNKNOWN;
         }
@@ -222,6 +226,8 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                 return cloudConfiguration.getCloudType() == CloudType.AZURE;
             case ADLS2:
                 return cloudConfiguration.getCloudType() == CloudType.AZURE;
+            case GS:
+                return cloudConfiguration.getCloudType() == CloudType.GCP;
             default:
                 return false;
         }
@@ -234,6 +240,10 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         params.computeIfPresent(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, (key, value) -> CREDENTIAL_MASK);
         params.computeIfPresent(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY, (key, value) -> CREDENTIAL_MASK);
         params.computeIfPresent(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN, (key, value) -> CREDENTIAL_MASK);
+        params.computeIfPresent(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_EMAIL, (key, value) -> CREDENTIAL_MASK);
+        params.computeIfPresent(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY_ID,
+                (key, value) -> CREDENTIAL_MASK);
+        params.computeIfPresent(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY, (key, value) -> CREDENTIAL_MASK);
     }
 
     public void getProcNodeData(BaseProcResult result) {
@@ -359,6 +369,26 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                 String clientEndpoint = adls2credentialInfo.getAuthorityHost();
                 if (!Strings.isNullOrEmpty(clientEndpoint)) {
                     params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT, clientEndpoint);
+                }
+                return params;
+            }
+            case GS: {
+                GSFileStoreInfo gsFileStoreInfo = fsInfo.getGsFsInfo();
+                params.put(CloudConfigurationConstants.GCP_GCS_ENDPOINT, gsFileStoreInfo.getEndpoint());
+                if (gsFileStoreInfo.getUseComputeEngineServiceAccount()) {
+                    params.put(CloudConfigurationConstants.GCP_GCS_USE_COMPUTE_ENGINE_SERVICE_ACCOUNT, "true");
+                } else {
+                    params.put(CloudConfigurationConstants.GCP_GCS_USE_COMPUTE_ENGINE_SERVICE_ACCOUNT, "false");
+                    params.put(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_EMAIL,
+                            gsFileStoreInfo.getServiceAccountEmail());
+                    params.put(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY_ID,
+                            gsFileStoreInfo.getServiceAccountPrivateKeyId());
+                    params.put(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY,
+                            gsFileStoreInfo.getServiceAccountPrivateKey());
+                }
+                if (!Strings.isNullOrEmpty(gsFileStoreInfo.getImpersonation())) {
+                    params.put(CloudConfigurationConstants.GCP_GCS_USE_COMPUTE_ENGINE_SERVICE_ACCOUNT,
+                            gsFileStoreInfo.getImpersonation());
                 }
                 return params;
             }
