@@ -48,7 +48,8 @@ To view the time zone setting, run the following command.
 
 - Time zone settings affect the time values returned by the SHOW LOAD and SHOW BACKENDS statements. However, the settings do not affect the value specified in the `LESS THAN` clause when the partitioning columns specified in CREATE TABLE statement are of the DATE or DATETIME type. The settings also do not affect data of the DATE and DATETIME types.
 - Time zone settings affect the display and storage of the following functions:
-  - **from_unixtime**: returns a date and time of your specified time zone based on a specified UTC timestamp. For example, if the global time zone of your StarRocks cluster is `Asia/Shanghai`, `select FROM_UNIXTIME(0);` returns `1970-01-01 08:00:00`.
+  - **from_unixtime**: returns a date and time of your specified time zone based on a specified UTC timestamp in seconds. For example, if the global time zone of your StarRocks cluster is `Asia/Shanghai`, `select FROM_UNIXTIME(0);` returns `1970-01-01 08:00:00`.
+  - **from_unixtime_ms**: returns a date and time of your specified time zone based on a specified UTC timestamp in milliseconds. For example, if the global time zone of your StarRocks cluster is `Asia/Shanghai`, `select FROM_UNIXTIME_MS(0);` returns `1970-01-01 08:00:00`.
   - **unix_timestamp**: returns a UTC timestamp based on the date and time of your specified time zone. For example, if the global time zone of your StarRocks cluster is `Asia/Shanghai`, `select UNIX_TIMESTAMP('1970-01-01 08:00:00');` returns `0`.
   - **curtime**: returns the current time of your specified time zone. For example, if the current time of a specified time zone is 16:34:05. `select CURTIME();` returns `16:34:05`.
   - **now**: returns the current date and time of your specified time zone. For example, if the current date and time of a specified time zone is 2021-02-11 16:34:13, `select NOW();` returns `2021-02-11 16:34:13`.

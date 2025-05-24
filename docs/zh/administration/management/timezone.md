@@ -48,7 +48,8 @@ displayed_sidebar: docs
 
 - 时区设置会影响 SHOW LOAD 和 SHOW BACKENDS 语句返回的时间值，但并不影响 CREATE TABLE 语句中分区列为 DATE 或 DATETIME 类型时 `LESS THAN` 子句指定的值，以及 DATE 或 DATETIME 类型的数据。
 - 受时区设置影响的函数包括：
-  - **from_unixtime**：给定一个 UTC 时间戳，返回指定时区的日期时间。如全局时区为 `Asia/Shanghai`，`select FROM_UNIXTIME(0);` 返回 `1970-01-01 08:00:00`。
+  - **from_unixtime**：给定一个 UTC 时间戳（秒级），返回指定时区的日期时间。如全局时区为 `Asia/Shanghai`，`select FROM_UNIXTIME(0);` 返回 `1970-01-01 08:00:00`。
+  - **from_unixtime_ms**：给定一个 UTC 时间戳（毫秒级），返回指定时区的日期时间。如全局时区为 `Asia/Shanghai`，`select FROM_UNIXTIME_MS(0);` 返回 `1970-01-01 08:00:00`。
   - **unix_timestamp**：给定一个指定时区的日期时间，返回 UTC 时间戳。如全局时区为 `Asia/Shanghai`，`select UNIX_TIMESTAMP('1970-01-01 08:00:00');` 返回 `0`。
   - **curtime**：返回指定时区的当前时间。如某时区当前时间为 16:34:05，`select CURTIME();` 返回 `16:34:05`。
   - **now**：返回指定时区的当前日期和时间。如某时区的当前日期和时间为 2021-02-11 16:34:13，`select NOW();` 返回 `2021-02-11 16:34:13`。
