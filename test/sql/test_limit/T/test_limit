@@ -70,3 +70,17 @@ select COUNT(*) from (select * from (select * from t0 limit 30) x limit 50, 10) 
 select count(*) from (select * from TABLE(generate_series(1, 100000)) limit 50000, 10) x;
 select count(*) from (select * from TABLE(generate_series(1, 100000)) limit 90000, 20000) x;
 select count(*) from (select * from TABLE(generate_series(1, 100000)) limit 1, 1000) x;
+
+set enable_multi_cast_limit_push_down = false;
+
+with C as (select region, sum(income) as total from t0 group by 1), 
+     L as (select total from C limit 3), 
+     R as (select total from C limit 4)
+select count(*) from ( select * from L union all select * from R ) as U;
+
+set enable_multi_cast_limit_push_down = true;
+
+with C as (select region, sum(income) as total from t0 group by 1), 
+     L as (select total from C limit 3), 
+     R as (select total from C limit 4)
+select count(*) from ( select * from L union all select * from R ) as U;

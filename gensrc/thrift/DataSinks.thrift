@@ -134,21 +134,23 @@ struct TDataStreamSink {
   // to each destination host.
   2: required Partitions.TDataPartition output_partition
 
-  3: optional bool ignore_not_found
+  3: required i64 limit
+
+  4: optional bool ignore_not_found
 
   // Only useful in pipeline mode
   // If receiver side is ExchangeMergeSortSourceOperator, then all the
   // packets should be kept in order (according sequence), so the sender
   // side need to maintain a send window in order to avoiding the receiver
   // buffer too many out-of-order packets
-  4: optional bool is_merge
+  5: optional bool is_merge
 
   // degree of paralleliasm of destination
   // only used in pipeline engine
-  5: optional i32 dest_dop
+  6: optional i32 dest_dop
 
   // Specify the columns which need to send
-  6: optional list<i32> output_columns;
+  7: optional list<i32> output_columns;
 }
 
 struct TMultiCastDataStreamSink {
