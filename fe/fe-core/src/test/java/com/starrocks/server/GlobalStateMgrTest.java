@@ -55,7 +55,10 @@ import com.starrocks.persist.OperationType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.system.Backend;
 import com.starrocks.system.Frontend;
+import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TNodesInfo;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -95,6 +98,9 @@ public class GlobalStateMgrTest {
         globalStateMgr.loadHeader(image2.getDataInputStream());
     }
 
+    @Mocked
+    private WarehouseManager warehouseManager;
+
     private GlobalStateMgr mockGlobalStateMgr() throws Exception {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
 
@@ -119,6 +125,10 @@ public class GlobalStateMgrTest {
         Field field4 = globalStateMgr.getClass().getDeclaredField("nodeMgr");
         field4.setAccessible(true);
         field4.set(globalStateMgr, nodeMgr);
+
+        Field field5 = globalStateMgr.getClass().getDeclaredField("warehouseMgr");
+        field5.setAccessible(true);
+        field5.set(globalStateMgr, warehouseManager);
 
         return globalStateMgr;
     }
@@ -360,5 +370,63 @@ public class GlobalStateMgrTest {
         Assert.assertNotNull(table);
         table = newState.getLocalMetastore().getTable("db2", "t1");
         Assert.assertEquals(1, table.getForeignKeyConstraints().size());
+    }
+    public void testCreateNodesInfo() throws Exception {
+        SystemInfoService systemInfoService = new SystemInfoService();
+        Backend backend = new Backend();
+        backend.setId(1234);
+        backend.setHost("127.0.0.1");
+        backend.setBePort(10000);
+        backend.setHttpPort(10001);
+        backend.setBrpcPort(10002);
+        backend.setAlive(true);
+        backend.setBackendState(Backend.BackendState.values()[1]);
+        systemInfoService.addBackend(backend);
+
+        GlobalStateMgr globalStateMgr = mockGlobalStateMgr();
+
+        {
+            boolean isExternalTable = true;
+            TNodesInfo nodesInfo =
+                    globalStateMgr.createNodesInfo(isExternalTable, WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                            systemInfoService);
+            Assert.assertEquals(1, nodesInfo.nodes.size());
+        }
+
+        {
+            new MockUp<RunMode>() {
+                @Mock
+                public RunMode getCurrentRunMode() {
+                    return RunMode.SHARED_NOTHING;
+                }
+            };
+
+            boolean isExternalTable = false;
+            TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState()
+                    .createNodesInfo(isExternalTable, WarehouseManager.DEFAULT_WAREHOUSE_ID, systemInfoService);
+            Assert.assertEquals(1, nodesInfo.nodes.size());
+        }
+
+        {
+            new MockUp<RunMode>() {
+                @Mock
+                public RunMode getCurrentRunMode() {
+                    return RunMode.SHARED_DATA;
+                }
+            };
+
+            long warehouseId = 1000L;
+            new Expectations() {
+                {
+                    warehouseManager.getAllComputeNodeIds(warehouseId);
+                    result = List.of(1234L);
+                }
+            };
+
+            boolean isExternalTable = false;
+            TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState()
+                    .createNodesInfo(isExternalTable, warehouseId, systemInfoService);
+            Assert.assertEquals(1, nodesInfo.nodes.size());
+        }
     }
 }
