@@ -111,7 +111,6 @@ public class LogicalTableFunctionOperator extends LogicalOperator {
         return new RowOutputInfo(outputInfoList, fnResultColRefs);
     }
 
-    @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalTableFunction(this, context);
     }
