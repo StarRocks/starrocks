@@ -173,4 +173,21 @@ public class ConfigTest {
         configs = ConfigForArray.getConfigInfo(null);
         Assert.assertEquals("[]", configs.get(2).get(2));
     }
+
+    @Test
+    public void testLdapConfigDefaults() throws Exception {
+        Assert.assertEquals("ldap", Config.authentication_ldap_simple_server_protocol);
+        Assert.assertNull(Config.authentication_ldaps_trust_store_path);
+        Assert.assertNull(Config.authentication_ldaps_trust_store_password);
+    }
+
+    @Test
+    public void testMutableLdapConfig() throws Exception {
+        Config.authentication_ldap_simple_server_protocol = "ldaps";
+        Config.authentication_ldaps_trust_store_path = "/tmp/test.jks";
+        Config.authentication_ldaps_trust_store_password = "password";
+        Assert.assertEquals("ldaps", Config.authentication_ldap_simple_server_protocol);
+        Assert.assertEquals("/tmp/test.jks", Config.authentication_ldaps_trust_store_path);
+        Assert.assertEquals("password", Config.authentication_ldaps_trust_store_password);
+    }
 }
