@@ -180,7 +180,7 @@ public class StarRocksFE {
             // 1. QeService for MySQL Server
             // 2. FrontendThriftServer for Thrift Server
             // 3. HttpServer for HTTP Server
-            // 4. ArrowFlightSqlService for Arrow Flight Sql Server
+            // 4. ArrowFlightSqlService for Arrow Flight SQL Server
             QeService qeService = new QeService(Config.query_port, ExecuteEnv.getInstance().getScheduler());
             FrontendThriftServer frontendThriftServer = new FrontendThriftServer(Config.rpc_port);
             HttpServer httpServer = new HttpServer(Config.http_port);

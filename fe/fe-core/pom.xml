@@ -194,10 +194,9 @@ under the License.
             <scope>test</scope>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf -->
         <dependency>
-            <groupId>com.baidu</groupId>
-            <artifactId>jprotobuf</artifactId>
+            <groupId>com.starrocks</groupId>
+            <artifactId>jprotobuf-starrocks</artifactId>
         </dependency>
 
         <dependency>
@@ -205,10 +204,9 @@ under the License.
             <artifactId>velocity-engine-core</artifactId>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf -->
         <dependency>
-            <groupId>com.baidu</groupId>
-            <artifactId>jprotobuf</artifactId>
+            <groupId>com.starrocks</groupId>
+            <artifactId>jprotobuf-starrocks</artifactId>
             <classifier>jar-with-dependencies</classifier>
         </dependency>
 
@@ -362,6 +360,11 @@ under the License.
         <dependency>
             <groupId>com.google.protobuf</groupId>
             <artifactId>protobuf-java</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java-util</artifactId>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.fasterxml.jackson.core/jackson-annotations -->
@@ -1039,37 +1042,37 @@ under the License.
                                 <mkdir dir="${basedir}/target/generated-sources/proto"/>
                                 <exec executable="${java.home}/bin/java">
                                     <arg value="-jar"/>
-                                    <arg value="${settings.localRepository}/com/baidu/jprotobuf/${jprotobuf.version}/jprotobuf-${jprotobuf.version}-jar-with-dependencies.jar"/>
+                                    <arg value="${settings.localRepository}/com/starrocks/jprotobuf-starrocks/${jprotobuf-starrocks.version}/jprotobuf-starrocks-${jprotobuf-starrocks.version}-jar-with-dependencies.jar"/>
                                     <arg value="--java_out=${basedir}/target/generated-sources/proto"/>
                                     <arg value="${starrocks.home}/gensrc/proto/lake_types.proto"/>
                                 </exec>
                                 <exec executable="${java.home}/bin/java">
                                     <arg value="-jar"/>
-                                    <arg value="${settings.localRepository}/com/baidu/jprotobuf/${jprotobuf.version}/jprotobuf-${jprotobuf.version}-jar-with-dependencies.jar"/>
+                                    <arg value="${settings.localRepository}/com/starrocks/jprotobuf-starrocks/${jprotobuf-starrocks.version}/jprotobuf-starrocks-${jprotobuf-starrocks.version}-jar-with-dependencies.jar"/>
                                     <arg value="--java_out=${basedir}/target/generated-sources/proto"/>
                                     <arg value="${starrocks.home}/gensrc/proto/internal_service.proto"/>
                                 </exec>
                                 <exec executable="${java.home}/bin/java">
                                     <arg value="-jar"/>
-                                    <arg value="${settings.localRepository}/com/baidu/jprotobuf/${jprotobuf.version}/jprotobuf-${jprotobuf.version}-jar-with-dependencies.jar"/>
+                                    <arg value="${settings.localRepository}/com/starrocks/jprotobuf-starrocks/${jprotobuf-starrocks.version}/jprotobuf-starrocks-${jprotobuf-starrocks.version}-jar-with-dependencies.jar"/>
                                     <arg value="--java_out=${basedir}/target/generated-sources/proto"/>
                                     <arg value="${starrocks.home}/gensrc/proto/types.proto"/>
                                 </exec>
                                 <exec executable="${java.home}/bin/java">
                                     <arg value="-jar"/>
-                                    <arg value="${settings.localRepository}/com/baidu/jprotobuf/${jprotobuf.version}/jprotobuf-${jprotobuf.version}-jar-with-dependencies.jar"/>
+                                    <arg value="${settings.localRepository}/com/starrocks/jprotobuf-starrocks/${jprotobuf-starrocks.version}/jprotobuf-starrocks-${jprotobuf-starrocks.version}-jar-with-dependencies.jar"/>
                                     <arg value="--java_out=${basedir}/target/generated-sources/proto"/>
                                     <arg value="${starrocks.home}/gensrc/proto/tablet_schema.proto"/>
                                 </exec>
                                 <exec executable="${java.home}/bin/java">
                                     <arg value="-jar"/>
-                                    <arg value="${settings.localRepository}/com/baidu/jprotobuf/${jprotobuf.version}/jprotobuf-${jprotobuf.version}-jar-with-dependencies.jar"/>
+                                    <arg value="${settings.localRepository}/com/starrocks/jprotobuf-starrocks/${jprotobuf-starrocks.version}/jprotobuf-starrocks-${jprotobuf-starrocks.version}-jar-with-dependencies.jar"/>
                                     <arg value="--java_out=${basedir}/target/generated-sources/proto"/>
                                     <arg value="${starrocks.home}/gensrc/proto/lake_service.proto"/>
                                 </exec>
                                 <exec executable="${java.home}/bin/java">
                                     <arg value="-jar"/>
-                                    <arg value="${settings.localRepository}/com/baidu/jprotobuf/${jprotobuf.version}/jprotobuf-${jprotobuf.version}-jar-with-dependencies.jar"/>
+                                    <arg value="${settings.localRepository}/com/starrocks/jprotobuf-starrocks/${jprotobuf-starrocks.version}/jprotobuf-starrocks-${jprotobuf-starrocks.version}-jar-with-dependencies.jar"/>
                                     <arg value="--java_out=${basedir}/target/generated-sources/proto"/>
                                     <arg value="${starrocks.home}/gensrc/proto/encryption.proto"/>
                                 </exec>

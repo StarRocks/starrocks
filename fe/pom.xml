@@ -41,7 +41,7 @@ under the License.
     <properties>
         <starrocks.home>${basedir}/../</starrocks.home>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <jprotobuf.version>2.4.23</jprotobuf.version>
+        <jprotobuf-starrocks.version>1.0.0</jprotobuf-starrocks.version>
         <log4j.version>2.19.0</log4j.version>
         <jackson.version>2.15.2</jackson.version>
         <spark.version>3.5.5</spark.version>
@@ -360,11 +360,10 @@ under the License.
                 <scope>test</scope>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf -->
             <dependency>
-                <groupId>com.baidu</groupId>
-                <artifactId>jprotobuf</artifactId>
-                <version>${jprotobuf.version}</version>
+                <groupId>com.starrocks</groupId>
+                <artifactId>jprotobuf-starrocks</artifactId>
+                <version>${jprotobuf-starrocks.version}</version>
                 <exclusions>
                     <exclusion>
                         <groupId>com.google.auto.value</groupId>
@@ -375,11 +374,10 @@ under the License.
 
             <!--Only used to compile protobuf-->
             <!--jar-with-dependencies contains CVE problems, so set scope with provided to download it.-->
-            <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf -->
             <dependency>
-                <groupId>com.baidu</groupId>
-                <artifactId>jprotobuf</artifactId>
-                <version>${jprotobuf.version}</version>
+                <groupId>com.starrocks</groupId>
+                <artifactId>jprotobuf-starrocks</artifactId>
+                <version>${jprotobuf-starrocks.version}</version>
                 <classifier>jar-with-dependencies</classifier>
                 <scope>provided</scope>
             </dependency>
@@ -511,6 +509,12 @@ under the License.
             <dependency>
                 <groupId>com.google.protobuf</groupId>
                 <artifactId>protobuf-java</artifactId>
+                <version>${protobuf-java.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.google.protobuf</groupId>
+                <artifactId>protobuf-java-util</artifactId>
                 <version>${protobuf-java.version}</version>
             </dependency>
 
@@ -665,6 +669,30 @@ under the License.
                     <exclusion>
                         <groupId>com.google.protobuf</groupId>
                         <artifactId>protobuf-java</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.eclipse.jetty</groupId>
+                        <artifactId>jetty-server</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.eclipse.jetty</groupId>
+                        <artifactId>jetty-util</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.eclipse.jetty</groupId>
+                        <artifactId>jetty-io</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.eclipse.jetty</groupId>
+                        <artifactId>jetty-servlet</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.eclipse.jetty</groupId>
+                        <artifactId>jetty-client</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.eclipse.jetty</groupId>
+                        <artifactId>jetty-security</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>
@@ -983,6 +1011,10 @@ under the License.
                         <artifactId>hadoop-hdfs</artifactId>
                     </exclusion>
                     <exclusion>
+                        <groupId>org.apache.hbase</groupId>
+                        <artifactId>hbase-http</artifactId>
+                    </exclusion>
+                    <exclusion>
                         <groupId>org.apache.hbase.thirdparty</groupId>
                         <artifactId>hbase-shaded-jetty</artifactId>
                     </exclusion>
@@ -1125,31 +1157,37 @@ under the License.
                 <artifactId>odps-sdk-table-api</artifactId>
                 <version>${odps.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>io.grpc</groupId>
                 <artifactId>grpc-api</artifactId>
                 <version>${grpc.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>io.grpc</groupId>
                 <artifactId>grpc-netty-shaded</artifactId>
                 <version>${grpc.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>io.grpc</groupId>
                 <artifactId>grpc-protobuf</artifactId>
                 <version>${grpc.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>io.grpc</groupId>
                 <artifactId>grpc-stub</artifactId>
                 <version>${grpc.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>io.grpc</groupId>
                 <artifactId>grpc-core</artifactId>
                 <version>${grpc.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>org.apache.arrow</groupId>
                 <artifactId>arrow-vector</artifactId>
@@ -1167,17 +1205,20 @@ under the License.
                 <artifactId>flight-sql</artifactId>
                 <version>${arrow.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>org.apache.arrow</groupId>
                 <artifactId>flight-core</artifactId>
                 <version>${arrow.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>org.apache.arrow</groupId>
                 <artifactId>flight-sql-jdbc-driver</artifactId>
                 <version>${arrow.version}</version>
                 <scope>test</scope>
             </dependency>
+
             <dependency>
                 <groupId>org.apache.arrow</groupId>
                 <artifactId>arrow-jdbc</artifactId>
@@ -1214,7 +1255,6 @@ under the License.
                 <artifactId>paimon-oss</artifactId>
                 <version>${paimon.version}</version>
             </dependency>
-
 
             <dependency>
                 <groupId>io.delta</groupId>
@@ -1337,6 +1377,12 @@ under the License.
             <dependency>
                 <groupId>org.eclipse.jetty</groupId>
                 <artifactId>jetty-util-ajax</artifactId>
+                <version>${jetty.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-security</artifactId>
                 <version>${jetty.version}</version>
             </dependency>
 
