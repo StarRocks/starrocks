@@ -328,16 +328,15 @@ BlobContainerClientPtr AzBlobClientFactory::new_blob_container_client(
 
 BlobContainerClientPtr AzBlobClientFactory::create_blob_container_client(
         const AzureCloudCredential& azure_cloud_credential, const AzBlobURI& blob_uri) {
+    // shared key
     if (!azure_cloud_credential.shared_key.empty()) {
-        // shared key
         auto shared_key_credential = std::make_shared<Azure::Storage::StorageSharedKeyCredential>(
                 blob_uri.account(), azure_cloud_credential.shared_key);
-
         return std::make_shared<BlobContainerClient>(blob_uri.get_container_uri(), shared_key_credential);
     }
 
+    // sas token
     if (!azure_cloud_credential.sas_token.empty()) {
-        // sas token
         std::string container_uri = blob_uri.get_container_uri();
         if (azure_cloud_credential.sas_token.front() != '?') {
             container_uri += '?';
@@ -346,8 +345,17 @@ BlobContainerClientPtr AzBlobClientFactory::create_blob_container_client(
         return std::make_shared<BlobContainerClient>(container_uri);
     }
 
+    // client secret service principal
+    if (!azure_cloud_credential.client_id.empty() && !azure_cloud_credential.client_secret.empty() &&
+        !azure_cloud_credential.tenant_id.empty()) {
+        auto client_secret_credential = std::make_shared<Azure::Identity::ClientSecretCredential>(
+                azure_cloud_credential.tenant_id, azure_cloud_credential.client_id,
+                azure_cloud_credential.client_secret);
+        return std::make_shared<BlobContainerClient>(blob_uri.get_container_uri(), client_secret_credential);
+    }
+
+    // user assigned managed identity
     if (!azure_cloud_credential.client_id.empty()) {
-        // managed identity
         auto managed_identity_credential =
                 std::make_shared<Azure::Identity::ManagedIdentityCredential>(azure_cloud_credential.client_id);
         return std::make_shared<BlobContainerClient>(blob_uri.get_container_uri(), managed_identity_credential);
@@ -479,8 +487,6 @@ StatusOr<BlobContainerClientPtr> AzBlobFileSystem::new_blob_container_client(con
 
     const auto& azure_cloud_configuration = CloudConfigurationFactory::create_azure(*t_cloud_configuration);
     const auto& azure_cloud_credential = azure_cloud_configuration.azure_cloud_credential;
-    RETURN_IF_ERROR(azure_cloud_credential.validate());
-
     return _factory->new_blob_container_client(azure_cloud_credential, uri);
 }
 

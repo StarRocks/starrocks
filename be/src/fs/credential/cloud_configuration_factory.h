@@ -59,6 +59,8 @@ static const std::string ALIYUN_OSS_ENDPOINT = "aliyun.oss.endpoint";
 static const std::string AZURE_BLOB_SHARED_KEY = "azure.blob.shared_key";
 static const std::string AZURE_BLOB_SAS_TOKEN = "azure.blob.sas_token";
 static const std::string AZURE_BLOB_OAUTH2_CLIENT_ID = "azure.blob.oauth2_client_id";
+static const std::string AZURE_BLOB_OAUTH2_CLIENT_SECRET = "azure.blob.oauth2_client_secret";
+static const std::string AZURE_BLOB_OAUTH2_TENANT_ID = "azure.blob.oauth2_tenant_id";
 
 class CloudConfigurationFactory {
 public:

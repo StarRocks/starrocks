@@ -64,16 +64,12 @@ public:
     std::string shared_key;
     std::string sas_token;
     std::string client_id;
-
-    Status validate() const {
-        if (shared_key.empty() && sas_token.empty() && client_id.empty()) {
-            return Status::InvalidArgument("Azure credential invalid: all fields are empty");
-        }
-        return Status::OK();
-    }
+    std::string client_secret;
+    std::string tenant_id;
 
     bool operator==(const AzureCloudCredential& rhs) const {
-        return shared_key == rhs.shared_key && sas_token == rhs.sas_token && client_id == rhs.client_id;
+        return shared_key == rhs.shared_key && sas_token == rhs.sas_token && client_id == rhs.client_id &&
+               client_secret == rhs.client_secret && tenant_id == rhs.tenant_id;
     }
 };
 
