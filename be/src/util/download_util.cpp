@@ -28,7 +28,7 @@ namespace starrocks {
 Status DownloadUtil::download(const std::string& url, const std::string& target_file,
                               const std::string& expected_checksum) {
     auto success = false;
-    auto tmp_file = fmt::format("{}_{}", target_file, ThreadLocalUUIDGenerator::next_uuid_string());
+    auto tmp_file = fmt::format("{}_{}", target_file, UUIDGenerator::next_uuid_string());
     auto fp = fopen(tmp_file.c_str(), "w");
     DeferOp defer([&]() {
         if (fp != nullptr) {

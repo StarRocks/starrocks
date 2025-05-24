@@ -15,20 +15,16 @@
 
 package com.starrocks.common.util;
 
-import com.fasterxml.uuid.EthernetAddress;
 import com.fasterxml.uuid.Generators;
-import com.fasterxml.uuid.impl.TimeBasedGenerator;
+import com.fasterxml.uuid.impl.TimeBasedEpochRandomGenerator;
 import com.starrocks.thrift.TUniqueId;
 
 import java.util.UUID;
 
 public class UUIDUtil {
-    private static final EthernetAddress ETHERNET_ADDRESS = EthernetAddress.fromInterface();
-    private static final TimeBasedGenerator UUID_GENERATOR = Generators.timeBasedGenerator(ETHERNET_ADDRESS);
+    // Prefer UUIDv7 to UUIDv4, as UUIDv7 values are sortable, but UUIDv4 are not
+    private static final TimeBasedEpochRandomGenerator UUID_GENERATOR = Generators.timeBasedEpochRandomGenerator();
 
-    // java.util.UUID.randomUUID() uses SecureRandom to generate random uuid,
-    // and SecureRandom hold locks when generate random bytes.
-    // This method is faster than java.util.UUID.randomUUID() in high concurrency environment
     public static UUID genUUID() {
         return UUID_GENERATOR.generate();
     }

@@ -34,21 +34,21 @@
 
 #pragma once
 
+#include <boost/uuid/time_generator_v7.hpp>
 #include <boost/uuid/uuid.hpp>
-#include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 #include <string>
 
 namespace starrocks {
 
-class ThreadLocalUUIDGenerator {
+class UUIDGenerator {
 public:
-    static boost::uuids::uuid next_uuid() { return s_tls_gen(); }
+    static inline boost::uuids::uuid next_uuid() { return uuid_generator(); }
 
-    static std::string next_uuid_string() { return boost::uuids::to_string(next_uuid()); }
+    static inline std::string next_uuid_string() { return boost::uuids::to_string(next_uuid()); }
 
 private:
-    static inline thread_local boost::uuids::basic_random_generator<boost::mt19937> s_tls_gen;
+    static boost::uuids::time_generator_v7 uuid_generator;
 };
 
 } // namespace starrocks
