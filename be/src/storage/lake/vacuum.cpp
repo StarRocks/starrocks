@@ -281,17 +281,30 @@ void run_clear_task_async(std::function<void()> task) {
 }
 
 static Status collect_garbage_files(const TabletMetadataPB& metadata, const std::string& base_dir,
-                                    AsyncFileDeleter* deleter, int64_t* garbage_data_size) {
+                                    AsyncFileDeleter* deleter, int64_t* garbage_data_size,
+                                    const std::unordered_set<std::string>* retain_files_set) {
     for (const auto& rowset : metadata.compaction_inputs()) {
-        for (const auto& segment : rowset.segments()) {
+        int64_t skip_segment_size = 0;
+        for (int i = 0; i < rowset.segments().size(); ++i) {
+            const auto& segment = rowset.segments(i);
+            if (retain_files_set != nullptr && retain_files_set->find(segment) != retain_files_set->end()) {
+                skip_segment_size += rowset.segment_size(i);
+                continue;
+            }
             RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, segment)));
         }
         for (const auto& del_file : rowset.del_files()) {
+            if (retain_files_set != nullptr && retain_files_set->find(del_file.name()) != retain_files_set->end()) {
+                continue;
+            }
             RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, del_file.name())));
         }
-        *garbage_data_size += rowset.data_size();
+        *garbage_data_size += (rowset.data_size() - skip_segment_size);
     }
     for (const auto& file : metadata.orphan_files()) {
+        if (retain_files_set != nullptr && retain_files_set->find(file.name()) != retain_files_set->end()) {
+            continue;
+        }
         RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, file.name())));
         *garbage_data_size += file.size();
     }
@@ -318,7 +331,9 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
                                       VacuumTabletMetaVerionRange* vacuum_version_range,
                                       AsyncFileDeleter* datafile_deleter, AsyncFileDeleter* metafile_deleter,
                                       int64_t* total_datafile_size, int64_t* vacuumed_version,
-                                      int64_t* extra_datafile_size) {
+                                      int64_t* extra_datafile_size,
+                                      const std::unordered_set<int64_t>& retain_versions_set,
+                                      const std::unordered_set<std::string>& retain_files_set) {
     auto t0 = butil::gettimeofday_ms();
     auto meta_dir = join_path(root_dir, kMetadataDirectoryName);
     auto data_dir = join_path(root_dir, kSegmentDirectoryName);
@@ -345,8 +360,8 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
             extra_file_size += collect_extra_files_size(*metadata, min_retain_version);
             if (skip_check_grace_timestamp) {
                 DCHECK_LE(version, final_retain_version);
-                RETURN_IF_ERROR(
-                        collect_garbage_files(*metadata, data_dir, datafile_deleter, &prepare_vacuum_file_size));
+                RETURN_IF_ERROR(collect_garbage_files(*metadata, data_dir, datafile_deleter, &prepare_vacuum_file_size,
+                                                      &retain_files_set));
             } else {
                 int64_t compare_time = 0;
                 if (metadata->has_commit_time() && metadata->commit_time() > 0) {
@@ -381,7 +396,8 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
                     skip_check_grace_timestamp = true;
 
                     // The metadata will be retained, but garbage files recorded in it can be deleted.
-                    RETURN_IF_ERROR(collect_garbage_files(*metadata, data_dir, datafile_deleter, total_datafile_size));
+                    RETURN_IF_ERROR(collect_garbage_files(*metadata, data_dir, datafile_deleter, total_datafile_size,
+                                                          &retain_files_set));
                 } else {
                     DCHECK_LE(version, final_retain_version);
                     final_retain_version = version;
@@ -406,6 +422,9 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
     DCHECK_LE(version, final_retain_version);
     if (vacuum_version_range == nullptr) {
         for (auto v = version + 1; v < final_retain_version; v++) {
+            if (retain_versions_set.find(v) != retain_versions_set.end()) {
+                continue;
+            }
             RETURN_IF_ERROR(metafile_deleter->delete_file(join_path(meta_dir, tablet_metadata_filename(tablet_id, v))));
         }
     } else {
@@ -429,11 +448,43 @@ static void erase_tablet_metadata_from_metacache(TabletManager* tablet_mgr, cons
     }
 }
 
+static Status get_retain_files(const std::vector<int64_t>& retain_versions, int64_t tablet_id,
+                               TabletManager* tablet_mgr, std::unordered_set<std::string>& retain_files_set) {
+    for (const auto& version : retain_versions) {
+        auto res = tablet_mgr->get_tablet_metadata(tablet_id, version, false);
+        if (!res.status().ok()) {
+            return res.status();
+        }
+        auto metadata = std::move(res).value();
+        for (const auto& rowset : metadata->rowsets()) {
+            for (const auto& segment : rowset.segments()) {
+                retain_files_set.insert(segment);
+            }
+            for (const auto& del_file : rowset.del_files()) {
+                retain_files_set.insert(del_file.name());
+            }
+        }
+
+        for (const auto& [_, dcg] : (*metadata).dcg_meta().dcgs()) {
+            for (const auto& column_file : dcg.column_files()) {
+                retain_files_set.insert(column_file);
+            }
+        }
+        for (const auto& [_, file] : (*metadata).delvec_meta().version_to_file()) {
+            retain_files_set.insert(file.name());
+        }
+        for (const auto& sstable : (*metadata).sstable_meta().sstables()) {
+            retain_files_set.insert(sstable.filename());
+        }
+    }
+    return Status::OK();
+}
+
 static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view root_dir,
                                      std::vector<TabletInfoPB>& tablet_infos, int64_t min_retain_version,
                                      int64_t grace_timestamp, bool enable_partition_aggregation,
                                      int64_t* vacuumed_files, int64_t* vacuumed_file_size, int64_t* vacuumed_version,
-                                     int64_t* extra_file_size) {
+                                     int64_t* extra_file_size, std::vector<int64_t>& retain_versions) {
     DCHECK(tablet_mgr != nullptr);
     DCHECK(std::is_sorted(tablet_infos.begin(), tablet_infos.end(),
                           [](const auto& a, const auto& b) { return a.tablet_id() < b.tablet_id(); }));
@@ -450,13 +501,18 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
         vacuum_version_range = std::make_unique<VacuumTabletMetaVerionRange>();
     }
     int64_t final_vacuum_version = std::numeric_limits<int64_t>::max();
+    std::unordered_set<int64_t> retain_versions_set(retain_versions.begin(), retain_versions.end());
     for (auto& tablet_info : tablet_infos) {
+        std::unordered_set<std::string> retain_files_set;
+        RETURN_IF_ERROR(get_retain_files(retain_versions, tablet_info.tablet_id(), tablet_mgr, retain_files_set));
+
         int64_t tablet_vacuumed_version = 0;
         AsyncFileDeleter datafile_deleter(config::lake_vacuum_min_batch_delete_size);
         AsyncFileDeleter metafile_deleter(INT64_MAX, metafile_delete_cb);
         RETURN_IF_ERROR(collect_files_to_vacuum(tablet_mgr, root_dir, tablet_info, grace_timestamp, min_retain_version,
                                                 vacuum_version_range.get(), &datafile_deleter, &metafile_deleter,
-                                                vacuumed_file_size, &tablet_vacuumed_version, extra_file_size));
+                                                vacuumed_file_size, &tablet_vacuumed_version, extra_file_size,
+                                                retain_versions_set, retain_files_set));
         RETURN_IF_ERROR(datafile_deleter.finish());
         (*vacuumed_files) += datafile_deleter.delete_count();
         if (!enable_partition_aggregation) {
@@ -471,6 +527,9 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
         AsyncFileDeleter metafile_deleter(INT64_MAX, metafile_delete_cb);
         auto meta_dir = join_path(root_dir, kMetadataDirectoryName);
         for (auto v = vacuum_version_range->min_version; v < vacuum_version_range->max_version; v++) {
+            if (retain_versions_set.find(v) != retain_versions_set.end()) {
+                continue;
+            }
             RETURN_IF_ERROR(metafile_deleter.delete_file(join_path(meta_dir, tablet_metadata_filename(0, v))));
         }
         RETURN_IF_ERROR(metafile_deleter.finish());
@@ -558,6 +617,10 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
     auto min_retain_version = request.min_retain_version();
     auto grace_timestamp = request.grace_timestamp();
     auto min_active_txn_id = request.min_active_txn_id();
+    std::vector<int64_t> retain_versions;
+    if (request.retain_versions_size() > 0) {
+        retain_versions = std::vector<int64_t>(request.retain_versions().begin(), request.retain_versions().end());
+    }
 
     int64_t vacuumed_files = 0;
     int64_t vacuumed_file_size = 0;
@@ -569,7 +632,7 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
 
     RETURN_IF_ERROR(vacuum_tablet_metadata(tablet_mgr, root_loc, tablet_infos, min_retain_version, grace_timestamp,
                                            request.enable_partition_aggregation(), &vacuumed_files, &vacuumed_file_size,
-                                           &vacuumed_version, &extra_file_size));
+                                           &vacuumed_version, &extra_file_size, retain_versions));
     extra_file_size -= vacuumed_file_size;
     if (request.delete_txn_log()) {
         RETURN_IF_ERROR(vacuum_txn_log(root_loc, min_active_txn_id, &vacuumed_files, &vacuumed_file_size));
@@ -711,7 +774,7 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                     latest_metadata = metadata;
                 }
                 int64_t dummy_file_size = 0;
-                RETURN_IF_ERROR(collect_garbage_files(*metadata, data_dir, &deleter, &dummy_file_size));
+                RETURN_IF_ERROR(collect_garbage_files(*metadata, data_dir, &deleter, &dummy_file_size, nullptr));
                 if (metadata->has_prev_garbage_version()) {
                     garbage_version = metadata->prev_garbage_version();
                 } else {

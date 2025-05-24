@@ -19,6 +19,10 @@ import com.starrocks.alter.AlterTest;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SchemaChangeJobV2;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -33,6 +37,7 @@ import com.starrocks.leader.CheckpointController;
 import com.starrocks.persist.ClusterSnapshotLog;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
@@ -404,5 +409,102 @@ public class ClusterSnapshotTest {
         Assert.assertTrue(job2.getStarMgrJournalId() == 6666L);
         Assert.assertTrue(job2.isFinished());
         localClusterSnapshotMgr.setAutomatedSnapshotOff();
+    }
+
+    @Test
+    public void testRetainVersion() {
+        // 1. test get version info function
+        long testDbId = 0;
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
+        for (Long dbId : dbIds) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            if (db != null && !db.isSystemDatabase()) {
+                testDbId = dbId;
+                break;
+            }
+        }
+        Database sourceDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(testDbId);
+        final Database dbTest = new Database(sourceDb.getId(), sourceDb.getFullName());
+        for (Table tbl : sourceDb.getTables()) {
+            if (tbl.isOlapTable()) {
+                dbTest.registerTableUnlocked(tbl);
+            }
+        }
+
+        new MockUp<Table>() {
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+        };
+
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(long dbId) {
+                if (dbId == dbTest.getId()) {
+                    return dbTest;
+                } else {
+                    return null;
+                }
+            }
+        };
+
+        ClusterSnapshotInfo clusterSnapshotInfo = new ClusterSnapshotInfo();
+        {
+            GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+            Assert.assertTrue(globalStateMgr.getLocalMetastore().getClusterSnapshotInfo() == null);
+            new Expectations(globalStateMgr) {
+                {
+                    globalStateMgr.isCheckpointThread();
+                    minTimes = 0;
+                    result = true;
+    
+                }
+            };
+            clusterSnapshotInfo = globalStateMgr.getLocalMetastore().getNativeTableVersions();
+            Assert.assertTrue(!clusterSnapshotInfo.isEmpty());
+        }
+        for (Table tbl : dbTest.getTables()) {
+            OlapTable olapTable = (OlapTable) tbl;
+            for (PhysicalPartition part : olapTable.getPhysicalPartitions()) {
+                long value = clusterSnapshotInfo.getVersion(dbTest.getId(), olapTable.getId(), part.getParentId(), part.getId());
+                Assert.assertTrue(value != 0 && value == part.getVisibleVersion());
+            }
+        }
+        clusterSnapshotInfo = null;
+
+        // 2. test get vacuum version
+        ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgr();
+
+        ClusterSnapshotInfo finishClusterSnapshotInfo = new ClusterSnapshotInfo();
+        finishClusterSnapshotInfo.putVersion(122L, 1222L, 12222L, 122222L, 3L);
+        ClusterSnapshotJob jobFinish = new ClusterSnapshotJob(4534543, "testjob_1", "default", -1);
+        jobFinish.setClusterSnapshotInfo(finishClusterSnapshotInfo);
+        jobFinish.setState(ClusterSnapshotJobState.FINISHED);
+        localClusterSnapshotMgr.addSnapshotJob(jobFinish);
+
+        ClusterSnapshotInfo unFinishClusterSnapshotInfo = new ClusterSnapshotInfo();
+        unFinishClusterSnapshotInfo.putVersion(122L, 1222L, 12222L, 122222L, 6L);
+        ClusterSnapshotJob jobUnFinish = new ClusterSnapshotJob(4534544, "testjob_2", "default", -1);
+        jobUnFinish.setClusterSnapshotInfo(unFinishClusterSnapshotInfo);
+        localClusterSnapshotMgr.addSnapshotJob(jobUnFinish);
+
+        Assert.assertTrue(localClusterSnapshotMgr.getRetainVersionsForVacuum(122L, 1222L, 12222L, 122222L) == null);
+        jobUnFinish.setState(ClusterSnapshotJobState.SNAPSHOTING);
+        Assert.assertTrue(localClusterSnapshotMgr.getRetainVersionsForVacuum(122L, 1222L, 12222L, 122222L) == null);
+        jobUnFinish.setState(ClusterSnapshotJobState.UPLOADING);
+        Assert.assertTrue(localClusterSnapshotMgr.getRetainVersionsForVacuum(122L, 1222L, 12222L, 122222L).isEmpty());
+
+        jobFinish.getSnapshot().setType(ClusterSnapshot.ClusterSnapshotType.MANUAL);
+        jobFinish.setClusterSnapshotInfo(finishClusterSnapshotInfo);
+        jobUnFinish.getSnapshot().setType(ClusterSnapshot.ClusterSnapshotType.MANUAL);
+        jobUnFinish.setClusterSnapshotInfo(unFinishClusterSnapshotInfo);
+
+        List<Long> retainVersions = localClusterSnapshotMgr.getRetainVersionsForVacuum(122L, 1222L, 12222L, 122222L);
+        Assert.assertTrue(retainVersions.size() == 2 && retainVersions.get(0) == 3L && retainVersions.get(1) == 6L);
+        jobUnFinish.setState(ClusterSnapshotJobState.FINISHED);
+        retainVersions = localClusterSnapshotMgr.getRetainVersionsForVacuum(122L, 1222L, 12222L, 122222L);
+        Assert.assertTrue(retainVersions.size() == 1);
+        Assert.assertTrue(retainVersions.get(0) == 6L);
     }
 }

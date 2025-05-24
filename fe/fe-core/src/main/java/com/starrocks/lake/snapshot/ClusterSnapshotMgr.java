@@ -40,10 +40,13 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.NavigableMap;
+import java.util.Set;
 import java.util.concurrent.ConcurrentSkipListMap;
 
 // only used for AUTOMATED snapshot for now
@@ -299,6 +302,44 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         for (Long removeId : removeIds) {
             automatedSnapshotJobs.remove(removeId);
         }
+    }
+
+    public List<Long> getRetainVersionsForVacuum(long dbId, long tableId, long partId, long physicalPartId) {
+        // we need to consider the following two job and merge all versions
+        ClusterSnapshotJob lastFinishedAutoSnapshotJob = getLastFinishedAutomatedClusterSnapshotJob();
+        ClusterSnapshotJob runningJob = getRunningJob();
+        if (runningJob != null && !runningJob.isUploading()) {
+            // we need to reject the retain version request because the runningJob is still trying to get
+            // the snapshot version and does not finish
+            return null;
+        }
+
+        Set<Long> versionsSet = new HashSet<>();
+        if (lastFinishedAutoSnapshotJob != null) {
+            long version = lastFinishedAutoSnapshotJob.getSnapshotVersion(dbId, tableId, partId, physicalPartId);
+            if (version != 0) {
+                versionsSet.add(version);
+            }
+        }
+        if (runningJob != null) {
+            long version = runningJob.getSnapshotVersion(dbId, tableId, partId, physicalPartId);
+            if (version != 0) {
+                versionsSet.add(version);
+            }
+        }
+
+        List<Long> versions = Lists.newArrayList(versionsSet);
+        Collections.sort(versions);
+        return versions;
+    }
+
+    public ClusterSnapshotJob getRunningJob() {
+        Entry<Long, ClusterSnapshotJob> entry = automatedSnapshotJobs.lastEntry();
+        if (entry != null && entry.getValue().isUnFinishedState()) {
+            return entry.getValue();
+        }
+
+        return null;
     }
 
     public void start() {

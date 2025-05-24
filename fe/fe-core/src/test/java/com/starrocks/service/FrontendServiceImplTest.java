@@ -33,6 +33,9 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.journal.CheckpointException;
+import com.starrocks.lake.snapshot.ClusterSnapshotInfo;
+import com.starrocks.leader.CheckpointController;
 import com.starrocks.load.batchwrite.BatchWriteMgr;
 import com.starrocks.load.batchwrite.RequestLoadResult;
 import com.starrocks.load.batchwrite.TableId;
@@ -56,6 +59,7 @@ import com.starrocks.thrift.TDescribeTableParams;
 import com.starrocks.thrift.TDescribeTableResult;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TFileType;
+import com.starrocks.thrift.TFinishCheckpointRequest;
 import com.starrocks.thrift.TGetDictQueryParamRequest;
 import com.starrocks.thrift.TGetDictQueryParamResponse;
 import com.starrocks.thrift.TGetLoadTxnStatusRequest;
@@ -1521,5 +1525,32 @@ public class FrontendServiceImplTest {
             Assert.assertEquals(physicalPartition.getNextVersion(), meta.getNext_version());
             Assert.assertEquals(olapTable.isTempPartition(partitionId), meta.isIs_temp());
         }
+    }
+
+    @Test
+    public void testFinishCheckpointWithVersionsInfo() throws TException {
+        final CheckpointController checkpointController = new CheckpointController("test1", null, "test2");
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public CheckpointController getCheckpointController() {
+                return checkpointController;
+            }
+        };
+        new MockUp<CheckpointController>() {
+            @Mock
+            public void finishCheckpoint(long journalId, String nodeName, ClusterSnapshotInfo clusterSnapshotInfo)
+                                         throws CheckpointException {
+                Assert.assertTrue(clusterSnapshotInfo.getVersion(6L, 66L, 666L, 6666L) == 66666L);
+            }
+        };
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TFinishCheckpointRequest request = new TFinishCheckpointRequest();
+        request.setIs_global_state_mgr(true);
+        request.setIs_success(true);
+
+        ClusterSnapshotInfo inputClusterSnapshotInfo = new ClusterSnapshotInfo();
+        inputClusterSnapshotInfo.putVersion(6L, 66L, 666L, 6666L, 66666L);
+        request.setCluster_snapshot_info(inputClusterSnapshotInfo.toThrift());
+        Assert.assertTrue(impl.finishCheckpoint(request).getStatus().getStatus_code() == TStatusCode.OK);
     }
 }

@@ -41,6 +41,8 @@ public class ClusterSnapshot {
     private long feJournalId;
     @SerializedName(value = "starMgrJournal")
     private long starMgrJournalId;
+    @SerializedName(value = "clusterSnapshotInfo")
+    private ClusterSnapshotInfo clusterSnapshotInfo;
 
     public ClusterSnapshot() {
     }
@@ -55,6 +57,7 @@ public class ClusterSnapshot {
         this.finishedTimeMs = finishedTimeMs;
         this.feJournalId = feJournalId;
         this.starMgrJournalId = starMgrJournalId;
+        this.clusterSnapshotInfo = new ClusterSnapshotInfo();
     }
 
     public void setJournalIds(long feJournalId, long starMgrJournalId) {
@@ -92,6 +95,25 @@ public class ClusterSnapshot {
 
     public long getId() {
         return id;
+    }
+
+    public boolean needClusterSnapshotInfo() {
+        return type == ClusterSnapshotType.MANUAL;
+    }
+
+    // for UT
+    public void setType(ClusterSnapshotType type) {
+        this.type = type;
+    }
+
+    public void setClusterSnapshotInfo(ClusterSnapshotInfo clusterSnapshotInfo) {
+        if (needClusterSnapshotInfo()) {
+            this.clusterSnapshotInfo = clusterSnapshotInfo;
+        }
+    }
+
+    public long getSnapshotVersion(long dbId, long tableId, long partId, long physicalPartId) {
+        return clusterSnapshotInfo.getVersion(dbId, tableId, partId, physicalPartId);
     }
 
     public TClusterSnapshotsItem getInfo() {
