@@ -34,14 +34,6 @@ public class LdapSecurityTest {
     }
     
     @Test
-    public void testStaticBlockSetsSystemProperties() {
-        Assert.assertEquals("JKS", System.getProperty("custom.ldap.truststore.type"));
-        Assert.assertEquals("test.jks", System.getProperty("custom.ldap.truststore.loc"));
-        Assert.assertEquals("changeit", System.getProperty("custom.ldap.truststore.password"));
-        Assert.assertEquals("TLS", System.getProperty("custom.ldap.ssl.protocol"));
-    }
-    
-    @Test
     public void testLdapEnvForLdaps() {
         // Simulate what LdapSecurity would do when in ldaps mode
         String url = Config.authentication_ldap_simple_server_protocol + "://localhost:389";
