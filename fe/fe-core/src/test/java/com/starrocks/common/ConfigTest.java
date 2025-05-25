@@ -189,5 +189,6 @@ public class ConfigTest {
         Assert.assertEquals("ldaps", Config.authentication_ldap_simple_server_protocol);
         Assert.assertEquals("/tmp/test.jks", Config.authentication_ldaps_trust_store_path);
         Assert.assertEquals("password", Config.authentication_ldaps_trust_store_password);
+        Config.authentication_ldap_simple_server_protocol = "ldaps";
     }
 }
