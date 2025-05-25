@@ -56,12 +56,6 @@ public class CustomLdapSslSocketFactoryTest {
         Assert.assertSame(factory1, factory2);
     }
     
-    @Test(expected = CustomLdapSslSocketFactoryException.class)
-    public void testLoadTrustStoreWithInvalidPath() {
-        System.setProperty("custom.ldap.truststore.loc", "invalid.jks");
-        CustomLdapSslSocketFactory.getDefault();
-    }
-    
     @Test
     public void testLoadTrustStoreWithInvalidPathMessage() {
         System.setProperty("custom.ldap.truststore.loc", "invalid.jks");
