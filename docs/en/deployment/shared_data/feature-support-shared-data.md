@@ -260,6 +260,5 @@ The following table shows the performance test results on thirteen queries and t
 - Full-text inverted index
 - Hybrid row-column storage
 - Global dictionary object
-- Generated column
 - Backup and restore
 

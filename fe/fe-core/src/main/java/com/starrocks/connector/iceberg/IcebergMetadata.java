@@ -73,6 +73,7 @@ import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -133,8 +134,10 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -221,16 +224,16 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listDbNames(ConnectContext context) {
-        return icebergCatalog.listAllDatabases();
+        return icebergCatalog.listAllDatabases(context);
     }
 
     @Override
-    public void createDb(String dbName, Map<String, String> properties) throws AlreadyExistsException {
-        if (dbExists(new ConnectContext(), dbName)) {
+    public void createDb(ConnectContext context, String dbName, Map<String, String> properties) throws AlreadyExistsException {
+        if (dbExists(context, dbName)) {
             throw new AlreadyExistsException("Database Already Exists");
         }
 
-        icebergCatalog.createDB(dbName, properties);
+        icebergCatalog.createDB(context, dbName, properties);
     }
 
     @Override
@@ -241,7 +244,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             throw new StarRocksConnectorException("Database %s not empty", dbName);
         }
 
-        icebergCatalog.dropDB(dbName);
+        icebergCatalog.dropDB(context, dbName);
         databases.remove(dbName);
     }
 
@@ -252,7 +255,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
         Database db;
         try {
-            db = icebergCatalog.getDB(dbName);
+            db = icebergCatalog.getDB(context, dbName);
         } catch (NoSuchNamespaceException e) {
             LOG.error("Database {} not found", dbName, e);
             return null;
@@ -264,11 +267,11 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listTableNames(ConnectContext context, String dbName) {
-        return icebergCatalog.listTables(dbName);
+        return icebergCatalog.listTables(context, dbName);
     }
 
     @Override
-    public boolean createTable(CreateTableStmt stmt) throws DdlException {
+    public boolean createTable(ConnectContext context, CreateTableStmt stmt) throws DdlException {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
 
@@ -286,11 +289,12 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
         Map<String, String> createTableProperties = IcebergApiConverter.rebuildCreateTableProperties(properties);
 
-        return icebergCatalog.createTable(dbName, tableName, schema, partitionSpec, tableLocation, createTableProperties);
+        return icebergCatalog.createTable(context, dbName, tableName, schema, partitionSpec, tableLocation,
+                createTableProperties);
     }
 
     @Override
-    public void createView(CreateViewStmt stmt) throws DdlException {
+    public void createView(ConnectContext context, CreateViewStmt stmt) throws DdlException {
         String dbName = stmt.getDbName();
         String viewName = stmt.getTable();
 
@@ -299,7 +303,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
 
-        if (getView(dbName, viewName) != null) {
+        if (getView(context, dbName, viewName) != null) {
             if (stmt.isSetIfNotExists()) {
                 LOG.info("create view[{}] which already exists", viewName);
                 return;
@@ -311,11 +315,11 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         ConnectorViewDefinition viewDefinition = ConnectorViewDefinition.fromCreateViewStmt(stmt);
-        icebergCatalog.createView(catalogName, viewDefinition, stmt.isReplace());
+        icebergCatalog.createView(context, catalogName, viewDefinition, stmt.isReplace());
     }
 
     @Override
-    public void alterView(AlterViewStmt stmt) throws StarRocksException {
+    public void alterView(ConnectContext context, AlterViewStmt stmt) throws StarRocksException {
         String dbName = stmt.getDbName();
         String viewName = stmt.getTable();
 
@@ -323,14 +327,14 @@ public class IcebergMetadata implements ConnectorMetadata {
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
-        if (getView(dbName, viewName) == null) {
+        if (getView(context, dbName, viewName) == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, dbName + "." + viewName);
         }
 
         ConnectorViewDefinition viewDefinition = ConnectorViewDefinition.fromAlterViewStmt(stmt);
-        View currentView = icebergCatalog.getView(dbName, viewName);
+        View currentView = icebergCatalog.getView(context, dbName, viewName);
         if (!stmt.getProperties().isEmpty() || stmt.isAlterDialect()) {
-            icebergCatalog.alterView(currentView, viewDefinition);
+            icebergCatalog.alterView(context, currentView, viewDefinition);
         } else {
             throw new DdlException("ALTER VIEW <viewName> AS is not supported. Use CREATE OR REPLACE VIEW instead");
         }
@@ -340,7 +344,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     public void alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
-        org.apache.iceberg.Table table = icebergCatalog.getTable(dbName, tableName);
+        org.apache.iceberg.Table table = icebergCatalog.getTable(context, dbName, tableName);
 
         if (table == null) {
             throw new StarRocksConnectorException(
@@ -363,11 +367,11 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void dropTable(DropTableStmt stmt) {
+    public void dropTable(ConnectContext context, DropTableStmt stmt) {
         Table icebergTable = getTable(new ConnectContext(), stmt.getDbName(), stmt.getTableName());
 
         if (icebergTable != null && icebergTable.isIcebergView()) {
-            icebergCatalog.dropView(stmt.getDbName(), stmt.getTableName());
+            icebergCatalog.dropView(context, stmt.getDbName(), stmt.getTableName());
             return;
         }
 
@@ -375,7 +379,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             return;
         }
 
-        icebergCatalog.dropTable(stmt.getDbName(), stmt.getTableName(), stmt.isForceDrop());
+        icebergCatalog.dropTable(context, stmt.getDbName(), stmt.getTableName(), stmt.isForceDrop());
         tables.remove(TableIdentifier.of(stmt.getDbName(), stmt.getTableName()));
         StatisticUtils.dropStatisticsAfterDropTable(icebergTable);
         asyncRefreshOthersFeMetadataCache(stmt.getDbName(), stmt.getTableName());
@@ -399,7 +403,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             if (tables.containsKey(identifier)) {
                 icebergTable = tables.get(identifier);
             } else {
-                icebergTable = icebergCatalog.getTable(dbName, tblName);
+                icebergTable = icebergCatalog.getTable(context, dbName, tblName);
             }
 
             IcebergCatalogType catalogType = icebergCatalog.getIcebergCatalogType();
@@ -419,7 +423,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             LOG.error("Failed to get iceberg table {}", identifier, e);
             return null;
         } catch (NoSuchTableException e) {
-            return getView(dbName, tblName);
+            return getView(context, dbName, tblName);
         }
     }
 
@@ -487,9 +491,9 @@ public class IcebergMetadata implements ConnectorMetadata {
                 .snapshotId();
     }
 
-    public Table getView(String dbName, String viewName) {
+    public Table getView(ConnectContext context, String dbName, String viewName) {
         try {
-            View icebergView = icebergCatalog.getView(dbName, viewName);
+            View icebergView = icebergCatalog.getView(context, dbName, viewName);
             return IcebergApiConverter.toView(catalogName, dbName, icebergView);
         } catch (Exception e) {
             LOG.error("Failed to get iceberg view {}.{}", dbName, viewName, e);
@@ -518,7 +522,7 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public boolean tableExists(ConnectContext context, String dbName, String tblName) {
-        return icebergCatalog.tableExists(dbName, tblName);
+        return icebergCatalog.tableExists(context, dbName, tblName);
     }
 
     @Override
@@ -1168,7 +1172,7 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         PartitionSpec partitionSpec = nativeTbl.spec();
         for (TIcebergDataFile dataFile : dataFiles) {
-            Metrics metrics = IcebergApiConverter.buildDataFileMetrics(dataFile);
+            Metrics metrics = IcebergApiConverter.buildDataFileMetrics(dataFile, nativeTbl);
             DataFiles.Builder builder =
                     DataFiles.builder(partitionSpec)
                             .withMetrics(metrics)
@@ -1177,14 +1181,19 @@ public class IcebergMetadata implements ConnectorMetadata {
                             .withRecordCount(dataFile.record_count)
                             .withFileSizeInBytes(dataFile.file_size_in_bytes)
                             .withSplitOffsets(dataFile.split_offsets);
-
+            String nullFingerprint = "";
+            if (!dataFile.isSetPartition_null_fingerprint()) {
+                nullFingerprint = "0".repeat(partitionSpec.fields().size());
+            } else {
+                nullFingerprint = dataFile.getPartition_null_fingerprint();
+            }
             if (partitionSpec.isPartitioned()) {
                 String relativePartitionLocation = getIcebergRelativePartitionPath(
                         nativeTbl.location(), dataFile.partition_path);
-
                 PartitionData partitionData = partitionDataFromPath(
-                        relativePartitionLocation, partitionSpec);
+                        relativePartitionLocation, nullFingerprint, partitionSpec, nativeTbl);
                 builder.withPartition(partitionData);
+                // builder.withPartitionPath(relativePartitionLocation);
             }
             batchWrite.addFile(builder.build());
         }
@@ -1226,27 +1235,100 @@ public class IcebergMetadata implements ConnectorMetadata {
         return isOverwrite ? new DynamicOverwrite(transaction) : new Append(transaction);
     }
 
-    public static PartitionData partitionDataFromPath(String relativePartitionPath, PartitionSpec spec) {
+    public PartitionData partitionDataFromPath(String relativePartitionPath, 
+            String partitionNullFingerprint, PartitionSpec spec, org.apache.iceberg.Table table) {
         PartitionData data = new PartitionData(spec.fields().size());
         String[] partitions = relativePartitionPath.split("/", -1);
         List<PartitionField> partitionFields = spec.fields();
-
+        if (partitions.length != partitionNullFingerprint.length()) {
+            throw new InternalError("Invalid partition and fingerprint size, partition:" + relativePartitionPath + 
+                    " partition size:" + String.valueOf(partitions.length) + " fingerprint:" + partitionNullFingerprint);
+        }
         for (int i = 0; i < partitions.length; i++) {
             PartitionField field = partitionFields.get(i);
             String[] parts = partitions[i].split("=", 2);
             Preconditions.checkArgument(parts.length == 2 && parts[0] != null &&
                     field.name().equals(parts[0]), "Invalid partition: %s", partitions[i]);
-
-            org.apache.iceberg.types.Type sourceType = spec.partitionType().fields().get(i).type();
-            // apply url decoding for string/fixed type
-            if (sourceType.typeId() == Type.TypeID.STRING || sourceType.typeId() == Type.TypeID.FIXED) {
-                parts[1] = URLDecoder.decode(parts[1], StandardCharsets.UTF_8);
+            org.apache.iceberg.types.Type resultType = spec.partitionType().fields().get(i).type();
+            // org.apache.iceberg.types.Type sourceType = table.schema().findType(field.sourceId());
+            // NOTICE:
+            // The behavior here should match the make_partition_path method in be, 
+            // and revert the String path value to the origin value and type of transform expr for the metastore.
+            // otherwise, if we use the api of iceberg to filter the scan files, the result may be incorrect!
+            if (partitionNullFingerprint.charAt(i) == '0') { //'0' means not null, '1' means null
+                // apply date decoding for date type
+                String transform = field.transform().toString();
+                if (transform.equals("year") || transform.equals("month") 
+                        || transform.equals("day") || transform.equals("hour")) {
+                    Integer year = org.apache.iceberg.util.DateTimeUtil.EPOCH.getYear();
+                    Integer month = org.apache.iceberg.util.DateTimeUtil.EPOCH.getMonthValue();
+                    Integer day = org.apache.iceberg.util.DateTimeUtil.EPOCH.getDayOfMonth();
+                    Integer hour = org.apache.iceberg.util.DateTimeUtil.EPOCH.getHour();
+                    String[] dateParts = parts[1].split("-");
+                    if (dateParts.length > 0) {
+                        year = Integer.parseInt(dateParts[0]);
+                    }
+                    if (dateParts.length > 1) {
+                        month = Integer.parseInt(dateParts[1]);
+                    }
+                    if (dateParts.length > 2) {
+                        day = Integer.parseInt(dateParts[2]);
+                    }
+                    if (dateParts.length > 3) {
+                        hour = Integer.parseInt(dateParts[3]);
+                    }
+                    LocalDateTime target = LocalDateTime.of(year, month, day, hour, 0);
+                    if (transform.equals("year")) {
+                        //iceberg stores the result of transform as metadata.
+                        parts[1] = String.valueOf(
+                                ChronoUnit.YEARS.between(org.apache.iceberg.util.DateTimeUtil.EPOCH_DAY, target));
+                    } else if (transform.equals("month")) {
+                        parts[1] = String.valueOf(
+                                ChronoUnit.MONTHS.between(org.apache.iceberg.util.DateTimeUtil.EPOCH_DAY, target));
+                    } else if (transform.equals("day")) {
+                        //The reuslt of day transform is a date type.
+                        //It is diffrent from other date transform exprs, however other's result is a integer.
+                        //do nothing
+                    } else if (transform.equals("hour")) {
+                        parts[1] = String.valueOf(
+                                ChronoUnit.HOURS.between(org.apache.iceberg.util.DateTimeUtil.EPOCH_DAY.atTime(0, 0), target));
+                    }
+                } else if (transform.startsWith("truncate")) {
+                    //the result type of truncate is the same as the truncate column
+                    if (parts[1].length() == 0) {
+                        //do nothing
+                    } else if (resultType.typeId() == Type.TypeID.STRING || resultType.typeId() == Type.TypeID.FIXED) {
+                        parts[1] = URLDecoder.decode(parts[1], StandardCharsets.UTF_8);
+                    } else if (resultType.typeId() == Type.TypeID.BINARY) {
+                        parts[1] = URLDecoder.decode(parts[1], StandardCharsets.UTF_8);
+                        //Do not convert the byte array to utf-8, because some byte is not valid in utf-8.
+                        //like 0xE6 is not valid in utf8. If the convert failed, utf-8 will transfer the byte to 0xFFFD as default
+                        //we should just read and store the byte in latin, and thus not change the byte array value.
+                        parts[1] = new String(Base64.getDecoder().decode(parts[1]), StandardCharsets.ISO_8859_1);
+                    }
+                } else if (transform.startsWith("bucket")) {
+                    //the result type of bucket is integer.
+                    //do nothing
+                } else if (transform.equals("identity")) {
+                    if (parts[1].length() == 0) {
+                        //do nothing
+                    } else if (resultType.typeId() == Type.TypeID.STRING || resultType.typeId() == Type.TypeID.FIXED) {
+                        parts[1] = URLDecoder.decode(parts[1], StandardCharsets.UTF_8);
+                    } else if (resultType.typeId() == Type.TypeID.BINARY) {
+                        parts[1] = URLDecoder.decode(parts[1], StandardCharsets.UTF_8);
+                        parts[1] = new String(Base64.getDecoder().decode(parts[1]), StandardCharsets.ISO_8859_1);
+                    }
+                } else {
+                    throw new DmlException("Unsupported partition transform: %s", transform);
+                }
             }
 
-            if (parts[1].equals("null")) {
+            if (partitionNullFingerprint.charAt(i) == '1') {
                 data.set(i, null);
+            } else if (resultType.typeId() == Type.TypeID.BINARY) {
+                data.set(i, parts[1].getBytes(StandardCharsets.ISO_8859_1));
             } else {
-                data.set(i, Conversions.fromPartitionString(sourceType, parts[1]));
+                data.set(i, Conversions.fromPartitionString(resultType, parts[1]));
             }
         }
         return data;
@@ -1367,7 +1449,11 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         @Override
         public <T> T get(int pos, Class<T> javaClass) {
-            return javaClass.cast(values[pos]);
+            Object value = values[pos];
+            if (javaClass == ByteBuffer.class && value instanceof byte[]) {
+                value = ByteBuffer.wrap((byte[]) value);
+            }
+            return javaClass.cast(value);
         }
 
         @Override

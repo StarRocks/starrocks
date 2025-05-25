@@ -3,7 +3,11 @@ displayed_sidebar: docs
 sidebar_position: 11
 ---
 
-# [Preview] SQL Plan Manager
+import Beta from '../_assets/commonMarkdown/_beta.mdx'
+
+# SQL Plan Manager
+
+<Beta />
 
 本文介绍 SQL Plan Manager 功能的基本概念和使用场景，以及如何使用 SQL Plan Manager 规范化查询计划。
 

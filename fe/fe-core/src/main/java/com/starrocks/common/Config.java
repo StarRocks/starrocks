@@ -400,8 +400,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "task run ttl")
     public static int task_runs_ttl_second = 7 * 24 * 3600;     // 7 day
 
-    @Deprecated
-    @ConfField(mutable = true, comment = "[DEPRECATED as enable_task_history_archive] max number of task run history. ")
+    @ConfField(mutable = true, comment = "max number of task run history. ")
     public static int task_runs_max_history_number = 10000;
 
     @ConfField(mutable = true, comment = "Minimum schedule interval of a task")
@@ -2747,6 +2746,14 @@ public class Config extends ConfigBase {
     // * END: of Cloud native meta server related configurations
     // ***********************************************************
 
+    /**
+     * Whether to use Azure Native SDK (FE java and BE c++) to access Azure Storage.
+     * Default is true. If set to false, use Hadoop Azure.
+     * Currently only supported for Azure Blob Storage in files() table function.
+     */
+    @ConfField(mutable = true)
+    public static boolean azure_use_native_sdk = true;
+
     @ConfField(mutable = true)
     public static boolean enable_experimental_rowstore = false;
 
@@ -2881,9 +2888,11 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "True to start warehouse idle checker")
     public static boolean warehouse_idle_check_enable = false;
 
-    // e.g. "tableId1;tableId2"
-    @ConfField(mutable = true)
-    public static String lake_compaction_disable_tables = "";
+    // e.g. "tableId1;partitionId2"
+    // both table id and partition id are supported
+    @ConfField(mutable = true, comment = "disable table or partition compaction, format:'id1;id2'",
+            aliases = {"lake_compaction_disable_tables"})
+    public static String lake_compaction_disable_ids = "";
 
     @ConfField(mutable = true, comment = "the max number of threads for lake table publishing version")
     public static int lake_publish_version_max_threads = 512;
@@ -3252,6 +3261,15 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "The default try lock timeout for mv refresh to try base table/mv dbs' lock")
     public static int mv_refresh_try_lock_timeout_ms = 30 * 1000;
 
+    @ConfField(mutable = true, comment = "materialized view can refresh at most 10 partition at a time")
+    public static int mv_max_partitions_num_per_refresh = 10;
+
+    @ConfField(mutable = true, comment = "materialized view can refresh at most 100_000_000 rows of data at a time")
+    public static long mv_max_rows_per_refresh = 100_000_000L;
+
+    @ConfField(mutable = true, comment = "materialized view can refresh at most 20GB of data at a time")
+    public static long mv_max_bytes_per_refresh = 21474836480L;
+
     @ConfField(mutable = true, comment = "Whether enable to refresh materialized view in sync mode mergeable or not")
     public static boolean enable_mv_refresh_sync_refresh_mergeable = false;
 
@@ -3274,6 +3292,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int default_mv_partition_refresh_number = 1;
+
+    @ConfField(mutable = true)
+    public static String default_mv_partition_refresh_strategy = "strict";
 
     @ConfField(mutable = true, comment = "Check the schema of materialized view's base table strictly or not")
     public static boolean enable_active_materialized_view_schema_strict_check = true;

@@ -87,4 +87,10 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
                                                Set<String> mvPotentialPartitionNames, boolean tentative) {
         // do nothing
     }
+
+    @Override
+    public void filterPartitionByAdaptiveRefreshNumber(Set<String> mvPartitionsToRefresh,
+                                                       Set<String> mvPotentialPartitionNames, boolean tentative) {
+        // do nothing
+    }
 }

@@ -39,6 +39,7 @@ import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.types.Types;
 import org.junit.Test;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -71,10 +72,13 @@ public class IcebergApiConverterTest {
     public void testDecimal() {
         int precision = 9;
         int scale = 5;
-        Type decimalType = ScalarType.createUnifiedDecimalType(precision, scale);
         org.apache.iceberg.types.Type icebergType = Types.DecimalType.of(precision, scale);
         Type resType = fromIcebergType(icebergType);
-        assertEquals(resType, decimalType);
+        assertEquals(resType, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, scale));
+        resType = fromIcebergType(Types.DecimalType.of(10, scale));
+        assertEquals(resType, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, scale));
+        resType = fromIcebergType(Types.DecimalType.of(19, scale));
+        assertEquals(resType, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 19, scale));
     }
 
     @Test
@@ -249,6 +253,19 @@ public class IcebergApiConverterTest {
         source = ImmutableMap.of("file_format", "avro", "compression_codec", "zstd");
         target = IcebergApiConverter.rebuildCreateTableProperties(source);
         assertEquals("zstd", target.get(AVRO_COMPRESSION));
+    }
+
+    @Test
+    public void testReverseByteBuffer() {
+        byte[] bytes = new byte[] {1, 2, 3, 4, 5};
+        ByteBuffer byteBuffer = ByteBuffer.wrap(bytes);
+        IcebergApiConverter.reverseBuffer(byteBuffer);
+        assertEquals(5, byteBuffer.remaining());
+        assertEquals(5, byteBuffer.get(0));
+        assertEquals(4, byteBuffer.get(1));
+        assertEquals(3, byteBuffer.get(2));
+        assertEquals(2, byteBuffer.get(3));
+        assertEquals(1, byteBuffer.get(4));
     }
 
     @Test

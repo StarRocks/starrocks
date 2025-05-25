@@ -80,6 +80,8 @@ public:
             : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, fs_options) {}
 
     const THdfsProperties* hdfs_properties() const;
+    const TCloudConfiguration* get_cloud_configuration() const;
+    bool azure_use_native_sdk() const;
 
     const TBrokerScanRangeParams* scan_range_params;
     const TExportSink* export_sink;
@@ -143,7 +145,7 @@ struct FileWriteStat {
 
 class FileSystem {
 public:
-    enum Type { POSIX, S3, HDFS, BROKER, MEMORY, STARLET };
+    enum Type { POSIX, S3, HDFS, BROKER, MEMORY, STARLET, AZBLOB };
 
     // Governs if/how the file is created.
     //

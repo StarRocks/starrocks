@@ -34,6 +34,7 @@ set(EXEC_FILES
         ./connector_sink/file_chunk_sink_test.cpp
         ./connector_sink/async_flush_output_stream_test.cpp
         ./fs/azure/azblob_uri_test.cpp
+        ./fs/azure/utils_test.cpp
         ./fs/credential/cloud_configuration_factory_test.cpp
         ./fs/fs_broker_test.cpp
         ./fs/fs_hdfs_test.cpp
@@ -74,6 +75,7 @@ set(EXEC_FILES
         ./exec/stream/stream_pipeline_test.cpp
         ./exec/tablet_info_test.cpp
         ./exec/agg_hash_map_test.cpp
+        ./exec/hash_variant_test.cpp
         ./exec/pipeline/olap_scan_operator_test.cpp
         ./exec/analytor_test.cpp
         ./exec/analytor_test.cpp
@@ -128,6 +130,7 @@ set(EXEC_FILES
         ./exprs/encryption_functions_test.cpp
         ./exprs/function_call_expr_test.cpp
         ./exprs/geography_functions_test.cpp
+        ./exprs/gin_functions_test.cpp
         ./exprs/hash_functions_test.cpp
         ./exprs/hyperloglog_functions_test.cpp
         ./exprs/if_expr_test.cpp
@@ -492,6 +495,7 @@ set(EXEC_FILES
         ./util/trace_test.cpp
         ./util/uid_util_test.cpp
         ./util/utf8_check_test.cpp
+        ./util/uuid_generator_test.cpp
         ./util/int96_test.cpp
         ./util/internal_service_recoverable_stub_test.cpp
         ./util/bit_packing_test.cpp

@@ -329,7 +329,24 @@ public class IcebergApiConverter {
         return tIcebergSchemaField;
     }
 
-    public static Metrics buildDataFileMetrics(TIcebergDataFile dataFile) {
+    public static void reverseBuffer(ByteBuffer buf) {
+        if (buf == null || buf.remaining() <= 1) {
+            return; // nothing to reverse
+        }
+        int lo = buf.position();
+        int hi = buf.limit() - 1;
+
+        while (lo < hi) {
+            byte bLo = buf.get(lo);
+            byte bHi = buf.get(hi);
+            buf.put(lo, bHi);
+            buf.put(hi, bLo);
+            lo++;
+            hi--;
+        }
+    }
+
+    public static Metrics buildDataFileMetrics(TIcebergDataFile dataFile, org.apache.iceberg.Table nativeTable) {
         Map<Integer, Long> columnSizes = new HashMap<>();
         Map<Integer, Long> valueCounts = new HashMap<>();
         Map<Integer, Long> nullValueCounts = new HashMap<>();
@@ -351,6 +368,14 @@ public class IcebergApiConverter {
             }
             if (stats.isSetUpper_bounds()) {
                 upperBounds = stats.upper_bounds;
+            }
+        }
+
+        for (Types.NestedField field : nativeTable.schema().columns()) {
+            if (field.type() instanceof Types.DecimalType || field.type() == Types.UUIDType.get()) {
+                //change to BigEndian
+                reverseBuffer(lowerBounds.get(field.fieldId()));
+                reverseBuffer(upperBounds.get(field.fieldId()));
             }
         }
 
@@ -436,15 +461,16 @@ public class IcebergApiConverter {
         return view;
     }
 
-    public static List<String> toPartitionFields(PartitionSpec spec) {
+    public static List<String> toPartitionFields(PartitionSpec spec, Boolean withTransfomPrefix) {
         return spec.fields().stream()
-                .map(field -> toPartitionField(spec, field))
+                .map(field -> toPartitionField(spec, field, withTransfomPrefix))
                 .collect(toImmutableList());
     }
 
-    private static String toPartitionField(PartitionSpec spec, PartitionField field) {
+    public static String toPartitionField(PartitionSpec spec, PartitionField field, Boolean withTransfomPrefix) {
         String name = spec.schema().findColumnName(field.sourceId());
         String transform = field.transform().toString();
+        String prefix = withTransfomPrefix ? FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX : "";
 
         switch (transform) {
             case "identity":
@@ -454,17 +480,17 @@ public class IcebergApiConverter {
             case "day":
             case "hour":
             case "void":
-                return format("%s(%s)", transform, name);
+                return prefix + format("%s(%s)", transform, name);
         }
 
         Matcher matcher = ICEBERG_BUCKET_PATTERN.matcher(transform);
         if (matcher.matches()) {
-            return format("bucket(%s, %s)", name, matcher.group(1));
+            return prefix + format("bucket(%s, %s)", name, matcher.group(1));
         }
 
         matcher = ICEBERG_TRUNCATE_PATTERN.matcher(transform);
         if (matcher.matches()) {
-            return format("truncate(%s, %s)", name, matcher.group(1));
+            return prefix + format("truncate(%s, %s)", name, matcher.group(1));
         }
 
         throw new StarRocksConnectorException("Unsupported partition transform: " + field);

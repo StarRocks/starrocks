@@ -199,9 +199,17 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             return Status::OK();
         });
         _config_callback.emplace("transaction_publish_version_worker_count", [&]() -> Status {
-            auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
-            return thread_pool->update_max_threads(
+            Status st1 = ExecEnv::GetInstance()
+                                 ->agent_server()
+                                 ->get_thread_pool(TTaskType::PUBLISH_VERSION)
+                                 ->update_max_threads(std::max(MIN_TRANSACTION_PUBLISH_WORKER_COUNT,
+                                                               config::transaction_publish_version_worker_count));
+            Status st2 = ExecEnv::GetInstance()->put_aggregate_metadata_thread_pool()->update_max_threads(
                     std::max(MIN_TRANSACTION_PUBLISH_WORKER_COUNT, config::transaction_publish_version_worker_count));
+            if (!st1.ok() || !st2.ok()) {
+                return Status::InvalidArgument("Failed to update transaction_publish_version_worker_count.");
+            }
+            return st1;
         });
         _config_callback.emplace("transaction_publish_version_thread_pool_num_min", [&]() -> Status {
             auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
