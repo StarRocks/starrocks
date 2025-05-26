@@ -19,6 +19,7 @@
 #include <arrow/flight/sql/server.h>
 #include <arrow/flight/types.h>
 
+#include "arrow_flight_auth_server_middleware.h"
 #include "common/status.h"
 
 namespace starrocks {
@@ -40,6 +41,8 @@ private:
     static arrow::Result<std::pair<std::string, std::string>> decode_ticket(const std::string& ticket);
 
     bool _running = false;
+
+    std::shared_ptr<NoOpBearerAuthServerMiddlewareFactory> _bearer_middleware;
 };
 
 } // namespace starrocks

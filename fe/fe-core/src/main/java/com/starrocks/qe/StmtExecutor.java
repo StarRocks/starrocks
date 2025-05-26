@@ -520,7 +520,7 @@ public class StmtExecutor {
 
     // Execute one statement.
     // Exception:
-    //  IOException: talk with client failed.
+    // IOException: talk with client failed.
     public void execute() throws Exception {
         long beginTimeInNanoSecond = TimeUtils.getStartTime();
         context.setStmtId(STMT_ID_GENERATOR.incrementAndGet());
@@ -682,7 +682,9 @@ public class StmtExecutor {
                         handleQueryStmt(retryContext.getExecPlan());
                         break;
                     } catch (Exception e) {
-                        if (i == retryTime - 1) {
+                        // For Arrow Flight SQL, FE doesn't know whether the client has already pull data from BE.
+                        // So FE cannot decide whether it is able to retry.
+                        if (i == retryTime - 1 || context instanceof ArrowFlightSqlConnectContext) {
                             throw e;
                         }
                         ExecuteExceptionHandler.handle(e, retryContext);
@@ -713,9 +715,7 @@ public class StmtExecutor {
                                     coord.onReleaseSlots();
                                 }
 
-                                if (context instanceof ArrowFlightSqlConnectContext) {
-                                    isAsync = tryProcessProfileAsync(execPlan, i);
-                                } else if (context.isProfileEnabled()) {
+                                if (context.isProfileEnabled()) {
                                     isAsync = tryProcessProfileAsync(execPlan, i);
                                     if (parsedStmt.isExplain() &&
                                             StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
@@ -972,8 +972,7 @@ public class StmtExecutor {
     private boolean createTableCreatedByCTAS(CreateTableAsSelectStmt stmt) throws Exception {
         try {
             if (stmt instanceof CreateTemporaryTableAsSelectStmt) {
-                CreateTemporaryTableStmt createTemporaryTableStmt =
-                        (CreateTemporaryTableStmt) stmt.getCreateTableStmt();
+                CreateTemporaryTableStmt createTemporaryTableStmt = (CreateTemporaryTableStmt) stmt.getCreateTableStmt();
                 createTemporaryTableStmt.setSessionId(context.getSessionId());
                 return context.getGlobalStateMgr().getMetadataMgr().createTemporaryTable(context, createTemporaryTableStmt);
             } else {
@@ -1360,10 +1359,8 @@ public class StmtExecutor {
             batch = httpResultSender.sendQueryResult(coord, execPlan, parsedStmt.getOrigStmt().getOrigStmt());
         } else if (context instanceof ArrowFlightSqlConnectContext) {
             ArrowFlightSqlConnectContext ctx = (ArrowFlightSqlConnectContext) context;
-            ctx.setReturnFromFE(false);
-            ctx.setExecPlan(execPlan);
-            ctx.setCoordinator(coord);
-            ctx.getState().setEof();
+            ctx.setReturnResultFromFE(false);
+            ctx.setDeploymentFinished(coord);
         } else {
             boolean needSendResult = !isPlanAdvisorAnalyze && !isExplainAnalyze
                     && !context.getSessionVariable().isEnableExecutionOnly();
@@ -1409,6 +1406,10 @@ public class StmtExecutor {
             if (!isSendFields && !isOutfileQuery && !isExplainAnalyze && !isPlanAdvisorAnalyze) {
                 sendFields(colNames, outputExprs);
             }
+        }
+
+        if (context instanceof ArrowFlightSqlConnectContext) {
+            coord.join(0);
         }
 
         processQueryStatisticsFromResult(batch, execPlan, isOutfileQuery);
@@ -1951,7 +1952,8 @@ public class StmtExecutor {
 
         // Send result set for Arrow Flight SQL.
         if (context instanceof ArrowFlightSqlConnectContext) {
-            ((ArrowFlightSqlConnectContext) context).addShowResult(resultSet);
+            ArrowFlightSqlConnectContext ctx = (ArrowFlightSqlConnectContext) context;
+            ctx.addShowResult(DebugUtil.printId(ctx.getExecutionId()), resultSet);
             context.getState().setEof();
             return;
         }

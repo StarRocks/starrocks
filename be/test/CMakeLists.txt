@@ -390,6 +390,7 @@ set(EXEC_FILES
         ./storage/column_and_predicate_test.cpp
         ./storage/olap_runtime_range_pruner_test.cpp
         ./runtime/agg_state_desc_test.cpp
+        ./runtime/arrow_result_writer_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/data_stream_mgr_test.cpp
         ./runtime/datetime_value_test.cpp
@@ -520,6 +521,7 @@ set(EXEC_FILES
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
         ./service/mem_hook_test.cpp
+        ./service/service_be/arrow_flight_call_header_utils_test.cpp
         ./service/service_be/internal_service_test.cpp
         ./service/staros_worker_test.cpp
         ./storage/metadata_util_test.cpp
