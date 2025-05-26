@@ -50,6 +50,9 @@ private:
     bool _is_finished = false;
     std::atomic<int64_t>& _limit;
     ChunkPtr _cur_chunk = nullptr;
+	// determines whether the limit can be use to update the columns of the chunk in place, or the chunk should be
+    // cloned beforehand. This is relevant in the case of multi cast exchange where chunks could be used in multiple
+    // pipelines with different limits.
     bool _limit_chunk_in_place;
 };
 
