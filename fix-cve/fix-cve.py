@@ -80,6 +80,12 @@ def patch_jar_file(jar_exec_path, jar_file, pom_files):
                 print(f"Copy {pom_file} to {pom_in_jar}")
                 shutil.copy(os.path.join(cwd, "pom", pom_file), pom_in_jar)
 
+                xml_file = pom_file.replace("pom.properties", "pom.xml")
+                xml_in_jar = os.path.join("META-INF", "maven", xml_file)
+                if os.path.exists(os.path.join(cwd, "pom", xml_file)):
+                    print(f"Copy {xml_file} to {xml_in_jar}")
+                    shutil.copy(os.path.join(cwd, "pom", xml_file), xml_in_jar)
+
         ret = subprocess.run(
             [jar_exec_path, "cf", new_jar_file, "."], stdout=None, stderr=None
         )
