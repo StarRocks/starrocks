@@ -28,6 +28,7 @@ set(CACHE_FILES
   block_cache/io_buffer.cpp
   block_cache/block_cache_hit_rate_counter.hpp
   object_cache/lrucache_module.cpp
+  object_cache/page_cache.cpp
 )
 
 if (${WITH_STARCACHE} STREQUAL "ON")

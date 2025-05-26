@@ -34,8 +34,8 @@
 
 #pragma once
 
+#include "cache/object_cache/page_cache.h"
 #include "gutil/macros.h" // for DISALLOW_COPY
-#include "storage/page_cache.h"
 #include "util/slice.h"
 
 namespace starrocks {
