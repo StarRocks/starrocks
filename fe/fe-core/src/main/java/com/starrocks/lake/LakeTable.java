@@ -253,8 +253,10 @@ public class LakeTable extends OlapTable {
 
     @Override
     public void gsonPostProcess() throws IOException {
+        // We should restore column unique id before calling super.gsonPostProcess(), which will rebuild full schema there.
+        // And the max unique id will be reset while rebuilding full schema.
+        LakeTableHelper.restoreColumnUniqueIdIfNeeded(this);
         super.gsonPostProcess();
-        restoreColumnUniqueIdIfNeed();
     }
 
     @Override

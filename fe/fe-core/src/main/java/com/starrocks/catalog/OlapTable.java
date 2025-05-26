@@ -89,7 +89,6 @@ import com.starrocks.common.util.Util;
 import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.DataCacheInfo;
-import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.ColocatePersistInfo;
@@ -432,6 +431,7 @@ public class OlapTable extends Table {
         }
     }
 
+<<<<<<< HEAD
     protected void restoreColumnUniqueIdIfNeed() {
         boolean needRestoreColumnUniqueId = (indexIdToMeta.values().stream().findFirst().
                 get().getSchema().get(0).getUniqueId() < 0);
@@ -452,6 +452,10 @@ public class OlapTable extends Table {
         } else {
             LOG.warn("partition {} does not exist", tempPartitionName);
         }
+=======
+    public void addDoubleWritePartition(long sourcePartitionId, long tempPartitionId) {
+        doubleWritePartitions.put(sourcePartitionId, tempPartitionId);
+>>>>>>> c9cca5fe14 ([BugFix] Fix invalid max column unique id introduced by version compatibility for cloud-native table (#59190))
     }
 
     public void clearDoubleWritePartition() {

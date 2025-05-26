@@ -52,6 +52,7 @@ import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.journal.JournalTask;
+import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.lake.Utils;
@@ -246,9 +247,14 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             // If upgraded from an old version and do schema change,
             // the schema saved in indexSchemaMap is the schema in the old version, whose uniqueId is -1,
             // so here we initialize column uniqueId here.
-            restoreColumnUniqueIdIfNeed(indexSchemaMap.get(shadowIdxId));
+            List<Column> columns = indexSchemaMap.get(shadowIdxId);
+            boolean restored = LakeTableHelper.restoreColumnUniqueId(columns);
+            if (restored) {
+                LOG.info("Columns of index {} in table {} has reset all unique ids, column size: {}", shadowIdxId,
+                        tableName, columns.size());
+            }
 
-            table.setIndexMeta(shadowIdxId, indexIdToName.get(shadowIdxId), indexSchemaMap.get(shadowIdxId), 0, 0,
+            table.setIndexMeta(shadowIdxId, indexIdToName.get(shadowIdxId), columns, 0, 0,
                     indexShortKeyMap.get(shadowIdxId), TStorageType.COLUMN,
                     table.getKeysTypeByIndexId(indexIdMap.get(shadowIdxId)), null, sortKeyColumnIndexes,
                     sortKeyColumnUniqueIds);
