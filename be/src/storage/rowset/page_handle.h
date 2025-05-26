@@ -51,12 +51,11 @@ public:
 
     // This class will take the ownership of input data's memory. It will
     // free it when deconstructs.
-    explicit PageHandle(const Slice& data) : _is_data_owner(true), _data(data) {}
+    explicit PageHandle(std::vector<uint8_t>* data) : _is_data_owner(true), _data(data) {}
 
     // This class will take the content of cache data, and will make input
-    // cache_data to a invalid cache handle.
-    explicit PageHandle(PageCacheHandle&& cache_data)
-            : _data(static_cast<uint8_t*>(nullptr), 0), _cache_data(std::move(cache_data)) {}
+    // cache_data to an invalid cache handle.
+    explicit PageHandle(PageCacheHandle&& cache_data) : _cache_data(std::move(cache_data)) {}
 
     // Move constructor
     PageHandle(PageHandle&& other) noexcept : _data(other._data), _cache_data(std::move(other._cache_data)) {
@@ -73,31 +72,31 @@ public:
 
     ~PageHandle() {
         if (_is_data_owner) {
-            delete[] _data.data;
-            _data.data = nullptr;
+            delete _data;
+            _data = nullptr;
         }
     }
 
     void reset() {
         if (_is_data_owner) {
-            delete[] _data.data;
+            delete _data;
             _is_data_owner = false;
         }
-        _data.clear();
+        _data = nullptr;
     }
 
     // the return slice contains uncompressed page body, page footer, and footer size
-    Slice data() const {
+    const std::vector<uint8_t>* data() const {
         if (_is_data_owner) {
             return _data;
+        } else {
+            return _cache_data.data();
         }
-        Slice* item = (Slice*)_cache_data.data().data;
-        return Slice{item->data, item->size};
     }
 
     int64_t mem_usage() const {
         if (_is_data_owner) {
-            return _data.size;
+            return _data->size();
         } else {
             return 0;
         }
@@ -105,9 +104,9 @@ public:
 
 private:
     // when this is true, it means this struct own data and _data is valid.
-    // otherwise _cache_data is valid, and data is belong to cache.
+    // otherwise _cache_data is valid, and data is belonged to cache.
     bool _is_data_owner = false;
-    Slice _data;
+    std::vector<uint8_t>* _data = nullptr;
     PageCacheHandle _cache_data;
 
     // Don't allow copy and assign

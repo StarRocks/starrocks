@@ -180,6 +180,15 @@ stl_vector_resize_uninitialized(Container* vec, size_t new_size) {
     ((RawVector<T, typename Container::allocator_type>*)vec)->resize(new_size);
 }
 
+template <typename Container, typename T = typename Container::value_type>
+inline typename std::enable_if<
+        std::is_same<Container, std::vector<typename Container::value_type, typename Container::allocator_type>>::value,
+        void>::type
+stl_vector_resize_uninitialized(Container* vec, size_t reserve_size, size_t new_size) {
+    ((RawVector<T, typename Container::allocator_type>*)vec)->resize(reserve_size);
+    vec->resize(new_size);
+}
+
 inline void stl_string_resize_uninitialized(std::string* str, size_t new_size) {
     ((RawString*)str)->resize(new_size);
 }
