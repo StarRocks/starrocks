@@ -63,6 +63,7 @@ public class PaimonTable extends Table {
     private String databaseName;
     private String tableName;
     private org.apache.paimon.table.Table paimonNativeTable;
+    private String uuid;
     private List<String> partColumnNames;
     private List<String> paimonFieldNames;
     private Map<String, String> properties;
@@ -110,11 +111,14 @@ public class PaimonTable extends Table {
 
     @Override
     public String getUUID() {
-        if (!new Identifier(databaseName, tableName).isSystemTable()) {
-            return String.join(".", catalogName,  paimonNativeTable.uuid());
-        } else {
-            return String.join(".", catalogName, databaseName, tableName, paimonNativeTable.uuid());
+        if (Strings.isNullOrEmpty(this.uuid)) {
+            if (!new Identifier(databaseName, tableName).isSystemTable()) {
+                this.uuid =  String.join(".", catalogName,  paimonNativeTable.uuid());
+            } else {
+                this.uuid =  String.join(".", catalogName, databaseName, tableName, paimonNativeTable.uuid());
+            }
         }
+        return this.uuid;
     }
 
     @Override
