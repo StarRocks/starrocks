@@ -22,6 +22,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendServiceImpl;
 import com.starrocks.sql.ast.StatementBase;
@@ -37,6 +38,8 @@ import org.apache.thrift.TException;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
 public class LeaderOpExecutorTest {
     private static ConnectContext connectContext;
@@ -155,5 +158,26 @@ public class LeaderOpExecutorTest {
         TMasterOpRequest request = executor.createTMasterOpRequest(connectContext, 1);
         Assert.assertEquals(catalog, request.getCatalog());
         Assert.assertEquals(database, request.getDb());
+    }
+
+    @Test
+    public void testTxnForward() throws Exception {
+        String sql = "begin";
+        StatementBase stmtBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+
+        TMasterOpResult tMasterOpResult = new TMasterOpResult();
+        tMasterOpResult.setTxn_id(1);
+
+        try (MockedStatic<ThriftRPCRequestExecutor> thriftConnectionPoolMockedStatic =
+                Mockito.mockStatic(ThriftRPCRequestExecutor.class)) {
+            thriftConnectionPoolMockedStatic.when(()
+                            -> ThriftRPCRequestExecutor.call(Mockito.any(), Mockito.any(), Mockito.anyInt(), Mockito.any()))
+                    .thenReturn(tMasterOpResult);
+            LeaderOpExecutor executor =
+                    new LeaderOpExecutor(stmtBase, stmtBase.getOrigStmt(), connectContext, RedirectStatus.FORWARD_NO_SYNC);
+            executor.execute();
+
+            Assert.assertEquals(1, connectContext.getTxnId());
+        }
     }
 }

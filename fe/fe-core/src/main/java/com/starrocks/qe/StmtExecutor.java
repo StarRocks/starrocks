@@ -2385,7 +2385,7 @@ public class StmtExecutor {
 
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
 
-        if (context.getExplicitTxnState() != null) {
+        if (context.getTxnId() != 0) {
             TransactionStmtExecutor.loadData(database, targetTable, execPlan, stmt, originStmt, context);
             return;
         }
