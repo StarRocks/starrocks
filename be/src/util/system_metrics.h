@@ -55,6 +55,7 @@ public:
     // MemPool metrics
     METRIC_DEFINE_INT_GAUGE(process_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(query_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(connector_scan_pool_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(load_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(metadata_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(tablet_metadata_mem_bytes, MetricUnit::BYTES);

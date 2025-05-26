@@ -42,6 +42,7 @@ struct WorkGroupMetrics {
     std::unique_ptr<DoubleGauge> inuse_connector_scan_ratio = nullptr;
     std::unique_ptr<IntGauge> mem_limit = nullptr;
     std::unique_ptr<IntGauge> inuse_mem_bytes = nullptr;
+    std::unique_ptr<IntGauge> connector_scan_mem_bytes = nullptr;
     std::unique_ptr<IntGauge> running_queries = nullptr;
     std::unique_ptr<IntGauge> total_queries = nullptr;
     std::unique_ptr<IntGauge> concurrency_overflow_count = nullptr;
@@ -341,6 +342,11 @@ void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockTy
         bool mem_inuse_registered = StarRocksMetrics::instance()->metrics()->register_metric(
                 "resource_group_mem_inuse_bytes", MetricLabels().add("name", wg->name()),
                 resource_group_mem_allocated_bytes.get());
+        // connector scan use bytes.
+        auto resource_group_connector_scan_bytes = std::make_unique<IntGauge>(MetricUnit::BYTES);
+        bool mem_connector_scan_registered = StarRocksMetrics::instance()->metrics()->register_metric(
+                "resource_group_connector_scan_bytes", MetricLabels().add("name", wg->name()),
+                resource_group_mem_allocated_bytes.get());
         // running queries
         auto resource_group_running_queries = std::make_unique<IntGauge>(MetricUnit::NOUNIT);
         bool running_registered = StarRocksMetrics::instance()->metrics()->register_metric(
@@ -383,6 +389,8 @@ void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockTy
             wg_metrics->inuse_connector_scan_ratio = std::move(resource_group_connector_scan_use_ratio);
         if (mem_limit_registered) wg_metrics->mem_limit = std::move(resource_group_mem_limit_bytes);
         if (mem_inuse_registered) wg_metrics->inuse_mem_bytes = std::move(resource_group_mem_allocated_bytes);
+        if (mem_connector_scan_registered)
+            wg_metrics->connector_scan_mem_bytes = std::move(resource_group_connector_scan_bytes);
         if (running_registered) wg_metrics->running_queries = std::move(resource_group_running_queries);
         if (total_registered) wg_metrics->total_queries = std::move(resource_group_total_queries);
         if (concurrency_registered)
@@ -438,6 +446,7 @@ void WorkGroupManager::update_metrics_unlocked() {
             wg_metrics->inuse_connector_scan_ratio->set_value(connector_scan_use_ratio);
             wg_metrics->mem_limit->set_value(wg->mem_limit_bytes());
             wg_metrics->inuse_mem_bytes->set_value(wg->mem_tracker()->consumption());
+            wg_metrics->connector_scan_mem_bytes->set_value(wg->connector_scan_mem_tracker()->consumption());
             wg_metrics->running_queries->set_value(wg->num_running_queries());
             wg_metrics->total_queries->set_value(wg->num_total_queries());
             wg_metrics->concurrency_overflow_count->set_value(wg->concurrency_overflow_count());
@@ -460,6 +469,7 @@ void WorkGroupManager::update_metrics_unlocked() {
             wg_metrics->inuse_connector_scan_ratio->set_value(0);
             wg_metrics->mem_limit->set_value(0);
             wg_metrics->inuse_mem_bytes->set_value(0);
+            wg_metrics->connector_scan_mem_bytes->set_value(0);
             wg_metrics->running_queries->set_value(0);
             wg_metrics->total_queries->set_value(0);
             wg_metrics->concurrency_overflow_count->set_value(0);

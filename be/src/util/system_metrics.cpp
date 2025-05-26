@@ -272,6 +272,7 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
 
     registry->register_metric("process_mem_bytes", &_memory_metrics->process_mem_bytes);
     registry->register_metric("query_mem_bytes", &_memory_metrics->query_mem_bytes);
+    registry->register_metric("connector_scan_pool_mem_bytes", &_memory_metrics->connector_scan_pool_mem_bytes);
     registry->register_metric("load_mem_bytes", &_memory_metrics->load_mem_bytes);
     registry->register_metric("metadata_mem_bytes", &_memory_metrics->metadata_mem_bytes);
     registry->register_metric("tablet_metadata_mem_bytes", &_memory_metrics->tablet_metadata_mem_bytes);
@@ -366,6 +367,7 @@ void SystemMetrics::_update_memory_metrics() {
 
     SET_MEM_METRIC_VALUE(process_mem_tracker, process_mem_bytes)
     SET_MEM_METRIC_VALUE(query_pool_mem_tracker, query_mem_bytes)
+    SET_MEM_METRIC_VALUE(connector_scan_pool_mem_tracker, connector_scan_pool_mem_bytes)
     SET_MEM_METRIC_VALUE(load_mem_tracker, load_mem_bytes)
     SET_MEM_METRIC_VALUE(metadata_mem_tracker, metadata_mem_bytes)
     SET_MEM_METRIC_VALUE(tablet_metadata_mem_tracker, tablet_metadata_mem_bytes)
