@@ -133,28 +133,6 @@ Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const Chun
     return Status::OK();
 }
 
-Status AggregateBlockingSinkOperator::_build_runtime_filters(RuntimeState* state) {
-    const auto& build_runtime_filters = factory()->build_runtime_filters();
-    const auto* runtime_filters = _build_agg_runtime_filters(state->obj_pool());
-    if (runtime_filters != nullptr && !build_runtime_filters.empty()) {
-        std::list<RuntimeFilterBuildDescriptor*> build_descs(build_runtime_filters.begin(),
-                                                             build_runtime_filters.end());
-        for (size_t i = 0; i < build_runtime_filters.size(); ++i) {
-            auto rf = (*runtime_filters)[i];
-            build_runtime_filters[i]->set_or_intersect_filter(rf);
-            VLOG(2) << "runtime filter version:" << rf->rf_version() << "," << rf->debug_string() << rf;
-        }
-        state->runtime_filter_port()->publish_runtime_filters(build_descs);
-    }
-    return Status::OK();
-}
-
-std::vector<RuntimeFilter*>* AggregateBlockingSinkOperator::_build_agg_runtime_filters(ObjectPool* pool) {
-    if (_aggregator->is_none_group_by_exprs()) {
-    }
-    return &_runtime_filters;
-}
-
 void AggregateBlockingSinkOperator::_build_in_runtime_filters(RuntimeState* state) {
     if (!_agg_group_by_with_limit || _shared_limit_countdown.load(std::memory_order_acquire) > 0 ||
         _in_runtime_filter_built) {
