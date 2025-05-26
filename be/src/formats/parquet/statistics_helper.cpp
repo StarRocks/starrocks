@@ -257,10 +257,12 @@ Status StatisticsHelper::min_max_filter_on_min_max_stat_t(const std::vector<std:
     auto rf_min_value = min_max_filter->get_min_value();
     auto rf_max_value = min_max_filter->get_max_value();
 
-    RETURN_IF_ERROR(StatisticsHelper::decode_value_into_column(min_column, min_values, null_pages, root_expr->type(),
-                                                               field, timezone));
-    RETURN_IF_ERROR(StatisticsHelper::decode_value_into_column(max_column, max_values, null_pages, root_expr->type(),
-                                                               field, timezone));
+    auto st = StatisticsHelper::decode_value_into_column(min_column, min_values, null_pages, root_expr->type(), field,
+                                                         timezone);
+    RETURN_IF(!st.ok(), Status::OK());
+    st = StatisticsHelper::decode_value_into_column(max_column, max_values, null_pages, root_expr->type(), field,
+                                                    timezone);
+    RETURN_IF(!st.ok(), Status::OK());
 
     for (size_t i = 0; i < min_values.size(); i++) {
         if (!selected[i]) {
@@ -322,11 +324,13 @@ Status StatisticsHelper::in_filter_on_min_max_stat(const std::vector<std::string
     //  but there are many places in our reader just treat column as nullable, and use down_cast<NullableColumn>
     ColumnPtr min_col = ColumnHelper::create_column(c->type(), true);
     min_col->reserve(min_values.size());
-    RETURN_IF_ERROR(decode_value_into_column(min_col, min_values, null_pages, c->type(), field, timezone));
+    auto st = decode_value_into_column(min_col, min_values, null_pages, c->type(), field, timezone);
+    RETURN_IF(!st.ok(), Status::OK());
     min_col = down_cast<NullableColumn*>(min_col.get())->data_column();
     ColumnPtr max_col = ColumnHelper::create_column(c->type(), true);
     max_col->reserve(max_values.size());
-    RETURN_IF_ERROR(decode_value_into_column(max_col, max_values, null_pages, c->type(), field, timezone));
+    st = decode_value_into_column(max_col, max_values, null_pages, c->type(), field, timezone);
+    RETURN_IF(!st.ok(), Status::OK());
     max_col = down_cast<NullableColumn*>(max_col.get())->data_column();
 
     // logic and example:
