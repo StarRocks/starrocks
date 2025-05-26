@@ -123,7 +123,7 @@ public class DataStreamSink extends DataSink {
         if (outputColumnIds != null && !outputColumnIds.isEmpty()) {
             tStreamSink.setOutput_columns(outputColumnIds);
         }
-        if (limit == -1) {
+        if (limit != -1) {
             tStreamSink.setLimit(limit);
         }
         result.setStream_sink(tStreamSink);
