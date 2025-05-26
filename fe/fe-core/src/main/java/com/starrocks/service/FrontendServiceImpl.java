@@ -333,6 +333,8 @@ import com.starrocks.thrift.TTransactionStatus;
 import com.starrocks.thrift.TUpdateExportTaskStatusRequest;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUpdateResourceUsageResponse;
+import com.starrocks.thrift.TUpdateTabletVersionRequest;
+import com.starrocks.thrift.TUpdateTabletVersionResult;
 import com.starrocks.thrift.TUserPrivDesc;
 import com.starrocks.thrift.TVerboseVariableRecord;
 import com.starrocks.thrift.TWarehouseInfo;
@@ -3050,4 +3052,83 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TGetKeywordsResponse getKeywords(TGetKeywordsRequest request) throws TException {
         return InformationSchemaDataSource.generateKeywordsResponse(request);
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public TGetWarehouseMetricsRespone getWarehouseMetrics(TGetWarehouseMetricsRequest request) throws TException {
+        return WarehouseQueryQueueMetrics.build(request);
+    }
+
+    @Override
+    public TGetWarehouseQueriesResponse getWarehouseQueries(TGetWarehouseQueriesRequest request) throws TException {
+        return WarehouseQueryQueueMetrics.build(request);
+    }
+
+    @Override
+    public TListConnectionResponse listConnections(TListConnectionRequest request) {
+        TListConnectionResponse response = new TListConnectionResponse();
+
+        ConnectContext context = new ConnectContext();
+        context.setAuthInfoFromThrift(request.getAuth_info());
+        String forUser = request.getFor_user();
+        boolean showFull = request.isSetShow_full();
+
+        List<ConnectContext.ThreadInfo> threadInfos = ExecuteEnv.getInstance().getScheduler()
+                .listConnection(context, forUser);
+        long nowMs = System.currentTimeMillis();
+        for (ConnectContext.ThreadInfo info : threadInfos) {
+            List<String> row = info.toRow(nowMs, showFull);
+            if (row != null) {
+                TConnectionInfo tConnectionInfo = getTConnectionInfo(row);
+                response.addToConnections(tConnectionInfo);
+            }
+        }
+
+        return response;
+    }
+
+    @Override
+    public TUpdateFailPointResponse updateFailPointStatus(TUpdateFailPointRequest request) {
+        TStatus status = new TStatus();
+        if (FailPoint.isEnabled()) {
+            if (request.isIs_enable()) {
+                FailPoint.setTriggerPolicy(request.getName(), TriggerPolicy.fromThrift(request));
+            } else {
+                FailPoint.removeTriggerPolicy(request.getName());
+            }
+            status.setStatus_code(OK);
+        } else {
+            status.setStatus_code(SERVICE_UNAVAILABLE);
+            status.setError_msgs(
+                    Lists.newArrayList("fail point is not enabled, please start fe with --failpoint option"));
+        }
+
+        TUpdateFailPointResponse response = new TUpdateFailPointResponse();
+        response.setStatus(status);
+        return response;
+    }
+
+    @Override
+    public TUpdateTabletVersionResult updateTabletVersion(TUpdateTabletVersionRequest request) {
+        return leaderImpl.updateTabletVersion(request);
+    }
+
+    @NotNull
+    private static TConnectionInfo getTConnectionInfo(List<String> row) {
+        TConnectionInfo tConnectionInfo = new TConnectionInfo();
+        tConnectionInfo.setConnection_id(row.get(0));
+        tConnectionInfo.setUser(row.get(1));
+        tConnectionInfo.setHost(row.get(2));
+        tConnectionInfo.setDb(row.get(3));
+        tConnectionInfo.setCommand(row.get(4));
+        tConnectionInfo.setConnection_start_time(row.get(5));
+        tConnectionInfo.setTime(row.get(6));
+        tConnectionInfo.setState(row.get(7));
+        tConnectionInfo.setInfo(row.get(8));
+        tConnectionInfo.setIsPending(row.get(9));
+        tConnectionInfo.setWarehouse(row.get(10));
+        return tConnectionInfo;
+    }
+>>>>>>> 469ae2a077 ([Enhancement] Report tablet version in advance if publish cost too much time (#59009))
 }

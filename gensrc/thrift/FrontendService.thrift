@@ -1978,6 +1978,30 @@ struct TGetApplicableRolesResponse {
     2: optional i64 next_table_id_offset;
 }
 
+<<<<<<< HEAD
+=======
+struct TUpdateFailPointRequest {
+    1: optional string name;
+    2: optional bool is_enable;
+    3: optional i32 times;
+    4: optional double probability;
+}
+
+struct TUpdateFailPointResponse {
+    1: optional Status.TStatus status;
+}
+
+struct TUpdateTabletVersionRequest {
+    1: optional Types.TBackend backend;
+    2: optional i64 signature;
+    3: optional list<MasterService.TTabletVersionPair> tablet_versions;
+}
+
+struct TUpdateTabletVersionResult {
+    1: optional Status.TStatus status;
+}
+
+>>>>>>> 469ae2a077 ([Enhancement] Report tablet version in advance if publish cost too much time (#59009))
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -2104,5 +2128,16 @@ service FrontendService {
     TGetApplicableRolesResponse getApplicableRoles(1: TGetApplicableRolesRequest request)
 
     TGetKeywordsResponse getKeywords(1: TGetKeywordsRequest request)
+<<<<<<< HEAD
+=======
+
+    TGetWarehouseMetricsRespone getWarehouseMetrics(1: TGetWarehouseMetricsRequest request)
+
+    TGetWarehouseQueriesResponse getWarehouseQueries(1: TGetWarehouseQueriesRequest request)
+
+    TUpdateFailPointResponse updateFailPointStatus(1: TUpdateFailPointRequest request)
+
+    TUpdateTabletVersionResult updateTabletVersion(1: TUpdateTabletVersionRequest request)
+>>>>>>> 469ae2a077 ([Enhancement] Report tablet version in advance if publish cost too much time (#59009))
 }
 
