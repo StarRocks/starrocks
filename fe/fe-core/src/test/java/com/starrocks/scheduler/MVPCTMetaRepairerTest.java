@@ -50,16 +50,16 @@ public class MVPCTMetaRepairerTest extends MVTestBase {
         ConnectorPlanTestBase.mockCatalog(connectContext, MOCKED_ICEBERG_CATALOG_NAME);
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        Table t1 =  metadataMgr.getTable(connectContext, MOCKED_ICEBERG_CATALOG_NAME, "partitioned_db", "t1");
+        Table t1 =  metadataMgr.getTable(MOCKED_ICEBERG_CATALOG_NAME, "partitioned_db", "t1");
         assertThat(t1).isNotNull();
 
         {
-            BaseTableInfo baseTableInfo = new BaseTableInfo(MOCKED_ICEBERG_CATALOG_NAME, t1.getCatalogDBName(),
+            BaseTableInfo baseTableInfo = new BaseTableInfo(MOCKED_ICEBERG_CATALOG_NAME, "partitioned_db",
                     t1.getName(), t1.getTableIdentifier());
             assertThat(MVPCTMetaRepairer.isSupportedPCTRepairer(t1, baseTableInfo)).isTrue();
         }
         {
-            BaseTableInfo baseTableInfo = new BaseTableInfo(MOCKED_ICEBERG_CATALOG_NAME, t1.getCatalogDBName(),
+            BaseTableInfo baseTableInfo = new BaseTableInfo(MOCKED_ICEBERG_CATALOG_NAME, "partitioned_db",
                     t1.getName(), "t1:0");
             assertThat(MVPCTMetaRepairer.isSupportedPCTRepairer(t1, baseTableInfo)).isFalse();
         }
@@ -73,16 +73,16 @@ public class MVPCTMetaRepairerTest extends MVTestBase {
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        Table t1 =  metadataMgr.getTable(connectContext, "hive0", "tpch", "supplier");
+        Table t1 =  metadataMgr.getTable("hive0", "tpch", "supplier");
         assertThat(t1).isNotNull();
 
         {
-            BaseTableInfo baseTableInfo = new BaseTableInfo("hive0", t1.getCatalogDBName(),
+            BaseTableInfo baseTableInfo = new BaseTableInfo("hive0", "tpch",
                     t1.getName(), t1.getTableIdentifier());
             assertThat(MVPCTMetaRepairer.isSupportedPCTRepairer(t1, baseTableInfo)).isTrue();
         }
         {
-            BaseTableInfo baseTableInfo = new BaseTableInfo("hive0", t1.getCatalogDBName(),
+            BaseTableInfo baseTableInfo = new BaseTableInfo("hive0", "tpch",
                     t1.getName(), "supplier:0");
             assertThat(MVPCTMetaRepairer.isSupportedPCTRepairer(t1, baseTableInfo)).isTrue();
         }
@@ -96,7 +96,7 @@ public class MVPCTMetaRepairerTest extends MVTestBase {
         ConnectorPlanTestBase.mockCatalog(connectContext, MOCKED_ICEBERG_CATALOG_NAME);
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        Table t1 =  metadataMgr.getTable(connectContext, MOCKED_ICEBERG_CATALOG_NAME, "partitioned_db", "t1");
+        Table t1 =  metadataMgr.getTable(MOCKED_ICEBERG_CATALOG_NAME, "partitioned_db", "t1");
         assertThat(t1).isNotNull();
 
         starRocksAssert.useDatabase("test")
@@ -159,7 +159,7 @@ public class MVPCTMetaRepairerTest extends MVTestBase {
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        Table t1 =  metadataMgr.getTable(connectContext, "hive0", "tpch", "supplier");
+        Table t1 =  metadataMgr.getTable("hive0", "tpch", "supplier");
         assertThat(t1).isNotNull();
 
         starRocksAssert.useDatabase("test")
