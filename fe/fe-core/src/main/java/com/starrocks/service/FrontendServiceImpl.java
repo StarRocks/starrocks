@@ -3239,6 +3239,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 partitionMeta.setVisible_time(physicalPartition.getVisibleVersionTime());
                 partitionMeta.setNext_version(physicalPartition.getNextVersion());
                 partitionMeta.setIs_temp(olapTable.isTempPartition(parentPartitionId));
+                partitionMeta.setBucket_num(physicalPartition.getBucketNum());
                 result.add(partitionMeta);
                 donePartitionIds.add(partitionId);
             } finally {

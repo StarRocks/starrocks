@@ -76,18 +76,18 @@ public class LakeTableRollupBuilder extends AlterJobV2Builder {
                 // create shard group
                 long shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().
                         createShardGroup(dbId, olapTable.getId(), partitionId, rollupIndexId);
+                MaterializedIndex baseIndex = physicalPartition.getIndex(baseIndexId);
                 // index state is SHADOW
                 MaterializedIndex mvIndex = new MaterializedIndex(rollupIndexId,
-                        MaterializedIndex.IndexState.SHADOW, shardGroupId);
-                MaterializedIndex baseIndex = physicalPartition.getIndex(baseIndexId);
-
+                        MaterializedIndex.IndexState.SHADOW, shardGroupId, baseIndex.getBucketNum());
+                
                 // create shard
                 Map<String, String> shardProperties = new HashMap<>();
                 shardProperties.put(LakeTablet.PROPERTY_KEY_TABLE_ID, Long.toString(olapTable.getId()));
                 shardProperties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
                 shardProperties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(rollupIndexId));
 
-                List<Tablet> originTablets = physicalPartition.getIndex(baseIndexId).getTablets();
+                List<Tablet> originTablets = baseIndex.getTablets();
                 WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
                 Optional<Long> workerGroupId = warehouseManager.selectWorkerGroupByWarehouseId(
                         ConnectContext.get().getCurrentWarehouseId());

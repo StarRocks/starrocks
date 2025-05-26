@@ -470,8 +470,9 @@ public class ExternalOlapTable extends OlapTable {
             PhysicalPartition physicalPartition = new PhysicalPartition(GlobalStateMgr.getCurrentState().getNextId(),
                     partitionMeta.getPartition_name(),
                     partitionMeta.getPartition_id(), // TODO(wulei): fix it
+                    PhysicalPartition.INVALID_SHARD_GROUP_ID,
+                    partitionMeta.getBucket_num(),
                     null);
-            physicalPartition.setBucketNum(defaultDistributionInfo.getBucketNum());
 
             logicalPartition.addSubPartition(physicalPartition);
 
@@ -480,7 +481,9 @@ public class ExternalOlapTable extends OlapTable {
                     partitionMeta.getVisible_time());
             for (TIndexMeta indexMeta : meta.getIndexes()) {
                 MaterializedIndex index = new MaterializedIndex(indexMeta.getIndex_id(),
-                        IndexState.fromThrift(indexMeta.getIndex_state()));
+                        IndexState.fromThrift(indexMeta.getIndex_state()),
+                        PhysicalPartition.INVALID_SHARD_GROUP_ID,
+                        indexMeta.getBucket_num());
                 index.setRowCount(indexMeta.getRow_count());
                 for (TTabletMeta tTabletMeta : indexMeta.getTablets()) {
                     LocalTablet tablet = new LocalTablet(tTabletMeta.getTablet_id());

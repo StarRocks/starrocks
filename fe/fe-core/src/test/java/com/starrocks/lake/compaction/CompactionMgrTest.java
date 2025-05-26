@@ -213,7 +213,8 @@ public class CompactionMgrTest {
                 PartitionIdentifier partitionIdentifier = new PartitionIdentifier(1, 2, 3);
                 Database db = new Database();
                 Table table = new LakeTable();
-                PhysicalPartition partition = new PhysicalPartition(123, "aaa", 123,  null);
+                PhysicalPartition partition = new PhysicalPartition(123, "aaa", 123,
+                        PhysicalPartition.INVALID_SHARD_GROUP_ID, 0, null);
                 CompactionJob job = new CompactionJob(db, table, partition, txnId, false);
                 r.put(partitionIdentifier, job);
                 return r;

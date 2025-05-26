@@ -106,8 +106,10 @@ public class CompactionSchedulerTest {
                 Table table = new LakeTable();
                 PartitionIdentifier partitionIdentifier1 = new PartitionIdentifier(1, 2, 3);
                 PartitionIdentifier partitionIdentifier2 = new PartitionIdentifier(1, 2, 4);
-                PhysicalPartition partition1 = new PhysicalPartition(123, "aaa", 123, null);
-                PhysicalPartition partition2 = new PhysicalPartition(124, "bbb", 124, null);
+                PhysicalPartition partition1 = new PhysicalPartition(123, "aaa", 123,
+                        PhysicalPartition.INVALID_SHARD_GROUP_ID, 0, null);
+                PhysicalPartition partition2 = new PhysicalPartition(124, "bbb", 124,
+                        PhysicalPartition.INVALID_SHARD_GROUP_ID, 0, null);
                 CompactionJob job1 = new CompactionJob(db, table, partition1, 100, false);
                 try {
                     Thread.sleep(10);
@@ -193,7 +195,8 @@ public class CompactionSchedulerTest {
                 Database db = new Database();
                 Table table = new LakeTable();
                 long partitionId = partitionStatisticsSnapshot.getPartition().getPartitionId();
-                PhysicalPartition partition = new PhysicalPartition(partitionId, "aaa", partitionId, null);
+                PhysicalPartition partition = new PhysicalPartition(partitionId, "aaa", partitionId,
+                        PhysicalPartition.INVALID_SHARD_GROUP_ID, 0, null);
                 return new CompactionJob(db, table, partition, 100, false);
             }
         };

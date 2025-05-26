@@ -1259,6 +1259,7 @@ struct TIndexMeta {
     6: optional i64 rollup_finished_version
     7: optional TSchemaMeta schema_meta
     8: optional list<TTabletMeta> tablets
+    9: optional i32 bucket_num
 }
 
 struct TDataProperty {
@@ -1309,6 +1310,7 @@ struct TPartitionMeta {
     8: optional i64 next_version
     9: optional i64 next_version_hash // Deprecated
     10: optional bool is_temp
+    11: optional i32 bucket_num
 }
 
 struct THashDistributionInfo {

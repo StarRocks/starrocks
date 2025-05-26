@@ -1554,17 +1554,21 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         // so that the shards of this logical partition are more evenly distributed.
         long shardGroupId = partition.getDefaultPhysicalPartition().getBaseIndex().getShardGroupId();
         for (long indexId : olapTable.getIndexIdToMeta().keySet()) {
-            MaterializedIndex rollup = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL, shardGroupId);
+            MaterializedIndex rollup = new MaterializedIndex(indexId,
+                    MaterializedIndex.IndexState.NORMAL,
+                    shardGroupId,
+                    distributionInfo.getBucketNum());
             indexMap.put(indexId, rollup);
         }
 
         long id = GlobalStateMgr.getCurrentState().getNextId();
         PhysicalPartition physicalPartition = new PhysicalPartition(
-                id, partition.generatePhysicalPartitionName(id),
-                partition.getId(), indexMap.get(olapTable.getBaseIndexId()));
-        // set ShardGroupId to partition for rollback to old version
-        physicalPartition.setShardGroupId(shardGroupId);
-        physicalPartition.setBucketNum(distributionInfo.getBucketNum());
+                id,
+                partition.generatePhysicalPartitionName(id),
+                partition.getId(),
+                shardGroupId, // set ShardGroupId to partition for rollback to old version
+                distributionInfo.getBucketNum(),
+                indexMap.get(olapTable.getBaseIndexId()));
 
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         short replicationNum = partitionInfo.getReplicationNum(partitionId);
@@ -1734,7 +1738,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().
                         createShardGroup(db.getId(), table.getId(), partitionId, indexId);
             }
-            MaterializedIndex rollup = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL, shardGroupId);
+            MaterializedIndex rollup = new MaterializedIndex(indexId,
+                    MaterializedIndex.IndexState.NORMAL,
+                    shardGroupId,
+                    distributionInfo.getBucketNum());
             indexMap.put(indexId, rollup);
         }
 
@@ -1748,8 +1755,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 physicalPartitionId,
                 logicalPartition.generatePhysicalPartitionName(physicalPartitionId),
                 partitionId,
+                PhysicalPartition.INVALID_SHARD_GROUP_ID, // set shard group id later
+                distributionInfo.getBucketNum(),
                 indexMap.get(table.getBaseIndexId()));
-        physicalPartition.setBucketNum(distributionInfo.getBucketNum());
 
         logicalPartition.addSubPartition(physicalPartition);
 

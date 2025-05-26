@@ -40,7 +40,9 @@ public class PhysicalPartitionImplTest {
 
     @Test
     public void testPhysicalPartition() throws Exception {
-        PhysicalPartition p = new PhysicalPartition(1, "", 1, new MaterializedIndex());
+        PhysicalPartition p = new PhysicalPartition(1, "", 1,
+                PhysicalPartition.INVALID_SHARD_GROUP_ID, 0,
+                new MaterializedIndex());
         Assert.assertEquals(1, p.getId());
         Assert.assertEquals(1, p.getParentId());
         Assert.assertFalse(p.isImmutable());
@@ -106,7 +108,9 @@ public class PhysicalPartitionImplTest {
         Assert.assertTrue(p.equals(p));
         Assert.assertFalse(p.equals(new Partition(0, 11, "", null, null)));
 
-        PhysicalPartition p2 = new PhysicalPartition(1, "", 1, new MaterializedIndex());
+        PhysicalPartition p2 = new PhysicalPartition(1, "", 1,
+                PhysicalPartition.INVALID_SHARD_GROUP_ID, 0,
+                new MaterializedIndex());
         Assert.assertFalse(p.equals(p2));
         p2.setBaseIndex(new MaterializedIndex(1));
 
@@ -143,8 +147,12 @@ public class PhysicalPartitionImplTest {
 
     @Test
     public void testPhysicalPartitionEqual() throws Exception {
-        PhysicalPartition p1 = new PhysicalPartition(1, "", 1, new MaterializedIndex());
-        PhysicalPartition p2 = new PhysicalPartition(1, "", 1, new MaterializedIndex());
+        PhysicalPartition p1 = new PhysicalPartition(1, "", 1,
+                PhysicalPartition.INVALID_SHARD_GROUP_ID, 0,
+                new MaterializedIndex());
+        PhysicalPartition p2 = new PhysicalPartition(1, "", 1,
+                PhysicalPartition.INVALID_SHARD_GROUP_ID, 0,
+                new MaterializedIndex());
         Assert.assertTrue(p1.equals(p2));
 
         p1.createRollupIndex(new MaterializedIndex());

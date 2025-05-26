@@ -37,6 +37,7 @@ package com.starrocks.catalog;
 import com.google.common.base.Objects;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
@@ -116,11 +117,14 @@ public class Partition extends MetaObject implements GsonPostProcessable {
         this.distributionInfo = distributionInfo;
 
         this.defaultPhysicalPartitionId = physicalPartitionId;
-        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId,
-                generatePhysicalPartitionName(physicalPartitionId), id, baseIndex);
-        if (distributionInfo != null) {
-            physicalPartition.setBucketNum(distributionInfo.getBucketNum());
-        }
+        PhysicalPartition physicalPartition = new PhysicalPartition(
+                physicalPartitionId,
+                generatePhysicalPartitionName(physicalPartitionId),
+                id,
+                PhysicalPartition.INVALID_SHARD_GROUP_ID,
+                distributionInfo.getBucketNum(),
+                baseIndex);
+
         this.idToSubPartition.put(physicalPartitionId, physicalPartition);
         this.nameToSubPartition.put(physicalPartition.getName(), physicalPartition);
     }
@@ -314,6 +318,19 @@ public class Partition extends MetaObject implements GsonPostProcessable {
             }
             if (subPartition.getBaseIndex().getShardGroupId() == PhysicalPartition.INVALID_SHARD_GROUP_ID) {
                 subPartition.getBaseIndex().setShardGroupId(getDefaultPhysicalPartition().getShardGroupId());
+            }
+
+            // Set bucket num for physical partition
+            if (subPartition.getBucketNum() <= 0) {
+                subPartition.setBucketNum(distributionInfo.getBucketNum());
+            }
+
+            // Previously, bucket number is at physical partition level
+            // Now, bucket number is at materialized index level
+            for (MaterializedIndex index : subPartition.getMaterializedIndices(IndexExtState.ALL)) {
+                if (index.getBucketNum() <= 0) {
+                    index.setBucketNum(subPartition.getBucketNum());
+                }
             }
 
             nameToSubPartition.put(subPartition.getName(), subPartition);

@@ -150,6 +150,8 @@ public class MockedLocalMetaStore extends LocalMetastore {
                 physicalPartitionId,
                 logicalPartition.generatePhysicalPartitionName(physicalPartitionId),
                 partitionId,
+                PhysicalPartition.INVALID_SHARD_GROUP_ID,
+                0,
                 null);
         physicalPartition.setBucketNum(distributionInfo.getBucketNum());
 

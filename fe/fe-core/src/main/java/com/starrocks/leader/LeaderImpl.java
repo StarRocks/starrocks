@@ -990,6 +990,7 @@ public class LeaderImpl {
                 partitionMeta.setVisible_time(physicalPartition.getVisibleVersionTime());
                 partitionMeta.setNext_version(physicalPartition.getNextVersion());
                 partitionMeta.setIs_temp(olapTable.getPartition(partition.getName(), true) != null);
+                partitionMeta.setBucket_num(physicalPartition.getBucketNum());
                 tableMeta.addToPartitions(partitionMeta);
                 short replicaNum = partitionInfo.getReplicationNum(partition.getId());
                 boolean inMemory = partitionInfo.getIsInMemory(partition.getId());
@@ -1126,6 +1127,7 @@ public class LeaderImpl {
                             throw new NotImplementedException(tablet.getClass().getName() + " is not implemented");
                         }
                         indexMeta.addToTablets(tTabletMeta);
+                        indexMeta.setBucket_num(index.getBucketNum());
                     }
                     tableMeta.addToIndexes(indexMeta);
                 }

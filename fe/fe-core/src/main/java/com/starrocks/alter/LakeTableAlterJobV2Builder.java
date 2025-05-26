@@ -74,9 +74,10 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
             for (PhysicalPartition partition : table.getPhysicalPartitions()) {
                 long partitionId = partition.getParentId();
                 long physicalPartitionId = partition.getId();
-                long shardGroupId = partition.getIndex(originIndexId).getShardGroupId();
+                MaterializedIndex originIndex = partition.getIndex(originIndexId);
+                long shardGroupId = originIndex.getShardGroupId();
 
-                List<Tablet> originTablets = partition.getIndex(originIndexId).getTablets();
+                List<Tablet> originTablets = originIndex.getTablets();
                 // TODO: It is not good enough to create shards into the same group id, schema change PR needs to
                 //  revise the code again.
                 List<Long> originTabletIds = originTablets.stream().map(Tablet::getId).collect(Collectors.toList());
@@ -93,8 +94,8 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                 TStorageMedium medium = table.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
                 TabletMeta shadowTabletMeta =
                         new TabletMeta(dbId, tableId, physicalPartitionId, shadowIndexId, 0, medium, true);
-                MaterializedIndex shadowIndex =
-                        new MaterializedIndex(shadowIndexId, MaterializedIndex.IndexState.SHADOW, shardGroupId);
+                MaterializedIndex shadowIndex = new MaterializedIndex(shadowIndexId,
+                        MaterializedIndex.IndexState.SHADOW, shardGroupId, originIndex.getBucketNum());
                 for (int i = 0; i < originTablets.size(); i++) {
                     Tablet originTablet = originTablets.get(i);
                     Tablet shadowTablet = new LakeTablet(shadowTabletIds.get(i));

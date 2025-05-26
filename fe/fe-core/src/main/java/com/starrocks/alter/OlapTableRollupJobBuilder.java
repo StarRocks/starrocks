@@ -64,9 +64,12 @@ public class OlapTableRollupJobBuilder extends AlterJobV2Builder {
 
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 long physicalPartitionId = physicalPartition.getId();
-                // index state is SHADOW
-                MaterializedIndex mvIndex = new MaterializedIndex(rollupIndexId, MaterializedIndex.IndexState.SHADOW);
                 MaterializedIndex baseIndex = physicalPartition.getIndex(baseIndexId);
+                // index state is SHADOW
+                MaterializedIndex mvIndex = new MaterializedIndex(rollupIndexId,
+                        MaterializedIndex.IndexState.SHADOW,
+                        PhysicalPartition.INVALID_SHARD_GROUP_ID,
+                        baseIndex.getBucketNum());
                 TabletMeta mvTabletMeta = new TabletMeta(dbId, olapTable.getId(),
                         physicalPartitionId, rollupIndexId, mvSchemaHash, medium);
                 for (Tablet baseTablet : baseIndex.getTablets()) {

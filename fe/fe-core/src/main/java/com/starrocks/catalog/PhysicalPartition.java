@@ -123,10 +123,13 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     }
 
-    public PhysicalPartition(long id, String name, long parentId, MaterializedIndex baseIndex) {
+    public PhysicalPartition(long id, String name, long parentId, long shardGroupId, int bucketNum,
+            MaterializedIndex baseIndex) {
         this.id = id;
         this.name = name;
         this.parentId = parentId;
+        this.shardGroupId = shardGroupId;
+        this.bucketNum = bucketNum;
         this.baseIndex = baseIndex;
         this.visibleVersion = PARTITION_INIT_VERSION;
         this.visibleVersionTime = System.currentTimeMillis();
