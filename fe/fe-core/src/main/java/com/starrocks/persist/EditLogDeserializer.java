@@ -20,7 +20,6 @@ import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.authentication.UserPropertyInfo;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.Repository;
-import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.Function;
@@ -136,8 +135,8 @@ public class EditLogDeserializer {
             .put(OperationType.OP_RESET_FRONTENDS, Frontend.class)
             .put(OperationType.OP_LEADER_INFO_CHANGE_V2, LeaderInfo.class)
             .put(OperationType.OP_TIMESTAMP_V2, Timestamp.class)
-            .put(OperationType.OP_ADD_BROKER_V2, BrokerMgr.ModifyBrokerInfo.class)
-            .put(OperationType.OP_DROP_BROKER_V2, BrokerMgr.ModifyBrokerInfo.class)
+            .put(OperationType.OP_ADD_BROKER_V2, ModifyBrokerInfo.class)
+            .put(OperationType.OP_DROP_BROKER_V2, ModifyBrokerInfo.class)
             .put(OperationType.OP_UPSERT_TRANSACTION_STATE_V2, TransactionState.class)
             .put(OperationType.OP_UPSERT_TRANSACTION_STATE_BATCH, TransactionStateBatch.class)
             .put(OperationType.OP_CREATE_REPOSITORY_V2, Repository.class)
