@@ -50,7 +50,7 @@ public class MVPCTMetaRepairerTest extends MVTestBase {
         ConnectorPlanTestBase.mockCatalog(connectContext, MOCKED_ICEBERG_CATALOG_NAME);
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        Table t1 =  metadataMgr.getTable(connectContext, MOCKED_ICEBERG_CATALOG_NAME, "partitioned_db", "t1");
+        Table t1 =  metadataMgr.getTable(MOCKED_ICEBERG_CATALOG_NAME, "partitioned_db", "t1");
         assertThat(t1).isNotNull();
 
         {
@@ -73,7 +73,7 @@ public class MVPCTMetaRepairerTest extends MVTestBase {
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        Table t1 =  metadataMgr.getTable(connectContext, "hive0", "tpch", "supplier");
+        Table t1 =  metadataMgr.getTable("hive0", "tpch", "supplier");
         assertThat(t1).isNotNull();
 
         {
@@ -96,7 +96,7 @@ public class MVPCTMetaRepairerTest extends MVTestBase {
         ConnectorPlanTestBase.mockCatalog(connectContext, MOCKED_ICEBERG_CATALOG_NAME);
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        Table t1 =  metadataMgr.getTable(connectContext, MOCKED_ICEBERG_CATALOG_NAME, "partitioned_db", "t1");
+        Table t1 =  metadataMgr.getTable(MOCKED_ICEBERG_CATALOG_NAME, "partitioned_db", "t1");
         assertThat(t1).isNotNull();
 
         starRocksAssert.useDatabase("test")
@@ -159,7 +159,7 @@ public class MVPCTMetaRepairerTest extends MVTestBase {
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        Table t1 =  metadataMgr.getTable(connectContext, "hive0", "tpch", "supplier");
+        Table t1 =  metadataMgr.getTable("hive0", "tpch", "supplier");
         assertThat(t1).isNotNull();
 
         starRocksAssert.useDatabase("test")
