@@ -38,6 +38,7 @@ import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.proto.TxnInfoPB;
@@ -621,7 +622,11 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         // If upgraded from an old version and do roll up,
         // the schema saved in indexSchemaMap is the schema in the old version, whose uniqueId is -1,
         // so here we initialize column uniqueId here.
-        restoreColumnUniqueIdIfNeed(rollupSchema);
+        boolean restored = LakeTableHelper.restoreColumnUniqueId(rollupSchema);
+        if (restored) {
+            LOG.info("Columns of rollup index {} in table {} has reset all unique ids, column size: {}", rollupIndexId,
+                    tableName, rollupSchema.size());
+        }
 
         tbl.setIndexMeta(rollupIndexId, rollupIndexName, rollupSchema, rollupSchemaVersion /* initial schema version */,
                 rollupSchemaHash, rollupShortKeyColumnCount, TStorageType.COLUMN, rollupKeysType, origStmt);
