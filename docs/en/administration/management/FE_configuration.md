@@ -3284,7 +3284,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: -
 - Is mutable: Yes
 - Description: The table or partition list of which compaction is disabled in shared-data mode. The format is `tableId1;partitionId2`, seperated by semicolon, for example, `12345;98765`.
-- Introduced in: v3.5.0
+- Introduced in: v3.4.4
 
 ##### lake_enable_balance_tablets_between_workers
 
