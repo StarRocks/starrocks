@@ -246,6 +246,8 @@ Status GlobalEnv::_init_mem_tracker() {
 
     MemChunkAllocator::init_instance(_chunk_allocator_mem_tracker.get(), config::chunk_reserved_bytes_limit);
 
+    _profile_mem_tracker = regist_tracker(MemTrackerType::PROFILE, -1, process_mem_tracker());
+
     return Status::OK();
 }
 

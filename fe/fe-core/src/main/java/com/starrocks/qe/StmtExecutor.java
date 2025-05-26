@@ -2861,6 +2861,8 @@ public class StmtExecutor {
             coord = getCoordinatorFactory().createQueryScheduler(
                     context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift());
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
+            coord.setTopProfileSupplier(this::buildTopLevelProfile);
+            coord.setExecPlan(plan);
 
             coord.exec();
             RowBatch batch;
