@@ -1447,8 +1447,9 @@ public class DefaultCoordinator extends Coordinator {
     public void registerProfileToRunningProfileManager() {
         RunningProfileManager.RunningProfile runningProfile = queryProfile.createRunningProfile();
         runningProfile.registerInstanceProfiles(executionDAG.getIndexInJobToExecState());
-
-        RunningProfileManager.getInstance().registerProfile(jobSpec.getQueryId(), runningProfile);
+        if (jobSpec.isNeedReport()) {
+            RunningProfileManager.getInstance().registerProfile(jobSpec.getQueryId(), runningProfile);
+        }
     }
 
 }
