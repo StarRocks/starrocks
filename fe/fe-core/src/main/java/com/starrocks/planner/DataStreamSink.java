@@ -40,7 +40,6 @@ import com.starrocks.thrift.TDataStreamSink;
 import com.starrocks.thrift.TExplainLevel;
 
 import java.util.List;
-import java.util.Optional;
 
 /**
  * Data sink that forwards data to an exchange node.
@@ -51,12 +50,13 @@ public class DataStreamSink extends DataSink {
 
     private DataPartition outputPartition;
 
-    private long limit;
-
     private boolean isMerge;
 
     // Specify the columns which need to send, used on MultiCastSink
     private List<Integer> outputColumnIds;
+
+    // Specify the limit on output columns, used on MultiCastSink
+    private long limit;
 
     public DataStreamSink(PlanNodeId exchNodeId) {
         this.exchNodeId = exchNodeId;
@@ -117,13 +117,15 @@ public class DataStreamSink extends DataSink {
     protected TDataSink toThrift() {
         TDataSink result = new TDataSink(TDataSinkType.DATA_STREAM_SINK);
         TDataStreamSink tStreamSink =
-                new TDataStreamSink(exchNodeId.asInt(), outputPartition.toThrift(), limit);
+                new TDataStreamSink(exchNodeId.asInt(), outputPartition.toThrift());
         tStreamSink.setIs_merge(isMerge);
         tStreamSink.setDest_dop(exchDop);
         if (outputColumnIds != null && !outputColumnIds.isEmpty()) {
             tStreamSink.setOutput_columns(outputColumnIds);
         }
-        tStreamSink.setLimit(limit);
+        if (limit == -1) {
+            tStreamSink.setLimit(limit);
+        }
         result.setStream_sink(tStreamSink);
         return result;
     }
