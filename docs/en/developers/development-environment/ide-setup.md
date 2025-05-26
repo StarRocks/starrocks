@@ -111,7 +111,6 @@ Then you can use IDEA to open `fe` folder directly, everything is ok.
 
 The same as other Java applications. You might face OOM error while compiling StarRocks on Intellij IDEA, you can go to Build, Execution, Deployment -> Compiler -> Increase Heap size to a larger value.
 
-```bash
 
 #### Remote debug
 
