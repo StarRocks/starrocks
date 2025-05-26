@@ -68,7 +68,7 @@ public class ConnectScheduler {
     private final AtomicInteger numberConnection;
     private final ConnectionIdGenerator connectionIdGenerator;
 
-    // mysql connectContext/ http connectContext/ arrowFlight connextContext all stored in connectionMap
+    // mysql connectContext/ http connectContext/ arrowFlight connectContext all stored in connectionMap
     private final Map<Long, ConnectContext> connectionMap = Maps.newConcurrentMap();
     private final Map<String, ArrowFlightSqlConnectContext> arrowFlightSqlConnectContextMap = Maps.newConcurrentMap();
 
@@ -141,8 +141,7 @@ public class ConnectScheduler {
             connCountByUser.computeIfAbsent(ctx.getQualifiedUser(), k -> new AtomicInteger(0));
             AtomicInteger currentConnAtomic = connCountByUser.get(ctx.getQualifiedUser());
             int currentConn = currentConnAtomic.get();
-            long currentUserMaxConn =
-                    ctx.getGlobalStateMgr().getAuthenticationMgr().getMaxConn(ctx.getQualifiedUser());
+            long currentUserMaxConn = ctx.getGlobalStateMgr().getAuthenticationMgr().getMaxConn(ctx.getQualifiedUser());
             if (currentConn >= currentUserMaxConn) {
                 String userErrMsg = "Reach user-level(qualifiedUser: " + ctx.getQualifiedUser() + ") connection limit, " +
                         "currentUserMaxConn=" + currentUserMaxConn + ", connectionMap.size=" + connectionMap.size() +
@@ -159,7 +158,7 @@ public class ConnectScheduler {
 
             if (ctx instanceof ArrowFlightSqlConnectContext) {
                 ArrowFlightSqlConnectContext context = (ArrowFlightSqlConnectContext) ctx;
-                arrowFlightSqlConnectContextMap.put(context.getToken(), context);
+                arrowFlightSqlConnectContextMap.put(context.getArrowFlightSqlToken(), context);
             }
 
             return new Pair<>(true, null);
@@ -186,7 +185,7 @@ public class ConnectScheduler {
 
             if (ctx instanceof ArrowFlightSqlConnectContext) {
                 ArrowFlightSqlConnectContext context = (ArrowFlightSqlConnectContext) ctx;
-                arrowFlightSqlConnectContextMap.remove(context.getToken());
+                arrowFlightSqlConnectContextMap.remove(context.getArrowFlightSqlToken());
             }
         } finally {
             connStatsLock.unlock();
@@ -199,10 +198,6 @@ public class ConnectScheduler {
 
     public ConnectContext getContext(long connectionId) {
         return connectionMap.get(connectionId);
-    }
-
-    public ConnectContext getContext(String token) {
-        return connectionMap.get(token);
     }
 
     public ArrowFlightSqlConnectContext getArrowFlightSqlConnectContext(String token) {
