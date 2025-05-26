@@ -47,6 +47,7 @@
 #include "rocksdb/slice.h"
 #include "rocksdb/slice_transform.h"
 #include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
 #include "storage/olap_define.h"
 #include "storage/rocksdb_status_adapter.h"
 #include "util/runtime_profile.h"
