@@ -75,6 +75,7 @@ private:
 
     std::unique_ptr<ThreadPool> _merge_thread_pool;
     std::unique_ptr<ThreadPool> _report_thread_pool;
+    MemTracker* _mem_tracker;
 };
 
 } // namespace starrocks::pipeline

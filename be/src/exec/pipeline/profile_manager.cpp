@@ -104,7 +104,7 @@ profile_manager::profile_manager(const CpuUtil::CpuIds& cpuids) {
     REGISTER_THREAD_POOL_METRICS(async_profile_merge, _report_thread_pool);
 
     int max_reporter = config::async_profile_report_thread_max_num == 0 ? CpuInfo::num_cores() / 2
-                                                                     : config::async_profile_merge_thread_max_num;
+                                                                        : config::async_profile_merge_thread_max_num;
     status = ThreadPoolBuilder("query_profile_report")
                      .set_min_threads(1)
                      .set_max_threads(max_reporter)
@@ -117,6 +117,8 @@ profile_manager::profile_manager(const CpuUtil::CpuIds& cpuids) {
     }
 
     REGISTER_THREAD_POOL_METRICS(async_profile_report, _merge_thread_pool);
+
+    _mem_tracker = GlobalEnv::GetInstance()->profile_mem_tracker();
 }
 
 void profile_manager::build_and_report_profile(std::shared_ptr<FragmentProfileMaterial> fragment_profile_material) {
@@ -127,6 +129,8 @@ void profile_manager::build_and_report_profile(std::shared_ptr<FragmentProfileMa
     //              << " be_number=" << fragment_profile_material->be_number
     //              << " queryId=" << print_id(fragment_profile_material->query_id);
     auto profile_task = [=, fragment_profile_material = fragment_profile_material]() {
+        SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+
         ObjectPool obj_pool;
         RuntimeProfile* merged_instance_profile = build_merged_instance_profile(fragment_profile_material, &obj_pool);
         std::shared_ptr<TFragmentProfile> params =
