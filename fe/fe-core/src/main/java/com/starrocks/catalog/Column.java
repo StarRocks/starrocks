@@ -767,7 +767,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             }
             sb.append("AS ").append(generatedColumnSql).append(" ");
         }
-        sb.append("COMMENT \"").append(comment).append("\"");
+        sb.append("COMMENT \"").append(getDisplayComment()).append("\"");
 
         return sb.toString();
     }
