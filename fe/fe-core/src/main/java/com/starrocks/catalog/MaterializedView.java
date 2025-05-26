@@ -1983,8 +1983,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 // TODO: get table from current context rather than metadata catalog
                 // it's fine to re-get table from metadata catalog again since metadata catalog should cache
                 // the newest table info.
-                Table refreshedTable = MvUtils.getTableChecked(tableToBaseTableInfoCache.get(table));
-                result.put(refreshedTable, e.getValue());
+                // NOTE: use getTable rather getTableChecked to avoid throwing exception when table has changed/recreated.
+                // If the table has changed, MVPCTMetaRepairer will handle it rather than throwing exception here.
+                Optional<Table> refreshedTableOpt = MvUtils.getTable(tableToBaseTableInfoCache.get(table));
+                if (refreshedTableOpt.isEmpty()) {
+                    LOG.warn("The table {} is not found in metadata catalog", table.getName());
+                    throw MaterializedViewExceptions.reportBaseTableNotExists(table.getName());
+                }
+                result.put(refreshedTableOpt.get(), e.getValue());
             } else {
                 result.put(table, e.getValue());
             }

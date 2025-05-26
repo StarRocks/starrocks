@@ -13,11 +13,15 @@
 // limitations under the License.
 package com.starrocks.scheduler.mv;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.MaterializedViewExceptions;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.HivePartitionDataInfo;
@@ -47,6 +51,60 @@ public class MVPCTMetaRepairer {
     public MVPCTMetaRepairer(Database db, MaterializedView mv) {
         this.db = db;
         this.mv = mv;
+    }
+
+    /**
+     * Repair the base table's meta info of the materialized view if needed. For example, if the base external table is dropped
+     * and recreated, the table identifier may change.
+     * @param db: the database of the materialized view
+     * @param mv: the materialized view to repair
+     * @param toRepairTables: the list of tables to repair
+     * @throws DmlException when the table is not supported by MVPCTMetaRepairer, and the mv will be set inactive.
+     */
+    public static void repairMetaIfNeeded(Database db, MaterializedView mv,
+                                          List<Pair<Table, BaseTableInfo>> toRepairTables) throws DmlException {
+        if (toRepairTables.isEmpty()) {
+            return;
+        }
+        Optional<Pair<Table, BaseTableInfo>> nonSupportedTableOpt =
+                toRepairTables.stream().filter(p -> !isSupportedPCTRepairer(p.first, p.second)).findFirst();
+        if (nonSupportedTableOpt.isPresent()) {
+            Pair<Table, BaseTableInfo> nonSupportedTable = nonSupportedTableOpt.get();
+            mv.setInactiveAndReason(
+                    MaterializedViewExceptions.inactiveReasonForBaseTableChanged(nonSupportedTable.second.getTableName()));
+            throw new DmlException(String.format("Table %s is recreated and needed to be repaired, but it is not supported " +
+                            "by MVPCTMetaRepairer: %s, set mv %s inactive",
+                    nonSupportedTable.first.getName(), nonSupportedTable.second, mv.getName()));
+        }
+        final MVPCTMetaRepairer repairer = new MVPCTMetaRepairer(db, mv);
+        for (Pair<Table, BaseTableInfo> pair : toRepairTables) {
+            Table newTable = pair.first;
+            BaseTableInfo baseTableInfo = pair.second;
+            repairer.repairTableIfNeeded(newTable, baseTableInfo);
+        }
+    }
+
+    /**
+     * Check whether the base table is supported by MVPCTMetaRepairer.
+     * - Only table identifier change is needed to repair.
+     * - Only Hive table is supported if it is external table.
+     * @param baseTable: the base table of materialized view
+     * @param baseTableInfo: the base table info of the materialized view
+     * @return: true if the base table is supported by MVPCTMetaRepairer, false otherwise
+     */
+    @VisibleForTesting
+    public static boolean isSupportedPCTRepairer(Table baseTable, BaseTableInfo baseTableInfo) {
+        if (baseTable == null || baseTableInfo == null) {
+            return false;
+        }
+        if (baseTable.getTableIdentifier().equals(baseTableInfo.getTableIdentifier())) {
+            return true;
+        }
+        if (!(baseTable instanceof HiveTable)) {
+            return false;
+        }
+        HiveTable hiveTable = (HiveTable) baseTable;
+        return hiveTable.getHiveTableType() == HiveTable.HiveTableType.EXTERNAL_TABLE;
     }
 
     /**
