@@ -71,6 +71,7 @@ Status PageReader::_deal_page_with_cache() {
     bool ret = _cache->lookup(page_cache_key, &cache_handle);
     if (ret) {
         _hit_cache = true;
+        _opts.stats->page_cache_read_counter += 1;
         auto* cache_buf = cache_handle.data();
         _page_handle = PageHandle(std::move(cache_handle));
         _header_length = _cache_buf->size();
@@ -87,7 +88,12 @@ Status PageReader::_deal_page_with_cache() {
         }
         RETURN_IF_ERROR(_read_and_decompress_internal(true));
         auto st = _cache->insert(page_cache_key, _cache_buf.get(), &cache_handle, false);
-        _page_handle = st.ok() ? PageHandle(std::move(cache_handle)) : PageHandle(_cache_buf.get());
+        if (st.ok()) {
+            _page_handle = PageHandle(std::move(cache_handle));
+            _opts.stats->page_cache_write_counter += 1;
+        } else {
+            _page_handle = PageHandle(_cache_buf.get());
+        }
         _cache_buf.release();
     }
 
