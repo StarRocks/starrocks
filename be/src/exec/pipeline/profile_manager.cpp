@@ -135,7 +135,8 @@ void profile_manager::build_and_report_profile(std::shared_ptr<FragmentProfileMa
         RuntimeProfile* merged_instance_profile = build_merged_instance_profile(fragment_profile_material, &obj_pool);
         std::shared_ptr<TFragmentProfile> params =
                 create_report_profile_params(fragment_profile_material, merged_instance_profile);
-        auto report_task = [params, fragment_profile_material]() {
+        auto report_task = [params, fragment_profile_material, this]() {
+            SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
             const auto& fe_addr = fragment_profile_material->fe_addr;
             int max_retry_times = config::report_exec_rpc_request_retry_num;
             int retry_times = 0;
@@ -164,6 +165,7 @@ void profile_manager::build_and_report_profile(std::shared_ptr<FragmentProfileMa
 
     Status status = _merge_thread_pool->submit_func(profile_task);
     if (!status.ok()) {
+        LOG(WARNING) << "Cannot submit profile report: " << status.to_string();
         profile_task();
     }
 }

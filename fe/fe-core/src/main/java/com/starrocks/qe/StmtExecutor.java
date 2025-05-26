@@ -744,9 +744,8 @@ public class StmtExecutor {
                                 QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(),
                                         System.currentTimeMillis() +
                                                 context.getSessionVariable().getProfileTimeout() * 1000L);
-                            } else {
-                                QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
                             }
+                            QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
                         }
                     }
                 }
@@ -1055,7 +1054,7 @@ public class StmtExecutor {
         }
     }
 
-    private boolean processProfileAsync(ExecPlan plan, int retryIndex) {
+    private boolean processProfileAsync(ExecPlan plan, final int retryIndex) {
         if (coord == null) {
             return false;
         }
@@ -1071,23 +1070,31 @@ public class StmtExecutor {
         // Otherwise, the context may be changed, for example, containing the wrong query id.
         profile = buildTopLevelProfile();
 
-        long profileCollectStartTime = System.currentTimeMillis();
-        long startTime = context.getStartTime();
-        TUniqueId executionId = context.getExecutionId();
-        QueryDetail queryDetail = context.getQueryDetail();
-        boolean needMerge = context.needMergeProfile();
-        boolean isShortCircuit = coord.isShortCircuit();
+        final long profileCollectStartTime = System.currentTimeMillis();
+        final long startTime = context.getStartTime();
+        final TUniqueId executionId = context.getExecutionId();
+        final QueryDetail queryDetail = context.getQueryDetail();
+        // boolean needMerge = context.needMergeProfile();
+        final boolean isShortCircuit = coord.isShortCircuit();
+        final ProfilingExecPlan profilingPlan;
+        if (isShortCircuit) {
+            profilingPlan = null;
+        } else {
+            profilingPlan = plan == null ? null : plan.getProfilingPlan();
+        }
+
+        final RuntimeProfile profileCopy = profile;
 
         // DO NOT use context int the async task, because the context is shared among consecutive queries.
         // profile of query1 maybe executed when query2 is under execution.
         Consumer<Boolean> task = (Boolean isAsync) -> {
-            RuntimeProfile summaryProfile = profile.getChild("Summary");
+            RuntimeProfile summaryProfile = profileCopy.getChild("Summary");
             summaryProfile.addInfoString(ProfileManager.PROFILE_COLLECT_TIME,
                     DebugUtil.getPrettyStringMs(System.currentTimeMillis() - profileCollectStartTime));
             summaryProfile.addInfoString("IsProfileAsync", String.valueOf(isAsync));
             RunningProfileManager.RunningProfile runningProfile =
                     RunningProfileManager.getInstance().getRunningProfile(executionId);
-            profile.addChild(runningProfile.buildExecutionProfile());
+            profileCopy.addChild(runningProfile.buildExecutionProfile());
 
             // Update TotalTime to include the Profile Collect Time and the time to build the profile.
             long now = System.currentTimeMillis();
@@ -1098,18 +1105,12 @@ public class StmtExecutor {
                 summaryProfile.addInfoString(ProfileManager.RETRY_TIMES, Integer.toString(retryIndex + 1));
             }
 
-            ProfilingExecPlan profilingPlan;
-            if (isShortCircuit) {
-                profilingPlan = null;
-            } else {
-                profilingPlan = plan == null ? null : plan.getProfilingPlan();
-            }
-            String profileContent = ProfileManager.getInstance().pushProfile(profilingPlan, profile);
+            String profileContent = ProfileManager.getInstance().pushProfile(profilingPlan, profileCopy);
             if (queryDetail != null) {
                 queryDetail.setProfile(profileContent);
             }
             QeProcessorImpl.INSTANCE.unMonitorQuery(executionId);
-            QeProcessorImpl.INSTANCE.unregisterQuery(executionId);
+            //            QeProcessorImpl.INSTANCE.unregisterQuery(executionId);
             RunningProfileManager.getInstance().removeProfile(executionId);
             if (Config.enable_collect_query_detail_info && Config.enable_profile_log) {
                 String jsonString = GSON.toJson(queryDetail);
@@ -2327,9 +2328,8 @@ public class StmtExecutor {
                 if (isAsync) {
                     QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
                             context.getSessionVariable().getProfileTimeout() * 1000L);
-                } else {
-                    QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
                 }
+                QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
             }
         }
     }
@@ -2947,12 +2947,13 @@ public class StmtExecutor {
         } finally {
             try {
                 if (context.isProfileEnabled()) {
-                    tryProcessProfileAsync(plan, 0);
-                    QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
-                            context.getSessionVariable().getProfileTimeout() * 1000L);
-                } else {
-                    QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+                    boolean isAsync = tryProcessProfileAsync(plan, 0);
+                    if (isAsync) {
+                        QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
+                                context.getSessionVariable().getProfileTimeout() * 1000L);
+                    }
                 }
+                QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
                 recordExecStatsIntoContext();
             } catch (Exception e) {
                 LOG.warn("Failed to unregister query", e);
