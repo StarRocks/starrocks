@@ -55,8 +55,6 @@ protected:
     AggregateBlockingSinkOperatorFactory* factory() {
         return down_cast<AggregateBlockingSinkOperatorFactory*>(_factory);
     }
-    Status _build_runtime_filters(RuntimeState* state);
-    std::vector<RuntimeFilter*>* _build_agg_runtime_filters(ObjectPool* pool);
     void _build_in_runtime_filters(RuntimeState* state);
 
     DECLARE_ONCE_DETECTOR(_set_finishing_once);

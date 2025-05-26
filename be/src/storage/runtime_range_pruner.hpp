@@ -83,7 +83,6 @@ struct RuntimeColumnPredicateBuilder {
             // applied global-dict optimized column
             auto* minmax = rf->get_min_max_filter();
             if (minmax) {
-                LOG(INFO) << "TRACE in minmax:" << in_filter;
                 if constexpr (ltype == TYPE_VARCHAR) {
                     auto cid = parser->column_id(*slot);
                     if (auto iter = global_dictmaps->find(cid); iter != global_dictmaps->end()) {
