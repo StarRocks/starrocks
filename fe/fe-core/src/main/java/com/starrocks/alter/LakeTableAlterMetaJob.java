@@ -72,7 +72,7 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
         }
         if (metaType == TTabletMetaType.ENABLE_PARTITION_AGGREGATION) {
             return TabletMetadataUpdateAgentTaskFactory.createUpdatePartitionAggregationTask(nodeId, tablets,
-                        getAggregateTabletMetadata());
+                        isAggregateTabletMetadata());
         }
         return null;
     }
@@ -94,7 +94,7 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
             table.getTableProperty().buildPersistentIndexType();
         }
         if (metaType == TTabletMetaType.ENABLE_PARTITION_AGGREGATION) {
-            table.setEnablePartitionAggregation(getAggregateTabletMetadata());
+            table.setEnablePartitionAggregation(isAggregateTabletMetadata());
         }
     }
 

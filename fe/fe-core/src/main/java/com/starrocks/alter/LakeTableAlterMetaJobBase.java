@@ -623,7 +623,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         GlobalStateMgr.getCurrentState().getLocalMetastore().handleMVRepair(db, table, partitionRepairInfos);
     }
 
-    public boolean getAggregateTabletMetadata() {
+    public boolean isAggregateTabletMetadata() {
         return metadataOp == MetadataOp.AGGREGATE;
     }
 }
