@@ -35,7 +35,7 @@ CREATE USER <username> IDENTIFIED WITH authentication_jwt AS
 
 属性：
 
-- `jwks_url`: JSON Web Key Set (JWKS) 服务的 URL 或 `fe/conf` 目录下本地文件的路径。
+- `jwks_url`: JSON Web Key Set (JWKS) 服务的 URL 或 `fe/conf` 目录下公钥本地文件的路径。
 - `principal_field`: 用于标识 JWT 中主体 (`sub`) 的字段的字符串。默认值为 `sub`。此字段的值必须与登录 StarRocks 的用户名相同。
 - `required_issuer` (可选): 用于标识 JWT 中发行者 (`iss`) 的字符串列表。仅当列表中的某个值与 JWT 发行者匹配时，JWT 才被视为有效。
 - `required_audience` (可选): 用于标识 JWT 中受众 (`aud`) 的字符串列表。仅当列表中的某个值与 JWT 受众匹配时，JWT 才被视为有效。
@@ -48,7 +48,7 @@ CREATE USER tom IDENTIFIED WITH authentication_jwt AS
   "jwks_url": "http://localhost:38080/realms/master/protocol/jwt/certs",
   "principal_field": "preferred_username",
   "required_issuer": "http://localhost:38080/realms/master",
-  "required_audience": "12345"
+  "required_audience": "starrocks"
 }';
 ```
 
