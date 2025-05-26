@@ -74,7 +74,7 @@ public:
             return Status::NotSupported("ngram search's second parameter must be const");
         }
 
-        const Slice& needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_column);
+        const Slice needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_column);
         if (needle.get_size() > MAX_STRING_SIZE) {
             return Status::NotSupported("ngram function's second parameter is larger than 2^15");
         }
@@ -127,7 +127,7 @@ public:
         }
 
         auto const& needle_column = context->get_constant_column(1);
-        const Slice& needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_column);
+        const Slice needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_column);
 
         auto const& gram_num_column = context->get_constant_column(2);
         size_t gram_num = ColumnHelper::get_const_value<TYPE_INT>(gram_num_column);
@@ -141,7 +141,7 @@ public:
 
         // all not-null const, so we just calculate the result once
         if (context->is_notnull_constant_column(0)) {
-            const Slice& haystack = ColumnHelper::get_const_value<TYPE_VARCHAR>(context->get_constant_column(0));
+            const Slice haystack = ColumnHelper::get_const_value<TYPE_VARCHAR>(context->get_constant_column(0));
             state->result = haystack_const_and_needle_const(haystack, state->publicHashMap, context, gram_num);
         }
         return Status::OK();
