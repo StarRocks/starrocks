@@ -284,6 +284,16 @@ public class CreateTableLikeTest {
                     (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(newDbName).getTable("table_like_10");
         Assert.assertEquals(new RandomDistributionInfo(7), table.getDefaultDistributionInfo());
         Assert.assertEquals("1", table.getProperties().get("replication_num"));
+
+        // 11. create table like with primary key and double quotation in column comment
+        String createTableSql11 = "create table test.testTbl11\n" + "(k1 int comment \"xx\\\"xx\", k2 int)\n"
+                + "primary key(k1)\n" + "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1'); ";
+        String createTableLikeSql11 = "create table test.testTbl11_like like test.testTbl11";
+        String newDbName11 = "test";
+        String newTblName11 = "testTbl11_like";
+        String existedTblName11 = "testTbl11";
+        checkCreateOlapTableLike(createTableSql11, createTableLikeSql11, newDbName11, newDbName11, newTblName11,
+                existedTblName11);
     }
 
     @Test
