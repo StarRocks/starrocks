@@ -70,7 +70,7 @@ public:
         dict_footer.set_type(starrocks::DATA_PAGE);
         starrocks::DataPageFooterPB* dict_page_footer = dict_footer.mutable_data_page_footer();
         dict_page_footer->set_nullmap_size(0);
-        std::unique_ptr<char[]> dict_page = nullptr;
+        std::unique_ptr<std::vector<uint8_t>> dict_page = nullptr;
         Status st = StoragePageDecoder::decode_page(&dict_footer, 0, starrocks::BIT_SHUFFLE, &dict_page, &encoded_dict);
         ASSERT_TRUE(st.ok());
 
@@ -85,7 +85,7 @@ public:
         footer_data.set_type(DATA_PAGE);
         starrocks::DataPageFooterPB* data_page_footer = footer_data.mutable_data_page_footer();
         data_page_footer->set_nullmap_size(0);
-        std::unique_ptr<char[]> data_page = nullptr;
+        std::unique_ptr<std::vector<uint8_t>> data_page = nullptr;
         st = StoragePageDecoder::decode_page(&footer_data, 0, starrocks::DICT_ENCODING, &data_page, &encoded_data);
         ASSERT_TRUE(st.ok());
 
@@ -350,7 +350,7 @@ TEST_F(DictPageTest, TestLargeDataSize) {
     dict_footer.set_type(starrocks::DATA_PAGE);
     starrocks::DataPageFooterPB* dict_page_footer = dict_footer.mutable_data_page_footer();
     dict_page_footer->set_nullmap_size(0);
-    std::unique_ptr<char[]> dict_page = nullptr;
+    std::unique_ptr<std::vector<uint8_t>> dict_page = nullptr;
     Status st = StoragePageDecoder::decode_page(&dict_footer, 0, starrocks::BIT_SHUFFLE, &dict_page, &encoded_dict);
     ASSERT_TRUE(st.ok());
     auto dict_page_decoder = std::make_unique<BitShufflePageDecoder<TYPE_BIGINT>>(encoded_dict);
@@ -364,7 +364,7 @@ TEST_F(DictPageTest, TestLargeDataSize) {
         footer.set_type(DATA_PAGE);
         DataPageFooterPB* data_page_footer = footer.mutable_data_page_footer();
         data_page_footer->set_nullmap_size(0);
-        std::unique_ptr<char[]> page = nullptr;
+        std::unique_ptr<std::vector<uint8_t>> page = nullptr;
 
         st = StoragePageDecoder::decode_page(&footer, 0, starrocks::DICT_ENCODING, &page, &encoded_data);
         ASSERT_TRUE(st.ok());
