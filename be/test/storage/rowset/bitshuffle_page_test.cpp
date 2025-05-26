@@ -90,7 +90,7 @@ public:
         footer.set_type(starrocks::DATA_PAGE);
         starrocks::DataPageFooterPB* data_page_footer = footer.mutable_data_page_footer();
         data_page_footer->set_nullmap_size(0);
-        std::unique_ptr<char[]> page = nullptr;
+        std::unique_ptr<std::vector<uint8_t>> page = nullptr;
 
         Status st = StoragePageDecoder::decode_page(&footer, 0, starrocks::BIT_SHUFFLE, &page, &encoded_data);
         ASSERT_TRUE(st.ok());
@@ -150,7 +150,7 @@ public:
         OwnedSlice s = page_builder.finish()->build();
 
         Slice encoded_data = s.slice();
-        std::unique_ptr<char[]> page = nullptr;
+        std::unique_ptr<std::vector<uint8_t>> page = nullptr;
         {
             starrocks::PageFooterPB footer;
             footer.set_type(starrocks::DATA_PAGE);
@@ -262,7 +262,7 @@ public:
         footer.set_type(starrocks::DATA_PAGE);
         starrocks::DataPageFooterPB* data_page_footer = footer.mutable_data_page_footer();
         data_page_footer->set_nullmap_size(0);
-        std::unique_ptr<char[]> page = nullptr;
+        std::unique_ptr<std::vector<uint8_t>> page = nullptr;
         Status st = StoragePageDecoder::decode_page(&footer, 0, starrocks::BIT_SHUFFLE, &page, &encoded_data);
         ASSERT_TRUE(st.ok());
 

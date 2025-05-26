@@ -18,39 +18,25 @@
 
 #include <cstring>
 #include <iterator>
-#include <map>
-#include <sstream>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include "cache/datacache.h"
-#include "column/column.h"
-#include "column/column_helper.h"
-#include "column/const_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "common/config.h"
-#include "common/global_types.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "exec/hdfs_scanner.h"
-#include "exprs/expr_context.h"
-#include "exprs/runtime_filter.h"
-#include "exprs/runtime_filter_bank.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/predicate_filter_evaluator.h"
-#include "formats/parquet/scalar_column_reader.h"
-#include "formats/parquet/schema.h"
-#include "formats/parquet/statistics_helper.h"
 #include "formats/parquet/utils.h"
 #include "fs/fs.h"
 #include "gen_cpp/parquet_types.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "io/shared_buffered_input_stream.h"
-#include "runtime/descriptors.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks::parquet {
 
