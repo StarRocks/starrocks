@@ -107,7 +107,7 @@ Status PageReader::_read_and_deserialize_header(bool need_fill_cache) {
 
     RETURN_IF_ERROR(_stream->seek(_offset));
     BufferPtr tmp_page_buffer;
-    Buffer* page_buffer;
+    std::vector<uint8_t>* page_buffer;
     if (need_fill_cache) {
         DCHECK(_cache_buf);
         page_buffer = _cache_buf.get();
