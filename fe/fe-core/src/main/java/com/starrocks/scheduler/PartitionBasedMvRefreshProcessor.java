@@ -390,7 +390,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
         // throw the last exception if all retries failed
         String errorMsg = MvUtils.shrinkToSize(DebugUtil.getRootStackTrace(lastException), MAX_FIELD_VARCHAR_LENGTH);
-        throw new DmlException("Refresh mv %s failed after %s/%s times, error-msg : " +
+        throw new DmlException("Refresh mv %s failed after %s times, try lock failed: %s, error-msg : " +
                 "%s", lastException, mv.getName(), refreshFailedTimes, lockFailedTimes, errorMsg);
     }
 
@@ -742,8 +742,14 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             Table table = optTable.get();
 
             // refresh old table
+<<<<<<< HEAD
             if (table.isNativeTableOrMaterializedView() || table.isHiveView()) {
                 logger.debug("No need to refresh table:{} because it is native table or materialized view or connector view",
+=======
+            Table table = optTable.get();
+            if (table.isNativeTableOrMaterializedView() || table.isView()) {
+                logger.debug("No need to refresh table:{} because it is native table or mv or connector view",
+>>>>>>> 8cf3530f59 ([BugFix] Fix mv refresh when iceberg base table is recreated (#59287))
                         baseTableInfo.getTableInfoStr());
                 continue;
             }
@@ -830,6 +836,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             if (!partitionDataInfos.containsKey(partitionName)) {
                 continue;
             }
+<<<<<<< HEAD
             MaterializedView.BasePartitionInfo basePartitionInfo = tablePartitionInfoMap.get(partitionName);
             Optional<HivePartitionDataInfo> partitionDataInfoOptional = partitionDataInfos.get(partitionName);
             if (partitionDataInfoOptional.isEmpty()) {
@@ -842,11 +849,19 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                         || basePartitionInfo.getFileNumber() != hivePartitionDataInfo.getFileNumber()) {
                     updatedPartitionNames.add(partitionNames.get(i));
                 }
+=======
+
+            Table newTable = optNewTable.get();
+            // only collect to-repair tables when the table is not the same as the old one by checking the table identifier
+            if (!baseTableInfo.getTableIdentifier().equals(table.getTableIdentifier())) {
+                toRepairTables.add(Pair.create(newTable, baseTableInfo));
+>>>>>>> 8cf3530f59 ([BugFix] Fix mv refresh when iceberg base table is recreated (#59287))
             }
         }
         return updatedPartitionNames;
     }
 
+<<<<<<< HEAD
     private void repairMvBaseTableMeta(
             MaterializedView mv, BaseTableInfo oldBaseTableInfo,
             Table newTable, List<String> updatedPartitionNames) {
@@ -913,6 +928,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     newBaseTableInfo.getTableIdentifier(), newConnectorTableInfo);
         } finally {
             locker.unLockTableWithIntensiveDbLock(db, mv, LockType.WRITE);
+=======
+        // do repair if needed
+        if (!toRepairTables.isEmpty()) {
+            MVPCTMetaRepairer.repairMetaIfNeeded(db, mv, toRepairTables);
+>>>>>>> 8cf3530f59 ([BugFix] Fix mv refresh when iceberg base table is recreated (#59287))
         }
     }
 
