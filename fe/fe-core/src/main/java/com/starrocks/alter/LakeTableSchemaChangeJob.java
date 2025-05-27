@@ -162,6 +162,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     private MarkedCountDownLatch<Long, Long> createReplicaLatch = null;
     private AtomicBoolean waitingCreatingReplica = new AtomicBoolean(false);
     private AtomicBoolean isCancelling = new AtomicBoolean(false);
+    private boolean enablePartitionAggregation = false;
 
     // for deserialization
     public LakeTableSchemaChangeJob() {
@@ -767,6 +768,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     boolean readyToPublishVersion() throws AlterCancelException {
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             OlapTable table = getTableOrThrow(db, tableId);
+            enablePartitionAggregation = table.enablePartitionAggregation();
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                 Preconditions.checkState(partition != null, partitionId);
@@ -794,7 +796,12 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 long commitVersion = commitVersionMap.get(partitionId);
                 Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
                 for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
-                    Utils.publishVersion(shadowIndex.getTablets(), txnInfo, 1, commitVersion, warehouseId);
+                    if (!enablePartitionAggregation) {
+                        Utils.publishVersion(shadowIndex.getTablets(), txnInfo, 1, commitVersion, warehouseId);
+                    } else {
+                        Utils.aggregatePublishVersion(shadowIndex.getTablets(), Lists.newArrayList(txnInfo), 1, commitVersion,
+                                null, null, warehouseId, null);
+                    }
                 }
             }
             return true;
