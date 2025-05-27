@@ -238,6 +238,11 @@ set(EXEC_FILES
         ./storage/protobuf_file_test.cpp
         ./storage/page_cache_test.cpp
         ./storage/persistent_index_test.cpp
+<<<<<<< HEAD
+=======
+        ./storage/persistent_index_load_executor_test.cpp
+        ./storage/persistent_index_snapshot_load_test.cpp
+>>>>>>> 2f1ec5e920 ([BugFix] fix persistent index compatibility issue when migrate between different cpu arch (#59219))
         ./storage/primary_index_test.cpp
         ./storage/primary_key_encoder_test.cpp
         ./storage/roaring2range_test.cpp

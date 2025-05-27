@@ -73,7 +73,7 @@ struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
 
     void serialize(uint8_t* dst) const {
         phmap::InMemoryOutput output(reinterpret_cast<char*>(dst));
-        set.dump(output);
+        [[maybe_unused]] auto err = set.dump(output);
         DCHECK(output.length() == set.dump_bound());
     }
 
@@ -81,11 +81,18 @@ struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
         phmap::InMemoryInput input(reinterpret_cast<const char*>(src));
         auto old_size = set.size();
         if (old_size == 0) {
+<<<<<<< HEAD
             set.load(input);
             return set.size() * phmap::item_serialize_size<HashSet<T>>::value;
         } else {
             HashSet<T> set_src;
             set_src.load(input);
+=======
+            [[maybe_unused]] auto err = set.load(input);
+        } else {
+            MyHashSet set_src;
+            [[maybe_unused]] auto err = set_src.load(input);
+>>>>>>> 2f1ec5e920 ([BugFix] fix persistent index compatibility issue when migrate between different cpu arch (#59219))
             set.merge(set_src);
             return (set.size() - old_size) * phmap::item_serialize_size<HashSet<T>>::value;
         }
