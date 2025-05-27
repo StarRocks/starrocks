@@ -102,9 +102,18 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     @SerializedName(value = "rowCount")
     private long rowCount;
 
+    // Virtual buckets. Each virtual bucket saves a tablet id.
+    // We divide data into virtual buckets and then arrange these virtual buckets
+    // into physical buckets, which are tablets.
+    // Each virtual bucket is associated with a tablet. Multiple virtual buckets are
+    // allowed to be associated with the same tablet.
+    @SerializedName(value = "virtualBuckets")
+    private List<Long> virtualBuckets;
+
     private Map<Long, Tablet> idToTablets;
+
+    // Deprecated, virtual buckets keeps tablet order, keep this for compatibility
     @SerializedName(value = "tablets")
-    // this is for keeping tablet order
     private List<Tablet> tablets;
 
     @SerializedName(value = "shardGroupId")
@@ -143,6 +152,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     public MaterializedIndex(long id, @Nullable IndexState state, long visibleTxnId, long shardGroupId) {
         this.id = id;
         this.state = state == null ? IndexState.NORMAL : state;
+        this.virtualBuckets = new ArrayList<>();
         this.idToTablets = new HashMap<>();
         this.tablets = new ArrayList<>();
         this.rowCount = 0;
@@ -184,6 +194,10 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         return shardGroupId;
     }
 
+    public List<Long> getVirtualBuckets() {
+        return virtualBuckets;
+    }
+
     public List<Tablet> getTablets() {
         return tablets;
     }
@@ -201,6 +215,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     }
 
     public void clearTabletsForRestore() {
+        virtualBuckets.clear();
         idToTablets.clear();
         tablets.clear();
     }
@@ -210,6 +225,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     }
 
     public void addTablet(Tablet tablet, TabletMeta tabletMeta, boolean updateInvertedIndex) {
+        virtualBuckets.add(tablet.getId());
         idToTablets.put(tablet.getId(), tablet);
         tablets.add(tablet);
         if (updateInvertedIndex) {
@@ -280,6 +296,16 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         }
     }
 
+    public List<Integer> getVirtualBucketsByTabletId(long tabletId) {
+        List<Integer> virtualBucketIndexes = new ArrayList<>();
+        for (int i = 0; i < virtualBuckets.size(); ++i) {
+            if (virtualBuckets.get(i).longValue() == tabletId) {
+                virtualBucketIndexes.add(i);
+            }
+        }
+        return virtualBucketIndexes;
+    }
+
     public int getTabletOrderIdx(long tabletId) {
         int idx = 0;
         for (Tablet tablet : tablets) {
@@ -312,7 +338,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(idToTablets);
+        return Objects.hashCode(virtualBuckets, idToTablets);
     }
 
     @Override
@@ -324,8 +350,8 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
             return false;
         }
         MaterializedIndex other = (MaterializedIndex) obj;
-        return idToTablets.equals(other.idToTablets) && state.equals(other.state) && (rowCount == other.rowCount) &&
-                (visibleTxnId == other.visibleTxnId);
+        return virtualBuckets.equals(other.virtualBuckets) && idToTablets.equals(other.idToTablets)
+                && state.equals(other.state) && (rowCount == other.rowCount) && (visibleTxnId == other.visibleTxnId);
     }
 
     @Override
@@ -335,8 +361,10 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         buffer.append("index state: ").append(state.name()).append("; ");
         buffer.append("shardGroupId: ").append(shardGroupId).append("; ");
         buffer.append("row count: ").append(rowCount).append("; ");
-        buffer.append("tablets size: ").append(tablets.size()).append("; ");
         buffer.append("visibleTxnId: ").append(visibleTxnId).append("; ");
+        buffer.append("virtual buckets size: ").append(virtualBuckets.size()).append("; ");
+        buffer.append("virtual buckets: ").append(virtualBuckets).append("; ");
+        buffer.append("tablets size: ").append(tablets.size()).append("; ");
         buffer.append("tablets: [");
         for (Tablet tablet : tablets) {
             buffer.append("tablet: ").append(tablet.toString()).append(", ");
@@ -351,6 +379,17 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         // build "idToTablets" from "tablets"
         for (Tablet tablet : tablets) {
             idToTablets.put(tablet.getId(), tablet);
+        }
+
+        // Build "virtualBuckets" from "tablets" when upgrading from old versions
+        // Before StarRocks didn't have virtual buckets, it would be empty when loading
+        // from the previous image.
+        // In this situation, the virtual bucket is equivalent to the physical tablet.
+        // So just fill the virtual buckets with the physical tablets.
+        if (virtualBuckets.isEmpty()) {
+            for (Tablet tablet : tablets) {
+                virtualBuckets.add(tablet.getId());
+            }
         }
     }
 }
