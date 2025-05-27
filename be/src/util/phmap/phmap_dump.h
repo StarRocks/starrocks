@@ -82,65 +82,108 @@ size_t raw_hash_set<Policy, Hash, Eq, Alloc>::dump_bound() const {
 
 template <class Policy, class Hash, class Eq, class Alloc>
 template <typename OutputArchive>
-bool raw_hash_set<Policy, Hash, Eq, Alloc>::dump(OutputArchive& ar) const {
+starrocks::Status raw_hash_set<Policy, Hash, Eq, Alloc>::dump(OutputArchive& ar) const {
     static_assert(type_traits_internal::IsTriviallyCopyable<value_type>::value,
                   "value_type should be trivially copyable");
 
-    if (!ar.dump(size_)) {
-        std::cerr << "Failed to dump size_" << std::endl;
-        return false;
+    if (!ar.dump(static_cast<uint64_t>(size_))) {
+        return starrocks::Status::InternalError("Failed to dump size_");
     }
     if (size_ == 0) {
-        return true;
+        return starrocks::Status::OK();
     }
-    if (!ar.dump(capacity_)) {
-        std::cerr << "Failed to dump capacity_" << std::endl;
-        return false;
+    if (!ar.dump(static_cast<uint64_t>(capacity_))) {
+        return starrocks::Status::InternalError("Failed to dump capacity_");
     }
     SanitizerUnpoisonMemoryRegion(ctrl_, sizeof(ctrl_t) * (capacity_ + Group::kWidth + 1));
     if (!ar.dump(reinterpret_cast<char*>(ctrl_), sizeof(ctrl_t) * (capacity_ + Group::kWidth + 1))) {
-        std::cerr << "Failed to dump ctrl_" << std::endl;
-        return false;
+        return starrocks::Status::InternalError("Failed to dump ctrl_");
     }
     SanitizerUnpoisonMemoryRegion(slots_, sizeof(slot_type) * capacity_);
     if (!ar.dump(reinterpret_cast<char*>(slots_), sizeof(slot_type) * capacity_)) {
-        std::cerr << "Failed to dump slot_" << std::endl;
+        return starrocks::Status::InternalError("Failed to dump slots_");
+    }
+    return starrocks::Status::OK();
+}
+
+static inline bool safe_convert_from_uint64(uint64_t value, size_t& result) {
+    if (value > std::numeric_limits<size_t>::max()) {
         return false;
     }
+    result = static_cast<size_t>(value);
     return true;
 }
 
 template <class Policy, class Hash, class Eq, class Alloc>
 template <typename InputArchive>
-bool raw_hash_set<Policy, Hash, Eq, Alloc>::load(InputArchive& ar) {
+starrocks::Status raw_hash_set<Policy, Hash, Eq, Alloc>::load(InputArchive& ar) {
     static_assert(type_traits_internal::IsTriviallyCopyable<value_type>::value,
                   "value_type should be trivially copyable");
     raw_hash_set<Policy, Hash, Eq, Alloc>().swap(*this); // clear any existing content
-    if (!ar.load(&size_)) {
-        std::cerr << "Failed to load size_" << std::endl;
-        return false;
+
+    uint64_t size_64;
+    if (!ar.load(&size_64)) {
+        return starrocks::Status::InternalError("Failed to load size_");
     }
+
+    if (!safe_convert_from_uint64(size_64, size_)) {
+        // If size_64 is larger than the maximum value of size_t, we cannot safely convert it.
+        return starrocks::Status::InternalError("Loaded size too large for current platform's size_t");
+    }
+
     if (size_ == 0) {
-        return true;
+        return starrocks::Status::OK();
     }
-    if (!ar.load(&capacity_)) {
-        std::cerr << "Failed to load capacity_" << std::endl;
-        return false;
+
+    uint64_t capacity_64;
+    if (!ar.load(&capacity_64)) {
+        return starrocks::Status::InternalError("Failed to load capacity_");
+    }
+    if (!safe_convert_from_uint64(capacity_64, capacity_)) {
+        // If capacity_64 is larger than the maximum value of size_t, we cannot safely convert it.
+        return starrocks::Status::InternalError("Loaded capacity too large for current platform's size_t");
     }
 
     // allocate memory for ctrl_ and slots_
     initialize_slots();
     SanitizerUnpoisonMemoryRegion(ctrl_, sizeof(ctrl_t) * (capacity_ + Group::kWidth + 1));
     if (!ar.load(reinterpret_cast<char*>(ctrl_), sizeof(ctrl_t) * (capacity_ + Group::kWidth + 1))) {
-        std::cerr << "Failed to load ctrl" << std::endl;
-        return false;
+        return starrocks::Status::InternalError("Failed to load ctrl_");
     }
     SanitizerUnpoisonMemoryRegion(slots_, sizeof(slot_type) * capacity_);
     if (!ar.load(reinterpret_cast<char*>(slots_), sizeof(slot_type) * capacity_)) {
-        std::cerr << "Failed to load slot" << std::endl;
-        return false;
+        return starrocks::Status::InternalError("Failed to load slots_");
     }
-    return true;
+    return starrocks::Status::OK();
+}
+
+template <class Policy, class Hash, class Eq, class Alloc>
+template <typename InputArchive>
+starrocks::Status raw_hash_set<Policy, Hash, Eq, Alloc>::completeness_check(InputArchive& ar) {
+    static_assert(type_traits_internal::IsTriviallyCopyable<value_type>::value,
+                  "value_type should be trivially copyable");
+    raw_hash_set<Policy, Hash, Eq, Alloc>().swap(*this); // clear any existing content
+    uint64_t size = 0;
+    if (!ar.load(&size)) {
+        return starrocks::Status::InternalError("Failed to load size");
+    }
+    if (size == 0) {
+        return starrocks::Status::OK();
+    }
+    uint64_t capacity = 0;
+    if (!ar.load(&capacity)) {
+        return starrocks::Status::InternalError("Failed to load capacity");
+    }
+
+    // skip ctrl
+    if (!ar.skip(sizeof(ctrl_t) * (capacity + Group::kWidth + 1))) {
+        return starrocks::Status::InternalError("Failed to skip ctrl");
+    }
+    // skip slot
+    if (!ar.skip(sizeof(slot_type) * capacity)) {
+        return starrocks::Status::InternalError("Failed to skip slot");
+    }
+    return starrocks::Status::OK();
 }
 
 // ------------------------------------------------------------------------
@@ -294,6 +337,22 @@ public:
         if (!ret) return ret;
         ifs_.read(reinterpret_cast<char*>(v), sizeof(V));
         return !ifs_.fail();
+    }
+
+    void reset() {
+        ifs_.clear();
+        ifs_.seekg(0, std::ios_base::beg);
+    }
+
+    bool skip(size_t sz) {
+        ifs_.seekg(sz, std::ios_base::cur);
+        return !ifs_.fail();
+    }
+
+    bool eof() {
+        char dummy;
+        ifs_.get(dummy);
+        return ifs_.eof();
     }
 
 private:

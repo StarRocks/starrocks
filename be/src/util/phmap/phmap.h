@@ -82,6 +82,7 @@
 #include <utility>
 #include <vector>
 
+#include "common/status.h"
 #include "phmap_base.h"
 #include "phmap_fwd_decl.h"
 #include "phmap_hash.h"
@@ -1537,10 +1538,13 @@ public:
     size_t dump_bound() const;
 
     template <typename OutputArchive>
-    bool dump(OutputArchive&) const;
+    starrocks::Status dump(OutputArchive&) const;
 
     template <typename InputArchive>
-    bool load(InputArchive&);
+    starrocks::Status load(InputArchive&);
+
+    template <typename InputArchive>
+    starrocks::Status completeness_check(InputArchive& ar);
 #endif
 
     void rehash(size_t n) {
