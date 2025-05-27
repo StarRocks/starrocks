@@ -85,6 +85,8 @@ public class CloudConfigurationConstants {
     public static final String AZURE_BLOB_CONTAINER = "azure.blob.container";
     public static final String AZURE_BLOB_SAS_TOKEN = "azure.blob.sas_token";
     public static final String AZURE_BLOB_OAUTH2_CLIENT_ID = "azure.blob.oauth2_client_id";
+    public static final String AZURE_BLOB_OAUTH2_CLIENT_SECRET = "azure.blob.oauth2_client_secret";
+    public static final String AZURE_BLOB_OAUTH2_TENANT_ID = "azure.blob.oauth2_tenant_id";
     // For Azure Data Lake Storage Gen1 (ADLS1)
     public static final String AZURE_ADLS1_USE_MANAGED_SERVICE_IDENTITY = "azure.adls1.use_managed_service_identity";
     public static final String AZURE_ADLS1_OAUTH2_CLIENT_ID = "azure.adls1.oauth2_client_id";

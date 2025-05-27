@@ -88,6 +88,8 @@ const AzureCloudConfiguration CloudConfigurationFactory::create_azure(
     azure_cloud_credential.shared_key = get_or_default(properties, AZURE_BLOB_SHARED_KEY, std::string());
     azure_cloud_credential.sas_token = get_or_default(properties, AZURE_BLOB_SAS_TOKEN, std::string());
     azure_cloud_credential.client_id = get_or_default(properties, AZURE_BLOB_OAUTH2_CLIENT_ID, std::string());
+    azure_cloud_credential.client_secret = get_or_default(properties, AZURE_BLOB_OAUTH2_CLIENT_SECRET, std::string());
+    azure_cloud_credential.tenant_id = get_or_default(properties, AZURE_BLOB_OAUTH2_TENANT_ID, std::string());
 
     AzureCloudConfiguration azure_cloud_configuration{};
     azure_cloud_configuration.azure_cloud_credential = azure_cloud_credential;
