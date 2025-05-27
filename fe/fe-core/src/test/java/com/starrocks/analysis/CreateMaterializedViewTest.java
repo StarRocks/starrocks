@@ -48,6 +48,7 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -4684,5 +4685,39 @@ public class CreateMaterializedViewTest {
             Assert.fail(e.getMessage());
         }
         starRocksAssert.dropTable("list_partition_tbl1");
+    }
+
+    @Test
+    public void testRefreshMVWithExternalTable1() throws Exception {
+        new MockUp<MaterializedViewAnalyzer>() {
+            @Mock
+            public boolean isExternalTableFromResource(Table t) {
+                return true;
+            }
+        };
+        String sql = "create materialized view test_mv11 " +
+                "distributed by hash(k2) buckets 10 " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")" +
+                "as select tbl1.k1 ss, tbl1.k2 from mysql_external_table tbl1;";
+        starRocksAssert.withMaterializedView(sql);
+        starRocksAssert.refreshMV(connectContext, "test_mv11");
+        starRocksAssert.dropMaterializedView("test_mv11");
+    }
+
+    @Test
+    public void testRefreshMVWithExternalTable2() throws Exception {
+        String sql = "create materialized view test_mv11 " +
+                "distributed by hash(k2) buckets 10 " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")" +
+                "as select tbl1.k1 ss, tbl1.k2 from mysql_external_table tbl1;";
+        starRocksAssert.withMaterializedView(sql);
+        starRocksAssert.refreshMV(connectContext, "test_mv11");
+        starRocksAssert.dropMaterializedView("test_mv11");
     }
 }
