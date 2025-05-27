@@ -165,8 +165,10 @@ public class ExchangeNode extends PlanNode {
 
     @Override
     public final void setLimit(long limit) {
-        super.setLimit(limit);
-        cardinality = Math.min(limit, cardinality);
+        if (limit != -1) {
+            super.setLimit(limit);
+            cardinality = Math.min(limit, cardinality);
+        }
     }
 
     @Override
