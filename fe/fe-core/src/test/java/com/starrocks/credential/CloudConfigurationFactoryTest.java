@@ -174,6 +174,25 @@ public class CloudConfigurationFactoryTest {
             Map<String, String> map = new HashMap<String, String>() {
                 {
                     put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID, "client_id_xxx");
+                    put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_SECRET, "client_secret_xxx");
+                    put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_TENANT_ID, "tenant_id_xxx");
+                }
+            };
+
+            CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
+            TCloudConfiguration tc = new TCloudConfiguration();
+            cc.toThrift(tc);
+            Map<String, String> cloudProperties = tc.getCloud_properties();
+            Assert.assertEquals("client_id_xxx", cloudProperties.get(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID));
+            Assert.assertEquals("client_secret_xxx",
+                    cloudProperties.get(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_SECRET));
+            Assert.assertEquals("tenant_id_xxx", cloudProperties.get(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_TENANT_ID));
+        }
+
+        {
+            Map<String, String> map = new HashMap<String, String>() {
+                {
+                    put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID, "client_id_xxx");
                 }
             };
 
