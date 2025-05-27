@@ -42,7 +42,8 @@ import java.util.List;
  */
 public class LakeTabletsProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("TabletId").add("BackendId").add("DataSize").add("RowCount").add("MinVersion")
+            .add("TabletId").add("BackendId").add("DataSize").add("RowCount")
+            .add("MinVersion").add("VirtualBuckets")
             .build();
 
     private final Database db;
@@ -84,6 +85,7 @@ public class LakeTabletsProcDir implements ProcDirInterface {
                 tabletInfo.add(new ByteSizeValue(lakeTablet.getDataSize(true)));
                 tabletInfo.add(lakeTablet.getRowCount(0L));
                 tabletInfo.add(lakeTablet.getMinVersion());
+                tabletInfo.add(index.getVirtualBucketsByTabletId(lakeTablet.getId()).toString());
                 tabletInfos.add(tabletInfo);
             }
         } finally {
@@ -141,7 +143,7 @@ public class LakeTabletsProcDir implements ProcDirInterface {
                 throw new AnalysisException("Can't find tablet id: " + tabletIdStr);
             }
             Preconditions.checkState(tablet instanceof LakeTablet);
-            return new LakeTabletProcNode((LakeTablet) tablet);
+            return new LakeTabletProcNode(index, (LakeTablet) tablet);
         } finally {
             locker.unLockDatabase(db.getId(), LockType.READ);
         }
@@ -149,9 +151,11 @@ public class LakeTabletsProcDir implements ProcDirInterface {
 
     // Handle showing single tablet info
     public static class LakeTabletProcNode implements ProcNodeInterface {
+        private final MaterializedIndex index;
         private final LakeTablet tablet;
 
-        public LakeTabletProcNode(LakeTablet tablet) {
+        public LakeTabletProcNode(MaterializedIndex index, LakeTablet tablet) {
+            this.index = index;
             this.tablet = tablet;
         }
 
@@ -167,7 +171,8 @@ public class LakeTabletsProcDir implements ProcDirInterface {
                     new Gson().toJson(tablet.getBackendIds(warehouseId)),
                     new ByteSizeValue(tablet.getDataSize(true)).toString(),
                     String.valueOf(tablet.getRowCount(0L)),
-                    String.valueOf(tablet.getMinVersion())
+                    String.valueOf(tablet.getMinVersion()),
+                    index.getVirtualBucketsByTabletId(tablet.getId()).toString()
             );
             result.addRow(row);
 
