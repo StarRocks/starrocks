@@ -48,6 +48,7 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -4685,4 +4686,148 @@ public class CreateMaterializedViewTest {
         }
         starRocksAssert.dropTable("list_partition_tbl1");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testCreateMaterializedViewOnMultiPartitionColumns1() throws Exception {
+        String createSQL = "CREATE TABLE test.list_partition_tbl1 (\n" +
+                "      id BIGINT,\n" +
+                "      age SMALLINT,\n" +
+                "      dt datetime,\n" +
+                "      province VARCHAR(64) not null\n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY province, date_trunc('day', dt) \n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")";
+        starRocksAssert.withTable(createSQL);
+
+        String sql = "create materialized view list_partition_mv1 " +
+                "PARTITION BY (pr1, date_trunc('day', dt1)) \n" +
+                "distributed by hash(dt, province) buckets 10 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select dt as dt1, province as pr1, avg(age) from list_partition_tbl1 group by dt, province;";
+        try {
+            starRocksAssert.withMaterializedView(sql);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Please check the partition expression pr1, " +
+                    "it should refer base table's partition column directly."));
+        }
+        starRocksAssert.dropTable("list_partition_tbl1");
+    }
+
+    @Test
+    public void testCreateMaterializedViewOnMultiPartitionColumns2() throws Exception {
+        String createSQL = "CREATE TABLE test.list_partition_tbl1 (\n" +
+                "      id BIGINT,\n" +
+                "      age SMALLINT,\n" +
+                "      dt datetime,\n" +
+                "      province VARCHAR(64) not null\n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY province, date_trunc('day', dt) \n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")";
+        starRocksAssert.withTable(createSQL);
+
+        String sql = "create materialized view list_partition_mv1 " +
+                "PARTITION BY (date_trunc('day', dt)) \n" +
+                "distributed by hash(dt, province) buckets 10 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select dt as dt, province , avg(age) from list_partition_tbl1 group by dt, province;";
+        try {
+            starRocksAssert.withMaterializedView(sql);
+        } catch (Exception e) {
+            Assert.fail();
+        }
+        starRocksAssert.dropTable("list_partition_tbl1");
+    }
+
+    @Test
+    public void testCreateMaterializedViewOnMultiPartitionColumnsActive1() throws Exception {
+        String createSQL = "CREATE TABLE test.list_partition_tbl1 (\n" +
+                "      id BIGINT,\n" +
+                "      age SMALLINT,\n" +
+                "      dt datetime,\n" +
+                "      province VARCHAR(64) not null\n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY province, date_trunc('day', dt) \n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")";
+        starRocksAssert.withTable(createSQL);
+
+        String sql = "create materialized view list_partition_mv1 " +
+                "PARTITION BY (province, date_trunc('day', dt)) \n" +
+                "distributed by hash(dt, province) buckets 10 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select dt, province, avg(age) from list_partition_tbl1 group by dt, province;";
+        starRocksAssert.withMaterializedView(sql);
+        MaterializedView mv = (MaterializedView) starRocksAssert.getTable("test", "list_partition_mv1");
+
+        String result = mv.getMaterializedViewDdlStmt(false, false);
+        System.out.println(result);
+
+        sql = "alter materialized view list_partition_mv1 inactive";
+        starRocksAssert.alterMvProperties(sql);
+
+        sql = "alter materialized view list_partition_mv1 active";
+        starRocksAssert.alterMvProperties(sql);
+
+        mv = (MaterializedView) starRocksAssert.getTable("test", "list_partition_mv1");
+        String result2 = mv.getMaterializedViewDdlStmt(false, false);
+        Assert.assertTrue(result2.equals(result));
+
+        starRocksAssert.dropTable("list_partition_tbl1");
+    }
+
+    @Test
+    public void testRefreshMVWithExternalTable1() throws Exception {
+        new MockUp<MaterializedViewAnalyzer>() {
+            @Mock
+            public static boolean isExternalTableFromResource(Table t) {
+                return true;
+            }
+        };
+        String sql = "create materialized view mv1 " +
+                "distributed by hash(k2) buckets 10 " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")" +
+                "as select tbl1.k1 ss, tbl1.k2 from mysql_external_table tbl1;";
+        starRocksAssert.withMaterializedView(sql);
+        starRocksAssert.refreshMV(connectContext, "mv1");
+    }
+
+    @Test
+    public void testRefreshMVWithExternalTable2() throws Exception {
+        String sql = "create materialized view mv1 " +
+                "distributed by hash(k2) buckets 10 " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")" +
+                "as select tbl1.k1 ss, tbl1.k2 from mysql_external_table tbl1;";
+        starRocksAssert.withMaterializedView(sql);
+        starRocksAssert.refreshMV(connectContext, "mv1");
+    }
+>>>>>>> 4d30cd8c19 ([BugFix] Fix mv refresh external table error (#59369))
 }
