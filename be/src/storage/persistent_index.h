@@ -74,7 +74,8 @@ enum PersistentIndexFileVersion {
     PERSISTENT_INDEX_VERSION_3,
     PERSISTENT_INDEX_VERSION_4,
     PERSISTENT_INDEX_VERSION_5,
-    PERSISTENT_INDEX_VERSION_6
+    PERSISTENT_INDEX_VERSION_6,
+    PERSISTENT_INDEX_VERSION_7
 };
 
 static constexpr uint64_t NullIndexValue = -1;
@@ -250,7 +251,7 @@ public:
     // get dump total size of hashmaps of shards
     virtual size_t dump_bound() = 0;
 
-    virtual bool dump(phmap::BinaryOutputArchive& ar) = 0;
+    virtual Status dump(phmap::BinaryOutputArchive& ar) = 0;
 
     // get all key-values pair references by shard, the result will remain valid until next modification
     // |nshard|: number of shard
@@ -280,6 +281,10 @@ public:
     virtual size_t memory_usage() = 0;
 
     virtual Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb) = 0;
+
+    virtual void set_mutable_index_format_version(uint32_t ver) = 0;
+
+    virtual Status completeness_check(phmap::BinaryInputArchive& ar) = 0;
 
     static StatusOr<std::unique_ptr<MutableIndex>> create(size_t key_size);
 
@@ -373,7 +378,7 @@ public:
 
     size_t dump_bound();
 
-    bool dump(phmap::BinaryOutputArchive& ar, std::set<uint32_t>& dumped_shard_idxes);
+    Status dump(phmap::BinaryOutputArchive& ar, std::set<uint32_t>& dumped_shard_idxes);
 
     Status commit(MutableIndexMetaPB* meta, const EditVersion& version, const CommitType& type);
 
@@ -407,6 +412,8 @@ public:
     static StatusOr<std::unique_ptr<ShardByLengthMutableIndex>> create(size_t key_size, const std::string& path);
 
     Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb);
+
+    Status check_snapshot_file(phmap::BinaryInputArchive& ar, const std::set<uint32_t>& idxes);
 
 private:
     friend class PersistentIndex;
