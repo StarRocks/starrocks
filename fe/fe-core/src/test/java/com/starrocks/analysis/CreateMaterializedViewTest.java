@@ -4695,7 +4695,7 @@ public class CreateMaterializedViewTest {
                 return true;
             }
         };
-        String sql = "create materialized view test_mv11" +
+        String sql = "create materialized view test_mv11 " +
                 "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
