@@ -201,6 +201,7 @@ import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CompactionClause;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
+import com.starrocks.sql.ast.CreateClusterSnapshotStmt;
 import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateDictionaryStmt;
@@ -242,6 +243,7 @@ import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.DropBranchClause;
 import com.starrocks.sql.ast.DropCatalogStmt;
+import com.starrocks.sql.ast.DropClusterSnapshotStmt;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropComputeNodeClause;
 import com.starrocks.sql.ast.DropDataCacheRuleStmt;
@@ -2759,6 +2761,26 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitAdminSetAutomatedSnapshotOffStatement(
             StarRocksParser.AdminSetAutomatedSnapshotOffStatementContext context) {
         return new AdminSetAutomatedSnapshotOffStmt(createPos(context));
+    }
+
+    // ------------------------------------------- Manual Snapshot Statement -------------------------------------------
+    @Override
+    public ParseNode visitCreateClusterSnapshotStatement(StarRocksParser.CreateClusterSnapshotStatementContext context) {
+        String snapshotName = getIdentifierName(context.snapshotName);
+        boolean ifNotExists = context.IF() != null;
+        String comment = context.comment() != null ? ((StringLiteral) visit(context.comment())).getStringValue() : null;
+        String svName = StorageVolumeMgr.BUILTIN_STORAGE_VOLUME;
+        if (context.svName != null) {
+            svName = getIdentifierName(context.svName);
+        }
+        return new CreateClusterSnapshotStmt(snapshotName, ifNotExists, comment, svName, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDropClusterSnapshotStatement(StarRocksParser.DropClusterSnapshotStatementContext context) {
+        String snapshotName = getIdentifierName(context.snapshotName);
+        boolean ifExists = context.IF() != null;
+        return new DropClusterSnapshotStmt(snapshotName, ifExists, createPos(context));
     }
 
     // ------------------------------------------- Cluster Management Statement ----------------------------------------

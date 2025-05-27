@@ -130,6 +130,10 @@ statement
     | adminSetAutomatedSnapshotOnStatement
     | adminSetAutomatedSnapshotOffStatement
 
+    // Manual Snapshot Statement
+    | createClusterSnapshotStatement
+    | dropClusterSnapshotStatement
+
     // Cluster Management Statement
     | alterSystemStatement
     | cancelAlterSystemStatement
@@ -841,6 +845,15 @@ adminSetAutomatedSnapshotOnStatement
 
 adminSetAutomatedSnapshotOffStatement
     : ADMIN SET AUTOMATED CLUSTER SNAPSHOT OFF
+    ;
+
+// ------------------------------------------- Manual Snapshot Statement ------------------------------------------------
+createClusterSnapshotStatement
+    : CREATE CLUSTER SNAPSHOT (IF NOT EXISTS)? snapshotName=identifier comment? (STORAGE VOLUME svName=identifier)?
+    ;
+
+dropClusterSnapshotStatement
+    : DROP CLUSTER SNAPSHOT snapshotName=identifier (IF EXISTS)?
     ;
 
 // ------------------------------------------- Cluster Management Statement ---------------------------------------------

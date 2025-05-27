@@ -56,6 +56,7 @@ import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.ClearDataCacheRulesStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
+import com.starrocks.sql.ast.CreateClusterSnapshotStmt;
 import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateDictionaryStmt;
@@ -80,6 +81,7 @@ import com.starrocks.sql.ast.DataCacheSelectStatement;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
+import com.starrocks.sql.ast.DropClusterSnapshotStmt;
 import com.starrocks.sql.ast.DropDataCacheRuleStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropDictionaryStmt;
@@ -603,6 +605,19 @@ public class Analyzer {
         @Override
         public Void visitAdminSetAutomatedSnapshotOffStatement(AdminSetAutomatedSnapshotOffStmt statement,
                                                                ConnectContext context) {
+            ClusterSnapshotAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        // ---------------------------------------- Manual Snapshot Statement -----------------------------------
+        @Override
+        public Void visitCreateClusterSnapshotStatement(CreateClusterSnapshotStmt statement, ConnectContext context) {
+            ClusterSnapshotAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDropClusterSnapshotStatement(DropClusterSnapshotStmt statement, ConnectContext context) {
             ClusterSnapshotAnalyzer.analyze(statement, context);
             return null;
         }

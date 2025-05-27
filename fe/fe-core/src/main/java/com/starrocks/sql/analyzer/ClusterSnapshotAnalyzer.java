@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.common.DdlException;
+import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -22,6 +23,8 @@ import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOffStmt;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.CreateClusterSnapshotStmt;
+import com.starrocks.sql.ast.DropClusterSnapshotStmt;
 import com.starrocks.sql.ast.StatementBase;
 
 public class ClusterSnapshotAnalyzer {
@@ -64,6 +67,40 @@ public class ClusterSnapshotAnalyzer {
                 throw new SemanticException("Automated snapshot has not been turn on");
             }
 
+            return null;
+        }
+
+        @Override
+        public Void visitCreateClusterSnapshotStatement(CreateClusterSnapshotStmt statement, ConnectContext context) {
+            if (!RunMode.isSharedDataMode()) {
+                throw new SemanticException("Create cluster snapshot only support shared data mode");
+            }
+
+            if (statement.getClusterSnapshotName().equalsIgnoreCase(ClusterSnapshotMgr.AUTOMATED_NAME_PREFIX)) {
+                throw new SemanticException("Manual cluster snapshot name can not be same as automated snapshot name");
+            }
+
+            String storageVolumeName = statement.getStorageVolumeName();
+            StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+            try {
+                if (!storageVolumeMgr.exists(storageVolumeName)) {
+                    throw new SemanticException("Unknown storage volume: %s", storageVolumeName);
+                }
+            } catch (DdlException e) {
+                throw new SemanticException("Failed to get storage volume", e);
+            }
+
+            // TODO: check if not exists
+            return null;
+        }
+
+        @Override
+        public Void visitDropClusterSnapshotStatement(DropClusterSnapshotStmt statement, ConnectContext context) {
+            if (!RunMode.isSharedDataMode()) {
+                throw new SemanticException("Drop cluster snapshot only support shared data mode");
+            }
+
+            // TODO: check if exists
             return null;
         }
     }

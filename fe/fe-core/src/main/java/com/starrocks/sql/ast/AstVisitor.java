@@ -455,6 +455,16 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(clause, context);
     }
 
+    // ---------------------------------------- Manual Snapshot Statement -------------------------------------------
+
+    default R visitCreateClusterSnapshotStatement(CreateClusterSnapshotStmt clause, C context) {
+        return visitDDLStatement(clause, context);
+    }
+
+    default R visitDropClusterSnapshotStatement(DropClusterSnapshotStmt clause, C context) {
+        return visitDDLStatement(clause, context);
+    }
+
     // ---------------------------------------- Cluster Management Statement -------------------------------------------
 
     default R visitAlterSystemStatement(AlterSystemStmt statement, C context) {

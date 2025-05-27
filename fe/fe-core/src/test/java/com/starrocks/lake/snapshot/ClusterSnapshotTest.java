@@ -405,4 +405,24 @@ public class ClusterSnapshotTest {
         Assert.assertTrue(job2.isFinished());
         localClusterSnapshotMgr.setAutomatedSnapshotOff();
     }
+
+    @Test
+    public void testManualClusterSnapshotSyntax() {
+        String createSql = "CREATE CLUSTER SNAPSHOT testSnapshot STORAGE VOLUME testSv";
+        analyzeFail(createSql);
+        createSql = "CREATE CLUSTER SNAPSHOT testSnapshot";
+        analyzeSuccess(createSql);
+        createSql = "CREATE CLUSTER SNAPSHOT IF NOT EXISTS testSnapshot";
+        analyzeSuccess(createSql);
+        createSql = "CREATE CLUSTER SNAPSHOT " + ClusterSnapshotMgr.AUTOMATED_NAME_PREFIX;
+        analyzeFail(createSql);
+        createSql = "CREATE CLUSTER SNAPSHOT IF NOT EXISTS testSnapshot COMMENT \"test comment\" STORAGE VOLUME " +
+                    StorageVolumeMgr.BUILTIN_STORAGE_VOLUME;
+        analyzeSuccess(createSql);
+
+        String dropSql = "DROP CLUSTER SNAPSHOT testSnapshot";
+        analyzeSuccess(dropSql);
+        dropSql = "DROP CLUSTER SNAPSHOT testSnapshot IF EXISTS";
+        analyzeSuccess(dropSql);
+    }
 }
