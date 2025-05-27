@@ -94,7 +94,9 @@ public class AzBlobFileSystemTest {
     @Test
     public void testGlobListWithWildcard() throws StarRocksException {
         // Mock
-        properties.put(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, "shared_key_xxx");
+        properties.put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID, "client_id_xxx");
+        properties.put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_SECRET, "client_secret_xxx");
+        properties.put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_TENANT_ID, "11111111-2222-3333-4444-555555555555");
         fs = Mockito.spy(new AzBlobFileSystem(properties));
 
         String path = "wasbs://testcontainer@testaccount.blob.core.windows.net/data";
