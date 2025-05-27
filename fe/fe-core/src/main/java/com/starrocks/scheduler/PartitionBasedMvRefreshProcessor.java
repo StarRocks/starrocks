@@ -39,6 +39,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MaterializedViewExceptions;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
@@ -51,7 +52,6 @@ import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorPartitionTraits;
-import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.HivePartitionDataInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.TableUpdateArbitrator;
@@ -60,6 +60,7 @@ import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.scheduler.mv.MVPCTMetaRepairer;
 import com.starrocks.scheduler.mv.MVPCTRefreshListPartitioner;
 import com.starrocks.scheduler.mv.MVPCTRefreshNonPartitioner;
 import com.starrocks.scheduler.mv.MVPCTRefreshPartitioner;
@@ -390,7 +391,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
         // throw the last exception if all retries failed
         String errorMsg = MvUtils.shrinkToSize(DebugUtil.getRootStackTrace(lastException), MAX_FIELD_VARCHAR_LENGTH);
-        throw new DmlException("Refresh mv %s failed after %s/%s times, error-msg : " +
+        throw new DmlException("Refresh mv %s failed after %s times, try lock failed: %s, error-msg : " +
                 "%s", lastException, mv.getName(), refreshFailedTimes, lockFailedTimes, errorMsg);
     }
 
@@ -725,6 +726,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
         // use it if refresh external table fails
         ConnectContext connectContext = context.getCtx();
+        List<Pair<Table, BaseTableInfo>> toRepairTables = Lists.newArrayList();
         for (BaseTableInfo baseTableInfo : baseTableInfos) {
             Optional<Database> dbOpt = GlobalStateMgr.getCurrentState().getMetadataMgr().getDatabase(baseTableInfo);
             if (dbOpt.isEmpty()) {
@@ -739,11 +741,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                         MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(baseTableInfo.getTableName()));
                 throw new DmlException("Materialized view base table: %s not exist.", baseTableInfo.getTableInfoStr());
             }
-            Table table = optTable.get();
 
             // refresh old table
-            if (table.isNativeTableOrMaterializedView() || table.isHiveView()) {
-                logger.debug("No need to refresh table:{} because it is native table or materialized view or connector view",
+            Table table = optTable.get();
+            if (table.isNativeTableOrMaterializedView() || table.isView()) {
+                logger.debug("No need to refresh table:{} because it is native table or mv or connector view",
                         baseTableInfo.getTableInfoStr());
                 continue;
             }
@@ -761,158 +763,27 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 // refresh the whole table, which may be costly in extreme case
                 connectContext.getGlobalStateMgr().getMetadataMgr().refreshTable(baseTableInfo.getCatalogName(),
                         baseTableInfo.getDbName(), table, Lists.newArrayList(), true);
-                // should clear query cache
-                context.getCtx().getGlobalStateMgr().getMetadataMgr().removeQueryMetadata();
-                Optional<Table> optNewTable = MvUtils.getTable(baseTableInfo);
-                if (optTable.isEmpty()) {
-                    logger.warn("table {} does not exist after refreshing materialized view:{}",
-                            baseTableInfo.getTableInfoStr(), mv.getName());
-                    mv.setInactiveAndReason(
-                            MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(baseTableInfo.getTableName()));
-                    throw new DmlException("Materialized view base table: %s not exist.", baseTableInfo.getTableInfoStr());
-                }
-                Table newTable = optNewTable.get();
-                if (!(newTable instanceof HiveTable)
-                        || ((HiveTable) newTable).getHiveTableType() != HiveTable.HiveTableType.EXTERNAL_TABLE) {
-                    continue;
-                }
-                if (!baseTableInfo.getTableIdentifier().equals(newTable.getTableIdentifier())) {
-                    // table identifier changed, original table may be dropped and recreated
-                    // consider auto refresh partition limit
-                    // format: l_shipdate=1998-01-02
-                    // consider __HIVE_DEFAULT_PARTITION__
-                    logger.info("base table:{} identifier has changed from:{} to:{}",
-                            baseTableInfo.getTableName(), baseTableInfo.getTableIdentifier(), newTable.getTableIdentifier());
-                    Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap =
-                            mv.getBaseTableRefreshInfo(baseTableInfo);
-                    if (partitionInfoMap == null || partitionInfoMap.isEmpty()) {
-                        return;
-                    }
-                    boolean isAutoRefresh = mv.getRefreshScheme().isAsync();
-                    int autoRefreshPartitionsLimit = -1;
-                    if (isAutoRefresh) {
-                        // only work for auto refresh
-                        // for manual refresh, we respect the partition range specified by user
-                        autoRefreshPartitionsLimit = mv.getTableProperty().getAutoRefreshPartitionsLimit();
-                    }
-                    List<String> partitionNames = Lists.newArrayList(partitionInfoMap.keySet());
-                    TableUpdateArbitrator.UpdateContext updateContext = new TableUpdateArbitrator.UpdateContext(
-                            newTable,
-                            autoRefreshPartitionsLimit,
-                            partitionNames);
-                    TableUpdateArbitrator arbitrator = TableUpdateArbitrator.create(updateContext);
-                    if (arbitrator == null) {
-                        return;
-                    }
-                    Map<String, Optional<HivePartitionDataInfo>> partitionDataInfos = arbitrator.getPartitionDataInfos();
-                    List<String> updatedPartitionNames =
-                            getUpdatedPartitionNames(partitionNames, partitionInfoMap, partitionDataInfos);
-                    logger.info("try to get updated partitions names based on data." +
-                                    " partitionNames:{}, isAutoRefresh:{}," +
-                                    " autoRefreshPartitionsLimit:{}, updatedPartitionNames:{}",
-                            partitionNames, isAutoRefresh, autoRefreshPartitionsLimit, updatedPartitionNames);
-                    // if partition is not modified, change the last refresh time to update
-                    repairMvBaseTableMeta(mv, baseTableInfo, newTable, updatedPartitionNames);
-                }
             }
             // should clear query cache
-            connectContext.getGlobalStateMgr().getMetadataMgr().removeQueryMetadata();
-        }
-    }
+            context.getCtx().getGlobalStateMgr().getMetadataMgr().removeQueryMetadata();
 
-    private List<String> getUpdatedPartitionNames(
-            List<String> partitionNames,
-            Map<String, MaterializedView.BasePartitionInfo> tablePartitionInfoMap,
-            Map<String, Optional<HivePartitionDataInfo>> partitionDataInfos) {
-        List<String> updatedPartitionNames = Lists.newArrayList();
-        for (int i = 0; i < partitionNames.size(); i++) {
-            String partitionName = partitionNames.get(i);
-            if (!partitionDataInfos.containsKey(partitionName)) {
-                continue;
+            Optional<Table> optNewTable = MvUtils.getTable(baseTableInfo);
+            if (optTable.isEmpty()) {
+                logger.warn("table {} does not exist after refreshing materialized view:{}",
+                        baseTableInfo.getTableInfoStr(), mv.getName());
+                mv.setInactiveAndReason(
+                        MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(baseTableInfo.getTableName()));
+                throw new DmlException("Materialized view base table: %s not exist.", baseTableInfo.getTableInfoStr());
             }
-            MaterializedView.BasePartitionInfo basePartitionInfo = tablePartitionInfoMap.get(partitionName);
-            Optional<HivePartitionDataInfo> partitionDataInfoOptional = partitionDataInfos.get(partitionName);
-            if (partitionDataInfoOptional.isEmpty()) {
-                updatedPartitionNames.add(partitionNames.get(i));
-            } else {
-                HivePartitionDataInfo hivePartitionDataInfo = partitionDataInfoOptional.get();
-                // if file last modified time changed or file number under partition change,
-                // the partition is treated as changed
-                if (basePartitionInfo.getExtLastFileModifiedTime() != hivePartitionDataInfo.getLastFileModifiedTime()
-                        || basePartitionInfo.getFileNumber() != hivePartitionDataInfo.getFileNumber()) {
-                    updatedPartitionNames.add(partitionNames.get(i));
-                }
+
+            Table newTable = optNewTable.get();
+            if (!baseTableInfo.getTableIdentifier().equals(newTable.getTableIdentifier())) {
+                toRepairTables.add(Pair.create(newTable, baseTableInfo));
             }
         }
-        return updatedPartitionNames;
-    }
 
-    private void repairMvBaseTableMeta(
-            MaterializedView mv, BaseTableInfo oldBaseTableInfo,
-            Table newTable, List<String> updatedPartitionNames) {
-        if (oldBaseTableInfo.isInternalCatalog()) {
-            return;
-        }
-
-        // acquire db write lock to modify meta of mv
-        Locker locker = new Locker();
-        if (!locker.lockDatabaseAndCheckExist(db, mv, LockType.WRITE)) {
-            throw new DmlException("repair mv meta failed. database:" + db.getFullName() + " not exist");
-        }
-        try {
-            Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = mv.getBaseTableRefreshInfo(oldBaseTableInfo);
-            Map<String, MaterializedView.BasePartitionInfo> newPartitionInfoMap = Maps.newHashMap();
-            for (Map.Entry<String, MaterializedView.BasePartitionInfo> entry : partitionInfoMap.entrySet()) {
-                if (updatedPartitionNames.contains(entry.getKey())) {
-                    newPartitionInfoMap.put(entry.getKey(), entry.getValue());
-                } else {
-                    List<String> baseTablePartitionNames = Lists.newArrayList(partitionInfoMap.keySet());
-                    Map<String, com.starrocks.connector.PartitionInfo> newPartitionInfos =
-                            PartitionUtil.getPartitionNameWithPartitionInfo(newTable, baseTablePartitionNames);
-                    if (newPartitionInfos.containsKey(entry.getKey())) {
-                        MaterializedView.BasePartitionInfo oldBasePartitionInfo = entry.getValue();
-                        com.starrocks.connector.PartitionInfo newPartitionInfo = newPartitionInfos.get(entry.getKey());
-                        MaterializedView.BasePartitionInfo newBasePartitionInfo = new MaterializedView.BasePartitionInfo(
-                                entry.getValue().getId(), newPartitionInfo.getModifiedTime(), newPartitionInfo.getModifiedTime());
-                        newBasePartitionInfo.setExtLastFileModifiedTime(oldBasePartitionInfo.getExtLastFileModifiedTime());
-                        newBasePartitionInfo.setFileNumber(oldBasePartitionInfo.getFileNumber());
-                        newPartitionInfoMap.put(entry.getKey(), newBasePartitionInfo);
-                    } else {
-                        // if the partition does not exist in new table,
-                        // keep the partition's last modified time as old
-                        // which will be refreshed
-                        newPartitionInfoMap.put(entry.getKey(), entry.getValue());
-                    }
-                }
-            }
-            Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> baseTableInfoMapMap =
-                    mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoVisibleVersionMap();
-            // create new base table info with newTable.getTableIdentifier()
-            BaseTableInfo newBaseTableInfo = new BaseTableInfo(
-                    oldBaseTableInfo.getCatalogName(),
-                    oldBaseTableInfo.getDbName(),
-                    oldBaseTableInfo.getTableName(), newTable.getTableIdentifier());
-            baseTableInfoMapMap.remove(oldBaseTableInfo);
-            baseTableInfoMapMap.put(newBaseTableInfo, newPartitionInfoMap);
-
-            List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
-            baseTableInfos.remove(oldBaseTableInfo);
-            baseTableInfos.add(newBaseTableInfo);
-
-            ConnectorTableInfo connectorTableInfo = GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr()
-                    .getConnectorTableInfo(oldBaseTableInfo.getCatalogName(), oldBaseTableInfo.getDbName(),
-                            oldBaseTableInfo.getTableIdentifier());
-            ConnectorTableInfo newConnectorTableInfo = ConnectorTableInfo.builder()
-                    .setRelatedMaterializedViews(connectorTableInfo.getRelatedMaterializedViews())
-                    .build();
-            GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().removeConnectorTableInfo(
-                    oldBaseTableInfo.getCatalogName(), oldBaseTableInfo.getDbName(),
-                    oldBaseTableInfo.getTableIdentifier(), connectorTableInfo);
-            GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().addConnectorTableInfo(
-                    newBaseTableInfo.getCatalogName(), newBaseTableInfo.getDbName(),
-                    newBaseTableInfo.getTableIdentifier(), newConnectorTableInfo);
-        } finally {
-            locker.unLockTableWithIntensiveDbLock(db, mv, LockType.WRITE);
+        if (!toRepairTables.isEmpty()) {
+            MVPCTMetaRepairer.repairMetaIfNeeded(db, mv, toRepairTables);
         }
     }
 

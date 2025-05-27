@@ -546,7 +546,7 @@ public class MetadataMgr {
         if (tableOpt.isPresent()) {
             return tableOpt.get();
         }
-        throw MaterializedViewExceptions.reportBaseTableNotExists(baseTableInfo);
+        throw MaterializedViewExceptions.reportBaseTableNotExists(baseTableInfo.getTableName());
     }
 
     public Table getTemporaryTable(UUID sessionId, String catalogName, Long databaseId, String tblName) {

@@ -14,7 +14,6 @@
 
 package com.starrocks.common;
 
-import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.commons.lang3.StringUtils;
 
@@ -30,6 +29,13 @@ public class MaterializedViewExceptions {
      */
     public static String inactiveReasonForBaseTableNotExists(String tableName) {
         return "base-table dropped: " + tableName;
+    }
+
+    /**
+     * Create the inactive reason when base table changed, eg: drop & recreated
+     */
+    public static String inactiveReasonForBaseTableChanged(String tableName) {
+        return "base-table changed: " + tableName;
     }
 
     public static String inactiveReasonForBaseTableNotExists(long tableId) {
@@ -68,7 +74,7 @@ public class MaterializedViewExceptions {
         return "base table schema changed for columns: " + StringUtils.join(columns, ",");
     }
 
-    public static SemanticException reportBaseTableNotExists(BaseTableInfo baseTableInfo) {
-        return new SemanticException(inactiveReasonForBaseTableNotExists(baseTableInfo.getTableName()));
+    public static SemanticException reportBaseTableNotExists(String tableName) {
+        return new SemanticException(inactiveReasonForBaseTableNotExists(tableName));
     }
 }
