@@ -56,17 +56,17 @@ public:
     /**
      * Convert arrow array to starrocks column.
      */
-    virtual arrow::Status toSrColumn(std::shared_ptr<arrow::Array> array, ColumnPtr& column) = 0;
+    virtual arrow::Status toSrColumn(std::shared_ptr<arrow::Array> array, MutableColumnPtr& column) = 0;
 
     /**
      * Convert starrocks column to arrow array.
      */
-    virtual arrow::Result<std::shared_ptr<arrow::Array>> toArrowArray(const std::shared_ptr<Column>& column) = 0;
+    virtual arrow::Result<std::shared_ptr<arrow::Array>> toArrowArray(const ColumnPtr& column) = 0;
 
 protected:
     arrow::Result<std::shared_ptr<arrow::Buffer>> convert_null_bitmap(const Buffer<uint8_t>& null_bytes);
 
-    static ColumnPtr get_data_column(const ColumnPtr& column);
+    static ColumnPtr get_data_column(const Column* column_ptr);
 
 protected:
     const std::shared_ptr<arrow::DataType> _arrow_type;
