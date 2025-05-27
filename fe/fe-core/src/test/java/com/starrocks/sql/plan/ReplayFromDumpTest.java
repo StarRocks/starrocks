@@ -507,6 +507,8 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
 
     @Test
     public void testCorrelatedPredicateRewrite() throws Exception {
+        connectContext.getSessionVariable().setSemiJoinDeduplicateMode(-1);
+        connectContext.getSessionVariable().setEnableInnerJoinToSemi(false);
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/union_with_subquery"), null, TExplainLevel.COSTS);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("1201:HASH JOIN\n" +

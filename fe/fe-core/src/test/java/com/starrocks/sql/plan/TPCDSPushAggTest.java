@@ -32,12 +32,15 @@ public class TPCDSPushAggTest extends TPCDS1TTestBase {
     public static void beforeAll() {
         FeConstants.unitTestView = false;
         connectContext.getSessionVariable().setEnableMaterializedViewRewrite(false);
+        connectContext.getSessionVariable().setEnableInnerJoinToSemi(false);
+        connectContext.getSessionVariable().setSemiJoinDeduplicateMode(-1);
     }
 
     @AfterAll
     public static void afterAll() {
         FeConstants.unitTestView = true;
         connectContext.getSessionVariable().setEnableMaterializedViewRewrite(true);
+        connectContext.getSessionVariable().setEnableInnerJoinToSemi(true);
     }
 
     private String check(int mode, String sql, int aggNum) throws Exception {

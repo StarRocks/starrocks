@@ -216,6 +216,7 @@ public enum RuleType {
     TF_OR_TO_UNION_ALL_JOIN,
 
     TF_REUSE_FUSION_RULE,
+    TF_INNER_TO_SEMI,
 
     // The following are implementation rules:
     IMPLEMENTATION_RULES,

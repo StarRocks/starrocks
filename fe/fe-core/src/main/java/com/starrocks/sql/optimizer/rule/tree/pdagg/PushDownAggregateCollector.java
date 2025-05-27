@@ -72,7 +72,7 @@ import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficie
  * mark push down which aggregation, the value will multi-rewrite by path, for check
  * which aggregation needs push down
  */
-class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePushDownContext> {
+public class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePushDownContext> {
     private static final Logger LOG = LogManager.getLogger(PushDownAggregateCollector.class);
 
     private static final int DISABLE_PUSH_DOWN_AGG = -1;
@@ -598,7 +598,7 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
     // high(2): row_count / cardinality < MEDIUM_AGGREGATE_EFFECT_COEFFICIENT
     // medium(1): row_count / cardinality >= MEDIUM_AGGREGATE_EFFECT_COEFFICIENT and < LOW_AGGREGATE_EFFECT_COEFFICIENT
     // lower(0): row_count / cardinality >= LOW_AGGREGATE_EFFECT_COEFFICIENT
-    private int groupByCardinality(ColumnStatistic statistic, double rowCount) {
+    public static int groupByCardinality(ColumnStatistic statistic, double rowCount) {
         if (statistic.isUnknown()) {
             return 2;
         }
