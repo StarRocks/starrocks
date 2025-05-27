@@ -301,10 +301,11 @@ public class CloudConfigurationFactoryTest {
     public void testGCPCloudConfiguration() {
         Map<String, String> map = new HashMap<String, String>() {
             {
+                put(CloudConfigurationConstants.GCP_GCS_ENDPOINT, "http://xx");
                 put(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY, "XX");
                 put(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY_ID, "XX");
                 put(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_EMAIL, "XX");
-                put(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_IMPERSONATION_SERVICE_ACCOUNT, "XX");
+                put(CloudConfigurationConstants.GCP_GCS_IMPERSONATION_SERVICE_ACCOUNT, "XX");
                 put(CloudConfigurationConstants.GCP_GCS_USE_COMPUTE_ENGINE_SERVICE_ACCOUNT, "XX");
             }
         };
@@ -317,7 +318,7 @@ public class CloudConfigurationFactoryTest {
         cc.toFileStoreInfo();
         Assert.assertEquals(cc.toConfString(),
                 "GCPCloudConfiguration{resources='', jars='', hdpuser='', " +
-                        "cred=GCPCloudCredential{useComputeEngineServiceAccount=false, " +
+                        "cred=GCPCloudCredential{endpoint='http://xx', useComputeEngineServiceAccount=false, " +
                         "serviceAccountEmail='XX', serviceAccountPrivateKeyId='XX', serviceAccountPrivateKey='XX', " +
                         "impersonationServiceAccount='XX'}}");
     }

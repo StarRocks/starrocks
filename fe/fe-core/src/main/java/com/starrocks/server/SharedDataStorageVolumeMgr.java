@@ -332,9 +332,13 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 // validate azure_adls2_path configuration
                 normalizeConfigPath(Config.azure_adls2_path, "adls2", "Config.azure_adls2_path", true);
                 break;
+            case "gs":
+                normalizeConfigPath(Config.gcp_gcs_path, "gs", "Config.gcp_gcs_path", true);
+                break;
             default:
                 throw new InvalidConfException(String.format(
-                        "The configuration item \"cloud_native_storage_type = %s\" is invalid, must be HDFS S3 AZBLOB or ADLS2.",
+                        "The configuration item \"cloud_native_storage_type = %s\" is invalid, must" +
+                                " be HDFS S3 AZBLOB ADLS2 or GS.",
                         Config.cloud_native_storage_type));
         }
     }
@@ -531,6 +535,10 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 uri = normalizeConfigPath(Config.azure_adls2_path, "adls2", "Config.azure_adls2_path", true);
                 locations.add(uri.toString());
                 break;
+            case "gs":
+                uri = normalizeConfigPath(Config.gcp_gcs_path, "gs", "Config.gcp_gcs_path", true);
+                locations.add(uri.toString());
+                break;
             default:
                 return locations;
         }
@@ -574,6 +582,18 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                         Config.azure_adls2_oauth2_client_secret);
                 params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT,
                         Config.azure_adls2_oauth2_oauth2_client_endpoint);
+                break;
+            case "gs":
+                params.put(CloudConfigurationConstants.GCP_GCS_ENDPOINT, Config.gcp_gcs_endpoint);
+                params.put(CloudConfigurationConstants.GCP_GCS_USE_COMPUTE_ENGINE_SERVICE_ACCOUNT,
+                        Config.gcp_gcs_use_compute_engine_service_account);
+                params.put(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_EMAIL, Config.gcp_gcs_service_account_email);
+                params.put(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY,
+                        Config.gcp_gcs_service_account_private_key);
+                params.put(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY_ID,
+                        Config.gcp_gcs_service_account_private_key_id);
+                params.put(CloudConfigurationConstants.GCP_GCS_IMPERSONATION_SERVICE_ACCOUNT,
+                        Config.gcp_gcs_impersonation_service_account);
                 break;
             default:
                 return params;

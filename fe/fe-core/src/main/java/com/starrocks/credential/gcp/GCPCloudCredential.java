@@ -16,6 +16,8 @@ package com.starrocks.credential.gcp;
 
 import com.google.common.base.Preconditions;
 import com.staros.proto.FileStoreInfo;
+import com.staros.proto.FileStoreType;
+import com.staros.proto.GSFileStoreInfo;
 import com.starrocks.credential.CloudCredential;
 import org.apache.hadoop.conf.Configuration;
 
@@ -24,6 +26,7 @@ import java.util.Map;
 
 public class GCPCloudCredential implements CloudCredential {
 
+    private final String endpoint;
     private final boolean useComputeEngineServiceAccount;
     private final String serviceAccountEmail;
     private final String serviceAccountPrivateKeyId;
@@ -32,13 +35,15 @@ public class GCPCloudCredential implements CloudCredential {
 
     private final Map<String, String> hadoopConfiguration;
 
-    public GCPCloudCredential(boolean useComputeEngineServiceAccount, String serviceAccountEmail,
+    public GCPCloudCredential(String endpoint, boolean useComputeEngineServiceAccount, String serviceAccountEmail,
                               String serviceAccountPrivateKeyId, String serviceAccountPrivateKey,
                               String impersonationServiceAccount) {
+        Preconditions.checkNotNull(endpoint);
         Preconditions.checkNotNull(serviceAccountEmail);
         Preconditions.checkNotNull(serviceAccountPrivateKeyId);
         Preconditions.checkNotNull(serviceAccountPrivateKey);
         Preconditions.checkNotNull(impersonationServiceAccount);
+        this.endpoint = endpoint;
         this.useComputeEngineServiceAccount = useComputeEngineServiceAccount;
         this.serviceAccountEmail = serviceAccountEmail;
         this.serviceAccountPrivateKeyId = serviceAccountPrivateKeyId;
@@ -48,11 +53,17 @@ public class GCPCloudCredential implements CloudCredential {
         tryGenerateHadoopConfiguration(hadoopConfiguration);
     }
 
+    public String getEndpoint() {
+        return endpoint;
+    }
+
     private void tryGenerateHadoopConfiguration(Map<String, String> hadoopConfiguration) {
+        if (!endpoint.isEmpty()) {
+            hadoopConfiguration.put("fs.gs.endpoint", endpoint);
+        }
         if (useComputeEngineServiceAccount) {
             hadoopConfiguration.put("fs.gs.auth.type", "COMPUTE_ENGINE");
-        } else if (!serviceAccountEmail.isEmpty() && !serviceAccountPrivateKeyId.isEmpty() &&
-                !serviceAccountPrivateKey.isEmpty()) {
+        } else {
             hadoopConfiguration.put("fs.gs.auth.service.account.email", serviceAccountEmail);
             hadoopConfiguration.put("fs.gs.auth.service.account.private.key.id", serviceAccountPrivateKeyId);
             hadoopConfiguration.put("fs.gs.auth.service.account.private.key", serviceAccountPrivateKey);
@@ -89,7 +100,8 @@ public class GCPCloudCredential implements CloudCredential {
     @Override
     public String toCredString() {
         return "GCPCloudCredential{" +
-                "useComputeEngineServiceAccount=" + useComputeEngineServiceAccount +
+                "endpoint='" + endpoint + '\'' +
+                ", useComputeEngineServiceAccount=" + useComputeEngineServiceAccount +
                 ", serviceAccountEmail='" + serviceAccountEmail + '\'' +
                 ", serviceAccountPrivateKeyId='" + serviceAccountPrivateKeyId + '\'' +
                 ", serviceAccountPrivateKey='" + serviceAccountPrivateKey + '\'' +
@@ -99,7 +111,19 @@ public class GCPCloudCredential implements CloudCredential {
 
     @Override
     public FileStoreInfo toFileStoreInfo() {
-        // TODO: Support gcp credential
-        return null;
+        FileStoreInfo.Builder fsb = FileStoreInfo.newBuilder();
+        fsb.setFsType(FileStoreType.GS);
+        GSFileStoreInfo.Builder gsFileStoreInfo = GSFileStoreInfo.newBuilder();
+        gsFileStoreInfo.setEndpoint(endpoint);
+
+        gsFileStoreInfo.setUseComputeEngineServiceAccount(useComputeEngineServiceAccount);
+        if (!useComputeEngineServiceAccount) {
+            gsFileStoreInfo.setServiceAccountEmail(serviceAccountEmail);
+            gsFileStoreInfo.setServiceAccountPrivateKeyId(serviceAccountPrivateKeyId);
+            gsFileStoreInfo.setServiceAccountPrivateKey(serviceAccountPrivateKey);
+        }
+        gsFileStoreInfo.setImpersonation(impersonationServiceAccount);
+        fsb.setGsFsInfo(gsFileStoreInfo);
+        return fsb.build();
     }
 }
