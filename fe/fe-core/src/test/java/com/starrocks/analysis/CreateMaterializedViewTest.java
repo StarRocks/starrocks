@@ -4704,6 +4704,7 @@ public class CreateMaterializedViewTest {
                 "as select tbl1.k1 ss, tbl1.k2 from mysql_external_table tbl1;";
         starRocksAssert.withMaterializedView(sql);
         starRocksAssert.refreshMV(connectContext, "mv1");
+        starRocksAssert.dropMaterializedView("mv1");
     }
 
     @Test
@@ -4717,5 +4718,6 @@ public class CreateMaterializedViewTest {
                 "as select tbl1.k1 ss, tbl1.k2 from mysql_external_table tbl1;";
         starRocksAssert.withMaterializedView(sql);
         starRocksAssert.refreshMV(connectContext, "mv1");
+        starRocksAssert.dropMaterializedView("mv1");
     }
 }
