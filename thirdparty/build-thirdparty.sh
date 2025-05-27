@@ -1382,6 +1382,8 @@ build_icu() {
     # Use a subshell to prevent LD_LIBRARY_PATH from affecting the external environment
     (
         export LD_LIBRARY_PATH=${STARROCKS_GCC_HOME}/lib:${STARROCKS_GCC_HOME}/lib64:${LD_LIBRARY_PATH:-}
+        export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC"
+        export CXXFLAGS="-O3 -fno-omit-frame-pointer -fPIC"
         ./runConfigureICU Linux --prefix=$TP_INSTALL_DIR --enable-static --disable-shared
         make -j$PARALLEL
         make install

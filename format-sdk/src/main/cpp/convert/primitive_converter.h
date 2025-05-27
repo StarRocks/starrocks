@@ -68,7 +68,7 @@ public:
         }
     };
 
-    arrow::Status toSrColumn(const std::shared_ptr<arrow::Array> array, ColumnPtr& column) override {
+    arrow::Status toSrColumn(const std::shared_ptr<arrow::Array> array, MutableColumnPtr& column) override {
         if (!column->is_nullable() && array->null_count() > 0) {
             return arrow::Status::Invalid("Column ", column->get_name(),
                                           " is non-nullable, but there are some null data in array.");
@@ -79,7 +79,7 @@ public:
         // copy data column
         const auto& real_arrow_type = arrow::internal::checked_pointer_cast<ArrowType>(_arrow_type);
         const auto& real_array = arrow::internal::checked_pointer_cast<const ArrowArrayType>(array);
-        const auto data_column = arrow::internal::checked_pointer_cast<SrColumnType>(get_data_column(column));
+        auto data_column = SrColumnType::dynamic_pointer_cast(get_data_column(column.get()));
         if constexpr (SR_TYPE == TYPE_DATE || SR_TYPE == TYPE_DATETIME) {
             for (size_t i = 0; i < num_rows; ++i) {
                 SrCppType value;
@@ -154,7 +154,7 @@ public:
         return arrow::Status::OK();
     }
 
-    arrow::Result<std::shared_ptr<arrow::Array>> toArrowArray(const std::shared_ptr<Column>& column) override {
+    arrow::Result<std::shared_ptr<arrow::Array>> toArrowArray(const ColumnPtr& column) override {
         using ArrowBuilderType = typename arrow::TypeTraits<ArrowType>::BuilderType;
 
         const auto& real_arrow_type = arrow::internal::checked_pointer_cast<ArrowType>(_arrow_type);
