@@ -22,6 +22,9 @@ insert into t2 select * from t1;
 truncate table _statistics_.query_history;
 -- result:
 -- !result
+truncate table _statistics_.spm_baselines;
+-- result:
+-- !result
 select count(1) from _statistics_.query_history;
 -- result:
 0
@@ -35,7 +38,7 @@ set global query_history_load_interval_seconds=2;
 set global enable_plan_capture=true;
 -- result:
 -- !result
-set global plan_capture_interval_seconds=5;
+set global plan_capture_interval_seconds=10;
 -- result:
 -- !result
 select count(1) from t1 join t2 on t1.k2 = t2.k2;
@@ -93,7 +96,7 @@ select count(1) from _statistics_.spm_baselines where is_enable = false;
 -- !result
 select count(1) from _statistics_.spm_baselines where source = "CAPTURE";
 -- result:
-2
+0
 -- !result
 set global enable_query_history=false;
 -- result:

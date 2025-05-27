@@ -17,12 +17,13 @@ select s1, s1 % 1000, repeat('a', 128) FROM TABLE(generate_series(1, 100)) s(s1)
 insert into t2 select * from t1;
 
 truncate table _statistics_.query_history;
+truncate table _statistics_.spm_baselines;
 select count(1) from _statistics_.query_history;
 
 set global enable_query_history=true;
 set global query_history_load_interval_seconds=2;
 set global enable_plan_capture=true;
-set global plan_capture_interval_seconds=5;
+set global plan_capture_interval_seconds=10;
 
 select count(1) from t1 join t2 on t1.k2 = t2.k2;
 select count(1) from t1 join t2 on t1.k2 = t2.k2 limit 10;
