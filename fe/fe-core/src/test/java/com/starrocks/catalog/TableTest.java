@@ -56,6 +56,7 @@ public class TableTest {
         FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
         FakeGlobalStateMgr.setMetaVersion(FeConstants.META_VERSION);
     }
+
     @Test
     public void testGetMysqlType() {
         Assert.assertEquals("BASE TABLE", new Table(TableType.OLAP).getMysqlType());
