@@ -166,7 +166,8 @@ public class LakeTabletsProcDir implements ProcDirInterface {
                     String.valueOf(tablet.getId()),
                     new Gson().toJson(tablet.getBackendIds(warehouseId)),
                     new ByteSizeValue(tablet.getDataSize(true)).toString(),
-                    String.valueOf(tablet.getRowCount(0L))
+                    String.valueOf(tablet.getRowCount(0L)),
+                    String.valueOf(tablet.getMinVersion())
             );
             result.addRow(row);
 
