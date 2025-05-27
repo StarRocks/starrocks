@@ -84,7 +84,8 @@ public class ColumnStatsUsageSystemTable extends SystemTable {
 
     @Override
     public boolean supportFeEvaluation(ScalarOperator predicate) {
-        if (FeConstants.runningUnitTest) {
+        // TODO(FIXME): use it in the non unit test environment
+        if (!FeConstants.runningUnitTest) {
             return false;
         }
         final List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
