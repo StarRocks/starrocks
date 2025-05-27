@@ -15,6 +15,7 @@
 package com.starrocks.catalog.system.information;
 
 import com.google.api.client.util.Lists;
+import com.google.common.collect.ImmutableSet;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.InternalCatalog;
@@ -40,6 +41,7 @@ import org.apache.commons.lang3.NotImplementedException;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -70,9 +72,20 @@ public class ColumnStatsUsageSystemTable extends SystemTable {
         return new ColumnStatsUsageSystemTable();
     }
 
+    private static final Set<String> SUPPORTED_EQUAL_COLUMNS = ImmutableSet.of(
+            "TABLE_CATALOG", "TABLE_DATABASE", "TABLE_NAME"
+    );
+
     @Override
-    public boolean supportFeEvaluation() {
-        return FeConstants.runningUnitTest;
+    public boolean supportFeEvaluation(ScalarOperator predicate) {
+        if (FeConstants.runningUnitTest) {
+            return false;
+        }
+        final List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
+        if (!isOnlyEqualConstantOps(conjuncts)) {
+            return false;
+        }
+        return isSupportedEqualPredicateColumn(conjuncts, SUPPORTED_EQUAL_COLUMNS);
     }
 
     @Override

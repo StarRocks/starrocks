@@ -60,7 +60,6 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -76,6 +75,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.information.AnalyzeStatusSystemTable;
 import com.starrocks.catalog.system.information.ColumnStatsUsageSystemTable;
+import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
 import com.starrocks.catalog.system.information.TasksSystemTable;
 import com.starrocks.catalog.system.sys.GrantsTo;
@@ -94,7 +94,6 @@ import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
@@ -149,8 +148,6 @@ import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.ProxyContextManager;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryStatisticsInfo;
-import com.starrocks.qe.ShowExecutor;
-import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.qe.scheduler.warehouse.WarehouseQueryQueueMetrics;
@@ -303,7 +300,6 @@ import com.starrocks.thrift.TMVReportEpochResponse;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TMasterResult;
-import com.starrocks.thrift.TMaterializedViewStatus;
 import com.starrocks.thrift.TMergeCommitRequest;
 import com.starrocks.thrift.TMergeCommitResult;
 import com.starrocks.thrift.TNetworkAddress;
@@ -639,23 +635,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TListMaterializedViewStatusResult listMaterializedViewStatus(TGetTablesParams params) throws TException {
         LOG.debug("get list table request: {}", params);
-
-        PatternMatcher matcher = null;
-        boolean caseSensitive = CaseSensibility.TABLE.getCaseSensibility();
-        if (params.isSetPattern()) {
-            matcher = PatternMatcher.createMysqlPattern(params.getPattern(), caseSensitive);
-        }
-
-        // database privs should be checked in analysis phrase
-        long limit = params.isSetLimit() ? params.getLimit() : -1;
-        UserIdentity currentUser;
-        if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
-        } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
-        }
-        Preconditions.checkState(params.isSetType() && TTableType.MATERIALIZED_VIEW.equals(params.getType()));
-        return listMaterializedViewStatus(limit, matcher, currentUser, params);
+        ConnectContext context = new ConnectContext();
+        return MaterializedViewsSystemTable.query(params, context);
     }
 
     @Override
@@ -801,114 +782,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         });
 
         return res;
-    }
-
-    // list MaterializedView table match pattern
-    private TListMaterializedViewStatusResult listMaterializedViewStatus(long limit, PatternMatcher matcher,
-                                                                         UserIdentity currentUser, TGetTablesParams params) {
-        TListMaterializedViewStatusResult result = new TListMaterializedViewStatusResult();
-        List<TMaterializedViewStatus> tablesResult = Lists.newArrayList();
-        result.setMaterialized_views(tablesResult);
-        String dbName = params.getDb();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
-        if (db == null) {
-            LOG.warn("database not exists: {}", dbName);
-            return result;
-        }
-
-        listMaterializedViews(limit, matcher, currentUser, params).stream()
-                .map(s -> s.toThrift())
-                .forEach(t -> tablesResult.add(t));
-        return result;
-    }
-
-    private void filterAsynchronousMaterializedView(PatternMatcher matcher,
-                                                    UserIdentity currentUser,
-                                                    String dbName,
-                                                    MaterializedView mv,
-                                                    TGetTablesParams params,
-                                                    List<MaterializedView> result) {
-        // check table name
-        String mvName = params.table_name;
-        if (mvName != null && !mvName.equalsIgnoreCase(mv.getName())) {
-            return;
-        }
-
-        try {
-            ConnectContext context = new ConnectContext();
-            context.setCurrentUserIdentity(currentUser);
-            context.setCurrentRoleIds(currentUser);
-            Authorizer.checkAnyActionOnTableLikeObject(context, dbName, mv);
-        } catch (AccessDeniedException e) {
-            return;
-        }
-
-        boolean caseSensitive = CaseSensibility.TABLE.getCaseSensibility();
-        if (!PatternMatcher.matchPattern(params.getPattern(), mv.getName(), matcher, caseSensitive)) {
-            return;
-        }
-        result.add(mv);
-    }
-
-    private void filterSynchronousMaterializedView(OlapTable olapTable, PatternMatcher matcher,
-                                                   TGetTablesParams params,
-                                                   List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs) {
-        // synchronized materialized view metadata size should be greater than 1.
-        if (olapTable.getVisibleIndexMetas().size() <= 1) {
-            return;
-        }
-
-        // check table name
-        String mvName = params.table_name;
-        if (mvName != null && !mvName.equalsIgnoreCase(olapTable.getName())) {
-            return;
-        }
-
-        List<MaterializedIndexMeta> visibleMaterializedViews = olapTable.getVisibleIndexMetas();
-        long baseIdx = olapTable.getBaseIndexId();
-        boolean caseSensitive = CaseSensibility.TABLE.getCaseSensibility();
-        for (MaterializedIndexMeta mvMeta : visibleMaterializedViews) {
-            if (baseIdx == mvMeta.getIndexId()) {
-                continue;
-            }
-
-            if (!PatternMatcher.matchPattern(params.getPattern(), olapTable.getIndexNameById(mvMeta.getIndexId()),
-                    matcher, caseSensitive)) {
-                continue;
-            }
-            singleTableMVs.add(Pair.create(olapTable, mvMeta));
-        }
-    }
-
-    private List<ShowMaterializedViewStatus> listMaterializedViews(long limit, PatternMatcher matcher,
-                                                                   UserIdentity currentUser, TGetTablesParams params) {
-        String dbName = params.getDb();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
-        List<MaterializedView> materializedViews = Lists.newArrayList();
-        List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs = Lists.newArrayList();
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
-        try {
-            for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
-                if (table.isMaterializedView()) {
-                    filterAsynchronousMaterializedView(matcher, currentUser, dbName,
-                            (MaterializedView) table, params, materializedViews);
-                } else if (table.getType() == Table.TableType.OLAP) {
-                    filterSynchronousMaterializedView((OlapTable) table, matcher, params, singleTableMVs);
-                } else {
-                    // continue
-                }
-
-                // check limit
-                int mvSize = materializedViews.size() + singleTableMVs.size();
-                if (limit > 0 && mvSize >= limit) {
-                    break;
-                }
-            }
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
-        }
-        return ShowExecutor.listMaterializedViewStatus(dbName, materializedViews, singleTableMVs);
     }
 
     @Override
