@@ -19,7 +19,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.thrift.TResultSinkType;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 /*
