@@ -15,7 +15,6 @@
 package com.starrocks.catalog.system.information;
 
 import com.google.api.client.util.Lists;
-import com.google.common.collect.ImmutableSet;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.InternalCatalog;
@@ -39,9 +38,11 @@ import com.starrocks.thrift.TColumnStatsUsageRes;
 import com.starrocks.thrift.TSchemaTableType;
 import org.apache.commons.lang3.NotImplementedException;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 /**
@@ -72,9 +73,14 @@ public class ColumnStatsUsageSystemTable extends SystemTable {
         return new ColumnStatsUsageSystemTable();
     }
 
-    private static final Set<String> SUPPORTED_EQUAL_COLUMNS = ImmutableSet.of(
-            "TABLE_CATALOG", "TABLE_DATABASE", "TABLE_NAME"
-    );
+    private static final Set<String> SUPPORTED_EQUAL_COLUMNS =
+            Collections.unmodifiableSet(new TreeSet<>(String.CASE_INSENSITIVE_ORDER) {
+                {
+                    add("TABLE_CATALOG");
+                    add("TABLE_DATABASE");
+                    add("TABLE_NAME");
+                }
+            });
 
     @Override
     public boolean supportFeEvaluation(ScalarOperator predicate) {
