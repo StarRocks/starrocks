@@ -115,14 +115,14 @@ public class QueryRuntimeProfile {
     // ------------------------------------------------------------------------------------
     // Fields for export.
     // ------------------------------------------------------------------------------------
-    private final List<String> exportFiles = Lists.newArrayList();
-    private final List<TTabletCommitInfo> commitInfos = Lists.newArrayList();
-    private final List<TTabletFailInfo> failInfos = Lists.newArrayList();
+    private final List<String> exportFiles = Lists.newCopyOnWriteArrayList();
+    private final List<TTabletCommitInfo> commitInfos = Lists.newCopyOnWriteArrayList();
+    private final List<TTabletFailInfo> failInfos = Lists.newCopyOnWriteArrayList();
 
     // ------------------------------------------------------------------------------------
     // Fields for external table sink
     // ------------------------------------------------------------------------------------
-    private final List<TSinkCommitInfo> sinkCommitInfos = Lists.newArrayList();
+    private final List<TSinkCommitInfo> sinkCommitInfos = Lists.newCopyOnWriteArrayList();
 
     public QueryRuntimeProfile(ConnectContext connectContext,
                                JobSpec jobSpec,
