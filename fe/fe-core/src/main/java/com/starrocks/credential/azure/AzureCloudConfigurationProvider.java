@@ -37,6 +37,8 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_CONTAINER;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_ENDPOINT;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_SECRET;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_OAUTH2_TENANT_ID;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_STORAGE_ACCOUNT;
@@ -61,7 +63,9 @@ public class AzureCloudConfigurationProvider implements CloudConfigurationProvid
                 properties.getOrDefault(AZURE_BLOB_SHARED_KEY, ""),
                 properties.getOrDefault(AZURE_BLOB_CONTAINER, container),
                 properties.getOrDefault(AZURE_BLOB_SAS_TOKEN, ""),
-                properties.getOrDefault(AZURE_BLOB_OAUTH2_CLIENT_ID, "")
+                properties.getOrDefault(AZURE_BLOB_OAUTH2_CLIENT_ID, ""),
+                properties.getOrDefault(AZURE_BLOB_OAUTH2_CLIENT_SECRET, ""),
+                properties.getOrDefault(AZURE_BLOB_OAUTH2_TENANT_ID, "")
         );
         if (blob.validate()) {
             return new AzureCloudConfiguration(blob);
