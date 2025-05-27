@@ -317,4 +317,28 @@ public class TPCDS1TExtractCTETest extends TPCDS1TTestBase {
                 "  |  <slot 131> : to_bitmap(108: c_customer_id)\n" +
                 "  |  <slot 132> : 101: c_birth_country = 'USA'");
     }
+
+    @Test
+    public void testFilterProject() throws Exception {
+        String sql = "select * from ( \n"
+                + " SELECT c_current_addr_sk,sum(c_birth_day) FROM customer "
+                + " GROUP BY c_current_addr_sk \n"
+                + "  union all \n"
+                + " SELECT c_current_addr_sk,sum(c_birth_day) FROM customer "
+                + " where c_current_addr_sk > 100"
+                + " GROUP BY c_current_addr_sk \n"
+                + ") t ORDER BY 1; \n";
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update serialize)\n"
+                + "  |  STREAMING\n"
+                + "  |  output: sum(42: c_birth_day), sum_if(61: c_birth_day, 60: expr)\n"
+                + "  |  group by: 45: c_current_addr_sk\n"
+                + "  |  \n"
+                + "  1:Project\n"
+                + "  |  <slot 42> : 42: c_birth_day\n"
+                + "  |  <slot 45> : 45: c_current_addr_sk\n"
+                + "  |  <slot 60> : 45: c_current_addr_sk > 100\n"
+                + "  |  <slot 61> : clone(42: c_birth_day)");
+    }
 }

@@ -307,6 +307,10 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
                 Map<ColumnRefOperator, ScalarOperator> filterProject = aggFilterProject.entrySet().stream()
                         .collect(Collectors.toMap(Map.Entry::getValue, Map.Entry::getKey));
                 groupBys.forEach(k -> filterProject.put(k, k));
+                aggToRefs.keySet().forEach(k -> {
+                    List<ColumnRefOperator> input = k.getColumnRefs();
+                    input.forEach(v -> filterProject.putIfAbsent(v, v));
+                });
                 childPieces = QueryPieces.of(new LogicalProjectOperator(filterProject),
                         Collections.emptyList(), childPieces.get());
             }
