@@ -68,10 +68,10 @@ import com.starrocks.thrift.TSinkCommitInfo;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.paimon.Snapshot;
 import org.apache.paimon.catalog.CachingCatalog;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.Identifier;
-import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.data.Timestamp;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.io.DataInputViewStreamWrapper;
@@ -79,8 +79,6 @@ import org.apache.paimon.metrics.Gauge;
 import org.apache.paimon.metrics.Metric;
 import org.apache.paimon.operation.metrics.ScanMetrics;
 import org.apache.paimon.predicate.Predicate;
-import org.apache.paimon.reader.RecordReader;
-import org.apache.paimon.reader.RecordReaderIterator;
 import org.apache.paimon.schema.Schema;
 import org.apache.paimon.stats.ColStats;
 import org.apache.paimon.table.FileStoreTable;
@@ -92,10 +90,8 @@ import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.InnerTableScan;
 import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.source.Split;
-import org.apache.paimon.table.system.SnapshotsTable;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
-import org.apache.paimon.types.DataTypeChecks;
 import org.apache.paimon.types.DateType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.DateTimeUtils;
@@ -108,6 +104,7 @@ import java.io.FileWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -648,37 +645,19 @@ public class PaimonMetadata implements ConnectorMetadata {
     }
 
     public long getTableUpdateTime(String dbName, String tblName) {
-        Identifier snapshotsTableIdentifier = new Identifier(dbName, String.format("%s%s", tblName, "$snapshots"));
-        RecordReaderIterator<InternalRow> iterator = null;
+        Identifier identifier = new Identifier(dbName, tblName);
         long lastCommitTime = -1;
         try {
-            SnapshotsTable table = (SnapshotsTable) paimonNativeCatalog.getTable(snapshotsTableIdentifier);
-            RowType rowType = table.rowType();
-            if (!rowType.getFieldNames().contains("commit_time")) {
-                return System.currentTimeMillis();
-            }
-            DataType commitTimeType = rowType.getTypeAt(rowType.getFieldIndex("commit_time"));
-            int[] projected = new int[] {5};
-            RecordReader<InternalRow> recordReader = table.newReadBuilder().withProjection(projected)
-                    .newRead().createReader(table.newScan().plan());
-            iterator = new RecordReaderIterator<>(recordReader);
-            while (iterator.hasNext()) {
-                InternalRow rowData = iterator.next();
-                Timestamp commitTime = rowData.getTimestamp(0, DataTypeChecks.getPrecision(commitTimeType));
-                if (convertToSystemDefaultTime(commitTime) > lastCommitTime) {
-                    lastCommitTime = convertToSystemDefaultTime(commitTime);
-                }
+            Optional<Snapshot> snapshotOptional = paimonNativeCatalog.getTable(identifier).latestSnapshot();
+            if (snapshotOptional.isPresent()) {
+                Timestamp updateTimestamp = Timestamp.fromLocalDateTime(
+                        LocalDateTime.ofInstant(
+                                Instant.ofEpochMilli(snapshotOptional.get().timeMillis()),
+                                ZoneId.systemDefault()));
+                lastCommitTime = convertToSystemDefaultTime(updateTimestamp);
             }
         } catch (Exception e) {
             LOG.error("Failed to get commit_time of paimon table {}.{}.", dbName, tblName, e);
-        } finally {
-            if (iterator != null) {
-                try {
-                    iterator.close();
-                } catch (Exception e) {
-                    LOG.error("Failed to get commit_time of paimon table {}.{}.", dbName, tblName, e);
-                }
-            }
         }
         if (lastCommitTime == -1) {
             lastCommitTime = System.currentTimeMillis();
