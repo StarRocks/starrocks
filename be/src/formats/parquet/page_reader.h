@@ -115,7 +115,7 @@ private:
     using BufferPtr = std::unique_ptr<std::vector<uint8_t>>;
     BufferPtr _compressed_buf;
     BufferPtr _uncompressed_buf;
-    BufferPtr _cache_buf;
+    std::vector<uint8_t>* _cache_buf = nullptr;
     PageHandle _page_handle;
     bool _hit_cache = false;
     bool _skip_page_cache = false;
