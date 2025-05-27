@@ -56,6 +56,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -5679,5 +5680,37 @@ public class CreateMaterializedViewTest extends MVTestBase {
         Assert.assertTrue(result2.equals(result));
 
         starRocksAssert.dropTable("list_partition_tbl1");
+    }
+
+    @Test
+    public void testRefreshMVWithExternalTable1() throws Exception {
+        new MockUp<MaterializedViewAnalyzer>() {
+            @Mock
+            public static boolean isExternalTableFromResource(Table t) {
+                return true;
+            }
+        };
+        String sql = "create materialized view mv1 " +
+                "distributed by hash(k2) buckets 10 " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")" +
+                "as select tbl1.k1 ss, tbl1.k2 from mysql_external_table tbl1;";
+        starRocksAssert.withMaterializedView(sql);
+        starRocksAssert.refreshMV(connectContext, "mv1");
+    }
+
+    @Test
+    public void testRefreshMVWithExternalTable2() throws Exception {
+        String sql = "create materialized view mv1 " +
+                "distributed by hash(k2) buckets 10 " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")" +
+                "as select tbl1.k1 ss, tbl1.k2 from mysql_external_table tbl1;";
+        starRocksAssert.withMaterializedView(sql);
+        starRocksAssert.refreshMV(connectContext, "mv1");
     }
 }
