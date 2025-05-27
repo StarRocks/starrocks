@@ -184,6 +184,9 @@ public class MaterializedViewsSystemTable extends SystemTable {
             FieldValueMetaData meta = TMaterializedViewStatus.metaDataMap.get(field).valueMetaData;
             Object obj = status.getFieldValue(field);
             Type valueType = thriftToScalarType(meta.type);
+            if (valueType.isStringType() && obj == null) {
+                obj = ""; // Convert null string to empty string
+            }
             ConstantOperator scalar = ConstantOperator.createNullableObject(obj, valueType);
             scalar = mayCast(scalar, column.getType());
             result.add(scalar);
