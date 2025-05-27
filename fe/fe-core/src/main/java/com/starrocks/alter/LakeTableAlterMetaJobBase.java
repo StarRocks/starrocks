@@ -264,17 +264,22 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             txnInfo.commitTime = finishedTimeMs / 1000;
             txnInfo.txnType = TxnTypePB.TXN_NORMAL;
             txnInfo.gtid = watershedGtid;
+            List<Tablet> tablets = new ArrayList<>();
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(partitionId);
+                tablets.clear();
                 Map<Long, MaterializedIndex> dirtyIndexMap = physicalPartitionIndexMap.row(partitionId);
                 for (MaterializedIndex index : dirtyIndexMap.values()) {
                     if (!enablePartitionAggregation) {
                         Utils.publishVersion(index.getTablets(), txnInfo, commitVersion - 1, commitVersion,
                                 warehouseId);
                     } else {
-                        Utils.aggregatePublishVersion(index.getTablets(), Lists.newArrayList(txnInfo), commitVersion - 1, 
-                                commitVersion, null, null, warehouseId, null);
+                        tablets.addAll(index.getTablets());
                     }
+                }
+                if (enablePartitionAggregation) {
+                    Utils.aggregatePublishVersion(tablets, Lists.newArrayList(txnInfo), commitVersion - 1, commitVersion, 
+                                null, null, warehouseId, null);
                 }
             }
             return true;

@@ -792,16 +792,21 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             txnInfo.txnType = TxnTypePB.TXN_NORMAL;
             txnInfo.commitTime = finishedTimeMs / 1000;
             txnInfo.gtid = watershedGtid;
+            List<Tablet> tablets = new ArrayList<>();
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(partitionId);
+                tablets.clear();
                 Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
                 for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
                     if (!enablePartitionAggregation) {
                         Utils.publishVersion(shadowIndex.getTablets(), txnInfo, 1, commitVersion, warehouseId);
                     } else {
-                        Utils.aggregatePublishVersion(shadowIndex.getTablets(), Lists.newArrayList(txnInfo), 1, commitVersion,
-                                null, null, warehouseId, null);
+                        tablets.addAll(shadowIndex.getTablets());
                     }
+                }
+                if (enablePartitionAggregation) {
+                    Utils.aggregatePublishVersion(tablets, Lists.newArrayList(txnInfo), 1, commitVersion,
+                            null, null, warehouseId, null);
                 }
             }
             return true;
