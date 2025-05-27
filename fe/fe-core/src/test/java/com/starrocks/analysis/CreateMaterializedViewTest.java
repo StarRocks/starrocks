@@ -4695,7 +4695,7 @@ public class CreateMaterializedViewTest {
                 return true;
             }
         };
-        String sql = "create materialized view mv1 " +
+        String sql = "create materialized view test_mv11" +
                 "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
@@ -4703,13 +4703,13 @@ public class CreateMaterializedViewTest {
                 ")" +
                 "as select tbl1.k1 ss, tbl1.k2 from mysql_external_table tbl1;";
         starRocksAssert.withMaterializedView(sql);
-        starRocksAssert.refreshMV(connectContext, "mv1");
-        starRocksAssert.dropMaterializedView("mv1");
+        starRocksAssert.refreshMV(connectContext, "test_mv11");
+        starRocksAssert.dropMaterializedView("test_mv11");
     }
 
     @Test
     public void testRefreshMVWithExternalTable2() throws Exception {
-        String sql = "create materialized view mv1 " +
+        String sql = "create materialized view test_mv11 " +
                 "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
@@ -4717,7 +4717,7 @@ public class CreateMaterializedViewTest {
                 ")" +
                 "as select tbl1.k1 ss, tbl1.k2 from mysql_external_table tbl1;";
         starRocksAssert.withMaterializedView(sql);
-        starRocksAssert.refreshMV(connectContext, "mv1");
-        starRocksAssert.dropMaterializedView("mv1");
+        starRocksAssert.refreshMV(connectContext, "test_mv11");
+        starRocksAssert.dropMaterializedView("test_mv11");
     }
 }
