@@ -5683,13 +5683,26 @@ public class CreateMaterializedViewTest extends MVTestBase {
     }
 
     @Test
-    public void testRefreshMVWithExternalTable() throws Exception {
+    public void testRefreshMVWithExternalTable1() throws Exception {
         new MockUp<MaterializedViewAnalyzer>() {
             @Mock
             public static boolean isExternalTableFromResource(Table t) {
                 return true;
             }
         };
+        String sql = "create materialized view mv1 " +
+                "distributed by hash(k2) buckets 10 " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")" +
+                "as select tbl1.k1 ss, tbl1.k2 from mysql_external_table tbl1;";
+        starRocksAssert.withMaterializedView(sql);
+        starRocksAssert.refreshMV(connectContext, "mv1");
+    }
+
+    @Test
+    public void testRefreshMVWithExternalTable2() throws Exception {
         String sql = "create materialized view mv1 " +
                 "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
