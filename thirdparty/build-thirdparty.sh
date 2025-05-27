@@ -1420,7 +1420,8 @@ build_azure() {
         -DCURL_LIBRARY=$TP_INSTALL_DIR/lib/libcurl.a \
         -DOPENSSL_ROOT_DIR=$TP_INSTALL_DIR \
         -DOPENSSL_USE_STATIC_LIBS=TRUE \
-        -DLibXml2_ROOT=$TP_INSTALL_DIR
+        -DLibXml2_ROOT=$TP_INSTALL_DIR \
+        -DCMAKE_INSTALL_LIBDIR=lib
 
     ${BUILD_SYSTEM} -j "${PARALLEL}"
     ${BUILD_SYSTEM} install
