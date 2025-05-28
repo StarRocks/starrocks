@@ -671,6 +671,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
     protected boolean lakePublishVersion() {
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             OlapTable table = getTableOrThrow(db, tableId);
+            boolean enablePartitionAggregation = table.enablePartitionAggregation();
             for (long partitionId : physicalPartitionIdToRollupIndex.keySet()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
                 Preconditions.checkState(physicalPartition != null, partitionId);
@@ -689,8 +690,13 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 rollUpTxnInfo.txnType = TxnTypePB.TXN_NORMAL;
                 rollUpTxnInfo.gtid = watershedGtid;
                 // publish rollup tablets
-                Utils.publishVersion(physicalPartitionIdToRollupIndex.get(partitionId).getTablets(), rollUpTxnInfo,
-                        1, commitVersion, warehouseId);
+                if (!enablePartitionAggregation) {
+                    Utils.publishVersion(physicalPartitionIdToRollupIndex.get(partitionId).getTablets(), rollUpTxnInfo,
+                            1, commitVersion, warehouseId);
+                } else {
+                    Utils.aggregatePublishVersion(physicalPartitionIdToRollupIndex.get(partitionId).getTablets(), 
+                            Lists.newArrayList(rollUpTxnInfo), 1, commitVersion, null, null, warehouseId, null);
+                }
 
                 TxnInfoPB originTxnInfo = new TxnInfoPB();
                 originTxnInfo.txnId = -1L;
@@ -699,8 +705,13 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 originTxnInfo.txnType = TxnTypePB.TXN_EMPTY;
                 originTxnInfo.gtid = watershedGtid;
                 // publish origin tablets
-                Utils.publishVersion(allOtherPartitionTablets, originTxnInfo, commitVersion - 1,
-                        commitVersion, warehouseId);
+                if (!enablePartitionAggregation) {
+                    Utils.publishVersion(allOtherPartitionTablets, originTxnInfo, commitVersion - 1,
+                            commitVersion, warehouseId);
+                } else {
+                    Utils.aggregatePublishVersion(allOtherPartitionTablets, Lists.newArrayList(originTxnInfo),
+                            commitVersion - 1, commitVersion, null, null, warehouseId, null);
+                }
 
             }
             return true;
