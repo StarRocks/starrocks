@@ -3283,35 +3283,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return response;
     }
 
-<<<<<<< HEAD
-=======
-    @Override
-    public TUpdateFailPointResponse updateFailPointStatus(TUpdateFailPointRequest request) {
-        TStatus status = new TStatus();
-        if (FailPoint.isEnabled()) {
-            if (request.isIs_enable()) {
-                FailPoint.setTriggerPolicy(request.getName(), TriggerPolicy.fromThrift(request));
-            } else {
-                FailPoint.removeTriggerPolicy(request.getName());
-            }
-            status.setStatus_code(OK);
-        } else {
-            status.setStatus_code(SERVICE_UNAVAILABLE);
-            status.setError_msgs(
-                    Lists.newArrayList("fail point is not enabled, please start fe with --failpoint option"));
-        }
-
-        TUpdateFailPointResponse response = new TUpdateFailPointResponse();
-        response.setStatus(status);
-        return response;
-    }
-
     @Override
     public TUpdateTabletVersionResult updateTabletVersion(TUpdateTabletVersionRequest request) {
         return leaderImpl.updateTabletVersion(request);
     }
 
->>>>>>> 469ae2a077 ([Enhancement] Report tablet version in advance if publish cost too much time (#59009))
     @NotNull
     private static TConnectionInfo getTConnectionInfo(List<String> row) {
         TConnectionInfo tConnectionInfo = new TConnectionInfo();
