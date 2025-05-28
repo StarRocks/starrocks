@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW PROC
 
-## Description
-
-Shows certain indicators of the StarRocks cluster.
+SHOW PROC shows certain indicators of the StarRocks cluster.
 
 :::tip
 

@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # DESC
 
-## Description
-
-You can use the statement to perform the following operations:
+DESC is used to view table schemas:
 
 - View the schema of a table stored in your StarRocks cluster, along with the type of the [sort key](../../../table_design/indexes/Prefix_index_sort_key.md) and [materialized view](../../../using_starrocks/async_mv/Materialized_view.md) of the table.
 - View the schema of a table stored in the following external data sources, such as Apache Hive™. Note that you can perform this operation only in StarRocks 2.4 and later versions.

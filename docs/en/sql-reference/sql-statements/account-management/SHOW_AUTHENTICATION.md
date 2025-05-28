@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW AUTHENTICATION
 
-## Description
-
-Displays the authentication information of the current user or all users in the current cluster.
+SHOW AUTHENTICATION displays the authentication information of the current user or all users in the current cluster.
 
 :::tip
 All users have the privilege to view their own authentication information. Only users with the `user_admin` role can view the authentication information of all users or the authentication information of specified users.
