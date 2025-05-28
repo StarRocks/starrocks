@@ -42,6 +42,7 @@
 
 #include <cstring>
 
+#include "common/process_exit.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "http/http_channel.h"
@@ -60,6 +61,7 @@ class mg_connection;
 namespace starrocks {
 
 extern void (*s_injected_send_reply)(HttpRequest*, HttpStatus, std::string_view);
+extern std::atomic<bool> k_starrocks_exit;
 
 namespace {
 static std::string k_response_str;
@@ -176,6 +178,42 @@ TEST_F(StreamLoadActionTest, normal) {
     rapidjson::Document doc;
     doc.Parse(k_response_str.c_str());
     ASSERT_STREQ("Success", doc["Status"].GetString());
+}
+
+TEST_F(StreamLoadActionTest, process_exit_abort_stream_load) {
+    StreamLoadAction action(&_env, _limiter.get());
+
+    HttpRequest request(_evhttp_req);
+
+    struct evhttp_request ev_req;
+    ev_req.remote_host = nullptr;
+    request._ev_req = &ev_req;
+
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    request.set_handler(&action);
+
+    // set process exit in progress flag
+    k_starrocks_exit.store(true);
+
+    action.on_header(&request);
+    action.handle(&request);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+
+    // {
+    //   "TxnId": -1,
+    //   "Status": "Fail",
+    //   "Message", "Service is shutting down, please retry later!",
+    //   ...
+    // }
+    ASSERT_STREQ("Fail", doc["Status"].GetString()) << k_response_str;
+    ASSERT_EQ(-1, doc["TxnId"].GetInt());
+    ASSERT_STREQ("Service is shutting down, please retry later!", doc["Message"].GetString());
+
+    // restore the flags
+    k_starrocks_exit.store(false);
 }
 
 TEST_F(StreamLoadActionTest, put_fail) {
