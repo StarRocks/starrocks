@@ -113,10 +113,11 @@ After the queries and legacy materialized views are added to the Tunespace, Star
 Syntax:
 
 ```SQL
-SHOW RECOMMENDATIONS FROM <tunespace_name> [LIMIT <INT>] [OFFSET <INT>]
+SHOW [SINGLE] RECOMMENDATIONS FROM <tunespace_name> [LIMIT <INT>] [OFFSET <INT>]
 ```
 
-`tunespace_name`: Name of the Tunespace.
+- `SINGLE`: Recommends 1:1 materialized views for external tables (supported from v3.5.0 onwards). When this option is specified, StarRocks will map the external table data to materialized views, which essentially transforms the external tables into StarRocks native tables, to achieve transparent query acceleration.
+- `tunespace_name`: Name of the Tunespace.
 
 Example:
 
@@ -443,7 +444,7 @@ StarRocks merges materialized views in two different ways: Consolidation and Cov
 ##### automv_default_partition_by_time_granule
 
 - **Default**: day
-- **Description**: When the materialized view has a dimension column that can be used for partitioning, this column is preferentially used as the partitioning column. If the materialized view dimension column cannot be used as the partition column and all metric columns in the materialized view can be rewritten for rollup, the recommendation algorithm will try to add a base table partition column to the materialized view dimension columns as the default partition column. This parameter is used to set the default partitioning granularity of the materialized view. Valid values are `year`, `quarter`, `month`, `day`, `hour`, and `none` (which indicates disabling the default partitioning column supplement logic). Currently, only range partitioning is supported. List partitioning is not supported.
+- **Description**: When the materialized view has a dimension column that can be used for partitioning, this column is preferentially used as the partitioning column. If the materialized view dimension column cannot be used as the partition column and all metric columns in the materialized view can be rewritten for rollup, the recommendation algorithm will try to add a base table partition column to the materialized view dimension columns as the default partition column. This parameter is used to set the default partitioning granularity of the materialized view. Valid values are `year`, `quarter`, `month`, `day`, `hour`, and `none` (which indicates disabling the default partitioning column supplement logic).
 - **Introduced in**: v3.3.2
 
 ##### automv_prefer_range_partition
