@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # CREATE EXTERNAL CATALOG
 
-## Description
-
-Creates an external catalog. You can use external catalogs to query data in external data sources without loading data into StarRocks or creating external tables. Currently, you can create the following types of external catalogs:
+CREATE EXTERNAL CATALOG creates an external catalog. You can use external catalogs to query data in external data sources without loading data into StarRocks or creating external tables. Currently, you can create the following types of external catalogs:
 
 - [Hive catalog](../../../data_source/catalog/hive_catalog.md): used for querying data from Apache Hive™.
 - [Iceberg catalog](../../../data_source/catalog/iceberg/iceberg_catalog.md): used for querying data from Apache Iceberg.

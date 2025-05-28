@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # REFRESH MATERIALIZED VIEW
 
-## Description
-
-Manually refresh a specific asynchronous materialized view or partitions within.
+REFRESH MATERIALIZED VIEW manually refreshes a specific asynchronous materialized view or partitions within.
 
 > **CAUTION**
 >

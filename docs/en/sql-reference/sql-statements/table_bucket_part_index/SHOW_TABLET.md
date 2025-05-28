@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW TABLET
 
-## Description
-
-Displays tablet related information.
+SHOW TABLET displays tablet related information.
 
 > **NOTE**
 >
