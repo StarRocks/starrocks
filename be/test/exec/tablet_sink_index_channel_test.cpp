@@ -88,7 +88,6 @@ protected:
         partition.distributed_columns.push_back("c1");
         partition.partitions.resize(1);
         partition.partitions[0].id = 0;
-        partition.partitions[0].num_buckets = 1;
         partition.partitions[0].indexes.resize(1);
         partition.partitions[0].indexes[0].index_id = 0;
         partition.partitions[0].indexes[0].tablets.push_back(0);

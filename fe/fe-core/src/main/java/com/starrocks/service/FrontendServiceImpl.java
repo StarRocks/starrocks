@@ -2245,7 +2245,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         for (MaterializedIndex index : physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
             tPartition.addToIndexes(new TOlapTableIndexTablets(index.getId(), Lists.newArrayList(
                     index.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()))));
-            tPartition.setNum_buckets(index.getTablets().size());
         }
         partitions.add(tPartition);
     }
@@ -2649,7 +2648,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
             tPartition.addToIndexes(new TOlapTableIndexTablets(index.getId(), Lists.newArrayList(
                     index.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()))));
-            tPartition.setNum_buckets(index.getTablets().size());
         }
         partitions.add(tPartition);
         txnState.getPartitionNameToTPartition().put(partition.getName(), tPartition);
