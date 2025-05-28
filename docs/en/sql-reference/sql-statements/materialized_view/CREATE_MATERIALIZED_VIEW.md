@@ -277,7 +277,7 @@ The sort key of the asynchronous materialized view. If you do not specify the so
 
 **INDEX** (optional)
 
-Asynchronous materialized views support ​Bitmap​ and ​BloomFilter​ indexes to accelerate query performance, and their usage is the same as in regular tables. For details on the use cases and information about ​Bitmap​ and ​BloomFilter​ indexes, please refer to：[Bitmap Index](。。/../../table_design/indexes/Bitmap_index.md) and [Bloom filter Index](。。/../../table_design/indexes/Bloomfilter_index.md).
+Asynchronous materialized views support ​Bitmap​ and ​BloomFilter​ indexes to accelerate query performance, and their usage is the same as in regular tables. For details on the use cases and information about ​Bitmap​ and ​BloomFilter​ indexes, please refer to：[Bitmap Index](../../../table_design/indexes/Bitmap_index.md) and [Bloom filter Index](../../../table_design/indexes/Bloomfilter_index.md).
 
 Using Bitmap Indexes:  
 ```sql
