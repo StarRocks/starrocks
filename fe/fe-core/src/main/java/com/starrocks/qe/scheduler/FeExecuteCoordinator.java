@@ -16,6 +16,7 @@ package com.starrocks.qe.scheduler;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
@@ -32,6 +33,7 @@ import com.starrocks.qe.RowBatch;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.sql.common.RyuDouble;
 import com.starrocks.sql.common.RyuFloat;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -326,25 +328,25 @@ public class FeExecuteCoordinator extends Coordinator {
     private List<ByteBuffer> covertToMySQLRowBuffer() {
         final MysqlSerializer serializer = MysqlSerializer.newInstance();
         final PhysicalValuesOperator valuesOperator = (PhysicalValuesOperator) execPlan.getPhysicalPlan().getOp();
-        // Ensure output columns' order is consistent with output expressions
         final List<ColumnRefOperator> outputColumnRefs = execPlan.getOutputColumns();
+        final Projection valueOperatorProjection = valuesOperator.getProjection();
         final List<ColumnRefOperator> valuesOperatorColumnRefs = valuesOperator.getColumnRefSet();
         // Map values operator's output column references to their indices
         final Map<ColumnRefOperator, Integer> valuesOperatorOutputMap = IntStream.range(0, outputColumnRefs.size())
                 .boxed()
                 .collect(Collectors.toMap(valuesOperatorColumnRefs::get, i -> i));
+        // NOTE: this is only used when value operator's projection is null since row will be output by projection mapping if
+        // project exists.
         // Find the indices of the output columns in the values operator's output
-        final List<Integer> alignedOutputIndexes = outputColumnRefs.stream()
-                .map(valuesOperatorOutputMap::get)
-                .collect(Collectors.toList());
+        final List<Integer> alignedOutputIndexes = valueOperatorProjection == null ?
+                outputColumnRefs.stream()
+                        .map(valuesOperatorOutputMap::get)
+                        .collect(Collectors.toList()) : null;
         final List<ByteBuffer> res = Lists.newArrayList();
         for (final List<ScalarOperator> row : valuesOperator.getRows()) {
             serializer.reset();
             Preconditions.checkArgument(row.size() == outputColumnRefs.size());
-            // Align the output according to the output column references
-            List<ScalarOperator> alignedRow = alignedOutputIndexes.stream()
-                    .map(i -> row.get(i))
-                    .collect(Collectors.toUnmodifiableList());
+            List<ScalarOperator> alignedRow = getAlignedRow(valuesOperator, row, alignedOutputIndexes);
             for (ScalarOperator scalarOperator : alignedRow) {
                 ConstantOperator constantOperator = (ConstantOperator) scalarOperator;
                 if (constantOperator.isNull()) {
@@ -421,6 +423,37 @@ public class FeExecuteCoordinator extends Coordinator {
             res.add(serializer.toByteBuffer());
         }
         return res;
+    }
+
+    /**
+     * Align the row with the output indexes of the values operator.
+     * @param valuesOperator: the values operator to get the projection from
+     * @param row: the row to align
+     * @param alignedOutputIndexes: the output indexes of the values operator,
+     *                              if null, will use projection mapping
+     * @return: the aligned row
+     */
+    private List<ScalarOperator> getAlignedRow(PhysicalValuesOperator valuesOperator,
+                                               List<ScalarOperator> row,
+                                               List<Integer> alignedOutputIndexes) {
+        if (alignedOutputIndexes != null) {
+            return alignedOutputIndexes.stream()
+                    .map(i -> row.get(i))
+                    .collect(Collectors.toUnmodifiableList());
+        } else {
+            // TODO: add cache for this
+            Preconditions.checkArgument(valuesOperator.getProjection() != null);
+            return execPlan.getOutputExprs().stream()
+                    .map(expr -> {
+                        int slotId = ((SlotRef) expr).getSlotId().asInt();
+                        return valuesOperator.getProjection().getColumnRefMap().entrySet().stream()
+                                .filter(entry -> entry.getKey().getId() == slotId)
+                                .map(Map.Entry::getValue)
+                                .findFirst()
+                                .orElseThrow(() -> new IllegalStateException("No match for slotId: " + slotId));
+                    })
+                    .collect(Collectors.toList());
+        }
     }
 
     private String convertToTimeString(double time) {
