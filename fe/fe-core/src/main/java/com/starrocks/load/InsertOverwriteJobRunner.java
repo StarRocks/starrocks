@@ -54,6 +54,7 @@ import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.transaction.InsertOverwriteJobStats;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -390,8 +391,18 @@ public class InsertOverwriteJobRunner {
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
+        ComputeResource computeResource;
+        try {
+            computeResource = context.getCurrentComputeResource();
+        } catch (Exception e) {
+            throw new DmlException("insert overwrite commit failed because no available resource");
+        }
+        if (computeResource == null) {
+            throw new DmlException("insert overwrite commit failed because no available resource");
+        }
         PartitionUtils.createAndAddTempPartitionsForTable(db, targetTable, postfix,
-                job.getSourcePartitionIds(), job.getTmpPartitionIds(), null, job.getWarehouseId());
+                job.getSourcePartitionIds(), job.getTmpPartitionIds(), null,
+                computeResource);
         createPartitionElapse = System.currentTimeMillis() - createPartitionStartTimestamp;
     }
 

@@ -248,12 +248,6 @@ public class CompactionSchedulerTest {
 
                 globalStateMgr.getWarehouseMgr();
                 result = warehouseManager;
-
-                warehouseManager.getCompactionWarehouse();
-                result = warehouse;
-
-                warehouse.getId();
-                result = 100L;
             }
         };
 

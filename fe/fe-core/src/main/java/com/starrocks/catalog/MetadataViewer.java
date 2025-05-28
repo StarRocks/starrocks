@@ -47,6 +47,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.PartitionNames;
@@ -54,6 +55,7 @@ import com.starrocks.sql.ast.ShowDataDistributionStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 
 import java.text.DecimalFormat;
 import java.util.Collections;
@@ -283,11 +285,13 @@ public class MetadataViewer {
         List<Long> allComputeNodeIds = Lists.newArrayList();
         if (RunMode.isSharedDataMode()) {
             // check warehouse
-            long warehouseId = ConnectContext.get().getCurrentWarehouseId();
-            List<Long> computeNodeIs =
-                    GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+            final ConnectContext connectContext = ConnectContext.get();
+            final ComputeResource computeResource = connectContext.getCurrentComputeResource();
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            List<Long> computeNodeIs = warehouseManager.getAllComputeNodeIds(computeResource);
             if (computeNodeIs.isEmpty()) {
-                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+                final long warehouseId = computeResource.getWarehouseId();
+                final Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
                 throw new DdlException("no available compute nodes in warehouse " + warehouse.getName());
             }
             allComputeNodeIds.addAll(computeNodeIs);

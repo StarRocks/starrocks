@@ -34,6 +34,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -104,7 +105,8 @@ public class VacuumTest {
         
 
         when(warehouseManager.getBackgroundWarehouse()).thenReturn(mock(Warehouse.class));
-        when(warehouseManager.getComputeNodeAssignedToTablet(anyString(), any(LakeTablet.class))).thenReturn(computeNode);
+        when(warehouseManager.getComputeNodeAssignedToTablet((ComputeResource) any(), any(LakeTablet.class)))
+                .thenReturn(computeNode);
 
         when(computeNode.getHost()).thenReturn("localhost");
         when(computeNode.getBrpcPort()).thenReturn(8080);

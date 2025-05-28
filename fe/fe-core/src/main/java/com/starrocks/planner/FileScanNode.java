@@ -90,6 +90,7 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -185,14 +186,14 @@ public class FileScanNode extends LoadScanNode {
     private List<ParamCreateContext> paramCreateContexts;
 
     public FileScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName,
-                        List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded, long warehouseId) {
+                        List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded, ComputeResource computeResource) {
         super(id, desc, planNodeName);
         this.fileStatusesList = fileStatusesList;
         this.filesAdded = filesAdded;
         this.parallelInstanceNum = 1;
         this.useVectorizedLoad = false;
         this.nullExprInAutoIncrement = true;
-        this.warehouseId = warehouseId;
+        this.computeResource = computeResource;
     }
 
     @Override
@@ -551,7 +552,7 @@ public class FileScanNode extends LoadScanNode {
     }
 
     private void assignBackends() throws StarRocksException {
-        nodes = getAvailableComputeNodes(warehouseId);
+        nodes = getAvailableComputeNodes(computeResource);
         if (nodes.isEmpty()) {
             throw new StarRocksException("No available backends");
         }

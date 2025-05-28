@@ -109,6 +109,7 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TTableSampleOptions;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -216,9 +217,9 @@ public class OlapScanNode extends ScanNode {
         olapTable = (OlapTable) desc.getTable();
     }
 
-    public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, long warehouseId) {
+    public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, ComputeResource computeResource) {
         this(id, desc, planNodeName);
-        this.warehouseId = warehouseId;
+        this.computeResource = computeResource;
     }
 
     public Map<Long, Long> getScanPartitionVersions() {
@@ -422,7 +423,8 @@ public class OlapScanNode extends ScanNode {
 
     // update TScanRangeLocations based on the latest olapTable tablet distributions,
     // this function will make sure the version of each TScanRangeLocations doesn't change.
-    public List<TScanRangeLocations> updateScanRangeLocations(List<TScanRangeLocations> locations)
+    public List<TScanRangeLocations> updateScanRangeLocations(List<TScanRangeLocations> locations,
+                                                              ComputeResource computeResource)
             throws StarRocksException {
         if (selectedPartitionIds.size() == 0) {
             throw new StarRocksException("Scan node's partition is empty");
@@ -455,7 +457,7 @@ public class OlapScanNode extends ScanNode {
             List<Replica> localReplicas = Lists.newArrayList();
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
                 selectedTablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
-                        expectedVersion, -1, schemaHash, warehouseId);
+                        expectedVersion, -1, schemaHash, computeResource);
             } else {
                 selectedTablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
                         expectedVersion, -1, schemaHash);
@@ -528,8 +530,8 @@ public class OlapScanNode extends ScanNode {
         // frontend if there are many calls per request (e.g. one per partition when there are many partitions).
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
             WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-            if (CollectionUtils.isEmpty(warehouseManager.getAliveComputeNodes(warehouseId))) {
-                Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
+            if (CollectionUtils.isEmpty(warehouseManager.getAliveComputeNodes(computeResource))) {
+                Warehouse warehouse = warehouseManager.getWarehouse(computeResource.getWarehouseId());
                 throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
             }
         }
@@ -586,7 +588,7 @@ public class OlapScanNode extends ScanNode {
             List<Replica> localReplicas = Lists.newArrayList();
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
                 tablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
-                        visibleVersion, localBeId, schemaHash, warehouseId);
+                        visibleVersion, localBeId, schemaHash, computeResource);
             } else {
                 tablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
                         visibleVersion, localBeId, schemaHash);
@@ -1124,7 +1126,7 @@ public class OlapScanNode extends ScanNode {
     // export some tablets
     public static OlapScanNode createOlapScanNodeByLocation(
             PlanNodeId id, TupleDescriptor desc, String planNodeName, List<TScanRangeLocations> locationsList,
-            long warehouseId) {
+            ComputeResource computeResource) {
         OlapScanNode olapScanNode = new OlapScanNode(id, desc, planNodeName);
         olapScanNode.selectedIndexId = olapScanNode.olapTable.getBaseIndexId();
         olapScanNode.selectedPartitionNum = 1;
@@ -1132,7 +1134,7 @@ public class OlapScanNode extends ScanNode {
         olapScanNode.totalTabletsNum = 1;
         olapScanNode.isPreAggregation = false;
         olapScanNode.isFinalized = true;
-        olapScanNode.warehouseId = warehouseId;
+        olapScanNode.computeResource = computeResource;
         olapScanNode.result.addAll(locationsList);
 
         return olapScanNode;

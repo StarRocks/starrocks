@@ -66,6 +66,7 @@ import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -90,6 +91,8 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -292,6 +295,9 @@ public class ConnectContext {
 
     // thread id is the thread who created this ConnectContext's id
     private AtomicLong currentThreadId = null;
+
+    // The cnResource of the current session.
+    private ComputeResource computeResource = null;
 
     // listeners for this connection
     private List<Listener> listeners = Lists.newArrayList();
@@ -834,6 +840,7 @@ public class ConnectContext {
         mysqlChannel.close();
         threadLocalInfo.remove();
         returnRows = 0;
+        computeResource = null;
     }
 
     public boolean isKilled() {
@@ -969,11 +976,39 @@ public class ConnectContext {
 
     public void setCurrentWarehouse(String currentWarehouse) {
         this.sessionVariable.setWarehouseName(currentWarehouse);
+        this.computeResource = null;
     }
 
     public void setCurrentWarehouseId(long warehouseId) {
         Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseId);
         this.sessionVariable.setWarehouseName(warehouse.getName());
+        this.computeResource = null;
+    }
+
+    public void setCurrentComputeResource(ComputeResource computeResource) {
+        this.computeResource = computeResource;
+    }
+
+    public synchronized void tryAcquireResource(boolean force) {
+        if (!force && this.computeResource != null) {
+            return;
+        }
+        // once warehouse is set, needs to choose the available cngroup
+        // try to acquire cn group id once the warehouse is set
+        final long warehouseId = this.getCurrentWarehouseId();
+        final WarehouseManager warehouseManager = globalStateMgr.getWarehouseMgr();
+        final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseId, this.computeResource);
+        this.computeResource = warehouseManager.acquireComputeResource(acquireContext);
+    }
+
+    public ComputeResource getCurrentComputeResource() {
+        if (RunMode.isSharedNothingMode()) {
+            return WarehouseManager.DEFAULT_RESOURCE;
+        }
+        if (this.computeResource == null) {
+            tryAcquireResource(false);
+        }
+        return this.computeResource;
     }
 
     public void setParentConnectContext(ConnectContext parent) {

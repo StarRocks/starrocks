@@ -382,7 +382,7 @@ public class InsertPlanner {
                 dataSink = new OlapTableSink(olapTable, tupleDesc, targetPartitionIds,
                         olapTable.writeQuorum(),
                         forceReplicatedStorage ? true : olapTable.enableReplicatedStorage(),
-                        nullExprInAutoIncrement, enableAutomaticPartition, session.getCurrentWarehouseId());
+                        nullExprInAutoIncrement, enableAutomaticPartition, session.getCurrentComputeResource());
                 if (insertStmt.usePartialUpdate()) {
                     ((OlapTableSink) dataSink).setPartialUpdateMode(TPartialUpdateMode.AUTO_MODE);
                     if (insertStmt.autoIncrementPartialUpdate()) {

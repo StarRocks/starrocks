@@ -56,6 +56,8 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -202,10 +204,12 @@ public class KafkaUtil {
                     PKafkaOffsetProxyRequest req = request.kafkaOffsetBatchRequest.requests.get(0);
                     warehouseId = req.kafkaInfo.warehouseId;
                 }
-
+                // TODO(CNGROUP): support multi cn groups
+                final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
                 List<Long> computeNodeIds = null;
                 try {
-                    computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+                    ComputeResource computeResource = warehouseManager.acquireComputeResource(CRAcquireContext.of(warehouseId));
+                    computeNodeIds = warehouseManager.getAllComputeNodeIds(computeResource);
                 } catch (ErrorReportException e) {
                     throw new LoadException(
                             String.format("Failed to send get kafka partition info request. err: %s", e.getMessage()));

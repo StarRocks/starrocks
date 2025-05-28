@@ -76,7 +76,7 @@ public class WarehouseQueryQueueOptionsTest {
                 minTimes = 0;
                 result = warehouseId;
 
-                GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+                GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(anyLong);
                 minTimes = 0;
                 result = Lists.newArrayList(10003L, 10004L, 10005L);
             }

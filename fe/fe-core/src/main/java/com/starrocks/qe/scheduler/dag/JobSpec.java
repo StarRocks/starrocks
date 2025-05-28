@@ -41,6 +41,7 @@ import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.lang3.StringUtils;
 
 import java.time.Instant;
@@ -82,10 +83,10 @@ public class JobSpec {
     private TQueryOptions queryOptions;
     private TWorkGroup resourceGroup;
 
-    private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+    private ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
-    public long getWarehouseId() {
-        return warehouseId;
+    public ComputeResource getComputeResource() {
+        return computeResource;
     }
 
     private String planProtocol;
@@ -130,7 +131,7 @@ public class JobSpec {
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
                     .commonProperties(context)
-                    .warehouseId(context.getCurrentWarehouseId())
+                    .computeResource(context.getCurrentComputeResource())
                     .setPlanProtocol(context.getSessionVariable().getThriftPlanProtocol())
                     .build();
         }
@@ -185,7 +186,7 @@ public class JobSpec {
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
                     .commonProperties(context)
-                    .warehouseId(loadPlanner.getWarehouseId())
+                    .computeResource(loadPlanner.getComputeResource())
                     .build();
         }
 
@@ -220,7 +221,7 @@ public class JobSpec {
                     .needReport(true)
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
-                    .warehouseId(context.getCurrentWarehouseId())
+                    .computeResource(context.getCurrentComputeResource())
                     .commonProperties(context)
                     .build();
         }
@@ -285,7 +286,7 @@ public class JobSpec {
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
                     .commonProperties(context)
-                    .warehouseId(warehouseId)
+                    .computeResource(context.getCurrentComputeResource())
                     .build();
         }
 
@@ -305,7 +306,7 @@ public class JobSpec {
                     .queryOptions(null)
                     .enablePipeline(false)
                     .resourceGroup(null)
-                    .warehouseId(planner.getWarehouseId())
+                    .computeResource(planner.getComputeResource())
                     .setSyncStreamLoad()
                     .build();
         }
@@ -389,7 +390,7 @@ public class JobSpec {
                 ", enableStreamPipeline=" + enableStreamPipeline +
                 ", isBlockQuery=" + isBlockQuery +
                 ", resourceGroup=" + resourceGroup +
-                ", warehouseId=" + warehouseId +
+                ", cnGroup=" + computeResource +
                 '}';
     }
 
@@ -618,8 +619,8 @@ public class JobSpec {
             return this;
         }
 
-        private Builder warehouseId(long warehouseId) {
-            instance.warehouseId = warehouseId;
+        private Builder computeResource(ComputeResource computeResource) {
+            instance.computeResource = computeResource;
             return this;
         }
 
