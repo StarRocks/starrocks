@@ -1,0 +1,34 @@
+-- name: test_pipeline_operator_failed @sequential
+update default_catalog.information_schema.be_configs set `value` = "1000" where name= "pipeline_prepare_timeout_guard_ms";
+-- result:
+-- !result
+CREATE TABLE `t0` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into t0 SELECT generate_series, generate_series FROM TABLE(generate_series(1,  8192));
+-- result:
+-- !result
+admin enable failpoint 'fragment_prepare_sleep';
+-- result:
+-- !result
+[UC] select count(*) from t0;
+-- result:
+8192
+-- !result
+admin disable failpoint 'fragment_prepare_sleep';
+-- result:
+-- !result

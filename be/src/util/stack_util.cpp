@@ -19,9 +19,12 @@
 
 #include <cxxabi.h>
 #include <dirent.h>
+#include <fmt/core.h>
 #include <fmt/format.h>
+#include <fmt/ostream.h>
 #include <sys/syscall.h>
 
+#include <thread>
 #include <tuple>
 
 #include "common/config.h"
@@ -53,6 +56,7 @@ std::string get_stack_trace() {
 }
 
 struct StackTraceTask {
+    std::thread::id id;
     static constexpr int kMaxStackDepth = 64;
     void* addrs[kMaxStackDepth];
     int depth{0};
@@ -136,6 +140,7 @@ void get_stack_trace_sighandler(int signum, siginfo_t* siginfo, void* ucontext) 
     // To ensure the cost is valid, set cost before done flag
     task.cost_us = MonotonicMicros() - start_us;
     task.done = true;
+    task.id = std::this_thread::get_id();
 }
 
 bool install_stack_trace_sighandler() {
@@ -195,8 +200,8 @@ std::string get_stack_trace_for_thread(int tid, int timeout_ms) {
             return msg;
         }
     }
-    std::string ret = fmt::format("Stack trace id: {}, tid: {}\n{}", stack_trace_id, tid, task.to_string());
-    LOG(INFO) << ret;
+    std::string ret =
+            fmt::format("Stack trace id: {}, tid: {} cid:{} \n{}", stack_trace_id, tid, task.id, task.to_string());
     return ret;
 }
 
