@@ -22,16 +22,13 @@ SELECT 语句用于从单个或多个表，视图，物化视图中读取数据�
       - [等值 Join 和非等值 Join](#等值-join-和非等值-join)
     - [ORDER BY](#order-by)
     - [GROUP BY](#group-by)
-  - [语法](#语法)
-    - [Parameters](#parameters)
-    - [Note](#note)
   - [示例](#示例)
     - [HAVING](#having)
     - [LIMIT](#limit)
       - [OFFSET](#offset)
-    - [**UNION**](#union)
-    - [**INTERSECT**](#intersect)
-    - [**EXCEPT/MINUS**](#exceptminus)
+    - [UNION](#union)
+    - [INTERSECT](#intersect)
+    - [EXCEPT/MINUS](#exceptminus)
     - [DISTINCT](#distinct)
     - [子查询](#子查询)
       - [不相关子查询](#不相关子查询)
@@ -275,12 +272,14 @@ GROUP BY 子句通常和聚合函数一起使用。GROUP BY 指定的列不会�
 #### 参数
 
 - `FILTER` 与聚合函数共同使用，仅有被筛选出来的行才会参与聚合函数的实际运算。
-  > 注意：
-  > FILTER 语句仅支持在 AVG, COUNT, MAX, MIN, SUM, ARRAY_AGG, and ARRAY_AGG_DISTINCT 函数后使用。
-  > 不支持 COUNT DISTINCT。
-  > ARRAY_AGG 和 ARRAY_AGG_DISTINCT 不支持在函数中使用 ORDER BY。
 
-- `GROUPING SETS` ｜ `CUBE` ｜ `ROLLUP` 是对 GROUP BY 子句的扩展，它能够在一个 GROUP BY 子句中实现多个集合的分组的聚合。其结果等价于将多个相应 GROUP BY 子句进行 UNION 操作。
+  > **注意**
+  >
+  > - FILTER 语句仅支持在 AVG, COUNT, MAX, MIN, SUM, ARRAY_AGG, and ARRAY_AGG_DISTINCT 函数后使用。
+  > - FILTER 语句不支持 COUNT DISTINCT。
+  > - 指定 FILTER 语句后，不支持在 ARRAY_AGG 和 ARRAY_AGG_DISTINCT 函数内部使用 ORDER BY。
+
+- `GROUPING SETS`、`CUBE` 以及 `ROLLUP` 是对 GROUP BY 子句的扩展，它能够在一个 GROUP BY 子句中实现多个集合的分组的聚合。其结果等价于将多个相应 GROUP BY 子句进行 UNION 操作。
 
 #### 示例
 
@@ -332,7 +331,7 @@ GROUP BY 子句通常和聚合函数一起使用。GROUP BY 指定的列不会�
     )
     ```
   
-  带入实际数据的例子:
+  代入实际数据的例子:
   
     ```sql
     SELECT * FROM t;
