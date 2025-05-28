@@ -164,6 +164,14 @@ public class ExchangeNode extends PlanNode {
     }
 
     @Override
+    public final void setLimit(long limit) {
+        if (limit != -1) {
+            super.setLimit(limit);
+            cardinality = Math.min(limit, cardinality);
+        }
+    }
+
+    @Override
     public final void computeTupleIds() {
         clearTupleIds();
         tupleIds.addAll(getChild(0).getTupleIds());

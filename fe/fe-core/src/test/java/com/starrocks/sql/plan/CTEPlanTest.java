@@ -300,16 +300,37 @@ public class CTEPlanTest extends PlanTestBase {
 
     @Test
     public void testSubqueryWithPushLimit() throws Exception {
-        String sql = "select * from " +
+        String sqlWithPredicate = "select * from " +
                 "(with xx as (select * from t0) " +
                 "select x1.* from xx x1 left outer join[broadcast] xx x2 on x1.v2 = x2.v2) s " +
                 "where s.v1 = 2 limit 10;";
 
-        String plan = getFragmentPlan(sql);
-        defaultCTEReuse();
+        connectContext.getSessionVariable().setEnableMultiCastLimitPushDown(false);
+        String plan = getFragmentPlan(sqlWithPredicate);
         Assert.assertTrue(plan.contains("  3:SELECT\n" +
                 "  |  predicates: 4: v1 = 2\n" +
                 "  |  limit: 10"));
+
+        connectContext.getSessionVariable().setEnableMultiCastLimitPushDown(true);
+        plan = getFragmentPlan(sqlWithPredicate);
+        Assert.assertFalse(plan.contains("  1:EXCHANGE\n" +
+                "     limit: 10"));
+
+        String sqlWithoutPredicate = "select * from " +
+                "(with xx as (select * from t0) " +
+                "select x1.* from xx x1 left outer join[broadcast] xx x2 on x1.v2 = x2.v2) s " +
+                "limit 10;";
+
+        connectContext.getSessionVariable().setEnableMultiCastLimitPushDown(false);
+        plan = getFragmentPlan(sqlWithoutPredicate);
+        Assert.assertFalse(plan.contains("  3:SELECT\n" +
+                "  |  predicates: 4: v1 = 2\n" +
+                "  |  limit: 10"));
+
+        connectContext.getSessionVariable().setEnableMultiCastLimitPushDown(true);
+        plan = getFragmentPlan(sqlWithoutPredicate);
+        Assert.assertTrue(plan.contains("  1:EXCHANGE\n" +
+                "     limit: 10"));
     }
 
     @Test
@@ -919,14 +940,29 @@ public class CTEPlanTest extends PlanTestBase {
 
     @Test
     public void testCTELimitSelect() throws Exception {
-        alwaysCTEReuse();
         String sql = "with cte as (select * from t0)" +
                 " select case when not exists (select 1 from cte where v2 = 1) then 'A' else 'B' end," +
-                "        case when not exists (select 1 from cte where v3 = 1) then 'C' else 'D' end " +
+                "        case when not exists (select 1 from cte where v3 = 1) then 'C' else 'D' end, " +
+                "        case when not exists (select 1 from cte) then 'E' else 'F' end " +
                 " from t2;";
+
+        connectContext.getSessionVariable().setEnableMultiCastLimitPushDown(false);
         String plan = getFragmentPlan(sql);
-        defaultCTEReuse();
-        assertNotContains(plan, "1:EXCHANGE\n" +
+        assertNotContains(plan, "  1:EXCHANGE\n" +
+                "     limit: 1");
+        assertNotContains(plan, "  12:EXCHANGE\n" +
+                "     limit: 1");
+        assertNotContains(plan, "  21:EXCHANGE\n" +
+                "     limit: 1");
+
+        // consumers that don't have a predicate can push down the limit to the exchange node.
+        connectContext.getSessionVariable().setEnableMultiCastLimitPushDown(true);
+        plan = getFragmentPlan(sql);
+        assertNotContains(plan, "  1:EXCHANGE\n" +
+                "     limit: 1");
+        assertNotContains(plan, "  12:EXCHANGE\n" +
+                "     limit: 1");
+        assertContains(plan, "  21:EXCHANGE\n" +
                 "     limit: 1");
     }
 }
