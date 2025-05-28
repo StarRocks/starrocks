@@ -54,6 +54,7 @@ SchemaScanner::ColumnDesc SchemaPartitionsMetaScanner::_s_columns[] = {
         {"P50_CS", TypeDescriptor::from_logical_type(TYPE_DOUBLE), sizeof(double), false},
         {"MAX_CS", TypeDescriptor::from_logical_type(TYPE_DOUBLE), sizeof(double), false},
         {"STORAGE_PATH", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"STORAGE_SIZE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
 };
 
 SchemaPartitionsMetaScanner::SchemaPartitionsMetaScanner()
@@ -295,6 +296,12 @@ Status SchemaPartitionsMetaScanner::fill_chunk(ChunkPtr* chunk) {
             fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&storage_path);
             break;
         }
+        case 29: {
+            // STORAGE_SIZE
+            fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.storage_size);
+            break;
+        }
+
         default:
             break;
         }

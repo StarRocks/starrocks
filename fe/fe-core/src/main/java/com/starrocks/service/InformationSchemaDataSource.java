@@ -492,6 +492,8 @@ public class InformationSchemaDataSource {
         partitionMetaInfo.setData_version(physicalPartition.getDataVersion());
         partitionMetaInfo.setVersion_epoch(physicalPartition.getVersionEpoch());
         partitionMetaInfo.setVersion_txn_type(physicalPartition.getVersionTxnType().toThrift());
+        // STORAGE_SIZE
+        partitionMetaInfo.setStorage_size(physicalPartition.storageDataSize() + physicalPartition.getExtraFileSize());
     }
 
     // tables
