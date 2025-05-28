@@ -81,6 +81,9 @@ public:
     void tablet_writer_cancel(google::protobuf::RpcController* controller, const PTabletWriterCancelRequest* request,
                               PTabletWriterCancelResult* response, google::protobuf::Closure* done) override;
 
+    void get_load_replica_status(google::protobuf::RpcController* controller, const PLoadReplicaStatusRequest* request,
+                                 PLoadReplicaStatusResult* response, google::protobuf::Closure* done) override;
+
     void load_diagnose(google::protobuf::RpcController* controller, const PLoadDiagnoseRequest* request,
                        PLoadDiagnoseResult* response, google::protobuf::Closure* done) override;
 

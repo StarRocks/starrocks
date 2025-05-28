@@ -84,6 +84,9 @@ public:
     void cancel(brpc::Controller* cntl, const PTabletWriterCancelRequest& request, PTabletWriterCancelResult* response,
                 google::protobuf::Closure* done);
 
+    void get_load_replica_status(brpc::Controller* cntl, const PLoadReplicaStatusRequest* request,
+                                 PLoadReplicaStatusResult* response, google::protobuf::Closure* done);
+
     void load_diagnose(brpc::Controller* cntl, const PLoadDiagnoseRequest* request, PLoadDiagnoseResult* response,
                        google::protobuf::Closure* done);
 

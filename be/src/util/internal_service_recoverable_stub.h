@@ -67,6 +67,8 @@ public:
                                    const ::starrocks::PTabletWriterAddSegmentRequest* request,
                                    ::starrocks::PTabletWriterAddSegmentResult* response,
                                    ::google::protobuf::Closure* done);
+    void get_load_replica_status(google::protobuf::RpcController* controller, const PLoadReplicaStatusRequest* request,
+                                 PLoadReplicaStatusResult* response, google::protobuf::Closure* done) override;
     void load_diagnose(::google::protobuf::RpcController* controller, const ::starrocks::PLoadDiagnoseRequest* request,
                        ::starrocks::PLoadDiagnoseResult* response, ::google::protobuf::Closure* done) override;
     void transmit_runtime_filter(::google::protobuf::RpcController* controller,

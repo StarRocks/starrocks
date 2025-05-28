@@ -219,4 +219,20 @@ TEST_F(InternalServiceTest, test_fetch_datacache_via_brpc) {
     }
 }
 
+TEST_F(InternalServiceTest, test_get_load_replica_status) {
+    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance());
+    PLoadReplicaStatusRequest request;
+    request.mutable_load_id()->set_hi(0);
+    request.mutable_load_id()->set_lo(0);
+    request.set_txn_id(1);
+    request.set_sink_id(1);
+    request.set_node_id(1);
+    request.add_tablet_ids(1);
+    PLoadReplicaStatusResult response;
+    brpc::Controller cntl;
+    MockClosure closure;
+    service.get_load_replica_status(&cntl, &request, &response, &closure);
+    ASSERT_EQ(1, response.replica_statuses_size());
+}
+
 } // namespace starrocks
