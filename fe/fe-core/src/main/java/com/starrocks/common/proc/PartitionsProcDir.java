@@ -130,8 +130,8 @@ public class PartitionsProcDir implements ProcDirInterface {
                     .add("MaxCS") // Maximum compaction score
                     .add("DataVersion")
                     .add("VersionEpoch")
-                    .add("VersionTxnType");
-                    .add("MetaSwitchVersion")
+                    .add("VersionTxnType")
+                    .add("MetaSwitchVersion");
             this.titleNames = builder.build();
         } else {
             ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()

@@ -273,7 +273,6 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             boolean isEnablePartitionAggregation = isEnablePartitionAggregation();
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(partitionId);
-                tablets.clear();
                 Map<Long, MaterializedIndex> dirtyIndexMap = physicalPartitionIndexMap.row(partitionId);
                 List<Tablet> tablets = new ArrayList<>();
                 for (MaterializedIndex index : dirtyIndexMap.values()) {
