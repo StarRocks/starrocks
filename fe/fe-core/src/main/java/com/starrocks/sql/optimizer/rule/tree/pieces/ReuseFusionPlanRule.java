@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionParams;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Column;
@@ -28,6 +29,9 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.combinator.AggStateIf;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.FunctionAnalyzer;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.CTEContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -55,6 +59,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarRangePredicateExtractor;
 import com.starrocks.sql.optimizer.rule.tree.TreeRewriteRule;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -73,6 +78,8 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
 
     private ColumnRefFactory factory;
 
+    private ConnectContext ctx;
+
     public boolean hasRewrite() {
         return !fusionPieces.isEmpty();
     }
@@ -80,6 +87,7 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
         factory = taskContext.getOptimizerContext().getColumnRefFactory();
+        ctx = taskContext.getOptimizerContext().getConnectContext();
         PiecesPlanTransformer transformer = new PiecesPlanTransformer(factory);
         root = transformer.transformSPJGPieces(root);
 
@@ -147,7 +155,7 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
                 continue;
             }
 
-            PiecesFusion fusion = new PiecesFusion(factory, pieces);
+            PiecesFusion fusion = new PiecesFusion(factory, ctx, pieces);
             Optional<QueryPiecesPlan> p = fusion.fusion();
             p.ifPresent(queryPiecesPlan -> {
                 fusionPieces.add(queryPiecesPlan);
@@ -170,7 +178,9 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
         // align with piecePlans
         private final List<List<ScalarOperator>> fusionScanFilters;
 
-        public PiecesFusion(ColumnRefFactory factory, List<QueryPiecesPlan> piecePlans) {
+        private ConnectContext ctx;
+
+        public PiecesFusion(ColumnRefFactory factory, ConnectContext ctx, List<QueryPiecesPlan> piecePlans) {
             this.factory = factory;
             this.piecePlans = piecePlans;
 
@@ -368,8 +378,13 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
                 return fallbackAggIfBuilder.apply(call);
             } else {
                 Preconditions.checkState(aggFunc instanceof AggregateFunction);
+                Type[] argTypes = new Type[] {child.getType(), Type.BOOLEAN};
                 Function aggStateIf = Expr.getBuiltinFunction(aggFunc.functionName() + FunctionSet.AGG_STATE_IF_SUFFIX,
-                        new Type[] {child.getType(), Type.BOOLEAN}, Function.CompareMode.IS_IDENTICAL);
+                        argTypes, Function.CompareMode.IS_IDENTICAL);
+                // set precision and scale for decimal
+                if (aggStateIf != null && argTypes[0].isDecimalV3()) {
+                    aggStateIf = rectifyAggregationFunctionForDecimal(aggFunc.functionName(), child.getType());
+                }
 
                 if (aggStateIf == null) {
                     return fallbackAggIfBuilder.apply(call);
@@ -388,6 +403,29 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
                 return new CallOperator(aggStateIf.functionName(), call.getType(),
                         List.of(childOutput, filterProject.get(filter)), aggStateIf,
                         call.isDistinct());
+            }
+        }
+
+        Function rectifyAggregationFunctionForDecimal(String fnWithoutIfName, Type argType) {
+            FunctionParams argParams = new FunctionParams(false, Lists.newArrayList());
+            Boolean[] argArgumentConstants = new Boolean[] {false};
+            NodePosition position = new NodePosition(0, 0);
+
+            Function fnWithoutIf =
+                    FunctionAnalyzer.getAnalyzedAggregateFunction(ctx, fnWithoutIfName, argParams,
+                            new Type[] {argType}, argArgumentConstants, position);
+            if (fnWithoutIf == null) {
+                return null;
+            }
+            if (!(fnWithoutIf instanceof AggregateFunction aggFuncWithoutIf)) {
+                return null;
+            }
+
+            Optional<? extends Function> finalAggIfFunc = AggStateIf.of(aggFuncWithoutIf);
+            if (finalAggIfFunc.isPresent()) {
+                return finalAggIfFunc.get();
+            } else {
+                return null;
             }
         }
 
