@@ -487,6 +487,10 @@ CONF_Int32(make_snapshot_rpc_timeout_ms, "20000");
 // OlapTableSink sender's send interval, should be less than the real response time of a tablet writer rpc.
 CONF_mInt32(olap_table_sink_send_interval_ms, "10");
 
+// The interval that the secondary replica checks it's status on the primary replica if the last check rpc successes.
+CONF_mInt32(load_replica_status_check_interval_ms_on_success, "15000");
+// The interval that the secondary replica checks it's status on the primary replica if the last check rpc fails.
+CONF_mInt32(load_replica_status_check_interval_ms_on_failure, "2000");
 // If load rpc timeout is larger than this value, slow log will be printed every time,
 // if smaller than this value, will reduce slow log print frequency.
 // 0 is print slow log every time.
@@ -507,8 +511,6 @@ CONF_mInt32(load_diagnose_rpc_timeout_stack_trace_threshold_ms, "600000");
 CONF_mInt32(load_fp_brpc_timeout_ms, "-1");
 // Used in load fail point. The block time to simulate TabletsChannel::add_chunk spends much time
 CONF_mInt32(load_fp_tablets_channel_add_chunk_block_ms, "-1");
-// Used in load fail point. The block time to simulate waiting secondary replica spends much time
-CONF_mInt32(load_fp_tablets_channel_wait_secondary_replica_block_ms, "-1");
 
 // The interval for performing stack trace to control the frequency.
 CONF_mInt64(diagnose_stack_trace_interval_ms, "1800000");

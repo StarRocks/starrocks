@@ -312,6 +312,33 @@ message PTabletWriterCancelRequest {
 message PTabletWriterCancelResult {
 };
 
+// Sent from secondary replica to primary replica
+message PLoadReplicaStatusRequest {
+    optional PUniqueId load_id = 1;
+    optional int64 txn_id = 2;
+    optional int64 index_id = 3;
+    optional int64 sink_id = 4;
+    optional int32 node_id = 5;
+    repeated int64 tablet_ids = 6;
+}
+
+enum LoadReplicaStatePB {
+    NOT_PRESENT = 0;
+    IN_PROCESSING = 1;
+    SUCCESS = 2;
+    FAILED = 3;
+}
+
+message PLoadReplicaStatus {
+    optional int64 tablet_id = 1;
+    optional LoadReplicaStatePB state = 2;
+    optional string message = 3;
+}
+
+message PLoadReplicaStatusResult {
+    repeated PLoadReplicaStatus replica_statuses = 1;
+}
+
 message PLoadDiagnoseRequest {
     optional PUniqueId id = 1;
     optional int64 txn_id = 2;
@@ -730,6 +757,7 @@ service PInternalService {
     rpc tablet_writer_add_chunks_via_http(PHttpRequest) returns (starrocks.PTabletWriterAddBatchResult);
     rpc tablet_writer_add_segment(starrocks.PTabletWriterAddSegmentRequest) returns (starrocks.PTabletWriterAddSegmentResult);
     rpc load_diagnose(PLoadDiagnoseRequest) returns (PLoadDiagnoseResult);
+    rpc get_load_replica_status(PLoadReplicaStatusRequest) returns (PLoadReplicaStatusResult);
     rpc transmit_runtime_filter(PTransmitRuntimeFilterParams) returns (PTransmitRuntimeFilterResult);
 
     rpc submit_mv_maintenance_task(PMVMaintenanceTaskRequest) returns (PMVMaintenanceTaskResult);

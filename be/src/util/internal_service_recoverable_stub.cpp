@@ -138,6 +138,14 @@ void PInternalService_RecoverableStub::tablet_writer_add_segment(
     _stub->tablet_writer_add_segment(controller, request, response, closure);
 }
 
+void PInternalService_RecoverableStub::get_load_replica_status(google::protobuf::RpcController* controller,
+                                                               const PLoadReplicaStatusRequest* request,
+                                                               PLoadReplicaStatusResult* response,
+                                                               google::protobuf::Closure* done) {
+    auto closure = new RecoverableClosure(shared_from_this(), controller, done);
+    _stub->get_load_replica_status(controller, request, response, closure);
+}
+
 void PInternalService_RecoverableStub::load_diagnose(::google::protobuf::RpcController* controller,
                                                      const ::starrocks::PLoadDiagnoseRequest* request,
                                                      ::starrocks::PLoadDiagnoseResult* response,

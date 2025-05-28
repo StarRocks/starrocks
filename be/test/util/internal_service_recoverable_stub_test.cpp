@@ -81,3 +81,20 @@ TEST_F(PInternalService_RecoverableStubTest, test_load_diagnose) {
     auto* closure = new starrocks::RefCountClosure<starrocks::PLoadDiagnoseResult>();
     stub->load_diagnose(&closure->cntl, &request, &closure->result, closure);
 }
+
+TEST_F(PInternalService_RecoverableStubTest, test_get_load_replica_status) {
+    std::shared_ptr<starrocks::PInternalService_RecoverableStub> stub;
+
+    butil::EndPoint point;
+    auto res = butil::str2endpoint("127.0.0.1", 8000, &point);
+    ASSERT_EQ(res, 0);
+
+    stub = std::make_shared<starrocks::PInternalService_RecoverableStub>(point);
+
+    auto st = stub->reset_channel();
+    ASSERT_TRUE(st.ok());
+
+    PLoadReplicaStatusRequest request;
+    auto* closure = new starrocks::RefCountClosure<starrocks::PLoadReplicaStatusResult>();
+    stub->get_load_replica_status(&closure->cntl, &request, &closure->result, closure);
+}

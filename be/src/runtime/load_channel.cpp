@@ -459,6 +459,22 @@ void LoadChannel::diagnose(const std::string& remote_ip, const PLoadDiagnoseRequ
     }
 }
 
+void LoadChannel::get_load_replica_status(const std::string& remote_ip, const PLoadReplicaStatusRequest* request,
+                                          PLoadReplicaStatusResult* response) {
+    TabletsChannelKey key(request->load_id(), request->sink_id(), request->index_id());
+    auto local_tablets_channel = dynamic_cast<LocalTabletsChannel*>(get_tablets_channel(key).get());
+    if (local_tablets_channel == nullptr) {
+        for (int64_t tablet_id : request->tablet_ids()) {
+            auto replica_status = response->add_replica_statuses();
+            replica_status->set_tablet_id(tablet_id);
+            replica_status->set_state(LoadReplicaStatePB::NOT_PRESENT);
+            replica_status->set_message("can't find local tablets channel");
+        }
+        return;
+    }
+    local_tablets_channel->get_load_replica_status(remote_ip, request, response);
+}
+
 Status LoadChannel::_update_and_serialize_profile(std::string* result, bool print_profile) {
     COUNTER_UPDATE(_profile_report_count, 1);
     SCOPED_TIMER(_profile_report_timer);

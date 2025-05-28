@@ -5286,3 +5286,21 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: The retry times of rpc request to report exec rpc request to FE. The default value is 10, which means that the rpc request will be retried 10 times if it fails only if it's fragment instatnce finish rpc. Report exec rpc request is important for load job, if one fragment instance finish report failed, the load job will be hang until timeout.
 - Introduced in: -
+
+##### load_replica_status_check_interval_ms_on_success
+
+- Default: 15000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The interval that the secondary replica checks it's status on the primary replica if the last check rpc successes.
+- Introduced in: 3.5.1
+
+##### load_replica_status_check_interval_ms_on_failure
+
+- Default: 2000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The interval that the secondary replica checks it's status on the primary replica if the last check rpc fails.
+- Introduced in: 3.5.1
