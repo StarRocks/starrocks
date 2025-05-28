@@ -680,7 +680,6 @@ public class DefaultCoordinator extends Coordinator {
             this.scheduler.schedule(option);
             MetricRepo.HISTO_DEPLOY_PLAN_FRAGMENTS_LATENCY.update(ignored.getTotalTime());
             queryProfile.attachExecutionProfiles(executionDAG.getExecutions());
-            registerProfileToRunningProfileManager();
         } finally {
             unlock();
         }

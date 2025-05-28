@@ -122,12 +122,6 @@ profile_manager::profile_manager(const CpuUtil::CpuIds& cpuids) {
 }
 
 void profile_manager::build_and_report_profile(std::shared_ptr<FragmentProfileMaterial> fragment_profile_material) {
-    // LOG(WARNING) << "Before task - fragment_profile_material content: "
-    //              << " total_cpu_cost_ns=" << fragment_profile_material->total_cpu_cost_ns
-    //              << " total_spill_bytes=" << fragment_profile_material->total_spill_bytes
-    //              << " instance_is_done=" << fragment_profile_material->instance_is_done
-    //              << " be_number=" << fragment_profile_material->be_number
-    //              << " queryId=" << print_id(fragment_profile_material->query_id);
     auto profile_task = [=, fragment_profile_material = fragment_profile_material]() {
         SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
 
@@ -140,6 +134,7 @@ void profile_manager::build_and_report_profile(std::shared_ptr<FragmentProfileMa
             const auto& fe_addr = fragment_profile_material->fe_addr;
             int max_retry_times = config::report_exec_rpc_request_retry_num;
             int retry_times = 0;
+            bool success = false;
             while (retry_times++ < max_retry_times) {
                 TStatus t_res;
                 Status rpc_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
@@ -147,6 +142,10 @@ void profile_manager::build_and_report_profile(std::shared_ptr<FragmentProfileMa
                         [&](FrontendServiceConnection& client) { client->asyncProfileReport(t_res, *params); });
                 Status res = Status(t_res);
                 if (!rpc_status.ok() || !res.ok()) {
+                    LOG(WARNING) << "profile report failed once, return res:" << res.to_string()
+                                 << ", rpc error:" << rpc_status.to_string()
+                                 << " be_number=" << fragment_profile_material->be_number
+                                 << " queryId=" << print_id(fragment_profile_material->query_id);
                     if (res.is_not_found()) {
                         VLOG(1) << "[Driver] Fail to report profile due to query not found";
                     } else {
@@ -155,9 +154,17 @@ void profile_manager::build_and_report_profile(std::shared_ptr<FragmentProfileMa
                             continue;
                         }
                     }
+                } else {
+                    success = true;
                 }
                 break;
             }
+
+            LOG(WARNING) << "report task: "
+                         << " instance_is_done=" << fragment_profile_material->instance_is_done
+                         << " be_number=" << fragment_profile_material->be_number
+                         << " queryId=" << print_id(fragment_profile_material->query_id)
+                         << " report success=" << success;
         };
 
         (void)_report_thread_pool->submit_func(std::move(report_task));

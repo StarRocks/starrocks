@@ -129,7 +129,7 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
         long now = System.currentTimeMillis();
         for (Map.Entry<TUniqueId, Long> entry : monitorQueryMap.entrySet()) {
             if (now > entry.getValue()) {
-                LOG.warn("monitor expired, query id = {}", DebugUtil.printId(entry.getKey()));
+                LOG.warn("remove profile timeout, query id = {}", DebugUtil.printId(entry.getKey()));
                 //  unregisterQuery(entry.getKey());
                 RunningProfileManager.getInstance().removeProfile(entry.getKey());
                 monitorQueryMap.remove(entry.getKey());
