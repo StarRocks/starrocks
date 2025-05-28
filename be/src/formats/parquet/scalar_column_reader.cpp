@@ -636,6 +636,7 @@ bool LowCardColumnReader::try_to_use_dict_filter(ExprContext* ctx, bool is_decod
 }
 
 Status LowCardColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
+    size_t num_rows = src->size();
     if (!_code_convert_map.has_value()) {
         RETURN_IF_ERROR(_check_current_dict());
     }
@@ -649,7 +650,7 @@ Status LowCardColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
 
     auto& codes = codes_column->get_data();
     if (codes_nullable_column->has_null()) {
-        for (size_t i = 0; i < src->size(); i++) {
+        for (size_t i = 0; i < num_rows; i++) {
             // if null, we assign dict code 0
             // null = 0, mask = 0xffffffff
             // null = 1, mask = 0x00000000
@@ -660,7 +661,7 @@ Status LowCardColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
 
     auto* dst_data_column = down_cast<LowCardDictColumn*>(ColumnHelper::get_data_column(dst.get()));
     SIMDGather::gather(dst_data_column->get_data().data(), _code_convert_map->data(), codes.data(),
-                       _code_convert_map->size(), src->size());
+                       _code_convert_map->size(), num_rows);
 
     if (dst->is_nullable()) {
         auto* nullable_dst = down_cast<NullableColumn*>(dst.get());
