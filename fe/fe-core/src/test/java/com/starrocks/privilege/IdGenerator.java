@@ -14,6 +14,7 @@
 
 package com.starrocks.privilege;
 
+<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/privilege/IdGenerator.java
 public class IdGenerator {
     private static final int BATCH_ID_INTERVAL = 1000;
     private long nextId;
@@ -25,5 +26,18 @@ public class IdGenerator {
     // performance is more quickly
     public synchronized long getNextId() {
         return nextId++;
+=======
+import com.starrocks.connector.ConnectorType;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.metadata.iceberg.IcebergMetadataTableFactory;
+
+public class MetadataTableFactoryProvider {
+    public static AbstractMetadataTableFactory getFactory(String catalogType) {
+        if (catalogType.equalsIgnoreCase(ConnectorType.ICEBERG.getName()) ||
+                catalogType.equalsIgnoreCase(ConnectorType.UNIFIED.getName())) {
+            return IcebergMetadataTableFactory.INSTANCE;
+        }
+        throw new StarRocksConnectorException("not support getting %s metadata table factory", catalogType);
+>>>>>>> f8628553de ([Enhancement] Support query iceberg metadata table for unified catalog (#59412)):fe/fe-core/src/main/java/com/starrocks/connector/metadata/MetadataTableFactoryProvider.java
     }
 }
