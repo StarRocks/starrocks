@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW EXPORT
 
-## Description
-
-Queries the execution information of export jobs that meet the specified conditions.
+SHOW EXPORT queries the execution information of export jobs that meet the specified conditions.
 
 ## Syntax
 

@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # DROP STORAGE VOLUME
 
-## Description
-
-Drops a storage volume. Dropped storage volumes cannot be referenced anymore. This feature is supported from v3.1.
+DROP STORAGE VOLUME drops a storage volume. Dropped storage volumes cannot be referenced anymore. This feature is supported from v3.1.
 
 > **CAUTION**
 >

@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # ADD SQLBLACKLIST
 
-## Description
-
-Adds a regular expression to the SQL blacklist to forbid certain SQL patterns. When the SQL Blacklist feature is enabled, StarRocks compares all SQL statements to be executed against the SQL regular expressions in the blacklist. StarRocks does not execute SQLs that match any regular expression in the blacklist and returns an error. This prevents certain SQLs from triggering cluster crashes or unexpected behavior.
+ADD SQLBLACKLIST adds a regular expression to the SQL blacklist to forbid certain SQL patterns. When the SQL Blacklist feature is enabled, StarRocks compares all SQL statements to be executed against the SQL regular expressions in the blacklist. StarRocks does not execute SQLs that match any regular expression in the blacklist and returns an error. This prevents certain SQLs from triggering cluster crashes or unexpected behavior.
 
 For more about SQL Blacklist, see [Manage SQL Blacklist](../../../../administration/management/resource_management/Blacklist.md).
 
