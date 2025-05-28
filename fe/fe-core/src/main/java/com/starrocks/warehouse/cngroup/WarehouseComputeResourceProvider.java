@@ -35,7 +35,7 @@ import java.util.stream.Collectors;
  * {@code WarehouseComputeResourceProvider} is responsible for providing warehouse compute node resources and
  * associated operations.
  */
-public class WarehouseComputeResourceProvider implements ComputeResourceProvider {
+public final class WarehouseComputeResourceProvider implements ComputeResourceProvider {
     private static final Logger LOG = LogManager.getLogger(WarehouseComputeResourceProvider.class);
 
     public WarehouseComputeResourceProvider() {

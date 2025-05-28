@@ -29,7 +29,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
-public class CNWarehouseResourceProviderTest extends WarehouseTestBase {
+public class WarehouseComputeResourceProviderTest extends WarehouseTestBase {
     private final WarehouseComputeResourceProvider provider = new WarehouseComputeResourceProvider();
 
     @Test

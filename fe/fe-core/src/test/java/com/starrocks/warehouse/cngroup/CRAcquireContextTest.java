@@ -21,7 +21,7 @@ import org.junit.Test;
 
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
-public class CNAcquireContextTest extends WarehouseTestBase {
+public class CRAcquireContextTest extends WarehouseTestBase {
     @Test
     public void testCNAcquireContext1() {
         CRAcquireContext context = CRAcquireContext.of(1L, CRAcquireStrategy.STANDARD);

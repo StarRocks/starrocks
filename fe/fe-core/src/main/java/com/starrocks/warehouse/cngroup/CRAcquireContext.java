@@ -24,13 +24,13 @@ import com.starrocks.warehouse.Warehouse;
  * {@code CRAcquireContext} is the context for acquiring ComputeResource from a warehouse.
  */
 public class CRAcquireContext {
-    // The id of the warehouse which is must be specified.
+    // The id of the warehouse which must be specified.
     private final long warehouseId;
 
-    // The strategy to get the CNGroup from the warehouse.
+    // The strategy to get compute resource from the warehouse.
     private final CRAcquireStrategy strategy;
 
-    // The previous CNResource which is used to get the CNGroup from the warehouse.
+    // The previous CNResource which is used to get the compute resource from the warehouse.
     private final ComputeResource prevComputeResource;
 
     public CRAcquireContext(long warehouseId, CRAcquireStrategy strategy, ComputeResource prevComputeResource) {

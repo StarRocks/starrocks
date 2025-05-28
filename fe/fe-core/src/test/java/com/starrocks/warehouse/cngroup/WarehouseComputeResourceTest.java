@@ -23,7 +23,7 @@ import org.junit.Test;
 
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
-public class CNWarehouseResourceTest extends WarehouseTestBase {
+public class WarehouseComputeResourceTest extends WarehouseTestBase {
     @Test
     public void testCNWarehouseResourceEquals() {
         WarehouseComputeResource resource1 = new WarehouseComputeResource(1);
