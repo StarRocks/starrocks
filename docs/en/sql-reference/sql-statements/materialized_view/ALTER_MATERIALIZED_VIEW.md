@@ -16,6 +16,7 @@ This SQL statement can:
 
   You can use this SQL statement to alter the following properties:
 
+  - `bloom_filter_columns`
   - `partition_ttl_number`
   - `partition_refresh_number`
   - `resource_group`
@@ -116,4 +117,10 @@ Example 9: Alter the query rewrite staleness time for the materialized view to 6
 
 ```SQL
 ALTER MATERIALIZED VIEW mv1 SET ("mv_rewrite_staleness_second" = "600");
+```
+
+Example 10: Alter the materialized view's bloom filter indexes.
+
+```SQL
+ALTER MATERIALIZED VIEW mv1 SET ("bloom_filter_columns" = "col1, col2");
 ```
