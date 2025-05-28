@@ -608,9 +608,6 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         long version = table.getPartitions().stream().map(p -> p.getDefaultPhysicalPartition().getVisibleVersionTime())
                 .max(Long::compareTo).orElse(0L);
 
-        if ((table.getKeysType().equals(KeysType.PRIMARY_KEYS))) {
-            return DecodeInfo.EMPTY;
-        }
         if (table.hasForbiddenGlobalDict()) {
             return DecodeInfo.EMPTY;
         }
