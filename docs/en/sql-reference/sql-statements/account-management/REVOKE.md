@@ -4,9 +4,13 @@ displayed_sidebar: docs
 
 # REVOKE
 
+<<<<<<< HEAD
 ## Description
 
 Revokes specific privileges or roles from a user or a role. For the privileges supported by StarRocks, see [Privileges supported by StarRocks](../../../administration/user_privs/privilege_overview.md).
+=======
+Use REVOKE to remove specific privileges or roles from a user or a role. For the privileges supported by StarRocks, see [Privileges supported by StarRocks](../../../administration/user_privs/authorization/user_privs.md).
+>>>>>>> 31fdd8f622 ([Doc] remove description heading (#59443))
 
 :::tip
 

@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # DROP RESOURCE
 
-## Description
-
-This statement is used to drop an existing resource. Only root or superuser can drop resources.
+Use DROP RESOURCE to drop an existing resource. Only root or superuser can drop resources.
 
 Syntax:
 

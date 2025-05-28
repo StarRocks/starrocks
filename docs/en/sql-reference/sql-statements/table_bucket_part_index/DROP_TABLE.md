@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # DROP TABLE
 
-## Description
-
-This statement is used to delete a table.
+DROP TABLE is used to delete a table.
 
 ## Syntax
 
