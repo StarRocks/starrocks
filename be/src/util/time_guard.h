@@ -13,9 +13,14 @@
 // limitations under the License.
 
 #pragma once
+#include <csignal>
+#include <thread>
+
+#include "bthread/timer_thread.h"
 #include "common/config.h"
 #include "common/logging.h"
 #include "util/time.h"
+#include "util/unaligned_access.h"
 
 namespace starrocks {
 
@@ -44,6 +49,47 @@ private:
     int64_t _timeout_ms;
     LazyMsgCallBack _callback;
     int64_t _begin_time = 0;
+};
+
+// export from stack_util.h
+std::string get_stack_trace_for_thread(int tid, int timeout_ms);
+
+// SignalTimerGuard class manages a timer to capture and log thread stack traces after a specified timeout.
+// Note: If bthread yields. you may not get the expected stacktrace. But it's still safe.
+// usage:
+// {
+//     SignalTimerGuard guard(100);
+//     monitor_function();
+// }
+class SignalTimerGuard {
+public:
+    using TaskId = bthread::TimerThread::TaskId;
+    SignalTimerGuard(int64_t timeout_ms) {
+        if (timeout_ms > 0) {
+            auto timer_thread = bthread::get_global_timer_thread();
+            timespec tm = butil::milliseconds_from_now(timeout_ms);
+            int lwp_id = syscall(SYS_gettid);
+            void* arg = nullptr;
+            unaligned_store<int>(&arg, lwp_id);
+            _tid = timer_thread->schedule(dump_trace_info, arg, tm);
+        }
+    }
+
+    ~SignalTimerGuard() {
+        if (_tid != bthread::TimerThread::INVALID_TASK_ID) {
+            auto timer_thread = bthread::get_global_timer_thread();
+            timer_thread->unschedule(_tid);
+        }
+    }
+
+private:
+    TaskId _tid = bthread::TimerThread::INVALID_TASK_ID;
+
+    static void dump_trace_info(void* arg) {
+        int tid = unaligned_load<int>(&arg);
+        std::string msg = get_stack_trace_for_thread(tid, 1000);
+        LOG(INFO) << "found slow function:" << msg;
+    }
 };
 
 }; // namespace starrocks

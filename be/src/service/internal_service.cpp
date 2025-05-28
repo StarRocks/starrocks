@@ -83,6 +83,7 @@
 #include "util/stopwatch.hpp"
 #include "util/thrift_util.h"
 #include "util/time.h"
+#include "util/time_guard.h"
 #include "util/uid_util.h"
 
 namespace starrocks {
@@ -459,6 +460,7 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl,
 template <typename T>
 Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_pipeline(const TExecPlanFragmentParams& t_common_param,
                                                                     const TExecPlanFragmentParams& t_unique_request) {
+    SignalTimerGuard guard(config::pipeline_prepare_timeout_guard_ms);
     pipeline::FragmentExecutor fragment_executor;
     auto status = fragment_executor.prepare(_exec_env, t_common_param, t_unique_request);
     if (status.ok()) {
