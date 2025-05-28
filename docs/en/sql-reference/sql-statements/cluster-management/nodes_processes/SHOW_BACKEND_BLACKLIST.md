@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW BACKEND BLACKLIST
 
-## Description
-
-Shows the BE nodes in the BE Blacklist.
+SHOW BACKEND BLACKLIST shows the BE nodes in the BE Blacklist.
 
 This feature is supported from v3.3.0 onwards. For more information, see [Manage BE Blacklist](../../../../administration/management/BE_blacklist.md).
 
