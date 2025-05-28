@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # ALTER VIEW
 
-## Description
-
-Modifies the definition of a view.
+ALTER VIEW Modifies the definition of a view.
 
 ## Syntax
 

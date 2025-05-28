@@ -5,8 +5,6 @@ sidebar_position: 10
 
 # Prefix indexes
 
-## Description
-
 Specify one or more columns to comprise the sort key at table creation. The data rows in the table will be sorted based on the sort key and then stored on the disk.
 
 **During data writing, the Prefix index is automatically generated. After the data is sorted according to the specified sort key, every 1024 rows of data are included in one logical data block. An index entry that consists of the values of sort key columns of the first data row in that logical data block is added to the Prefix index table.**
