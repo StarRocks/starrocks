@@ -238,10 +238,12 @@ StatusOr<bool> RawColumnReader::_row_group_zone_map_filter(const std::vector<con
                 StatisticsHelper::get_min_max_value(_opts.file_meta_data, col_type, &get_chunk_metadata()->meta_data,
                                                     get_column_parquet_field(), min_values, max_values);
         if (st.ok()) {
-            RETURN_IF_ERROR(StatisticsHelper::decode_value_into_column(min_column, min_values, null_pages, col_type,
-                                                                       get_column_parquet_field(), _opts.timezone));
-            RETURN_IF_ERROR(StatisticsHelper::decode_value_into_column(max_column, max_values, null_pages, col_type,
-                                                                       get_column_parquet_field(), _opts.timezone));
+            st = StatisticsHelper::decode_value_into_column(min_column, min_values, null_pages, col_type,
+                                                            get_column_parquet_field(), _opts.timezone);
+            RETURN_IF(!st.ok(), filtered);
+            st = StatisticsHelper::decode_value_into_column(max_column, max_values, null_pages, col_type,
+                                                            get_column_parquet_field(), _opts.timezone);
+            RETURN_IF(!st.ok(), filtered);
 
             zone_map_detail = ZoneMapDetail{min_column->get(0), max_column->get(0), has_null};
             zone_map_detail->set_num_rows(rg_num_rows);
