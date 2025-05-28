@@ -22,8 +22,6 @@ class SharedWritableFileContext {
 public:
     SharedWritableFileContext() = default;
     ~SharedWritableFileContext() = default;
-    // Called when the first chunk is added to the channel.
-    void init(bool eos);
 
     Status try_create_shared_file(const std::function<StatusOr<std::unique_ptr<WritableFile>>()>& create_file_fn);
 
@@ -34,7 +32,6 @@ public:
     // last writer will close the shared file.
     Status decrease_active_writers();
 
-    bool enable_shared_file() const { return _enable_shared_file.load(); }
     const std::string& filename() const { return _filename; }
 
     // Append slices to the shared file, and return the first offset of the slices.
@@ -45,9 +42,6 @@ private:
     std::unique_ptr<WritableFile> _shared_file;
     // mutex for shared file write
     std::mutex _shared_file_mutex;
-    // It will be disable when more than 1 add chunk request to this channel.
-    std::atomic<bool> _enable_shared_file{false};
-    bool _is_inited = false;
     // The number of active writers to this file.
     uint32_t _active_writers = 0;
     // filename, init when create shared file.

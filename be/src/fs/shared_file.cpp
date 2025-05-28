@@ -19,14 +19,6 @@
 
 namespace starrocks {
 
-void SharedWritableFileContext::init(bool eos) {
-    std::lock_guard<std::mutex> l(_shared_file_mutex);
-    if (!_is_inited && eos) {
-        _enable_shared_file = true;
-    }
-    _is_inited = true;
-}
-
 Status SharedWritableFileContext::try_create_shared_file(
         const std::function<StatusOr<std::unique_ptr<WritableFile>>()>& create_file_fn) {
     std::lock_guard<std::mutex> l(_shared_file_mutex);
