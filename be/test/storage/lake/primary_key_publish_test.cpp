@@ -2032,7 +2032,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_data_file_sharing) {
     tablet_ids.push_back(tablet_id3);
     for (int i = 0; i < 3; i++) {
         std::unique_ptr<SharedWritableFileContext> context = std::make_unique<SharedWritableFileContext>();
-        context->init(true);
         int64_t txn_id = next_id();
         std::vector<std::unique_ptr<DeltaWriter>> delta_writers;
         for (int64_t tid : tablet_ids) {

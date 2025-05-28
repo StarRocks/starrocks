@@ -427,10 +427,6 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     // |_delta_writers.size()| is the max number of tasks invoking `AsyncDeltaWriter::finish()`
     auto count_down_latch = BThreadCountDownLatch(channel_size + (request.eos() ? _delta_writers.size() : 0));
 
-    if (_shared_writable_file_context) {
-        _shared_writable_file_context->init(request.eos());
-    }
-
     int64_t wait_memtable_flush_time_ns = 0;
     int32_t total_row_num = 0;
     // Open and write AsyncDeltaWriter

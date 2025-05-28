@@ -46,7 +46,6 @@ TEST_F(SharedFileTest, test_write_read) {
 
     // 1. create shared file context
     auto shared_context = std::make_shared<SharedWritableFileContext>();
-    shared_context->init(true);
     shared_context->try_create_shared_file([&]() {
         WritableFileOptions opts;
         return fs::new_writable_file(opts, shared_file_path);
@@ -154,7 +153,6 @@ TEST_F(SharedFileTest, test_empty_write) {
     std::string shared_file_path = _test_dir + "/test_empty_shared_file.dat";
 
     auto shared_context = std::make_shared<SharedWritableFileContext>();
-    shared_context->init(true);
     shared_context->try_create_shared_file([&]() {
         WritableFileOptions opts;
         return fs::new_writable_file(opts, shared_file_path);
@@ -188,7 +186,6 @@ TEST_F(SharedFileTest, test_concurrent_write) {
     std::string shared_file_path = _test_dir + "/test_concurrent_shared_file.dat";
 
     auto shared_context = std::make_shared<SharedWritableFileContext>();
-    shared_context->init(true);
     shared_context->try_create_shared_file([&]() {
         WritableFileOptions opts;
         return fs::new_writable_file(opts, shared_file_path);

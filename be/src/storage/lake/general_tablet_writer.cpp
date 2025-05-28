@@ -47,12 +47,12 @@ Status HorizontalGeneralTabletWriter::open() {
     return Status::OK();
 }
 
-Status HorizontalGeneralTabletWriter::write(const starrocks::Chunk& data, SegmentPB* segment) {
+Status HorizontalGeneralTabletWriter::write(const starrocks::Chunk& data, SegmentPB* segment, bool eos) {
     if (_seg_writer == nullptr ||
         (_auto_flush && (_seg_writer->estimate_segment_size() >= config::max_segment_file_size ||
                          _seg_writer->num_rows_written() + data.num_rows() >= INT32_MAX /*TODO: configurable*/))) {
         RETURN_IF_ERROR(flush_segment_writer(segment));
-        RETURN_IF_ERROR(reset_segment_writer());
+        RETURN_IF_ERROR(reset_segment_writer(eos));
     }
     RETURN_IF_ERROR(_seg_writer->append_chunk(data));
     _num_rows += data.num_rows();
@@ -87,7 +87,7 @@ void HorizontalGeneralTabletWriter::close() {
     _files.clear();
 }
 
-Status HorizontalGeneralTabletWriter::reset_segment_writer() {
+Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
     DCHECK(_schema != nullptr);
     auto name = gen_segment_filename(_txn_id);
     SegmentWriterOptions opts;
@@ -106,7 +106,9 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer() {
             return fs::new_writable_file(wopts, _tablet_mgr->segment_location(_tablet_id, name));
         }
     };
-    if (_shared_file_context != nullptr && _shared_file_context->enable_shared_file()) {
+    if (_shared_file_context != nullptr && _files.empty() && eos) {
+        // If this is the first data file writer and it is the end of stream,
+        // then we will create a shared file for this segment writer.
         RETURN_IF_ERROR(_shared_file_context->try_create_shared_file(create_file_fn));
         of = std::make_unique<SharedWritableFile>(_shared_file_context, wopts.encryption_info);
     } else {

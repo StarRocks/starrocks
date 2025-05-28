@@ -59,7 +59,7 @@ public:
 
     Status flush_chunk(const Chunk& chunk, starrocks::SegmentPB* segment = nullptr, bool eos = false,
                        int64_t* flush_data_size = nullptr) override {
-        RETURN_IF_ERROR(_writer->write(chunk, segment));
+        RETURN_IF_ERROR(_writer->write(chunk, segment, eos));
         return _writer->flush(segment);
     }
 
@@ -67,7 +67,7 @@ public:
                                     starrocks::SegmentPB* segment = nullptr, bool eos = false,
                                     int64_t* flush_data_size = nullptr) override {
         RETURN_IF_ERROR(_writer->flush_del_file(deletes));
-        RETURN_IF_ERROR(_writer->write(upserts, segment));
+        RETURN_IF_ERROR(_writer->write(upserts, segment, eos));
         return _writer->flush(segment);
     }
 
