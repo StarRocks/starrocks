@@ -21,37 +21,39 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * WorkerGroupProvider provides an available cngroup to a job scheduler based on the current warehouse's load status or strategy.
+ * {@code ComputeResourceProvider} is responsible to provide an available compute resource for a job scheduler
+ * based on the current warehouse's load status or strategy.
  */
-public interface CNResourceProvider {
+public interface ComputeResourceProvider {
     /**
      * NOTE: prefer to call this infrequently, as it can come to dominate the execution time of a query in the
      *  frontend if there are many calls per request (e.g. one per partition when there are many partitions).
+     *
      * @param warehouse: the warehouse to get the worker group from
      * @param acquireContext: the context to acquire the worker group
-     * @return: an available CNResource for the warehouse by the strategy
+     * @return: an available ComputeResource for the warehouse by the strategy, or Optional.empty() if no available worker group
      * @throws RuntimeException : if the warehouse is invalid or there is no available worker group
      */
-    Optional<CNResource> acquireCNResource(Warehouse warehouse, CNAcquireContext acquireContext);
+    Optional<ComputeResource> acquireCNResource(Warehouse warehouse, CRAcquireContext acquireContext);
 
     /**
-     * Check Whether the resource is available, this method will not throw exception
-     * @param cnResource: the CNResource to check
+     * Check the resource is available or not; this method will not throw exception.
+     * @param computeResource: the ComputeResource to check
      * @return: true if the resource is available, false otherwise
      */
-    boolean isResourceAvailable(CNResource cnResource);
+    boolean isResourceAvailable(ComputeResource computeResource);
 
     /**
-     * Get all compute node ids in the CNResource without checking the alive status
-     * @param cnResource: the CNResource to get the compute node ids from
-     * @return: a list of compute node ids, empty if the CNResource is not available
+     * Get all compute node ids in the ComputeResource without checking its alive status
+     * @param computeResource: the ComputeResource to get the compute node ids from
+     * @return: a list of compute node ids, empty if the ComputeResource is not available
      */
-    List<Long> getAllComputeNodeIds(CNResource cnResource);
+    List<Long> getAllComputeNodeIds(ComputeResource computeResource);
 
     /**
-     * Get all alive compute nodes in the CNResource
-     * @param cnResource: the CNResource to get the alive compute nodes from
-     * @return: a list of alive compute nodes, empty if the CNResource is not available
+     * Get all alive compute nodes in the ComputeResource
+     * @param computeResource: the ComputeResource to get the alive compute nodes from
+     * @return: a list of alive compute nodes, empty if the ComputeResource is not available
      */
-    List<ComputeNode> getAliveComputeNodes(CNResource cnResource);
+    List<ComputeNode> getAliveComputeNodes(ComputeResource computeResource);
 }

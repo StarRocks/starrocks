@@ -21,59 +21,59 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.warehouse.Warehouse;
 
 /**
- * CNAcquireContext is the context for acquiring CNResource from a warehouse.
+ * {@code CRAcquireContext} is the context for acquiring ComputeResource from a warehouse.
  */
-public class CNAcquireContext {
+public class CRAcquireContext {
     // The id of the warehouse which is must be specified.
     private final long warehouseId;
 
     // The strategy to get the CNGroup from the warehouse.
-    private final CNAcquireStrategy cnAcquireStrategy;
+    private final CRAcquireStrategy strategy;
 
     // The previous CNResource which is used to get the CNGroup from the warehouse.
-    private final CNResource prevCNResource;
+    private final ComputeResource prevComputeResource;
 
-    public CNAcquireContext(long warehouseId, CNAcquireStrategy cnAcquireStrategy, CNResource prevCNResource) {
+    public CRAcquireContext(long warehouseId, CRAcquireStrategy strategy, ComputeResource prevComputeResource) {
         this.warehouseId = warehouseId;
-        this.cnAcquireStrategy = cnAcquireStrategy;
-        this.prevCNResource = prevCNResource;
+        this.strategy = strategy;
+        this.prevComputeResource = prevComputeResource;
     }
 
-    public static CNAcquireContext of(long warehouseId, CNAcquireStrategy cnGroupStrategy, CNResource prevCNResource) {
-        return new CNAcquireContext(warehouseId, cnGroupStrategy, prevCNResource);
+    public static CRAcquireContext of(long warehouseId, CRAcquireStrategy cnGroupStrategy, ComputeResource prevComputeResource) {
+        return new CRAcquireContext(warehouseId, cnGroupStrategy, prevComputeResource);
     }
 
-    public static CNAcquireContext of(long warehouseId, CNResource prevCNResource) {
-        return new CNAcquireContext(warehouseId, CNAcquireStrategy.STANDARD, prevCNResource);
+    public static CRAcquireContext of(long warehouseId, ComputeResource prevComputeResource) {
+        return new CRAcquireContext(warehouseId, CRAcquireStrategy.STANDARD, prevComputeResource);
     }
 
-    public static CNAcquireContext of(long warehouseId, CNAcquireStrategy cnGroupStrategy) {
-        return new CNAcquireContext(warehouseId, cnGroupStrategy, null);
+    public static CRAcquireContext of(long warehouseId, CRAcquireStrategy cnGroupStrategy) {
+        return new CRAcquireContext(warehouseId, cnGroupStrategy, null);
     }
 
-    public static CNAcquireContext of(long warehouseId) {
-        return new CNAcquireContext(warehouseId, CNAcquireStrategy.STANDARD, null);
+    public static CRAcquireContext of(long warehouseId) {
+        return new CRAcquireContext(warehouseId, CRAcquireStrategy.STANDARD, null);
     }
 
-    public static CNAcquireContext of(String warehouseName) {
+    public static CRAcquireContext of(String warehouseName) {
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         final Warehouse warehouse = warehouseManager.getWarehouse(warehouseName);
         if (warehouse == null) {
             throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
                     String.format("name: %d", warehouseName));
         }
-        return new CNAcquireContext(warehouse.getId(), CNAcquireStrategy.STANDARD, null);
+        return new CRAcquireContext(warehouse.getId(), CRAcquireStrategy.STANDARD, null);
     }
 
     public long getWarehouseId() {
         return warehouseId;
     }
 
-    public CNAcquireStrategy getCnAcquireStrategy() {
-        return cnAcquireStrategy;
+    public CRAcquireStrategy getStrategy() {
+        return strategy;
     }
 
-    public CNResource getPrevCNResource() {
-        return prevCNResource;
+    public ComputeResource getPrevComputeResource() {
+        return prevComputeResource;
     }
 }

@@ -30,61 +30,61 @@ import java.util.Optional;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
 public class CNWarehouseResourceProviderTest extends WarehouseTestBase {
-    private final CNWarehouseResourceProvider provider = new CNWarehouseResourceProvider();
+    private final WarehouseComputeResourceProvider provider = new WarehouseComputeResourceProvider();
 
     @Test
     public void testProviderAcquireCNResourceGood() {
         WarehouseManager warehouseManager = GlobalStateMgr.getServingState().getWarehouseMgr();
         Warehouse defaultWarehouse = warehouseManager.getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        CNAcquireContext cnAcquireContext = CNAcquireContext.of(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        Optional<CNResource> result = provider.acquireCNResource(defaultWarehouse, cnAcquireContext);
+        CRAcquireContext cnAcquireContext = CRAcquireContext.of(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        Optional<ComputeResource> result = provider.acquireCNResource(defaultWarehouse, cnAcquireContext);
         assertThat(result.isPresent()).isTrue();
     }
 
     @Test
     public void testProviderAcquireCNResourceBad() {
-        CNAcquireContext cnAcquireContext = CNAcquireContext.of(1);
+        CRAcquireContext cnAcquireContext = CRAcquireContext.of(1);
         try {
-            Optional<CNResource> result = provider.acquireCNResource(null, cnAcquireContext);
+            Optional<ComputeResource> result = provider.acquireCNResource(null, cnAcquireContext);
             Assert.fail();
         } catch (ErrorReportException e) {
             assertThat(e.getMessage()).contains("Warehouse id: 1 not exist");
         }
     }
 
-    private CNResource acquireDefaultWarehouseResource() {
+    private ComputeResource acquireDefaultWarehouseResource() {
         WarehouseManager warehouseManager = GlobalStateMgr.getServingState().getWarehouseMgr();
         Warehouse defaultWarehouse = warehouseManager.getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        CNAcquireContext cnAcquireContext = CNAcquireContext.of(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        Optional<CNResource> result = provider.acquireCNResource(defaultWarehouse, cnAcquireContext);
+        CRAcquireContext cnAcquireContext = CRAcquireContext.of(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        Optional<ComputeResource> result = provider.acquireCNResource(defaultWarehouse, cnAcquireContext);
         assertThat(result.isPresent()).isTrue();
         return result.get();
     }
 
     @Test
     public void testProviderIsResourceAvailableGood() {
-        CNResource cnResource = acquireDefaultWarehouseResource();
-        assertThat(provider.isResourceAvailable(cnResource)).isTrue();
+        ComputeResource computeResource = acquireDefaultWarehouseResource();
+        assertThat(provider.isResourceAvailable(computeResource)).isTrue();
     }
 
     @Test
     public void testProviderIsResourceAvailableBad() {
-        CNResource cnResource = CNWarehouseResource.of(1);
-        assertThat(provider.isResourceAvailable(cnResource)).isFalse();
+        ComputeResource computeResource = WarehouseComputeResource.of(1);
+        assertThat(provider.isResourceAvailable(computeResource)).isFalse();
     }
 
     @Test
     public void testProviderGetAllComputeNodeIds() {
-        CNResource cnResource = acquireDefaultWarehouseResource();
-        List<Long> result = provider.getAllComputeNodeIds(cnResource);
+        ComputeResource computeResource = acquireDefaultWarehouseResource();
+        List<Long> result = provider.getAllComputeNodeIds(computeResource);
         assertThat(result).isEqualTo(Lists.newArrayList(10001L));
     }
 
     @Test
     public void testProviderGetAllComputeNodeIdsBad() {
-        CNResource cnResource = CNWarehouseResource.of(1);
+        ComputeResource computeResource = WarehouseComputeResource.of(1);
         try {
-            provider.getAllComputeNodeIds(cnResource);
+            provider.getAllComputeNodeIds(computeResource);
             Assert.fail();
         } catch (ErrorReportException e) {
             assertThat(e.getMessage()).contains("Warehouse id: 1 not exist");
@@ -93,16 +93,16 @@ public class CNWarehouseResourceProviderTest extends WarehouseTestBase {
 
     @Test
     public void testProviderGetAliveComputeNodes() {
-        CNResource cnResource = acquireDefaultWarehouseResource();
-        List<ComputeNode> result = provider.getAliveComputeNodes(cnResource);
+        ComputeResource computeResource = acquireDefaultWarehouseResource();
+        List<ComputeNode> result = provider.getAliveComputeNodes(computeResource);
         assertThat(result.isEmpty()).isFalse();
     }
 
     @Test
     public void testProviderGetAliveComputeNodesBad() {
-        CNResource cnResource = CNWarehouseResource.of(1);
+        ComputeResource computeResource = WarehouseComputeResource.of(1);
         try {
-            provider.getAliveComputeNodes(cnResource);
+            provider.getAliveComputeNodes(computeResource);
             Assert.fail();
         } catch (ErrorReportException e) {
             assertThat(e.getMessage()).contains("Warehouse id: 1 not exist");

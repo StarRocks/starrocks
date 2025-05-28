@@ -15,19 +15,19 @@
 package com.starrocks.warehouse.cngroup;
 
 /**
- * 1. CNResource is a compute node resource acquired from a warehouse or some other resources.
- * 2. It can be a warehouse or a cngroup of warehouse which is to represent the resource that can be used for compute.
+ * ComputeResource is a resource acquired from warehouse, t can be a warehouse or a cngroup resource of warehouse which is to
+ * represent the resource that can be used for compute.
  */
-public interface CNResource {
+public interface ComputeResource {
 
     /**
-     * Get the id of the CNResource
+     * Get the id of the ComputeResource
      * @return: the id of the CNResource
      */
     long getWarehouseId();
 
     /**
-     * Get the id of the worker group that this CNResource belongs to.
+     * Get the id of the worker group that this ComputeResource belongs to.
      * @return: the id of the worker group
      */
     long getWorkerGroupId();

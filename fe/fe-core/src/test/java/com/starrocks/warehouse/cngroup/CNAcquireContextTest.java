@@ -24,16 +24,16 @@ import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 public class CNAcquireContextTest extends WarehouseTestBase {
     @Test
     public void testCNAcquireContext1() {
-        CNAcquireContext context = CNAcquireContext.of(1L, CNAcquireStrategy.STANDARD);
+        CRAcquireContext context = CRAcquireContext.of(1L, CRAcquireStrategy.STANDARD);
         assertThat(context != null).isTrue();
         assertThat(context.getWarehouseId() == 1L).isTrue();
-        assertThat(context.getCnAcquireStrategy() == CNAcquireStrategy.STANDARD).isTrue();
-        assertThat(context.getPrevCNResource() == null).isTrue();
+        assertThat(context.getStrategy() == CRAcquireStrategy.STANDARD).isTrue();
+        assertThat(context.getPrevComputeResource() == null).isTrue();
     }
 
     @Test
     public void testCNAcquireContext2() {
-        CNResource prevCNResource = new CNResource() {
+        ComputeResource prevComputeResource = new ComputeResource() {
             @Override
             public long getWarehouseId() {
                 return 1L;
@@ -45,25 +45,25 @@ public class CNAcquireContextTest extends WarehouseTestBase {
             }
         };
 
-        CNAcquireContext context = CNAcquireContext.of(1L, CNAcquireStrategy.STANDARD, prevCNResource);
+        CRAcquireContext context = CRAcquireContext.of(1L, CRAcquireStrategy.STANDARD, prevComputeResource);
         assertThat(context != null).isTrue();
         assertThat(context.getWarehouseId() == 1L).isTrue();
-        assertThat(context.getCnAcquireStrategy() == CNAcquireStrategy.STANDARD).isTrue();
-        assertThat(context.getPrevCNResource() == prevCNResource).isTrue();
+        assertThat(context.getStrategy() == CRAcquireStrategy.STANDARD).isTrue();
+        assertThat(context.getPrevComputeResource() == prevComputeResource).isTrue();
     }
 
     @Test
     public void testCNAcquireContext3() {
-        CNAcquireContext context = CNAcquireContext.of(1L);
+        CRAcquireContext context = CRAcquireContext.of(1L);
         assertThat(context != null).isTrue();
         assertThat(context.getWarehouseId() == 1L).isTrue();
-        assertThat(context.getCnAcquireStrategy() == CNAcquireStrategy.STANDARD).isTrue();
-        assertThat(context.getPrevCNResource() == null).isTrue();
+        assertThat(context.getStrategy() == CRAcquireStrategy.STANDARD).isTrue();
+        assertThat(context.getPrevComputeResource() == null).isTrue();
     }
 
     @Test
     public void testCNAcquireContext4() {
-        CNResource prevCNResource = new CNResource() {
+        ComputeResource prevComputeResource = new ComputeResource() {
             @Override
             public long getWarehouseId() {
                 return 1L;
@@ -75,17 +75,17 @@ public class CNAcquireContextTest extends WarehouseTestBase {
             }
         };
 
-        CNAcquireContext context = CNAcquireContext.of(1L, prevCNResource);
+        CRAcquireContext context = CRAcquireContext.of(1L, prevComputeResource);
         assertThat(context != null).isTrue();
         assertThat(context.getWarehouseId() == 1L).isTrue();
-        assertThat(context.getCnAcquireStrategy() == CNAcquireStrategy.STANDARD).isTrue();
-        assertThat(context.getPrevCNResource() == prevCNResource).isTrue();
+        assertThat(context.getStrategy() == CRAcquireStrategy.STANDARD).isTrue();
+        assertThat(context.getPrevComputeResource() == prevComputeResource).isTrue();
     }
 
     @Test
     public void testCNAcquireContext5() {
         try {
-            CNAcquireContext.of("bad_warehouse");
+            CRAcquireContext.of("bad_warehouse");
             Assert.fail();
         } catch (ErrorReportException e) {
             e.printStackTrace();

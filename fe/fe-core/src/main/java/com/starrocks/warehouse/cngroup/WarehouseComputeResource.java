@@ -27,21 +27,21 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * CNWarehouseResource represents a compute node resource that is associated with a specific warehouse.
+ * {@code WarehouseComputeResource} represents a compute node resource associated with a specific warehouse.
  */
-public class CNWarehouseResource implements CNResource {
-    private static final Logger LOG = LogManager.getLogger(CNWarehouseResource.class);
+public class WarehouseComputeResource implements ComputeResource {
+    private static final Logger LOG = LogManager.getLogger(WarehouseComputeResource.class);
     // The warehouseId is used to identify the warehouse.
     private final long warehouseId;
 
-    public static final CNResource DEFAULT = new CNWarehouseResource(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+    public static final ComputeResource DEFAULT = new WarehouseComputeResource(WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
-    public CNWarehouseResource(long warehouseId) {
+    public WarehouseComputeResource(long warehouseId) {
         this.warehouseId = warehouseId;
     }
 
-    public static CNWarehouseResource of(long warehouseId) {
-        return new CNWarehouseResource(warehouseId);
+    public static WarehouseComputeResource of(long warehouseId) {
+        return new WarehouseComputeResource(warehouseId);
     }
 
     @Override
@@ -81,10 +81,10 @@ public class CNWarehouseResource implements CNResource {
         if (this == obj) {
             return true;
         }
-        if (!(obj instanceof CNWarehouseResource)) {
+        if (!(obj instanceof WarehouseComputeResource)) {
             return false;
         }
-        CNWarehouseResource other = (CNWarehouseResource) obj;
+        WarehouseComputeResource other = (WarehouseComputeResource) obj;
         return warehouseId == other.warehouseId;
     }
 }

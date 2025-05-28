@@ -26,9 +26,9 @@ import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 public class CNWarehouseResourceTest extends WarehouseTestBase {
     @Test
     public void testCNWarehouseResourceEquals() {
-        CNWarehouseResource resource1 = new CNWarehouseResource(1);
-        CNWarehouseResource resource2 = new CNWarehouseResource(1);
-        CNWarehouseResource resource3 = new CNWarehouseResource(2);
+        WarehouseComputeResource resource1 = new WarehouseComputeResource(1);
+        WarehouseComputeResource resource2 = new WarehouseComputeResource(1);
+        WarehouseComputeResource resource3 = new WarehouseComputeResource(2);
 
         assertThat(resource1.equals(resource2)).isTrue();
         assertThat(resource1.equals(resource3)).isFalse();
@@ -37,28 +37,28 @@ public class CNWarehouseResourceTest extends WarehouseTestBase {
 
     @Test
     public void testCNWarehouseResourceToString() {
-        CNResource cnResource = CNWarehouseResource.of(1);
-        assertThat(cnResource.toString()).isEqualTo("{warehouseId=1}");
-        assertThat(cnResource.getWarehouseId()).isEqualTo(1);
+        ComputeResource computeResource = WarehouseComputeResource.of(1);
+        assertThat(computeResource.toString()).isEqualTo("{warehouseId=1}");
+        assertThat(computeResource.getWarehouseId()).isEqualTo(1);
     }
 
     @Test
     public void testCNWarehouseResourceWorkerGroupIdGood() {
         ConnectContext connectContext = new ConnectContext();
         connectContext.setThreadLocalInfo();
-        CNResource cnResource = CNWarehouseResource.of(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        assertThat(cnResource.getWarehouseId()).isEqualTo(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        assertThat(cnResource.getWorkerGroupId()).isEqualTo(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+        ComputeResource computeResource = WarehouseComputeResource.of(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        assertThat(computeResource.getWarehouseId()).isEqualTo(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        assertThat(computeResource.getWorkerGroupId()).isEqualTo(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
     }
 
     @Test
     public void testCNWarehouseResourceWorkerGroupIdBad() {
         ConnectContext connectContext = new ConnectContext();
         connectContext.setThreadLocalInfo();
-        CNResource cnResource = CNWarehouseResource.of(1);
-        assertThat(cnResource.getWarehouseId()).isEqualTo(1);
+        ComputeResource computeResource = WarehouseComputeResource.of(1);
+        assertThat(computeResource.getWarehouseId()).isEqualTo(1);
         try {
-            cnResource.getWorkerGroupId();
+            computeResource.getWorkerGroupId();
             Assert.fail();
         } catch (Exception e) {
             assertThat(e.getMessage()).contains("Warehouse id: 1 not exist");

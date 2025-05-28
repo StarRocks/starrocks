@@ -42,8 +42,8 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
-import com.starrocks.warehouse.cngroup.CNResource;
-import com.starrocks.warehouse.cngroup.CNWarehouseResource;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -67,7 +67,7 @@ public class WarehouseManager implements Writable {
     public static final long DEFAULT_WAREHOUSE_ID = 0L;
 
     // default compute resource
-    public static final CNResource DEFAULT_CNRESOURCE = CNWarehouseResource.DEFAULT;
+    public static final ComputeResource DEFAULT_CNRESOURCE = WarehouseComputeResource.DEFAULT;
 
     protected final Map<Long, Warehouse> idToWh = new HashMap<>();
     protected final Map<String, Warehouse> nameToWh = new HashMap<>();

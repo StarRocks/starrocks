@@ -32,24 +32,24 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
- * CNWarehouseResourceProvider is responsible for providing compute node resources{@code CNWarehouseResource} and
+ * {@code WarehouseComputeResourceProvider} is responsible for providing warehouse compute node resources and
  * associated operations.
  */
-public class CNWarehouseResourceProvider implements CNResourceProvider {
-    private static final Logger LOG = LogManager.getLogger(CNWarehouseResourceProvider.class);
+public class WarehouseComputeResourceProvider implements ComputeResourceProvider {
+    private static final Logger LOG = LogManager.getLogger(WarehouseComputeResourceProvider.class);
 
-    public CNWarehouseResourceProvider() {
+    public WarehouseComputeResourceProvider() {
         // No-op
     }
 
     @Override
-    public Optional<CNResource> acquireCNResource(Warehouse warehouse, CNAcquireContext acquireContext) {
+    public Optional<ComputeResource> acquireCNResource(Warehouse warehouse, CRAcquireContext acquireContext) {
         final long warehouseId = acquireContext.getWarehouseId();
         if (warehouse == null) {
             throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
                     String.format("id: %d", warehouseId));
         }
-        CNWarehouseResource cnResource = CNWarehouseResource.of(warehouseId);
+        WarehouseComputeResource cnResource = WarehouseComputeResource.of(warehouseId);
         if (!isResourceAvailable(cnResource)) {
             LOG.warn("failed to get alive compute nodes from warehouse {}", warehouse.getName());
             return Optional.empty();
@@ -61,10 +61,10 @@ public class CNWarehouseResourceProvider implements CNResourceProvider {
      * TODO: Add a blacklist cache to avoid time-consuming alive check
      */
     @Override
-    public boolean isResourceAvailable(CNResource cnResource) {
+    public boolean isResourceAvailable(ComputeResource computeResource) {
         try {
             final long availableWorkerGroupIdSize =
-                    Optional.ofNullable(getAliveComputeNodes(cnResource)).map(List::size).orElse(0);
+                    Optional.ofNullable(getAliveComputeNodes(computeResource)).map(List::size).orElse(0);
             return availableWorkerGroupIdSize > 0;
         } catch (Exception e) {
             LOG.warn("Failed to get alive compute nodes from starMgr : {}", e.getMessage());
@@ -73,9 +73,9 @@ public class CNWarehouseResourceProvider implements CNResourceProvider {
     }
 
     @Override
-    public List<Long> getAllComputeNodeIds(CNResource cnResource) {
+    public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
         try {
-            return GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkersByWorkerGroup(cnResource.getWorkerGroupId());
+            return GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkersByWorkerGroup(computeResource.getWorkerGroupId());
         } catch (StarRocksException e) {
             LOG.warn("Fail to get compute node ids from starMgr : {}", e.getMessage());
             return new ArrayList<>();
@@ -83,8 +83,8 @@ public class CNWarehouseResourceProvider implements CNResourceProvider {
     }
 
     @Override
-    public List<ComputeNode> getAliveComputeNodes(CNResource cnResource) {
-        List<Long> computeNodeIds = getAllComputeNodeIds(cnResource);
+    public List<ComputeNode> getAliveComputeNodes(ComputeResource computeResource) {
+        List<Long> computeNodeIds = getAllComputeNodeIds(computeResource);
         if (CollectionUtils.isEmpty(computeNodeIds)) {
             return Lists.newArrayList();
         }

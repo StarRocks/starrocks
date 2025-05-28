@@ -15,9 +15,9 @@
 package com.starrocks.warehouse.cngroup;
 
 /**
- * CNAcquireStrategy is the strategy to get the cnresource from the warehouse.
+ * {@code CRAcquireStrategy} is to mark the strategy to get the compute resource from the warehouse.
  */
-public enum CNAcquireStrategy {
+public enum CRAcquireStrategy {
     STANDARD, // default strategy
     RANDOM, // round-robin strategy
     LOCAL_FIRST, // local first strategy
