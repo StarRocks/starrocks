@@ -277,7 +277,6 @@ Status OlapTablePartitionParam::init(RuntimeState* state) {
     for (auto& t_part : _t_param.partitions) {
         OlapTablePartition* part = _obj_pool.add(new OlapTablePartition());
         part->id = t_part.id;
-        part->num_buckets = t_part.num_buckets;
         auto num_indexes = _schema->indexes().size();
         if (t_part.indexes.size() != num_indexes) {
             std::stringstream ss;
@@ -293,13 +292,20 @@ Status OlapTablePartitionParam::init(RuntimeState* state) {
                   });
         // check index
         for (int j = 0; j < num_indexes; ++j) {
-            if (part->indexes[j].index_id != _schema->indexes()[j]->index_id) {
+            auto& index_tablets = part->indexes[j];
+            const auto& index_schema = _schema->indexes()[j];
+            if (index_tablets.index_id != index_schema->index_id) {
                 std::stringstream ss;
                 ss << "partition's index is not equal with schema's"
-                   << ", part_index=" << part->indexes[j].index_id
-                   << ", schema_index=" << _schema->indexes()[j]->index_id;
+                   << ", part_index=" << index_tablets.index_id << ", schema_index=" << index_schema->index_id;
                 LOG(WARNING) << ss.str();
                 return Status::InternalError(ss.str());
+            }
+
+            // If virtual buckets is not set, set its value with tablets.
+            // This may happen during cluster upgrading, when BE is upgraded to the new version but FE is still on the old version.
+            if (!index_tablets.__isset.virtual_buckets) {
+                index_tablets.__set_virtual_buckets(index_tablets.tablets);
             }
         }
         _partitions.emplace(part->id, part);
@@ -489,7 +495,6 @@ Status OlapTablePartitionParam::add_partitions(const std::vector<TOlapTableParti
             }
         }
 
-        part->num_buckets = t_part.num_buckets;
         auto num_indexes = _schema->indexes().size();
         if (t_part.indexes.size() != num_indexes - _schema->shadow_index_size()) {
             std::stringstream ss;
