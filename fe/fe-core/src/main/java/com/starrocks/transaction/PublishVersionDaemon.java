@@ -828,13 +828,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 Map<Long, Double> compactionScores = new HashMap<>();
                 // Used to collect statistics when the partition is first imported
                 Map<Long, Long> tabletRowNums = new HashMap<>();
-                if (!enablePartitionAggregation) {
-                    Utils.publishVersion(normalTablets, txnInfo, baseVersion, txnVersion, compactionScores,
-                            warehouseId, tabletRowNums);
-                } else {
-                    Utils.aggregatePublishVersion(normalTablets, Lists.newArrayList(txnInfo), baseVersion, txnVersion, 
-                            compactionScores, null, warehouseId, tabletRowNums);
-                }
+                Utils.publishVersion(normalTablets, txnInfo, baseVersion, txnVersion, compactionScores,
+                        warehouseId, tabletRowNums, enablePartitionAggregation);
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 partitionCommitInfo.setCompactionScore(quantiles);

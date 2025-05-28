@@ -799,7 +799,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
                 for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
                     if (!enablePartitionAggregation) {
-                        Utils.publishVersion(shadowIndex.getTablets(), txnInfo, 1, commitVersion, warehouseId);
+                        Utils.publishVersion(shadowIndex.getTablets(), txnInfo, 1, commitVersion, warehouseId,
+                                enablePartitionAggregation);
                     } else {
                         tablets.addAll(shadowIndex.getTablets());
                     }

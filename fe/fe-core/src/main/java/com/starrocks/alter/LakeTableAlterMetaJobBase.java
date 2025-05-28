@@ -272,7 +272,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                 for (MaterializedIndex index : dirtyIndexMap.values()) {
                     if (!enablePartitionAggregation) {
                         Utils.publishVersion(index.getTablets(), txnInfo, commitVersion - 1, commitVersion,
-                                warehouseId);
+                                warehouseId, enablePartitionAggregation);
                     } else {
                         tablets.addAll(index.getTablets());
                     }
