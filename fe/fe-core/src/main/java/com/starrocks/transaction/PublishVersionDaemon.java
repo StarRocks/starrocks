@@ -479,6 +479,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
         // version -> shadowTablets
         long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        boolean enablePartitionAggregation = Config.enable_partition_aggregation;
         try {
             OlapTable table =
                     (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
@@ -498,6 +499,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 return false;
             }
 
+            enablePartitionAggregation = table.enablePartitionAggregation();
             for (int i = 0; i < transactionStates.size(); i++) {
                 TransactionState txnState = transactionStates.get(i);
                 warehouseId = txnState.getWarehouseId();
@@ -544,9 +546,14 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
                 // used to delete txnLog when publish success
                 Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
-                Utils.publishVersionBatch(publishTablets, txnInfos,
-                        startVersion - 1, endVersion, compactionScores, nodeToTablets,
-                        warehouseId, null);
+                if (!enablePartitionAggregation) {
+                    Utils.publishVersionBatch(publishTablets, txnInfos,
+                            startVersion - 1, endVersion, compactionScores, nodeToTablets,
+                            warehouseId, null);
+                } else {
+                    Utils.aggregatePublishVersion(publishTablets, txnInfos, startVersion - 1, endVersion, 
+                            compactionScores, nodeToTablets, warehouseId, null);
+                }
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 stateBatch.setCompactionScore(tableId, partitionId, quantiles);
@@ -821,13 +828,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 Map<Long, Double> compactionScores = new HashMap<>();
                 // Used to collect statistics when the partition is first imported
                 Map<Long, Long> tabletRowNums = new HashMap<>();
-                if (!enablePartitionAggregation) {
-                    Utils.publishVersion(normalTablets, txnInfo, baseVersion, txnVersion, compactionScores,
-                            warehouseId, tabletRowNums);
-                } else {
-                    Utils.aggregatePublishVersion(normalTablets, Lists.newArrayList(txnInfo), baseVersion, txnVersion, 
-                            compactionScores, null, warehouseId, tabletRowNums);
-                }
+                Utils.publishVersion(normalTablets, txnInfo, baseVersion, txnVersion, compactionScores,
+                        warehouseId, tabletRowNums, enablePartitionAggregation);
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 partitionCommitInfo.setCompactionScore(quantiles);

@@ -676,6 +676,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
     protected boolean lakePublishVersion() {
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             OlapTable table = getTableOrThrow(db, tableId);
+            boolean enablePartitionAggregation = table.enablePartitionAggregation();
             for (long partitionId : physicalPartitionIdToRollupIndex.keySet()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
                 Preconditions.checkState(physicalPartition != null, partitionId);
@@ -695,7 +696,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 rollUpTxnInfo.gtid = watershedGtid;
                 // publish rollup tablets
                 Utils.publishVersion(physicalPartitionIdToRollupIndex.get(partitionId).getTablets(), rollUpTxnInfo,
-                        1, commitVersion, warehouseId);
+                        1, commitVersion, warehouseId, enablePartitionAggregation);
 
                 TxnInfoPB originTxnInfo = new TxnInfoPB();
                 originTxnInfo.txnId = -1L;
@@ -705,7 +706,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 originTxnInfo.gtid = watershedGtid;
                 // publish origin tablets
                 Utils.publishVersion(allOtherPartitionTablets, originTxnInfo, commitVersion - 1,
-                        commitVersion, warehouseId);
+                        commitVersion, warehouseId, enablePartitionAggregation);
 
             }
             return true;
