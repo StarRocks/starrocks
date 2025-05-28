@@ -1111,6 +1111,7 @@ public class StmtExecutor {
             }
             QeProcessorImpl.INSTANCE.unMonitorQuery(executionId);
             //            QeProcessorImpl.INSTANCE.unregisterQuery(executionId);
+            LOG.warn("removeProfile in profile task: queryId: {}", DebugUtil.printId(executionId));
             RunningProfileManager.getInstance().removeProfile(executionId);
             if (Config.enable_collect_query_detail_info && Config.enable_profile_log) {
                 String jsonString = GSON.toJson(queryDetail);

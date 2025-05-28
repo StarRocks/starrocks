@@ -53,6 +53,7 @@ public class RunningProfileManager {
     }
 
     public void registerProfile(TUniqueId queryId, RunningProfile queryProfile) {
+        LOG.warn("registerProfile: queryId: {}", DebugUtil.printId(queryId));
         profiles.putIfAbsent(queryId, queryProfile);
     }
 
@@ -65,6 +66,7 @@ public class RunningProfileManager {
         final RunningProfile queryProfile = profiles.get(request.getQuery_id());
         if (queryProfile == null) {
             status = new TStatus(TStatusCode.NOT_FOUND);
+            LOG.warn("asyncProfileReport query not found: queryId: {}", DebugUtil.printId(request.getQuery_id()));
             status.addToError_msgs("query id " + DebugUtil.printId(request.getQuery_id()) + " not found");
             return status;
         }
@@ -74,6 +76,7 @@ public class RunningProfileManager {
 
         if (fragmentInstanceProfile == null) {
             status = new TStatus(TStatusCode.NOT_FOUND);
+            LOG.warn("asyncProfileReport query fragment not found: queryId: {}", DebugUtil.printId(request.getQuery_id()));
             status.addToError_msgs("query id " + DebugUtil.printId(request.getQuery_id()) + ", fragment instance id " +
                     request.backend_num + " not found");
             return status;
@@ -90,8 +93,9 @@ public class RunningProfileManager {
         }
 
         try {
-            //            LOG.warn("asyncProfileReport, queryid: {}, instanceIndex: {}, isDone:{}",
-            //                    DebugUtil.printId(request.getQuery_id()), request.backend_num, instanceIsDone.toString());
+            LOG.warn("asyncProfileReport, queryid: {}, instanceIndex: {}, isDone:{}",
+                    DebugUtil.printId(request.getQuery_id()), request.backend_num,
+                    fragmentInstanceProfile.isDone.toString());
             queryProfile.tryToTriggerRuntimeProfileUpdate();
             fragmentInstanceProfile.updateRunningProfile(request);
             queryProfile.updateLoadChannelProfile(request);
@@ -102,7 +106,7 @@ public class RunningProfileManager {
             LOG.warn("update profile failed {}", DebugUtil.printId(request.getQuery_id()), e);
         }
 
-        return new TStatus(TStatusCode.NOT_FOUND);
+        return new TStatus(TStatusCode.OK);
     }
 
     public static class FragmentInstanceProfile {
