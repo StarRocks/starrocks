@@ -259,7 +259,7 @@ public class TaskRunHistoryTest {
     }
 
     @Test
-    public void testHistoryVacuumSkipArchive(@Mocked SimpleExecutor repo) {
+    public void testHistoryVacuumSkipArchive() {
         new MockUp<TableKeeper>() {
             @Mock
             public boolean isReady() {
