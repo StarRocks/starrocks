@@ -21,6 +21,7 @@ import com.staros.proto.AzBlobCredentialInfo;
 import com.staros.proto.AzBlobFileStoreInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
+import com.starrocks.common.Config;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudCredential;
 import org.apache.hadoop.conf.Configuration;
@@ -73,9 +74,11 @@ class AzureBlobCloudCredential extends AzureStorageCloudCredential {
     private final String container;
     private final String sasToken;
     private final String clientId;
+    private final String clientSecret;
+    private final String tenantId;
 
     AzureBlobCloudCredential(String endpoint, String storageAccount, String sharedKey, String container, String sasToken,
-                             String clientId) {
+                             String clientId, String clientSecret, String tenantId) {
         Preconditions.checkNotNull(endpoint);
         Preconditions.checkNotNull(storageAccount);
         Preconditions.checkNotNull(sharedKey);
@@ -88,6 +91,8 @@ class AzureBlobCloudCredential extends AzureStorageCloudCredential {
         this.container = container;
         this.sasToken = sasToken;
         this.clientId = clientId;
+        this.clientSecret = clientSecret;
+        this.tenantId = tenantId;
         tryGenerateConfigurationMap();
     }
 
@@ -115,12 +120,22 @@ class AzureBlobCloudCredential extends AzureStorageCloudCredential {
         }
 
         // For azure native sdk
-        if (!sharedKey.isEmpty()) {
-            generatedConfigurationMap.put(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, sharedKey);
-        } else if (!sasToken.isEmpty()) {
-            generatedConfigurationMap.put(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, sasToken);
-        } else if (!clientId.isEmpty()) {
-            generatedConfigurationMap.put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID, clientId);
+        if (Config.azure_use_native_sdk) {
+            if (!sharedKey.isEmpty()) {
+                // shared key
+                generatedConfigurationMap.put(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, sharedKey);
+            } else if (!sasToken.isEmpty()) {
+                // sas token
+                generatedConfigurationMap.put(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, sasToken);
+            } else if (!clientId.isEmpty() && !clientSecret.isEmpty() && !tenantId.isEmpty()) {
+                // client secret service principal
+                generatedConfigurationMap.put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID, clientId);
+                generatedConfigurationMap.put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_SECRET, clientSecret);
+                generatedConfigurationMap.put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_TENANT_ID, tenantId);
+            } else if (!clientId.isEmpty()) {
+                // user assigned managed identity
+                generatedConfigurationMap.put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID, clientId);
+            }
         }
     }
 

@@ -76,6 +76,7 @@ import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.PartitionNames;
@@ -792,7 +793,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
             // refresh old table
             Table table = optTable.get();
-            if (table.isNativeTableOrMaterializedView() || table.isView()) {
+            // if table is native table or materialized view or connector view or external table, no need to refresh
+            if (table.isNativeTableOrMaterializedView() || table.isView()
+                    || MaterializedViewAnalyzer.isExternalTableFromResource(table)) {
                 logger.debug("No need to refresh table:{} because it is native table or mv or connector view",
                         baseTableInfo.getTableInfoStr());
                 continue;

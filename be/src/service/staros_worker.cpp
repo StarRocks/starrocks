@@ -305,6 +305,9 @@ absl::StatusOr<std::string> StarOSWorker::build_scheme_from_shard_info(const Sha
     case staros::FileStoreType::ADLS2:
         scheme = "adls2://";
         break;
+    case staros::FileStoreType::GS:
+        scheme = "gs://";
+        break;
     default:
         return absl::InvalidArgumentError("Unknown shard storage scheme!");
     }

@@ -34,6 +34,7 @@ set(EXEC_FILES
         ./connector_sink/file_chunk_sink_test.cpp
         ./connector_sink/async_flush_output_stream_test.cpp
         ./fs/azure/azblob_uri_test.cpp
+        ./fs/azure/fs_azblob_test.cpp
         ./fs/azure/utils_test.cpp
         ./fs/credential/cloud_configuration_factory_test.cpp
         ./fs/fs_broker_test.cpp
@@ -63,6 +64,7 @@ set(EXEC_FILES
         ./exec/pipeline/table_function_operator_test.cpp
         ./exec/pipeline/sink/export_sink_operator_test.cpp
         ./exec/pipeline/sink/table_function_table_sink_operator_test.cpp
+        ./exec/pipeline/limit_operator_test.cpp
         ./exec/pipeline/mem_limited_chunk_queue_test.cpp
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
@@ -262,6 +264,7 @@ set(EXEC_FILES
         ./storage/page_cache_test.cpp
         ./storage/persistent_index_test.cpp
         ./storage/persistent_index_load_executor_test.cpp
+        ./storage/persistent_index_snapshot_load_test.cpp
         ./storage/primary_index_test.cpp
         ./storage/primary_key_encoder_test.cpp
         ./storage/roaring2range_test.cpp

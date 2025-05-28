@@ -85,6 +85,8 @@ public class CloudConfigurationConstants {
     public static final String AZURE_BLOB_CONTAINER = "azure.blob.container";
     public static final String AZURE_BLOB_SAS_TOKEN = "azure.blob.sas_token";
     public static final String AZURE_BLOB_OAUTH2_CLIENT_ID = "azure.blob.oauth2_client_id";
+    public static final String AZURE_BLOB_OAUTH2_CLIENT_SECRET = "azure.blob.oauth2_client_secret";
+    public static final String AZURE_BLOB_OAUTH2_TENANT_ID = "azure.blob.oauth2_tenant_id";
     // For Azure Data Lake Storage Gen1 (ADLS1)
     public static final String AZURE_ADLS1_USE_MANAGED_SERVICE_IDENTITY = "azure.adls1.use_managed_service_identity";
     public static final String AZURE_ADLS1_OAUTH2_CLIENT_ID = "azure.adls1.oauth2_client_id";
@@ -103,12 +105,13 @@ public class CloudConfigurationConstants {
 
     // Credential for Google Cloud Platform (GCP)
     // For Google Cloud Storage (GCS)
+    public static final String GCP_GCS_ENDPOINT = "gcp.gcs.endpoint";
     public static final String GCP_GCS_USE_COMPUTE_ENGINE_SERVICE_ACCOUNT =
             "gcp.gcs.use_compute_engine_service_account";
     public static final String GCP_GCS_SERVICE_ACCOUNT_EMAIL = "gcp.gcs.service_account_email";
     public static final String GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY = "gcp.gcs.service_account_private_key";
     public static final String GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY_ID = "gcp.gcs.service_account_private_key_id";
-    public static final String GCP_GCS_SERVICE_ACCOUNT_IMPERSONATION_SERVICE_ACCOUNT =
+    public static final String GCP_GCS_IMPERSONATION_SERVICE_ACCOUNT =
             "gcp.gcs.impersonation_service_account";
 
     // Credential for HDFS
