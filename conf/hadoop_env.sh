@@ -14,15 +14,8 @@
 
 export HADOOP_CLASSPATH=${STARROCKS_HOME}/lib/hadoop/common/*:${STARROCKS_HOME}/lib/hadoop/common/lib/*:${STARROCKS_HOME}/lib/hadoop/hdfs/*:${STARROCKS_HOME}/lib/hadoop/hdfs/lib/*
 
-if [ -z "${HADOOP_USER_NAME}" ]
-then
-    if [ -z "${USER}" ]
-    then
-        export HADOOP_USER_NAME=$(id -u -n)
-    else
-        export HADOOP_USER_NAME=${USER}
-    fi
-fi
+export HADOOP_USER_NAME=$(ps aux | grep -E 'starrocks_be|StarRocksFE' | grep -v "grep" | awk '{print $1}'| head -n 1)
+echo "HADOOP_USER_NAME:$HADOOP_USER_NAME"
 
 # the purpose is to use local hadoop configuration first.
 # under HADOOP_CONF_DIR(eg. /etc/ecm/hadoop-conf), there are hadoop/hdfs/hbase conf files.
