@@ -78,9 +78,13 @@ import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
 import com.starrocks.load.Load;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariableConstants;
+import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.RelationFields;
@@ -836,6 +840,35 @@ public class OlapTableSink extends DataSink {
                         for (Map.Entry<Replica, Long> entry : bePathsMap.entries()) {
                             allBePathsMap.put(entry.getKey().getBackendId(), entry.getValue());
                         }
+                    }
+                }
+            }
+        }
+
+        // Double-check the tablet location backend alive info
+        if (RunMode.isSharedDataMode()) {
+            // NOTE: shared-nothing workerProvider.allowUsingBackupNode() == false, so don't bother to create it
+            WorkerProvider.Factory workerProviderFactory = new DefaultSharedDataWorkerProvider.Factory();
+            WorkerProvider workerProvider = workerProviderFactory.captureAvailableWorkers(
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), false, 0,
+                    SessionVariableConstants.ComputationFragmentSchedulingPolicy.ALL_NODES, warehouseId);
+            if (workerProvider.allowUsingBackupNode()) {
+                for (TTabletLocation location : locationParam.getTablets()) {
+                    Map<Long, Long> replacePair = new HashMap<>();
+                    List<Long> nodeIds = location.getNode_ids();
+                    for (long id : nodeIds) {
+                        if (!workerProvider.isDataNodeAvailable(id)) {
+                            long backupId = workerProvider.selectBackupWorker(id);
+                            if (backupId == -1) {
+                                // error out
+                                workerProvider.reportWorkerNotFoundException();
+                            }
+                            replacePair.put(id, backupId);
+                        }
+                    }
+                    for (Map.Entry<Long, Long> entry : replacePair.entrySet()) {
+                        nodeIds.remove(entry.getKey());
+                        nodeIds.add(entry.getValue());
                     }
                 }
             }
