@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # CREATE MATERIALIZED VIEW
 
-## Description
-
-Creates a materialized view. For usage information about materialized views, see [Synchronous materialized view](../../../using_starrocks/Materialized_view-single_table.md) and [Asynchronous materialized view](../../../using_starrocks/async_mv/Materialized_view.md).
+CREATE MATERIALIZED VIEW creates a materialized view. For usage information about materialized views, see [Synchronous materialized view](../../../using_starrocks/Materialized_view-single_table.md) and [Asynchronous materialized view](../../../using_starrocks/async_mv/Materialized_view.md).
 
 > **CAUTION**
 >

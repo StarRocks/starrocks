@@ -13,8 +13,6 @@ keywords:
 
 import InsertPrivNote from '../../../_assets/commonMarkdown/insertPrivNote.md'
 
-## Description
-
 StarRocks provides the MySQL-based loading method Broker Load. After you submit a load job, StarRocks asynchronously runs the job. You can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information about the background information, principles, supported data file formats, how to perform single-table loads and multi-table loads, and how to view job results, see [loading overview](../../../loading/Loading_intro.md).
 
 <InsertPrivNote />

@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # INSERT
 
-## Description
-
 Inserts data into a specific table or overwrites a specific table with data. From v3.2.0 onwards, INSERT supports writing data into files in remote storage. You can use INSERT INTO FILES() to unload data from StarRocks to remote storage.
 
 You can submit an asynchronous INSERT task using [SUBMIT TASK](ETL/SUBMIT_TASK.md).

@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW GRANTS
 
-## Description
-
-Displays all the privileges that have been granted to a user or role.
+SHOW GRANTS displays all the privileges that have been granted to a user or role.
 
 For more information about roles and privileges, see [Overview of privileges](../../../administration/user_privs/authorization/user_privs.md).
 

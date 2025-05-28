@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # CANCEL DECOMMISSION
 
-## Description
-
-This statement is used to undo a node decommission.
+CANCEL DECOMMISSION is used to undo a node decommission.
 
 :::tip
 

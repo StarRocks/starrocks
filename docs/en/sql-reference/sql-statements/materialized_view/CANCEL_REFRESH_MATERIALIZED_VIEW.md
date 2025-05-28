@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # CANCEL REFRESH MATERIALIZED VIEW
 
-## Description
-
-Cancels a refresh task for an asynchronous materialized view.
+CANCEL REFRESH MATERIALIZED VIEW cancels a refresh task for an asynchronous materialized view.
 
 :::tip
 

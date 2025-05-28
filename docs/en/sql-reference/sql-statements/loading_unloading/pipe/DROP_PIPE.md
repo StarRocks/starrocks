@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # DROP PIPE
 
-## Description
-
-Drops a pipe and the related jobs and metadata. Executing this statement on a pipe does not revoke the data that has been loaded via this pipe. This command is supported from v3.2 onwards.
+DROP PIPE drops a pipe and the related jobs and metadata. Executing this statement on a pipe does not revoke the data that has been loaded via this pipe. This command is supported from v3.2 onwards.
 
 ## Syntax
 

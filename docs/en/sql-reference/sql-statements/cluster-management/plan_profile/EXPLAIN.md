@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # EXPLAIN
 
-## Description
-
-Shows the logical or physical execution plans for a query statement. For instructions on how to analyze a query plan, refer to [Plan analysis](../../../../administration/Query_planning.md#plan-analysis).
+EXPLAIN shows the logical or physical execution plans for a query statement. For instructions on how to analyze a query plan, refer to [Plan analysis](../../../../administration/Query_planning.md#plan-analysis).
 
 :::tip
 

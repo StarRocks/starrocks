@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW MATERIALIZED VIEWS
 
-## Description
-
-Shows all or one specific asynchronous materialized view.
+SHOW MATERIALIZED VIEWS shows all or one specific asynchronous materialized view.
 
 Since v3.0, the name of this statement is changed from SHOW MATERIALIZED VIEW to SHOW MATERIALIZED VIEWS.
 

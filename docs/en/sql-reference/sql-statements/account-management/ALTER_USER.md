@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # ALTER USER
 
-## Description
-
-Modifies user information, including password, authentication method, default roles, and user properties (supported from v3.3.3 onwards).
+ALTER USER modifies user information, including password, authentication method, default roles, and user properties (supported from v3.3.3 onwards).
 
 :::tip
 Common users can use this command to modify information for themselves. Only users with the `user_admin` role can modify information for other users.

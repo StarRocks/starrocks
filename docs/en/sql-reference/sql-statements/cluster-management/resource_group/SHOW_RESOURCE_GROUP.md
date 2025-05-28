@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW RESOURCE GROUP
 
-## Description
-
-Shows the information of resource groups.
+SHOW RESOURCE GROUP shows the information of resource groups.
 
 :::tip
 

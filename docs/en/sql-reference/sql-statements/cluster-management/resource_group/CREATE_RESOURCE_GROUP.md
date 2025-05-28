@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # CREATE RESOURCE GROUP
 
-## Description
-
-Creates a resource group.
+CREATE RESOURCE GROUP creates a resource group.
 
 For more information, see [Resource group](../../../../administration/management/resource_management/resource_group.md).
 

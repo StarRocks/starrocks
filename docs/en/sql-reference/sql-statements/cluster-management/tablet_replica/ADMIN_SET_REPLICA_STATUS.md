@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # ADMIN SET REPLICA STATUS
 
-## Description
-
-This statement is used to set the status of the specified replicas.
+ADMIN SET REPLICA STATUS is used to set the status of the specified replicas.
 
 This command currently only used to manually set the status of some replicas to BAD or OK, allowing the system to automatically repair these replicas.
 

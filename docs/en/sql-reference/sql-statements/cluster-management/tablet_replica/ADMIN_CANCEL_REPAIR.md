@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # ADMIN CANCEL REPAIR
 
-## Description
-
-This statement is used to cancel repairing specified tables or partitions with high priority.
+ADMIN CANCEL REPAIR is used to cancel repairing specified tables or partitions with high priority.
 
 :::tip
 

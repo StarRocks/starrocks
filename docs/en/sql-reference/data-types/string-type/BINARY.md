@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # BINARY/VARBINARY
 
-## Description
-
 BINARY(M)
 
 VARBINARY(M)

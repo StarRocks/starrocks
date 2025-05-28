@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # EXPORT
 
-## Description
-
 Exports the data of a table to a specified location.
 
 This is an asynchronous operation. The export result is returned after you submit the export task. You can use [SHOW EXPORT](SHOW_EXPORT.md) to view the progress of the export task.

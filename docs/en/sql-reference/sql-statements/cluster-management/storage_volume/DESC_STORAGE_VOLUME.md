@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # DESC STORAGE VOLUME
 
-## Description
-
-Describes a storage volume. This feature is supported from v3.1.
+DESC STORAGE VOLUME describes a storage volume. This feature is supported from v3.1.
 
 > **CAUTION**
 >

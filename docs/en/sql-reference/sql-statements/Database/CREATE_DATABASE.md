@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # CREATE DATABASE
 
-## Description
-
-This statement is used to create databases.
+CREATE DATABASE is used to create databases.
 
 :::tip
 

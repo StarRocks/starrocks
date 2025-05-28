@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW DELETE
 
-## Description
-
-Queries historical DELETE operations that were successfully performed on Duplicate Key, Unique Key, and Aggregate tables in a specified database. For more information about data deletion, see [DELETE](DELETE.md).
+SHOW DELETE queries historical DELETE operations that were successfully performed on Duplicate Key, Unique Key, and Aggregate tables in a specified database. For more information about data deletion, see [DELETE](DELETE.md).
 
 Note that this command cannot be used to query DELETE operations that were performed on Primary Key tables.
 

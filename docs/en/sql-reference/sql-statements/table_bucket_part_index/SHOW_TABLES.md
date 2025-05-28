@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW TABLES
 
-## Description
-
-Displays all tables in a StarRocks database or a database in an external data source, for example, Hive, Iceberg, Hudi, or Delta Lake.
+SHOW TABLES displays all tables in a StarRocks database or a database in an external data source, for example, Hive, Iceberg, Hudi, or Delta Lake.
 
 > **NOTE**
 >

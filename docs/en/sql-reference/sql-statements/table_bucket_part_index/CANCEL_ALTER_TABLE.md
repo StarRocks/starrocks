@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # CANCEL ALTER TABLE
 
-## Description
-
-Cancels the execution of the ongoing ALTER TABLE operation, including:
+CANCEL ALTER TABLE cancels the execution of the ongoing ALTER TABLE operation, including:
 
 - Modify columns.
 - Optimize table schema (from v3.2), including modifying the bucketing method and the number of buckets.

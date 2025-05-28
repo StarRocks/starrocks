@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW META
 
-## Description
-
-Views metadata of CBO statistics, including basic statistics and histograms.
+SHOW META views metadata of CBO statistics, including basic statistics and histograms.
 
 This statement is supported from v2.4.
 

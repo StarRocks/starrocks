@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW STORAGE VOLUMES
 
-## Description
-
-Shows the storage volumes in your StarRocks cluster. This feature is supported from v3.1.
+SHOW STORAGE VOLUMES shows the storage volumes in your StarRocks cluster. This feature is supported from v3.1.
 
 :::tip
 

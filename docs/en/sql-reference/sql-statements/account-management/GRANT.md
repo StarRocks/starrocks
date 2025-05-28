@@ -8,9 +8,7 @@ toc_max_heading_level: 4
 import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.md'
 import MultiServiceAccess from '../../../_assets/commonMarkdown/multi-service-access.mdx'
 
-## Description
-
-Grants one or more privileges on specific objects to a user or a role.
+GRANT grants one or more privileges on specific objects to a user or a role.
 
 Grants roles to users or other roles.
 

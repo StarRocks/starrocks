@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW RUNNING QUERIES
 
-## Description
-
-Shows the information of all queries that are running or pending in the query queue. This feature is supported from v3.1.4 onwards.
+SHOW RUNNING QUERIES displays information of all queries that are running or pending in the query queue. This feature is supported from v3.1.4 onwards.
 
 :::tip
 

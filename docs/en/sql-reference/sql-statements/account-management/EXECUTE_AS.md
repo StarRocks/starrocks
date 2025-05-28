@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # EXECUTE AS
 
-## Description
-
-After you obtain the privilege to impersonate a user (IMPERSONATE), you can use the EXECUTE AS statement to switch the execution context of the current session to the user.
+Use the IMPERSONATE privilege with EXECUTE AS statements to switch the execution context of the current session to the impersonated user.
 
 This command is supported from v2.4.
 

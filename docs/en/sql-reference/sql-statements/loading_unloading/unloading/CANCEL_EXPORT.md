@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # CANCEL EXPORT
 
-## Description
-
-Cancels a given data unloading job. Unloading jobs with the state `CANCELLED` or `FINISHED` cannot be canceled. Canceling an unloading job is an asynchronous process. You can use the [SHOW EXPORT](SHOW_EXPORT.md) statement to check whether an unloading job is successfully canceled. The unloading job is successfully canceled if the value of `State` is `CANCELLED`.
+CANCEL EXPORT cancels a given data unloading job. Unloading jobs with the state `CANCELLED` or `FINISHED` cannot be canceled. Canceling an unloading job is an asynchronous process. You can use the [SHOW EXPORT](SHOW_EXPORT.md) statement to check whether an unloading job is successfully canceled. The unloading job is successfully canceled if the value of `State` is `CANCELLED`.
 
 The CANCEL EXPORT statement requires that you have at least one of the following privileges on the database to which the given unloading job belongs: `SELECT_PRIV`, `LOAD_PRIV`, `ALTER_PRIV`, `CREATE_PRIV`, `DROP_PRIV`, and `USAGE_PRIV`. For more information about privilege descriptions, see [GRANT](../../account-management/GRANT.md).
 

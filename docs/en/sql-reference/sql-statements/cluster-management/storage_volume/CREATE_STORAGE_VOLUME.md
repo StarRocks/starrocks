@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # CREATE STORAGE VOLUME
 
-## Description
-
-Creates a storage volume for a remote storage system. This feature is supported from v3.1.
+CREATE STORAGE VOLUME creates a storage volume for a remote storage system. This feature is supported from v3.1.
 
 A storage volume consists of the properties and credential information of the remote data storage. You can reference a storage volume when you create databases and cloud-native tables in a shared-data StarRocks cluster.
 

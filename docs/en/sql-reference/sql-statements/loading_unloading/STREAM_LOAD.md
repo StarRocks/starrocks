@@ -6,11 +6,9 @@ import Tip from '../../../_assets/commonMarkdown/quickstart-shared-nothing-tip.m
 
 # STREAM LOAD
 
+StarRocks provides the loading method HTTP-based STREAM LOAD to help you load data from a local file system or a streaming data source. After you submit a load job, StarRocks synchronously runs the job, and returns the result of the job after the job finishes. You can determine whether the job is successful based on the job result. For information about the application scenarios, limits, principles, and supported data file formats of Stream Load, see [Loading from a local file system via Stream Load](../../../loading/StreamLoad.md#loading-from-a-local-file-system-via-stream-load).
+
 <Tip />
-
-## Description
-
-StarRocks provides the loading method HTTP-based Stream Load to help you load data from a local file system or a streaming data source. After you submit a load job, StarRocks synchronously runs the job, and returns the result of the job after the job finishes. You can determine whether the job is successful based on the job result. For information about the application scenarios, limits, principles, and supported data file formats of Stream Load, see [Loading from a local file system via Stream Load](../../../loading/StreamLoad.md#loading-from-a-local-file-system-via-stream-load).
 
 Since v3.2.7, Stream Load supports compressing JSON data during transmission, reducing network bandwidth overhead. Users can specify different compression algorithms using parameters `compression` and `Content-Encoding`. Supported compression algorithms including GZIP, BZIP2, LZ4_FRAME, and ZSTD. For more information, see [data_desc](#data_desc).
 
