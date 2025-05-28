@@ -136,7 +136,7 @@ public class QueryAnalyzer {
         new Visitor().process(node, new Scope(RelationId.anonymous(), new RelationFields()));
 
         // If the query involves `information_schema.tables`, temporarily enable
-        // `enable_groupby_use_output_alias` to support BI compatibility like Tableau.
+        // `enable_groupby_use_output_alias` to support Tableau compatibility.
         if (containsInformationSchemaTables) {
             session.getSessionVariable().setEnableGroupbyUseOutputAlias(true);
 
