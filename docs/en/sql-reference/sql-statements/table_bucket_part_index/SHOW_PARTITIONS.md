@@ -1,5 +1,7 @@
 ---
 displayed_sidebar: docs
+keywords:
+  - SHOW PARTITIONS
 ---
 
 # SHOW PARTITIONS
