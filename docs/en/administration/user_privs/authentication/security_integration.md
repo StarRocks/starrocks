@@ -268,17 +268,16 @@ PROPERTIES (
 
 ## Configure authentication chain
 
-After the security integration is created, it is added to your StarRocks cluster as a new authentication method. You must enable the security integration by setting the order of the authentication methods via the FE dynamic configuration item `authentication_chain`. In this case, you need to set the security integration as the preferred authentication method and then the native authentication of the StarRocks cluster.
+After the security integration is created, it is added to your StarRocks cluster as a new authentication method. You must enable the security integration by setting the order of the authentication methods via the FE dynamic configuration item `authentication_chain`.
 
 ```SQL
 ADMIN SET FRONTEND CONFIG (
-    "authentication_chain" = "<security_integration_name>[... ,], [native]"
+    "authentication_chain" = "<security_integration_name>[... ,]"
 );
 ```
 
 :::note
-- If `authentication_chain` is not specified, only the native authentication is enabled.
-- Once `authentication_chain` is set, StarRocks first verifies the user login with the top preferred authentication method. If a login fails with the preferred authentication method, the cluster follows the specified order to try the next authentication method.
+- StarRocks prioritizes native authentication for local users. If a local user with the same username does not exist, authentication is performed in the order configured by `authentication_chain`. If login fails using the native authentication method, the cluster will try the next authentication method in the specified order.
 - You can specify multiple security integrations in `authentication_chain` except for OAuth 2.0 security integration. You cannot specify multiple OAuth 2.0 security integrations or one with other security integrations.
 :::
 
