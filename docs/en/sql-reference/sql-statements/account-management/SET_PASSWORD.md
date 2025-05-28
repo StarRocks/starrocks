@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SET PASSWORD
 
-## Description
-
-Changes login password for users. The [ALTER USER](ALTER_USER.md) command can also be used to change a password.
+SET PASSWORD changes the login password for users. The [ALTER USER](ALTER_USER.md) command can also be used to change a password.
 
 :::tip
 
