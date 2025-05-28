@@ -13,45 +13,48 @@ In a share-data cluster, data is shared among multiple warehouses, yet distinct 
 Multi-Warehouse can bring the following benefits:
 
 - **Resource isolation**
-  -  Multi-Warehouse allows for finer-grained scheduling of CNs. You can allocate different tasks to distinct warehouses, ensuring the physical isolation of compute resources.
+  - Multi-Warehouse allows for finer-grained scheduling of CNs. You can allocate different tasks to distinct warehouses, ensuring the physical isolation of compute resources.
 - **Data sharing**
-  -  Multiple warehouses can share a common data storage, empowering authorized users to access cluster data through any warehouse seamlessly.
+  - Multiple warehouses can share a common data storage, empowering authorized users to access cluster data through any warehouse seamlessly.
 - **Vertical scalability**
-  -  Multi-Warehouse allows you to group CNs as needed, bringing higher flexibility to cope with fluctuations in load. You can dynamically start or stop a warehouse, or scale it up or down by adding or dropping the stateless CNs.
+  - Multi-Warehouse allows you to group CNs as needed, bringing higher flexibility to cope with fluctuations in load. You can dynamically start or stop a warehouse, or scale it up or down by adding or dropping the stateless CNs.
 - **Horizontal scalability**
-  -  You can easily create a new warehouse to cater to the demand of new business scenarios, without impacting the existing warehouses. Tasks on the existing warehouses will not be disrupted because no data redistribution is needed. You can build a centralized large cluster to support multiple concurrent services, avoiding the increased complexity and costs associated with maintaining multiple independent clusters.
+  - You can easily create a new warehouse to cater to the demand of new business scenarios, without impacting the existing warehouses. Tasks on the existing warehouses will not be disrupted because no data redistribution is needed. You can build a centralized large cluster to support multiple concurrent services, avoiding the increased complexity and costs associated with maintaining multiple independent clusters.
 
 ### Use cases
 
 Multi-Warehouse finds applications in various scenarios:
 
 - **Diverse business workloads**
-  -  You can assign different types of workloads to distinct warehouses to isolate the compute resources physically. For example, you can allocate one warehouse to perform query analytics and another for ETL processing, optimizing resource utilization for each.
+  - You can assign different types of workloads to distinct warehouses to isolate the compute resources physically. For example, you can allocate one warehouse to perform query analytics and another for ETL processing, optimizing resource utilization for each.
 - **Centralized large cluster**
-  -  Database administrators can maintain a common large cluster and create separate warehouses for each business unit, effectively mitigating the need to establish numerous smaller StarRocks clusters, thus reducing maintenance overhead.
+  - Database administrators can maintain a common large cluster and create separate warehouses for each business unit, effectively mitigating the need to establish numerous smaller StarRocks clusters, thus reducing maintenance overhead.
 - **Background task separation**
-  -  You can isolate and execute background tasks, such as compaction, within dedicated warehouses to prevent disruption to regular operations. Furthermore, you can adjust warehouse resources as needed to strike a balance between cost and performance.
+  - You can isolate and execute background tasks, such as compaction, within dedicated warehouses to prevent disruption to regular operations. Furthermore, you can adjust warehouse resources as needed to strike a balance between cost and performance.
 
 ### Best practices
 
 Multi-Warehouse's capabilities shine in scenarios like:
 
 - **Online-offline hybrid analysis**
-  -  Multi-Warehouse offers superior resource isolation and data sharing capabilities for businesses combining online and offline operations. With unified data storage, this approach streamlines storage costs and simplifies cluster management.
+  - Multi-Warehouse offers superior resource isolation and data sharing capabilities for businesses combining online and offline operations. With unified data storage, this approach streamlines storage costs and simplifies cluster management.
 - **Ad hoc** **query**
-  -  You can flexibly scale up or down the warehouse for ad hoc query requests.
+  - You can flexibly scale up or down the warehouse for ad hoc query requests.
 - **Offline tasks**
-  -  In cases where an offline task is time-sensitive, Multi-Warehouse enables rapid resource allocation adjustments, ensuring urgent tasks are accomplished within time constraints.
+  - In cases where an offline task is time-sensitive, Multi-Warehouse enables rapid resource allocation adjustments, ensuring urgent tasks are accomplished within time constraints.
 
 ## Create a warehouse
 
 Each time a new StarRocks cluster is deployed, a built-in warehouse `default_warehouse` is created. Any request without specifying a warehouse to use is routed to `default_warehouse`.
+
+From v3.5 onwards, StarRocks further ensures cluster performance reliability with the support of Compute Replica when creating a Warehouse. For more information, see [Schedule Compute Resource using Compute Replicas](./multi_compute_replica.md).
 
 Use the following syntax to create a new warehouse:
 
 ```SQL
 CREATE WAREHOUSE [ IF NOT EXISTS ] <warehouse_name>
 [COMMENT <comment>]
+[PROPERTIES("key"="value" [, ...])]
 ```
 
 **Parameter**:
@@ -59,12 +62,30 @@ CREATE WAREHOUSE [ IF NOT EXISTS ] <warehouse_name>
 - `warehouse_name` (Required): The name of the warehouse you want to create.
 - `comment` (Optional): The comment for the warehouse you want to create.
 
+**PROPERTIES**:
+
+- `compute_replica`: Number of compute replicas. The default value is `1` and the maximum value is limited by the FE dynamic configuration item `lake_warehouse_max_compute_replica`. The default value of `lake_warehouse_max_compute_replica` is `3`.
+- `replication_type`: Cache replication type. When data is being loaded into a CN node, the data of the source CN will be replicated to the caches of other CN nodes according to the replication type and the number of replicas. Valid values:
+  - `NONE` (Default): The system will not replicate the data in the source CN node to the caches of other CN nodes.
+  - `SYNC`: The system will synchronously replicate the data from the source CN node to the caches of other CN nodes.
+  - `ASYNC`: The system will asynchronously replicate the data from the source CN node to the caches of other CN nodes.
+- `warmup_level`: Cache warmup level. When a new Tablet is loaded to a CN node, the system will warm up the latest version of the Tablet once according to the warmup level. Valid values:
+  - `NONE` (Default): The system will not warm up Tablet metadata or data files.
+  - `META`: The system will warm up the latest version of Tablet metadata.
+  - `INDEX`: The system will warm up the latest version of Tablet metadata and the footer of the corresponding data files.
+  - `ALL`: The system will warm up the latest version of Tablet metadata and the corresponding data files.
+
 **Example**:
 
-Create a warehouse `wh1`.
+Create a warehouse `wh1`, enable 3 compute replicas. The compute replicas will synchronously replicate the data from the source CN node to the caches of other CN nodes, and warm up the latest version of tablet metadata and the footer of the corresponding data files.
 
 ```SQL
-CREATE WAREHOUSE wh1;
+CREATE WAREHOUSE wh1
+PROPERTIES(
+  'compute_replica'='3',
+  'replication_type'='SYNC',
+  'warmup_level'='INDEX'
+);
 ```
 
 ## Add CNs to warehouse
@@ -91,6 +112,35 @@ Add a CN to `wh1`.
 ```SQL
 ALTER SYSTEM ADD COMPUTE NODE "xxx.xxx.xx.xxx:9050"
 INTO WAREHOUSE wh1;
+```
+
+### Alter warehouse properties
+
+Use the following syntax to alter warehouse properties:
+
+```SQL
+ALTER WAREHOUSE <warehouse_name>
+SET("key"="value" [, ...])
+```
+
+**Example**：
+
+Alter the properties of the warehouse `wh1`.
+
+```SQL
+ALTER WAREHOUSE wh1
+SET(
+  'compute_replica'='2',
+  'warmup_level'='META'
+);
+```
+
+### View warehouses
+
+Use the following syntax to view warehouses:
+
+```SQL
+SHOW WAREHOUSES
 ```
 
 ## Set warehouse
