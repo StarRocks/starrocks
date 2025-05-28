@@ -326,7 +326,7 @@ In data management, partitioning based on different time granularity is crucial 
 ```SQL
 ALTER TABLE [<db_name>.]<table_name>
 PARTITION BY <time_expr>
-WHERE <time_range_column> BETWEEN <start_time> AND <end_time>
+BETWEEN <start_time> AND <end_time>
 ```
 
 #### Parameters
@@ -347,7 +347,7 @@ Merge the partitions in the table `site_access1`, and change the partition time 
 
 ```SQL
 ALTER TABLE site_access1 PARTITION BY date_trunc('month', event_day)
-WHERE event_day BETWEEN '2024-01-01' AND '2024-03-31';
+BETWEEN '2024-01-01' AND '2024-03-31';
 ```
 
 After merging:
