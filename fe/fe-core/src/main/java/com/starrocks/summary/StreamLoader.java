@@ -56,7 +56,7 @@ class StreamLoader {
             InterruptedException {
         Frontend fe = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf();
         label += fe.getHost().replace(".", "_");
-        label += fe.getEditLogPort();
+        label += "_" + System.identityHashCode(this);
         label += "_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
 
         String authString = fe.getHost() + ":" + fe.getNodeName();
