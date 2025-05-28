@@ -112,7 +112,20 @@ public class MockedWarehouseManager extends WarehouseManagerEPack {
 
     @Override
     public ComputeNode getComputeNodeAssignedToTablet(String warehouseName, LakeTablet tablet) {
-        return computeNodeSetAssignedToTablet.iterator().next();
+        if (computeNodeSetAssignedToTablet.isEmpty()) {
+            return null;
+        } else {
+            return computeNodeSetAssignedToTablet.iterator().next();
+        }
+    }
+
+    @Override
+    public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
+        if (computeNodeSetAssignedToTablet.isEmpty()) {
+            return null;
+        } else {
+            return computeNodeSetAssignedToTablet.iterator().next();
+        }
     }
 
     public void setComputeNodesAssignedToTablet(Set<ComputeNode> computeNodeSet) {
