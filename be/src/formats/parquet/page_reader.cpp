@@ -354,8 +354,7 @@ Status PageReader::_read_and_decompress_internal(bool need_fill_cache) {
             return _decompress_page(read_data, &_uncompressed_data);
         } else if (_cache_decompressed_data()) {
             auto original_size = _cache_buf->size();
-            TRY_CATCH_BAD_ALLOC(
-                    raw::stl_vector_resize_uninitialized(_cache_buf, uncompressed_size + original_size));
+            TRY_CATCH_BAD_ALLOC(raw::stl_vector_resize_uninitialized(_cache_buf, uncompressed_size + original_size));
             _uncompressed_data = Slice(_cache_buf->data() + original_size, uncompressed_size);
             return _decompress_page(read_data, &_uncompressed_data);
         }
