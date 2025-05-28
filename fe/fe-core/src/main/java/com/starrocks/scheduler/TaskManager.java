@@ -857,8 +857,8 @@ public class TaskManager implements MemoryTrackable {
         dropTasks(taskIdToDelete, true);
     }
 
-    public void removeExpiredTaskRuns() {
-        taskRunManager.getTaskRunHistory().vacuum();
+    public void removeExpiredTaskRuns(boolean archiveHistory) {
+        taskRunManager.getTaskRunHistory().vacuum(archiveHistory);
     }
 
     @Override

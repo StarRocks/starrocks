@@ -238,7 +238,7 @@ public class TaskRunHistoryTest {
         history.addHistory(run2);
         assertEquals(2, history.getInMemoryHistory().size());
 
-        history.vacuum();
+        history.vacuum(true);
         assertEquals(1, history.getInMemoryHistory().size());
 
         // vacuum failed
@@ -254,8 +254,28 @@ public class TaskRunHistoryTest {
         run3.setTaskName("t3");
         run3.setState(Constants.TaskRunState.SUCCESS);
         history.addHistory(run3);
-        history.vacuum();
+        history.vacuum(true);
         assertEquals(2, history.getInMemoryHistory().size());
+    }
+
+    @Test
+    public void testHistoryVacuumSkipArchive(@Mocked SimpleExecutor repo) {
+        new MockUp<TableKeeper>() {
+            @Mock
+            public boolean isReady() {
+                return true;
+            }
+        };
+
+        TaskRunHistory history = new TaskRunHistory();
+        TaskRunStatus run = new TaskRunStatus();
+        run.setExpireTime(System.currentTimeMillis() + 10000);
+        run.setQueryId("q3");
+        run.setTaskName("t3");
+        run.setState(Constants.TaskRunState.SUCCESS);
+        history.addHistory(run);
+        history.vacuum(false);
+        assertEquals(1, history.getInMemoryHistory().size());
     }
 
     @Test
@@ -280,7 +300,7 @@ public class TaskRunHistoryTest {
         assertEquals(2, history.getInMemoryHistory().size());
 
         // run, trigger the expiration
-        history.vacuum();
+        history.vacuum(true);
         Assert.assertEquals(0, history.getInMemoryHistory().size());
 
         Config.enable_task_history_archive = true;
