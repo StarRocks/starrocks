@@ -240,31 +240,15 @@ select  *  from  sales_record  order by  employee_id  nulls first;
 
 ### GROUP BY
 
-The GROUP BY clause is often used with aggregate functions such as COUNT(), SUM(), AVG(), MIN(), and MAX().
-
-The column specified by GROUP BY will not participate in the aggregation operation. The GROUP BY clause can be added with the Having clause to filter the results produced by the aggregate function.
-
-Examples:
-
-```sql
-select tiny_column, sum(short_column)
-from small_table 
-group by tiny_column;
-```
-
-```plain text
-+-------------+---------------------+
-| tiny_column |  sum('short_column')|
-+-------------+---------------------+
-|      1      |        2            |
-|      2      |        1            |
-+-------------+---------------------+
-```
+The GROUP BY clause is often used with aggregate functions. Columns specified in the GROUP BY clause will not participate in the aggregation operation.
 
 #### Syntax
 
   ```sql
-  SELECT ...
+  SELECT
+  ...
+  aggregate_function() [ FILTER ( where boolean_expression ) ]
+  ...
   FROM ...
   [ ... ]
   GROUP BY [
@@ -278,124 +262,118 @@ group by tiny_column;
 
 #### Parameters
 
-  `groupSet` represents a set composed of columns, aliases or expressions in the select list.  `groupSet ::= { ( expr  [ , expr [ , ... ] ] )}`
+- `FILTER` can be used together with aggregate functions. Only filtered rows will participate in the calculation of the aggregate function.
 
-  `expr`  indicates the column, alias or expression in the select list.
+  > **NOTE**
+  >
+  > - The FILTER clause is only supported in AVG, COUNT, MAX, MIN, SUM, ARRAY_AGG, and ARRAY_AGG_DISTINCT functions.
+  > - The FILTER clause is not supported for COUNT DISTINCT.
+  > - When the FILTER clause is specified, ORDER BY clauses are not allowed within ARRAY_AGG and ARRAY_AGG_DISTINCT functions.
 
-#### Note
-
-StarRocks supports syntax like PostgreSQL. The syntax examples are as follows:
-
-  ```sql
-  SELECT a, b, SUM( c ) FROM tab1 GROUP BY GROUPING SETS ( (a, b), (a), (b), ( ) );
-  SELECT a, b,c, SUM( d ) FROM tab1 GROUP BY ROLLUP(a,b,c)
-  SELECT a, b,c, SUM( d ) FROM tab1 GROUP BY CUBE(a,b,c)
-  ```
-
-  `ROLLUP(a,b,c)` is equivalent to the following`GROUPING SETS` statement:
-
-  ```sql
-  GROUPING SETS (
-  (a,b,c),
-  ( a, b ),
-  ( a),
-  ( )
-  )
-  ```
-
-  `CUBE ( a, b, c )`  is equivalent to the following`GROUPING SETS` statement:
-
-  ```sql
-  GROUPING SETS (
-  ( a, b, c ),
-  ( a, b ),
-  ( a,    c ),
-  ( a       ),
-  (    b, c ),
-  (    b    ),
-  (       c ),
-  (         )
-  )
-  ```
+- `GROUPING SETS`, `CUBE`, and `ROLLUP` are extensions of the GROUP BY clause. In a GROUP BY clause, they can be used to achieve grouped aggregations of multiple sets. The results are equivalent to that of the UNION of multiple GROUP BY clauses.
 
 #### Examples
 
-  The following is an example of actual data:
+Example 1: `FILTER`
 
-  ```plain text
-  SELECT * FROM t;
-  +------+------+------+
-  | k1   | k2   | k3   |
-  +------+------+------+
-  | a    | A    |    1 |
-  | a    | A    |    2 |
-  | a    | B    |    1 |
-  | a    | B    |    3 |
-  | b    | A    |    1 |
-  | b    | A    |    4 |
-  | b    | B    |    1 |
-  | b    | B    |    5 |
-  +------+------+------+
-  8 rows in set (0.01 sec)
-
-  SELECT k1, k2, SUM(k3) FROM t GROUP BY GROUPING SETS ( (k1, k2), (k2), (k1), ( ) );
-  +------+------+-----------+
-  | k1   | k2   | sum(`k3`) |
-  +------+------+-----------+
-  | b    | B    |         6 |
-  | a    | B    |         4 |
-  | a    | A    |         3 |
-  | b    | A    |         5 |
-  | NULL | B    |        10 |
-  | NULL | A    |         8 |
-  | a    | NULL |         7 |
-  | b    | NULL |        11 |
-  | NULL | NULL |        18 |
-  +------+------+-----------+
-  9 rows in set (0.06 sec)
-
-  > SELECT k1, k2, GROUPING_ID(k1,k2), SUM(k3) FROM t GROUP BY GROUPING SETS ((k1, k2), (k1), (k2), ());
-  +------+------+---------------+----------------+
-  | k1   | k2   | grouping_id(k1,k2) | sum(`k3`) |
-  +------+------+---------------+----------------+
-  | a    | A    |             0 |              3 |
-  | a    | B    |             0 |              4 |
-  | a    | NULL |             1 |              7 |
-  | b    | A    |             0 |              5 |
-  | b    | B    |             0 |              6 |
-  | b    | NULL |             1 |             11 |
-  | NULL | A    |             2 |              8 |
-  | NULL | B    |             2 |             10 |
-  | NULL | NULL |             3 |             18 |
-  +------+------+---------------+----------------+
-  9 rows in set (0.02 sec)
-  ```
-
-GROUP BY `GROUPING SETS` ｜ `CUBE` ｜ `ROLLUP` is an extension of the GROUP BY clause. It can realize the aggregation of groups of multiple sets in a GROUP BY clause. The result is equivalent to the UNION operation of multiple corresponding GROUP BY clauses.
-
-GROUP BY clause is a special case of GROUP BY GROUPING SETS containing only one element. For example, the GROUPING SETS statement:
+  The following two queries are equivalent.
 
   ```sql
-  SELECT a, b, SUM( c ) FROM tab1 GROUP BY GROUPING SETS ( (a, b), (a), (b), ( ) );
+  SELECT
+    COUNT(*) AS total_users,
+    SUM(CASE WHEN gender = 'M' THEN 1 ELSE 0 END) AS male_users,
+    SUM(CASE WHEN gender = 'F' THEN 1 ELSE 0 END) AS female_users
+  FROM users;
   ```
-
-  The query result is equivalent to:
-
-  ```sql
-  SELECT a, b, SUM( c ) FROM tab1 GROUP BY a, b
-  UNION
-  SELECT a, null, SUM( c ) FROM tab1 GROUP BY a
-  UNION
-  SELECT null, b, SUM( c ) FROM tab1 GROUP BY b
-  UNION
-  SELECT null, null, SUM( c ) FROM tab1
-  ```
-
-  `GROUPING(expr)` indicates whether a column is an aggregate column. If it is an aggregate column, it is 0, otherwise it is 1.
-
-  `GROUPING_ID(expr  [ , expr [ , ... ] ])` is similar to GROUPING. GROUPING_ ID calculates the bitmap value of a column list according to the specified column order, and each bit is the value of GROUPING.
   
-  GROUPING_ID() function returns the decimal value of the bit vector.
+  ```sql
+  SELECT
+    COUNT(*) AS total_users,
+    COUNT(*) FILTER (WHERE gender = 'M') AS male_users,
+    COUNT(*) FILTER (WHERE gender = 'F') AS female_users
+  FROM users;
+  ```
+
+Example 2: `GROUPING SETS`, `CUBE`, and `ROLLUP`
+
+  `ROLLUP(a,b,c)` is equivalent to the following `GROUPING SETS` clause.
+  
+    ```sql
+    GROUPING SETS (
+    (a,b,c),
+    (a,b  ),
+    (a    ),
+    (     )
+    )
+    ```
+  
+  `CUBE (a, b, c)` is equivalent to the following `GROUPING SETS` clause.
+  
+    ```sql
+    GROUPING SETS (
+    ( a, b, c ),
+    ( a, b    ),
+    ( a,    c ),
+    ( a       ),
+    (    b, c ),
+    (    b    ),
+    (       c ),
+    (         )
+    )
+    ```
+  
+  Test in an actual dataset.
+  
+    ```sql
+    SELECT * FROM t;
+    +------+------+------+
+    | k1   | k2   | k3   |
+    +------+------+------+
+    | a    | A    |    1 |
+    | a    | A    |    2 |
+    | a    | B    |    1 |
+    | a    | B    |    3 |
+    | b    | A    |    1 |
+    | b    | A    |    4 |
+    | b    | B    |    1 |
+    | b    | B    |    5 |
+    +------+------+------+
+    8 rows in set (0.01 sec)
+  
+    SELECT k1, k2, SUM(k3) FROM t
+    GROUP BY GROUPING SETS ( (k1, k2), (k2), (k1), ( ) );
+    +------+------+-----------+
+    | k1   | k2   | sum(`k3`) |
+    +------+------+-----------+
+    | b    | B    |         6 |
+    | a    | B    |         4 |
+    | a    | A    |         3 |
+    | b    | A    |         5 |
+    | NULL | B    |        10 |
+    | NULL | A    |         8 |
+    | a    | NULL |         7 |
+    | b    | NULL |        11 |
+    | NULL | NULL |        18 |
+    +------+------+-----------+
+    9 rows in set (0.06 sec)
+  
+    SELECT k1, k2, GROUPING_ID(k1,k2), SUM(k3) FROM t
+    GROUP BY GROUPING SETS ((k1, k2), (k1), (k2), ());
+    +------+------+---------------+----------------+
+    | k1   | k2   | grouping_id(k1,k2) | sum(`k3`) |
+    +------+------+---------------+----------------+
+    | a    | A    |             0 |              3 |
+    | a    | B    |             0 |              4 |
+    | a    | NULL |             1 |              7 |
+    | b    | A    |             0 |              5 |
+    | b    | B    |             0 |              6 |
+    | b    | NULL |             1 |             11 |
+    | NULL | A    |             2 |              8 |
+    | NULL | B    |             2 |             10 |
+    | NULL | NULL |             3 |             18 |
+    +------+------+---------------+----------------+
+    9 rows in set (0.02 sec)
+    ```
 
 ### HAVING
 
@@ -672,7 +650,7 @@ limit 3;
 3 rows in set (0.01 sec)
 ```
 
-### **INTERSECT**
+### INTERSECT
 
 Calculates the intersection of the results of multiple queries, that is, the results that appear in all the result sets. This clause returns only unique rows among the result sets. The ALL keyword is not supported.
 
@@ -715,7 +693,7 @@ order by id;
 +------+-------+
 ```
 
-### **EXCEPT/MINUS**
+### EXCEPT/MINUS
 
 Returns distinct results of the left-hand query that do not exist in the right-hand query. EXCEPT is equivalent to MINUS.
 
