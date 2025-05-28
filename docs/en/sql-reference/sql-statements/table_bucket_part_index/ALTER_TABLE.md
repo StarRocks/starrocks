@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # ALTER TABLE
 
-## Description
-
-Modifies an existing table, including:
+ALTER TABLE Modifies an existing table, including:
 
 - [Rename table, partition, index, or column](#rename)
 - [Modify table comment](#alter-table-comment-from-v31)

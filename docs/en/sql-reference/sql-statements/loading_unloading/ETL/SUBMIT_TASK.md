@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SUBMIT TASK
 
-## Description
-
-Submits an ETL statement as an asynchronous task.
+SUBMIT TASK submits an ETL statement as an asynchronous task.
 
 You can use this statement to:
 

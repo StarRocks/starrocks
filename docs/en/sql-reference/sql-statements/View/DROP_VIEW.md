@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # DROP VIEW
 
-## Description
-
-This statement is used to drop a logical view VIEW
+DROP VIEW is used to drop a logical view VIEW
 
 ## Syntax
 

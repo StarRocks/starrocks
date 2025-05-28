@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # DELETE SQLBLACKLIST
 
-## Description
-
-Deletes an SQL regular expression from the SQL blacklist.
+DELETE SQLBLACKLIST deletes an SQL regular expression from the SQL blacklist.
 
 For more about SQL Blacklist, see [Manage SQL Blacklist](../../../../administration/management/resource_management/Blacklist.md).
 

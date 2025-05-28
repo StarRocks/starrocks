@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # ALTER DATABASE
 
-## Description
-
-Configures the properties of the specified database.
+ALTER DATABASE configures the properties of the specified database.
 
 :::tip
 

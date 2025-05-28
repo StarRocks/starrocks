@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SELECT
 
-## Description
-
-Queries data from one or more tables, views, or materialized views. The SELECT statement generally consists of the following clauses:
+SELECT queries data from one or more tables, views, or materialized views. The SELECT statement generally consists of the following clauses:
 
 - [WITH](#with)
 - [WHERE and operators](#where-and-operators)

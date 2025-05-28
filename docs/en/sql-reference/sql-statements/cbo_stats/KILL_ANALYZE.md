@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # KILL ANALYZE
 
-## Description
-
-Cancels a **running** collection task, including manual and custom automatic tasks.
+KILL ANALYZE cancels a **running** collection task, including manual and custom automatic tasks.
 
 This statement is supported from v2.4.
 

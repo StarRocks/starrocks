@@ -6,9 +6,7 @@ displayed_sidebar: docs
 
 import RoutineLoadPrivNote from '../../../../_assets/commonMarkdown/RoutineLoadPrivNote.md'
 
-## Description
-
-Shows the execution information of load tasks within a Routine Load job.
+SHOW ROUTINE LOAD TASK shows the execution information of load tasks within a Routine Load job.
 
 :::note
 

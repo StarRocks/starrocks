@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # ALTER RESOURCE GROUP
 
-## Description
-
-Alters the configuration of a resource group.
+ALTER RESOURCE GROUP alters the configuration of a resource group.
 
 :::tip
 

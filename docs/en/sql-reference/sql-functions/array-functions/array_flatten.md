@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # array_flatten
 
-## Description
-
-Flatten one layer of nested arrays.
+`array_flatten` flattens one layer of nested arrays.
 
 ## Syntax
 

@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # ALTER SYSTEM
 
-## Description
-
-Manages FE, BE, CN, Broker nodes, and metadata snapshots in a cluster.
+ALTER SYSTEM Manages FE, BE, CN, Broker nodes, and metadata snapshots in a cluster.
 
 > **NOTE**
 >

@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # ADMIN REPAIR
 
-## Description
-
-This statement is used to try and fix the specified tables or partitions first.
+ADMIN REPAIR is used to try and fix the specified tables or partitions first.
 
 :::tip
 

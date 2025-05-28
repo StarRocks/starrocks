@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # VARCHAR
 
-## Description
-
 VARCHAR(M)
 
 A variable-length string. `M` indicates the length of the string. The default value is `1`. Unit: bytes.

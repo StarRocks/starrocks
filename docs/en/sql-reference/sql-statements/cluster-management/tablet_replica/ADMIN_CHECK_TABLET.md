@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # ADMIN CHECK TABLET
 
-## Description
-
-This statement is used to check a group of tablets.
+ADMIN CHECK TABLET is used to check a group of tablets.
 
 :::tip
 

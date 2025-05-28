@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SET DEFAULT STORAGE VOLUME
 
-## Description
-
-Sets a storage volume as the default storage volume. After creating a storage volume for an external data source, you can set it as the default storage volume of your StarRocks cluster. This feature is supported from v3.1.
+SET DEFAULT STORAGE VOLUME sets a storage volume as the default storage volume. After creating a storage volume for an external data source, you can set it as the default storage volume of your StarRocks cluster. This feature is supported from v3.1.
 
 > **CAUTION**
 >

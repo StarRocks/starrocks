@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # DROP FILE
 
-## Description
-
-You can execute the DROP FILE statement to delete a file. When you use this statement to delete a file, the file is deleted both in frontend (FE) memory and in Berkeley DB Java Edition (BDBJE).
+Use the DROP FILE statement to delete a file. When you use this statement to delete a file, the file is deleted both in frontend (FE) memory and in Berkeley DB Java Edition (BDBJE).
 
 :::tip
 

@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # TRUNCATE TABLE
 
-## Description
-
-This statement is used to truncate the specified table and partition data.
+TRUNCATE TABLE is used to truncate the specified table and partition data.
 
 Syntax:
 

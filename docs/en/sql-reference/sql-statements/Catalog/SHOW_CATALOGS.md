@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW CATALOGS
 
-## Description
-
-Query all catalogs in the current StarRocks cluster, including the internal catalog and external catalogs.
+SHOW CATALOGS queries all catalogs in the current StarRocks cluster, including the internal catalog and external catalogs.
 
 > **NOTE**
 >

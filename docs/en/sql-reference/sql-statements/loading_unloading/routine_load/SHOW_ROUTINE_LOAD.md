@@ -6,9 +6,7 @@ displayed_sidebar: docs
 
 import RoutineLoadPrivNote from '../../../../_assets/commonMarkdown/RoutineLoadPrivNote.md'
 
-## Description
-
-Shows the execution information of Routine Load jobs.
+SHOW ROUTINE LOAD shows the execution information of Routine Load jobs.
 
 <RoutineLoadPrivNote />
 

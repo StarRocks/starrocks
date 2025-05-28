@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SET DEFAULT ROLE
 
-## Description
-
-Sets the roles that are activated by default when the user connects to the server.
+SET DEFAULT ROLE sets the roles that are activated by default when the user connects to the server.
 
 This command is supported from v3.0.
 

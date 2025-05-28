@@ -6,9 +6,7 @@ displayed_sidebar: docs
 
 import RoutineLoadPrivNote from '../../../../_assets/commonMarkdown/RoutineLoadPrivNote.md'
 
-## Description
-
-Pauses a Routine Load job but does not terminate this job. You can execute [RESUME ROUTINE LOAD](RESUME_ROUTINE_LOAD.md) to resume it. After the load job is paused, you can execute [SHOW ROUTINE LOAD](SHOW_ROUTINE_LOAD.md) and [ALTER ROUTINE LOAD](./ALTER_ROUTINE_LOAD.md) to view and modify information ../../data-manipulation/ALTER_ROUTINE_LOAD.mdob.
+PAUSE ROUTINE LOAD pauses a Routine Load job but does not terminate this job. You can execute [RESUME ROUTINE LOAD](RESUME_ROUTINE_LOAD.md) to resume it. After the load job is paused, you can execute [SHOW ROUTINE LOAD](SHOW_ROUTINE_LOAD.md) and [ALTER ROUTINE LOAD](./ALTER_ROUTINE_LOAD.md) to view and modify information ../../data-manipulation/ALTER_ROUTINE_LOAD.mdob.
 
 <RoutineLoadPrivNote />
 

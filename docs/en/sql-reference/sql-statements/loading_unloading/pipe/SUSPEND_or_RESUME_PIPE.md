@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # SUSPEND or RESUME PIPE
 
-## Description
-
 Suspends or resumes a pipe:
 
 - When a load job is in progress (namely, in the `RUNNING` state), suspending (`SUSPEND`) the pipe for the job interrupts the job.

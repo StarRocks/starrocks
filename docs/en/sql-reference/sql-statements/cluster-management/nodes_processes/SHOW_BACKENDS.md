@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW BACKENDS
 
-## Description
-
-Shows the information of all BE nodes in the cluster.
+SHOW BACKENDS shows the information of all BE nodes in the cluster.
 
 :::tip
 

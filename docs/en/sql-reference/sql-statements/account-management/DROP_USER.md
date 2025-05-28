@@ -6,9 +6,7 @@ displayed_sidebar: docs
 
 import UserManagementPriv from '../../../_assets/commonMarkdown/userManagementPriv.md'
 
-## Description
-
-Drops a specified user identity.
+DROP USER drops a specified user identity.
 
 <UserManagementPriv />
 

@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # SET
 
-## Description
-
 Sets the specified system variables or user-defined variables for StarRocks. You can view the system variables of StarRocks using [SHOW VARIABLES](./SHOW_VARIABLES.md). For details about system variables, see [System Variables](../../../System_variable.md). For details about user-defined variables, see [User-defined variables](../../../user_defined_variables.md).
 
 :::tip

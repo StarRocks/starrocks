@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # SHOW COMPUTE NODES
 
-## Description
-
-Shows the information of all CN nodes in the cluster.
+SHOW COMPUTE NODES shows the information of all CN nodes in the cluster.
 
 :::tip
 
