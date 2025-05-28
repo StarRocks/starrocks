@@ -18,6 +18,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.planner.LoadScanNode;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.arrow.util.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -76,7 +77,7 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
     private final ConcurrentHashMap<Long, LoadMeta> registeredLoadMetas;
 
     // Warehouse metas. warehouse id -> WarehouseMeta. Only read/write in the singleExecutor
-    private final Map<Long, WarehouseMeta> warehouseMetas;
+    private final Map<ComputeResource, WarehouseMeta> warehouseMetas;
 
     // The number of tasks to be executed triggered by EventType.DETECT_UNAVAILABLE_NODES.
     // It's used to avoid submitting too many similar tasks when there are unavailable nodes.
@@ -168,11 +169,11 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
 
     // Registers a load, and try to wait for the node assignment to finish
     @Override
-    public void registerBatchWrite(long loadId, long warehouseId, TableId tableId, int expectParallel) {
+    public void registerBatchWrite(long loadId, ComputeResource computeResource, TableId tableId, int expectParallel) {
         LoadMeta loadMeta = registeredLoadMetas.computeIfAbsent(
-                loadId, k -> new LoadMeta(loadId, warehouseId, tableId, expectParallel));
+                loadId, k -> new LoadMeta(loadId, computeResource, tableId, expectParallel));
         LOG.info("Register load, load id: {}, warehouse: {}, {}, parallel: {}",
-                loadId, warehouseId, tableId, expectParallel);
+                loadId, computeResource, tableId, expectParallel);
 
         // Submit a task to assign nodes to the load, and try to wait for the task to finish
         boolean success = false;
@@ -209,7 +210,7 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
         if (loadMeta == null) {
             return;
         }
-        LOG.info("Unregister load, load id: {}, warehouse: {}, {}", loadId, loadMeta.warehouseId, loadMeta.tableId);
+        LOG.info("Unregister load, load id: {}, warehouse: {}, {}", loadId, loadMeta.computeResource, loadMeta.tableId);
 
         Task task = new Task(
                 taskIdAllocator.incrementAndGet(),
@@ -265,19 +266,19 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
 
     // Execute EventType.REGISTER_LOAD task which assigns nodes to the load
     void runRegisterLoadTask(LoadMeta loadMeta) {
-        long warehouseId = loadMeta.warehouseId;
+        final ComputeResource computeResource = loadMeta.computeResource;
         WarehouseMeta warehouseMeta =
-                warehouseMetas.computeIfAbsent(warehouseId, WarehouseMeta::new);
+                warehouseMetas.computeIfAbsent(computeResource, WarehouseMeta::new);
 
         NavigableSet<NodeMeta> nodeMetas = warehouseMeta.sortedNodeMetas;
         if (nodeMetas.isEmpty()) {
             try {
-                List<ComputeNode> nodes = getAvailableNodes(warehouseId);
+                List<ComputeNode> nodes = getAvailableNodes(computeResource);
                 nodes.forEach(node -> nodeMetas.add(new NodeMeta(node)));
             } catch (Exception e) {
                 LOG.warn("Register load to unknown warehouse, load id: {}, warehouse: {}, {}}",
-                        loadMeta.loadId, loadMeta.warehouseId, loadMeta.tableId);
-                throw new RuntimeException("Unknown warehouse id " + loadMeta.warehouseId, e);
+                        loadMeta.loadId, loadMeta.computeResource, loadMeta.tableId);
+                throw new RuntimeException("Unknown warehouse id " + loadMeta.computeResource, e);
             }
         }
 
@@ -285,7 +286,7 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
         long loadId = loadMeta.loadId;
         if (loadMetas.putIfAbsent(loadId, loadMeta) != null) {
             LOG.warn("Register duplicate load, load id: {}, warehouse: {}, {}, nodes: {}",
-                    loadMeta.loadId, loadMeta.warehouseId, loadMeta.tableId, loadMeta.nodes);
+                    loadMeta.loadId, loadMeta.computeResource, loadMeta.tableId, loadMeta.nodes);
             return;
         }
 
@@ -320,18 +321,18 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
         nodeMetas.addAll(needUpdateNodeMetas);
         loadMeta.nodes = selectedNodes;
         LOG.info("Allocate nodes for load id: {}, warehouse: {}, {}, expect parallel: {}, actual parallel: {}, " +
-                        "selected nodes: {}", loadMeta.loadId, loadMeta.warehouseId, loadMeta.tableId,
+                        "selected nodes: {}", loadMeta.loadId, loadMeta.computeResource, loadMeta.tableId,
                 loadMeta.expectParallel, actualParallel, selectedNodes);
         logStatistics(warehouseMeta);
     }
 
     // Execute EventType.UNREGISTER_LOAD task which deallocates nodes of the load
     private void runUnregisterLoadTask(LoadMeta loadMeta) {
-        long warehouseId = loadMeta.warehouseId;
-        WarehouseMeta warehouseMeta = warehouseMetas.get(warehouseId);
+        final ComputeResource computeResource = loadMeta.computeResource;
+        WarehouseMeta warehouseMeta = warehouseMetas.get(computeResource);
         if (warehouseMeta == null) {
             LOG.warn("Unregister a load from a non-exist warehouse, load id: {}, warehouse: {}, {}, nodes: {}",
-                    loadMeta.loadId, loadMeta.warehouseId, loadMeta.tableId, loadMeta.nodes);
+                    loadMeta.loadId, loadMeta.computeResource, loadMeta.tableId, loadMeta.nodes);
             return;
         }
 
@@ -339,7 +340,7 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
         long loadId = loadMeta.loadId;
         if (loadMetas == null || !loadMetas.containsKey(loadId)) {
             LOG.warn("Unregister a non-exist load, load id: {}, warehouse: {}, {}, nodes: {}",
-                    loadMeta.loadId, loadMeta.warehouseId, loadMeta.tableId, loadMeta.nodes);
+                    loadMeta.loadId, loadMeta.computeResource, loadMeta.tableId, loadMeta.nodes);
             return;
         }
 
@@ -356,14 +357,14 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
         nodeMetas.addAll(needUpdateNodeMetas);
         loadMetas.remove(loadId);
         LOG.info("Deallocate nodes, load id: {}, warehouse: {}, {}, nodes: {}",
-                loadMeta.loadId, loadMeta.warehouseId, loadMeta.tableId, loadMeta.nodes);
+                loadMeta.loadId, loadMeta.computeResource, loadMeta.tableId, loadMeta.nodes);
         logStatistics(warehouseMeta);
     }
 
     // Execute EventType.DETECT_UNAVAILABLE_NODES task which evicts unavailable nodes
     // and reallocates the loads to other nodes if necessary
     private void runDetectUnavailableNodesTask(LoadMeta loadMeta) {
-        WarehouseMeta warehouseMeta = warehouseMetas.get(loadMeta.warehouseId);
+        WarehouseMeta warehouseMeta = warehouseMetas.get(loadMeta.computeResource);
         if (warehouseMeta == null) {
             return;
         }
@@ -373,12 +374,12 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
     void runPeriodicalCheck() {
         long startTime = System.currentTimeMillis();
         try {
-            List<Long> warehouseIds = new ArrayList<>(warehouseMetas.keySet());
-            for (long warehouseId : warehouseIds) {
-                WarehouseMeta warehouseMeta = warehouseMetas.get(warehouseId);
+            List<ComputeResource> computeResources = new ArrayList<>(warehouseMetas.keySet());
+            for (ComputeResource computeResource : computeResources) {
+                WarehouseMeta warehouseMeta = warehouseMetas.get(computeResource);
                 if (warehouseMeta.loadMetas.isEmpty()) {
-                    warehouseMetas.remove(warehouseMeta.warehouseId);
-                    LOG.info("Remove empty warehouse {}", warehouseMeta.warehouseId);
+                    warehouseMetas.remove(warehouseMeta.computeResource);
+                    LOG.info("Remove empty warehouse {}", warehouseMeta.computeResource);
                 } else {
                     checkNodeStatusAndReassignment(warehouseMeta);
                     doBalanceIfNeeded(warehouseMeta, Config.merge_commit_be_assigner_balance_factor_threshold);
@@ -401,10 +402,10 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
         // 1. find the newest unavailable/available nodes
         Map<Long, ComputeNode> currentAvailableNodes = new HashMap<>();
         try {
-            getAvailableNodes(warehouseMeta.warehouseId)
+            getAvailableNodes(warehouseMeta.computeResource)
                     .forEach(node -> currentAvailableNodes.put(node.getId(), node));
         } catch (Exception e) {
-            LOG.debug("Skip to check node status for unknown warehouse, warehouse: {}", warehouseMeta.warehouseId, e);
+            LOG.debug("Skip to check node status for unknown warehouse, warehouse: {}", warehouseMeta.computeResource, e);
             return;
         }
 
@@ -424,7 +425,7 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
                 !unavailableNodeMetas.isEmpty() || availableNodeMetas.size() < currentAvailableNodes.size();
         if (!nodesStatusChanged) {
             LOG.debug("Node status does not change, warehouse: {}, num nodes: {}",
-                    warehouseMeta.warehouseId, currentAvailableNodes.size());
+                    warehouseMeta.computeResource, currentAvailableNodes.size());
             return;
         }
 
@@ -438,7 +439,7 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
 
         LOG.info("Node status changes, and need reassignment, warehouse: {}, num new nodes: {}, " +
                         "num unavailable nodes: {}, to add nodes: {}, to remove nodes: {}",
-                warehouseMeta.warehouseId, newAvailableNodes.size(), unavailableNodeMetas.size(), newAvailableNodes,
+                warehouseMeta.computeResource, newAvailableNodes.size(), unavailableNodeMetas.size(), newAvailableNodes,
                 unavailableNodeMetas.values().stream().map(meta -> meta.node).collect(Collectors.toList()));
 
         // 2. Reassign nodes to each load if
@@ -507,11 +508,11 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
             List<ComputeNode> oldNodes = loadMeta.nodes;
             loadMeta.nodes = newNodes;
             LOG.info("Reassign nodes, load id: {}, warehouse: {}, {}, old parallel: {}, new parallel: {}, " +
-                    "old nodes: {}, new nodes: {}", loadMeta.loadId, loadMeta.warehouseId, loadMeta.tableId,
+                    "old nodes: {}, new nodes: {}", loadMeta.loadId, loadMeta.computeResource, loadMeta.tableId,
                     oldNodes.size(), newNodes.size(), oldNodes, newNodes);
         }
         LOG.info("Finish the reassignment, warehouse: {}, num reassigned loads: {}, cost: {} ms",
-                warehouseMeta.warehouseId, reassignedLoadIds.size(), System.currentTimeMillis() - startTime);
+                warehouseMeta.computeResource, reassignedLoadIds.size(), System.currentTimeMillis() - startTime);
         logStatistics(warehouseMeta);
     }
 
@@ -524,7 +525,7 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
         }
 
         LOG.info("Start to balance warehouse {}, expect balance factor: {}, current balance factor: {}",
-                warehouseMeta.warehouseId, balanceFactorThreshold, balanceFactor);
+                warehouseMeta.computeResource, balanceFactorThreshold, balanceFactor);
 
         // All the nodes are unbalanced initially. The process includes many iterations, and each iteration
         // will pick one unbalanced node and make it balanced. After each iteration, we will calculate the
@@ -599,11 +600,11 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
             loadMeta.nodes = newNodes;
             LOG.info("Balance load, load id: {}, warehouse: {}, {}, num old nodes: {}, " +
                             "num new nodes: {}, old nodes: {}, new nodes: {}",
-                    loadMeta.loadId, loadMeta.warehouseId, loadMeta.tableId,
+                    loadMeta.loadId, loadMeta.computeResource, loadMeta.tableId,
                     oldNodes.size(), newNodes.size(), oldNodes, newNodes);
         }
         LOG.info("Finish balancing warehouse {}, num changed loads: {}, cost: {} ms",
-                warehouseMeta.warehouseId, movedLoadIds.size(), System.currentTimeMillis() - startTime);
+                warehouseMeta.computeResource, movedLoadIds.size(), System.currentTimeMillis() - startTime);
         logStatistics(warehouseMeta);
     }
 
@@ -668,18 +669,18 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
 
         LOG.info("Statistics for warehouse {}, num nodes: {}, num loads: {}, total parallel expect/actual: {}/{}, " +
                         "node parallel: {}, balance factor: {}, load distribution [node id,host,#loads]: {}",
-                warehouseMeta.warehouseId, nodeMetas.size(), loadMetas.size(), totalExpectParallel,
+                warehouseMeta.computeResource, nodeMetas.size(), loadMetas.size(), totalExpectParallel,
                 totalActualParallel, totalNodeLoadParallel, calculateBalanceFactor(nodeMetas), nodeStat);
 
         if (LOG.isDebugEnabled()) {
             for (LoadMeta meta : loadMetas.values()) {
                 LOG.debug("Load details, warehouse: {}, load id: {}, {}, parallel expect/actual: {}/{}, nodes: {}",
-                        meta.warehouseId, meta.loadId, meta.tableId, meta.expectParallel,
+                        meta.computeResource, meta.loadId, meta.tableId, meta.expectParallel,
                         meta.nodes.size(), meta.nodes);
             }
             for (NodeMeta nodeMeta : nodeMetas) {
                 LOG.debug("Node details, warehouse: {}, node: {}, num load: {}, load ids: {}",
-                        warehouseMeta.warehouseId, nodeMeta.node, nodeMeta.loadIds.size(), nodeMeta.loadIds);
+                        warehouseMeta.computeResource, nodeMeta.node, nodeMeta.loadIds.size(), nodeMeta.loadIds);
             }
         }
     }
@@ -702,8 +703,8 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
     }
 
     // Note that warehouse id may be invalid after the warehouse is dropped, and an exception can be thrown
-    List<ComputeNode> getAvailableNodes(long warehouseId) throws Exception {
-        return LoadScanNode.getAvailableComputeNodes(warehouseId);
+    List<ComputeNode> getAvailableNodes(ComputeResource computeResource) throws Exception {
+        return LoadScanNode.getAvailableComputeNodes(computeResource);
     }
 
     @VisibleForTesting
@@ -717,8 +718,8 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
     }
 
     @VisibleForTesting
-    WarehouseMeta getWarehouseMeta(long warehouseId) {
-        return warehouseMetas.get(warehouseId);
+    WarehouseMeta getWarehouseMeta(ComputeResource computeResource) {
+        return warehouseMetas.get(computeResource);
     }
 
     @VisibleForTesting
@@ -728,8 +729,8 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
     }
 
     @VisibleForTesting
-    double currentLoadDiffRatio(long warehouseId) {
-        WarehouseMeta whMeta = warehouseMetas.get(warehouseId);
+    double currentLoadDiffRatio(ComputeResource computeResource) {
+        WarehouseMeta whMeta = warehouseMetas.get(computeResource);
         if (whMeta == null) {
             return 0;
         }
@@ -739,16 +740,16 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
     // The meta for a load
     static class LoadMeta {
         final long loadId;
-        final long warehouseId;
+        final ComputeResource computeResource;
         final TableId tableId;
         // The expected number of coordinator backends
         final int expectParallel;
         // List of nodes assigned to the load. It's copy-on-write mode, and updated in the single schedule thread
         volatile List<ComputeNode> nodes;
 
-        public LoadMeta(long loadId, long warehouseId, TableId tableId, int expectParallel) {
+        public LoadMeta(long loadId, ComputeResource computeResource, TableId tableId, int expectParallel) {
             this.loadId = loadId;
-            this.warehouseId = warehouseId;
+            this.computeResource = computeResource;
             this.tableId = tableId;
             this.expectParallel = expectParallel;
             this.nodes = new ArrayList<>();
@@ -784,14 +785,14 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
 
     // The meta for a warehouse
     static class WarehouseMeta {
-        final long warehouseId;
+        final ComputeResource computeResource;
         // A set of node metas sorted according to NodeMetaComparator
         final NavigableSet<NodeMeta> sortedNodeMetas;
         // Loads that have been assigned to this warehouse. load id -> LoadMeta.
         final Map<Long, LoadMeta> loadMetas;
 
-        public WarehouseMeta(long warehouseId) {
-            this.warehouseId = warehouseId;
+        public WarehouseMeta(ComputeResource computeResource) {
+            this.computeResource = computeResource;
             this.sortedNodeMetas = new TreeSet<>(NodeMetaComparator.INSTANCE);
             this.loadMetas = new HashMap<>();
         }

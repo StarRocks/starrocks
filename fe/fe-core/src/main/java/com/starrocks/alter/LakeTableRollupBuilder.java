@@ -65,7 +65,7 @@ public class LakeTableRollupBuilder extends AlterJobV2Builder {
                 baseIndexId, rollupIndexId, baseIndexName, rollupIndexName, mvSchemaVersion,
                 rollupColumns, whereClause, baseSchemaHash, mvSchemaHash,
                 rollupKeysType, rollupShortKeyColumnCount, origStmt, viewDefineSql, isColocateMVIndex);
-        mvJob.setWarehouseId(warehouseId);
+        mvJob.setComputeResource(computeResource);
 
         for (Partition partition : olapTable.getPartitions()) {
             long partitionId = partition.getId();
@@ -88,11 +88,11 @@ public class LakeTableRollupBuilder extends AlterJobV2Builder {
                 shardProperties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(rollupIndexId));
 
                 List<Tablet> originTablets = physicalPartition.getIndex(baseIndexId).getTablets();
-                WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-                Optional<Long> workerGroupId = warehouseManager.selectWorkerGroupByWarehouseId(
-                        ConnectContext.get().getCurrentWarehouseId());
+                final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                final long warehouseId = ConnectContext.get().getCurrentWarehouseId();
+                final Optional<Long> workerGroupId = warehouseManager.getWorkerGroupId(warehouseId);
                 if (workerGroupId.isEmpty()) {
-                    Warehouse warehouse = warehouseManager.getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                    Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
                     ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
                 }
                 List<Long> originTableIds = originTablets.stream()
@@ -102,7 +102,7 @@ public class LakeTableRollupBuilder extends AlterJobV2Builder {
                         originTablets.size(),
                         olapTable.getPartitionFilePathInfo(partitionId),
                         olapTable.getPartitionFileCacheInfo(partitionId),
-                        shardGroupId, originTableIds, shardProperties, workerGroupId.get());
+                        shardGroupId, originTableIds, shardProperties, computeResource);
                 Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
 
                 TabletMeta shadowTabletMeta =

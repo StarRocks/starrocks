@@ -27,6 +27,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaderValues;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -58,7 +59,6 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENABLE_BATCH_WRITE;
-import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_NAME;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -311,7 +311,7 @@ public class LoadActionTest extends StarRocksHttpTestCase {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(DEFAULT_WAREHOUSE_NAME);
+                GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds((ComputeResource) any);
                 result = nodeIds;
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 result = service;

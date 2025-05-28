@@ -64,6 +64,7 @@ import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
@@ -164,6 +165,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     private AtomicBoolean waitingCreatingReplica = new AtomicBoolean(false);
     private AtomicBoolean isCancelling = new AtomicBoolean(false);
     private boolean enablePartitionAggregation = false;
+
+    final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
 
     // for deserialization
     public LakeTableSchemaChangeJob() {
@@ -375,6 +378,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             createReplicaLatch = countDownLatch;
             long baseIndexId = table.getBaseIndexId();
             long gtid = getNextGtid();
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
                 Preconditions.checkState(physicalPartition != null);
@@ -408,8 +412,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                     boolean createSchemaFile = true;
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
-                        ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                                .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) shadowTablet);
+                        ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource,
+                                (LakeTablet) shadowTablet);
                         if (computeNode == null) {
                             //todo: fix the error message.
                             throw new AlterCancelException("No alive backend");
@@ -641,8 +645,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                     }
 
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
-                        ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                                .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) shadowTablet);
+                        ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource,
+                                (LakeTablet) shadowTablet);
                         if (computeNode == null) {
                             throw new AlterCancelException("No alive backend");
                         }
@@ -805,7 +809,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
                 for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
                     if (!enablePartitionAggregation) {
-                        Utils.publishVersion(shadowIndex.getTablets(), txnInfo, 1, commitVersion, warehouseId,
+                        Utils.publishVersion(shadowIndex.getTablets(), txnInfo, 1, commitVersion, computeResource,
                                 enablePartitionAggregation);
                     } else {
                         tablets.addAll(shadowIndex.getTablets());
@@ -813,7 +817,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 }
                 if (enablePartitionAggregation) {
                     Utils.aggregatePublishVersion(tablets, Lists.newArrayList(txnInfo), 1, commitVersion,
-                            null, null, warehouseId, null);
+                            null, null, computeResource, null);
                 }
             }
             return true;

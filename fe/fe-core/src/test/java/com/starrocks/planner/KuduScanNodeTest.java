@@ -37,6 +37,8 @@ import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -200,6 +202,13 @@ public class KuduScanNodeTest {
             @Mock
             public WarehouseManager getWarehouseMgr() {
                 return mockedWarehouseManager;
+            }
+        };
+
+        new MockUp<WarehouseComputeResourceProvider>() {
+            @Mock
+            public boolean isResourceAvailable(ComputeResource computeResource) {
+                return true;
             }
         };
 

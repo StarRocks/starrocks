@@ -16,6 +16,7 @@ package com.starrocks.load.batchwrite;
 
 import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -185,7 +186,7 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
         CoordinatorBackendAssigner assigner = batchWriteMgr.getCoordinatorBackendAssigner();
         new Expectations(assigner) {
             {
-                assigner.registerBatchWrite(anyLong, anyLong, (TableId) any, anyInt);
+                assigner.registerBatchWrite(anyLong, (ComputeResource) any, (TableId) any, anyInt);
                 result = new Exception("registerBatchWrite failed");
             }
         };

@@ -100,12 +100,11 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         Preconditions.checkNotNull(starOSAgent);
         Map<Long, Set<Long>> shardIdsByBeMap = new HashMap<>();
         // group shards by be
+        final WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        final Warehouse warehouse = manager.getBackgroundWarehouse();
+        final long workerGroupId = manager.getAliveWorkerGroupId(warehouse.getId());
         for (long shardId : shardIds) {
             try {
-                WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-                Warehouse warehouse = manager.getBackgroundWarehouse();
-                long workerGroupId = manager.selectWorkerGroupByWarehouseId(warehouse.getId())
-                        .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                 long backendId = starOSAgent.getPrimaryComputeNodeIdByShard(shardId, workerGroupId);
                 shardIdsByBeMap.computeIfAbsent(backendId, k -> Sets.newHashSet()).add(shardId);
             } catch (StarRocksException ignored1) {
@@ -285,7 +284,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         try {
             WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             Warehouse warehouse = warehouseManager.getBackgroundWarehouse();
-            long workerGroupId = warehouseManager.selectWorkerGroupByWarehouseId(warehouse.getId())
+            final long workerGroupId = warehouseManager.getWorkerGroupId(warehouse.getId())
                     .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
             List<String> workerAddresses = GlobalStateMgr.getCurrentState().getStarOSAgent().listWorkerGroupIpPort(workerGroupId);
 

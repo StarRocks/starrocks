@@ -18,6 +18,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -32,10 +33,10 @@ public class LakeAggregator {
 
     // TODO(zhangqiang)
     // Optimize the aggregator selection strategy
-    public static ComputeNode chooseAggregatorNode(long warehouseId) {
+    public static ComputeNode chooseAggregatorNode(ComputeResource computeResource) {
         try {
             WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-            List<ComputeNode> candidateNodes = warehouseManager.getAliveComputeNodes(warehouseId);
+            List<ComputeNode> candidateNodes = warehouseManager.getAliveComputeNodes(computeResource);
             if (candidateNodes != null && !candidateNodes.isEmpty()) {
                 return candidateNodes.get(ThreadLocalRandom.current().nextInt(candidateNodes.size()));
             } else {

@@ -371,7 +371,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
         }
 
         // the previous BE is not available, try to find a better one
-        long beId = routineLoadManager.takeBeTaskSlot(routineLoadTaskInfo.warehouseId, routineLoadTaskInfo.getJobId());
+        long beId = routineLoadManager.takeBeTaskSlot(routineLoadTaskInfo.getWarehouseId(), routineLoadTaskInfo.getJobId());
         if (beId < 0) {
             return false;
         }

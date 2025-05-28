@@ -104,6 +104,8 @@ import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.warehouse.LoadJobWithWarehouse;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.WarehouseIdleChecker;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.text.StringEscapeUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -306,6 +308,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     @SerializedName("warehouseId")
     protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+
+    // no needs to persist
+    protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     protected ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
     // TODO(ml): error sample
@@ -730,6 +735,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         return warehouseId;
     }
 
+    public ComputeResource getComputeResource() {
+        return computeResource;
+    }
+
     // RoutineLoadScheduler will run this method at fixed interval, and renew the timeout tasks
     public void processTimeoutTasks() {
         writeLock();
@@ -883,6 +892,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     // call before first scheduling
     // derived class can override this.
     public void prepare() throws StarRocksException {
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        final CRAcquireContext acquireContext = CRAcquireContext.of(this.warehouseId, this.computeResource);
+        this.computeResource = warehouseManager.acquireComputeResource(acquireContext);
     }
 
     private Coordinator.Factory getCoordinatorFactory() {

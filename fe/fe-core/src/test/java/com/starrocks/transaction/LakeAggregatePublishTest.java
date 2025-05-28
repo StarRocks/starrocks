@@ -33,6 +33,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.DefaultWarehouse;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
@@ -111,7 +112,7 @@ public class LakeAggregatePublishTest {
                         "label1",
                         transactionSource,
                         TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second,
-                        -1);
+                        WarehouseManager.DEFAULT_RESOURCE);
         // commit a transaction
         VisibleStateWaiter waiter1 = globalTransactionMgr.commitTransaction(db.getId(), transactionId1, transTablets1,
                 Lists.newArrayList(), null);
@@ -140,19 +141,20 @@ public class LakeAggregatePublishTest {
         
             WarehouseManager mockManager = mock(WarehouseManager.class);
             when(mockManager.warehouseExists(anyLong())).thenReturn(true);
-            when(mockManager.getComputeNodeAssignedToTablet(anyLong(), any(LakeTablet.class)))
+            when(mockManager.getComputeNodeAssignedToTablet(any(), any(LakeTablet.class)))
                     .thenReturn(null);
             when(mockManager.getBackgroundWarehouse()).thenReturn(new DefaultWarehouse(100, "test"));
             warehouseMgrField.set(GlobalStateMgr.getCurrentState(), mockManager);
 
         
             Assert.assertThrows(NoAliveBackendException.class, () -> {
-                Utils.aggregatePublishVersion(tablets, null, 1, 2, null, null, -1, null);
+                Utils.aggregatePublishVersion(tablets, null, 1, 2, null,
+                        null, WarehouseManager.DEFAULT_RESOURCE, null);
             });
 
-            when(mockManager.getAliveComputeNodes(anyLong())).thenReturn(null);
+            when(mockManager.getAliveComputeNodes(any())).thenReturn(null);
             LakeAggregator lakeAggregator = new LakeAggregator();
-            Assert.assertNotNull(lakeAggregator.chooseAggregatorNode(10));
+            Assert.assertNotNull(lakeAggregator.chooseAggregatorNode(WarehouseComputeResource.of(10)));
         } finally {
             Field warehouseMgrField = GlobalStateMgr.class.getDeclaredField("warehouseMgr");
             warehouseMgrField.setAccessible(true);

@@ -51,6 +51,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -69,12 +70,12 @@ public class LakeDeleteJob extends DeleteJob {
 
     private Map<Long, List<Long>> beToTablets;
 
-    private final long warehouseId;
+    private final ComputeResource computeResource;
 
-    public LakeDeleteJob(long id, long transactionId, String label, MultiDeleteInfo deleteInfo, long warehouseId) {
+    public LakeDeleteJob(long id, long transactionId, String label, MultiDeleteInfo deleteInfo, ComputeResource computeResource) {
         super(id, transactionId, label, deleteInfo);
         beToTablets = Maps.newHashMap();
-        this.warehouseId = warehouseId;
+        this.computeResource = computeResource;
     }
 
     @Override
@@ -86,7 +87,7 @@ public class LakeDeleteJob extends DeleteJob {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
-            beToTablets = Utils.groupTabletID(partitions, MaterializedIndex.IndexExtState.VISIBLE, warehouseId);
+            beToTablets = Utils.groupTabletID(partitions, MaterializedIndex.IndexExtState.VISIBLE, computeResource);
         } catch (Throwable t) {
             LOG.warn("error occurred during delete process", t);
             // if transaction has been begun, need to abort it

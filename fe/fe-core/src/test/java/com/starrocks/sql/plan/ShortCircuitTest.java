@@ -104,7 +104,7 @@ public class ShortCircuitTest extends PlanTestBase {
 
         OlapScanNode scanNode = OlapScanNode.createOlapScanNodeByLocation(execPlan.getNextNodeId(), tupleDescriptor,
                 "OlapScanNodeForShortCircuit", ImmutableList.of(scanRangeLocations),
-                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                WarehouseManager.DEFAULT_RESOURCE);
         List<Long> selectPartitionIds = ImmutableList.of(1L);
         scanNode.setSelectedPartitionIds(selectPartitionIds);
 
@@ -146,7 +146,7 @@ public class ShortCircuitTest extends PlanTestBase {
 
         OlapScanNode scanNode = OlapScanNode.createOlapScanNodeByLocation(execPlan.getNextNodeId(), tupleDescriptor,
                 "OlapScanNodeForShortCircuit", ImmutableList.of(scanRangeLocations),
-                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                WarehouseManager.DEFAULT_RESOURCE);
 
         DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(connectContext,
                 execPlan.getFragments(), ImmutableList.of(scanNode), execPlan.getDescTbl().toThrift());

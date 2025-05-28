@@ -175,7 +175,7 @@ public class MergeCommitTask implements Runnable {
                 pair.first.getId(), Lists.newArrayList(pair.second.getId()), label,
                 TransactionState.TxnCoordinator.fromThisFE(),
                 TransactionState.LoadJobSourceType.FRONTEND_STREAMING,
-                streamLoadInfo.getTimeout(), streamLoadInfo.getWarehouseId());
+                streamLoadInfo.getTimeout(), streamLoadInfo.getComputeResource());
     }
 
     private void commitAndPublishTxn() throws Exception {
@@ -235,7 +235,6 @@ public class MergeCommitTask implements Runnable {
                     streamLoadInfo.getLoadMemLimit(), streamLoadInfo.getExecMemLimit(),
                     streamLoadInfo.getNegative(), coordinatorBackendIds.size(), streamLoadInfo.getColumnExprDescs(),
                     streamLoadInfo, label, streamLoadInfo.getTimeout());
-            loadPlanner.setWarehouseId(streamLoadInfo.getWarehouseId());
             loadPlanner.setBatchWrite(batchWriteIntervalMs,
                     ImmutableMap.<String, String>builder()
                             .putAll(loadParameters.toMap()).build(), coordinatorBackendIds);

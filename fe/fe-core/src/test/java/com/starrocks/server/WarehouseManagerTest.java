@@ -33,6 +33,8 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -66,12 +68,10 @@ public class WarehouseManagerTest {
                 () -> mgr.getWarehouse("a"));
         ExceptionChecker.expectThrowsWithMsg(ErrorReportException.class, "Warehouse id: 1 not exist.",
                 () -> mgr.getWarehouse(1L));
-        ExceptionChecker.expectThrowsWithMsg(ErrorReportException.class, "Warehouse name: a not exist.",
-                () -> mgr.getAllComputeNodeIds("a"));
         ExceptionChecker.expectThrowsWithMsg(ErrorReportException.class, "Warehouse id: 1 not exist.",
-                () -> mgr.getAllComputeNodeIds(1L));
+                () -> mgr.getAllComputeNodeIds(WarehouseComputeResource.of(1L)));
         ExceptionChecker.expectThrowsWithMsg(ErrorReportException.class, "Warehouse id: 1 not exist.",
-                () -> mgr.getComputeNodeId(1L, null));
+                () -> mgr.getComputeNodeId(WarehouseComputeResource.of(1L), null));
     }
 
     @Test
@@ -115,10 +115,10 @@ public class WarehouseManagerTest {
         WarehouseManager mgr = new WarehouseManager();
         mgr.initDefaultWarehouse();
 
-        List<Long> nodeIds = mgr.getAllComputeNodeIds(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        List<Long> nodeIds = mgr.getAllComputeNodeIds(WarehouseManager.DEFAULT_RESOURCE);
         Assert.assertEquals(2, nodeIds.size());
 
-        List<ComputeNode> nodes = mgr.getAliveComputeNodes(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        List<ComputeNode> nodes = mgr.getAliveComputeNodes(WarehouseManager.DEFAULT_RESOURCE);
         Assert.assertEquals(1, nodes.size());
     }
 
@@ -167,8 +167,8 @@ public class WarehouseManagerTest {
 
         new MockUp<WarehouseManager>() {
             @Mock
-            public List<ComputeNode> getAliveComputeNodes(long warehouseId) {
-                if (warehouseId == WarehouseManager.DEFAULT_WAREHOUSE_ID) {
+            public List<ComputeNode> getAliveComputeNodes(ComputeResource computeResource) {
+                if (computeResource.getWarehouseId() == WarehouseManager.DEFAULT_WAREHOUSE_ID) {
                     return new ArrayList<>(Arrays.asList(b1));
                 }
                 return Lists.newArrayList();
@@ -185,13 +185,13 @@ public class WarehouseManagerTest {
 
         WarehouseManager warehouseManager = new WarehouseManager();
         warehouseManager.initDefaultWarehouse();
-        Optional<Long> workerGroupId = warehouseManager.selectWorkerGroupByWarehouseId(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        Optional<Long> workerGroupId = warehouseManager.getWorkerGroupId(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         Assert.assertFalse(workerGroupId.isEmpty());
         Assert.assertEquals(StarOSAgent.DEFAULT_WORKER_GROUP_ID, workerGroupId.get().longValue());
 
         try {
             workerGroupId = Optional.ofNullable(null);
-            workerGroupId = warehouseManager.selectWorkerGroupByWarehouseId(1111L);
+            workerGroupId = warehouseManager.getWorkerGroupId(1111L);
             Assert.assertEquals(1, 2);   // can not be here
         } catch (ErrorReportException e) {
             Assert.assertTrue(workerGroupId.isEmpty());
@@ -244,7 +244,7 @@ public class WarehouseManagerTest {
 
         new MockUp<WarehouseManager>() {
             @Mock
-            public List<ComputeNode> getAliveComputeNodes(long warehouseId) {
+            public List<ComputeNode> getAliveComputeNodes(ComputeResource computeResource) {
                 return Lists.newArrayList();
             }
 
@@ -260,7 +260,7 @@ public class WarehouseManagerTest {
         try {
             WarehouseManager warehouseManager = new WarehouseManager();
             warehouseManager.initDefaultWarehouse();
-            Optional<Long> workerGroupId = warehouseManager.selectWorkerGroupByWarehouseId(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+            Optional<Long> workerGroupId = warehouseManager.getWorkerGroupId(WarehouseManager.DEFAULT_WAREHOUSE_ID);
             Assert.assertTrue(workerGroupId.isEmpty());
         } catch (ErrorReportException e) {
             Assert.assertEquals(1, 2);   // can not be here
@@ -338,7 +338,7 @@ public class WarehouseManagerTest {
             {
                 // This is the point of the test -- we only want to call this once even though we're calling
                 // addScanRangeLocations multiple times.
-                mockWarehouseMgr.getAliveComputeNodes(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                mockWarehouseMgr.getAliveComputeNodes(WarehouseManager.DEFAULT_RESOURCE);
                 times = 1;
                 result = Lists.newArrayList(livingCn);
             }

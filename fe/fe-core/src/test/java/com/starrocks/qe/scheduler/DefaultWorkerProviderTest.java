@@ -129,7 +129,7 @@ public class DefaultWorkerProviderTest {
             workerProvider =
                     workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                             true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY,
-                            WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                            WarehouseManager.DEFAULT_RESOURCE);
 
             int numAvailableComputeNodes = 0;
             for (long id = 0; id < 15; id++) {
@@ -176,7 +176,7 @@ public class DefaultWorkerProviderTest {
             workerProvider =
                     workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                             true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY,
-                            WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                            WarehouseManager.DEFAULT_RESOURCE);
             List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
             for (Long selectedWorkerId : selectedWorkerIdsList) {
                 Assert.assertTrue("selectedWorkerId:" + selectedWorkerId,
@@ -188,7 +188,7 @@ public class DefaultWorkerProviderTest {
             workerProvider =
                     workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                             false, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY,
-                            WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                            WarehouseManager.DEFAULT_RESOURCE);
             List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
             Assert.assertEquals(availableId2Backend.size(), selectedWorkerIdsList.size());
             for (Long selectedWorkerId : selectedWorkerIdsList) {
@@ -201,7 +201,7 @@ public class DefaultWorkerProviderTest {
             workerProvider =
                     workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                             true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.ALL_NODES,
-                            WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                            WarehouseManager.DEFAULT_RESOURCE);
             List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
             Collections.reverse(selectedWorkerIdsList); //put ComputeNode id to the front,Backend id to the back
             //test ComputeNode
@@ -221,7 +221,7 @@ public class DefaultWorkerProviderTest {
     public void testSelectWorker() throws StarRocksException {
         DefaultWorkerProvider workerProvider =
                 new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
-                        true, 0);
+                        true, WarehouseManager.DEFAULT_RESOURCE);
         for (long id = -1; id < 20; id++) {
             if (availableId2Worker.containsKey(id)) {
                 workerProvider.selectWorker(id);
@@ -254,22 +254,23 @@ public class DefaultWorkerProviderTest {
 
         workerProvider =
                 new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
-                        true, 0);
+                        true, WarehouseManager.DEFAULT_RESOURCE);
         testSelectNextWorkerHelper(workerProvider, availableId2ComputeNode);
 
         workerProvider =
-                new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, ImmutableMap.of(), true, 0);
+                new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, ImmutableMap.of(),
+                        true, WarehouseManager.DEFAULT_RESOURCE);
         testSelectNextWorkerHelper(workerProvider, availableId2Backend);
 
         workerProvider =
                 new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
-                        false, 0);
+                        false, WarehouseManager.DEFAULT_RESOURCE);
         testSelectNextWorkerHelper(workerProvider, availableId2Backend);
 
         ImmutableMap<Long, ComputeNode> id2BackendHalfDead = genWorkers(0, 10, Backend::new, true);
         workerProvider =
                 new DefaultWorkerProvider(id2BackendHalfDead, id2ComputeNode, ImmutableMap.of(), ImmutableMap.of(),
-                        false, 0);
+                        false, WarehouseManager.DEFAULT_RESOURCE);
         DefaultWorkerProvider finalWorkerProvider = workerProvider;
 
         SchedulerException e = Assert.assertThrows(SchedulerException.class, finalWorkerProvider::selectNextWorker);
@@ -301,13 +302,13 @@ public class DefaultWorkerProviderTest {
 
         workerProvider =
                 new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
-                        false, 0);
+                        false, WarehouseManager.DEFAULT_RESOURCE);
         computeNodes = workerProvider.selectAllComputeNodes();
         Assert.assertTrue(computeNodes.isEmpty());
 
         workerProvider =
                 new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
-                        true, 0);
+                        true, WarehouseManager.DEFAULT_RESOURCE);
         computeNodes = workerProvider.selectAllComputeNodes();
         Assert.assertEquals(availableId2ComputeNode.size(), computeNodes.size());
         Set<Long> computeNodeSet = new HashSet<>(computeNodes);
@@ -342,7 +343,7 @@ public class DefaultWorkerProviderTest {
     public void testGetBackend() {
         DefaultWorkerProvider workerProvider =
                 new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
-                        true, 0);
+                        true, WarehouseManager.DEFAULT_RESOURCE);
         testGetBackendHelper(workerProvider, availableId2Backend);
     }
 
@@ -352,18 +353,19 @@ public class DefaultWorkerProviderTest {
 
         workerProvider =
                 new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
-                        true, 0);
+                        true, WarehouseManager.DEFAULT_RESOURCE);
         assertThat(workerProvider.getAllWorkers())
                 .containsOnlyOnceElementsOf(availableId2ComputeNode.values());
 
         workerProvider =
-                new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, ImmutableMap.of(), true, 0);
+                new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, ImmutableMap.of(),
+                        true, WarehouseManager.DEFAULT_RESOURCE);
         assertThat(workerProvider.getAllWorkers())
                 .containsOnlyOnceElementsOf(availableId2Backend.values());
 
         workerProvider =
                 new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
-                        false, 0);
+                        false, WarehouseManager.DEFAULT_RESOURCE);
         assertThat(workerProvider.getAllWorkers())
                 .containsOnlyOnceElementsOf(availableId2ComputeNode.values());
     }
@@ -372,14 +374,15 @@ public class DefaultWorkerProviderTest {
     public void testReportBackendNotFoundException() {
         DefaultWorkerProvider workerProvider =
                 new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
-                        true, 0);
+                        true, WarehouseManager.DEFAULT_RESOURCE);
         Assert.assertThrows(SchedulerException.class, workerProvider::reportDataNodeNotFoundException);
     }
 
     @Test
     public void testNextWorkerOverflow() throws NonRecoverableException {
         DefaultWorkerProvider workerProvider =
-                new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode, true, 0);
+                new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
+                        true, WarehouseManager.DEFAULT_RESOURCE);
         for (int i = 0; i < 100; i++) {
             Long workerId = workerProvider.selectNextWorker();
             assertThat(workerId).isNotNegative();

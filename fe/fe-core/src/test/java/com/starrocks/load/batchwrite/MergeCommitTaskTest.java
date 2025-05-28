@@ -42,6 +42,7 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Before;
@@ -421,7 +422,7 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
                                                        List<PlanFragment> fragments, List<ScanNode> scanNodes,
                                                        String timezone, long startTime,
                                                        Map<String, String> sessionVariables, long execMemLimit,
-                                                       long warehouseId) {
+                                                       ComputeResource computeResource) {
             return coordinator;
         }
 

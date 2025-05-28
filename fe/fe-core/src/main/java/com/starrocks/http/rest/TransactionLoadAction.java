@@ -65,6 +65,8 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.commons.lang3.StringUtils;
@@ -284,7 +286,10 @@ public class TransactionLoadAction extends RestBaseAction {
         Long nodeId;
         // save label->be hashmap when begin transaction, so that subsequent operator can send to same BE
         if (TXN_BEGIN.equals(txnOperation)) {
-            List<Long> nodeIds = LoadAction.selectNodes(warehouseName);
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseName);
+            final ComputeResource computeResource = warehouseManager.acquireComputeResource(acquireContext);
+            List<Long> nodeIds = LoadAction.selectNodes(computeResource);
             Long chosenNodeId = nodeIds.get(0);
             nodeId = chosenNodeId;
             // txnNodeMap is LRU cache, it atomic remove unused entry
