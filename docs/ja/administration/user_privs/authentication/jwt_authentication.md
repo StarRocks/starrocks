@@ -35,7 +35,7 @@ CREATE USER <username> IDENTIFIED WITH authentication_jwt AS
 
 プロパティ:
 
-- `jwks_url`: JSON Web Key Set (JWKS) サービスの URL または `fe/conf` ディレクトリ内のローカルファイルへのパス。
+- `jwks_url`: JSON Web Key Set (JWKS) サービスの URL または `fe/conf` ディレクトリ内の公開鍵ローカルファイルへのパス。
 - `principal_field`: JWT 内でサブジェクト (`sub`) を示すフィールドを識別するために使用される文字列。デフォルト値は `sub` です。このフィールドの値は、StarRocks にログインするためのユーザー名と一致している必要があります。
 - `required_issuer` (オプション): JWT 内の発行者 (`iss`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT 発行者と一致する場合にのみ、JWT は有効と見なされます。
 - `required_audience` (オプション): JWT 内の受信者 (`aud`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT 受信者と一致する場合にのみ、JWT は有効と見なされます。
@@ -48,7 +48,7 @@ CREATE USER tom IDENTIFIED WITH authentication_jwt AS
   "jwks_url": "http://localhost:38080/realms/master/protocol/jwt/certs",
   "principal_field": "preferred_username",
   "required_issuer": "http://localhost:38080/realms/master",
-  "required_audience": "12345"
+  "required_audience": "starrocks"
 }';
 ```
 
