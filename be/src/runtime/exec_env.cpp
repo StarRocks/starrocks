@@ -213,7 +213,8 @@ Status GlobalEnv::_init_mem_tracker() {
     _load_mem_tracker = regist_tracker(MemTrackerType::LOAD, load_mem_limit, process_mem_tracker());
 
     // Metadata statistics memory statistics do not use new mem statistics framework with hook
-    _metadata_mem_tracker = regist_tracker(MemTrackerType::METADATA, -1, nullptr);
+    const int64_t metadata_mem_limit = _process_mem_tracker->limit() * (int64_t)config::metadata_cache_memory_limit_percent / (int64_t)100;
+    _metadata_mem_tracker = regist_tracker(MemTrackerType::METADATA, metadata_mem_limit, nullptr);
     _metadata_mem_tracker->set_level(2);
 
     _tablet_metadata_mem_tracker = regist_tracker(MemTrackerType::TABLET_METADATA, -1, metadata_mem_tracker());

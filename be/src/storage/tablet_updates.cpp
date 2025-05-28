@@ -5877,17 +5877,9 @@ void TabletUpdates::_reset_apply_status(const EditVersionInfo& version_info_appl
         if (column_state_entry != nullptr) {
             manager->update_column_state_cache().remove(column_state_entry);
         }
-        // release rowset meta memory
-        rowset->close();
     } else if (version_info_apply.compaction) {
         // reset compaction state
         _compaction_state.reset();
-        // release rowset meta memory
-        const uint32_t rowset_id = version_info_apply.compaction->output;
-        RowsetSharedPtr rowset = get_rowset(rowset_id);
-        if (rowset != nullptr) {
-            rowset->close();
-        }
     }
 
     // 2. remove index entry
