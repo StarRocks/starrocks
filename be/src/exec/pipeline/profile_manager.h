@@ -62,7 +62,7 @@ struct FragmentProfileMaterial {
 
 class profile_manager {
 public:
-    explicit profile_manager(const CpuUtil::CpuIds& cpuids);
+    explicit profile_manager();
     void build_and_report_profile(std::shared_ptr<FragmentProfileMaterial> fragment_profile_material);
 
 private:

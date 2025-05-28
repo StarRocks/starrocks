@@ -88,15 +88,14 @@ RuntimeProfile* profile_manager::build_merged_instance_profile(
     return new_instance_profile;
 }
 
-profile_manager::profile_manager(const CpuUtil::CpuIds& cpuids) {
-    int max_merger = config::async_profile_merge_thread_max_num == 0 ? CpuInfo::num_cores() / 2
+profile_manager::profile_manager() {
+    int max_merger = config::async_profile_merge_thread_max_num == 0 ? CpuInfo::num_cores() / 6
                                                                      : config::async_profile_merge_thread_max_num;
     auto status = ThreadPoolBuilder("query_profile_merge")
                           .set_min_threads(1)
                           .set_max_threads(max_merger)
                           .set_max_queue_size(100)
                           .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
-                          .set_cpuids(cpuids)
                           .build(&_report_thread_pool);
     if (!status.ok()) {
         LOG(FATAL) << "Cannot create thread pool for profile_manager's query_profile_merge: error="
@@ -111,7 +110,6 @@ profile_manager::profile_manager(const CpuUtil::CpuIds& cpuids) {
                      .set_min_threads(1)
                      .set_max_threads(max_reporter)
                      .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
-                     .set_cpuids(cpuids)
                      .build(&_merge_thread_pool);
     if (!status.ok()) {
         LOG(FATAL) << "Cannot create thread pool for query_profile_merge's query_profile_report: error="
@@ -162,11 +160,11 @@ void profile_manager::build_and_report_profile(std::shared_ptr<FragmentProfileMa
                 break;
             }
 
-            LOG(WARNING) << "report task: "
-                         << " instance_is_done=" << fragment_profile_material->_instance_is_done
-                         << " _instance_id=" << fragment_profile_material->_instance_id
-                         << " queryId=" << print_id(fragment_profile_material->_query_id)
-                         << " report success=" << success;
+            // LOG(WARNING) << "report task: "
+            //              << " instance_is_done=" << fragment_profile_material->_instance_is_done
+            //              << " _instance_id=" << fragment_profile_material->_instance_id
+            //              << " queryId=" << print_id(fragment_profile_material->_query_id)
+            //              << " report success=" << success;
         };
 
         (void)_report_thread_pool->submit_func(std::move(report_task));
@@ -180,12 +178,16 @@ void profile_manager::build_and_report_profile(std::shared_ptr<FragmentProfileMa
 }
 
 std::unique_ptr<TFragmentProfile> profile_manager::create_report_profile_params(
-        const std::shared_ptr<FragmentProfileMaterial>& fragment_profile_material, RuntimeProfile* merged_instance_profile) {
+        const std::shared_ptr<FragmentProfileMaterial>& fragment_profile_material,
+        RuntimeProfile* merged_instance_profile) {
     auto res = std::make_unique<TFragmentProfile>();
     TFragmentProfile& params = *res;
     params.__set_query_id(fragment_profile_material->_query_id);
     params.__set_fragment_instance_id(fragment_profile_material->_instance_id);
     params.__set_done(fragment_profile_material->_instance_is_done);
+
+    ObjectPool obj_pool;
+    merged_instance_profile = obj_pool.add(new RuntimeProfile(merged_instance_profile->name()));
 
     merged_instance_profile->to_thrift(&params.profile);
     params.__isset.profile = true;

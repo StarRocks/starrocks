@@ -358,7 +358,9 @@ public class ExecutionDAG {
         if (jobSpec.isNeedReport()) {
             RunningProfileManager.RunningProfile runningProfile =
                     RunningProfileManager.getInstance().getRunningProfile(jobSpec.getQueryId());
-            runningProfile.addInstanceProfile(execution.getInstanceId(), execution.getProfile());
+            if (runningProfile != null) {
+                runningProfile.addInstanceProfile(execution.getInstanceId(), execution.getProfile());
+            }
         }
     }
 

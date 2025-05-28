@@ -47,7 +47,7 @@ GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_
                   new PipelineDriverPoller(name, _driver_queue.get(), cpuids, metrics->get_poller_metrics())),
           _exec_state_reporter(new ExecStateReporter(cpuids)),
           _audit_statistics_reporter(new AuditStatisticsReporter()),
-          _profile_manager(new profile_manager(cpuids)),
+          _profile_manager(new profile_manager()),
           _metrics(metrics->get_driver_executor_metrics()) {}
 
 void GlobalDriverExecutor::close() {
