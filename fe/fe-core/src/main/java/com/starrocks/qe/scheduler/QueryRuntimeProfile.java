@@ -241,6 +241,11 @@ public class QueryRuntimeProfile {
         // execution at backends where it hasn't even started
         fragmentInstanceDownSignal = new MarkedCountDownLatch<>(instanceIds.size());
         instanceIds.forEach(instanceId -> fragmentInstanceDownSignal.addMark(instanceId, MARKED_COUNT_DOWN_VALUE));
+        runningProfile = createRunningProfile();
+        runningProfile.registerInstanceProfiles(instanceIds);
+        if (jobSpec.isNeedReport()) {
+            RunningProfileManager.getInstance().registerProfile(jobSpec.getQueryId(), runningProfile);
+        }
     }
 
     public void attachExecutionProfiles(Collection<FragmentInstanceExecState> executions) {
@@ -261,12 +266,6 @@ public class QueryRuntimeProfile {
     public void finishInstance(TUniqueId instanceId) {
         if (fragmentInstanceDownSignal != null) {
             fragmentInstanceDownSignal.markedCountDown(instanceId, MARKED_COUNT_DOWN_VALUE);
-        }
-    }
-
-    public void finishInstanceProfile(int indexInJob) {
-        if (runningProfile != null) {
-            runningProfile.finishInstance(indexInJob);
         }
     }
 

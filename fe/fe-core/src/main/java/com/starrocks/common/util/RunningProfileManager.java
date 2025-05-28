@@ -16,7 +16,6 @@ package com.starrocks.common.util;
 import com.google.common.collect.Maps;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.qe.scheduler.QueryRuntimeProfile;
-import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
 import com.starrocks.thrift.TFragmentProfile;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
@@ -24,6 +23,7 @@ import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
@@ -72,13 +72,13 @@ public class RunningProfileManager {
         }
 
         final FragmentInstanceProfile fragmentInstanceProfile =
-                queryProfile.fragmentInstanceProfiles.get(request.getBackend_num());
+                queryProfile.fragmentInstanceProfiles.get(request.fragment_instance_id);
 
         if (fragmentInstanceProfile == null) {
             status = new TStatus(TStatusCode.NOT_FOUND);
             LOG.warn("asyncProfileReport query fragment not found: queryId: {}", DebugUtil.printId(request.getQuery_id()));
             status.addToError_msgs("query id " + DebugUtil.printId(request.getQuery_id()) + ", fragment instance id " +
-                    request.backend_num + " not found");
+                    DebugUtil.printId(request.fragment_instance_id) + " not found");
             return status;
         }
 
@@ -94,13 +94,13 @@ public class RunningProfileManager {
 
         try {
             LOG.warn("asyncProfileReport, queryid: {}, instanceIndex: {}, isDone:{}",
-                    DebugUtil.printId(request.getQuery_id()), request.backend_num,
+                    DebugUtil.printId(request.getQuery_id()), DebugUtil.printId(request.fragment_instance_id),
                     fragmentInstanceProfile.isDone.toString());
             queryProfile.tryToTriggerRuntimeProfileUpdate();
             fragmentInstanceProfile.updateRunningProfile(request);
             queryProfile.updateLoadChannelProfile(request);
             if (fragmentInstanceProfile.isDone.get()) {
-                queryProfile.finishInstance(request.getBackend_num());
+                queryProfile.finishInstance(request.fragment_instance_id);
             }
         } catch (Throwable e) {
             LOG.warn("update profile failed {}", DebugUtil.printId(request.getQuery_id()), e);
@@ -134,11 +134,11 @@ public class RunningProfileManager {
         private final int runtimeProfileReportInterval;
         private final boolean needMergeProfile;
         private final boolean isBrokerLoad;
-        private MarkedCountDownLatch<Integer, Long> profileDoneSignal;
+        private MarkedCountDownLatch<TUniqueId, Long> profileDoneSignal;
         // topProfileSupplier is used for running profile to generate top level profile
         // when query is done, topProfileSupplier is null
         private Supplier<RuntimeProfile> topProfileSupplier;
-        private Map<Integer, FragmentInstanceProfile> fragmentInstanceProfiles;
+        private Map<TUniqueId, FragmentInstanceProfile> fragmentInstanceProfiles;
         private TUniqueId queryId;
 
         public RunningProfile(RuntimeProfile executionProfile, Optional<RuntimeProfile> loadChannelProfile,
@@ -154,14 +154,19 @@ public class RunningProfileManager {
             this.isBrokerLoad = isisBrokerLoad;
         }
 
-        public void registerInstanceProfiles(Map<Integer, FragmentInstanceExecState> indexInJobToExecState) {
-            profileDoneSignal = new MarkedCountDownLatch<>(indexInJobToExecState.size());
+        public void registerInstanceProfiles(Collection<TUniqueId> instanceIds) {
+            profileDoneSignal = new MarkedCountDownLatch<>(instanceIds.size());
+            instanceIds.forEach(instanceId -> profileDoneSignal.addMark(instanceId, MARKED_COUNT_DOWN_VALUE));
             fragmentInstanceProfiles = Maps.newConcurrentMap();
-            indexInJobToExecState.forEach((index, execState) -> {
-                fragmentInstanceProfiles.putIfAbsent(index, new FragmentInstanceProfile(execState.getProfile()));
-                profileDoneSignal.addMark(index, MARKED_COUNT_DOWN_VALUE);
-            });
+            //            indexInJobToExecState.forEach((index, execState) -> {
+            //                fragmentInstanceProfiles.putIfAbsent(index, new FragmentInstanceProfile(execState.getProfile()));
+            //                profileDoneSignal.addMark(index, MARKED_COUNT_DOWN_VALUE);
+            //            });
 
+        }
+
+        public void addInstanceProfile(TUniqueId instanceId, RuntimeProfile profile) {
+            fragmentInstanceProfiles.put(instanceId, new FragmentInstanceProfile(profile));
         }
 
         public void addListener(Runnable listener) {
@@ -217,14 +222,14 @@ public class RunningProfileManager {
                     loadChannelProfile.get().prettyPrint(builder, "");
                     LOG.debug("Load channel profile for query_id={} after reported by instance_id={}\n{}",
                             DebugUtil.printId(request.getQuery_id()),
-                            request.backend_num,
+                            DebugUtil.printId(request.fragment_instance_id),
                             builder);
                 }
             }
         }
 
-        public void finishInstance(int indexInJob) {
-            profileDoneSignal.markedCountDown(indexInJob, MARKED_COUNT_DOWN_VALUE);
+        public void finishInstance(TUniqueId instanceId) {
+            profileDoneSignal.markedCountDown(instanceId, MARKED_COUNT_DOWN_VALUE);
         }
 
         public RuntimeProfile buildExecutionProfile() {

@@ -1443,12 +1443,12 @@ public class DefaultCoordinator extends Coordinator {
         return connectContext;
     }
 
-    public void registerProfileToRunningProfileManager() {
-        RunningProfileManager.RunningProfile runningProfile = queryProfile.createRunningProfile();
-        runningProfile.registerInstanceProfiles(executionDAG.getIndexInJobToExecState());
-        if (jobSpec.isNeedReport()) {
-            RunningProfileManager.getInstance().registerProfile(jobSpec.getQueryId(), runningProfile);
-        }
-    }
+//    public void registerProfileToRunningProfileManager() {
+////        RunningProfileManager.RunningProfile runningProfile = queryProfile.createRunningProfile();
+////        runningProfile.registerInstanceProfiles(executionDAG.getIndexInJobToExecState());
+//        if (jobSpec.isNeedReport()) {
+//            RunningProfileManager.getInstance().registerProfile(jobSpec.getQueryId(), runningProfile);
+//        }
+//    }
 
 }

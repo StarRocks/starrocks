@@ -4,22 +4,24 @@
 
 #include "profile_manager.h"
 
+#include <utility>
+
 #include "runtime/client_cache.h"
 #include "util/starrocks_metrics.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks::pipeline {
 RuntimeProfile* profile_manager::build_merged_instance_profile(
-        std::shared_ptr<FragmentProfileMaterial> fragment_profile_material, ObjectPool* obj_pool) {
+        const std::shared_ptr<FragmentProfileMaterial>& fragment_profile_material, ObjectPool* obj_pool) {
     // LOG(WARNING) << "Before task - fragment_profile_material content: "
     //              << " total_cpu_cost_ns=" << fragment_profile_material->total_cpu_cost_ns
     //              << " total_spill_bytes=" << fragment_profile_material->total_spill_bytes
     //              << " instance_is_done=" << fragment_profile_material->instance_is_done
     //              << " be_number=" << fragment_profile_material->be_number;
     RuntimeProfile* new_instance_profile = nullptr;
-    RuntimeProfile* instance_profile = fragment_profile_material->instance_profile.get();
-    if (fragment_profile_material->profile_level >= TPipelineProfileLevel::type::DETAIL) {
-        new_instance_profile = fragment_profile_material->instance_profile.get();
+    RuntimeProfile* instance_profile = fragment_profile_material->_instance_profile.get();
+    if (fragment_profile_material->_profile_level >= TPipelineProfileLevel::type::DETAIL) {
+        new_instance_profile = fragment_profile_material->_instance_profile.get();
     } else {
         int64_t process_raw_timer = 0;
         DeferOp defer([&new_instance_profile, &process_raw_timer]() {
@@ -68,20 +70,20 @@ RuntimeProfile* profile_manager::build_merged_instance_profile(
     auto* query_peak_memory = new_instance_profile->add_counter(
             "QueryPeakMemoryUsage", TUnit::BYTES,
             RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
-    query_peak_memory->set(fragment_profile_material->mem_cost_bytes);
+    query_peak_memory->set(fragment_profile_material->_mem_cost_bytes);
     auto* query_cumulative_cpu = new_instance_profile->add_counter(
             "QueryCumulativeCpuTime", TUnit::TIME_NS,
             RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS, TCounterMergeType::SKIP_FIRST_MERGE));
-    query_cumulative_cpu->set(fragment_profile_material->total_cpu_cost_ns);
+    query_cumulative_cpu->set(fragment_profile_material->_total_cpu_cost_ns);
     auto* query_spill_bytes = new_instance_profile->add_counter(
             "QuerySpillBytes", TUnit::BYTES,
             RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
-    query_spill_bytes->set(fragment_profile_material->total_spill_bytes);
+    query_spill_bytes->set(fragment_profile_material->_total_spill_bytes);
     // Add execution wall time
     auto* query_exec_wall_time = new_instance_profile->add_counter(
             "QueryExecutionWallTime", TUnit::TIME_NS,
             RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS, TCounterMergeType::SKIP_FIRST_MERGE));
-    query_exec_wall_time->set(fragment_profile_material->lifetime);
+    query_exec_wall_time->set(fragment_profile_material->_lifetime);
 
     return new_instance_profile;
 }
@@ -122,7 +124,7 @@ profile_manager::profile_manager(const CpuUtil::CpuIds& cpuids) {
 }
 
 void profile_manager::build_and_report_profile(std::shared_ptr<FragmentProfileMaterial> fragment_profile_material) {
-    auto profile_task = [=, fragment_profile_material = fragment_profile_material]() {
+    auto profile_task = [=, fragment_profile_material = std::move(fragment_profile_material)]() {
         SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
 
         ObjectPool obj_pool;
@@ -131,7 +133,7 @@ void profile_manager::build_and_report_profile(std::shared_ptr<FragmentProfileMa
                 create_report_profile_params(fragment_profile_material, merged_instance_profile);
         auto report_task = [params, fragment_profile_material, this]() {
             SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
-            const auto& fe_addr = fragment_profile_material->fe_addr;
+            const auto& fe_addr = fragment_profile_material->_fe_addr;
             int max_retry_times = config::report_exec_rpc_request_retry_num;
             int retry_times = 0;
             bool success = false;
@@ -144,8 +146,8 @@ void profile_manager::build_and_report_profile(std::shared_ptr<FragmentProfileMa
                 if (!rpc_status.ok() || !res.ok()) {
                     LOG(WARNING) << "profile report failed once, return res:" << res.to_string()
                                  << ", rpc error:" << rpc_status.to_string()
-                                 << " be_number=" << fragment_profile_material->be_number
-                                 << " queryId=" << print_id(fragment_profile_material->query_id);
+                                 << " be_number=" << fragment_profile_material->_instance_id
+                                 << " queryId=" << print_id(fragment_profile_material->_query_id);
                     if (res.is_not_found()) {
                         VLOG(1) << "[Driver] Fail to report profile due to query not found";
                     } else {
@@ -161,9 +163,9 @@ void profile_manager::build_and_report_profile(std::shared_ptr<FragmentProfileMa
             }
 
             LOG(WARNING) << "report task: "
-                         << " instance_is_done=" << fragment_profile_material->instance_is_done
-                         << " be_number=" << fragment_profile_material->be_number
-                         << " queryId=" << print_id(fragment_profile_material->query_id)
+                         << " instance_is_done=" << fragment_profile_material->_instance_is_done
+                         << " _instance_id=" << fragment_profile_material->_instance_id
+                         << " queryId=" << print_id(fragment_profile_material->_query_id)
                          << " report success=" << success;
         };
 
@@ -178,19 +180,19 @@ void profile_manager::build_and_report_profile(std::shared_ptr<FragmentProfileMa
 }
 
 std::unique_ptr<TFragmentProfile> profile_manager::create_report_profile_params(
-        std::shared_ptr<FragmentProfileMaterial> fragment_profile_material, RuntimeProfile* merged_instance_profile) {
+        const std::shared_ptr<FragmentProfileMaterial>& fragment_profile_material, RuntimeProfile* merged_instance_profile) {
     auto res = std::make_unique<TFragmentProfile>();
     TFragmentProfile& params = *res;
-    params.__set_query_id(fragment_profile_material->query_id);
-    params.__set_backend_num(fragment_profile_material->be_number);
-    params.__set_done(fragment_profile_material->instance_is_done);
+    params.__set_query_id(fragment_profile_material->_query_id);
+    params.__set_fragment_instance_id(fragment_profile_material->_instance_id);
+    params.__set_done(fragment_profile_material->_instance_is_done);
 
     merged_instance_profile->to_thrift(&params.profile);
     params.__isset.profile = true;
 
-    if (fragment_profile_material->query_type == TQueryType::LOAD) {
+    if (fragment_profile_material->_query_type == TQueryType::LOAD) {
         // Load channel profile will be merged on FE
-        fragment_profile_material->load_channel_profile->to_thrift(&params.load_channel_profile);
+        fragment_profile_material->_load_channel_profile->to_thrift(&params.load_channel_profile);
         params.__isset.load_channel_profile = true;
     }
 

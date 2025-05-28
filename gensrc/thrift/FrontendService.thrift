@@ -2136,7 +2136,7 @@ struct TFragmentProfile {
     1: optional RuntimeProfile.TRuntimeProfileTree profile;
     2: optional RuntimeProfile.TRuntimeProfileTree load_channel_profile;
     3: optional Types.TUniqueId query_id;
-    4: optional i32 backend_num;
+    4: optional Types.TUniqueId fragment_instance_id;
     5: optional bool done;
 }
 
