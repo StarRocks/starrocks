@@ -2243,8 +2243,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
         }
         for (MaterializedIndex index : physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-            tPartition.addToIndexes(new TOlapTableIndexTablets(index.getId(), Lists.newArrayList(
-                    index.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()))));
+            TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getId(), index.getTabletIdsInOrder());
+            tIndex.setVirtual_buckets(Lists.newArrayList(index.getVirtualBuckets()));
+            tPartition.addToIndexes(tIndex);
         }
         partitions.add(tPartition);
     }
@@ -2646,8 +2647,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
                 .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-            tPartition.addToIndexes(new TOlapTableIndexTablets(index.getId(), Lists.newArrayList(
-                    index.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()))));
+            TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getId(), index.getTabletIdsInOrder());
+            tIndex.setVirtual_buckets(Lists.newArrayList(index.getVirtualBuckets()));
+            tPartition.addToIndexes(tIndex);
         }
         partitions.add(tPartition);
         txnState.getPartitionNameToTPartition().put(partition.getName(), tPartition);

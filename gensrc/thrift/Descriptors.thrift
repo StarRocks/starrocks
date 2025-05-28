@@ -243,6 +243,9 @@ struct TColumn {
 struct TOlapTableIndexTablets {
     1: required i64 index_id
     2: required list<i64> tablets
+
+    // Virtual buckets, each virtual bucket saves a tablet id
+    3: optional list<i64> virtual_buckets
 }
 
 // its a closed-open range
