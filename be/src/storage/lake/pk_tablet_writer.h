@@ -70,7 +70,7 @@ public:
 
     DISALLOW_COPY(VerticalPkTabletWriter);
 
-    Status write(const starrocks::Chunk& data, SegmentPB* segment = nullptr) override {
+    Status write(const starrocks::Chunk& data, SegmentPB* segment = nullptr, bool eos = false) override {
         return Status::NotSupported("VerticalPkTabletWriter write not support");
     }
 
