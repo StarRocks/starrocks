@@ -222,6 +222,9 @@ Status Rowset::do_load() {
         }
         _segments.push_back(std::move(res).value());
     }
+    LOG(INFO) << "Rowset loaded successfully. rowset_id=" << rowset_id().to_string()
+             << ", num_segments=" << num_segments() << ", tablet_id=" << _rowset_meta->tablet_id()
+             << ", version=" << start_version() << "-" << end_version();
 #ifndef BE_TEST
     if (config::metadata_cache_memory_limit_percent > 0 && _keys_type != PRIMARY_KEYS) {
         // Add rowset to lru metadata cache for memory control.
