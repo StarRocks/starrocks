@@ -55,6 +55,7 @@ private:
 std::string get_stack_trace_for_thread(int tid, int timeout_ms);
 
 // SignalTimerGuard class manages a timer to capture and log thread stack traces after a specified timeout.
+// Note: If bthread yields. you may not get the expected stacktrace. But it's still safe.
 // usage:
 // {
 //     SignalTimerGuard guard(100);
