@@ -283,7 +283,7 @@ public:
             LOG(WARNING) << "state transition failed from:" << st.to_string();
             return;
         }
-        VLOG(3) << "rowset is close. rowset state from:" << old_state << " to " << _rowset_state_machine.rowset_state()
+        LOG(INFO) << "rowset is close. rowset state from:" << old_state << " to " << _rowset_state_machine.rowset_state()
                 << ", version:" << start_version() << "-" << end_version()
                 << ", tabletid:" << _rowset_meta->tablet_id();
     }
