@@ -375,22 +375,82 @@ public class QueryAnalyzer {
             sourceScope.setParent(scope);
 
             selectRelation.accept(new RewriteAliasVisitor(sourceScope, session), null);
-            SelectAnalyzer selectAnalyzer = new SelectAnalyzer(session);
-            selectAnalyzer.analyze(
-                    analyzeState,
-                    selectRelation.getSelectList(),
-                    selectRelation.getRelation(),
-                    sourceScope,
-                    selectRelation.getGroupByClause(),
-                    selectRelation.getHavingClause(),
-                    selectRelation.getWhereClause(),
-                    selectRelation.getOrderBy(),
-                    selectRelation.getLimit());
 
-            selectRelation.fillResolvedAST(analyzeState);
-            GeneratedColumnExprMappingCollector collector = new GeneratedColumnExprMappingCollector();
-            collector.process(selectRelation, sourceScope);
-            return analyzeState.getOutputScope();
+            // Tableau issues queries on `information_schema.tables` that reference SELECT aliases
+            // in the HAVING clause, which is not supported in StarRocks by default
+            // (when `enable_groupby_use_output_alias` is false).
+            // This logic detects whether the SELECT is querying `information_schema.tables`.
+            // If so, the session variable `enable_groupby_use_output_alias` is temporarily enabled
+            // to support Tableau's query syntax and avoid semantic errors.
+            boolean isInformationSchemaTables = isInformationSchemaTables(resolvedRelation);
+            boolean originalGroupbyUseOutputAlias = session.getSessionVariable().getEnableGroupbyUseOutputAlias();
+            if (isInformationSchemaTables) {
+                session.getSessionVariable().setEnableGroupbyUseOutputAlias(true);
+            }
+
+            try {
+                SelectAnalyzer selectAnalyzer = new SelectAnalyzer(session);
+                selectAnalyzer.analyze(
+                        analyzeState,
+                        selectRelation.getSelectList(),
+                        selectRelation.getRelation(),
+                        sourceScope,
+                        selectRelation.getGroupByClause(),
+                        selectRelation.getHavingClause(),
+                        selectRelation.getWhereClause(),
+                        selectRelation.getOrderBy(),
+                        selectRelation.getLimit());
+
+                selectRelation.fillResolvedAST(analyzeState);
+                GeneratedColumnExprMappingCollector collector = new GeneratedColumnExprMappingCollector();
+                collector.process(selectRelation, sourceScope);
+                return analyzeState.getOutputScope();
+            } finally {
+                // Restore the original session variable value to avoid side effects
+                // on subsequent queries.
+                if (isInformationSchemaTables) {
+                    session.getSessionVariable().setEnableGroupbyUseOutputAlias(originalGroupbyUseOutputAlias);
+                }
+            }
+        }
+
+        /**
+         * Determines whether the given Relation is querying `information_schema.tables`.
+         * This method recursively checks TableRelation, SubqueryRelation, and JoinRelation.
+         * Used to decide whether to temporarily enable `enable_groupby_use_output_alias`.
+         */
+        private boolean isInformationSchemaTables(Relation relation) {
+            if (relation instanceof TableRelation) {
+                TableName tableName = ((TableRelation) relation).getName();
+                return tableName != null
+                        && "information_schema".equalsIgnoreCase(tableName.getDb())
+                        && "tables".equalsIgnoreCase(tableName.getTbl());
+            } else if (relation instanceof SubqueryRelation) {
+                QueryRelation subQuery = ((SubqueryRelation) relation).getQueryStatement().getQueryRelation();
+                return isInformationSchemaTablesFromQueryRelation(subQuery);
+            } else if (relation instanceof JoinRelation) {
+                return isInformationSchemaTables(((JoinRelation) relation).getLeft())
+                        || isInformationSchemaTables(((JoinRelation) relation).getRight());
+            }
+            return false;
+        }
+
+        /**
+         * Determines whether the given QueryRelation (SelectRelation, SetOperationRelation, etc.)
+         * references `information_schema.tables`.
+         * This method is used to support nested queries and set operations (e.g., UNION).
+         */
+        private boolean isInformationSchemaTablesFromQueryRelation(QueryRelation queryRelation) {
+            if (queryRelation instanceof SelectRelation) {
+                return isInformationSchemaTables(((SelectRelation) queryRelation).getRelation());
+            } else if (queryRelation instanceof SetOperationRelation) {
+                for (QueryRelation child : ((SetOperationRelation) queryRelation).getRelations()) {
+                    if (isInformationSchemaTablesFromQueryRelation(child)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
 
         // for reduce meta initialization, only support simple query relation, like: select x1, x2 from t;
