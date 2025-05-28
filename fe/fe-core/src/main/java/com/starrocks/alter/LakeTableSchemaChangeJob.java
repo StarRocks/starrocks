@@ -163,6 +163,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     private MarkedCountDownLatch<Long, Long> createReplicaLatch = null;
     private AtomicBoolean waitingCreatingReplica = new AtomicBoolean(false);
     private AtomicBoolean isCancelling = new AtomicBoolean(false);
+    private boolean enablePartitionAggregation = false;
 
     // for deserialization
     public LakeTableSchemaChangeJob() {
@@ -773,6 +774,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     boolean readyToPublishVersion() throws AlterCancelException {
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             OlapTable table = getTableOrThrow(db, tableId);
+            enablePartitionAggregation = table.enablePartitionAggregation();
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                 Preconditions.checkState(partition != null, partitionId);
@@ -796,11 +798,22 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             txnInfo.txnType = TxnTypePB.TXN_NORMAL;
             txnInfo.commitTime = finishedTimeMs / 1000;
             txnInfo.gtid = watershedGtid;
+            List<Tablet> tablets = new ArrayList<>();
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(partitionId);
+                tablets.clear();
                 Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
                 for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
-                    Utils.publishVersion(shadowIndex.getTablets(), txnInfo, 1, commitVersion, warehouseId);
+                    if (!enablePartitionAggregation) {
+                        Utils.publishVersion(shadowIndex.getTablets(), txnInfo, 1, commitVersion, warehouseId,
+                                enablePartitionAggregation);
+                    } else {
+                        tablets.addAll(shadowIndex.getTablets());
+                    }
+                }
+                if (enablePartitionAggregation) {
+                    Utils.aggregatePublishVersion(tablets, Lists.newArrayList(txnInfo), 1, commitVersion,
+                            null, null, warehouseId, null);
                 }
             }
             return true;

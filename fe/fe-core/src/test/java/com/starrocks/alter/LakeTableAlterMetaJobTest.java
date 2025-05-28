@@ -121,6 +121,31 @@ public class LakeTableAlterMetaJobTest {
     }
 
     @Test
+    public void testJobStateEnablePartitionAggregation() throws Exception {
+        LakeTable table1 = createTable(connectContext,
+                    "CREATE TABLE t1(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
+                                "PROPERTIES('enable_persistent_index'='true', " + 
+                                "'enable_partition_aggregation'='true')");
+        LakeTableAlterMetaJob job1 = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(), db.getId(), 
+                        table1.getId(), table1.getName(), 60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true, 
+                        "CLOUD_NATIVE");
+    
+        Assert.assertEquals(AlterJobV2.JobState.PENDING, job1.getJobState());
+        job1.runPendingJob();
+        Assert.assertEquals(AlterJobV2.JobState.RUNNING, job1.getJobState());
+        Assert.assertNotEquals(-1L, job1.getTransactionId().orElse(-1L).longValue());
+        job1.runRunningJob();
+        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job1.getJobState());
+        while (job1.getJobState() != AlterJobV2.JobState.FINISHED) {
+            job1.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
+        Assert.assertEquals(AlterJobV2.JobState.FINISHED, job1.getJobState());
+
+        Assert.assertTrue(table1.enablePersistentIndex());
+    }
+
+    @Test
     public void testSetEnablePersistentWithoutType() throws Exception {
         Assert.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
         job.runPendingJob();
