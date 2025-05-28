@@ -14,7 +14,6 @@
 
 package com.starrocks.qe.scheduler;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.ScalarType;
@@ -331,119 +330,29 @@ public class FeExecuteCoordinator extends Coordinator {
         final List<ColumnRefOperator> outputColumnRefs = execPlan.getOutputColumns();
         final Projection valueOperatorProjection = valuesOperator.getProjection();
         final List<ColumnRefOperator> valuesOperatorColumnRefs = valuesOperator.getColumnRefSet();
-        // Map values operator's output column references to their indices
-        final Map<ColumnRefOperator, Integer> valuesOperatorOutputMap = IntStream.range(0, outputColumnRefs.size())
-                .boxed()
-                .collect(Collectors.toMap(valuesOperatorColumnRefs::get, i -> i));
-        // NOTE: this is only used when value operator's projection is null since row will be output by projection mapping if
-        // project exists.
-        // Find the indices of the output columns in the values operator's output
-        final List<Integer> alignedOutputIndexes = valueOperatorProjection == null ?
-                outputColumnRefs.stream()
-                        .map(valuesOperatorOutputMap::get)
-                        .collect(Collectors.toList()) : null;
-        final List<ByteBuffer> res = Lists.newArrayList();
-        for (final List<ScalarOperator> row : valuesOperator.getRows()) {
-            serializer.reset();
-            Preconditions.checkArgument(row.size() == outputColumnRefs.size());
-            List<ScalarOperator> alignedRow = getAlignedRow(valuesOperator, row, alignedOutputIndexes);
-            for (ScalarOperator scalarOperator : alignedRow) {
-                ConstantOperator constantOperator = (ConstantOperator) scalarOperator;
-                if (constantOperator.isNull()) {
-                    serializer.writeNull();
-                } else if (constantOperator.isTrue()) {
-                    serializer.writeLenEncodedString("1");
-                } else if (constantOperator.isFalse()) {
-                    serializer.writeLenEncodedString("0");
-                } else if (constantOperator.getType().getPrimitiveType().isBinaryType()) {
-                    serializer.writeVInt(constantOperator.getBinary().length);
-                    serializer.writeBytes(constantOperator.getBinary());
-                } else {
-                    String value;
-                    switch (constantOperator.getType().getPrimitiveType()) {
-                        case TINYINT:
-                            value = String.valueOf(constantOperator.getTinyInt());
-                            break;
-                        case SMALLINT:
-                            value = String.valueOf(constantOperator.getSmallint());
-                            break;
-                        case INT:
-                            value = String.valueOf(constantOperator.getInt());
-                            break;
-                        case BIGINT:
-                            value = String.valueOf(constantOperator.getBigint());
-                            break;
-                        case LARGEINT:
-                            value = String.valueOf(constantOperator.getLargeInt());
-                            break;
-                        case FLOAT:
-                            value = RyuFloat.floatToString((float) constantOperator.getFloat());
-                            break;
-                        case DOUBLE:
-                            value = RyuDouble.doubleToString(constantOperator.getDouble());
-                            break;
-                        case DECIMALV2:
-                            value = constantOperator.getDecimal().toPlainString();
-                            break;
-                        case DECIMAL32:
-                        case DECIMAL64:
-                        case DECIMAL128:
-                            int scale = ((ScalarType) constantOperator.getType()).getScalarScale();
-                            BigDecimal val1 = constantOperator.getDecimal();
-                            DecimalFormat df = new DecimalFormat((scale == 0 ? "0" : "0.") + StringUtils.repeat("0", scale));
-                            value = df.format(val1);
-                            break;
-                        case CHAR:
-                            value = constantOperator.getChar();
-                            break;
-                        case VARCHAR:
-                            value = constantOperator.getVarchar();
-                            break;
-                        case TIME:
-                            value = convertToTimeString(constantOperator.getTime());
-                            break;
-                        case DATE:
-                            LocalDateTime date = constantOperator.getDate();
-                            value = date.format(DateUtils.DATE_FORMATTER_UNIX);
-                            break;
-                        case DATETIME:
-                            LocalDateTime datetime = constantOperator.getDate();
-                            if (datetime.getNano() != 0) {
-                                value = datetime.format(DateUtils.DATE_TIME_MS_FORMATTER_UNIX);
-                            } else {
-                                value = datetime.format(DateUtils.DATE_TIME_FORMATTER_UNIX);
-                            }
-                            break;
-                        default:
-                            value = constantOperator.toString();
-                    }
-                    serializer.writeLenEncodedString(value);
-                }
-            }
-            res.add(serializer.toByteBuffer());
-        }
-        return res;
-    }
 
-    /**
-     * Align the row with the output indexes of the values operator.
-     * @param valuesOperator: the values operator to get the projection from
-     * @param row: the row to align
-     * @param alignedOutputIndexes: the output indexes of the values operator,
-     *                              if null, will use projection mapping
-     * @return: the aligned row
-     */
-    private List<ScalarOperator> getAlignedRow(PhysicalValuesOperator valuesOperator,
-                                               List<ScalarOperator> row,
-                                               List<Integer> alignedOutputIndexes) {
-        if (alignedOutputIndexes != null) {
-            return alignedOutputIndexes.stream()
-                    .map(i -> row.get(i))
-                    .collect(Collectors.toUnmodifiableList());
+        // NOTE: this is only used when value operator's projection is null since row will be output
+        // by projection mapping if project exists.
+        final List<ByteBuffer> res = Lists.newArrayList();
+        if (valueOperatorProjection == null) {
+            // Map values operator's output column references to their indices
+            final Map<ColumnRefOperator, Integer> valuesOperatorOutputMap = IntStream.range(0, outputColumnRefs.size())
+                    .boxed()
+                    .collect(Collectors.toMap(valuesOperatorColumnRefs::get, i -> i));
+            // Find the indices of the output columns in the values operator's output
+            final List<Integer> alignedOutputIndexes = outputColumnRefs.stream()
+                    .map(valuesOperatorOutputMap::get)
+                    .collect(Collectors.toList());
+            for (final List<ScalarOperator> row : valuesOperator.getRows()) {
+                serializer.reset();
+                final List<ScalarOperator> alignedRow = alignedOutputIndexes.stream()
+                        .map(i -> row.get(i))
+                        .collect(Collectors.toUnmodifiableList());
+                serializeAlignedRow(alignedRow, serializer);
+                res.add(serializer.toByteBuffer());
+            }
         } else {
-            // TODO: add cache for this
-            Preconditions.checkArgument(valuesOperator.getProjection() != null);
-            return execPlan.getOutputExprs().stream()
+            List<ScalarOperator> alignedRow = execPlan.getOutputExprs().stream()
                     .map(expr -> {
                         int slotId = ((SlotRef) expr).getSlotId().asInt();
                         return valuesOperator.getProjection().getColumnRefMap().entrySet().stream()
@@ -453,6 +362,89 @@ public class FeExecuteCoordinator extends Coordinator {
                                 .orElseThrow(() -> new IllegalStateException("No match for slotId: " + slotId));
                     })
                     .collect(Collectors.toList());
+            for (final List<ScalarOperator> row : valuesOperator.getRows()) {
+                serializer.reset();
+                serializeAlignedRow(alignedRow, serializer);
+                res.add(serializer.toByteBuffer());
+            }
+        }
+        return res;
+    }
+
+    private void serializeAlignedRow(List<ScalarOperator> alignedRow,
+                                     MysqlSerializer serializer) {
+        for (ScalarOperator scalarOperator : alignedRow) {
+            ConstantOperator constantOperator = (ConstantOperator) scalarOperator;
+            if (constantOperator.isNull()) {
+                serializer.writeNull();
+            } else if (constantOperator.isTrue()) {
+                serializer.writeLenEncodedString("1");
+            } else if (constantOperator.isFalse()) {
+                serializer.writeLenEncodedString("0");
+            } else if (constantOperator.getType().getPrimitiveType().isBinaryType()) {
+                serializer.writeVInt(constantOperator.getBinary().length);
+                serializer.writeBytes(constantOperator.getBinary());
+            } else {
+                String value;
+                switch (constantOperator.getType().getPrimitiveType()) {
+                    case TINYINT:
+                        value = String.valueOf(constantOperator.getTinyInt());
+                        break;
+                    case SMALLINT:
+                        value = String.valueOf(constantOperator.getSmallint());
+                        break;
+                    case INT:
+                        value = String.valueOf(constantOperator.getInt());
+                        break;
+                    case BIGINT:
+                        value = String.valueOf(constantOperator.getBigint());
+                        break;
+                    case LARGEINT:
+                        value = String.valueOf(constantOperator.getLargeInt());
+                        break;
+                    case FLOAT:
+                        value = RyuFloat.floatToString((float) constantOperator.getFloat());
+                        break;
+                    case DOUBLE:
+                        value = RyuDouble.doubleToString(constantOperator.getDouble());
+                        break;
+                    case DECIMALV2:
+                        value = constantOperator.getDecimal().toPlainString();
+                        break;
+                    case DECIMAL32:
+                    case DECIMAL64:
+                    case DECIMAL128:
+                        int scale = ((ScalarType) constantOperator.getType()).getScalarScale();
+                        BigDecimal val1 = constantOperator.getDecimal();
+                        DecimalFormat df = new DecimalFormat((scale == 0 ? "0" : "0.") + StringUtils.repeat("0", scale));
+                        value = df.format(val1);
+                        break;
+                    case CHAR:
+                        value = constantOperator.getChar();
+                        break;
+                    case VARCHAR:
+                        value = constantOperator.getVarchar();
+                        break;
+                    case TIME:
+                        value = convertToTimeString(constantOperator.getTime());
+                        break;
+                    case DATE:
+                        LocalDateTime date = constantOperator.getDate();
+                        value = date.format(DateUtils.DATE_FORMATTER_UNIX);
+                        break;
+                    case DATETIME:
+                        LocalDateTime datetime = constantOperator.getDate();
+                        if (datetime.getNano() != 0) {
+                            value = datetime.format(DateUtils.DATE_TIME_MS_FORMATTER_UNIX);
+                        } else {
+                            value = datetime.format(DateUtils.DATE_TIME_FORMATTER_UNIX);
+                        }
+                        break;
+                    default:
+                        value = constantOperator.toString();
+                }
+                serializer.writeLenEncodedString(value);
+            }
         }
     }
 
