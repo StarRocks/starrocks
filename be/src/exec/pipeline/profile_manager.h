@@ -23,41 +23,41 @@ class RuntimeProfile;
 namespace starrocks::pipeline {
 
 struct FragmentProfileMaterial {
-    std::shared_ptr<RuntimeProfile> instance_profile;
+    std::shared_ptr<RuntimeProfile> _instance_profile;
     // pipeline profile/driver profile/operator profile
-    std::vector<std::shared_ptr<RuntimeProfile>> profiles_holders;
-    std::shared_ptr<RuntimeProfile> load_channel_profile;
-    TPipelineProfileLevel::type profile_level;
+    std::vector<std::shared_ptr<RuntimeProfile>> _profiles_holders;
+    std::shared_ptr<RuntimeProfile> _load_channel_profile;
+    TPipelineProfileLevel::type _profile_level;
 
-    int64_t mem_cost_bytes;
-    int64_t total_cpu_cost_ns;
-    int64_t total_spill_bytes;
-    int64_t lifetime;
+    int64_t _mem_cost_bytes;
+    int64_t _total_cpu_cost_ns;
+    int64_t _total_spill_bytes;
+    int64_t _lifetime;
 
-    bool instance_is_done;
-    TUniqueId query_id;
-    int be_number;
-    TQueryType::type query_type;
-    TNetworkAddress fe_addr;
+    bool _instance_is_done;
+    TUniqueId _query_id;
+    TUniqueId _instance_id;
+    TQueryType::type _query_type;
+    TNetworkAddress _fe_addr;
 
     FragmentProfileMaterial(std::shared_ptr<RuntimeProfile> instance_profile,
                             std::shared_ptr<RuntimeProfile> load_channel_profile,
                             TPipelineProfileLevel::type profile_level, int64_t mem_cost_bytes,
                             int64_t total_cpu_cost_ns, int64_t total_spill_bytes, int64_t lifetime,
-                            bool instance_is_done, TUniqueId query_id, int be_number, TQueryType::type query_type,
-                            TNetworkAddress fe_addr)
-            : instance_profile(std::move(instance_profile)),
-              load_channel_profile(std::move(load_channel_profile)),
-              profile_level(profile_level),
-              mem_cost_bytes(mem_cost_bytes),
-              total_cpu_cost_ns(total_cpu_cost_ns),
-              total_spill_bytes(total_spill_bytes),
-              lifetime(lifetime),
-              instance_is_done(instance_is_done),
-              query_id(query_id),
-              be_number(be_number),
-              query_type(query_type),
-              fe_addr(fe_addr) {}
+                            bool instance_is_done, const TUniqueId& query_id, const TUniqueId& instance_id,
+                            TQueryType::type query_type, const TNetworkAddress& fe_addr)
+            : _instance_profile(std::move(instance_profile)),
+              _load_channel_profile(std::move(load_channel_profile)),
+              _profile_level(profile_level),
+              _mem_cost_bytes(mem_cost_bytes),
+              _total_cpu_cost_ns(total_cpu_cost_ns),
+              _total_spill_bytes(total_spill_bytes),
+              _lifetime(lifetime),
+              _instance_is_done(instance_is_done),
+              _query_id(query_id),
+              _instance_id(instance_id),
+              _query_type(query_type),
+              _fe_addr(fe_addr) {}
 };
 
 class profile_manager {
@@ -67,10 +67,10 @@ public:
 
 private:
     static RuntimeProfile* build_merged_instance_profile(
-            std::shared_ptr<FragmentProfileMaterial> fragment_profile_material, ObjectPool* obj_pool);
+            const std::shared_ptr<FragmentProfileMaterial>& fragment_profile_material, ObjectPool* obj_pool);
 
     static std::unique_ptr<TFragmentProfile> create_report_profile_params(
-            std::shared_ptr<FragmentProfileMaterial> fragment_profile_material,
+            const std::shared_ptr<FragmentProfileMaterial>& fragment_profile_material,
             RuntimeProfile* merged_instance_profile);
 
     std::unique_ptr<ThreadPool> _merge_thread_pool;

@@ -324,7 +324,7 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
                 fragment_ctx->runtime_state()->runtime_profile_ptr(),
                 fragment_ctx->runtime_state()->load_channel_profile_ptr(), query_ctx->profile_level(),
                 query_ctx->mem_cost_bytes(), query_ctx->cpu_cost(), query_ctx->get_spill_bytes(), query_ctx->lifetime(),
-                done, query_ctx->query_id(), fragment_ctx->runtime_state()->be_number(),
+                done, query_ctx->query_id(), fragment_ctx->runtime_state()->fragment_instance_id(),
                 fragment_ctx->runtime_state()->query_options().query_type, fe_addr);
 
         _profile_manager->build_and_report_profile(fragment_profile_material);
