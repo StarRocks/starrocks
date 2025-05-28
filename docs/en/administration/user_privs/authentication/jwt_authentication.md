@@ -35,7 +35,7 @@ CREATE USER <username> IDENTIFIED WITH authentication_jwt AS
 
 Properties:
 
-- `jwks_url`: The URL to the JSON Web Key Set (JWKS) service or the path to the local file under the `fe/conf` directory.
+- `jwks_url`: The URL to the JSON Web Key Set (JWKS) service or the path to the public key local file under the `fe/conf` directory.
 - `principal_field`: The string used to identify the field that indicates the subject (`sub`) in the JWT. The default value is `sub`. The value of this field must be identical with the username for logging in to StarRocks.
 - `required_issuer` (Optional): The list of strings used to identify the issuers (`iss`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT issuer.
 - `required_audience` (Optional): The list of strings used to identify the audience (`aud`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT audience.
@@ -48,7 +48,7 @@ CREATE USER tom IDENTIFIED WITH authentication_jwt AS
   "jwks_url": "http://localhost:38080/realms/master/protocol/jwt/certs",
   "principal_field": "preferred_username",
   "required_issuer": "http://localhost:38080/realms/master",
-  "required_audience": "12345"
+  "required_audience": "starrocks"
 }';
 ```
 
