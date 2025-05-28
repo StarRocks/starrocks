@@ -165,6 +165,16 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
         }
     }
 
+    @Override
+    protected boolean isEnablePartitionAggregation() {
+        return false;
+    }
+
+    @Override
+    protected boolean isDisablePartitionAggregation() {
+        return false;
+    }
+
     private static class IndexSchemaInfo {
         @SerializedName("indexId")
         private final long indexId;

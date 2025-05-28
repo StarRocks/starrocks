@@ -2114,7 +2114,7 @@ public class SchemaChangeHandler extends AlterHandler {
             boolean enablePersistentIndex = false;
             String persistentIndexType = "";
             boolean aggregateTabletMetadata = false;
-            LakeTableAlterMetaJobBase.MetadataOp metadataOp = LakeTableAlterMetaJobBase.MetadataOp.NO_OPERATION;
+            LakeTableAlterMetaJob.MetadataOp metadataOp = LakeTableAlterMetaJob.MetadataOp.NO_OPERATION;
             TTabletMetaType metaType = TTabletMetaType.ENABLE_PERSISTENT_INDEX;
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
                 enablePersistentIndex = PropertyAnalyzer.analyzeBooleanProp(properties,
@@ -2158,9 +2158,9 @@ public class SchemaChangeHandler extends AlterHandler {
                     return null;
                 }
                 if (aggregateTabletMetadata) {
-                    metadataOp = LakeTableAlterMetaJobBase.MetadataOp.AGGREGATE;
+                    metadataOp = LakeTableAlterMetaJob.MetadataOp.ENABLE_PARTITION_AGGREGATE;
                 } else {
-                    metadataOp = LakeTableAlterMetaJobBase.MetadataOp.SPLIT;
+                    metadataOp = LakeTableAlterMetaJob.MetadataOp.DISABLE_PARTITION_AGGREGATE;
                 }
                 metaType = TTabletMetaType.ENABLE_PARTITION_AGGREGATION;
             } else {
