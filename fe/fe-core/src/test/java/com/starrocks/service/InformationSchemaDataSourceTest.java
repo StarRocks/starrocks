@@ -555,6 +555,12 @@ public class InformationSchemaDataSourceTest {
             }
         };
         // supported
+        starRocksAssert.query("select TABLE_NAME, LAST_REFRESH_STATE,LAST_REFRESH_ERROR_CODE,IS_ACTIVE,INACTIVE_REASON\n" +
+                        "from information_schema.materialized_views where table_name = 'test_mv1")
+                .explainContains(" OUTPUT EXPRS:3: TABLE_NAME | 13: LAST_REFRESH_STATE " +
+                                "| 19: LAST_REFRESH_ERROR_CODE | 5: IS_ACTIVE | 6: INACTIVE_REASON",
+                        "constant exprs: ",
+                        "'test_mv1' | 'true' | '' | 'SUCCESS' | '0'");
         starRocksAssert.query("select count(1) from information_schema.materialized_views")
                 .explainContains("     constant exprs: ");
         starRocksAssert.query("select * from information_schema.materialized_views")

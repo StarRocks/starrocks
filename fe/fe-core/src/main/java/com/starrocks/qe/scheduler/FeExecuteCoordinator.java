@@ -14,9 +14,8 @@
 
 package com.starrocks.qe.scheduler;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
@@ -57,6 +56,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public class FeExecuteCoordinator extends Coordinator {
 
@@ -323,27 +324,28 @@ public class FeExecuteCoordinator extends Coordinator {
     }
 
     private List<ByteBuffer> covertToMySQLRowBuffer() {
-        MysqlSerializer serializer = MysqlSerializer.newInstance();
-        PhysicalValuesOperator valuesOperator = (PhysicalValuesOperator) execPlan.getPhysicalPlan().getOp();
-        List<ByteBuffer> res = Lists.newArrayList();
-        for (List<ScalarOperator> row : valuesOperator.getRows()) {
+        final MysqlSerializer serializer = MysqlSerializer.newInstance();
+        final PhysicalValuesOperator valuesOperator = (PhysicalValuesOperator) execPlan.getPhysicalPlan().getOp();
+        // Ensure output columns' order is consistent with output expressions
+        final List<ColumnRefOperator> outputColumnRefs = execPlan.getOutputColumns();
+        final List<ColumnRefOperator> valuesOperatorColumnRefs = valuesOperator.getColumnRefSet();
+        // Map values operator's output column references to their indices
+        final Map<ColumnRefOperator, Integer> valuesOperatorOutputMap = IntStream.range(0, outputColumnRefs.size())
+                .boxed()
+                .collect(Collectors.toMap(valuesOperatorColumnRefs::get, i -> i));
+        // Find the indices of the output columns in the values operator's output
+        final List<Integer> alignedOutputIndexes = outputColumnRefs.stream()
+                .map(valuesOperatorOutputMap::get)
+                .collect(Collectors.toList());
+        final List<ByteBuffer> res = Lists.newArrayList();
+        for (final List<ScalarOperator> row : valuesOperator.getRows()) {
             serializer.reset();
-            if (valuesOperator.getProjection() != null) {
-                List<ScalarOperator> alignedOutput = Lists.newArrayList();
-                for (Expr expr : execPlan.getOutputExprs()) {
-                    SlotRef slotRef = (SlotRef) expr;
-                    for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : valuesOperator.getProjection()
-                            .getColumnRefMap().entrySet()) {
-                        if (slotRef.getSlotId().asInt() == entry.getKey().getId()) {
-                            alignedOutput.add(entry.getValue());
-                            break;
-                        }
-                    }
-                }
-                row = alignedOutput;
-            }
-
-            for (ScalarOperator scalarOperator : row) {
+            Preconditions.checkArgument(row.size() == outputColumnRefs.size());
+            // Align the output according to the output column references
+            List<ScalarOperator> alignedRow = alignedOutputIndexes.stream()
+                    .map(i -> row.get(i))
+                    .collect(Collectors.toUnmodifiableList());
+            for (ScalarOperator scalarOperator : alignedRow) {
                 ConstantOperator constantOperator = (ConstantOperator) scalarOperator;
                 if (constantOperator.isNull()) {
                     serializer.writeNull();
