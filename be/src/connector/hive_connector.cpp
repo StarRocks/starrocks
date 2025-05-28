@@ -96,6 +96,8 @@ Status HiveDataSource::open(RuntimeState* state) {
                 "Invalid table type. Only hive/iceberg/hudi/delta lake/file/paimon/kudu table are supported");
     }
     RETURN_IF_ERROR(_check_all_slots_nullable());
+    bool enable_cache_select =
+            state->query_options().__isset.enable_cache_select && state->query_options().enable_cache_select;
 
     // Check that the system meets the requirements for enabling DataCache
     if (BlockCache::instance()->available()) {
@@ -109,7 +111,7 @@ Status HiveDataSource::open(RuntimeState* state) {
             datacache_ttl_seconds = state->query_options().datacache_ttl_seconds;
         }
 
-        if (state->query_options().__isset.enable_cache_select && state->query_options().enable_cache_select) {
+        if (enable_cache_select) {
             // set datacache options for cache select
             _datacache_options = DataCacheOptions{.enable_datacache = true,
                                                   .enable_cache_select = true,
@@ -132,7 +134,7 @@ Status HiveDataSource::open(RuntimeState* state) {
                 enable_populate_datacache = state->query_options().enable_populate_datacache;
             }
 
-            const bool enable_datacache_aync_populate_mode =
+            const bool enable_datacache_async_populate_mode =
                     state->query_options().__isset.enable_datacache_async_populate_mode &&
                     state->query_options().enable_datacache_async_populate_mode;
             const bool enable_datacache_io_adaptor = state->query_options().__isset.enable_datacache_io_adaptor &&
@@ -147,13 +149,16 @@ Status HiveDataSource::open(RuntimeState* state) {
                     DataCacheOptions{.enable_datacache = true,
                                      .enable_cache_select = false,
                                      .enable_populate_datacache = enable_populate_datacache,
-                                     .enable_datacache_async_populate_mode = enable_datacache_aync_populate_mode,
+                                     .enable_datacache_async_populate_mode = enable_datacache_async_populate_mode,
                                      .enable_datacache_io_adaptor = enable_datacache_io_adaptor,
                                      .modification_time = _scan_range.modification_time,
                                      .datacache_evict_probability = datacache_evict_probability,
                                      .datacache_priority = datacache_priority,
                                      .datacache_ttl_seconds = datacache_ttl_seconds};
         }
+    } else if (enable_cache_select) {
+        _no_data = true;
+        return Status::OK();
     }
 
     // Don't use datacache when priority = -1
