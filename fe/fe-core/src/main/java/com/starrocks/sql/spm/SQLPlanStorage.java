@@ -15,6 +15,7 @@ package com.starrocks.sql.spm;
 
 import com.starrocks.analysis.Expr;
 
+import java.util.Collections;
 import java.util.List;
 
 public interface SQLPlanStorage {
@@ -38,4 +39,10 @@ public interface SQLPlanStorage {
     default void replayUpdateBaselinePlan(BaselinePlan.Info info, boolean isEnable) {}
 
     void controlBaselinePlan(boolean isEnable, List<Long> baseLineIds);
+
+    default void replayBaselinePlan(BaselinePlan plan, boolean isCreate) {}
+
+    default List<BaselinePlan> queryBaselinePlan(List<String> sqlDigest, String source) {
+        return Collections.emptyList();
+    }
 }

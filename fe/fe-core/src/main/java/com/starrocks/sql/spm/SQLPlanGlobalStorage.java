@@ -314,6 +314,33 @@ class SQLPlanGlobalStorage implements SQLPlanStorage {
         cache.invalidateAll(ids);
     }
 
+    @Override
+    public List<BaselinePlan> queryBaselinePlan(List<String> sqlDigest, String source) {
+        if (sqlDigest.isEmpty()) {
+            return List.of();
+        }
+        if (!StatisticUtils.checkStatisticTables(List.of(StatsConstants.SPM_BASELINE_TABLE_NAME))) {
+            return Collections.emptyList();
+        }
+        StringBuilder sql = new StringBuilder(QUERY_SQL);
+        sql.append("WHERE ");
+        sql.append("source = ");
+        sql.append("'").append(source).append("'");
+
+        sql.append(" and bind_sql_digest IN (");
+        sqlDigest.forEach(digest -> sql.append("'").append(digest).append("',"));
+        sql.setLength(sql.length() - 1);
+        sql.append(")");
+
+        try {
+            List<TResultBatch> datas = executor.executeDQL(sql.toString());
+            return castToBaselinePlan(datas);
+        } catch (Exception e) {
+            LOG.warn("sql plan baselines get baseline failed, sql: " + sql, e);
+            return List.of();
+        }
+    }
+
     private class BaselinePlanLoader implements CacheLoader<Long, BaselinePlan> {
         @Override
         public BaselinePlan load(@NonNull Long key) {
