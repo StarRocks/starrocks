@@ -22,7 +22,6 @@ import com.starrocks.common.Status;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
-import com.starrocks.common.util.RunningProfileManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ExecuteExceptionHandler;
 import com.starrocks.qe.scheduler.dag.ExecutionDAG;

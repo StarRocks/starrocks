@@ -53,7 +53,7 @@ public class RunningProfileManager {
     }
 
     public void registerProfile(TUniqueId queryId, RunningProfile queryProfile) {
-        LOG.warn("registerProfile: queryId: {}", DebugUtil.printId(queryId));
+        // LOG.warn("registerProfile: queryId: {}", DebugUtil.printId(queryId));
         profiles.putIfAbsent(queryId, queryProfile);
     }
 
@@ -93,9 +93,9 @@ public class RunningProfileManager {
         }
 
         try {
-            LOG.warn("asyncProfileReport, queryid: {}, instanceIndex: {}, isDone:{}",
-                    DebugUtil.printId(request.getQuery_id()), DebugUtil.printId(request.fragment_instance_id),
-                    fragmentInstanceProfile.isDone.toString());
+            //            LOG.warn("asyncProfileReport, queryid: {}, instanceIndex: {}, isDone:{}",
+            //                    DebugUtil.printId(request.getQuery_id()), DebugUtil.printId(request.fragment_instance_id),
+            //                    fragmentInstanceProfile.isDone.toString());
             queryProfile.tryToTriggerRuntimeProfileUpdate();
             fragmentInstanceProfile.updateRunningProfile(request);
             queryProfile.updateLoadChannelProfile(request);

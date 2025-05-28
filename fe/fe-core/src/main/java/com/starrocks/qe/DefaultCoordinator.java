@@ -55,7 +55,6 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.common.util.RunningProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.exception.GlobalDictNotMatchException;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
@@ -1442,13 +1441,5 @@ public class DefaultCoordinator extends Coordinator {
     public ConnectContext getConnectContext() {
         return connectContext;
     }
-
-//    public void registerProfileToRunningProfileManager() {
-////        RunningProfileManager.RunningProfile runningProfile = queryProfile.createRunningProfile();
-////        runningProfile.registerInstanceProfiles(executionDAG.getIndexInJobToExecState());
-//        if (jobSpec.isNeedReport()) {
-//            RunningProfileManager.getInstance().registerProfile(jobSpec.getQueryId(), runningProfile);
-//        }
-//    }
 
 }
