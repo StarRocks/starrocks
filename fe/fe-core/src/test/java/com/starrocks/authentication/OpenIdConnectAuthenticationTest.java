@@ -35,8 +35,8 @@ public class OpenIdConnectAuthenticationTest {
     public void testAuthentication() throws Exception {
         GlobalStateMgr.getCurrentState().setJwkMgr(new MockTokenUtils.MockJwkMgr());
 
-        OpenIdConnectAuthenticationProvider provider =
-                new OpenIdConnectAuthenticationProvider("jwks.json", "preferred_username", emptyIssuer, emptyAudience);
+        JWTAuthenticationProvider provider =
+                new JWTAuthenticationProvider("jwks.json", "preferred_username", emptyIssuer, emptyAudience);
         UserAuthOptionAnalyzer.analyzeAuthOption(new UserIdentity("harbor", "%"),
                 new UserAuthOption(null, "", true, NodePosition.ZERO));
         String openIdConnectJson = mockTokenUtils.generateTestOIDCToken(3600 * 1000);

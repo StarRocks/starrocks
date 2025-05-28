@@ -55,8 +55,8 @@ public class SecurityIntegrationTest {
         properties.put("group_provider", "A, B, C");
         properties.put("permitted_groups", "B");
 
-        OIDCSecurityIntegration oidcSecurityIntegration =
-                new OIDCSecurityIntegration("oidc", properties);
+        JWTSecurityIntegration oidcSecurityIntegration =
+                new JWTSecurityIntegration("oidc", properties);
 
         List<String> groupProviderNameList = oidcSecurityIntegration.getGroupProviderName();
         Assert.assertEquals("A,B,C", Joiner.on(",").join(groupProviderNameList));
@@ -64,14 +64,14 @@ public class SecurityIntegrationTest {
         List<String> permittedGroups = oidcSecurityIntegration.getGroupAllowedLoginList();
         Assert.assertEquals("B", Joiner.on(",").join(permittedGroups));
 
-        oidcSecurityIntegration = new OIDCSecurityIntegration("oidc", new HashMap<>());
+        oidcSecurityIntegration = new JWTSecurityIntegration("oidc", new HashMap<>());
         Assert.assertTrue(oidcSecurityIntegration.getGroupProviderName().isEmpty());
         Assert.assertTrue(oidcSecurityIntegration.getGroupAllowedLoginList().isEmpty());
 
         properties = new HashMap<>();
         properties.put("group_provider", "");
         properties.put("permitted_groups", "");
-        oidcSecurityIntegration = new OIDCSecurityIntegration("oidc", properties);
+        oidcSecurityIntegration = new JWTSecurityIntegration("oidc", properties);
         Assert.assertTrue(oidcSecurityIntegration.getGroupProviderName().isEmpty());
         Assert.assertTrue(oidcSecurityIntegration.getGroupAllowedLoginList().isEmpty());
     }
@@ -81,9 +81,9 @@ public class SecurityIntegrationTest {
         GlobalStateMgr.getCurrentState().setJwkMgr(new MockTokenUtils.MockJwkMgr());
 
         Map<String, String> properties = new HashMap<>();
-        properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_openid_connect");
-        properties.put(OpenIdConnectAuthenticationProvider.OIDC_JWKS_URL, "jwks.json");
-        properties.put(OpenIdConnectAuthenticationProvider.OIDC_PRINCIPAL_FIELD, "preferred_username");
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_jwt");
+        properties.put(JWTAuthenticationProvider.JWT_JWKS_URL, "jwks.json");
+        properties.put(JWTAuthenticationProvider.JWT_PRINCIPAL_FIELD, "preferred_username");
 
         AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
         authenticationMgr.createSecurityIntegration("oidc2", properties, true);
@@ -141,9 +141,9 @@ public class SecurityIntegrationTest {
         GlobalStateMgr.getCurrentState().setJwkMgr(new MockTokenUtils.MockJwkMgr());
 
         Map<String, String> properties = new HashMap<>();
-        properties.put(OIDCSecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_openid_connect");
-        properties.put(OpenIdConnectAuthenticationProvider.OIDC_JWKS_URL, "jwks.json");
-        properties.put(OpenIdConnectAuthenticationProvider.OIDC_PRINCIPAL_FIELD, "preferred_username");
+        properties.put(JWTSecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_jwt");
+        properties.put(JWTAuthenticationProvider.JWT_JWKS_URL, "jwks.json");
+        properties.put(JWTAuthenticationProvider.JWT_PRINCIPAL_FIELD, "preferred_username");
         properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER, "file_group_provider");
         properties.put(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN, "group1");
 
