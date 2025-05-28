@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # CREATE PIPE
 
-## Description
-
-Creates a new pipe for defining the INSERT INTO SELECT FROM FILES statement used by the system to load data from a specified source data file to a destination table. This command is supported from v3.2 onwards.
+CREATE PIPE creates a new pipe for defining the INSERT INTO SELECT FROM FILES statement used by the system to load data from a specified source data file to a destination table. This command is supported from v3.2 onwards.
 
 ## Syntax
 

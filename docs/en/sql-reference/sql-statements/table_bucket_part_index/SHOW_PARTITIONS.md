@@ -1,12 +1,12 @@
 ---
 displayed_sidebar: docs
+keywords:
+  - SHOW PARTITIONS
 ---
 
 # SHOW PARTITIONS
 
-## Description
-
-Displays partition information, including common partitions and [temporary partitions](../../../table_design/data_distribution/Temporary_partition.md).
+SHOW PARTITIONS displays partition information, including common partitions and [temporary partitions](../../../table_design/data_distribution/Temporary_partition.md).
 
 ## Syntax
 

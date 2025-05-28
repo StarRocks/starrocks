@@ -4,9 +4,7 @@ displayed_sidebar: docs
 
 # ALTER MATERIALIZED VIEW
 
-## Description
-
-This SQL statement can:
+ALTER MATERIALIZED VIEW can:
 
 - Alter the name of an asynchronous materialized view.
 - Alter the refresh strategy of an asynchronous materialized view.
