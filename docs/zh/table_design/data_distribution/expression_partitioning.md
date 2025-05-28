@@ -330,7 +330,7 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 ```sql
 ALTER TABLE [<db_name>.]<table_name>
 PARTITION BY <time_expr>
-WHERE <time_range_column> BETWEEN <start_time> AND <end_time>
+BETWEEN <start_time> AND <end_time>
 ```
 
 #### 参数解释
@@ -351,7 +351,7 @@ WHERE <time_range_column> BETWEEN <start_time> AND <end_time>
 
 ```SQL
 ALTER TABLE site_access1 PARTITION BY date_trunc('month', event_day)
-WHERE event_day BETWEEN '2024-01-01' AND '2024-03-31';
+BETWEEN '2024-01-01' AND '2024-03-31';
 ```
 
 合并后：
