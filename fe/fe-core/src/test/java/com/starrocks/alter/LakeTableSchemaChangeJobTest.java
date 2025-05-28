@@ -422,6 +422,51 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
+    public void testAlterTabletSuccessEnablePartitionAgg() throws Exception {
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+        };
+
+        LakeTable table1 = createTable(connectContext, 
+                    "CREATE TABLE t1(c0 INT) duplicate key(c0) distributed by hash(c0) buckets 3 " +
+                                "PROPERTIES('enable_partition_aggregation'='true')");
+        
+        Config.enable_fast_schema_evolution_in_share_data_mode = false;
+        alterTable(connectContext, "ALTER TABLE t1 ADD COLUMN c1 BIGINT AS c0 + 2");
+        LakeTableSchemaChangeJob schemaChangeJob1 = getAlterJob(table1);
+        
+        schemaChangeJob1.runPendingJob();
+        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob1.getJobState());
+
+        schemaChangeJob1.runWaitingTxnJob();
+        Assert.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob1.getJobState());
+
+        schemaChangeJob1.runRunningJob();
+        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob1.getJobState());
+        Assert.assertTrue(schemaChangeJob1.getFinishedTimeMs() > System.currentTimeMillis() - 10_000L);
+        Collection<Partition> partitions = table1.getPartitions();
+        Assert.assertEquals(1, partitions.size());
+        Partition partition = partitions.stream().findFirst().orElse(null);
+        Assert.assertNotNull(partition);
+        Assert.assertEquals(3, partition.getDefaultPhysicalPartition().getNextVersion());
+        List<MaterializedIndex> shadowIndexes =
+                    partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+        Assert.assertEquals(1, shadowIndexes.size());
+
+        // Does not support cancel job in FINISHED_REWRITING state.
+        schemaChangeJob.cancel("test");
+        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob1.getJobState());
+
+        while (schemaChangeJob1.getJobState() != AlterJobV2.JobState.FINISHED) {
+            schemaChangeJob1.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
+    }
+
+    @Test
     public void testPublishVersion() throws AlterCancelException, InterruptedException {
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
