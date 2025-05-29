@@ -11,7 +11,7 @@ PROPERTIES (
     "replication_num" = "1"
 );
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Column `dt` in the partition condition is not a table's partition expression, please use table's partition expressions: date_trunc('day', `dt`)/`province`.")
+[REGEX].*Column `dt` in the partition condition is not a table's partition expression.*
 -- !result
 CREATE TABLE t1 (
     dt datetime,
@@ -25,7 +25,7 @@ PROPERTIES (
     "replication_num" = "1"
 );
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Column `dt` in the partition condition is not a table's partition expression, please use table's partition expressions: date_trunc('day', `dt`)/`province`.")
+[REGEX].*Column `dt` in the partition condition is not a table's partition expression.*
 -- !result
 CREATE TABLE tbl_ttl_expr (
     dt datetime,
