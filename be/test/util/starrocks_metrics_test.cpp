@@ -105,7 +105,6 @@ TEST_F(StarRocksMetricsTest, Normal) {
     auto instance = StarRocksMetrics::instance();
     auto metrics = instance->metrics();
     metrics->collect(&visitor);
-    LOG(INFO) << "\n" << visitor.to_string();
     // check metric
     {
         instance->fragment_requests_total.increment(12);
