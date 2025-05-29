@@ -23,7 +23,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.datacache.DataCacheOptions;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.RowOutputInfo;
-import com.starrocks.sql.optimizer.ScanOptimzeOption;
+import com.starrocks.sql.optimizer.ScanOptimizeOption;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -47,7 +47,12 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
      */
     protected ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap;
     protected ImmutableList<ColumnAccessPath> columnAccessPaths;
+<<<<<<< HEAD
     protected ScanOptimzeOption scanOptimzeOption;
+=======
+    protected ScanOptimizeOption scanOptimizeOption;
+    protected TableVersionRange tableVersionRange;
+>>>>>>> 0beffd3c16 ([Enhancxement] set `enable_rewrite_simple_agg_to_hdfs_scan` true by default (#59462))
     protected DataCacheOptions dataCacheOptions = null;
 
     protected PhysicalScanOperator(OperatorType type) {
@@ -66,7 +71,12 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
         this.predicate = predicate;
         this.projection = projection;
         this.columnAccessPaths = ImmutableList.of();
+<<<<<<< HEAD
         this.scanOptimzeOption = new ScanOptimzeOption();
+=======
+        this.scanOptimizeOption = new ScanOptimizeOption();
+        this.tableVersionRange = tableVersionRange;
+>>>>>>> 0beffd3c16 ([Enhancxement] set `enable_rewrite_simple_agg_to_hdfs_scan` true by default (#59462))
 
         updateOutputColumns();
     }
@@ -95,8 +105,13 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
 
     public PhysicalScanOperator(OperatorType type, LogicalScanOperator scanOperator) {
         this(type, scanOperator.getTable(), scanOperator.getColRefToColumnMetaMap(), scanOperator.getLimit(),
+<<<<<<< HEAD
                 scanOperator.getPredicate(), scanOperator.getProjection());
         this.scanOptimzeOption = scanOperator.getScanOptimzeOption().copy();
+=======
+                scanOperator.getPredicate(), scanOperator.getProjection(), scanOperator.getTableVersionRange());
+        this.scanOptimizeOption = scanOperator.getScanOptimizeOption().copy();
+>>>>>>> 0beffd3c16 ([Enhancxement] set `enable_rewrite_simple_agg_to_hdfs_scan` true by default (#59462))
     }
 
     public List<ColumnRefOperator> getOutputColumns() {
@@ -115,12 +130,12 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
         return colRefToColumnMetaMap;
     }
 
-    public ScanOptimzeOption getScanOptimzeOption() {
-        return scanOptimzeOption;
+    public ScanOptimizeOption getScanOptimizeOption() {
+        return scanOptimizeOption;
     }
 
-    public void setScanOptimzeOption(ScanOptimzeOption opt) {
-        this.scanOptimzeOption = opt.copy();
+    public void setScanOptimizeOption(ScanOptimizeOption opt) {
+        this.scanOptimizeOption = opt.copy();
     }
 
     public Table getTable() {
@@ -193,7 +208,12 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
             builder.outputColumns = operator.outputColumns;
             builder.colRefToColumnMetaMap = operator.colRefToColumnMetaMap;
             builder.columnAccessPaths = operator.columnAccessPaths;
+<<<<<<< HEAD
             builder.scanOptimzeOption = operator.scanOptimzeOption;
+=======
+            builder.scanOptimizeOption = operator.scanOptimizeOption;
+            builder.tableVersionRange = operator.tableVersionRange;
+>>>>>>> 0beffd3c16 ([Enhancxement] set `enable_rewrite_simple_agg_to_hdfs_scan` true by default (#59462))
             return (B) this;
         }
 
