@@ -29,6 +29,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Streams;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.ListenableFutureTask;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
@@ -145,7 +146,7 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
 
         hmsExternalTableCache = newCacheBuilder(expireAfterWriteSec, NEVER_REFRESH, maxSize).build();
         partitionCache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec, maxSize)
-                .build(asyncReloading(new CacheLoader<HivePartitionName, Partition>() {
+                .build(new CacheLoader<HivePartitionName, Partition>() {
                     @Override
                     public Partition load(@NotNull HivePartitionName key) {
                         return loadPartition(key);
@@ -156,7 +157,9 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
                     public ListenableFuture<Partition> reload(
                             @NotNull HivePartitionName key, @NotNull Partition oldValue) {
                         if (isCachedExternalTable(key.getDatabaseTableName())) {
-                            return Futures.immediateFuture(loadPartition(key));
+                            ListenableFutureTask<Partition> task = ListenableFutureTask.create(() -> loadPartition(key));
+                            partitionExecutor.execute(task);
+                            return task;
                         }
                         return Futures.immediateFuture(oldValue);
                     }
@@ -166,7 +169,7 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
                             @NotNull Iterable<? extends HivePartitionName> partitionKeys) {
                         return loadPartitionsByNames(partitionKeys);
                     }
-                }, partitionExecutor));
+                });
 
         tableStatsCache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec, maxSize)
                 .build(asyncReloading(CacheLoader.from(this::loadTableStatistics), executor));
