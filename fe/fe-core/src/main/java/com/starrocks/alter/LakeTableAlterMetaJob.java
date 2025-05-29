@@ -31,12 +31,6 @@ import java.io.IOException;
 import java.util.Set;
 
 public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
-    public enum MetadataOp {
-        NO_OPERATION, // do nothing
-        ENABLE_PARTITION_AGGREGATE, // update enable_partition_aggregation from false to true
-        DISABLE_PARTITION_AGGREGATE // update enable_partition_aggregation from true to false
-    }
-
     @SerializedName(value = "metaType")
     private TTabletMetaType metaType;
 
@@ -46,8 +40,8 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
     @SerializedName(value = "persistentIndexType")
     private String persistentIndexType;
 
-    @SerializedName(value = "metadataOp")
-    private MetadataOp metadataOp;
+    @SerializedName(value = "aggregateMetadata")
+    private boolean aggregateMetadata;
 
     // for deserialization
     public LakeTableAlterMetaJob() {
@@ -58,18 +52,18 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
                                  long timeoutMs, TTabletMetaType metaType, boolean metaValue,
                                  String persistentIndexType) {
         this(jobId, dbId, tableId, tableName, timeoutMs, metaType, metaValue, persistentIndexType,
-                MetadataOp.NO_OPERATION);
+                false);
     }
 
     public LakeTableAlterMetaJob(long jobId, long dbId, long tableId, String tableName,
                                  long timeoutMs, TTabletMetaType metaType, boolean metaValue,
                                  String persistentIndexType,
-                                 MetadataOp metadataOp) {
+                                 boolean aggregateMetadata) {
         super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
         this.metaType = metaType;
         this.metaValue = metaValue;
         this.persistentIndexType = persistentIndexType;
-        this.metadataOp = metadataOp;
+        this.aggregateMetadata = aggregateMetadata;
     }
 
     @Override
@@ -81,7 +75,7 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
         }
         if (metaType == TTabletMetaType.ENABLE_PARTITION_AGGREGATION) {
             return TabletMetadataUpdateAgentTaskFactory.createUpdatePartitionAggregationTask(nodeId, tablets,
-                        isEnablePartitionAggregation());
+                        aggregateMetadata);
         }
         return null;
     }
@@ -92,13 +86,13 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
     }
 
     @Override
-    protected boolean isEnablePartitionAggregation() {
-        return metadataOp == MetadataOp.ENABLE_PARTITION_AGGREGATE;
+    protected boolean isAggregateMetadata() {
+        return metaType == TTabletMetaType.ENABLE_PARTITION_AGGREGATION && aggregateMetadata;
     }
 
     @Override
-    protected boolean isDisablePartitionAggregation() {
-        return metadataOp == MetadataOp.DISABLE_PARTITION_AGGREGATE;
+    protected boolean isSplitMetadata() {
+        return metaType == TTabletMetaType.ENABLE_PARTITION_AGGREGATION && !aggregateMetadata;
     }
 
     @Override
@@ -113,7 +107,7 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
             table.getTableProperty().buildPersistentIndexType();
         }
         if (metaType == TTabletMetaType.ENABLE_PARTITION_AGGREGATION) {
-            table.setEnablePartitionAggregation(isEnablePartitionAggregation());
+            table.setEnablePartitionAggregation(aggregateMetadata);
         }
     }
 
@@ -123,7 +117,7 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
         this.metaType = other.metaType;
         this.metaValue = other.metaValue;
         this.persistentIndexType = other.persistentIndexType;
-        this.metadataOp = other.metadataOp;
+        this.aggregateMetadata = other.aggregateMetadata;
     }
 
     @Override

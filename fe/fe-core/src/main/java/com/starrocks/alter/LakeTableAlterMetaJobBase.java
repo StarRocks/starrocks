@@ -134,9 +134,9 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
 
     protected abstract void restoreState(LakeTableAlterMetaJobBase job);
 
-    protected abstract boolean isEnablePartitionAggregation();
+    protected abstract boolean isAggregateMetadata();
 
-    protected abstract boolean isDisablePartitionAggregation();
+    protected abstract boolean isSplitMetadata();
 
     @Override
     protected void runWaitingTxnJob() throws AlterCancelException {
@@ -270,20 +270,24 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             txnInfo.commitTime = finishedTimeMs / 1000;
             txnInfo.txnType = TxnTypePB.TXN_NORMAL;
             txnInfo.gtid = watershedGtid;
-            boolean isEnablePartitionAggregation = isEnablePartitionAggregation();
+            // there are two scenario we should use aggregate_publish
+            // 1. this task is change `enable_partition_aggregation`
+            // 2. the table is enable_partition_aggregation and this task is not change `enable_partition_aggregation`
+            //    to false.
+            boolean useAggregatePublish = isAggregateMetadata() || (enablePartitionAggregation && !isSplitMetadata());
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(partitionId);
                 Map<Long, MaterializedIndex> dirtyIndexMap = physicalPartitionIndexMap.row(partitionId);
                 List<Tablet> tablets = new ArrayList<>();
                 for (MaterializedIndex index : dirtyIndexMap.values()) {
-                    if (!enablePartitionAggregation && !isEnablePartitionAggregation) {
+                    if (!useAggregatePublish) {
                         Utils.publishVersion(index.getTablets(), txnInfo, commitVersion - 1, commitVersion,
                                 warehouseId, false);
                     } else {
                         tablets.addAll(index.getTablets());
                     }
                 }
-                if (enablePartitionAggregation || isEnablePartitionAggregation) {
+                if (useAggregatePublish) {
                     Utils.aggregatePublishVersion(tablets, Lists.newArrayList(txnInfo), commitVersion - 1, commitVersion, 
                                 null, null, warehouseId, null);
                 }
@@ -423,7 +427,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             Preconditions.checkState(partition.getVisibleVersion() == commitVersion - 1,
                     "partitionVisitionVersion=" + partition.getVisibleVersion() + " commitVersion=" + commitVersion);
             partition.updateVisibleVersion(commitVersion, finishedTimeMs);
-            if (isEnablePartitionAggregation() || isDisablePartitionAggregation()) {
+            if (isAggregateMetadata() || isSplitMetadata()) {
                 partition.setMetadataSwitchVersion(commitVersion);
             }
             LOG.info("partitionVisibleVersion=" + partition.getVisibleVersion() + " commitVersion=" + commitVersion);
