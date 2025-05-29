@@ -68,6 +68,9 @@ public class PartitionUpdate {
     }
 
     public long getFileCount() {
+        if (fileNames == null) {
+            return 0;
+        }
         return fileNames.size();
     }
 

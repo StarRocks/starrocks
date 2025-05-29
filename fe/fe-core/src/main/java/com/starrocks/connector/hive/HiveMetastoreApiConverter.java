@@ -630,7 +630,7 @@ public class HiveMetastoreApiConverter {
         }
         long numFiles = getLongParam(NUM_FILES, params);
         if (numFiles < 0) {
-            numFiles = 1;
+            numFiles = 0;
         }
         return new HiveCommonStats(numRows, totalSize, numFiles);
     }
