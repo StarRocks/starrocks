@@ -180,6 +180,15 @@ public class Util {
         return !Strings.isNullOrEmpty(currentUser) && currentUser.equalsIgnoreCase(AuthenticationMgr.ROOT_USER);
     }
 
+    public static boolean isRootUser() {
+        if (ConnectContext.get() != null) {
+            String qualifiedUser = ConnectContext.get().getQualifiedUser();
+            String identityUser = ConnectContext.get().getCurrentUserIdentity().getUser();
+            return isRootUser(qualifiedUser) || isRootUser(identityUser);
+        }
+        return false;
+    }
+
     public static CommandResult executeCommand(String cmd, String[] envp) throws TimeoutException {
         return executeCommand(cmd, envp, DEFAULT_EXEC_CMD_TIMEOUT_MS);
     }

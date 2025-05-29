@@ -178,7 +178,7 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
         for (String catalogName : catalogNames) {
             Catalog paimonCatalog = paimonCatalogs.get(catalogName);
             if (paimonCatalog == null) {
-                LOG.error("Failed to get paimonCatalog by catalog {}.", catalogName);
+                LOG.error("Failed to get paimon catalog by name: {}.", catalogName);
                 continue;
             }
             LOG.info("Start to refresh paimon catalog {}", catalogName);

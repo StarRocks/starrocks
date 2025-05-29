@@ -16,7 +16,6 @@ package com.starrocks.connector.paimon;
 
 import com.google.common.base.Strings;
 import com.starrocks.common.util.DlfUtil;
-import com.starrocks.common.util.Util;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
@@ -43,6 +42,7 @@ import org.apache.paimon.options.Options;
 
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import static com.aliyun.datalake.core.constant.DataLakeConfig.CATALOG_ID;
@@ -58,7 +58,7 @@ public class PaimonConnector implements Connector {
     private static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     private static final String DLF_CATALOG_ID = "dlf.catalog.id";
     private final HdfsEnvironment hdfsEnvironment;
-    private Catalog paimonNativeCatalog;
+    private final Map<String, Catalog> nativePaimonCatalogs = new ConcurrentHashMap<>();
     private final String catalogName;
     private final String catalogType;
     private final Options paimonOptions;
@@ -106,17 +106,11 @@ public class PaimonConnector implements Connector {
                     throw new StarRocksConnectorException("The property %s must be set.", CATALOG_ID);
                 }
             }
-            properties.keySet().stream()
-                    .filter(k -> k.startsWith("dlf.") && !k.equals(DLF_AUTH_USER_NAME))
-                    .forEach(k -> paimonOptions.setString(k, properties.get(k)));
         } else if (catalogType.equalsIgnoreCase("rest")) {
             // DLF 2.5
             if ("dlf".equalsIgnoreCase(properties.get("token.provider"))) {
                 this.paimonOptions.set(URI.key(), properties.get("uri"));
                 this.paimonOptions.set("token.provider", "dlf");
-                properties.keySet().stream()
-                        .filter(k -> k.startsWith("dlf."))
-                        .forEach(k -> paimonOptions.setString(k, properties.get(k)));
             }
         }
         if (Strings.isNullOrEmpty(warehousePath)
@@ -153,6 +147,9 @@ public class PaimonConnector implements Connector {
             String key = k.substring(keyPrefix.length());
             this.paimonOptions.setString(key, properties.get(k));
         }
+        properties.keySet().stream()
+                .filter(k -> k.startsWith("dlf.") && !k.equals(DLF_AUTH_USER_NAME))
+                .forEach(k -> paimonOptions.setString(k, properties.get(k)));
     }
 
     public void initFsOption(CloudConfiguration cloudConfiguration) {
@@ -194,23 +191,20 @@ public class PaimonConnector implements Connector {
         return catalogType;
     }
 
-    public void setRamUser(String ramUser) {
-        this.ramUser = ramUser;
-        this.paimonOptions.set(DLF_AUTH_USER_NAME, ramUser);
-    }
-
     public Catalog getPaimonNativeCatalog() {
         try {
+            String catalogKey = "";
+            String ramUser = "";
             // DLF 2.5 or DLF 2.0
             if ((catalogType.equalsIgnoreCase("rest") && this.paimonOptions.get("token.provider").equalsIgnoreCase("dlf"))
                     || catalogType.equalsIgnoreCase("dlf-paimon")) {
-                String ramUser = DlfUtil.getRamUser();
+                ramUser = DlfUtil.getRamUser();
                 boolean noAK = Strings.isNullOrEmpty(this.paimonOptions.get("dlf.access-key-id"))
                         || Strings.isNullOrEmpty(this.paimonOptions.get("dlf.access-key-secret"));
                 // Only search for meta token path when users do not config ak/sk themselves
                 if ("dlf".equalsIgnoreCase(this.paimonOptions.get("token.provider")) && noAK) {
                     // For DLF 2.5, we should get the exact meta token for user
-                    paimonOptions.set("dlf.token-path", DlfUtil.getMetaToken(ramUser));
+                    this.paimonOptions.set("dlf.token-path", DlfUtil.getMetaToken(ramUser));
                 }
                 // Do not need ram user check when using ak/sk
                 if (noAK) {
@@ -220,26 +214,30 @@ public class PaimonConnector implements Connector {
                         throw new StarRocksConnectorException("Failed to find a valid RAM user from {} and {}.",
                                 qualifiedUser, user);
                     } else {
-                        // ignore root and cache native catalog
-                        if (!Util.isRootUser(ramUser) && !this.ramUser.isEmpty() && this.ramUser.equals(ramUser) &&
-                                paimonOptions.get(DLF_AUTH_USER_NAME).equals(ramUser) && paimonNativeCatalog != null) {
-                            return paimonNativeCatalog;
+                        if (this.nativePaimonCatalogs.get(ramUser) != null) {
+                            return this.nativePaimonCatalogs.get(ramUser);
                         } else {
-                            setRamUser(ramUser);
+                            this.paimonOptions.set(DLF_AUTH_USER_NAME, ramUser);
                         }
                     }
                 }
-            } else if (paimonNativeCatalog != null) {
-                return paimonNativeCatalog;
+                catalogKey = this.catalogName + "-" + ramUser;
+            } else {
+                catalogKey = "base";
+            }
+            if (this.nativePaimonCatalogs.get(catalogKey) != null) {
+                return this.nativePaimonCatalogs.get(catalogKey);
             }
             Configuration configuration = new Configuration();
             hdfsEnvironment.getCloudConfiguration().applyToConfiguration(configuration);
-            this.paimonNativeCatalog = CatalogFactory.createCatalog(CatalogContext.create(
+            Catalog paimonNativeCatalog = CatalogFactory.createCatalog(CatalogContext.create(
                     getPaimonOptions(), configuration, new HadoopFileIOLoader(), new HadoopFileIOLoader()));
-            if (this.paimonNativeCatalog instanceof CachingCatalog) {
+            this.nativePaimonCatalogs.put(catalogKey, paimonNativeCatalog);
+            if (paimonNativeCatalog instanceof CachingCatalog) {
                 GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
-                        .registerPaimonCatalog(catalogName, this.paimonNativeCatalog);
+                        .registerPaimonCatalog(catalogKey, this.nativePaimonCatalogs.get(catalogKey));
             }
+            return paimonNativeCatalog;
         } catch (Exception e) {
             if (e instanceof NullPointerException ||
                     (e.getMessage() != null && e.getMessage().contains(DLF_AUTH_USER_NAME))) {
@@ -247,7 +245,6 @@ public class PaimonConnector implements Connector {
             }
             throw new StarRocksConnectorException("Error creating a paimon catalog.", e);
         }
-        return paimonNativeCatalog;
     }
 
     @Override

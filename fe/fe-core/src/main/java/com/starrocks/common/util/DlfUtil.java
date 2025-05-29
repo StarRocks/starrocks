@@ -22,7 +22,6 @@ import com.aliyun.datalake.common.DlfMetaToken;
 import com.aliyun.datalake.common.impl.Base64Util;
 import com.aliyun.datalake.external.com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Strings;
-import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -63,9 +62,6 @@ public class DlfUtil {
     }
 
     public static String getRamUser(String user) {
-        if (Util.isRootUser(user)) {
-            return AuthenticationMgr.ROOT_USER;
-        }
         if (!Strings.isNullOrEmpty(user)) {
             return GlobalStateMgr.getCurrentState().getAuthenticationMgr().getRamUser(user);
         }
@@ -94,13 +90,8 @@ public class DlfUtil {
     }
 
     public static String getMetaToken(String ramUser) {
-        String prefix = "/secret/DLF/meta/";
-        if (Util.isRootUser(ramUser)) {
-            return prefix + AuthenticationMgr.ROOT_USER;
-        } else {
-            // fixed currently, maybe can get from config later
-            return prefix + Base64Util.encodeBase64WithoutPadding(ramUser);
-        }
+        // fixed currently, maybe can get from config later
+        return "/secret/DLF/meta/" + Base64Util.encodeBase64WithoutPadding(ramUser);
     }
 
     public static Map<String, String> setDataToken(File dataTokenFile) throws IOException {

@@ -728,7 +728,6 @@ public class PaimonMetadata implements ConnectorMetadata {
 
         try {
             String dataTokenName = getLocalDataTokenFile(ramUser, dbName, tblName);
-            LOG.info("File name is " + dataTokenName);
             String dataTokenPath = paimonNativeCatalog.options().containsKey(DATA_CREDENTIAL_PROVIDER_URL)
                     ? paimonNativeCatalog.options().get(DATA_CREDENTIAL_PROVIDER_URL) : conf.get(DATA_CREDENTIAL_PROVIDER_URL);
             if (dataTokenPath.startsWith("secrets")) {

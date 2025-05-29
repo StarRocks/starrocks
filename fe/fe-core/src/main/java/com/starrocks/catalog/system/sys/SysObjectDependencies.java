@@ -75,6 +75,10 @@ public class SysObjectDependencies {
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(auth.getUser(), auth.getUser_ip());
         }
+        ConnectContext ctx = new ConnectContext(null);
+        ctx.setQualifiedUser(currentUser.getUser());
+        ctx.setCurrentUserIdentity(currentUser);
+        ctx.setThreadLocalInfo();
 
         // list dependencies of mv
         Locker locker = new Locker();
