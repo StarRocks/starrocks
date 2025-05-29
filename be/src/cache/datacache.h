@@ -50,6 +50,7 @@ public:
     ObjectCache* external_table_page_cache() const { return _starcache_based_object_cache.get(); }
     StoragePageCache* page_cache() const { return _page_cache.get(); }
     std::shared_ptr<StoragePageCache> page_cache_ptr() const { return _page_cache; }
+    bool page_cache_available() const;
 
     StatusOr<int64_t> get_storage_page_cache_limit();
     int64_t check_storage_page_cache_limit(int64_t storage_cache_limit);

@@ -40,10 +40,10 @@
 #include <memory>
 #include <string>
 
+#include "cache/object_cache/page_cache.h"
 #include "common/logging.h"
 #include "fs/fs_memory.h"
 #include "runtime/mem_tracker.h"
-#include "storage/page_cache.h"
 #include "testutil/assert.h"
 
 namespace starrocks {

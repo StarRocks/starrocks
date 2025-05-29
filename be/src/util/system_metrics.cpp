@@ -46,12 +46,12 @@
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
 #endif
+#include "cache/object_cache/page_cache.h"
 #include "gutil/strings/split.h" // for string split
 #include "gutil/strtoint.h"      //  for atoi64
 #include "io/io_profiler.h"
 #include "jemalloc/jemalloc.h"
 #include "runtime/runtime_filter_worker.h"
-#include "storage/page_cache.h"
 #include "util/metrics.h"
 
 namespace starrocks {

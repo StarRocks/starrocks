@@ -18,12 +18,12 @@
 #include "cache/disk_space_monitor.h"
 #include "cache/mem_space_monitor.h"
 #include "cache/object_cache/lrucache_module.h"
+#include "cache/object_cache/page_cache.h"
 #include "cache/peer_cache_wrapper.h"
 #include "common/status.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/strip.h"
 #include "storage/options.h"
-#include "storage/page_cache.h"
 #include "util/parse_util.h"
 
 #ifdef WITH_STARCACHE
@@ -273,6 +273,10 @@ void DataCache::try_release_resource_before_core_dump() {
 
 StatusOr<int64_t> DataCache::get_storage_page_cache_limit() {
     return ParseUtil::parse_mem_spec(config::storage_page_cache_limit.value(), _global_env->process_mem_limit());
+}
+
+bool DataCache::page_cache_available() const {
+    return !config::disable_storage_page_cache && _page_cache != nullptr && _page_cache->get_capacity() > 0;
 }
 
 int64_t DataCache::check_storage_page_cache_limit(int64_t storage_cache_limit) {
