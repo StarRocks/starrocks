@@ -1721,7 +1721,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableRewritePartitionColumnMinMax = true;
 
     @VarAttr(name = ENABLE_REWRITE_SIMPLE_AGG_TO_HDFS_SCAN)
-    private boolean enableRewriteSimpleAggToHdfsScan = false;
+    private boolean enableRewriteSimpleAggToHdfsScan = true;
 
     @VarAttr(name = ENABLE_EVALUATE_SCHEMA_SCAN_RULE)
     private boolean enableEvaluateSchemaScanRule = true;
