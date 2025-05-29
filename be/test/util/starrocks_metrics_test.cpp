@@ -37,8 +37,8 @@
 #include <gtest/gtest.h>
 
 #include "cache/datacache.h"
+#include "cache/object_cache/page_cache.h"
 #include "common/config.h"
-#include "storage/page_cache.h"
 #include "testutil/assert.h"
 #include "util/logging.h"
 

@@ -261,7 +261,6 @@ set(EXEC_FILES
         ./storage/kv_store_test.cpp
         ./storage/options_test.cpp
         ./storage/protobuf_file_test.cpp
-        ./storage/page_cache_test.cpp
         ./storage/persistent_index_test.cpp
         ./storage/persistent_index_load_executor_test.cpp
         ./storage/persistent_index_snapshot_load_test.cpp

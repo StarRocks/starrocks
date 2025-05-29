@@ -27,13 +27,13 @@
 #include <mutex>
 
 #include "cache/datacache.h"
+#include "cache/object_cache/page_cache.h"
 #include "common/config.h"
 #include "gutil/endian.h"
 #include "gutil/stringprintf.h"
 #include "gutil/sysinfo.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "storage/page_cache.h"
 #include "util/logging.h"
 #include "util/stack_util.h"
 

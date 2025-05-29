@@ -14,10 +14,10 @@
 
 #include "cache/mem_space_monitor.h"
 
+#include "cache/object_cache/page_cache.h"
 #include "common/config.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-#include "storage/page_cache.h"
 #include "util/await.h"
 #include "util/gc_helper.h"
 #include "util/thread.h"
