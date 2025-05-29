@@ -1420,7 +1420,7 @@ public class StmtExecutor {
      * The query result batch will piggyback query statistics in it
      */
     private void processQueryStatisticsFromResult(RowBatch batch, ExecPlan execPlan, boolean isOutfileQuery) {
-        if (batch != null) {
+        if (batch != null && parsedStmt.getOrigStmt() != null && parsedStmt.getOrigStmt().getOrigStmt() != null) {
             statisticsForAuditLog = batch.getQueryStatistics();
             if (!isOutfileQuery) {
                 context.getState().setEof();

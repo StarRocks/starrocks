@@ -25,6 +25,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.StatementPlanner;
@@ -39,6 +40,7 @@ import com.starrocks.thrift.TResultSinkType;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Optional;
 
 public class UserVariable extends SetListItem {
     private final String variable;
@@ -93,6 +95,12 @@ public class UserVariable extends SetListItem {
 
     public void deriveUserVariableExpressionResult(ConnectContext ctx) {
         QueryStatement queryStatement = ((Subquery) unevaluatedExpression).getQueryStatement();
+        try {
+            Optional.ofNullable(queryStatement.toSql())
+                    .ifPresent(originSql -> queryStatement.setOrigStmt(new OriginStatement(originSql, 0)));
+        } catch (Throwable ignored) {
+        }
+
         ExecPlan execPlan = StatementPlanner.plan(queryStatement,
                 ConnectContext.get(), TResultSinkType.MYSQL_PROTOCAL);
         StmtExecutor executor = StmtExecutor.newInternalExecutor(ctx, queryStatement);

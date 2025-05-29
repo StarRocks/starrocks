@@ -1,0 +1,100 @@
+-- name: test_set_user_variable
+create table dup_tbl(
+col_int int,
+col_integer integer,
+col_tinyint tinyint,
+col_float float,
+col_double double,
+col_decimal decimal,
+col_date date,
+col_timestamp datetime,
+col_varchar varchar(100),
+col_char char(100),
+col_boolean boolean)
+DUPLICATE KEY(`col_int`)
+DISTRIBUTED BY HASH(`col_int`) BUCKETS 1
+PROPERTIES ("replication_num" = "3");
+-- result:
+-- !result
+insert into dup_tbl select 1,0,1,1.001,10.1,1110.1,'2001-01-01','2021-10-30 12:10:23','hello world','hi hello',true;
+-- result:
+-- !result
+insert into dup_tbl select 1,1,1,1.001,10.1,1110.1,'2001-01-02','2021-10-30 12:10:23','hello world','hi hello',true;
+-- result:
+-- !result
+insert into dup_tbl select 1,2,1,1.001,10.1,1110.1,'2001-01-03','2021-10-30 12:10:23','hello world','hi hello',true;
+-- result:
+-- !result
+insert into dup_tbl select 1,3,1,1.001,10.1,1110.1,'2001-01-04','2021-10-30 12:10:23','hello world','hi hello',true;
+-- result:
+-- !result
+insert into dup_tbl select 1,4,1,1.001,10.1,1110.1,'2001-01-05','2021-10-30 12:10:23','hello world','hi hello',true;
+-- result:
+-- !result
+insert into dup_tbl select 1,5,1,1.001,10.1,1110.1,'2001-01-06','2021-10-30 12:10:23','hello world','hi hello',true;
+-- result:
+-- !result
+insert into dup_tbl select 1,6,1,1.001,10.1,1110.1,'2001-01-07','2021-10-30 12:10:23','hello world','hi hello',true;
+-- result:
+-- !result
+insert into dup_tbl select 1,7,1,1.001,10.1,1110.1,'2001-01-08','2021-10-30 12:10:23','hello world','hi hello',true;
+-- result:
+-- !result
+insert into dup_tbl select 1,8,1,1.001,10.1,1110.1,'2001-01-09','2021-10-30 12:10:23','hello world','hi hello',true;
+-- result:
+-- !result
+insert into dup_tbl select 1,9,1,1.001,10.1,1110.1,'2001-01-10','2021-10-30 12:10:23','hello world','hi hello',true;
+-- result:
+-- !result
+insert into dup_tbl select 1,10,1,1.001,10.1,1110.1,'2001-01-11','2021-10-30 12:10:23','hello world','hi hello',true;
+-- result:
+-- !result
+insert into dup_tbl select 1,11,1,1.001,10.1,1110.1,'2001-01-12','2021-10-30 12:10:23','hello world','hi hello',true;
+-- result:
+-- !result
+insert into dup_tbl select 1,12,1,1.001,10.1,1110.1,'2001-01-13','2021-10-30 12:10:23','hello world','hi hello',true;
+-- result:
+-- !result
+insert into dup_tbl select 1,13,1,1.001,10.1,1110.1,'2001-01-14','2021-10-30 12:10:23','hello world','hi hello',true;
+-- result:
+-- !result
+insert into dup_tbl select * from dup_tbl;
+-- result:
+-- !result
+insert into dup_tbl select * from dup_tbl;
+-- result:
+-- !result
+insert into dup_tbl select * from dup_tbl;
+-- result:
+-- !result
+insert into dup_tbl select * from dup_tbl;
+-- result:
+-- !result
+insert into dup_tbl select * from dup_tbl;
+-- result:
+-- !result
+insert into dup_tbl select * from dup_tbl;
+-- result:
+-- !result
+insert into dup_tbl select * from dup_tbl;
+-- result:
+-- !result
+insert into dup_tbl select * from dup_tbl;
+-- result:
+-- !result
+insert into dup_tbl select * from dup_tbl;
+-- result:
+-- !result
+insert into dup_tbl select * from dup_tbl;
+-- result:
+-- !result
+set enable_plan_analyzer = true;
+-- result:
+-- !result
+select count(*) from dup_tbl;
+-- result:
+14336
+-- !result
+set @test_variables=(select max(b.col_date) from dup_tbl a cross join dup_tbl b on a.col_date = b.col_date where b.col_date >= '2001-01-01' and b.col_date < '2001-02-01');
+-- result:
+-- !result
