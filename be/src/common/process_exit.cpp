@@ -16,6 +16,8 @@
 
 namespace starrocks {
 
+// TODO: use bitmask to merge all the atomic variables into one atomic variable.
+
 // NOTE: when BE receiving SIGTERM, this flag will be set to true. Then BE will reject
 // all ExecPlanFragments call by returning a fail status(brpc::EINTERNAL).
 // After all existing fragments executed, BE will exit.
@@ -28,6 +30,11 @@ std::atomic<bool> k_starrocks_exit;
 // k_starrocks_exit not only require waiting for all existing fragment to complete,
 // but also waiting for all threads to exit gracefully.
 std::atomic<bool> k_starrocks_quick_exit;
+
+// NOTE: when backend is going to shutdown, if FE's heartbeat request received, the status code
+// in the response will be set to SHUTDOWN, then FE leader will know the node is in shutdown immediately.
+// This flag records whether there is a such response with status SHUTDOWN sent back to FE.
+std::atomic<bool> k_starrocks_fe_heartbeat_aware_shutdown = false;
 
 bool set_process_exit() {
     bool expected = false;
@@ -45,6 +52,18 @@ bool process_exit_in_progress() {
 
 bool process_quick_exit_in_progress() {
     return k_starrocks_quick_exit.load(std::memory_order_relaxed);
+}
+
+void set_frontend_aware_of_exit() {
+    k_starrocks_fe_heartbeat_aware_shutdown.store(true);
+}
+
+void clear_frontend_aware_of_exit() {
+    k_starrocks_fe_heartbeat_aware_shutdown.store(false);
+}
+
+bool is_frontend_aware_of_exit() {
+    return k_starrocks_fe_heartbeat_aware_shutdown.load(std::memory_order_relaxed);
 }
 
 } // namespace starrocks
