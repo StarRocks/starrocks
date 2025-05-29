@@ -2104,9 +2104,11 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, con
     EditVersion version;
     RETURN_IF_ERROR(_commit_compaction(pinfo, *output_rowset, &version));
     {
-        // already committed, so we can ignore timeout error here
         std::unique_lock<std::mutex> ul(_lock);
-        RETURN_IF_ERROR(_wait_for_version(version, 120000, ul, true));
+        auto st = _wait_for_version(version, 120000, ul, true);
+        // apply timeout doesn't mean compaction failed, we shouldn't return error,
+        // apply task will success later.
+        RETURN_IF(!st.ok() && !st.is_time_out(), st);
     }
     // Release metadata memory after rowsets have been compacted.
     Rowset::close_rowsets(input_rowsets);
