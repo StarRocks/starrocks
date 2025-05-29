@@ -129,7 +129,7 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
         }
 
         if (scanOperator.getOutputColumns().equals(new ArrayList<>(scanColumns))) {
-            scanOperator.getScanOptimzeOption().setCanUseAnyColumn(canUseAnyColumn);
+            scanOperator.getScanOptimizeOption().setCanUseAnyColumn(canUseAnyColumn);
             return Collections.emptyList();
         } else {
             try {
@@ -144,7 +144,7 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
                                 scanOperator.getColumnMetaToColRefMap(),
                                 scanOperator.getLimit(),
                                 scanOperator.getPredicate());
-                newScanOperator.getScanOptimzeOption().setCanUseAnyColumn(canUseAnyColumn);
+                newScanOperator.getScanOptimizeOption().setCanUseAnyColumn(canUseAnyColumn);
                 newScanOperator.setScanOperatorPredicates(scanOperator.getScanOperatorPredicates());
                 newScanOperator.setTableVersionRange(scanOperator.getTableVersionRange());
 

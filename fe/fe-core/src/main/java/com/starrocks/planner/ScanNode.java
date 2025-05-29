@@ -42,7 +42,7 @@ import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.common.UserException;
 import com.starrocks.datacache.DataCacheOptions;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.optimizer.ScanOptimzeOption;
+import com.starrocks.sql.optimizer.ScanOptimizeOption;
 import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TScanRangeLocations;
 import org.jetbrains.annotations.TestOnly;
@@ -62,7 +62,7 @@ public abstract class ScanNode extends PlanNode {
     protected List<ColumnAccessPath> columnAccessPaths;
     protected DataCacheOptions dataCacheOptions = null;
     protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
-    protected ScanOptimzeOption scanOptimzeOption;
+    protected ScanOptimizeOption scanOptimizeOption;
 
     public ScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc.getId().asList(), planNodeName);
@@ -90,12 +90,12 @@ public abstract class ScanNode extends PlanNode {
         this.warehouseId = warehouseId;
     }
 
-    public void setScanOptimzeOption(ScanOptimzeOption opt) {
-        this.scanOptimzeOption = opt.copy();
+    public void setScanOptimizeOption(ScanOptimizeOption opt) {
+        this.scanOptimizeOption = opt.copy();
     }
 
-    public ScanOptimzeOption getScanOptimzeOption() {
-        return scanOptimzeOption;
+    public ScanOptimizeOption getScanOptimizeOption() {
+        return scanOptimizeOption;
     }
 
     public String getTableName() {
