@@ -14,7 +14,6 @@
 package com.starrocks.catalog.system.information;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Column;
@@ -27,7 +26,6 @@ import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
@@ -50,25 +48,17 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.util.Strings;
 import org.apache.thrift.meta_data.FieldValueMetaData;
-import org.apache.thrift.protocol.TType;
 
-import java.time.ZoneId;
+import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 public class TaskRunsSystemTable extends SystemTable {
     private static final Logger LOG = LogManager.getLogger(SystemTable.class);
 
     private static final SystemTable TABLE = new TaskRunsSystemTable();
-
-    private static final ImmutableMap<Byte, Type> THRIFT_TO_SCALAR_TYPE_MAPPING =
-            ImmutableMap.<Byte, Type>builder()
-                    .put(TType.I16, Type.SMALLINT)
-                    .put(TType.I32, Type.INT)
-                    .put(TType.I64, Type.BIGINT)
-                    .put(TType.STRING, Type.STRING)
-                    .put(TType.BOOL, Type.BOOLEAN)
-                    .build();
 
     public static final String NAME = "task_runs";
 
@@ -98,9 +88,25 @@ public class TaskRunsSystemTable extends SystemTable {
                         .build(), TSchemaTableType.SCH_TASK_RUNS);
     }
 
+    private static final Set<String> SUPPORTED_EQUAL_COLUMNS =
+            Collections.unmodifiableSet(new TreeSet<>(String.CASE_INSENSITIVE_ORDER) {
+                {
+                    add("QUERY_ID");
+                    add("TASK_NAME");
+                }
+            });
+
     @Override
-    public boolean supportFeEvaluation() {
-        return Config.enable_task_run_fe_evaluation;
+    public boolean supportFeEvaluation(ScalarOperator predicate) {
+        if (!Config.enable_task_run_fe_evaluation) {
+            return false;
+        }
+        final List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
+        if (!isOnlyEqualConstantOps(conjuncts)) {
+            return false;
+        }
+        // only support QUERY_ID and TASK_NAME
+        return isSupportedEqualPredicateColumn(conjuncts, SUPPORTED_EQUAL_COLUMNS);
     }
 
     @Override
@@ -138,7 +144,7 @@ public class TaskRunsSystemTable extends SystemTable {
 
     private static List<ScalarOperator> infoToScalar(TTaskRunInfo info) {
         List<ScalarOperator> result = Lists.newArrayList();
-        for (Column column : TABLE.getColumns()) {
+        for (Column column : TABLE.getBaseSchema()) {
             String name = column.getName().toLowerCase();
             TTaskRunInfo._Fields field = TTaskRunInfo._Fields.findByName(name);
             FieldValueMetaData meta = TTaskRunInfo.metaDataMap.get(field).valueMetaData;
@@ -149,34 +155,6 @@ public class TaskRunsSystemTable extends SystemTable {
             result.add(scalar);
         }
         return result;
-    }
-
-    /**
-     * The thrift type may differ from schema-type, for example user a LONG timestamp in thrift, but return a
-     * DATETIME in the schema table.
-     */
-    private static ConstantOperator mayCast(ConstantOperator value, Type schemaType) {
-        if (value.getType().equals(schemaType)) {
-            return value;
-        }
-        if (value.getType().isStringType() && schemaType.isStringType()) {
-            return value;
-        }
-        // From timestamp to DATETIME
-        if (value.getType().isBigint() && schemaType.isDatetime()) {
-            return ConstantOperator.createDatetime(DateUtils.fromEpochMillis(value.getBigint() * 1000, ZoneId.systemDefault()));
-        }
-        return value.castTo(schemaType)
-                .orElseThrow(() -> new NotImplementedException(String.format("unsupported type cast from %s to %s",
-                        value.getType(), schemaType)));
-    }
-
-    private static Type thriftToScalarType(byte type) {
-        Type valueType = THRIFT_TO_SCALAR_TYPE_MAPPING.get(type);
-        if (valueType == null) {
-            throw new NotImplementedException("not supported type: " + type);
-        }
-        return valueType;
     }
 
     public static TGetTaskRunInfoResult query(TGetTasksParams params) {

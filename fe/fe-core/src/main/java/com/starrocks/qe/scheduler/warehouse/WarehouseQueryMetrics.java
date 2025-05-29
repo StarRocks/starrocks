@@ -17,14 +17,18 @@
 
 package com.starrocks.qe.scheduler.warehouse;
 
+import com.google.common.collect.Lists;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.qe.scheduler.slot.QueryQueueOptions;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.thrift.TGetWarehouseQueriesResponseItem;
 import com.starrocks.thrift.TUniqueId;
 
+import java.util.List;
 import java.util.Optional;
 
 public class WarehouseQueryMetrics {
@@ -86,6 +90,31 @@ public class WarehouseQueryMetrics {
             item.setExtra_message(GsonUtils.GSON.toJson(extra));
         }
         return item;
+    }
+
+    public List<ScalarOperator> toConstantOperators() {
+        List<ScalarOperator> result = Lists.newArrayList();
+        result.add(ConstantOperator.createVarchar(String.valueOf(warehouseId)));
+        result.add(ConstantOperator.createVarchar(warehouseName));
+        result.add(ConstantOperator.createVarchar(DebugUtil.printId(queryId)));
+        result.add(ConstantOperator.createVarchar(state.name()));
+        result.add(ConstantOperator.createVarchar(String.valueOf(estCostsSlots)));
+        result.add(ConstantOperator.createVarchar(String.valueOf(allocateSlots)));
+        result.add(ConstantOperator.createDouble(queuedWaitSeconds));
+        result.add(ConstantOperator.createVarchar(query));
+        if (extraMessage.isPresent()) {
+            LogicalSlot.ExtraMessage extra = extraMessage.get();
+            result.add(ConstantOperator.createVarchar(TimeUtils.longToTimeString(extra.getQueryStartTime())));
+            result.add(ConstantOperator.createVarchar(TimeUtils.longToTimeString(extra.getQueryEndTime())));
+            result.add(ConstantOperator.createVarchar(String.valueOf(extra.getQueryDuration())));
+            result.add(ConstantOperator.createVarchar(GsonUtils.GSON.toJson(extra)));
+        } else {
+            result.add(ConstantOperator.createVarchar(""));
+            result.add(ConstantOperator.createVarchar(""));
+            result.add(ConstantOperator.createVarchar(""));
+            result.add(ConstantOperator.createVarchar(""));
+        }
+        return result;
     }
 }
 

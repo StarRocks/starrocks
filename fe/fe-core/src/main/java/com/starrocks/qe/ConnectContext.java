@@ -1175,16 +1175,19 @@ public class ConnectContext {
         } else {
             long timeoutSecond = getExecTimeout();
             if (delta > timeoutSecond * 1000L) {
-                LOG.warn("kill timeout {}, remote: {}, execute timeout: {}, query id: {}, sql: {}",
+                final long pendingTime = getPendingTimeSecond();
+                final long execTimeout = getExecTimeoutWithoutPendingTime();
+                LOG.warn("kill timeout {}, remote: {}, execute timeout: {}, exec timeout: {}, pending time:{}, " +
+                                "query id: {}, sql: {}",
                         getExecType().toLowerCase(), getMysqlChannel().getRemoteHostPortString(), timeoutSecond,
-                        queryId, SqlUtils.sqlPrefix(sql));
+                        execTimeout, pendingTime, queryId, SqlUtils.sqlPrefix(sql));
 
                 // Only kill
                 killFlag = true;
 
-                String suggestedMsg = String.format("please increase the '%s' session variable",
-                        isExecLoadType() ? SessionVariable.INSERT_TIMEOUT : SessionVariable.QUERY_TIMEOUT);
-                errMsg = ErrorCode.ERR_TIMEOUT.formatErrorMsg(getExecType(), timeoutSecond, suggestedMsg);
+                String suggestedMsg = String.format("please increase the '%s' session variable, pending time:%s",
+                        isExecLoadType() ? SessionVariable.INSERT_TIMEOUT : SessionVariable.QUERY_TIMEOUT, pendingTime);
+                errMsg = ErrorCode.ERR_TIMEOUT.formatErrorMsg(getExecType(), execTimeout, suggestedMsg);
             }
         }
         if (killFlag) {
