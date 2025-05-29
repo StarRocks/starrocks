@@ -1027,7 +1027,7 @@ Status TabletManager::report_all_tablets_info(std::map<TTabletId, TTablet>* tabl
             TTablet t_tablet;
             TTabletInfo tablet_info;
             tablet_ptr->build_tablet_report_info(&tablet_info);
- 
+            
             size_t current_rowset_num = tablet_ptr->version_count();
             if (current_rowset_num > max_tablet_rowset_num) {
                 max_tablet_rowset_num = current_rowset_num;
