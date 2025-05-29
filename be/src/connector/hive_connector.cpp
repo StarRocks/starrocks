@@ -178,7 +178,7 @@ Status HiveDataSource::open(RuntimeState* state) {
     if (state->query_options().__isset.enable_file_pagecache) {
         _use_file_pagecache = state->query_options().enable_file_pagecache;
     }
-    _use_file_pagecache &= BlockCache::instance()->mem_cache_available();
+    _use_file_pagecache &= !config::disable_storage_page_cache;
 #endif
 
     if (state->query_options().__isset.enable_dynamic_prune_scan_range) {
