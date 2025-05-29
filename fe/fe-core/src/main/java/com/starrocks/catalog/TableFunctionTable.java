@@ -19,7 +19,6 @@ import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.Delimiter;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.CsvFormat;
@@ -29,7 +28,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.ParseUtil;
-import com.starrocks.fs.HdfsUtil;
+import com.starrocks.fs.FileSystem;
 import com.starrocks.load.Load;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PSlotDescriptor;
@@ -323,7 +322,8 @@ public class TableFunctionTable extends Table {
         }
 
         List<FileStatus> files = Lists.newArrayList();
-        for (FileStatus fStatus : HdfsUtil.listFileMeta(uri.normalize().toString(), new BrokerDesc(properties), false)) {
+        String normalizedPath = uri.normalize().toString();
+        for (FileStatus fStatus : FileSystem.getFileSystem(normalizedPath, properties).globList(normalizedPath, false)) {
             files.add(fStatus);
             if (listRecursively && fStatus.isDirectory()) {
                 files.addAll(listFilesAndDirs(fStatus.getPath().toString() + "/*", true, properties));
@@ -541,7 +541,15 @@ public class TableFunctionTable extends Table {
             }
             List<String> pieces = Splitter.on(",").trimResults().omitEmptyStrings().splitToList(path);
             for (String piece : ListUtils.emptyIfNull(pieces)) {
-                HdfsUtil.parseFile(piece, new BrokerDesc(properties), fileStatuses);
+                List<FileStatus> fileStatusList = FileSystem.getFileSystem(piece, properties).globList(piece, true);
+                for (FileStatus fileStatus : fileStatusList) {
+                    TBrokerFileStatus brokerFileStatus = new TBrokerFileStatus();
+                    brokerFileStatus.setPath(fileStatus.getPath().toString());
+                    brokerFileStatus.setIsDir(fileStatus.isDirectory());
+                    brokerFileStatus.setSize(fileStatus.getLen());
+                    brokerFileStatus.setIsSplitable(true);
+                    fileStatuses.add(brokerFileStatus);
+                }
             }
         } catch (StarRocksException e) {
             LOG.error("parse files error", e);
@@ -578,8 +586,8 @@ public class TableFunctionTable extends Table {
         }
 
         try {
-            THdfsProperties hdfsProperties = new THdfsProperties();
-            HdfsUtil.getTProperties(filelist.get(0).path, new BrokerDesc(properties), hdfsProperties);
+            String path = filelist.get(0).path;
+            THdfsProperties hdfsProperties = FileSystem.getFileSystem(path, properties).getHdfsProperties(path);
             params.setHdfs_properties(hdfsProperties);
         } catch (StarRocksException e) {
             throw new TException("failed to parse files: " + e.getMessage());

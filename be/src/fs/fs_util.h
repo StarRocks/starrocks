@@ -214,6 +214,10 @@ inline bool is_s3_uri(std::string_view uri) {
     return is_in_list(uri, config::s3_compatible_fs_list);
 }
 
+inline bool is_azblob_uri(std::string_view uri) {
+    return starts_with(uri, "wasb://") || starts_with(uri, "wasbs://");
+}
+
 inline bool is_azure_uri(std::string_view uri) {
     return starts_with(uri, "wasb://") || starts_with(uri, "wasbs://") || starts_with(uri, "adl://") ||
            starts_with(uri, "abfs://") || starts_with(uri, "abfss://");

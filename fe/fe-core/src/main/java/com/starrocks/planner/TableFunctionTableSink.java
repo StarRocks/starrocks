@@ -15,6 +15,7 @@
 package com.starrocks.planner;
 
 import com.starrocks.catalog.TableFunctionTable;
+import com.starrocks.common.Config;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.thrift.TCloudConfiguration;
@@ -50,6 +51,8 @@ public class TableFunctionTableSink extends DataSink {
         tTableFunctionTableSink.setTarget_table(table.toTTableFunctionTable());
         TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
         cloudConfiguration.toThrift(tCloudConfiguration);
+        // Set use azure native sdk
+        tCloudConfiguration.setAzure_use_native_sdk(Config.azure_use_native_sdk);
         tTableFunctionTableSink.setCloud_configuration(tCloudConfiguration);
         TDataSink tDataSink = new TDataSink(TDataSinkType.TABLE_FUNCTION_TABLE_SINK);
         tDataSink.setTable_function_table_sink(tTableFunctionTableSink);

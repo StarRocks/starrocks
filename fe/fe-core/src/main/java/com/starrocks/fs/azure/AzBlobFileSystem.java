@@ -34,6 +34,7 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
 import com.starrocks.fs.FileSystem;
 import com.starrocks.thrift.TCloudConfiguration;
+import com.starrocks.thrift.THdfsProperties;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.GlobFilter;
 import org.apache.hadoop.fs.Path;
@@ -205,7 +206,7 @@ public class AzBlobFileSystem implements FileSystem {
     }
 
     @Override
-    public TCloudConfiguration getCloudConfiguration(String path) throws StarRocksException {
+    public THdfsProperties getHdfsProperties(String path) throws StarRocksException {
         Map<String, String> copied = Maps.newHashMap(properties);
 
         // Put path into properties, so that we can get storage account and container from path
@@ -222,7 +223,12 @@ public class AzBlobFileSystem implements FileSystem {
         TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
         cloudConfiguration.toThrift(tCloudConfiguration);
 
-        return tCloudConfiguration;
+        // Set use azure native sdk as true
+        tCloudConfiguration.setAzure_use_native_sdk(true);
+
+        THdfsProperties hdfsProperties = new THdfsProperties();
+        hdfsProperties.setCloud_configuration(tCloudConfiguration);
+        return hdfsProperties;
     }
 
 }
