@@ -114,6 +114,7 @@ import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
+import org.apache.iceberg.expressions.Literal;
 import org.apache.iceberg.expressions.ResidualEvaluator;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.CloseableIterator;
@@ -1317,6 +1318,9 @@ public class IcebergMetadata implements ConnectorMetadata {
                     } else if (resultType.typeId() == Type.TypeID.BINARY) {
                         parts[1] = URLDecoder.decode(parts[1], StandardCharsets.UTF_8);
                         parts[1] = new String(Base64.getDecoder().decode(parts[1]), StandardCharsets.ISO_8859_1);
+                    } else if (resultType.typeId() == Type.TypeID.TIMESTAMP) {
+                        parts[1] = URLDecoder.decode(parts[1], StandardCharsets.UTF_8);
+                        parts[1] = parts[1].replace(' ', 'T');
                     }
                 } else {
                     throw new DmlException("Unsupported partition transform: %s", transform);
@@ -1327,6 +1331,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                 data.set(i, null);
             } else if (resultType.typeId() == Type.TypeID.BINARY) {
                 data.set(i, parts[1].getBytes(StandardCharsets.ISO_8859_1));
+            } else if (resultType.typeId() == Type.TypeID.TIMESTAMP) {
+                data.set(i, Literal.of(parts[1]).to(Types.TimestampType.withoutZone()).value());
             } else {
                 data.set(i, Conversions.fromPartitionString(resultType, parts[1]));
             }

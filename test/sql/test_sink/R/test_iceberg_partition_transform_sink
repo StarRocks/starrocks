@@ -1,0 +1,377 @@
+-- name: test_iceberg_partition_transform_sink
+create external catalog iceberg_sink_${uuid0} PROPERTIES (
+    "type"  =  "iceberg",
+    "iceberg.catalog.type"  =  "hive",
+    "iceberg.catalog.hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}",
+    "enable_iceberg_metadata_cache" = "false"
+);
+-- result:
+-- !result
+create database iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/iceberg_sink_db_${uuid0}/test_iceberg_partition_transform_sink/${uuid0}"
+);
+-- result:
+-- !result
+create table iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t1 (
+    c1 int,
+    c2 bigint,
+    c3 date,
+    c4 decimal(10,3)
+) partition by c1,c2,c3,c4;
+-- result:
+-- !result
+insert into iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t1 values(1, 2, '2022-01-01', 10.23);
+-- result:
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t1;
+-- result:
+1	2	2022-01-01	10.230
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t1 where c1=1;
+-- result:
+1	2	2022-01-01	10.230
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t1 where c2=2;
+-- result:
+1	2	2022-01-01	10.230
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t1 where c3='2022-01-01';
+-- result:
+1	2	2022-01-01	10.230
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t1 where c4=10.23;
+-- result:
+1	2	2022-01-01	10.230
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t1 where c1=1 and c2=2 and c3='2022-01-01' and c4=10.23;
+-- result:
+1	2	2022-01-01	10.230
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t1 where c1=1 and c2=2 and c3="2022-01-01" and c4=10.23', 'partitions=1/1')
+-- result:
+None
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t1 where c1=2 and c2=2 and c3='2022-01-01';
+-- result:
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t1 where c1=2 and c2=2 and c3="2022-01-01" and c4=10.23', 'partitions=0/1')
+-- result:
+None
+-- !result
+create table iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 (
+    c1 int,
+    c2 bigint,
+    c3 date,
+    c4 decimal(10,2),
+    c5 varbinary(100)
+) partition by truncate(c1, 50), bucket(c2, 10), year(c3), truncate(c4, 50), truncate(c5, 1);
+-- result:
+-- !result
+insert into iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 values(1,2,'2022-01-01', 10.65, '我是RD'), (49,38,'2022-12-12', 10.99, '教我SR');
+-- result:
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=51', 'partitions=0/1')
+-- result:
+None
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=51;
+-- result:
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=48', 'partitions=1/1')
+-- result:
+None
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=48;
+-- result:
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=50', 'partitions=0/1')
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=3', 'partitions=0/1')
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=4', 'partitions=0/1')
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2', 'partitions=1/1')
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=15', 'partitions=1/1')
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3="2022-06-06"', 'partitions=1/1')
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3="2023-01-06"', 'partitions=0/1')
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3="2022-06-06" and c4 = 10.650', 'partitions=1/1')
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3="2022-06-06" and c4 = 10.653', 'partitions=1/1')
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3="2022-06-06" and c4 = 10.699', 'partitions=1/1')
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3="2022-06-06" and c4 = 11.090', 'partitions=0/1')
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3="2022-06-06" and c4 = 10.700', 'partitions=1/1')
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3="2022-06-06" and c4 = 10.650000', 'partitions=1/1')
+-- result:
+None
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3='2022-01-01' and c4 = 10.650000;
+-- result:
+1	2	2022-01-01	10.65	我是RD
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3="2022-06-06" and c4 = 10.6500001', 'partitions=1/1')
+-- result:
+None
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3='2022-01-01' and c4 = 10.650001;
+-- result:
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3="2022-06-06" and c4 = 10.65', 'partitions=1/1')
+-- result:
+None
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3='2022-01-01' and c4 = 10.65;
+-- result:
+1	2	2022-01-01	10.65	我是RD
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3='2022-01-01' and c4 = 10.651;
+-- result:
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3='2022-01-01' and c4 = 10.650;
+-- result:
+1	2	2022-01-01	10.65	我是RD
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3="2022-06-06" and c4 = 10.65 and c5=cast("我" as varbinary)', 'partitions=0/1')
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3="2022-06-06" and c4 = 10.65 and c5=cast("我是RD" as varbinary)', 'partitions=1/1')
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3="2022-06-06" and c4 = 10.65 and c5=cast("你" as varbinary)', 'partitions=0/1')
+-- result:
+None
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3='2022-01-01' and c4 = 10.650 and c5=cast('我是RD' as varbinary);
+-- result:
+1	2	2022-01-01	10.65	我是RD
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3='2022-01-01' and c4 = 10.650 and c5=cast('你是RD' as varbinary);
+-- result:
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3="2022-06-06" and c4 = 10.65 and c5="我是RD"', 'partitions=1/1')
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3="2022-06-06" and c4 = 10.65 and c5="你"', 'partitions=0/1')
+-- result:
+None
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3='2022-01-01' and c4 = 10.650 and c5='我是RD';
+-- result:
+1	2	2022-01-01	10.65	我是RD
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=1 and c2=2 and c3='2022-01-01' and c4 = 10.650 and c5='你是RD';
+-- result:
+-- !result
+create table iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t3 (
+    c1 date,
+    c2 date,
+    c3 date,
+    c4 datetime
+) partition by year(c1), month(c2), day(c3), hour(c4);
+-- result:
+-- !result
+insert into iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t3 values('2022-01-01', '2022-01-01' ,'2022-01-01', '2022-01-01 12:13:14'), ('2022-01-02', '2022-01-02' ,'2022-01-01', '2022-01-01 12:15:14'), ('2022-01-03', '2022-01-03' ,'2022-01-01', '2022-01-01 12:17:14');
+-- result:
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t3 where c1="2022-01-01"', 'partitions=1/1')
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t3 where c1="2022-01-01" and c2="2022-01-02" and c3="2022-01-01" and c4="2022-01-01 12:16:55"', 'partitions=1/1')
+-- result:
+None
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t3 where c1="2022-01-01" and c2="2022-01-02" and c3="2022-01-01" and c4="2022-01-01 12:16:55";
+-- result:
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t3 where c1="2022-01-01" and c2="2022-01-02" and c3="2022-01-01" and c4="2022-01-01 13:33:55"', 'partitions=0/1')
+-- result:
+None
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t3 where c1="2022-01-01" and c2="2022-01-02" and c3="2022-01-01" and c4="2022-01-01 13:33:55";
+-- result:
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t3 where c1="2022-01-01" and c2="2022-01-03" and c3="2022-01-01" and c4="2022-01-01 12:16:55"', 'partitions=1/1')
+-- result:
+None
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t3 where c1="2022-01-01" and c2="2022-01-04" and c3="2022-01-01" and c4="2022-01-01 12:16:55";
+-- result:
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t3 where c1="2022-01-01" and c2="2022-02-04" and c3="2022-01-01" and c4="2022-01-01 12:16:55"', 'partitions=0/1')
+-- result:
+None
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t3;
+-- result:
+2022-01-01	2022-01-01	2022-01-01	2022-01-01 12:13:14
+2022-01-02	2022-01-02	2022-01-01	2022-01-01 12:15:14
+2022-01-03	2022-01-03	2022-01-01	2022-01-01 12:17:14
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t3 where c1='2022-01-01';
+-- result:
+2022-01-01	2022-01-01	2022-01-01	2022-01-01 12:13:14
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t3 where c1='2022-01-01' and c2='2022-01-01' and c3='2022-01-01';
+-- result:
+2022-01-01	2022-01-01	2022-01-01	2022-01-01 12:13:14
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t3 where c4='2022-01-01 12:13:14';
+-- result:
+2022-01-01	2022-01-01	2022-01-01	2022-01-01 12:13:14
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t3 where c4='2022-01-01 12:13:15';
+-- result:
+-- !result
+create table iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t4 (
+    c1 varchar(100)
+) partition by truncate(c1, 1);
+-- result:
+-- !result
+insert into iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t4 values('测试1');
+-- result:
+-- !result
+insert into iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t4 values('测试2');
+-- result:
+-- !result
+insert into iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t4 values('测试3');
+-- result:
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t4;
+-- result:
+测试3
+测试1
+测试2
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t4 where c1="测试2"', 'partitions=1/1')
+-- result:
+None
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t4 where c1='测试2';
+-- result:
+测试2
+-- !result
+create table iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t5 (
+    c1 varbinary(100)
+) partition by truncate(c1, 1);
+-- result:
+-- !result
+insert into iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t5 values('abc');
+-- result:
+-- !result
+insert into iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t5 values('abc');
+-- result:
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t5 where c1="abc"', 'partitions=1/1')
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t5 where c1="bbc"', 'partitions=0/1')
+-- result:
+None
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t5 where c1="abc";
+-- result:
+abc
+abc
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t5 where c1="bbc";
+-- result:
+-- !result
+create table iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t6 (
+    c1 datetime
+) partition by c1;
+-- result:
+-- !result
+insert into iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t6 values('2022-01-01 12:13:14'), (NULL);
+-- result:
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t6 where c1="2022-01-01 12:13:14"', 'partitions=1/2')
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t6 where c1="2022-01-01 12:13:15"', 'partitions=0/2')
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains('select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t6 where c1 is NULL', 'partitions=1/2')
+-- result:
+None
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t6 where c1="2022-01-01 12:13:14";
+-- result:
+2022-01-01 12:13:14
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t6 where c1="2022-01-01 12:13:15";
+-- result:
+-- !result
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t6 where c1 is NULL;
+-- result:
+None
+-- !result
+drop table iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t1 force;
+-- result:
+-- !result
+drop table iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 force;
+-- result:
+-- !result
+drop table iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t3 force;
+-- result:
+-- !result
+drop table iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t4 force;
+-- result:
+-- !result
+drop table iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t5 force;
+-- result:
+-- !result
+drop table iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t6 force;
+-- result:
+-- !result
+drop database iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0};
+-- result:
+-- !result
+drop catalog iceberg_sink_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/iceberg_sink_db_${uuid0}/test_iceberg_partition_transform_sink/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
