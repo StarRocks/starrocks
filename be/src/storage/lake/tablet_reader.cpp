@@ -697,4 +697,22 @@ Status TabletReader::parse_seek_range(const TabletSchema& tablet_schema,
     return Status::OK();
 }
 
+Status TabletReader::load_all_segments(const TabletReaderParams& params) {
+    std::vector<ChunkIteratorPtr> seg_iters;
+    RETURN_IF_ERROR(get_segment_iterators(params, &seg_iters));
+
+    auto defer = DeferOp([&seg_iters]() {
+        for (auto& seg_iter : seg_iters) {
+            seg_iter->close();
+        }
+        seg_iters.clear();
+    });
+
+    for (auto& seg_iter : seg_iters) {
+        RETURN_IF_ERROR(seg_iter->init());
+    }
+
+    return Status::OK();
+}
+
 } // namespace starrocks::lake

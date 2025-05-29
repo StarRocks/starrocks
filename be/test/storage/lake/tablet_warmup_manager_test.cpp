@@ -238,7 +238,7 @@ TEST_F(TabletWarmupManagerTest, test_tablet_abnormal_path) {
         auto future = _warmup_mgr->warmup_tablet2(1L);
         EXPECT_FALSE(staros_need_warmup_tablet(1L).ok());
         auto st = future.get();
-        EXPECT_TRUE(st.is_not_found()) << st;
+        EXPECT_TRUE(st.ok()) << st;
     }
     {
         int64_t tablet_id = 1024;

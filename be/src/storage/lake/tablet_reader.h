@@ -87,6 +87,9 @@ public:
 
     void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) { split_tasks->swap(_split_tasks); }
 
+    // open & load index & close
+    Status load_all_segments(const TabletReaderParams& read_params);
+
     static Status parse_seek_range(const TabletSchema& tablet_schema,
                                    TabletReaderParams::RangeStartOperation range_start_op,
                                    TabletReaderParams::RangeEndOperation range_end_op,

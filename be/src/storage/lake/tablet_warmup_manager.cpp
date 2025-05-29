@@ -209,7 +209,7 @@ void TabletWarmupManager::batch_prepare_warmup() {
         }
         auto s = staros_need_warmup_tablet(ctx->_tablet_id);
         if (!s.ok()) {
-            ctx->abort(s);
+            ctx->done();
             continue;
         }
 
@@ -376,7 +376,6 @@ void TabletWarmupManager::do_warmup_tablet(int64_t tablet_id, int64_t version) {
         return;
     }
 
-    // WARMUP-LEVEL2: Segments & Footers
     auto schema = ChunkHelper::convert_schema(tablet->get_schema());
     auto reader_or = (*tablet).new_reader(schema);
     if (!reader_or.ok()) {
@@ -396,17 +395,29 @@ void TabletWarmupManager::do_warmup_tablet(int64_t tablet_id, int64_t version) {
     params.lake_io_opts.fill_metadata_cache = false;
     params.lake_io_opts.fill_data_cache = true;
     params.lake_io_opts.cache_file_only = config::lake_cache_select_in_physical_way;
+
+    // WARMUP-LEVEL2: Segments & Footers
+    if (warmup_level == staros::WarmupLevel::WARMUP_INDEX) {
+        st.update(reader->load_all_segments(params));
+        if (!st.ok()) {
+            abort_warmup(tablet_id, std::move(st));
+            return;
+        }
+        reader->close();
+
+        // after reader is closed, statistics will be collected
+        size_t read_remote_size = reader->stats().compressed_bytes_read_remote;
+        g_lake_warmup_read_remote_bytes << read_remote_size;
+
+        done_warmup(tablet_id, warmup_level, read_remote_size, true /* report */);
+        return;
+    }
+
     st.update(reader->open(params));
     if (!st.ok()) {
         abort_warmup(tablet_id, std::move(st));
         return;
     }
-    if (warmup_level == staros::WarmupLevel::WARMUP_INDEX) {
-        done_warmup(tablet_id, warmup_level, 0 /* read_size */, true /* report */);
-        reader->close();
-        return;
-    }
-    // check stop point
     if (_stopped.load()) {
         abort_warmup(tablet_id, Status::Aborted("warmup manager stopped!"));
         reader->close();

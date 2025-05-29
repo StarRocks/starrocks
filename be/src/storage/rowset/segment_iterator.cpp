@@ -113,6 +113,8 @@ public:
 
     void close() override;
 
+    Status init() override { return _init(); }
+
 protected:
     Status do_get_next(Chunk* chunk) override;
     Status do_get_next(Chunk* chunk, vector<uint32_t>* rowid) override;

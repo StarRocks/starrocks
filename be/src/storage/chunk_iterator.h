@@ -133,6 +133,8 @@ public:
 
     int chunk_size() const { return _chunk_size; }
 
+    virtual Status init() { return Status::NotSupported("ChunkIterator init not supported"); }
+
 protected:
     virtual Status do_get_next(Chunk* chunk) = 0;
     virtual Status do_get_next(Chunk* chunk, std::vector<uint32_t>* rowid) {
