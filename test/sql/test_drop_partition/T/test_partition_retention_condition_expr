@@ -5,7 +5,7 @@ CREATE TABLE t1 (
     num int
 )
 DUPLICATE KEY(dt, province)
-PARTITION BY date_trunc('day', dt)
+PARTITION BY date_trunc('day', dt), province
 PROPERTIES (
     "partition_retention_condition" = "dt >= CURRENT_DATE() - INTERVAL 1 MONTH OR last_day(dt) = date_trunc('day', dt)",
     "replication_num" = "1"

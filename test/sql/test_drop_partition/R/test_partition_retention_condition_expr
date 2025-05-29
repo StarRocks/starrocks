@@ -5,13 +5,13 @@ CREATE TABLE t1 (
     num int
 )
 DUPLICATE KEY(dt, province)
-PARTITION BY date_trunc('day', dt)
+PARTITION BY date_trunc('day', dt), province
 PROPERTIES (
     "partition_retention_condition" = "dt >= CURRENT_DATE() - INTERVAL 1 MONTH OR last_day(dt) = date_trunc('day', dt)",
     "replication_num" = "1"
 );
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Retention condition must only contain monotonic functions for range partition tables but contains: last_day.')
+E: (1064, "Getting analyzing error. Detail message: Column `dt` in the partition condition is not a table's partition expression, please use table's partition expressions: date_trunc('day', `dt`)/`province`.")
 -- !result
 CREATE TABLE t1 (
     dt datetime,
