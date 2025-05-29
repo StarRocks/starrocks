@@ -15,6 +15,9 @@
 package com.starrocks.summary;
 
 import com.google.common.collect.Lists;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
@@ -23,12 +26,18 @@ import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -44,6 +53,8 @@ public class QueryHistoryMgr {
             1, Integer.MAX_VALUE,
             "query-history-executor", true);
 
+    private final SimpleExecutor queryExecutor = new SimpleExecutor("QueryHistory", TResultSinkType.HTTP_PROTOCAL);
+
     private final List<QueryHistory> histories = Lists.newArrayListWithCapacity(CONVERT_BATCH_SIZE + 1);
 
     private StringBuffer buffer = new StringBuffer("[");
@@ -54,6 +65,55 @@ public class QueryHistoryMgr {
 
     public LocalDateTime getLastLoadTime() {
         return lastLoadTime;
+    }
+
+    public List<QueryHistory> queryLastHistory(LocalDateTime beginTime) {
+        if (!StatisticUtils.checkStatisticTables(List.of(StatsConstants.QUERY_HISTORY_TABLE_NAME))) {
+            return List.of();
+        }
+        // get the second slow SQL for each SQL digest
+        // 1. avoid get a SQL only query once
+        String sql = "select * from ("
+                + "select dt, db, sql_digest, sql, query_ms, "
+                + " ROW_NUMBER() OVER (PARTITION BY sql_digest ORDER BY query_ms desc) as rn"
+                + " from " + StatsConstants.STATISTICS_DB_NAME + "." + StatsConstants.QUERY_HISTORY_TABLE_NAME
+                + " where dt >= '" + DateUtils.formatDateTimeUnix(beginTime) + "'"
+                + ") tmp"
+                + " where rn = 2";
+        try {
+            List<TResultBatch> datas = queryExecutor.executeDQL(sql);
+            List<QueryHistory> history = Lists.newArrayList();
+
+            for (TResultBatch batch : ListUtils.emptyIfNull(datas)) {
+                for (ByteBuffer buffer : batch.getRows()) {
+                    ByteBuf copied = Unpooled.copiedBuffer(buffer);
+                    String jsonString = copied.toString(Charset.defaultCharset());
+                    /*
+                     * SPM baselines table
+                     * 0.dt             | datetime
+                     * 1.db             | string
+                     * 2.sql_digest     | string
+                     * 3.sql            | string
+                     * 4.query_ms       | double
+                     */
+                    JsonElement obj = JsonParser.parseString(jsonString);
+                    JsonArray data = obj.getAsJsonObject().get("data").getAsJsonArray();
+                    QueryHistory qh = new QueryHistory();
+
+                    qh.setDatetime(DateUtils.parseUnixDateTime(data.get(0).getAsString()));
+                    qh.setDb(data.get(1).getAsString());
+                    qh.setSqlDigest(data.get(2).getAsString());
+                    qh.setOriginSQL(data.get(3).getAsString());
+                    qh.setQueryMs(data.get(4).getAsDouble());
+
+                    history.add(qh);
+                }
+            }
+            return history;
+        } catch (Exception e) {
+            LOG.warn("Failed to query query history.", e);
+        }
+        return List.of();
     }
 
     public synchronized void addQueryHistory(ConnectContext ctx, ExecPlan plan) {
