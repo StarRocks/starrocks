@@ -1,0 +1,67 @@
+-- name: test_mv_with_index
+create database test_mv_with_index;
+use test_mv_with_index;
+
+admin set frontend config('alter_scheduler_interval_millisecond' = '100');
+
+CREATE TABLE t1 (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 48
+PROPERTIES (
+"replication_num" = "1"
+);
+insert into t1 SELECT generate_series % 100, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  4096));
+
+CREATE MATERIALIZED VIEW test_mv1 
+DISTRIBUTED BY hash(c0, c1) 
+AS 
+SELECT * from t1;
+
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+
+SELECT * FROM test_mv1 order by c0, c1 limit 3;
+
+ALTER MATERIALIZED VIEW test_mv1 SET ("bloom_filter_columns" = "c1, c2");
+function: wait_alter_table_finish()
+
+SHOW CREATE MATERIALIZED VIEW test_mv1;
+
+CREATE INDEX idx1 ON test_mv1(c0) USING BITMAP COMMENT 'bitmap index on c0';
+function: wait_alter_table_finish()
+CREATE INDEX idx2 ON test_mv1(c1) USING BITMAP COMMENT 'bitmap index on c1';
+function: wait_alter_table_finish()
+
+SHOW INDEXES FROM test_mv1;
+
+SELECT count(1) FROM test_mv1 where c1 = '1';
+SELECT count(1) FROM test_mv1 where c1 = '1' or c2 = '10';
+SELECT count(1) FROM test_mv1 where c0 = 10;
+SELECT count(1) FROM test_mv1 where c0 = 10 or c1 = 10;
+
+insert into t1 SELECT generate_series % 100, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  4096));
+
+SELECT count(1) FROM test_mv1 where c1 = '1';
+SELECT count(1) FROM test_mv1 where c1 = '1' or c2 = '10';
+SELECT count(1) FROM test_mv1 where c0 = 10;
+SELECT count(1) FROM test_mv1 where c0 = 10 or c1 = 10;
+
+ALTER MATERIALIZED VIEW test_mv1 SET ("bloom_filter_columns" = "");
+function: wait_alter_table_finish()
+SHOW CREATE MATERIALIZED VIEW test_mv1;
+
+DROP INDEX idx2 ON test_mv1;
+function: wait_alter_table_finish()
+SHOW INDEXES FROM test_mv1;
+
+insert into t1 SELECT generate_series % 100, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  4096));
+SELECT count(1) FROM test_mv1 where c1 = '1';
+SELECT count(1) FROM test_mv1 where c1 = '1' or c2 = '10';
+SELECT count(1) FROM test_mv1 where c0 = 10;
+SELECT count(1) FROM test_mv1 where c0 = 10 or c1 = 10;
+
+DROP database test_mv_with_index;
