@@ -1027,8 +1027,12 @@ Status TabletManager::report_all_tablets_info(std::map<TTabletId, TTablet>* tabl
             TTablet t_tablet;
             TTabletInfo tablet_info;
             tablet_ptr->build_tablet_report_info(&tablet_info);
-            max_tablet_rowset_num = std::max(max_tablet_rowset_num, tablet_ptr->version_count());
-            max_tablet_id = std::max(max_tablet_id, tablet_ptr->tablet_id());
+            
+            size_t current_rowset_num = tablet_ptr->version_count();
+            if (current_rowset_num > max_tablet_rowset_num) {
+                max_tablet_rowset_num = current_rowset_num;
+                max_tablet_id = tablet_ptr->tablet_id();
+            }
             // find expired transaction corresponding to this tablet
             TabletInfo tinfo(tablet_ptr->tablet_id(), tablet_ptr->schema_hash(), tablet_ptr->tablet_uid());
             auto find = expire_txn_map.find(tinfo);
