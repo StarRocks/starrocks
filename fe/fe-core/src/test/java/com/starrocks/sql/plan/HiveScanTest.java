@@ -40,13 +40,13 @@ public class HiveScanTest extends ConnectorPlanTestBase {
                 "select count(*) from lineitem_par",
                 "select count(*) from lineitem_par where l_shipdate = '1998-01-01'"
         };
-        boolean[] expexted = {true, true};
-        Assert.assertEquals(sqlString.length, expexted.length);
+        boolean[] expected = {true, true};
+        Assert.assertEquals(sqlString.length, expected.length);
         for (int i = 0; i < sqlString.length; i++) {
             String sql = sqlString[i];
             ExecPlan plan = getExecPlan(sql);
             List<ScanNode> scanNodeList = plan.getScanNodes();
-            Assert.assertEquals(scanNodeList.get(0).getScanOptimzeOption().getCanUseAnyColumn(), expexted[i]);
+            Assert.assertEquals(scanNodeList.get(0).getScanOptimizeOption().getCanUseAnyColumn(), expected[i]);
         }
 
         connectContext.getSessionVariable().setEnableCountStarOptimization(false);
@@ -54,7 +54,7 @@ public class HiveScanTest extends ConnectorPlanTestBase {
             String sql = sqlString[i];
             ExecPlan plan = getExecPlan(sql);
             List<ScanNode> scanNodeList = plan.getScanNodes();
-            Assert.assertEquals(scanNodeList.get(0).getScanOptimzeOption().getCanUseAnyColumn(), false);
+            Assert.assertEquals(scanNodeList.get(0).getScanOptimizeOption().getCanUseAnyColumn(), false);
         }
         connectContext.getSessionVariable().setEnableCountStarOptimization(true);
     }
@@ -77,7 +77,7 @@ public class HiveScanTest extends ConnectorPlanTestBase {
             boolean expexted = Boolean.valueOf(sqlString[i + 1]);
             ExecPlan plan = getExecPlan(sql);
             List<ScanNode> scanNodeList = plan.getScanNodes();
-            Assert.assertEquals(expexted, scanNodeList.get(0).getScanOptimzeOption().getCanUseMinMaxCountOpt());
+            Assert.assertEquals(expexted, scanNodeList.get(0).getScanOptimizeOption().getCanUseMinMaxCountOpt());
         }
     }
 

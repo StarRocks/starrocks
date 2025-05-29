@@ -44,7 +44,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.RemoteFilesSampleStrategy;
 import com.starrocks.datacache.DataCacheOptions;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.optimizer.ScanOptimzeOption;
+import com.starrocks.sql.optimizer.ScanOptimizeOption;
 import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TScanRangeLocations;
 import org.jetbrains.annotations.TestOnly;
@@ -66,7 +66,7 @@ public abstract class ScanNode extends PlanNode {
     protected List<ColumnAccessPath> columnAccessPaths;
     protected DataCacheOptions dataCacheOptions = null;
     protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
-    protected ScanOptimzeOption scanOptimzeOption;
+    protected ScanOptimizeOption scanOptimizeOption;
     // The column names applied dict optimization
     // used for explain
     protected final List<String> appliedDictStringColumns = new ArrayList<>();
@@ -97,12 +97,12 @@ public abstract class ScanNode extends PlanNode {
         this.warehouseId = warehouseId;
     }
 
-    public void setScanOptimzeOption(ScanOptimzeOption opt) {
-        this.scanOptimzeOption = opt.copy();
+    public void setScanOptimizeOption(ScanOptimizeOption opt) {
+        this.scanOptimizeOption = opt.copy();
     }
 
-    public ScanOptimzeOption getScanOptimzeOption() {
-        return scanOptimzeOption;
+    public ScanOptimizeOption getScanOptimizeOption() {
+        return scanOptimizeOption;
     }
 
     public void updateAppliedDictStringColumns(Set<Integer> appliedColumnIds) {

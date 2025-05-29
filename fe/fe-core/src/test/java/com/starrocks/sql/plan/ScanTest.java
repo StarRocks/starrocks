@@ -492,7 +492,7 @@ public class ScanTest extends PlanTestBase {
             String sql = sqlString[i];
             ExecPlan plan = getExecPlan(sql);
             List<ScanNode> scanNodeList = plan.getScanNodes();
-            Assert.assertEquals(scanNodeList.get(0).getScanOptimzeOption().getCanUseAnyColumn(), expexted[i]);
+            Assert.assertEquals(scanNodeList.get(0).getScanOptimizeOption().getCanUseAnyColumn(), expexted[i]);
         }
 
         connectContext.getSessionVariable().setEnableCountStarOptimization(false);
@@ -500,7 +500,7 @@ public class ScanTest extends PlanTestBase {
             String sql = sqlString[i];
             ExecPlan plan = getExecPlan(sql);
             List<ScanNode> scanNodeList = plan.getScanNodes();
-            Assert.assertEquals(scanNodeList.get(0).getScanOptimzeOption().getCanUseAnyColumn(), false);
+            Assert.assertEquals(scanNodeList.get(0).getScanOptimizeOption().getCanUseAnyColumn(), false);
         }
         connectContext.getSessionVariable().setEnableCountStarOptimization(true);
     }
@@ -524,7 +524,7 @@ public class ScanTest extends PlanTestBase {
             boolean expexted = Boolean.valueOf(sqlString[i + 1]);
             ExecPlan plan = getExecPlan(sql);
             List<ScanNode> scanNodeList = plan.getScanNodes();
-            Assert.assertEquals(expexted, scanNodeList.get(0).getScanOptimzeOption().getCanUseMinMaxCountOpt());
+            Assert.assertEquals(expexted, scanNodeList.get(0).getScanOptimizeOption().getCanUseMinMaxCountOpt());
         }
     }
 
