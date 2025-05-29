@@ -38,6 +38,7 @@ import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -87,7 +88,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
-import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
@@ -229,8 +229,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     public StreamLoadTask(long id, Database db, OlapTable table, String label, String user, String clientIp,
                           long timeoutMs, int channelNum, int channelId, long createTimeMs, long warehouseId) {
         this.id = id;
-        UUID uuid = UUID.randomUUID();
-        this.loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+        this.loadId = UUIDUtil.genTUniqueId();
         this.dbId = db.getId();
         this.dbName = db.getFullName();
         this.tableId = table.getId();

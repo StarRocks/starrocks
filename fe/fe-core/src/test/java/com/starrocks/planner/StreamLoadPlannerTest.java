@@ -45,6 +45,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadInfo;
@@ -67,7 +68,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_PARTIAL_UPDATE_MODE;
 
@@ -180,8 +180,7 @@ public class StreamLoadPlannerTest {
     public void testPartialUpdateMode() throws StarRocksException {
         StreamLoadKvParams param = new StreamLoadKvParams(
                 Collections.singletonMap(HTTP_PARTIAL_UPDATE_MODE, "column"));
-        UUID uuid = UUID.randomUUID();
-        TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+        TUniqueId loadId = UUIDUtil.genTUniqueId();
         StreamLoadInfo.fromHttpStreamLoadRequest(loadId, 100, Optional.of(100), param);
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         StreamLoadInfo.fromRoutineLoadJob(routineLoadJob);

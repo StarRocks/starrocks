@@ -42,6 +42,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.KafkaUtil;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TExecPlanFragmentParams;
@@ -86,7 +87,7 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
 
     public KafkaTaskInfo(long timeToExecuteMs, KafkaTaskInfo kafkaTaskInfo, Map<Integer, Long> partitionIdToOffset,
                          long tastTimeoutMs) {
-        super(UUID.randomUUID(), kafkaTaskInfo.getJob(), kafkaTaskInfo.getTaskScheduleIntervalMs(), timeToExecuteMs,
+        super(UUIDUtil.genUUID(), kafkaTaskInfo.getJob(), kafkaTaskInfo.getTaskScheduleIntervalMs(), timeToExecuteMs,
                 kafkaTaskInfo.getBeId(), tastTimeoutMs);
         this.partitionIdToOffset = partitionIdToOffset;
     }

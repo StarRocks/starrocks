@@ -22,9 +22,9 @@ import com.baidu.bjf.remoting.protobuf.ProtobufProxy;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Replica.ReplicaState;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.proto.TxnFinishStatePB;
-import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
@@ -40,7 +40,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.UUID;
 
 public class TransactionStateTest {
 
@@ -54,9 +53,8 @@ public class TransactionStateTest {
 
     @Test
     public void testSerDe() {
-        UUID uuid = UUID.randomUUID();
         TransactionState transactionState = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
-                3000, "label123", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
+                3000, "label123", UUIDUtil.genTUniqueId(),
                 LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
                 60 * 1000L);
 
@@ -107,9 +105,8 @@ public class TransactionStateTest {
 
     @Test
     public void testSerDeTxnStateNewFinish() {
-        UUID uuid = UUID.randomUUID();
         TransactionState transactionState = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
-                3000, "label123", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
+                3000, "label123", UUIDUtil.genTUniqueId(),
                 LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
                 60 * 1000L);
 
@@ -132,10 +129,9 @@ public class TransactionStateTest {
         nonRunningStatus.add(TransactionStatus.VISIBLE);
         nonRunningStatus.add(TransactionStatus.ABORTED);
 
-        UUID uuid = UUID.randomUUID();
         for (TransactionStatus status : TransactionStatus.values()) {
             TransactionState transactionState = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
-                    3000, "label123", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
+                    3000, "label123", UUIDUtil.genTUniqueId(),
                     LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
                     60 * 1000L);
             transactionState.setTransactionStatus(status);
@@ -145,9 +141,8 @@ public class TransactionStateTest {
 
     @Test
     public void testCommitInfos() {
-        UUID uuid = UUID.randomUUID();
         TransactionState transactionState = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
-                3000, "label123", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
+                3000, "label123", UUIDUtil.genTUniqueId(),
                 LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
                 60 * 1000L);
         Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(1001, 1001, ReplicaState.NORMAL));

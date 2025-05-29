@@ -73,6 +73,7 @@ import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -483,9 +484,8 @@ public class ExportJob implements Writable, GsonPostProcessable {
         return new DefaultCoordinator.Factory();
     }
 
-    private void genCoordinators(ExportStmt stmt, List<PlanFragment> fragments, List<ScanNode> nodes)
-            throws StarRocksException {
-        UUID uuid = UUID.randomUUID();
+    private void genCoordinators(ExportStmt stmt, List<PlanFragment> fragments, List<ScanNode> nodes) {
+        UUID uuid = UUIDUtil.genUUID();
         for (int i = 0; i < fragments.size(); ++i) {
             PlanFragment fragment = fragments.get(i);
             ScanNode scanNode = nodes.get(i);

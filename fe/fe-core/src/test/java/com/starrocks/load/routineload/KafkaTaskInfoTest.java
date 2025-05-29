@@ -22,6 +22,7 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.KafkaUtil;
+import com.starrocks.common.util.UUIDUtil;
 import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
@@ -30,7 +31,6 @@ import org.junit.Test;
 
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 public class KafkaTaskInfoTest {
 
@@ -58,7 +58,7 @@ public class KafkaTaskInfoTest {
 
         Map<Integer, Long> offset1 = Maps.newHashMap();
         offset1.put(0, 99L);
-        KafkaTaskInfo kafkaTaskInfo1 = new KafkaTaskInfo(UUID.randomUUID(),
+        KafkaTaskInfo kafkaTaskInfo1 = new KafkaTaskInfo(UUIDUtil.genUUID(),
                 kafkaRoutineLoadJob,
                 System.currentTimeMillis(),
                 System.currentTimeMillis(),
@@ -69,7 +69,7 @@ public class KafkaTaskInfoTest {
 
         Map<Integer, Long> offset2 = Maps.newHashMap();
         offset2.put(0, 100L);
-        KafkaTaskInfo kafkaTaskInfo2 = new KafkaTaskInfo(UUID.randomUUID(),
+        KafkaTaskInfo kafkaTaskInfo2 = new KafkaTaskInfo(UUIDUtil.genUUID(),
                 kafkaRoutineLoadJob,
                 System.currentTimeMillis(),
                 System.currentTimeMillis(),
@@ -80,7 +80,7 @@ public class KafkaTaskInfoTest {
         // consume offset > latest offset
         Map<Integer, Long> offset3 = Maps.newHashMap();
         offset3.put(0, 101L);
-        KafkaTaskInfo kafkaTaskInfo3 = new KafkaTaskInfo(UUID.randomUUID(),
+        KafkaTaskInfo kafkaTaskInfo3 = new KafkaTaskInfo(UUIDUtil.genUUID(),
                 kafkaRoutineLoadJob,
                 System.currentTimeMillis(),
                 System.currentTimeMillis(),
@@ -106,7 +106,7 @@ public class KafkaTaskInfoTest {
 
         Map<Integer, Long> offset1 = Maps.newHashMap();
         offset1.put(0, 100L);
-        KafkaTaskInfo kafkaTaskInfo = new KafkaTaskInfo(UUID.randomUUID(),
+        KafkaTaskInfo kafkaTaskInfo = new KafkaTaskInfo(UUIDUtil.genUUID(),
                 kafkaRoutineLoadJob,
                 System.currentTimeMillis(),
                 System.currentTimeMillis(),
@@ -140,7 +140,7 @@ public class KafkaTaskInfoTest {
 
         Map<Integer, Long> offset = Maps.newHashMap();
         offset.put(0, 99L);
-        KafkaTaskInfo kafkaTaskInfo = new KafkaTaskInfo(UUID.randomUUID(),
+        KafkaTaskInfo kafkaTaskInfo = new KafkaTaskInfo(UUIDUtil.genUUID(),
                 kafkaRoutineLoadJob,
                 System.currentTimeMillis(),
                 System.currentTimeMillis(),

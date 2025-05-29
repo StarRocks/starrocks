@@ -44,6 +44,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.ExportChecker;
@@ -341,7 +342,7 @@ public class ExportExportingTask extends PriorityLeaderTask {
 
                 if (i < RETRY_NUM - 1) {
                     TUniqueId oldQueryId = coord.getQueryId();
-                    UUID uuid = UUID.randomUUID();
+                    UUID uuid = UUIDUtil.genUUID();
                     // generate one new queryId here, to avoid being rejected by BE,
                     // because the request is considered as a repeat request.
                     // we make the high part of query id unchanged to facilitate tracing problem by log.

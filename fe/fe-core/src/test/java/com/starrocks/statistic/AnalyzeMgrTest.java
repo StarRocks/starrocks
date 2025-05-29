@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.persist.OperationType;
 import com.starrocks.qe.ConnectContext;
@@ -42,7 +43,6 @@ import org.junit.Test;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
-import java.util.UUID;
 
 public class AnalyzeMgrTest {
     public static ConnectContext connectContext;
@@ -333,8 +333,7 @@ public class AnalyzeMgrTest {
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(dbId, tableId,
                 Lists.newArrayList("c1"), StatsConstants.AnalyzeType.FULL, LocalDateTime.now(), new HashMap<>()));
 
-        UUID uuid = UUID.randomUUID();
-        TUniqueId requestId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+        TUniqueId requestId = UUIDUtil.genTUniqueId();
         TransactionState transactionState = new TransactionState(dbId, Lists.newArrayList(tableId), 33333L, "xxx",
                 requestId, TransactionState.LoadJobSourceType.INSERT_STREAMING, null, 44444L, 10000);
         transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(0));
