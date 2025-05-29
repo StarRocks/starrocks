@@ -877,7 +877,7 @@ public class PlanFragmentBuilder {
                     context.getConnectContext().getCurrentWarehouseId());
             scanNode.setLimit(node.getLimit());
             scanNode.computeStatistics(optExpr.getStatistics());
-            scanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+            scanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             scanNode.setIsSortedByKeyPerTablet(node.needSortedByKeyPerTablet());
             scanNode.setIsOutputChunkByBucket(node.needOutputChunkByBucket());
             scanNode.setWithoutColocateRequirement(node.isWithoutColocateRequirement());
@@ -1153,7 +1153,7 @@ public class PlanFragmentBuilder {
             HudiScanNode hudiScanNode =
                     new HudiScanNode(context.getNextNodeId(), tupleDescriptor, "HudiScanNode");
             hudiScanNode.computeStatistics(optExpression.getStatistics());
-            hudiScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+            hudiScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             currentExecGroup.add(hudiScanNode, true);
             try {
                 HDFSScanNodePredicates scanNodePredicates = hudiScanNode.getScanNodePredicates();
@@ -1195,7 +1195,7 @@ public class PlanFragmentBuilder {
 
             HdfsScanNode hdfsScanNode =
                     new HdfsScanNode(context.getNextNodeId(), tupleDescriptor, "HdfsScanNode");
-            hdfsScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+            hdfsScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             hdfsScanNode.computeStatistics(optExpression.getStatistics());
             currentExecGroup.add(hdfsScanNode, true);
             try {
@@ -1242,7 +1242,7 @@ public class PlanFragmentBuilder {
 
             FileTableScanNode fileTableScanNode =
                     new FileTableScanNode(context.getNextNodeId(), tupleDescriptor, "FileTableScanNode");
-            fileTableScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+            fileTableScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             fileTableScanNode.computeStatistics(optExpression.getStatistics());
             currentExecGroup.add(fileTableScanNode, true);
             try {
@@ -1283,7 +1283,7 @@ public class PlanFragmentBuilder {
             DeltaLakeScanNode deltaLakeScanNode =
                     new DeltaLakeScanNode(context.getNextNodeId(), tupleDescriptor, "DeltaLakeScanNode");
             deltaLakeScanNode.computeStatistics(optExpression.getStatistics());
-            deltaLakeScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+            deltaLakeScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             currentExecGroup.add(deltaLakeScanNode, true);
             try {
                 // set predicate
@@ -1337,7 +1337,7 @@ public class PlanFragmentBuilder {
 
             PaimonScanNode paimonScanNode =
                     new PaimonScanNode(context.getNextNodeId(), tupleDescriptor, "PaimonScanNode");
-            paimonScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+            paimonScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             paimonScanNode.computeStatistics(optExpression.getStatistics());
             currentExecGroup.add(paimonScanNode, true);
             try {
@@ -1384,7 +1384,7 @@ public class PlanFragmentBuilder {
 
             OdpsScanNode odpsScanNode =
                     new OdpsScanNode(context.getNextNodeId(), tupleDescriptor, "OdpsScanNode");
-            odpsScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+            odpsScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             currentExecGroup.add(odpsScanNode, true);
             try {
                 // set predicate
@@ -1433,7 +1433,7 @@ public class PlanFragmentBuilder {
 
             KuduScanNode kuduScanNode =
                     new KuduScanNode(context.getNextNodeId(), tupleDescriptor, "KuduScanNode");
-            kuduScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+            kuduScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             try {
                 // set predicate
                 ScalarOperatorToExpr.FormatterContext formatterContext =
@@ -1500,7 +1500,7 @@ public class PlanFragmentBuilder {
                         op.getTableFullMORParams(), op.getMORParams());
             }
 
-            icebergScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+            icebergScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             icebergScanNode.computeStatistics(expression.getStatistics());
             currentExecGroup.add(icebergScanNode, true);
             try {
@@ -1641,7 +1641,7 @@ public class PlanFragmentBuilder {
             scanNode.setUser(context.getConnectContext().getQualifiedUser());
             scanNode.setUserIp(context.getConnectContext().getRemoteIP());
             scanNode.setLimit(node.getLimit());
-            scanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+            scanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             currentExecGroup.add(scanNode, true);
 
             // set predicate
@@ -1846,7 +1846,7 @@ public class PlanFragmentBuilder {
             scanNode.setLimit(node.getLimit());
             scanNode.computeColumnsAndFilters();
             scanNode.computeStatistics(optExpression.getStatistics());
-            scanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+            scanNode.setScanOptimizeOption(node.getScanOptimizeOption());
 
             context.getScanNodes().add(scanNode);
             PlanFragment fragment =
@@ -1885,7 +1885,7 @@ public class PlanFragmentBuilder {
             }
             scanNode.setLimit(node.getLimit());
             scanNode.computeStatistics(optExpression.getStatistics());
-            scanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+            scanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             try {
                 scanNode.assignNodes();
             } catch (StarRocksException e) {
@@ -1933,7 +1933,7 @@ public class PlanFragmentBuilder {
             scanNode.setLimit(node.getLimit());
             scanNode.computeColumnsAndFilters();
             scanNode.computeStatistics(optExpression.getStatistics());
-            scanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+            scanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             context.getScanNodes().add(scanNode);
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.UNPARTITIONED);
