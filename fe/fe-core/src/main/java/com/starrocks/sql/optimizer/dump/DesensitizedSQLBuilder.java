@@ -84,6 +84,7 @@ import java.util.StringJoiner;
 import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
+import static com.starrocks.catalog.DefaultExpr.isValidDefaultFunction;
 import static java.util.stream.Collectors.toList;
 
 public class DesensitizedSQLBuilder {
@@ -755,9 +756,13 @@ public class DesensitizedSQLBuilder {
             if (column.getDefaultExpr() == null && column.isAutoIncrement()) {
                 sb.append("AUTO_INCREMENT ");
             } else if (column.getDefaultExpr() != null) {
-                if ("now()".equalsIgnoreCase(column.getDefaultExpr().getExpr())) {
+                if (isValidDefaultFunction(column.getDefaultExpr().getExpr())) {
                     // compatible with mysql
-                    sb.append("DEFAULT ").append("CURRENT_TIMESTAMP").append(" ");
+                    if (column.getDefaultExpr().hasArgs()) {
+                        sb.append("DEFAULT ").append(column.getDefaultExpr().getExpr()).append(" ");
+                    } else {
+                        sb.append("DEFAULT ").append("CURRENT_TIMESTAMP").append(" ");
+                    }
                 } else {
                     sb.append("DEFAULT ").append("(").append(column.getDefaultExpr().getExpr()).append(") ");
                 }
