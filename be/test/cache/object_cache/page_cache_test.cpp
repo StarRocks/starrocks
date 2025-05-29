@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "storage/page_cache.h"
+#include "cache/object_cache/page_cache.h"
 
 #include <gtest/gtest.h>
 

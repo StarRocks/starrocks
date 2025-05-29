@@ -32,12 +32,11 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "storage/page_cache.h"
+#include "cache/object_cache/page_cache.h"
 
 #include <malloc.h>
 
 #include "runtime/current_thread.h"
-#include "runtime/mem_tracker.h"
 #include "util/defer_op.h"
 #include "util/lru_cache.h"
 #include "util/metrics.h"
@@ -72,15 +71,15 @@ void StoragePageCache::set_capacity(size_t capacity) {
     LOG_IF(INFO, !st.ok()) << "Fail to set cache capacity to " << capacity << ", reason: " << st.message();
 }
 
-size_t StoragePageCache::get_capacity() {
+size_t StoragePageCache::get_capacity() const {
     return _cache->capacity();
 }
 
-uint64_t StoragePageCache::get_lookup_count() {
+uint64_t StoragePageCache::get_lookup_count() const {
     return _cache->lookup_count();
 }
 
-uint64_t StoragePageCache::get_hit_count() {
+uint64_t StoragePageCache::get_hit_count() const {
     return _cache->hit_count();
 }
 

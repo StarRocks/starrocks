@@ -38,11 +38,11 @@
 #include <string>
 #include <string_view>
 
+#include "cache/object_cache/page_cache.h"
 #include "column/column.h"
 #include "common/logging.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
-#include "storage/page_cache.h"
 #include "storage/rowset/storage_page_decoder.h"
 #include "util/coding.h"
 #include "util/compression/block_compression.h"

@@ -472,7 +472,8 @@ size_t ShardedLRUCache::_get_stat(size_t (LRUCache::*mem_fun)() const) const {
     return n;
 }
 size_t ShardedLRUCache::get_capacity() const {
-    return _get_stat(&LRUCache::get_capacity);
+    std::lock_guard l(_mutex);
+    return _capacity;
 }
 
 void ShardedLRUCache::prune() {
