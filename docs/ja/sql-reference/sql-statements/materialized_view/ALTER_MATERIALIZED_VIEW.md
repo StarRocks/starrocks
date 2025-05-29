@@ -16,6 +16,7 @@ displayed_sidebar: docs
 
   このSQLステートメントを使用して、以下のプロパティを変更できます:
 
+  - `bloom_filter_columns`
   - `partition_ttl_number`
   - `partition_refresh_number`
   - `resource_group`
@@ -116,4 +117,10 @@ ALTER MATERIALIZED VIEW mv1 SET ("session.new_planner_optimize_timeout" = "30000
 
 ```SQL
 ALTER MATERIALIZED VIEW mv1 SET ("mv_rewrite_staleness_second" = "600");
+```
+
+例10: マテリアライズドビューのブルームフィルターインデックスを変更します。
+
+```SQL
+ALTER MATERIALIZED VIEW mv1 SET ("bloom_filter_columns" = "col1, col2");
 ```
