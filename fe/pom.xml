@@ -78,6 +78,7 @@ under the License.
         <byteman.version>4.0.24</byteman.version>
         <!-- azure native sdk -->
         <azure.version>1.2.34</azure.version>
+        <fastutil.version>8.5.15</fastutil.version>
     </properties>
 
     <profiles>
@@ -1438,6 +1439,13 @@ under the License.
                 <version>${azure.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/it.unimi.dsi/fastutil -->
+            <dependency>
+                <groupId>it.unimi.dsi</groupId>
+                <artifactId>fastutil</artifactId>
+                <version>${fastutil.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

@@ -48,6 +48,7 @@ import java.nio.file.Paths;
 import java.util.Comparator;
 import java.util.ConcurrentModificationException;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 
@@ -201,23 +202,26 @@ public abstract class TestWithFeService {
     }
 
     private void updateReplicaPathHash() {
-        com.google.common.collect.Table<Long, Long, Replica> replicaMetaTable =
+        Map<Long, Map<Long, Replica>> replicaMetaTable =
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex()
                         .getReplicaMetaTable();
-        for (com.google.common.collect.Table.Cell<Long, Long, Replica> cell : replicaMetaTable.cellSet()) {
-            long beId = cell.getColumnKey();
-            Backend be = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(beId);
-            if (be == null) {
-                continue;
-            }
-            Replica replica = cell.getValue();
-            TabletMeta tabletMeta =
-                    GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(cell.getRowKey());
-            ImmutableMap<String, DiskInfo> diskMap = be.getDisks();
-            for (DiskInfo diskInfo : diskMap.values()) {
-                if (diskInfo.getStorageMedium() == tabletMeta.getStorageMedium()) {
-                    replica.setPathHash(diskInfo.getPathHash());
-                    break;
+        for (Map.Entry<Long, Map<Long, Replica>> tabletEntry : replicaMetaTable.entrySet()) {
+            long tabletId = tabletEntry.getKey();
+            for (Map.Entry<Long, Replica> replicaEntry : tabletEntry.getValue().entrySet()) {
+                long beId = replicaEntry.getKey();
+                Replica replica = replicaEntry.getValue();
+                Backend be = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(beId);
+                if (be == null) {
+                    continue;
+                }
+                TabletMeta tabletMeta =
+                        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(tabletId);
+                ImmutableMap<String, DiskInfo> diskMap = be.getDisks();
+                for (DiskInfo diskInfo : diskMap.values()) {
+                    if (diskInfo.getStorageMedium() == tabletMeta.getStorageMedium()) {
+                        replica.setPathHash(diskInfo.getPathHash());
+                        break;
+                    }
                 }
             }
         }
