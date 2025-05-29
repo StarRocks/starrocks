@@ -79,7 +79,28 @@ public class DeltaUnityConnectorTest {
                 "databricks_catalog", workspaceClient, null);
 
         expectedEx.expect(IllegalArgumentException.class);
-        expectedEx.expectMessage("Databricks host and token must be set");
+        expectedEx.expectMessage("Databricks Catalog need to set databricks.token or " +
+                "databricks.client.id and databricks.client.secret");
+        DeltaLakeConnector deltaUnityConnector = new DeltaLakeConnector(new ConnectorContext("databricks0",
+                "deltalake", properties));
+    }
+
+    @Test
+    public void testCreateDatabricksConnectorWithException3() {
+        Map<String, String> properties = ImmutableMap.of("databricks.host", "https://xxxx.cloud.databricks.com",
+                "type", "deltalake",
+                "databricks.catalog.name", "databricks_catalog",
+                "databricks.client.id", "aaa-bbb",
+                "hive.metastore.type", "unity");
+
+        WorkspaceClient workspaceClient = new WorkspaceClient(new DatabricksConfig().
+                setHost("https://xxxx.cloud.databricks.com").setToken("xxxx"));
+        DatabricksUnityMetastore databricksUnityMetastore = new DatabricksUnityMetastore("databricks0",
+                "databricks_catalog", workspaceClient, null);
+
+        expectedEx.expect(IllegalArgumentException.class);
+        expectedEx.expectMessage("Databricks Catalog need to set databricks.token or " +
+                "databricks.client.id and databricks.client.secret");
         DeltaLakeConnector deltaUnityConnector = new DeltaLakeConnector(new ConnectorContext("databricks0",
                 "deltalake", properties));
     }

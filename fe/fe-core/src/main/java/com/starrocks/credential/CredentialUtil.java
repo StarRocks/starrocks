@@ -63,6 +63,7 @@ public class CredentialUtil {
 
         // Mask for databricks credential
         doMask(properties, DatabricksUnityMetastore.DATABRICKS_TOKEN);
+        doMask(properties, DatabricksUnityMetastore.DATABRICKS_CLIENT_SECRET);
     }
 
     private static void doMask(Map<String, String> properties, String configKey) {

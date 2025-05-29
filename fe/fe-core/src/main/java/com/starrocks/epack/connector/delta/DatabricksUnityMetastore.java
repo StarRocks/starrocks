@@ -29,6 +29,8 @@ public class DatabricksUnityMetastore implements IMetastore {
     private static final Logger LOG = LogManager.getLogger(DatabricksUnityMetastore.class);
     public static final String DATABRICKS_HOST = "databricks.host";
     public static final String DATABRICKS_TOKEN = "databricks.token";
+    public static final String DATABRICKS_CLIENT_ID = "databricks.client.id";
+    public static final String DATABRICKS_CLIENT_SECRET = "databricks.client.secret";
     public static final String DATABRICKS_CATALOG_NAME = "databricks.catalog.name";
 
     private final String catalogName;

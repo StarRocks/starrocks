@@ -19,6 +19,8 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
 import static com.starrocks.epack.connector.delta.DatabricksUnityMetastore.DATABRICKS_CATALOG_NAME;
+import static com.starrocks.epack.connector.delta.DatabricksUnityMetastore.DATABRICKS_CLIENT_ID;
+import static com.starrocks.epack.connector.delta.DatabricksUnityMetastore.DATABRICKS_CLIENT_SECRET;
 import static com.starrocks.epack.connector.delta.DatabricksUnityMetastore.DATABRICKS_HOST;
 import static com.starrocks.epack.connector.delta.DatabricksUnityMetastore.DATABRICKS_TOKEN;
 
@@ -45,16 +47,24 @@ public class DeltaLakeInternalMgrEpack extends DeltaLakeInternalMgr {
 
     public IDeltaLakeMetastore createUnityBackedDeltaLakeMetastore() {
         Map<String, String> properties = deltaLakeCatalogProperties.getProperties();
-        if (!properties.containsKey(DATABRICKS_HOST) || !properties.containsKey(DATABRICKS_TOKEN)) {
-            throw new IllegalArgumentException("Databricks host and token must be set");
+        if (!properties.containsKey(DATABRICKS_HOST)) {
+            throw new IllegalArgumentException("Databricks host must be set");
         }
         if (!properties.containsKey(DATABRICKS_CATALOG_NAME)) {
             throw new IllegalArgumentException("Databricks catalog name must be set");
         }
+        if (!properties.containsKey(DATABRICKS_TOKEN) && !(properties.containsKey(DATABRICKS_CLIENT_ID)
+                && properties.containsKey(DATABRICKS_CLIENT_SECRET))) {
+            throw new IllegalArgumentException("Databricks Catalog need to set databricks.token " +
+                    "or databricks.client.id and databricks.client.secret");
+        }
         String host = properties.get(DATABRICKS_HOST);
         String token = properties.get(DATABRICKS_TOKEN);
+        String clientId = properties.get(DATABRICKS_CLIENT_ID);
+        String clientSecret = properties.get(DATABRICKS_CLIENT_SECRET);
         String dataBricksCatalogName = properties.get(DATABRICKS_CATALOG_NAME);
-        DatabricksConfig cfg = new DatabricksConfig().setHost(host).setToken(token);
+        DatabricksConfig cfg = new DatabricksConfig().setHost(host).setToken(token).
+                setClientId(clientId).setClientSecret(clientSecret);
         WorkspaceClient client = new WorkspaceClient(cfg);
         DatabricksUnityMetastore databricksUnityMetastore = new DatabricksUnityMetastore(catalogName,
                 dataBricksCatalogName, client, hdfsEnvironment);
