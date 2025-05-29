@@ -216,6 +216,25 @@ public class SelectConstTest extends PlanTestBase {
                 "-78883632:00:01");
     }
 
+    @Test
+    public void testExecuteInFEWithComplexQuery() throws Exception {
+        String sql = "select 1, -1, 1.23456, cast(1.123 as float), cast(1.123 as double), " +
+                "cast(10 as bigint), cast(100 as largeint),\n" +
+                "1000000000000, 1+1, 100 * 100, 'abc', \"中文\", '\"abc\"', " +
+                "\"'abc'\", '\\'abc\\\\', \"\\\"abc\\\\\", cast(1.123000000 as decimalv2),\n" +
+                "cast(1.123 as decimal(10, 7)), date '2021-01-01', " +
+                "datetime '2021-01-01 00:00:00', datetime '2021-01-01 00:00:00.123456',\n" +
+                "timediff('2028-01-01 11:25:36', '2000-11-21 12:12:12'), " +
+                "timediff('2000-11-21 12:12:12', '2028-01-01 11:25:36'), x'123456', x'AABBCC11';";
+        ExecPlan execPlan = getExecPlan(sql);
+        FeExecuteCoordinator coordinator = new FeExecuteCoordinator(connectContext, execPlan);
+        try {
+            RowBatch rowBatch = coordinator.getNext();
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
+    }
+
     private void assertFeExecuteResult(String sql, String expected) throws Exception {
         ExecPlan execPlan = getExecPlan(sql);
         FeExecuteCoordinator coordinator = new FeExecuteCoordinator(connectContext, execPlan);
@@ -228,6 +247,7 @@ public class SelectConstTest extends PlanTestBase {
         } else {
             value = new String(bytes, lengthOffset, bytes.length - lengthOffset, StandardCharsets.UTF_8);
         }
+        System.out.println(value);
         Assert.assertEquals(expected, value);
     }
 
