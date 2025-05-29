@@ -1322,7 +1322,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableRewriteSimpleAggToMetaScan = false;
 
     @VarAttr(name = ENABLE_REWRITE_SIMPLE_AGG_TO_HDFS_SCAN)
-    private boolean enableRewriteSimpleAggToHdfsScan = false;
+    private boolean enableRewriteSimpleAggToHdfsScan = true;
 
     @VariableMgr.VarAttr(name = INTERLEAVING_GROUP_SIZE)
     private int interleavingGroupSize = 10;

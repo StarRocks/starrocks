@@ -39,8 +39,16 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.ColumnAccessPath;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.sql.optimizer.ScanOptimzeOption;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.connector.RemoteFilesSampleStrategy;
+import com.starrocks.datacache.DataCacheOptions;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.optimizer.ScanOptimizeOption;
+>>>>>>> 0beffd3c16 ([Enhancxement] set `enable_rewrite_simple_agg_to_hdfs_scan` true by default (#59462))
 import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TScanRangeLocations;
 
@@ -57,7 +65,16 @@ public abstract class ScanNode extends PlanNode {
     protected Map<String, PartitionColumnFilter> columnFilters;
     protected String sortColumn = null;
     protected List<ColumnAccessPath> columnAccessPaths;
+<<<<<<< HEAD
     protected ScanOptimzeOption scanOptimzeOption;
+=======
+    protected DataCacheOptions dataCacheOptions = null;
+    protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+    protected ScanOptimizeOption scanOptimizeOption;
+    // The column names applied dict optimization
+    // used for explain
+    protected final List<String> appliedDictStringColumns = new ArrayList<>();
+>>>>>>> 0beffd3c16 ([Enhancxement] set `enable_rewrite_simple_agg_to_hdfs_scan` true by default (#59462))
 
     public ScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc.getId().asList(), planNodeName);
@@ -72,12 +89,30 @@ public abstract class ScanNode extends PlanNode {
         this.columnAccessPaths = columnAccessPaths;
     }
 
+<<<<<<< HEAD
     public void setScanOptimzeOption(ScanOptimzeOption opt) {
         this.scanOptimzeOption = opt.copy();
+=======
+    @TestOnly
+    public List<ColumnAccessPath> getColumnAccessPaths() {
+        return this.columnAccessPaths;
     }
 
-    public ScanOptimzeOption getScanOptimzeOption() {
-        return scanOptimzeOption;
+    public void setDataCacheOptions(DataCacheOptions dataCacheOptions) {
+        this.dataCacheOptions = dataCacheOptions;
+    }
+
+    public void setWarehouseId(long warehouseId) {
+        this.warehouseId = warehouseId;
+    }
+
+    public void setScanOptimizeOption(ScanOptimizeOption opt) {
+        this.scanOptimizeOption = opt.copy();
+>>>>>>> 0beffd3c16 ([Enhancxement] set `enable_rewrite_simple_agg_to_hdfs_scan` true by default (#59462))
+    }
+
+    public ScanOptimizeOption getScanOptimizeOption() {
+        return scanOptimizeOption;
     }
 
     public String getTableName() {

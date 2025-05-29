@@ -22,7 +22,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.RowOutputInfo;
-import com.starrocks.sql.optimizer.ScanOptimzeOption;
+import com.starrocks.sql.optimizer.ScanOptimizeOption;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -46,7 +46,17 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
      */
     protected final ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap;
     protected ImmutableList<ColumnAccessPath> columnAccessPaths;
+<<<<<<< HEAD
     protected ScanOptimzeOption scanOptimzeOption;
+=======
+    protected ScanOptimizeOption scanOptimizeOption;
+    protected TableVersionRange tableVersionRange;
+    protected DataCacheOptions dataCacheOptions = null;
+
+    protected PhysicalScanOperator(OperatorType type) {
+        super(type);
+    }
+>>>>>>> 0beffd3c16 ([Enhancxement] set `enable_rewrite_simple_agg_to_hdfs_scan` true by default (#59462))
 
     public PhysicalScanOperator(OperatorType type, Table table,
                                 Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
@@ -60,7 +70,12 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
         this.predicate = predicate;
         this.projection = projection;
         this.columnAccessPaths = ImmutableList.of();
+<<<<<<< HEAD
         this.scanOptimzeOption = new ScanOptimzeOption();
+=======
+        this.scanOptimizeOption = new ScanOptimizeOption();
+        this.tableVersionRange = tableVersionRange;
+>>>>>>> 0beffd3c16 ([Enhancxement] set `enable_rewrite_simple_agg_to_hdfs_scan` true by default (#59462))
 
         if (this.projection != null) {
             ColumnRefSet usedColumns = new ColumnRefSet();
@@ -85,8 +100,13 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
 
     public PhysicalScanOperator(OperatorType type, LogicalScanOperator scanOperator) {
         this(type, scanOperator.getTable(), scanOperator.getColRefToColumnMetaMap(), scanOperator.getLimit(),
+<<<<<<< HEAD
                 scanOperator.getPredicate(), scanOperator.getProjection());
         this.scanOptimzeOption = scanOperator.getScanOptimzeOption().copy();
+=======
+                scanOperator.getPredicate(), scanOperator.getProjection(), scanOperator.getTableVersionRange());
+        this.scanOptimizeOption = scanOperator.getScanOptimizeOption().copy();
+>>>>>>> 0beffd3c16 ([Enhancxement] set `enable_rewrite_simple_agg_to_hdfs_scan` true by default (#59462))
     }
 
     public List<ColumnRefOperator> getOutputColumns() {
@@ -105,12 +125,12 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
         return colRefToColumnMetaMap;
     }
 
-    public ScanOptimzeOption getScanOptimzeOption() {
-        return scanOptimzeOption;
+    public ScanOptimizeOption getScanOptimizeOption() {
+        return scanOptimizeOption;
     }
 
-    public void setScanOptimzeOption(ScanOptimzeOption opt) {
-        this.scanOptimzeOption = opt.copy();
+    public void setScanOptimizeOption(ScanOptimizeOption opt) {
+        this.scanOptimizeOption = opt.copy();
     }
 
     public Table getTable() {
@@ -165,4 +185,34 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
     public int hashCode() {
         return Objects.hash(super.hashCode(), table.getId(), colRefToColumnMetaMap.keySet());
     }
+<<<<<<< HEAD
+=======
+
+    public abstract static class Builder<O extends PhysicalScanOperator, B extends PhysicalScanOperator.Builder>
+            extends PhysicalOperator.Builder<O, B> {
+        @Override
+        public B withOperator(O operator) {
+            super.withOperator(operator);
+            builder.table = operator.table;
+            builder.outputColumns = operator.outputColumns;
+            builder.colRefToColumnMetaMap = operator.colRefToColumnMetaMap;
+            builder.columnAccessPaths = operator.columnAccessPaths;
+            builder.scanOptimizeOption = operator.scanOptimizeOption;
+            builder.tableVersionRange = operator.tableVersionRange;
+            return (B) this;
+        }
+
+        public B setColRefToColumnMetaMap(Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+            builder.colRefToColumnMetaMap = ImmutableMap.copyOf(colRefToColumnMetaMap);
+            return (B) this;
+        }
+
+        @Override
+        public O build() {
+            O op = super.build();
+            op.updateOutputColumns();
+            return op;
+        }
+    }
+>>>>>>> 0beffd3c16 ([Enhancxement] set `enable_rewrite_simple_agg_to_hdfs_scan` true by default (#59462))
 }

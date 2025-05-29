@@ -26,7 +26,7 @@ import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.RowOutputInfo;
-import com.starrocks.sql.optimizer.ScanOptimzeOption;
+import com.starrocks.sql.optimizer.ScanOptimizeOption;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
@@ -58,7 +58,12 @@ public abstract class LogicalScanOperator extends LogicalOperator {
     protected ImmutableMap<String, PartitionColumnFilter> columnFilters;
     protected Set<String> partitionColumns = Sets.newHashSet();
     protected ImmutableList<ColumnAccessPath> columnAccessPaths;
+<<<<<<< HEAD
     protected ScanOptimzeOption scanOptimzeOption;
+=======
+    protected ScanOptimizeOption scanOptimizeOption;
+    protected TableVersionRange tableVersionRange;
+>>>>>>> 0beffd3c16 ([Enhancxement] set `enable_rewrite_simple_agg_to_hdfs_scan` true by default (#59462))
 
     public LogicalScanOperator(
             OperatorType type,
@@ -73,7 +78,12 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         this.colRefToColumnMetaMap = ImmutableMap.copyOf(colRefToColumnMetaMap);
         this.columnMetaToColRefMap = ImmutableMap.copyOf(columnMetaToColRefMap);
         this.columnAccessPaths = ImmutableList.of();
+<<<<<<< HEAD
         this.scanOptimzeOption = new ScanOptimzeOption();
+=======
+        this.scanOptimizeOption = new ScanOptimizeOption();
+        this.tableVersionRange = tableVersionRange;
+>>>>>>> 0beffd3c16 ([Enhancxement] set `enable_rewrite_simple_agg_to_hdfs_scan` true by default (#59462))
         buildColumnFilters(predicate);
     }
 
@@ -82,7 +92,12 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         this.colRefToColumnMetaMap = ImmutableMap.of();
         this.columnMetaToColRefMap = ImmutableMap.of();
         this.columnAccessPaths = ImmutableList.of();
+<<<<<<< HEAD
         this.scanOptimzeOption = new ScanOptimzeOption();
+=======
+        this.scanOptimizeOption = new ScanOptimizeOption();
+        this.tableVersionRange = TableVersionRange.empty();
+>>>>>>> 0beffd3c16 ([Enhancxement] set `enable_rewrite_simple_agg_to_hdfs_scan` true by default (#59462))
     }
 
     public Table getTable() {
@@ -114,8 +129,12 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         return columnRefOperatorMap;
     }
 
-    public ScanOptimzeOption getScanOptimzeOption() {
-        return scanOptimzeOption;
+    public ScanOptimizeOption getScanOptimizeOption() {
+        return scanOptimizeOption;
+    }
+
+    public void setScanOptimizeOption(ScanOptimizeOption scanOptimizeOption) {
+        this.scanOptimizeOption = scanOptimizeOption;
     }
     // for mark empty partitions/empty tablet
     public boolean isEmptyOutputRows() {
@@ -211,7 +230,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
             builder.columnMetaToColRefMap = scanOperator.columnMetaToColRefMap;
             builder.columnFilters = scanOperator.columnFilters;
             builder.columnAccessPaths = scanOperator.columnAccessPaths;
-            builder.scanOptimzeOption = scanOperator.scanOptimzeOption;
+            builder.scanOptimizeOption = scanOperator.scanOptimizeOption;
             builder.partitionColumns = scanOperator.partitionColumns;
             return (B) this;
         }

@@ -766,7 +766,7 @@ public class PlanFragmentBuilder {
             OlapScanNode scanNode = new OlapScanNode(context.getNextNodeId(), tupleDescriptor, "OlapScanNode");
             scanNode.setLimit(node.getLimit());
             scanNode.computeStatistics(optExpr.getStatistics());
-            scanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+            scanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             scanNode.setIsSortedByKeyPerTablet(node.needSortedByKeyPerTablet());
             scanNode.setIsOutputChunkByBucket(node.needOutputChunkByBucket());
             scanNode.setWithoutColocateRequirement(node.isWithoutColocateRequirement());
@@ -1002,7 +1002,12 @@ public class PlanFragmentBuilder {
             HudiScanNode hudiScanNode =
                     new HudiScanNode(context.getNextNodeId(), tupleDescriptor, "HudiScanNode");
             hudiScanNode.computeStatistics(optExpression.getStatistics());
+<<<<<<< HEAD
             hudiScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+=======
+            hudiScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
+            currentExecGroup.add(hudiScanNode, true);
+>>>>>>> 0beffd3c16 ([Enhancxement] set `enable_rewrite_simple_agg_to_hdfs_scan` true by default (#59462))
             try {
                 HDFSScanNodePredicates scanNodePredicates = hudiScanNode.getScanNodePredicates();
                 scanNodePredicates.setSelectedPartitionIds(predicates.getSelectedPartitionIds());
@@ -1044,7 +1049,7 @@ public class PlanFragmentBuilder {
 
             HdfsScanNode hdfsScanNode =
                     new HdfsScanNode(context.getNextNodeId(), tupleDescriptor, "HdfsScanNode");
-            hdfsScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+            hdfsScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             hdfsScanNode.computeStatistics(optExpression.getStatistics());
             try {
                 HDFSScanNodePredicates scanNodePredicates = hdfsScanNode.getScanNodePredicates();
@@ -1085,7 +1090,7 @@ public class PlanFragmentBuilder {
 
             FileTableScanNode fileTableScanNode =
                     new FileTableScanNode(context.getNextNodeId(), tupleDescriptor, "FileTableScanNode");
-            fileTableScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+            fileTableScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             fileTableScanNode.computeStatistics(optExpression.getStatistics());
             try {
                 HDFSScanNodePredicates scanNodePredicates = fileTableScanNode.getScanNodePredicates();
@@ -1124,7 +1129,12 @@ public class PlanFragmentBuilder {
             DeltaLakeScanNode deltaLakeScanNode =
                     new DeltaLakeScanNode(context.getNextNodeId(), tupleDescriptor, "DeltaLakeScanNode");
             deltaLakeScanNode.computeStatistics(optExpression.getStatistics());
+<<<<<<< HEAD
             deltaLakeScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+=======
+            deltaLakeScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
+            currentExecGroup.add(deltaLakeScanNode, true);
+>>>>>>> 0beffd3c16 ([Enhancxement] set `enable_rewrite_simple_agg_to_hdfs_scan` true by default (#59462))
             try {
                 // set predicate
                 ScalarOperatorToExpr.FormatterContext formatterContext =
@@ -1167,7 +1177,7 @@ public class PlanFragmentBuilder {
 
             PaimonScanNode paimonScanNode =
                     new PaimonScanNode(context.getNextNodeId(), tupleDescriptor, "PaimonScanNode");
-            paimonScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+            paimonScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             paimonScanNode.computeStatistics(optExpression.getStatistics());
             try {
                 // set predicate
@@ -1212,7 +1222,12 @@ public class PlanFragmentBuilder {
 
             OdpsScanNode odpsScanNode =
                     new OdpsScanNode(context.getNextNodeId(), tupleDescriptor, "OdpsScanNode");
+<<<<<<< HEAD
             odpsScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+=======
+            odpsScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
+            currentExecGroup.add(odpsScanNode, true);
+>>>>>>> 0beffd3c16 ([Enhancxement] set `enable_rewrite_simple_agg_to_hdfs_scan` true by default (#59462))
             try {
                 // set predicate
                 ScalarOperatorToExpr.FormatterContext formatterContext =
@@ -1247,6 +1262,52 @@ public class PlanFragmentBuilder {
             return fragment;
         }
 
+<<<<<<< HEAD
+=======
+        public PlanFragment visitPhysicalKuduScan(OptExpression optExpression, ExecPlan context) {
+            PhysicalKuduScanOperator node = (PhysicalKuduScanOperator) optExpression.getOp();
+
+            Table referenceTable = node.getTable();
+            context.getDescTbl().addReferencedTable(referenceTable);
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            tupleDescriptor.setTable(referenceTable);
+
+            // set slot
+            prepareContextSlots(node, context, tupleDescriptor);
+
+            KuduScanNode kuduScanNode =
+                    new KuduScanNode(context.getNextNodeId(), tupleDescriptor, "KuduScanNode");
+            kuduScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
+            try {
+                // set predicate
+                ScalarOperatorToExpr.FormatterContext formatterContext =
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+                List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
+                for (ScalarOperator predicate : predicates) {
+                    kuduScanNode.getConjuncts()
+                            .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+                }
+                kuduScanNode.setupScanRangeLocations(tupleDescriptor, node.getPredicate());
+                HDFSScanNodePredicates scanNodePredicates = kuduScanNode.getScanNodePredicates();
+                prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context, referenceTable);
+                prepareCommonExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
+            } catch (Exception e) {
+                LOG.warn("Kudu scan node get scan range locations failed : ", e);
+                throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
+            }
+
+            kuduScanNode.setLimit(node.getLimit());
+
+            tupleDescriptor.computeMemLayout();
+            context.getScanNodes().add(kuduScanNode);
+
+            PlanFragment fragment =
+                    new PlanFragment(context.getNextFragmentId(), kuduScanNode, DataPartition.RANDOM);
+            context.getFragments().add(fragment);
+            return fragment;
+        }
+
+>>>>>>> 0beffd3c16 ([Enhancxement] set `enable_rewrite_simple_agg_to_hdfs_scan` true by default (#59462))
         @Override
         public PlanFragment visitPhysicalIcebergScan(OptExpression optExpression, ExecPlan context) {
             PhysicalIcebergScanOperator node = (PhysicalIcebergScanOperator) optExpression.getOp();
@@ -1259,11 +1320,33 @@ public class PlanFragmentBuilder {
             // set slot
             prepareContextSlots(node, context, tupleDescriptor);
 
+<<<<<<< HEAD
             TupleDescriptor equalityDeleteTupleDesc = context.getDescTbl().createTupleDescriptor();
             IcebergScanNode icebergScanNode =
                     new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, "IcebergScanNode", equalityDeleteTupleDesc);
             icebergScanNode.computeStatistics(optExpression.getStatistics());
             icebergScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+=======
+            boolean isEqDeleteScan = node.getOpType() != OperatorType.PHYSICAL_ICEBERG_SCAN;
+            IcebergScanNode icebergScanNode;
+            String planNodeName = isEqDeleteScan ? "IcebergEqualityDeleteScanNode" : "IcebergScanNode";
+            if (!isEqDeleteScan) {
+                PhysicalIcebergScanOperator op = node.cast();
+                icebergScanNode = new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, planNodeName,
+                        op.getTableFullMORParams(), op.getMORParams());
+                icebergScanNode.updateAppliedDictStringColumns(
+                        ((PhysicalIcebergScanOperator) node).getGlobalDicts().stream()
+                                .map(entry -> entry.first).collect(Collectors.toSet()));
+            } else {
+                PhysicalIcebergEqualityDeleteScanOperator op = node.cast();
+                icebergScanNode = new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, planNodeName,
+                        op.getTableFullMORParams(), op.getMORParams());
+            }
+
+            icebergScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
+            icebergScanNode.computeStatistics(expression.getStatistics());
+            currentExecGroup.add(icebergScanNode, true);
+>>>>>>> 0beffd3c16 ([Enhancxement] set `enable_rewrite_simple_agg_to_hdfs_scan` true by default (#59462))
             try {
                 // set predicate
                 ScalarOperatorToExpr.FormatterContext formatterContext =
@@ -1325,7 +1408,12 @@ public class PlanFragmentBuilder {
             scanNode.setUser(context.getConnectContext().getQualifiedUser());
             scanNode.setUserIp(context.getConnectContext().getRemoteIP());
             scanNode.setLimit(node.getLimit());
+<<<<<<< HEAD
             scanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+=======
+            scanNode.setScanOptimizeOption(node.getScanOptimizeOption());
+            currentExecGroup.add(scanNode, true);
+>>>>>>> 0beffd3c16 ([Enhancxement] set `enable_rewrite_simple_agg_to_hdfs_scan` true by default (#59462))
 
             // set predicate
             List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
@@ -1493,7 +1581,7 @@ public class PlanFragmentBuilder {
             scanNode.setLimit(node.getLimit());
             scanNode.computeColumnsAndFilters();
             scanNode.computeStatistics(optExpression.getStatistics());
-            scanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+            scanNode.setScanOptimizeOption(node.getScanOptimizeOption());
 
             context.getScanNodes().add(scanNode);
             PlanFragment fragment =
@@ -1531,7 +1619,7 @@ public class PlanFragmentBuilder {
             }
             scanNode.setLimit(node.getLimit());
             scanNode.computeStatistics(optExpression.getStatistics());
-            scanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+            scanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             try {
                 scanNode.assignNodes();
             } catch (UserException e) {
@@ -1578,7 +1666,7 @@ public class PlanFragmentBuilder {
             scanNode.setLimit(node.getLimit());
             scanNode.computeColumnsAndFilters();
             scanNode.computeStatistics(optExpression.getStatistics());
-            scanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+            scanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             context.getScanNodes().add(scanNode);
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.UNPARTITIONED);
