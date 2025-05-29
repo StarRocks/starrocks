@@ -7,7 +7,7 @@ USE db_${uuid0};
 -- !result
 desc information_schema.warehouse_metrics;
 -- result:
-WAREHOUSE_ID	varchar(512)	YES	false	None	
+WAREHOUSE_ID	bigint	YES	false	None	
 WAREHOUSE_NAME	varchar(2048)	YES	false	None	
 QUEUE_PENDING_LENGTH	varchar(2048)	YES	false	None	
 QUEUE_RUNNING_LENGTH	varchar(2048)	YES	false	None	
