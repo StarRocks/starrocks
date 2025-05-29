@@ -189,7 +189,7 @@ public class Utils {
                                       boolean enablePartitionAggregation)
             throws NoAliveBackendException, RpcException {
         List<TxnInfoPB> txnInfos = Lists.newArrayList(txnInfo);
-        if (enablePartitionAggregation) {
+        if (!enablePartitionAggregation) {
             publishVersionBatch(tablets, txnInfos, baseVersion, newVersion, compactionScores, null, 
                     warehouseId, tabletRowNums);
         } else {
