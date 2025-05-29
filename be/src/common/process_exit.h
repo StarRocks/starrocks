@@ -42,4 +42,16 @@ bool process_exit_in_progress();
 //  - false: process is not in quick exit
 bool process_quick_exit_in_progress();
 
+// set the flag of FE leader awareness of the shutdown
+void set_frontend_aware_of_exit();
+
+// whether the FE leader is aware of the shutdown
+// returns:
+//  - true: at least one response is marked as shutdown to FE's heartbeat request
+//  - false: no response is marked as shutdown to FE's heartbeat request
+bool is_frontend_aware_of_exit();
+
+// clear the flag of frontend awareness of the shutdown.
+void clear_frontend_aware_of_exit();
+
 } // namespace starrocks
