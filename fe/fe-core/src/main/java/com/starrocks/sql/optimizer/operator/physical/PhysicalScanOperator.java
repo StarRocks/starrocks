@@ -47,12 +47,7 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
      */
     protected ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap;
     protected ImmutableList<ColumnAccessPath> columnAccessPaths;
-<<<<<<< HEAD
-    protected ScanOptimzeOption scanOptimzeOption;
-=======
     protected ScanOptimizeOption scanOptimizeOption;
-    protected TableVersionRange tableVersionRange;
->>>>>>> 0beffd3c16 ([Enhancxement] set `enable_rewrite_simple_agg_to_hdfs_scan` true by default (#59462))
     protected DataCacheOptions dataCacheOptions = null;
 
     protected PhysicalScanOperator(OperatorType type) {
@@ -71,12 +66,7 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
         this.predicate = predicate;
         this.projection = projection;
         this.columnAccessPaths = ImmutableList.of();
-<<<<<<< HEAD
-        this.scanOptimzeOption = new ScanOptimzeOption();
-=======
         this.scanOptimizeOption = new ScanOptimizeOption();
-        this.tableVersionRange = tableVersionRange;
->>>>>>> 0beffd3c16 ([Enhancxement] set `enable_rewrite_simple_agg_to_hdfs_scan` true by default (#59462))
 
         updateOutputColumns();
     }
@@ -105,13 +95,8 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
 
     public PhysicalScanOperator(OperatorType type, LogicalScanOperator scanOperator) {
         this(type, scanOperator.getTable(), scanOperator.getColRefToColumnMetaMap(), scanOperator.getLimit(),
-<<<<<<< HEAD
                 scanOperator.getPredicate(), scanOperator.getProjection());
-        this.scanOptimzeOption = scanOperator.getScanOptimzeOption().copy();
-=======
-                scanOperator.getPredicate(), scanOperator.getProjection(), scanOperator.getTableVersionRange());
         this.scanOptimizeOption = scanOperator.getScanOptimizeOption().copy();
->>>>>>> 0beffd3c16 ([Enhancxement] set `enable_rewrite_simple_agg_to_hdfs_scan` true by default (#59462))
     }
 
     public List<ColumnRefOperator> getOutputColumns() {
@@ -208,12 +193,7 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
             builder.outputColumns = operator.outputColumns;
             builder.colRefToColumnMetaMap = operator.colRefToColumnMetaMap;
             builder.columnAccessPaths = operator.columnAccessPaths;
-<<<<<<< HEAD
-            builder.scanOptimzeOption = operator.scanOptimzeOption;
-=======
             builder.scanOptimizeOption = operator.scanOptimizeOption;
-            builder.tableVersionRange = operator.tableVersionRange;
->>>>>>> 0beffd3c16 ([Enhancxement] set `enable_rewrite_simple_agg_to_hdfs_scan` true by default (#59462))
             return (B) this;
         }
 

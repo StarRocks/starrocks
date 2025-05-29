@@ -58,12 +58,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
     protected ImmutableMap<String, PartitionColumnFilter> columnFilters;
     protected Set<String> partitionColumns = Sets.newHashSet();
     protected ImmutableList<ColumnAccessPath> columnAccessPaths;
-<<<<<<< HEAD
-    protected ScanOptimzeOption scanOptimzeOption;
-=======
     protected ScanOptimizeOption scanOptimizeOption;
-    protected TableVersionRange tableVersionRange;
->>>>>>> 0beffd3c16 ([Enhancxement] set `enable_rewrite_simple_agg_to_hdfs_scan` true by default (#59462))
 
     public LogicalScanOperator(
             OperatorType type,
@@ -78,12 +73,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         this.colRefToColumnMetaMap = ImmutableMap.copyOf(colRefToColumnMetaMap);
         this.columnMetaToColRefMap = ImmutableMap.copyOf(columnMetaToColRefMap);
         this.columnAccessPaths = ImmutableList.of();
-<<<<<<< HEAD
-        this.scanOptimzeOption = new ScanOptimzeOption();
-=======
         this.scanOptimizeOption = new ScanOptimizeOption();
-        this.tableVersionRange = tableVersionRange;
->>>>>>> 0beffd3c16 ([Enhancxement] set `enable_rewrite_simple_agg_to_hdfs_scan` true by default (#59462))
         buildColumnFilters(predicate);
     }
 
@@ -92,12 +82,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         this.colRefToColumnMetaMap = ImmutableMap.of();
         this.columnMetaToColRefMap = ImmutableMap.of();
         this.columnAccessPaths = ImmutableList.of();
-<<<<<<< HEAD
-        this.scanOptimzeOption = new ScanOptimzeOption();
-=======
         this.scanOptimizeOption = new ScanOptimizeOption();
-        this.tableVersionRange = TableVersionRange.empty();
->>>>>>> 0beffd3c16 ([Enhancxement] set `enable_rewrite_simple_agg_to_hdfs_scan` true by default (#59462))
     }
 
     public Table getTable() {

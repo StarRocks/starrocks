@@ -1379,33 +1379,12 @@ public class PlanFragmentBuilder {
             // set slot
             prepareContextSlots(node, context, tupleDescriptor);
 
-<<<<<<< HEAD
             TupleDescriptor equalityDeleteTupleDesc = context.getDescTbl().createTupleDescriptor();
             IcebergScanNode icebergScanNode =
                     new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, "IcebergScanNode",
                             equalityDeleteTupleDesc);
             icebergScanNode.computeStatistics(optExpression.getStatistics());
-            icebergScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
-=======
-            boolean isEqDeleteScan = node.getOpType() != OperatorType.PHYSICAL_ICEBERG_SCAN;
-            IcebergScanNode icebergScanNode;
-            String planNodeName = isEqDeleteScan ? "IcebergEqualityDeleteScanNode" : "IcebergScanNode";
-            if (!isEqDeleteScan) {
-                PhysicalIcebergScanOperator op = node.cast();
-                icebergScanNode = new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, planNodeName,
-                        op.getTableFullMORParams(), op.getMORParams());
-                icebergScanNode.updateAppliedDictStringColumns(
-                        ((PhysicalIcebergScanOperator) node).getGlobalDicts().stream()
-                                .map(entry -> entry.first).collect(Collectors.toSet()));
-            } else {
-                PhysicalIcebergEqualityDeleteScanOperator op = node.cast();
-                icebergScanNode = new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, planNodeName,
-                        op.getTableFullMORParams(), op.getMORParams());
-            }
-
             icebergScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
-            icebergScanNode.computeStatistics(expression.getStatistics());
->>>>>>> 0beffd3c16 ([Enhancxement] set `enable_rewrite_simple_agg_to_hdfs_scan` true by default (#59462))
             currentExecGroup.add(icebergScanNode, true);
             try {
                 // set predicate
