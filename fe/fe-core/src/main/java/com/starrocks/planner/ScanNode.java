@@ -62,14 +62,7 @@ public abstract class ScanNode extends PlanNode {
     protected List<ColumnAccessPath> columnAccessPaths;
     protected DataCacheOptions dataCacheOptions = null;
     protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
-<<<<<<< HEAD
-    protected ScanOptimzeOption scanOptimzeOption;
-=======
     protected ScanOptimizeOption scanOptimizeOption;
-    // The column names applied dict optimization
-    // used for explain
-    protected final List<String> appliedDictStringColumns = new ArrayList<>();
->>>>>>> 0beffd3c16 ([Enhancxement] set `enable_rewrite_simple_agg_to_hdfs_scan` true by default (#59462))
 
     public ScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc.getId().asList(), planNodeName);
