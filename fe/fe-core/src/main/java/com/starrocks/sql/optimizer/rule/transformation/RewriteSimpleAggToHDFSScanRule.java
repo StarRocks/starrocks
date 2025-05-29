@@ -156,8 +156,8 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             LOG.warn("Unexpected scan operator: " + scanOperator);
             return null;
         }
+        newMetaScan.setScanOptimizeOption(scanOperator.getScanOptimizeOption());
         try {
-            newMetaScan.setScanOptimizeOption(scanOperator.getScanOptimizeOption());
             newMetaScan.setScanOperatorPredicates(scanOperator.getScanOperatorPredicates());
         } catch (AnalysisException e) {
             LOG.warn("Exception caught when set scan operator predicates", e);
