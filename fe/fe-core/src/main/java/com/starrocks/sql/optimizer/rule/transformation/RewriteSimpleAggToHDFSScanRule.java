@@ -157,6 +157,7 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             return null;
         }
         try {
+            newMetaScan.setScanOptimizeOption(scanOperator.getScanOptimizeOption());
             newMetaScan.setScanOperatorPredicates(scanOperator.getScanOperatorPredicates());
         } catch (AnalysisException e) {
             LOG.warn("Exception caught when set scan operator predicates", e);
