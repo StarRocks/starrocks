@@ -1168,6 +1168,12 @@ CONF_mInt16(pulsar_client_log_level, "2");
 // max loop count when be waiting its fragments to finish. It has no effect if the var is configured with value <= 0.
 CONF_mInt64(loop_count_wait_fragments_finish, "2");
 
+// Determines whether to await at least one frontend heartbeat response indicating SHUTDOWN status before completing graceful exit.
+//
+// When enabled, the graceful shutdown process remains active until a SHUTDOWN confirmation is responded via heartbeat RPC,
+// ensuring the frontend has sufficient time to detect the termination state between two regular heartbeat intervals.
+CONF_mBool(graceful_exit_wait_for_frontend_heartbeat, "false");
+
 // the maximum number of connections in the connection pool for a single jdbc url
 CONF_Int16(jdbc_connection_pool_size, "8");
 // the minimum number of idle connections that connection pool tries to maintain.

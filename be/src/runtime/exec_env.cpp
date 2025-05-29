@@ -43,6 +43,7 @@
 #include "common/config.h"
 #include "common/configbase.h"
 #include "common/logging.h"
+#include "common/process_exit.h"
 #include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/query_context.h"
@@ -795,8 +796,14 @@ void ExecEnv::_wait_for_fragments_finish() {
     size_t running_fragments = _get_running_fragments_count();
     size_t loop_secs = 0;
 
-    while (running_fragments > 0 && loop_secs < max_loop_secs) {
-        LOG(INFO) << running_fragments << " fragment(s) are still running...";
+    // TODO: decouple the heartbeat with the graceful exit
+    // only wait for frontend's heartbeat when the node is ever received heartbeats from the frontend
+    bool need_wait_frontend_hb = config::graceful_exit_wait_for_frontend_heartbeat && get_backend_id().has_value();
+
+    while ((running_fragments > 0 || (need_wait_frontend_hb && !is_frontend_aware_of_exit())) &&
+           loop_secs < max_loop_secs) {
+        LOG(INFO) << "Frontend is aware of exit: " << is_frontend_aware_of_exit() << ", " << running_fragments
+                  << " fragment(s) are still running...";
         sleep(1);
         running_fragments = _get_running_fragments_count();
         loop_secs++;

@@ -3755,6 +3755,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：BE/CN 退出时需要等待正在执行的查询完成的轮次，一轮次固定 10 秒。设置为 `0` 表示禁用轮询等待，立即退出。自 v3.4 起，该参数变为动态参数，且默认值由 `0` 变为 `2`。
 - 引入版本：v2.5
 
+##### graceful_exit_wait_for_frontend_heartbeat
+
+- 默认值：false
+- 类型： Boolean
+- 单位：-
+- 是否动态：是
+- 描述： 确定是否在完成优雅退出前等待至少一个指示SHUTDOWN状态的FE心跳响应。启用后，优雅关闭进程将持续运行直至通过心跳RPC返回给FE SHUTDOWN状态变化，确保FE在两次常规心跳探测间隔期间有足够时间感知终止状态。
+- 引入版本：v3.4.5
+
 ### 数据湖
 
 ##### jdbc_connection_pool_size
