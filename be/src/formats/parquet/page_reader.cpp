@@ -91,7 +91,8 @@ Status PageReader::_deal_page_with_cache() {
             return Status::OK();
         }
         RETURN_IF_ERROR(_read_and_decompress_internal(true));
-        auto st = _cache->insert(page_cache_key, _cache_buf, &cache_handle, false);
+        ObjectCacheWriteOptions opts{.evict_probability = _opts.datacache_options->datacache_evict_probability};
+        auto st = _cache->insert(page_cache_key, _cache_buf, &cache_handle, opts);
         if (st.ok()) {
             _page_handle = PageHandle(std::move(cache_handle));
             _opts.stats->page_cache_write_counter += 1;

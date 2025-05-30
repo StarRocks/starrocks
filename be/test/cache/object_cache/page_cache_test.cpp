@@ -73,7 +73,8 @@ TEST_F(StoragePageCacheTest, normal) {
         auto data = std::make_unique<std::vector<uint8_t>>(1024);
         PageCacheHandle handle;
 
-        ASSERT_OK(_page_cache->insert(key, data.get(), &handle, false));
+        ObjectCacheWriteOptions opts;
+        ASSERT_OK(_page_cache->insert(key, data.get(), &handle, &opts));
         ASSERT_EQ(handle.data(), data.get());
         auto* check_data = data.release();
 
@@ -87,7 +88,8 @@ TEST_F(StoragePageCacheTest, normal) {
         auto data = std::make_unique<std::vector<uint8_t>>(1024);
         PageCacheHandle handle;
 
-        ASSERT_OK(_page_cache->insert(key, data.get(), &handle, true));
+        ObjectCacheWriteOptions opts{.priority = true};
+        ASSERT_OK(_page_cache->insert(key, data.get(), &handle, opts));
         ASSERT_EQ(handle.data(), data.get());
         data.release();
 
@@ -100,7 +102,8 @@ TEST_F(StoragePageCacheTest, normal) {
         key.append(std::to_string(i));
         auto data = std::make_unique<std::vector<uint8_t>>(1024);
         PageCacheHandle handle;
-        ASSERT_OK(_page_cache->insert(key, data.get(), &handle, false));
+        ObjectCacheWriteOptions opts;
+        ASSERT_OK(_page_cache->insert(key, data.get(), &handle, opts));
         data.release();
     }
 
@@ -166,7 +169,8 @@ TEST_F(StoragePageCacheTest, metrics) {
     {
         // Insert a piece of data, but the application layer does not release it.
         auto data = std::make_unique<std::vector<uint8_t>>(1024);
-        ASSERT_OK(_page_cache->insert(key1, data.get(), &handle1, false));
+        ObjectCacheWriteOptions opts;
+        ASSERT_OK(_page_cache->insert(key1, data.get(), &handle1, opts));
         data.release();
     }
 
@@ -174,7 +178,8 @@ TEST_F(StoragePageCacheTest, metrics) {
         // Insert another piece of data and release it from the application layer.
         auto data = std::make_unique<std::vector<uint8_t>>(1024);
         PageCacheHandle handle2;
-        ASSERT_OK(_page_cache->insert(key2, data.get(), &handle2, false));
+        ObjectCacheWriteOptions opts;
+        ASSERT_OK(_page_cache->insert(key2, data.get(), &handle2, opts));
         data.release();
     }
 
