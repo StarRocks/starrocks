@@ -56,7 +56,6 @@ protected:
         ASSERT_TRUE(_fs->create_dir(kTestDir).ok());
 
         _opts.use_page_cache = true;
-        _opts.kept_in_memory = false;
         _opts.stats = &_stats;
     }
     void TearDown() override { StoragePageCache::instance()->prune(); }

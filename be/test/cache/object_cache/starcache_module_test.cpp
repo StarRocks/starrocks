@@ -82,7 +82,7 @@ void StarCacheModuleTest::insert_value(int i) {
     int* ptr = (int*)malloc(_value_size);
     *ptr = i;
     ObjectCacheHandlePtr handle = nullptr;
-    ASSERT_OK(_cache->insert(key, (void*)ptr, _value_size, &Deleter, &handle, &_write_opt));
+    ASSERT_OK(_cache->insert(key, (void*)ptr, _value_size, &Deleter, &handle, _write_opt));
     _cache->release(handle);
 }
 
@@ -102,7 +102,8 @@ TEST_F(StarCacheModuleTest, test_charge_size) {
     int* value = new (ptr) int;
     *value = 10;
     ObjectCacheHandlePtr handle = nullptr;
-    ASSERT_OK(_cache->insert("1", (void*)ptr, mem_size, &Deleter, &handle, nullptr));
+    ObjectCacheWriteOptions opts;
+    ASSERT_OK(_cache->insert("1", (void*)ptr, mem_size, &Deleter, &handle, opts));
     _cache->release(handle);
 
     ObjectCacheHandlePtr lookup_handle = nullptr;
@@ -119,7 +120,7 @@ TEST_F(StarCacheModuleTest, test_charge_size_with_write_option) {
     int* value = new (ptr) int;
     *value = 10;
     ObjectCacheHandlePtr handle = nullptr;
-    ASSERT_OK(_cache->insert("1", (void*)ptr, mem_size, &Deleter, &handle, &_write_opt));
+    ASSERT_OK(_cache->insert("1", (void*)ptr, mem_size, &Deleter, &handle, _write_opt));
     _cache->release(handle);
 
     ObjectCacheHandlePtr lookup_handle = nullptr;
@@ -135,7 +136,8 @@ TEST_F(StarCacheModuleTest, insert_with_null_options) {
     int* ptr = (int*)malloc(_value_size);
     *ptr = 0;
     ObjectCacheHandlePtr handle = nullptr;
-    ASSERT_OK(_cache->insert(key, (void*)ptr, _value_size, &Deleter, &handle, nullptr));
+    ObjectCacheWriteOptions opts;
+    ASSERT_OK(_cache->insert(key, (void*)ptr, _value_size, &Deleter, &handle, opts));
     _cache->release(handle);
 }
 
@@ -144,12 +146,12 @@ TEST_F(StarCacheModuleTest, insert_and_release_old_handle) {
     int* ptr = (int*)malloc(_value_size);
     *ptr = 0;
     ObjectCacheHandlePtr handle = nullptr;
-    ASSERT_OK(_cache->insert(key, (void*)ptr, _value_size, &Deleter, &handle, &_write_opt));
+    ASSERT_OK(_cache->insert(key, (void*)ptr, _value_size, &Deleter, &handle, _write_opt));
 
     key = int_to_string(6, 1);
     ptr = (int*)malloc(_value_size);
     *ptr = 1;
-    ASSERT_OK(_cache->insert(key, (void*)ptr, _value_size, &Deleter, &handle, &_write_opt));
+    ASSERT_OK(_cache->insert(key, (void*)ptr, _value_size, &Deleter, &handle, _write_opt));
     _cache->release(handle);
 }
 

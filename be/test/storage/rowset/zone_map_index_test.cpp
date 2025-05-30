@@ -92,7 +92,6 @@ protected:
         ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(filename))
         opts.read_file = rfile.get();
         opts.use_page_cache = false;
-        opts.kept_in_memory = false;
         OlapReaderStatistics stats;
         opts.stats = &stats;
         ZoneMapIndexReader column_zone_map;
@@ -146,7 +145,6 @@ void ColumnZoneMapTest::load_zone_map(ZoneMapIndexReader& reader, ColumnIndexMet
     ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(filename))
     opts.read_file = rfile.get();
     opts.use_page_cache = false;
-    opts.kept_in_memory = false;
     OlapReaderStatistics stats;
     opts.stats = &stats;
     ASSERT_TRUE(reader.load(opts, meta.zone_map_index()).value());

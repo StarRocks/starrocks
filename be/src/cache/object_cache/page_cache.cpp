@@ -103,7 +103,7 @@ bool StoragePageCache::lookup(const std::string& key, PageCacheHandle* handle) {
 }
 
 Status StoragePageCache::insert(const std::string& key, std::vector<uint8_t>* data, PageCacheHandle* handle,
-                                bool in_memory) {
+                                const ObjectCacheWriteOptions& opts) {
 #ifndef BE_TEST
     int64_t mem_size = malloc_usable_size(data->data()) + sizeof(*data);
     tls_thread_status.mem_release(mem_size);
@@ -118,12 +118,10 @@ Status StoragePageCache::insert(const std::string& key, std::vector<uint8_t>* da
         delete cache_item;
     };
 
-    ObjectCacheWriteOptions options;
-    options.priority = in_memory ? 1 : 0;
     ObjectCacheHandle* obj_handle = nullptr;
     // Use mem size managed by memory allocator as this record charge size.
     // At the same time, we should record this record size for data fetching when lookup.
-    Status st = _cache->insert(key, (void*)data, mem_size, deleter, &obj_handle, &options);
+    Status st = _cache->insert(key, (void*)data, mem_size, deleter, &obj_handle, opts);
     if (st.ok()) {
         *handle = PageCacheHandle(_cache, obj_handle);
     }

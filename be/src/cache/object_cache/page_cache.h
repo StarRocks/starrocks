@@ -48,6 +48,7 @@ namespace starrocks {
 
 class PageCacheHandle;
 class MemTracker;
+class ObjectCacheWriteOptions;
 
 // Page cache min size is 256MB
 static constexpr int64_t kcacheMinSize = 268435456;
@@ -80,7 +81,8 @@ public:
     // This function is thread-safe, and when two clients insert two same key
     // concurrently, this function can assure that only one page is cached.
     // The in_memory page will have higher priority.
-    Status insert(const std::string& key, std::vector<uint8_t>* data, PageCacheHandle* handle, bool in_memory = false);
+    Status insert(const std::string& key, std::vector<uint8_t>* data, PageCacheHandle* handle,
+                  const ObjectCacheWriteOptions& opts);
 
     size_t memory_usage() const { return _cache->usage(); }
 

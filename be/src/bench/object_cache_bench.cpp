@@ -151,7 +151,7 @@ void ObjectCacheBench::prepare_sequence_data(ObjectCache* cache, int64_t count) 
         *(int*)ptr = 1;
         ObjectCacheHandlePtr handle = nullptr;
         ObjectCacheWriteOptions options;
-        Status st = cache->insert(key, ptr, _page_size, deleter, &handle, &options);
+        Status st = cache->insert(key, ptr, _page_size, deleter, &handle, options);
         if (!st.ok()) {
             if (!st.is_already_exist()) {
                 LOG(FATAL) << "insert failed: " << st;

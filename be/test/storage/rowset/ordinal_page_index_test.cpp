@@ -88,7 +88,6 @@ TEST_F(OrdinalPageIndexTest, normal) {
     ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(filename))
     opts.read_file = rfile.get();
     opts.use_page_cache = true;
-    opts.kept_in_memory = false;
     OlapReaderStatistics stats;
     opts.stats = &stats;
     OrdinalIndexReader index;
@@ -149,7 +148,6 @@ TEST_F(OrdinalPageIndexTest, one_data_page) {
     IndexReadOptions opts;
     opts.read_file = nullptr;
     opts.use_page_cache = true;
-    opts.kept_in_memory = false;
     OlapReaderStatistics stats;
     opts.stats = &stats;
     OrdinalIndexReader index;
