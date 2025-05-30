@@ -65,6 +65,8 @@ INSERT INTO insert_wiki_edit
         "aws.s3.secret_key" = "YYYYYYYYYY",
         "aws.s3.region" = "us-west-2"
 );
+INSERT INTO insert_wiki_edit_copy
+    SELECT * FROM insert_wiki_edit;
 COMMIT WORK;
 ```
 
@@ -72,7 +74,8 @@ COMMIT WORK;
 
 - Currently, StarRocks only supports INSERT and SELECT statements in SQL transactions.
 - All target tables of the DML statements in a transaction must be within the same database.
-- Multiple INSERT statements against the same table within a transaction are not allowed.
+- Multiple INSERT statements against the same table within a transaction are not allowed. Otherwise, the system returns an error.
+- Execting a SELECT statement after an INSERT statement against the same table is not allowed. Otherwise, the system returns an error.
 - Nesting transactions are not allowed. You cannot specify BEGIN WORK within a BEGIN-COMMIT/ROLLBACK pair.
 - If the session where an on-going transaction belongs is terminated or closed, the transaction is automatically rolled back.
 - StarRock only supports limited READ COMMITTED for Transaction Isolation Level as described above.
