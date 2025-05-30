@@ -89,6 +89,18 @@ public:
     starrocks::failpoint::FailPointRegisterer fpr##NAME(&sfp##NAME);
 #define FAIL_POINT_SCOPE(NAME) starrocks::failpoint::ScopedFailPointGuard sfpg##NAME(#NAME);
 #define FAIL_POINT_TRIGGER_EXECUTE(NAME, stmt) fiu_do_on(#NAME, stmt)
+// Execute stmt if the failpoint is triggered, otherwise execute default_stmt
+#define FAIL_POINT_TRIGGER_EXECUTE_OR_DEFAULT(NAME, stmt, default_stmt) \
+    do {                                                                \
+        bool fp_triggered__ = false;                                    \
+        FAIL_POINT_TRIGGER_EXECUTE(NAME, {                              \
+            fp_triggered__ = true;                                      \
+            { stmt }                                                    \
+        });                                                             \
+        if (!fp_triggered__) {                                          \
+            default_stmt                                                \
+        }                                                               \
+    } while (false);
 #define FAIL_POINT_TRIGGER_RETURN(NAME, retVal) fiu_return_on(#NAME, retVal)
 #define FAIL_POINT_TRIGGER_RETURN_ERROR(NAME) \
     fiu_return_on(#NAME, Status::InternalError(fmt::format("inject error {} at {}:{}", #NAME, __FILE__, __LINE__)))
@@ -97,6 +109,7 @@ public:
 #define DEFINE_SCOPED_FAIL_POINT(NAME)
 #define FAIL_POINT_SCOPE(NAME)
 #define FAIL_POINT_TRIGGER_EXECUTE(NAME, stmt)
+#define FAIL_POINT_TRIGGER_EXECUTE_OR_DEFAULT(NAME, stmt, default_stmt) default_stmt
 #define FAIL_POINT_TRIGGER_RETURN(NAME, retVal)
 #define FAIL_POINT_TRIGGER_RETURN_ERROR(NAME)
 #endif
