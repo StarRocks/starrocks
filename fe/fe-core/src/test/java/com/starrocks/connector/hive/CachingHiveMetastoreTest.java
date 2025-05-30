@@ -389,7 +389,7 @@ public class CachingHiveMetastoreTest {
         CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
                 metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
 
-        HiveCommonStats stats = new HiveCommonStats(10, 100);
+        HiveCommonStats stats = new HiveCommonStats(10, 100, 1);
 
         // unpartition
         {
@@ -413,7 +413,7 @@ public class CachingHiveMetastoreTest {
         CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
                 metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
 
-        HiveCommonStats stats = new HiveCommonStats(10, 100);
+        HiveCommonStats stats = new HiveCommonStats(10, 100, 1);
         HivePartitionName hivePartitionName = HivePartitionName.of("db1", "unpartitioned_table", "col1=1");
         Partition partition = cachingHiveMetastore.getPartition(
                 "db1", "unpartitioned_table", Lists.newArrayList("col1"));
