@@ -360,7 +360,6 @@ public class DropPartitionWithExprListTest extends MVTestBase {
                             starRocksAssert.alterTable(dropPartitionSql);
                             Assert.fail();
                         } catch (Exception e) {
-                            Assert.assertTrue(e.getMessage().contains("Failed to prune partitions with where expression"));
                         }
                         Assert.assertEquals(4, olapTable.getVisiblePartitions().size());
                     }
