@@ -121,7 +121,7 @@ Status StoragePageCache::insert(const std::string& key, std::vector<uint8_t>* da
     ObjectCacheHandle* obj_handle = nullptr;
     // Use mem size managed by memory allocator as this record charge size.
     // At the same time, we should record this record size for data fetching when lookup.
-    Status st = _cache->insert(key, (void*)data, mem_size, deleter, &obj_handle, &options);
+    Status st = _cache->insert(key, (void*)data, mem_size, deleter, &obj_handle, opts);
     if (st.ok()) {
         *handle = PageCacheHandle(_cache, obj_handle);
     }
