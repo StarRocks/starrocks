@@ -108,46 +108,17 @@ public class LakeRollupJobTest {
 
         String sql3 = "create materialized view mv3 as\n" +
                 "select k2, k1 from base_table3 order by k2;";
-<<<<<<< HEAD
-=======
         lakeRollupJob3 = createJob(sql3);
-
-        String sql4 = "create materialized view mv4 as\n" +
-                "select k2, k1 from base_table4 order by k2;";
-        lakeRollupJob4 = createJob(sql4);
 
         db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
         table = db.getTable("base_table");
     }
 
     private static LakeRollupJob createJob(String sql) throws Exception {
->>>>>>> 3ec633501e ([UT] Fix lake rollup job UT (#59494))
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         Assert.assertTrue(stmt instanceof CreateMaterializedViewStmt);
         CreateMaterializedViewStmt createMaterializedViewStmt = (CreateMaterializedViewStmt) stmt;
         GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createMaterializedViewStmt);
-<<<<<<< HEAD
-
-        StatementBase stmt2 = UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
-        Assert.assertTrue(stmt2 instanceof CreateMaterializedViewStmt);
-        CreateMaterializedViewStmt createMaterializedViewStmt2 = (CreateMaterializedViewStmt) stmt2;
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createMaterializedViewStmt2);
-
-        StatementBase stmt3 = UtFrameUtils.parseStmtWithNewParser(sql3, connectContext);
-        Assert.assertTrue(stmt3 instanceof CreateMaterializedViewStmt);
-        CreateMaterializedViewStmt createMaterializedViewStmt3 = (CreateMaterializedViewStmt) stmt3;
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createMaterializedViewStmt3);
-
-        db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
-        table = db.getTable("base_table");
-
-        Map<Long, AlterJobV2> alterJobV2Map = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
-        Assert.assertEquals(3, alterJobV2Map.size());
-        List<AlterJobV2> alterJobV2List = alterJobV2Map.values().stream().collect(Collectors.toList());
-        lakeRollupJob = (LakeRollupJob) alterJobV2List.get(0);
-        lakeRollupJob2 = (LakeRollupJob) alterJobV2List.get(1);
-        lakeRollupJob3 = (LakeRollupJob) alterJobV2List.get(2);
-=======
         Map<Long, AlterJobV2> alterJobV2Map = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
         Assert.assertEquals(1, alterJobV2Map.size());
         List<AlterJobV2> alterJobV2List = alterJobV2Map.values().stream().collect(Collectors.toList());
@@ -155,7 +126,6 @@ public class LakeRollupJobTest {
         // Disable the execution of job in background thread
         GlobalStateMgr.getCurrentState().getRollupHandler().clearJobs();
         return job;
->>>>>>> 3ec633501e ([UT] Fix lake rollup job UT (#59494))
     }
 
     @AfterClass
