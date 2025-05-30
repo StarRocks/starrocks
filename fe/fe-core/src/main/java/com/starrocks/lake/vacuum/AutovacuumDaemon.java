@@ -241,7 +241,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
             vacuumRequest.minActiveTxnId = minActiveTxnId;
             vacuumRequest.partitionId = partition.getId();
             vacuumRequest.deleteTxnLog = needDeleteTxnLog;
-            vacuumRequest.enablePartitionAggregation = ioMerge;
+            vacuumRequest.enableIoMerge = ioMerge;
             // Perform deletion of txn log on the first node only.
             needDeleteTxnLog = false;
             try {
