@@ -62,6 +62,7 @@ import javax.validation.constraints.NotNull;
 
 public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     private static final Logger LOG = LogManager.getLogger(LakeTableAlterMetaJobBase.class);
+
     @SerializedName(value = "watershedTxnId")
     private long watershedTxnId = -1;
     @SerializedName(value = "watershedGtid")
@@ -113,7 +114,8 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             this.watershedGtid = globalStateMgr.getGtidGenerator().nextGtid();
             GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this.getShadowCopy());
         }
-
+        // TODO(zhangqiang)
+        // if update partition aggregation, can we skip write txn log?
         try {
             for (Partition partition : partitions) {
                 updatePartitionTabletMeta(db, table, partition);
@@ -131,6 +133,10 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     protected abstract void updateCatalog(Database db, LakeTable table);
 
     protected abstract void restoreState(LakeTableAlterMetaJobBase job);
+
+    protected abstract boolean isAggregateMetadata();
+
+    protected abstract boolean isSplitMetadata();
 
     @Override
     protected void runWaitingTxnJob() throws AlterCancelException {
@@ -264,20 +270,24 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             txnInfo.commitTime = finishedTimeMs / 1000;
             txnInfo.txnType = TxnTypePB.TXN_NORMAL;
             txnInfo.gtid = watershedGtid;
-            List<Tablet> tablets = new ArrayList<>();
+            // there are two scenario we should use aggregate_publish
+            // 1. this task is change `enable_partition_aggregation`
+            // 2. the table is enable_partition_aggregation and this task is not change `enable_partition_aggregation`
+            //    to false.
+            boolean useAggregatePublish = isAggregateMetadata() || (enablePartitionAggregation && !isSplitMetadata());
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(partitionId);
-                tablets.clear();
                 Map<Long, MaterializedIndex> dirtyIndexMap = physicalPartitionIndexMap.row(partitionId);
+                List<Tablet> tablets = new ArrayList<>();
                 for (MaterializedIndex index : dirtyIndexMap.values()) {
-                    if (!enablePartitionAggregation) {
+                    if (!useAggregatePublish) {
                         Utils.publishVersion(index.getTablets(), txnInfo, commitVersion - 1, commitVersion,
-                                warehouseId, enablePartitionAggregation);
+                                warehouseId, false);
                     } else {
                         tablets.addAll(index.getTablets());
                     }
                 }
-                if (enablePartitionAggregation) {
+                if (useAggregatePublish) {
                     Utils.aggregatePublishVersion(tablets, Lists.newArrayList(txnInfo), commitVersion - 1, commitVersion, 
                                 null, null, warehouseId, null);
                 }
@@ -417,6 +427,9 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             Preconditions.checkState(partition.getVisibleVersion() == commitVersion - 1,
                     "partitionVisitionVersion=" + partition.getVisibleVersion() + " commitVersion=" + commitVersion);
             partition.updateVisibleVersion(commitVersion, finishedTimeMs);
+            if (isAggregateMetadata() || isSplitMetadata()) {
+                partition.setMetadataSwitchVersion(commitVersion);
+            }
             LOG.info("partitionVisibleVersion=" + partition.getVisibleVersion() + " commitVersion=" + commitVersion);
             LOG.info("LakeTableAlterMetaJob id: {} update visible version of partition: {}, visible Version: {}",
                     jobId, partition.getId(), commitVersion);

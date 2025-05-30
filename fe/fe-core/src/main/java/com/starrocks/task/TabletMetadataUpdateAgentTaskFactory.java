@@ -72,6 +72,12 @@ public class TabletMetadataUpdateAgentTaskFactory {
         return new UpdateLakePersistentIndexTask(backendId, tablets, enablePersistentIndex, persistentIndexType);
     }
 
+    public static TabletMetadataUpdateAgentTask createUpdatePartitionAggregationTask(long backendId, Set<Long> tablets,
+                                                                                     boolean aggregateTabletMetadata) {
+        requireNonNull(tablets, "tablets is null");
+        return new UpdatePartitionAggregationTask(backendId, tablets, aggregateTabletMetadata);
+    }
+
     public static TabletMetadataUpdateAgentTask createEnablePersistentIndexUpdateTask(long backend, Set<Long> tablets,
                                                                                       Boolean value) {
         requireNonNull(tablets, "tablets is null");
@@ -245,6 +251,35 @@ public class TabletMetadataUpdateAgentTaskFactory {
                     throw new IllegalArgumentException("Unknown persistent index type: " + persistentIndexType);
                 }
                 metaInfo.setMeta_type(TTabletMetaType.ENABLE_PERSISTENT_INDEX);
+                metaInfos.add(metaInfo);
+            }
+            return metaInfos;
+        }
+    }
+
+    private static class UpdatePartitionAggregationTask extends TabletMetadataUpdateAgentTask {
+        private final Set<Long> tablets;
+        private boolean aggregateTabletMetadata;
+
+        private UpdatePartitionAggregationTask(long backendId, Set<Long> tablets, 
+                                               boolean aggregateTabletMetadata) {
+            super(backendId, tablets.hashCode());
+            this.tablets = tablets;
+            this.aggregateTabletMetadata = aggregateTabletMetadata;
+        }
+
+        @Override
+        public Set<Long> getTablets() {
+            return tablets;
+        }
+
+        @Override
+        public List<TTabletMetaInfo> getTTabletMetaInfoList() {
+            List<TTabletMetaInfo> metaInfos = Lists.newArrayList();
+            for (Long tabletId : tablets) {
+                TTabletMetaInfo metaInfo = new TTabletMetaInfo();
+                metaInfo.setTablet_id(tabletId);
+                metaInfo.setAggregate_tablet_metadata(aggregateTabletMetadata);
                 metaInfos.add(metaInfo);
             }
             return metaInfos;

@@ -162,6 +162,7 @@ message MetadataUpdateInfoPB {
     optional bool enable_persistent_index = 1;
     optional TabletSchemaPB tablet_schema = 2;
     optional PersistentIndexTypePB persistent_index_type = 3;
+    optional bool aggregate_tablet_metadata = 4;
 }
 
 message SharedTabletMetadataPB {
