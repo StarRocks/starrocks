@@ -332,8 +332,9 @@ public class DropPartitionWithExprListTest extends MVTestBase {
                             starRocksAssert.alterTable(dropPartitionSql);
                             Assert.fail();
                         } catch (Exception e) {
-                            Assert.assertTrue(e.getMessage().contains("Column is not a partition column which " +
-                                    "can not be used in where clause for drop partition"));
+                            Assert.assertTrue(e.getMessage().contains("Column `dt` in the partition condition is not " +
+                                    "a table's partition expression, please use table's partition expressions: " +
+                                    "`province`/`str2date(dt, '%Y-%m-%d')`"));
                         }
                         Assert.assertEquals(4, olapTable.getVisiblePartitions().size());
                     }
@@ -487,7 +488,9 @@ public class DropPartitionWithExprListTest extends MVTestBase {
                             starRocksAssert.alterTable(dropPartitionSql);
                             Assert.fail();
                         } catch (Exception e) {
-                            Assert.assertTrue(e.getMessage().contains("Column is not a partition column which can not"));
+                            Assert.assertTrue(e.getMessage().contains("Column `province` in the partition condition is not " +
+                                    "a table's partition expression, please use table's partition expressions: `str2date(dt, " +
+                                    "'%Y-%m-%d')`/`date_trunc('day', dt)`."));
                         }
                     }
                     {

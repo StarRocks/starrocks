@@ -938,8 +938,8 @@ public class CreateTableWithPartitionTest extends StarRocksTestBase  {
                     "'partition_retention_condition' = 'cast(id as date) > current_date() - interval 1 month'\n" +
                     ")");
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Column is not a partition column which can not be " +
-                    "used in where clause for drop partition"));
+            Assert.assertTrue(e.getMessage().contains("Column `id` in the partition condition is not a table's partition " +
+                    "expression, please use table's partition expressions: `province`/`dt`."));
         }
     }
 
@@ -958,8 +958,8 @@ public class CreateTableWithPartitionTest extends StarRocksTestBase  {
                     "'partition_retention_condition' = 'cast(id as date) > current_date() - interval 1 month'\n" +
                     ")");
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Can't drop partitions with where expression " +
-                    "since it is not partitioned"));
+            Assert.assertTrue(e.getMessage().contains("Partition condition `CAST(id AS DATE) > current_date() - INTERVAL 1 MONTH` " +
+                    "is supported for a partitioned table"));
         }
     }
 
