@@ -255,7 +255,7 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
 
-    public static final String PROPERTIES_ENABLE_PARTITION_AGGREGATION = "enable_partition_aggregation";
+    public static final String PROPERTIES_IO_MERGE = "io_merge";
 
     /**
      * Matches location labels like : ["*", "a:*", "bcd_123:*", "123bcd_:val_123", "  a :  b  "],
@@ -886,13 +886,13 @@ public class PropertyAnalyzer {
                 + " must be `true` or `false`");
     }
 
-    public static Boolean analyzeEnablePartitionAggregation(Map<String, String> properties) throws AnalysisException {
-        boolean enablePartitionAggregation = Config.enable_partition_aggregation;
-        if (properties != null && properties.containsKey(PROPERTIES_ENABLE_PARTITION_AGGREGATION)) {
-            enablePartitionAggregation = Boolean.parseBoolean(properties.get(PROPERTIES_ENABLE_PARTITION_AGGREGATION));
-            properties.remove(PROPERTIES_ENABLE_PARTITION_AGGREGATION);
+    public static Boolean analyzeIOMerge(Map<String, String> properties) throws AnalysisException {
+        boolean ioMerge = Config.lake_io_merge;
+        if (properties != null && properties.containsKey(PROPERTIES_IO_MERGE)) {
+            ioMerge = Boolean.parseBoolean(properties.get(PROPERTIES_IO_MERGE));
+            properties.remove(PROPERTIES_IO_MERGE);
         }
-        return enablePartitionAggregation;
+        return ioMerge;
     }
 
     public static Set<String> analyzeBloomFilterColumns(Map<String, String> properties, List<Column> columns,

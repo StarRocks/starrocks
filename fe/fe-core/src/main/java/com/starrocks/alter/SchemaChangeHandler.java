@@ -2113,7 +2113,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
             boolean enablePersistentIndex = false;
             String persistentIndexType = "";
-            boolean aggregateTabletMetadata = false;
+            boolean enableIOMerge = false;
             TTabletMetaType metaType = TTabletMetaType.ENABLE_PERSISTENT_INDEX;
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
                 enablePersistentIndex = PropertyAnalyzer.analyzeBooleanProp(properties,
@@ -2148,15 +2148,15 @@ public class SchemaChangeHandler extends AlterHandler {
                             olapTable.getName(), persistentIndexType));
                     return null;
                 }
-            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION)) {
-                aggregateTabletMetadata = PropertyAnalyzer.analyzeBooleanProp(properties,
-                            PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION, false);
-                if (aggregateTabletMetadata == olapTable.enablePartitionAggregation()) {
-                    LOG.info(String.format("table: %s enable_partition_aggregation is %s, nothing need to do",
-                            olapTable.getName(), aggregateTabletMetadata));
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_IO_MERGE)) {
+                enableIOMerge = PropertyAnalyzer.analyzeBooleanProp(properties,
+                            PropertyAnalyzer.PROPERTIES_IO_MERGE, false);
+                if (enableIOMerge == olapTable.isIOMerge()) {
+                    LOG.info(String.format("table: %s io_merge is %s, nothing need to do",
+                            olapTable.getName(), enableIOMerge));
                     return null;
                 }
-                metaType = TTabletMetaType.ENABLE_PARTITION_AGGREGATION;
+                metaType = TTabletMetaType.ENABLE_IO_MERGE;
             } else {
                 throw new DdlException("does not support alter " + properties.entrySet().iterator().next().getKey() +
                         " in shared_data mode");
@@ -2166,7 +2166,7 @@ public class SchemaChangeHandler extends AlterHandler {
             alterMetaJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
                     db.getId(),
                     olapTable.getId(), olapTable.getName(), timeoutSecond * 1000 /* should be ms*/,
-                    metaType, enablePersistentIndex, persistentIndexType, aggregateTabletMetadata);
+                    metaType, enablePersistentIndex, persistentIndexType, enableIOMerge);
         } else {
             // shouldn't happen
             throw new DdlException("only support alter enable_persistent_index in shared_data mode");

@@ -164,7 +164,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     private MarkedCountDownLatch<Long, Long> createReplicaLatch = null;
     private AtomicBoolean waitingCreatingReplica = new AtomicBoolean(false);
     private AtomicBoolean isCancelling = new AtomicBoolean(false);
-    private boolean enablePartitionAggregation = false;
+    private boolean isIOMerge = false;
 
     final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
 
@@ -367,7 +367,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             OlapTable table = getTableOrThrow(db, tableId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
 
-            enableTabletCreationOptimization |= table.enablePartitionAggregation();
+            enableTabletCreationOptimization |= table.isIOMerge();
             if (enableTabletCreationOptimization) {
                 numTablets = physicalPartitionIndexMap.size();
             } else {
@@ -778,7 +778,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     boolean readyToPublishVersion() throws AlterCancelException {
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             OlapTable table = getTableOrThrow(db, tableId);
-            enablePartitionAggregation = table.enablePartitionAggregation();
+            isIOMerge = table.isIOMerge();
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                 Preconditions.checkState(partition != null, partitionId);
@@ -808,14 +808,14 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 tablets.clear();
                 Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
                 for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
-                    if (!enablePartitionAggregation) {
+                    if (!isIOMerge) {
                         Utils.publishVersion(shadowIndex.getTablets(), txnInfo, 1, commitVersion, computeResource,
-                                enablePartitionAggregation);
+                                isIOMerge);
                     } else {
                         tablets.addAll(shadowIndex.getTablets());
                     }
                 }
-                if (enablePartitionAggregation) {
+                if (isIOMerge) {
                     Utils.aggregatePublishVersion(tablets, Lists.newArrayList(txnInfo), 1, commitVersion,
                             null, null, computeResource, null);
                 }

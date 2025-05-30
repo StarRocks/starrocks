@@ -259,7 +259,7 @@ public class LakeTableHelper {
 
     // if one of the tables in tableIdList is LakeTable with partition aggregation, return true
     // else return false
-    public static boolean enablePartitionAggregation(long dbId, List<Long> tableIdList) {
+    public static boolean ioMerge(long dbId, List<Long> tableIdList) {
         if (!RunMode.isSharedDataMode()) {
             return false;
         }
@@ -270,7 +270,7 @@ public class LakeTableHelper {
                 continue;
             }
             // check if table is LakeTable with partition aggregation
-            if (table.enablePartitionAggregation()) {
+            if (table.isIOMerge()) {
                 return true;
             }
         }

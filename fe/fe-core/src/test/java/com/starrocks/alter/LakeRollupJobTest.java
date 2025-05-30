@@ -111,7 +111,7 @@ public class LakeRollupJobTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES(\n" +
-                        "    \"enable_partition_aggregation\" = \"true\"\n" +
+                        "    \"io_merge\" = \"true\"\n" +
                         ");");
 
         String sql = "create materialized view mv1 as\n" +
@@ -185,7 +185,7 @@ public class LakeRollupJobTest {
     }
 
     @Test
-    public void testCreateSyncMvWithEnablePartitionAggregation() throws Exception {
+    public void testCreateSyncMvWithEnableIOMerge() throws Exception {
         new MockUp<LakeRollupJob>() {
             @Mock
             public void sendAgentTask(AgentBatchTask batchTask) {

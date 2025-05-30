@@ -166,12 +166,12 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
     }
 
     @Override
-    protected boolean isAggregateMetadata() {
+    protected boolean enableIOMerge() {
         return false;
     }
 
     @Override
-    protected boolean isSplitMetadata() {
+    protected boolean disableIOMerge() {
         return false;
     }
 
