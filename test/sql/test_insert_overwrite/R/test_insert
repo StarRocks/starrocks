@@ -16,3 +16,24 @@ select count(*) from t;
 -- result:
 32
 -- !result
+
+create table t1 (k1 int, k2 varchar(100));
+-- result:
+-- !result
+insert into t1 values(3, "c");
+-- result:
+-- !result
+select * from t1;
+-- result:
+3	c
+-- !result
+create table t2 (k1 int, k2 varchar(100), k3 int default "10");
+-- result:
+-- !result
+insert overwrite t2 by name select k1, k2 from t1;
+-- result:
+-- !result
+select * from t2;
+-- result:
+3	c	10
+-- !result
