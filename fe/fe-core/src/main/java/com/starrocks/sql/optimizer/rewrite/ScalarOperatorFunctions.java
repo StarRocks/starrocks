@@ -458,7 +458,6 @@ public class ScalarOperatorFunctions {
 
         LocalDateTime dt = date.getDatetime();
         LocalDate resultDate;
-
         switch (unit) {
             case "month":
                 resultDate = dt.with(TemporalAdjusters.lastDayOfMonth()).toLocalDate();
@@ -477,7 +476,7 @@ public class ScalarOperatorFunctions {
                 throw new IllegalArgumentException("Invalid unit for last_day(): " + unit);
         }
 
-        return ConstantOperator.createDate(resultDate.atStartOfDay());
+        return ConstantOperator.createDateOrNull(resultDate.atStartOfDay());
     }
 
     @ConstantFunction.List(list = {

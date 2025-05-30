@@ -1,7 +1,4 @@
 -- name: test_partition_prune_with_last_day
-set disable_function_fold_constants=true;
--- result:
--- !result
 CREATE TABLE t1 (
     dt datetime,
     province string,
@@ -24,7 +21,7 @@ INSERT INTO t1(dt, province, num) SELECT NULL, NULL, NULL;
 -- !result
 function: print_plan_partition_selected_num("select count(*) from t1 where last_day(dt) = '2025-01-01';", "t1")
 -- result:
-502/502
+None
 -- !result
 function: print_table_partitions_num("t1")
 -- result:
@@ -441,83 +438,83 @@ SELECT count(*) FROM t1 WHERE  date_trunc('day', dt) < '2025-12-30' - INTERVAL 2
 -- !result
 function: print_plan_partition_selected_num("select count(*) from t1 where last_day(dt) = '2025-01-01';", "t1")
 -- result:
-502/502
+None
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-01-31';", "t1")
 -- result:
-502/502
+31/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-02-28';", "t1")
 -- result:
-502/502
+29/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-03-31';", "t1")
 -- result:
-502/502
+32/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-04-30';", "t1")
 -- result:
-502/502
+31/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-05-31';", "t1")
 -- result:
-502/502
+32/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-06-30';", "t1")
 -- result:
-502/502
+31/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-07-31';", "t1")
 -- result:
-502/502
+32/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-08-31';", "t1")
 -- result:
-502/502
+32/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-09-30';", "t1")
 -- result:
-502/502
+31/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-10-31';", "t1")
 -- result:
-502/502
+32/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-11-30';", "t1")
 -- result:
-502/502
+31/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-12-31';", "t1")
 -- result:
-502/502
+32/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) is NULL;", "t1")
 -- result:
-502/502
+1/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) BETWEEN '2025-01-01' AND '2025-01-31';", "t1")
 -- result:
-502/502
+31/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) BETWEEN '2025-01-01' AND '2025-02-28';", "t1")
 -- result:
-502/502
+59/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) BETWEEN '2025-01-01' AND '2025-09-28';", "t1")
 -- result:
-502/502
+243/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) BETWEEN '2025-01-01' AND '2025-12-28';", "t1")
 -- result:
-502/502
+334/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) BETWEEN '2025-01-01' AND '2025-12-31';", "t1")
 -- result:
-502/502
+365/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) BETWEEN '2025-01-01' AND '2025-12-31' or last_day(dt) is NULL;", "t1")
 -- result:
-502/502
+366/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = date_trunc('day', dt);", "t1")
 -- result:
@@ -533,11 +530,11 @@ function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE  date_trunc('day', dt) < '2025-05-30' - INTERVAL 2 MONTH AND last_day(date_trunc('day', dt)) != date_trunc('day', dt);", "t1")
 -- result:
-502/502
+89/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE  date_trunc('day', dt) < '2025-12-30' - INTERVAL 2 MONTH AND last_day(date_trunc('day', dt)) != date_trunc('day', dt);", "t1")
 -- result:
-502/502
+303/502
 -- !result
 drop table if exists t1;
 -- result:
@@ -681,83 +678,83 @@ SELECT count(*) FROM t1 WHERE  date_trunc('day', dt) < '2025-12-30' - INTERVAL 2
 -- !result
 function: print_plan_partition_selected_num("select count(*) from t1 where last_day(dt) = '2025-01-01';", "t1")
 -- result:
-502/502
+None
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-01-31';", "t1")
 -- result:
-502/502
+31/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-02-28';", "t1")
 -- result:
-502/502
+29/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-03-31';", "t1")
 -- result:
-502/502
+32/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-04-30';", "t1")
 -- result:
-502/502
+31/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-05-31';", "t1")
 -- result:
-502/502
+32/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-06-30';", "t1")
 -- result:
-502/502
+31/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-07-31';", "t1")
 -- result:
-502/502
+32/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-08-31';", "t1")
 -- result:
-502/502
+32/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-09-30';", "t1")
 -- result:
-502/502
+31/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-10-31';", "t1")
 -- result:
-502/502
+32/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-11-30';", "t1")
 -- result:
-502/502
+31/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = '2025-12-31';", "t1")
 -- result:
-502/502
+32/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) is NULL;", "t1")
 -- result:
-502/502
+1/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) BETWEEN '2025-01-01' AND '2025-01-31';", "t1")
 -- result:
-502/502
+31/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) BETWEEN '2025-01-01' AND '2025-02-28';", "t1")
 -- result:
-502/502
+59/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) BETWEEN '2025-01-01' AND '2025-09-28';", "t1")
 -- result:
-502/502
+243/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) BETWEEN '2025-01-01' AND '2025-12-28';", "t1")
 -- result:
-502/502
+334/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) BETWEEN '2025-01-01' AND '2025-12-31';", "t1")
 -- result:
-502/502
+365/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) BETWEEN '2025-01-01' AND '2025-12-31' or last_day(dt) is NULL;", "t1")
 -- result:
-502/502
+366/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE last_day(dt) = date_trunc('day', dt);", "t1")
 -- result:
@@ -1049,9 +1046,9 @@ SELECT count(*) FROM t1 WHERE last_day(dt, 'year') = date_trunc('year', dt);
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE  date_trunc('day', dt) < '2025-05-30' - INTERVAL 2 MONTH AND last_day(date_trunc('day', dt)) != date_trunc('day', dt);", "t1")
 -- result:
-502/502
+89/502
 -- !result
 function: print_plan_partition_selected_num("SELECT count(*) FROM t1 WHERE  date_trunc('day', dt) < '2025-12-30' - INTERVAL 2 MONTH AND last_day(date_trunc('day', dt)) != date_trunc('day', dt);", "t1")
 -- result:
-502/502
+303/502
 -- !result
