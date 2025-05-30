@@ -26,11 +26,11 @@ LRUCacheModule::LRUCacheModule(std::shared_ptr<Cache> cache) : _cache(std::move(
 }
 
 Status LRUCacheModule::insert(const std::string& key, void* value, size_t size, ObjectCacheDeleter deleter,
-                              ObjectCacheHandlePtr* handle, ObjectCacheWriteOptions* options) {
+                              ObjectCacheHandlePtr* handle, const ObjectCacheWriteOptions& options) {
     if (!_check_write(size, options)) {
         return Status::InternalError("cache insertion is rejected");
     }
-    auto* lru_handle = _cache->insert(key, value, size, deleter, static_cast<CachePriority>(options->priority));
+    auto* lru_handle = _cache->insert(key, value, size, deleter, static_cast<CachePriority>(options.priority));
     if (handle) {
         *handle = reinterpret_cast<ObjectCacheHandlePtr>(lru_handle);
     }
@@ -115,11 +115,11 @@ Status LRUCacheModule::shutdown() {
     return Status::OK();
 }
 
-bool LRUCacheModule::_check_write(size_t charge, ObjectCacheWriteOptions* options) const {
-    if (options->evict_probability >= 100) {
+bool LRUCacheModule::_check_write(size_t charge, const ObjectCacheWriteOptions& options) const {
+    if (options.evict_probability >= 100) {
         return true;
     }
-    if (options->evict_probability <= 0) {
+    if (options.evict_probability <= 0) {
         return false;
     }
 
@@ -130,7 +130,7 @@ bool LRUCacheModule::_check_write(size_t charge, ObjectCacheWriteOptions* option
     }
     */
 
-    if (butil::fast_rand_less_than(100) < options->evict_probability) {
+    if (butil::fast_rand_less_than(100) < options.evict_probability) {
         return true;
     }
     return false;
