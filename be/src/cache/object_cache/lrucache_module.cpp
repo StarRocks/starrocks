@@ -123,10 +123,12 @@ bool LRUCacheModule::_check_write(size_t charge, ObjectCacheWriteOptions* option
         return false;
     }
 
+    /*
     // TODO: The cost of this call may be relatively high, and it needs to be optimized later.
     if (_cache->get_memory_usage() + charge <= _cache->get_capacity()) {
         return true;
     }
+    */
 
     if (butil::fast_rand_less_than(100) < options->evict_probability) {
         return true;
