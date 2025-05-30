@@ -202,7 +202,8 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         return tablets;
     }
 
-    public List<Long> getTabletIdsInOrder() {
+    // With virtual buckets, the order of tablets is irrelevant
+    public List<Long> getTabletIds() {
         List<Long> tabletIds = Lists.newArrayListWithCapacity(tablets.size());
         for (Tablet tablet : tablets) {
             tabletIds.add(tablet.getId());
@@ -306,6 +307,8 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         return virtualBucketIndexes;
     }
 
+    // TODO: adapt colocation for virtual buckets
+    // Keep this method temporarily for colocate table
     public int getTabletOrderIdx(long tabletId) {
         int idx = 0;
         for (Tablet tablet : tablets) {
