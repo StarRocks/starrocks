@@ -61,7 +61,6 @@ protected:
         ASSERT_TRUE(_fs->create_dir(kTestDir).ok());
 
         _opts.use_page_cache = true;
-        _opts.kept_in_memory = false;
         _opts.stats = &_stats;
     }
     void TearDown() override { StoragePageCache::instance()->prune(); }
@@ -261,7 +260,6 @@ TEST_F(BitmapIndexTest, test_concurrent_load) {
     ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name))
     opts.read_file = rfile.get();
     opts.use_page_cache = true;
-    opts.kept_in_memory = false;
     OlapReaderStatistics stats;
     opts.stats = &stats;
     auto reader = std::make_unique<BitmapIndexReader>();

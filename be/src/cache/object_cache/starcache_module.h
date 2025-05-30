@@ -26,7 +26,7 @@ public:
     virtual ~StarCacheModule() = default;
 
     Status insert(const std::string& key, void* value, size_t size, ObjectCacheDeleter deleter,
-                  ObjectCacheHandlePtr* handle, ObjectCacheWriteOptions* options) override;
+                  ObjectCacheHandlePtr* handle, const ObjectCacheWriteOptions& options) override;
 
     Status lookup(const std::string& key, ObjectCacheHandlePtr* handle, ObjectCacheReadOptions* options) override;
 
