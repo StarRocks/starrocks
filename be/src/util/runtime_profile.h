@@ -52,6 +52,7 @@
 #include "common/object_pool.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gutil/casts.h"
+#include "phmap/phmap.h"
 #include "util/stopwatch.hpp"
 
 namespace starrocks {
@@ -611,12 +612,12 @@ private:
 
     // Map from counter names to counters and parent counter names.
     // The profile owns the memory for the counters.
-    typedef std::map<std::string, std::pair<Counter*, std::string>> CounterMap;
+    typedef phmap::flat_hash_map<std::string, std::pair<Counter*, std::string>> CounterMap;
     CounterMap _counter_map;
 
     // Map from parent counter name to a set of child counter name.
     // All top level counters are the child of "" (root).
-    typedef std::map<std::string, std::set<std::string>> ChildCounterMap;
+    typedef phmap::flat_hash_map<std::string, std::set<std::string>> ChildCounterMap;
     ChildCounterMap _child_counter_map;
 
     // A set of bucket counters registered in this runtime profile.
@@ -628,7 +629,7 @@ private:
     // Child profiles.  Does not own memory.
     // We record children in both a map (to facilitate updates) and a vector
     // (to print things in the order they were registered)
-    typedef std::map<std::string, RuntimeProfile*> ChildMap;
+    typedef phmap::flat_hash_map<std::string, RuntimeProfile*> ChildMap;
     ChildMap _child_map;
 
     ChildVector _children;
@@ -636,7 +637,7 @@ private:
     std::vector<std::shared_ptr<RuntimeProfile>> _childre_holder;
     mutable std::mutex _children_lock; // protects _child_map, _children and _childre_holder
 
-    typedef std::map<std::string, std::string> InfoStrings;
+    typedef phmap::flat_hash_map<std::string, std::string> InfoStrings;
     InfoStrings _info_strings;
 
     // Keeps track of the order in which InfoStrings are displayed when printed
@@ -646,7 +647,7 @@ private:
     // Protects _info_strings and _info_strings_display_order
     mutable std::mutex _info_strings_lock;
 
-    typedef std::map<std::string, EventSequence*> EventSequenceMap;
+    typedef phmap::flat_hash_map<std::string, EventSequence*> EventSequenceMap;
     EventSequenceMap _event_sequence_map;
     mutable std::mutex _event_sequences_lock;
 

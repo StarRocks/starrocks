@@ -131,7 +131,7 @@ void RuntimeProfile::merge(RuntimeProfile* other) {
                 child->_metadata = other_child->_metadata;
                 bool indent_other_child = i.second;
                 _child_map[child->_name] = child;
-                _children.push_back(std::make_pair(child, indent_other_child));
+                _children.emplace_back(child, indent_other_child);
             }
 
             child->merge(other_child);
@@ -182,7 +182,7 @@ void RuntimeProfile::update(const std::vector<TRuntimeProfileNode>& nodes, int* 
             }
         }
 
-        ChildCounterMap::const_iterator child_counter_src_itr;
+        std::map<std::string, std::set<std::string>>::const_iterator child_counter_src_itr;
 
         for (child_counter_src_itr = node.child_counters_map.begin();
              child_counter_src_itr != node.child_counters_map.end(); ++child_counter_src_itr) {
@@ -194,7 +194,7 @@ void RuntimeProfile::update(const std::vector<TRuntimeProfileNode>& nodes, int* 
 
     if (!is_node_old) {
         std::lock_guard<std::mutex> l(_info_strings_lock);
-        const InfoStrings& info_strings = node.info_strings;
+        const std::map<std::string, std::string>& info_strings = node.info_strings;
         for (const std::string& key : node.info_strings_display_order) {
             // Look for existing info strings and update in place. If there
             // are new strings, add them to the end of the display order.
@@ -229,7 +229,7 @@ void RuntimeProfile::update(const std::vector<TRuntimeProfileNode>& nodes, int* 
                 child = _pool->add(new RuntimeProfile(tchild.name));
                 child->_metadata = tchild.metadata;
                 _child_map[tchild.name] = child;
-                _children.push_back(std::make_pair(child, tchild.indent));
+                _children.emplace_back(child, tchild.indent);
             }
 
             child->update(nodes, idx, is_node_old);
@@ -369,7 +369,6 @@ void RuntimeProfile::reserve_child_holder(size_t child_num) {
     _childre_holder.reserve(child_num);
 }
 
-
 RuntimeProfile* RuntimeProfile::get_child(const std::string& name) {
     std::lock_guard<std::mutex> l(_children_lock);
     auto it = _child_map.find(name);
@@ -401,6 +400,7 @@ RuntimeProfile* RuntimeProfile::get_child(const size_t index) {
 
 void RuntimeProfile::get_children(std::vector<RuntimeProfile*>* children) {
     children->clear();
+    children->reserve(_children.size());
     std::lock_guard<std::mutex> l(_children_lock);
 
     for (auto& child : _children) {
@@ -565,7 +565,7 @@ void RuntimeProfile::copy_all_counters_from(RuntimeProfile* src_profile, const s
     std::lock_guard<std::mutex> l2(_counter_lock);
 
     std::queue<std::pair<std::string, std::string>> name_queue;
-    name_queue.push(std::make_pair(ROOT_COUNTER, ROOT_COUNTER));
+    name_queue.emplace(ROOT_COUNTER, ROOT_COUNTER);
     while (!name_queue.empty()) {
         auto top_pair = std::move(name_queue.front());
         name_queue.pop();
@@ -596,7 +596,7 @@ void RuntimeProfile::copy_all_counters_from(RuntimeProfile* src_profile, const s
         }
 
         for (auto& child_name : names_it->second) {
-            name_queue.push(std::make_pair(child_name, name));
+            name_queue.emplace(child_name, name);
         }
     }
 }
@@ -799,7 +799,9 @@ void RuntimeProfile::to_thrift(std::vector<TRuntimeProfileNode>* nodes) {
     {
         std::lock_guard<std::mutex> l(_counter_lock);
         counter_map = _counter_map;
-        node.child_counters_map = _child_counter_map;
+        for (const auto& kv : _child_counter_map) {
+            node.child_counters_map.emplace(kv.first, kv.second);
+        }
     }
 
     // If the node has a MIN/MAX and they need to be displayed, the node itself also needs to be reserved,
@@ -835,7 +837,9 @@ void RuntimeProfile::to_thrift(std::vector<TRuntimeProfileNode>* nodes) {
 
     {
         std::lock_guard<std::mutex> l(_info_strings_lock);
-        node.info_strings = _info_strings;
+        for (const auto& kv : _info_strings) {
+            node.info_strings.emplace(kv.first, kv.second);
+        }
         node.info_strings_display_order = _info_strings_display_order;
     }
 
