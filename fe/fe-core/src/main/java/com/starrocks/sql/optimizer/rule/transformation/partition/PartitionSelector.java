@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.starrocks.sql.optimizer.rule.transformation.partition;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicate;
 import com.google.common.collect.ImmutableMap;
@@ -78,6 +79,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.parquet.Strings;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
@@ -96,7 +98,8 @@ public class PartitionSelector {
     // why not use `PARTITION_ID` here? because partition_id in partitions_meta is physical partition id which may be confused.
     private static final String PARTITIONS_META_TEMPLATE = "SELECT PARTITION_NAME FROM INFORMATION_SCHEMA.PARTITIONS_META " +
             "WHERE DB_NAME ='%s' and TABLE_NAME='%s' AND %s;";
-    private static final String JSON_QUERY_TEMPLATE = "CAST(JSON_QUERY(%s, '$[0].[%d]') AS %s)";
+    // NOTE: `json` to `datetime` is not supported yet, so we use `string` here.
+    private static final String JSON_QUERY_TEMPLATE = "CAST(CAST(JSON_QUERY(%s, '$[0].[%d]') AS STRING) AS %s)";
 
     /**
      * Return filtered partition names by whereExpr.
@@ -106,9 +109,9 @@ public class PartitionSelector {
                                                        TableName tableName,
                                                        OlapTable olapTable,
                                                        Expr whereExpr,
-                                                       boolean isRecyclingCondition) {
+                                                       boolean isDropPartitionCondition) {
         List<Long> selectedPartitionIds = getPartitionIdsByExpr(context, tableName, olapTable, whereExpr,
-                isRecyclingCondition);
+                isDropPartitionCondition);
         return selectedPartitionIds.stream()
                 .map(p -> olapTable.getPartition(p))
                 .map(Partition::getName)
@@ -123,18 +126,34 @@ public class PartitionSelector {
                                                    TableName tableName,
                                                    OlapTable olapTable,
                                                    Expr whereExpr,
-                                                   boolean isRecyclingCondition) {
-        return getPartitionIdsByExpr(context, tableName, olapTable, whereExpr, isRecyclingCondition, null);
+                                                   boolean isDropPartitionCondition) {
+        return getPartitionIdsByExpr(context, tableName, olapTable, whereExpr, isDropPartitionCondition, null);
     }
 
     public static List<Long> getPartitionIdsByExpr(ConnectContext context,
                                                    TableName tableName,
                                                    OlapTable olapTable,
                                                    Expr whereExpr,
-                                                   boolean isRecyclingCondition,
+                                                   boolean isDropPartitionCondition,
                                                    Map<Expr, Expr> partitionByExprMap) {
-        return getPartitionIdsByExpr(context, tableName, olapTable, whereExpr, isRecyclingCondition,
+        return getPartitionIdsByExpr(context, tableName, olapTable, whereExpr, isDropPartitionCondition,
                 null, partitionByExprMap);
+    }
+
+    public static String getPartitionColumnDefinedQuery(OlapTable olapTable, Column column) {
+        if (column.isGeneratedColumn()) {
+            String definedQuery = column.generatedColumnExprToString();
+            if (!Strings.isNullOrEmpty(definedQuery)) {
+                return "`" + column.generatedColumnExprToString() + "`";
+            }
+            Expr deinfedExpr = column.getGeneratedColumnExpr(olapTable.getIdToColumn());
+            if (deinfedExpr != null) {
+                return deinfedExpr.toSqlWithoutTbl();
+            }
+            return "`" + column.getName() + "`";
+        } else {
+            return "`" + column.getName() + "`";
+        }
     }
 
     /**
@@ -144,12 +163,13 @@ public class PartitionSelector {
                                                     TableName tableName,
                                                     OlapTable olapTable,
                                                     Expr whereExpr,
-                                                    boolean isRecyclingCondition,
+                                                    boolean isDropPartitionCondition,
                                                     Map<Long, PCell> inputCells,
                                                     Map<Expr, Expr> partitionByExprMap) {
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         if (!partitionInfo.isPartitioned()) {
-            throw new SemanticException("Can't drop partitions with where expression since it is not partitioned");
+            throw new SemanticException(String.format("Partition condition `%s` is supported for a partitioned table",
+                    whereExpr.toSql()));
         }
         Scope scope = new Scope(RelationId.anonymous(), new RelationFields(
                 olapTable.getBaseSchema().stream()
@@ -211,8 +231,14 @@ public class PartitionSelector {
         ScalarOperator scalarOperator =
                 SqlToScalarOperatorTranslator.translate(whereExpr, expressionMapping, Lists.newArrayList(),
                         columnRefFactory, context, null, null, null, false);
+
+        List<String> partitionDefinedQueries = partitionCols.stream()
+                .map(col -> getPartitionColumnDefinedQuery(olapTable, col))
+                .collect(Collectors.toUnmodifiableList());
+        String partitionExpressions = Joiner.on("/").join(partitionDefinedQueries);
         if (scalarOperator == null) {
-            throw new SemanticException("Failed to translate where expression to scalar operator:" + whereExpr.toSql());
+            throw new SemanticException(String.format("Failed to parse the partition condition:%s, please use " +
+                            "table's partition expressions directly: %s", whereExpr.toSql(), partitionExpressions));
         }
         // validate scalar operator
         validateRetentionConditionPredicate(olapTable, scalarOperator);
@@ -220,29 +246,32 @@ public class PartitionSelector {
         List<ColumnRefOperator> usedPartitionColumnRefs = Lists.newArrayList();
         scalarOperator.getColumnRefs(usedPartitionColumnRefs);
         if (CollectionUtils.isEmpty(usedPartitionColumnRefs)) {
-            throw new SemanticException("No partition column is used in where clause for drop partition: " + whereExpr.toSql());
+            throw new SemanticException(String.format("No partition columns are used in the partition condition: %s, " +
+                    "please use table's partition expressions directly: %s" + whereExpr.toSql(), partitionExpressions));
         }
         // check if all used columns are partition columns
         for (ColumnRefOperator colRef : usedPartitionColumnRefs) {
             if (!partitionColNames.contains(colRef.getName())) {
-                throw new SemanticException("Column is not a partition column which can not" +
-                        " be used in where clause for drop partition: " + colRef.getName());
+
+                throw new SemanticException(String.format("Column `%s` in the partition condition is not a table's partition " +
+                                "expression, please use table's partition expressions: %s",
+                        colRef.getName(), partitionExpressions));
             }
         }
         List<Long> selectedPartitionIds;
         if (partitionInfo.isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             selectedPartitionIds = getRangePartitionIdsByExpr(olapTable, rangePartitionInfo, scalarOperator,
-                    columnRefOperatorMap, isRecyclingCondition, inputCells);
+                    columnRefOperatorMap, isDropPartitionCondition, inputCells);
         } else if (partitionInfo.isListPartition()) {
             ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
             selectedPartitionIds = getListPartitionIdsByExpr(tableName.getDb(), olapTable, listPartitionInfo,
-                    whereExpr, scalarOperator, exprToColumnIdxes, isRecyclingCondition, inputCells);
+                    whereExpr, scalarOperator, exprToColumnIdxes, isDropPartitionCondition, inputCells);
         } else {
             throw new SemanticException("Unsupported partition type: " + partitionInfo.getType());
         }
         if (selectedPartitionIds == null) {
-            throw new SemanticException("Failed to prune partitions with where expression: " + whereExpr.toSql());
+            throw new SemanticException("Failed to get partitions with partition condition: " + whereExpr.toSql());
         }
         return selectedPartitionIds;
     }
@@ -266,7 +295,7 @@ public class PartitionSelector {
                 return Lists.newArrayList();
             }
         } catch (Exception e) {
-            throw new SemanticException("Failed to parse retention condition: " + ttlCondition);
+            throw new SemanticException("Failed to parse partition retention condition: " + ttlCondition);
         }
 
         // if isMockPartitionIds is true, we mock partition ids for input cells because the partition is not added into table
@@ -390,7 +419,7 @@ public class PartitionSelector {
                                                          RangePartitionInfo rangePartitionInfo,
                                                          ScalarOperator predicate,
                                                          Map<Column, ColumnRefOperator> columnRefOperatorMap,
-                                                         boolean isRecyclingCondition,
+                                                         boolean isDropPartitionCondition,
                                                          Map<Long, PCell> inputCells) {
         // clone it to avoid changing the original map
         Map<Long, Range<PartitionKey>> keyRangeById = Maps.newHashMap(rangePartitionInfo.getIdToRange(false));
@@ -406,7 +435,7 @@ public class PartitionSelector {
         // since partition pruning is false positive which means it may not prune some partitions which should be pruned
         // but it will not prune partitions which should not be pruned.
         ScalarOperator fpPredicate = predicate;
-        if (isRecyclingCondition) {
+        if (isDropPartitionCondition) {
             // use not condition to prune partitions because it's not safe to prune partitions with where expression directly,
             ScalarOperator notWhereExpr =
                     new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT, predicate);
@@ -432,13 +461,13 @@ public class PartitionSelector {
                         columnRefOperatorMap, selectedPartitionIds, candidateRanges);
             }
             if (selectedPartitionIds == null) {
-                throw new SemanticException("Failed to prune partitions with where expression: " + predicate.toString());
+                throw new SemanticException("Failed to prune partitions with partition condition: " + predicate.toString());
             }
         } catch (Exception e) {
-            throw new SemanticException("Failed to prune partitions with where expression: " + e.getMessage());
+            throw new SemanticException("Failed to prune partitions with partition condition: " + e.getMessage());
         }
         // check if all used columns are partition columns
-        if (isRecyclingCondition) {
+        if (isDropPartitionCondition) {
             // for recycling, we need to return the partitions which should not be pruned.
             Set<Long> notMatchedPartitionIds = Sets.newHashSet(selectedPartitionIds);
             return keyRangeById.keySet().stream()
@@ -454,27 +483,40 @@ public class PartitionSelector {
                                                         Expr whereExpr,
                                                         ScalarOperator scalarOperator,
                                                         Map<Expr, Integer> exprToColumnIdxes,
-                                                        boolean isRecyclingCondition,
+                                                        boolean isDropPartitionCondition,
                                                         Map<Long, PCell> inputCells) {
 
         List<Long> result = null;
         // try to prune partitions by FE's constant evaluation ability
         try {
-            result = getListPartitionIdsByExprV1(olapTable, listPartitionInfo, scalarOperator,
-                    isRecyclingCondition, inputCells);
+            result = getPartitionsByFEConstantEvaluation(olapTable, listPartitionInfo, scalarOperator,
+                    isDropPartitionCondition, inputCells);
             if (result != null) {
                 return result;
             }
-        } catch (Exception e1) {
-            Log.info("Failed to prune partitions by FE's constant evaluation, transform to partitions_meta instead.");
+        } catch (Exception e) {
+            Log.warn("Failed to prune partitions by FE's constant evaluation, transform to partitions_meta instead",
+                    e);
+        }
+
+        String sql = "";
+        try {
+            sql = buildPartitionSelectQuery(dbName, olapTable, whereExpr, exprToColumnIdxes);
+        } catch (Exception e) {
+            LOG.warn("Failed to build partition select query: " + e.getMessage());
+            throw new SemanticException("Build partition query from information_schema.partition_meta failed: "
+                    + e.getMessage());
+        }
+        if (Strings.isNullOrEmpty(sql)) {
+            throw new SemanticException("Build partition query from information_schema.partition_meta failed: " + sql);
         }
 
         try {
             // TODO: support to prune extra inputCells.
-            return getListPartitionIdsByExprV2(dbName, olapTable, listPartitionInfo, whereExpr, exprToColumnIdxes);
-        } catch (Exception e2) {
-            LOG.warn("Failed to prune partitions with where expression(v2): " + e2.getMessage());
-            throw new SemanticException("Failed to prune partitions with where expression: " + whereExpr.toSql());
+            return getPartitionsByQuerying(olapTable, listPartitionInfo, sql);
+        } catch (Exception e) {
+            LOG.warn("Get partitions from information_schema.partition_meta querying failed: " + e.getMessage());
+            throw new SemanticException("Get partitions from information_schema.partition_meta querying failed:\n " + sql);
         }
     }
 
@@ -496,21 +538,21 @@ public class PartitionSelector {
      * @param rewriter : rewriter to rewrite the partition condition scalar operator by constant fold and so on
      * @param replaceColumnRefRewriter: replace columnRef with literal
      * @param scalarOperator : partition condition scalar operator
-     * @param isRecyclingCondition : true for recycling/dropping condition, false for retention condition.
+     * @param isDropPartitionCondition : true for recycling/dropping condition, false for retention condition.
      * @param record : used to record the state of eval result
      * @return : true if the eval result is satisfied, false if not satisfied, null if the eval result is not set.
      */
     private static Optional<Boolean> isEvalResultSatisfied(ScalarOperatorRewriter rewriter,
                                                            ReplaceColumnRefRewriter replaceColumnRefRewriter,
                                                            ScalarOperator scalarOperator,
-                                                           boolean isRecyclingCondition,
+                                                           boolean isDropPartitionCondition,
                                                            Recorder record) {
         ScalarOperator result = replaceColumnRefRewriter.rewrite(scalarOperator);
         result = rewriter.rewrite(result, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
         if (!result.isConstant()) {
             return Optional.empty();
         }
-        if (isRecyclingCondition) {
+        if (isDropPartitionCondition) {
             // for recycling condition, keep partitions as less as possible
             // T1, partitions:
             //  p1: [1, 2]
@@ -547,11 +589,11 @@ public class PartitionSelector {
     /**
      * Fetch selected partition ids by using FE's constant evaluation ability.
      */
-    private static List<Long> getListPartitionIdsByExprV1(OlapTable olapTable,
-                                                          ListPartitionInfo listPartitionInfo,
-                                                          ScalarOperator scalarOperator,
-                                                          boolean isRecyclingCondition,
-                                                          Map<Long, PCell> inputCells) {
+    private static List<Long> getPartitionsByFEConstantEvaluation(OlapTable olapTable,
+                                                                  ListPartitionInfo listPartitionInfo,
+                                                                  ScalarOperator scalarOperator,
+                                                                  boolean isDropPartitionCondition,
+                                                                  Map<Long, PCell> inputCells) {
         // eval for each conjunct
         Map<ColumnRefOperator, Integer> colRefIdxMap = Maps.newHashMap();
         List<String> partitionColNames = olapTable.getPartitionColumns().stream()
@@ -578,7 +620,7 @@ public class PartitionSelector {
                 final ReplaceColumnRefRewriter replaceColumnRefRewriter = new ReplaceColumnRefRewriter(replaceMap);
                 // check for each partition value
                 final Optional<Boolean> evalResultSatisfied = isEvalResultSatisfied(rewriter, replaceColumnRefRewriter,
-                        scalarOperator, isRecyclingCondition, recorder);
+                        scalarOperator, isDropPartitionCondition, recorder);
                 // if eval result is not set, return it directly
                 if (evalResultSatisfied == null || evalResultSatisfied.isEmpty()) {
                     return null;
@@ -601,7 +643,7 @@ public class PartitionSelector {
 
                 // check for each partition value
                 final Optional<Boolean> evalResultSatisfied = isEvalResultSatisfied(rewriter, replaceColumnRefRewriter,
-                        scalarOperator, isRecyclingCondition, recorder);
+                        scalarOperator, isDropPartitionCondition, recorder);
                 // if eval result is not set, return it directly
                 if (evalResultSatisfied == null || evalResultSatisfied.isEmpty()) {
                     return null;
@@ -627,7 +669,7 @@ public class PartitionSelector {
 
                     // check for each partition value
                     final Optional<Boolean> evalResultSatisfied = isEvalResultSatisfied(rewriter, replaceColumnRefRewriter,
-                            scalarOperator, isRecyclingCondition, recorder);
+                            scalarOperator, isDropPartitionCondition, recorder);
                     // if eval result is not set, return it directly
                     if (evalResultSatisfied == null || evalResultSatisfied.isEmpty()) {
                         return null;
@@ -645,14 +687,10 @@ public class PartitionSelector {
         return selectedPartitionIds;
     }
 
-    /**
-     * Use `information_schema.partitions_meta` to filter selected partition names by using whereExpr.
-     */
-    private static List<Long> getListPartitionIdsByExprV2(String dbName,
-                                                          OlapTable olapTable,
-                                                          ListPartitionInfo listPartitionInfo,
-                                                          Expr whereExpr,
-                                                          Map<Expr, Integer> exprToColumnIdxes) {
+    private static String buildPartitionSelectQuery(String dbName,
+                                                    OlapTable olapTable,
+                                                    Expr whereExpr,
+                                                    Map<Expr, Integer> exprToColumnIdxes) {
         Database infoSchemaDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(InfoSchemaDb.DATABASE_NAME);
         if (infoSchemaDb == null) {
             return null;
@@ -671,6 +709,15 @@ public class PartitionSelector {
         String newWhereSql = newExpr.toSql();
         String sql = String.format(PARTITIONS_META_TEMPLATE, dbName, olapTable.getName(), newWhereSql);
         LOG.info("Get partition ids by sql: {}", sql);
+        return sql;
+    }
+
+    /**
+     * Use `information_schema.partitions_meta` to filter selected partition names by using whereExpr.
+     */
+    private static List<Long> getPartitionsByQuerying(OlapTable olapTable,
+                                                      ListPartitionInfo listPartitionInfo,
+                                                      String sql) {
         List<TResultBatch> batch = SimpleExecutor.getRepoExecutor().executeDQL(sql);
         List<String> partitionNames = deserializeLookupResult(batch);
         // multi items in the single partition is not supported yet since `JSON_QUERY_TEMPLATE` is constructed the first element.
