@@ -275,4 +275,27 @@ TEST_F(LakeCompactionSchedulerTest, test_issue44136) {
     latch->wait();
 }
 
+TEST_F(LakeCompactionSchedulerTest, test_abort_with_not_write_txnlog) {
+    auto txn_id = next_id();
+    auto latch = std::make_shared<CountDownLatch>(1);
+    auto request = CompactRequest{};
+    auto response = CompactResponse{};
+    request.add_tablet_ids(_tablet_metadata->id());
+    request.set_timeout_ms(/*1 minute=*/60 * 1000);
+    request.set_txn_id(txn_id);
+    request.set_version(1);
+    request.set_skip_write_txnlog(true);
+    auto cb = ::google::protobuf::NewCallback(notify, latch);
+    TEST_ENABLE_ERROR_POINT("VerticalCompactionTask::execute::1", Status::IOError("injected error"));
+    TEST_ENABLE_ERROR_POINT("HorizontalCompactionTask::execute::1", Status::IOError("injected error"));
+    TEST_ENABLE_ERROR_POINT("CloudNativeIndexCompactionTask::execute::1", Status::IOError("injected error"));
+    SyncPoint::GetInstance()->EnableProcessing();
+    _compaction_scheduler.compact(nullptr, &request, &response, cb);
+    latch->wait();
+    TEST_DISABLE_ERROR_POINT("VerticalCompactionTask::execute::1");
+    TEST_DISABLE_ERROR_POINT("HorizontalCompactionTask::execute::1");
+    TEST_DISABLE_ERROR_POINT("CloudNativeIndexCompactionTask::execute::1");
+    SyncPoint::GetInstance()->DisableProcessing();
+}
+
 } // namespace starrocks::lake
