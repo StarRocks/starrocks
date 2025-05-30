@@ -553,7 +553,7 @@ public class OlapTableSink extends DataSink {
                         TOlapTablePartition tPartition = new TOlapTablePartition();
                         tPartition.setId(physicalPartition.getId());
                         setRangeKeys(rangePartitionInfo, partition, tPartition);
-                        setIndexAndBucketNums(physicalPartition, tPartition);
+                        setMaterializedIndexes(physicalPartition, tPartition);
                         partitionParam.addToPartitions(tPartition);
                         LOG.debug("add partition: {} physicalPartition: {}", tPartition, physicalPartition);
                     }
@@ -629,7 +629,7 @@ public class OlapTableSink extends DataSink {
                         TOlapTablePartition tPartition = new TOlapTablePartition();
                         tPartition.setId(physicalPartition.getId());
                         setListPartitionValues(listPartitionInfo, partition, tPartition);
-                        setIndexAndBucketNums(physicalPartition, tPartition);
+                        setMaterializedIndexes(physicalPartition, tPartition);
                         partitionParam.addToPartitions(tPartition);
                         LOG.debug("add partition: {} physicalPartition: {}", tPartition, physicalPartition);
                     }
@@ -667,7 +667,7 @@ public class OlapTableSink extends DataSink {
                     TOlapTablePartition tPartition = new TOlapTablePartition();
                     tPartition.setId(physicalPartition.getId());
                     // No lowerBound and upperBound for this range
-                    setIndexAndBucketNums(physicalPartition, tPartition);
+                    setMaterializedIndexes(physicalPartition, tPartition);
                     partitionParam.addToPartitions(tPartition);
                     LOG.debug("add partition: {} physicalPartition: {}", tPartition, physicalPartition);
                 }
@@ -742,9 +742,9 @@ public class OlapTableSink extends DataSink {
         }
     }
 
-    private static void setIndexAndBucketNums(PhysicalPartition partition, TOlapTablePartition tPartition) {
+    private static void setMaterializedIndexes(PhysicalPartition partition, TOlapTablePartition tPartition) {
         for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
-            TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getId(), index.getTabletIdsInOrder());
+            TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getId(), index.getTabletIds());
             tIndex.setVirtual_buckets(Lists.newArrayList(index.getVirtualBuckets()));
             tPartition.addToIndexes(tIndex);
         }
