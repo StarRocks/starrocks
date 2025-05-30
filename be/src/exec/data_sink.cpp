@@ -353,7 +353,7 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
             }
 
             // sink op
-            ops.emplace_back(_create_exchange_sink_operator(context, t_stream_sink, sender.get()));
+            ops.emplace_back(_create_exchange_sink_operator(context, t_stream_sink, sender.get(), dop));
 
             context->add_pipeline(std::move(ops));
         }
