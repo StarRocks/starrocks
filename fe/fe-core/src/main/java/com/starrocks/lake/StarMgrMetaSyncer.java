@@ -39,11 +39,10 @@ import com.starrocks.proto.DeleteTabletResponse;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TStatusCode;
-import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -96,16 +95,14 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         return groupIds;
     }
 
-    public static void dropTabletAndDeleteShard(List<Long> shardIds, StarOSAgent starOSAgent) {
+    public static void dropTabletAndDeleteShard(ComputeResource computeResource,
+                                                List<Long> shardIds, StarOSAgent starOSAgent) {
         Preconditions.checkNotNull(starOSAgent);
         Map<Long, Set<Long>> shardIdsByBeMap = new HashMap<>();
         // group shards by be
-        final WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        final Warehouse warehouse = manager.getBackgroundWarehouse();
-        final long workerGroupId = manager.getAliveWorkerGroupId(warehouse.getId());
         for (long shardId : shardIds) {
             try {
-                long backendId = starOSAgent.getPrimaryComputeNodeIdByShard(shardId, workerGroupId);
+                long backendId = starOSAgent.getPrimaryComputeNodeIdByShard(shardId, computeResource.getWorkerGroupId());
                 shardIdsByBeMap.computeIfAbsent(backendId, k -> Sets.newHashSet()).add(shardId);
             } catch (StarRocksException ignored1) {
                 // ignore error
@@ -244,7 +241,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             } else {
                 // drop meta and data
                 long start = System.currentTimeMillis();
-                dropTabletAndDeleteShard(shardIds, starOSAgent);
+                dropTabletAndDeleteShard(computeResource, shardIds, starOSAgent);
                 LOG.debug("delete shards from starMgr and FE, shard group: {}, cost: {} ms",
                         groupId, (System.currentTimeMillis() - start));
             }
@@ -282,10 +279,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
     public int deleteUnusedWorker() {
         int cnt = 0;
         try {
-            WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-            Warehouse warehouse = warehouseManager.getBackgroundWarehouse();
-            final long workerGroupId = warehouseManager.getWorkerGroupId(warehouse.getId())
-                    .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+            final long workerGroupId = computeResource.getWorkerGroupId();
             List<String> workerAddresses = GlobalStateMgr.getCurrentState().getStarOSAgent().listWorkerGroupIpPort(workerGroupId);
 
             // filter backend
@@ -416,7 +410,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 try {
                     List<Long> shardIds = new ArrayList<>();
                     shardIds.addAll(entry.getValue());
-                    dropTabletAndDeleteShard(shardIds, starOSAgent);
+                    dropTabletAndDeleteShard(computeResource, shardIds, starOSAgent);
                 } catch (Exception e) {
                     // ignore exception
                     LOG.info(e.getMessage());
@@ -467,6 +461,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
+        acquireBackgroundComputeResource();
         deleteUnusedShardAndShardGroup();
         deleteUnusedWorker();
         syncTableMetaAndColocationInfo();

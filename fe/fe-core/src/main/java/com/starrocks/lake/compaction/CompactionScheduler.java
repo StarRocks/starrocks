@@ -49,6 +49,7 @@ import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.VisibleStateWaiter;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.queue.CircularFifoQueue;
 import org.apache.logging.log4j.LogManager;
@@ -115,7 +116,9 @@ public class CompactionScheduler extends Daemon {
 
     private void scheduleNewCompaction() {
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        this.computeResource = warehouseManager.getCompactionComputeResource();
+        final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseManager.getCompactionWarehouse().getId(),
+                this.computeResource);
+        this.computeResource = warehouseManager.acquireComputeResource(acquireContext);
 
         // Check whether there are completed compaction jobs.
         for (Iterator<Map.Entry<PartitionIdentifier, CompactionJob>> iterator = runningCompactions.entrySet().iterator();

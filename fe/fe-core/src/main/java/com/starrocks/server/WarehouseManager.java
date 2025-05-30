@@ -169,50 +169,10 @@ public class WarehouseManager implements Writable {
             throw ErrorReportException.report(ErrorCode.ERR_WAREHOUSE_UNAVAILABLE, warehouse.getName());
         }
         ComputeResource computeResource = result.get();
-        LOG.info("Acquired cngroup resource: {}", computeResource);
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Acquired cngroup resource: {}", computeResource);
+        }
         return computeResource;
-    }
-
-    /**
-     * We prefer to call getAliveComputeNodes infrequently, as it can come to dominate the execution time of a query in the
-     * frontend if there are many calls per request (e.g. one per partition when there are many partitions).
-     * @param warehouseId: the id of the warehouse
-     * @return: an available worker group id of the warehouse
-     * @throws RuntimeException : if there is no available worker group
-     */
-    public long getAliveWorkerGroupId(long warehouseId) {
-        final Warehouse warehouse = getWarehouse(warehouseId);
-        if (warehouse == null) {
-            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
-                    String.format("id: %d", warehouseId));
-        }
-        final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseId);
-        final Optional<ComputeResource> result = computeResourceProvider.acquireComputeResource(warehouse, acquireContext);
-        if (result.isEmpty()) {
-            throw ErrorReportException.report(ErrorCode.ERR_WAREHOUSE_UNAVAILABLE, warehouse.getName());
-        }
-        final ComputeResource computeResource = result.get();
-        if (!isResourceAvailable(computeResource)) {
-            throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE,
-                    String.format("warehouse id: %s", acquireContext.getWarehouseId()));
-        }
-        return computeResource.getWorkerGroupId();
-    }
-
-    /**
-     * Get an available worker group id of the warehouse.
-     * @param warehouseId the id of the warehouse
-     * @return: an Optional containing the worker group id if available, or empty if not
-     */
-    public Optional<Long> getWorkerGroupId(long warehouseId) {
-        final Warehouse warehouse = getWarehouse(warehouseId);
-        if (warehouse == null) {
-            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
-                    String.format("id: %d", warehouseId));
-        }
-        final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseId);
-        final Optional<ComputeResource> result = computeResourceProvider.acquireComputeResource(warehouse, acquireContext);
-        return result.map(ComputeResource::getWorkerGroupId);
     }
 
     /**
@@ -221,11 +181,10 @@ public class WarehouseManager implements Writable {
      * @return: true if the resource is available, false otherwise
      */
     public boolean isResourceAvailable(ComputeResource computeResource) {
-        if (RunMode.isSharedDataMode()) {
-            return computeResourceProvider.isResourceAvailable(computeResource);
-        } else {
+        if (!RunMode.isSharedDataMode()) {
             return true;
         }
+        return computeResourceProvider.isResourceAvailable(computeResource);
     }
 
     /**
@@ -327,11 +286,6 @@ public class WarehouseManager implements Writable {
 
     public Warehouse getBackgroundWarehouse() {
         return getWarehouse(DEFAULT_WAREHOUSE_ID);
-    }
-
-    public ComputeResource getCompactionComputeResource() {
-        final Warehouse warehouse = getCompactionWarehouse();
-        return acquireComputeResource(CRAcquireContext.of(warehouse.getId()));
     }
 
     public ComputeResource getBackgroundComputeResource() {

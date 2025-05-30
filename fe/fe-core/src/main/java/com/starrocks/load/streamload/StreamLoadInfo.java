@@ -447,6 +447,7 @@ public class StreamLoadInfo {
         trimSpace = routineLoadJob.isTrimspace();
         enclose = routineLoadJob.getEnclose();
         escape = routineLoadJob.getEscape();
+        computeResource = routineLoadJob.getComputeResource();
     }
 
     // used for stream load

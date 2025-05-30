@@ -37,7 +37,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class LakeTableRollupBuilder extends AlterJobV2Builder {
@@ -89,9 +88,8 @@ public class LakeTableRollupBuilder extends AlterJobV2Builder {
 
                 List<Tablet> originTablets = physicalPartition.getIndex(baseIndexId).getTablets();
                 final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-                final long warehouseId = ConnectContext.get().getCurrentWarehouseId();
-                final Optional<Long> workerGroupId = warehouseManager.getWorkerGroupId(warehouseId);
-                if (workerGroupId.isEmpty()) {
+                if (warehouseManager.isResourceAvailable(computeResource)) {
+                    final long warehouseId = ConnectContext.get().getCurrentWarehouseId();
                     Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
                     ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
                 }

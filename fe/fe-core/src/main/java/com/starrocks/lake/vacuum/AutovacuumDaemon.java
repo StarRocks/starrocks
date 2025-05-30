@@ -82,16 +82,8 @@ public class AutovacuumDaemon extends FrontendDaemon {
             return;
         }
 
-        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        Warehouse warehouse = warehouseManager.getBackgroundWarehouse();
-
-        // try to acquire resource
-        try {
-            acquireBackgroundComputeResource();
-        } catch (Exception e) {
-            LOG.warn("failed to acquire resource for autovacuum daemon", e);
-            return;
-        }
+        // acquire background resource
+        acquireBackgroundComputeResource();
 
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         for (Long dbId : dbIds) {
