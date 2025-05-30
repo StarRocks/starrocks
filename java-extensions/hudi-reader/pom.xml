@@ -13,7 +13,7 @@
 
     <properties>
         <java-extensions.home>${basedir}/../</java-extensions.home>
-        <hudi.version>0.15.0</hudi.version>
+        <hudi.version>1.0.2</hudi.version>
     </properties>
 
     <dependencies>
