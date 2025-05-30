@@ -88,7 +88,7 @@ TEST_F(StoragePageCacheTest, normal) {
         auto data = std::make_unique<std::vector<uint8_t>>(1024);
         PageCacheHandle handle;
 
-        ObjectCacheWriteOptions opts {.priority = true};
+        ObjectCacheWriteOptions opts{.priority = true};
         ASSERT_OK(_page_cache->insert(key, data.get(), &handle, opts));
         ASSERT_EQ(handle.data(), data.get());
         data.release();
