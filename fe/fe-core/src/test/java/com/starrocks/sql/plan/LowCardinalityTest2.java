@@ -2208,7 +2208,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "GROUP BY S_SUPPKEY ";
         String plan = getVerboseExplain(sql);
         assertContains(plan, "17: DictDefine(13: S_ADDRESS, [reverse(<place-holder>)])");
-        assertContains(plan, "15: DictDefine(13: S_ADDRESS, [reverse(<place-holder>)])x");
+        assertContains(plan, "15: DictDefine(13: S_ADDRESS, [reverse(<place-holder>)])");
     }
 
     @Test
