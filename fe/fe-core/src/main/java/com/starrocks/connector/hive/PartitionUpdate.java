@@ -67,6 +67,13 @@ public class PartitionUpdate {
         return fileNames;
     }
 
+    public long getFileCount() {
+        if (fileNames == null) {
+            return 0;
+        }
+        return fileNames.size();
+    }
+
     public long getRowCount() {
         return rowCount;
     }
