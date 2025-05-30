@@ -110,10 +110,6 @@ public class LakeRollupJobTest {
                 "select k2, k1 from base_table3 order by k2;";
         lakeRollupJob3 = createJob(sql3);
 
-        String sql4 = "create materialized view mv4 as\n" +
-                "select k2, k1 from base_table4 order by k2;";
-        lakeRollupJob4 = createJob(sql4);
-
         db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
         table = db.getTable("base_table");
     }
