@@ -35,5 +35,5 @@ insert overwrite t2 by name select k1, k2 from t1;
 -- !result
 select * from t2;
 -- result:
-3	c
+3	c	10
 -- !result
