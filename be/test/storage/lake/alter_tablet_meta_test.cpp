@@ -609,7 +609,7 @@ TEST_F(AlterTabletMetaTest, test_skip_load_pindex) {
     }
 }
 
-TEST_F(AlterTabletMetaTest, test_enable_partition_aggregation) {
+TEST_F(AlterTabletMetaTest, test_aggregate_tablet_metadata) {
     lake::SchemaChangeHandler handler(_tablet_mgr.get());
     TUpdateTabletMetaInfoReq update_tablet_meta_req;
     int64_t txn_id = next_id();
