@@ -37,6 +37,12 @@ package com.starrocks.qe;
 import com.google.common.base.Predicate;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
+=======
+import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
+>>>>>>> ace091afea ([BugFix] Shouldn't show process list for root user when admin protection enabled (#59435))
 import com.starrocks.common.CloseableLock;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -243,7 +249,13 @@ public class ConnectScheduler {
             }
 
             // Check whether it's the connection for the specified user.
+<<<<<<< HEAD
             if (forUser != null && !ctx.getQualifiedUser().equals(forUser)) {
+=======
+            if ((forUser != null && !contextToShow.getQualifiedUser().equals(forUser)) ||
+                    (Config.authorization_enable_admin_user_protection &&
+                            contextToShow.getQualifiedUser().equals(AuthenticationMgr.ROOT_USER))) {
+>>>>>>> ace091afea ([BugFix] Shouldn't show process list for root user when admin protection enabled (#59435))
                 continue;
             }
 
