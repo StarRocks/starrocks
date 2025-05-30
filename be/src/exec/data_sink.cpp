@@ -53,6 +53,7 @@
 #include "exec/pipeline/exchange/multi_cast_local_exchange_source_operator.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exec/pipeline/fragment_executor.h"
+#include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/olap_table_sink_operator.h"
 #include "exec/pipeline/result_sink_operator.h"
 #include "exec/pipeline/sink/blackhole_table_sink_operator.h"
@@ -315,10 +316,10 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
         // note(yan): steps are:
         // 1. create exchange[EX]
         // 2. create sink[A] at the end of current pipeline
-        // 3. create source[B]/sink[C] pipelines.
-        // A -> EX -> B0/C0
-        //       | -> B1/C1
-        //       | -> B2/C2
+        // 3. create source[B]/limit[C]/sink[D] pipelines.
+        // A -> EX -> B0/C0/D0
+        //       | -> B1/C1/D1
+        //       | -> B2/C2/D2
         // sink[A] will push chunk to exchanger
         // and source[B] will pull chunk from exchanger
         // so basically you can think exchanger is a chunk repository.
@@ -345,11 +346,11 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
         prev_operators.emplace_back(sink_op);
         context->add_pipeline(std::move(prev_operators));
 
-        // ==== create source/sink pipelines ====
+        // ==== create source/limit/sink pipelines ====
         for (size_t i = 0; i < sinks.size(); i++) {
             const auto& sender = sinks[i];
             OpFactories ops;
-            // it's okary to set arbitrary dop.
+            // it's okay to set arbitrary dop.
             const size_t dop = 1;
             auto& t_stream_sink = t_multi_case_stream_sink.sinks[i];
 
@@ -358,12 +359,18 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
                     context->next_operator_id(), upstream_plan_node_id, i, mcast_local_exchanger);
             context->inherit_upstream_source_properties(source_op.get(), upstream_source);
             source_op->set_degree_of_parallelism(dop);
+            ops.emplace_back(source_op);
+
+            // limit op
+            if (t_stream_sink.__isset.limit && t_stream_sink.limit != -1) {
+                ops.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(),
+                                                                        upstream_plan_node_id, t_stream_sink.limit,
+                                                                        false /*limit_chunk_in_place*/));
+            }
 
             // sink op
-            auto sink_op = _create_exchange_sink_operator(context, t_stream_sink, sender.get());
+            ops.emplace_back(_create_exchange_sink_operator(context, t_stream_sink, sender.get()));
 
-            ops.emplace_back(source_op);
-            ops.emplace_back(sink_op);
             context->add_pipeline(std::move(ops));
         }
     } else if (typeid(*this) == typeid(starrocks::SplitDataStreamSink)) {
