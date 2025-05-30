@@ -65,6 +65,8 @@ INSERT INTO insert_wiki_edit
         "aws.s3.secret_key" = "YYYYYYYYYY",
         "aws.s3.region" = "us-west-2"
 );
+INSERT INTO insert_wiki_edit_copy
+    SELECT * FROM insert_wiki_edit;
 COMMIT WORK;
 ```
 
@@ -72,7 +74,8 @@ COMMIT WORK;
 
 - 現在、StarRocks は SQL トランザクションで INSERT および SELECT ステートメントのみをサポートしています。
 - トランザクション内の DML ステートメントのすべての対象テーブルは、同じデータベース内になければなりません。
-- トランザクション内で同じテーブルに対する複数の INSERT ステートメントは許可されていません。
+- トランザクション内で同じテーブルに対する複数の INSERT ステートメントは許可されていません。そうでない場合、システムはエラーを返す。
+- 同じテーブルに対してINSERT文を実行した後にSELECT文を実行することはできません。そうでない場合、システムはエラーを返す。
 - トランザクションのネストは許可されていません。BEGIN-COMMIT/ROLLBACK ペア内で BEGIN WORK を指定することはできません。
 - 進行中のトランザクションが属するセッションが終了または閉じられた場合、トランザクションは自動的にロールバックされます。
 - StarRocks は、上記のようにトランザクション分離レベルとして限定された READ COMMITTED のみをサポートしています。
