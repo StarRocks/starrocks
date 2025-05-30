@@ -463,38 +463,4 @@ public class CachingHiveMetastoreTest {
         processor = new HiveCacheUpdateProcessor("hive_catalog", metastore, null, null, false, false);
         Assert.assertTrue(processor.getCachedTableNames().isEmpty());
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testAutoRefreshPartition() throws InterruptedException {
-        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
-                metastore, executor, executor,
-                expireAfterWriteSec, 1, 1000L, false);
-        HiveTable table = (HiveTable) cachingHiveMetastore.getTable("db1", "tbl1");
-        Partition partition = cachingHiveMetastore.getPartition(
-                "db1", "tbl1", Lists.newArrayList("par1"));
-        HiveTable externalTable = (HiveTable) cachingHiveMetastore.getTable("db1", "external_table");
-        Partition externalPartition = cachingHiveMetastore.getPartition(
-                "db1", "external_table", Lists.newArrayList("par1"));
-
-        Assert.assertTrue(cachingHiveMetastore.isCachedExternalTable(
-                DatabaseTableName.of("db1", "external_table")));
-        Assert.assertFalse(cachingHiveMetastore.isCachedExternalTable(
-                DatabaseTableName.of("db1", "tbl1")));
-
-        // Get partition for 5 times every 1s
-        String mangedTableMark = partition.getParameters().get(TASK);
-        String externalTableMark = externalPartition.getParameters().get(TASK);
-        for (int i = 0; i < 5; i++) {
-            partition =
-                    cachingHiveMetastore.getPartition("db1", "tbl1", Lists.newArrayList("par1"));
-            externalPartition =
-                    cachingHiveMetastore.getPartition("db1", "external_table", Lists.newArrayList("par1"));
-            Thread.sleep(1000);
-        }
-        Assert.assertEquals(partition.getParameters().get(TASK), mangedTableMark);
-        Assert.assertNotEquals(externalPartition.getParameters().get(TASK), externalTableMark);
-    }
->>>>>>> 416cab867b ([BugFix] add `numFiles` to hive common stats to avoid hive insert overwrite failure (#59469))
 }
