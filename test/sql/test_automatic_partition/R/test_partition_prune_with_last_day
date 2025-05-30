@@ -1,0 +1,22 @@
+-- name: test_partition_prune_with_last_day
+CREATE TABLE t1 (
+    dt datetime,
+    province string,
+    num int
+)
+DUPLICATE KEY(dt, province)
+PARTITION BY date_trunc('day', dt)
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t1(dt, province, num)
+SELECT minutes_add(hours_add(date_add('2025-01-01', x), x%24), x%60), concat('x-', x%3), x
+FROM TABLE(generate_series(0, 200-1)) as t(x);
+-- result:
+-- !result
+INSERT INTO t1(dt, province, num) SELECT NULL, NULL, NULL;
+-- result:
+-- !result
+function: print_plan_partition_selected_num("select count(*) from t1 where last_day(dt) = '2025-01-01';", "t1")

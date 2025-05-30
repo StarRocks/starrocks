@@ -772,9 +772,11 @@ public:
      */
     DEFINE_VECTORIZED_FN(last_day);
     DEFINE_VECTORIZED_FN(last_day_with_format);
-
     static Status last_day_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status last_day_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    // last_day with input date type arguments
+    DEFINE_VECTORIZED_FN(last_day_date);
+    DEFINE_VECTORIZED_FN(last_day_date_with_format);
 
     // Following const variables used to obtains number days of year
     constexpr static int NUMBER_OF_LEAP_YEAR = 366;
@@ -853,8 +855,12 @@ private:
 
     static StatusOr<ColumnPtr> convert_tz_const(FunctionContext* context, const Columns& columns,
                                                 const cctz::time_zone& from, const cctz::time_zone& to);
-
+    // last_day
+    template <LogicalType DATE_TYPE>
+    static StatusOr<ColumnPtr> _last_day(FunctionContext* context, const Columns& columns);
+    template <LogicalType DATE_TYPE>
     static StatusOr<ColumnPtr> _last_day_with_format(FunctionContext* context, const Columns& columns);
+    template <LogicalType DATE_TYPE>
     static StatusOr<ColumnPtr> _last_day_with_format_const(std::string& format_content, FunctionContext* context,
                                                            const Columns& columns);
     static Status _error_date_part();
