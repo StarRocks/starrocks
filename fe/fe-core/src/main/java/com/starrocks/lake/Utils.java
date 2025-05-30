@@ -133,12 +133,8 @@ public class Utils {
             ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) tablet);
             if (computeNode == null) {
                 LOG.warn("No alive node in warehouse for handle publish version request, try to use background warehouse");
-                try {
-                    computeResource = warehouseManager.getBackgroundComputeResource();
-                    computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) tablet);
-                } catch (Exception e) {
-                    LOG.warn("failed to acquire resource for background warehouse id: {}", computeResource);
-                }
+                computeResource = warehouseManager.getBackgroundComputeResource();
+                computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) tablet);
                 if (computeNode == null) {
                     throw new NoAliveBackendException("No alive node for handle publish version request in background warehouse");
                 }
@@ -347,12 +343,8 @@ public class Utils {
             ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) tablet);
             if (computeNode == null) {
                 LOG.warn("no alive node in warehouse for handle publish log version request, try to use background warehouse");
-                try {
-                    computeResource = warehouseManager.getBackgroundComputeResource();
-                    computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) tablet);
-                } catch (Exception e) {
-                    LOG.warn("failed to acquire resource for background warehouse id: {}", computeResource);
-                }
+                computeResource = warehouseManager.getBackgroundComputeResource();
+                computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) tablet);
                 if (computeNode == null) {
                     throw new NoAliveBackendException("No alive node for handle publish version request in background warehouse");
                 }

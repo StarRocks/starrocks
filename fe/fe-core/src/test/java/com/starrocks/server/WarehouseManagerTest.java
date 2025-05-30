@@ -33,6 +33,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
 import mockit.Expectations;
@@ -122,6 +123,18 @@ public class WarehouseManagerTest {
         Assert.assertEquals(1, nodes.size());
     }
 
+    public Optional<Long> getWorkerGroupId(WarehouseManager warehouseManager, long warehouseId) {
+        final Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
+        if (warehouse == null) {
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
+                    String.format("id: %d", warehouseId));
+        }
+        final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseId);
+        final Optional<ComputeResource> result = warehouseManager.computeResourceProvider.acquireComputeResource(
+                warehouse, acquireContext);
+        return result.map(ComputeResource::getWorkerGroupId);
+    }
+
     @Test
     public void testSelectWorkerGroupByWarehouseId_hasAliveNodes() throws StarRocksException {
         Backend b1 = new Backend(10001L, "192.168.0.1", 9050);
@@ -185,13 +198,13 @@ public class WarehouseManagerTest {
 
         WarehouseManager warehouseManager = new WarehouseManager();
         warehouseManager.initDefaultWarehouse();
-        Optional<Long> workerGroupId = warehouseManager.getWorkerGroupId(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        Optional<Long> workerGroupId = getWorkerGroupId(warehouseManager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
         Assert.assertFalse(workerGroupId.isEmpty());
         Assert.assertEquals(StarOSAgent.DEFAULT_WORKER_GROUP_ID, workerGroupId.get().longValue());
 
         try {
             workerGroupId = Optional.ofNullable(null);
-            workerGroupId = warehouseManager.getWorkerGroupId(1111L);
+            workerGroupId = getWorkerGroupId(warehouseManager, 1111L);
             Assert.assertEquals(1, 2);   // can not be here
         } catch (ErrorReportException e) {
             Assert.assertTrue(workerGroupId.isEmpty());
@@ -260,7 +273,7 @@ public class WarehouseManagerTest {
         try {
             WarehouseManager warehouseManager = new WarehouseManager();
             warehouseManager.initDefaultWarehouse();
-            Optional<Long> workerGroupId = warehouseManager.getWorkerGroupId(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+            Optional<Long> workerGroupId = getWorkerGroupId(warehouseManager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
             Assert.assertTrue(workerGroupId.isEmpty());
         } catch (ErrorReportException e) {
             Assert.assertEquals(1, 2);   // can not be here

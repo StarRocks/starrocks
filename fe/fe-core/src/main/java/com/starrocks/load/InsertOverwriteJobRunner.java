@@ -391,12 +391,8 @@ public class InsertOverwriteJobRunner {
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
-        ComputeResource computeResource;
-        try {
-            computeResource = context.getCurrentComputeResource();
-        } catch (Exception e) {
-            throw new DmlException("insert overwrite commit failed because no available resource");
-        }
+        // acquire compute resource
+        ComputeResource computeResource = context.getCurrentComputeResource();
         if (computeResource == null) {
             throw new DmlException("insert overwrite commit failed because no available resource");
         }
