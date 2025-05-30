@@ -292,7 +292,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         }
 
         if (tableType == HudiTableType.MOR) {
-            tHudiTable.setInstant_time(lastInstant == null ? "" : lastInstant.getTimestamp());
+            tHudiTable.setInstant_time(lastInstant == null ? "" : lastInstant.getCompletionTime());
         }
 
         tHudiTable.setHive_column_names(hudiProperties.get(HUDI_TABLE_COLUMN_NAMES));
