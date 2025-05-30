@@ -8,10 +8,6 @@ scan:
   skip-files:
     # hdfs required
     - "**/hadoop-client-runtime-3.4.1.jar"
-    # hudi required
-    - "**/htrace-core4-4.2.0-incubating.jar"
-    - "**/hbase-protocol-shaded-2.4.13.jar"
-    - "**/hbase-shaded-netty-4.1.1.jar"
     # kudu required
     - "**/kudu-client-1.17.1.jar"
     # paimon required
