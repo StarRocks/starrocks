@@ -22,7 +22,6 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RecycleRangePartitionInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 
 public class RecycleLakeRangePartitionInfo extends RecycleRangePartitionInfo  {

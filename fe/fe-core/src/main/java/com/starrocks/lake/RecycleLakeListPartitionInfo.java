@@ -20,7 +20,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.RecycleListPartitionInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 
 public class RecycleLakeListPartitionInfo extends RecycleListPartitionInfo {

@@ -20,7 +20,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.RecycleUnPartitionInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 
 // This class is simply used as the Interface to trigger the background task
