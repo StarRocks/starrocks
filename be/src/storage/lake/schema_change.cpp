@@ -468,6 +468,12 @@ Status SchemaChangeHandler::do_process_update_tablet_meta(const TTabletMetaInfo&
         }
     }
 
+    // TODO(zhangqiang)
+    // aggregate alter txn log
+    if (tablet_meta_info.__isset.aggregate_tablet_metadata) {
+        metadata_update_info->set_aggregate_tablet_metadata(tablet_meta_info.aggregate_tablet_metadata);
+    }
+
     RETURN_IF_ERROR(tablet.put_txn_log(std::move(txn_log)));
     return Status::OK();
 }

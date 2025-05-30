@@ -102,7 +102,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         long current = System.currentTimeMillis();
         long staleTime = current - Config.lake_autovacuum_stale_partition_threshold * MILLISECONDS_PER_HOUR;
 
-        if (partition.getVisibleVersionTime() <= staleTime) {
+        if (partition.getVisibleVersionTime() <= staleTime && partition.getMetadataSwitchVersion() == 0) {
             return false;
         }
         // empty parition
@@ -113,6 +113,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         if (current < partition.getLastVacuumTime() + Config.lake_autovacuum_partition_naptime_seconds * 1000) {
             return false;
         }
+
         if (Config.lake_autovacuum_detect_vaccumed_version) {
             long minRetainVersion = partition.getMinRetainVersion();
             if (minRetainVersion <= 0) {
@@ -169,6 +170,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        boolean enablePartitionAggregation = table.enablePartitionAggregation();
         try {
             for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                 tablets.addAll(index.getTablets());
@@ -179,6 +181,12 @@ public class AutovacuumDaemon extends FrontendDaemon {
                 minRetainVersion = Math.max(1, visibleVersion - Config.lake_autovacuum_max_previous_versions);
             }
             preExtraFileSize = partition.getExtraFileSize();
+            if (partition.getMetadataSwitchVersion() != 0) {
+                // If metadataSwitchVersion is not 0, it means that for versions prior to this, the value of 
+                // enablePartitionAggregation should be the ​​opposite​​ of the current value.
+                enablePartitionAggregation = !enablePartitionAggregation;
+            }
+
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
@@ -189,7 +197,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         for (Tablet tablet : tablets) {
             LakeTablet lakeTablet = (LakeTablet) tablet;
 
-            if (table.enablePartitionAggregation()) {
+            if (enablePartitionAggregation) {
                 // if enable partition aggregation, there will be only one node.
                 if (pickNode == null) {
                     pickNode = LakeAggregator.chooseAggregatorNode(warehouse.getId());
@@ -227,7 +235,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
             vacuumRequest.minActiveTxnId = minActiveTxnId;
             vacuumRequest.partitionId = partition.getId();
             vacuumRequest.deleteTxnLog = needDeleteTxnLog;
-            vacuumRequest.enablePartitionAggregation = table.enablePartitionAggregation();
+            vacuumRequest.enablePartitionAggregation = enablePartitionAggregation;
             // Perform deletion of txn log on the first node only.
             needDeleteTxnLog = false;
             try {
@@ -289,6 +297,9 @@ public class AutovacuumDaemon extends FrontendDaemon {
             // the vacuumedVersion isthe minimum success vacuum version among all tablets within the partition which
             // means that all the garbage files before the vacuumVersion have been deleted.
             partition.setLastSuccVacuumVersion(vacuumedVersion);
+            if (partition.getMetadataSwitchVersion() != 0 && vacuumedVersion >= partition.getMetadataSwitchVersion()) {
+                partition.setMetadataSwitchVersion(0);
+            }
             long incrementExtraFileSize = partition.getExtraFileSize() - preExtraFileSize;
             partition.setExtraFileSize(extraFileSize + incrementExtraFileSize);
         }

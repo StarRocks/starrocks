@@ -123,6 +123,7 @@ public class VacuumTest {
         partition = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
         partition.setVisibleVersion(10L, System.currentTimeMillis());
         partition.setMinRetainVersion(10L);
+        partition.setMetadataSwitchVersion(5L);
         partition.setLastSuccVacuumVersion(4L);
 
         AutovacuumDaemon autovacuumDaemon = new AutovacuumDaemon();
@@ -154,6 +155,7 @@ public class VacuumTest {
             autovacuumDaemon.testVacuumPartitionImpl(db, olapTable, partition);
         }
         Assert.assertEquals(7L, partition.getLastSuccVacuumVersion());
+        Assert.assertEquals(0L, partition.getMetadataSwitchVersion());
     }
 
     @Test
@@ -202,6 +204,7 @@ public class VacuumTest {
         partition.setVisibleVersion(10L, System.currentTimeMillis());
         partition.setMinRetainVersion(10L);
         partition.setLastSuccVacuumVersion(4L);
+        partition.setMetadataSwitchVersion(5L);
         AutovacuumDaemon autovacuumDaemon = new AutovacuumDaemon();
 
         VacuumResponse mockResponse = new VacuumResponse();
@@ -225,6 +228,7 @@ public class VacuumTest {
         }
         
         Assert.assertEquals(4L, partition.getLastSuccVacuumVersion());
+        Assert.assertEquals(5L, partition.getMetadataSwitchVersion());
     }
 
     @Test
@@ -236,8 +240,11 @@ public class VacuumTest {
         AutovacuumDaemon autovacuumDaemon = new AutovacuumDaemon();
         long current = System.currentTimeMillis();
         // static
-        partition.setVisibleVersion(1L, current - Config.lake_autovacuum_stale_partition_threshold * 3600 * 1000);
+        partition.setVisibleVersion(10L, current - Config.lake_autovacuum_stale_partition_threshold * 3600 * 1000);
         Assert.assertFalse(autovacuumDaemon.shouldVacuum(partition));
+        // metaSwitchVersion is not 0
+        partition.setMetadataSwitchVersion(5);
+        Assert.assertTrue(autovacuumDaemon.shouldVacuum(partition));
         // empty
         partition.setVisibleVersion(1L, current);
         Assert.assertFalse(autovacuumDaemon.shouldVacuum(partition));

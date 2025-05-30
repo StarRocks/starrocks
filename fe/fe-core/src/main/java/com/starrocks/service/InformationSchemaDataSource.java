@@ -487,6 +487,8 @@ public class InformationSchemaDataSource {
             // STORAGE_PATH
             partitionMetaInfo.setStorage_path(
                     table.getPartitionFilePathInfo(physicalPartition.getId()).getFullPath());
+            // METADATA_SWITCH_VERSION
+            partitionMetaInfo.setMetadata_switch_version(physicalPartition.getMetadataSwitchVersion());
         }
 
         partitionMetaInfo.setData_version(physicalPartition.getDataVersion());

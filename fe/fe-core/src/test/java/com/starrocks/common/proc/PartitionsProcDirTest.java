@@ -74,5 +74,6 @@ public class PartitionsProcDirTest {
         Assert.assertEquals("2", list1.get(4));
         Assert.assertEquals("NORMAL", list1.get(5));
         Assert.assertEquals("province", list1.get(6));
+        Assert.assertEquals("0", list1.get(21));
     }
 }

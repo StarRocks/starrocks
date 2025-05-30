@@ -102,6 +102,20 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     private long versionEpoch;
     @SerializedName(value = "versionTxnType")
     private TransactionType versionTxnType;
+
+    /**
+     * metadataSwitchVersion is non-zero: The metadata format differs before and after this version.
+     * Therefore, vacuum operations cannot be executed across `metadataSwitchVersion`
+     * e.g.
+     *  the tablet under this partition has five versions: 1, 2, 3, 4, 5 and the metadataSwitchVersion is 3
+     *  the vacuum is run as the following:
+     *      1. Set minRetainVersion to 3 in the vacuumRequest.
+     *      2. The BE will delete tablet metadata where the version is less than 3.
+     *      3. If all tablets execute successfully and there are no metadata entries in two different formats, 
+     *      set metadataSwitchVersion to 0.
+     */
+    @SerializedName(value = "metadataSwitchVersion")
+    private long metadataSwitchVersion;
     /**
      * ID of the transaction that has committed current visible version.
      * Just for tracing the txn log, no need to persist.
@@ -199,7 +213,11 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     }
 
     public long getMinRetainVersion() {
-        return minRetainVersion;
+        long retainVersion = minRetainVersion;
+        if (metadataSwitchVersion != 0) {
+            retainVersion = Math.min(retainVersion, metadataSwitchVersion);
+        }
+        return retainVersion;
     }
 
     public void setMinRetainVersion(long minRetainVersion) {
@@ -342,6 +360,14 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     public void setVersionTxnType(TransactionType versionTxnType) {
         this.versionTxnType = versionTxnType;
+    }
+
+    public long getMetadataSwitchVersion() {
+        return metadataSwitchVersion;
+    }
+
+    public void setMetadataSwitchVersion(long metadataSwitchVersion) {
+        this.metadataSwitchVersion = metadataSwitchVersion;
     }
 
     public MaterializedIndex getIndex(long indexId) {
