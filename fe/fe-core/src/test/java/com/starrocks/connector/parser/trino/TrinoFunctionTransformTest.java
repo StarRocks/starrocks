@@ -116,6 +116,7 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
     @Test
     public void testDateFnTransform() throws Exception {
+        connectContext.getSessionVariable().setDisableFunctionFoldConstants(true);
         String sql = "select to_unixtime(TIMESTAMP '2023-04-22 00:00:00');";
         assertPlanContains(sql, "1682092800");
 
@@ -226,6 +227,7 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select from_iso8601_timestamp('2025-02-02')";
         assertPlanContains(sql, "'2025-02-02 00:00:00'");
+        connectContext.getSessionVariable().setDisableFunctionFoldConstants(false);
     }
 
     @Test

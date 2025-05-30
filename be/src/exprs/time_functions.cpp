@@ -3310,8 +3310,6 @@ Status TimeFunctions::datediff_close(FunctionContext* context, FunctionContext::
 
 template <LogicalType DATE_TYPE>
 StatusOr<ColumnPtr> TimeFunctions::_last_day(FunctionContext* context, const Columns& columns) {
-    auto input_col = columns[0];
-
     ColumnViewer<DATE_TYPE> data_column(columns[0]);
     auto size = columns[0]->size();
 
