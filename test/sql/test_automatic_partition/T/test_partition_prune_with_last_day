@@ -1,6 +1,6 @@
 -- name: test_partition_prune_with_last_day
 
--- set disable_function_fold_constants=true;
+set disable_function_fold_constants=true;
 
 CREATE TABLE t1 (
     dt datetime,
