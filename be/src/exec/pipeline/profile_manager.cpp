@@ -89,7 +89,7 @@ RuntimeProfile* profile_manager::build_merged_instance_profile(
 }
 
 profile_manager::profile_manager() {
-    int max_merger = config::async_profile_merge_thread_max_num == 0 ? CpuInfo::num_cores() / 6
+    int max_merger = config::async_profile_merge_thread_max_num == 0 ? CpuInfo::num_cores()
                                                                      : config::async_profile_merge_thread_max_num;
     auto status = ThreadPoolBuilder("query_profile_merge")
                           .set_min_threads(1)
@@ -186,8 +186,8 @@ std::unique_ptr<TFragmentProfile> profile_manager::create_report_profile_params(
     params.__set_fragment_instance_id(fragment_profile_material->_instance_id);
     params.__set_done(fragment_profile_material->_instance_is_done);
 
-    ObjectPool obj_pool;
-    merged_instance_profile = obj_pool.add(new RuntimeProfile(merged_instance_profile->name()));
+    // ObjectPool obj_pool;
+    // merged_instance_profile = obj_pool.add(new RuntimeProfile(merged_instance_profile->name()));
 
     merged_instance_profile->to_thrift(&params.profile);
     params.__isset.profile = true;
