@@ -27,9 +27,9 @@ public class CloudConfigurationConstants {
 
     // Credential for AWS s3
     public static final String AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR = "aws.s3.use_aws_sdk_default_behavior";
-    public static final String AWS_S3_USE_INSTANCE_PROFILE = "aws.s3.use_instance_profile";
+    public static final String AWS_S3_USE_INSTANCE_TOKEN_FILE = "aws.s3.use_instance_token_file";
 
-    public static final String AWS_S3_USE_WEIDENTITY_PROFILE = "aws.s3.use_webidentity_profile";
+    public static final String AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE = "aws.s3.use_web_identity_token_file";
     public static final String AWS_S3_ACCESS_KEY = "aws.s3.access_key";
     public static final String AWS_S3_SECRET_KEY = "aws.s3.secret_key";
     public static final String AWS_S3_SESSION_TOKEN = "aws.s3.session_token";
@@ -64,8 +64,8 @@ public class CloudConfigurationConstants {
     public static final String AWS_S3_ENABLE_SSL = "aws.s3.enable_ssl";
 
     public static final String AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR = "aws.glue.use_aws_sdk_default_behavior";
-    public static final String AWS_GLUE_USE_INSTANCE_PROFILE = "aws.glue.use_instance_profile";
-    public static final String AWS_GLUE_USE_WEBIDENTITY_PROFILE = "aws.glue.use_webidentity_profile";
+    public static final String AWS_GLUE_USE_INSTANCE_TOKEN_FILE = "aws.glue.use_instance_token_file";
+    public static final String AWS_GLUE_USE_WEB_IDENTITY_TOKEN_FILE = "aws.glue.use_web_identity_token_file";
     public static final String AWS_GLUE_ACCESS_KEY = "aws.glue.access_key";
     public static final String AWS_GLUE_SECRET_KEY = "aws.glue.secret_key";
     public static final String AWS_GLUE_SESSION_TOKEN = "aws.glue.session_token";

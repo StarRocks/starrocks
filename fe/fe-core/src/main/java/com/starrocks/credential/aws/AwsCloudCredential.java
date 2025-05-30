@@ -291,7 +291,7 @@ public class AwsCloudCredential implements CloudCredential {
     public void toThrift(Map<String, String> properties) {
         properties.put(CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR,
                 String.valueOf(useAWSSDKDefaultBehavior));
-        properties.put(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE,
+        properties.put(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_TOKEN_FILE,
                 String.valueOf(useInstanceProfile));
         properties.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, accessKey);
         properties.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY, secretKey);
