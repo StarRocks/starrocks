@@ -84,6 +84,10 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
             }
             metadata->mutable_schema()->CopyFrom(alter_meta.tablet_schema());
         }
+
+        if (alter_meta.has_aggregate_tablet_metadata()) {
+            // do nothing
+        }
     }
     return Status::OK();
 }

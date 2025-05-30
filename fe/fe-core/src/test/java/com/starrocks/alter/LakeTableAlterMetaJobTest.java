@@ -26,9 +26,11 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
@@ -402,5 +404,77 @@ public class LakeTableAlterMetaJobTest {
         ExceptionChecker.expectThrows(DdlException.class,
                 () -> schemaChangeHandler.createAlterMetaJob(modify, db, table2));
 
+    }
+
+    @Test
+    public void testModifyPropertyEnablePartitionAggregation() throws Exception {
+        LakeTable table2 = createTable(connectContext,
+                    "CREATE TABLE t12(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
+                                "PROPERTIES('enable_partition_aggregation'='false')");
+        Assert.assertFalse(table2.enablePartitionAggregation());
+        Map<String, String> properties = new HashMap<>();
+        properties.put("enable_partition_aggregation", "true");
+        ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+        AlterJobV2 job = schemaChangeHandler.createAlterMetaJob(modify, db, table2);
+        Assert.assertNotNull(job);
+        Assert.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
+        job.runPendingJob();
+        Assert.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        Assert.assertNotEquals(-1L, job.getTransactionId().orElse(-1L).longValue());
+        Assert.assertTrue(((LakeTableAlterMetaJob) job).isAggregateMetadata());
+        Assert.assertFalse(((LakeTableAlterMetaJob) job).isSplitMetadata());
+        job.runRunningJob();
+        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        while (job.getJobState() != AlterJobV2.JobState.FINISHED) {
+            job.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
+        Assert.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
+        Assert.assertTrue(table2.enablePartitionAggregation());
+        Assert.assertFalse(table2.allowUpdatePartitionAggregation());
+
+        properties.put("enable_partition_aggregation", "true");
+        ModifyTablePropertiesClause modify1 = new ModifyTablePropertiesClause(properties);
+        AlterJobV2 job1 = schemaChangeHandler.createAlterMetaJob(modify1, db, table2);
+        Assert.assertNull(job1);
+        Assert.assertFalse(table2.allowUpdatePartitionAggregation());
+
+        try {
+            String alterStmtStr = "alter table test.t12 set ('enable_partition_aggregation'='true')";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
+        } catch (Exception e) {
+            Assert.assertTrue(table2.enablePartitionAggregation());
+        }
+
+        try {
+            String alterStmtStr = "alter table test.t12 set ('enable_partition_aggregation'='false')";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
+        } catch (Exception e) {
+            Assert.assertFalse(table2.allowUpdatePartitionAggregation());
+            Assert.assertTrue(table2.enablePartitionAggregation());
+        }
+
+        properties.clear();
+        properties.put("enable_partition_aggregation", "false");
+        ModifyTablePropertiesClause modify2 = new ModifyTablePropertiesClause(properties);
+        AlterJobV2 job2 = schemaChangeHandler.createAlterMetaJob(modify2, db, table2);
+        Assert.assertNotNull(job2);
+        Assert.assertEquals(AlterJobV2.JobState.PENDING, job2.getJobState());
+        job2.runPendingJob();
+        Assert.assertEquals(AlterJobV2.JobState.RUNNING, job2.getJobState());
+        Assert.assertNotEquals(-1L, job2.getTransactionId().orElse(-1L).longValue());
+        Assert.assertTrue(((LakeTableAlterMetaJob) job2).isSplitMetadata());
+        Assert.assertFalse(((LakeTableAlterMetaJob) job2).isAggregateMetadata());
+        job2.runRunningJob();
+        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job2.getJobState());
+        while (job2.getJobState() != AlterJobV2.JobState.FINISHED) {
+            job2.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
+        Assert.assertEquals(AlterJobV2.JobState.FINISHED, job2.getJobState());
+        Assert.assertFalse(table2.enablePartitionAggregation());
     }
 }
