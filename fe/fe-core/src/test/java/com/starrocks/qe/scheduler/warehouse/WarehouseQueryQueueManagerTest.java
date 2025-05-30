@@ -14,6 +14,7 @@
 
 package com.starrocks.qe.scheduler.warehouse;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -23,13 +24,18 @@ import com.starrocks.epack.warehouse.WarehouseProperty;
 import com.starrocks.epack.warehouse.WarehouseSlotManager;
 import com.starrocks.epack.warehouse.WarehouseSlotTracker;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.metric.Metric;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.metric.MetricVisitor;
+import com.starrocks.metric.PrometheusMetricVisitor;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.SchedulerTestBase;
 import com.starrocks.qe.scheduler.SchedulerTestNoneDBBase;
 import com.starrocks.qe.scheduler.slot.BaseSlotTracker;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
+import com.starrocks.qe.scheduler.slot.QueryQueueOptions;
+import com.starrocks.qe.scheduler.slot.SlotSelectionStrategyV2;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -52,6 +58,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
@@ -283,5 +290,85 @@ public class WarehouseQueryQueueManagerTest extends SchedulerTestBase {
         warehouseMetricEntityMap = slotManager.getWarehouseMetrics();
         assertThat(warehouseMetricEntityMap.size()).isEqualTo(0);
         property.setEnableQueryQueue(true);
+    }
+
+    private static Set<String> WAREHOUSE_METRICS_KEYS = ImmutableSet.of(
+            "query_pending_length",
+            "query_running_length",
+            "max_query_queue_length",
+            "earliest_query_wait_time",
+            "max_query_pending_time_second",
+            "max_required_slots",
+            "sum_required_slots",
+            "remain_slots",
+            "max_slots");
+
+    @Test
+    public void testCollectWarehouseMetricsNormal() {
+        WarehouseSlotManager slotManager = (WarehouseSlotManager) GlobalStateMgr.getCurrentState().getSlotManager();
+
+        MetricVisitor visitor = new PrometheusMetricVisitor("fe_ut");
+        slotManager.collectWarehouseMetrics(visitor);
+
+        String result = visitor.build();
+        System.out.println("MetricVisitor produces: " + result);
+        assertThat(WAREHOUSE_METRICS_KEYS.stream().allMatch(x -> result.contains(x))).isTrue();
+    }
+
+    @Test
+    public void testCollectWarehouseMetricsBad1() {
+        new MockUp<WarehouseSlotManager>() {
+            @Mock
+            public Map<Long, WarehouseMetricEntity> getWarehouseMetrics() {
+                throw new RuntimeException("Mocked exception for testing");
+            }
+        };
+        WarehouseSlotManager slotManager = (WarehouseSlotManager) GlobalStateMgr.getCurrentState().getSlotManager();
+        MetricVisitor visitor = new PrometheusMetricVisitor("fe_ut");
+        slotManager.collectWarehouseMetrics(visitor);
+        String result = visitor.build();
+        System.out.println("MetricVisitor produces: " + result);
+        assertThat(result.equals(""));
+    }
+
+    @Test
+    public void testCollectWarehouseMetricsBad2() {
+        new MockUp<WarehouseMetricEntity>() {
+            public List<Metric> getMetrics() {
+                throw new RuntimeException("Mocked exception for testing");
+            }
+        };
+        WarehouseSlotManager slotManager = (WarehouseSlotManager) GlobalStateMgr.getCurrentState().getSlotManager();
+        MetricVisitor visitor = new PrometheusMetricVisitor("fe_ut");
+        slotManager.collectWarehouseMetrics(visitor);
+        String result = visitor.build();
+        System.out.println("MetricVisitor produces: " + result);
+        assertThat(result.equals(""));
+    }
+
+    @Test
+    public void testWarehouseSlotTrackerGetOptsV2Normal() {
+        WarehouseSlotManager slotManager = (WarehouseSlotManager) GlobalStateMgr.getCurrentState().getSlotManager();
+        Map<Long, BaseSlotTracker> warehouseIdToSlotTracker = slotManager.getWarehouseIdToSlotTracker();
+        WarehouseSlotTracker warehouseSlotTracker =
+                (WarehouseSlotTracker) warehouseIdToSlotTracker.get(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        assertThat(warehouseSlotTracker != null).isTrue();
+        assertThat(warehouseSlotTracker.getOptsV2()).isPresent();
+    }
+
+    @Test
+    public void testWarehouseSlotTrackerGetOptsV2Bad() {
+        new MockUp<SlotSelectionStrategyV2>() {
+            @Mock
+            public QueryQueueOptions getOpts() {
+                throw new RuntimeException("Mocked exception for testing");
+            }
+        };
+        WarehouseSlotManager slotManager = (WarehouseSlotManager) GlobalStateMgr.getCurrentState().getSlotManager();
+        Map<Long, BaseSlotTracker> warehouseIdToSlotTracker = slotManager.getWarehouseIdToSlotTracker();
+        WarehouseSlotTracker warehouseSlotTracker =
+                (WarehouseSlotTracker) warehouseIdToSlotTracker.get(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        assertThat(warehouseSlotTracker != null).isTrue();
+        assertThat(warehouseSlotTracker.getOptsV2()).isEmpty();
     }
 }

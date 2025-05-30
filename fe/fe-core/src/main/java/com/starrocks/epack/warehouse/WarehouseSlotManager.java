@@ -217,14 +217,23 @@ public class WarehouseSlotManager extends BaseSlotManager {
      */
     @Override
     public void collectWarehouseMetrics(MetricVisitor visitor) {
-        Map<Long, WarehouseMetricEntity> warehouseMetrics = getWarehouseMetrics();
-        for (Map.Entry<Long, WarehouseMetricEntity> entry : warehouseMetrics.entrySet()) {
-            WarehouseMetricEntity entity = entry.getValue();
-            for  (Metric metric : entity.getMetrics()) {
-                metric.addLabel(new MetricLabel("warehouse_id", String.valueOf(entity.getWarehouseId())));
-                metric.addLabel(new MetricLabel("warehouse_name", entity.getWarehouseName()));
-                visitor.visit(metric);
+        try {
+            Map<Long, WarehouseMetricEntity> warehouseMetrics = getWarehouseMetrics();
+            for (Map.Entry<Long, WarehouseMetricEntity> entry : warehouseMetrics.entrySet()) {
+                try {
+                    WarehouseMetricEntity entity = entry.getValue();
+                    for  (Metric metric : entity.getMetrics()) {
+                        metric.addLabel(new MetricLabel("warehouse_id", String.valueOf(entity.getWarehouseId())));
+                        metric.addLabel(new MetricLabel("warehouse_name", entity.getWarehouseName()));
+                        visitor.visit(metric);
+                    }
+                } catch (Exception e) {
+                    LOG.warn("Failed to collect warehouse metrics for warehouse {}: {}",
+                            entry.getKey(), e.getMessage(), e);
+                }
             }
+        } catch (Exception e) {
+            LOG.warn("Failed to collect warehouse metrics: {}", e.getMessage(), e);
         }
     }
 

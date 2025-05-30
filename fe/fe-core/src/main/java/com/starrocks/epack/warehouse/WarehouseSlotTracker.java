@@ -23,10 +23,13 @@ import com.starrocks.qe.scheduler.slot.QueryQueueOptions;
 import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
 import com.starrocks.qe.scheduler.slot.SlotSelectionStrategyV2;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Optional;
 
 public class WarehouseSlotTracker extends BaseSlotTracker {
+    private static final Logger LOG = LogManager.getLogger(WarehouseSlotTracker.class);
 
     public WarehouseSlotTracker(ResourceUsageMonitor resourceUsageMonitor, long warehouseId) {
         super(resourceUsageMonitor, warehouseId);
@@ -43,9 +46,15 @@ public class WarehouseSlotTracker extends BaseSlotTracker {
     public Optional<QueryQueueOptions.V2> getOptsV2() {
         Preconditions.checkArgument(slotSelectionStrategy instanceof SlotSelectionStrategyV2,
                 "Slot selection strategy is not SlotSelectionStrategyV2");
-        SlotSelectionStrategyV2 strategyV2 = (SlotSelectionStrategyV2) slotSelectionStrategy;
-        strategyV2.updateOptionsPeriodically();
-        return Optional.ofNullable(strategyV2.getOpts()).map(QueryQueueOptions::v2);
+        try {
+            SlotSelectionStrategyV2 strategyV2 = (SlotSelectionStrategyV2) slotSelectionStrategy;
+            strategyV2.updateOptionsPeriodically();
+            return Optional.ofNullable(strategyV2.getOpts()).map(QueryQueueOptions::v2);
+        } catch (Exception e) {
+            LOG.warn("Failed to get QueryQueueOptions.V2 for warehouse {}, error: {}",
+                    warehouseId, e.getMessage(), e);
+            return Optional.empty();
+        }
     }
 
     public SlotSelectionStrategyV2 getSlotSelectionStrategy() {
