@@ -1475,7 +1475,6 @@ under the License.
                 <version>${byteman.version}</version>
             </dependency>
 
-<<<<<<< HEAD
             <!-- azure native sdk -->
             <dependency>
                 <groupId>com.azure</groupId>
