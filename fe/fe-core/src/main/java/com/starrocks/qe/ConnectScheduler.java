@@ -37,9 +37,11 @@ package com.starrocks.qe;
 import com.google.common.base.Predicate;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.common.CloseableLock;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.mysql.MysqlCommand;
@@ -235,7 +237,9 @@ public class ConnectScheduler {
             }
 
             // Check whether it's the connection for the specified user.
-            if (forUser != null && !contextToShow.getQualifiedUser().equals(forUser)) {
+            if ((forUser != null && !contextToShow.getQualifiedUser().equals(forUser)) ||
+                    (Config.authorization_enable_admin_user_protection &&
+                            contextToShow.getQualifiedUser().equals(AuthenticationMgr.ROOT_USER))) {
                 continue;
             }
 
