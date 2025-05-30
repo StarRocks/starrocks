@@ -55,8 +55,12 @@ public class DataStreamSink extends DataSink {
     // Specify the columns which need to send, used on MultiCastSink
     private List<Integer> outputColumnIds;
 
+    // Specify the limit on output columns, used on MultiCastSink
+    private long limit;
+
     public DataStreamSink(PlanNodeId exchNodeId) {
         this.exchNodeId = exchNodeId;
+        this.limit = -1;
     }
 
     @Override
@@ -84,6 +88,8 @@ public class DataStreamSink extends DataSink {
     public void setOutputColumnIds(List<Integer> outputColumnIds) {
         this.outputColumnIds = outputColumnIds;
     }
+
+    public void setLimit(long limit) { this.limit = limit; }
 
     @Override
     public String getExplainString(String prefix, TExplainLevel explainLevel) {
@@ -116,6 +122,9 @@ public class DataStreamSink extends DataSink {
         tStreamSink.setDest_dop(exchDop);
         if (outputColumnIds != null && !outputColumnIds.isEmpty()) {
             tStreamSink.setOutput_columns(outputColumnIds);
+        }
+        if (limit != -1) {
+            tStreamSink.setLimit(limit);
         }
         result.setStream_sink(tStreamSink);
         return result;
