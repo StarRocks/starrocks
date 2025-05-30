@@ -65,6 +65,8 @@ INSERT INTO insert_wiki_edit
         "aws.s3.secret_key" = "YYYYYYYYYY",
         "aws.s3.region" = "us-west-2"
 );
+INSERT INTO insert_wiki_edit_copy
+    SELECT * FROM insert_wiki_edit;
 COMMIT WORK;
 ```
 
@@ -72,7 +74,8 @@ COMMIT WORK;
 
 - 目前，StarRocks 的 SQL 事务仅支持 INSERT 和 SELECT 语句。
 - 事务中 DML 语句的所有目标表必须在同一个数据库中。
-- 不允许在事务中对同一表执行多个 INSERT 语句。
+- 不允许在事务中对同一表执行多个 INSERT 语句。否则系统报错。
+- 不允许在事务中对一张表执行 INSERT 语句后再执行 SELECT 语句。否则系统报错。
 - 不允许嵌套事务，即不能在一对 BEGIN-COMMIT/ROLLBACK 之间再次指定 BEGIN WORK。
 - 如果执行事务的会话被终止或关闭，事务会自动回滚。
 - 如上所述，StarRocks 仅支持有限的 READ COMMITTED 事务隔离级别。
