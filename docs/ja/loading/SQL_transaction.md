@@ -69,8 +69,6 @@ INSERT INTO insert_wiki_edit
         "aws.s3.secret_key" = "YYYYYYYYYY",
         "aws.s3.region" = "us-west-2"
 );
-INSERT INTO insert_wiki_edit_copy
-    SELECT * FROM insert_wiki_edit;
 COMMIT WORK;
 ```
 
