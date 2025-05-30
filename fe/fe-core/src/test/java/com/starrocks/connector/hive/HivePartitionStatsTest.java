@@ -22,9 +22,10 @@ public class HivePartitionStatsTest {
     public void testFromCommonStats() {
         long rowNums = 5;
         long fileSize = 100;
-        HivePartitionStats hivePartitionStats = HivePartitionStats.fromCommonStats(rowNums, fileSize);
+        HivePartitionStats hivePartitionStats = HivePartitionStats.fromCommonStats(rowNums, fileSize, 1);
         Assert.assertEquals(5, hivePartitionStats.getCommonStats().getRowNums());
         Assert.assertEquals(100, hivePartitionStats.getCommonStats().getTotalFileBytes());
+        Assert.assertEquals(1, hivePartitionStats.getCommonStats().getNumFiles());
         Assert.assertTrue(hivePartitionStats.getColumnStats().isEmpty());
     }
 
@@ -34,17 +35,18 @@ public class HivePartitionStatsTest {
         HivePartitionStats update = HivePartitionStats.empty();
         Assert.assertEquals(current, HivePartitionStats.merge(current, update));
 
-        current = HivePartitionStats.fromCommonStats(5, 100);
+        current = HivePartitionStats.fromCommonStats(5, 100, 1);
         update = HivePartitionStats.empty();
         Assert.assertEquals(current, HivePartitionStats.merge(current, update));
 
-        current = HivePartitionStats.fromCommonStats(0, 0);
-        update = HivePartitionStats.fromCommonStats(5, 100);
+        current = HivePartitionStats.fromCommonStats(0, 0, 1);
+        update = HivePartitionStats.fromCommonStats(5, 100, 1);
         Assert.assertEquals(update, HivePartitionStats.merge(current, update));
 
-        current = HivePartitionStats.fromCommonStats(5, 100);
+        current = HivePartitionStats.fromCommonStats(5, 100, 1);
         Assert.assertEquals(10, HivePartitionStats.merge(current, update).getCommonStats().getRowNums());
         Assert.assertEquals(200, HivePartitionStats.merge(current, update).getCommonStats().getTotalFileBytes());
+        Assert.assertEquals(1, HivePartitionStats.merge(current, update).getCommonStats().getNumFiles());
     }
 
     @Test

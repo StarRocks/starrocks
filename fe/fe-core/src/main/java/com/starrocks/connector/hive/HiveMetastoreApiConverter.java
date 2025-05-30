@@ -628,7 +628,11 @@ public class HiveMetastoreApiConverter {
         if (totalSize == -1 && Config.enable_reuse_spark_column_statistics) {
             totalSize = getLongParam("spark.sql.statistics.totalSize", params);
         }
-        return new HiveCommonStats(numRows, totalSize);
+        long numFiles = getLongParam(NUM_FILES, params);
+        if (numFiles < 0) {
+            numFiles = 0;
+        }
+        return new HiveCommonStats(numRows, totalSize, numFiles);
     }
 
     public static Map<String, Map<String, HiveColumnStats>> toPartitionColumnStatistics(
@@ -668,6 +672,7 @@ public class HiveMetastoreApiConverter {
 
         result.put(ROW_COUNT, String.valueOf(statistics.getRowNums()));
         result.put(TOTAL_SIZE, String.valueOf(statistics.getTotalFileBytes()));
+        result.put(NUM_FILES, String.valueOf(statistics.getNumFiles()));
 
         if (!parameters.containsKey("STATS_GENERATED_VIA_STATS_TASK")) {
             result.put("STATS_GENERATED_VIA_STATS_TASK", "workaround for potential lack of HIVE-12730");
@@ -717,7 +722,8 @@ public class HiveMetastoreApiConverter {
     }
 
     /**
-     * Refer to https://github.com/apache/hive/blob/rel/release-3.1.3/ql/src/java/org/apache/hadoop/hive/ql/exec/ColumnStatsUpdateTask.java#L77
+     * Refer to https://github.com/apache/hive/blob/rel/release-3.1
+     * .3/ql/src/java/org/apache/hadoop/hive/ql/exec/ColumnStatsUpdateTask.java#L77
      */
     public static ColumnStatisticsObj convertSparkColumnStatistics(FieldSchema fieldSchema, Map<String, String> parameters) {
 
@@ -805,7 +811,8 @@ public class HiveMetastoreApiConverter {
     }
 
     /**
-     * Refer to https://github.com/apache/hive/blob/rel/release-3.1.3/ql/src/java/org/apache/hadoop/hive/ql/exec/ColumnStatsUpdateTask.java#L318
+     * Refer to https://github.com/apache/hive/blob/rel/release-3.1
+     * .3/ql/src/java/org/apache/hadoop/hive/ql/exec/ColumnStatsUpdateTask.java#L318
      */
     private static Date readDateValue(String dateStr) {
         // try either yyyy-mm-dd, or integer representing days since epoch
