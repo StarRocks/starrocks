@@ -321,7 +321,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     private Multimap<String, String> location;
 
-    private boolean enablePartitionAggregation = false;
+    private boolean ioMerge = false;
 
     public TableProperty() {
         this(Maps.newLinkedHashMap());
@@ -818,10 +818,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
-    public TableProperty buildEnablePartitionAggregation() {
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION)) {
-            enablePartitionAggregation = Boolean.parseBoolean(
-                    properties.getOrDefault(PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION, "false"));
+    public TableProperty buildIOMerge() {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_IO_MERGE)) {
+            ioMerge = Boolean.parseBoolean(
+                    properties.getOrDefault(PropertyAnalyzer.PROPERTIES_IO_MERGE, "false"));
         }
         return this;
     }
@@ -1013,8 +1013,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return enablePersistentIndex;
     }
 
-    public boolean enablePartitionAggregation() {
-        return enablePartitionAggregation;
+    public boolean isIOMerge() {
+        return ioMerge;
     }
 
     public int primaryIndexCacheExpireSec() {
@@ -1190,7 +1190,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildMvProperties();
         buildLocation();
         buildBaseCompactionForbiddenTimeRanges();
-        buildEnablePartitionAggregation();
+        buildIOMerge();
         buildMutableBucketNum();
     }
 }

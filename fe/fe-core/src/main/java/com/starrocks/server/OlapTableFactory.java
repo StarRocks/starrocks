@@ -483,8 +483,8 @@ public class OlapTableFactory implements AbstractTableFactory {
             }
             
             try {
-                boolean enablePartitionAggregation = PropertyAnalyzer.analyzeEnablePartitionAggregation(properties);
-                table.setEnablePartitionAggregation(enablePartitionAggregation);
+                boolean ioMerge = PropertyAnalyzer.analyzeIOMerge(properties);
+                table.setIOMerge(ioMerge);
             } catch (Exception e) {
                 throw new DdlException(e.getMessage());
             }
