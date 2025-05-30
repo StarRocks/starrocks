@@ -83,7 +83,7 @@ public class SampleInfoTest extends PlanTestBase {
         Assert.assertTrue(insertStmt.getQueryStatement().getQueryRelation() instanceof ValuesRelation);
         ValuesRelation valuesRelation = (ValuesRelation) insertStmt.getQueryStatement().getQueryRelation();
         Assert.assertTrue(valuesRelation.getRows().size() == 3);
-        Assert.assertTrue(valuesRelation.getRows().get(0).size() == 12);
+        Assert.assertTrue(valuesRelation.getRows().get(0).size() == 13);
     }
 
     @Test
@@ -104,7 +104,7 @@ public class SampleInfoTest extends PlanTestBase {
         Assert.assertEquals(2, unionRelation.getRelations().size());
         Assert.assertTrue(unionRelation.getRelations().get(0) instanceof SelectRelation);
         SelectRelation selectRelation = (SelectRelation) unionRelation.getRelations().get(0);
-        Assert.assertTrue(selectRelation.getSelectList().getItems().size() == 12);
+        Assert.assertTrue(selectRelation.getSelectList().getItems().size() == 13);
     }
 
     @Test
