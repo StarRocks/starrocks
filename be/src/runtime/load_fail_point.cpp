@@ -14,6 +14,11 @@
 
 #include "runtime/load_fail_point.h"
 
+#ifdef FIU_ENABLE
+#include "gutil/strings/join.h"
+#include "util/uid_util.h"
+#endif
+
 namespace starrocks::load::failpoint {
 
 DEFINE_FAIL_POINT(TABLET_WRITER_OPEN);

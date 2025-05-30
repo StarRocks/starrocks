@@ -16,6 +16,12 @@
 
 #include "util/failpoint/fail_point.h"
 
+#ifdef FIU_ENABLE
+#include "gen_cpp/internal_service.pb.h"
+#include "util/ref_count_closure.h"
+#include "util/reusable_closure.h"
+#endif
+
 namespace starrocks::load::failpoint {
 
 #define FP_NAME(name) FP_PREFIX + name
@@ -31,10 +37,6 @@ static const std::string PK_PRELOAD = FP_NAME("pk_preload");
 static const std::string COMMIT_TXN = FP_NAME("commit_txn");
 
 #ifdef FIU_ENABLE
-#include "gen_cpp/internal_service.pb.h"
-#include "util/ref_count_closure.h"
-#include "util/reusable_closure.h"
-
 void tablet_writer_open_fp_action(RefCountClosure<PTabletWriterOpenResult>* closure, PTabletWriterOpenRequest* request);
 void tablet_writer_add_chunks_fp_action(ReusableClosure<PTabletWriterAddBatchResult>* closure,
                                         PTabletWriterAddChunksRequest* request);
@@ -43,10 +45,14 @@ void tablet_writer_add_segment_fp_action(ReusableClosure<PTabletWriterAddSegment
 void tablet_writer_cancel_fp_action(RefCountClosure<PTabletWriterCancelResult>* closure,
                                     PTabletWriterCancelRequest* request);
 
-#define TABLET_WRITER_OPEN_FP_ACTION(closure, request) tablet_writer_open_fp_action(closure, &request);
-#define TABLET_WRITER_ADD_CHUNKS_FP_ACTION(closure, request) tablet_writer_add_chunks_fp_action(closure, &request);
-#define TABLET_WRITER_ADD_SEGMENT_FP_ACTION(closure, request) tablet_writer_add_segment_fp_action(closure, &request);
-#define TABLET_WRITER_CANCEL_FP_ACTION(closure, request) tablet_writer_cancel_fp_action(closure, &request);
+#define TABLET_WRITER_OPEN_FP_ACTION(closure, request) \
+    ::starrocks::load::failpoint::tablet_writer_open_fp_action(closure, &request);
+#define TABLET_WRITER_ADD_CHUNKS_FP_ACTION(closure, request) \
+    ::starrocks::load::failpoint::tablet_writer_add_chunks_fp_action(closure, &request);
+#define TABLET_WRITER_ADD_SEGMENT_FP_ACTION(closure, request) \
+    ::starrocks::load::failpoint::tablet_writer_add_segment_fp_action(closure, &request);
+#define TABLET_WRITER_CANCEL_FP_ACTION(closure, request) \
+    ::starrocks::load::failpoint::tablet_writer_cancel_fp_action(closure, &request);
 #else
 #define TABLET_WRITER_OPEN_FP_ACTION(closure, request)
 #define TABLET_WRITER_ADD_CHUNKS_FP_ACTION(closure, request)
