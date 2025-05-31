@@ -229,7 +229,6 @@ public class InsertAnalyzer {
                 }
             }
 
-            Preconditions.checkState(insertStmt.getTargetColumnNames() == null);
             // column name is case insensitive
             insertStmt.setTargetColumnNames(
                     query.getColumnOutputNames().stream().map(String::toLowerCase).collect(Collectors.toList()));
