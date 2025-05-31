@@ -48,6 +48,12 @@ CONF_Int32(brpc_port, "8060");
 
 // The number of bthreads for brpc, the default value is set to -1, which means the number of bthreads is #cpu-cores.
 CONF_Int32(brpc_num_threads, "-1");
+// https enable flag
+CONF_Bool(enable_https, "false");
+// path of certificate
+CONF_String(ssl_certificate_path, "");
+// path of private key
+CONF_String(ssl_private_key_path, "");
 
 // The max number of single connections maintained by the brpc client and each server.
 // These connections are created during the first few access and will be used thereafter
