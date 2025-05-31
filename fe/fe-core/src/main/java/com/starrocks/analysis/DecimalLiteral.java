@@ -287,6 +287,17 @@ public class DecimalLiteral extends LiteralExpr {
                     buffer.put(prefixByte);
                 }
                 break;
+            case DECIMAL256:
+                byte[] bytes256 = scaledValue.toBigInteger().toByteArray();
+                for (int i = bytes256.length - 1; i >= 0; --i) {
+                    buffer.put(bytes256[i]);
+                }
+                byte prefixByte256 = scaledValue.signum() >= 0 ? (byte) 0 : (byte) 0xff;
+                int numPaddingBytes256 = 32 - bytes256.length;
+                for (int i = 0; i < numPaddingBytes256; ++i) {
+                    buffer.put(prefixByte256);
+                }
+                break;
             default:
                 Preconditions.checkArgument(false, "Type bust be decimal type");
         }

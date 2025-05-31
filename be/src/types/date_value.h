@@ -16,6 +16,9 @@
 
 #include <cstdint>
 #include <string>
+#include <boost/multiprecision/cpp_int.hpp>
+#include <boost/multiprecision/detail/number_base.hpp>
+#include <boost/multiprecision/traits/is_restricted_conversion.hpp>
 
 #include "runtime/time_types.h"
 #include "storage/uint24.h"
@@ -152,7 +155,22 @@ inline std::ostream& operator<<(std::ostream& os, const DateValue& value) {
     os << value.to_string();
     return os;
 }
+
 } // namespace starrocks
+
+namespace boost {
+namespace multiprecision {
+
+template <>
+struct number_category<starrocks::DateValue> : public std::integral_constant<int, number_kind_integer> {
+    static constexpr int value = number_kind_integer;
+};
+
+template <>
+struct detail::is_restricted_conversion<starrocks::DateValue, backends::cpp_int_backend<256, 256, signed_magnitude, unchecked, void>> : public std::false_type {};
+
+} // namespace multiprecision
+} // namespace boost
 
 namespace std {
 template <>
@@ -168,7 +186,23 @@ public:
 
     // Must define the following static constants.
     static constexpr bool is_specialized = true;
-    static constexpr bool is_integer = false;
-    static constexpr bool is_signed = false;
+    static constexpr bool is_integer = true;
+    static constexpr bool is_signed = true;
+    static constexpr bool is_exact = true;
+    static constexpr bool has_infinity = false;
+    static constexpr bool has_quiet_NaN = false;
+    static constexpr bool has_signaling_NaN = false;
+    static constexpr bool is_bounded = true;
+    static constexpr bool is_modulo = false;
+    static constexpr int digits = 31;
+    static constexpr int digits10 = 9;
+    static constexpr int max_digits10 = 0;
+    static constexpr int radix = 2;
+    static constexpr int min_exponent = 0;
+    static constexpr int min_exponent10 = 0;
+    static constexpr int max_exponent = 0;
+    static constexpr int max_exponent10 = 0;
+    static constexpr bool traps = false;
+    static constexpr bool tinyness_before = false;
 };
 } // namespace std

@@ -96,6 +96,7 @@ namespace starrocks {
     M(DECIMAL32)                        \
     M(DECIMAL64)                        \
     M(DECIMAL128)                       \
+    M(DECIMAL256)                       \
     M(FUNCTION)                         \
     M(BINARY)                           \
     M(VARBINARY)                        \
