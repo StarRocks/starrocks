@@ -44,6 +44,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -172,7 +173,7 @@ public class MetadataViewerTest {
                 minTimes = 0;
                 result = warehouseId;
 
-                GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+                GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds((ComputeResource) any);
                 minTimes = 0;
                 result = Lists.newArrayList(10003L, 10004L, 10005L);
             }

@@ -26,6 +26,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.arrow.util.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -58,6 +59,7 @@ public class MergeCommitJob implements MergeCommitTaskCallback {
     private final int batchWriteParallel;
     private final boolean asyncMode;
     private final StreamLoadKvParams loadParameters;
+    private final ComputeResource computeResource;
 
     /**
      * The assigner for coordinator backends.
@@ -115,6 +117,7 @@ public class MergeCommitJob implements MergeCommitTaskCallback {
         this.mergeCommitTasks = new ConcurrentHashMap<>();
         this.lock = new ReentrantReadWriteLock();
         this.lastLoadCreateTimeMs = new AtomicLong(System.currentTimeMillis());
+        this.computeResource = streamLoadInfo.getComputeResource();
     }
 
     public long getId() {
@@ -135,6 +138,10 @@ public class MergeCommitJob implements MergeCommitTaskCallback {
 
     public int numRunningLoads() {
         return mergeCommitTasks.size();
+    }
+
+    public ComputeResource getComputeResource() {
+        return computeResource;
     }
 
     /**

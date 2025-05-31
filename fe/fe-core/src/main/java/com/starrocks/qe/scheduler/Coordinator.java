@@ -43,6 +43,7 @@ import com.starrocks.thrift.TTabletFailInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 
 import java.util.Collections;
 import java.util.List;
@@ -80,7 +81,7 @@ public abstract class Coordinator {
                                                 List<ScanNode> scanNodes, String timezone, long startTime,
                                                 Map<String, String> sessionVariables,
                                                 long execMemLimit,
-                                                long warehouseId);
+                                                ComputeResource computeResource);
 
         Coordinator createRefreshDictionaryCacheScheduler(ConnectContext context, TUniqueId queryId,
                                                           DescriptorTable descTable, List<PlanFragment> fragments,

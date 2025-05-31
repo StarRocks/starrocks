@@ -77,6 +77,7 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -158,7 +159,7 @@ public class StreamLoadScanNode extends LoadScanNode {
     public StreamLoadScanNode(
             TUniqueId loadId, PlanNodeId id, TupleDescriptor tupleDesc, Table dstTable,
             StreamLoadInfo streamLoadInfo, String dbName, String label,
-            int numInstances, long txnId, long warehouseId) {
+            int numInstances, long txnId, ComputeResource computeResource) {
         super(id, tupleDesc, "StreamLoadScanNode");
         this.loadId = loadId;
         this.dstTable = dstTable;
@@ -172,7 +173,7 @@ public class StreamLoadScanNode extends LoadScanNode {
         this.txnId = txnId;
         this.curChannelId = 0;
         this.nullExprInAutoIncrement = true;
-        this.warehouseId = warehouseId;
+        this.computeResource = computeResource;
     }
 
     public void setUseVectorizedLoad(boolean useVectorizedLoad) {
@@ -282,7 +283,7 @@ public class StreamLoadScanNode extends LoadScanNode {
                 computeNodes.add(computeNode);
             }
         } else {
-            computeNodes = getAvailableComputeNodes(warehouseId);
+            computeNodes = getAvailableComputeNodes(computeResource);
             Collections.shuffle(computeNodes, random);
         }
         if (computeNodes.isEmpty()) {

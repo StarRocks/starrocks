@@ -49,7 +49,8 @@ import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.VisibleStateWaiter;
-import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.queue.CircularFifoQueue;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -83,6 +84,7 @@ public class CompactionScheduler extends Daemon {
     private final SynchronizedCircularQueue<CompactionRecord> history;
     private long lastPartitionCleanTime;
     private Set<Long> disabledIds; // copy-on-write, table id or partition id
+    private ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     CompactionScheduler(@NotNull CompactionMgr compactionManager, @NotNull SystemInfoService systemInfoService,
                         @NotNull GlobalTransactionMgr transactionMgr, @NotNull GlobalStateMgr stateMgr,
@@ -113,6 +115,11 @@ public class CompactionScheduler extends Daemon {
     }
 
     private void scheduleNewCompaction() {
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseManager.getCompactionWarehouse().getId(),
+                this.computeResource);
+        this.computeResource = warehouseManager.acquireComputeResource(acquireContext);
+
         // Check whether there are completed compaction jobs.
         for (Iterator<Map.Entry<PartitionIdentifier, CompactionJob>> iterator = runningCompactions.entrySet().iterator();
                 iterator.hasNext(); ) {
@@ -236,9 +243,8 @@ public class CompactionScheduler extends Daemon {
         if (Config.lake_compaction_max_tasks >= 0) {
             return Config.lake_compaction_max_tasks;
         }
-        WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        Warehouse warehouse = manager.getCompactionWarehouse();
-        List<ComputeNode> aliveComputeNodes = manager.getAliveComputeNodes(warehouse.getId());
+        final WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        final List<ComputeNode> aliveComputeNodes = manager.getAliveComputeNodes(computeResource);
         return aliveComputeNodes.size() * 16;
     }
 
@@ -412,9 +418,8 @@ public class CompactionScheduler extends Daemon {
 
         // 2. pick aggregator node and build lake serivce
         WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        Warehouse warehouse = manager.getCompactionWarehouse();
         LakeAggregator aggregator = new LakeAggregator();
-        ComputeNode aggregatorNode = aggregator.chooseAggregatorNode(warehouse.getId());
+        ComputeNode aggregatorNode = aggregator.chooseAggregatorNode(computeResource);
         LakeService service = BrpcProxy.getLakeService(aggregatorNode.getHost(), aggregatorNode.getBrpcPort());
 
         // 3. build AggregateCompactionTask
@@ -425,11 +430,11 @@ public class CompactionScheduler extends Daemon {
     private Map<Long, List<Long>> collectPartitionTablets(PhysicalPartition partition) {
         List<MaterializedIndex> visibleIndexes = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
         Map<Long, List<Long>> beToTablets = new HashMap<>();
+
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         for (MaterializedIndex index : visibleIndexes) {
             for (Tablet tablet : index.getTablets()) {
-                WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-                Warehouse warehouse = manager.getCompactionWarehouse();
-                ComputeNode computeNode = manager.getComputeNodeAssignedToTablet(warehouse.getName(), (LakeTablet) tablet);
+                ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) tablet);
                 if (computeNode == null) {
                     beToTablets.clear();
                     return beToTablets;
@@ -453,10 +458,8 @@ public class CompactionScheduler extends Daemon {
         TransactionState.TxnCoordinator coordinator = new TransactionState.TxnCoordinator(txnSourceType, HOST_NAME);
         String label = String.format("COMPACTION_%d-%d-%d-%d", dbId, tableId, partitionId, currentTs);
 
-        WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        Warehouse warehouse = manager.getCompactionWarehouse();
         return transactionMgr.beginTransaction(dbId, Lists.newArrayList(tableId), label, coordinator,
-                loadJobSourceType, Config.lake_compaction_default_timeout_second, warehouse.getId());
+                loadJobSourceType, Config.lake_compaction_default_timeout_second, computeResource);
     }
 
     private void commitCompaction(PartitionIdentifier partition, CompactionJob job, boolean forceCommit)

@@ -57,6 +57,7 @@ import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.task.LoadEtlTask;
@@ -77,6 +78,7 @@ import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.LoadJobWithWarehouse;
 import com.starrocks.warehouse.WarehouseIdleChecker;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import io.netty.handler.codec.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -196,6 +198,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     private OlapTable table;
     private long taskDeadlineMs;
     private boolean isCommitting;
+    // needs to acquire cngroup for each beginTxn.
+    private ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     private ReentrantReadWriteLock lock;
 
@@ -252,7 +256,6 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         this.txnId = -1;
         this.errorMsg = null;
         this.warehouseId = warehouseId;
-
         init();
     }
 
@@ -826,8 +829,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 streamLoadInfo.getNegative(), channelNum, streamLoadInfo.getColumnExprDescs(), streamLoadInfo, label,
                 streamLoadInfo.getTimeout());
 
-        loadPlanner.setWarehouseId(streamLoadInfo.getWarehouseId());
-
+        loadPlanner.setComputeResource(streamLoadInfo.getComputeResource());
         loadPlanner.plan();
 
         coord = getCoordinatorFactory().createStreamLoadScheduler(loadPlanner);
@@ -959,7 +961,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                 isBackendTxn ? TransactionState.LoadJobSourceType.BACKEND_STREAMING
                     : TransactionState.LoadJobSourceType.FRONTEND_STREAMING, id,
-                timeoutMs / 1000, warehouseId);
+                timeoutMs / 1000, computeResource);
     }
 
     public void unprotectedPrepareTxn() throws StarRocksException, LockTimeoutException {

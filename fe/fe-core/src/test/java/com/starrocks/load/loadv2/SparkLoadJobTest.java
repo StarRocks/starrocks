@@ -83,6 +83,7 @@ import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -242,7 +243,7 @@ public class SparkLoadJobTest {
                 result = transactionMgr;
                 transactionMgr.beginTransaction(dbId, Lists.newArrayList(), label, null,
                         (TransactionState.TxnCoordinator) any, LoadJobSourceType.FRONTEND,
-                        anyLong, anyLong, anyLong);
+                        anyLong, anyLong, (ComputeResource) any);
                 result = transactionId;
                 pendingTask.init();
                 pendingTask.getSignature();
