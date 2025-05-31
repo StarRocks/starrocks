@@ -35,12 +35,12 @@ TabletSinkColocateSender::TabletSinkColocateSender(
 
 Status TabletSinkColocateSender::send_chunk(const OlapTableSchemaParam* schema,
                                             const std::vector<OlapTablePartition*>& partitions,
-                                            const std::vector<uint32_t>& tablet_indexes,
+                                            const std::vector<uint32_t>& record_hashes,
                                             const std::vector<uint16_t>& validate_select_idx,
                                             std::unordered_map<int64_t, std::set<int64_t>>& index_id_partition_id,
                                             Chunk* chunk) {
     if (UNLIKELY(!_colocate_mv_index)) {
-        return TabletSinkSender::send_chunk(schema, partitions, tablet_indexes, validate_select_idx,
+        return TabletSinkSender::send_chunk(schema, partitions, record_hashes, validate_select_idx,
                                             index_id_partition_id, chunk);
     }
 
@@ -59,8 +59,11 @@ Status TabletSinkColocateSender::send_chunk(const OlapTableSchemaParam* schema,
             auto* index = schema->indexes()[i];
             for (size_t j = 0; j < selection_size; ++j) {
                 uint16_t selection = validate_select_idx[j];
-                index_id_partition_id[index->index_id].emplace(partitions[selection]->id);
-                _index_tablet_ids[i][selection] = partitions[selection]->indexes[i].tablets[tablet_indexes[selection]];
+                const auto* partition = partitions[selection];
+                index_id_partition_id[index->index_id].emplace(partition->id);
+                const auto& tablets = partition->indexes[i].tablets;
+                // TODO: remove num_buckets
+                _index_tablet_ids[i][selection] = tablets[record_hashes[selection] % partition->num_buckets];
             }
         }
         return _send_chunks(schema, chunk, _index_tablet_ids, validate_select_idx);
@@ -71,8 +74,11 @@ Status TabletSinkColocateSender::send_chunk(const OlapTableSchemaParam* schema,
             auto* index = schema->indexes()[i];
             _index_tablet_ids[i].resize(num_rows);
             for (size_t j = 0; j < num_rows; ++j) {
-                index_id_partition_id[index->index_id].emplace(partitions[j]->id);
-                _index_tablet_ids[i][j] = partitions[j]->indexes[i].tablets[tablet_indexes[j]];
+                const auto* partition = partitions[j];
+                index_id_partition_id[index->index_id].emplace(partition->id);
+                const auto& tablets = partition->indexes[i].tablets;
+                // TODO: remove num_buckets
+                _index_tablet_ids[i][j] = tablets[record_hashes[j] % partition->num_buckets];
             }
         }
         return _send_chunks(schema, chunk, _index_tablet_ids, validate_select_idx);
