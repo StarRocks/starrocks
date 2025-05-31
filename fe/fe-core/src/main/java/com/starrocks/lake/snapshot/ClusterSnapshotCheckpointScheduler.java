@@ -69,6 +69,7 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
         try {
             runCheckpointScheduler();
         } finally {
+            feController.setNeedClusterSnapshotInfo(false);
             CheckpointController.exclusiveUnlock();
         }
     }
@@ -96,7 +97,9 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
 
             long feImageJournalId = feController.getImageJournalId();
             long feCheckpointJournalId = consistentIds.first;
+            long startTime = System.currentTimeMillis();
             if (feImageJournalId < feCheckpointJournalId) {
+                feController.setNeedClusterSnapshotInfo(job.needClusterSnapshotInfo());
                 Pair<Boolean, String> createFEImageRet = feController.runCheckpointControllerWithIds(feImageJournalId,
                         feCheckpointJournalId);
                 if (!createFEImageRet.first) {
@@ -105,6 +108,14 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
                 }
             } else if (feImageJournalId > feCheckpointJournalId) {
                 errMsg = "checkpoint journal id for FE is smaller than image version";
+                break;
+            }
+            long finishTime = System.currentTimeMillis();
+            // Check the time taken to obtain consistency information. Reject the snapshot if
+            // it takes too long to finish to prevent the verion has been vacuumed.
+            if (job.needClusterSnapshotInfo() &&
+                    (finishTime - startTime) / 1000 > Config.lake_autovacuum_grace_period_minutes * 60) {
+                errMsg = "Take too long to obtain consistency information";
                 break;
             }
             LOG.info("Finished create image for FE image, version: {}", consistentIds.first);
@@ -122,6 +133,7 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
                 errMsg = "checkpoint journal id for starMgr is smaller than image version";
                 break;
             }
+            job.setClusterSnapshotInfo(feController.getClusterSnapshotInfo());
             LOG.info("Finished create image for starMgr image, version: {}", consistentIds.second);
 
             // step 3: upload all finished image file

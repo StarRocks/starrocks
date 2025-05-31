@@ -125,6 +125,10 @@ public class ClusterSnapshotJob implements Writable {
         return state == ClusterSnapshotJobState.INITIALIZING;
     }
 
+    public boolean isUploading() {
+        return state == ClusterSnapshotJobState.UPLOADING;
+    }
+
     public boolean isError() {
         return state == ClusterSnapshotJobState.ERROR;
     }
@@ -147,6 +151,18 @@ public class ClusterSnapshotJob implements Writable {
 
     public void setDetailInfo(String detailInfo) {
         this.detailInfo = detailInfo;
+    }
+
+    public boolean needClusterSnapshotInfo() {
+        return snapshot.needClusterSnapshotInfo();
+    }
+
+    public void setClusterSnapshotInfo(ClusterSnapshotInfo clusterSnapshotInfo) {
+        snapshot.setClusterSnapshotInfo(clusterSnapshotInfo);
+    }
+
+    public long getSnapshotVersion(long dbId, long tableId, long partId, long physicalPartId) {
+        return snapshot.getSnapshotVersion(dbId, tableId, partId, physicalPartId);
     }
 
     public void logJob() {
