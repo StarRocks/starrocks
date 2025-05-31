@@ -49,9 +49,11 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.thrift.TAggregationNode;
@@ -61,6 +63,7 @@ import com.starrocks.thrift.TNormalAggregationNode;
 import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
+import com.starrocks.thrift.TRuntimeFilterDescription;
 import com.starrocks.thrift.TStreamingPreaggregationMode;
 import org.apache.commons.collections.CollectionUtils;
 
@@ -76,7 +79,7 @@ import static com.starrocks.qe.SessionVariableConstants.FORCE_PREAGGREGATION;
 import static com.starrocks.qe.SessionVariableConstants.FORCE_STREAMING;
 import static com.starrocks.qe.SessionVariableConstants.LIMITED;
 
-public class AggregationNode extends PlanNode {
+public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode {
     private final AggregateInfo aggInfo;
 
     // Set to true if this aggregation node needs to run the Finalize step. This
@@ -100,6 +103,9 @@ public class AggregationNode extends PlanNode {
     // 4. 1st phaes of three-phase-agg(2nd phase of four-phase agg eliminated).
     // OlapScanNode and these PlanNodes have the same data partition policy.
     private boolean identicallyDistributed = false;
+
+    private final List<RuntimeFilterDescription> buildRuntimeFilters = Lists.newArrayList();
+    private boolean withRuntimeFilters = false;
 
     /**
      * Create an agg node that is not an intermediate node.
@@ -256,6 +262,12 @@ public class AggregationNode extends PlanNode {
             msg.agg_node.setIntermediate_aggr_exprs(Expr.treesToThrift(intermediateAggrExprs));
         }
 
+        if (!buildRuntimeFilters.isEmpty()) {
+            List<TRuntimeFilterDescription> tRuntimeFilterDescriptions =
+                    RuntimeFilterDescription.toThriftRuntimeFilterDescriptions(buildRuntimeFilters);
+            msg.agg_node.setBuild_runtime_filters(tRuntimeFilterDescriptions);
+        }
+
         msg.agg_node.setHas_outer_join_child(hasNullableGenerateChild);
         if (streamingPreaggregationMode.equalsIgnoreCase(FORCE_STREAMING)) {
             msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.FORCE_STREAMING);
@@ -270,7 +282,8 @@ public class AggregationNode extends PlanNode {
         msg.agg_node.setAgg_func_set_version(FeConstants.AGG_FUNC_VERSION);
         msg.agg_node.setInterpolate_passthrough(
                 useStreamingPreagg && ConnectContext.get().getSessionVariable().isInterpolatePassthrough());
-        msg.agg_node.setEnable_pipeline_share_limit(ConnectContext.get().getSessionVariable().getEnableAggregationPipelineShareLimit());
+        msg.agg_node.setEnable_pipeline_share_limit(
+                ConnectContext.get().getSessionVariable().getEnableAggregationPipelineShareLimit());
     }
 
     protected String getDisplayLabelDetail() {
@@ -316,6 +329,15 @@ public class AggregationNode extends PlanNode {
 
         if (withLocalShuffle) {
             output.append(detailPrefix).append("withLocalShuffle: true\n");
+        }
+
+        if (detailLevel == TExplainLevel.VERBOSE) {
+            if (!buildRuntimeFilters.isEmpty()) {
+                output.append(detailPrefix).append("build runtime filters:\n");
+                for (RuntimeFilterDescription rf : buildRuntimeFilters) {
+                    output.append(detailPrefix).append("- ").append(rf.toExplainString(-1)).append("\n");
+                }
+            }
         }
 
         return output.toString();
@@ -367,7 +389,7 @@ public class AggregationNode extends PlanNode {
 
     @Override
     public boolean canUseRuntimeAdaptiveDop() {
-        return getChildren().stream().allMatch(PlanNode::canUseRuntimeAdaptiveDop);
+        return !withRuntimeFilters && getChildren().stream().allMatch(PlanNode::canUseRuntimeAdaptiveDop);
     }
 
     private void disableCacheIfHighCardinalityGroupBy(FragmentNormalizer normalizer) {
@@ -470,5 +492,67 @@ public class AggregationNode extends PlanNode {
     @Override
     public boolean needCollectExecStats() {
         return true;
+    }
+
+    @Override
+    public List<RuntimeFilterDescription> getBuildRuntimeFilters() {
+        return buildRuntimeFilters;
+    }
+
+    @Override
+    public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> generator, DescriptorTable descTbl,
+                                    ExecGroupSets execGroupSets) {
+        SessionVariable sv = ConnectContext.get().getSessionVariable();
+        // RF push down group by one column
+        if (limit > 0 && limit < sv.getAggInFilterLimit() && !aggInfo.getAggregateExprs().isEmpty() && !aggInfo.getGroupingExprs().isEmpty()) {
+            Expr groupingExpr = aggInfo.getGroupingExprs().get(0);
+            pushDownUnaryInRuntimeFilter(generator, groupingExpr, descTbl, execGroupSets, 0);
+        }
+        withRuntimeFilters = !buildRuntimeFilters.isEmpty();
+    }
+
+    private int getProbeExprOrder(List<Expr> exprs, Expr probeExpr) {
+        for (int i = 0; i < exprs.size(); i++) {
+            if (exprs.get(i).equals(probeExpr)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private void pushDownUnaryAggInRuntimeFilter(IdGenerator<RuntimeFilterId> generator, Expr expr,
+                                                 DescriptorTable descTbl,
+                                                 ExecGroupSets execGroupSets,
+                                                 RuntimeFilterDescription.RuntimeFilterType type,
+                                                 int exprOrder,
+                                                 JoinNode.DistributionMode mode) {
+        SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+        RuntimeFilterDescription rf = new RuntimeFilterDescription(sessionVariable);
+        rf.setFilterId(generator.getNextId().asInt());
+        rf.setBuildPlanNodeId(getId().asInt());
+        rf.setExprOrder(exprOrder);
+        rf.setJoinMode(mode);
+        rf.setBuildExpr(expr);
+        rf.setRuntimeFilterType(type);
+        rf.setEqualCount(1);
+        RuntimeFilterPushDownContext rfPushDownCtx = new RuntimeFilterPushDownContext(rf, descTbl, execGroupSets);
+        for (PlanNode child : children) {
+            if (child.pushDownRuntimeFilters(rfPushDownCtx, expr, Lists.newArrayList())) {
+                this.buildRuntimeFilters.add(rf);
+            }
+        }
+    }
+
+    private void pushDownUnaryInRuntimeFilter(IdGenerator<RuntimeFilterId> generator, Expr expr,
+                                              DescriptorTable descTbl,
+                                              ExecGroupSets execGroupSets, int exprOrder) {
+        pushDownUnaryAggInRuntimeFilter(generator, expr, descTbl, execGroupSets,
+                RuntimeFilterDescription.RuntimeFilterType.AGG_IN_FILTER, exprOrder,
+                JoinNode.DistributionMode.PARTITIONED);
+    }
+
+    @Override
+    public void clearBuildRuntimeFilters() {
+        buildRuntimeFilters.clear();
     }
 }

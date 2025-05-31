@@ -50,7 +50,16 @@ import static com.starrocks.planner.JoinNode.DistributionMode.SHUFFLE_HASH_BUCKE
 public class RuntimeFilterDescription {
     public enum RuntimeFilterType {
         TOPN_FILTER,
-        JOIN_FILTER
+        JOIN_FILTER,
+        AGG_IN_FILTER;
+
+        public boolean isTopNFilter() {
+            return TOPN_FILTER.equals(this);
+        }
+
+        public boolean isAggInFilter() {
+            return AGG_IN_FILTER.equals(this);
+        }
     }
 
     private int filterId;
@@ -74,6 +83,7 @@ public class RuntimeFilterDescription {
     private long buildCardinality;
     private SessionVariable sessionVariable;
 
+    // TODO: remove me
     private boolean onlyLocal;
 
     private long topn;
@@ -150,10 +160,6 @@ public class RuntimeFilterDescription {
         this.type = type;
     }
 
-    public SortInfo getSortInfo() {
-        return sortInfo;
-    }
-
     public void setSortInfo(SortInfo sortInfo) {
         this.sortInfo = sortInfo;
     }
@@ -166,7 +172,7 @@ public class RuntimeFilterDescription {
         return this.topn;
     }
 
-        public PlanNode getBuildPlanNode() {
+    public PlanNode getBuildPlanNode() {
         return buildPlanNode;
     }
 
@@ -215,7 +221,7 @@ public class RuntimeFilterDescription {
             return false;
         }
 
-        if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType()) && node instanceof OlapScanNode) {
+        if (runtimeFilterType().isTopNFilter() && node instanceof OlapScanNode) {
             ((OlapScanNode) node).setOrderHint(isAscFilter());
         }
         // if we don't across exchange node, that's to say this is in local fragment instance.
@@ -250,7 +256,7 @@ public class RuntimeFilterDescription {
 
     // return true if Node could accept the Filter
     public boolean canAcceptFilter(PlanNode node, RuntimeFilterPushDownContext rfPushCtx) {
-        if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType())) {
+        if (runtimeFilterType().isTopNFilter() || runtimeFilterType().isAggInFilter()) {
             if (node instanceof ScanNode) {
                 ScanNode scanNode = (ScanNode) node;
                 return scanNode.supportTopNRuntimeFilter();
@@ -269,17 +275,17 @@ public class RuntimeFilterDescription {
         return true;
     }
 
-    public boolean isNullLast() {
-        if (sortInfo != null) {
-            return !sortInfo.getNullsFirst().get(0);
-        } else {
-            return false;
-        }
-    }
-
     public boolean isAscFilter() {
         if (sortInfo != null) {
             return sortInfo.getIsAscOrder().get(0);
+        } else {
+            return true;
+        }
+    }
+
+    public boolean isNullsFirst() {
+        if (sortInfo != null) {
+            return sortInfo.getNullsFirst().get(0);
         } else {
             return true;
         }
@@ -617,8 +623,10 @@ public class RuntimeFilterDescription {
 
         t.setBuild_from_group_execution(isBuildFromColocateGroup);
 
-        if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType())) {
+        if (runtimeFilterType().isTopNFilter()) {
             t.setFilter_type(TRuntimeFilterBuildType.TOPN_FILTER);
+        } else if (runtimeFilterType().isAggInFilter()) {
+            t.setFilter_type(TRuntimeFilterBuildType.AGG_FILTER);
         } else {
             t.setFilter_type(TRuntimeFilterBuildType.JOIN_FILTER);
         }
