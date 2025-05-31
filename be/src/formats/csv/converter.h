@@ -70,16 +70,16 @@ public:
         // Hive array format like: 1^C2^B3^4
         ArrayFormatType array_format_type = ArrayFormatType::kDefault;
         // [Only used in Hive now!]
-        // Control hive array's element delimiter.
-        char array_hive_collection_delimiter = '\002';
+        // Control hive array & struct's element delimiter.
+        char hive_collection_delimiter = '\002';
         // [Only used in Hive now!]
         // mapkey_delimiter is the separator between key and value in map.
-        // For example, {"smith": age} mapkey_delimiter is ':', array_hive_mapkey_delimiter is
+        // For example, {"smith": age} mapkey_delimiter is ':', hive_mapkey_delimiter is
         // used to generate collection delimiter in Hive.
-        char array_hive_mapkey_delimiter = '\003';
+        char hive_mapkey_delimiter = '\003';
         // [Only used in Hive now!]
-        // Control array nested level, used to generate collection delimiter in Hive.
-        size_t array_hive_nested_level = 1;
+        // Control array & struct nested level, used to generate collection delimiter in Hive.
+        size_t hive_nested_level = 1;
 
         // type desc of the slot we are dealing with now.
         const TypeDescriptor* type_desc = nullptr;
@@ -119,6 +119,20 @@ protected:
 
 std::unique_ptr<Converter> get_converter(const TypeDescriptor& type_desc, bool nullable);
 std::unique_ptr<Converter> get_hive_converter(const TypeDescriptor& type_desc, bool nullable);
+
+// Hive collection delimiter generate rule is quiet complex,
+// if you want to know the details, you can refer to:
+// https://github.com/apache/hive/blob/90428cc5f594bd0abb457e4e5c391007b2ad1cb8/serde/src/java/org/apache/hadoop/hive/serde2/lazy/LazySerDeParameters.java#L250
+// Next let's begin the story:
+// There is a 3D-array [[[1, 2]], [[3, 4], [5, 6]]], in Hive it will be stored as 1^D2^B3^D4^C5^D6 (without '[', ']').
+// ^B = (char)2, ^C = (char)3, ^D = (char)4 ....
+// In the first level, Hive will use collection_delimiter (user can specify it, default is ^B) as an element separator,
+// then origin array split into [[1, 2]] (1^D2) and [[3, 4], [5, 6]] (3^D4^C5^D6).
+// In the second level, Hive will use mapkey_delimiter (user can specify it, default is ^C) as a separator, then
+// array split into [1, 2], [3, 4] and [5, 6].
+// In the third level, Hive will use ^D (user can't specify it) as a separator, then we can get
+// each element in this array.
+char get_collection_delimiter(char collection_delimiter, char mapkey_delimiter, size_t nested_array_level);
 
 } // namespace csv
 } // namespace starrocks
