@@ -129,6 +129,7 @@ statement
     | executeScriptStatement
     | adminSetAutomatedSnapshotOnStatement
     | adminSetAutomatedSnapshotOffStatement
+    | adminShowBackendConfigStatement
 
     // Cluster Management Statement
     | alterSystemStatement
@@ -739,6 +740,9 @@ adminSetReplicaStatusStatement
     ;
 adminShowConfigStatement
     : ADMIN SHOW FRONTEND CONFIG (LIKE pattern=string)?
+    ;
+adminShowBackendConfigStatement
+    : ADMIN SHOW BACKEND CONFIG (LIKE pattern=string)?
     ;
 
 adminShowReplicaDistributionStatement
