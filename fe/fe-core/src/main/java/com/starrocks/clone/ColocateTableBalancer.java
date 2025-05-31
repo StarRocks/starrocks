@@ -348,7 +348,8 @@ public class ColocateTableBalancer extends FrontendDaemon {
 
             Set<Long> unavailableBeIdsInGroup = getUnavailableBeIdsInGroup(infoService, colocateIndex, groupId);
             stat.counterColocateBalanceRound.incrementAndGet();
-            List<Long> availableBeIds = getAvailableBeIds(infoService);
+            // Get list of BEs which can be considered as destinations while moving
+            List<Long> availableBeIds = getAvailableBeIds(infoService, colocateIndex.getGroupSchema(groupId));
             List<List<Long>> balancedBackendsPerBucketSeq = Lists.newArrayList();
             if (doRelocateAndBalance(groupId, unavailableBeIdsInGroup, availableBeIds, colocateIndex, infoService,
                     statistic, balancedBackendsPerBucketSeq)) {
@@ -605,6 +606,11 @@ public class ColocateTableBalancer extends FrontendDaemon {
                             new ArrayList<>(srcInfo.replicaNumToGroupsMap.get(numOfReplicas));
                     Collections.shuffle(candidateGroupList);
                     for (GroupId groupId : candidateGroupList) {
+                        // check destInfo label matches with group schema or not here
+                        if (!TabletChecker.isLocationMatch(destInfo.backendId,
+                                colocateIndex.getGroupSchema(groupId).getLocationMap())) {
+                            continue;
+                        }
                         // we use `result` map to temporarily keep the balance result, so here we need
                         // to get the updated backend list if it has already changed because of the ongoing
                         // balance process, if not, get it from the metadata manager, i.e. ColocateIndex
@@ -628,8 +634,11 @@ public class ColocateTableBalancer extends FrontendDaemon {
                                 backendSetForBucket.remove(srcInfo.backendId);
                                 backendSetForBucket.add(destInfo.backendId);
                                 // Here we check whether this move will break the per group balanced state,
+                                // Will compare even distribution of replicas across labels with/without movement
                                 // if it will, we won't make this move
-                                if (!checkKeepingPerGroupBalanced(backendsPerBucketSeq)) {
+                                if (!checkKeepingPerGroupBalanced(backendsPerBucketSeq, srcInfo.backendId,
+                                        destInfo.backendId, bucketIdx, systemInfoService,
+                                        colocateIndex.getGroupSchema(groupId))) {
                                     // restore backend set
                                     backendsPerBucketSeq.set(bucketIdx, oldBackendSetForBucket);
                                     continue;
@@ -687,7 +696,51 @@ public class ColocateTableBalancer extends FrontendDaemon {
         }
     }
 
-    private boolean checkKeepingPerGroupBalanced(List<Set<Long>> backendsPerBucketSeq) {
+
+    /**
+     *
+     * @param backendsPerBucketSeq
+     * @param srcBackendId
+     * @param destBackendId
+     * @param bucketIdx
+     * @param systemInfoService
+     * @param groupSchema
+     * @return true if group will be balanced and replicas are evenly distributed as per location label after movement
+     *         false if movement causes inbalance or uneven replica distribution between location labels
+     */
+    private boolean checkKeepingPerGroupBalanced(List<Set<Long>> backendsPerBucketSeq,
+                                                 long srcBackendId, long destBackendId, int bucketIdx,
+                                                 SystemInfoService systemInfoService, ColocateGroupSchema groupSchema) {
+        boolean locLabelCheck = true;
+        Map<Pair<String, String>, Long> existingLocationMap = Maps.newHashMap();
+        if (groupSchema.getLocationMap() != null) {
+            LOG.debug("Check for location label {} even distribution while rebalancing across colocate groups",
+                    groupSchema.getLocationMap());
+            // if src location label is matching, check for even distribution, otherwise consider as repair for
+            // label match and pass the check
+            if (TabletChecker.isLocationMatch(srcBackendId, groupSchema.getLocationMap())) {
+                Set<Long> curBucketBackendIds = backendsPerBucketSeq.get(bucketIdx);
+                for (long backendId : curBucketBackendIds) {
+                    Backend backend = systemInfoService.getBackend(backendId);
+                    existingLocationMap.merge(backend.getSingleLevelLocationKV(), 1L,
+                            (existingVal, defaultVal) -> existingVal + 1);
+                }
+
+                LOG.debug("location label to replica count map with new dest BE {}", existingLocationMap);
+                // If number of replicas in dest label are more than 1
+                if (existingLocationMap.get(systemInfoService.getBackend(destBackendId).getSingleLevelLocationKV()) > 1) {
+                    // If there is no replica with src BE label
+                    if (!existingLocationMap.containsKey(systemInfoService.getBackend(srcBackendId)
+                            .getSingleLevelLocationKV())) {
+                        LOG.info("label {} is missed and label {} have extra replica",
+                                systemInfoService.getBackend(srcBackendId).getSingleLevelLocationKV(),
+                                systemInfoService.getBackend(destBackendId).getSingleLevelLocationKV());
+                        locLabelCheck = false;
+                    }
+                }
+            }
+        }
+
         // backend id -> replica num, and sorted by replica num, descending.
         Map<Long, Long> backendToReplicaNum = backendsPerBucketSeq.stream().flatMap(Collection::stream)
                 .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
@@ -695,7 +748,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
                 backendToReplicaNum.entrySet().stream().sorted(Comparator.comparingLong(Map.Entry::getValue))
                         .collect(Collectors.toList());
         int lastIdx = entries.size() - 1;
-        return entries.get(lastIdx).getValue() - entries.get(0).getValue() <= 1;
+        return locLabelCheck && entries.get(lastIdx).getValue() - entries.get(0).getValue() <= 1;
     }
 
     public static boolean needToForceRepair(TabletHealthStatus st, LocalTablet tablet, Set<Long> backendsSet) {
@@ -1046,10 +1099,27 @@ public class ColocateTableBalancer extends FrontendDaemon {
                 //    sequence which will cause a lot of wasted colocate balancing work and further more make the
                 //    colocate group unstable for longer time, but we can still do the balance work.
                 //
-                // In both cases, we change the src be to which that have the most replicas.
-                srcBeId = backendWithReplicaNum.get(0).getKey();
-                srcBeSeqIndexes = getBeSeqIndexes(flatBackendsPerBucketSeq, srcBeId);
-                leftBound = 0;
+                // In both cases, we change the src be to
+                // 1. If There are any redundant replicas, move them first
+                // 2. else, assign to which have most replicas
+                Pair<Long, List<Integer>> beId2SrcSeqIndex = null;
+                if (groupSchema.getLocationMap() != null) {
+                    beId2SrcSeqIndex = getLocationLabelMismatchReplicas(availableBeIds, flatBackendsPerBucketSeq,
+                                infoService, replicationNum);
+                }
+                // If redundant replicas are found
+                if (beId2SrcSeqIndex != null) {
+                    LOG.debug("Redundant replicas found in BE {} at indices {}",
+                            beId2SrcSeqIndex.first, beId2SrcSeqIndex.second);
+                    srcBeId = beId2SrcSeqIndex.first;
+                    srcBeSeqIndexes = beId2SrcSeqIndex.second;
+                    leftBound = -1;
+
+                } else {
+                    srcBeId = backendWithReplicaNum.get(0).getKey();
+                    srcBeSeqIndexes = getBeSeqIndexes(flatBackendsPerBucketSeq, srcBeId);
+                    leftBound = 0;
+                }
             } else {
                 leftBound = -1;
             }
@@ -1082,7 +1152,9 @@ public class ColocateTableBalancer extends FrontendDaemon {
                     List<Long> backendsSet = backendsPerBucketSeq.get(bucketIndex);
                     List<String> hostsSet = hostsPerBucketSeq.get(bucketIndex);
                     // the replicas of a tablet can not locate in same Backend or same host
-                    if (!backendsSet.contains(destBeId) && !hostsSet.contains(destBe.getHost())) {
+                    if (!backendsSet.contains(destBeId) && !hostsSet.contains(destBe.getHost())
+                            && checkForEvenDistribution(groupSchema, srcBeId, destBeId, backendsSet,
+                            availableBeIds, infoService)) {
                         Preconditions.checkState(backendsSet.contains(srcBeId), srcBeId);
                         flatBackendsPerBucketSeq.set(seqIndex, destBeId);
                         LOG.info("per group colocate balance, replace backend {} with backend {} in colocate" +
@@ -1115,6 +1187,177 @@ public class ColocateTableBalancer extends FrontendDaemon {
             balancedBackendsPerBucketSeq.addAll(Lists.partition(flatBackendsPerBucketSeq, replicationNum));
         }
         return isChanged;
+    }
+
+    /**
+     *
+     * @param groupSchema
+     * @param srcBeId
+     * @param destBeId
+     * @param backendsSet
+     * @param availableBeIds
+     * @param infoService
+     * @return true if ok to move the replica to destBE
+     *         false if another BE is available with label matching and with more location balance
+     */
+    private boolean checkForEvenDistribution(ColocateGroupSchema groupSchema, long srcBeId, long destBeId,
+                         List<Long> backendsSet, List<Long> availableBeIds, SystemInfoService infoService) {
+        Map<Pair<String, String>, Long> existingLocationMap = Maps.newHashMap();
+        Preconditions.checkState(srcBeId != destBeId);
+        // 1. Check if group has location label , no need to check for even distribution in case of no label
+        if (groupSchema.getLocationMap() == null) {
+            LOG.debug("Current location group doesn't have location label to check for even label distribution");
+            return true;
+        }
+
+        // 2. Prepare list of existing labels, remove src BE
+        for (Long beId : backendsSet) {
+            if (beId != srcBeId) {
+                Backend backend = infoService.getBackend(beId);
+                existingLocationMap.merge(backend.getSingleLevelLocationKV(), 1L,
+                        (existingCount, defaultCount) -> existingCount + 1L);
+            }
+        }
+        // Some available BE might have same label as BEs having replica already, retail the count for such cases
+        // For others keep count as 0
+        for (Long beId : availableBeIds) {
+            Backend backend = infoService.getBackend(beId);
+            existingLocationMap.merge(backend.getSingleLevelLocationKV(), 0L,
+                    (existingCount, defaultCount) -> existingCount);
+        }
+
+        // 3. If new BE label have 0 replica count, consider BE for movement
+        Backend backend = infoService.getBackend(destBeId);
+        Pair<String, String> destBELocationLabel = backend.getSingleLevelLocationKV();
+        long curLabelCount = existingLocationMap.get(destBELocationLabel);
+        if (curLabelCount == 0) {
+            LOG.debug("Placing replica in new location label {}", destBELocationLabel);
+            return true;
+        }
+
+        // 4. If replica already present for this label, check for even distribution
+        for (Map.Entry<Pair<String, String>, Long> entry : existingLocationMap.entrySet()) {
+            if (entry.getValue() < curLabelCount) {
+                // There is another label available with less replica count
+                LOG.debug("Found another label {} with less replica count {} then dest BE label {} and" +
+                        " its current replica count {}", entry.getKey(), entry.getValue(),
+                        destBELocationLabel, curLabelCount);
+                return false;
+            }
+        }
+
+        // 5. End of loop means, all labels have equal replicas, so replicas can be moved to destBE
+        LOG.debug("All labels have same replica count {}, so move replica to dest BE", curLabelCount);
+        return true;
+    }
+
+    /**
+     *
+     * @param availableBeIds
+     * @param flatBackendsPerBucketSeq
+     * @param infoService
+     * @param replicationNum
+     * @return Pair of BE id and indices in flatBackendsPerBucketSeq which can be considered for replica movement
+     */
+    private Pair<Long, List<Integer>> getLocationLabelMismatchReplicas(List<Long> availableBeIds,
+                           List<Long> flatBackendsPerBucketSeq, SystemInfoService infoService, int replicationNum) {
+        List<List<Long>> bucketSeq2BesList = Lists.partition(flatBackendsPerBucketSeq, replicationNum);
+        List<Map<Pair<String, String>, Long>> existingLocationMapByBucketSeq = Lists.newArrayList();
+        List<List<Pair<String, String>>> availableLabelsByBucketSeq = Lists.newArrayList();
+
+        // 1. Prepare existing label to replica count map for each Bucket
+        getRedundantReplicasByBucketSeq(bucketSeq2BesList, infoService, existingLocationMapByBucketSeq);
+        Preconditions.checkState(existingLocationMapByBucketSeq.size() == bucketSeq2BesList.size());
+
+        // 2. Prepare list of available BE labels for each bucket
+        getAvailableLabelsByBucketSeq(availableBeIds, existingLocationMapByBucketSeq,
+                infoService, availableLabelsByBucketSeq);
+        Preconditions.checkState(availableLabelsByBucketSeq.size() == bucketSeq2BesList.size());
+
+
+        // 3. Loop through flatBackendsPerBucketSeq
+        long srcBeId = -1;
+        List<Integer> indexList = Lists.newArrayList();
+        Pair<String, String> curSrcLabel = null;
+        for (int i = 0; i < flatBackendsPerBucketSeq.size(); i++) {
+            int curBucket = i / replicationNum;
+            // Decide src BE first
+            if (srcBeId == -1) {
+                long beId = flatBackendsPerBucketSeq.get(i);
+                List<Pair<String, String>> availableLabelsForBucket = availableLabelsByBucketSeq.get(curBucket);
+
+                // If there are labels which don't have replicas
+                if (!availableLabelsForBucket.isEmpty()) {
+                    Map<Pair<String, String>, Long> usedLabels2ReplicaCount
+                            = existingLocationMapByBucketSeq.get(curBucket);
+                    Pair<String, String> curLabel = infoService.getBackend(beId).getSingleLevelLocationKV();
+                    // If any existing labels have more than 1 replica, those replicas can be moved to other labels
+                    if (usedLabels2ReplicaCount.get(curLabel) > 1) {
+                        LOG.debug("Redundant replica present BE {}, label {}, index {}", beId, curLabel, i);
+                        srcBeId = beId;
+                        curSrcLabel = curLabel;
+                        indexList.add(i);
+                    }
+                }
+            } else { // We fixed to src BE already, check for more occurances of same BE and label
+                if (srcBeId == flatBackendsPerBucketSeq.get(i)) {
+                    List<Pair<String, String>> availableLabelsForBucket = availableLabelsByBucketSeq.get(curBucket);
+                    if (!availableLabelsForBucket.isEmpty()) {
+                        Map<Pair<String, String>, Long> usedLabels2ReplicaCount
+                                = existingLocationMapByBucketSeq.get(curBucket);
+                        // If any existing labels have more than 1 replica, those replicas can be moved to other labels
+                        if (usedLabels2ReplicaCount.get(curSrcLabel) > 1) {
+                            LOG.debug("Adding more redundant replia present in BE {}, label {}, index {}",
+                                    srcBeId, curSrcLabel, i);
+                            // update index
+                            indexList.add(i);
+                        }
+                    }
+                }
+            }
+        }
+        if (srcBeId != -1) {
+            return new Pair<>(srcBeId, indexList);
+        }
+        return null;
+    }
+
+    /**
+     *
+     * @param availableBeIds
+     * @param existingLocationMapByBucketSeq
+     * @param infoService
+     * @param availableLabelsByBucketSeq
+     *
+     * Get list of labels for each bucket, which are not used for replica allocation
+     */
+    private void getAvailableLabelsByBucketSeq(List<Long> availableBeIds,
+                                               List<Map<Pair<String, String>, Long>> existingLocationMapByBucketSeq,
+                                               SystemInfoService infoService,
+                                               List<List<Pair<String, String>>> availableLabelsByBucketSeq) {
+        for (Map<Pair<String, String>, Long> existingLocationMap : existingLocationMapByBucketSeq) {
+            List<Pair<String, String>> availableLabels = Lists.newArrayList();
+            for (long beId : availableBeIds) {
+                Pair<String, String> backendLabel = infoService.getBackend(beId).getSingleLevelLocationKV();
+                if (!existingLocationMap.containsKey(backendLabel)) {
+                    availableLabels.add(backendLabel);
+                }
+            }
+            availableLabelsByBucketSeq.add(availableLabels);
+        }
+    }
+
+    private void getRedundantReplicasByBucketSeq(List<List<Long>> bucketSeq2BesList, SystemInfoService infoService,
+                                                 List<Map<Pair<String, String>, Long>> existingLocationMapByBucketSeq) {
+        for (List<Long> beListByIndex : bucketSeq2BesList) {
+            Map<Pair<String, String>, Long> existingLocationMap = Maps.newHashMap();
+            for (long beId : beListByIndex) {
+                Backend backend = infoService.getBackend(beId);
+                existingLocationMap.merge(backend.getSingleLevelLocationKV(), 1L,
+                        (existingVal, defaultVal) -> existingVal + 1);
+            }
+            existingLocationMapByBucketSeq.add(existingLocationMap);
+        }
     }
 
     // change the backend id to backend host
@@ -1203,9 +1446,19 @@ public class ColocateTableBalancer extends FrontendDaemon {
                                                  GroupId groupId) {
         Set<Long> backends = colocateIndex.getBackendsByGroup(groupId);
         Set<Long> unavailableBeIds = Sets.newHashSet();
+        ColocateGroupSchema groupSchema = colocateIndex.getGroupSchema(groupId);
+        Preconditions.checkNotNull(groupSchema);
+
         for (Long backendId : backends) {
             if (!checkBackendAvailable(backendId, infoService)) {
                 unavailableBeIds.add(backendId);
+            } else if (groupSchema.getLocationMap() != null) {
+                // Check for location label matching
+                if (!TabletChecker.isLocationMatch(backendId, groupSchema.getLocationMap())) {
+                    LOG.debug("Backend {} location label not matching with colocate group location {}",
+                            backendId, groupSchema.getLocationMap());
+                    unavailableBeIds.add(backendId);
+                }
             }
         }
         return unavailableBeIds;
@@ -1224,14 +1477,20 @@ public class ColocateTableBalancer extends FrontendDaemon {
         return decommissionedBackends;
     }
 
-    private List<Long> getAvailableBeIds(SystemInfoService infoService) {
+    private List<Long> getAvailableBeIds(SystemInfoService infoService, ColocateGroupSchema colocateGroupSchema) {
         // get all backends to allBackendIds, and check be availability using checkBackendAvailable
         // backend stopped for a short period of time is still considered available
+        Preconditions.checkNotNull(colocateGroupSchema);
         List<Long> allBackendIds = infoService.getBackendIds(false);
         List<Long> availableBeIds = Lists.newArrayList();
         for (Long backendId : allBackendIds) {
             if (checkBackendAvailable(backendId, infoService)) {
-                availableBeIds.add(backendId);
+                // Do label matching when location label is mentioned for group
+                // When label is mentioned, considering BEs only when label is matched during repair/balancing
+                if (colocateGroupSchema.getLocationMap() == null ||
+                        TabletChecker.isLocationMatch(backendId, colocateGroupSchema.getLocationMap())) {
+                    availableBeIds.add(backendId);
+                }
             }
         }
         return availableBeIds;
