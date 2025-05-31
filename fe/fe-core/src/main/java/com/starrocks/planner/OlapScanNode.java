@@ -405,15 +405,15 @@ public class OlapScanNode extends ScanNode {
     }
 
     private Collection<Long> distributionPrune(
-            MaterializedIndex table,
+            MaterializedIndex index,
             DistributionInfo distributionInfo) throws AnalysisException {
         DistributionPruner distributionPruner;
         if (DistributionInfo.DistributionInfoType.HASH == distributionInfo.getType()) {
             HashDistributionInfo info = (HashDistributionInfo) distributionInfo;
-            distributionPruner = new HashDistributionPruner(table.getTabletIdsInOrder(),
+            distributionPruner = new HashDistributionPruner(index.getVirtualBuckets(),
+                    index.getTabletIds(),
                     MetaUtils.getColumnsByColumnIds(olapTable, info.getDistributionColumns()),
-                    columnFilters,
-                    info.getBucketNum());
+                    columnFilters);
             return distributionPruner.prune();
         } else {
             return null;
@@ -745,7 +745,6 @@ public class OlapScanNode extends ScanNode {
                 final Collection<Long> tabletIds = distributionPrune(selectedIndex, partition.getDistributionInfo());
                 LOG.debug("distribution prune tablets: {}", tabletIds);
 
-                List<Long> allTabletIds = selectedIndex.getTabletIdsInOrder();
                 if (tabletIds != null) {
                     for (Long id : tabletIds) {
                         tablets.add(selectedIndex.getTablet(id));
@@ -753,9 +752,10 @@ public class OlapScanNode extends ScanNode {
                     scanTabletIds.addAll(tabletIds);
                 } else {
                     tablets.addAll(selectedIndex.getTablets());
-                    scanTabletIds.addAll(allTabletIds);
+                    scanTabletIds.addAll(selectedIndex.getTabletIds());
                 }
 
+                List<Long> allTabletIds = selectedIndex.getVirtualBuckets();
                 for (int i = 0; i < allTabletIds.size(); i++) {
                     tabletId2BucketSeq.put(allTabletIds.get(i), i);
                 }
@@ -1519,7 +1519,7 @@ public class OlapScanNode extends ScanNode {
             Partition partition = olapTable.getPartition(partitionId);
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 MaterializedIndex materializedIndex = physicalPartition.getIndex(selectedIndexId);
-                for (long tabletId : materializedIndex.getTabletIdsInOrder()) {
+                for (long tabletId : materializedIndex.getTabletIds()) {
                     tabletToPartitionMap.put(tabletId, physicalPartition.getId());
                 }
                 partitionToTabletMap.put(physicalPartition.getId(), Lists.newArrayList());

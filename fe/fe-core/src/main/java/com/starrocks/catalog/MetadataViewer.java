@@ -356,7 +356,8 @@ public class MetadataViewer {
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                     long version = physicalPartition.getVisibleVersion();
                     for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                        List<Long> tabletIds = index.getTabletIdsInOrder();
+                        // TODO: adapt the modification of bucket number from partition level to materialized index level
+                        List<Long> tabletIds = index.getVirtualBuckets();
                         for (int i = 0; i < tabletIds.size(); i++) {
                             Tablet tablet = index.getTablet(tabletIds.get(i));
                             long rowCount = tablet.getRowCount(version);

@@ -55,6 +55,8 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class HashDistributionPrunerTest extends PlanTestBase {
 
@@ -111,7 +113,9 @@ public class HashDistributionPrunerTest extends PlanTestBase {
         filters.put("channel", channelFilter);
         filters.put("shop_type", shopTypeFilter);
 
-        HashDistributionPruner pruner = new HashDistributionPruner(tabletIds, columns, filters, tabletIds.size());
+        HashDistributionPruner pruner = new HashDistributionPruner(
+                Stream.concat(tabletIds.stream(), tabletIds.stream()).collect(Collectors.toList()),
+                tabletIds, columns, filters);
 
         Collection<Long> results = pruner.prune();
         // 20 = 1 * 5 * 2 * 2 * 1 (element num of each filter)
@@ -190,7 +194,9 @@ public class HashDistributionPrunerTest extends PlanTestBase {
         Map<String, PartitionColumnFilter> filters = Maps.newHashMap();
         filters.put("main_brand_id", mainBrandFilter);
 
-        HashDistributionPruner pruner = new HashDistributionPruner(tabletIds, columns, filters, tabletIds.size());
+        HashDistributionPruner pruner = new HashDistributionPruner(
+                Stream.concat(tabletIds.stream(), tabletIds.stream()).collect(Collectors.toList()),
+                tabletIds, columns, filters);
 
         Collection<Long> results = pruner.prune();
         Assert.assertEquals(tabletIds.size(), results.size());
