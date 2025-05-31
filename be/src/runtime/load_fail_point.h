@@ -42,7 +42,7 @@ void tablet_writer_add_chunks_fp_action(ReusableClosure<PTabletWriterAddBatchRes
                                         PTabletWriterAddChunksRequest* request);
 void tablet_writer_add_segment_fp_action(ReusableClosure<PTabletWriterAddSegmentResult>* closure,
                                          PTabletWriterAddSegmentRequest* request);
-void tablet_writer_cancel_fp_action(RefCountClosure<PTabletWriterCancelResult>* closure,
+void tablet_writer_cancel_fp_action(::google::protobuf::Closure* closure, brpc::Controller* cntl,
                                     PTabletWriterCancelRequest* request);
 
 #define TABLET_WRITER_OPEN_FP_ACTION(closure, request) \
@@ -51,8 +51,8 @@ void tablet_writer_cancel_fp_action(RefCountClosure<PTabletWriterCancelResult>* 
     ::starrocks::load::failpoint::tablet_writer_add_chunks_fp_action(closure, &request);
 #define TABLET_WRITER_ADD_SEGMENT_FP_ACTION(closure, request) \
     ::starrocks::load::failpoint::tablet_writer_add_segment_fp_action(closure, &request);
-#define TABLET_WRITER_CANCEL_FP_ACTION(closure, request) \
-    ::starrocks::load::failpoint::tablet_writer_cancel_fp_action(closure, &request);
+#define TABLET_WRITER_CANCEL_FP_ACTION(closure, cntl, request) \
+    ::starrocks::load::failpoint::tablet_writer_cancel_fp_action(closure, &cntl, &request);
 #else
 #define TABLET_WRITER_OPEN_FP_ACTION(closure, request)
 #define TABLET_WRITER_ADD_CHUNKS_FP_ACTION(closure, request)

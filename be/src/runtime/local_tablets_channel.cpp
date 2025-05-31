@@ -600,7 +600,8 @@ void LocalTabletsChannel::_abort_replica_tablets(
 
 #ifndef BE_TEST
         FAIL_POINT_TRIGGER_EXECUTE_OR_DEFAULT(
-                load::failpoint::TABLET_WRITER_CANCEL, TABLET_WRITER_CANCEL_FP_ACTION(closure, cancel_request),
+                load::failpoint::TABLET_WRITER_CANCEL,
+                TABLET_WRITER_CANCEL_FP_ACTION(closure, closure->cntl, cancel_request),
                 { stub->tablet_writer_cancel(&closure->cntl, &cancel_request, &closure->result, closure); });
 #else
         std::tuple<PTabletWriterCancelRequest*, google::protobuf::Closure*, brpc::Controller*> rpc_tuple{
