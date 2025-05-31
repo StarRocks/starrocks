@@ -170,6 +170,8 @@ public:
 
     const GlobalDictByNameMaps* rowset_global_dicts() const { return _writer_options.global_dicts; }
 
+    const RowsetWriterContext& context() const { return _context; }
+
 private:
     Status _flush_segment(const SegmentPB& segment_pb, butil::IOBuf& data);
 

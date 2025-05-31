@@ -23,6 +23,7 @@
 #include "gen_cpp/data.pb.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "runtime/load_fail_point.h"
 #include "runtime/mem_tracker.h"
 #include "storage/delta_writer.h"
 #include "util/brpc_stub_cache.h"
@@ -165,7 +166,9 @@ void ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, boo
     // brpc send buffer is also considered as part of the memory used by load
     _mem_tracker->consume_without_root(_closure->request_size);
 
-    _stub->tablet_writer_add_segment(&_closure->cntl, &request, &_closure->result, _closure);
+    FAIL_POINT_TRIGGER_EXECUTE_OR_DEFAULT(
+            load::failpoint::TABLET_WRITER_ADD_SEGMENT, TABLET_WRITER_ADD_SEGMENT_FP_ACTION(_closure, request),
+            _stub->tablet_writer_add_segment(&_closure->cntl, &request, &_closure->result, _closure));
 
     request.release_id();
     if (segment != nullptr) {
@@ -286,7 +289,7 @@ void ReplicateToken::_sync_segment(std::unique_ptr<SegmentPB> segment, bool eos)
             }
             auto rfile = std::move(res.value());
             auto buf = new uint8[segment->data_size()];
-            data.append_user_data(buf, segment->data_size(), [](void* buf) { delete[](uint8*) buf; });
+            data.append_user_data(buf, segment->data_size(), [](void* buf) { delete[] (uint8*)buf; });
             auto st = rfile->read_fully(buf, segment->data_size());
             if (!st.ok()) {
                 LOG(WARNING) << "Failed to read segment " << segment->DebugString() << " by " << debug_string()
@@ -303,7 +306,7 @@ void ReplicateToken::_sync_segment(std::unique_ptr<SegmentPB> segment, bool eos)
             }
             auto rfile = std::move(res.value());
             auto buf = new uint8[segment->delete_data_size()];
-            data.append_user_data(buf, segment->delete_data_size(), [](void* buf) { delete[](uint8*) buf; });
+            data.append_user_data(buf, segment->delete_data_size(), [](void* buf) { delete[] (uint8*)buf; });
             auto st = rfile->read_fully(buf, segment->delete_data_size());
             if (!st.ok()) {
                 LOG(WARNING) << "Failed to read delete file " << segment->DebugString() << " by " << debug_string()
@@ -320,7 +323,7 @@ void ReplicateToken::_sync_segment(std::unique_ptr<SegmentPB> segment, bool eos)
             }
             auto rfile = std::move(res.value());
             auto buf = new uint8[segment->update_data_size()];
-            data.append_user_data(buf, segment->update_data_size(), [](void* buf) { delete[](uint8*) buf; });
+            data.append_user_data(buf, segment->update_data_size(), [](void* buf) { delete[] (uint8*)buf; });
             auto st = rfile->read_fully(buf, segment->update_data_size());
             if (!st.ok()) {
                 LOG(WARNING) << "Failed to read delete file " << segment->DebugString() << " by " << debug_string()
@@ -354,7 +357,7 @@ void ReplicateToken::_sync_segment(std::unique_ptr<SegmentPB> segment, bool eos)
 
                     auto rfile = std::move(res.value());
                     auto buf = new uint8[file_size];
-                    data.append_user_data(buf, file_size, [](void* buf) { delete[](uint8*) buf; });
+                    data.append_user_data(buf, file_size, [](void* buf) { delete[] (uint8*)buf; });
                     auto st = rfile->read_fully(buf, file_size);
                     if (!st.ok()) {
                         LOG(WARNING) << "Failed to read index file " << segment->DebugString() << " by "
