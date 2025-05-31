@@ -107,8 +107,12 @@ public class InformationSchemaDataSourceTest {
                 "REFRESH ASYNC " +
                 "AS SELECT k1, k2 " +
                 "FROM db1.tbl1 ";
-
         starRocksAssert.withMaterializedView(createMvStmtStr);
+
+        String createViewStmtStr = "CREATE VIEW db1.v1 " +
+                "AS SELECT k1, k2 " +
+                "FROM db1.tbl1 ";
+        starRocksAssert.withView(createViewStmtStr);
 
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TGetTablesConfigRequest req = new TGetTablesConfigRequest();
@@ -139,6 +143,13 @@ public class InformationSchemaDataSourceTest {
         Map<String, String> propsMap = new Gson().fromJson(mvConfig.getProperties(), Map.class);
         Assert.assertEquals("1", propsMap.get("replication_num"));
         Assert.assertEquals("HDD", propsMap.get("storage_medium"));
+
+        TTableConfigInfo viewConfig = response.getTables_config_infos().stream()
+                .filter(t -> t.getTable_engine().equals("VIEW")).findFirst()
+                .orElseGet(null);
+        Assert.assertEquals("VIEW", viewConfig.getTable_engine());
+        Assert.assertEquals("db1", viewConfig.getTable_schema());
+        Assert.assertEquals("v1", viewConfig.getTable_name());
 
     }
 
