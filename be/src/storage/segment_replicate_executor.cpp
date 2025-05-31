@@ -168,7 +168,7 @@ void ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, boo
 
     FAIL_POINT_TRIGGER_EXECUTE_OR_DEFAULT(
             load::failpoint::TABLET_WRITER_ADD_SEGMENT, TABLET_WRITER_ADD_SEGMENT_FP_ACTION(_closure, request),
-            { _stub->tablet_writer_add_segment(&_closure->cntl, &request, &_closure->result, _closure); });
+            _stub->tablet_writer_add_segment(&_closure->cntl, &request, &_closure->result, _closure));
 
     request.release_id();
     if (segment != nullptr) {

@@ -91,6 +91,17 @@ Status segment_flush_fp_action(int64_t txn_id, int64_t tablet_id) {
     LOG_FP(SEGMENT_FLUSH) << ", txn_id: " << txn_id << ", tablet_id: " << tablet_id;
     return Status::IOError(ERROR_MSG(SEGMENT_FLUSH));
 }
+
+Status pk_preload_fp_action(int64_t txn_id, int64_t tablet_id) {
+    LOG_FP(PK_PRELOAD) << ", txn_id: " << txn_id << ", tablet_id: " << tablet_id;
+    return Status::IOError(ERROR_MSG(PK_PRELOAD));
+}
+
+Status commit_txn_fp_action(int64_t txn_id, int64_t tablet_id) {
+    LOG_FP(COMMIT_TXN) << ", txn_id: " << txn_id << ", tablet_id: " << tablet_id;
+    return Status::IOError(ERROR_MSG(COMMIT_TXN));
+}
+
 #endif
 
 } // namespace starrocks::load::failpoint

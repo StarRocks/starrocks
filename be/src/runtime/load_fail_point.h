@@ -47,6 +47,8 @@ void tablet_writer_cancel_fp_action(::google::protobuf::Closure* closure, brpc::
 
 Status memtable_flush_fp_action(int64_t txn_id, int64_t tablet_id);
 Status segment_flush_fp_action(int64_t txn_id, int64_t tablet_id);
+Status pk_preload_fp_action(int64_t txn_id, int64_t tablet_id);
+Status commit_txn_fp_action(int64_t txn_id, int64_t tablet_id);
 
 #define TABLET_WRITER_OPEN_FP_ACTION(closure, request) \
     ::starrocks::load::failpoint::tablet_writer_open_fp_action(closure, &request);
@@ -57,9 +59,11 @@ Status segment_flush_fp_action(int64_t txn_id, int64_t tablet_id);
 #define TABLET_WRITER_CANCEL_FP_ACTION(closure, cntl, request) \
     ::starrocks::load::failpoint::tablet_writer_cancel_fp_action(closure, &cntl, &request);
 #define MEMTABLE_FLUSH_FP_ACTION(txn_id, tablet_id) \
-    { return ::starrocks::load::failpoint::memtable_flush_fp_action(txn_id, tablet_id); }
+    return ::starrocks::load::failpoint::memtable_flush_fp_action(txn_id, tablet_id);
 #define SEGMENT_FLUSH_FP_ACTION(txn_id, tablet_id) \
-    { return ::starrocks::load::failpoint::segment_flush_fp_action(txn_id, tablet_id); }
+    return ::starrocks::load::failpoint::segment_flush_fp_action(txn_id, tablet_id);
+#define PK_PRELOAD_FP_ACTION(txn_id, tablet_id) ::starrocks::load::failpoint::pk_preload_fp_action(txn_id, tablet_id)
+#define COMMIT_TXN_FP_ACTION(txn_id, tablet_id) ::starrocks::load::failpoint::commit_txn_fp_action(txn_id, tablet_id)
 #else
 #define TABLET_WRITER_OPEN_FP_ACTION(closure, request)
 #define TABLET_WRITER_ADD_CHUNKS_FP_ACTION(closure, request)
@@ -67,6 +71,8 @@ Status segment_flush_fp_action(int64_t txn_id, int64_t tablet_id);
 #define TABLET_WRITER_CANCEL_FP_ACTION(closure, request)
 #define MEMTABLE_FLUSH_FP_ACTION(txn_id, tablet_id)
 #define SEGMENT_FLUSH_FP_ACTION(txn_id, tablet_id)
+#define PK_PRELOAD_FP_ACTION(txn_id, tablet_id)
+#define COMMIT_TXN_FP_ACTION(txn_id, tablet_id)
 #endif
 
 } // namespace starrocks::load::failpoint
