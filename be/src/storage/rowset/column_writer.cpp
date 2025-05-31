@@ -329,6 +329,10 @@ StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterO
         ColumnWriterOptions str_opts = opts;
         str_opts.field_name = column->name();
         return std::make_unique<ScalarColumnWriter>(str_opts, std::move(type_info), wfile);
+    } else if (column->type() == TYPE_DECIMAL256) {
+        ColumnWriterOptions str_opts = opts;
+        str_opts.field_name = column->name();
+        return std::make_unique<ScalarColumnWriter>(str_opts, std::move(type_info), wfile);
     } else {
         switch (column->type()) {
         case LogicalType::TYPE_ARRAY:

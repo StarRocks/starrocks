@@ -23,7 +23,8 @@
 
 namespace starrocks {
 
-VALUE_GUARD(LogicalType, DecimalFTGuard, ft_is_decimal, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128)
+VALUE_GUARD(LogicalType, DecimalFTGuard, ft_is_decimal, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128,
+            TYPE_DECIMAL256)
 
 VALUE_GUARD(LogicalType, InvalidFTGuard, ft_is_invalid, TYPE_MAX_VALUE);
 
@@ -52,6 +53,7 @@ public:
         if (dst_scale < src_scale || dst_precision - dst_scale < src_precision - src_scale) {
             return Status::InvalidArgument("Fail to cast to decimal.");
         }
+        LOG(ERROR) << "src_precision|" << src_precision << "|dst_precision|" << dst_precision << "|";
         int adjust_scale = dst_scale - src_scale;
         if (adjust_scale == 0) {
             DecimalV3Cast::to_decimal_trivial<From, To, false>(*src, dst);
@@ -70,6 +72,7 @@ public:
 #define TO_DECIMAL_MACRO(n, m)                                                                               \
                                                                                                              \
     if (src_type == TYPE_DECIMAL##n && dst_type == TYPE_DECIMAL##m) {                                        \
+        LOG(ERROR) << "src_precision|" << src_precision << "|dst_precision|" << dst_precision << "|";        \
         int##n##_t src_datum = 0;                                                                            \
         int##m##_t dst_datum = 0;                                                                            \
         src_datum = unaligned_load<typeof(src_datum)>(src);                                                  \
@@ -86,12 +89,19 @@ public:
         TO_DECIMAL_MACRO(32, 32)
         TO_DECIMAL_MACRO(32, 64)
         TO_DECIMAL_MACRO(32, 128)
+        TO_DECIMAL_MACRO(32, 256)
         TO_DECIMAL_MACRO(64, 32)
         TO_DECIMAL_MACRO(64, 64)
         TO_DECIMAL_MACRO(64, 128)
+        TO_DECIMAL_MACRO(64, 256)
         TO_DECIMAL_MACRO(128, 32)
         TO_DECIMAL_MACRO(128, 64)
         TO_DECIMAL_MACRO(128, 128)
+        TO_DECIMAL_MACRO(128, 256)
+        TO_DECIMAL_MACRO(256, 32)
+        TO_DECIMAL_MACRO(256, 64)
+        TO_DECIMAL_MACRO(256, 128)
+        TO_DECIMAL_MACRO(256, 256)
 
         DIAGNOSTIC_POP
 #undef TO_DECIMAL_MACRO
@@ -104,6 +114,7 @@ public:
 #define TO_DECIMAL_MACRO(n, m)                                                                           \
                                                                                                          \
     if (src_type == TYPE_DECIMAL##n && dst_type == TYPE_DECIMAL##m) {                                    \
+        LOG(ERROR) << "src_precision|" << src_precision << "|dst_precision|" << dst_precision << "|";    \
         int##m##_t dst_val = 0;                                                                          \
         int##n##_t src_val = src_datum.get_int##n();                                                     \
         auto overflow = to_decimal<int##n##_t, int##m##_t>(&src_val, &dst_val, src_precision, src_scale, \
@@ -120,12 +131,19 @@ public:
         TO_DECIMAL_MACRO(32, 32)
         TO_DECIMAL_MACRO(32, 64)
         TO_DECIMAL_MACRO(32, 128)
+        TO_DECIMAL_MACRO(32, 256)
         TO_DECIMAL_MACRO(64, 32)
         TO_DECIMAL_MACRO(64, 64)
         TO_DECIMAL_MACRO(64, 128)
+        TO_DECIMAL_MACRO(64, 256)
         TO_DECIMAL_MACRO(128, 32)
         TO_DECIMAL_MACRO(128, 64)
         TO_DECIMAL_MACRO(128, 128)
+        TO_DECIMAL_MACRO(128, 256)
+        TO_DECIMAL_MACRO(256, 32)
+        TO_DECIMAL_MACRO(256, 64)
+        TO_DECIMAL_MACRO(256, 128)
+        TO_DECIMAL_MACRO(256, 256)
 
         DIAGNOSTIC_POP
 
@@ -165,7 +183,9 @@ public:
 
     size_t size() const override { return _delegate->size(); }
 
-    int precision() const override { return _precision; }
+    int precision() const override {
+        return _precision;
+    }
 
     int scale() const override { return _scale; }
 
@@ -187,6 +207,7 @@ private:
 };
 
 TypeInfoPtr get_decimal_type_info(LogicalType type, int precision, int scale) {
+    LOG(ERROR) << "get_decimal_type_info|" << precision << "|" << scale << "|";
     switch (type) {
     case TYPE_DECIMAL32:
         return std::make_shared<DecimalTypeInfo<TYPE_DECIMAL32>>(precision, scale);
@@ -194,6 +215,8 @@ TypeInfoPtr get_decimal_type_info(LogicalType type, int precision, int scale) {
         return std::make_shared<DecimalTypeInfo<TYPE_DECIMAL64>>(precision, scale);
     case TYPE_DECIMAL128:
         return std::make_shared<DecimalTypeInfo<TYPE_DECIMAL128>>(precision, scale);
+    case TYPE_DECIMAL256:
+        return std::make_shared<DecimalTypeInfo<TYPE_DECIMAL256>>(precision, scale);
     default:
         return nullptr;
     }
@@ -211,6 +234,10 @@ std::string get_decimal_zone_map_string(TypeInfo* type_info, const void* value) 
     }
     case TYPE_DECIMAL128: {
         auto* decimal_type_info = down_cast<DecimalTypeInfo<TYPE_DECIMAL128>*>(type_info);
+        return decimal_type_info->to_zone_map_string(value);
+    }
+    case TYPE_DECIMAL256: {
+        auto* decimal_type_info = down_cast<DecimalTypeInfo<TYPE_DECIMAL256>*>(type_info);
         return decimal_type_info->to_zone_map_string(value);
     }
     default:

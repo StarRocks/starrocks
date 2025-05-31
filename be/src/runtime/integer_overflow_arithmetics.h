@@ -15,6 +15,7 @@
 #pragma once
 
 #include <runtime/int128_arithmetics_x86_64.h>
+#include "runtime/int256_arithmetics_x86_64.h"
 #include <util/decimal_types.h>
 
 namespace starrocks {
@@ -51,6 +52,19 @@ inline bool add_overflow(int128_t a, int128_t b, int128_t* c) {
 #endif
 }
 
+template <>
+inline bool add_overflow(int256_t a, int256_t b, int256_t* c) {
+#if defined(__x86_64__) && defined(__GNUC__)
+    return asm_add(a, b, *c);
+#else
+    *c = a + b;
+    bool a_negative = a < 0;
+    bool b_negative = b < 0;
+    bool result_negative = *c < 0;
+    return (a_negative == b_negative) && (a_negative != result_negative);
+#endif
+}
+
 template <typename T>
 inline bool sub_overflow(T a, T b, T* c) {
     return __builtin_sub_overflow(a, b, c);
@@ -82,6 +96,20 @@ inline bool sub_overflow(int128_t a, int128_t b, int128_t* c) {
     return int128_sub_overflow(a, b, c);
 #endif
 }
+
+template <>
+inline bool sub_overflow(int256_t a, int256_t b, int256_t* c) {
+#if defined(__x86_64__) && defined(__GNUC__)
+    return asm_sub(a, b, *c);
+#else
+    *c = a - b;
+    bool a_negative = a < 0;
+    bool b_negative = b < 0;
+    bool result_negative = *c < 0;
+    return (a_negative != b_negative) && (a_negative != result_negative);
+#endif
+}
+
 
 template <typename T>
 inline bool mul_overflow(T a, T b, T* c) {
@@ -122,6 +150,32 @@ inline bool mul_overflow(int128_t a, int128_t b, int128_t* c) {
     return multi3(a, b, *c);
 #else
     return int128_mul_overflow(a, b, c);
+#endif
+}
+
+
+template <>
+inline bool mul_overflow(int256_t a, int256_t b, int256_t* c) {
+#if defined(__x86_64__) && defined(__GNUC__)
+    return mul_256(a, b, *c);
+#else
+    if (a == 0 || b == 0) {
+        *c = 0;
+        return false;
+    }
+
+    *c = a * b;
+
+    if (a != 0 && (*c / a) != b) {
+        return true;
+    }
+
+    bool a_negative = a < 0;
+    bool b_negative = b < 0;
+    bool result_negative = *c < 0;
+    bool should_be_negative = a_negative != b_negative;
+
+    return result_negative != should_be_negative;
 #endif
 }
 

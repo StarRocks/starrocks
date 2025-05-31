@@ -156,7 +156,7 @@ public class DecimalLiteral extends LiteralExpr {
             int precision = getRealPrecision(this.value);
             int scale = getRealScale(this.value);
             int integerPartWidth = precision - scale;
-            int maxIntegerPartWidth = 38;
+            int maxIntegerPartWidth = 77;
             // integer part of decimal literal should not exceed 38
             if (integerPartWidth > maxIntegerPartWidth) {
                 String errMsg = String.format(
@@ -285,6 +285,17 @@ public class DecimalLiteral extends LiteralExpr {
                 int numPaddingBytes = 16 - bytes.length;
                 for (int i = 0; i < numPaddingBytes; ++i) {
                     buffer.put(prefixByte);
+                }
+                break;
+            case DECIMAL256:
+                byte[] bytes256 = scaledValue.toBigInteger().toByteArray();
+                for (int i = bytes256.length - 1; i >= 0; --i) {
+                    buffer.put(bytes256[i]);
+                }
+                byte prefixByte256 = scaledValue.signum() >= 0 ? (byte) 0 : (byte) 0xff;
+                int numPaddingBytes256 = 32 - bytes256.length;
+                for (int i = 0; i < numPaddingBytes256; ++i) {
+                    buffer.put(prefixByte256);
                 }
                 break;
             default:
