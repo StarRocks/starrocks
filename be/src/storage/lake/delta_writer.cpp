@@ -70,6 +70,9 @@ public:
         return _writer->flush(segment);
     }
 
+    int64_t txn_id() override { return _writer->txn_id(); }
+    int64_t tablet_id() override { return _writer->tablet_id(); }
+
 private:
     TabletWriter* _writer;
 };
