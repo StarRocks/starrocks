@@ -21,6 +21,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.catalog.TableFunctionTable.MisMatchFillValue;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -118,6 +119,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public static final String TRIMSPACE = "trim_space";
     public static final String ENCLOSE = "enclose";
     public static final String ESCAPE = "escape";
+    public static final String FILL_MISMATCH_COLUMN_WITH = "fill_mismatch_column_with";
 
     public static final String PAUSE_ON_FATAL_PARSE_ERROR = "pause_on_fatal_parse_error";
 
@@ -163,6 +165,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(TRIMSPACE)
             .add(ENCLOSE)
             .add(ESCAPE)
+            .add(FILL_MISMATCH_COLUMN_WITH)
             .add(LOG_REJECTED_RECORD_NUM_PROPERTY)
             .add(TASK_CONSUME_SECOND)
             .add(TASK_TIMEOUT_SECOND)
@@ -227,6 +230,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     private boolean trimspace = false;
     private byte enclose = 0;
     private byte escape = 0;
+    private String misMatchFillValue = "NONE";
 
     // kafka related properties
     private String kafkaBrokerList;
@@ -300,6 +304,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
     public byte getEscape() {
         return escape;
+    }
+
+    public String getMisMatchFillValue() {
+        return misMatchFillValue;
     }
 
     public LabelName getLabelName() {
@@ -621,6 +629,14 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 escape = (byte) jobProperties.get(ESCAPE).charAt(0);
             } else {
                 escape = 0;
+            }
+            if (jobProperties.containsKey(FILL_MISMATCH_COLUMN_WITH)) {
+                misMatchFillValue = jobProperties.get(FILL_MISMATCH_COLUMN_WITH);
+                if (MisMatchFillValue.fromString(misMatchFillValue) == null) {
+                    String msg = String.format("%s (case insensitive)", String.join(", ", MisMatchFillValue.getCandidates()));
+                    ErrorReport.reportSemanticException(
+                            ErrorCode.ERR_INVALID_VALUE, FILL_MISMATCH_COLUMN_WITH, misMatchFillValue, msg);
+                }
             }
         }
 
