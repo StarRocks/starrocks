@@ -24,6 +24,9 @@
 
 #include "column/column.h"
 #include "common/status.h"
+#include "runtime/memory/allocator.h"
+#include "runtime/memory/column_allocator.h"
+#include "runtime/memory/counting_allocator.h"
 #include "runtime/types.h"
 #include "types/logical_type.h"
 
@@ -151,6 +154,9 @@ public:
 
     void set_mem_usage_counter(int64_t* mem_usage_counter) { _mem_usage_counter = mem_usage_counter; }
 
+    void set_agg_state_column_allocator(Allocator* allocator) { _agg_state_column_allocator = allocator; }
+    Allocator* agg_state_column_allocator() { return _agg_state_column_allocator; }
+
     int64_t mem_usage() const {
         DCHECK(_mem_usage_counter);
         return *_mem_usage_counter;
@@ -216,6 +222,8 @@ private:
     // If it is not explicitly set externally (e.g. AggFuncBasedValueAggregator),
     // it will point to the internal _mem_usage
     int64_t* _mem_usage_counter = &_mem_usage;
+
+    Allocator* _agg_state_column_allocator = &kDefaultColumnAllocator;
 
     // UDAF Context
     std::unique_ptr<JavaUDAFContext> _jvm_udaf_ctxs;
