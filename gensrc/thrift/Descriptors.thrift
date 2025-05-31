@@ -243,6 +243,9 @@ struct TColumn {
 struct TOlapTableIndexTablets {
     1: required i64 index_id
     2: required list<i64> tablets
+
+    // Virtual buckets, each virtual bucket saves a tablet id
+    3: optional list<i64> virtual_buckets
 }
 
 // its a closed-open range
@@ -252,8 +255,8 @@ struct TOlapTablePartition {
     2: optional Exprs.TExprNode start_key
     3: optional Exprs.TExprNode end_key
 
-    // how many tablets in one partition
-    4: required i32 num_buckets
+    // Deprecated, different indexes could have different buckets
+    4: optional i32 deprecated_num_buckets = 0
 
     5: required list<TOlapTableIndexTablets> indexes
 
