@@ -195,7 +195,7 @@ The following table lists the major features of Primary Key tables and their sup
 | **Feature**                   | **Supported Version(s)** | **Description**                                              |
 | ----------------------------- | ------------------------ | ------------------------------------------------------------ |
 | Primary Key tables            | v3.1.0                   |                                                              |
-| Primary Key index persistence | v3.2.0<br />v3.1.3       | <ul><li>Currently, shared-data clusters support Primary Key index persistence on local disks.</li><li>Persistence in remote storage will be supported in future releases.</li></ul> |
+| Primary Key index persistence | v3.2.0<br />v3.1.3<br />v3.3.2       |                                                              |
 | Partial Update                | v3.1.0                   | Shared-data clusters support Partial Update in Row mode from v3.1.0 onwards and in Column mode from v3.3.1 onwards. |
 | Conditional Update            | v3.1.0                   | Currently, the condition only supports 'Greater'.            |
 | Hybrid row-column storage     | ❌                        | To be supported in future releases.                          |
