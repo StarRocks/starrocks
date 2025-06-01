@@ -127,21 +127,33 @@ static void dump_trace_info() {
 
 static void dontdump_unused_pages() {
     static bool start_dump = false;
+    struct timeval tv;
+    gettimeofday(&tv, nullptr);
+    pthread_t tid = pthread_self();
+
     if (!start_dump) {
         std::string purge_msg = "arena." + std::to_string(MALLCTL_ARENAS_ALL) + ".purge";
         int ret = je_mallctl(purge_msg.c_str(), nullptr, nullptr, nullptr, 0);
         if (ret != 0) {
-            LOG(ERROR) << "je_mallctl execute purge failed: " << strerror(ret);
+            std::cerr << "[" << tv.tv_sec << "." << tv.tv_usec / 1000 << "]"
+                      << "[thread:" << tid << "] "
+                      << "je_mallctl execute purge failed: " << strerror(ret) << std::endl;
         } else {
-            LOG(INFO) << "je_mallctl execute purge success";
+            std::cerr << "[" << tv.tv_sec << "." << tv.tv_usec / 1000 << "]"
+                      << "[thread:" << tid << "] "
+                      << "je_mallctl execute purge success" << std::endl;
         }
 
         std::string dontdump_msg = "arena." + std::to_string(MALLCTL_ARENAS_ALL) + ".dontdump";
         ret = je_mallctl(dontdump_msg.c_str(), nullptr, nullptr, nullptr, 0);
         if (ret != 0) {
-            LOG(ERROR) << "je_mallctl execute dontdump failed: " << strerror(ret);
+            std::cerr << "[" << tv.tv_sec << "." << tv.tv_usec / 1000 << "]"
+                      << "[thread:" << tid << "] "
+                      << "je_mallctl execute dontdump failed: " << strerror(ret) << std::endl;
         } else {
-            LOG(INFO) << "je_mallctl execute dontdump success";
+            std::cerr << "[" << tv.tv_sec << "." << tv.tv_usec / 1000 << "]"
+                      << "[thread:" << tid << "] "
+                      << "je_mallctl execute dontdump success" << std::endl;
         }
     }
     start_dump = true;
