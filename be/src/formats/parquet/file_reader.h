@@ -58,7 +58,7 @@ class ObjectCache;
 namespace starrocks::parquet {
 
 struct SplitContext : public HdfsSplitContext {
-    FileMetaDataPtr file_metadata;
+    const FileMetaData* file_metadata = nullptr;
     SkipRowsContextPtr skip_rows_ctx;
 
     HdfsSplitContextPtr clone() override {
@@ -80,7 +80,7 @@ public:
 
     Status get_next(ChunkPtr* chunk);
 
-    FileMetaData* get_file_metadata();
+    const FileMetaData* get_file_metadata();
 
     Status collect_scan_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* io_ranges);
 
@@ -102,15 +102,12 @@ private:
     StatusOr<bool> _update_rf_and_filter_group(const GroupReaderPtr& group_reader);
 
     // get row group to read
-    // if scan range conatain the first byte in the row group, will be read
+    // if scan range contain the first byte in the row group, will be read
     // TODO: later modify the larger block should be read
     bool _select_row_group(const tparquet::RowGroup& row_group);
 
     // only scan partition column + not exist column
     Status _exec_no_materialized_column_scan(ChunkPtr* chunk);
-
-    // get partition column idx in param.partition_columns
-    int32_t _get_partition_column_idx(const std::string& col_name) const;
 
     Status _build_split_tasks();
 
@@ -128,8 +125,9 @@ private:
     size_t _scan_row_count = 0;
     bool _no_materialized_column_scan = false;
 
-    ObjectCache* _cache = nullptr;
-    FileMetaDataPtr _file_metadata = nullptr;
+    StoragePageCache* _cache = nullptr;
+    const FileMetaData* _file_metadata = nullptr;
+    FileFooterHandle _file_footer_handle;
 
     // not exist column conjuncts eval false, file can be skipped
     bool _is_file_filtered = false;

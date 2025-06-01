@@ -128,4 +128,14 @@ Status StoragePageCache::insert(const std::string& key, std::vector<uint8_t>* da
     return st;
 }
 
+Status StoragePageCache::insert(const std::string& key, void* data, int64_t size, PageCacheHandle* handle,
+                                ObjectCacheDeleter deleter, const ObjectCacheWriteOptions& opts) {
+    ObjectCacheHandle* obj_handle = nullptr;
+    Status st = _cache->insert(key, data, size, deleter, &obj_handle, opts);
+    if (st.ok()) {
+        *handle = PageCacheHandle(_cache, obj_handle);
+    }
+    return st;
+}
+
 } // namespace starrocks

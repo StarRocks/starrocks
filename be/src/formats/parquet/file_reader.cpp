@@ -55,12 +55,12 @@ FileReader::~FileReader() = default;
 Status FileReader::init(HdfsScannerContext* ctx) {
     _scanner_ctx = ctx;
     if (ctx->use_file_metacache) {
-        _cache = DataCache::GetInstance()->external_table_meta_cache();
+        _cache = DataCache::GetInstance()->page_cache();
     }
 
     // parse FileMetadata
     FileMetaDataParser file_metadata_parser{_file, ctx, _cache, &_datacache_options, _file_size};
-    ASSIGN_OR_RETURN(_file_metadata, file_metadata_parser.get_file_metadata());
+    ASSIGN_OR_RETURN(_file_metadata, file_metadata_parser.get_file_metadata(&_file_footer_handle));
 
     // set existed SlotDescriptor in this parquet file
     std::unordered_set<std::string> existed_column_names;
@@ -89,15 +89,15 @@ std::shared_ptr<MetaHelper> FileReader::_build_meta_helper() {
     if (_scanner_ctx->lake_schema != nullptr && _file_metadata->schema().exist_filed_id()) {
         // If we want read this parquet file with iceberg/paimon schema,
         // we also need to make sure it contains parquet field id.
-        return std::make_shared<LakeMetaHelper>(_file_metadata.get(), _scanner_ctx->case_sensitive,
+        return std::make_shared<LakeMetaHelper>(_file_metadata, _scanner_ctx->case_sensitive,
                                                 _scanner_ctx->lake_schema);
     } else {
-        return std::make_shared<ParquetMetaHelper>(_file_metadata.get(), _scanner_ctx->case_sensitive);
+        return std::make_shared<ParquetMetaHelper>(_file_metadata, _scanner_ctx->case_sensitive);
     }
 }
 
-FileMetaData* FileReader::get_file_metadata() {
-    return _file_metadata.get();
+const FileMetaData* FileReader::get_file_metadata() {
+    return _file_metadata;
 }
 
 Status FileReader::collect_scan_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* io_ranges) {
@@ -110,9 +110,9 @@ Status FileReader::collect_scan_io_ranges(std::vector<io::SharedBufferedInputStr
 }
 
 Status FileReader::_build_split_tasks() {
-    // dont do split in following cases:
+    // don't do split in following cases:
     // 1. this feature is not enabled
-    // 2. we have already do split before (that's why `split_context` is nullptr)
+    // 2. we have already done split before (that's why `split_context` is nullptr)
     if (!_scanner_ctx->enable_split_tasks || _scanner_ctx->split_context != nullptr) {
         return Status::OK();
     }
@@ -210,15 +210,6 @@ StatusOr<bool> FileReader::_update_rf_and_filter_group(const GroupReaderPtr& gro
     return filter;
 }
 
-int32_t FileReader::_get_partition_column_idx(const std::string& col_name) const {
-    for (int32_t i = 0; i < _scanner_ctx->partition_columns.size(); i++) {
-        if (_scanner_ctx->partition_columns[i].name() == col_name) {
-            return i;
-        }
-    }
-    return -1;
-}
-
 void FileReader::_prepare_read_columns(std::unordered_set<std::string>& existed_column_names) {
     _meta_helper->prepare_read_columns(_scanner_ctx->materialized_columns, _group_reader_param.read_cols,
                                        existed_column_names);
@@ -264,7 +255,7 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.sb_stream = _sb_stream;
     _group_reader_param.chunk_size = _chunk_size;
     _group_reader_param.file = _file;
-    _group_reader_param.file_metadata = _file_metadata.get();
+    _group_reader_param.file_metadata = _file_metadata;
     _group_reader_param.case_sensitive = fd_scanner_ctx.case_sensitive;
     _group_reader_param.use_file_pagecache = fd_scanner_ctx.use_file_pagecache;
     _group_reader_param.lazy_column_coalesce_counter = fd_scanner_ctx.lazy_column_coalesce_counter;

@@ -75,7 +75,8 @@ Status PageReader::_deal_page_with_cache() {
         // TODO: This is an ugly implementation. The _cache_buf is used both as a const pointer
         //  retrieved from the cache and as a temporary mutable pointer before insertion into the cache.
         //  Therefore, I must use const_cast here, which will be optimized later.
-        _cache_buf = const_cast<std::vector<uint8_t>*>(cache_handle.data());
+        _cache_buf =
+                const_cast<std::vector<uint8_t>*>(reinterpret_cast<const std::vector<uint8_t>*>(cache_handle.data()));
         _page_handle = PageHandle(std::move(cache_handle));
         _header_length = _cache_buf->size();
         auto st = deserialize_thrift_msg(_cache_buf->data(), &_header_length, TProtocolType::COMPACT, &_cur_header);
