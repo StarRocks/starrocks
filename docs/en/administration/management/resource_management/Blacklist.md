@@ -22,7 +22,7 @@ The admin user who has ADMIN_PRIV privileges can manage blacklists by executing 
 ~~~sql
 ADD SQLBLACKLIST "<sql>"
 DELETE SQLBLACKLIST <sql_index_number>
-SHOW SQLBLACKLISTS
+SHOW SQLBLACKLIST
 ~~~
 
 * When `enable_sql_blacklist` is true, every SQL query needs to be filtered by sqlblacklist. If it matches, the user will be informed that theSQL is in the blacklist. Otherwise, the SQL will be executed normally. The message may be as follows when the SQL is blacklisted:
