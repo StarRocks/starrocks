@@ -22,7 +22,7 @@ ADMIN_PRIV権限を持つ管理ユーザーは、次のコマンドを実行し�
 ~~~sql
 ADD SQLBLACKLIST "<sql>"
 DELETE SQLBLACKLIST <sql_index_number>
-SHOW SQLBLACKLISTS
+SHOW SQLBLACKLIST
 ~~~
 
 * `enable_sql_blacklist` が true の場合、すべてのSQLクエリは sqlblacklist によってフィルタリングされる必要があります。一致する場合、ユーザーはそのSQLがブラックリストにあることを通知されます。そうでない場合、SQLは通常通り実行されます。SQLがブラックリストに載っている場合、メッセージは次のようになります。
