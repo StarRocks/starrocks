@@ -168,7 +168,7 @@ public final class MetricRepo {
                     () -> new LongCounterMetric("failed_stats_collect_job", MetricUnit.REQUESTS,
                             "the number of failed statistics collect jobs"));
 
-    public static LongCounterMetric COUNTER_SQL_BLOCK_HIT_RULE;
+    public static LongCounterMetric COUNTER_SQL_BLOCK_HIT_COUNT;
 
     public static LongCounterMetric COUNTER_UNFINISHED_BACKUP_JOB;
     public static LongCounterMetric COUNTER_UNFINISHED_RESTORE_JOB;
@@ -593,9 +593,9 @@ public final class MetricRepo {
                 "current unfinished restore job");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_UNFINISHED_RESTORE_JOB);
 
-        COUNTER_SQL_BLOCK_HIT_RULE = new LongCounterMetric("sql_block_hit_rule", MetricUnit.REQUESTS,
-                                                           "total sql hit block rule query");
-        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_SQL_BLOCK_HIT_RULE);
+        COUNTER_SQL_BLOCK_HIT_COUNT = new LongCounterMetric("sql_block_hit_count", MetricUnit.REQUESTS,
+                                                           "total sql block hit count");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_SQL_BLOCK_HIT_COUNT);
 
         List<Database> dbs = Lists.newArrayList();
         if (GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb() != null) {
