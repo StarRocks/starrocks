@@ -1,28 +1,4 @@
 -- name: test_partition_retention_condition_expr
-CREATE TABLE t1 (
-    dt datetime,
-    province string,
-    num int
-)
-DUPLICATE KEY(dt, province)
-PARTITION BY date_trunc('day', dt), province
-PROPERTIES (
-    "partition_retention_condition" = "dt >= CURRENT_DATE() - INTERVAL 1 MONTH OR last_day(dt) = date_trunc('day', dt)",
-    "replication_num" = "1"
-);
-
-CREATE TABLE t1 (
-    dt datetime,
-    province string,
-    num int
-)
-DUPLICATE KEY(dt, province)
-PARTITION BY date_trunc('day', dt), province
-PROPERTIES (
-    "partition_retention_condition" = "dt >= CURRENT_DATE() - INTERVAL 1 MONTH OR last_day(dt) = date_trunc('day', dt)",
-    "replication_num" = "1"
-);
-
 CREATE TABLE tbl_ttl_expr (
     dt datetime,
     province string,
@@ -39,11 +15,11 @@ SELECT minutes_add(hours_add(date_add('2025-01-01', x), x%24), x%60), concat('x-
 FROM TABLE(generate_series(0, 200-1)) as t(x);
 function: print_table_partitions_num("tbl_ttl_expr")
 
-ALTER TABLE tbl_ttl_expr DROP PARTITIONS WHERE date_trunc('day', dt) < CURRENT_DATE() - INTERVAL 3 MONTH;
+ALTER TABLE tbl_ttl_expr DROP PARTITIONS WHERE date_trunc('day', dt) < '2025-05-30' - INTERVAL 3 MONTH;
 function: print_table_partitions_num("tbl_ttl_expr")
 
 ALTER TABLE tbl_ttl_expr DROP PARTITIONS WHERE last_day(date_trunc('day', dt)) != date_trunc('day', dt);
 function: print_table_partitions_num("tbl_ttl_expr")
 
-ALTER TABLE tbl_ttl_expr DROP PARTITIONS  WHERE date_trunc('day', dt) < CURRENT_DATE() - INTERVAL 2 MONTH AND last_day(date_trunc('day', dt)) != date_trunc('day', dt);
+ALTER TABLE tbl_ttl_expr DROP PARTITIONS  WHERE date_trunc('day', dt) < '2025-05-30' - INTERVAL 2 MONTH AND last_day(date_trunc('day', dt)) != date_trunc('day', dt);
 function: print_table_partitions_num("tbl_ttl_expr")
