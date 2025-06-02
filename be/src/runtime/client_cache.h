@@ -101,6 +101,8 @@ public:
     void init_metrics(MetricRegistry* metrics, const std::string& key_prefix);
 
 private:
+    void _remove_client(void* client_key, ThriftClientImpl* client);
+
     template <class T>
     friend class ClientCache;
     // Private constructor so that only ClientCache can instantiate this class.
