@@ -60,7 +60,7 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_STS_ENDPOINT;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_STS_REGION;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR;
-import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_USE_INSTANCE_TOKEN_FILE;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_USE_INSTANCE_PROFILE;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_USE_WEB_IDENTITY_TOKEN_FILE;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ACCESS_KEY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS;
@@ -73,7 +73,7 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_STS_ENDPOINT;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_STS_REGION;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
-import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_INSTANCE_TOKEN_FILE;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.DEFAULT_AWS_REGION;
 
@@ -114,7 +114,7 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
         this.awsProperties = new AwsProperties(properties);
 
         s3UseAWSSDKDefaultBehavior = Boolean.parseBoolean(properties.getOrDefault(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false"));
-        s3UseInstanceProfile = Boolean.parseBoolean(properties.getOrDefault(AWS_S3_USE_INSTANCE_TOKEN_FILE, "false"));
+        s3UseInstanceProfile = Boolean.parseBoolean(properties.getOrDefault(AWS_S3_USE_INSTANCE_PROFILE, "false"));
         s3UseWebIdentityProfile = Boolean.parseBoolean(properties.getOrDefault(AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE, "false"));
         s3AccessKey = properties.getOrDefault(S3FileIOProperties.ACCESS_KEY_ID,
                 properties.getOrDefault(AWS_S3_ACCESS_KEY, ""));
@@ -134,7 +134,7 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
 
         glueUseAWSSDKDefaultBehavior = Boolean.parseBoolean(
                 properties.getOrDefault(AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false"));
-        glueUseInstanceProfile = Boolean.parseBoolean(properties.getOrDefault(AWS_GLUE_USE_INSTANCE_TOKEN_FILE, "false"));
+        glueUseInstanceProfile = Boolean.parseBoolean(properties.getOrDefault(AWS_GLUE_USE_INSTANCE_PROFILE, "false"));
         glueUseWebIdentityProfile = Boolean.parseBoolean(properties.getOrDefault(AWS_GLUE_USE_WEB_IDENTITY_TOKEN_FILE, "false"));
         glueAccessKey = properties.getOrDefault(AWS_GLUE_ACCESS_KEY, "");
         glueSecretKey = properties.getOrDefault(AWS_GLUE_SECRET_KEY, "");
