@@ -55,7 +55,6 @@ void tablet_writer_open_fp_action(RefCountClosure<PTabletWriterOpenResult>* clos
     LOG_BRPC_FP(load_tablet_writer_open, closure->cntl, request)
             << ", send_id: " << request->sender_id() << ", tablet_ids: " << tablet_ids;
     closure->cntl.SetFailed(BRPC_ERROR_MSG(load_tablet_writer_open, request->txn_id()));
-    brpc::StartCancel(closure->cntl.call_id());
 }
 
 void tablet_writer_add_chunks_fp_action(ReusableClosure<PTabletWriterAddBatchResult>* closure,
@@ -64,14 +63,12 @@ void tablet_writer_add_chunks_fp_action(ReusableClosure<PTabletWriterAddBatchRes
     LOG_BRPC_FP(load_tablet_writer_add_chunks, closure->cntl, request->mutable_requests(0))
             << ", send_id: " << request->mutable_requests(0)->sender_id();
     closure->cntl.SetFailed(BRPC_ERROR_MSG(load_tablet_writer_add_chunks, request->mutable_requests(0)->txn_id()));
-    closure->cancel();
 }
 
 void tablet_writer_add_segment_fp_action(ReusableClosure<PTabletWriterAddSegmentResult>* closure,
                                          PTabletWriterAddSegmentRequest* request) {
     LOG_BRPC_FP(load_tablet_writer_add_segment, closure->cntl, request) << ", tablet_id: " << request->tablet_id();
     closure->cntl.SetFailed(BRPC_ERROR_MSG(load_tablet_writer_add_segment, request->txn_id()));
-    closure->cancel();
 }
 
 void tablet_writer_cancel_fp_action(::google::protobuf::Closure* closure, brpc::Controller* cntl,
@@ -85,7 +82,6 @@ void tablet_writer_cancel_fp_action(::google::protobuf::Closure* closure, brpc::
     LOG_BRPC_FP(load_tablet_writer_cancel, *cntl, request) << ", send_id: " << request->sender_id() << ", tablet_ids: ("
                                                            << tablet_ids << "), reason: " << request->reason();
     cntl->SetFailed(BRPC_ERROR_MSG(load_tablet_writer_cancel, request->txn_id()));
-    brpc::StartCancel(cntl->call_id());
 }
 
 Status memtable_flush_fp_action(int64_t txn_id, int64_t tablet_id) {
