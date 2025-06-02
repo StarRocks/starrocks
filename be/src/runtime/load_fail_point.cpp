@@ -40,8 +40,9 @@ DEFINE_FAIL_POINT(load_pk_preload);
 
 #define BRPC_ERROR_MSG(name, txn_id) \
     fmt::format("{} failpoint triggered failure, be: {}, txn_id: {}", #name, BackendOptions::get_localhost(), txn_id)
-#define IO_ERROR_MSG(name, txn_id, tablet_id) \
-    fmt::format("{} failpoint triggered failure, txn_id: {}, tablet_id: {}", #name, txn_id, tablet_id)
+#define IO_ERROR_MSG(name, txn_id, tablet_id)                                               \
+    fmt::format("{} failpoint triggered failure, be: {}, txn_id: {}, tablet_id: {}", #name, \
+                BackendOptions::get_localhost(), txn_id, tablet_id)
 
 std::string get_remote_ip(const brpc::Controller& cntl) {
     return butil::ip2str(cntl.remote_side().ip).c_str();
