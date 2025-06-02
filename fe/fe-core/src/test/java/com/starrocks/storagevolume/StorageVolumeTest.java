@@ -64,7 +64,7 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_REGION;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_SECRET_KEY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
-import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_INSTANCE_TOKEN_FILE;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_ENDPOINT;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY;
@@ -142,7 +142,7 @@ public class StorageVolumeTest {
         Map<String, String> storageParams = new HashMap<>();
         storageParams.put(AWS_S3_REGION, "region");
         storageParams.put(AWS_S3_ENDPOINT, "endpoint");
-        storageParams.put(AWS_S3_USE_INSTANCE_TOKEN_FILE, "true");
+        storageParams.put(AWS_S3_USE_INSTANCE_PROFILE, "true");
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false");
 
         StorageVolume sv = new StorageVolume("1", "test", "s3", Arrays.asList("s3://abc"),
@@ -165,7 +165,7 @@ public class StorageVolumeTest {
         Map<String, String> storageParams = new HashMap<>();
         storageParams.put(AWS_S3_REGION, "region");
         storageParams.put(AWS_S3_ENDPOINT, "endpoint");
-        storageParams.put(AWS_S3_USE_INSTANCE_TOKEN_FILE, "true");
+        storageParams.put(AWS_S3_USE_INSTANCE_PROFILE, "true");
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false");
         storageParams.put(AWS_S3_IAM_ROLE_ARN, "iam_role_arn");
         storageParams.put(AWS_S3_EXTERNAL_ID, "iam_role_arn");

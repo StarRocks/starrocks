@@ -287,7 +287,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                 }
                 AwsCredentialInfo credentialInfo = s3FileStoreInfo.getCredential();
                 if (credentialInfo.hasSimpleCredential()) {
-                    params.put(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_TOKEN_FILE, "false");
+                    params.put(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE, "false");
                     params.put(CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false");
                     params.put(CloudConfigurationConstants.AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE, "false");
                     params.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY,
@@ -295,7 +295,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                     params.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY,
                             credentialInfo.getSimpleCredential().getAccessKeySecret());
                 } else if (credentialInfo.hasAssumeRoleCredential()) {
-                    params.put(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_TOKEN_FILE, "true");
+                    params.put(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE, "true");
                     params.put(CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false");
                     params.put(CloudConfigurationConstants.AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE, "false");
                     params.put(CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN,
@@ -303,7 +303,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                     params.put(CloudConfigurationConstants.AWS_S3_EXTERNAL_ID,
                             credentialInfo.getAssumeRoleCredential().getExternalId());
                 } else if (credentialInfo.hasProfileCredential()) {
-                    params.put(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_TOKEN_FILE, "true");
+                    params.put(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE, "true");
                     params.put(CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false");
                     params.put(CloudConfigurationConstants.AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE, "false");
                 } else if (credentialInfo.hasDefaultCredential()) {
