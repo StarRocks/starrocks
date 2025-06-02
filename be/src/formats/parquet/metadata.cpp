@@ -473,8 +473,8 @@ StatusOr<const FileMetaData*> FileMetaDataParser::get_file_metadata(FileFooterHa
         auto deleter = [](const starrocks::CacheKey& key, void* value) { delete (FileMetaData*)value; };
         ObjectCacheWriteOptions options;
         options.evict_probability = _datacache_options->datacache_evict_probability;
-        Status st = _cache->insert(metacache_key, (void*)(file_metadata.get()), file_metadata_size, &cache_handle,
-                                   deleter, options);
+        Status st = _cache->insert(metacache_key, (void*)(file_metadata.get()), file_metadata_size, deleter, options,
+                                   &cache_handle);
         if (st.ok()) {
             _scanner_ctx->stats->footer_cache_write_bytes += file_metadata_size;
             _scanner_ctx->stats->footer_cache_write_count += 1;

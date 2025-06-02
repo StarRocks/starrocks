@@ -282,7 +282,7 @@ TEST_F(StarRocksMetricsTest, PageCacheMetrics) {
             PageCacheHandle handle;
             auto data = std::make_unique<std::vector<uint8_t>>(1024);
             ObjectCacheWriteOptions opts;
-            ASSERT_OK(_page_cache->insert(key, data.get(), &handle, opts));
+            ASSERT_OK(_page_cache->insert(key, data.get(), opts, &handle));
             ASSERT_TRUE(_page_cache->lookup(key, &handle));
             data.release();
         }

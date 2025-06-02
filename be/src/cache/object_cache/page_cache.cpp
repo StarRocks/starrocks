@@ -102,8 +102,8 @@ bool StoragePageCache::lookup(const std::string& key, PageCacheHandle* handle) {
     return true;
 }
 
-Status StoragePageCache::insert(const std::string& key, std::vector<uint8_t>* data, PageCacheHandle* handle,
-                                const ObjectCacheWriteOptions& opts) {
+Status StoragePageCache::insert(const std::string& key, std::vector<uint8_t>* data, const ObjectCacheWriteOptions& opts,
+                                PageCacheHandle* handle) {
 #ifndef BE_TEST
     int64_t mem_size = malloc_usable_size(data->data()) + sizeof(*data);
     tls_thread_status.mem_release(mem_size);
@@ -128,8 +128,8 @@ Status StoragePageCache::insert(const std::string& key, std::vector<uint8_t>* da
     return st;
 }
 
-Status StoragePageCache::insert(const std::string& key, void* data, int64_t size, PageCacheHandle* handle,
-                                ObjectCacheDeleter deleter, const ObjectCacheWriteOptions& opts) {
+Status StoragePageCache::insert(const std::string& key, void* data, int64_t size, ObjectCacheDeleter deleter,
+                                const ObjectCacheWriteOptions& opts, PageCacheHandle* handle) {
     ObjectCacheHandle* obj_handle = nullptr;
     Status st = _cache->insert(key, data, size, deleter, &obj_handle, opts);
     if (st.ok()) {
