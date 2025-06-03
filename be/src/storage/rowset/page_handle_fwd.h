@@ -25,5 +25,5 @@ template <class PageType>
 class PageHandleTmpl;
 
 using PageHandle = PageHandleTmpl<std::vector<uint8_t>>;
-using FileFooterHandle = PageHandleTmpl<parquet::FileMetaData>;
+using FileFooterHandle = PageHandleTmpl<std::shared_ptr<parquet::FileMetaData>*>;
 } // namespace starrocks

@@ -106,7 +106,7 @@ private:
     ApplicationVersion _writer_version;
 };
 
-using FileMetaDataPtr = std::unique_ptr<FileMetaData>;
+using FileMetaDataPtr = std::shared_ptr<FileMetaData>;
 
 // FileMetaDataParser parse FileMetaData through below way:
 // 1. try to reuse SplitContext's FileMetaData
@@ -120,7 +120,7 @@ public:
               _cache(cache),
               _datacache_options(datacache_options),
               _file_size(file_size) {}
-    StatusOr<const FileMetaData*> get_file_metadata(FileFooterHandle* handle);
+    StatusOr<FileMetaDataPtr> get_file_metadata();
 
 private:
     Status _parse_footer(FileMetaDataPtr* file_metadata_ptr, int64_t* file_metadata_size);

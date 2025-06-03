@@ -58,7 +58,7 @@ class ObjectCache;
 namespace starrocks::parquet {
 
 struct SplitContext : public HdfsSplitContext {
-    const FileMetaData* file_metadata = nullptr;
+    FileMetaDataPtr file_metadata;
     SkipRowsContextPtr skip_rows_ctx;
 
     HdfsSplitContextPtr clone() override {
@@ -126,8 +126,7 @@ private:
     bool _no_materialized_column_scan = false;
 
     StoragePageCache* _cache = nullptr;
-    const FileMetaData* _file_metadata = nullptr;
-    FileFooterHandle _file_footer_handle;
+    FileMetaDataPtr _file_metadata = nullptr;
 
     // not exist column conjuncts eval false, file can be skipped
     bool _is_file_filtered = false;

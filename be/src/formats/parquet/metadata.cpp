@@ -437,7 +437,7 @@ bool ApplicationVersion::IsAlwaysCompressed() const {
     return VersionLt(PARQUET_CPP_10353_FIXED_VERSION());
 }
 
-StatusOr<const FileMetaData*> FileMetaDataParser::get_file_metadata(FileFooterHandle* handle) {
+StatusOr<FileMetaDataPtr> FileMetaDataParser::get_file_metadata() {
     // return from split_context directly
     if (_scanner_ctx->split_context != nullptr) {
         auto split_ctx = down_cast<const SplitContext*>(_scanner_ctx->split_context);
@@ -449,8 +449,7 @@ StatusOr<const FileMetaData*> FileMetaDataParser::get_file_metadata(FileFooterHa
         int64_t file_metadata_size = 0;
         FileMetaDataPtr file_metadata_ptr = nullptr;
         RETURN_IF_ERROR(_parse_footer(&file_metadata_ptr, &file_metadata_size));
-        *handle = FileFooterHandle(file_metadata_ptr.release());
-        return handle->data();
+        return file_metadata_ptr;
     }
 
     PageCacheHandle cache_handle;
@@ -460,9 +459,8 @@ StatusOr<const FileMetaData*> FileMetaDataParser::get_file_metadata(FileFooterHa
         SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_cache_read_ns);
         bool ret = _cache->lookup(metacache_key, &cache_handle);
         if (ret) {
-            *handle = FileFooterHandle(std::move(cache_handle));
             _scanner_ctx->stats->footer_cache_read_count += 1;
-            return handle->data();
+            return *(reinterpret_cast<const FileMetaDataPtr*>(cache_handle.data()));
         }
     }
 
@@ -470,20 +468,20 @@ StatusOr<const FileMetaData*> FileMetaDataParser::get_file_metadata(FileFooterHa
     int64_t file_metadata_size = 0;
     RETURN_IF_ERROR(_parse_footer(&file_metadata, &file_metadata_size));
     if (file_metadata_size > 0) {
-        auto deleter = [](const starrocks::CacheKey& key, void* value) { delete (FileMetaData*)value; };
+        auto deleter = [](const starrocks::CacheKey& key, void* value) { delete (FileMetaDataPtr*)value; };
         ObjectCacheWriteOptions options;
         options.evict_probability = _datacache_options->datacache_evict_probability;
-        Status st = _cache->insert(metacache_key, (void*)(file_metadata.get()), file_metadata_size, deleter, options,
+        auto capture = std::make_unique<FileMetaDataPtr>(file_metadata);
+        Status st = _cache->insert(metacache_key, (void*)(capture.get()), file_metadata_size, deleter, options,
                                    &cache_handle);
         if (st.ok()) {
             _scanner_ctx->stats->footer_cache_write_bytes += file_metadata_size;
             _scanner_ctx->stats->footer_cache_write_count += 1;
-            *handle = FileFooterHandle(std::move(cache_handle));
-            return file_metadata.release();
+            capture.release();
+            return file_metadata;
         } else {
             _scanner_ctx->stats->footer_cache_write_fail_count += 1;
-            *handle = FileFooterHandle(file_metadata.release());
-            return handle->data();
+            return file_metadata;
         }
     } else {
         return Status::InternalError(
@@ -526,7 +524,7 @@ Status FileMetaDataParser::_parse_footer(FileMetaDataPtr* file_metadata_ptr, int
                                                        footer_buffer.size() - PARQUET_FOOTER_SIZE - metadata_length,
                                                &metadata_length, TProtocolType::COMPACT, &t_metadata));
 
-        *file_metadata_ptr = std::make_unique<FileMetaData>();
+        *file_metadata_ptr = std::make_shared<FileMetaData>();
         FileMetaData* file_metadata = file_metadata_ptr->get();
         RETURN_IF_ERROR(file_metadata->init(t_metadata, _scanner_ctx->case_sensitive));
         *file_metadata_size = CurrentThread::current().get_consumed_bytes() - before_bytes;

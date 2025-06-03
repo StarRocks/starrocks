@@ -60,7 +60,7 @@ Status FileReader::init(HdfsScannerContext* ctx) {
 
     // parse FileMetadata
     FileMetaDataParser file_metadata_parser{_file, ctx, _cache, &_datacache_options, _file_size};
-    ASSIGN_OR_RETURN(_file_metadata, file_metadata_parser.get_file_metadata(&_file_footer_handle));
+    ASSIGN_OR_RETURN(_file_metadata, file_metadata_parser.get_file_metadata());
 
     // set existed SlotDescriptor in this parquet file
     std::unordered_set<std::string> existed_column_names;
@@ -89,15 +89,15 @@ std::shared_ptr<MetaHelper> FileReader::_build_meta_helper() {
     if (_scanner_ctx->lake_schema != nullptr && _file_metadata->schema().exist_filed_id()) {
         // If we want read this parquet file with iceberg/paimon schema,
         // we also need to make sure it contains parquet field id.
-        return std::make_shared<LakeMetaHelper>(_file_metadata, _scanner_ctx->case_sensitive,
+        return std::make_shared<LakeMetaHelper>(_file_metadata.get(), _scanner_ctx->case_sensitive,
                                                 _scanner_ctx->lake_schema);
     } else {
-        return std::make_shared<ParquetMetaHelper>(_file_metadata, _scanner_ctx->case_sensitive);
+        return std::make_shared<ParquetMetaHelper>(_file_metadata.get(), _scanner_ctx->case_sensitive);
     }
 }
 
 const FileMetaData* FileReader::get_file_metadata() {
-    return _file_metadata;
+    return _file_metadata.get();
 }
 
 Status FileReader::collect_scan_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* io_ranges) {
@@ -255,7 +255,7 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.sb_stream = _sb_stream;
     _group_reader_param.chunk_size = _chunk_size;
     _group_reader_param.file = _file;
-    _group_reader_param.file_metadata = _file_metadata;
+    _group_reader_param.file_metadata = _file_metadata.get();
     _group_reader_param.case_sensitive = fd_scanner_ctx.case_sensitive;
     _group_reader_param.use_file_pagecache = fd_scanner_ctx.use_file_pagecache;
     _group_reader_param.lazy_column_coalesce_counter = fd_scanner_ctx.lazy_column_coalesce_counter;
