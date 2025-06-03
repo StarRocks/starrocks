@@ -479,7 +479,6 @@ public class PublishVersionDaemon extends FrontendDaemon {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
         // version -> shadowTablets
-        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
         boolean enablePartitionAggregation = Config.enable_partition_aggregation;
         ComputeResource computeResource =  WarehouseManager.DEFAULT_RESOURCE;
         try {
@@ -504,8 +503,6 @@ public class PublishVersionDaemon extends FrontendDaemon {
             enablePartitionAggregation = table.enablePartitionAggregation();
             for (int i = 0; i < transactionStates.size(); i++) {
                 TransactionState txnState = transactionStates.get(i);
-                warehouseId = txnState.getWarehouseId();
-                // TODO(CNGROUP): ensure the compute resource is the same for all transactions
                 computeResource = txnState.getComputeResource();
                 List<MaterializedIndex> indexes = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
                 for (MaterializedIndex index : indexes) {

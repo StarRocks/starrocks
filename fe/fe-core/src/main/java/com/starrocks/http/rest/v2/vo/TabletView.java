@@ -47,7 +47,7 @@ public class TabletView {
 
         if (tablet instanceof LakeTablet) {
             LakeTablet lakeTablet = (LakeTablet) tablet;
-            // TODO(CNGROUP): support multi cngroups
+            // TODO(ComputeResource): support more better compute resource acquiring.
             Long computeNodeId = GlobalStateMgr.getCurrentState().getWarehouseMgr()
                     .getComputeNodeId(DEFAULT_RESOURCE, lakeTablet);
             tvo.setPrimaryComputeNodeId(computeNodeId);

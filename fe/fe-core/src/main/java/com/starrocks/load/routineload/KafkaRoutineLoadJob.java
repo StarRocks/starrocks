@@ -240,7 +240,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         // because the file info can be changed anytime.
         convertCustomProperties(true);
 
-        ((KafkaProgress) progress).convertOffset(brokerList, topic, convertedCustomProperties, warehouseId);
+        ((KafkaProgress) progress).convertOffset(brokerList, topic, convertedCustomProperties, computeResource);
     }
 
     public synchronized void convertCustomProperties(boolean rebuild) throws DdlException {
@@ -512,7 +512,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     private List<Integer> getAllKafkaPartitions() throws StarRocksException {
         convertCustomProperties(false);
         return KafkaUtil.getAllKafkaPartitions(brokerList, topic,
-                ImmutableMap.copyOf(convertedCustomProperties), warehouseId);
+                ImmutableMap.copyOf(convertedCustomProperties), computeResource);
     }
 
     public static KafkaRoutineLoadJob fromCreateStmt(CreateRoutineLoadStmt stmt) throws StarRocksException {

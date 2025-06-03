@@ -193,7 +193,7 @@ public class SystemInfoService implements GsonPostProcessable {
         HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
         List<Long> computeNodeIds;
         if (RunMode.isSharedDataMode()) {
-            // TODO(CNGROUP): fix me later.
+            // TODO(ComputeResource): support more better compute resource acquiring.
             final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             final Warehouse wh = warehouseManager.getWarehouse(warehouse);
             final CRAcquireContext acquireContext = CRAcquireContext.of(wh.getId());
@@ -299,7 +299,7 @@ public class SystemInfoService implements GsonPostProcessable {
     private void updateHistoricalBackends(String warehouse, long updateTime) {
         HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
         if (RunMode.isSharedDataMode()) {
-            // TODO(CNGROUP): fix me later.
+            // TODO(ComputeResource): support more better compute resource acquiring.
             final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             final Warehouse wh = warehouseManager.getWarehouse(warehouse);
             final CRAcquireContext acquireContext = CRAcquireContext.of(wh.getId());

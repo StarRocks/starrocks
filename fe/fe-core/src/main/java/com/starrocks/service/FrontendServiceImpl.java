@@ -1997,7 +1997,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             warehouseId = Utils.getWarehouseIdByNodeId(systemInfo, request.getBackend_id())
                     .orElse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         }
-        // TODO(cngroup): support multi cngroups later.
+        // TODO(ComputeResource): support more better compute resource acquiring.
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseId);
         final ComputeResource computeResource = warehouseManager.acquireComputeResource(acquireContext);
@@ -2065,7 +2065,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setTablets(tablets);
 
         // build nodes
-        // TODO(CNGroup): support multi cn groups
+        // TODO(ComputeResource): support more better compute resource acquiring.
         TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo(WarehouseManager.DEFAULT_RESOURCE,
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
         result.setNodes(nodesInfo.nodes);
@@ -2908,7 +2908,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     dictTable.getAutomaticBucketSize(), allPartitions);
             response.setPartition(partitionParam);
             response.setLocation(OlapTableSink.createLocation(dictTable, partitionParam, dictTable.enableReplicatedStorage()));
-            // TODO(CNGROUP): support multi cngroups
+            // TODO(ComputeResource): support more better compute resource acquiring.
             response.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(WarehouseManager.DEFAULT_RESOURCE,
                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()));
         } catch (StarRocksException e) {

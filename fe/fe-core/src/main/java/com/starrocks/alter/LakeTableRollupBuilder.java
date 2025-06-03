@@ -88,7 +88,7 @@ public class LakeTableRollupBuilder extends AlterJobV2Builder {
 
                 List<Tablet> originTablets = physicalPartition.getIndex(baseIndexId).getTablets();
                 final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-                if (warehouseManager.isResourceAvailable(computeResource)) {
+                if (!warehouseManager.isResourceAvailable(computeResource)) {
                     final long warehouseId = ConnectContext.get().getCurrentWarehouseId();
                     Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
                     ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());

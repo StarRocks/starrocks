@@ -76,23 +76,23 @@ public class KafkaUtil {
 
     public static List<Integer> getAllKafkaPartitions(String brokerList, String topic,
                                                       ImmutableMap<String, String> properties,
-                                                      long warehouseId) throws StarRocksException {
-        return PROXY_API.getAllKafkaPartitions(brokerList, topic, properties, warehouseId);
+                                                      ComputeResource computeResource) throws StarRocksException {
+        return PROXY_API.getAllKafkaPartitions(brokerList, topic, properties, computeResource);
     }
 
     // latest offset is (the latest existing message offset + 1)
     public static Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
                                                       ImmutableMap<String, String> properties,
                                                       List<Integer> partitions,
-                                                      long warehouseId) throws StarRocksException {
-        return PROXY_API.getLatestOffsets(brokerList, topic, properties, partitions, warehouseId);
+                                                      ComputeResource computeResource) throws StarRocksException {
+        return PROXY_API.getLatestOffsets(brokerList, topic, properties, partitions, computeResource);
     }
 
     public static Map<Integer, Long> getBeginningOffsets(String brokerList, String topic,
                                                          ImmutableMap<String, String> properties,
                                                          List<Integer> partitions,
-                                                         long warehouseId) throws StarRocksException {
-        return PROXY_API.getBeginningOffsets(brokerList, topic, properties, partitions, warehouseId);
+                                                         ComputeResource computeResource) throws StarRocksException {
+        return PROXY_API.getBeginningOffsets(brokerList, topic, properties, partitions, computeResource);
     }
 
     public static List<PKafkaOffsetProxyResult> getBatchOffsets(List<PKafkaOffsetProxyRequest> requests)
@@ -102,11 +102,11 @@ public class KafkaUtil {
 
     public static PKafkaLoadInfo genPKafkaLoadInfo(String brokerList, String topic,
                                                    ImmutableMap<String, String> properties,
-                                                   long warehouseId) {
+                                                   ComputeResource computeResource) {
         PKafkaLoadInfo kafkaLoadInfo = new PKafkaLoadInfo();
         kafkaLoadInfo.brokers = brokerList;
         kafkaLoadInfo.topic = topic;
-        kafkaLoadInfo.warehouseId = warehouseId;
+        kafkaLoadInfo.warehouseId = computeResource.getWarehouseId();
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             PStringPair pair = new PStringPair();
             pair.key = entry.getKey();
@@ -122,11 +122,12 @@ public class KafkaUtil {
     static class ProxyAPI {
         public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
                                                    ImmutableMap<String, String> convertedCustomProperties,
-                                                   long warehouseId)
+                                                   ComputeResource computeResource)
                 throws StarRocksException {
             // create request
             PKafkaMetaProxyRequest metaRequest = new PKafkaMetaProxyRequest();
-            metaRequest.kafkaInfo = genPKafkaLoadInfo(brokerList, topic, convertedCustomProperties, warehouseId);
+            // TODO(ComputeResource): support more better compute resource acquiring.
+            metaRequest.kafkaInfo = genPKafkaLoadInfo(brokerList, topic, convertedCustomProperties, computeResource);
             PProxyRequest request = new PProxyRequest();
             request.kafkaMetaRequest = metaRequest;
 
@@ -137,24 +138,24 @@ public class KafkaUtil {
         public Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
                                                    ImmutableMap<String, String> properties,
                                                    List<Integer> partitions,
-                                                   long warehouseId) throws StarRocksException {
-            return getOffsets(brokerList, topic, properties, partitions, true, warehouseId);
+                                                   ComputeResource computeResource) throws StarRocksException {
+            return getOffsets(brokerList, topic, properties, partitions, true, computeResource);
         }
 
         public Map<Integer, Long> getBeginningOffsets(String brokerList, String topic,
                                                       ImmutableMap<String, String> properties,
                                                       List<Integer> partitions,
-                                                      long warehouseId) throws StarRocksException {
-            return getOffsets(brokerList, topic, properties, partitions, false, warehouseId);
+                                                      ComputeResource computeResource) throws StarRocksException {
+            return getOffsets(brokerList, topic, properties, partitions, false, computeResource);
         }
 
         public Map<Integer, Long> getOffsets(String brokerList, String topic,
                                              ImmutableMap<String, String> properties,
                                              List<Integer> partitions, boolean isLatest,
-                                             long warehouseId) throws StarRocksException {
+                                             ComputeResource computeResource) throws StarRocksException {
             // create request
             PKafkaOffsetProxyRequest offsetRequest = new PKafkaOffsetProxyRequest();
-            offsetRequest.kafkaInfo = genPKafkaLoadInfo(brokerList, topic, properties, warehouseId);
+            offsetRequest.kafkaInfo = genPKafkaLoadInfo(brokerList, topic, properties, computeResource);
             offsetRequest.partitionIds = partitions;
             PProxyRequest request = new PProxyRequest();
             request.kafkaOffsetRequest = offsetRequest;
@@ -204,7 +205,7 @@ public class KafkaUtil {
                     PKafkaOffsetProxyRequest req = request.kafkaOffsetBatchRequest.requests.get(0);
                     warehouseId = req.kafkaInfo.warehouseId;
                 }
-                // TODO(CNGROUP): support multi cn groups
+                // TODO(ComputeResource): support more better compute resource acquiring.
                 final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
                 List<Long> computeNodeIds = null;
                 try {

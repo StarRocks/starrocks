@@ -1262,7 +1262,7 @@ public class LeaderImpl {
 
         long txnId;
         try {
-            // TODO(CNGROUP): support multi cngroups
+            // TODO(ComputeResource): support more better compute resource acquiring.
             txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(db.getId(),
                     request.getTable_ids(), request.getLabel(),
                     new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),

@@ -158,7 +158,7 @@ public class PulsarUtil {
                         PPulsarBacklogProxyRequest req = request.pulsarBacklogBatchRequest.requests.get(0);
                         warehouseId = req.pulsarInfo.warehouseId;
                     }
-                    // TODO(CNGroup): support compute node group
+                    // TODO(ComputeResource): support more better compute resource acquiring.
                     final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
                     final ComputeResource computeResource =
                             warehouseManager.acquireComputeResource(CRAcquireContext.of(warehouseId));

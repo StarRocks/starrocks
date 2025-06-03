@@ -55,7 +55,6 @@ import com.starrocks.sql.ast.ShowDataDistributionStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.Warehouse;
-import com.starrocks.warehouse.cngroup.ComputeResource;
 
 import java.text.DecimalFormat;
 import java.util.Collections;
@@ -285,12 +284,10 @@ public class MetadataViewer {
         List<Long> allComputeNodeIds = Lists.newArrayList();
         if (RunMode.isSharedDataMode()) {
             // check warehouse
-            final ConnectContext connectContext = ConnectContext.get();
-            final ComputeResource computeResource = connectContext.getCurrentComputeResource();
+            long warehouseId = ConnectContext.get().getCurrentWarehouseId();
             final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-            List<Long> computeNodeIs = warehouseManager.getAllComputeNodeIds(computeResource);
+            List<Long> computeNodeIs = warehouseManager.getAllComputeNodeIds(warehouseId);
             if (computeNodeIs.isEmpty()) {
-                final long warehouseId = computeResource.getWarehouseId();
                 final Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
                 throw new DdlException("no available compute nodes in warehouse " + warehouse.getName());
             }

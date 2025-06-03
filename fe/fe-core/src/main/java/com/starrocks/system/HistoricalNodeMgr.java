@@ -34,7 +34,7 @@ import java.util.stream.Collectors;
 
 public class HistoricalNodeMgr {
     private static final Logger LOG = LogManager.getLogger(HistoricalNodeMgr.class);
-    // TODO(CNGROUP): use CNGROUP as key to store historical node
+    // TODO(ComputeResource): support more better compute resource acquiring.
     private ConcurrentHashMap<String, HistoricalNodeSet> whToComputeNodeIds;
 
     public HistoricalNodeMgr() {

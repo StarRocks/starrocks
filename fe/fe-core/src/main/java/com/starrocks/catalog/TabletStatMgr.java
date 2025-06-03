@@ -107,14 +107,7 @@ public class TabletStatMgr extends FrontendDaemon {
             return;
         }
 
-        // try acquire resource
-        try {
-            acquireBackgroundComputeResource();
-        } catch (Exception e) {
-            LOG.warn("Failed to acquire resource", e);
-            return;
-        }
-
+        acquireBackgroundComputeResource();
         updateLocalTabletStat();
         updateLakeTabletStat();
 

@@ -86,7 +86,6 @@ public class LoadAction extends RestBaseAction {
                 new LoadAction(controller));
     }
 
-    // TODO(CNGROUP): refactor this method
     public static List<Long> selectNodes(ComputeResource computeResource) throws DdlException {
         // Choose a backend sequentially, or choose a cn in shared_data mode
         List<Long> nodeIds = new ArrayList<>();
