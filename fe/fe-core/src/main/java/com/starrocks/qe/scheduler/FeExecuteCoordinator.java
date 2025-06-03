@@ -336,7 +336,9 @@ public class FeExecuteCoordinator extends Coordinator {
         final List<ByteBuffer> res = Lists.newArrayList();
         if (valueOperatorProjection == null) {
             // Map values operator's output column references to their indices
-            final Map<ColumnRefOperator, Integer> valuesOperatorOutputMap = IntStream.range(0, outputColumnRefs.size())
+            // NOTE: valuesOperatorColumnRefs's length may be different from outputColumnRefs's
+            // length when the query is from an empty table scan.
+            final Map<ColumnRefOperator, Integer> valuesOperatorOutputMap = IntStream.range(0, valuesOperatorColumnRefs.size())
                     .boxed()
                     .collect(Collectors.toMap(valuesOperatorColumnRefs::get, i -> i));
             // Find the indices of the output columns in the values operator's output
