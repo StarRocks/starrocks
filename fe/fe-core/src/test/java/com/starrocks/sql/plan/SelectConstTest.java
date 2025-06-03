@@ -14,8 +14,10 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.common.FeConstants;
 import com.starrocks.qe.RowBatch;
 import com.starrocks.qe.scheduler.FeExecuteCoordinator;
+import com.starrocks.thrift.TResultBatch;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -239,16 +241,21 @@ public class SelectConstTest extends PlanTestBase {
         ExecPlan execPlan = getExecPlan(sql);
         FeExecuteCoordinator coordinator = new FeExecuteCoordinator(connectContext, execPlan);
         RowBatch rowBatch = coordinator.getNext();
-        byte[] bytes = rowBatch.getBatch().getRows().get(0).array();
-        int lengthOffset = getOffset(bytes);
-        String value;
-        if (lengthOffset == -1) {
-            value = "NULL";
+        TResultBatch tResultBatch = rowBatch.getBatch();
+        if (tResultBatch.rows.isEmpty()) {
+            Assert.assertNull(expected);
         } else {
-            value = new String(bytes, lengthOffset, bytes.length - lengthOffset, StandardCharsets.UTF_8);
+            byte[] bytes = tResultBatch.getRows().get(0).array();
+            int lengthOffset = getOffset(bytes);
+            String value;
+            if (lengthOffset == -1) {
+                value = "NULL";
+            } else {
+                value = new String(bytes, lengthOffset, bytes.length - lengthOffset, StandardCharsets.UTF_8);
+            }
+            System.out.println(value);
+            Assert.assertEquals(expected, value);
         }
-        System.out.println(value);
-        Assert.assertEquals(expected, value);
     }
 
     private static int getOffset(byte[] bytes) {
@@ -265,5 +272,32 @@ public class SelectConstTest extends PlanTestBase {
             default:
                 return 1;
         }
+    }
+
+    @Test
+    public void testEmptyScan() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE tbl0 (\n" +
+                "  c1 int,\n" +
+                "  c2 date,\n" +
+                "  c3 varchar(10),\n" +
+                "  c4 bigint,\n" +
+                "  c5 varchar(3),\n" +
+                "  c6 datetime,\n" +
+                "  c7 string,\n" +
+                "  c8 decimal(10,5),\n" +
+                "  c9 boolean,\n" +
+                "  c10 largeint,\n" +
+                "  c11 date,\n" +
+                "  c12 float,\n" +
+                "  c13 double)\n" +
+                "  PRIMARY KEY(c1,c2)\n" +
+                "  DISTRIBUTED BY HASH(c1) BUCKETS 3\n" +
+                "PROPERTIES ('replication_num' = '1');");
+        String sql = "select c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13," +
+                "c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13 " +
+                "from tbl0;";
+        FeConstants.enablePruneEmptyOutputScan = true;
+        assertFeExecuteResult(sql, null);
+        FeConstants.enablePruneEmptyOutputScan = false;
     }
 }
