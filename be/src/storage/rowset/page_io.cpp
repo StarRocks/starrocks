@@ -256,7 +256,7 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
     if (opts.use_page_cache) {
         // insert this page into cache and return the cache handle
         ObjectCacheWriteOptions opts;
-        Status st = cache->insert(cache_key, page.get(), &cache_handle, opts);
+        Status st = cache->insert(cache_key, page.get(), opts, &cache_handle);
         *handle = st.ok() ? PageHandle(std::move(cache_handle)) : PageHandle(page.get());
     } else {
         *handle = PageHandle(page.get());
