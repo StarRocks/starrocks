@@ -122,4 +122,4 @@ with t1 as (
  from t1  
 )
 select * from t2 
-where  array_contains(fields,'bbb')
+where  array_contains(fields,'bbb');
