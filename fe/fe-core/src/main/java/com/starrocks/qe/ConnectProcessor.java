@@ -386,7 +386,7 @@ public class ConnectProcessor {
                     }
                 }
 
-                if (ctx.getExplicitTxnState() != null &&
+                if (ctx.getTxnId() != 0 &&
                         !((parsedStmt instanceof InsertStmt && !((InsertStmt) parsedStmt).isOverwrite()) ||
                                 parsedStmt instanceof BeginStmt ||
                                 parsedStmt instanceof CommitStmt ||
@@ -858,6 +858,14 @@ public class ConnectProcessor {
             ctx.setForwardTimes(request.getForward_times());
         }
 
+        if (request.isSetConnectionId()) {
+            ctx.setConnectionId(request.getConnectionId());
+        }
+
+        if (request.isSetTxn_id()) {
+            ctx.setTxnId(request.getTxn_id());
+        }
+
         ctx.setThreadLocalInfo();
 
         if (ctx.getCurrentUserIdentity() == null) {
@@ -934,6 +942,9 @@ public class ConnectProcessor {
         result.setPacket(getResultPacket());
         result.setState(ctx.getState().getStateType().toString());
         result.setErrorMsg(ctx.getState().getErrorMessage());
+        //Put the txnId in connectContext into result and pass it back to the follower node
+        result.setTxn_id(ctx.getTxnId());
+
         if (executor != null) {
             if (executor.getProxyResultSet() != null) {  // show statement
                 result.setResultSet(executor.getProxyResultSet().tothrift());

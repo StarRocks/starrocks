@@ -31,11 +31,14 @@ import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.txn.BeginStmt;
+import com.starrocks.sql.ast.txn.CommitStmt;
+import com.starrocks.sql.ast.txn.RollbackStmt;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
@@ -50,6 +53,7 @@ import org.junit.Test;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -92,7 +96,7 @@ public class ExplicitTxnTest {
         context.setThreadLocalInfo();
         context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
 
-        context.setExplicitTxnState(new ExplicitTxnState());
+        context.setTxnId(1);
 
         //Init ConnectProcessor
         MetricRepo.init();
@@ -194,7 +198,7 @@ public class ExplicitTxnTest {
         String sql = "insert into db1.tbl1 values(1,2,3)";
         DmlStmt stmt = (DmlStmt) SqlParser.parseSingleStatement(sql, context.getSessionVariable().getSqlMode());
         Analyzer.analyze(stmt, context);
-        stmt.setTxnId(context.getExplicitTxnState().getTransactionState().getTransactionId());
+
         TransactionStmtExecutor.loadData(database, olapTable, new ExecPlan(), (DmlStmt) stmt, stmt.getOrigStmt(), context);
         Assert.assertFalse(context.getState().isError());
         try {
@@ -203,5 +207,124 @@ public class ExplicitTxnTest {
         } catch (ErrorReportException e) {
             Assert.assertEquals(ErrorCode.ERR_TXN_IMPORT_SAME_TABLE, e.getErrorCode());
         }
+    }
+
+    @Test
+    public void testBegin() throws IOException, DdlException {
+        ConnectContext context = new ConnectContext();
+
+        long transactionId = 1;
+        TransactionState transactionState = new TransactionState(transactionId, "test-label", null,
+                TransactionState.LoadJobSourceType.INSERT_STREAMING,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
+                context.getExecTimeout() * 1000L);
+
+        ExplicitTxnState explicitTxnState = new ExplicitTxnState();
+        explicitTxnState.setTransactionState(transactionState);
+
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        globalTransactionMgr.addTransactionState(transactionId, explicitTxnState);
+
+        context.setTxnId(transactionId);
+        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO));
+
+        Assert.assertFalse(context.getState().isError());
+        Assert.assertEquals("{'label':'test-label', 'status':'PREPARE', 'txnId':'1'}", context.getState().getInfoMessage());
+    }
+
+    @Test
+    public void testCommitEmptyInsert() {
+        ConnectContext context = new ConnectContext();
+        //Commit txn not exist
+        context.setTxnId(12345);
+        TransactionStmtExecutor.commitStmt(context, new CommitStmt(NodePosition.ZERO));
+
+        // Commit transaction not insert data
+        long transactionId = 1;
+        TransactionState transactionState = new TransactionState(transactionId, "test-label", null,
+                TransactionState.LoadJobSourceType.INSERT_STREAMING,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
+                context.getExecTimeout() * 1000L);
+
+        ExplicitTxnState explicitTxnState = new ExplicitTxnState();
+        explicitTxnState.setTransactionState(transactionState);
+
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        globalTransactionMgr.addTransactionState(transactionId, explicitTxnState);
+
+        context.setTxnId(transactionId);
+        TransactionStmtExecutor.commitStmt(context, new CommitStmt(NodePosition.ZERO));
+        Assert.assertEquals(0, context.getTxnId());
+        Assert.assertEquals("{'label':'test-label', 'status':'VISIBLE', 'txnId':'1'}", context.getState().getInfoMessage());
+        Assert.assertNull(globalTransactionMgr.getExplicitTxnState(transactionId));
+
+        // Rollback transaction not insert data
+        transactionId = 2;
+        transactionState = new TransactionState(transactionId, "test-label-2", null,
+                TransactionState.LoadJobSourceType.INSERT_STREAMING,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
+                context.getExecTimeout() * 1000L);
+
+        explicitTxnState = new ExplicitTxnState();
+        explicitTxnState.setTransactionState(transactionState);
+
+        globalTransactionMgr.addTransactionState(transactionId, explicitTxnState);
+
+        context.setTxnId(transactionId);
+        TransactionStmtExecutor.rollbackStmt(context, new RollbackStmt(NodePosition.ZERO));
+        Assert.assertEquals(0, context.getTxnId());
+        Assert.assertEquals("{'label':'test-label-2', 'status':'ABORTED', 'txnId':'2'}", context.getState().getInfoMessage());
+        Assert.assertNull(globalTransactionMgr.getExplicitTxnState(transactionId));
+    }
+
+    @Test
+    public void testCommitDatabaseNotExist() {
+        ConnectContext context = new ConnectContext();
+        long transactionId = 1;
+        TransactionState transactionState = new TransactionState(transactionId, "test-label", null,
+                TransactionState.LoadJobSourceType.INSERT_STREAMING,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
+                context.getExecTimeout() * 1000L);
+
+        ExplicitTxnState explicitTxnState = new ExplicitTxnState();
+        explicitTxnState.setTransactionState(transactionState);
+
+        ExplicitTxnState.ExplicitTxnStateItem explicitTxnStateItem = new ExplicitTxnState.ExplicitTxnStateItem();
+        explicitTxnStateItem.setTabletCommitInfos(List.of());
+        explicitTxnStateItem.setTabletFailInfos(List.of());
+
+        explicitTxnState.addTransactionItem(explicitTxnStateItem);
+
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        globalTransactionMgr.addTransactionState(transactionId, explicitTxnState);
+
+        context.setTxnId(transactionId);
+        TransactionStmtExecutor.commitStmt(context, new CommitStmt(NodePosition.ZERO));
+        Assert.assertEquals(0, context.getTxnId());
+        Assert.assertNull(globalTransactionMgr.getExplicitTxnState(transactionId));
+        Assert.assertEquals("database 0 is not found", context.getState().getErrorMessage());
+
+        transactionId = 2;
+        transactionState = new TransactionState(transactionId, "test-label-2", null,
+                TransactionState.LoadJobSourceType.INSERT_STREAMING,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
+                context.getExecTimeout() * 1000L);
+
+        explicitTxnState = new ExplicitTxnState();
+        explicitTxnState.setTransactionState(transactionState);
+
+        explicitTxnStateItem = new ExplicitTxnState.ExplicitTxnStateItem();
+        explicitTxnStateItem.setTabletCommitInfos(List.of());
+        explicitTxnStateItem.setTabletFailInfos(List.of());
+
+        explicitTxnState.addTransactionItem(explicitTxnStateItem);
+
+        globalTransactionMgr.addTransactionState(transactionId, explicitTxnState);
+
+        context.setTxnId(transactionId);
+        TransactionStmtExecutor.rollbackStmt(context, new RollbackStmt(NodePosition.ZERO));
+        Assert.assertEquals(0, context.getTxnId());
+        Assert.assertNull(globalTransactionMgr.getExplicitTxnState(transactionId));
+        Assert.assertEquals("database 0 is not found", context.getState().getErrorMessage());
     }
 }
