@@ -21,6 +21,10 @@ The fundamental idea of disaster recovery for shared-data clusters is to ensure 
 
 In shared-data clusters, the CN state (data) is stored in object storage, but the FE state (metadata) remains local. To ensure that object storage has all the cluster state for restoration, StarRocks now supports the Automated Cluster Snapshot for both data and metadata in object storage.
 
+### Workflow
+
+![Workflow](../_assets/cluster_snapshot_workflow.png)
+
 ### Terms
 
 - **Cluster snapshot**

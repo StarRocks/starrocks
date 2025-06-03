@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
-sidebar_label: Cluster Snapshot
-keywords: ['backup', 'restore', 'shared data', 'snapshot']
+sidebar_label: 集群快照
+keywords: ['备份', '恢复', '存算分离', '快照']
 ---
 
 <head><meta name="docsearch:pagerank" content="100"/></head>
@@ -21,6 +21,10 @@ import Beta from '../_assets/commonMarkdown/_beta.mdx'
 存算分离集群的灾难恢复的基本思想是确保完整的集群状态（包括数据和元数据）存储在对象存储中。这样，如果集群发生故障，只要数据和元数据保持完整，就可以从对象存储中恢复。此外，云提供商提供的备份和跨区域复制等功能可以用于实现远程恢复和跨区域灾难恢复。
 
 在存算分离集群中，CN 状态（数据）存储在对象存储中，但 FE 状态（元数据）仍然是本地的。为了确保对象存储中拥有所有用于恢复的集群状态，StarRocks 现在支持在对象存储中自动化集群快照以保存数据和元数据。
+
+### 工作流程
+
+![Workflow](../_assets/cluster_snapshot_workflow.png)
 
 ### 术语
 
