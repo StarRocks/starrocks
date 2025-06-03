@@ -53,6 +53,8 @@ import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.scheduler.TaskRunScheduler;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.DistributionDesc;
+import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.OptimizeClause;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
@@ -468,6 +470,28 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
                         }
                     }
                     allPartitionOptimized = true;
+                }
+            } else {
+                if (optimizeClause.getDistributionDesc() != null) {
+                    // hasFailedTask == true
+                    DistributionDesc optimizeDistributionDesc = optimizeClause.getDistributionDesc();
+                    DistributionDesc tableDistributionDesc = targetTable.getDefaultDistributionInfo().toDistributionDesc(
+                            targetTable.getIdToColumn());
+                    if (tableDistributionDesc.getType() != optimizeDistributionDesc.getType()) {
+                        throw new AlterCancelException("can not change distribution type of target table" +
+                                    " since some partitions rewrite failed [" + errMsg + "]");
+                    }
+                    if (tableDistributionDesc instanceof HashDistributionDesc) {
+                        HashDistributionDesc tableHashDistributionDesc = (HashDistributionDesc) tableDistributionDesc;
+                        HashDistributionDesc optimizeHashDistributionDesc = (HashDistributionDesc) optimizeDistributionDesc;
+                        if (!tableHashDistributionDesc.getDistributionColumnNames()
+                                .equals(optimizeHashDistributionDesc.getDistributionColumnNames())) {
+                            throw new AlterCancelException("can not change distribution column of target table" +
+                                        " from " + tableHashDistributionDesc.getDistributionColumnNames() + " to " +
+                                        optimizeHashDistributionDesc.getDistributionColumnNames() +
+                                        " since some partitions rewrite failed [" + errMsg + "]");
+                        }
+                    }
                 }
             }
 
