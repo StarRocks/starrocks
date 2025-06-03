@@ -16,7 +16,6 @@
 
 #include <gtest/gtest.h>
 
-#include "gen_cpp/FrontendService.h"
 #include "runtime/client_cache.h"
 #include "testutil/assert.h"
 #include "util/network_util.h"
