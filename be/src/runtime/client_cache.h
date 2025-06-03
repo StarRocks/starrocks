@@ -101,8 +101,6 @@ public:
     void init_metrics(MetricRegistry* metrics, const std::string& key_prefix);
 
 private:
-    void _remove_client(void* client_key, ThriftClientImpl* client);
-
     template <class T>
     friend class ClientCache;
     // Private constructor so that only ClientCache can instantiate this class.
@@ -136,8 +134,8 @@ private:
     std::unique_ptr<IntGauge> _opened_clients;
 
     // Create a new client for specific host/port in 'client' and put it in _client_map
-    Status create_client(const TNetworkAddress& hostport, const client_factory& factory_method, void** client_key,
-                         int timeout_ms);
+    Status _create_client(const TNetworkAddress& hostport, const client_factory& factory_method, void** client_key);
+    void _remove_client(void* client_key, ThriftClientImpl* client);
 };
 
 template <class T>

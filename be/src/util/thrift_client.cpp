@@ -95,6 +95,10 @@ void ThriftClientImpl::close() {
     }
 }
 
+void ThriftClientImpl::update_active_time() {
+    _last_active_time = MonotonicMillis();
+}
+
 bool ThriftClientImpl::is_active() {
     if (MonotonicMillis() - _last_active_time > config::thrift_rpc_connection_max_valid_time_ms) {
         return false;

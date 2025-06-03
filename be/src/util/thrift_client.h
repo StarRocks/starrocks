@@ -69,7 +69,7 @@ public:
     // Set the send timeout
     void set_send_timeout(int ms) { _socket->setSendTimeout(ms); }
 
-    void update_active_time() { _last_active_time = MonotonicMillis(); }
+    void update_active_time();
 
     bool is_active();
 
@@ -88,7 +88,7 @@ private:
     std::shared_ptr<apache::thrift::transport::TSocket> _socket;
     std::shared_ptr<apache::thrift::transport::TTransport> _transport;
     std::shared_ptr<apache::thrift::protocol::TBinaryProtocol> _protocol;
-    size_t _last_active_time;
+    size_t _last_active_time{};
 };
 
 // Utility client to a Thrift server. The parameter type is the
