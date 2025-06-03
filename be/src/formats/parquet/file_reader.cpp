@@ -55,7 +55,7 @@ FileReader::~FileReader() = default;
 Status FileReader::init(HdfsScannerContext* ctx) {
     _scanner_ctx = ctx;
     if (ctx->use_file_metacache) {
-        _cache = DataCache::GetInstance()->external_table_meta_cache();
+        _cache = DataCache::GetInstance()->page_cache();
     }
 
     // parse FileMetadata
@@ -96,7 +96,7 @@ std::shared_ptr<MetaHelper> FileReader::_build_meta_helper() {
     }
 }
 
-FileMetaData* FileReader::get_file_metadata() {
+const FileMetaData* FileReader::get_file_metadata() {
     return _file_metadata.get();
 }
 
@@ -110,9 +110,9 @@ Status FileReader::collect_scan_io_ranges(std::vector<io::SharedBufferedInputStr
 }
 
 Status FileReader::_build_split_tasks() {
-    // dont do split in following cases:
+    // don't do split in following cases:
     // 1. this feature is not enabled
-    // 2. we have already do split before (that's why `split_context` is nullptr)
+    // 2. we have already done split before (that's why `split_context` is nullptr)
     if (!_scanner_ctx->enable_split_tasks || _scanner_ctx->split_context != nullptr) {
         return Status::OK();
     }
@@ -208,15 +208,6 @@ StatusOr<bool> FileReader::_update_rf_and_filter_group(const GroupReaderPtr& gro
                 true, 0));
     }
     return filter;
-}
-
-int32_t FileReader::_get_partition_column_idx(const std::string& col_name) const {
-    for (int32_t i = 0; i < _scanner_ctx->partition_columns.size(); i++) {
-        if (_scanner_ctx->partition_columns[i].name() == col_name) {
-            return i;
-        }
-    }
-    return -1;
 }
 
 void FileReader::_prepare_read_columns(std::unordered_set<std::string>& existed_column_names) {

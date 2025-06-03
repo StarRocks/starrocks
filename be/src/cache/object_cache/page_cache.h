@@ -81,8 +81,11 @@ public:
     // This function is thread-safe, and when two clients insert two same key
     // concurrently, this function can assure that only one page is cached.
     // The in_memory page will have higher priority.
-    Status insert(const std::string& key, std::vector<uint8_t>* data, PageCacheHandle* handle,
-                  const ObjectCacheWriteOptions& opts);
+    Status insert(const std::string& key, std::vector<uint8_t>* data, const ObjectCacheWriteOptions& opts,
+                  PageCacheHandle* handle);
+
+    Status insert(const std::string& key, void* data, int64_t size, ObjectCacheDeleter deleter,
+                  const ObjectCacheWriteOptions& opts, PageCacheHandle* handle);
 
     size_t memory_usage() const { return _cache->usage(); }
 
@@ -128,9 +131,7 @@ public:
     }
 
     ObjectCache* cache() const { return _cache; }
-    const std::vector<uint8_t>* data() const {
-        return reinterpret_cast<const std::vector<uint8_t>*>(_cache->value(_handle));
-    }
+    const void* data() const { return _cache->value(_handle); }
 
 private:
     ObjectCache* _cache = nullptr;
