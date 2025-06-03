@@ -153,7 +153,6 @@ std::string get_stack_trace_for_thread(int tid, int timeout_ms) {
             return msg;
         }
     }
-    
     std::string ret = fmt::format("Stack trace tid:{} cid:{} \n{}", tid, task.id, task.to_string());
     return ret;
 }
