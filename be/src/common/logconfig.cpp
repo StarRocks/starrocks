@@ -110,20 +110,7 @@ static void dump_trace_info() {
             res = snprintf(buffer + res, MAX_BUFFER_SIZE - res, "%s\n", custom_coredump_msg.c_str()) + res;
         }
 
-<<<<<<< HEAD
-        wt = write(STDERR_FILENO, buffer, res);
-        // dump memory usage
-        // copy trackers
-        auto& trackers = GlobalEnv::GetInstance()->mem_trackers();
-        for (const auto& tracker : trackers) {
-            if (tracker) {
-                size_t len = tracker->debug_string(buffer, sizeof(buffer));
-                wt = write(STDERR_FILENO, buffer, len);
-            }
-        }
-=======
         std::ignore = write(STDERR_FILENO, buffer, res);
->>>>>>> f224abe7b4 ([BugFix] Avoid allocating memory in dontdump_unused_pages (#59538))
     }
     start_dump = true;
 }
