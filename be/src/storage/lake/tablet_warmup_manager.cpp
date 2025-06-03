@@ -16,6 +16,10 @@
 
 #include "tablet_warmup_manager.h"
 
+#include <rapidjson/document.h>
+#include <rapidjson/stringbuffer.h>
+#include <rapidjson/writer.h>
+
 #include <chrono>
 
 #include "agent/master_info.h"
@@ -49,13 +53,44 @@ namespace starrocks::lake {
 
 static constexpr int64_t INVALID_PARTITION_ID = -1;
 
+std::string TabletWarmupManager::WarmupStats::to_json_str() {
+    rapidjson::Document root;
+    root.SetObject();
+    auto& allocator = root.GetAllocator();
+    // add stats
+    if (before_version_ts && pending_ts) {
+        root.AddMember("wait_version_ms", rapidjson::Value(before_version_ts - pending_ts), allocator);
+    }
+    if (get_version_ts && before_version_ts) {
+        root.AddMember("get_version_ms", rapidjson::Value(get_version_ts - before_version_ts), allocator);
+    }
+    if (start_ts && get_version_ts) {
+        root.AddMember("wait_warmup_ms", rapidjson::Value(start_ts - get_version_ts), allocator);
+    }
+    if (finish_ts && start_ts) {
+        root.AddMember("warmup_ms", rapidjson::Value(finish_ts - start_ts), allocator);
+    }
+    root.AddMember("read_remote_bytes", rapidjson::Value(io_bytes_read_remote), allocator);
+    root.AddMember("read_remote_ms", rapidjson::Value(io_ms_read_remote), allocator);
+    root.AddMember("write_local_ms", rapidjson::Value(io_ms_write_local), allocator);
+    if (finish_ts && pending_ts) {
+        root.AddMember("total_ms", rapidjson::Value(finish_ts - pending_ts), allocator);
+    }
+
+    rapidjson::StringBuffer strbuf;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(strbuf);
+    root.Accept(writer);
+    return {strbuf.GetString()};
+}
+
 TabletWarmupManager::WarmupContext::~WarmupContext() {
     if (_future.wait_for(std::chrono::nanoseconds(1)) == std::future_status::timeout) {
         _promise.set_value(Status::Aborted("aborted!"));
     }
     auto st = _future.get();
     if (!st.ok()) {
-        VLOG(3) << "warmup failed for tablet: " << _tablet_id << ", error:" << st;
+        VLOG(3) << "warmup failed for tablet: " << _tablet_id << ", error:" << st
+                << ", profile: " << _stats.to_json_str();
         g_lake_warmup_tablet_fail_count << 1;
     }
 }
@@ -89,11 +124,11 @@ void TabletWarmupManager::stop() {
         _schedule_thread.join();
         _thread_pool->shutdown();
         {
-            std::scoped_lock lock(_mutex);
-            _tablet_id_list.clear();
+            std::scoped_lock lock(_mutex_pending);
+            _tablet_pending.clear();
         }
         {
-            std::scoped_lock lock(_mutex_inprogress);
+            std::scoped_lock lock(_mutex_in_progress);
             _tablet_in_progress.clear();
         }
     }
@@ -122,9 +157,9 @@ std::shared_future<Status> TabletWarmupManager::warmup_tablet2(uint64_t tablet_i
         promise.set_value(Status::Aborted("warmup manager stopped!"));
         return promise.get_future().share();
     }
-    std::scoped_lock lock(_mutex);
-    _tablet_id_list.emplace_back(std::make_unique<WarmupContext>(static_cast<int64_t>(tablet_id)));
-    return _tablet_id_list.back()->_future;
+    std::scoped_lock lock(_mutex_pending);
+    _tablet_pending.emplace_back(std::make_shared<WarmupContext>(static_cast<int64_t>(tablet_id)));
+    return _tablet_pending.back()->_future;
 }
 
 void TabletWarmupManager::loop_schedule() {
@@ -160,30 +195,32 @@ void TabletWarmupManager::loop_schedule() {
         }
 
         // get visible version if any
-        std::set<int64_t> tmp_set_version;
+        std::unordered_map<int64_t, std::shared_ptr<WarmupContext>> tmp_pending_version;
         {
             std::scoped_lock lock(_mutex_pending_version);
-            tmp_set_version.swap(_tablet_id_pending_version);
+            tmp_pending_version.swap(_tablet_pending_version);
         }
-        if (!tmp_set_version.empty()) {
-            std::vector<int64_t> ids(tmp_set_version.begin(), tmp_set_version.end());
-            auto st = _thread_pool->submit_func(
-                    std::bind(&TabletWarmupManager::batch_get_partitions_meta_from_frontend, this, std::move(ids)));
+        if (!tmp_pending_version.empty()) {
+            std::vector<int64_t> ids;
+            for (auto& e : tmp_pending_version) {
+                ids.push_back(e.first);
+            }
+            auto st = _thread_pool->submit_func(std::bind(&TabletWarmupManager::batch_get_partitions_meta_from_frontend,
+                                                          this, std::move(tmp_pending_version)));
             if (!st.ok()) {
-                for (auto id : tmp_set_version) {
+                for (auto& id : ids) {
                     abort_warmup(id, st);
                 }
             }
-            tmp_set_version.clear();
         }
 
         bool has_pending_ids = false;
         {
-            std::scoped_lock lock(_mutex);
-            has_pending_ids = !_tablet_id_list.empty();
+            std::scoped_lock lock(_mutex_pending);
+            has_pending_ids = !_tablet_pending.empty();
         }
         if (has_pending_ids) {
-            // give up copying the _tablet_id_list into a temp list and passes into batch_prepare_warmup() as parameter
+            // give up copying the _tablet_pending into a temp list and passes into batch_prepare_warmup() as parameter
             auto st = _thread_pool->submit_func([this] { this->batch_prepare_warmup(); });
             if (!st.ok()) {
                 LOG(INFO) << "Failed to prepare warmup for tablets, error: " << st;
@@ -196,10 +233,10 @@ void TabletWarmupManager::loop_schedule() {
 }
 
 void TabletWarmupManager::batch_prepare_warmup() {
-    decltype(_tablet_id_list) tmp_ctxs;
+    decltype(_tablet_pending) tmp_ctxs;
     {
-        std::scoped_lock lock(_mutex);
-        tmp_ctxs.swap(_tablet_id_list);
+        std::scoped_lock lock(_mutex_pending);
+        tmp_ctxs.swap(_tablet_pending);
     }
     for (auto& ctx : tmp_ctxs) {
         if (ctx->_tablet_id <= 0) {
@@ -216,9 +253,10 @@ void TabletWarmupManager::batch_prepare_warmup() {
         int64_t tablet_id = ctx->_tablet_id;
         bool duplicate = false;
         {
-            std::scoped_lock lock(_mutex_inprogress);
+            std::scoped_lock lock(_mutex_in_progress);
             if (_tablet_in_progress.find(tablet_id) == _tablet_in_progress.end()) {
-                _tablet_in_progress.emplace(tablet_id, std::move(ctx));
+                ctx->_stats.before_version_ts = UnixMillis();
+                _tablet_in_progress.emplace(tablet_id, ctx);
                 g_lake_warmup_tablet_processing_count << 1;
             } else {
                 duplicate = true;
@@ -230,14 +268,15 @@ void TabletWarmupManager::batch_prepare_warmup() {
         }
         // NOTE: ctx is not available after this because of moved into _tablet_in_progress
 
-        auto st = _thread_pool->submit_func([this, tablet_id]() { this->get_tablet_visible_version(tablet_id); });
+        auto st = _thread_pool->submit_func([this, ctx]() { this->get_tablet_visible_version(ctx); });
         if (!st.ok()) {
             abort_warmup(tablet_id, std::move(st));
         }
     }
 }
 
-void TabletWarmupManager::get_tablet_visible_version(int64_t tablet_id) {
+void TabletWarmupManager::get_tablet_visible_version(std::shared_ptr<WarmupContext> ctx) {
+    int64_t tablet_id = ctx->_tablet_id;
     auto info_or = g_worker->get_shard_info(tablet_id);
     if (!info_or.ok()) {
         abort_warmup(tablet_id, to_status(info_or.status()));
@@ -245,30 +284,34 @@ void TabletWarmupManager::get_tablet_visible_version(int64_t tablet_id) {
     }
     int64_t partition_id = get_partition_id_from_shard_info(info_or.value());
     if (partition_id == INVALID_PARTITION_ID) {
-        add_tablet_id_pending_visible_version(tablet_id);
+        add_tablet_id_pending_visible_version(ctx);
         return;
     }
 
     // get a valid partition_id from the shardInfo
     auto partition_version_opt = _partition_version_cache.get(partition_id);
     if (partition_version_opt) {
-        auto version = *partition_version_opt;
-        auto st =
-                _thread_pool->submit_func([this, tablet_id, version]() { this->do_warmup_tablet(tablet_id, version); });
+        ctx->record_version(*partition_version_opt);
+        auto st = _thread_pool->submit_func([this, ctx]() { this->do_warmup_tablet(ctx); });
         if (!st.ok()) {
             abort_warmup(tablet_id, std::move(st));
         }
     } else {
-        add_tablet_id_pending_visible_version(tablet_id);
+        add_tablet_id_pending_visible_version(ctx);
     }
 }
 
-void TabletWarmupManager::add_tablet_id_pending_visible_version(int64_t tablet_id) {
+void TabletWarmupManager::add_tablet_id_pending_visible_version(std::shared_ptr<WarmupContext> ctx) {
     std::scoped_lock lock(_mutex_pending_version);
-    _tablet_id_pending_version.insert(tablet_id);
+    _tablet_pending_version.emplace(ctx->_tablet_id, ctx);
 }
 
-void TabletWarmupManager::batch_get_partitions_meta_from_frontend(const std::vector<int64_t>& tablet_ids) {
+void TabletWarmupManager::batch_get_partitions_meta_from_frontend(
+        const std::unordered_map<int64_t, std::shared_ptr<WarmupContext>>& tablet_pending_version) {
+    std::vector<int64_t> tablet_ids;
+    for (auto& e : tablet_pending_version) {
+        tablet_ids.push_back(e.first);
+    }
     TPartitionMetaRequest request;
     request.__set_tablet_ids(tablet_ids);
     TPartitionMetaResponse response;
@@ -291,16 +334,18 @@ void TabletWarmupManager::batch_get_partitions_meta_from_frontend(const std::vec
     }
     const auto& id_meta_index = response.tablet_id_partition_meta_index;
 
-    for (auto id : tablet_ids) {
+    for (auto& e : tablet_pending_version) {
+        int64_t id = e.first;
         auto iter = id_meta_index.find(id);
         if (iter == id_meta_index.end()) {
             // if meta is not found in FE, consider warmup succeed
-            done_warmup(id, staros::WarmupLevel::WARMUP_NOTHING, 0 /* read_size */, true /* report */);
+            done_warmup(id, staros::WarmupLevel::WARMUP_NOTHING, true /* report */);
             continue;
         }
         auto version = response.partition_metas.at(iter->second).visible_version;
-        auto st = _thread_pool->submit_func(
-                [this, id = id, version = version]() { this->do_warmup_tablet(id, version); });
+        auto ctx = e.second;
+        ctx->record_version(version);
+        auto st = _thread_pool->submit_func([this, ctx]() { this->do_warmup_tablet(ctx); });
         if (!st.ok()) {
             abort_warmup(id, std::move(st));
             continue;
@@ -309,7 +354,7 @@ void TabletWarmupManager::batch_get_partitions_meta_from_frontend(const std::vec
 }
 
 void TabletWarmupManager::abort_warmup(int64_t tablet_id, Status status) {
-    std::scoped_lock lock(_mutex_inprogress);
+    std::scoped_lock lock(_mutex_in_progress);
     auto iter = _tablet_in_progress.find(tablet_id);
     if (iter != _tablet_in_progress.end()) {
         iter->second->abort(status);
@@ -319,17 +364,16 @@ void TabletWarmupManager::abort_warmup(int64_t tablet_id, Status status) {
     // unlike `done_warmup`, fail log is printed in `WarmupContext::~WarmupContext`
 }
 
-void TabletWarmupManager::done_warmup(int64_t tablet_id, staros::WarmupLevel level, size_t read_remote_size,
-                                      bool report) {
-    std::unique_ptr<WarmupContext> ctx;
+void TabletWarmupManager::done_warmup(int64_t tablet_id, staros::WarmupLevel level, bool report) {
+    std::shared_ptr<WarmupContext> ctx;
     {
-        std::scoped_lock lock(_mutex_inprogress);
+        std::scoped_lock lock(_mutex_in_progress);
         auto iter = _tablet_in_progress.find(tablet_id);
         if (iter == _tablet_in_progress.end()) {
             LOG(INFO) << "Fail to find tablet " << tablet_id << "after warmup.";
             return;
         } else {
-            ctx = std::move(iter->second);
+            ctx = iter->second;
             _tablet_in_progress.erase(iter);
             g_lake_warmup_tablet_processing_count << -1;
         }
@@ -342,18 +386,21 @@ void TabletWarmupManager::done_warmup(int64_t tablet_id, staros::WarmupLevel lev
         g_lake_warmup_tablet_success_count << 1;
     }
     VLOG(3) << "Successfully warmup tablet: " << tablet_id << ", level: " << level
-            << ", read remote size: " << read_remote_size << ", report: " << report;
+            << ", profile: " << ctx->_stats.to_json_str();
 }
 
-void TabletWarmupManager::do_warmup_tablet(int64_t tablet_id, int64_t version) {
+void TabletWarmupManager::do_warmup_tablet(std::shared_ptr<WarmupContext> ctx) {
+    ctx->record_start();
+    int64_t tablet_id = ctx->_tablet_id;
+    int64_t version = ctx->_version;
     staros::WarmupLevel warmup_level = staros_worker_warmup_level();
     if (warmup_level == staros::WarmupLevel::WARMUP_NOT_SET || warmup_level == staros::WarmupLevel::WARMUP_NOTHING) {
-        done_warmup(tablet_id, staros::WarmupLevel::WARMUP_NOTHING, 0 /* read_size */, false /* report */);
+        done_warmup(tablet_id, staros::WarmupLevel::WARMUP_NOTHING, false /* report */);
         return;
     }
 
     if (version <= 1) {
-        done_warmup(tablet_id, warmup_level, 0 /* read_size */, true /* report */);
+        done_warmup(tablet_id, warmup_level, true /* report */);
         return;
     }
 
@@ -367,7 +414,7 @@ void TabletWarmupManager::do_warmup_tablet(int64_t tablet_id, int64_t version) {
         return;
     }
     if (warmup_level == staros::WarmupLevel::WARMUP_META) {
-        done_warmup(tablet_id, warmup_level, 0 /* read_size */, true /* report */);
+        done_warmup(tablet_id, warmup_level, true /* report */);
         return;
     }
     // check stop point
@@ -406,10 +453,10 @@ void TabletWarmupManager::do_warmup_tablet(int64_t tablet_id, int64_t version) {
         reader->close();
 
         // after reader is closed, statistics will be collected
-        size_t read_remote_size = reader->stats().compressed_bytes_read_remote;
-        g_lake_warmup_read_remote_bytes << read_remote_size;
+        ctx->record_io_stats(reader->stats());
+        g_lake_warmup_read_remote_bytes << reader->stats().compressed_bytes_read_remote;
 
-        done_warmup(tablet_id, warmup_level, read_remote_size, true /* report */);
+        done_warmup(tablet_id, warmup_level, true /* report */);
         return;
     }
 
@@ -446,10 +493,10 @@ void TabletWarmupManager::do_warmup_tablet(int64_t tablet_id, int64_t version) {
     reader->close();
 
     // after reader is closed, statistics will be collected
-    size_t read_remote_size = reader->stats().compressed_bytes_read_remote;
-    g_lake_warmup_read_remote_bytes << read_remote_size;
+    ctx->record_io_stats(reader->stats());
+    g_lake_warmup_read_remote_bytes << reader->stats().compressed_bytes_read_remote;
 
-    done_warmup(tablet_id, warmup_level, read_remote_size, true /* report */);
+    done_warmup(tablet_id, warmup_level, true /* report */);
 }
 
 void TabletWarmupManager::batch_report_tablet_replica_status(const std::vector<uint64_t>& tablet_ids) {

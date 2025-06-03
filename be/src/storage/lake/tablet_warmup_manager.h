@@ -27,6 +27,8 @@
 #include "common/status.h"
 #include "gutil/macros.h"
 #include "storage/fixed_fifo_cache.h"
+#include "storage/olap_common.h"
+#include "util/time.h"
 #include "worker.pb.h"
 
 namespace staros::starlet {
@@ -53,16 +55,53 @@ class TabletManager;
 // 7. (ThreadPool) Notify StarOSWorker that the warmup task is done
 class TabletWarmupManager {
 protected:
+    struct WarmupStats {
+        int64_t pending_ts = 0;
+        int64_t before_version_ts = 0;
+        int64_t get_version_ts = 0;
+        int64_t start_ts = 0;
+        int64_t finish_ts = 0; // abort or done ts
+
+        int64_t io_bytes_read_remote = 0;
+        int64_t io_ms_read_remote = 0;
+        int64_t io_ms_write_local = 0;
+
+        std::string to_json_str();
+    };
+
     struct WarmupContext {
         int64_t _tablet_id;
         std::promise<Status> _promise;
         std::shared_future<Status> _future;
+        int64_t _version;
+        WarmupStats _stats;
 
-        WarmupContext(int64_t id) : _tablet_id(id), _future(_promise.get_future()) {}
+        WarmupContext(int64_t id) : _tablet_id(id), _future(_promise.get_future()), _version(-1) {
+            _stats.pending_ts = UnixMillis();
+        }
         ~WarmupContext();
 
-        void abort(Status status) { _promise.set_value(std::move(status)); }
-        void done() { _promise.set_value(Status::OK()); }
+        void record_version(int64_t version) {
+            _version = version;
+            _stats.get_version_ts = UnixMillis();
+        }
+
+        void record_io_stats(const OlapReaderStatistics& stat) {
+            _stats.io_bytes_read_remote = stat.compressed_bytes_read_remote;
+            _stats.io_ms_read_remote = stat.io_ns_remote / 1000000;
+            _stats.io_ms_write_local = stat.io_ns_write_local_disk / 1000000;
+        }
+
+        void record_start() { _stats.start_ts = UnixMillis(); }
+
+        void abort(Status status) {
+            _promise.set_value(std::move(status));
+            _stats.finish_ts = UnixMillis();
+        }
+        void done() {
+            _promise.set_value(Status::OK());
+            _stats.finish_ts = UnixMillis();
+        }
     };
 
 public:
@@ -90,13 +129,14 @@ private:
     void loop_schedule();
 
     void batch_prepare_warmup();
-    void get_tablet_visible_version(int64_t tablet_id);
-    void add_tablet_id_pending_visible_version(int64_t tablet_id);
-    void batch_get_partitions_meta_from_frontend(const std::vector<int64_t>& tablet_ids);
+    void get_tablet_visible_version(std::shared_ptr<WarmupContext> ctx);
+    void add_tablet_id_pending_visible_version(std::shared_ptr<WarmupContext> ctx);
+    void batch_get_partitions_meta_from_frontend(
+            const std::unordered_map<int64_t, std::shared_ptr<WarmupContext>>& tablet_pending_version);
     void batch_report_tablet_replica_status(const std::vector<uint64_t>& tablet_ids);
-    void do_warmup_tablet(int64_t tablet_id, int64_t version);
+    void do_warmup_tablet(std::shared_ptr<WarmupContext> ctx);
     void abort_warmup(int64_t tablet_id, Status status);
-    void done_warmup(int64_t tablet_id, staros::WarmupLevel level, size_t read_remote_size, bool report);
+    void done_warmup(int64_t tablet_id, staros::WarmupLevel level, bool report);
 
     static int64_t get_partition_id_from_shard_info(staros::starlet::ShardInfo& info);
 
@@ -109,13 +149,13 @@ private:
     TabletManager* _tablet_mgr;
     std::unique_ptr<ThreadPool> _thread_pool;
 
-    // protect accessing to _tablet_id_list
-    std::mutex _mutex;
-    std::list<std::unique_ptr<WarmupContext>> _tablet_id_list;
+    // protect accessing to _tablet_pending
+    std::mutex _mutex_pending;
+    std::list<std::shared_ptr<WarmupContext>> _tablet_pending;
 
     // protect accessng to _tablet_in_progress
-    std::mutex _mutex_inprogress;
-    std::unordered_map<int64_t, std::unique_ptr<WarmupContext>> _tablet_in_progress;
+    std::mutex _mutex_in_progress;
+    std::unordered_map<int64_t, std::shared_ptr<WarmupContext>> _tablet_in_progress;
 
     std::thread _schedule_thread;
 
@@ -124,9 +164,9 @@ private:
 
     FixedFIFOCache<int64_t, int64_t> _partition_version_cache;
 
-    // protect accessing to _tablet_id_pending_version
+    // protect accessing to _tablet_pending_version
     std::mutex _mutex_pending_version;
-    std::set<int64_t> _tablet_id_pending_version;
+    std::unordered_map<int64_t, std::shared_ptr<WarmupContext>> _tablet_pending_version;
 
     // protect accessing to _tablet_id_report
     std::mutex _mutex_batch_report;
