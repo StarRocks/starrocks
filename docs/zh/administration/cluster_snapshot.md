@@ -57,7 +57,7 @@ ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON
 
 参数：
 
-`storage_volume_name`：指定用于存储快照的存储卷。如果未指定此参数，将使用默认存储卷。
+`storage_volume_name`：指定用于存储快照的存储卷。如果未指定此参数，将使用默认存储卷。有关创建存储卷的详细信息，请参阅 [CREATE STORAGE VOLUME](../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md)。
 
 每次 FE 在完成元数据检查点后创建新的元数据镜像时，它会自动创建一个快照。快照的名称由系统生成，格式为 `automated_cluster_snapshot_{timestamp}`。
 
@@ -209,3 +209,7 @@ storage_volumes:
       - key: username
         value: starrocks
 ```
+
+:::note
+有关 AWS 认证信息的更多信息，请参阅 [配置 AWS 认证信息](../integrations/authenticate_to_aws_resources.md)。
+:::

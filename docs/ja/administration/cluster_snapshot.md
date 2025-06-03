@@ -57,7 +57,7 @@ ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON
 
 パラメータ:
 
-`storage_volume_name`: スナップショットを保存するために使用されるストレージボリュームを指定します。このパラメータが指定されていない場合、デフォルトのストレージボリュームが使用されます。
+`storage_volume_name`: スナップショットを保存するために使用されるストレージボリュームを指定します。このパラメータが指定されていない場合、デフォルトのストレージボリュームが使用されます。ストレージボリュームの作成の詳細については、[CREATE STORAGE VOLUME](../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md) を参照してください。
 
 FE がメタデータチェックポイントを完了した後に新しいメタデータイメージを作成するたびに、自動的にスナップショットが作成されます。スナップショットの名前は、`automated_cluster_snapshot_{timestamp}` という形式でシステムによって生成されます。
 
@@ -209,3 +209,7 @@ storage_volumes:
       - key: username
         value: starrocks
 ```
+
+:::note
+AWS の認証情報の詳細については、[AWS リソースへの認証](../integrations/authenticate_to_aws_resources.md)を参照してください。
+:::
