@@ -498,9 +498,8 @@ static void erase_tablet_metadata_from_metacache(TabletManager* tablet_mgr, cons
 
 static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view root_dir,
                                      std::vector<TabletInfoPB>& tablet_infos, int64_t min_retain_version,
-                                     int64_t grace_timestamp, bool enable_io_merge,
-                                     int64_t* vacuumed_files, int64_t* vacuumed_file_size, int64_t* vacuumed_version,
-                                     int64_t* extra_file_size) {
+                                     int64_t grace_timestamp, bool enable_io_merge, int64_t* vacuumed_files,
+                                     int64_t* vacuumed_file_size, int64_t* vacuumed_version, int64_t* extra_file_size) {
     DCHECK(tablet_mgr != nullptr);
     DCHECK(std::is_sorted(tablet_infos.begin(), tablet_infos.end(),
                           [](const auto& a, const auto& b) { return a.tablet_id() < b.tablet_id(); }));

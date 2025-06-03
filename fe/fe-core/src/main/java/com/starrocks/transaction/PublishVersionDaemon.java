@@ -479,13 +479,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
         // version -> shadowTablets
-<<<<<<< HEAD
-        boolean enablePartitionAggregation = Config.enable_partition_aggregation;
-        ComputeResource computeResource =  WarehouseManager.DEFAULT_RESOURCE;
-=======
-        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
         boolean useAggregatePublish = Config.lake_io_merge;
->>>>>>> ff9beeee76 (rename property  to)
+        ComputeResource computeResource =  WarehouseManager.DEFAULT_RESOURCE;
         try {
             OlapTable table =
                     (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
