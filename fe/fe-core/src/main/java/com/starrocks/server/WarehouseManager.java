@@ -25,6 +25,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.DropWarehouseLog;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.WarehouseInternalOpLog;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -357,6 +358,10 @@ public class WarehouseManager implements Writable {
     }
 
     public void replayAlterWarehouse(Warehouse warehouse) {
+
+    }
+
+    public void replayInternalOpLog(WarehouseInternalOpLog log) {
 
     }
 

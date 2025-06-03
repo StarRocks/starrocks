@@ -195,5 +195,6 @@ public class OperationTypeTest {
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_UPDATE_REPLICA_V2));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_UPSERT_TRANSACTION_STATE_BATCH));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_UPSERT_TRANSACTION_STATE_V2));
+        Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_WAREHOUSE_INTERNAL_OP));
     }
 }
