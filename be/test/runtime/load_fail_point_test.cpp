@@ -25,6 +25,8 @@ TEST(LoadFailPointTest, tablet_writer_open) {
     request.mutable_id()->set_lo(482323);
     request.set_txn_id(123456);
     request.set_sender_id(1);
+    auto tablet = request.add_tablets();
+    tablet->set_tablet_id(1);
     tablet_writer_open_fp_action(&closure, &request);
     ASSERT_TRUE(closure.cntl.Failed());
     ASSERT_EQ(closure.cntl.ErrorText(), "load_tablet_writer_open failpoint triggered failure, be: , txn_id: 123456");
