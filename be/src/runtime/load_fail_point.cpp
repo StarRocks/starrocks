@@ -75,9 +75,7 @@ void tablet_writer_add_segment_fp_action(ReusableClosure<PTabletWriterAddSegment
 void tablet_writer_cancel_fp_action(::google::protobuf::Closure* closure, brpc::Controller* cntl,
                                     PTabletWriterCancelRequest* request) {
     std::string tablet_ids;
-    if (request->has_tablet_id()) {
-        tablet_ids = std::to_string(request->tablet_id());
-    } else if (!request->tablet_ids().empty()) {
+    if (!request->tablet_ids().empty()) {
         tablet_ids = JoinElements(request->tablet_ids(), ",");
     }
     LOG_BRPC_FP(load_tablet_writer_cancel, *cntl, request) << ", send_id: " << request->sender_id() << ", tablet_ids: ("
