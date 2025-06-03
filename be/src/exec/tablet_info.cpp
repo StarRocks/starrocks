@@ -559,6 +559,7 @@ Status OlapTablePartitionParam::remove_partitions(const std::vector<int64_t>& pa
 
         _partitions.erase(it);
     }
+    LOG_IF(INFO, _partitions.empty()) << "Empty partitions for db:" << db_id() << ", table_id:" << table_id();
 
     return Status::OK();
 }
@@ -706,6 +707,13 @@ Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTable
         auto& part_ids = _partitions_map.begin()->second;
         for (size_t i = 0; i < num_rows; ++i) {
             if ((*selection)[i]) {
+                if (_partitions.empty()) {
+                    // Don't know the reason yet, just defensive coding not crashing the process and possibly for further investigation
+                    LOG(WARNING) << "empty partition for selection[i=" << i << "]=" << (*selection)[i]
+                                 << ", db=" << db_id() << ", table_id=" << table_id();
+                    return Status::InternalError(
+                            fmt::format("empty partitions for db={}, table={}", db_id(), table_id()));
+                }
                 (*partitions)[i] = _partitions[part_ids[(*hashes)[i] % _partitions.size()]];
             }
         }
