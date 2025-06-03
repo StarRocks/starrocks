@@ -14,13 +14,26 @@
 
 package com.starrocks.service;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.gson.Gson;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.qe.scheduler.slot.BaseSlotTracker;
+import com.starrocks.qe.scheduler.slot.LogicalSlot;
+import com.starrocks.qe.scheduler.slot.SlotManager;
+import com.starrocks.qe.scheduler.slot.SlotSelectionStrategyV2;
+import com.starrocks.qe.scheduler.slot.SlotTracker;
 import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TApplicableRolesInfo;
 import com.starrocks.thrift.TAuthInfo;
@@ -57,6 +70,7 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -507,5 +521,191 @@ public class InformationSchemaDataSourceTest {
                 .explainContains(" OUTPUT EXPRS:1: WAREHOUSE_ID | 2: WAREHOUSE_NAME | 3: QUERY_ID | 4: STATE " +
                         "| 5: EST_COSTS_SLOTS | 6: ALLOCATE_SLOTS | 7: QUEUED_WAIT_SECONDS " +
                         "| 8: QUERY | 9: QUERY_START_TIME | 10: QUERY_END_TIME | 11: QUERY_DURATION | 12: EXTRA_MESSAGE\n");
+    }
+
+    @Test
+    public void testMaterializedViewsEvaluation() throws Exception {
+        starRocksAssert.withDatabase("d1").useDatabase("d1");
+        starRocksAssert.withTable("create table t1 (c1 int, c2 int) properties('replication_num'='1') ");
+        starRocksAssert.withMaterializedView("create materialized view test_mv1 refresh manual as select * from t1");
+
+        MaterializedView mv = starRocksAssert.getMv("d1", "test_mv1");
+        Assert.assertTrue(mv != null);
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        String taskName = TaskBuilder.getMvTaskName(mv.getId());
+        Task task = taskManager.getTask(taskName);
+        Assert.assertTrue(task != null);
+
+        TaskRunStatus taskRun = new TaskRunStatus();
+        taskRun.setTaskName(taskName);
+        taskRun.setState(Constants.TaskRunState.SUCCESS);
+        taskRun.setDbName("d1");
+        taskRun.setCreateTime(DateUtils.parseDatTimeString("2024-01-02 03:04:05")
+                .toEpochSecond(offset(ZoneId.systemDefault())) * 1000);
+        taskRun.setFinishTime(DateUtils.parseDatTimeString("2024-01-02 03:04:05")
+                .toEpochSecond(offset(ZoneId.systemDefault())) * 1000);
+        taskRun.setExpireTime(DateUtils.parseDatTimeString("2024-01-02 03:04:05")
+                .toEpochSecond(offset(ZoneId.systemDefault())) * 1000);
+        new MockUp<TaskManager>() {
+            @Mock
+            public Map<String, List<TaskRunStatus>> listMVRefreshedTaskRunStatus(String dbName, Set<String> taskNames) {
+                Map<String, List<TaskRunStatus>> result = Maps.newHashMap();
+                result.put(taskName, Lists.newArrayList(taskRun));
+                return result;
+            }
+        };
+        // supported
+        starRocksAssert.query("select TABLE_NAME, LAST_REFRESH_STATE,LAST_REFRESH_ERROR_CODE,IS_ACTIVE,INACTIVE_REASON\n" +
+                        "from information_schema.materialized_views where table_name = 'test_mv1")
+                .explainContains(" OUTPUT EXPRS:3: TABLE_NAME | 13: LAST_REFRESH_STATE " +
+                                "| 19: LAST_REFRESH_ERROR_CODE | 5: IS_ACTIVE | 6: INACTIVE_REASON",
+                        "constant exprs: ",
+                        "'test_mv1' | 'true' | '' | 'SUCCESS' | '0'");
+        starRocksAssert.query("select count(1) from information_schema.materialized_views")
+                .explainContains("     constant exprs: ");
+        starRocksAssert.query("select * from information_schema.materialized_views")
+                .explainContains("     constant exprs: ",
+                        "'d1' | 'test_mv1' | 'MANUAL' | 'true' | '' | 'UNPARTITIONED' | '0'");
+        starRocksAssert.query("select * from information_schema.materialized_views where table_name = 'test_mv1' ")
+                .explainContains("     constant exprs: ",
+                        "'d1' | 'test_mv1' | 'MANUAL' | 'true' | '' | 'UNPARTITIONED' | '0'");
+        starRocksAssert.query("select * from information_schema.materialized_views " +
+                        "where TABLE_SCHEMA = 'd1' and TABLE_NAME = 'test_mv1'")
+                .explainContains("     constant exprs: ",
+                        "'d1' | 'test_mv1' | 'MANUAL' | 'true' | '' | 'UNPARTITIONED' | '0'");
+        starRocksAssert.query("select *, TASK_ID + 1 from information_schema.materialized_views " +
+                        "where TABLE_SCHEMA = 'd1' and TABLE_NAME = 'test_mv1'")
+                .explainContains("     constant exprs: ",
+                        "'d1' | 'test_mv1' | 'MANUAL' | 'true' | '' | 'UNPARTITIONED' | '0'");
+
+        // not supported
+        starRocksAssert.query("select * from information_schema.materialized_views where TABLE_NAME != 'test_mv1' ")
+                .explainContains("SCAN SCHEMA");
+        starRocksAssert.query("select * from information_schema.materialized_views where TABLE_SCHEMA = 'd1' or " +
+                        "TABLE_NAME = 'test_mv1' ")
+                .explainContains("SCAN SCHEMA");
+        starRocksAssert.query("select * from information_schema.materialized_views where TABLE_NAME = 'test_mv1' " +
+                        "or TABLE_NAME = 'test_mv2' ")
+                .explainContains("SCAN SCHEMA");
+        starRocksAssert.query("select * from information_schema.materialized_views where TASK_NAME = 'txxx' ")
+                .explainContains("SCAN SCHEMA");
+    }
+
+    @Test
+    public void testWarehouseMetricsEvaluation() throws Exception {
+        starRocksAssert.withDatabase("d1").useDatabase("d1");
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
+
+        new MockUp<SlotManager>() {
+            @Mock
+            public Map<Long, BaseSlotTracker> getWarehouseIdToSlotTracker() {
+                Map<Long, BaseSlotTracker> result = Maps.newHashMap();
+                result.put(WarehouseManager.DEFAULT_WAREHOUSE_ID, slotTracker);
+                return result;
+            }
+        };
+        // supported
+        starRocksAssert.query("select count(1) from information_schema.warehouse_metrics")
+                .explainContains("     constant exprs: \n" +
+                        "         '0'");
+        starRocksAssert.query("select * from information_schema.warehouse_metrics")
+                .explainContains("     constant exprs: \n" +
+                        "         '0'");
+        starRocksAssert.query("select WAREHOUSE_NAME, REMAIN_SLOTS from information_schema.warehouse_metrics")
+                .explainContains("constant exprs: \n" +
+                        "         'default_warehouse' | '0'");
+        starRocksAssert.query("select count(1) from information_schema.warehouse_metrics where warehouse_id = '0'")
+                .explainContains("     constant exprs: \n" +
+                        "         '0'");
+        starRocksAssert.query("select * from information_schema.warehouse_metrics where WAREHOUSE_ID = '0'")
+                .explainContains("     constant exprs: \n" +
+                        "         '0'");
+        starRocksAssert.query("select WAREHOUSE_NAME, REMAIN_SLOTS from information_schema.warehouse_metrics " +
+                        "where WAREHOUSE_ID = 0")
+                .explainContains("constant exprs: \n" +
+                        "         'default_warehouse' | '0'");
+        starRocksAssert.query("select count(1) from information_schema.warehouse_metrics where WAREHOUSE_NAME = " +
+                        "'default_warehouse'")
+                .explainContains("     constant exprs: \n" +
+                        "         '0'");
+        starRocksAssert.query("select * from information_schema.warehouse_metrics where WAREHOUSE_NAME= 'default_warehouse'")
+                .explainContains("     constant exprs: \n" +
+                        "         '0'");
+        starRocksAssert.query("select WAREHOUSE_NAME, REMAIN_SLOTS from information_schema.warehouse_metrics " +
+                        "where WAREHOUSE_NAME = 'default_warehouse'")
+                .explainContains("constant exprs: \n" +
+                        "         'default_warehouse' | '0'");
+
+        // not supported
+        starRocksAssert.query("select count(1) from information_schema.warehouse_metrics where WAREHOUSE_ID != '0'")
+                .explainContains("SCAN SCHEMA");
+        starRocksAssert.query("select * from information_schema.warehouse_metrics where WAREHOUSE_ID = 0 and " +
+                        "WAREHOUSE_NAME = 'default_warehouse'")
+                .explainContains("SCAN SCHEMA");
+        starRocksAssert.query("select * from information_schema.warehouse_metrics where WAREHOUSE_ID = 0 or " +
+                        "WAREHOUSE_NAME = 'default_warehouse'")
+                .explainContains("SCAN SCHEMA");
+    }
+
+    private static LogicalSlot generateSlot(int numSlots) {
+        return new LogicalSlot(UUIDUtil.genTUniqueId(), "fe", WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                LogicalSlot.ABSENT_GROUP_ID, numSlots, 0, 0, 0,
+                0, 0);
+    }
+
+    @Test
+    public void testWarehouseQueriesEvaluation() throws Exception {
+        starRocksAssert.withDatabase("d1").useDatabase("d1");
+        LogicalSlot slot1 = generateSlot(1);
+        new MockUp<SlotManager>() {
+            @Mock
+            public List<LogicalSlot> getSlots() {
+                List<LogicalSlot> result = Lists.newArrayList();
+                result.add(slot1);
+                return result;
+            }
+        };
+        // supported
+        starRocksAssert.query("select count(1) from information_schema.warehouse_queries")
+                .explainContains("     constant exprs: \n" +
+                        "         '0'");
+        starRocksAssert.query("select * from information_schema.warehouse_queries")
+                .explainContains("     constant exprs: \n" +
+                        "         '0'");
+        starRocksAssert.query("select WAREHOUSE_NAME, EST_COSTS_SLOTS from information_schema.warehouse_queries")
+                .explainContains("     constant exprs: \n" +
+                        "         'default_warehouse' | '1'");
+        starRocksAssert.query("select count(1) from information_schema.warehouse_queries where warehouse_id = '0'")
+                .explainContains("     constant exprs: \n" +
+                        "         '0'");
+        starRocksAssert.query("select * from information_schema.warehouse_queries where WAREHOUSE_ID = '0'")
+                .explainContains("     constant exprs: \n" +
+                        "         '0'");
+        starRocksAssert.query("select WAREHOUSE_NAME, EST_COSTS_SLOTS from information_schema.warehouse_queries " +
+                        "where WAREHOUSE_ID = 0")
+                .explainContains("     constant exprs: \n" +
+                        "         'default_warehouse' | '1'");
+        starRocksAssert.query("select count(1) from information_schema.warehouse_queries where WAREHOUSE_NAME = " +
+                        "'default_warehouse'")
+                .explainContains("     constant exprs: \n" +
+                        "         '0'");
+        starRocksAssert.query("select * from information_schema.warehouse_queries where WAREHOUSE_NAME= 'default_warehouse'")
+                .explainContains("     constant exprs: \n" +
+                        "         '0'");
+        starRocksAssert.query("select WAREHOUSE_NAME, EST_COSTS_SLOTS from information_schema.warehouse_queries " +
+                        "where WAREHOUSE_NAME = 'default_warehouse'")
+                .explainContains("     constant exprs: \n" +
+                        "         'default_warehouse' | '1'");
+
+        // not supported
+        starRocksAssert.query("select count(1) from information_schema.warehouse_queries where WAREHOUSE_ID != '0'")
+                .explainContains("SCAN SCHEMA");
+        starRocksAssert.query("select * from information_schema.warehouse_queries where WAREHOUSE_ID = 0 and " +
+                        "WAREHOUSE_NAME = 'default_warehouse'")
+                .explainContains("SCAN SCHEMA");
+        starRocksAssert.query("select * from information_schema.warehouse_queries where WAREHOUSE_ID = 0 or " +
+                        "WAREHOUSE_NAME = 'default_warehouse'")
+                .explainContains("SCAN SCHEMA");
     }
 }

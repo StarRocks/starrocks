@@ -311,7 +311,10 @@ public abstract class BaseSlotTracker {
     }
 
     public double getEarliestQueryWaitTimeSecond() {
-        return slots.values().stream().map(LogicalSlot::getStartTimeMs).min(Long::compareTo)
+        return slots.values().stream()
+                .filter(slot -> slot.getState() == LogicalSlot.State.REQUIRING) // only consider requiring slots
+                .map(LogicalSlot::getStartTimeMs)
+                .min(Long::compareTo)
                 .map(t -> (System.currentTimeMillis() - t) / 1000.0).orElse(0.0);
     }
 
