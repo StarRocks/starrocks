@@ -59,7 +59,7 @@ FE がメタデータチェックポイントを完了した後に新しいメ�
 
 メタデータスナップショットは `/{storage_volume_locations}/{service_id}/meta/image/automated_cluster_snapshot_timestamp` に保存されます。データスナップショットは元のデータと同じ場所に保存されます。
 
-FE の設定項目 `automated_cluster_snapshot_interval_seconds` はスナップショットの自動化サイクルを制御します。デフォルト値は 1800 秒（30 分）です。
+FE の設定項目 `automated_cluster_snapshot_interval_seconds` はスナップショットの自動化サイクルを制御します。デフォルト値は 600 秒（10 分）です。
 
 ### 自動クラスタースナップショットを無効にする
 

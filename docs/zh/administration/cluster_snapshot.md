@@ -59,7 +59,7 @@ ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON
 
 元数据快照存储在 `/{storage_volume_locations}/{service_id}/meta/image/automated_cluster_snapshot_timestamp` 下。数据快照存储在与原始数据相同的位置。
 
-FE 配置项 `automated_cluster_snapshot_interval_seconds` 控制快照自动化周期。默认值为 1800 秒（30 分钟）。
+FE 配置项 `automated_cluster_snapshot_interval_seconds` 控制快照自动化周期。默认值为 600 秒（10 分钟）。
 
 ### 禁用自动化集群快照
 

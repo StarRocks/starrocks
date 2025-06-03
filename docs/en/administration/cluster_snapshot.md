@@ -59,7 +59,7 @@ Each time FE creates a new metadata image after completing a metadata checkpoint
 
 Metadata snapshots are stored under `/{storage_volume_locations}/{service_id}/meta/image/automated_cluster_snapshot_timestamp`. Data snapshots are stored in the same location as the original data.
 
-FE configuration item `automated_cluster_snapshot_interval_seconds` controls the snapshot automation cycle. The default value is 1800 seconds (30 minutes).
+FE configuration item `automated_cluster_snapshot_interval_seconds` controls the snapshot automation cycle. The default value is 600 seconds (10 minutes).
 
 ### Disable Automated Cluster Snapshot
 
