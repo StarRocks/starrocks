@@ -135,7 +135,7 @@ private:
 
     // Create a new client for specific host/port in 'client' and put it in _client_map
     Status _create_client(const TNetworkAddress& hostport, const client_factory& factory_method, void** client_key);
-    void _remove_client(void* client_key, ThriftClientImpl* client);
+    void _evict_client(void* client_key, ThriftClientImpl* client);
 };
 
 template <class T>

@@ -78,7 +78,7 @@ Status ClientCacheHelper::get_client(const TNetworkAddress& hostport, const clie
             info_list.pop_front();
             ThriftClientImpl* client = _client_map[key];
             if (!client->is_active()) {
-                _remove_client(key, client);
+                _evict_client(key, client);
             } else {
                 *client_key = key;
                 break;
@@ -111,7 +111,7 @@ Status ClientCacheHelper::reopen_client(const client_factory& factory_method, vo
         DCHECK(i != _client_map.end());
         ThriftClientImpl* info = i->second;
         addr = make_network_address(info->ipaddress(), info->port());
-        _remove_client(*client_key, info);
+        _evict_client(*client_key, info);
     }
 
     *client_key = nullptr;
@@ -173,7 +173,7 @@ void ClientCacheHelper::release_client(void** client_key) {
 
     if (_max_cache_size_per_host >= 0 && iter->second.size() >= _max_cache_size_per_host) {
         // cache of this host is full, close this client connection and remove if from _client_map
-        _remove_client(*client_key, info);
+        _evict_client(*client_key, info);
     } else {
         iter->second.push_back(*client_key);
     }
@@ -197,7 +197,7 @@ void ClientCacheHelper::close_connections(const TNetworkAddress& hostport) {
         auto client_map_entry = _client_map.find(client_key);
         DCHECK(client_map_entry != _client_map.end());
         ThriftClientImpl* info = client_map_entry->second;
-        _remove_client(client_key, info);
+        _evict_client(client_key, info);
     }
     _client_cache.erase(cache_entry);
 }
@@ -232,7 +232,7 @@ void ClientCacheHelper::init_metrics(MetricRegistry* metrics, const std::string&
     _metrics_enabled = true;
 }
 
-void ClientCacheHelper::_remove_client(void* client_key, ThriftClientImpl* client) {
+void ClientCacheHelper::_evict_client(void* client_key, ThriftClientImpl* client) {
     client->close();
     _client_map.erase(client_key);
     delete client;
