@@ -1206,6 +1206,19 @@ void Aggregator::_destroy_state(AggDataPtr __restrict state) {
     }
 }
 
+const std::vector<SlotId>& Aggregator::output_group_by_slot_ids() const {
+    if (!_opt_partition_by_slot_ids.has_value()) {
+        std::vector<SlotId> slot_ids;
+        const auto num_group_by_columns = _group_by_expr_ctxs.size();
+        slot_ids.resize(num_group_by_columns);
+        auto slots_begin = _output_tuple_desc->slots().begin();
+        std::transform(slots_begin, slots_begin + num_group_by_columns, slot_ids.begin(),
+                       [](auto slot) { return slot->id(); });
+        _opt_partition_by_slot_ids = std::move(slot_ids);
+    }
+    return _opt_partition_by_slot_ids.value();
+}
+
 ChunkPtr Aggregator::_build_output_chunk(const Columns& group_by_columns, const Columns& agg_result_columns,
                                          bool use_intermediate_as_output) {
     ChunkPtr result_chunk = std::make_shared<Chunk>();

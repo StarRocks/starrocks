@@ -207,6 +207,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // spill mode: auto, force
     public static final String SPILL_MODE = "spill_mode";
     public static final String ENABLE_AGG_SPILL_PREAGGREGATION = "enable_agg_spill_preaggregation";
+
+    public static final String SPILL_PARTITIONWISE_AGG = "spill_partitionwise_agg";
+    public static final String SPILL_PARTITIONWISE_AGG_SKEW_ELIMINATION = "spill_partitionwise_agg_skew_elimination";
     public static final String ENABLE_SPILL_BUFFER_READ = "enable_spill_buffer_read";
     public static final String MAX_SPILL_READ_BUFFER_BYTES_PER_DRIVER = "max_spill_read_buffer_bytes_per_driver";
     public static final String SPILL_HASH_JOIN_PROBE_OP_MAX_BYTES = "spill_hash_join_probe_op_max_bytes";
@@ -1348,6 +1351,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_AGG_SPILL_PREAGGREGATION, flag = VariableMgr.INVISIBLE)
     public boolean enableAggSpillPreaggregation = true;
+
+    @VarAttr(name = SPILL_PARTITIONWISE_AGG)
+    public boolean spillPartitionWiseAgg = false;
+
+    @VarAttr(name = SPILL_PARTITIONWISE_AGG_SKEW_ELIMINATION, flag = VariableMgr.INVISIBLE)
+    public boolean spillPartitionWiseAggSkewElimination = true;
 
     @VarAttr(name = ENABLE_SPILL_BUFFER_READ, flag = VariableMgr.INVISIBLE)
     public boolean enableSpillBufferRead = true;
@@ -3359,6 +3368,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.spillEncodeLevel;
     }
 
+    public void setSpillPartitionWiseAgg(boolean value) {
+        this.spillPartitionWiseAgg = value;
+    }
+
+    public boolean getSpillPartitionWiseAgg() {
+        return this.spillPartitionWiseAgg;
+    }
+
+    public void setSpillPartitionWiseAggSkewElimination(boolean value) {
+        this.spillPartitionWiseAggSkewElimination = value;
+    }
+
+    public boolean getSpillPartitionWiseAggSkewElimination() {
+        return this.spillPartitionWiseAggSkewElimination;
+    }
+
     public boolean getForwardToLeader() {
         return forwardToLeader;
     }
@@ -5085,6 +5110,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             spillOptions.setSpill_encode_level(spillEncodeLevel);
             spillOptions.setSpillable_operator_mask(spillableOperatorMask);
             spillOptions.setEnable_agg_spill_preaggregation(enableAggSpillPreaggregation);
+            spillOptions.setSpill_partitionwise_agg(spillPartitionWiseAgg);
+            spillOptions.setSpill_partitionwise_agg_skew_elimination(spillPartitionWiseAggSkewElimination);
             spillOptions.setSpill_enable_direct_io(spillEnableDirectIO);
             spillOptions.setSpill_rand_ratio(spillRandRatio);
             spillOptions.setSpill_enable_compaction(spillEnableCompaction);
