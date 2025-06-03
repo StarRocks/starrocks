@@ -18,6 +18,7 @@
 #include "agent/master_info.h"
 #include "agent/task_signatures_manager.h"
 #include "common/config.h"
+#include "gen_cpp/FrontendService.h"
 #include "runtime/client_cache.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
