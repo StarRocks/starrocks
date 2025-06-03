@@ -235,7 +235,7 @@ public class HudiMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void dropTable(DropTableStmt stmt) throws DdlException {
+    public void dropTable(ConnectContext context, DropTableStmt stmt) throws DdlException {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
         if (isResourceMappingCatalog(catalogName)) {

@@ -28,7 +28,7 @@ public class OAuth2SecurityProperties {
         requireNonNull(securityConfig, "securityConfig is null");
 
         ImmutableMap.Builder<String, String> propertiesBuilder = ImmutableMap.builder();
-        if (securityConfig.getSecurity() == SecurityEnum.OAUTH2) {
+        if (securityConfig.getSecurity() == IcebergRESTCatalog.Security.OAUTH2) {
             securityConfig.getCredential().ifPresent(
                     credential -> {
                         propertiesBuilder.put(OAuth2Properties.CREDENTIAL, credential);
@@ -39,6 +39,13 @@ public class OAuth2SecurityProperties {
                     value -> propertiesBuilder.put(OAuth2Properties.TOKEN, value));
             securityConfig.getServerUri().ifPresent(
                     value -> propertiesBuilder.put(OAuth2Properties.OAUTH2_SERVER_URI, value.toString()));
+            securityConfig.getAudience().ifPresent(
+                    value -> propertiesBuilder.put(OAuth2Properties.AUDIENCE, value));
+            securityConfig.isTokenRefreshEnabled().ifPresent(
+                    value -> propertiesBuilder.put(OAuth2Properties.TOKEN_REFRESH_ENABLED, Boolean.toString(value)));
+        } else if (securityConfig.getSecurity() == IcebergRESTCatalog.Security.JWT) {
+            // for JWT disable the token-refresh
+            propertiesBuilder.put(OAuth2Properties.TOKEN_REFRESH_ENABLED, "false");
         }
 
         this.securityProperties = propertiesBuilder.buildOrThrow();

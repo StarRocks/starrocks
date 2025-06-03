@@ -371,7 +371,16 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         } // end for dbs
     }
 
+    public void createDb(String dbName) throws DdlException, AlreadyExistsException {
+        createDb(dbName, new HashMap<>());
+    }
+
     @Override
+    public void createDb(ConnectContext context, String dbName, Map<String, String> properties)
+            throws DdlException, AlreadyExistsException {
+        createDb(dbName, properties);
+    }
+
     public void createDb(String dbName, Map<String, String> properties) throws DdlException, AlreadyExistsException {
         long id = 0L;
         if (!tryLock(false)) {
@@ -765,6 +774,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
+    @Override
+    public boolean createTable(ConnectContext context, CreateTableStmt stmt) throws DdlException {
+        return createTable(stmt);
+    }
+
     /**
      * Following is the step to create an olap table:
      * 1. create columns
@@ -784,7 +798,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
      *
      * @return whether the table is created
      */
-    @Override
     public boolean createTable(CreateTableStmt stmt) throws DdlException {
         // check if db exists
         Database db = getDb(stmt.getDbName());
@@ -2276,6 +2289,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         return chosenBackendIds;
     }
 
+    @Override
+    public void dropTable(ConnectContext context, DropTableStmt stmt) throws DdlException {
+        dropTable(stmt);
+    }
+
     // Drop table
     public void dropTable(DropTableStmt stmt) throws DdlException {
         String dbName = stmt.getDbName();
@@ -2821,7 +2839,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
      * used for handling AlterViewStmt (the ALTER VIEW command).
      */
     @Override
-    public void alterView(AlterViewStmt stmt) throws StarRocksException {
+    public void alterView(ConnectContext context, AlterViewStmt stmt) throws StarRocksException {
         new AlterJobExecutorEPack().process(stmt, ConnectContext.get());
     }
 
@@ -4321,6 +4339,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     }
 
     @Override
+    public void createView(ConnectContext context, CreateViewStmt stmt) throws DdlException {
+        createView(stmt);
+    }
+
     public void createView(CreateViewStmt stmt) throws DdlException {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTable();

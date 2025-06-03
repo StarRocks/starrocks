@@ -117,7 +117,7 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void createDb(String dbName, Map<String, String> properties) throws AlreadyExistsException {
+    public void createDb(ConnectContext context, String dbName, Map<String, String> properties) throws AlreadyExistsException {
         if (dbExists(new ConnectContext(), dbName)) {
             throw new AlreadyExistsException("Database Already Exists");
         }
@@ -152,7 +152,7 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public boolean createTable(CreateTableStmt stmt) throws DdlException {
+    public boolean createTable(ConnectContext context, CreateTableStmt stmt) throws DdlException {
         return hmsOps.createTable(stmt);
     }
 
@@ -162,7 +162,7 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void dropTable(DropTableStmt stmt) throws DdlException {
+    public void dropTable(ConnectContext context, DropTableStmt stmt) throws DdlException {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
         if (isResourceMappingCatalog(catalogName)) {
