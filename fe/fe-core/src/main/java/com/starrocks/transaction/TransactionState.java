@@ -616,6 +616,13 @@ public class TransactionState implements Writable, GsonPreProcessable {
             txnSpan.end();
         } else if (transactionStatus == TransactionStatus.COMMITTED) {
             txnSpan.addEvent("set_committed");
+            // if this txn is triggered by compaction, and also enable `useCombinedTxnLog`.
+            // That means this txn is downgrade from high version and we should disable
+            // `useCombinedTxnLog`, because we don't support compaction aggregate
+            // in current version.
+            if (sourceType == LoadJobSourceType.LAKE_COMPACTION && useCombinedTxnLog) {
+                useCombinedTxnLog = false;
+            }
         }
     }
 
