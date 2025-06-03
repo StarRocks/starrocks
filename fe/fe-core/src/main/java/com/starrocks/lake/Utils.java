@@ -103,16 +103,10 @@ public class Utils {
     }
 
     public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
-<<<<<<< HEAD
-                                      long newVersion, ComputeResource computeResource, boolean enablePartitionAggregation)
+                                      long newVersion, ComputeResource computeResource, boolean useAggregatePublish)
             throws NoAliveBackendException, RpcException {
         publishVersion(tablets, txnInfo, baseVersion, newVersion, null, computeResource,
-                null, enablePartitionAggregation);
-=======
-                                      long newVersion, long warehouseId, boolean useAggregatePublish)
-            throws NoAliveBackendException, RpcException {
-        publishVersion(tablets, txnInfo, baseVersion, newVersion, null, warehouseId, null, useAggregatePublish);
->>>>>>> ff9beeee76 (rename property  to)
+                null, useAggregatePublish);
     }
 
     public static void publishVersionBatch(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
