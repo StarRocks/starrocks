@@ -97,7 +97,7 @@ struct StackTraceTaskHash {
 void get_stack_trace_sighandler(int signum, siginfo_t* siginfo, void* ucontext) {
     auto task = reinterpret_cast<StackTraceTask*>(siginfo->si_value.sival_ptr);
     task->depth = google::glog_internal_namespace_::GetStackTrace(task->addrs, StackTraceTask::kMaxStackDepth, 2);
-    task.id = std::this_thread::get_id();
+    task->id = std::this_thread::get_id();
     task->done = true;
 }
 
