@@ -72,6 +72,7 @@ import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -742,9 +743,10 @@ public class OlapTableFactory implements AbstractTableFactory {
             // if failed in any step, use this set to do clear things
             Set<Long> tabletIdSet = new HashSet<Long>();
 
-            long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+            ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
             if (ConnectContext.get() != null) {
-                warehouseId = ConnectContext.get().getCurrentWarehouseId();
+                ConnectContext connectContext = ConnectContext.get();
+                computeResource = connectContext.getCurrentComputeResource();
             }
 
             // do not create partition for external table
@@ -758,9 +760,9 @@ public class OlapTableFactory implements AbstractTableFactory {
                     // this is a 1-level partitioned table, use table name as partition name
                     long partitionId = partitionNameToId.get(tableName);
                     Partition partition = metastore.createPartition(db, table, partitionId, tableName, version, tabletIdSet,
-                            warehouseId);
+                            computeResource);
                     metastore.buildPartitions(db, table, partition.getSubPartitions().stream().collect(Collectors.toList()),
-                            warehouseId);
+                            computeResource);
                     table.addPartition(partition);
                 } else if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
                     try {
@@ -796,12 +798,12 @@ public class OlapTableFactory implements AbstractTableFactory {
                     List<Partition> partitions = new ArrayList<>(partitionNameToId.size());
                     for (Map.Entry<String, Long> entry : partitionNameToId.entrySet()) {
                         Partition partition = metastore.createPartition(db, table, entry.getValue(), entry.getKey(), version,
-                                tabletIdSet, warehouseId);
+                                tabletIdSet, computeResource);
                         partitions.add(partition);
                     }
                     // It's ok if partitions is empty.
                     metastore.buildPartitions(db, table, partitions.stream().map(Partition::getSubPartitions)
-                            .flatMap(p -> p.stream()).collect(Collectors.toList()), warehouseId);
+                            .flatMap(p -> p.stream()).collect(Collectors.toList()), computeResource);
                     for (Partition partition : partitions) {
                         table.addPartition(partition);
                     }

@@ -99,7 +99,7 @@ class StreamLoader {
         List<Long> nodeIds = new ArrayList<>();
         if (RunMode.isSharedDataMode()) {
             List<Long> computeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                    .getAllComputeNodeIds(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+                    .getAllComputeNodeIds(WarehouseManager.DEFAULT_RESOURCE);
             for (long nodeId : computeIds) {
                 ComputeNode node =
                         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);

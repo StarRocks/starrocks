@@ -66,6 +66,7 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.PublishVersionTask;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -478,8 +479,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
         // version -> shadowTablets
-        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
         boolean enablePartitionAggregation = Config.enable_partition_aggregation;
+        ComputeResource computeResource =  WarehouseManager.DEFAULT_RESOURCE;
         try {
             OlapTable table =
                     (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
@@ -502,7 +503,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             enablePartitionAggregation = table.enablePartitionAggregation();
             for (int i = 0; i < transactionStates.size(); i++) {
                 TransactionState txnState = transactionStates.get(i);
-                warehouseId = txnState.getWarehouseId();
+                computeResource = txnState.getComputeResource();
                 List<MaterializedIndex> indexes = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
                 for (MaterializedIndex index : indexes) {
                     if (!index.visibleForTransaction(txnState.getTransactionId())) {
@@ -537,7 +538,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 Utils.publishLogVersionBatch(publishShadowTablets,
                         txnInfos.subList(index, txnInfos.size()),
                         versions.subList(index, versions.size()),
-                        warehouseId);
+                        computeResource);
             }
             if (CollectionUtils.isNotEmpty(normalTablets)) {
                 Map<Long, Double> compactionScores = new HashMap<>();
@@ -549,10 +550,10 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 if (!enablePartitionAggregation) {
                     Utils.publishVersionBatch(publishTablets, txnInfos,
                             startVersion - 1, endVersion, compactionScores, nodeToTablets,
-                            warehouseId, null);
+                            computeResource, null);
                 } else {
                     Utils.aggregatePublishVersion(publishTablets, txnInfos, startVersion - 1, endVersion, 
-                            compactionScores, nodeToTablets, warehouseId, null);
+                            compactionScores, nodeToTablets, computeResource, null);
                 }
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
@@ -774,7 +775,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         long txnId = txnState.getTransactionId();
         long commitTime = txnState.getCommitTime();
         String txnLabel = txnState.getLabel();
-        long warehouseId = txnState.getWarehouseId();
+        ComputeResource computeResource = txnState.getComputeResource();
         List<Tablet> normalTablets = null;
         List<Tablet> shadowTablets = null;
 
@@ -822,14 +823,14 @@ public class PublishVersionDaemon extends FrontendDaemon {
         TxnInfoPB txnInfo = TxnInfoHelper.fromTransactionState(txnState);
         try {
             if (CollectionUtils.isNotEmpty(shadowTablets)) {
-                Utils.publishLogVersion(shadowTablets, txnInfo, txnVersion, warehouseId);
+                Utils.publishLogVersion(shadowTablets, txnInfo, txnVersion, computeResource);
             }
             if (CollectionUtils.isNotEmpty(normalTablets)) {
                 Map<Long, Double> compactionScores = new HashMap<>();
                 // Used to collect statistics when the partition is first imported
                 Map<Long, Long> tabletRowNums = new HashMap<>();
                 Utils.publishVersion(normalTablets, txnInfo, baseVersion, txnVersion, compactionScores,
-                        warehouseId, tabletRowNums, enablePartitionAggregation);
+                        computeResource, tabletRowNums, enablePartitionAggregation);
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 partitionCommitInfo.setCompactionScore(quantiles);

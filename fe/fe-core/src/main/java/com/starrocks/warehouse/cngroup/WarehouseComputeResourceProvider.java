@@ -43,18 +43,18 @@ public final class WarehouseComputeResourceProvider implements ComputeResourcePr
     }
 
     @Override
-    public Optional<ComputeResource> acquireCNResource(Warehouse warehouse, CRAcquireContext acquireContext) {
+    public Optional<ComputeResource> acquireComputeResource(Warehouse warehouse, CRAcquireContext acquireContext) {
         final long warehouseId = acquireContext.getWarehouseId();
         if (warehouse == null) {
             throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
                     String.format("id: %d", warehouseId));
         }
-        WarehouseComputeResource cnResource = WarehouseComputeResource.of(warehouseId);
-        if (!isResourceAvailable(cnResource)) {
+        WarehouseComputeResource computeResource = WarehouseComputeResource.of(warehouseId);
+        if (!isResourceAvailable(computeResource)) {
             LOG.warn("failed to get alive compute nodes from warehouse {}", warehouse.getName());
             return Optional.empty();
         }
-        return Optional.of(cnResource);
+        return Optional.of(computeResource);
     }
 
     /**

@@ -199,7 +199,7 @@ public class BatchWriteMgr extends FrontendDaemon {
                 MergeCommitJob newLoad = new MergeCommitJob(
                         id, tableId, warehouseName, streamLoadInfo, batchWriteIntervalMs, batchWriteParallel,
                         params, coordinatorBackendAssigner, threadPoolExecutor, txnStateDispatcher);
-                coordinatorBackendAssigner.registerBatchWrite(id, newLoad.getWarehouseId(), tableId,
+                coordinatorBackendAssigner.registerBatchWrite(id, newLoad.getComputeResource(), tableId,
                         newLoad.getBatchWriteParallel());
                 return newLoad;
             });

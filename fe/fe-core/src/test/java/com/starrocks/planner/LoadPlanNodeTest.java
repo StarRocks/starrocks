@@ -16,9 +16,11 @@ package com.starrocks.planner;
 
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -78,14 +80,15 @@ public class LoadPlanNodeTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(1L);
+                GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(
+                        WarehouseComputeResource.of(1));
                 result = nodeIds;
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 result = service;
             }
         };
 
-        List<ComputeNode> nodes = LoadScanNode.getAvailableComputeNodes(1L);
+        List<ComputeNode> nodes = LoadScanNode.getAvailableComputeNodes(WarehouseComputeResource.of(1));
         assertNotNull(nodes);
         assertEquals(2, nodes.size());
         nodes.sort((o1, o2) -> (int) (o1.getId() - o2.getId()));
@@ -131,7 +134,7 @@ public class LoadPlanNodeTest {
             }
         };
 
-        List<ComputeNode> nodes = LoadScanNode.getAvailableComputeNodes(0L);
+        List<ComputeNode> nodes = LoadScanNode.getAvailableComputeNodes(WarehouseManager.DEFAULT_RESOURCE);
         assertNotNull(nodes);
         assertEquals(2, nodes.size());
         nodes.sort((o1, o2) -> (int) (o1.getId() - o2.getId()));

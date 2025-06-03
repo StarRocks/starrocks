@@ -67,6 +67,8 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.transaction.GtidGenerator;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -517,6 +519,13 @@ public class StarMgrMetaSyncerTest {
             @Mock
             public void deleteShards(Set<Long> shardIds) throws DdlException {
                 allShardIds.removeAll(shardIds);
+            }
+        };
+
+        new MockUp<WarehouseComputeResourceProvider>() {
+            @Mock
+            public boolean isResourceAvailable(ComputeResource computeResource) {
+                return true;
             }
         };
 

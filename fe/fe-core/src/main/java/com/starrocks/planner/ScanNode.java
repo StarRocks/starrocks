@@ -47,6 +47,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.optimizer.ScanOptimizeOption;
 import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.jetbrains.annotations.TestOnly;
 
 import java.util.ArrayList;
@@ -70,6 +71,9 @@ public abstract class ScanNode extends PlanNode {
     // The column names applied dict optimization
     // used for explain
     protected final List<String> appliedDictStringColumns = new ArrayList<>();
+    // NOTE: To avoid trigger a new compute resource creation, set the value when the scan node needs to use it.
+    // The compute resource used by this scan node.
+    protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     public ScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc.getId().asList(), planNodeName);
@@ -93,8 +97,8 @@ public abstract class ScanNode extends PlanNode {
         this.dataCacheOptions = dataCacheOptions;
     }
 
-    public void setWarehouseId(long warehouseId) {
-        this.warehouseId = warehouseId;
+    public void setComputeResource(ComputeResource computeResource) {
+        this.computeResource = computeResource;
     }
 
     public void setScanOptimizeOption(ScanOptimizeOption opt) {

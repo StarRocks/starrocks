@@ -121,7 +121,7 @@ public class StatisticUtils {
 
         WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         Warehouse warehouse = manager.getBackgroundWarehouse();
-        context.getSessionVariable().setWarehouseName(warehouse.getName());
+        context.setCurrentWarehouse(warehouse.getName());
 
         context.setStatisticsContext(true);
         context.setDatabase(StatsConstants.STATISTICS_DB_NAME);
