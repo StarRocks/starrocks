@@ -34,7 +34,7 @@ public interface ComputeResourceProvider {
      * @return: an available ComputeResource for the warehouse by the strategy, or Optional.empty() if no available worker group
      * @throws RuntimeException : if the warehouse is invalid or there is no available worker group
      */
-    Optional<ComputeResource> acquireCNResource(Warehouse warehouse, CRAcquireContext acquireContext);
+    Optional<ComputeResource> acquireComputeResource(Warehouse warehouse, CRAcquireContext acquireContext);
 
     /**
      * Check the resource is available or not; this method will not throw exception.

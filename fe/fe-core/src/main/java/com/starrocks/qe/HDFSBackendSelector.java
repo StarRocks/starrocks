@@ -184,13 +184,13 @@ public class HDFSBackendSelector implements BackendSelector {
         WorkerProvider candidateWorkerProvider = factory.captureAvailableWorkers(
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                 sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
-                sessionVariable.getComputationFragmentSchedulingPolicy(), workerProvider.getWarehouseId());
+                sessionVariable.getComputationFragmentSchedulingPolicy(), workerProvider.getComputeResource());
         return candidateWorkerProvider;
     }
 
     private boolean isCacheSharingExpired(long cacheSharingWorkPeriod) {
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        Warehouse warehouse = warehouseManager.getWarehouse(workerProvider.getWarehouseId());
+        Warehouse warehouse = warehouseManager.getWarehouse(workerProvider.getComputeResource().getWarehouseId());
         HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
 
         long lastUpdateTime = historicalNodeMgr.getLastUpdateTime(warehouse.getName());

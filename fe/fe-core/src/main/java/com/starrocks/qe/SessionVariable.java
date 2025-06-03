@@ -3129,6 +3129,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return warehouseName;
     }
 
+    // NOTE: It's not recommended to set warehouse name in session variable, use ConnectContext#setCurrentWarehouse to change.
     public void setWarehouseName(String warehouseName) {
         this.warehouseName = warehouseName;
     }

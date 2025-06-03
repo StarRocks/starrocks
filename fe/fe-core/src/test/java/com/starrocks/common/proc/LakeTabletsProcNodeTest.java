@@ -39,6 +39,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -83,10 +84,10 @@ public class LakeTabletsProcNodeTest {
                 GlobalStateMgr.getCurrentState().getWarehouseMgr();
                 result = agent;
 
-                agent.getAllComputeNodeIdsAssignToTablet(0L, (LakeTablet) tablet1);
+                agent.getAllComputeNodeIdsAssignToTablet((ComputeResource) any, (LakeTablet) tablet1);
                 result = Lists.newArrayList(10000, 10001);
 
-                agent.getAllComputeNodeIdsAssignToTablet(0L, (LakeTablet) tablet2);
+                agent.getAllComputeNodeIdsAssignToTablet((ComputeResource) any, (LakeTablet) tablet2);
                 result = Lists.newArrayList(10001, 10002);
             }
         };

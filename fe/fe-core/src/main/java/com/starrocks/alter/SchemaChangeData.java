@@ -20,6 +20,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -44,6 +45,7 @@ class SchemaChangeData {
     private final List<Integer> sortKeyIdxes;
     private final List<Integer> sortKeyUniqueIds;
     private final long warehouseId;
+    private final ComputeResource computeResource;
 
     static Builder newBuilder() {
         return new Builder();
@@ -106,8 +108,9 @@ class SchemaChangeData {
         return sortKeyUniqueIds;
     }
 
-    long getWarehouseId() {
-        return warehouseId;
+    @NotNull
+    public ComputeResource getComputeResource() {
+        return computeResource;
     }
 
     private SchemaChangeData(Builder builder) {
@@ -124,6 +127,7 @@ class SchemaChangeData {
         this.sortKeyIdxes = builder.sortKeyIdxes;
         this.sortKeyUniqueIds = builder.sortKeyUniqueIds;
         this.warehouseId = builder.warehouseId;
+        this.computeResource = builder.computeResource;
     }
 
     static class Builder {
@@ -140,6 +144,7 @@ class SchemaChangeData {
         private List<Integer> sortKeyIdxes;
         private List<Integer> sortKeyUniqueIds;
         private long warehouseId;
+        private ComputeResource computeResource;
 
         private Builder() {
         }
@@ -196,8 +201,9 @@ class SchemaChangeData {
             return this;
         }
 
-        Builder withWarehouse(long warehouseId) {
-            this.warehouseId = warehouseId;
+        Builder withComputeResource(ComputeResource computeResource) {
+            this.computeResource = computeResource;
+            this.warehouseId = computeResource.getWarehouseId();
             return this;
         }
 

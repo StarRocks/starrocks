@@ -22,6 +22,8 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.OriginStatement;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 
 import java.util.HashMap;
 import java.util.List;
@@ -43,8 +45,8 @@ public abstract class AlterJobV2Builder {
     protected Map<Long, List<Column>> newIndexSchema = new HashMap<>();
     protected Map<Long, Short> newIndexShortKeyCount = new HashMap<>();
     protected List<Integer> sortKeyIdxes;
-    protected long warehouseId;
     protected List<Integer> sortKeyUniqueIds;
+    protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     // -------- for roll up-----------------
     protected long baseIndexId;
@@ -180,8 +182,8 @@ public abstract class AlterJobV2Builder {
         return this;
     }
 
-    public AlterJobV2Builder withWarehouse(@Nullable long warehouseId) {
-        this.warehouseId = warehouseId;
+    public AlterJobV2Builder withComputeResource(@NotNull ComputeResource computeResource) {
+        this.computeResource = computeResource;
         return this;
     }
 

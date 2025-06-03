@@ -72,6 +72,7 @@ import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
@@ -239,7 +240,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         // because the file info can be changed anytime.
         convertCustomProperties(true);
 
-        ((KafkaProgress) progress).convertOffset(brokerList, topic, convertedCustomProperties, warehouseId);
+        ((KafkaProgress) progress).convertOffset(brokerList, topic, convertedCustomProperties, computeResource);
     }
 
     public synchronized void convertCustomProperties(boolean rebuild) throws DdlException {
@@ -296,7 +297,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                     KafkaTaskInfo kafkaTaskInfo = new KafkaTaskInfo(UUIDUtil.genUUID(), this,
                             taskSchedIntervalS * 1000,
                             timeToExecuteMs, taskKafkaProgress, taskTimeoutSecond * 1000);
-                    kafkaTaskInfo.setWarehouseId(warehouseId);
+                    kafkaTaskInfo.setComputeResource(computeResource);
                     routineLoadTaskInfoList.add(kafkaTaskInfo);
                     result.add(kafkaTaskInfo);
                 }
@@ -321,7 +322,8 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         int aliveNodeNum = systemInfoService.getAliveBackendNumber();
         if (RunMode.isSharedDataMode()) {
             aliveNodeNum = 0;
-            List<Long> computeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            final List<Long> computeIds = warehouseManager.getAllComputeNodeIds(computeResource);
             for (long nodeId : computeIds) {
                 ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
                 if (node != null && node.isAlive()) {
@@ -409,7 +411,8 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         KafkaTaskInfo kafkaTaskInfo = new KafkaTaskInfo(timeToExecuteMs, oldKafkaTaskInfo,
                 ((KafkaProgress) progress).getPartitionIdToOffset(oldKafkaTaskInfo.getPartitions()),
                 ((KafkaTaskInfo) routineLoadTaskInfo).getLatestOffset());
-        kafkaTaskInfo.setWarehouseId(routineLoadTaskInfo.getWarehouseId());
+        // cngroup
+        kafkaTaskInfo.setComputeResource(routineLoadTaskInfo.getComputeResource());
         // remove old task
         routineLoadTaskInfoList.remove(routineLoadTaskInfo);
         // add new task
@@ -509,7 +512,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     private List<Integer> getAllKafkaPartitions() throws StarRocksException {
         convertCustomProperties(false);
         return KafkaUtil.getAllKafkaPartitions(brokerList, topic,
-                ImmutableMap.copyOf(convertedCustomProperties), warehouseId);
+                ImmutableMap.copyOf(convertedCustomProperties), computeResource);
     }
 
     public static KafkaRoutineLoadJob fromCreateStmt(CreateRoutineLoadStmt stmt) throws StarRocksException {

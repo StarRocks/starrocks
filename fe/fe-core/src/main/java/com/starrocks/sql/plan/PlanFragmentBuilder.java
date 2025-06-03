@@ -124,6 +124,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -210,6 +211,7 @@ import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TFileScanType;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.NotImplementedException;
@@ -299,7 +301,7 @@ public class PlanFragmentBuilder {
 
         DataSink tableSink = new OlapTableSink(view, tupleDesc, fakePartitionIds,
                 view.writeQuorum(), view.enableReplicatedStorage(), false, false,
-                connectContext.getCurrentWarehouseId());
+                connectContext.getCurrentComputeResource());
         execPlan.getTopFragment().setSink(tableSink);
 
         return execPlan;
@@ -874,7 +876,7 @@ public class PlanFragmentBuilder {
             tupleDescriptor.setTable(referenceTable);
 
             OlapScanNode scanNode = new OlapScanNode(context.getNextNodeId(), tupleDescriptor, "OlapScanNode",
-                    context.getConnectContext().getCurrentWarehouseId());
+                    context.getConnectContext().getCurrentComputeResource());
             scanNode.setLimit(node.getLimit());
             scanNode.computeStatistics(optExpr.getStatistics());
             scanNode.setScanOptimizeOption(node.getScanOptimizeOption());
@@ -1034,12 +1036,14 @@ public class PlanFragmentBuilder {
             context.getDescTbl().addReferencedTable(scan.getTable());
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
             tupleDescriptor.setTable(scan.getTable());
-
+            ComputeResource computeResource = ConnectContext.get() != null ?
+                    ConnectContext.get().getCurrentComputeResource() : WarehouseManager.DEFAULT_RESOURCE;
             MetaScanNode scanNode = new MetaScanNode(context.getNextNodeId(),
                     tupleDescriptor, (OlapTable) scan.getTable(), scan.getAggColumnIdToNames(),
                     scan.getSelectPartitionNames(),
-                    context.getConnectContext().getCurrentWarehouseId());
-            scanNode.computeRangeLocations();
+                    context.getConnectContext().getCurrentComputeResource());
+
+            scanNode.computeRangeLocations(computeResource);
             scanNode.computeStatistics(optExpression.getStatistics());
             currentExecGroup.add(scanNode, true);
 
@@ -1633,7 +1637,8 @@ public class PlanFragmentBuilder {
 
             tupleDescriptor.computeMemLayout();
 
-            SchemaScanNode scanNode = new SchemaScanNode(context.getNextNodeId(), tupleDescriptor);
+            SchemaScanNode scanNode = new SchemaScanNode(context.getNextNodeId(), tupleDescriptor,
+                    context.getConnectContext().getCurrentComputeResource());
 
             scanNode.setCatalogName(table.getCatalogName());
             scanNode.setFrontendIP(FrontendOptions.getLocalHostAddress());
@@ -1873,7 +1878,9 @@ public class PlanFragmentBuilder {
             }
             tupleDescriptor.computeMemLayout();
 
-            EsScanNode scanNode = new EsScanNode(context.getNextNodeId(), tupleDescriptor, "EsScanNode");
+            final ComputeResource computeResource = context.getConnectContext().getCurrentComputeResource();
+            EsScanNode scanNode = new EsScanNode(context.getNextNodeId(), tupleDescriptor, "EsScanNode",
+                    computeResource);
             currentExecGroup.add(scanNode, true);
             // set predicate
             List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
@@ -3951,9 +3958,9 @@ public class PlanFragmentBuilder {
 
             List<List<TBrokerFileStatus>> files = new ArrayList<>();
             files.add(table.loadFileList());
-            long warehouseId = context.getConnectContext().getCurrentWarehouseId();
+            ComputeResource computeResource = context.getConnectContext().getCurrentComputeResource();
             FileScanNode scanNode = new FileScanNode(context.getNextNodeId(), tupleDesc,
-                    "FileScanNode", files, table.loadFileList().size(), warehouseId);
+                    "FileScanNode", files, table.loadFileList().size(), computeResource);
 
             Set<String> scanColumns = tupleDesc.getSlots().stream().map(SlotDescriptor::getColumn).map(Column::getName).collect(
                     Collectors.toCollection(() -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER)));

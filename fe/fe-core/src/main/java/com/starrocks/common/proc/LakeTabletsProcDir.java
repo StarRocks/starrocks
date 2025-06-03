@@ -30,6 +30,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -81,7 +82,7 @@ public class LakeTabletsProcDir implements ProcDirInterface {
                 List<Comparable> tabletInfo = Lists.newArrayList();
                 LakeTablet lakeTablet = (LakeTablet) tablet;
                 tabletInfo.add(lakeTablet.getId());
-                tabletInfo.add(new Gson().toJson(lakeTablet.getBackendIds(ConnectContext.get().getCurrentWarehouseId())));
+                tabletInfo.add(new Gson().toJson(lakeTablet.getBackendIds(ConnectContext.get().getCurrentComputeResource())));
                 tabletInfo.add(new ByteSizeValue(lakeTablet.getDataSize(true)));
                 tabletInfo.add(lakeTablet.getRowCount(0L));
                 tabletInfo.add(lakeTablet.getMinVersion());
@@ -165,10 +166,10 @@ public class LakeTabletsProcDir implements ProcDirInterface {
             result.setNames(TITLE_NAMES);
 
             // get current warehouse
-            long warehouseId = ConnectContext.get().getCurrentWarehouseId();
+            ComputeResource computeResource = ConnectContext.get().getCurrentComputeResource();
             List<String> row = Arrays.asList(
                     String.valueOf(tablet.getId()),
-                    new Gson().toJson(tablet.getBackendIds(warehouseId)),
+                    new Gson().toJson(tablet.getBackendIds(computeResource)),
                     new ByteSizeValue(tablet.getDataSize(true)).toString(),
                     String.valueOf(tablet.getRowCount(0L)),
                     String.valueOf(tablet.getMinVersion()),

@@ -67,6 +67,7 @@ import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -108,7 +109,7 @@ public class LoadLoadingTask extends LoadTask {
     private final int fileNum;
 
     private final LoadJob.JSONOptions jsonOptions;
-    private long warehouseId;
+    private ComputeResource computeResource;
 
     private LoadLoadingTask(Builder builder) {
         super(builder.callback, TaskType.LOADING, builder.priority);
@@ -136,7 +137,7 @@ public class LoadLoadingTask extends LoadTask {
         this.fileStatusList = builder.fileStatusList;
         this.fileNum = builder.fileNum;
         this.jsonOptions = builder.jsonOptions;
-        this.warehouseId = builder.warehouseId;
+        this.computeResource = builder.computeResource;
     }
 
     public void prepare() throws StarRocksException {
@@ -146,7 +147,7 @@ public class LoadLoadingTask extends LoadTask {
         loadPlanner.setPartialUpdateMode(partialUpdateMode);
         loadPlanner.setMergeConditionStr(mergeConditionStr);
         loadPlanner.setJsonOptions(jsonOptions);
-        loadPlanner.setWarehouseId(warehouseId);
+        loadPlanner.setComputeResource(computeResource);
         loadPlanner.plan();
     }
 
@@ -342,7 +343,7 @@ public class LoadLoadingTask extends LoadTask {
         private int fileNum = 0;
         private LoadTaskCallback callback;
         private int priority;
-        private long warehouseId;
+        private ComputeResource computeResource;
 
         private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
 
@@ -471,8 +472,8 @@ public class LoadLoadingTask extends LoadTask {
             return this;
         }
 
-        public Builder setWarehouseId(long warehouseId) {
-            this.warehouseId = warehouseId;
+        public Builder setComputeResource(ComputeResource computeResource) {
+            this.computeResource = computeResource;
             return this;
         }
 

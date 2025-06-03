@@ -28,6 +28,8 @@ import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ModifyBackendClause;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -206,6 +208,12 @@ public class SystemInfoServiceTest {
             }
         };
 
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeResource acquireComputeResource(CRAcquireContext acquireContext) {
+                return WarehouseManager.DEFAULT_RESOURCE;
+            }
+        };
         service.addBackend(be);
         be.setStarletPort(1001);
         service.dropBackend("newHost", 1000, WarehouseManager.DEFAULT_WAREHOUSE_NAME, "", false);

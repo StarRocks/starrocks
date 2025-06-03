@@ -282,14 +282,14 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                 for (MaterializedIndex index : dirtyIndexMap.values()) {
                     if (!useAggregatePublish) {
                         Utils.publishVersion(index.getTablets(), txnInfo, commitVersion - 1, commitVersion,
-                                warehouseId, false);
+                                computeResource, false);
                     } else {
                         tablets.addAll(index.getTablets());
                     }
                 }
                 if (useAggregatePublish) {
                     Utils.aggregatePublishVersion(tablets, Lists.newArrayList(txnInfo), commitVersion - 1, commitVersion, 
-                                null, null, warehouseId, null);
+                                null, null, computeResource, null);
                 }
             }
             return true;
@@ -349,9 +349,9 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
 
-        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         for (Tablet tablet : tablets) {
-            Long backendId = warehouseManager.getComputeNodeId(warehouseId, (LakeTablet) tablet);
+            Long backendId = warehouseManager.getComputeNodeId(computeResource, (LakeTablet) tablet);
             if (backendId == null) {
                 throw new AlterCancelException("no alive node");
             }

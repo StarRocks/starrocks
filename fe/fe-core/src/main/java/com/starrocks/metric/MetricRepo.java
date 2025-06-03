@@ -74,11 +74,14 @@ import com.starrocks.proto.PKafkaOffsetProxyResult;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.DatabaseTransactionMgr;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -793,11 +796,21 @@ public final class MetricRepo {
         );
 
         // get all partitions offset in a batch api
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         for (Map.Entry<Long, List<RoutineLoadJob>> entry : kafkaJobsMp.entrySet()) {
             long warehouseId = entry.getKey();
             List<RoutineLoadJob> kafkaJobs = entry.getValue();
 
             List<PKafkaOffsetProxyRequest> requests = new ArrayList<>();
+
+            final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseId);
+            ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
+            try {
+                computeResource = warehouseManager.acquireComputeResource(acquireContext);
+            } catch (Exception e) {
+                LOG.warn("acquire compute resource failed for warehouse: {}, error: {}", warehouseId, e.getMessage());
+                return;
+            }
 
             for (RoutineLoadJob job : kafkaJobs) {
                 KafkaRoutineLoadJob kJob = (KafkaRoutineLoadJob) job;
@@ -809,7 +822,7 @@ public final class MetricRepo {
                 }
                 PKafkaOffsetProxyRequest offsetProxyRequest = new PKafkaOffsetProxyRequest();
                 offsetProxyRequest.kafkaInfo = KafkaUtil.genPKafkaLoadInfo(kJob.getBrokerList(), kJob.getTopic(),
-                        ImmutableMap.copyOf(kJob.getConvertedCustomProperties()), warehouseId);
+                        ImmutableMap.copyOf(kJob.getConvertedCustomProperties()), computeResource);
                 offsetProxyRequest.partitionIds = new ArrayList<>(
                         ((KafkaProgress) kJob.getProgress()).getPartitionIdToOffset().keySet());
                 requests.add(offsetProxyRequest);

@@ -17,6 +17,8 @@ package com.starrocks.load.batchwrite;
 import com.starrocks.common.Config;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
 import mockit.Expectations;
 import org.awaitility.Awaitility;
 import org.junit.Before;
@@ -50,30 +52,44 @@ public class CoordinatorBackendAssignerTest extends BatchWriteTestBase {
         assigner.start();
     }
 
+    // to be compatible with old api
+    private void registerBatchWrite(long loadId, long warehouseId, TableId tableId, int expectParallel) {
+        assigner.registerBatchWrite(
+                loadId, WarehouseComputeResource.of(warehouseId), tableId, expectParallel);
+    }
+
+    private CoordinatorBackendAssignerImpl.WarehouseMeta getWarehouseMeta(long warehouseId) {
+        return assigner.getWarehouseMeta(WarehouseComputeResource.of(warehouseId));
+    }
+
+    private double currentLoadDiffRatio(long warehouseId) {
+        return assigner.currentLoadDiffRatio(WarehouseComputeResource.of(warehouseId));
+    }
+
     @Test
     public void testRegisterBatchWrite() throws Exception {
-        assigner.registerBatchWrite(
+        registerBatchWrite(
                 1L, 1, new TableId(DB_NAME_1, TABLE_NAME_1_1), 1);
         Optional<List<ComputeNode>> nodes1 = assigner.getBackends(1);
         assertTrue(nodes1.isPresent());
         assertEquals(1, nodes1.get().size());
         assertEquals(1, nodes1.get().stream().map(ComputeNode::getId).collect(Collectors.toSet()).size());
 
-        assigner.registerBatchWrite(
+        registerBatchWrite(
                 2L, 1, new TableId(DB_NAME_1, TABLE_NAME_1_2), 2);
         Optional<List<ComputeNode>> nodes2 = assigner.getBackends(2);
         assertTrue(nodes2.isPresent());
         assertEquals(2, nodes2.get().size());
         assertEquals(2, nodes2.get().stream().map(ComputeNode::getId).collect(Collectors.toSet()).size());
 
-        assigner.registerBatchWrite(
+        registerBatchWrite(
                 3L, 2, new TableId(DB_NAME_2, TABLE_NAME_2_1), 4);
         Optional<List<ComputeNode>> nodes3 = assigner.getBackends(3);
         assertTrue(nodes3.isPresent());
         assertEquals(4, nodes3.get().size());
         assertEquals(4, nodes3.get().stream().map(ComputeNode::getId).collect(Collectors.toSet()).size());
 
-        assigner.registerBatchWrite(
+        registerBatchWrite(
                 4L, 2, new TableId(DB_NAME_2, TABLE_NAME_2_2), 10);
         Optional<List<ComputeNode>> nodes4 = assigner.getBackends(4);
         assertTrue(nodes4.isPresent());
@@ -83,13 +99,13 @@ public class CoordinatorBackendAssignerTest extends BatchWriteTestBase {
 
     @Test
     public void testUnRegisterBatchWrite() throws Exception {
-        assigner.registerBatchWrite(
+        registerBatchWrite(
                 1L, 1, new TableId(DB_NAME_1, TABLE_NAME_1_1), 1);
-        assigner.registerBatchWrite(
+        registerBatchWrite(
                 2L, 1, new TableId(DB_NAME_1, TABLE_NAME_1_2), 2);
-        assigner.registerBatchWrite(
+        registerBatchWrite(
                 3L, 2, new TableId(DB_NAME_2, TABLE_NAME_2_1), 4);
-        assigner.registerBatchWrite(
+        registerBatchWrite(
                 4L, 2, new TableId(DB_NAME_2, TABLE_NAME_2_2), 10);
 
         final AtomicLong expectNumScheduledTask = new AtomicLong(assigner.numScheduledTasks());
@@ -124,13 +140,13 @@ public class CoordinatorBackendAssignerTest extends BatchWriteTestBase {
 
     @Test
     public void testDetectUnavailableNodesWhenGetBackends() throws Exception {
-        assigner.registerBatchWrite(
+        registerBatchWrite(
                 1L, 1, new TableId(DB_NAME_1, TABLE_NAME_1_1), 1);
-        assigner.registerBatchWrite(
+        registerBatchWrite(
                 2L, 1, new TableId(DB_NAME_1, TABLE_NAME_1_2), 2);
-        assigner.registerBatchWrite(
+        registerBatchWrite(
                 3L, 1, new TableId(DB_NAME_2, TABLE_NAME_2_1), 3);
-        assigner.registerBatchWrite(
+        registerBatchWrite(
                 4L, 1, new TableId(DB_NAME_2, TABLE_NAME_2_2), 4);
 
         assigner.disablePeriodicalScheduleForTest();
@@ -165,7 +181,7 @@ public class CoordinatorBackendAssignerTest extends BatchWriteTestBase {
     public void testPeriodicalCheck() throws Exception {
         Set<Long> backendIds = new HashSet<>();
         for (int i = 1; i <= 100; i++) {
-            assigner.registerBatchWrite(
+            registerBatchWrite(
                     i, 1, new TableId(DB_NAME_1, TABLE_NAME_1_1), 4);
             Optional<List<ComputeNode>> nodes = assigner.getBackends(i);
             assertTrue(nodes.isPresent());
@@ -173,17 +189,18 @@ public class CoordinatorBackendAssignerTest extends BatchWriteTestBase {
             nodes.get().forEach(node -> backendIds.add(node.getId()));
         }
         assertEquals(5, backendIds.size());
-        assertTrue(assigner.currentLoadDiffRatio(1) < Config.merge_commit_be_assigner_balance_factor_threshold);
+        assertTrue(currentLoadDiffRatio(1)
+                < Config.merge_commit_be_assigner_balance_factor_threshold);
 
 
         // create empty warehouse meta
-        assigner.registerBatchWrite(
+        registerBatchWrite(
                 201, 2, new TableId(DB_NAME_1, TABLE_NAME_1_1), 4);
         long expectNumScheduledTask = assigner.numScheduledTasks() + 1;
         assigner.unregisterBatchWrite(201);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
                 .until(() -> assigner.numScheduledTasks() == expectNumScheduledTask);
-        CoordinatorBackendAssignerImpl.WarehouseMeta whMeta = assigner.getWarehouseMeta(2);
+        CoordinatorBackendAssignerImpl.WarehouseMeta whMeta = getWarehouseMeta(2);
         assertNotNull(whMeta);
         assertTrue(whMeta.loadMetas.isEmpty());
 
@@ -194,8 +211,8 @@ public class CoordinatorBackendAssignerTest extends BatchWriteTestBase {
         try {
             backendIds.clear();
             assigner.runPeriodicalCheck();
-            assertNull(assigner.getWarehouseMeta(2));
-            assertTrue(assigner.currentLoadDiffRatio(1) < Config.merge_commit_be_assigner_balance_factor_threshold);
+            assertNull(getWarehouseMeta(2));
+            assertTrue(currentLoadDiffRatio(1) < Config.merge_commit_be_assigner_balance_factor_threshold);
             for (int i = 1; i <= 100; i++) {
                 Optional<List<ComputeNode>> nodes = assigner.getBackends(i);
                 assertTrue(nodes.isPresent());
@@ -203,7 +220,7 @@ public class CoordinatorBackendAssignerTest extends BatchWriteTestBase {
                 nodes.get().forEach(node -> backendIds.add(node.getId()));
             }
             assertEquals(10, backendIds.size());
-            assertTrue(assigner.currentLoadDiffRatio(1) < Config.merge_commit_be_assigner_balance_factor_threshold);
+            assertTrue(currentLoadDiffRatio(1) < Config.merge_commit_be_assigner_balance_factor_threshold);
         } finally {
             for (int i = 10006; i <= 10010; i++) {
                 UtFrameUtils.dropMockBackend(i);
@@ -215,13 +232,13 @@ public class CoordinatorBackendAssignerTest extends BatchWriteTestBase {
     public void testRegisterBatchWriteFailure() throws Exception {
         new Expectations(assigner) {
             {
-                assigner.getAvailableNodes(anyLong);
+                assigner.getAvailableNodes((ComputeResource) any);
                 result = new RuntimeException("can't find warehouse");
             }
         };
 
         try {
-            assigner.registerBatchWrite(
+            registerBatchWrite(
                     1L, 1, new TableId(DB_NAME_1, TABLE_NAME_1_1), 1);
             fail();
         } catch (Exception e) {
@@ -260,7 +277,7 @@ public class CoordinatorBackendAssignerTest extends BatchWriteTestBase {
     }
 
     private boolean containsLoadMeta(long loadId, long warehouseId) {
-        CoordinatorBackendAssignerImpl.WarehouseMeta whMeta = assigner.getWarehouseMeta(warehouseId);
+        CoordinatorBackendAssignerImpl.WarehouseMeta whMeta = getWarehouseMeta(warehouseId);
         if (whMeta == null) {
             return false;
         }

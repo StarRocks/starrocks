@@ -22,7 +22,6 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.lake.LakeAggregator;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.ComputeNodePB;
 import com.starrocks.proto.PublishLogVersionBatchRequest;
@@ -38,6 +37,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -80,7 +80,7 @@ public class Utils {
 
     public static Map<Long, List<Long>> groupTabletID(Collection<Partition> partitions,
                                                       MaterializedIndex.IndexExtState indexState,
-                                                      long warehouseId)
+                                                      ComputeResource computeResource)
             throws NoAliveBackendException {
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
 
@@ -89,8 +89,8 @@ public class Utils {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 for (MaterializedIndex index : physicalPartition.getMaterializedIndices(indexState)) {
                     for (Tablet tablet : index.getTablets()) {
-                        ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(
-                                warehouseId, (LakeTablet) tablet);
+                        ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource,
+                                (LakeTablet) tablet);
                         if (computeNode == null) {
                             throw new NoAliveBackendException("no alive backend");
                         }
@@ -103,16 +103,17 @@ public class Utils {
     }
 
     public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
-                                      long newVersion, long warehouseId, boolean enablePartitionAggregation)
+                                      long newVersion, ComputeResource computeResource, boolean enablePartitionAggregation)
             throws NoAliveBackendException, RpcException {
-        publishVersion(tablets, txnInfo, baseVersion, newVersion, null, warehouseId, null, enablePartitionAggregation);
+        publishVersion(tablets, txnInfo, baseVersion, newVersion, null, computeResource,
+                null, enablePartitionAggregation);
     }
 
     public static void publishVersionBatch(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
                                            long baseVersion, long newVersion,
                                            Map<Long, Double> compactionScores,
                                            Map<ComputeNode, List<Long>> nodeToTablets,
-                                           long warehouseId,
+                                           ComputeResource computeResource,
                                            Map<Long, Long> tabletRowNum)
             throws NoAliveBackendException, RpcException {
         if (nodeToTablets == null) {
@@ -120,19 +121,20 @@ public class Utils {
         }
 
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        if (!warehouseManager.warehouseExists(warehouseId)) {
+        if (!warehouseManager.isResourceAvailable(computeResource)) {
             LOG.warn("publish version operation should be successful even if the warehouse is not exist, " +
-                    "and switch the warehouse id from {} to {}", warehouseId, warehouseManager.getBackgroundWarehouse().getId());
-            warehouseId = warehouseManager.getBackgroundWarehouse().getId();
+                    "and switch the warehouse id from {} to {}", computeResource,
+                    warehouseManager.getBackgroundWarehouse().getId());
+            computeResource = warehouseManager.getBackgroundComputeResource();
         }
 
         List<Long> rebuildPindexTabletIds = new ArrayList<>();
         for (Tablet tablet : tablets) {
-            ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
+            ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) tablet);
             if (computeNode == null) {
                 LOG.warn("No alive node in warehouse for handle publish version request, try to use background warehouse");
-                computeNode = warehouseManager.getComputeNodeAssignedToTablet(warehouseManager.getBackgroundWarehouse().getId(),
-                        (LakeTablet) tablet);
+                computeResource = warehouseManager.getBackgroundComputeResource();
+                computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) tablet);
                 if (computeNode == null) {
                     throw new NoAliveBackendException("No alive node for handle publish version request in background warehouse");
                 }
@@ -185,25 +187,25 @@ public class Utils {
 
     public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
                                       long newVersion, Map<Long, Double> compactionScores,
-                                      long warehouseId, Map<Long, Long> tabletRowNums,
+                                      ComputeResource computeResource, Map<Long, Long> tabletRowNums,
                                       boolean enablePartitionAggregation)
             throws NoAliveBackendException, RpcException {
         List<TxnInfoPB> txnInfos = Lists.newArrayList(txnInfo);
         if (!enablePartitionAggregation) {
             publishVersionBatch(tablets, txnInfos, baseVersion, newVersion, compactionScores, null, 
-                    warehouseId, tabletRowNums);
+                    computeResource, tabletRowNums);
         } else {
             aggregatePublishVersion(tablets, txnInfos, baseVersion, newVersion, compactionScores, 
-                    null, warehouseId, tabletRowNums);
+                    null, computeResource, tabletRowNums);
         }
     }
 
-    public static boolean processTablets(List<Tablet> tablets, long warehouseId,
+    public static boolean processTablets(List<Tablet> tablets, ComputeResource computeResource,
                                          WarehouseManager warehouseManager,
                                          Map<ComputeNode, List<Long>> nodeToTablets,
                                          List<Long> rebuildPindexTabletIds, long baseVersion) {
         for (Tablet tablet : tablets) {
-            ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
+            ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) tablet);
             if (computeNode == null) {
                 LOG.warn("No alive node in warehouse for handle publish version request, try to use background warehouse");
                 return false;
@@ -223,7 +225,7 @@ public class Utils {
                                                long baseVersion, long newVersion,
                                                Map<Long, Double> compactionScores,
                                                Map<ComputeNode, List<Long>> nodeToTablets,
-                                               long warehouseId,
+                                               ComputeResource computeResource,
                                                Map<Long, Long> tabletRowNum) 
             throws NoAliveBackendException, RpcException {
         if (nodeToTablets == null) {
@@ -231,23 +233,24 @@ public class Utils {
         }
 
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        if (!warehouseManager.warehouseExists(warehouseId)) {
+        if (!warehouseManager.isResourceAvailable(computeResource)) {
             LOG.warn("publish version operation should be successful even if the warehouse is not exist, " +
-                    "and switch the warehouse id from {} to {}[{}]", warehouseId, 
+                    "and switch the warehouse id from {} to {}[{}]", computeResource,
                     warehouseManager.getBackgroundWarehouse().getId(),
                     warehouseManager.getBackgroundWarehouse().getName());
-            warehouseId = warehouseManager.getBackgroundWarehouse().getId();
+            computeResource = warehouseManager.getBackgroundComputeResource();
         }
 
         List<Long> rebuildPindexTabletIds = new ArrayList<>();
         boolean success = 
-                processTablets(tablets, warehouseId, warehouseManager, nodeToTablets, rebuildPindexTabletIds, baseVersion);
-        if (!success && warehouseId != warehouseManager.getBackgroundWarehouse().getId()) {
-            warehouseId = warehouseManager.getBackgroundWarehouse().getId();
+                processTablets(tablets, computeResource, warehouseManager, nodeToTablets, rebuildPindexTabletIds, baseVersion);
+        if (!success && (computeResource == null ||
+                computeResource.getWarehouseId() != warehouseManager.getBackgroundWarehouse().getId())) {
+            computeResource = warehouseManager.getBackgroundComputeResource();
             rebuildPindexTabletIds.clear();
             nodeToTablets.clear();
-            success = 
-                    processTablets(tablets, warehouseId, warehouseManager, nodeToTablets, rebuildPindexTabletIds, baseVersion);
+            success = processTablets(tablets, computeResource, warehouseManager, nodeToTablets,
+                    rebuildPindexTabletIds, baseVersion);
         }
         if (!success) {
             throw new NoAliveBackendException("No alive node for handle publish version request in background warehouse");
@@ -255,7 +258,7 @@ public class Utils {
 
         // choose one aggregator
         LakeAggregator lakeAggregator = new LakeAggregator();
-        ComputeNode aggregatorNode = lakeAggregator.chooseAggregatorNode(warehouseId);
+        ComputeNode aggregatorNode = lakeAggregator.chooseAggregatorNode(computeResource);
         if (aggregatorNode == null) {
             throw new NoAliveBackendException("No alive compute node for handle aggregate publish version");
         }
@@ -313,33 +316,35 @@ public class Utils {
         }
     }
 
-    public static void publishLogVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long version, long warehouseId)
+    public static void publishLogVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo,
+                                         long version, ComputeResource computeResource)
             throws NoAliveBackendException, RpcException {
         List<TxnInfoPB> txnInfos = new ArrayList<>();
         txnInfos.add(txnInfo);
         List<Long> versions = new ArrayList<>();
         versions.add(version);
-        publishLogVersionBatch(tablets, txnInfos, versions, warehouseId);
+        publishLogVersionBatch(tablets, txnInfos, versions, computeResource);
     }
 
     public static void publishLogVersionBatch(@NotNull List<Tablet> tablets, List<TxnInfoPB> txns, List<Long> versions,
-                                              long warehouseId)
+                                              ComputeResource computeResource)
             throws NoAliveBackendException, RpcException {
         Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
 
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        if (!warehouseManager.warehouseExists(warehouseId)) {
+        if (!warehouseManager.isResourceAvailable(computeResource)) {
             LOG.warn("publish log version operation should be successful even if the warehouse is not exist, " +
-                    "and switch the warehouse id from {} to {}", warehouseId, warehouseManager.getBackgroundWarehouse().getId());
-            warehouseId = warehouseManager.getBackgroundWarehouse().getId();
+                    "and switch the warehouse id from {} to {}",
+                    computeResource, warehouseManager.getBackgroundWarehouse().getId());
+            computeResource = warehouseManager.getBackgroundComputeResource();
         }
 
         for (Tablet tablet : tablets) {
-            ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
+            ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) tablet);
             if (computeNode == null) {
                 LOG.warn("no alive node in warehouse for handle publish log version request, try to use background warehouse");
-                computeNode = warehouseManager.getComputeNodeAssignedToTablet(warehouseManager.getBackgroundWarehouse().getId(),
-                        (LakeTablet) tablet);
+                computeResource = warehouseManager.getBackgroundComputeResource();
+                computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) tablet);
                 if (computeNode == null) {
                     throw new NoAliveBackendException("No alive node for handle publish version request in background warehouse");
                 }

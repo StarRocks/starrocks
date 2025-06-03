@@ -62,6 +62,7 @@ import com.starrocks.thrift.TOlapTablePartition;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import io.opentelemetry.api.trace.Span;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -298,6 +299,9 @@ public class TransactionState implements Writable, GsonPreProcessable {
 
     @SerializedName("wid")
     private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+
+    // no needs to persistent
+    private ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     // this map should be set when load execution begin, so that when the txn commit, it will know
     // which tables and rollups it loaded.
@@ -593,8 +597,13 @@ public class TransactionState implements Writable, GsonPreProcessable {
         return warehouseId;
     }
 
-    public void setWarehouseId(long warehouseId) {
-        this.warehouseId = warehouseId;
+    public void setComputeResource(ComputeResource computeResource) {
+        this.warehouseId = computeResource.getWarehouseId();
+        this.computeResource = computeResource;
+    }
+
+    public ComputeResource getComputeResource() {
+        return computeResource;
     }
 
     public void setTransactionStatus(TransactionStatus transactionStatus) {

@@ -22,6 +22,8 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import mockit.Mock;
@@ -62,15 +64,21 @@ public class TransactionLoadActionOnSharedDataClusterTest extends TransactionLoa
 
         new MockUp<WarehouseManager>() {
             @Mock
-            public List<Long> getAllComputeNodeIds(String warehouseName) {
+            public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
                 List<Long> nodes = new ArrayList<>();
                 nodes.add(1234L);
                 return nodes;
             }
         };
 
-        new MockUp<TransactionLoadAction>() {
+        new MockUp<WarehouseComputeResourceProvider>() {
+            @Mock
+            public boolean isResourceAvailable(ComputeResource computeResource) {
+                return true;
+            }
+        };
 
+        new MockUp<TransactionLoadAction>() {
             @Mock
             public void redirectTo(BaseRequest request,
                                    BaseResponse response,

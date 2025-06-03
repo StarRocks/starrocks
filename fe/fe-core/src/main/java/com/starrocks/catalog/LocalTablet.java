@@ -51,6 +51,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TxnFinishState;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -322,7 +323,8 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
 
     @Override
     public void getQueryableReplicas(List<Replica> allQueryableReplicas, List<Replica> localReplicas,
-                                     long visibleVersion, long localBeId, int schemaHash, long warehouseId) {
+                                     long visibleVersion, long localBeId, int schemaHash,
+                                     ComputeResource computeResource) {
         throw new SemanticException("not implemented");
     }
 

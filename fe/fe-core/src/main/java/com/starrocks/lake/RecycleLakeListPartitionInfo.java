@@ -20,7 +20,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.RecycleListPartitionInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 
 public class RecycleLakeListPartitionInfo extends RecycleListPartitionInfo {
     public RecycleLakeListPartitionInfo(long dbId, long tableId, Partition partition,
@@ -36,9 +36,9 @@ public class RecycleLakeListPartitionInfo extends RecycleListPartitionInfo {
             GlobalStateMgr.getCurrentState().getEditLog().logDisablePartitionRecovery(partition.getId());
         }
         try {
-            WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-            Warehouse warehouse = manager.getBackgroundWarehouse();
-            if (LakeTableHelper.removePartitionDirectory(partition, warehouse.getId())) {
+            final WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            final ComputeResource computeResource = manager.getBackgroundComputeResource();
+            if (LakeTableHelper.removePartitionDirectory(partition, computeResource)) {
                 GlobalStateMgr.getCurrentState().getLocalMetastore().onErasePartition(partition);
                 LakeTableHelper.deleteShardGroupMeta(partition);
                 return true;

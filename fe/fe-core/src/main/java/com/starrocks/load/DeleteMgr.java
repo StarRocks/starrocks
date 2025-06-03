@@ -104,6 +104,7 @@ import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
@@ -263,9 +264,9 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         long jobId = GlobalStateMgr.getCurrentState().getNextId();
         stmt.setJobId(jobId);
 
-        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
         if (ConnectContext.get() != null) {
-            warehouseId = ConnectContext.get().getCurrentWarehouseId();
+            computeResource = ConnectContext.get().getCurrentComputeResource();
         }
 
         // begin txn here and generate txn id
@@ -273,7 +274,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
                 Lists.newArrayList(olapTable.getId()), label, null,
                 new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                 TransactionState.LoadJobSourceType.DELETE, jobId, Config.stream_load_default_timeout_second,
-                warehouseId);
+                computeResource);
 
         MultiDeleteInfo deleteInfo =
                 new MultiDeleteInfo(db.getId(), olapTable.getId(), olapTable.getName(), deleteConditions);
@@ -282,7 +283,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         DeleteJob deleteJob = null;
 
         if (olapTable.isCloudNativeTable()) {
-            deleteJob = new LakeDeleteJob(jobId, transactionId, label, deleteInfo, warehouseId);
+            deleteJob = new LakeDeleteJob(jobId, transactionId, label, deleteInfo, computeResource);
         } else {
             deleteJob = new OlapDeleteJob(jobId, transactionId, label, partitionReplicaNum, deleteInfo);
         }

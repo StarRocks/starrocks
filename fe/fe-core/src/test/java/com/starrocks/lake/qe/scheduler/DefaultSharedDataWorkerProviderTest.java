@@ -45,6 +45,7 @@ import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -113,7 +114,7 @@ public class DefaultSharedDataWorkerProviderTest {
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         new Expectations(warehouseManager) {
             {
-                warehouseManager.getAllComputeNodeIds(anyLong);
+                warehouseManager.getAllComputeNodeIds((ComputeResource) any);
                 result = Lists.newArrayList(id2AllNodes.keySet());
                 minTimes = 0;
             }
@@ -135,7 +136,7 @@ public class DefaultSharedDataWorkerProviderTest {
         return factory.captureAvailableWorkers(
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), true,
                 -1, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY,
-                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                WarehouseManager.DEFAULT_RESOURCE);
     }
 
     private static void testUsingWorkerHelper(WorkerProvider workerProvider, Long workerId) {
@@ -268,7 +269,8 @@ public class DefaultSharedDataWorkerProviderTest {
             }
             ImmutableMap<Long, ComputeNode> availableId2ComputeNode = builder.build();
             WorkerProvider workerProvider =
-                    new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2Backend), availableId2ComputeNode, 0);
+                    new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2Backend), availableId2ComputeNode,
+                            WarehouseManager.DEFAULT_RESOURCE);
             testSelectNextWorkerHelper(workerProvider, availableId2ComputeNode);
         }
 
@@ -281,7 +283,8 @@ public class DefaultSharedDataWorkerProviderTest {
             }
             ImmutableMap<Long, ComputeNode> availableId2ComputeNode = builder.build();
             WorkerProvider workerProvider =
-                    new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2ComputeNode), availableId2ComputeNode, 0);
+                    new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2ComputeNode), availableId2ComputeNode,
+                            WarehouseManager.DEFAULT_RESOURCE);
             testSelectNextWorkerHelper(workerProvider, availableId2ComputeNode);
         }
 
@@ -294,13 +297,15 @@ public class DefaultSharedDataWorkerProviderTest {
             }
             ImmutableMap<Long, ComputeNode> availableId2ComputeNode = builder.build();
             WorkerProvider workerProvider =
-                    new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes), availableId2ComputeNode, 0);
+                    new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes), availableId2ComputeNode,
+                            WarehouseManager.DEFAULT_RESOURCE);
             testSelectNextWorkerHelper(workerProvider, availableId2ComputeNode);
         }
 
         { // test no available worker to select
             WorkerProvider workerProvider =
-                    new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes), ImmutableMap.of(), 0);
+                    new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes), ImmutableMap.of(),
+                            WarehouseManager.DEFAULT_RESOURCE);
 
             Exception e = Assert.assertThrows(NonRecoverableException.class, workerProvider::selectNextWorker);
             Assert.assertEquals(
@@ -327,15 +332,15 @@ public class DefaultSharedDataWorkerProviderTest {
     @Test
     public void testChooseAllComputedNodes() {
         { // empty compute nodes
-            WorkerProvider workerProvider =
-                    new DefaultSharedDataWorkerProvider(ImmutableMap.of(), ImmutableMap.of(), 0);
+            WorkerProvider workerProvider = new DefaultSharedDataWorkerProvider(ImmutableMap.of(), ImmutableMap.of(),
+                            WarehouseManager.DEFAULT_RESOURCE);
             Assert.assertTrue(workerProvider.selectAllComputeNodes().isEmpty());
         }
 
         { // both compute nodes and backend are treated as compute nodes
             WorkerProvider workerProvider =
                     new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes),
-                            ImmutableMap.copyOf(id2AllNodes), 0);
+                            ImmutableMap.copyOf(id2AllNodes), WarehouseManager.DEFAULT_RESOURCE);
 
             List<Long> computeNodeIds = workerProvider.selectAllComputeNodes();
             Assert.assertEquals(id2AllNodes.size(), computeNodeIds.size());
@@ -560,7 +565,7 @@ public class DefaultSharedDataWorkerProviderTest {
         { // make only one node available, the final assignment will be all on the single available node
             ComputeNode availNode = id2AllNodes.get(availList.get(0));
             WorkerProvider provider1 = new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes),
-                    ImmutableMap.of(availNode.getId(), availNode), 0);
+                    ImmutableMap.of(availNode.getId(), availNode), WarehouseManager.DEFAULT_RESOURCE);
 
             FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
             NormalBackendSelector selector =
@@ -577,7 +582,7 @@ public class DefaultSharedDataWorkerProviderTest {
 
         { // make no node available. Exception throws
             WorkerProvider providerNoAvailNode = new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes),
-                    ImmutableMap.of(), 0);
+                    ImmutableMap.of(), WarehouseManager.DEFAULT_RESOURCE);
             FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
             NormalBackendSelector selector =
                     new NormalBackendSelector(scanNode, scanLocations, assignment, providerNoAvailNode, false);
@@ -634,7 +639,7 @@ public class DefaultSharedDataWorkerProviderTest {
         { // make only one node available, the final assignment will be all on the single available node
             ComputeNode availNode = id2AllNodes.get(availList.get(0));
             WorkerProvider provider1 = new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes),
-                    ImmutableMap.of(availNode.getId(), availNode), 0);
+                    ImmutableMap.of(availNode.getId(), availNode), WarehouseManager.DEFAULT_RESOURCE);
 
             FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
             ColocatedBackendSelector.Assignment colAssignment = new ColocatedBackendSelector.Assignment(scanNode, 1);
@@ -652,7 +657,7 @@ public class DefaultSharedDataWorkerProviderTest {
 
         { // make no node available. Exception throws
             WorkerProvider providerNoAvailNode = new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes),
-                    ImmutableMap.of(), 0);
+                    ImmutableMap.of(), WarehouseManager.DEFAULT_RESOURCE);
             FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
             ColocatedBackendSelector.Assignment colAssignment = new ColocatedBackendSelector.Assignment(scanNode, 1);
             ColocatedBackendSelector selector =
@@ -664,7 +669,8 @@ public class DefaultSharedDataWorkerProviderTest {
     @Test
     public void testNextWorkerOverflow() throws NonRecoverableException {
         WorkerProvider provider =
-                new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes), ImmutableMap.copyOf(id2AllNodes), 0);
+                new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes), ImmutableMap.copyOf(id2AllNodes),
+                        WarehouseManager.DEFAULT_RESOURCE);
         for (int i = 0; i < 100; i++) {
             Long workerId = provider.selectNextWorker();
             assertThat(workerId).isNotNegative();

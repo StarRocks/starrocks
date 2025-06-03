@@ -112,6 +112,8 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -194,6 +196,8 @@ public class ExportJob implements Writable, GsonPostProcessable {
     private ExportFailMsg failMsg;
     @SerializedName("warehouseId")
     private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+    // the resource used by this export job, it will be acquired from warehouse manager
+    private ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     private TupleDescriptor exportTupleDesc;
     private Table exportTable;
@@ -240,6 +244,11 @@ public class ExportJob implements Writable, GsonPostProcessable {
     }
 
     public void setJob(ExportStmt stmt) throws StarRocksException {
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        // try to acquire resource from warehouse
+        CRAcquireContext acquireContext = CRAcquireContext.of(this.warehouseId, this.computeResource);
+        this.computeResource =  warehouseManager.acquireComputeResource(acquireContext);
+
         String dbName = stmt.getTblName().getDb();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
@@ -401,7 +410,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
         switch (exportTable.getType()) {
             case OLAP:
             case CLOUD_NATIVE:
-                scanNode = new OlapScanNode(new PlanNodeId(0), exportTupleDesc, "OlapScanNodeForExport", warehouseId);
+                scanNode = new OlapScanNode(new PlanNodeId(0), exportTupleDesc, "OlapScanNodeForExport", computeResource);
                 scanNode.setColumnFilters(Maps.newHashMap());
                 ((OlapScanNode) scanNode).setIsPreAggregation(false, "This an export operation");
                 ((OlapScanNode) scanNode).setCanTurnOnPreAggr(false);
@@ -425,7 +434,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
                     exportTupleDesc,
                     "OlapScanNodeForExport",
                     locations,
-                    warehouseId);
+                computeResource);
     }
 
     private PlanFragment genPlanFragment(Table.TableType type, ScanNode scanNode, int taskIdx) throws
@@ -492,7 +501,8 @@ public class ExportJob implements Writable, GsonPostProcessable {
             TUniqueId queryId = new TUniqueId(uuid.getMostSignificantBits() + i, uuid.getLeastSignificantBits());
             Coordinator coord = getCoordinatorFactory().createBrokerExportScheduler(
                         id, queryId, desc, Lists.newArrayList(fragment), Lists.newArrayList(scanNode),
-                        TimeUtils.DEFAULT_TIME_ZONE, stmt.getExportStartTime(), Maps.newHashMap(), getMemLimit(), warehouseId);
+                        TimeUtils.DEFAULT_TIME_ZONE, stmt.getExportStartTime(),
+                    Maps.newHashMap(), getMemLimit(), computeResource);
             this.coordList.add(coord);
             LOG.info("split export job to tasks. job id: {}, job query id: {}, task idx: {}, task query id: {}",
                         id, DebugUtil.printId(this.queryId), i, DebugUtil.printId(queryId));
@@ -522,7 +532,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
         newOlapScanNode.setCanTurnOnPreAggr(false);
         newOlapScanNode.init(tmpAnalyzer);
         newOlapScanNode.selectBestRollupByRollupSelector();
-        List<TScanRangeLocations> newLocations = newOlapScanNode.updateScanRangeLocations(locations);
+        List<TScanRangeLocations> newLocations = newOlapScanNode.updateScanRangeLocations(locations, computeResource);
 
         // random select a new location for each TScanRangeLocations
         for (TScanRangeLocations tablet : newLocations) {
@@ -536,7 +546,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
 
         Coordinator newCoord = getCoordinatorFactory().createBrokerExportScheduler(
                     id, newQueryId, desc, Lists.newArrayList(newFragment), Lists.newArrayList(newTaskScanNode),
-                    TimeUtils.DEFAULT_TIME_ZONE, coord.getStartTimeMs(), Maps.newHashMap(), getMemLimit(), warehouseId);
+                    TimeUtils.DEFAULT_TIME_ZONE, coord.getStartTimeMs(), Maps.newHashMap(), getMemLimit(), computeResource);
         this.coordList.set(taskIndex, newCoord);
         LOG.info("reset coordinator for export job: {}, taskIdx: {}", id, taskIndex);
         return newCoord;

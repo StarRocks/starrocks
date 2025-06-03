@@ -394,11 +394,11 @@ public class CatalogRecycleBinLakeTableTest {
         Partition p3 = table1.getPartition("p3");
         Assert.assertNotNull(p1);
         Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p1.getDefaultPhysicalPartition(),
-                WarehouseManager.DEFAULT_WAREHOUSE_ID));
+                WarehouseManager.DEFAULT_RESOURCE));
         Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p2.getDefaultPhysicalPartition(),
-                WarehouseManager.DEFAULT_WAREHOUSE_ID));
+                WarehouseManager.DEFAULT_RESOURCE));
         Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p3.getDefaultPhysicalPartition(),
-                WarehouseManager.DEFAULT_WAREHOUSE_ID));
+                WarehouseManager.DEFAULT_RESOURCE));
 
         // Drop partition "p1"
         alterTable(connectContext, String.format("ALTER TABLE %s.t1 DROP PARTITION p1", dbName));
@@ -505,7 +505,7 @@ public class CatalogRecycleBinLakeTableTest {
 
         p1 = table2.getPartition("p1");
         Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p1.getDefaultPhysicalPartition(),
-                WarehouseManager.DEFAULT_WAREHOUSE_ID));
+                WarehouseManager.DEFAULT_RESOURCE));
         // Drop partition "p1"
         alterTable(connectContext, String.format("ALTER TABLE %s.t2 DROP PARTITION p1", dbName));
         Assert.assertNull(table2.getPartition("p1"));

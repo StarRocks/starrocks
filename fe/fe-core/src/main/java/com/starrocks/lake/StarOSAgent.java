@@ -51,6 +51,7 @@ import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -77,6 +78,8 @@ public class StarOSAgent {
 
     public static final String SERVICE_NAME = "starrocks";
 
+    // warehouse -> worker_group
+    //  index -> worker_group_id
     public static final long DEFAULT_WORKER_GROUP_ID = 0L;
 
     protected StarClient client;
@@ -491,11 +494,12 @@ public class StarOSAgent {
 
     public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId,
                                    @Nullable List<Long> matchShardIds, @NotNull Map<String, String> properties,
-                                   long workerGroupId)
+                                   ComputeResource computeResource)
         throws DdlException {
         if (matchShardIds != null) {
             Preconditions.checkState(numShards == matchShardIds.size());
         }
+        long workerGroupId = computeResource.getWorkerGroupId();
         prepare();
         List<ShardInfo> shardInfos = null;
         try {

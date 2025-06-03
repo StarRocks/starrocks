@@ -1262,11 +1262,12 @@ public class LeaderImpl {
 
         long txnId;
         try {
+            // TODO(ComputeResource): support more better compute resource acquiring.
             txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(db.getId(),
                     request.getTable_ids(), request.getLabel(),
                     new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                     LoadJobSourceType.valueOf(request.getSource_type()), request.getTimeout_second(),
-                    WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                    WarehouseManager.DEFAULT_RESOURCE);
         } catch (Exception e) {
             LOG.warn("begin remote txn failed, label {}", request.getLabel(), e);
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);

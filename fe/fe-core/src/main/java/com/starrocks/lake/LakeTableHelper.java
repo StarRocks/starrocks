@@ -35,10 +35,10 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -115,8 +115,10 @@ public class LakeTableHelper {
         }
     }
 
-    static Optional<ShardInfo> getAssociatedShardInfo(PhysicalPartition partition, long warehouseId) throws StarClientException {
+    static Optional<ShardInfo> getAssociatedShardInfo(PhysicalPartition partition,
+                                                      ComputeResource computeResource) throws StarClientException {
         List<MaterializedIndex> allIndices = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+        final long workerGroupId = computeResource.getWorkerGroupId();
         for (MaterializedIndex materializedIndex : allIndices) {
             List<Tablet> tablets = materializedIndex.getTablets();
             if (tablets.isEmpty()) {
@@ -127,9 +129,6 @@ public class LakeTableHelper {
                 if (GlobalStateMgr.isCheckpointThread()) {
                     throw new RuntimeException("Cannot call getShardInfo in checkpoint thread");
                 }
-                WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-                long workerGroupId = warehouseManager.selectWorkerGroupByWarehouseId(warehouseId)
-                        .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                 ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent().getShardInfo(tablet.getShardId(),
                         workerGroupId);
 
@@ -144,10 +143,10 @@ public class LakeTableHelper {
         return Optional.empty();
     }
 
-    static boolean removePartitionDirectory(Partition partition, long warehouseId) throws StarClientException {
+    static boolean removePartitionDirectory(Partition partition, ComputeResource computeResource) throws StarClientException {
         boolean ret = true;
         for (PhysicalPartition subPartition : partition.getSubPartitions()) {
-            ShardInfo shardInfo = getAssociatedShardInfo(subPartition, warehouseId).orElse(null);
+            ShardInfo shardInfo = getAssociatedShardInfo(subPartition, computeResource).orElse(null);
             if (shardInfo == null) {
                 LOG.info("Skipped remove directory of empty partition {}", subPartition.getId());
                 continue;
@@ -184,9 +183,9 @@ public class LakeTableHelper {
         }
     }
 
-    public static boolean isSharedPartitionDirectory(PhysicalPartition physicalPartition, long warehouseId)
+    public static boolean isSharedPartitionDirectory(PhysicalPartition physicalPartition, ComputeResource computeResource)
             throws StarClientException {
-        ShardInfo shardInfo = getAssociatedShardInfo(physicalPartition, warehouseId).orElse(null);
+        ShardInfo shardInfo = getAssociatedShardInfo(physicalPartition, computeResource).orElse(null);
         if (shardInfo == null) {
             return false;
         }
