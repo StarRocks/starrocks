@@ -125,3 +125,14 @@ WITH `CTE` AS (
 [1]	[1]
 [1]	[1]
 -- !result
+with t1 as (
+ select parse_json('[{"open_id": "aaa", "num": 1},{"open_id": "bbb", "num": 2},{"open_id": "ccc", "num": 3}]') as price_list
+),t2 as (
+ select price_list,array_map(x -> get_json_string(x,'$.open_id'), cast(price_list as array<json>)  ) as  fields
+ from t1  
+)
+select * from t2 
+where  array_contains(fields,'bbb');
+-- result:
+[{"num": 1, "open_id": "aaa"}, {"num": 2, "open_id": "bbb"}, {"num": 3, "open_id": "ccc"}]	["aaa","bbb","ccc"]
+-- !result
