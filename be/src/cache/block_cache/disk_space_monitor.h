@@ -14,8 +14,6 @@
 
 #pragma once
 
-#include <sys/stat.h>
-
 #include <atomic>
 #include <mutex>
 #include <thread>
@@ -48,6 +46,7 @@ public:
         int64_t capacity_bytes = 0;
         int64_t available_bytes = 0;
 
+        int64_t used_bytes() { return capacity_bytes - available_bytes; }
         double used_rate() { return static_cast<double>(capacity_bytes - available_bytes) / capacity_bytes; }
     };
 
@@ -65,7 +64,7 @@ public:
 
     std::vector<DirSpace>& dir_spaces() { return _dir_spaces; }
 
-    size_t total_cache_quota();
+    size_t cache_quota();
 
     // The align unit when adjusting cache disk quota. We set it to 10G to keep consistent with underlying cache file size,
     // which can help reduce processing the specail tail files.
@@ -81,13 +80,17 @@ private:
 
     void _revise_disk_stats_by_cache_dir();
 
-    void _update_spaces_by_cache_usage(const AdjustContext& ctx);
-
     void _update_spaces_by_cache_quota(size_t cache_avalil_bytes);
 
     bool _allow_expansion(const AdjustContext& ctx);
 
+    size_t _cache_usage(const AdjustContext& ctx);
+
+    size_t _check_cache_limit(int64_t cache_quota);
+
     size_t _check_cache_low_limit(int64_t cache_quota);
+
+    size_t _check_cache_high_limit(int64_t cache_quota);
 
     dev_t _device_id = 0;
     std::string _path;
