@@ -24,12 +24,9 @@
 #include <fmt/ostream.h>
 #include <sys/syscall.h>
 
-<<<<<<< HEAD
-=======
 #include <thread>
 #include <tuple>
 
->>>>>>> 69fc6bdecb ([Enhancement] Add SignalTimerGuard class for thread stack trace timeout monitoring (#59380))
 #include "common/config.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/split.h"
@@ -98,34 +95,10 @@ struct StackTraceTaskHash {
 };
 
 void get_stack_trace_sighandler(int signum, siginfo_t* siginfo, void* ucontext) {
-<<<<<<< HEAD
     auto task = reinterpret_cast<StackTraceTask*>(siginfo->si_value.sival_ptr);
     task->depth = google::glog_internal_namespace_::GetStackTrace(task->addrs, StackTraceTask::kMaxStackDepth, 2);
-    task->done = true;
-=======
-    int64_t start_us = MonotonicMicros();
-    int tid = static_cast<int>(syscall(SYS_gettid));
-    auto stack_trace_id = siginfo->si_value.sival_int;
-    StackTraceTaskMapSharedPtr stack_trace_task_map;
-    bool ret =
-            g_running_stack_trace.if_contains(stack_trace_id, [&](const auto& value) { stack_trace_task_map = value; });
-    if (!ret) {
-        LOG(WARNING) << "stack trace id " << stack_trace_id << " not found, tid: " << tid;
-        return;
-    }
-    auto it = stack_trace_task_map->find(tid);
-    if (it == stack_trace_task_map->end()) {
-        LOG(WARNING) << "tid " << tid << " not found, stack trace id " << stack_trace_id;
-        return;
-    }
-    auto& task = it->second;
-    task.depth = google::glog_internal_namespace_::GetStackTrace(task.addrs, StackTraceTask::kMaxStackDepth, 2);
-    // get_stack_trace_for_thread first checks done flag then gets the cost.
-    // To ensure the cost is valid, set cost before done flag
-    task.cost_us = MonotonicMicros() - start_us;
-    task.done = true;
     task.id = std::this_thread::get_id();
->>>>>>> 69fc6bdecb ([Enhancement] Add SignalTimerGuard class for thread stack trace timeout monitoring (#59380))
+    task->done = true;
 }
 
 bool install_stack_trace_sighandler() {
@@ -180,13 +153,8 @@ std::string get_stack_trace_for_thread(int tid, int timeout_ms) {
             return msg;
         }
     }
-<<<<<<< HEAD
-    std::string ret = "Stack trace tid: " + std::to_string(tid) + "\n" + task.to_string();
-    LOG(INFO) << ret;
-=======
     std::string ret =
-            fmt::format("Stack trace id: {}, tid: {} cid:{} \n{}", stack_trace_id, tid, task.id, task.to_string());
->>>>>>> 69fc6bdecb ([Enhancement] Add SignalTimerGuard class for thread stack trace timeout monitoring (#59380))
+            fmt::format("Stack trace tid:{} cid:{} \n{}", tid, task.id, task.to_string());
     return ret;
 }
 
