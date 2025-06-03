@@ -3351,7 +3351,8 @@ TEST_F(FileReaderTest, TestReadFooterCache) {
     CacheOptions options = TestCacheUtils::create_simple_options(256 * KB, 100 * MB);
     auto local_cache = std::make_shared<StarCacheWrapper>();
     ASSERT_OK(local_cache->init(options));
-    auto cache = std::make_shared<StarCacheModule>(local_cache->starcache_instance());
+    auto starcache_module = std::make_shared<StarCacheModule>(local_cache->starcache_instance());
+    auto cache = std::make_shared<StoragePageCache>(starcache_module.get());
 
     auto file = _create_file(_file1_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),

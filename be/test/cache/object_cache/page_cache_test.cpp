@@ -65,6 +65,33 @@ void StoragePageCacheTest::create_obj_cache(size_t capacity) {
     _obj_cache = std::make_shared<LRUCacheModule>(_lru_cache);
 }
 
+TEST_F(StoragePageCacheTest, insert_with_deleter) {
+    struct Value {
+        Value(std::string v) : value(std::move(v)) {}
+        std::string value;
+    };
+    auto deleter = [](const starrocks::CacheKey& key, void* value) { delete (Value*)value; };
+
+    {
+        std::string key("123");
+        auto* value = new Value("value_of_123");
+        PageCacheHandle handle;
+        ObjectCacheWriteOptions opts;
+
+        ASSERT_OK(_page_cache->insert(key, (void*)value, 15, deleter, opts, &handle));
+        Value* handle_value = (Value*)handle.data();
+        ASSERT_EQ(handle_value->value, "value_of_123");
+    }
+    {
+        std::string key("123");
+        PageCacheHandle handle;
+
+        ASSERT_TRUE(_page_cache->lookup(key, &handle));
+        Value* handle_value = (Value*)handle.data();
+        ASSERT_EQ(handle_value->value, "value_of_123");
+    }
+}
+
 // NOLINTNEXTLINE
 TEST_F(StoragePageCacheTest, normal) {
     {
@@ -74,7 +101,7 @@ TEST_F(StoragePageCacheTest, normal) {
         PageCacheHandle handle;
 
         ObjectCacheWriteOptions opts;
-        ASSERT_OK(_page_cache->insert(key, data.get(), &handle, &opts));
+        ASSERT_OK(_page_cache->insert(key, data.get(), &opts, &handle));
         ASSERT_EQ(handle.data(), data.get());
         auto* check_data = data.release();
 
@@ -89,7 +116,7 @@ TEST_F(StoragePageCacheTest, normal) {
         PageCacheHandle handle;
 
         ObjectCacheWriteOptions opts{.priority = true};
-        ASSERT_OK(_page_cache->insert(key, data.get(), &handle, opts));
+        ASSERT_OK(_page_cache->insert(key, data.get(), opts, &handle));
         ASSERT_EQ(handle.data(), data.get());
         data.release();
 
@@ -103,7 +130,7 @@ TEST_F(StoragePageCacheTest, normal) {
         auto data = std::make_unique<std::vector<uint8_t>>(1024);
         PageCacheHandle handle;
         ObjectCacheWriteOptions opts;
-        ASSERT_OK(_page_cache->insert(key, data.get(), &handle, opts));
+        ASSERT_OK(_page_cache->insert(key, data.get(), opts, &handle));
         data.release();
     }
 
@@ -170,7 +197,7 @@ TEST_F(StoragePageCacheTest, metrics) {
         // Insert a piece of data, but the application layer does not release it.
         auto data = std::make_unique<std::vector<uint8_t>>(1024);
         ObjectCacheWriteOptions opts;
-        ASSERT_OK(_page_cache->insert(key1, data.get(), &handle1, opts));
+        ASSERT_OK(_page_cache->insert(key1, data.get(), opts, &handle1));
         data.release();
     }
 
@@ -179,7 +206,7 @@ TEST_F(StoragePageCacheTest, metrics) {
         auto data = std::make_unique<std::vector<uint8_t>>(1024);
         PageCacheHandle handle2;
         ObjectCacheWriteOptions opts;
-        ASSERT_OK(_page_cache->insert(key2, data.get(), &handle2, opts));
+        ASSERT_OK(_page_cache->insert(key2, data.get(), opts, &handle2));
         data.release();
     }
 
