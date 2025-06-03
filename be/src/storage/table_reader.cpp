@@ -107,11 +107,11 @@ Status TableReader::multi_get(Chunk& keys, const std::vector<std::string>& value
     size_t num_rows = keys.num_rows();
     found.assign(num_rows, false);
     std::vector<OlapTablePartition*> partitions;
-    std::vector<uint32_t> tablet_indexes;
+    std::vector<uint32_t> record_hashes;
     std::vector<uint8_t> validate_selection;
     std::vector<uint32_t> validate_select_idx;
     validate_selection.assign(num_rows, 1);
-    RETURN_IF_ERROR(_partition_param->find_tablets(&keys, &partitions, &tablet_indexes, &validate_selection, nullptr, 0,
+    RETURN_IF_ERROR(_partition_param->find_tablets(&keys, &partitions, &record_hashes, &validate_selection, nullptr, 0,
                                                    nullptr));
     // Arrange selection_idx by merging _validate_selection
     // If chunk num_rows is 6
@@ -130,14 +130,17 @@ Status TableReader::multi_get(Chunk& keys, const std::vector<std::string>& value
     std::unordered_map<uint64_t, std::unique_ptr<TabletMultiGet>> multi_gets_by_tablet;
     for (size_t i = 0; i < selected_size; ++i) {
         size_t key_index = validate_select_idx[i];
-        int64_t tablet_id = partitions[key_index]->indexes[0].tablets[tablet_indexes[key_index]];
+        const auto* partition = partitions[key_index];
+        const auto& tablets = partition->indexes[0].tablets;
+        // TODO: remove num_buckets
+        int64_t tablet_id = tablets[record_hashes[key_index] % partition->num_buckets];
         auto iter = multi_gets_by_tablet.find(tablet_id);
         TabletMultiGet* multi_get = nullptr;
         if (iter == multi_gets_by_tablet.end()) {
             multi_gets_by_tablet[tablet_id] = std::make_unique<TabletMultiGet>();
             multi_get = multi_gets_by_tablet[tablet_id].get();
             multi_get->tablet_id = tablet_id;
-            auto partition_id = partitions[key_index]->id;
+            auto partition_id = partition->id;
             auto itr = _params->partition_versions.find(partition_id);
             if (itr == _params->partition_versions.end()) {
                 return Status::InternalError(strings::Substitute(

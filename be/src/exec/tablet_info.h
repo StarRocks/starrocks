@@ -171,11 +171,11 @@ private:
 
 struct ChunkRow {
     ChunkRow() = default;
-    ChunkRow(Columns* columns_, uint32_t index_) : columns(columns_), index(index_) {}
+    ChunkRow(const Columns* columns_, uint32_t index_) : columns(columns_), index(index_) {}
 
     std::string debug_string();
 
-    Columns* columns = nullptr;
+    const Columns* columns = nullptr;
     uint32_t index = 0;
 };
 
@@ -258,7 +258,7 @@ public:
     // `invalid_row_index` stores index that chunk[index]
     // has been filtered out for not being able to find tablet.
     // it could be any row, becauset it's just for outputing error message for user to diagnose.
-    Status find_tablets(Chunk* chunk, std::vector<OlapTablePartition*>* partitions, std::vector<uint32_t>* indexes,
+    Status find_tablets(Chunk* chunk, std::vector<OlapTablePartition*>* partitions, std::vector<uint32_t>* hashes,
                         std::vector<uint8_t>* selection, std::vector<int>* invalid_row_indexs, int64_t txn_id,
                         std::vector<std::vector<std::string>>* partition_not_exist_row_values);
 
@@ -276,40 +276,40 @@ private:
     /**
      * @brief  find tablets with range partition table
      * @param chunk  input chunk
-     * @param partition_columns input partition columns 
+     * @param partition_columns input partition columns
+     * @param hashes  input row hashes
      * @param partitions  output partitions
-     * @param indexes  output partition indexes
      * @param selection  chunk's selection
      * @param invalid_row_indexs output invalid row indexs
      * @param partition_not_exist_row_values  output partition not exist row values
      * @return Status 
      */
-    Status _find_tablets_with_range_partition(Chunk* chunk, Columns partition_columns,
+    Status _find_tablets_with_range_partition(Chunk* chunk, const Columns& partition_columns,
+                                              const std::vector<uint32_t>& hashes,
                                               std::vector<OlapTablePartition*>* partitions,
-                                              std::vector<uint32_t>* indexes, std::vector<uint8_t>* selection,
-                                              std::vector<int>* invalid_row_indexs,
+                                              std::vector<uint8_t>* selection, std::vector<int>* invalid_row_indexs,
                                               std::vector<std::vector<std::string>>* partition_not_exist_row_values);
 
     /**
      * @brief  find tablets with list partition table
      * @param chunk  input chunk
-     * @param partition_columns input partition columns 
+     * @param partition_columns input partition columns
+     * @param hashes  input row hashes
      * @param partitions  output partitions
-     * @param indexes  output partition indexes
      * @param selection  chunk's selection
      * @param invalid_row_indexs output invalid row indexs
      * @param partition_not_exist_row_values  output partition not exist row values
      * @return Status 
      */
-    Status _find_tablets_with_list_partition(Chunk* chunk, Columns partition_columns,
+    Status _find_tablets_with_list_partition(Chunk* chunk, const Columns& partition_columns,
+                                             const std::vector<uint32_t>& hashes,
                                              std::vector<OlapTablePartition*>* partitions,
-                                             std::vector<uint32_t>* indexes, std::vector<uint8_t>* selection,
-                                             std::vector<int>* invalid_row_indexs,
+                                             std::vector<uint8_t>* selection, std::vector<int>* invalid_row_indexs,
                                              std::vector<std::vector<std::string>>* partition_not_exist_row_values);
 
     Status _create_partition_keys(const std::vector<TExprNode>& t_exprs, ChunkRow* part_key);
 
-    void _compute_hashes(Chunk* chunk, std::vector<uint32_t>* indexes);
+    void _compute_hashes(const Chunk* chunk, std::vector<uint32_t>* hashes);
 
     // check if this partition contain this key
     bool _part_contains(OlapTablePartition* part, ChunkRow* key) const {
@@ -327,7 +327,7 @@ private:
     std::vector<SlotDescriptor*> _partition_slot_descs;
     std::vector<SlotDescriptor*> _distributed_slot_descs;
     Columns _partition_columns;
-    std::vector<Column*> _distributed_columns;
+    std::vector<const Column*> _distributed_columns;
     std::vector<ExprContext*> _partitions_expr_ctxs;
 
     ObjectPool _obj_pool;
