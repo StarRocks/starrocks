@@ -150,6 +150,8 @@ public:
 
     const std::string& encryption_meta() const { return _opts.encryption_meta; }
 
+    int64_t bundle_file_offset() const;
+
 private:
     Status _write_short_key_index();
     Status _write_footer();

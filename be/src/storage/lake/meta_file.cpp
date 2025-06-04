@@ -121,6 +121,7 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
         if (replace_seg.first < rowset->segment_encryption_metas_size()) {
             rowset->set_segment_encryption_metas(replace_seg.first, replace_seg.second.encryption_meta);
         }
+        rowset->clear_bundle_file_offsets(); // clear shared file offsets, since we rewrite segments.
     }
 
     rowset->set_id(_tablet_meta->next_rowset_id());

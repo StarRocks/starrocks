@@ -93,8 +93,12 @@ void RssidFileInfoContainer::add_rssid_to_file(const TabletMetadata& metadata) {
     for (auto& rs : metadata.rowsets()) {
         bool has_segment_size = (rs.segments_size() == rs.segment_size_size());
         bool has_encryption_meta = (rs.segments_size() == rs.segment_encryption_metas_size());
+        bool has_bundle_file_offset = (rs.segments_size() == rs.bundle_file_offsets_size());
         for (int i = 0; i < rs.segments_size(); i++) {
             FileInfo segment_info{.path = rs.segments(i)};
+            if (has_bundle_file_offset) {
+                segment_info.bundle_file_offset = rs.bundle_file_offsets(i);
+            }
             if (LIKELY(has_segment_size)) {
                 segment_info.size = rs.segment_size(i);
             }
@@ -117,7 +121,11 @@ void RssidFileInfoContainer::add_rssid_to_file(const RowsetMetadataPB& meta, uin
     } else {
         bool has_segment_size = (meta.segments_size() == meta.segment_size_size());
         bool has_encryption_meta = (meta.segments_size() == meta.segment_encryption_metas_size());
+        bool has_bundle_file_offset = (meta.segments_size() == meta.bundle_file_offsets_size());
         FileInfo segment_info{.path = meta.segments(segment_id)};
+        if (has_bundle_file_offset) {
+            segment_info.bundle_file_offset = meta.bundle_file_offsets(segment_id);
+        }
         if (LIKELY(has_segment_size)) {
             segment_info.size = meta.segment_size(segment_id);
         }
@@ -557,6 +565,9 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, s
         if (segment_info.size.has_value()) {
             file_info.size = segment_info.size;
         }
+        if (segment_info.bundle_file_offset.has_value()) {
+            file_info.bundle_file_offset = segment_info.bundle_file_offset;
+        }
         auto segment = Segment::open(fs, file_info, segment_id, tablet_schema);
         if (!segment.ok()) {
             LOG(WARNING) << "Fail to open rssid: " << segment_id << " path: " << file_info.path << " : "
@@ -575,7 +586,7 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, s
         ColumnIteratorOptions iter_opts;
         OlapReaderStatistics stats;
         iter_opts.stats = &stats;
-        ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(opts, file_info));
+        ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file_with_bundling(opts, file_info));
         iter_opts.read_file = read_file.get();
         for (auto i = 0; i < read_column_ids.size(); ++i) {
             const TabletColumn& col = tablet_schema->column(read_column_ids[i]);
@@ -616,6 +627,11 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, s
         const std::vector<uint32_t> auto_increment_col_partial_id(1, auto_increment_state->id);
         FileInfo info;
         info.path = params.op_write.rowset().segments(segment_id);
+        if (segment_id < params.op_write.rowset().bundle_file_offsets_size()) {
+            // use shared file offset if available
+            info.bundle_file_offset = params.op_write.rowset().bundle_file_offsets(segment_id);
+            info.size = params.op_write.rowset().segment_size(segment_id);
+        }
         if (segment_id < params.op_write.rowset().segment_encryption_metas_size()) {
             info.encryption_meta = params.op_write.rowset().segment_encryption_metas(segment_id);
         }

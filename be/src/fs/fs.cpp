@@ -17,6 +17,7 @@
 #include <fmt/format.h>
 
 #include "fs/azure/fs_azblob.h"
+#include "fs/bundle_file.h"
 #include "fs/encrypt_file.h"
 #include "fs/fs_posix.h"
 #include "fs/fs_s3.h"
@@ -142,6 +143,20 @@ StatusOr<std::shared_ptr<FileSystem>> FileSystem::CreateSharedFromString(std::st
     // Since almost all famous storage are compatible with Hadoop FileSystem, it's always a choice to fallback using
     // Hadoop FileSystem to access storage.
     return get_tls_fs_hdfs();
+}
+
+StatusOr<std::unique_ptr<RandomAccessFile>> FileSystem::new_random_access_file_with_bundling(
+        const RandomAccessFileOptions& opts, const FileInfo& file_info) {
+    if (file_info.bundle_file_offset.has_value() && file_info.bundle_file_offset.value() >= 0) {
+        // If the file is a shared file, we need to create a new random access file with the offset.
+        ASSIGN_OR_RETURN(auto file, new_random_access_file(opts, file_info.path));
+        auto bundle_file = std::make_unique<BundleSeekableInputStream>(
+                file->stream(), file_info.bundle_file_offset.value(), file_info.size.value());
+        RETURN_IF_ERROR(bundle_file->init());
+        return std::make_unique<RandomAccessFile>(std::move(bundle_file), file->filename(), file->is_cache_hit());
+    } else {
+        return new_random_access_file(opts, file_info.path);
+    }
 }
 
 const THdfsProperties* FSOptions::hdfs_properties() const {

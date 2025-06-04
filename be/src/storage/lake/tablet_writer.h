@@ -81,7 +81,7 @@ public:
     // arranged in ascending order.
     //
     // For horizontal writer.
-    virtual Status write(const Chunk& data, SegmentPB* segment = nullptr) = 0;
+    virtual Status write(const Chunk& data, SegmentPB* segment = nullptr, bool eos = false) = 0;
 
     // Writes both chunk and each rows's rssid & rowid
     // For horizontal writer.

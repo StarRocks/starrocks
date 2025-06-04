@@ -31,8 +31,10 @@ namespace starrocks::lake {
 
 HorizontalPkTabletWriter::HorizontalPkTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
                                                    std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
-                                                   ThreadPool* flush_pool, bool is_compaction)
-        : HorizontalGeneralTabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, is_compaction, flush_pool),
+                                                   ThreadPool* flush_pool, bool is_compaction,
+                                                   BundleWritableFileContext* bundle_file_context)
+        : HorizontalGeneralTabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, is_compaction, flush_pool,
+                                        bundle_file_context),
           _rowset_txn_meta(std::make_unique<RowsetTxnMetaPB>()) {
     if (is_compaction) {
         auto rows_mapper_filename = lake_rows_mapper_filename(tablet_id, txn_id);
@@ -91,7 +93,12 @@ Status HorizontalPkTabletWriter::flush_segment_writer(SegmentPB* segment) {
         partial_rowset_footer->set_size(segment_size - footer_position);
         const std::string& segment_path = _seg_writer->segment_path();
         std::string segment_name = std::string(basename(segment_path));
-        _files.emplace_back(FileInfo{segment_name, segment_size, _seg_writer->encryption_meta()});
+        auto file_info = FileInfo{segment_name, segment_size, _seg_writer->encryption_meta()};
+        if (_seg_writer->bundle_file_offset() >= 0) {
+            // This is a shared data file.
+            file_info.bundle_file_offset = _seg_writer->bundle_file_offset();
+        }
+        _files.emplace_back(file_info);
         _data_size += segment_size;
         _stats.bytes_write += segment_size;
         _stats.segment_count++;

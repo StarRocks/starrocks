@@ -417,6 +417,7 @@ StatusOr<AsyncDeltaWriterBuilder::AsyncDeltaWriterPtr> AsyncDeltaWriterBuilder::
                                           .set_column_to_expr_value(_column_to_expr_value)
                                           .set_load_id(_load_id)
                                           .set_profile(_profile)
+                                          .set_bundle_writable_file_context(_bundle_writable_file_context)
                                           .build());
     auto impl = new AsyncDeltaWriterImpl(std::move(writer));
     return std::make_unique<AsyncDeltaWriter>(impl);
