@@ -112,6 +112,7 @@ set(UTIL_FILES
   debug_action.cpp
   internal_service_recoverable_stub.cpp
   byte_buffer.cpp
+  counter_memory_pool.cpp
 )
 
 add_library(Util STATIC
