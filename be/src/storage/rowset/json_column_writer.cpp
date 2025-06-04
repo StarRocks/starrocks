@@ -174,12 +174,13 @@ Status FlatJsonColumnWriter::_init_flat_writers() {
             opts.meta->set_is_nullable(true);
         }
 
-        if (_flat_types[i] == TYPE_JSON && (!_has_remain || i != _flat_paths.size() - 1)) {
+        if (config::json_flat_use_dict_encoding && _flat_types[i] == TYPE_JSON &&
+            (!_has_remain || i != _flat_paths.size() - 1)) {
             // try to use dict encoding for flat json
             opts.meta->set_encoding(EncodingTypePB::DICT_ENCODING);
             opts.meta->set_compression(_json_meta->compression());
         } else {
-            opts.meta->set_encoding(_json_meta->encoding());
+            opts.meta->set_encoding(EncodingTypePB::DEFAULT_ENCODING);
             opts.meta->set_compression(_json_meta->compression());
         }
 
