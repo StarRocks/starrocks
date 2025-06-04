@@ -35,9 +35,8 @@ HorizontalGeneralTabletWriter::HorizontalGeneralTabletWriter(TabletManager* tabl
                                                              std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
                                                              bool is_compaction, ThreadPool* flush_pool,
                                                              BundleWritableFileContext* bundle_file_context)
-        : TabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, is_compaction, flush_pool) {
-    _bundle_file_context = bundle_file_context;
-}
+        : TabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, is_compaction, flush_pool),
+          _bundle_file_context(bundle_file_context) {}
 
 HorizontalGeneralTabletWriter::~HorizontalGeneralTabletWriter() = default;
 

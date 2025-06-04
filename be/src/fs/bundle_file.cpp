@@ -32,7 +32,7 @@ Status BundleWritableFileContext::try_create_bundle_file(
     return Status::OK();
 }
 
-Status BundleWritableFileContext::close() {
+Status BundleWritableFileContext::_close() {
     if (_bundle_file) {
         RETURN_IF_ERROR(_bundle_file->close());
     }
@@ -53,7 +53,7 @@ Status BundleWritableFileContext::decrease_active_writers() {
     }
     if (is_last_writer) {
         // If there are no active writers, we can close the shared file.
-        RETURN_IF_ERROR(close());
+        RETURN_IF_ERROR(_close());
     }
     return Status::OK();
 }
@@ -78,9 +78,7 @@ Status BundleWritableFile::append(const Slice& data) {
 
 Status BundleWritableFile::appendv(const Slice* data, size_t cnt) {
     for (size_t i = 0; i < cnt; ++i) {
-        _buffers.emplace_back(std::make_unique<std::string>(data[i].data, data[i].size));
-        _slices.emplace_back(*_buffers.back());
-        _local_buffer_file_size += data[i].size;
+        RETURN_IF_ERROR(append(data[i]));
     }
     return Status::OK();
 }

@@ -423,9 +423,10 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
             << "segment_size size != segment file size, tablet: " << _tablet_id << ", rowset: " << metadata().id()
             << ", segment file size: " << segment_file_size << ", segment_size size: " << segment_size_size;
     LOG_IF(ERROR, bundle_file_offsets_size > 0 && segment_size_size != bundle_file_offsets_size)
-            << "segment_size size != shared file offsets size, tablet: " << _tablet_id
+            << "segment_size size != bundle file offsets size, tablet: " << _tablet_id
             << ", rowset: " << metadata().id() << ", segment file size: " << segment_file_size
-            << ", shared file offsets size: " << bundle_file_offsets_size;
+            << ", bundle file offsets size: " << bundle_file_offsets_size
+            << ", segment_size size: " << segment_size_size;
 
     const auto& files_to_size = metadata().segment_size();
     const auto& files_to_offset = metadata().bundle_file_offsets();

@@ -25,8 +25,6 @@ public:
 
     Status try_create_bundle_file(const std::function<StatusOr<std::unique_ptr<WritableFile>>()>& create_file_fn);
 
-    Status close();
-
     // Called when writer is prepared to write.
     void increase_active_writers();
     // last writer will close the shared file.
@@ -36,6 +34,9 @@ public:
 
     // Append slices to the shared file, and return the first offset of the slices.
     StatusOr<int64_t> appendv(const std::vector<Slice>& slices, const FileEncryptionInfo& info);
+
+private:
+    Status _close();
 
 private:
     // shared file
