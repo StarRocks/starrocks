@@ -15,6 +15,7 @@
 package com.starrocks.alter;
 
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.OptimizeClause;
@@ -92,6 +93,7 @@ public class OptimizeJobV2BuilderTest {
         Mockito.when(table.getName()).thenReturn("myTable");
         Mockito.when(table.getStorageType()).thenReturn(null);
         Mockito.when(table.enableReplicatedStorage()).thenReturn(true);
+        Config.enable_online_optimize_table = true;
 
         // Create an instance of OptimizeJobV2Builder without an optimize clause
         OptimizeJobV2Builder builder = new OptimizeJobV2Builder(table);
@@ -107,5 +109,6 @@ public class OptimizeJobV2BuilderTest {
         OnlineOptimizeJobV2 onlineOptimizeJob = (OnlineOptimizeJobV2) job;
         Assert.assertEquals(123L, onlineOptimizeJob.getTableId());
         Assert.assertEquals("myTable", onlineOptimizeJob.getTableName());
+        Config.enable_online_optimize_table = false;
     }
 }
