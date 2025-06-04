@@ -87,10 +87,10 @@ void RuntimeProfile::merge(RuntimeProfile* other) {
             dst_iter = _counter_map.find(src_iter->first);
 
             if (dst_iter == _counter_map.end()) {
-                _counter_map[src_iter->first] = std::make_pair(
-                        _pool->add(new Counter(src_iter->second.first->type(), src_iter->second.first->strategy(),
-                                               src_iter->second.first->value())),
-                        src_iter->second.second);
+                void* mem = _counter_pool.allocate(sizeof(Counter));
+                Counter* counter = new (mem) Counter(src_iter->second.first->type(), src_iter->second.first->strategy(),
+                                                     src_iter->second.first->value());
+                _counter_map[src_iter->first] = std::make_pair(counter, src_iter->second.second);
             } else {
                 DCHECK(dst_iter->second.first->type() == src_iter->second.first->type());
 
@@ -171,8 +171,9 @@ void RuntimeProfile::update(const std::vector<TRuntimeProfileNode>& nodes, int* 
 
             if (j == _counter_map.end()) {
                 // TODO(hcf) pass correct parent counter name
-                _counter_map[tcounter.name] = std::make_pair(
-                        _pool->add(new Counter(tcounter.type, tcounter.strategy, tcounter.value)), ROOT_COUNTER);
+                void* mem = _counter_pool.allocate(sizeof(Counter));
+                Counter* counter = new (mem) Counter(tcounter.type, tcounter.strategy, tcounter.value);
+                _counter_map[tcounter.name] = std::make_pair(counter, ROOT_COUNTER);
             } else {
                 if (j->second.first->type() != tcounter.type) {
                     LOG(ERROR) << "Cannot update counters with the same name (" << j->first << ") but different types.";
@@ -331,7 +332,10 @@ RuntimeProfile::Counter* RuntimeProfile::add_counter_unlock(const std::string& n
     }
 
     DCHECK(parent_name == ROOT_COUNTER || _counter_map.find(parent_name) != _counter_map.end());
-    Counter* counter = _pool->add(new Counter(type, strategy, 0));
+
+    void* mem = _counter_pool.allocate(sizeof(Counter));
+    Counter* counter = new (mem) Counter(type, strategy, 0);
+
     _counter_map[name] = std::make_pair(counter, parent_name);
     _child_counter_map[parent_name].insert(name);
     return counter;
@@ -488,7 +492,8 @@ void RuntimeProfile::copy_all_info_strings_from(RuntimeProfile* src_profile) {
             return reinterpret_cast<T*>(_counter_map[name].first);                                              \
         }                                                                                                       \
         DCHECK(parent_name == ROOT_COUNTER || _counter_map.find(parent_name) != _counter_map.end());            \
-        T* counter = _pool->add(new T(unit, strategy, 0));                                                      \
+        void* mem = _counter_pool.allocate(sizeof(T));                                                          \
+        T* counter = new (mem) T(unit, strategy, 0);                                                            \
         _counter_map[name] = std::make_pair(counter, parent_name);                                              \
         auto& child_counters = LookupOrInsert(&_child_counter_map, parent_name, std::set<std::string>());       \
         child_counters.insert(name);                                                                            \
@@ -514,7 +519,9 @@ RuntimeProfile::DerivedCounter* RuntimeProfile::add_derived_counter(const std::s
         return nullptr;
     }
 
-    DerivedCounter* counter = _pool->add(new DerivedCounter(type, counter_fn));
+    void* mem = _counter_pool.allocate(sizeof(DerivedCounter));
+    DerivedCounter* counter = new (mem) DerivedCounter(type, counter_fn);
+
     _counter_map[name] = std::make_pair(counter, parent_name);
     auto& child_counters = LookupOrInsert(&_child_counter_map, parent_name, std::set<std::string>());
     child_counters.insert(name);
@@ -522,7 +529,8 @@ RuntimeProfile::DerivedCounter* RuntimeProfile::add_derived_counter(const std::s
 }
 
 RuntimeProfile::ThreadCounters* RuntimeProfile::add_thread_counters(const std::string& prefix) {
-    ThreadCounters* counter = _pool->add(new ThreadCounters());
+    void* mem = _counter_pool.allocate(sizeof(ThreadCounters));
+    ThreadCounters* counter = new (mem) ThreadCounters();
     counter->_total_time =
             add_counter(prefix + THREAD_TOTAL_TIME, TUnit::TIME_NS, Counter::create_strategy(TUnit::TIME_NS));
     counter->_user_time = add_child_counter(prefix + THREAD_USER_TIME, TUnit::TIME_NS,
