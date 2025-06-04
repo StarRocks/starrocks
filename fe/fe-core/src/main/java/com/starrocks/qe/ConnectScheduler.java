@@ -250,13 +250,9 @@ public class ConnectScheduler {
             }
 
             // Check whether it's the connection for the specified user.
-<<<<<<< HEAD
-            if (forUser != null && !ctx.getQualifiedUser().equals(forUser)) {
-=======
-            if ((forUser != null && !contextToShow.getQualifiedUser().equals(forUser)) ||
+            if ((forUser != null && !ctx.getQualifiedUser().equals(forUser)) ||
                     (Config.authorization_enable_admin_user_protection &&
-                            contextToShow.getQualifiedUser().equals(AuthenticationMgr.ROOT_USER))) {
->>>>>>> ace091afea ([BugFix] Shouldn't show process list for root user when admin protection enabled (#59435))
+                            ctx.getQualifiedUser().equals(AuthenticationMgr.ROOT_USER))) {
                 continue;
             }
 
