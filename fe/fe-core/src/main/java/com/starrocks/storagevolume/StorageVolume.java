@@ -299,6 +299,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                 if (credentialInfo.hasSimpleCredential()) {
                     params.put(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE, "false");
                     params.put(CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false");
+                    params.put(CloudConfigurationConstants.AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE, "false");
                     params.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY,
                             credentialInfo.getSimpleCredential().getAccessKey());
                     params.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY,
@@ -306,6 +307,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                 } else if (credentialInfo.hasAssumeRoleCredential()) {
                     params.put(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE, "true");
                     params.put(CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false");
+                    params.put(CloudConfigurationConstants.AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE, "false");
                     params.put(CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN,
                             credentialInfo.getAssumeRoleCredential().getIamRoleArn());
                     params.put(CloudConfigurationConstants.AWS_S3_EXTERNAL_ID,
@@ -313,6 +315,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                 } else if (credentialInfo.hasProfileCredential()) {
                     params.put(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE, "true");
                     params.put(CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false");
+                    params.put(CloudConfigurationConstants.AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE, "false");
                 } else if (credentialInfo.hasDefaultCredential()) {
                     params.put(CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
                 }
