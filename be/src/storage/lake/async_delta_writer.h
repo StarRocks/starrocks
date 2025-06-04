@@ -33,7 +33,7 @@ class SlotDescriptor;
 namespace starrocks {
 class Chunk;
 class TxnLogPB;
-class SharedWritableFileContext;
+class BundleWritableFileContext;
 } // namespace starrocks
 
 namespace starrocks::lake {
@@ -205,7 +205,7 @@ public:
         return *this;
     }
 
-    AsyncDeltaWriterBuilder& set_shared_writable_file_context(SharedWritableFileContext* shared_writable_file_context) {
+    AsyncDeltaWriterBuilder& set_shared_writable_file_context(BundleWritableFileContext* shared_writable_file_context) {
         _shared_writable_file_context = shared_writable_file_context;
         return *this;
     }
@@ -228,7 +228,7 @@ private:
     const std::map<std::string, std::string>* _column_to_expr_value{nullptr};
     PUniqueId _load_id;
     RuntimeProfile* _profile{nullptr};
-    SharedWritableFileContext* _shared_writable_file_context{nullptr};
+    BundleWritableFileContext* _shared_writable_file_context{nullptr};
 };
 
 } // namespace starrocks::lake

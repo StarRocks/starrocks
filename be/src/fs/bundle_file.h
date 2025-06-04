@@ -18,12 +18,12 @@
 
 namespace starrocks {
 
-class SharedWritableFileContext {
+class BundleWritableFileContext {
 public:
-    SharedWritableFileContext() = default;
-    ~SharedWritableFileContext() = default;
+    BundleWritableFileContext() = default;
+    ~BundleWritableFileContext() = default;
 
-    Status try_create_shared_file(const std::function<StatusOr<std::unique_ptr<WritableFile>>()>& create_file_fn);
+    Status try_create_bundle_file(const std::function<StatusOr<std::unique_ptr<WritableFile>>()>& create_file_fn);
 
     Status close();
 
@@ -39,18 +39,18 @@ public:
 
 private:
     // shared file
-    std::unique_ptr<WritableFile> _shared_file;
+    std::unique_ptr<WritableFile> _bundle_file;
     // mutex for shared file write
-    std::mutex _shared_file_mutex;
+    std::mutex _bundle_file_mutex;
     // The number of active writers to this file.
     uint32_t _active_writers = 0;
     // filename, init when create shared file.
     std::string _filename;
 };
 
-class SharedWritableFile : public WritableFile {
+class BundleWritableFile : public WritableFile {
 public:
-    explicit SharedWritableFile(SharedWritableFileContext* c, const FileEncryptionInfo& encryption_info)
+    explicit BundleWritableFile(BundleWritableFileContext* c, const FileEncryptionInfo& encryption_info)
             : _context(c), _encryption_info(encryption_info) {}
 
     Status append(const Slice& data) override;
@@ -69,25 +69,25 @@ public:
 
     const std::string& filename() const override { return _context->filename(); }
 
-    int64_t shared_file_offset() const override { return _shared_file_offset; }
+    int64_t bundle_file_offset() const override { return _bundle_file_offset; }
 
 protected:
     // It will be shared with lots of threads.
-    SharedWritableFileContext* _context = nullptr;
+    BundleWritableFileContext* _context = nullptr;
     // Each thread will have its own buffer.
     std::vector<std::unique_ptr<std::string>> _buffers;
     std::vector<Slice> _slices;
     // The size of the local buffer.
     uint64_t _local_buffer_file_size = 0;
     // The offset of current file in the shared file.
-    int64_t _shared_file_offset = 0;
+    int64_t _bundle_file_offset = 0;
     // The encryption info of the file.
     FileEncryptionInfo _encryption_info;
 };
 
-class SharedSeekableInputStream final : public io::SeekableInputStream {
+class BundleSeekableInputStream final : public io::SeekableInputStream {
 public:
-    explicit SharedSeekableInputStream(std::shared_ptr<SeekableInputStream> stream, int64_t offset, int64_t size)
+    explicit BundleSeekableInputStream(std::shared_ptr<SeekableInputStream> stream, int64_t offset, int64_t size)
             : _stream(std::move(stream)), _offset(offset), _size(size) {}
 
     Status init();

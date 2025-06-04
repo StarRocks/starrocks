@@ -22,9 +22,9 @@
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
+#include "fs/bundle_file.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
-#include "fs/shared_file.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_task.h"
@@ -2031,7 +2031,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_data_file_sharing) {
     auto tablet_id3 = _tablet_metadata->id();
     tablet_ids.push_back(tablet_id3);
     for (int i = 0; i < 3; i++) {
-        std::unique_ptr<SharedWritableFileContext> context = std::make_unique<SharedWritableFileContext>();
+        std::unique_ptr<BundleWritableFileContext> context = std::make_unique<BundleWritableFileContext>();
         int64_t txn_id = next_id();
         std::vector<std::unique_ptr<DeltaWriter>> delta_writers;
         for (int64_t tid : tablet_ids) {

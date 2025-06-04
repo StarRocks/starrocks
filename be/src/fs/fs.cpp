@@ -17,12 +17,12 @@
 #include <fmt/format.h>
 
 #include "fs/azure/fs_azblob.h"
+#include "fs/bundle_file.h"
 #include "fs/encrypt_file.h"
 #include "fs/fs_posix.h"
 #include "fs/fs_s3.h"
 #include "fs/fs_util.h"
 #include "fs/hdfs/fs_hdfs.h"
-#include "fs/shared_file.h"
 #include "runtime/file_result_writer.h"
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
 #include "fs/fs_starlet.h"
@@ -145,15 +145,15 @@ StatusOr<std::shared_ptr<FileSystem>> FileSystem::CreateSharedFromString(std::st
     return get_tls_fs_hdfs();
 }
 
-StatusOr<std::unique_ptr<RandomAccessFile>> FileSystem::new_random_access_file_with_sharing(
+StatusOr<std::unique_ptr<RandomAccessFile>> FileSystem::new_random_access_file_with_bundling(
         const RandomAccessFileOptions& opts, const FileInfo& file_info) {
-    if (file_info.shared_file_offset.has_value() && file_info.shared_file_offset.value() >= 0) {
+    if (file_info.bundle_file_offset.has_value() && file_info.bundle_file_offset.value() >= 0) {
         // If the file is a shared file, we need to create a new random access file with the offset.
         ASSIGN_OR_RETURN(auto file, new_random_access_file(opts, file_info.path));
-        auto shared_file = std::make_unique<SharedSeekableInputStream>(
-                file->stream(), file_info.shared_file_offset.value(), file_info.size.value());
-        RETURN_IF_ERROR(shared_file->init());
-        return std::make_unique<RandomAccessFile>(std::move(shared_file), file->filename(), file->is_cache_hit());
+        auto bundle_file = std::make_unique<BundleSeekableInputStream>(
+                file->stream(), file_info.bundle_file_offset.value(), file_info.size.value());
+        RETURN_IF_ERROR(bundle_file->init());
+        return std::make_unique<RandomAccessFile>(std::move(bundle_file), file->filename(), file->is_cache_hit());
     } else {
         return new_random_access_file(opts, file_info.path);
     }

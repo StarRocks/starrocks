@@ -1842,7 +1842,7 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
                     "00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"
                 ],
                 "data_size": 4096,
-                "shared_file_offsets": [
+                "bundle_file_offsets": [
                     0
                 ]
             }
@@ -1860,7 +1860,7 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
                         "00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"
                     ],
                     "data_size": 4096,
-                    "shared_file_offsets": [
+                    "bundle_file_offsets": [
                         4096
                     ]
                 }
@@ -1878,7 +1878,7 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
                     "00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"
                 ],
                 "data_size": 4096,
-                "shared_file_offsets": [
+                "bundle_file_offsets": [
                     0
                 ]
             },
@@ -1887,7 +1887,7 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
                     "00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1e.dat"
                 ],
                 "data_size": 4096,
-                "shared_file_offsets": [
+                "bundle_file_offsets": [
                     0
                 ]
             }
@@ -1905,7 +1905,7 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
                         "00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"
                     ],
                     "data_size": 4096,
-                    "shared_file_offsets": [
+                    "bundle_file_offsets": [
                         4096
                     ]
                 },
@@ -1914,7 +1914,7 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
                         "00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1e.dat"
                     ],
                     "data_size": 4096,
-                    "shared_file_offsets": [
+                    "bundle_file_offsets": [
                         4096
                     ]
                 }
@@ -1940,7 +1940,7 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
                     "00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"
                 ],
                 "data_size": 4096,
-                "shared_file_offsets": [
+                "bundle_file_offsets": [
                     0
                 ]
             },
@@ -1949,7 +1949,7 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
                     "00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1e.dat"
                 ],
                 "data_size": 4096,
-                "shared_file_offsets": [
+                "bundle_file_offsets": [
                     0
                 ]
             }
@@ -1976,7 +1976,7 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
                         "00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"
                     ],
                     "data_size": 4096,
-                    "shared_file_offsets": [
+                    "bundle_file_offsets": [
                         4096
                     ]
                 },
@@ -1985,7 +1985,7 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
                         "00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1e.dat"
                     ],
                     "data_size": 4096,
-                    "shared_file_offsets": [
+                    "bundle_file_offsets": [
                         4096
                     ]
                 }

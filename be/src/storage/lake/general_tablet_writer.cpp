@@ -18,9 +18,9 @@
 
 #include "column/chunk.h"
 #include "common/config.h"
+#include "fs/bundle_file.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
-#include "fs/shared_file.h"
 #include "runtime/current_thread.h"
 #include "serde/column_array_serde.h"
 #include "storage/lake/filenames.h"
@@ -34,9 +34,9 @@ namespace starrocks::lake {
 HorizontalGeneralTabletWriter::HorizontalGeneralTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
                                                              std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
                                                              bool is_compaction, ThreadPool* flush_pool,
-                                                             SharedWritableFileContext* shared_file_context)
+                                                             BundleWritableFileContext* bundle_file_context)
         : TabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, is_compaction, flush_pool) {
-    _shared_file_context = shared_file_context;
+    _bundle_file_context = bundle_file_context;
 }
 
 HorizontalGeneralTabletWriter::~HorizontalGeneralTabletWriter() = default;
@@ -106,11 +106,11 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
             return fs::new_writable_file(wopts, _tablet_mgr->segment_location(_tablet_id, name));
         }
     };
-    if (_shared_file_context != nullptr && _files.empty() && eos) {
+    if (_bundle_file_context != nullptr && _files.empty() && eos) {
         // If this is the first data file writer and it is the end of stream,
         // then we will create a shared file for this segment writer.
-        RETURN_IF_ERROR(_shared_file_context->try_create_shared_file(create_file_fn));
-        of = std::make_unique<SharedWritableFile>(_shared_file_context, wopts.encryption_info);
+        RETURN_IF_ERROR(_bundle_file_context->try_create_bundle_file(create_file_fn));
+        of = std::make_unique<BundleWritableFile>(_bundle_file_context, wopts.encryption_info);
     } else {
         ASSIGN_OR_RETURN(of, create_file_fn());
     }
@@ -129,9 +129,9 @@ Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
         const std::string& segment_path = _seg_writer->segment_path();
         std::string segment_name = std::string(basename(segment_path));
         auto file_info = FileInfo{segment_name, segment_size, _seg_writer->encryption_meta()};
-        if (_seg_writer->shared_file_offset() >= 0) {
+        if (_seg_writer->bundle_file_offset() >= 0) {
             // This is a shared data file.
-            file_info.shared_file_offset = _seg_writer->shared_file_offset();
+            file_info.bundle_file_offset = _seg_writer->bundle_file_offset();
         }
         _files.emplace_back(file_info);
         _data_size += segment_size;

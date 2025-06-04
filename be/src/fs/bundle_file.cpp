@@ -12,19 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "fs/shared_file.h"
+#include "fs/bundle_file.h"
 
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 
 namespace starrocks {
 
-Status SharedWritableFileContext::try_create_shared_file(
+Status BundleWritableFileContext::try_create_bundle_file(
         const std::function<StatusOr<std::unique_ptr<WritableFile>>()>& create_file_fn) {
-    std::lock_guard<std::mutex> l(_shared_file_mutex);
-    if (_shared_file == nullptr) {
-        ASSIGN_OR_RETURN(_shared_file, create_file_fn());
-        _filename = _shared_file->filename();
+    std::lock_guard<std::mutex> l(_bundle_file_mutex);
+    if (_bundle_file == nullptr) {
+        ASSIGN_OR_RETURN(_bundle_file, create_file_fn());
+        _filename = _bundle_file->filename();
     } else {
         // If the shared file is already created, we don't need to create it again.
         // Just return OK.
@@ -32,22 +32,22 @@ Status SharedWritableFileContext::try_create_shared_file(
     return Status::OK();
 }
 
-Status SharedWritableFileContext::close() {
-    if (_shared_file) {
-        RETURN_IF_ERROR(_shared_file->close());
+Status BundleWritableFileContext::close() {
+    if (_bundle_file) {
+        RETURN_IF_ERROR(_bundle_file->close());
     }
     return Status::OK();
 }
 
-void SharedWritableFileContext::increase_active_writers() {
-    std::lock_guard<std::mutex> l(_shared_file_mutex);
+void BundleWritableFileContext::increase_active_writers() {
+    std::lock_guard<std::mutex> l(_bundle_file_mutex);
     _active_writers++;
 }
 
-Status SharedWritableFileContext::decrease_active_writers() {
+Status BundleWritableFileContext::decrease_active_writers() {
     bool is_last_writer = false;
     {
-        std::lock_guard<std::mutex> l(_shared_file_mutex);
+        std::lock_guard<std::mutex> l(_bundle_file_mutex);
         _active_writers--;
         is_last_writer = (_active_writers == 0);
     }
@@ -58,25 +58,25 @@ Status SharedWritableFileContext::decrease_active_writers() {
     return Status::OK();
 }
 
-StatusOr<int64_t> SharedWritableFileContext::appendv(const std::vector<Slice>& slices, const FileEncryptionInfo& info) {
+StatusOr<int64_t> BundleWritableFileContext::appendv(const std::vector<Slice>& slices, const FileEncryptionInfo& info) {
     // Use lock to make sure each thread will write to the shared file in order.
-    std::lock_guard<std::mutex> l(_shared_file_mutex);
+    std::lock_guard<std::mutex> l(_bundle_file_mutex);
     // Get the offset of current file in the shared file.
-    int64_t shared_file_offset = _shared_file->size();
+    int64_t bundle_file_offset = _bundle_file->size();
     // Append the slices to the shared file.
-    _shared_file->set_encryption_info(info);
-    RETURN_IF_ERROR(_shared_file->appendv(slices.data(), slices.size()));
-    return shared_file_offset;
+    _bundle_file->set_encryption_info(info);
+    RETURN_IF_ERROR(_bundle_file->appendv(slices.data(), slices.size()));
+    return bundle_file_offset;
 }
 
-Status SharedWritableFile::append(const Slice& data) {
+Status BundleWritableFile::append(const Slice& data) {
     _buffers.emplace_back(std::make_unique<std::string>(data.data, data.size));
     _slices.emplace_back(*_buffers.back());
     _local_buffer_file_size += data.size;
     return Status::OK();
 }
 
-Status SharedWritableFile::appendv(const Slice* data, size_t cnt) {
+Status BundleWritableFile::appendv(const Slice* data, size_t cnt) {
     for (size_t i = 0; i < cnt; ++i) {
         _buffers.emplace_back(std::make_unique<std::string>(data[i].data, data[i].size));
         _slices.emplace_back(*_buffers.back());
@@ -85,9 +85,9 @@ Status SharedWritableFile::appendv(const Slice* data, size_t cnt) {
     return Status::OK();
 }
 
-Status SharedWritableFile::close() {
+Status BundleWritableFile::close() {
     if (_local_buffer_file_size > 0) {
-        ASSIGN_OR_RETURN(_shared_file_offset, _context->appendv(_slices, _encryption_info));
+        ASSIGN_OR_RETURN(_bundle_file_offset, _context->appendv(_slices, _encryption_info));
         // Clear the local buffer.
         _slices.clear();
         _buffers.clear();
@@ -98,49 +98,49 @@ Status SharedWritableFile::close() {
     return Status::OK();
 }
 
-Status SharedSeekableInputStream::init() {
+Status BundleSeekableInputStream::init() {
     // Initialize the stream.
     RETURN_IF_ERROR(_stream->seek(_offset));
     return Status::OK();
 }
 
-Status SharedSeekableInputStream::seek(int64_t position) {
+Status BundleSeekableInputStream::seek(int64_t position) {
     return _stream->seek(_offset + position);
 }
 
-StatusOr<int64_t> SharedSeekableInputStream::position() {
+StatusOr<int64_t> BundleSeekableInputStream::position() {
     ASSIGN_OR_RETURN(auto pos, _stream->position());
     return pos - _offset;
 }
 
-StatusOr<int64_t> SharedSeekableInputStream::read_at(int64_t offset, void* out, int64_t count) {
+StatusOr<int64_t> BundleSeekableInputStream::read_at(int64_t offset, void* out, int64_t count) {
     return _stream->read_at(_offset + offset, out, count);
 }
 
-Status SharedSeekableInputStream::read_at_fully(int64_t offset, void* out, int64_t count) {
+Status BundleSeekableInputStream::read_at_fully(int64_t offset, void* out, int64_t count) {
     return _stream->read_at_fully(_offset + offset, out, count);
 }
 
-StatusOr<int64_t> SharedSeekableInputStream::get_size() {
+StatusOr<int64_t> BundleSeekableInputStream::get_size() {
     return _size;
 }
 
-Status SharedSeekableInputStream::skip(int64_t count) {
+Status BundleSeekableInputStream::skip(int64_t count) {
     return _stream->skip(count);
 }
 
-StatusOr<std::string> SharedSeekableInputStream::read_all() {
+StatusOr<std::string> BundleSeekableInputStream::read_all() {
     std::string result;
     result.resize(_size);
     RETURN_IF_ERROR(_stream->read_at_fully(_offset, result.data(), _size));
     return std::move(result);
 }
 
-const std::string& SharedSeekableInputStream::filename() const {
+const std::string& BundleSeekableInputStream::filename() const {
     return _stream->filename();
 }
 
-StatusOr<int64_t> SharedSeekableInputStream::read(void* data, int64_t count) {
+StatusOr<int64_t> BundleSeekableInputStream::read(void* data, int64_t count) {
     return _stream->read(data, count);
 }
 

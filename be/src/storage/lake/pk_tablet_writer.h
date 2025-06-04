@@ -24,7 +24,7 @@
 namespace starrocks {
 class SegmentWriter;
 class RowsMapperBuilder;
-class SharedWritableFileContext;
+class BundleWritableFileContext;
 } // namespace starrocks
 
 namespace starrocks::lake {
@@ -34,7 +34,7 @@ public:
     explicit HorizontalPkTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
                                       std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
                                       ThreadPool* flush_pool, bool is_compaction,
-                                      SharedWritableFileContext* shared_file_context = nullptr);
+                                      BundleWritableFileContext* bundle_file_context = nullptr);
 
     ~HorizontalPkTabletWriter() override;
 

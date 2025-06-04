@@ -22,7 +22,7 @@
 
 #include "column/chunk.h"
 #include "column/column.h"
-#include "fs/shared_file.h"
+#include "fs/bundle_file.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
@@ -85,7 +85,7 @@ public:
                              MemTracker* mem_tracker, int64_t max_buffer_size, int64_t schema_id,
                              const PartialUpdateMode& partial_update_mode,
                              const std::map<string, string>* column_to_expr_value, PUniqueId load_id,
-                             RuntimeProfile* profile, SharedWritableFileContext* shared_writable_file_context)
+                             RuntimeProfile* profile, BundleWritableFileContext* shared_writable_file_context)
             : _tablet_manager(tablet_manager),
               _tablet_id(tablet_id),
               _txn_id(txn_id),
@@ -240,7 +240,7 @@ private:
     // Used in partial update to limit too much rows which will cause OOM.
     size_t _max_buffer_rows = std::numeric_limits<size_t>::max();
 
-    SharedWritableFileContext* _shared_writable_file_context = nullptr;
+    BundleWritableFileContext* _shared_writable_file_context = nullptr;
 };
 
 bool DeltaWriterImpl::is_immutable() const {
@@ -591,8 +591,8 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
             op_write->mutable_rowset()->add_segments(std::move(f.path));
             op_write->mutable_rowset()->add_segment_size(f.size.value());
             op_write->mutable_rowset()->add_segment_encryption_metas(f.encryption_meta);
-            if (f.shared_file_offset.has_value() && f.shared_file_offset.value() >= 0) {
-                op_write->mutable_rowset()->add_shared_file_offsets(f.shared_file_offset.value());
+            if (f.bundle_file_offset.has_value() && f.bundle_file_offset.value() >= 0) {
+                op_write->mutable_rowset()->add_bundle_file_offsets(f.bundle_file_offset.value());
             }
         } else if (is_del(f.path)) {
             op_write->add_dels(std::move(f.path));
