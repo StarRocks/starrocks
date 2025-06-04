@@ -1174,6 +1174,12 @@ under the License.
             </dependency>
 
             <dependency>
+                <groupId>io.airlift</groupId>
+                <artifactId>security</artifactId>
+                <version>202</version>
+            </dependency>
+
+            <dependency>
                 <groupId>com.aliyun.odps</groupId>
                 <artifactId>odps-sdk-core</artifactId>
                 <version>${odps.version}</version>

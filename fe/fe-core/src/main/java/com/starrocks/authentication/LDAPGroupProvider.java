@@ -23,12 +23,15 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.File;
 import java.io.IOException;
+import java.security.GeneralSecurityException;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -46,6 +49,7 @@ import javax.naming.directory.DirContext;
 import javax.naming.directory.InitialDirContext;
 import javax.naming.directory.SearchControls;
 import javax.naming.directory.SearchResult;
+import javax.net.ssl.SSLContext;
 
 public class LDAPGroupProvider extends GroupProvider {
     private static final Logger LOG = LogManager.getLogger(LDAPGroupProvider.class);
@@ -55,6 +59,9 @@ public class LDAPGroupProvider extends GroupProvider {
     public static final String LDAP_PROP_ROOT_DN_KEY = "ldap_bind_root_dn";
     public static final String LDAP_PROP_ROOT_PWD_KEY = "ldap_bind_root_pwd";
     public static final String LDAP_PROP_BASE_DN_KEY = "ldap_bind_base_dn";
+    public static final String LDAP_SSL_CONN_ALLOW_INSECURE = "ldap_ssl_conn_allow_insecure";
+    public static final String LDAP_SSL_CONN_TRUST_STORE_PATH = "ldap_ssl_conn_trust_store_path";
+    public static final String LDAP_SSL_CONN_TRUST_STORE_PWD = "ldap_ssl_conn_trust_store_pwd";
     public static final String LDAP_PROP_CONN_TIMEOUT_MS_KEY = "ldap_conn_timeout";
     public static final String LDAP_PROP_CONN_READ_TIMEOUT_MS_KEY = "ldap_conn_read_timeout";
 
@@ -251,7 +258,8 @@ public class LDAPGroupProvider extends GroupProvider {
         }
     }
 
-    public DirContext createDirContextOnConnection(String dn, String pwd) throws NamingException, IOException {
+    public DirContext createDirContextOnConnection(String dn, String pwd) throws NamingException, IOException,
+            GeneralSecurityException {
         if (Strings.isNullOrEmpty(pwd)) {
             LOG.warn("empty password is not allowed for simple authentication");
             throw new IOException("empty password is not allowed for simple authentication");
@@ -267,6 +275,19 @@ public class LDAPGroupProvider extends GroupProvider {
         environment.put(Context.PROVIDER_URL, url);
         environment.put("com.sun.jndi.ldap.connect.timeout", getLdapConnTimeout());
         environment.put("com.sun.jndi.ldap.read.timeout", getLdapConnReadTimeout());
+
+        if (!isLdapSslConnAllowInsecure()) {
+            String trustStorePath = getLdapSslConnTrustStorePath();
+            String trustStorePwd = getLdapSslConnTrustStorePwd();
+            SSLContext sslContext = SslUtils.createSSLContext(
+                    Optional.empty(), /* For now, we don't support server to verify us(client). */
+                    Optional.empty(),
+                    trustStorePath.isEmpty() ? Optional.empty() : Optional.of(new File(trustStorePath)),
+                    trustStorePwd.isEmpty() ? Optional.empty() : Optional.of(trustStorePwd));
+            LdapSslSocketFactory.setSslContextForCurrentThread(sslContext);
+            // Refer to https://docs.oracle.com/javase/jndi/tutorial/ldap/security/ssl.html.
+            environment.put("java.naming.ldap.factory.socket", LdapSslSocketFactory.class.getName());
+        }
 
         return new InitialDirContext(environment);
     }
@@ -294,6 +315,19 @@ public class LDAPGroupProvider extends GroupProvider {
     public String getLdapConnReadTimeout() {
         return properties.getOrDefault(LDAP_PROP_CONN_READ_TIMEOUT_MS_KEY, "30000");
     }
+
+    public boolean isLdapSslConnAllowInsecure() {
+        return Boolean.parseBoolean(properties.getOrDefault(LDAP_SSL_CONN_ALLOW_INSECURE, "true"));
+    }
+
+    public String getLdapSslConnTrustStorePath() {
+        return properties.getOrDefault(LDAP_SSL_CONN_TRUST_STORE_PATH, "");
+    }
+
+    public String getLdapSslConnTrustStorePwd() {
+        return properties.getOrDefault(LDAP_SSL_CONN_TRUST_STORE_PWD, "");
+    }
+
 
     public String getLdapGroupFilter() {
         return properties.get(LDAP_GROUP_FILTER);
