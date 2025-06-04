@@ -103,6 +103,7 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     _tuple_desc_id = table_sink.tuple_id;
     _is_lake_table = table_sink.is_lake_table;
     _write_txn_log = table_sink.write_txn_log;
+    _enable_data_file_bundling = table_sink.enable_data_file_bundling;
     _keys_type = table_sink.keys_type;
     if (table_sink.__isset.null_expr_in_auto_increment) {
         _null_expr_in_auto_increment = table_sink.null_expr_in_auto_increment;

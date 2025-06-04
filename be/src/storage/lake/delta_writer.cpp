@@ -22,6 +22,7 @@
 
 #include "column/chunk.h"
 #include "column/column.h"
+#include "fs/bundle_file.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
@@ -58,7 +59,7 @@ public:
 
     Status flush_chunk(const Chunk& chunk, starrocks::SegmentPB* segment = nullptr, bool eos = false,
                        int64_t* flush_data_size = nullptr) override {
-        RETURN_IF_ERROR(_writer->write(chunk, segment));
+        RETURN_IF_ERROR(_writer->write(chunk, segment, eos));
         return _writer->flush(segment);
     }
 
@@ -66,7 +67,7 @@ public:
                                     starrocks::SegmentPB* segment = nullptr, bool eos = false,
                                     int64_t* flush_data_size = nullptr) override {
         RETURN_IF_ERROR(_writer->flush_del_file(deletes));
-        RETURN_IF_ERROR(_writer->write(upserts, segment));
+        RETURN_IF_ERROR(_writer->write(upserts, segment, eos));
         return _writer->flush(segment);
     }
 
@@ -84,7 +85,7 @@ public:
                              MemTracker* mem_tracker, int64_t max_buffer_size, int64_t schema_id,
                              const PartialUpdateMode& partial_update_mode,
                              const std::map<string, string>* column_to_expr_value, PUniqueId load_id,
-                             RuntimeProfile* profile)
+                             RuntimeProfile* profile, BundleWritableFileContext* bundle_writable_file_context)
             : _tablet_manager(tablet_manager),
               _tablet_id(tablet_id),
               _txn_id(txn_id),
@@ -100,7 +101,8 @@ public:
               _partial_update_mode(partial_update_mode),
               _column_to_expr_value(column_to_expr_value),
               _load_id(std::move(load_id)),
-              _profile(profile) {}
+              _profile(profile),
+              _bundle_writable_file_context(bundle_writable_file_context) {}
 
     ~DeltaWriterImpl() = default;
 
@@ -237,6 +239,8 @@ private:
 
     // Used in partial update to limit too much rows which will cause OOM.
     size_t _max_buffer_rows = std::numeric_limits<size_t>::max();
+
+    BundleWritableFileContext* _bundle_writable_file_context = nullptr;
 };
 
 bool DeltaWriterImpl::is_immutable() const {
@@ -272,10 +276,11 @@ Status DeltaWriterImpl::build_schema_and_writer() {
         RETURN_IF_ERROR(init_write_schema());
         if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
             _tablet_writer = std::make_unique<HorizontalPkTabletWriter>(_tablet_manager, _tablet_id, _write_schema,
-                                                                        _txn_id, nullptr, false /** no compaction**/);
+                                                                        _txn_id, nullptr, false /** no compaction**/,
+                                                                        _bundle_writable_file_context);
         } else {
-            _tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(_tablet_manager, _tablet_id, _write_schema,
-                                                                             _txn_id, false);
+            _tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(
+                    _tablet_manager, _tablet_id, _write_schema, _txn_id, false, nullptr, _bundle_writable_file_context);
         }
         RETURN_IF_ERROR(_tablet_writer->open());
         if (config::enable_load_spill &&
@@ -410,6 +415,9 @@ Status DeltaWriterImpl::open() {
     _flush_token = StorageEngine::instance()->lake_memtable_flush_executor()->create_flush_token();
     if (_flush_token == nullptr) {
         return Status::InternalError("fail to create flush token");
+    }
+    if (_bundle_writable_file_context) {
+        _bundle_writable_file_context->increase_active_writers();
     }
     return Status::OK();
 }
@@ -547,6 +555,9 @@ Status DeltaWriterImpl::finish() {
     RETURN_IF_ERROR(flush());
     RETURN_IF_ERROR(merge_blocks_to_segments());
     RETURN_IF_ERROR(_tablet_writer->finish());
+    if (_bundle_writable_file_context) {
+        RETURN_IF_ERROR(_bundle_writable_file_context->decrease_active_writers());
+    }
     return Status::OK();
 }
 
@@ -580,6 +591,9 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
             op_write->mutable_rowset()->add_segments(std::move(f.path));
             op_write->mutable_rowset()->add_segment_size(f.size.value());
             op_write->mutable_rowset()->add_segment_encryption_metas(f.encryption_meta);
+            if (f.bundle_file_offset.has_value() && f.bundle_file_offset.value() >= 0) {
+                op_write->mutable_rowset()->add_bundle_file_offsets(f.bundle_file_offset.value());
+            }
         } else if (is_del(f.path)) {
             op_write->add_dels(std::move(f.path));
             op_write->add_del_encryption_metas(f.encryption_meta);
@@ -927,7 +941,7 @@ StatusOr<DeltaWriterBuilder::DeltaWriterPtr> DeltaWriterBuilder::build() {
     auto impl = new DeltaWriterImpl(_tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition,
                                     _miss_auto_increment_column, _table_id, _immutable_tablet_size, _mem_tracker,
                                     _max_buffer_size, _schema_id, _partial_update_mode, _column_to_expr_value, _load_id,
-                                    _profile);
+                                    _profile, _bundle_writable_file_context);
     return std::make_unique<DeltaWriter>(impl);
 }
 

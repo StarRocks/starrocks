@@ -166,6 +166,7 @@ message PLoadChannelProfileConfig {
 message PTabletWriterOpenRequest {
     message LakeTabletParams {
         optional bool write_txn_log = 1;
+        optional bool enable_data_file_bundling = 2;
     };
 
     required PUniqueId id = 1;

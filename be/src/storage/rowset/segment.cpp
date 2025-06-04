@@ -241,7 +241,7 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
         _encryption_info = std::make_unique<FileEncryptionInfo>(opts.encryption_info);
     }
 
-    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(opts, _segment_file_info));
+    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file_with_bundling(opts, _segment_file_info));
     RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
     RETURN_IF_ERROR(_create_column_readers(&footer));
     _num_rows = footer.num_rows();
@@ -363,7 +363,7 @@ Status Segment::_load_index(const LakeIOOptions& lake_io_opts) {
         file_opts.encryption_info = std::move(info);
         _encryption_info = std::make_unique<FileEncryptionInfo>(file_opts.encryption_info);
     }
-    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(file_opts, _segment_file_info));
+    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file_with_bundling(file_opts, _segment_file_info));
 
     PageReadOptions opts;
     opts.use_page_cache = lake_io_opts.use_page_cache;

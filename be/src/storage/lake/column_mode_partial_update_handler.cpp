@@ -263,6 +263,9 @@ StatusOr<ChunkPtr> ColumnModePartialUpdateHandler::_read_from_source_segment(con
     if (relative_file_info.size.has_value()) {
         fileinfo.size = relative_file_info.size;
     }
+    if (relative_file_info.bundle_file_offset.has_value()) {
+        fileinfo.bundle_file_offset = relative_file_info.bundle_file_offset;
+    }
     uint32_t rowset_id = params.container.rssid_to_rowid().at(rssid);
     // 2. load segment meta.
     ASSIGN_OR_RETURN(auto segment, params.tablet->tablet_mgr()->load_segment(
