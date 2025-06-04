@@ -94,7 +94,7 @@ Status ScanOperator::prepare(RuntimeState* state) {
         if (auto* runtime_filters = runtime_bloom_filters(); runtime_filters != nullptr) {
             auto has_topn_filters =
                     std::any_of(runtime_filters->descriptors().begin(), runtime_filters->descriptors().end(),
-                                [](const auto& e) { return e.second->is_topn_filter(); });
+                                [](const auto& e) { return e.second->is_stream_build_filter(); });
             if (has_topn_filters) {
                 _topn_filter_back_pressure = std::make_unique<TopnRfBackPressure>(
                         0.1, _scan_node->get_back_pressure_throttle_time_upper_bound(),

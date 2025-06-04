@@ -43,7 +43,14 @@ inline const constexpr uint8_t RF_VERSION = 0x2; // deprecated
 inline const constexpr uint8_t RF_VERSION_V2 = 0x3;
 // Serialize format: RF_VERSION (1B) | RuntimeFilterType (1B) | RuntimeFilter(LogicalType | other content)
 inline const constexpr uint8_t RF_VERSION_V3 = 0x4;
-enum class RuntimeFilterSerializeType : uint8_t { NONE = 0, EMPTY_FILTER = 1, BLOOM_FILTER = 2, BITSET_FILTER = 3 };
+enum class RuntimeFilterSerializeType : uint8_t {
+    NONE = 0,
+    EMPTY_FILTER = 1,
+    BLOOM_FILTER = 2,
+    BITSET_FILTER = 3,
+    IN_FILTER = 4,
+    UNKNOWN_FILTER,
+};
 static_assert(sizeof(RF_VERSION_V3) == sizeof(RF_VERSION));
 static_assert(sizeof(RF_VERSION_V3) == sizeof(RF_VERSION_V2));
 inline const constexpr int32_t RF_VERSION_SZ = sizeof(RF_VERSION_V3);
@@ -59,6 +66,8 @@ inline std::string to_string(RuntimeFilterSerializeType type) {
         return "BloomFilter";
     case RuntimeFilterSerializeType::BITSET_FILTER:
         return "BitsetFilter";
+    case RuntimeFilterSerializeType::IN_FILTER:
+        return "InFilter";
     case RuntimeFilterSerializeType::NONE:
     default:
         return "None";
@@ -313,6 +322,7 @@ public:
     std::vector<RuntimeFilter*>& group_colocate_filter() { return _group_colocate_filters; }
     const std::vector<RuntimeFilter*>& group_colocate_filter() const { return _group_colocate_filters; }
 
+    virtual const RuntimeFilter* get_in_filter() const { return nullptr; }
     virtual const RuntimeFilter* get_min_max_filter() const {
         DCHECK(false) << "unreachable path";
         return nullptr;
@@ -537,6 +547,14 @@ public:
     static MinMaxRuntimeFilter* create_with_full_range_without_null(ObjectPool* pool) {
         auto* rf = pool->add(new MinMaxRuntimeFilter());
         rf->_init_full_range();
+        rf->_always_true = true;
+        return rf;
+    }
+
+    static MinMaxRuntimeFilter* create_full_range_with_null(ObjectPool* pool) {
+        auto* rf = pool->add(new MinMaxRuntimeFilter());
+        rf->_init_full_range();
+        rf->insert_null();
         rf->_always_true = true;
         return rf;
     }

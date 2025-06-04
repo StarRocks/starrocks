@@ -102,6 +102,8 @@ public:
         return iterator(_hash_table, search_key);
     }
 
+    iterator find(KeyType key, size_t hash_val) { return find(key); }
+
     iterator begin() {
         auto iter = iterator(_hash_table, 0);
         iter.skip_empty_value();
