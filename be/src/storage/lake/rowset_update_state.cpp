@@ -531,6 +531,9 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
         }
         src.encryption_meta = params.op_write.rowset().segment_encryption_metas(segment_id);
     }
+    if (rowset_meta.bundle_file_offsets_size() > 0) {
+        src.bundle_file_offset = rowset_meta.bundle_file_offsets(segment_id);
+    }
 
     int64_t t_rewrite_start = MonotonicMillis();
     if (has_auto_increment_partial_update_state(params) &&

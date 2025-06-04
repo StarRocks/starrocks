@@ -441,4 +441,8 @@ void SegmentWriter::_verify_footer() {
 #endif
 }
 
+int64_t SegmentWriter::bundle_file_offset() const {
+    return _wfile->bundle_file_offset();
+}
+
 } // namespace starrocks

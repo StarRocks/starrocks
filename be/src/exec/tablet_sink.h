@@ -187,6 +187,7 @@ private:
     int _num_senders = -1;
     bool _is_lake_table = false;
     bool _write_txn_log = false;
+    bool _enable_data_file_bundling = false;
 
     TKeysType::type _keys_type;
 
