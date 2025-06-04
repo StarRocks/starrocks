@@ -64,7 +64,6 @@ public:
 
     bool is_lambda_function() const override { return true; }
     bool is_lambda_expr_independent() const { return _is_lambda_expr_independent; }
-    bool is_constant() const override { return true; }
 
     Expr* get_lambda_expr() const { return _children[0]; }
     std::string debug_string() const override;
