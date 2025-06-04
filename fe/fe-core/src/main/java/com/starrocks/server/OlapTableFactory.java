@@ -483,8 +483,8 @@ public class OlapTableFactory implements AbstractTableFactory {
             }
             
             try {
-                boolean ioMerge = PropertyAnalyzer.analyzeIOMerge(properties);
-                table.setIOMerge(ioMerge);
+                boolean fileBundling = PropertyAnalyzer.analyzeFileBundling(properties);
+                table.setFileBundling(fileBundling);
             } catch (Exception e) {
                 throw new DdlException(e.getMessage());
             }

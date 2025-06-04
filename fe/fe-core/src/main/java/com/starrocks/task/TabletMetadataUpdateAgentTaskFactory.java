@@ -72,10 +72,10 @@ public class TabletMetadataUpdateAgentTaskFactory {
         return new UpdateLakePersistentIndexTask(backendId, tablets, enablePersistentIndex, persistentIndexType);
     }
 
-    public static TabletMetadataUpdateAgentTask createUpdateIOMergeTask(long backendId, Set<Long> tablets,
-                                                                        boolean enableIOMerge) {
+    public static TabletMetadataUpdateAgentTask createUpdateFileBundlingTask(long backendId, Set<Long> tablets,
+                                                                             boolean enableFileBundling) {
         requireNonNull(tablets, "tablets is null");
-        return new UpdateIOMergeTask(backendId, tablets, enableIOMerge);
+        return new UpdateFileBundlingTask(backendId, tablets, enableFileBundling);
     }
 
     public static TabletMetadataUpdateAgentTask createEnablePersistentIndexUpdateTask(long backend, Set<Long> tablets,
@@ -257,14 +257,14 @@ public class TabletMetadataUpdateAgentTaskFactory {
         }
     }
 
-    private static class UpdateIOMergeTask extends TabletMetadataUpdateAgentTask {
+    private static class UpdateFileBundlingTask extends TabletMetadataUpdateAgentTask {
         private final Set<Long> tablets;
-        private boolean enableIOMerge;
+        private boolean enableFileBundling;
 
-        private UpdateIOMergeTask(long backendId, Set<Long> tablets, boolean enableIOMerge) {
+        private UpdateFileBundlingTask(long backendId, Set<Long> tablets, boolean enableFileBundling) {
             super(backendId, tablets.hashCode());
             this.tablets = tablets;
-            this.enableIOMerge = enableIOMerge;
+            this.enableFileBundling = enableFileBundling;
         }
 
         @Override
@@ -278,7 +278,7 @@ public class TabletMetadataUpdateAgentTaskFactory {
             for (Long tabletId : tablets) {
                 TTabletMetaInfo metaInfo = new TTabletMetaInfo();
                 metaInfo.setTablet_id(tabletId);
-                metaInfo.setAggregate_tablet_metadata(enableIOMerge);
+                metaInfo.setAggregate_tablet_metadata(enableFileBundling);
                 metaInfos.add(metaInfo);
             }
             return metaInfos;

@@ -111,7 +111,7 @@ public class LakeRollupJobTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES(\n" +
-                        "    \"io_merge\" = \"true\"\n" +
+                        "    \"file_bundling\" = \"true\"\n" +
                         ");");
 
         String sql = "create materialized view mv1 as\n" +
@@ -185,7 +185,7 @@ public class LakeRollupJobTest {
     }
 
     @Test
-    public void testCreateSyncMvWithEnableIOMerge() throws Exception {
+    public void testCreateSyncMvWithEnableFileBundling() throws Exception {
         new MockUp<LakeRollupJob>() {
             @Mock
             public void sendAgentTask(AgentBatchTask batchTask) {

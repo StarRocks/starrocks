@@ -460,14 +460,14 @@ public class CreateLakeTableTest {
     }
 
     @Test
-    public void testCreateTableWithIOMerge() throws Exception {
+    public void testCreateTableWithFileBundling() throws Exception {
         ExceptionChecker.expectThrowsNoException(() -> createTable(
-                "create table lake_test.dup_test_io_merge (key1 int, key2 varchar(10))\n" +
+                "create table lake_test.dup_test_file_bundling (key1 int, key2 varchar(10))\n" +
                         "distributed by hash(key1) buckets 3\n" +
-                        "properties('replication_num' = '1', 'io_merge' = 'true');"));
-        checkLakeTable("lake_test", "dup_test_io_merge");
+                        "properties('replication_num' = '1', 'file_bundling' = 'true');"));
+        checkLakeTable("lake_test", "dup_test_file_bundling");
 
-        String sql = "show create table lake_test.dup_test_io_merge";
+        String sql = "show create table lake_test.dup_test_file_bundling";
         ShowCreateTableStmt showCreateTableStmt =
                 (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         ShowResultSet resultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);

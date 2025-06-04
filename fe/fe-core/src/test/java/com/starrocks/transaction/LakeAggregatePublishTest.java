@@ -86,7 +86,7 @@ public class LakeAggregatePublishTest {
                 ")" +
                 "DISTRIBUTED BY HASH(pk) BUCKETS 3" +
                 " PROPERTIES(\"replication_num\" = \"" + 1 +
-                "\", \"storage_medium\" = \"SSD\", \"io_merge\" = \"true\")";
+                "\", \"storage_medium\" = \"SSD\", \"file_bundling\" = \"true\")";
         starRocksAssert.withTable(sql);
     }    
 

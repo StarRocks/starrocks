@@ -92,7 +92,7 @@ public class VacuumTest {
                     ")\n" +
                     "DUPLICATE KEY(`v1`)\n" +
                     "DISTRIBUTED BY HASH(v1) BUCKETS 1\n" +
-                    "PROPERTIES('io_merge' = 'true');");
+                    "PROPERTIES('file_bundling' = 'true');");
 
         db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
         olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()

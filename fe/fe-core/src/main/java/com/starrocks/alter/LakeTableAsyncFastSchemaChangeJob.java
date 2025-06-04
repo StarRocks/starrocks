@@ -166,12 +166,12 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
     }
 
     @Override
-    protected boolean enableIOMerge() {
+    protected boolean enableFileBundling() {
         return false;
     }
 
     @Override
-    protected boolean disableIOMerge() {
+    protected boolean disableFileBundling() {
         return false;
     }
 

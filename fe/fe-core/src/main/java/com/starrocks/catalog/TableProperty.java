@@ -321,7 +321,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     private Multimap<String, String> location;
 
-    private boolean ioMerge = false;
+    private boolean fileBundling = false;
 
     public TableProperty() {
         this(Maps.newLinkedHashMap());
@@ -818,10 +818,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
-    public TableProperty buildIOMerge() {
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_IO_MERGE)) {
-            ioMerge = Boolean.parseBoolean(
-                    properties.getOrDefault(PropertyAnalyzer.PROPERTIES_IO_MERGE, "false"));
+    public TableProperty buildFileBundling() {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING)) {
+            fileBundling = Boolean.parseBoolean(
+                    properties.getOrDefault(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING, "false"));
         }
         return this;
     }
@@ -1013,8 +1013,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return enablePersistentIndex;
     }
 
-    public boolean isIOMerge() {
-        return ioMerge;
+    public boolean isFileBundling() {
+        return fileBundling;
     }
 
     public int primaryIndexCacheExpireSec() {
@@ -1190,7 +1190,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildMvProperties();
         buildLocation();
         buildBaseCompactionForbiddenTimeRanges();
-        buildIOMerge();
+        buildFileBundling();
         buildMutableBucketNum();
     }
 }

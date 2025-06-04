@@ -123,11 +123,11 @@ public class LakeTableAlterMetaJobTest {
     }
 
     @Test
-    public void testJobStateEnableIOMerge() throws Exception {
+    public void testJobStateEnableFileBundling() throws Exception {
         LakeTable table1 = createTable(connectContext,
                     "CREATE TABLE t1(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
                                 "PROPERTIES('enable_persistent_index'='true', " + 
-                                "'io_merge'='true')");
+                                "'file_bundling'='true')");
         LakeTableAlterMetaJob job1 = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(), db.getId(), 
                         table1.getId(), table1.getName(), 60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true, 
                         "CLOUD_NATIVE");
@@ -407,13 +407,13 @@ public class LakeTableAlterMetaJobTest {
     }
 
     @Test
-    public void testModifyPropertyIOMerge() throws Exception {
+    public void testModifyPropertyFileBundling() throws Exception {
         LakeTable table2 = createTable(connectContext,
                     "CREATE TABLE t12(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
-                                "PROPERTIES('io_merge'='false')");
-        Assert.assertFalse(table2.isIOMerge());
+                                "PROPERTIES('file_bundling'='false')");
+        Assert.assertFalse(table2.isFileBundling());
         Map<String, String> properties = new HashMap<>();
-        properties.put("io_merge", "true");
+        properties.put("file_bundling", "true");
         ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
         SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
         AlterJobV2 job = schemaChangeHandler.createAlterMetaJob(modify, db, table2);
@@ -422,8 +422,8 @@ public class LakeTableAlterMetaJobTest {
         job.runPendingJob();
         Assert.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
         Assert.assertNotEquals(-1L, job.getTransactionId().orElse(-1L).longValue());
-        Assert.assertTrue(((LakeTableAlterMetaJob) job).enableIOMerge());
-        Assert.assertFalse(((LakeTableAlterMetaJob) job).disableIOMerge());
+        Assert.assertTrue(((LakeTableAlterMetaJob) job).enableFileBundling());
+        Assert.assertFalse(((LakeTableAlterMetaJob) job).disableFileBundling());
         job.runRunningJob();
         Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
         while (job.getJobState() != AlterJobV2.JobState.FINISHED) {
@@ -431,34 +431,34 @@ public class LakeTableAlterMetaJobTest {
             Thread.sleep(100);
         }
         Assert.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
-        Assert.assertTrue(table2.isIOMerge());
-        Assert.assertFalse(table2.allowUpdateIOMerge());
+        Assert.assertTrue(table2.isFileBundling());
+        Assert.assertFalse(table2.allowUpdateFileBundling());
 
-        properties.put("io_merge", "true");
+        properties.put("file_bundling", "true");
         ModifyTablePropertiesClause modify1 = new ModifyTablePropertiesClause(properties);
         AlterJobV2 job1 = schemaChangeHandler.createAlterMetaJob(modify1, db, table2);
         Assert.assertNull(job1);
-        Assert.assertFalse(table2.allowUpdateIOMerge());
+        Assert.assertFalse(table2.allowUpdateFileBundling());
 
         try {
-            String alterStmtStr = "alter table test.t12 set ('io_merge'='true')";
+            String alterStmtStr = "alter table test.t12 set ('file_bundling'='true')";
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
             DDLStmtExecutor.execute(alterTableStmt, connectContext);
         } catch (Exception e) {
-            Assert.assertTrue(table2.isIOMerge());
+            Assert.assertTrue(table2.isFileBundling());
         }
 
         try {
-            String alterStmtStr = "alter table test.t12 set ('io_merge'='false')";
+            String alterStmtStr = "alter table test.t12 set ('file_bundling'='false')";
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
             DDLStmtExecutor.execute(alterTableStmt, connectContext);
         } catch (Exception e) {
-            Assert.assertFalse(table2.allowUpdateIOMerge());
-            Assert.assertTrue(table2.isIOMerge());
+            Assert.assertFalse(table2.allowUpdateFileBundling());
+            Assert.assertTrue(table2.isFileBundling());
         }
 
         properties.clear();
-        properties.put("io_merge", "false");
+        properties.put("file_bundling", "false");
         ModifyTablePropertiesClause modify2 = new ModifyTablePropertiesClause(properties);
         AlterJobV2 job2 = schemaChangeHandler.createAlterMetaJob(modify2, db, table2);
         Assert.assertNotNull(job2);
@@ -466,8 +466,8 @@ public class LakeTableAlterMetaJobTest {
         job2.runPendingJob();
         Assert.assertEquals(AlterJobV2.JobState.RUNNING, job2.getJobState());
         Assert.assertNotEquals(-1L, job2.getTransactionId().orElse(-1L).longValue());
-        Assert.assertTrue(((LakeTableAlterMetaJob) job2).disableIOMerge());
-        Assert.assertFalse(((LakeTableAlterMetaJob) job2).enableIOMerge());
+        Assert.assertTrue(((LakeTableAlterMetaJob) job2).disableFileBundling());
+        Assert.assertFalse(((LakeTableAlterMetaJob) job2).enableFileBundling());
         job2.runRunningJob();
         Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job2.getJobState());
         while (job2.getJobState() != AlterJobV2.JobState.FINISHED) {
@@ -475,6 +475,6 @@ public class LakeTableAlterMetaJobTest {
             Thread.sleep(100);
         }
         Assert.assertEquals(AlterJobV2.JobState.FINISHED, job2.getJobState());
-        Assert.assertFalse(table2.isIOMerge());
+        Assert.assertFalse(table2.isFileBundling());
     }
 }

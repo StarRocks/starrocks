@@ -2113,7 +2113,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
             boolean enablePersistentIndex = false;
             String persistentIndexType = "";
-            boolean enableIOMerge = false;
+            boolean enableFileBundling = false;
             TTabletMetaType metaType = TTabletMetaType.ENABLE_PERSISTENT_INDEX;
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
                 enablePersistentIndex = PropertyAnalyzer.analyzeBooleanProp(properties,
@@ -2148,15 +2148,15 @@ public class SchemaChangeHandler extends AlterHandler {
                             olapTable.getName(), persistentIndexType));
                     return null;
                 }
-            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_IO_MERGE)) {
-                enableIOMerge = PropertyAnalyzer.analyzeBooleanProp(properties,
-                            PropertyAnalyzer.PROPERTIES_IO_MERGE, false);
-                if (enableIOMerge == olapTable.isIOMerge()) {
-                    LOG.info(String.format("table: %s io_merge is %s, nothing need to do",
-                            olapTable.getName(), enableIOMerge));
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING)) {
+                enableFileBundling = PropertyAnalyzer.analyzeBooleanProp(properties,
+                            PropertyAnalyzer.PROPERTIES_FILE_BUNDLING, false);
+                if (enableFileBundling == olapTable.isFileBundling()) {
+                    LOG.info(String.format("table: %s file_bundling is %s, nothing need to do",
+                            olapTable.getName(), enableFileBundling));
                     return null;
                 }
-                metaType = TTabletMetaType.ENABLE_IO_MERGE;
+                metaType = TTabletMetaType.ENABLE_FILE_BUNDLING;
             } else {
                 throw new DdlException("does not support alter " + properties.entrySet().iterator().next().getKey() +
                         " in shared_data mode");
@@ -2166,7 +2166,7 @@ public class SchemaChangeHandler extends AlterHandler {
             alterMetaJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
                     db.getId(),
                     olapTable.getId(), olapTable.getName(), timeoutSecond * 1000 /* should be ms*/,
-                    metaType, enablePersistentIndex, persistentIndexType, enableIOMerge);
+                    metaType, enablePersistentIndex, persistentIndexType, enableFileBundling);
         } else {
             // shouldn't happen
             throw new DdlException("only support alter enable_persistent_index in shared_data mode");

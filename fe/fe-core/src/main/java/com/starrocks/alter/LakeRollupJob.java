@@ -158,7 +158,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             OlapTable table = getTableOrThrow(db, tableId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.ROLLUP);
 
-            enableTabletCreationOptimization |= table.isIOMerge();
+            enableTabletCreationOptimization |= table.isFileBundling();
             if (enableTabletCreationOptimization) {
                 numTablets = physicalPartitionIdToRollupIndex.size();
             } else {
@@ -677,7 +677,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
     protected boolean lakePublishVersion() {
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             OlapTable table = getTableOrThrow(db, tableId);
-            boolean useAggregatePublish = table.isIOMerge();
+            boolean useAggregatePublish = table.isFileBundling();
             for (long partitionId : physicalPartitionIdToRollupIndex.keySet()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
                 Preconditions.checkState(physicalPartition != null, partitionId);
