@@ -106,7 +106,7 @@ public:
     size_t current_size = 0;
     size_t max_size = 0;
     bool stop = false;
-    bool can_use_bf = true;
+    bool exceeded = true;
     bool is_skew_join;
 
     // only set when skew join optimization is used

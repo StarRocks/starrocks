@@ -435,6 +435,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String GLOBAL_RUNTIME_FILTER_RPC_TIMEOUT = "global_runtime_filter_rpc_timeout";
     public static final String RUNTIME_FILTER_EARLY_RETURN_SELECTIVITY = "runtime_filter_early_return_selectivity";
     public static final String ENABLE_TOPN_RUNTIME_FILTER = "enable_topn_runtime_filter";
+    public static final String AGG_IN_FILTER_LIMIT = "agg_in_filter_limit";
     public static final String GLOBAL_RUNTIME_FILTER_RPC_HTTP_MIN_SIZE = "global_runtime_filter_rpc_http_min_size";
     public static final String ENABLE_JOIN_RUNTIME_FILTER_PUSH_DOWN = "enable_join_runtime_filter_push_down";
     public static final String ENABLE_JOIN_RUNTIME_BITSET_FILTER = "enable_join_runtime_bitset_filter";
@@ -1544,6 +1545,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_TOPN_RUNTIME_FILTER)
     private boolean enableTopNRuntimeFilter = true;
+
+    @VariableMgr.VarAttr(name = AGG_IN_FILTER_LIMIT, flag = VariableMgr.INVISIBLE)
+    private int aggInFilterLimit = 1024;
 
     // Parameters to determine the usage of runtime filter
     // Either the build_max or probe_min equal to 0 would force use the filter,
@@ -3572,6 +3576,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean getEnableTopNRuntimeFilter() {
         return enableTopNRuntimeFilter;
+    }
+
+    public int getAggInFilterLimit() {
+        return aggInFilterLimit;
     }
 
     public void setGlobalRuntimeFilterBuildMaxSize(long globalRuntimeFilterBuildMaxSize) {
