@@ -116,10 +116,12 @@ static void dump_trace_info() {
     start_dump = true;
 }
 
-#define FMT_LOG(msg, ...)                                                                                 \
-    format_to(std::back_inserter(mbuffer), "[{}.{}][thread: {}] " msg "\n", tv.tv_sec, tv.tv_usec / 1000, \
-              tid __VA_OPT__(, ) __VA_ARGS__);                                                            \
-    DCHECK(mbuffer.size() < 500);
+#define FMT_LOG(msg, ...)                                                                                      \
+    fmt::format_to(std::back_inserter(mbuffer), "[{}.{}][thread: {}] " msg "\n", tv.tv_sec, tv.tv_usec / 1000, \
+                   tid __VA_OPT__(, ) __VA_ARGS__);                                                            \
+    DCHECK(mbuffer.size() < 500);                                                                              \
+    std::ignore = write(STDERR_FILENO, mbuffer.data(), mbuffer.size());                                        \
+    mbuffer.clear();
 
 static void dontdump_unused_pages() {
     size_t prev_allocate_size = CurrentThread::current().get_consumed_bytes();
@@ -138,13 +140,8 @@ static void dontdump_unused_pages() {
 
         if (ret != 0) {
             FMT_LOG("je_mallctl execute purge failed, errno:{}", ret);
-            std::ignore = write(STDERR_FILENO, mbuffer.data(), mbuffer.size());
-            mbuffer.clear();
-
         } else {
             FMT_LOG("je_mallctl execute purge success");
-            std::ignore = write(STDERR_FILENO, mbuffer.data(), mbuffer.size());
-            mbuffer.clear();
         }
 
         res = snprintf(buffer, MAX_BUFFER_SIZE, "arena.%d.dontdump", MALLCTL_ARENAS_ALL);
@@ -153,13 +150,8 @@ static void dontdump_unused_pages() {
 
         if (ret != 0) {
             FMT_LOG("je_mallctl execute dontdump failed, errno:{}", ret);
-            std::ignore = write(STDERR_FILENO, mbuffer.data(), mbuffer.size());
-            mbuffer.clear();
-
         } else {
             FMT_LOG("je_mallctl execute dontdump success");
-            std::ignore = write(STDERR_FILENO, mbuffer.data(), mbuffer.size());
-            mbuffer.clear();
         }
     }
     DCHECK_EQ(prev_allocate_size, CurrentThread::current().get_consumed_bytes());
