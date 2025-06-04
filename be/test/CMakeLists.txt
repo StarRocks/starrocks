@@ -483,6 +483,12 @@ set(EXEC_FILES
         ./block_cache/datacache_utils_test.cpp
         ./block_cache/block_cache_hit_rate_counter_test.cpp
         ./util/thrift_rpc_helper_test.cpp
+<<<<<<< HEAD
+=======
+        ./util/thrift_client_test.cpp
+        ./udf/java/java_native_method_test.cpp
+        ./udf/java/java_data_converter_test.cpp
+>>>>>>> 6f74df696d ([BugFix] Fix invalid connections are fetched in the thrift connection pools (#59536))
         )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")
