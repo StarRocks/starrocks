@@ -205,8 +205,8 @@ public:
         return *this;
     }
 
-    AsyncDeltaWriterBuilder& set_shared_writable_file_context(BundleWritableFileContext* shared_writable_file_context) {
-        _shared_writable_file_context = shared_writable_file_context;
+    AsyncDeltaWriterBuilder& set_bundle_writable_file_context(BundleWritableFileContext* bundle_writable_file_context) {
+        _bundle_writable_file_context = bundle_writable_file_context;
         return *this;
     }
 
@@ -228,7 +228,7 @@ private:
     const std::map<std::string, std::string>* _column_to_expr_value{nullptr};
     PUniqueId _load_id;
     RuntimeProfile* _profile{nullptr};
-    BundleWritableFileContext* _shared_writable_file_context{nullptr};
+    BundleWritableFileContext* _bundle_writable_file_context{nullptr};
 };
 
 } // namespace starrocks::lake

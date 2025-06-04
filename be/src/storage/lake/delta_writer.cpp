@@ -85,7 +85,7 @@ public:
                              MemTracker* mem_tracker, int64_t max_buffer_size, int64_t schema_id,
                              const PartialUpdateMode& partial_update_mode,
                              const std::map<string, string>* column_to_expr_value, PUniqueId load_id,
-                             RuntimeProfile* profile, BundleWritableFileContext* shared_writable_file_context)
+                             RuntimeProfile* profile, BundleWritableFileContext* bundle_writable_file_context)
             : _tablet_manager(tablet_manager),
               _tablet_id(tablet_id),
               _txn_id(txn_id),
@@ -102,7 +102,7 @@ public:
               _column_to_expr_value(column_to_expr_value),
               _load_id(std::move(load_id)),
               _profile(profile),
-              _shared_writable_file_context(shared_writable_file_context) {}
+              _bundle_writable_file_context(bundle_writable_file_context) {}
 
     ~DeltaWriterImpl() = default;
 
@@ -240,7 +240,7 @@ private:
     // Used in partial update to limit too much rows which will cause OOM.
     size_t _max_buffer_rows = std::numeric_limits<size_t>::max();
 
-    BundleWritableFileContext* _shared_writable_file_context = nullptr;
+    BundleWritableFileContext* _bundle_writable_file_context = nullptr;
 };
 
 bool DeltaWriterImpl::is_immutable() const {
@@ -277,10 +277,10 @@ Status DeltaWriterImpl::build_schema_and_writer() {
         if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
             _tablet_writer = std::make_unique<HorizontalPkTabletWriter>(_tablet_manager, _tablet_id, _write_schema,
                                                                         _txn_id, nullptr, false /** no compaction**/,
-                                                                        _shared_writable_file_context);
+                                                                        _bundle_writable_file_context);
         } else {
             _tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(
-                    _tablet_manager, _tablet_id, _write_schema, _txn_id, false, nullptr, _shared_writable_file_context);
+                    _tablet_manager, _tablet_id, _write_schema, _txn_id, false, nullptr, _bundle_writable_file_context);
         }
         RETURN_IF_ERROR(_tablet_writer->open());
         if (config::enable_load_spill &&
@@ -416,8 +416,8 @@ Status DeltaWriterImpl::open() {
     if (_flush_token == nullptr) {
         return Status::InternalError("fail to create flush token");
     }
-    if (_shared_writable_file_context) {
-        _shared_writable_file_context->increase_active_writers();
+    if (_bundle_writable_file_context) {
+        _bundle_writable_file_context->increase_active_writers();
     }
     return Status::OK();
 }
@@ -555,8 +555,8 @@ Status DeltaWriterImpl::finish() {
     RETURN_IF_ERROR(flush());
     RETURN_IF_ERROR(merge_blocks_to_segments());
     RETURN_IF_ERROR(_tablet_writer->finish());
-    if (_shared_writable_file_context) {
-        RETURN_IF_ERROR(_shared_writable_file_context->decrease_active_writers());
+    if (_bundle_writable_file_context) {
+        RETURN_IF_ERROR(_bundle_writable_file_context->decrease_active_writers());
     }
     return Status::OK();
 }
@@ -941,7 +941,7 @@ StatusOr<DeltaWriterBuilder::DeltaWriterPtr> DeltaWriterBuilder::build() {
     auto impl = new DeltaWriterImpl(_tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition,
                                     _miss_auto_increment_column, _table_id, _immutable_tablet_size, _mem_tracker,
                                     _max_buffer_size, _schema_id, _partial_update_mode, _column_to_expr_value, _load_id,
-                                    _profile, _shared_writable_file_context);
+                                    _profile, _bundle_writable_file_context);
     return std::make_unique<DeltaWriter>(impl);
 }
 

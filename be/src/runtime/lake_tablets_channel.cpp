@@ -235,7 +235,7 @@ private:
     mutable bthreads::BThreadSharedMutex _rw_mtx;
     std::unordered_map<int64_t, uint32_t> _tablet_id_to_sorted_indexes;
     std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>> _delta_writers;
-    std::unique_ptr<BundleWritableFileContext> _shared_writable_file_context;
+    std::unique_ptr<BundleWritableFileContext> _bundle_writable_file_context;
 
     GlobalDictByNameMaps _global_dicts;
     std::unique_ptr<MemPool> _mem_pool;
@@ -333,7 +333,7 @@ Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletW
 
     if (params.has_lake_tablet_params() && params.lake_tablet_params().has_enable_data_file_bundling() &&
         params.lake_tablet_params().enable_data_file_bundling()) {
-        _shared_writable_file_context = std::make_unique<BundleWritableFileContext>();
+        _bundle_writable_file_context = std::make_unique<BundleWritableFileContext>();
     }
     RETURN_IF_ERROR(_create_delta_writers(params, false));
 
@@ -723,7 +723,7 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
                                               .set_column_to_expr_value(&_column_to_expr_value)
                                               .set_load_id(params.id())
                                               .set_profile(_profile)
-                                              .set_shared_writable_file_context(_shared_writable_file_context.get())
+                                              .set_bundle_writable_file_context(_bundle_writable_file_context.get())
                                               .build());
         _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
         tablet_ids.emplace_back(tablet.tablet_id());

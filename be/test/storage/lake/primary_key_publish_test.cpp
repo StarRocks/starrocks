@@ -2043,7 +2043,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_data_file_sharing) {
                                                        .set_mem_tracker(_mem_tracker.get())
                                                        .set_schema_id(_tablet_schema->id())
                                                        .set_profile(&_dummy_runtime_profile)
-                                                       .set_shared_writable_file_context(context.get())
+                                                       .set_bundle_writable_file_context(context.get())
                                                        .build());
             ASSERT_OK(delta_writer->open());
             delta_writers.push_back(std::move(delta_writer));
