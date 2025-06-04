@@ -1820,13 +1820,13 @@ public:
                 if (is_const_array) {
                     auto* state = reinterpret_cast<ArrayContainsState*>(
                             context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
-                    if (UNLIKELY(state == nullptr)) {
-                        return Status::InternalError("array_contains get state failed");
+                    // todo: fix LambdaFunction's isConst()
+                    if (state != nullptr) {
+                        return is_nullable_target ? _process_with_hash_table<true>(state, target_data_column,
+                                                                                   target_null_data, is_const_target)
+                                                  : _process_with_hash_table<false>(state, target_data_column,
+                                                                                    target_null_data, is_const_target);
                     }
-                    return is_nullable_target ? _process_with_hash_table<true>(state, target_data_column,
-                                                                               target_null_data, is_const_target)
-                                              : _process_with_hash_table<false>(state, target_data_column,
-                                                                                target_null_data, is_const_target);
                 }
             }
 
