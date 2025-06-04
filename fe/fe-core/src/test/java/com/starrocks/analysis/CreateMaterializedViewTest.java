@@ -5713,4 +5713,20 @@ public class CreateMaterializedViewTest extends MVTestBase {
         starRocksAssert.withMaterializedView(sql);
         starRocksAssert.refreshMV(connectContext, "mv1");
     }
+
+    @Test
+    public void testAdaptiveRefreshMVWithExternalTable1() throws Exception {
+        starRocksAssert.useCatalog("hive0");
+        String sql = "CREATE MATERIALIZED VIEW tpch.supplier_mv " +
+                "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 10 REFRESH MANUAL " +
+                "properties (\n" +
+                "'replication_num' = '1',\n" +
+                "'partition_refresh_strategy' = 'adaptive'" +
+                ") \n" +
+                "AS select s_suppkey, s_nationkey, " +
+                "sum(s_acctbal) as total_s_acctbal, count(s_phone) as s_phone_count from hive0.tpch.supplier as supp " +
+                "group by s_suppkey, s_nationkey order by s_suppkey;";
+        starRocksAssert.withMaterializedView(sql);
+        starRocksAssert.refreshMV(connectContext, "supplier_mv");
+    }
 }
