@@ -17,7 +17,7 @@ package com.starrocks.mysql.privilege;
 import com.google.re2j.Pattern;
 import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.JWTAuthenticationProvider;
-import com.starrocks.authentication.LDAPAuthProviderForNative;
+import com.starrocks.authentication.LDAPAuthProvider;
 import com.starrocks.authentication.OAuth2AuthenticationProvider;
 import com.starrocks.authentication.OAuth2Context;
 import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
@@ -45,9 +45,12 @@ public class AuthPlugin {
                 }
 
                 case AUTHENTICATION_LDAP_SIMPLE -> {
-                    return new LDAPAuthProviderForNative(
+                    return new LDAPAuthProvider(
                             Config.authentication_ldap_simple_server_host,
                             Config.authentication_ldap_simple_server_port,
+                            !Config.authentication_ldap_simple_ssl_conn_allow_insecure,
+                            Config.authentication_ldap_simple_ssl_conn_trust_store_path,
+                            Config.authentication_ldap_simple_ssl_conn_trust_store_pwd,
                             Config.authentication_ldap_simple_bind_root_dn,
                             Config.authentication_ldap_simple_bind_root_pwd,
                             Config.authentication_ldap_simple_bind_base_dn,
