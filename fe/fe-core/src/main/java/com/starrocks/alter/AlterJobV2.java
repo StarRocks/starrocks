@@ -55,6 +55,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.warehouse.WarehouseIdleChecker;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import io.opentelemetry.api.trace.Span;
 import org.apache.hadoop.util.Lists;
 import org.apache.logging.log4j.LogManager;
@@ -120,6 +122,8 @@ public abstract class AlterJobV2 implements Writable {
     protected long timeoutMs = -1;
     @SerializedName(value = "warehouseId")
     protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+    // no needs to persistent
+    protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     protected Span span;
 
@@ -197,8 +201,9 @@ public abstract class AlterJobV2 implements Writable {
         this.finishedTimeMs = finishedTimeMs;
     }
 
-    public void setWarehouseId(long warehouseId) {
-        this.warehouseId = warehouseId;
+    public void setComputeResource(ComputeResource computeResource) {
+        this.computeResource = computeResource;
+        this.warehouseId = computeResource.getWarehouseId();
     }
 
     public void createConnectContextIfNeeded() {
@@ -236,6 +241,15 @@ public abstract class AlterJobV2 implements Writable {
 
         // create connectcontext
         createConnectContextIfNeeded();
+        // check & acquire resource
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        CRAcquireContext acquireContext = CRAcquireContext.of(this.warehouseId, this.computeResource);
+        try {
+            this.computeResource = warehouseManager.acquireComputeResource(acquireContext);
+        } catch (Exception e) {
+            LOG.warn("failed to acquire cn resource for job {}", jobId, e);
+            return;
+        }
 
         try {
             while (true) {

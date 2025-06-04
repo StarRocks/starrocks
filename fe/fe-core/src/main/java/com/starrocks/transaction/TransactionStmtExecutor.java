@@ -97,7 +97,7 @@ public class TransactionStmtExecutor {
                 context.getExecTimeout() * 1000L);
 
         transactionState.setPrepareTime(System.currentTimeMillis());
-        transactionState.setWarehouseId(context.getCurrentWarehouseId());
+        transactionState.setComputeResource(context.getCurrentComputeResource());
         boolean combinedTxnLog = LakeTableHelper.supportCombinedTxnLog(TransactionState.LoadJobSourceType.INSERT_STREAMING);
         transactionState.setUseCombinedTxnLog(combinedTxnLog);
 

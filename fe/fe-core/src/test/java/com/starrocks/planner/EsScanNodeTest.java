@@ -26,6 +26,7 @@ import com.starrocks.connector.elasticsearch.EsShardPartitions;
 import com.starrocks.connector.elasticsearch.EsShardRouting;
 import com.starrocks.connector.elasticsearch.EsTestCase;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
@@ -77,7 +78,7 @@ public class EsScanNodeTest extends EsTestCase {
         TupleDescriptor td = new TupleDescriptor(new TupleId(0));
         td.setTable(esTable);
         PlanNodeId planNodeId = new PlanNodeId(11);
-        EsScanNode scanNode = new EsScanNode(planNodeId, td, "EsScanNode");
+        EsScanNode scanNode = new EsScanNode(planNodeId, td, "EsScanNode", WarehouseManager.DEFAULT_RESOURCE);
 
         scanNode.init(analyzer);
 

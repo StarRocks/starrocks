@@ -75,6 +75,7 @@ import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -106,14 +107,14 @@ public class StreamLoadPlanner {
     // just for using session variable
     private ConnectContext connectContext;
 
-    private long warehouseId;
+    private ComputeResource computeResource;
 
     public StreamLoadPlanner(Database db, OlapTable destTable, StreamLoadInfo streamLoadInfo) {
         this.db = db;
         this.destTable = destTable;
         this.streamLoadInfo = streamLoadInfo;
         this.connectContext = new ConnectContext();
-        this.warehouseId = streamLoadInfo.getWarehouseId();
+        this.computeResource = streamLoadInfo.getComputeResource();
     }
 
     private void resetAnalyzer() {
@@ -131,7 +132,11 @@ public class StreamLoadPlanner {
     }
 
     public long getWarehouseId() {
-        return warehouseId;
+        return computeResource.getWarehouseId();
+    }
+
+    public ComputeResource getComputeResource() {
+        return computeResource;
     }
 
     // create the plan. the plan's query id and load id are same, using the parameter 'loadId'
@@ -193,7 +198,7 @@ public class StreamLoadPlanner {
         scanNode.setUseVectorizedLoad(true);
         scanNode.init(analyzer);
         scanNode.finalizeStats(analyzer);
-        scanNode.setWarehouseId(streamLoadInfo.getWarehouseId());
+        scanNode.setComputeResource(computeResource);
 
         descTable.computeMemLayout();
 
@@ -209,7 +214,7 @@ public class StreamLoadPlanner {
         }
         OlapTableSink olapTableSink = new OlapTableSink(destTable, tupleDesc, partitionIds, writeQuorum,
                 destTable.enableReplicatedStorage(), scanNode.nullExprInAutoIncrement(),
-                enableAutomaticPartition, streamLoadInfo.getWarehouseId());
+                enableAutomaticPartition, computeResource);
         if (missAutoIncrementColumn.size() == 1 && missAutoIncrementColumn.get(0) == Boolean.TRUE) {
             olapTableSink.setMissAutoIncrementColumn();
         }

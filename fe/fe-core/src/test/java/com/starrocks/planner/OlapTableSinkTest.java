@@ -78,8 +78,8 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
-import mockit.Mocked;
 import mockit.MockUp;
+import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
@@ -297,7 +297,7 @@ public class OlapTableSinkTest {
         partitionParam.addToPartitions(tPartition);
         TOlapTableLocationParam param = OlapTableSink.createLocation(
                 table, partitionParam, false,
-                WarehouseManagerEPack.DEFAULT_WAREHOUSE_ID);
+                WarehouseManagerEPack.DEFAULT_RESOURCE);
         System.out.println(param);
 
         // Check
@@ -405,7 +405,7 @@ public class OlapTableSinkTest {
         partitionParam.addToPartitions(tPartition);
         TOlapTableLocationParam param = OlapTableSink.createLocation(
                 table, partitionParam, true,
-                WarehouseManagerEPack.DEFAULT_WAREHOUSE_ID);
+                WarehouseManagerEPack.DEFAULT_RESOURCE);
         System.out.println(param);
 
         // Check

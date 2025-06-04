@@ -34,6 +34,9 @@ import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.ComputeResourceProvider;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -48,6 +51,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class WarehouseManagerEPack extends WarehouseManager {
     private static final Logger LOG = LogManager.getLogger(WarehouseManagerEPack.class);
     public static final long DEFAULT_CLUSTER_ID = 0L;
+
+    public WarehouseManagerEPack(ComputeResourceProvider computeResourceProvider) {
+        super(computeResourceProvider);
+    }
+
+    public WarehouseManagerEPack() {
+        super(new WarehouseComputeResourceProvider());
+    }
 
     @Override
     public void initDefaultWarehouse() {
@@ -102,21 +113,8 @@ public class WarehouseManagerEPack extends WarehouseManager {
     }
 
     @Override
-    public List<Long> getAllComputeNodeIds(String warehouseName) {
-        LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(warehouseName);
-        checkWarehouseState(warehouse);
-        try {
-            return GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getWorkersByWorkerGroup(warehouse.getAnyAvailableCluster().getWorkerGroupId());
-        } catch (StarRocksException e) {
-            LOG.warn("Fail to get compute node ids from starMgr : {}", e.getMessage());
-            return new ArrayList<>();
-        }
-    }
-
-    @Override
-    public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
-        LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(warehouseId);
+    public Long getComputeNodeId(ComputeResource computeResource, LakeTablet tablet) {
+        LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(computeResource.getWarehouseId());
         checkWarehouseState(warehouse);
         try {
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
@@ -127,8 +125,8 @@ public class WarehouseManagerEPack extends WarehouseManager {
     }
 
     @Override
-    public List<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
-        LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(warehouseId);
+    public List<Long> getAllComputeNodeIdsAssignToTablet(ComputeResource computeResource, LakeTablet tablet) {
+        LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(computeResource.getWarehouseId());
         checkWarehouseState(warehouse);
         try {
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
@@ -139,17 +137,10 @@ public class WarehouseManagerEPack extends WarehouseManager {
     }
 
     @Override
-    public ComputeNode getComputeNodeAssignedToTablet(String warehouseName, LakeTablet tablet) {
-        LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(warehouseName);
-        checkWarehouseState(warehouse);
-        return getComputeNodeAssignedToTablet(warehouse.getId(), tablet);
-    }
-
-    @Override
-    public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
-        Long computeNodeId = getComputeNodeId(warehouseId, tablet);
+    public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, LakeTablet tablet) {
+        Long computeNodeId = getComputeNodeId(computeResource, tablet);
         if (computeNodeId == null) {
-            throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, String.format("id: %d", warehouseId));
+            throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, String.format("id: %d", computeResource));
         }
         return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(computeNodeId);
     }

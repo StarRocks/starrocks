@@ -33,19 +33,19 @@ public class WarehouseComputeResourceProviderTest extends WarehouseTestBase {
     private final WarehouseComputeResourceProvider provider = new WarehouseComputeResourceProvider();
 
     @Test
-    public void testProviderAcquireCNResourceGood() {
+    public void testProviderAcquireComputeResourceGood() {
         WarehouseManager warehouseManager = GlobalStateMgr.getServingState().getWarehouseMgr();
         Warehouse defaultWarehouse = warehouseManager.getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         CRAcquireContext cnAcquireContext = CRAcquireContext.of(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        Optional<ComputeResource> result = provider.acquireCNResource(defaultWarehouse, cnAcquireContext);
+        Optional<ComputeResource> result = provider.acquireComputeResource(defaultWarehouse, cnAcquireContext);
         assertThat(result.isPresent()).isTrue();
     }
 
     @Test
-    public void testProviderAcquireCNResourceBad() {
+    public void testProviderAcquireComputeResourceBad() {
         CRAcquireContext cnAcquireContext = CRAcquireContext.of(1);
         try {
-            Optional<ComputeResource> result = provider.acquireCNResource(null, cnAcquireContext);
+            Optional<ComputeResource> result = provider.acquireComputeResource(null, cnAcquireContext);
             Assert.fail();
         } catch (ErrorReportException e) {
             assertThat(e.getMessage()).contains("Warehouse id: 1 not exist");
@@ -56,7 +56,7 @@ public class WarehouseComputeResourceProviderTest extends WarehouseTestBase {
         WarehouseManager warehouseManager = GlobalStateMgr.getServingState().getWarehouseMgr();
         Warehouse defaultWarehouse = warehouseManager.getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         CRAcquireContext cnAcquireContext = CRAcquireContext.of(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        Optional<ComputeResource> result = provider.acquireCNResource(defaultWarehouse, cnAcquireContext);
+        Optional<ComputeResource> result = provider.acquireComputeResource(defaultWarehouse, cnAcquireContext);
         assertThat(result.isPresent()).isTrue();
         return result.get();
     }

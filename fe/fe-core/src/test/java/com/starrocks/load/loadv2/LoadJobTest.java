@@ -63,6 +63,7 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
@@ -238,7 +239,7 @@ public class LoadJobTest {
             {
                 globalTransactionMgr.beginTransaction(anyLong, Lists.newArrayList(), anyString, (TUniqueId) any,
                         (TransactionState.TxnCoordinator) any,
-                        (TransactionState.LoadJobSourceType) any, anyLong, anyLong, anyLong);
+                        (TransactionState.LoadJobSourceType) any, anyLong, anyLong, (ComputeResource) any);
                 minTimes = 0;
                 result = 1;
                 leaderTaskExecutor.submit((LeaderTask) any);

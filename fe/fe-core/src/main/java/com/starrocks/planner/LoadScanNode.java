@@ -48,8 +48,10 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 
 import java.util.List;
 import java.util.Map;
@@ -109,11 +111,12 @@ public abstract class LoadScanNode extends ScanNode {
     // Return all available nodes under the warehouse to run load scan. Should consider different deployment modes
     // 1. Share-nothing: only backends can be used for scan
     // 2. Share-data: both backends and compute nodes can be used for scan
-    public static List<ComputeNode> getAvailableComputeNodes(long warehouseId) {
+    public static List<ComputeNode> getAvailableComputeNodes(ComputeResource computeResource) {
         List<ComputeNode> nodes = Lists.newArrayList();
         // TODO: need to refactor after be split into cn + dn
         if (RunMode.isSharedDataMode()) {
-            List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            final List<Long> computeNodeIds = warehouseManager.getAllComputeNodeIds(computeResource);
             for (long cnId : computeNodeIds) {
                 ComputeNode cn = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(cnId);
                 if (cn != null && cn.isAvailable() && !SimpleScheduler.isInBlocklist(cnId)) {

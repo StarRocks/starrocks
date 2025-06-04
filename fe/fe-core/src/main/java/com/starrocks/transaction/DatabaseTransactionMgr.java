@@ -75,6 +75,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import io.opentelemetry.api.trace.Span;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -175,7 +176,7 @@ public class DatabaseTransactionMgr {
                                  TransactionState.LoadJobSourceType sourceType,
                                  long callbackId,
                                  long timeoutSecond,
-                                 long warehouseId)
+                                 ComputeResource computeResource)
             throws DuplicatedRequestException, LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException {
         checkDatabaseDataQuota();
         Preconditions.checkNotNull(coordinator);
@@ -191,7 +192,7 @@ public class DatabaseTransactionMgr {
                 coordinator, callbackId, timeoutSecond * 1000);
 
         transactionState.setPrepareTime(System.currentTimeMillis());
-        transactionState.setWarehouseId(warehouseId);
+        transactionState.setComputeResource(computeResource);
         transactionState.setUseCombinedTxnLog(combinedTxnLog || enablePartitionAggregation);
         transactionState.writeLock();
         try {

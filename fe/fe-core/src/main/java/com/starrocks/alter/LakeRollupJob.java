@@ -45,6 +45,7 @@ import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -152,6 +153,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         long numTablets = 0;
         AgentBatchTask batchTask = new AgentBatchTask();
         MarkedCountDownLatch<Long, Long> countDownLatch;
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             OlapTable table = getTableOrThrow(db, tableId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.ROLLUP);
@@ -192,13 +194,12 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                         .build().toTabletSchema();
 
                 boolean createSchemaFile = true;
-                Map<Long, Long> tabletIdMap = this.physicalPartitionIdToBaseRollupTabletIdMap.get(partitionId);
+
                 for (Tablet rollupTablet : rollupIndex.getTablets()) {
                     long rollupTabletId = rollupTablet.getId();
                     ComputeNode computeNode = null;
                     try {
-                        computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                                .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) rollupTablet);
+                        computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) rollupTablet);
                     } catch (ErrorReportException e) {
                         // computeNode is null
                     }
@@ -294,6 +295,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         LOG.info("previous transactions are all finished, begin to send rollup tasks. job: {}", jobId);
 
         Map<Long, List<TColumn>> indexToThriftColumns = new HashMap<>();
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             OlapTable tbl = getTableOrThrow(db, tableId);
             Preconditions.checkState(tbl.getState() == OlapTable.OlapTableState.ROLLUP);
@@ -316,8 +318,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
 
                     ComputeNode computeNode = null;
                     try {
-                        computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                                .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) rollupTablet);
+                        computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) rollupTablet);
                     } catch (ErrorReportException e) {
                         // computeNode is null
                     }
@@ -696,7 +697,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 rollUpTxnInfo.gtid = watershedGtid;
                 // publish rollup tablets
                 Utils.publishVersion(physicalPartitionIdToRollupIndex.get(partitionId).getTablets(), rollUpTxnInfo,
-                        1, commitVersion, warehouseId, enablePartitionAggregation);
+                        1, commitVersion, computeResource, enablePartitionAggregation);
 
                 TxnInfoPB originTxnInfo = new TxnInfoPB();
                 originTxnInfo.txnId = -1L;
@@ -706,7 +707,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 originTxnInfo.gtid = watershedGtid;
                 // publish origin tablets
                 Utils.publishVersion(allOtherPartitionTablets, originTxnInfo, commitVersion - 1,
-                        commitVersion, warehouseId, enablePartitionAggregation);
+                        commitVersion, computeResource, enablePartitionAggregation);
 
             }
             return true;

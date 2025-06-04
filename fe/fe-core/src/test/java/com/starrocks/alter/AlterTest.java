@@ -1349,12 +1349,12 @@ public class AlterTest {
         Assert.assertEquals(table.getPhysicalPartitions().size(), 1);
 
         GlobalStateMgr.getCurrentState().getLocalMetastore().addSubPartitions(db, table, partition.get(), 1,
-                    WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                    WarehouseManager.DEFAULT_RESOURCE);
         Assert.assertEquals(partition.get().getSubPartitions().size(), 2);
         Assert.assertEquals(table.getPhysicalPartitions().size(), 2);
 
         GlobalStateMgr.getCurrentState().getLocalMetastore().addSubPartitions(db, table, partition.get(), 2,
-                    WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                    WarehouseManager.DEFAULT_RESOURCE);
         Assert.assertEquals(partition.get().getSubPartitions().size(), 4);
         Assert.assertEquals(table.getPhysicalPartitions().size(), 4);
 
@@ -1406,7 +1406,7 @@ public class AlterTest {
         Assert.assertNotNull(partition);
 
         GlobalStateMgr.getCurrentState().getLocalMetastore().addSubPartitions(db, table, partition, 1,
-                    WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                    WarehouseManager.DEFAULT_RESOURCE);
         Assert.assertEquals(table.getPhysicalPartitions().size(), 4);
         Assert.assertEquals(partition.getSubPartitions().size(), 2);
 
@@ -1414,7 +1414,7 @@ public class AlterTest {
         Assert.assertNotNull(partition);
 
         GlobalStateMgr.getCurrentState().getLocalMetastore().addSubPartitions(db, table, partition, 2,
-                    WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                    WarehouseManager.DEFAULT_RESOURCE);
         Assert.assertEquals(table.getPhysicalPartitions().size(), 6);
         Assert.assertEquals(partition.getSubPartitions().size(), 3);
 
@@ -1452,7 +1452,7 @@ public class AlterTest {
         Assert.assertEquals(table.getPhysicalPartitions().size(), 1);
 
         GlobalStateMgr.getCurrentState().getLocalMetastore().addSubPartitions(db, table, partition.get(), 1,
-                    WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                    WarehouseManager.DEFAULT_RESOURCE);
     }
 
     @Test

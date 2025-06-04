@@ -27,6 +27,9 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.ComputeResourceProvider;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -48,7 +51,11 @@ public class MockedWarehouseManager extends WarehouseManagerEPack {
     private boolean throwUnknownWarehouseException = false;
 
     public MockedWarehouseManager() {
-        super();
+        this(new WarehouseComputeResourceProvider());
+    }
+
+    public MockedWarehouseManager(ComputeResourceProvider computeResourceProvider) {
+        super(computeResourceProvider);
         warehouseIdToComputeNodeIds.put(DEFAULT_WAREHOUSE_ID, List.of(1000L));
         computeNodeIdSetAssignedToTablet.addAll(Lists.newArrayList(1000L));
         computeNodeSetAssignedToTablet.addAll(Sets.newHashSet(new ComputeNode(1000L, "127.0.0.1", 9030)));
@@ -64,6 +71,11 @@ public class MockedWarehouseManager extends WarehouseManagerEPack {
     }
 
     @Override
+    public boolean warehouseExists(long warehouseId) {
+        return true;
+    }
+
+    @Override
     public Warehouse getWarehouse(long warehouseId) {
         Warehouse warehouse = idToWh.get(warehouseId);
         if (warehouse != null) {
@@ -74,12 +86,12 @@ public class MockedWarehouseManager extends WarehouseManagerEPack {
     }
 
     @Override
-    public List<Long> getAllComputeNodeIds(long warehouseId) {
+    public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
         if (throwUnknownWarehouseException) {
             throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("id: %d", 1L));
         }
-        if (warehouseIdToComputeNodeIds.containsKey(warehouseId)) {
-            return warehouseIdToComputeNodeIds.get(warehouseId);
+        if (warehouseIdToComputeNodeIds.containsKey(computeResource.getWarehouseId())) {
+            return warehouseIdToComputeNodeIds.get(computeResource.getWarehouseId());
         }
         return warehouseIdToComputeNodeIds.get(DEFAULT_WAREHOUSE_ID);
     }
@@ -97,12 +109,12 @@ public class MockedWarehouseManager extends WarehouseManagerEPack {
     }
 
     @Override
-    public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
+    public Long getComputeNodeId(ComputeResource computeResource, LakeTablet tablet) {
         return computeNodeId;
     }
 
     @Override
-    public List<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
+    public List<Long> getAllComputeNodeIdsAssignToTablet(ComputeResource computeResource, LakeTablet tablet) {
         return computeNodeIdSetAssignedToTablet;
     }
 
@@ -110,17 +122,9 @@ public class MockedWarehouseManager extends WarehouseManagerEPack {
         computeNodeIdSetAssignedToTablet.addAll(computeNodeIds);
     }
 
-    @Override
-    public ComputeNode getComputeNodeAssignedToTablet(String warehouseName, LakeTablet tablet) {
-        if (computeNodeSetAssignedToTablet.isEmpty()) {
-            return null;
-        } else {
-            return computeNodeSetAssignedToTablet.iterator().next();
-        }
-    }
 
     @Override
-    public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
+    public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, LakeTablet tablet) {
         if (computeNodeSetAssignedToTablet.isEmpty()) {
             return null;
         } else {
@@ -140,7 +144,10 @@ public class MockedWarehouseManager extends WarehouseManagerEPack {
     }
 
     @Override
-    public List<ComputeNode> getAliveComputeNodes(long warehouseId) {
+    public List<ComputeNode> getAliveComputeNodes(ComputeResource computeResource) {
+        if (getAllComputeNodeIds(computeResource).isEmpty())  {
+            return Lists.newArrayList();
+        }
         if (!aliveComputeNodes.isEmpty()) {
             return aliveComputeNodes;
         }

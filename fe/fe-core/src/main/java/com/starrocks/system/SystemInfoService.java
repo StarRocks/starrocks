@@ -87,6 +87,8 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TResourceGroupUsage;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.validator.routines.InetAddressValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -191,7 +193,12 @@ public class SystemInfoService implements GsonPostProcessable {
         HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
         List<Long> computeNodeIds;
         if (RunMode.isSharedDataMode()) {
-            computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouse);
+            // TODO(ComputeResource): support more better compute resource acquiring.
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            final Warehouse wh = warehouseManager.getWarehouse(warehouse);
+            final CRAcquireContext acquireContext = CRAcquireContext.of(wh.getId());
+            final ComputeResource computeResource = warehouseManager.acquireComputeResource(acquireContext);
+            computeNodeIds = warehouseManager.getAllComputeNodeIds(computeResource);
         } else {
             computeNodeIds = new ArrayList<>(idToComputeNodeRef.keySet());
         }
@@ -292,7 +299,12 @@ public class SystemInfoService implements GsonPostProcessable {
     private void updateHistoricalBackends(String warehouse, long updateTime) {
         HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
         if (RunMode.isSharedDataMode()) {
-            List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouse);
+            // TODO(ComputeResource): support more better compute resource acquiring.
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            final Warehouse wh = warehouseManager.getWarehouse(warehouse);
+            final CRAcquireContext acquireContext = CRAcquireContext.of(wh.getId());
+            final ComputeResource computeResource = warehouseManager.acquireComputeResource(acquireContext);
+            List<Long> computeNodeIds = warehouseManager.getAllComputeNodeIds(computeResource);
             historicalNodeMgr.updateHistoricalComputeNodeIds(computeNodeIds, updateTime, warehouse);
 
             GlobalStateMgr.getCurrentState().getEditLog().logUpdateHistoricalNode(

@@ -19,7 +19,6 @@ import com.staros.proto.ReplicationType;
 import com.staros.proto.WarmupLevel;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.epack.lake.StarOSAgentEpack;
@@ -65,10 +64,6 @@ public class WarehouseManagerEPackTest {
         wh1.suspendSelf();
         idToWh.put(wh1.getId(), wh1);
         nameToWh.put(wh1.getName(), wh1);
-
-        // warehouse suspend
-        ExceptionChecker.expectThrowsWithMsg(ErrorReportException.class, "Warehouse name: wh1 has been suspended.",
-                () -> mgr.getAllComputeNodeIds("wh1"));
 
         SuspendWarehouseStmt suspendStmt = new SuspendWarehouseStmt("wh1");
         ExceptionChecker.expectThrowsWithMsg(DdlException.class, "Warehouse name: wh1 has been suspended.",

@@ -111,8 +111,9 @@ public class LakeBackupJob extends BackupJob {
     protected void prepareSnapshotTask(PhysicalPartition partition, Table tbl, Tablet tablet, MaterializedIndex index,
                                        long visibleVersion, int schemaHash) {
         try {
+            // TODO(ComputeResource): support more better compute resource acquiring.
             ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                    .getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_WAREHOUSE_NAME, (LakeTablet) tablet);
+                    .getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_RESOURCE, (LakeTablet) tablet);
             LakeTableSnapshotInfo snapshotInfo = new LakeTableSnapshotInfo(dbId,
                     tbl.getId(), partition.getId(), index.getId(), tablet.getId(),
                     computeNode.getId(), schemaHash, visibleVersion);

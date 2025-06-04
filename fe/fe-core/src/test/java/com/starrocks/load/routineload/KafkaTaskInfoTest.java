@@ -23,6 +23,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
@@ -48,7 +49,7 @@ public class KafkaTaskInfoTest {
             public Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
                                                        ImmutableMap<String, String> properties,
                                                        List<Integer> partitions,
-                                                       long warehouseId) throws StarRocksException {
+                                                       ComputeResource computeResource) throws StarRocksException {
                 Map<Integer, Long> offsets = Maps.newHashMap();
                 offsets.put(0, 100L);
                 offsets.put(1, 100L);
@@ -130,7 +131,7 @@ public class KafkaTaskInfoTest {
             public Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
                                                        ImmutableMap<String, String> properties,
                                                        List<Integer> partitions,
-                                                       long warehouseId) throws StarRocksException {
+                                                       ComputeResource computeResource) throws StarRocksException {
                 Map<Integer, Long> offsets = Maps.newHashMap();
                 offsets.put(0, 100L);
                 offsets.put(1, 100L);

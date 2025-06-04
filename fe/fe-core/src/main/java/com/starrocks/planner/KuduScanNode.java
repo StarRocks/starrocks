@@ -42,7 +42,7 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
-import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.kudu.client.KuduScanToken;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -150,13 +150,14 @@ public class KuduScanNode extends ScanNode {
         List<Long> allNodes;
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         if (RunMode.isSharedDataMode()) {
-            WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-            String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+            ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
             if (ConnectContext.get() != null) {
-                warehouseName = ConnectContext.get().getCurrentWarehouseName();
+                computeResource = ConnectContext.get().getCurrentComputeResource();
             }
-            Warehouse warehouse = warehouseManager.getWarehouse(warehouseName);
-            allNodes = warehouseManager.getAliveComputeNodes(warehouse.getId()).stream().map(ComputeNode::getId)
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            allNodes = warehouseManager.getAliveComputeNodes(computeResource)
+                    .stream()
+                    .map(ComputeNode::getId)
                     .collect(Collectors.toList());
         } else {
             allNodes = systemInfoService.getAvailableBackendIds();

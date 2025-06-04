@@ -26,6 +26,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.HistoricalNodeMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -56,9 +57,9 @@ public class CandidateWorkerProvider extends DefaultWorkerProvider implements Wo
                 SystemInfoService systemInfoService,
                 boolean preferComputeNode, int numUsedComputeNodes,
                 SessionVariableConstants.ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
-                long warehouseId) {
+                ComputeResource computeResource) {
             WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-            Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
+            Warehouse warehouse = warehouseManager.getWarehouse(computeResource.getWarehouseId());
             HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
 
             ImmutableMap<Long, ComputeNode> idToBackend = getHistoricalBackends(systemInfoService, historicalNodeMgr,
@@ -74,7 +75,7 @@ public class CandidateWorkerProvider extends DefaultWorkerProvider implements Wo
 
             return new CandidateWorkerProvider(idToBackend, idToComputeNode,
                     filterAvailableWorkers(idToBackend), filterAvailableWorkers(idToComputeNode),
-                    preferComputeNode, warehouseId);
+                    preferComputeNode, computeResource);
         }
     }
 
@@ -83,8 +84,8 @@ public class CandidateWorkerProvider extends DefaultWorkerProvider implements Wo
                                    ImmutableMap<Long, ComputeNode> id2ComputeNode,
                                    ImmutableMap<Long, ComputeNode> availableID2Backend,
                                    ImmutableMap<Long, ComputeNode> availableID2ComputeNode,
-                                   boolean preferComputeNode, long warehouseId) {
-        super(id2Backend, id2ComputeNode, availableID2Backend, availableID2ComputeNode, preferComputeNode, warehouseId);
+                                   boolean preferComputeNode, ComputeResource computeResource) {
+        super(id2Backend, id2ComputeNode, availableID2Backend, availableID2ComputeNode, preferComputeNode, computeResource);
     }
 
     private static ImmutableMap<Long, ComputeNode> buildComputeNodeInfo(

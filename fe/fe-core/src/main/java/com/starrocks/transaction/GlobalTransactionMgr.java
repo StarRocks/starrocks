@@ -64,6 +64,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.lang3.time.StopWatch;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -160,12 +161,10 @@ public class GlobalTransactionMgr implements MemoryTrackable {
      * @throws DuplicatedRequestException
      * @throws IllegalTransactionParameterException
      */
-
-
     public long beginTransaction(long dbId, List<Long> tableIdList, String label, TUniqueId requestId,
                                  TxnCoordinator coordinator, LoadJobSourceType sourceType, long listenerId,
                                  long timeoutSecond,
-                                 long warehouseId)
+                                 ComputeResource computeResource)
             throws LabelAlreadyUsedException, RunningTxnExceedException, DuplicatedRequestException, AnalysisException {
 
         if (Config.disable_load_job) {
@@ -197,7 +196,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
 
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
         return dbTransactionMgr.beginTransaction(tableIdList, label, requestId, coordinator, sourceType, listenerId,
-                timeoutSecond, warehouseId);
+                timeoutSecond, computeResource);
     }
 
     public long beginTransaction(long dbId, List<Long> tableIdList, String label, TxnCoordinator coordinator,
@@ -209,10 +208,10 @@ public class GlobalTransactionMgr implements MemoryTrackable {
 
     public long beginTransaction(long dbId, List<Long> tableIdList, String label, TxnCoordinator coordinator,
                                  LoadJobSourceType sourceType,
-                                 long timeoutSecond, long warehouseId)
+                                 long timeoutSecond, ComputeResource computeResource)
             throws AnalysisException, LabelAlreadyUsedException, RunningTxnExceedException, DuplicatedRequestException {
         return beginTransaction(dbId, tableIdList, label, null, coordinator, sourceType, -1,
-                timeoutSecond, warehouseId);
+                timeoutSecond, computeResource);
     }
 
     public long beginTransaction(long dbId, List<Long> tableIdList, String label, TUniqueId requestId,
@@ -220,7 +219,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
                                  long timeoutSecond)
             throws AnalysisException, LabelAlreadyUsedException, RunningTxnExceedException, DuplicatedRequestException {
         return beginTransaction(dbId, tableIdList, label, requestId, coordinator, sourceType, listenerId, timeoutSecond,
-                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                WarehouseManager.DEFAULT_RESOURCE);
     }
 
     public static void checkValidTimeoutSecond(long timeoutSecond, int maxLoadTimeoutSecond, int minLoadTimeOutSecond)

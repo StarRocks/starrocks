@@ -84,6 +84,7 @@ import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.MVColumnItem;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -356,11 +357,14 @@ public class MaterializedViewHandler extends AlterHandler {
         }
 
         long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
         if (RunMode.isSharedDataMode()) {
             // check warehouse
-            warehouseId = ConnectContext.get().getCurrentWarehouseId();
-            List<Long> computeNodeIs = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
-            if (computeNodeIs.isEmpty()) {
+            final ConnectContext connectContext = ConnectContext.get();
+            computeResource = connectContext != null ?
+                    connectContext.getCurrentComputeResource() : WarehouseManager.DEFAULT_RESOURCE;
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            if (!warehouseManager.isResourceAvailable(computeResource)) {
                 Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
                 throw new DdlException("no available compute nodes in warehouse " + warehouse.getName());
             }
@@ -383,7 +387,7 @@ public class MaterializedViewHandler extends AlterHandler {
                     .withViewDefineSql(viewDefineSql)
                     .withMvKeysType(mvKeysType)
                     .withIsColocateMv(isColocateMv)
-                    .withWarehouse(warehouseId)
+                    .withComputeResource(computeResource)
                     .build();
 
             LOG.info("finished to create materialized view job: {}", mvJob.getJobId());

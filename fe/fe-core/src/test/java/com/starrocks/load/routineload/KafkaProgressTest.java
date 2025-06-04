@@ -21,6 +21,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
@@ -39,7 +40,7 @@ public class KafkaProgressTest {
             public Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
                                                        ImmutableMap<String, String> properties,
                                                        List<Integer> partitions,
-                                                       long warehouseId) throws StarRocksException {
+                                                       ComputeResource computeResource) throws StarRocksException {
                 Map<Integer, Long> result = Maps.newHashMap();
                 result.put(0, 100L);
                 return result;
@@ -49,7 +50,7 @@ public class KafkaProgressTest {
             public Map<Integer, Long> getBeginningOffsets(String brokerList, String topic,
                                                           ImmutableMap<String, String> properties,
                                                           List<Integer> partitions,
-                                                          long warehouseId) throws StarRocksException {
+                                                          ComputeResource computeResource) throws StarRocksException {
                 Map<Integer, Long> result = Maps.newHashMap();
                 result.put(1, 1L);
                 return result;
@@ -70,7 +71,7 @@ public class KafkaProgressTest {
         progress.addPartitionOffset(new Pair<>(1, -2L));
         progress.addPartitionOffset(new Pair<>(2, 10L));
         progress.addPartitionOffset(new Pair<>(3, 10L));
-        progress.convertOffset("127.0.0.1:9020", "topic", Maps.newHashMap(), WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        progress.convertOffset("127.0.0.1:9020", "topic", Maps.newHashMap(), WarehouseManager.DEFAULT_RESOURCE);
 
         List<Pair<Integer, Long>> partitionToOffset = new ArrayList<>();
         partitionToOffset.add(new Pair<>(3, 20L));

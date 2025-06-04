@@ -27,6 +27,7 @@ import com.starrocks.planner.PlanNodeId;
 import com.starrocks.qe.scheduler.DefaultWorkerProvider;
 import com.starrocks.qe.scheduler.NonRecoverableException;
 import com.starrocks.qe.scheduler.WorkerProvider;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TScanRange;
@@ -318,7 +319,7 @@ public class ColocatedBackendSelectorTest {
         )));
         ImmutableMap<Long, ComputeNode> id2ComputeNode = ImmutableMap.of();
 
-        return new DefaultWorkerProvider(id2Backend, id2ComputeNode, id2Backend, id2ComputeNode, false, 0);
+        return new DefaultWorkerProvider(id2Backend, id2ComputeNode, id2Backend, id2ComputeNode, false,
+                WarehouseManager.DEFAULT_RESOURCE);
     }
-
 }

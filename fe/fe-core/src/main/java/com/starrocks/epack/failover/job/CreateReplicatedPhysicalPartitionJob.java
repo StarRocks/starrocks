@@ -8,6 +8,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.epack.failover.FailoverGroup;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -41,10 +42,10 @@ public class CreateReplicatedPhysicalPartitionJob extends FailoverGroupJob {
                 localTable.getName(), localPartition.getName(), remotePhysicalPartition.getName(),
                 failoverGroup.getName());
 
-        long warehouseId = GlobalStateMgr.getServingState().getWarehouseMgr().getBackgroundWarehouse().getId();
+        ComputeResource computeResource  = GlobalStateMgr.getServingState().getWarehouseMgr().getBackgroundComputeResource();
         try {
             GlobalStateMgr.getServingState().getLocalMetastore().addSubPartitions(localDatabase, localTable,
-                    localPartition, 1, warehouseId);
+                    localPartition, 1, computeResource);
         } catch (Exception e) {
             failoverGroup.addErrorMessage("Failed to create physical partition " + localDatabase.getFullName() + "." +
                     localTable.getName() + "." + localPartition.getName() + "." + remotePhysicalPartition.getName() +

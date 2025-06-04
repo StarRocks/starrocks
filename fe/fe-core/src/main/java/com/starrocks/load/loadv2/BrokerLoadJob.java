@@ -139,7 +139,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                 .beginTransaction(dbId, Lists.newArrayList(fileGroupAggInfo.getAllTableIds()), label, null,
                         new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                         TransactionState.LoadJobSourceType.BATCH_LOAD_JOB, id,
-                        timeoutSecond, warehouseId);
+                        timeoutSecond, computeResource);
     }
 
     @Override
@@ -312,7 +312,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                         .setFileNum(attachment.getFileNumByTable(aggKey))
                         .setLoadId(loadId)
                         .setJSONOptions(jsonOptions)
-                        .setWarehouseId(warehouseId)
+                        .setComputeResource(computeResource)
                         .build();
 
                 task.prepare();

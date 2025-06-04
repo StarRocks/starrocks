@@ -42,6 +42,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.hadoop.util.BlockingThreadPoolExecutorService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -69,6 +70,8 @@ public class AutovacuumDaemon extends FrontendDaemon {
     private final BlockingThreadPoolExecutorService executorService = BlockingThreadPoolExecutorService.newInstance(
             Config.lake_autovacuum_parallel_partitions, 0, 1, TimeUnit.HOURS, "autovacuum");
 
+    private ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
+
     public AutovacuumDaemon() {
         super("autovacuum", 2000);
     }
@@ -78,6 +81,10 @@ public class AutovacuumDaemon extends FrontendDaemon {
         if (FeConstants.runningUnitTest) {
             return;
         }
+
+        // acquire background resource
+        acquireBackgroundComputeResource();
+
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
@@ -167,7 +174,6 @@ public class AutovacuumDaemon extends FrontendDaemon {
         long preExtraFileSize = 0;
         // if enable partition aggregation, there will be only one node (Aggregator).
         Map<ComputeNode, List<TabletInfoPB>> nodeToTablets = new HashMap<>();
-
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         boolean enablePartitionAggregation = table.enablePartitionAggregation();
@@ -200,10 +206,10 @@ public class AutovacuumDaemon extends FrontendDaemon {
             if (enablePartitionAggregation) {
                 // if enable partition aggregation, there will be only one node.
                 if (pickNode == null) {
-                    pickNode = LakeAggregator.chooseAggregatorNode(warehouse.getId());
+                    pickNode = LakeAggregator.chooseAggregatorNode(computeResource);
                 }
             } else {
-                pickNode = warehouseManager.getComputeNodeAssignedToTablet(warehouse.getId(), lakeTablet);
+                pickNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, lakeTablet);
             }
 
             if (pickNode == null) {

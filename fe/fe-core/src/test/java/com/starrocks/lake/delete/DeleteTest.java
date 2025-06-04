@@ -86,7 +86,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 
 public class DeleteTest {
     private final long dbId = 1L;
@@ -126,7 +125,7 @@ public class DeleteTest {
         Map<Long, List<Long>> beToTablets = Maps.newHashMap();
         beToTablets.put(BACKEND_ID, Lists.newArrayList(TABLET_1_ID, TABLET_2_ID));
         MockedStatic<Utils> utilsMockedStatic = Mockito.mockStatic(Utils.class);
-        utilsMockedStatic.when(() -> Utils.groupTabletID(any(), any(), anyLong())).thenReturn(beToTablets);
+        utilsMockedStatic.when(() -> Utils.groupTabletID(any(), any(), any())).thenReturn(beToTablets);
     }
 
     private Database createDb() {

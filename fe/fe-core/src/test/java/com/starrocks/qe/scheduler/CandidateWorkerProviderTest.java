@@ -82,22 +82,22 @@ public class CandidateWorkerProviderTest {
         CandidateWorkerProvider.Factory workerProviderFactory = new CandidateWorkerProvider.Factory();
 
         CandidateWorkerProvider workerProvider = workerProviderFactory.captureAvailableWorkers(systemInfoService, true, 100,
-                ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY, WarehouseManager.DEFAULT_RESOURCE);
         Collection<ComputeNode> workers = workerProvider.getAllWorkers();
         Assert.assertEquals(workers.size(), id2ComputeNode.size());
 
         CandidateWorkerProvider workerProvider2 = workerProviderFactory.captureAvailableWorkers(systemInfoService, true, 100,
-                ComputationFragmentSchedulingPolicy.ALL_NODES, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                ComputationFragmentSchedulingPolicy.ALL_NODES, WarehouseManager.DEFAULT_RESOURCE);
         Collection<ComputeNode> workers2 = workerProvider2.getAllWorkers();
         Assert.assertEquals(workers2.size(), id2ComputeNode.size() + id2Backend.size());
 
         CandidateWorkerProvider workerProvider3 = workerProviderFactory.captureAvailableWorkers(systemInfoService, true, 12,
-                ComputationFragmentSchedulingPolicy.ALL_NODES, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                ComputationFragmentSchedulingPolicy.ALL_NODES, WarehouseManager.DEFAULT_RESOURCE);
         Collection<ComputeNode> workers3 = workerProvider3.getAllWorkers();
         Assert.assertEquals(workers3.size(), 12);
 
         CandidateWorkerProvider workerProvider4 = workerProviderFactory.captureAvailableWorkers(systemInfoService, true, 0,
-                ComputationFragmentSchedulingPolicy.ALL_NODES, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                ComputationFragmentSchedulingPolicy.ALL_NODES, WarehouseManager.DEFAULT_RESOURCE);
         Collection<ComputeNode> workers4 = workerProvider4.getAllWorkers();
         Assert.assertEquals(workers4.size(), id2ComputeNode.size() + id2Backend.size());
     }
@@ -121,7 +121,7 @@ public class CandidateWorkerProviderTest {
         CandidateWorkerProvider.Factory workerProviderFactory = new CandidateWorkerProvider.Factory();
 
         CandidateWorkerProvider workerProvider = workerProviderFactory.captureAvailableWorkers(systemInfoService, true, 100,
-                ComputationFragmentSchedulingPolicy.ALL_NODES, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                ComputationFragmentSchedulingPolicy.ALL_NODES, WarehouseManager.DEFAULT_RESOURCE);
         Collection<ComputeNode> workers = workerProvider.getAllWorkers();
         Assert.assertEquals(workers.size(), id2ComputeNode.size() + id2Backend.size() - 4);
     }
