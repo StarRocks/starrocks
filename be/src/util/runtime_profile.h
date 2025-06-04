@@ -339,45 +339,6 @@ public:
         Counter* _involuntary_context_switches;
     };
 
-    // An EventSequence captures a sequence of events (each added by
-    // calling MarkEvent). Each event has a text label, and a time
-    // (measured relative to the moment start() was called as t=0). It is
-    // useful for tracking the evolution of some serial process, such as
-    // the query lifecycle.
-    // Not thread-safe.
-    class EventSequence {
-    public:
-        EventSequence() = default;
-
-        // starts the timer without resetting it.
-        void start() { _sw.start(); }
-
-        // stops (or effectively pauses) the timer.
-        void stop() { _sw.stop(); }
-
-        // Stores an event in sequence with the given label and the
-        // current time (relative to the first time start() was called) as
-        // the timestamp.
-        void mark_event(const std::string& label) { _events.push_back(make_pair(label, _sw.elapsed_time())); }
-
-        int64_t elapsed_time() { return _sw.elapsed_time(); }
-
-        // An Event is a <label, timestamp> pair
-        typedef std::pair<std::string, int64_t> Event;
-
-        // An EventList is a sequence of Events, in increasing timestamp order
-        typedef std::vector<Event> EventList;
-
-        const EventList& events() const { return _events; }
-
-    private:
-        // Stored in increasing time order
-        EventList _events;
-
-        // Timer which allows events to be timestamped when they are recorded.
-        MonotonicStopWatch _sw;
-    };
-
     // Create a runtime profile object with 'name'.
     explicit RuntimeProfile(std::string name, bool is_averaged_profile = false);
 

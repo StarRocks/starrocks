@@ -918,7 +918,9 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, 
     {
         // Find all counters, although these profiles are expected to be isomorphic,
         // some counters are only attached to one of them
+        // every level is a map, map's key is counter's name, value is: {counter_type, parent_name}
         std::vector<std::map<std::string, std::pair<TUnit::type, std::string>>> all_level_counters;
+        size_t count_num = 0;
         for (auto* profile : profiles) {
             std::lock_guard<std::mutex> l(profile->_counter_lock);
             // Level order traverse starts with root
@@ -956,6 +958,7 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, 
                     auto it = level_counters.find(name);
                     if (it == level_counters.end()) {
                         level_counters[name] = std::make_pair<>(counter->type(), parent_name);
+                        count_num++;
                         continue;
                     }
                     const auto exist_type = it->second.first;
@@ -970,6 +973,7 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, 
         }
 
         std::vector<std::tuple<TUnit::type, std::string, std::string>> level_ordered_counters;
+        level_ordered_counters.reserve(count_num);
         for (const auto& level_counters : all_level_counters) {
             for (const auto& [name, pair] : level_counters) {
                 level_ordered_counters.emplace_back(pair.first, name, pair.second);
@@ -980,10 +984,10 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, 
             const auto& type = std::get<0>(tuple);
             const auto& name = std::get<1>(tuple);
             const auto& parent_name = std::get<2>(tuple);
-            // We don't need to calculate sum or average of counter's extra info (min value and max value)
-            if (name.rfind(MERGED_INFO_PREFIX_MIN, 0) == 0 || name.rfind(MERGED_INFO_PREFIX_MAX, 0) == 0) {
-                continue;
-            }
+            // // We don't need to calculate sum or average of counter's extra info (min value and max value)
+            // if (name.rfind(MERGED_INFO_PREFIX_MIN, 0) == 0 || name.rfind(MERGED_INFO_PREFIX_MAX, 0) == 0) {
+            //     continue;
+            // }
 
             std::vector<Counter*> counters;
 

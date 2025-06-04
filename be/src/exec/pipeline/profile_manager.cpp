@@ -105,7 +105,7 @@ profile_manager::profile_manager() {
     REGISTER_THREAD_POOL_METRICS(async_profile_merge, _report_thread_pool);
 
     int max_reporter = config::async_profile_report_thread_max_num == 0 ? CpuInfo::num_cores() / 2
-                                                                        : config::async_profile_merge_thread_max_num;
+                                                                        : config::async_profile_report_thread_max_num;
     status = ThreadPoolBuilder("query_profile_report")
                      .set_min_threads(1)
                      .set_max_threads(max_reporter)
