@@ -1514,6 +1514,9 @@ CONF_mBool(enable_json_flat_remain_filter, "true");
 // enable flat complex type (/array/object/hyper type), diables for save storage
 CONF_mBool(enable_json_flat_complex_type, "false");
 
+// flat json use dict-encoding
+CONF_mBool(json_flat_use_dict_encoding, "true");
+
 // if disable flat complex type, check complex type rate in hyper-type column
 CONF_mDouble(json_flat_complex_type_factor, "0.3");
 
