@@ -2456,6 +2456,9 @@ public class PlanFragmentBuilder {
                 currentExecGroup.setColocateGroup();
             }
             currentExecGroup.add(aggregationNode);
+            if (shouldBuildGlobalRuntimeFilter()) {
+                aggregationNode.buildRuntimeFilters(runtimeFilterIdIdGenerator, context.getDescTbl(), execGroups);
+            }
             inputFragment.setPlanRoot(aggregationNode);
             inputFragment.getPlanRoot().forceCollectExecStats();
             inputFragment.mergeQueryDictExprs(originalInputFragment.getQueryGlobalDictExprs());

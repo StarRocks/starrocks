@@ -871,6 +871,8 @@ struct TAggregationNode {
 
   // enable runtime limit, pipelines share one limit
   29: optional bool enable_pipeline_share_limit = false
+
+  30: optional list<RuntimeFilter.TRuntimeFilterDescription> build_runtime_filters
 }
 
 struct TRepeatNode {

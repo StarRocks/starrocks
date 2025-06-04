@@ -70,6 +70,7 @@ namespace starrocks {
 template <class T>
 class ColumnValueRange {
 public:
+    using RangeValueType = T;
     using ValuesContainer = boost::container::flat_set<T>;
     using iterator_type = typename ValuesContainer::iterator;
 
