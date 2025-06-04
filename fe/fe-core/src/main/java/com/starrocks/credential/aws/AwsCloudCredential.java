@@ -93,6 +93,8 @@ public class AwsCloudCredential implements CloudCredential {
 
     private final boolean useInstanceProfile;
 
+    private final boolean useWebIdentityProfile;
+
     private final String accessKey;
 
     private final String secretKey;
@@ -111,7 +113,8 @@ public class AwsCloudCredential implements CloudCredential {
 
     private final String endpoint;
 
-    protected AwsCloudCredential(boolean useAWSSDKDefaultBehavior, boolean useInstanceProfile, String accessKey,
+    protected AwsCloudCredential(boolean useAWSSDKDefaultBehavior, boolean useInstanceProfile, boolean useWebIdentityProfile,
+                                 String accessKey,
                                  String secretKey, String sessionToken, String iamRoleArn, String stsRegion,
                                  String stsEndpoint, String externalId, String region,
                                  String endpoint) {
@@ -124,6 +127,7 @@ public class AwsCloudCredential implements CloudCredential {
         Preconditions.checkNotNull(endpoint);
         this.useAWSSDKDefaultBehavior = useAWSSDKDefaultBehavior;
         this.useInstanceProfile = useInstanceProfile;
+        this.useWebIdentityProfile = useWebIdentityProfile;
         this.accessKey = accessKey;
         this.secretKey = secretKey;
         this.sessionToken = sessionToken;
