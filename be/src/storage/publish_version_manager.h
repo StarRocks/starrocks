@@ -27,6 +27,12 @@ namespace starrocks {
 
 using FinishTaskRequestPtr = std::shared_ptr<TFinishTaskRequest>;
 
+struct FinishTaskInfo {
+    TFinishTaskRequest request;
+    int64_t last_report_time;
+    size_t not_report_tablet_num;
+};
+
 class PublishVersionManager {
 public:
     Status init();
@@ -34,20 +40,20 @@ public:
     void wait_publish_task_apply_finish(std::vector<TFinishTaskRequest> finish_task_requests);
     bool has_pending_task() { return !_finish_task_requests.empty() || !_waitting_finish_task_requests.empty(); }
     void finish_publish_version_task();
-    void update_tablet_version(TFinishTaskRequest& finish_task_request);
+    void update_tablet_version(std::vector<TTabletVersionPair>& tablet_versions);
 
     size_t finish_task_requests_size() { return _finish_task_requests.size(); }
     size_t waitting_finish_task_requests_size() { return _waitting_finish_task_requests.size(); }
 
 private:
     bool _all_task_applied(const TFinishTaskRequest& finish_task_request);
-    bool _left_task_applied(const TFinishTaskRequest& finish_task_request);
+    size_t _left_task_applied(const TFinishTaskRequest& finish_task_request);
 
 private:
     mutable std::mutex _lock;
 
     std::map<int64_t, TFinishTaskRequest> _finish_task_requests;
-    std::map<int64_t, TFinishTaskRequest> _waitting_finish_task_requests;
+    std::map<int64_t, FinishTaskInfo> _waitting_finish_task_requests;
     std::map<int64_t, std::set<std::pair<int64_t, int64_t>>> _unapplied_tablet_by_txn;
     std::unique_ptr<ThreadPool> _finish_publish_version_thread_pool;
 };
