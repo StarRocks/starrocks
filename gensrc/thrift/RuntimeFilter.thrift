@@ -50,7 +50,8 @@ enum TRuntimeFilterBuildJoinMode {
 
 enum TRuntimeFilterBuildType {
   JOIN_FILTER,
-  TOPN_FILTER
+  TOPN_FILTER,
+  AGG_FILTER,
 }
 
 struct TRuntimeFilterDestination {

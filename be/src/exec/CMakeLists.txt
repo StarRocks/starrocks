@@ -47,6 +47,7 @@ set(EXEC_FILES
     es/es_scroll_parser.cpp
     local_file_writer.cpp
     plain_text_builder.cpp
+    agg_runtime_filter_builder.cpp
     aggregator.cpp
     sorted_streaming_aggregator.cpp
     aggregate/agg_hash_variant.cpp

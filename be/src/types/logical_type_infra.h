@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <type_traits>
+
 #include "common/logging.h"
 #include "types/logical_type.h"
 
@@ -207,6 +209,46 @@ Ret type_dispatch_predicate(LogicalType ltype, bool assert, Functor fun, Args...
             return Ret{};
         }
     }
+}
+
+constexpr size_t get_num_scalar_types() {
+    size_t size = 0;
+#define _NUM_SCALAR_TYPES(type) size++;
+    APPLY_FOR_ALL_SCALAR_TYPE(_NUM_SCALAR_TYPES)
+    return size;
+}
+constexpr size_t NUM_SCALAR_TYPES = get_num_scalar_types();
+constexpr std::array<LogicalType, NUM_SCALAR_TYPES> get_scalar_types() {
+    std::array<LogicalType, NUM_SCALAR_TYPES> scalar_types;
+    size_t index = 0;
+#define _BUILD_SCALAR_TYPES(type) scalar_types[index++] = type;
+    APPLY_FOR_ALL_SCALAR_TYPE(_BUILD_SCALAR_TYPES)
+
+    return scalar_types;
+}
+
+template <size_t I, class Functor>
+constexpr auto dispatch_helper(LogicalType ltype, Functor fun) {
+    constexpr std::array<LogicalType, NUM_SCALAR_TYPES> scalar_types = get_scalar_types();
+    if constexpr (I < scalar_types.size()) {
+        if (ltype == scalar_types[I]) {
+            return fun.template operator()<scalar_types[I]>();
+        } else {
+            return dispatch_helper<I + 1>(ltype, fun);
+        }
+    } else {
+        using RetType = decltype(fun.template operator()<scalar_types[0]>());
+        if constexpr (std::is_void_v<RetType>) {
+            return;
+        } else {
+            return RetType{};
+        }
+    }
+}
+
+template <class Functor, class... Args>
+auto scalar_type_dispatch(LogicalType ltype, Functor fun, Args... args) {
+    return dispatch_helper<0>(ltype, fun);
 }
 
 template <class Functor, class Ret, class... Args>

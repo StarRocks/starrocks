@@ -68,9 +68,10 @@ public:
     static RuntimeFilter* create_runtime_empty_filter(ObjectPool* pool, LogicalType type, int8_t join_mode);
     static RuntimeFilter* create_runtime_bloom_filter(ObjectPool* pool, LogicalType type, int8_t join_mode);
     static RuntimeFilter* create_runtime_bitset_filter(ObjectPool* pool, LogicalType type, int8_t join_mode);
+    static RuntimeFilter* create_agg_runtime_in_filter(ObjectPool* pool, LogicalType type, int8_t join_mode);
     static RuntimeFilter* transmit_to_runtime_empty_filter(ObjectPool* pool, RuntimeFilter* rf);
-    static RuntimeFilter* create_join_runtime_filter(ObjectPool* pool, RuntimeFilterSerializeType rf_type,
-                                                     LogicalType ltype, int8_t join_mode);
+    static RuntimeFilter* create_runtime_filter(ObjectPool* pool, RuntimeFilterSerializeType rf_type, LogicalType ltype,
+                                                int8_t join_mode);
     static RuntimeFilter* create_join_runtime_filter(ObjectPool* pool, LogicalType type, int8_t join_mode,
                                                      const pipeline::RuntimeMembershipFilterBuildParam& param,
                                                      size_t column_offset, size_t row_count);
@@ -108,6 +109,9 @@ public:
     bool has_remote_targets() const { return _has_remote_targets; }
     bool has_consumer() const { return _has_consumer; }
     const std::vector<TNetworkAddress>& merge_nodes() const { return _merge_nodes; }
+
+    TRuntimeFilterBuildType::type type() const { return _runtime_filter_type; }
+
     void set_runtime_filter(RuntimeFilter* rf) { _runtime_filter = rf; }
     // used in TopN filter to intersect with other runtime filters.
     void set_or_intersect_filter(RuntimeFilter* rf) {
@@ -160,6 +164,8 @@ private:
     bool _is_broad_cast_in_skew = false;
     int32_t _skew_shuffle_filter_id = -1;
 
+    TRuntimeFilterBuildType::type _runtime_filter_type;
+
     std::mutex _mutex;
 };
 
@@ -174,7 +180,8 @@ public:
     void close(RuntimeState* state);
     int32_t filter_id() const { return _filter_id; }
     bool skip_wait() const { return _skip_wait; }
-    bool is_topn_filter() const { return _is_topn_filter; }
+    // RF is built by stream
+    bool is_stream_build_filter() const { return _is_stream_build_filter; }
     ExprContext* probe_expr_ctx() { return _probe_expr_ctx; }
     bool is_bound(const std::vector<TupleId>& tuple_ids) const { return _probe_expr_ctx->root()->is_bound(tuple_ids); }
     // Disable pushing down runtime filters when:
@@ -236,7 +243,7 @@ private:
     int64_t _open_timestamp = 0;
     int64_t _ready_timestamp = 0;
     int8_t _join_mode;
-    bool _is_topn_filter = false;
+    bool _is_stream_build_filter = false;
 
     bool _skip_wait = false;
     // Indicates that the runtime filter was built from the colocate group execution build side.
@@ -314,7 +321,7 @@ public:
     int plan_node_id() { return _plan_node_id; }
     bool has_topn_filter() const {
         return std::any_of(_descriptors.begin(), _descriptors.end(),
-                           [](const auto& entry) { return entry.second->is_topn_filter(); });
+                           [](const auto& entry) { return entry.second->is_stream_build_filter(); });
     }
 
 private:

@@ -371,7 +371,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     public void computeLocalRfWaitingSet(PlanNode root, boolean clearGlobalRuntimeFilter) {
         root.fillLocalRfWaitingSet(runtimeFilterBuildNodeIds);
         // TopN Filter should't wait
-        if (root instanceof RuntimeFilterBuildNode && !(root instanceof SortNode)) {
+        if (root instanceof RuntimeFilterBuildNode && !(root instanceof SortNode) && !(root instanceof AggregationNode)) {
             runtimeFilterBuildNodeIds.add(root.getId().asInt());
         }
         if (clearGlobalRuntimeFilter) {
@@ -772,6 +772,13 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             JoinNode joinNode = (JoinNode) root;
             for (RuntimeFilterDescription description : joinNode.getBuildRuntimeFilters()) {
                 description.addMergeNode(host);
+            }
+        }
+        if (root instanceof AggregationNode aggNode) {
+            for (RuntimeFilterDescription description : aggNode.getBuildRuntimeFilters()) {
+                if (description.isHasRemoteTargets()) {
+                    description.addMergeNode(host);
+                }
             }
         }
 

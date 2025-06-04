@@ -24,6 +24,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/status.h"
+#include "exec/agg_runtime_filter_builder.h"
 #include "exec/aggregate/agg_profile.h"
 #include "exec/exec_node.h"
 #include "exec/limited_pipeline_chunk_buffer.h"
@@ -901,6 +902,13 @@ Status Aggregator::compute_batch_agg_states_with_selection(Chunk* chunk, size_t 
     return Status::OK();
 }
 
+RuntimeFilter* Aggregator::build_in_filters(RuntimeState* state, RuntimeFilterBuildDescriptor* desc) {
+    int expr_order = desc->build_expr_order();
+    const auto& group_type_type = _group_by_types[expr_order].result_type.type;
+    AggInRuntimeFilterBuilder in_builder(desc, group_type_type);
+    return in_builder.build(this, state->obj_pool());
+}
+
 Status Aggregator::_evaluate_const_columns(int i) {
     // used for const columns.
     Columns const_columns;
@@ -1167,7 +1175,7 @@ Columns Aggregator::_create_agg_result_columns(size_t num_rows, bool use_interme
     return agg_result_columns;
 }
 
-Columns Aggregator::_create_group_by_columns(size_t num_rows) {
+Columns Aggregator::_create_group_by_columns(size_t num_rows) const {
     Columns group_by_columns(_group_by_types.size());
     for (size_t i = 0; i < _group_by_types.size(); ++i) {
         group_by_columns[i] =
@@ -1378,12 +1386,13 @@ void Aggregator::_build_hash_map_with_shared_limit(size_t chunk_size, std::atomi
         build_hash_map_with_selection(chunk_size);
         return;
     } else {
-        _streaming_selection.assign(chunk_size, 0);
+        _streaming_selection.resize(chunk_size);
     }
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
-        hash_map_with_key->build_hash_map(chunk_size, _group_by_columns, _mem_pool.get(), AllocateState<MapType>(this),
-                                          &_tmp_agg_states);
+        hash_map_with_key->build_hash_map_with_limit(chunk_size, _group_by_columns, _mem_pool.get(),
+                                                     AllocateState<MapType>(this), &_tmp_agg_states,
+                                                     &_streaming_selection, _limit);
     });
     shared_limit_countdown.fetch_sub(_hash_map_variant.size() - start_size, std::memory_order_relaxed);
 }

@@ -39,6 +39,7 @@ protected:
     std::vector<ExprContext*> _group_by_expr_ctxs;
     AggregatorPtr _aggregator = nullptr;
     bool _child_eos = false;
+    std::vector<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
 };
 
 } // namespace starrocks
