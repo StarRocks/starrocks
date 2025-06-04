@@ -28,7 +28,7 @@ import com.starrocks.connector.hive.HiveConnectorScanRangeSource;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.datacache.DataCacheOptions;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.optimizer.ScanOptimzeOption;
+import com.starrocks.sql.optimizer.ScanOptimizeOption;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TDataCacheOptions;
@@ -201,7 +201,7 @@ public class HdfsScanNode extends ScanNode {
     }
 
     public static void setScanOptimizeOptionToThrift(THdfsScanNode tHdfsScanNode, ScanNode scanNode) {
-        ScanOptimzeOption option = scanNode.getScanOptimzeOption();
+        ScanOptimizeOption option = scanNode.getScanOptimizeOption();
         tHdfsScanNode.setCan_use_any_column(option.getCanUseAnyColumn());
         tHdfsScanNode.setCan_use_min_max_count_opt(option.getCanUseMinMaxCountOpt());
         tHdfsScanNode.setUse_partition_column_value_only(option.getUsePartitionColumnValueOnly());
