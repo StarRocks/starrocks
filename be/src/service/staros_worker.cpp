@@ -278,7 +278,7 @@ StarOSWorker::build_filesystem_from_shard_info(const ShardInfo& info, const Conf
         return scheme.status();
     }
 
-    return new_bundle_filesystem(*scheme, *localconf);
+    return new_shared_filesystem(*scheme, *localconf);
 }
 
 bool StarOSWorker::need_enable_cache(const ShardInfo& info) {
@@ -320,7 +320,7 @@ absl::StatusOr<fslib::Configuration> StarOSWorker::build_conf_from_shard_info(co
 }
 
 absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<fslib::FileSystem>>>
-StarOSWorker::new_bundle_filesystem(std::string_view scheme, const Configuration& conf) {
+StarOSWorker::new_shared_filesystem(std::string_view scheme, const Configuration& conf) {
     std::string cache_key = get_cache_key(scheme, conf);
 
     // Lookup LRU cache
