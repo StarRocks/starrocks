@@ -648,6 +648,10 @@ CONF_Bool(thrift_rpc_strict_mode, "true");
 // rpc max string body size. 0 means unlimited
 CONF_Int32(thrift_rpc_max_body_size, "0");
 
+// Maximum valid time for a thrift rpc connection. Just be consistent with FE's thrift_client_timeout_ms.
+// The connection will be closed if it has existed in the connection pool for longer than this value.
+CONF_Int32(thrift_rpc_connection_max_valid_time_ms, "5000");
+
 // txn commit rpc timeout
 CONF_mInt32(txn_commit_rpc_timeout_ms, "60000");
 
