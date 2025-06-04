@@ -4,3 +4,10 @@ insert into t select * from TABLE(generate_series(0,63));
 select count(*) from t;
 insert overwrite t select * from TABLE(generate_series(0,31));
 select count(*) from t;
+
+create table t1 (k1 int, k2 varchar(100));
+insert into t1 values(3, "c");
+select * from t1;
+create table t2 (k1 int, k2 varchar(100), k3 int default "10");
+insert overwrite t2 by name select k1, k2 from t1;
+select * from t2;
