@@ -463,6 +463,11 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         Preconditions.checkState(!idToVisibleRollupIndex.containsKey(shadowIndexId), shadowIndexId);
         shadowIdx.setState(IndexState.NORMAL);
         if (isBaseIndex) {
+            // in shared-data cluster, if upgraded from 3.3 or older version, `shardGroupId` will not
+            // be set, so must set it here
+            if (shadowIdx.getShardGroupId() == PhysicalPartition.INVALID_SHARD_GROUP_ID) {
+                shadowIdx.setShardGroupId(shardGroupId);
+            }
             baseIndex = shadowIdx;
         } else {
             idToVisibleRollupIndex.put(shadowIndexId, shadowIdx);
