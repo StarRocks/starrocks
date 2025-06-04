@@ -250,21 +250,8 @@ private:
 
 class CacheEnv {
 public:
-    static CacheEnv* GetInstance();
-
     Status init(const std::vector<StorePath>& store_paths);
     void destroy();
-
-    void try_release_resource_before_core_dump();
-
-    void set_local_cache(std::shared_ptr<LocalCache> local_cache) { _local_cache = std::move(local_cache); }
-
-    LocalCache* local_cache() { return _local_cache.get(); }
-    BlockCache* block_cache() const { return _block_cache.get(); }
-    void set_block_cache(std::shared_ptr<BlockCache> block_cache) { _block_cache = std::move(block_cache); }
-    ObjectCache* external_table_meta_cache() const { return _object_cache.get(); }
-    ObjectCache* external_table_page_cache() const { return _object_cache.get(); }
-    StoragePageCache* page_cache() const { return _page_cache.get(); }
 
     Status adjust_capacity(int64_t delta, size_t min_capacity = 0);
 

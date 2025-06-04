@@ -341,11 +341,6 @@ bool parse_resource_str(const string& str, string* value) {
     }
 }
 
-CacheEnv* CacheEnv::GetInstance() {
-    static CacheEnv s_cache_env;
-    return &s_cache_env;
-}
-
 Status CacheEnv::init(const std::vector<StorePath>& store_paths) {
     _global_env = GlobalEnv::GetInstance();
     _store_paths = store_paths;
@@ -502,30 +497,6 @@ Status CacheEnv::_init_object_cache(LocalCache* local_cache) {
 }
 
 #endif
-
-void CacheEnv::try_release_resource_before_core_dump() {
-    std::set<std::string> modules;
-    bool release_all = false;
-    if (config::try_release_resource_before_core_dump.value() == "*") {
-        release_all = true;
-    } else {
-        SplitStringAndParseToContainer(StringPiece(config::try_release_resource_before_core_dump), ",",
-                                       &parse_resource_str, &modules);
-    }
-
-    auto need_release = [&release_all, &modules](const std::string& name) {
-        return release_all || modules.contains(name);
-    };
-
-    if (_page_cache != nullptr && need_release("data_cache")) {
-        _page_cache->set_capacity(0);
-    }
-    if (_local_cache != nullptr && _local_cache->available() && need_release("data_cache")) {
-        // TODO: Currently, block cache don't support shutdown now,
-        //  so here will temporary use update_mem_quota instead to release memory.
-        (void)_local_cache->update_mem_quota(0, false);
-    }
-}
 
 ExecEnv* ExecEnv::GetInstance() {
     static ExecEnv s_exec_env;
