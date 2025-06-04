@@ -151,6 +151,9 @@ public class AuditEvent {
     @AuditField(value = "QueryFEAllocatedMemory")
     public long queryFeMemory = 0;
 
+    @AuditField(value = "SessionId")
+    public String sessionId = "";
+
     public static class AuditEventBuilder {
 
         private AuditEvent auditEvent = new AuditEvent();
@@ -386,6 +389,11 @@ public class AuditEvent {
 
         public AuditEventBuilder setQueryFeMemory(long queryFeMemory) {
             auditEvent.queryFeMemory = queryFeMemory;
+            return this;
+        }
+
+        public AuditEventBuilder setSessionId(String sessionId) {
+            auditEvent.sessionId = sessionId;
             return this;
         }
 
