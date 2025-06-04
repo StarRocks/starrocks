@@ -4,6 +4,7 @@ package com.starrocks.epack.connector.delta;
 
 import com.databricks.sdk.WorkspaceClient;
 import com.databricks.sdk.core.DatabricksConfig;
+import com.databricks.sdk.core.UserAgent;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.connector.HdfsEnvironment;
@@ -12,6 +13,7 @@ import com.starrocks.connector.ReentrantExecutor;
 import com.starrocks.connector.delta.CachingDeltaLakeMetastore;
 import com.starrocks.connector.delta.DeltaLakeInternalMgr;
 import com.starrocks.connector.delta.IDeltaLakeMetastore;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;
 import java.util.Map;
@@ -46,6 +48,9 @@ public class DeltaLakeInternalMgrEpack extends DeltaLakeInternalMgr {
     }
 
     public IDeltaLakeMetastore createUnityBackedDeltaLakeMetastore() {
+        UserAgent.withProduct("CelerData",
+                GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFeVersion());
+
         Map<String, String> properties = deltaLakeCatalogProperties.getProperties();
         if (!properties.containsKey(DATABRICKS_HOST)) {
             throw new IllegalArgumentException("Databricks host must be set");
