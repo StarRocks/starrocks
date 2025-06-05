@@ -744,9 +744,9 @@ public class OlapTableSink extends DataSink {
 
     private static void setIndexAndBucketNums(PhysicalPartition partition, TOlapTablePartition tPartition) {
         for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
-            tPartition.addToIndexes(new TOlapTableIndexTablets(index.getId(), Lists.newArrayList(
-                    index.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()))));
-            tPartition.setNum_buckets(index.getTablets().size());
+            TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getId(), index.getTabletIdsInOrder());
+            tIndex.setVirtual_buckets(Lists.newArrayList(index.getVirtualBuckets()));
+            tPartition.addToIndexes(tIndex);
         }
     }
 

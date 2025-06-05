@@ -110,7 +110,7 @@ public:
         }
     }
 
-    TabletLocation* find_tablet(int64_t tablet_id) {
+    const TabletLocation* find_tablet(int64_t tablet_id) {
         auto it = _tablets.find(tablet_id);
         if (it != std::end(_tablets)) {
             return &it->second;
@@ -120,8 +120,7 @@ public:
 
     void add_locations(std::vector<TTabletLocation>& locations) {
         for (auto& location : locations) {
-            if (_tablets.count(location.tablet_id) == 0) {
-                _tablets.emplace(location.tablet_id, std::move(location));
+            if (_tablets.try_emplace(location.tablet_id, std::move(location)).second) {
                 VLOG(2) << "add location " << location;
             }
         }
@@ -184,7 +183,6 @@ struct OlapTablePartition {
     ChunkRow start_key;
     ChunkRow end_key;
     std::vector<ChunkRow> in_keys;
-    int64_t num_buckets = 0;
     std::vector<OlapTableIndexTablets> indexes;
 };
 

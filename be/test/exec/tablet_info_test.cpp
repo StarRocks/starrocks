@@ -110,7 +110,6 @@ TEST_F(OlapTablePartitionParamTest, unknown_distributed_col) {
     t_partition_param.__set_distributed_columns({"c4"});
     t_partition_param.partitions.resize(1);
     t_partition_param.partitions[0].id = 10;
-    t_partition_param.partitions[0].num_buckets = 1;
     t_partition_param.partitions[0].indexes.resize(2);
     t_partition_param.partitions[0].indexes[0].index_id = 4;
     t_partition_param.partitions[0].indexes[0].tablets = {21};
@@ -137,7 +136,6 @@ TEST_F(OlapTablePartitionParamTest, bad_index) {
         t_partition_param.__set_distributed_columns({"c1", "c3"});
         t_partition_param.partitions.resize(1);
         t_partition_param.partitions[0].id = 10;
-        t_partition_param.partitions[0].num_buckets = 1;
         t_partition_param.partitions[0].indexes.resize(1);
         t_partition_param.partitions[0].indexes[0].index_id = 4;
         t_partition_param.partitions[0].indexes[0].tablets = {21};
@@ -156,7 +154,6 @@ TEST_F(OlapTablePartitionParamTest, bad_index) {
         t_partition_param.__set_distributed_columns({"c1", "c3"});
         t_partition_param.partitions.resize(1);
         t_partition_param.partitions[0].id = 10;
-        t_partition_param.partitions[0].num_buckets = 1;
         t_partition_param.partitions[0].indexes.resize(2);
         t_partition_param.partitions[0].indexes[0].index_id = 4;
         t_partition_param.partitions[0].indexes[0].tablets = {21};
