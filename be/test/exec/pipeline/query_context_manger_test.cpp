@@ -228,7 +228,12 @@ QueryContext* gen_query_ctx(MemTracker* parent_mem_tracker, QueryContextManager*
     query_id.hi = query_id_hi;
     query_id.lo = query_id_lo;
 
-    ASSIGN_OR_ASSERT_FAIL(auto* query_ctx, query_ctx_mgr->get_or_register(query_id));
+    //ASSIGN_OR_ASSERT_FAIL(auto* query_ctx, query_ctx_mgr->get_or_register(query_id));
+    auto res = query_ctx_mgr->get_or_register(query_id);
+    if (!res.ok()) {
+        return nullptr;
+    }
+    auto* query_ctx = res.value();
     query_ctx->set_total_fragments(total_fragments);
     query_ctx->set_delivery_expire_seconds(delivery_expire_seconds);
     query_ctx->set_query_expire_seconds(query_expire_seconds);
