@@ -23,7 +23,12 @@ import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.FunctionSet;
+<<<<<<< HEAD
 import com.starrocks.catalog.KeysType;
+=======
+import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.IcebergTable;
+>>>>>>> ca38736b86 ([Enhancement] Enable low cardinality optimization on PRIMARY KEY tables. (#59487))
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
@@ -532,9 +537,6 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         long version = table.getPartitions().stream().map(p -> p.getDefaultPhysicalPartition().getVisibleVersionTime())
                 .max(Long::compareTo).orElse(0L);
 
-        if ((table.getKeysType().equals(KeysType.PRIMARY_KEYS))) {
-            return DecodeInfo.EMPTY;
-        }
         if (table.hasForbiddenGlobalDict()) {
             return DecodeInfo.EMPTY;
         }
