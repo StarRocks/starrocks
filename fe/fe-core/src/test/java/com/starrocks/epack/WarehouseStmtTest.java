@@ -11,6 +11,7 @@ import com.starrocks.epack.warehouse.WarehouseSlotManager;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.BaseSlotTracker;
 import com.starrocks.server.GlobalStateMgr;
@@ -281,6 +282,21 @@ public class WarehouseStmtTest {
         // test query options
         Assert.assertFalse(warehouseSlotManager.isEnableQueryQueueV2(warehouseId));
         Assert.assertEquals(-1, warehouseSlotManager.getQueryQueueConcurrencyLimit(warehouseId));
+
+        // alter warehouse
+        sql = "ALTER WAREHOUSE warehouse_1\n" +
+                "SET (\n" +
+                "    'enable_query_queue' = 'true'\n" +
+                ")";
+        stmt = AnalyzeTestUtil.analyzeSuccess(sql);
+        Assert.assertTrue(stmt instanceof AlterWarehouseStmt);
+        DDLStmtExecutor.execute(stmt, connectCtx);
+        // refresh warehouse's property
+        property = warehouse.getProperty();
+        Assert.assertTrue(property.isEnableQueryQueue());
+        // default values: 600
+        Assert.assertEquals(Math.max(600, GlobalVariable.getQueryQueuePendingTimeoutSecond()),
+                property.getQueryQueuePendingTimeoutSecond());
 
         // alter warehouse
         sql = "ALTER WAREHOUSE warehouse_1\n" +

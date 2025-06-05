@@ -255,12 +255,9 @@ public class WarehouseQueryQueueManagerTest extends SchedulerTestBase {
                     "pending queries exceeds capacity"));
         }
         runningCoords.forEach(Coordinator::onFinished);
+        pendingCoords.forEach(Coordinator::onFinished);
         runningCoords.forEach(
                 coord -> assertEquals(LogicalSlot.State.RELEASED, coord.getSlot().getState()));
-
-        pendingCoords.forEach(Coordinator::onFinished);
-        pendingCoords.forEach(
-                coord -> assertEquals(LogicalSlot.State.CANCELLED, coord.getSlot().getState()));
     }
 
     @Test

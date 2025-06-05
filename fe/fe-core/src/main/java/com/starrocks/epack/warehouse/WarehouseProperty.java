@@ -68,8 +68,10 @@ public class WarehouseProperty {
     private boolean enableQueryQueueStatistic;
     @SerializedName(value = "query_queue_max_queued_queries")
     private int queryQueueMaxQueuedQueries = GlobalVariable.getQueryQueueMaxQueuedQueries();
+    // The timeout for a query to be pending in the queue, in seconds.
+    // Set to 600 seconds by default because warehouse autoscale will take more than 5 minutes to scale up.
     @SerializedName(value = "query_queue_pending_timeout_second")
-    private int queryQueuePendingTimeoutSecond = GlobalVariable.getQueryQueuePendingTimeoutSecond();
+    private int queryQueuePendingTimeoutSecond = Math.max(600, GlobalVariable.getQueryQueuePendingTimeoutSecond());
     @SerializedName(value = "query_queue_concurrency_limit")
     private int queryQueueConcurrencyLimit = -1;
 
