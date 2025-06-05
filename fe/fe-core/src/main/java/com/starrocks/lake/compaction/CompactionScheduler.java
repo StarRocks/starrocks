@@ -327,7 +327,7 @@ public class CompactionScheduler extends Daemon {
         long nextCompactionInterval = Config.lake_min_compaction_interval_ms_on_success;
         CompactionJob job = new CompactionJob(db, table, partition, txnId, Config.lake_compaction_allow_partial_success);
         try {
-            if (table.enablePartitionAggregation()) {
+            if (table.isFileBundling()) {
                 CompactionTask task = createAggregateCompactionTask(currentVersion, beToTablets, txnId,
                         partitionStatisticsSnapshot.getPriority());
                 task.sendRequest();

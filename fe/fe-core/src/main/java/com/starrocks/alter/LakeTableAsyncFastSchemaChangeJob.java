@@ -166,12 +166,12 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
     }
 
     @Override
-    protected boolean isAggregateMetadata() {
+    protected boolean enableFileBundling() {
         return false;
     }
 
     @Override
-    protected boolean isSplitMetadata() {
+    protected boolean disableFileBundling() {
         return false;
     }
 

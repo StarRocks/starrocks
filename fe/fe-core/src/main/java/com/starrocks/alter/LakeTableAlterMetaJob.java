@@ -40,8 +40,8 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
     @SerializedName(value = "persistentIndexType")
     private String persistentIndexType;
 
-    @SerializedName(value = "aggregateMetadata")
-    private boolean aggregateMetadata;
+    @SerializedName(value = "enableFileBundling")
+    private boolean enableFileBundling;
 
     // for deserialization
     public LakeTableAlterMetaJob() {
@@ -58,12 +58,12 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
     public LakeTableAlterMetaJob(long jobId, long dbId, long tableId, String tableName,
                                  long timeoutMs, TTabletMetaType metaType, boolean metaValue,
                                  String persistentIndexType,
-                                 boolean aggregateMetadata) {
+                                 boolean enableFileBundling) {
         super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
         this.metaType = metaType;
         this.metaValue = metaValue;
         this.persistentIndexType = persistentIndexType;
-        this.aggregateMetadata = aggregateMetadata;
+        this.enableFileBundling = enableFileBundling;
     }
 
     @Override
@@ -73,9 +73,9 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
             return TabletMetadataUpdateAgentTaskFactory.createLakePersistentIndexUpdateTask(nodeId, tablets,
                         metaValue, persistentIndexType);
         }
-        if (metaType == TTabletMetaType.ENABLE_PARTITION_AGGREGATION) {
-            return TabletMetadataUpdateAgentTaskFactory.createUpdatePartitionAggregationTask(nodeId, tablets,
-                        aggregateMetadata);
+        if (metaType == TTabletMetaType.ENABLE_FILE_BUNDLING) {
+            return TabletMetadataUpdateAgentTaskFactory.createUpdateFileBundlingTask(nodeId, tablets,
+                        enableFileBundling);
         }
         return null;
     }
@@ -86,13 +86,13 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
     }
 
     @Override
-    protected boolean isAggregateMetadata() {
-        return metaType == TTabletMetaType.ENABLE_PARTITION_AGGREGATION && aggregateMetadata;
+    protected boolean enableFileBundling() {
+        return metaType == TTabletMetaType.ENABLE_FILE_BUNDLING && enableFileBundling;
     }
 
     @Override
-    protected boolean isSplitMetadata() {
-        return metaType == TTabletMetaType.ENABLE_PARTITION_AGGREGATION && !aggregateMetadata;
+    protected boolean disableFileBundling() {
+        return metaType == TTabletMetaType.ENABLE_FILE_BUNDLING && !enableFileBundling;
     }
 
     @Override
@@ -106,8 +106,8 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
                     String.valueOf(persistentIndexType));
             table.getTableProperty().buildPersistentIndexType();
         }
-        if (metaType == TTabletMetaType.ENABLE_PARTITION_AGGREGATION) {
-            table.setEnablePartitionAggregation(aggregateMetadata);
+        if (metaType == TTabletMetaType.ENABLE_FILE_BUNDLING) {
+            table.setFileBundling(enableFileBundling);
         }
     }
 
@@ -117,7 +117,7 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
         this.metaType = other.metaType;
         this.metaValue = other.metaValue;
         this.persistentIndexType = other.persistentIndexType;
-        this.aggregateMetadata = other.aggregateMetadata;
+        this.enableFileBundling = other.enableFileBundling;
     }
 
     @Override

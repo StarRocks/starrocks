@@ -432,7 +432,7 @@ public class LakeTableSchemaChangeJobTest {
 
         LakeTable table1 = createTable(connectContext, 
                     "CREATE TABLE t1(c0 INT) duplicate key(c0) distributed by hash(c0) buckets 3 " +
-                                "PROPERTIES('enable_partition_aggregation'='true')");
+                                "PROPERTIES('file_bundling'='true')");
         
         Config.enable_fast_schema_evolution_in_share_data_mode = false;
         alterTable(connectContext, "ALTER TABLE t1 ADD COLUMN c1 BIGINT AS c0 + 2");
