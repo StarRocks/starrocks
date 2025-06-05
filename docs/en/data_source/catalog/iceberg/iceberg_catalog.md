@@ -239,6 +239,10 @@ For information about how to choose an authentication method for accessing AWS G
 
 ##### REST
 
+:::note
+For detailed instructions on creating an Iceberg REST catalog for S3 tables, see [Create Iceberg REST Catalog for AWS S3 tables](./iceberg_rest_s3.md).
+:::
+
 If you use REST as metastore, you must specify the metastore type as REST (`"iceberg.catalog.type" = "rest"`). Configure `MetastoreParams` as follows:
 
 ```SQL
@@ -355,14 +359,6 @@ mysql> select * from smith_polaris.`ns1.ns2.tpch_namespace`.tbl;
 +------+
 3 rows in set (0.34 sec)
 ```
-
-</TabItem>
-
-<TabItem value="S3 Tables" label="S3 Tables">
-
-#### S3 Tables
-
-For detailed instructions, see [Create Iceberg REST Catalog for AWS S3 tables](./iceberg_rest_s3.md).
 
 </TabItem>
 

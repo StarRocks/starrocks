@@ -172,6 +172,10 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
 
 ##### REST
 
+:::note
+有关为 S3 表创建 Iceberg REST Catalog 的详细说明，参考 [为 AWS S3 表创建 Iceberg REST Catalog](./iceberg_rest_s3.md)。
+:::
+
 如果您使用 REST 作为元数据服务，则必须设置元数据服务的类型为 REST (`"iceberg.catalog.type" = "rest"`)，请按如下配置 `MetastoreParams`：
 
 ```SQL
@@ -239,11 +243,6 @@ mysql> select * from smith_polaris.`ns1.ns2.tpch_namespace`.tbl;
 +------+
 3 rows in set (0.34 sec)
 ```
-
-#### S3 Tables
-
-详细信息，参考 [为 AWS S3 表创建 Iceberg REST Catalog](./iceberg_rest_s3.md)。
-
 
 ##### JDBC
 
