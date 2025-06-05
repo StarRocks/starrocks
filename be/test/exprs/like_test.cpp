@@ -694,4 +694,76 @@ TEST_F(LikeTest, splitLikePatternIntoNgramSet) {
     VectorizedFunctionCallExpr::split_like_string_to_ngram(pattern, options, ngram_set);
     ASSERT_EQ(0, ngram_set.size());
 }
+
+TEST_F(LikeTest, backslashInData) {
+    const auto context{FunctionContext::create_test_context()};
+    std::unique_ptr<FunctionContext> ctx(context);
+    Columns columns;
+
+    const auto pattern{ColumnHelper::create_const_column<TYPE_VARCHAR>(R"(\\)", 1)};
+    const auto haystack{ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false)};
+    haystack->append_datum(R"(Take off)");
+    haystack->append_datum(R"(Take\\off)");
+    haystack->append_datum(R"(Take\\off\\)");
+    haystack->append_datum(R"(Take\\off\)");
+
+    columns.push_back(haystack);
+    columns.push_back(pattern);
+
+    context->set_constant_columns(columns);
+
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+
+    const auto result{LikePredicate::like(context, columns).value()};
+
+    ASSERT_FALSE(result->is_constant());
+
+    const auto result_viewer{ColumnViewer<TYPE_BOOLEAN>(result)};
+
+    ASSERT_EQ(result->size(), 4);
+    ASSERT_FALSE(result_viewer.value(0));
+    // TODO: The next three rows should assert to true
+    ASSERT_FALSE(result_viewer.value(1));
+    ASSERT_FALSE(result_viewer.value(2));
+    ASSERT_FALSE(result_viewer.value(3));
+
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                        .ok());
+}
+
+TEST_F(LikeTest, escapeInData) {
+    const auto context{FunctionContext::create_test_context()};
+    std::unique_ptr<FunctionContext> ctx(context);
+    Columns columns;
+
+    const auto pattern{ColumnHelper::create_const_column<TYPE_VARCHAR>("\\\\", 1)};
+    const auto haystack{ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false)};
+    haystack->append_datum("Take off");
+    // TODO: The next three rows should assert to true
+    haystack->append_datum("Take\\off");
+    haystack->append_datum("Take\\off\\");
+    haystack->append_datum("Take\\off\\");
+
+    columns.push_back(haystack);
+    columns.push_back(pattern);
+
+    context->set_constant_columns(columns);
+
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+
+    const auto result{LikePredicate::like(context, columns).value()};
+
+    ASSERT_FALSE(result->is_constant());
+
+    const auto result_viewer{ColumnViewer<TYPE_BOOLEAN>(result)};
+
+    ASSERT_EQ(result->size(), 4);
+    ASSERT_FALSE(result_viewer.value(0));
+    ASSERT_FALSE(result_viewer.value(1));
+    ASSERT_FALSE(result_viewer.value(2));
+    ASSERT_FALSE(result_viewer.value(3));
+
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                        .ok());
+}
 } // namespace starrocks
