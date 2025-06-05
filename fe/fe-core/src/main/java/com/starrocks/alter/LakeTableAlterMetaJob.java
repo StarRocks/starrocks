@@ -81,11 +81,6 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
     }
 
     @Override
-    protected LakeTableAlterMetaJob getShadowCopy() {
-        return this;
-    }
-
-    @Override
     protected boolean enableFileBundling() {
         return metaType == TTabletMetaType.ENABLE_FILE_BUNDLING && enableFileBundling;
     }
