@@ -131,7 +131,7 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
             ASSERT_FALSE(tmp_query_ctx->is_dead());
             ASSERT_TRUE(query_ctx_mgr->get(query_id) != nullptr);
         }
-        query_ctx = query_ctx_mgr->get_or_register(query_id);
+        ASSIGN_OR_ASSERT_FAIL(query_ctx, query_ctx_mgr->get_or_register(query_id));
         query_ctx->count_down_fragments();
         query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
         ASSERT_TRUE(query_ctx->is_dead());
@@ -213,7 +213,7 @@ TEST(QueryContextManagerTest, testMulitiThreadOperations) {
         threads[i].join();
     }
 
-    query_ctx = query_ctx_mgr->get_or_register(query_id);
+    ASSIGN_OR_ASSERT_FAIL(query_ctx, query_ctx_mgr->get_or_register(query_id));
     query_ctx->count_down_fragments();
     query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
     ASSERT_TRUE(query_ctx->is_dead());
@@ -261,7 +261,7 @@ TEST(QueryContextManagerTest, testSetWorkgroup) {
     ASSERT_EQ(1, wg->concurrency_overflow_count());
     // All the fragments comes.
     for (int i = 1; i < query_ctx1->total_fragments(); ++i) {
-        ASSIGN_OR_ASSERT_FAIL(auto* cur_query_ctx, query_ctx_mgr->get_or_register(query_id));
+        ASSIGN_OR_ASSERT_FAIL(auto* cur_query_ctx, query_ctx_mgr->get_or_register(query_id1));
         ASSERT_EQ(query_ctx1, cur_query_ctx);
     }
     while (!query_ctx1->has_no_active_instances()) {
