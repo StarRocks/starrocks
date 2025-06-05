@@ -3,72 +3,101 @@ displayed_sidebar: docs
 toc_max_heading_level: 5
 keywords: ['iceberg']
 ---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+import QSTip from '../../../_assets/commonMarkdown/quickstart-iceberg-tip.mdx'
 
 # Iceberg catalog
 
-Iceberg Catalog 是一种 External Catalog。StarRocks 从 2.4 版本开始支持 Iceberg Catalog。您可以：
+<QSTip />
 
-- 无需手动建表，通过 Iceberg Catalog 直接查询 Iceberg 内的数据。
-- 通过 [INSERT INTO](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) 或异步物化视图（2.5 版本及以上）将 Iceberg 内的数据进行加工建模，并导入至 StarRocks。
-- 在 StarRocks 侧创建或删除 Iceberg 库表，或通过 [INSERT INTO](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) 把 StarRocks 表数据写入到 Parquet 格式的 Iceberg 表中（3.1 版本及以上）。
+Iceberg catalog 是一种外部 catalog，从 StarRocks v2.4 开始支持。使用 Iceberg catalog，您可以：
 
-为保证正常访问 Iceberg 内的数据，StarRocks 集群必须能够访问 Iceberg 集群的存储系统和元数据服务。目前 StarRocks 支持以下存储系统和元数据服务：
+- 直接查询存储在 Iceberg 中的数据，无需手动创建表。
+- 使用 [INSERT INTO](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) 或异步物化视图（从 v2.5 开始支持）来处理存储在 Iceberg 中的数据，并将数据导入到 StarRocks 中。
+- 在 StarRocks 上执行操作以创建或删除 Iceberg 数据库和表，或使用 [INSERT INTO](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) 将 StarRocks 表中的数据下沉到 Parquet 格式的 Iceberg 表中（此功能从 v3.1 开始支持）。
 
-- 分布式文件系统 (HDFS) 或对象存储。当前支持的对象存储包括：AWS S3、Microsoft Azure Storage、Google GCS、其他兼容 S3 协议的对象存储（如阿里云 OSS、华为云 OBS、腾讯云 COS、火山引擎 TOS、金山云 KS3、MinIO、Ceph S3 等）。
+为了确保在 Iceberg 集群上的 SQL 工作负载成功，您的 StarRocks 集群必须能够访问 Iceberg 集群的存储系统和元存储。StarRocks 支持以下存储系统和元存储：
 
-- 元数据服务。当前支持的元数据服务包括：Hive Metastore（以下简称 HMS）、AWS Glue、Tabular。
+- 分布式文件系统（HDFS）或对象存储，如 AWS S3、Microsoft Azure Storage、Google GCS 或其他 S3 兼容的存储系统（例如 MinIO）
 
-  > **说明**
-  >
-  > - 如果选择 AWS S3 作为存储系统，您可以选择 HMS 或 AWS Glue 作为元数据服务。如果选择其他存储系统，则只能选择 HMS 作为元数据服务。
-  > - 如果您使用 Tabular 作为元数据服务，则您需要使用 Iceberg 的 REST Catalog。
+- 元存储如 Hive metastore、AWS Glue 或 Tabular
 
-## 使用说明
+:::note
 
-StarRocks 查询 Iceberg 数据时，注意以下几点：
+- 如果选择 AWS S3 作为存储，可以使用 HMS 或 AWS Glue 作为元存储。如果选择其他存储系统，则只能使用 HMS 作为元存储。
+- 如果选择 Tabular 作为元存储，则需要使用 Iceberg REST catalog。
+
+:::
+
+## 使用注意事项
+
+使用 StarRocks 查询 Iceberg 数据时，请注意以下几点：
 
 | **文件格式** | **压缩格式**                                   | **Iceberg 表版本**                                           |
-| ------------ | ---------------------------------------------- | ------------------------------------------------------------ |
-| Parquet      | SNAPPY、LZ4、ZSTD、GZIP 和 NO_COMPRESSION      | <ul><li>v1 表：支持。</li><li>v2 表：自 StarRocks 3.1 版本起支持 position-delete，自3.1.10+、3.2.5+、3.3 版本起支持 equality-delete。</li></ul> |
-| ORC          | ZLIB、SNAPPY、LZO、LZ4、ZSTD 和 NO_COMPRESSION | <ul><li>v1 表：支持。</li><li>v2 表：自 StarRocks 3.0 版本起支持 position-delete，自3.1.8+、3.2.3+、3.3 版本起支持 equality-delete。</li></ul> |
+| --------------- | ---------------------------------------------- | ------------------------------------------------------------ |
+| Parquet         | SNAPPY, LZ4, ZSTD, GZIP, 和 NO_COMPRESSION      | <ul><li>v1 表：支持。 </li><li>v2 表：从 StarRocks v3.1 开始支持，其中对这些 v2 表的查询支持位置删除。在 v3.1.10、v3.2.5、v3.3 及其更高版本中，对 v2 表的查询还支持等值删除。 </li></ul> |
+| ORC             | ZLIB, SNAPPY, LZO, LZ4, ZSTD, 和 NO_COMPRESSION | <ul><li>v1 表：支持。 </li><li>v2 表：从 StarRocks v3.0 开始支持，其中对这些 v2 表的查询支持位置删除。在 v3.1.8、v3.2.3、v3.3 及其更高版本中，对 v2 表的查询还支持等值删除。 </li></ul> |
 
-## 准备工作
+## 集成准备
 
-在创建 Iceberg Catalog 之前，请确保 StarRocks 集群能够正常访问 Iceberg 的文件存储及元数据服务。
+在创建 Iceberg catalog 之前，请确保您的 StarRocks 集群可以与 Iceberg 集群的存储系统和元存储集成。
 
-### AWS IAM
+---
 
-如果 Iceberg 使用 AWS S3 作为文件存储或使用 AWS Glue 作为元数据服务，您需要选择一种合适的认证鉴权方案，确保 StarRocks 集群可以访问相关的 AWS 云资源。
+### 存储
 
-您可以选择如下认证鉴权方案：
+选择与您的存储类型匹配的选项卡：
 
-- Instance Profile（推荐）
-- Assumed Role
-- IAM User
+<Tabs groupId="storage">
+<TabItem value="AWS" label="AWS S3" default>
 
-有关 StarRocks 访问 AWS 认证鉴权的详细内容，参见[配置 AWS 认证方式 - 准备工作](../../../integrations/authenticate_to_aws_resources.md#准备工作)。
+如果您的 Iceberg 集群使用 AWS S3 作为存储或 AWS Glue 作为元存储，请选择合适的身份验证方法并进行必要的准备，以确保您的 StarRocks 集群可以访问相关的 AWS 云资源。
 
-### HDFS
+推荐以下身份验证方法：
 
-如果使用 HDFS 作为文件存储，则需要在 StarRocks 集群中做如下配置：
+- 实例配置文件
+- 假设角色
+- IAM 用户
 
-- （可选）设置用于访问 HDFS 集群和 HMS 的用户名。 您可以在每个 FE 的 **fe/conf/hadoop_env.sh** 文件、以及每个 的 **be/conf/hadoop_env.sh** 文件（或每个 CN 的 **cn/conf/hadoop_env.sh** 文件）最开头增加 `export HADOOP_USER_NAME="<user_name>"` 来设置该用户名。配置完成后，需重启各个 FE 和 BE（或 CN）使配置生效。如果不设置该用户名，则默认使用 FE 和 BE（或 CN）进程的用户名进行访问。每个 StarRocks 集群仅支持配置一个用户名。
-- 查询 Iceberg 数据时，StarRocks 集群的 FE 和 BE（或 CN）会通过 HDFS 客户端访问 HDFS 集群。一般情况下，StarRocks 会按照默认配置来启动 HDFS 客户端，无需手动配置。但在以下场景中，需要进行手动配置：
-  - 如果 HDFS 集群开启了高可用（High Availability，简称为“HA”）模式，则需要将 HDFS 集群中的 **hdfs-site.xml** 文件放到每个 FE 的 **$FE_HOME/conf** 路径下、以及每个 BE 的 **$BE_HOME/conf** 路径（或每个 CN 的 **$CN_HOME/conf** 路径）下。
-  - 如果 HDFS 集群配置了 ViewFs，则需要将 HDFS 集群中的 **core-site.xml** 文件放到每个 FE 的 **$FE_HOME/conf** 路径下、以及每个 BE 的 **$BE_HOME/conf** 路径（或每个 CN 的 **$CN_HOME/conf** 路径）下。
+在上述三种身份验证方法中，实例配置文件是最广泛使用的。
 
-> **注意**
->
-> 如果查询时因为域名无法识别 (Unknown Host) 而发生访问失败，您需要将 HDFS 集群中各节点的主机名及 IP 地址之间的映射关系配置到 **/etc/hosts** 路径中。
+有关更多信息，请参见 [AWS IAM 中的身份验证准备](../../../integrations/authenticate_to_aws_resources.md#preparations)。
 
-### Kerberos 认证
+</TabItem>
 
-如果 HDFS 集群或 HMS 开启了 Kerberos 认证，则需要在 StarRocks 集群中做如下配置：
+<TabItem value="HDFS" label="HDFS" >
 
-- 在每个 FE 和 每个 BE（或 CN）上执行 `kinit -kt keytab_path principal` 命令，从 Key Distribution Center (KDC) 获取到 Ticket Granting Ticket (TGT)。执行命令的用户必须拥有访问 HMS 和 HDFS 的权限。注意，使用该命令访问 KDC 具有时效性，因此需要使用 cron 定期执行该命令。
-- 在每个 FE 的 **$FE_HOME/conf/fe.conf** 文件和每个 BE 的 **$BE_HOME/conf/be.conf** 文件（或每个 CN 的 **$CN_HOME/conf/cn.conf** 文件）中添加 `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"`。其中，`/etc/krb5.conf` 是 **krb5.conf** 文件的路径，可以根据文件的实际路径进行修改。
+如果选择 HDFS 作为存储，请按以下步骤配置您的 StarRocks 集群：
 
-## 创建 Iceberg Catalog
+- （可选）设置用于访问 HDFS 集群和 Hive metastore 的用户名。默认情况下，StarRocks 使用 FE 和 BE 或 CN 进程的用户名来访问 HDFS 集群和 Hive metastore。您还可以通过在每个 FE 的 **fe/conf/hadoop_env.sh** 文件的开头以及每个 BE 的 **be/conf/hadoop_env.sh** 文件或每个 CN 的 **cn/conf/hadoop_env.sh** 文件的开头添加 `export HADOOP_USER_NAME="<user_name>"` 来设置用户名。设置完这些文件中的用户名后，重启每个 FE 和每个 BE 或 CN 以使参数设置生效。每个 StarRocks 集群只能设置一个用户名。
+- 当您查询 Iceberg 数据时，StarRocks 集群的 FEs 和 BEs 或 CNs 使用 HDFS 客户端访问您的 HDFS 集群。在大多数情况下，您不需要配置 StarRocks 集群即可实现此目的，StarRocks 使用默认配置启动 HDFS 客户端。您只需在以下情况下配置 StarRocks 集群：
+
+  - 您的 HDFS 集群启用了高可用性（HA）：将 HDFS 集群的 **hdfs-site.xml** 文件添加到每个 FE 的 **$FE_HOME/conf** 路径以及每个 BE 的 **$BE_HOME/conf** 路径或每个 CN 的 **$CN_HOME/conf** 路径。
+  - 您的 HDFS 集群启用了文件系统视图（ViewFs）：将 HDFS 集群的 **core-site.xml** 文件添加到每个 FE 的 **$FE_HOME/conf** 路径以及每个 BE 的 **$BE_HOME/conf** 路径或每个 CN 的 **$CN_HOME/conf** 路径。
+
+:::tip
+
+如果在发送查询时返回未知主机错误，您必须将 HDFS 集群节点的主机名和 IP 地址映射添加到 **/etc/hosts** 路径。
+
+:::
+
+---
+
+#### Kerberos 身份验证
+
+如果您的 HDFS 集群或 Hive metastore 启用了 Kerberos 身份验证，请按以下步骤配置您的 StarRocks 集群：
+
+- 在每个 FE 和每个 BE 或 CN 上运行 `kinit -kt keytab_path principal` 命令，从密钥分发中心（KDC）获取票证授予票证（TGT）。要运行此命令，您必须具有访问 HDFS 集群和 Hive metastore 的权限。请注意，使用此命令访问 KDC 是时间敏感的。因此，您需要使用 cron 定期运行此命令。
+- 将 `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"` 添加到每个 FE 的 **$FE_HOME/conf/fe.conf** 文件以及每个 BE 的 **$BE_HOME/conf/be.conf** 文件或每个 CN 的 **$CN_HOME/conf/cn.conf** 文件中。在此示例中，`/etc/krb5.conf` 是 **krb5.conf** 文件的保存路径。您可以根据需要修改路径。
+
+</TabItem>
+
+</Tabs>
+
+---
+
+## 创建 Iceberg catalog
 
 ### 语法
 
@@ -84,53 +113,67 @@ PROPERTIES
 )
 ```
 
-### 参数说明
+---
+
+### 参数
 
 #### catalog_name
 
-Iceberg Catalog 的名称。命名要求如下：
+Iceberg catalog 的名称。命名约定如下：
 
-- 必须由字母 (a-z 或 A-Z)、数字 (0-9) 或下划线 (_) 组成，且只能以字母开头。
-- 总长度不能超过 1023 个字符。
-- Catalog 名称大小写敏感。
+- 名称可以包含字母、数字（0-9）和下划线（_）。必须以字母开头。
+- 名称区分大小写，长度不能超过 1023 个字符。
 
 #### comment
 
-Iceberg Catalog 的描述。此参数为可选。
+Iceberg catalog 的描述。此参数是可选的。
 
 #### type
 
-数据源的类型。设置为 `iceberg`。
+数据源的类型。将值设置为 `iceberg`。
 
 #### MetastoreParams
 
-StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
+关于 StarRocks 如何与数据源的元存储集成的一组参数。选择与您的元存储类型匹配的选项卡：
 
-##### HMS
+<Tabs groupId="metastore">
+<TabItem value="HIVE" label="Hive metastore" default>
 
-如果选择 HMS 作为 Iceberg 集群的元数据服务，请按如下配置 `MetastoreParams`：
+##### Hive metastore
+
+如果选择 Hive metastore 作为数据源的元存储，请按以下方式配置 `MetastoreParams`：
 
 ```SQL
 "iceberg.catalog.type" = "hive",
 "hive.metastore.uris" = "<hive_metastore_uri>"
 ```
 
-> **说明**
->
-> 在查询 Iceberg 数据之前，必须将所有 HMS 节点的主机名及 IP 地址之间的映射关系添加到 **/etc/hosts** 路径。否则，发起查询时，StarRocks 可能无法访问 HMS。
+:::note
 
-`MetastoreParams` 包含如下参数。
+在查询 Iceberg 数据之前，必须将 Hive metastore 节点的主机名和 IP 地址映射添加到 `/etc/hosts` 路径。否则，StarRocks 在启动查询时可能无法访问 Hive metastore。
 
-| 参数                                 | 是否必须 | 说明                                                         |
-| ----------------------------------- | -------- | ------------------------------------------------------------ |
-| iceberg.catalog.type                | 是       | Iceberg 集群所使用的元数据服务的类型。设置为 `hive`。           |
-| hive.metastore.uris                 | 是       | HMS 的 URI。格式：`thrift://<HMS IP 地址>:<HMS 端口号>`。<br />如果您的 HMS 开启了高可用模式，此处可以填写多个 HMS 地址并用逗号分隔，例如：`"thrift://<HMS IP 地址 1>:<HMS 端口号 1>,thrift://<HMS IP 地址 2>:<HMS 端口号 2>,thrift://<HMS IP 地址 3>:<HMS 端口号 3>"`。 |
+:::
+
+下表描述了您需要在 `MetastoreParams` 中配置的参数。
+
+##### iceberg.catalog.type
+
+必需：是
+描述：您用于 Iceberg 集群的元存储类型。将值设置为 `hive`。
+
+##### hive.metastore.uris
+
+必需：是
+描述：Hive metastore 的 URI。格式：`thrift://<metastore_IP_address>:<metastore_port>`。<br />如果 Hive metastore 启用了高可用性（HA），您可以指定多个 metastore URI，并用逗号（`,`）分隔，例如 `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`。
+
+</TabItem>
+<TabItem value="GLUE" label="AWS Glue">
 
 ##### AWS Glue
 
-如果选择 AWS Glue 作为 Iceberg 集群的元数据服务（只有使用 AWS S3 作为存储系统时支持），请按如下配置 `MetastoreParams`：
+如果选择 AWS Glue 作为数据源的元存储，仅在选择 AWS S3 作为存储时支持，请采取以下措施之一：
 
-- 基于 Instance Profile 进行认证和鉴权
+- 要选择基于实例配置文件的身份验证方法，请按以下方式配置 `MetastoreParams`：
 
   ```SQL
   "iceberg.catalog.type" = "glue",
@@ -138,7 +181,7 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
   "aws.glue.region" = "<aws_glue_region>"
   ```
 
-- 基于 Assumed Role 进行认证和鉴权
+- 要选择基于假设角色的身份验证方法，请按以下方式配置 `MetastoreParams`：
 
   ```SQL
   "iceberg.catalog.type" = "glue",
@@ -147,7 +190,7 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
   "aws.glue.region" = "<aws_glue_region>"
   ```
 
-- 基于 IAM User 进行认证和鉴权
+- 要选择基于 IAM 用户的身份验证方法，请按以下方式配置 `MetastoreParams`：
 
   ```SQL
   "iceberg.catalog.type" = "glue",
@@ -157,26 +200,50 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
   "aws.glue.region" = "<aws_s3_region>"
   ```
 
-`MetastoreParams` 包含如下参数。
+AWS Glue 的 `MetastoreParams`：
 
-| 参数                          | 是否必须 | 说明                                                         |
-| ----------------------------- | -------- | ------------------------------------------------------------ |
-| iceberg.catalog.type          | 是       | Iceberg 集群所使用的元数据服务的类型。设置为 `glue`。           |
-| aws.glue.use_instance_profile | 是       | 指定是否开启 Instance Profile 和 Assumed Role 两种鉴权方式。取值范围：`true` 和 `false`。默认值：`false`。 |
-| aws.glue.iam_role_arn         | 否       | 有权限访问 AWS Glue Data Catalog 的 IAM Role 的 ARN。采用 Assumed Role 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
-| aws.glue.region               | 是       | AWS Glue Data Catalog 所在的地域。示例：`us-west-1`。        |
-| aws.glue.access_key           | 否       | IAM User 的 Access Key。采用 IAM User 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
-| aws.glue.secret_key           | 否       | IAM User 的 Secret Key。采用 IAM User 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
+###### iceberg.catalog.type
 
-有关如何选择用于访问 AWS Glue 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS Glue 的认证参数](../../../integrations/authenticate_to_aws_resources.md#访问-aws-glue-的认证参数)。
+必需：是
+描述：您用于 Iceberg 集群的元存储类型。将值设置为 `glue`。
+
+###### aws.glue.use_instance_profile
+
+必需：是
+描述：指定是否启用基于实例配置文件的身份验证方法和基于假设角色的身份验证方法。有效值：`true` 和 `false`。默认值：`false`。
+
+###### aws.glue.iam_role_arn
+
+必需：否
+描述：在 AWS Glue Data Catalog 上具有权限的 IAM 角色的 ARN。如果使用基于假设角色的身份验证方法访问 AWS Glue，则必须指定此参数。
+
+###### aws.glue.region
+
+必需：是
+描述：您的 AWS Glue Data Catalog 所在的区域。例如：`us-west-1`。
+
+###### aws.glue.access_key
+
+必需：否
+描述：您的 AWS IAM 用户的访问密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS Glue，则必须指定此参数。
+
+###### aws.glue.secret_key
+
+必需：否
+描述：您的 AWS IAM 用户的秘密密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS Glue，则必须指定此参数。
+
+有关如何选择访问 AWS Glue 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS Glue 的身份验证参数](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue)。
+
+</TabItem>
+<TabItem value="REST" label="REST">
 
 ##### REST
 
 :::note
-有关为 S3 表创建 Iceberg REST Catalog 的详细说明，参考 [为 AWS S3 表创建 Iceberg REST Catalog](./iceberg_rest_s3.md)。
+有关为 S3 表创建 Iceberg REST catalog 的详细说明，请参见 [为 AWS S3 表创建 Iceberg REST Catalog](./iceberg_rest_s3.md)。
 :::
 
-如果您使用 REST 作为元数据服务，则必须设置元数据服务的类型为 REST (`"iceberg.catalog.type" = "rest"`)，请按如下配置 `MetastoreParams`：
+如果使用 REST 作为元存储，必须将元存储类型指定为 REST（`"iceberg.catalog.type" = "rest"`）。按以下方式配置 `MetastoreParams`：
 
 ```SQL
 "iceberg.catalog.type" = "rest",
@@ -186,23 +253,72 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
 "iceberg.catalog.warehouse" = "<identifier_or_path_to_warehouse>"
 ```
 
-`MetastoreParams` 包含如下参数。
+REST catalog 的 `MetastoreParams`：
 
-| 参数                       | 是否必须 | 说明                                                         |
-| -------------------------- | ------ | ------------------------------------------------------------ |
-| iceberg.catalog.type       | 是      | Iceberg 集群所使用的元数据服务的类型。设置为 `rest`。           |
-| iceberg.catalog.uri        | 是      | REST 服务 Endpoint 的 URI，如 `https://api.tabular.io/ws`。      |
-| iceberg.catalog.security   | 否      | 要使用的授权协议类型。默认值：`NONE`。有效值：`OAUTH2`。使用 `OAUTH2` 需要指定 `token` 或 `credential`。 |
-| iceberg.catalog.view-endpoints-supported   | 否      | 当早期版本的 REST 服务不在 `CatalogConfig` 中返回 Endpoint 时，是否使用视图 Endpoint 来支持与视图相关的操作。该参数用于向后兼容早期版本的 REST 服务器。默认值：`false`。 |
-| iceberg.catalog.oauth2.token | 否    | 用于与服务器交互的 Bearer Token。使用 `OAUTH2` 需要指定 `token` 或 `credential`。示例：`AbCdEf123456`。 |
-| iceberg.catalog.oauth2.credential | 否  | 用于与服务器的 OAuth2 客户端 Credentials Flow 交换 Token 的 Credential。使用 `OAUTH2` 需要指定 `token` 或 `credential`。示例：`AbCdEf123456`。 |
-| iceberg.catalog.oauth2.scope | 否  | 与 REST Catalog 通信时使用的范围。仅在使用 `credential` 时适用。 |
-| iceberg.catalog.oauth2.server-uri | 否  | 从 OAuth2 服务器获取 Token 的端点。 |
-| iceberg.catalog.vended-credentials-enabled | 否  | 是否使用 REST 后端提供的 Credential 访问文件系统。默认：`true`。|
-| iceberg.catalog.warehouse  | 否      | Catalog 的仓库位置或标志符，如 `s3://my_bucket/warehouse_location` 或 `sandbox`。 |
-| iceberg.catalog.rest.nested-namespace-enabled  | 否      | 是否支持查询嵌套namespace下的数据。默认：`false`.     |
+###### iceberg.catalog.type
 
-例如，创建一个名为 `tabular` 的 Iceberg Catalog，使用 Tabular 作为元数据服务：
+必需：是
+描述：您用于 Iceberg 集群的元存储类型。将值设置为 `rest`。
+
+###### iceberg.catalog.uri
+
+必需：是
+描述：REST 服务端点的 URI。例如：`https://api.tabular.io/ws`。
+
+###### iceberg.catalog.view-endpoints-supported
+
+必需：否
+
+描述：是否使用视图端点支持与视图相关的操作，当早期版本的 REST 服务不在 `CatalogConfig` 中返回端点时使用。此参数用于与早期版本的 REST 服务器的向后兼容。默认值：`false`。
+
+###### iceberg.catalog.security
+
+必需：否
+
+描述：要使用的授权协议类型。默认值：`NONE`。有效值：`OAUTH2`，需要 `token` 或 `credential`。
+
+###### iceberg.catalog.oauth2.token
+
+必需：否
+
+描述：用于与服务器交互的承载令牌。`OAUTH2` 授权协议需要 `token` 或 `credential`。例如：`AbCdEf123456`。
+
+###### iceberg.catalog.oauth2.credential
+
+必需：否
+
+描述：用于在与服务器的 OAuth2 客户端凭证流中交换令牌的凭证。`OAUTH2` 授权协议需要 `token` 或 `credential`。例如：`AbCdEf123456`。
+
+###### iceberg.catalog.oauth2.scope
+
+必需：否
+
+描述：与 REST Catalog 通信时使用的范围。仅在使用 `credential` 时适用。
+
+###### iceberg.catalog.oauth2.server-uri
+
+必需：否
+
+描述：从 OAuth2 服务器检索访问令牌的端点。
+
+###### iceberg.catalog.vended-credentials-enabled
+
+必需：否
+
+描述：是否使用 REST 后端提供的凭证进行文件系统访问。默认值：`true`。
+
+###### iceberg.catalog.warehouse
+
+必需：否
+描述：Iceberg catalog 的仓库位置或标识符。例如：`s3://my_bucket/warehouse_location` 或 `sandbox`。
+
+##### iceberg.catalog.rest.nested-namespace-enabled
+
+必需：否
+
+描述：是否支持查询嵌套命名空间下的对象。默认值：`false`。
+
+以下示例创建了一个名为 `tabular` 的 Iceberg catalog，使用 Tabular 作为元存储：
 
 ```SQL
 CREATE EXTERNAL CATALOG tabular
@@ -215,8 +331,7 @@ PROPERTIES
     "iceberg.catalog.warehouse" = "sandbox"
 );
 ```
-
-以下示例创建了一个名为 `smith_polaris` 的 Iceberg Catalog，使用 Polaris 作为元数据服务：
+以下示例创建了一个名为 `smith_polaris` 的 Iceberg catalog，使用 Polaris 作为元存储：
 
 ```sql
 CREATE EXTERNAL CATALOG smith_polaris 
@@ -230,7 +345,7 @@ PROPERTIES (
     "iceberg.catalog.oauth2.scope"='PRINCIPAL_ROLE:ALL'
  );
 
-# `ns1.ns2.tpch_namespace` 为嵌套 namespace
+# `ns1.ns2.tpch_namespace` 是一个嵌套命名空间
 create table smith_polaris.`ns1.ns2.tpch_namespace`.tbl (c1 string);
 
 mysql> select * from smith_polaris.`ns1.ns2.tpch_namespace`.tbl;
@@ -244,9 +359,44 @@ mysql> select * from smith_polaris.`ns1.ns2.tpch_namespace`.tbl;
 3 rows in set (0.34 sec)
 ```
 
+以下示例创建了一个名为 `r2` 的 Iceberg catalog，使用 Cloudflare R2 Data Catalog 作为元存储：
+
+```SQL
+CREATE EXTERNAL CATALOG r2
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "rest",
+    "iceberg.catalog.uri" = "<r2_catalog_uri>",
+    "iceberg.catalog.security" = "oauth2",
+    "iceberg.catalog.oauth2.token" = "<r2_api_token>",
+    "iceberg.catalog.warehouse" = "<r2_warehouse_name>"
+);
+
+SET CATALOG r2;
+
+CREATE DATABASE testdb;
+
+SHOW DATABASES FROM r2;
+
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| testdb             |
++--------------------+
+2 rows in set (0.66 sec)
+```
+
+`<r2_warehouse_name>`、`<r2_api_token>` 和 `<r2_catalog_uri>` 的值可以从 [Cloudflare Dashboard 中获取，详细信息请参见此处](https://developers.cloudflare.com/r2/data-catalog/get-started/#prerequisites)。
+
+</TabItem>
+
+<TabItem value="JDBC" label="JDBC">
+
 ##### JDBC
 
-如果选择 JDBC 作为 Iceberg 集群的元数据服务，请按如下配置 `MetastoreParams`：
+如果选择 JDBC 作为数据源的元存储，请按以下方式配置 `MetastoreParams`：
 
 ```SQL
 "iceberg.catalog.type" = "jdbc",
@@ -254,18 +404,39 @@ mysql> select * from smith_polaris.`ns1.ns2.tpch_namespace`.tbl;
 "iceberg.catalog.warehouse" = "<warehouse_location>"
 ```
 
-`MetastoreParams` 包含如下参数。
+下表描述了您需要在 `MetastoreParams` 中配置的参数。
 
-| 参数                                 | 是否必须 | 说明                                                                  |
-| ----------------------------------- |---------|------------------------------------------------------------------------- |
-| iceberg.catalog.type                | 是      | Iceberg 集群所使用的元数据服务的类型。设置为 `jdbc`。                           |
-| iceberg.catalog.uri                 | 是      | 数据库的 URI。格式：`jdbc:[mysql\|postgresql]://<DB IP 地址>:<DB 端口>/<库名>`。 |
-| iceberg.catalog.warehouse.          | 是      | Catalog 的仓库位置或标志符，如 `s3://my_bucket/warehouse_location`。           |
-| iceberg.catalog.jdbc.user           | 否      | 数据库对应的账号                                                            |
-| iceberg.catalog.jdbc.password       | 否      | 数据库对应的密码                                                            |
+##### iceberg.catalog.type
 
+必需：是
 
-例如，创建一个名为 `iceberg_jdbc` 的 Iceberg Catalog，以 JDBC 为元数据服务：
+描述：您用于 Iceberg 集群的元存储类型。将值设置为 `jdbc`。
+
+##### iceberg.catalog.uri
+
+必需：是
+
+描述：您的数据库的 URI。格式：`jdbc:[mysql\|postgresql]://<DB_IP_address>:<DB_PORT>/<DB_NAME>`。
+
+###### iceberg.catalog.warehouse
+
+必需：是
+
+描述：Iceberg catalog 的仓库位置或标识符。例如：`s3://my_bucket/warehouse_location`。
+
+##### iceberg.catalog.jdbc.user
+
+必需：否
+
+描述：数据库的用户名。
+
+##### iceberg.catalog.jdbc.password
+
+必需：否
+
+描述：数据库的密码。
+
+以下示例创建了一个名为 `iceberg_jdbc` 的 Iceberg catalog，并使用 JDBC 作为元存储：
 
 ```SQL
 CREATE EXTERNAL CATALOG iceberg_jdbc
@@ -280,28 +451,39 @@ PROPERTIES
 );
 ```
 
-#### StorageCredentialParams
+</TabItem>
 
-StarRocks 访问 Iceberg 集群文件存储的相关参数配置。
+</Tabs>
 
-注意：
+---
 
-- 如果您使用 HDFS 作为存储系统，则不需要配置 `StorageCredentialParams`，可以跳过本小节。如果您使用 AWS S3、其他兼容 S3 协议的对象存储、Microsoft Azure Storage、或 GCS，则必须配置 `StorageCredentialParams`。
+#### `StorageCredentialParams`
 
-- 如果您使用 Tabular 作为元数据服务，则不需要配置 `StorageCredentialParams`，可以跳过本小节。如果您使用 HMS 或 AWS Glue 作为元数据服务，则必须配置 `StorageCredentialParams`。
+关于 StarRocks 如何与您的存储系统集成的一组参数。此参数集是可选的。
+
+注意以下几点：
+
+- 如果您使用 HDFS 作为存储，则无需配置 `StorageCredentialParams`，可以跳过此部分。如果您使用 AWS S3、其他 S3 兼容的存储系统、Microsoft Azure Storage 或 Google GCS 作为存储，则必须配置 `StorageCredentialParams`。
+
+- 如果您使用 Tabular 作为元存储，则无需配置 `StorageCredentialParams`，可以跳过此部分。如果您使用 HMS 或 AWS Glue 作为元存储，则必须配置 `StorageCredentialParams`。
+
+选择与您的存储类型匹配的选项卡：
+
+<Tabs groupId="storage">
+<TabItem value="AWS" label="AWS S3" default>
 
 ##### AWS S3
 
-如果选择 AWS S3 作为 Iceberg 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+如果选择 AWS S3 作为 Iceberg 集群的存储，请采取以下措施之一：
 
-- 基于 Instance Profile 进行认证和鉴权
+- 要选择基于实例配置文件的身份验证方法，请按以下方式配置 `StorageCredentialParams`：
 
   ```SQL
   "aws.s3.use_instance_profile" = "true",
   "aws.s3.region" = "<aws_s3_region>"
   ```
 
-- 基于 Assumed Role 进行认证和鉴权
+- 要选择基于假设角色的身份验证方法，请按以下方式配置 `StorageCredentialParams`：
 
   ```SQL
   "aws.s3.use_instance_profile" = "true",
@@ -309,7 +491,7 @@ StarRocks 访问 Iceberg 集群文件存储的相关参数配置。
   "aws.s3.region" = "<aws_s3_region>"
   ```
 
-- 基于 IAM User 进行认证和鉴权
+- 要选择基于 IAM 用户的身份验证方法，请按以下方式配置 `StorageCredentialParams`：
 
   ```SQL
   "aws.s3.use_instance_profile" = "false",
@@ -318,39 +500,50 @@ StarRocks 访问 Iceberg 集群文件存储的相关参数配置。
   "aws.s3.region" = "<aws_s3_region>"
   ```
 
-`StorageCredentialParams` 包含如下参数。
+AWS S3 的 `StorageCredentialParams`：
 
-| 参数                        | 是否必须 | 说明                                                         |
-| --------------------------- | -------- | ------------------------------------------------------------ |
-| aws.s3.use_instance_profile | 是       | 指定是否开启 Instance Profile 和 Assumed Role 两种鉴权方式。取值范围：`true` 和 `false`。默认值：`false`。 |
-| aws.s3.iam_role_arn         | 否       | 有权限访问 AWS S3 Bucket 的 IAM Role 的 ARN。采用 Assumed Role 鉴权方式访问 AWS S3 时，必须指定此参数。 |
-| aws.s3.region               | 是       | AWS S3 Bucket 所在的地域。示例：`us-west-1`。                |
-| aws.s3.access_key           | 否       | IAM User 的 Access Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。 |
-| aws.s3.secret_key           | 否       | IAM User 的 Secret Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。 |
+###### aws.s3.use_instance_profile
 
-有关如何选择用于访问 AWS S3 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS S3 的认证参数](../../../integrations/authenticate_to_aws_resources.md#访问-aws-s3-的认证参数)。
+必需：是
+描述：指定是否启用基于实例配置文件的身份验证方法和基于假设角色的身份验证方法。有效值：`true` 和 `false`。默认值：`false`。
 
-##### 阿里云 OSS
+###### aws.s3.iam_role_arn
 
-如果选择阿里云 OSS 作为 Iceberg 集群的文件存储，需要在 `StorageCredentialParams` 中配置如下认证参数：
+必需：否
+描述：在您的 AWS S3 存储桶上具有权限的 IAM 角色的 ARN。如果使用基于假设角色的身份验证方法访问 AWS S3，则必须指定此参数。
 
-```SQL
-"aliyun.oss.access_key" = "<user_access_key>",
-"aliyun.oss.secret_key" = "<user_secret_key>",
-"aliyun.oss.endpoint" = "<oss_endpoint>" 
-```
+###### aws.s3.region
 
-| 参数                            | 是否必须 | 说明                                                         |
-| ------------------------------- | -------- | ------------------------------------------------------------ |
-| aliyun.oss.endpoint             | 是      | 阿里云 OSS Endpoint, 如 `oss-cn-beijing.aliyuncs.com`，您可根据 Endpoint 与地域的对应关系进行查找，请参见 [访问域名和数据中心](https://help.aliyun.com/document_detail/31837.html)。    |
-| aliyun.oss.access_key           | 是      | 指定阿里云账号或 RAM 用户的 AccessKey ID，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.html)。                                     |
-| aliyun.oss.secret_key           | 是      | 指定阿里云账号或 RAM 用户的 AccessKey Secret，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.html)。     |
+必需：是
+描述：您的 AWS S3 存储桶所在的区域。例如：`us-west-1`。
 
-##### 兼容 S3 协议的对象存储
+###### aws.s3.access_key
 
-Iceberg Catalog 从 2.5 版本起支持兼容 S3 协议的对象存储。
+必需：否
+描述：您的 IAM 用户的访问密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS S3，则必须指定此参数。
 
-如果选择兼容 S3 协议的对象存储（如 MinIO）作为 Iceberg 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+###### aws.s3.secret_key
+
+必需：否
+描述：您的 IAM 用户的秘密密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS S3，则必须指定此参数。
+
+有关如何选择访问 AWS S3 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS S3 的身份验证参数](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)。
+
+</TabItem>
+
+<TabItem value="HDFS" label="HDFS" >
+
+使用 HDFS 存储时跳过存储凭证。
+
+</TabItem>
+
+<TabItem value="MINIO" label="MinIO" >
+
+##### S3 兼容的存储系统
+
+从 v2.5 开始，Iceberg catalog 支持 S3 兼容的存储系统。
+
+如果选择 S3 兼容的存储系统，例如 MinIO，作为 Iceberg 集群的存储，请按以下方式配置 `StorageCredentialParams` 以确保成功集成：
 
 ```SQL
 "aws.s3.enable_ssl" = "false",
@@ -360,39 +553,53 @@ Iceberg Catalog 从 2.5 版本起支持兼容 S3 协议的对象存储。
 "aws.s3.secret_key" = "<iam_user_secret_key>"
 ```
 
-`StorageCredentialParams` 包含如下参数。
+MinIO 和其他 S3 兼容系统的 `StorageCredentialParams`：
 
-| 参数                             | 是否必须   | 说明                                                  |
-| -------------------------------- | -------- | ------------------------------------------------------------ |
-| aws.s3.enable_ssl                | Yes      | 是否开启 SSL 连接。<br />取值范围：`true` 和 `false`。默认值：`true`。 |
-| aws.s3.enable_path_style_access  | Yes      | 是否开启路径类型访问 (Path-Style Access)。<br />取值范围：`true` 和 `false`。默认值：`false`。对于 MinIO，必须设置为 `true`。<br />路径类型 URL 使用如下格式：`https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`。例如，如果您在美国西部（俄勒冈）区域中创建一个名为 `DOC-EXAMPLE-BUCKET1` 的存储桶，并希望访问该存储桶中的 `alice.jpg` 对象，则可使用以下路径类型 URL：`https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`。 |
-| aws.s3.endpoint                  | Yes      | 用于访问兼容 S3 协议的对象存储的 Endpoint。 |
-| aws.s3.access_key                | Yes      | IAM User 的 Access Key。 |
-| aws.s3.secret_key                | Yes      | IAM User 的 Secret Key。 |
+###### aws.s3.enable_ssl
+
+必需：是
+描述：指定是否启用 SSL 连接。<br />有效值：`true` 和 `false`。默认值：`true`。
+
+###### aws.s3.enable_path_style_access
+
+必需：是
+描述：指定是否启用路径样式访问。<br />有效值：`true` 和 `false`。默认值：`false`。对于 MinIO，您必须将值设置为 `true`。<br />路径样式 URL 使用以下格式：`https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`。例如，如果您在美国西部（俄勒冈）区域创建了一个名为 `DOC-EXAMPLE-BUCKET1` 的存储桶，并且您想要访问该存储桶中的 `alice.jpg` 对象，可以使用以下路径样式 URL：`https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`。
+
+###### aws.s3.endpoint
+
+必需：是
+描述：用于连接到您的 S3 兼容存储系统而不是 AWS S3 的端点。
+
+###### aws.s3.access_key
+
+必需：是
+描述：您的 IAM 用户的访问密钥。
+
+###### aws.s3.secret_key
+
+必需：是
+描述：您的 IAM 用户的秘密密钥。
+
+</TabItem>
+
+<TabItem value="AZURE" label="Microsoft Azure Blob Storage" >
 
 ##### Microsoft Azure Storage
 
-Iceberg Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
+从 v3.0 开始，Iceberg catalog 支持 Microsoft Azure Storage。
 
 ###### Azure Blob Storage
 
-如果选择 Blob Storage 作为 Iceberg 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+如果选择 Blob Storage 作为 Iceberg 集群的存储，请采取以下措施之一：
 
-- 基于 Shared Key 进行认证和鉴权
+- 要选择共享密钥身份验证方法，请按以下方式配置 `StorageCredentialParams`：
 
   ```SQL
   "azure.blob.storage_account" = "<storage_account_name>",
   "azure.blob.shared_key" = "<storage_account_shared_key>"
   ```
 
-  `StorageCredentialParams` 包含如下参数。
-
-  | **参数**                   | **是否必须** | **说明**                         |
-  | -------------------------- | ------------ | -------------------------------- |
-  | azure.blob.storage_account | 是           | Blob Storage 账号的用户名。      |
-  | azure.blob.shared_key      | 是           | Blob Storage 账号的 Shared Key。 |
-
-- 基于 SAS Token 进行认证和鉴权
+- 要选择 SAS 令牌身份验证方法，请按以下方式配置 `StorageCredentialParams`：
 
   ```SQL
   "azure.blob.storage_account" = "<storage_account_name>",
@@ -400,81 +607,46 @@ Iceberg Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
   "azure.blob.sas_token" = "<storage_account_SAS_token>"
   ```
 
-  `StorageCredentialParams` 包含如下参数。
+Microsoft Azure 的 `StorageCredentialParams`：
 
-  | **参数**                  | **是否必须** | **说明**                                 |
-  | ------------------------- | ------------ | ---------------------------------------- |
-  | azure.blob.storage_account| 是           | Blob Storage 账号的用户名。              |
-  | azure.blob.container      | 是           | 数据所在 Blob 容器的名称。               |
-  | azure.blob.sas_token      | 是           | 用于访问 Blob Storage 账号的 SAS Token。 |
+###### azure.blob.storage_account
 
-###### Azure Data Lake Storage Gen2
+必需：是
+描述：您的 Blob Storage 账户的用户名。
 
-如果选择 Data Lake Storage Gen2 作为 Iceberg 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+###### azure.blob.shared_key
 
-- 基于 Managed Identity 进行认证和鉴权
+必需：是
+描述：您的 Blob Storage 账户的共享密钥。
 
-  ```SQL
-  "azure.adls2.oauth2_use_managed_identity" = "true",
-  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
-  "azure.adls2.oauth2_client_id" = "<service_client_id>"
-  ```
+###### azure.blob.account_name
 
-  `StorageCredentialParams` 包含如下参数。
+必需：是
+描述：您的 Blob Storage 账户的用户名。
 
-  | **参数**                                | **是否必须** | **说明**                                                |
-  | --------------------------------------- | ------------ | ------------------------------------------------------- |
-  | azure.adls2.oauth2_use_managed_identity | 是           | 指定是否开启 Managed Identity 鉴权方式。设置为 `true`。 |
-  | azure.adls2.oauth2_tenant_id            | 是           | 数据所属 Tenant 的 ID。                                 |
-  | azure.adls2.oauth2_client_id            | 是           | Managed Identity 的 Client (Application) ID。           |
+###### azure.blob.container
 
-- 基于 Shared Key 进行认证和鉴权
+必需：是
+描述：存储数据的 blob 容器的名称。
 
-  ```SQL
-  "azure.adls2.storage_account" = "<storage_account_name>",
-  "azure.adls2.shared_key" = "<storage_account_shared_key>"
-  ```
+###### azure.blob.sas_token
 
-  `StorageCredentialParams` 包含如下参数。
-
-  | **参数**                    | **是否必须** | **说明**                                   |
-  | --------------------------- | ------------ | ------------------------------------------ |
-  | azure.adls2.storage_account | 是           | Data Lake Storage Gen2 账号的用户名。      |
-  | azure.adls2.shared_key      | 是           | Data Lake Storage Gen2 账号的 Shared Key。 |
-
-- 基于 Service Principal 进行认证和鉴权
-
-  ```SQL
-  "azure.adls2.oauth2_client_id" = "<service_client_id>",
-  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
-  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
-  ```
-
-  `StorageCredentialParams` 包含如下参数。
-
-  | **参数**                           | **是否必须** | **说明**                                                     |
-  | ---------------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.adls2.oauth2_client_id       | 是           | Service Principal 的 Client (Application) ID。               |
-  | azure.adls2.oauth2_client_secret   | 是           | 新建的 Client (Application) Secret。                         |
-  | azure.adls2.oauth2_client_endpoint | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
+必需：是
+描述：用于访问您的 Blob Storage 账户的 SAS 令牌。
 
 ###### Azure Data Lake Storage Gen1
 
-如果选择 Data Lake Storage Gen1 作为 Iceberg 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+如果选择 Data Lake Storage Gen1 作为 Iceberg 集群的存储，请采取以下措施之一：
 
-- 基于 Managed Service Identity 进行认证和鉴权
+- 要选择托管服务身份验证方法，请按以下方式配置 `StorageCredentialParams`：
 
   ```SQL
   "azure.adls1.use_managed_service_identity" = "true"
   ```
 
-  `StorageCredentialParams` 包含如下参数。
+或：
 
-  | **参数**                                 | **是否必须** | **说明**                                                     |
-  | ---------------------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.adls1.use_managed_service_identity | 是           | 指定是否开启 Managed Service Identity 鉴权方式。设置为 `true`。 |
-
-- 基于 Service Principal 进行认证和鉴权
+- 要选择服务主体身份验证方法，请按以下方式配置 `StorageCredentialParams`：
 
   ```SQL
   "azure.adls1.oauth2_client_id" = "<application_client_id>",
@@ -482,33 +654,54 @@ Iceberg Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
   "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
   ```
 
-  `StorageCredentialParams` 包含如下参数。
+###### Azure Data Lake Storage Gen2
 
-  | **Parameter**                 | **Required** | **Description**                                              |
-  | ----------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.adls1.oauth2_client_id  | 是           | Service Principal 的 Client (Application) ID。               |
-  | azure.adls1.oauth2_credential | 是           | 新建的 Client (Application) Secret。                         |
-  | azure.adls1.oauth2_endpoint   | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
+如果选择 Data Lake Storage Gen2 作为 Iceberg 集群的存储，请采取以下措施之一：
+
+- 要选择托管身份验证方法，请按以下方式配置 `StorageCredentialParams`：
+
+  ```SQL
+  "azure.adls2.oauth2_use_managed_identity" = "true",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  或：
+
+- 要选择共享密钥身份验证方法，请按以下方式配置 `StorageCredentialParams`：
+
+  ```SQL
+  "azure.adls2.storage_account" = "<storage_account_name>",
+  "azure.adls2.shared_key" = "<storage_account_shared_key>"
+  ```
+
+  或：
+
+- 要选择服务主体身份验证方法，请按以下方式配置 `StorageCredentialParams`：
+
+  ```SQL
+  "azure.adls2.oauth2_client_id" = "<service_client_id>",
+  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
+  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
+  ```
+
+</TabItem>
+
+<TabItem value="GCS" label="Google GCS" >
 
 ##### Google GCS
 
-Iceberg Catalog 从 3.0 版本起支持 Google GCS。
+从 v3.0 开始，Iceberg catalog 支持 Google GCS。
 
-如果选择 Google GCS 作为 Iceberg 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+如果选择 Google GCS 作为 Iceberg 集群的存储，请采取以下措施之一：
 
-- 基于 VM 进行认证和鉴权
+- 要选择基于 VM 的身份验证方法，请按以下方式配置 `StorageCredentialParams`：
 
   ```SQL
   "gcp.gcs.use_compute_engine_service_account" = "true"
   ```
 
-  `StorageCredentialParams` 包含如下参数。
-
-  | **参数**                                   | **默认值** | **取值样例** | **说明**                                                 |
-  | ------------------------------------------ | ---------- | ------------ | -------------------------------------------------------- |
-  | gcp.gcs.use_compute_engine_service_account | false      | true         | 是否直接使用 Compute Engine 上面绑定的 Service Account。 |
-
-- 基于 Service Account 进行认证和鉴权
+- 要选择基于服务账户的身份验证方法，请按以下方式配置 `StorageCredentialParams`：
 
   ```SQL
   "gcp.gcs.service_account_email" = "<google_service_account_email>",
@@ -516,31 +709,16 @@ Iceberg Catalog 从 3.0 版本起支持 Google GCS。
   "gcp.gcs.service_account_private_key" = "<google_service_private_key>"
   ```
 
-  `StorageCredentialParams` 包含如下参数。
+- 要选择基于模拟的身份验证方法，请按以下方式配置 `StorageCredentialParams`：
 
-  | **参数**                               | **默认值** | **取值样例**                                                 | **说明**                                                     |
-  | -------------------------------------- | ---------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-  | gcp.gcs.service_account_email          | ""         | "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)" | 创建 Service Account 时生成的 JSON 文件中的 Email。          |
-  | gcp.gcs.service_account_private_key_id | ""         | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | 创建 Service Account 时生成的 JSON 文件中的 Private Key ID。 |
-  | gcp.gcs.service_account_private_key    | ""         | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | 创建 Service Account 时生成的 JSON 文件中的 Private Key。    |
-
-- 基于 Impersonation 进行认证和鉴权
-
-  - 使用 VM 实例模拟 Service Account
+  - 使 VM 实例模拟服务账户：
 
     ```SQL
     "gcp.gcs.use_compute_engine_service_account" = "true",
     "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"
     ```
 
-    `StorageCredentialParams` 包含如下参数。
-
-    | **参数**                                   | **默认值** | **取值样例** | **说明**                                                     |
-    | ------------------------------------------ | ---------- | ------------ | ------------------------------------------------------------ |
-    | gcp.gcs.use_compute_engine_service_account | false      | true         | 是否直接使用 Compute Engine 上面绑定的 Service Account。     |
-    | gcp.gcs.impersonation_service_account      | ""         | "hello"      | 需要模拟的目标 Service Account。 |
-
-  - 使用一个 Service Account（暂时命名为“Meta Service Account”）模拟另一个 Service Account（暂时命名为“Data Service Account”）
+  - 使服务账户（暂时命名为元服务账户）模拟另一个服务账户（暂时命名为数据服务账户）：
 
     ```SQL
     "gcp.gcs.service_account_email" = "<google_service_account_email>",
@@ -549,53 +727,63 @@ Iceberg Catalog 从 3.0 版本起支持 Google GCS。
     "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
     ```
 
-    `StorageCredentialParams` 包含如下参数。
+Google GCS 的 `StorageCredentialParams`：
 
-    | **参数**                               | **默认值** | **取值样例**                                                 | **说明**                                                     |
-    | -------------------------------------- | ---------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-    | gcp.gcs.service_account_email          | ""         | "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)" | 创建 Meta Service Account 时生成的 JSON 文件中的 Email。     |
-    | gcp.gcs.service_account_private_key_id | ""         | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | 创建 Meta Service Account 时生成的 JSON 文件中的 Private Key ID。 |
-    | gcp.gcs.service_account_private_key    | ""         | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | 创建 Meta Service Account 时生成的 JSON 文件中的 Private Key。 |
-    | gcp.gcs.impersonation_service_account  | ""         | "hello"                                                      | 需要模拟的目标 Data Service Account。 |
+###### gcp.gcs.service_account_email
+
+默认值： ""
+示例： "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)"
+描述：在创建服务账户时生成的 JSON 文件中的电子邮件地址。
+
+###### gcp.gcs.service_account_private_key_id
+
+默认值： ""
+示例： "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"
+描述：在创建服务账户时生成的 JSON 文件中的私钥 ID。
+
+###### gcp.gcs.service_account_private_key
+
+默认值： ""
+示例： "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  
+描述：在创建服务账户时生成的 JSON 文件中的私钥。
+
+###### gcp.gcs.impersonation_service_account
+
+默认值： ""  
+示例： "hello"  
+描述：您要模拟的服务账户。
+
+</TabItem>
+
+</Tabs>
+
+---
 
 #### MetadataUpdateParams
 
-指定元数据缓存更新策略的一组参数。StarRocks 根据该策略更新缓存的 Iceberg 元数据。此组参数为可选。
+关于 StarRocks 如何更新 Iceberg 元数据缓存的一组参数。此参数集是可选的。
 
-自 v3.3.3 起，StarRocks 采用[元数据周期性后台刷新方案](#附录元数据周期性后台刷新方案)，开箱即用。因此，一般情况下，您可以忽略 `MetadataUpdateParams`，无需对其中的策略参数进行调优。大多数情况下，推荐您通过系统变量 [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode) 调整 Iceberg Catalog 元数据检索方案。
+从 v3.3.3 开始，StarRocks 支持 [周期性元数据刷新策略](#appendix-periodic-metadata-refresh-strategy)。在大多数情况下，您可以忽略 `MetadataUpdateParams`，不需要调整其中的策略参数，因为这些参数的默认值已经为您提供了开箱即用的性能。您可以使用系统变量 [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode) 调整 Iceberg 元数据缓存计划。
 
-如果 Iceberg 数据更新频率较高，那么您可以对这些参数进行调优，从而优化该方案的性能。
-
-| **参数**                                       | **默认值**             | **说明**                                                      |
+| **参数**                                 | **默认值**           | **描述**                                              |
 | :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
-| enable_iceberg_metadata_cache                 | true                  | 是否缓存 Iceberg 相关的元数据，包括 Table Cache，Partition Name Cache，以及 Manifest 中的 Data File Cache 和 Delete Data File Cache。 |
-| iceberg_manifest_cache_with_column_statistics | false                 | 是否缓存列统计信息。                                         |
-| iceberg_manifest_cache_max_num                | 100000                | 可缓存的 Manifest 文件的最大数量。                           |
-| refresh_iceberg_manifest_min_length           | 2 * 1024 * 1024       | 触发 Data File Cache 刷新的最小 Manifest 文件长度。          |
+| enable_iceberg_metadata_cache                 | true                  | 是否缓存 Iceberg 相关的元数据，包括表缓存、分区名称缓存以及 Manifest 中的数据文件缓存和删除数据文件缓存。 |
+| iceberg_manifest_cache_with_column_statistics | false                 | 是否缓存列的统计信息。                  |
+| iceberg_manifest_cache_max_num                | 100000                | 可以缓存的 Manifest 文件的最大数量。     |
+| refresh_iceberg_manifest_min_length           | 2 * 1024 * 1024       | 触发数据文件缓存刷新的最小 Manifest 文件长度。 |
 
 ### 示例
 
-以下示例创建了一个名为 `iceberg_catalog_hms` 或 `iceberg_catalog_glue` 的 Iceberg Catalog，用于查询 Iceberg 集群里的数据。
+以下示例创建了一个名为 `iceberg_catalog_hms` 或 `iceberg_catalog_glue` 的 Iceberg catalog，具体取决于您使用的元存储类型，以便从您的 Iceberg 集群中查询数据。选择与您的存储类型匹配的选项卡：
 
-#### HDFS
-
-使用 HDFS 作为存储时，可以按如下创建 Iceberg Catalog：
-
-```SQL
-CREATE EXTERNAL CATALOG iceberg_catalog_hms
-PROPERTIES
-(
-    "type" = "iceberg",
-    "iceberg.catalog.type" = "hive",
-    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
-);
-```
+<Tabs groupId="storage">
+<TabItem value="AWS" label="AWS S3" default>
 
 #### AWS S3
 
-##### 如果基于 Instance Profile 进行鉴权和认证
+##### 如果选择基于实例配置文件的凭证
 
-- 如果 Iceberg 集群使用 HMS 作为元数据服务，可以按如下创建 Iceberg Catalog：
+- 如果在 Iceberg 集群中使用 Hive metastore，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
@@ -606,11 +794,10 @@ PROPERTIES
       "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.region" = "us-west-2"
-
   );
   ```
 
-- 如果 Amazon EMR Iceberg 集群使用 AWS Glue 作为元数据服务，可以按如下创建 Iceberg Catalog：
+- 如果在 Amazon EMR Iceberg 集群中使用 AWS Glue，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG iceberg_catalog_glue
@@ -625,9 +812,9 @@ PROPERTIES
   );
   ```
 
-##### 如果基于 Assumed Role 进行鉴权和认证
+##### 如果选择基于假设角色的凭证
 
-- 如果 Iceberg 集群使用 HMS 作为元数据服务，可以按如下创建 Iceberg Catalog：
+- 如果在 Iceberg 集群中使用 Hive metastore，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
@@ -642,7 +829,7 @@ PROPERTIES
   );
   ```
 
-- 如果 Amazon EMR Iceberg 集群使用 AWS Glue 作为元数据服务，可以按如下创建 Iceberg Catalog：
+- 如果在 Amazon EMR Iceberg 集群中使用 AWS Glue，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG iceberg_catalog_glue
@@ -659,9 +846,9 @@ PROPERTIES
   );
   ```
 
-##### 如果基于 IAM User 进行鉴权和认证
+##### 如果选择基于 IAM 用户的凭证
 
-- 如果 Iceberg 集群使用 HMS 作为元数据服务，可以按如下创建 Iceberg Catalog：
+- 如果在 Iceberg 集群中使用 Hive metastore，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
@@ -677,7 +864,7 @@ PROPERTIES
   );
   ```
 
-- 如果 Amazon EMR Iceberg 集群使用 AWS Glue 作为元数据服务，可以按如下创建 Iceberg Catalog：
+- 如果在 Amazon EMR Iceberg 集群中使用 AWS Glue，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG iceberg_catalog_glue
@@ -695,10 +882,31 @@ PROPERTIES
       "aws.s3.region" = "us-west-2"
   );
   ```
+</TabItem>
 
-#### 兼容 S3 协议的对象存储
+<TabItem value="HDFS" label="HDFS" >
 
-以 MinIO 为例，可以按如下创建 Iceberg Catalog：
+#### HDFS
+
+如果您使用 HDFS 作为存储，请运行如下命令：
+
+```SQL
+CREATE EXTERNAL CATALOG iceberg_catalog_hms
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
+);
+```
+
+</TabItem>
+
+<TabItem value="MINIO" label="MinIO" >
+
+#### S3 兼容的存储系统
+
+以 MinIO 为例。运行如下命令：
 
 ```SQL
 CREATE EXTERNAL CATALOG iceberg_catalog_hms
@@ -714,12 +922,15 @@ PROPERTIES
     "aws.s3.secret_key" = "<iam_user_secret_key>"
 );
 ```
+</TabItem>
+
+<TabItem value="AZURE" label="Microsoft Azure Blob Storage" >
 
 #### Microsoft Azure Storage
 
 ##### Azure Blob Storage
 
-- 如果基于 Shared Key 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
+- 如果选择共享密钥身份验证方法，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
@@ -733,7 +944,7 @@ PROPERTIES
   );
   ```
 
-- 如果基于 SAS Token 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
+- 如果选择 SAS 令牌身份验证方法，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
@@ -750,7 +961,7 @@ PROPERTIES
 
 ##### Azure Data Lake Storage Gen1
 
-- 如果基于 Managed Service Identity 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
+- 如果选择托管服务身份验证方法，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
@@ -763,7 +974,7 @@ PROPERTIES
   );
   ```
 
-- 如果基于 Service Principal 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
+- 如果选择服务主体身份验证方法，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
@@ -780,7 +991,7 @@ PROPERTIES
 
 ##### Azure Data Lake Storage Gen2
 
-- 如果基于 Managed Identity 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
+- 如果选择托管身份验证方法，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
@@ -795,7 +1006,7 @@ PROPERTIES
   );
   ```
 
-- 如果基于 Shared Key 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
+- 如果选择共享密钥身份验证方法，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
@@ -809,7 +1020,7 @@ PROPERTIES
   );
   ```
 
-- 如果基于 Service Principal 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
+- 如果选择服务主体身份验证方法，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
@@ -824,9 +1035,13 @@ PROPERTIES
   );
   ```
 
+</TabItem>
+
+<TabItem value="GCS" label="Google GCS" >
+
 #### Google GCS
 
-- 如果基于 VM 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
+- 如果选择基于 VM 的身份验证方法，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
@@ -839,7 +1054,7 @@ PROPERTIES
   );
   ```
 
-- 如果基于 Service Account 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
+- 如果选择基于服务账户的身份验证方法，请运行如下命令：
 
   ```SQL
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
@@ -854,9 +1069,9 @@ PROPERTIES
   );
   ```
 
-- 如果基于 Impersonation 进行认证和鉴权
+- 如果选择基于模拟的身份验证方法：
 
-  - 使用 VM 实例模拟 Service Account，可以按如下创建 Iceberg Catalog：
+  - 如果您让 VM 实例模拟服务账户，请运行如下命令：
 
     ```SQL
     CREATE EXTERNAL CATALOG iceberg_catalog_hms
@@ -866,11 +1081,11 @@ PROPERTIES
         "iceberg.catalog.type" = "hive",
         "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
         "gcp.gcs.use_compute_engine_service_account" = "true",
-        "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"
+        "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"    
     );
     ```
 
-  - 使用一个 Service Account 模拟另一个 Service Account，可以按如下创建 Iceberg Catalog：
+  - 如果您让服务账户模拟另一个服务账户，请运行如下命令：
 
     ```SQL
     CREATE EXTERNAL CATALOG iceberg_catalog_hms
@@ -882,143 +1097,176 @@ PROPERTIES
         "gcp.gcs.service_account_email" = "<google_service_account_email>",
         "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
         "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
-        "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"    
+        "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
     );
     ```
+</TabItem>
 
-## 查看 Iceberg Catalog
+</Tabs>
 
-您可以通过 [SHOW CATALOGS](../../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
+---
+
+## 使用您的 catalog
+
+### 查看 Iceberg catalog
+
+您可以使用 [SHOW CATALOGS](../../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) 查询当前 StarRocks 集群中的所有 catalog：
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-您也可以通过 [SHOW CREATE CATALOG](../../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Iceberg Catalog `iceberg_catalog_glue` 的创建语句：
+您还可以使用 [SHOW CREATE CATALOG](../../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) 查询外部 catalog 的创建语句。以下示例查询名为 `iceberg_catalog_glue` 的 Iceberg catalog 的创建语句：
 
 ```SQL
 SHOW CREATE CATALOG iceberg_catalog_glue;
 ```
 
-## 切换 Iceberg Catalog 和数据库
+---
 
-您可以通过如下方法切换至目标 Iceberg Catalog 和数据库：
+### 切换到 Iceberg Catalog 及其中的数据库
 
-- 先通过 [SET CATALOG](../../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) 指定当前会话生效的 Iceberg Catalog，然后再通过 [USE](../../../sql-reference/sql-statements/Database/USE.md) 指定数据库：
+您可以使用以下方法之一切换到 Iceberg catalog 及其中的数据库：
+
+- 使用 [SET CATALOG](../../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) 指定当前会话中的 Iceberg catalog，然后使用 [USE](../../../sql-reference/sql-statements/Database/USE.md) 指定活动数据库：
 
   ```SQL
-  -- 切换当前会话生效的 Catalog：
+  -- 切换到当前会话中的指定 catalog：
   SET CATALOG <catalog_name>
-  -- 指定当前会话生效的数据库：
+  -- 指定当前会话中的活动数据库：
   USE <db_name>
   ```
 
-- 通过 [USE](../../../sql-reference/sql-statements/Database/USE.md) 直接将会话切换到目标 Iceberg Catalog 下的指定数据库：
+- 直接使用 [USE](../../../sql-reference/sql-statements/Database/USE.md) 切换到 Iceberg catalog 及其中的数据库：
 
   ```SQL
   USE <catalog_name>.<db_name>
   ```
 
-## 删除 Iceberg Catalog
+---
 
-您可以通过 [DROP CATALOG](../../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) 删除某个 External Catalog。
+### 删除 Iceberg catalog
 
-例如，通过如下命令删除 Iceberg Catalog `iceberg_catalog_glue`：
+您可以使用 [DROP CATALOG](../../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) 删除外部 catalog。
+
+以下示例删除名为 `iceberg_catalog_glue` 的 Iceberg catalog：
 
 ```SQL
 DROP Catalog iceberg_catalog_glue;
 ```
 
-## 查看 Iceberg 表结构
+---
 
-您可以通过如下方法查看 Iceberg 表的表结构：
+### 查看 Iceberg 表的模式
 
-- 查看表结构
+您可以使用以下语法之一查看 Iceberg 表的模式：
+
+- 查看模式
 
   ```SQL
   DESC[RIBE] <catalog_name>.<database_name>.<table_name>
   ```
 
-- 从 CREATE 命令查看表结构和表文件存放位置
+- 从 CREATE 语句中查看模式和位置
 
   ```SQL
   SHOW CREATE TABLE <catalog_name>.<database_name>.<table_name>
   ```
 
-## 查询 Iceberg 表数据
+---
 
-1. 通过 [SHOW DATABASES](../../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) 查看指定 Catalog 所属的 Iceberg 集群中的数据库：
+### 查询 Iceberg 表
+
+1. 使用 [SHOW DATABASES](../../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) 查看 Iceberg 集群中的数据库：
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>
    ```
 
-2. [切换至目标 Iceberg Catalog 和数据库](#切换-iceberg-catalog-和数据库)。
+2. [切换到 Iceberg catalog 及其中的数据库](#switch-to-an-iceberg-catalog-and-a-database-in-it)。
 
-3. 通过 [SELECT](../../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 查询目标数据库中的目标表：
+3. 使用 [SELECT](../../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 查询指定数据库中的目标表：
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10
    ```
 
-## 创建 Iceberg 数据库
+---
 
-同 StarRocks 内部数据目录 (Internal Catalog) 一致，如果您拥有 Iceberg Catalog 的 [CREATE DATABASE](../../../administration/user_privs/authorization/privilege_item.md#数据目录权限-catalog) 权限，那么您可以使用 [CREATE DATABASE](../../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) 在该 Iceberg Catalog 内创建数据库。本功能自 3.1 版本起开始支持。
+### 创建 Iceberg 数据库
 
-> **说明**
->
-> 您可以通过 [GRANT](../../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+与 StarRocks 的内部 catalog 类似，如果您在 Iceberg catalog 上具有 [CREATE DATABASE](../../../administration/user_privs/authorization/privilege_item.md#catalog) 权限，您可以使用 [CREATE DATABASE](../../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) 语句在该 Iceberg catalog 中创建数据库。此功能从 v3.1 开始支持。
 
-[切换至目标 Iceberg Catalog](#切换-iceberg-catalog-和数据库)，然后通过如下语句创建 Iceberg 数据库：
+:::tip
+
+您可以使用 [GRANT](../../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../../sql-reference/sql-statements/account-management/REVOKE.md) 授予和撤销权限。
+
+:::
+
+[切换到 Iceberg catalog](#switch-to-an-iceberg-catalog-and-a-database-in-it)，然后使用以下语句在该 catalog 中创建 Iceberg 数据库：
 
 ```SQL
 CREATE DATABASE <database_name>
 [PROPERTIES ("location" = "<prefix>://<path_to_database>/<database_name.db>/")]
 ```
 
-您可以通过 `location` 参数来为该数据库设置具体的文件路径，支持 HDFS 和对象存储。如果您不指定 `location` 参数，则 StarRocks 会在当前 Iceberg Catalog 的默认路径下创建该数据库。
+您可以使用 `location` 参数指定要在其中创建数据库的文件路径。支持 HDFS 和云存储。如果未指定 `location` 参数，StarRocks 会在 Iceberg catalog 的默认文件路径中创建数据库。
 
-`prefix` 根据存储系统的不同而不同：
+`prefix` 根据您使用的存储系统而有所不同：
 
-| **存储系统**                           | **`Prefix` 取值**                                        |
-| -------------------------------------- | ------------------------------------------------------------ |
-| HDFS                                   | `hdfs`                                                       |
-| Google GCS                             | `gs`                                                         |
-| Azure Blob Storage                     | <ul><li>如果您的存储账号支持通过 HTTP 协议进行访问，`prefix` 为 `wasb`。</li><li>如果您的存储账号支持通过 HTTPS 协议进行访问，`prefix` 为 `wasbs`。</li></ul> |
-| Azure Data Lake Storage Gen1           | `adl`                                                        |
-| Azure Data Lake Storage Gen2           | <ul><li>如果您的存储账号支持通过 HTTP 协议进行访问，`prefix` 为 `abfs`。</li><li>如果您的存储账号支持通过 HTTPS 协议进行访问，`prefix` 为 `abfss`。</li></ul> |
-| 阿里云 OSS                             | `oss`                                                        |
-| 腾讯云 COS                             | `cosn`                                                       |
-| 华为云 OBS                             | `obs`                                                        |
-| AWS S3 及其他兼容 S3 的存储（如 MinIO)   | `s3`                                                         |
+#### HDFS
 
-## 删除 Iceberg 数据库
+`Prefix` 值：`hdfs`
 
-同 StarRocks 内部数据库一致，如果您拥有 Iceberg 数据库的 [DROP](../../../administration/user_privs/authorization/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [DROP DATABASE](../../../sql-reference/sql-statements/Database/DROP_DATABASE.md) 来删除该 Iceberg 数据库。本功能自 3.1 版本起开始支持。仅支持删除空数据库。
+#### Google GCS
 
-> **说明**
->
-> 您可以通过 [GRANT](../../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+`Prefix` 值：`gs`
 
-删除数据库操作并不会将 HDFS 或对象存储上的对应文件路径删除。
+#### Azure Blob Storage
 
-[切换至目标 Iceberg Catalog](#切换-iceberg-catalog-和数据库)，然后通过如下语句删除 Iceberg 数据库：
+`Prefix` 值：
+
+- 如果您的存储账户允许通过 HTTP 访问，`prefix` 为 `wasb`。
+- 如果您的存储账户允许通过 HTTPS 访问，`prefix` 为 `wasbs`。
+
+#### Azure Data Lake Storage Gen1
+
+`Prefix` 值：`adl`
+
+#### Azure Data Lake Storage Gen2
+
+`Prefix` 值：
+
+- 如果您的存储账户允许通过 HTTP 访问，`prefix` 为 `abfs`。
+- 如果您的存储账户允许通过 HTTPS 访问，`prefix` 为 `abfss`。
+
+#### AWS S3 或其他 S3 兼容存储（例如 MinIO）
+
+`Prefix` 值：`s3`
+
+---
+
+### 删除 Iceberg 数据库
+
+与 StarRocks 的内部数据库类似，如果您在 Iceberg 数据库上具有 [DROP](../../../administration/user_privs/authorization/privilege_item.md#database) 权限，您可以使用 [DROP DATABASE](../../../sql-reference/sql-statements/Database/DROP_DATABASE.md) 语句删除该 Iceberg 数据库。此功能从 v3.1 开始支持。您只能删除空数据库。
+
+当您删除 Iceberg 数据库时，数据库在您的 HDFS 集群或云存储上的文件路径不会随数据库一起删除。
+
+[切换到 Iceberg catalog](#switch-to-an-iceberg-catalog-and-a-database-in-it)，然后使用以下语句在该 catalog 中删除 Iceberg 数据库：
 
 ```SQL
 DROP DATABASE <database_name>;
 ```
 
-## 创建 Iceberg 表
+---
 
-同 StarRocks 内部数据库一致，如果您拥有 Iceberg 数据库的 [CREATE TABLE](../../../administration/user_privs/authorization/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) 或 [CREATE TABLE AS SELECT (CTAS)](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) 在该 Iceberg 数据库下创建表。本功能自 3.1 版本起开始支持。
+### 创建 Iceberg 表
 
-> **说明**
->
-> 您可以通过 [GRANT](../../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+与 StarRocks 的内部数据库类似，如果您在 Iceberg 数据库上具有 [CREATE TABLE](../../../administration/user_privs/authorization/privilege_item.md#database) 权限，您可以使用 [CREATE TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) 或 [CREATE TABLE AS SELECT ../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.mdELECT.md) 语句在该 Iceberg 数据库中创建表。此功能从 v3.1 开始支持。
 
-[切换至目标 Iceberg Catalog 和数据库](#切换-iceberg-catalog-和数据库)。然后通过如下语法创建 Iceberg 表：
+[切换到 Iceberg catalog 及其中的数据库](#switch-to-an-iceberg-catalog-and-a-database-in-it)，然后使用以下语法在该数据库中创建 Iceberg 表。
 
-### 语法
+#### 语法
 
 ```SQL
 CREATE TABLE [IF NOT EXISTS] [database.]table_name
@@ -1029,56 +1277,64 @@ partition_column_definition1,partition_column_definition2...])
 [AS SELECT query]
 ```
 
-### 参数说明
+#### 参数
 
-#### column_definition
+##### column_definition
 
-`column_definition` 语法定义如下:
+`column_definition` 的语法如下：
 
 ```SQL
 col_name col_type [COMMENT 'comment']
 ```
 
-参数说明：
+:::note
 
-| **参数**           | **说明**                                              |
-| ----------------- |------------------------------------------------------ |
-| col_name          | 列名称。                                                |
-| col_type          | 列数据类型。当前支持如下数据类型：TINYINT、SMALLINT、INT、BIGINT、FLOAT、DOUBLE、DECIMAL、DATE、DATETIME、CHAR、VARCHAR[(length)]、ARRAY、MAP、STRUCT。不支持 LARGEINT、HLL、BITMAP 类型。 |
+所有非分区列必须使用 `NULL` 作为默认值。这意味着您必须在表创建语句中为每个非分区列指定 `DEFAULT "NULL"`。此外，分区列必须在非分区列之后定义，并且不能使用 `NULL` 作为默认值。
 
-> **注意**
->
-> 所有非分区列均以 `NULL` 为默认值（即，在建表语句中指定 `DEFAULT "NULL"`）。分区列必须在最后声明，且不能为 `NULL`。
+:::
 
-#### partition_desc
+##### partition_desc
 
-`partition_desc` 语法定义如下:
+`partition_desc` 的语法如下：
 
 ```SQL
 PARTITION BY (par_col1[, par_col2...])
 ```
 
-目前 StarRocks 仅支持 [Identity Transforms](https://iceberg.apache.org/spec/#partitioning)。 即，会为每个唯一的分区值创建一个分区。
+目前 StarRocks 仅支持 [identity transforms](https://iceberg.apache.org/spec/#partitioning)，这意味着 StarRocks 为每个唯一的分区值创建一个分区。
 
-> **注意**
->
-> 分区列必须在最后声明，支持除 FLOAT、DOUBLE、DECIMAL、DATETIME 以外的数据类型，不支持 `NULL` 值。
+:::note
 
-#### PROPERTIES
+分区列必须在非分区列之后定义。分区列支持所有数据类型，除 FLOAT、DOUBLE、DECIMAL 和 DATETIME 外，并且不能使用 `NULL` 作为默认值。
 
-可以在 `PROPERTIES` 中通过 `"key" = "value"` 的形式声明 Iceberg 表的属性。具体请参见 [Iceberg 表属性](https://iceberg.apache.org/docs/latest/configuration/)。
+:::
 
-以下为常见的几个 Iceberg 表属性：
+##### PROPERTIES
 
-| **属性**          | **描述**                                                     |
-| ----------------- | ------------------------------------------------------------ |
-| location          | Iceberg 表所在的文件路径。使用 HMS 作为元数据服务时，您无需指定 `location` 参数。使用 AWS Glue 作为元数据服务时：<ul><li>如果在创建当前数据库时指定了 `location` 参数，那么在当前数据库下建表时不需要再指定 `location` 参数，StarRocks 默认把表建在当前数据库所在的文件路径下。</li><li>如果在创建当前数据库时没有指定 `location` 参数，那么在当前数据库建表时必须指定 `location` 参数。</li></ul> |
-| file_format       | Iceberg 表的文件格式。当前仅支持 Parquet 格式。默认值：`parquet`。 |
-| compression_codec | Iceberg 表的压缩格式。当前支持 SNAPPY、GZIP、ZSTD 和 LZ4。默认值：`gzip`。该属性自 3.2.3 版本起弃用，此后写入 Iceberg 表时的压缩算法统一由会话变量 [connector_sink_compression_codec](../../../sql-reference/System_variable.md#connector_sink_compression_codec) 控制。 |
+您可以在 `PROPERTIES` 中以 `"key" = "value"` 格式指定表属性。请参见 [Iceberg 表属性](https://iceberg.apache.org/docs/latest/configuration/)。
+
+下表描述了一些关键属性。
+
+###### location
+
+描述：您要在其中创建 Iceberg 表的文件路径。当您使用 HMS 作为元存储时，无需指定 `location` 参数，因为 StarRocks 会在当前 Iceberg catalog 的默认文件路径中创建表。当您使用 AWS Glue 作为元存储时：
+
+- 如果您已为要在其中创建表的数据库指定了 `location` 参数，则无需为表指定 `location` 参数。因此，表默认为其所属数据库的文件路径。
+- 如果您未为要在其中创建表的数据库指定 `location`，则必须为表指定 `location` 参数。
+
+###### file_format
+
+描述：Iceberg 表的文件格式。仅支持 Parquet 格式。默认值：`parquet`。
+
+###### compression_codec
+
+描述：Iceberg 表使用的压缩算法。支持的压缩算法有 SNAPPY、GZIP、ZSTD 和 LZ4。默认值：`gzip`。此属性在 v3.2.3 中已弃用，从该版本开始，导入数据到 Iceberg 表时使用的压缩算法由会话变量 [connector_sink_compression_codec](../../../sql-reference/System_variable.md#connector_sink_compression_codec) 统一控制。
+
+---
 
 ### 示例
 
-1. 创建非分区表 `unpartition_tbl`，包含 `id` 和 `score` 两列，如下所示：
+1. 创建一个名为 `unpartition_tbl` 的非分区表。该表由两列 `id` 和 `score` 组成，如下所示：
 
    ```SQL
    CREATE TABLE unpartition_tbl
@@ -1088,7 +1344,7 @@ PARTITION BY (par_col1[, par_col2...])
    );
    ```
 
-2. 创建分区表 `partition_tbl_1`，包含 `action`、`id`、`dt` 三列，并定义 `id` 和 `dt` 为分区列，如下所示：
+2. 创建一个名为 `partition_tbl_1` 的分区表。该表由三列 `action`、`id` 和 `dt` 组成，其中 `id` 和 `dt` 被定义为分区列，如下所示：
 
    ```SQL
    CREATE TABLE partition_tbl_1
@@ -1100,56 +1356,74 @@ PARTITION BY (par_col1[, par_col2...])
    PARTITION BY (id,dt);
    ```
 
-3. 查询原表 `partition_tbl_1` 的数据，并根据查询结果创建分区表 `partition_tbl_2`，定义 `id` 和 `dt` 为 `partition_tbl_2` 的分区列：
+3. 查询一个名为 `partition_tbl_1` 的现有表，并根据 `partition_tbl_1` 的查询结果创建一个名为 `partition_tbl_2` 的分区表。对于 `partition_tbl_2`，`id` 和 `dt` 被定义为分区列，如下所示：
 
    ```SQL
    CREATE TABLE partition_tbl_2
    PARTITION BY (id, dt)
-   AS SELECT * from partition_tbl_1;
+   AS SELECT * from employee;
    ```
 
-## 向 Iceberg 表中插入数据
+---
 
-同 StarRocks 内表一致，如果您拥有 Iceberg 表的 [INSERT](../../../administration/user_privs/authorization/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) 将 StarRocks 表数据写入到该 Iceberg 表中（当前仅支持写入到 Parquet 格式的 Iceberg 表）。本功能自 3.1 版本起开始支持。
+### 将数据下沉到 Iceberg 表
 
-> **说明**
->
-> 您可以通过 [GRANT](../../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+与 StarRocks 的内部表类似，如果您在 Iceberg 表上具有 [INSERT](../../../administration/user_privs/authorization/privilege_item.md#table) 权限，您可以使用 [INSERT](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) 语句将 StarRocks 表的数据下沉到该 Iceberg 表（目前仅支持 Parquet 格式的 Iceberg 表）。此功能从 v3.1 开始支持。
 
-[切换至目标 Iceberg Catalog 和数据库](#切换-iceberg-catalog-和数据库)，然后通过如下语法将 StarRocks 表数据写入到 Parquet 格式的 Iceberg 表中：
+[切换到 Iceberg catalog 及其中的数据库](#switch-to-an-iceberg-catalog-and-a-database-in-it)，然后使用以下语法将 StarRocks 表的数据下沉到该数据库中的 Parquet 格式的 Iceberg 表。
 
-### 语法
+#### 语法
 
 ```SQL
 INSERT {INTO | OVERWRITE} <table_name>
 [ (column_name [, ...]) ]
 { VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
 
--- 向指定分区写入数据。
+-- 如果要将数据下沉到指定的分区，请使用以下语法：
 INSERT {INTO | OVERWRITE} <table_name>
 PARTITION (par_col1=<value> [, par_col2=<value>...])
 { VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
 ```
 
-> **注意**
->
-> 分区列不允许为 `NULL`，因此导入时需要保证分区列有值。
+:::note
 
-### 参数说明
+分区列不允许 `NULL` 值。因此，您必须确保没有空值被加载到 Iceberg 表的分区列中。
 
-| 参数         | 说明                                                         |
-| ----------- | ------------------------------------------------------------ |
-| INTO        | 将数据追加写入目标表。                                       |
-| OVERWRITE   | 将数据覆盖写入目标表。                                       |
-| column_name | 导入的目标列。可以指定一个或多个列。指定多个列时，必须用逗号 (`,`) 分隔。指定的列必须是目标表中存在的列，并且必须包含分区列。该参数可以与源表中的列名称不同，但顺序需一一对应。如果不指定该参数，则默认导入数据到目标表中的所有列。如果源表中的某个非分区列在目标列不存在，则写入默认值 `NULL`。如果查询语句的结果列类型与目标列的类型不一致，会进行隐式转化，如果不能进行转化，那么 INSERT INTO 语句会报语法解析错误。 |
-| expression  | 表达式，用以为对应列赋值。                                   |
-| DEFAULT     | 为对应列赋予默认值。                                         |
-| query       | 查询语句，查询的结果会导入至目标表中。查询语句支持任意 StarRocks 支持的 SQL 查询语法。 |
-| PARTITION   | 导入的目标分区。需要指定目标表的所有分区列，指定的分区列的顺序可以与建表时定义的分区列的顺序不一致。指定分区时，不允许通过列名 (`column_name`) 指定导入的目标列。 |
+:::
 
-### 示例
+#### 参数
 
-1. 向表 `partition_tbl_1` 中插入如下三行数据：
+##### INTO
+
+将 StarRocks 表的数据追加到 Iceberg 表中。
+
+##### OVERWRITE
+
+用 StarRocks 表的数据覆盖 Iceberg 表的现有数据。
+
+##### column_name
+
+要加载数据的目标列的名称。您可以指定一个或多个列。如果指定多个列，请用逗号（`,`）分隔。您只能指定 Iceberg 表中实际存在的列，并且您指定的目标列必须包括 Iceberg 表的分区列。无论目标列名称是什么，您指定的目标列按顺序与 StarRocks 表的列一一对应。如果未指定目标列，数据将加载到 Iceberg 表的所有列中。如果 StarRocks 表的非分区列无法映射到 Iceberg 表的任何列，StarRocks 会将默认值 `NULL` 写入 Iceberg 表列。如果 INSERT 语句包含的查询语句返回的列类型与目标列的数据类型不匹配，StarRocks 会对不匹配的列进行隐式转换。如果转换失败，将返回语法解析错误。
+
+##### expression
+
+为目标列分配值的表达式。
+
+##### DEFAULT
+
+为目标列分配默认值。
+
+##### query
+
+其结果将加载到 Iceberg 表中的查询语句。它可以是 StarRocks 支持的任何 SQL 语句。
+
+##### PARTITION
+
+要加载数据的分区。您必须在此属性中指定 Iceberg 表的所有分区列。您在此属性中指定的分区列可以与您在表创建语句中定义的分区列顺序不同。如果指定此属性，则不能指定 `column_name` 属性。
+
+#### 示例
+
+1. 向 `partition_tbl_1` 表中插入三行数据：
 
    ```SQL
    INSERT INTO partition_tbl_1
@@ -1159,13 +1433,13 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
        ("buy", 3, "2023-09-03");
    ```
 
-2. 向表 `partition_tbl_1` 按指定列顺序插入一个包含简单计算的 SELECT 查询的结果数据：
+2. 将包含简单计算的 SELECT 查询结果插入到 `partition_tbl_1` 表中：
 
    ```SQL
    INSERT INTO partition_tbl_1 (id, action, dt) SELECT 1+1, 'buy', '2023-09-03';
    ```
 
-3. 向表 `partition_tbl_1` 中插入一个从其自身读取数据的 SELECT 查询的结果数据：
+3. 将从 `partition_tbl_1` 表中读取数据的 SELECT 查询结果插入到同一表中：
 
    ```SQL
    INSERT INTO partition_tbl_1 SELECT 'buy', 1, date_add(dt, INTERVAL 2 DAY)
@@ -1173,95 +1447,133 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
    WHERE id=1;
    ```
 
-4. 向表 `partition_tbl_2` 中 `dt='2023-09-01'`、`id=1` 的分区插入一个 SELECT 查询的结果数据：
+4. 将 SELECT 查询结果插入到满足两个条件 `dt='2023-09-01'` 和 `id=1` 的 `partition_tbl_2` 表的分区中：
 
    ```SQL
    INSERT INTO partition_tbl_2 SELECT 'order', 1, '2023-09-01';
    ```
 
-   Or
+   或
 
    ```SQL
    INSERT INTO partition_tbl_2 partition(dt='2023-09-01',id=1) SELECT 'order';
    ```
 
-5. 将表 `partition_tbl_1` 中 `dt='2023-09-01'`、`id=1` 的分区下所有 `action` 列值全部覆盖为 `close`：
+5. 将 `partition_tbl_1` 表中满足两个条件 `dt='2023-09-01'` 和 `id=1` 的分区中的所有 `action` 列值覆盖为 `close`：
 
    ```SQL
    INSERT OVERWRITE partition_tbl_1 SELECT 'close', 1, '2023-09-01';
    ```
 
-   Or
+   或
 
    ```SQL
    INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
    ```
 
-## 删除 Iceberg 表
+---
 
-同 StarRocks 内表一致，在拥有 Iceberg 表的 [DROP](../../../administration/user_privs/authorization/privilege_item.md#表权限-table) 权限的情况下，您可以使用 [DROP TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) 来删除该 Iceberg 表。本功能自 3.1 版本起开始支持。
+### 删除 Iceberg 表
 
-> **说明**
->
-> 您可以通过 [GRANT](../../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+与 StarRocks 的内部表类似，如果您在 Iceberg 表上具有 [DROP](../../../administration/user_privs/authorization/privilege_item.md#table) 权限，您可以使用 [DROP TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) 语句删除该 Iceberg 表。此功能从 v3.1 开始支持。
 
-删除表操作并不会将 HDFS 或对象存储上的对应文件路径和数据删除。
+当您删除 Iceberg 表时，表在您的 HDFS 集群或云存储上的文件路径和数据不会随表一起删除。
 
-强制删除表（增加 `FORCE` 关键字）会将 HDFS 或对象存储上的数据删除，但不会删除对应文件路径。
+当您强制删除 Iceberg 表（即在 DROP TABLE 语句中指定了 `FORCE` 关键字）时，表在您的 HDFS 集群或云存储上的数据将随表一起删除，但表的文件路径将保留。
 
-[切换至目标 Iceberg Catalog 和数据库](#切换-iceberg-catalog-和数据库)，然后通过如下语句删除 Iceberg 表：
+[切换到 Iceberg catalog 及其中的数据库](#switch-to-an-iceberg-catalog-and-a-database-in-it)，然后使用以下语句在该数据库中删除 Iceberg 表。
 
 ```SQL
 DROP TABLE <table_name> [FORCE];
 ```
 
-## 配置元数据缓存及刷新策略
+---
 
-Iceberg 的元数据文件可能存储在 AWS S3 或 HDFS 上。StarRocks 默认在内存中缓存 Iceberg 元数据。为了加速查询，StarRocks 提供了基于内存和磁盘的元数据两级缓存机制，在初次查询时触发缓存，在后续查询中会优先使用缓存。如果缓存中无对应元数据，则会直接访问远端存储。
+### 配置元数据缓存
 
-StarRocks 采用 Least Recently Used (LRU) 策略来缓存和淘汰数据，基本原则如下：
+您的 Iceberg 集群的元数据文件可能存储在远端存储中，例如 AWS S3 或 HDFS。默认情况下，StarRocks 将 Iceberg 元数据缓存到内存中。为了加速查询，StarRocks 采用了两级元数据缓存机制，可以在内存和磁盘上缓存元数据。对于每个初始查询，StarRocks 缓存其计算结果。如果发出与先前查询语义等效的任何后续查询，StarRocks 首先尝试从其缓存中检索请求的元数据，只有在缓存中未命中元数据时才从远端存储中检索元数据。
 
-- 优先从内存读取元数据。如果在内存中没有找到，才会从磁盘上读取。从磁盘上读取的元数据，会被加载到内存中。如果没有命中磁盘上的缓存，则会从远端存储拉取元数据，并在内存中缓存。
-- 从内存中淘汰的元数据，会写入磁盘；从磁盘上淘汰的元数据，会被废弃。
+StarRocks 使用最近最少使用（LRU）算法来缓存和驱逐数据。基本规则如下：
 
-您可以通过以下 FE 配置项来设置 Iceberg 元数据缓存方式：
+- StarRocks 首先尝试从内存中检索请求的元数据。如果内存中未命中元数据，StarRocks 尝试从磁盘中检索元数据。从磁盘中检索到的元数据将加载到内存中。如果磁盘中也未命中元数据，StarRocks 从远端存储中检索元数据并将其缓存到内存中。
+- StarRocks 将从内存中驱逐的元数据写入磁盘，但直接丢弃从磁盘中驱逐的元数据。
 
-| **配置项**                                       | **单位** | **默认值**                                           | **含义**                                                     |
-| ------------------------------------------------ | -------- | ---------------------------------------------------- | ------------------------------------------------------------ |
-| enable_iceberg_metadata_disk_cache               | 无       | `false`                                              | 是否开启磁盘缓存。                                           |
-| iceberg_metadata_cache_disk_path                 | 无       | `StarRocksFE.STARROCKS_HOME_DIR + "/caches/iceberg"` | 磁盘缓存的元数据文件位置。                                   |
-| iceberg_metadata_disk_cache_capacity             | 字节     | `2147483648`，即 2 GB                                | 磁盘中缓存的元数据最大空间。                                 |
-| iceberg_metadata_memory_cache_capacity           | 字节     | `536870912`，即 512 MB                               | 内存中缓存的元数据最大空间。                                 |
-| iceberg_metadata_memory_cache_expiration_seconds | 秒       | `86500`                                              | 内存中的缓存自最后一次访问后的过期时间。                     |
-| iceberg_metadata_disk_cache_expiration_seconds   | 秒       | `604800`，即一周                                     | 磁盘中的缓存自最后一次访问后的过期时间。                     |
-| iceberg_metadata_cache_max_entry_size            | 字节     | `8388608`，即 8 MB                                   | 缓存的单个文件最大大小，以防止单个文件过大挤占其他文件空间。超过此大小的文件不会缓存，如果查询命中则会直接访问远端元数据文件。 |
+从 v3.3.3 开始，StarRocks 支持 [周期性元数据刷新策略](#appendix-periodic-metadata-refresh-strategy)。您可以使用系统变量 [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode) 调整 Iceberg 元数据缓存计划。
 
-自 v3.3.3 起，Iceberg Catalog 支持 [元数据周期性后台刷新方案](#附录元数据周期性后台刷新方案)。您可以通过系统变量 [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode) 调整 Iceberg Catalog 元数据检索方案。
+#### Iceberg 元数据缓存的 FE 配置
 
-您可以通过以下 FE 配置项来设置 Iceberg 元数据缓存刷新行为：
+##### enable_iceberg_metadata_disk_cache
 
-| **配置项**                                                    | **单位** | **默认值**                  | **含义**                                                    |
-| :----------------------------------------------------------- | :--- | :-------------------------- | :----------------------------------------------------------- |
-| enable_background_refresh_connector_metadata                 | 无   | true | 是否开启 Iceberg 元数据缓存周期性刷新。开启后，StarRocks 会轮询 Iceberg 集群的元数据服务（HMS 或 AWS Glue），并刷新经常访问的 Iceberg 外部数据目录的元数据缓存，以感知数据更新。`true` 代表开启，`false` 代表关闭。 |
-| background_refresh_metadata_interval_millis                  | 毫秒 | 600000（10 分钟）           | 接连两次 Iceberg 元数据缓存刷新之间的间隔。                     |
-| background_refresh_metadata_time_secs_since_last_access_sec  | 秒   | 86400（24 小时）            | Iceberg 元数据缓存刷新任务过期时间。对于已被访问过的 Iceberg Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Iceberg Catalog，StarRocks 不会刷新其元数据缓存。 |
+- 单位：N/A
+- 默认值：`false`
+- 描述：指定是否启用磁盘缓存。
 
-## 附录：元数据周期性后台刷新方案
+##### iceberg_metadata_cache_disk_path
 
-元数据周期性后台刷新方案是 StarRocks 用于加速检索 Iceberg Catalog 中元数据的策略。
+- 单位：N/A
+- 默认值：`StarRocksFE.STARROCKS_HOME_DIR + "/caches/iceberg"`
+- 描述：磁盘上缓存的元数据文件的保存路径。
 
-自 v3.3.3 起，StarRocks 优化了 Iceberg 元数据的缓存机制，针对不同元数据使用场景，分别设定了不同检索方案。
+##### iceberg_metadata_disk_cache_capacity
 
-- **针对大体量元数据的分布式方案**
+- 单位：字节
+- 默认值：`2147483648`，相当于 2 GB
+- 描述：磁盘上允许缓存的元数据的最大大小。
 
-  为了有效处理大体量元数据，StarRocks 通过多 BE/CN 节点实现分布式元数据检索方案。该方案利用现代查询引擎的并行计算能力，可以将读取、解压和过滤 Manifest 文件等任务分布在多个节点上。通过并行处理这些 Manifest 文件，可以显著减少元数据检索所需的时间，从而加快作业计划的速度。该方案对涉及大量 Manifest 文件的大型查询特别有利，因为可以消除单点瓶颈，提高整体查询执行效率。
+##### iceberg_metadata_memory_cache_capacity
 
-- **针对小体量元数据的本地方案**
+- 单位：字节
+- 默认值：`536870912`，相当于 512 MB
+- 描述：内存中允许缓存的元数据的最大大小。
 
-  对于小型查询，由于反复解压和解析 Manifest 文件会引入不必要的延迟，StarRocks 采用了一种不同的策略。StarRocks 会将反序列化后的内存对象（尤其是 Avro 文件）缓存下来，以应对延迟问题。通过将这些反序列化的文件缓存在内存中，系统可以在后续查询中跳过解压和解析阶段，直接访问所需的元数据。这种缓存机制显著减少了检索时间，使系统响应更快，更能满足高查询需求和物化视图改写的要求。
+##### iceberg_metadata_memory_cache_expiration_seconds
 
-- **自适应的元数据检索方案（默认）**
+- 单位：秒  
+- 默认值：`86500`
+- 描述：从上次访问开始，内存中缓存条目过期的时间。
 
-  默认设置下，StarRocks 可以根据各种因素自动选择合适的元数据检索方法，包括 FE/BE/CN 节点的数量、核心数以及当前查询所需读取的 Manifest 文件数量。这种自适应的方法确保系统可以动态优化元数据的检索，无需手动调整元数据相关的参数。通过该方案，StarRocks 能在不同条件下平衡分布式和本地方案，实现最佳的查询性能，为用户提供无缝体验。
+##### iceberg_metadata_disk_cache_expiration_seconds
 
-您可以通过系统变量 [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode) 调整 Iceberg Catalog 元数据检索方案。
+- 单位：秒  
+- 默认值：`604800`，相当于一周
+- 描述：从上次访问开始，磁盘上缓存条目过期的时间。
+
+##### iceberg_metadata_cache_max_entry_size
+
+- 单位：字节
+- 默认值：`8388608`，相当于 8 MB
+- 描述：可以缓存的文件的最大大小。超过此参数值的文件无法缓存。如果查询请求这些文件，StarRocks 将从远端存储中检索它们。
+
+##### enable_background_refresh_connector_metadata
+
+- 单位：-
+- 默认值：true
+- 描述：是否启用周期性 Iceberg 元数据缓存刷新。启用后，StarRocks 会轮询 Iceberg 集群的元存储（Hive Metastore 或 AWS Glue），并刷新频繁访问的 Iceberg catalog 的缓存元数据以感知数据更改。`true` 表示启用 Iceberg 元数据缓存刷新，`false` 表示禁用。
+
+##### background_refresh_metadata_interval_millis
+
+- 单位：毫秒
+- 默认值：600000
+- 描述：两次连续 Iceberg 元数据缓存刷新之间的间隔。
+
+##### background_refresh_metadata_time_secs_since_last_access_sec
+
+- 单位：秒
+- 默认值：86400
+- 描述：Iceberg 元数据缓存刷新任务的过期时间。对于已访问的 Iceberg catalog，如果超过指定时间未访问，StarRocks 将停止刷新其缓存元数据。对于未访问的 Iceberg catalog，StarRocks 将不刷新其缓存元数据。
+
+## 附录：周期性元数据刷新策略
+
+- **大规模元数据的分布式计划**
+
+  为了有效处理大规模元数据，StarRocks 使用多个 BE 和 CN 节点采用分布式方法。此方法利用现代查询引擎的并行计算能力，可以将读取、解压缩和过滤清单文件等任务分配到多个节点。通过并行处理这些清单文件，显著减少了元数据检索所需的时间，从而加快了作业计划。对于涉及大量清单文件的大型查询，这尤其有益，因为它消除了单点瓶颈并提高了整体查询执行效率。
+
+- **小规模元数据的本地计划**
+
+  对于较小的查询，其中清单文件的重复解压缩和解析可能会引入不必要的延迟，采用了不同的策略。StarRocks 缓存反序列化的内存对象，特别是 Avro 文件，以解决此问题。通过将这些反序列化的文件存储在内存中，系统可以绕过后续查询的解压缩和解析阶段。此缓存机制允许直接访问所需的元数据，显著减少了检索时间。因此，系统变得更加响应，并更适合满足高查询需求和物化视图重写需求。
+
+- **自适应元数据检索策略**（默认）
+
+  StarRocks 旨在根据各种因素自动选择适当的元数据检索方法，包括 FE 和 BE/CN 节点的数量、其 CPU 核心数以及当前查询所需的清单文件数量。此自适应方法确保系统动态优化元数据检索，而无需手动调整与元数据相关的参数。通过这样做，StarRocks 提供了无缝体验，在分布式和本地计划之间取得平衡，以在不同条件下实现最佳查询性能。
+
+您可以使用系统变量 [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode) 调整 Iceberg 元数据缓存计划。
