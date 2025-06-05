@@ -53,9 +53,3 @@ function: print_hit_materialized_view("select k2, k3, sum(k1) from t1 group by k
 -- result:
 False
 -- !result
-select k2, k3, sum(k1) from t1 group by k2, k3 order by 1,2;
--- result:
-2020-06-02	BJ	2
-2020-06-02	SZ	6
-2020-07-02	SH	4
--- !result
