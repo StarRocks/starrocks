@@ -887,7 +887,7 @@ public class PropertyAnalyzer {
     }
 
     public static Boolean analyzeFileBundling(Map<String, String> properties) throws AnalysisException {
-        boolean fileBundling = Config.lake_enable_file_bundling;
+        boolean fileBundling = Config.enable_file_bundling;
         if (properties != null && properties.containsKey(PROPERTIES_FILE_BUNDLING)) {
             fileBundling = Boolean.parseBoolean(properties.get(PROPERTIES_FILE_BUNDLING));
             properties.remove(PROPERTIES_FILE_BUNDLING);

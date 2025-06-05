@@ -479,7 +479,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
         // version -> shadowTablets
-        boolean useAggregatePublish = Config.lake_enable_file_bundling;
+        boolean useAggregatePublish = Config.enable_file_bundling;
         ComputeResource computeResource =  WarehouseManager.DEFAULT_RESOURCE;
         try {
             OlapTable table =
@@ -781,7 +781,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
-        boolean useAggregatePublish = Config.lake_enable_file_bundling;
+        boolean useAggregatePublish = Config.enable_file_bundling;
         try {
             OlapTable table =
                     (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
