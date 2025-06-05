@@ -102,7 +102,8 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     @SerializedName(value = "rowCount")
     private long rowCount;
 
-    // Virtual buckets. Each virtual bucket saves a tablet id.
+    // Virtual buckets. There is a tablet id for each virtual bucket,
+    // which means this virtual bucket's data is stored in this tablet.
     // We divide data into virtual buckets and then arrange these virtual buckets
     // into physical buckets, which are tablets.
     // Each virtual bucket is associated with a tablet. Multiple virtual buckets are

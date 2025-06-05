@@ -333,20 +333,22 @@ Status OlapTableSink::_init_node_channels(RuntimeState* state, IndexIdToTabletBE
         // collect all tablets belong to this rollup
         std::vector<PTabletWithPartition> tablets;
         auto* index = _schema->indexes()[i];
-        std::unordered_map<int64_t, std::vector<int64_t>> tablet_to_be;
+        auto& tablet_to_be = index_id_to_tablet_be_map[index->index_id];
         for (auto& [id, part] : partitions) {
-            for (auto tablet : part->indexes[i].tablets) {
-                PTabletWithPartition tablet_info;
-                tablet_info.set_tablet_id(tablet);
+            for (auto tablet_id : part->indexes[i].tablets) {
+                auto& tablet_info = tablets.emplace_back();
+                tablet_info.set_tablet_id(tablet_id);
                 tablet_info.set_partition_id(part->id);
 
                 // setup replicas
-                auto* location = _location->find_tablet(tablet);
+                auto* location = _location->find_tablet(tablet_id);
                 if (location == nullptr) {
-                    auto msg = fmt::format("Failed to find tablet {} location info", tablet);
+                    auto msg = fmt::format("Failed to find tablet_id {} location info", tablet_id);
                     return Status::NotFound(msg);
                 }
-                tablet_to_be.emplace(tablet, location->node_ids);
+                if (!tablet_to_be.emplace(tablet_id, location->node_ids).second) {
+                    return Status::InvalidArgument(fmt::format("Duplicated tablet_id: {}", tablet_id));
+                }
 
                 auto node_ids_size = location->node_ids.size();
                 for (size_t i = 0; i < node_ids_size; ++i) {
@@ -380,11 +382,8 @@ Status OlapTableSink::_init_node_channels(RuntimeState* state, IndexIdToTabletBE
                         }
                     }
                 }
-
-                tablets.emplace_back(std::move(tablet_info));
             }
         }
-        index_id_to_tablet_be_map.emplace(index->index_id, std::move(tablet_to_be));
 
         auto channel = std::make_unique<IndexChannel>(this, index->index_id, index->where_clause);
         RETURN_IF_ERROR(channel->init(state, tablets, false));
@@ -535,18 +534,22 @@ Status OlapTableSink::_incremental_open_node_channel(const std::vector<TOlapTabl
     IndexIdToTabletBEMap index_tablet_bes_map;
     for (auto& t_part : partitions) {
         for (auto& index : t_part.indexes) {
-            std::vector<PTabletWithPartition> tablets;
+            auto& tablets = index_tablets_map[index.index_id];
+            auto& tablet_to_be = index_tablet_bes_map[index.index_id];
             // setup new partitions's tablets
-            for (auto tablet : index.tablets) {
-                PTabletWithPartition tablet_info;
-                tablet_info.set_tablet_id(tablet);
+            for (auto tablet_id : index.tablets) {
+                auto& tablet_info = tablets.emplace_back();
+                tablet_info.set_tablet_id(tablet_id);
                 // TODO: support logical materialized views;
                 tablet_info.set_partition_id(t_part.id);
 
-                auto* location = _location->find_tablet(tablet);
+                auto* location = _location->find_tablet(tablet_id);
                 if (location == nullptr) {
-                    auto msg = fmt::format("Failed to find tablet {} location info in incremental open", tablet);
+                    auto msg = fmt::format("Failed to find tablet_id {} location info in incremental open", tablet_id);
                     return Status::NotFound(msg);
+                }
+                if (!tablet_to_be.emplace(tablet_id, location->node_ids).second) {
+                    return Status::InvalidArgument(fmt::format("Duplicated tablet_id: {}", tablet_id));
                 }
 
                 for (auto& node_id : location->node_ids) {
@@ -558,11 +561,7 @@ Status OlapTableSink::_incremental_open_node_channel(const std::vector<TOlapTabl
                     replica->set_host(node_info->host);
                     replica->set_port(node_info->brpc_port);
                     replica->set_node_id(node_id);
-
-                    index_tablet_bes_map[index.index_id][tablet].emplace_back(node_id);
                 }
-
-                index_tablets_map[index.index_id].emplace_back(std::move(tablet_info));
             }
         }
     }
