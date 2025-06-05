@@ -17,7 +17,7 @@ package com.starrocks.authorization;
 import com.starrocks.analysis.TableName;
 import com.starrocks.qe.ConnectContext;
 
-public class AllowAllHiveAccessController extends ExternalAccessController {
+public class AllowAllAccessController extends ExternalAccessController {
     @Override
     public void checkDbAction(ConnectContext context, String catalogName, String db, PrivilegeType privilegeType) {
         // Allow all DB actions

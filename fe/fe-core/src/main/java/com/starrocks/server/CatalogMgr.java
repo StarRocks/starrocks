@@ -20,7 +20,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.authorization.AllowAllHiveAccessController;
+import com.starrocks.authorization.AllowAllAccessController;
 import com.starrocks.authorization.NativeAccessController;
 import com.starrocks.authorization.ranger.hive.RangerHiveAccessController;
 import com.starrocks.authorization.ranger.starrocks.RangerStarRocksAccessController;
@@ -124,7 +124,7 @@ public class CatalogMgr {
                     if (accessControl.equals("ranger")) {
                         Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
                     } else if (accessControl.equals("allowall")) {
-                        Authorizer.getInstance().setAccessControl(catalogName, new AllowAllHiveAccessController());
+                        Authorizer.getInstance().setAccessControl(catalogName, new AllowAllAccessController());
                     } else {
                         Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
                     }
@@ -198,7 +198,7 @@ public class CatalogMgr {
                     if ("ranger".equals(accessControl)) {
                         Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
                     } else if ("allowall".equals(accessControl)) {
-                        Authorizer.getInstance().setAccessControl(catalogName, new AllowAllHiveAccessController());
+                        Authorizer.getInstance().setAccessControl(catalogName, new AllowAllAccessController());
                     } else {
                         Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
                     }
@@ -361,7 +361,7 @@ public class CatalogMgr {
                 if (accessControl.equals("ranger")) {
                     Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
                 } else if (accessControl.equals("allowall")) {
-                    Authorizer.getInstance().setAccessControl(catalogName, new AllowAllHiveAccessController());
+                    Authorizer.getInstance().setAccessControl(catalogName, new AllowAllAccessController());
                 } else {
                     Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
                 }
