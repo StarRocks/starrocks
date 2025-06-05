@@ -1,0 +1,43 @@
+-- name: test_partitions_scan_statistics
+create database test_partitions_scan_db;
+
+CREATE TABLE test_partitions_scan_db.test_partitions_scan_tab (
+  `a` varchar(65533),
+  `b` varchar(65533),
+  `dt` date
+) ENGINE=OLAP
+DUPLICATE KEY(`a`)
+PARTITION BY (`dt`)
+DISTRIBUTED BY HASH(`a`)
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+insert into test_partitions_scan_db.test_partitions_scan_tab(a,b,dt) values('1','1','2025-06-01'),('2','2','2025-06-02'),('3','3','2025-06-03');
+
+set global enable_partitions_scan=true;
+set global partitions_scan_load_interval_seconds=0;
+
+select count(*) from test_partitions_scan_db.test_partitions_scan_tab;
+
+select sleep(2);
+
+select count(*) from _statistics_.partitions_scan where db_name='test_partitions_scan_db' and table_name='test_partitions_scan_tab';
+
+select sum(scan_count) from _statistics_.partitions_scan where db_name='test_partitions_scan_db' and table_name='test_partitions_scan_tab';
+
+
+select count(*) from test_partitions_scan_db.test_partitions_scan_tab;
+
+select sleep(2);
+
+select count(*) from _statistics_.partitions_scan where db_name='test_partitions_scan_db' and table_name='test_partitions_scan_tab';
+
+select sum(scan_count) from _statistics_.partitions_scan where db_name='test_partitions_scan_db' and table_name='test_partitions_scan_tab';
+
+set global enable_partitions_scan=false;
+set global partitions_scan_load_interval_seconds=300;
