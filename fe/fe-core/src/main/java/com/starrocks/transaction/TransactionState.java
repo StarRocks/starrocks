@@ -307,10 +307,6 @@ public class TransactionState implements Writable {
 
     private Span txnSpan = null;
     private String traceParent = null;
-<<<<<<< HEAD
-    private Set<TabletCommitInfo> tabletCommitInfos = null;
-=======
->>>>>>> 21acb8e40e ([BugFix] Fix query version not found error (#59194))
 
     // For a transaction, we need to ensure that different clients obtain consistent partition information,
     // to avoid inconsistencies caused by replica migration and other operations during the transaction process.
@@ -385,45 +381,8 @@ public class TransactionState implements Writable {
         this.traceParent = TraceManager.toTraceParent(txnSpan.getSpanContext());
     }
 
-<<<<<<< HEAD
     public void setCallbackId(long callbackId) {
         this.callbackId = callbackId;
-=======
-    public TransactionState(long transactionId,
-                            String label,
-                            TUniqueId requestId,
-                            LoadJobSourceType sourceType,
-                            TxnCoordinator txnCoordinator,
-                            long timeoutMs) {
-        this.tableIdList = Lists.newArrayList();
-        this.transactionId = transactionId;
-        this.label = label;
-        this.requestId = requestId;
-        this.idToTableCommitInfos = Maps.newHashMap();
-        this.txnCoordinator = txnCoordinator;
-        this.transactionStatus = TransactionStatus.PREPARE;
-        this.sourceType = sourceType;
-        this.prepareTime = -1;
-        this.commitTime = -1;
-        this.finishTime = -1;
-        this.reason = "";
-        this.errorReplicas = Sets.newHashSet();
-        this.unknownReplicas = Sets.newHashSet();
-        this.publishVersionTasks = Maps.newHashMap();
-        this.hasSendTask = false;
-        this.latch = new CountDownLatch(1);
-        this.callbackIdList = Lists.newArrayList();
-
-        this.timeoutMs = timeoutMs;
-        this.txnSpan = TraceManager.startSpan("txn");
-        txnSpan.setAttribute("txn_id", transactionId);
-        txnSpan.setAttribute("label", label);
-        this.traceParent = TraceManager.toTraceParent(txnSpan.getSpanContext());
-    }
-
-    public void addCallbackId(long callbackId) {
-        this.callbackIdList.add(callbackId);
->>>>>>> 21acb8e40e ([BugFix] Fix query version not found error (#59194))
     }
 
     public void setErrorReplicas(Set<Long> newErrorReplicas) {
@@ -448,14 +407,10 @@ public class TransactionState implements Writable {
         this.tabletCommitInfos.addAll(infos);
     }
 
-<<<<<<< HEAD
-
-=======
     // Not skip check replica version
     // 1. replica state is not normal and clone
     // 2. replica is in tabletCommitInfos in leader (or not in errorReplicas and unknownReplicas in follower)
     // 3. replica current version >= commit version
->>>>>>> 21acb8e40e ([BugFix] Fix query version not found error (#59194))
     public boolean checkReplicaNeedSkip(Tablet tablet, Replica replica, PartitionCommitInfo partitionCommitInfo) {
         ReplicaState state = replica.getState();
         if (state != ReplicaState.NORMAL && state != ReplicaState.CLONE) {
