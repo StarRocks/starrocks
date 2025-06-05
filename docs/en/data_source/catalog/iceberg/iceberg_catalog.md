@@ -374,6 +374,8 @@ PROPERTIES
     "iceberg.catalog.warehouse" = "<r2_warehouse_name>"
 );
 
+SET CATALOG r2;
+
 CREATE DATABASE testdb;
 
 SHOW DATABASES FROM r2;
