@@ -40,7 +40,7 @@ select count(*) from _statistics_.partitions_scan where db_name='test_partitions
 -- result:
 3
 -- !result
-select sum(scan_count) from _statistics_.partitions_scan where db_name='test_partitions_scan_db' and table_name='test_partitions_scan_tab';
+select cast(sum(scan_count) as int) from _statistics_.partitions_scan where db_name='test_partitions_scan_db' and table_name='test_partitions_scan_tab';
 -- result:
 3
 -- !result
@@ -56,7 +56,7 @@ select count(*) from _statistics_.partitions_scan where db_name='test_partitions
 -- result:
 3
 -- !result
-select sum(scan_count) from _statistics_.partitions_scan where db_name='test_partitions_scan_db' and table_name='test_partitions_scan_tab';
+select cast(sum(scan_count) as int) from _statistics_.partitions_scan where db_name='test_partitions_scan_db' and table_name='test_partitions_scan_tab';
 -- result:
 6
 -- !result
