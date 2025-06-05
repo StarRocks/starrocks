@@ -1181,6 +1181,23 @@ public class DatabaseTransactionMgr {
                                     transactionState.setErrorMsg(errMsg);
                                     hasError = true;
                                 }
+
+                                // collect unknown replicas
+                                long tabletId = tablet.getId();
+                                for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                                    long replicaId = replica.getId();
+                                    long backendId = replica.getBackendId();
+
+                                    if (errorReplicaIds.contains(replicaId)) {
+                                        continue;
+                                    }
+
+                                    if (transactionState.tabletCommitInfosContainsReplica(tabletId, backendId, replicaId)) {
+                                        continue;
+                                    }
+
+                                    transactionState.addUnknownReplica(replicaId);
+                                }
                             }
                         }
                     }
