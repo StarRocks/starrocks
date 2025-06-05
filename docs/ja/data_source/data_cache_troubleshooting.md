@@ -54,7 +54,7 @@ ClusterDecommissioned: false
 
 - BE Web コンソール (`http://${BE_HOST}:${BE_HTTP_PORT}/api/datacache/stat`) にアクセスして、現在の Data Cache クォータ、ヒット率、およびその他のメトリクスを確認できます。`disk_quota_bytes` または `mem_quota_bytes` が 0 より大きい場合、Data Cache が有効化されていることを確認できます。
 
-![Data Cache FAQ - Web Console](../assets/images/data_cache_be_web_console.png)
+![Data Cache FAQ - Web Console](../_assets/data_cache_be_web_console.png)
 
 ### なぜ Data Cache はデフォルトで有効化されていないのですか？
 
