@@ -83,6 +83,6 @@ private:
     std::unordered_set<int64_t> _versions;
     std::unordered_set<std::string> _files;
     std::unordered_set<uint32_t> _rowset_ids;
-}
+};
 
 } // namespace starrocks::lake

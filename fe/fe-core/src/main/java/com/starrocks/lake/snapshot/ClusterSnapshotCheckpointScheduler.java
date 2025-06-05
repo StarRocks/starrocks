@@ -14,7 +14,6 @@
 
 package com.starrocks.lake.snapshot;
 
-import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.FrontendDaemon;
@@ -138,7 +137,8 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
                     job.getFeJournalId(), job.getStarMgrJournalId());
         } while (false);
 
-        if (!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isAutomatedSnapshotOn()) {
+        if (!job.needClusterSnapshotInfo() &&
+                !GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isAutomatedSnapshotOn()) {
             errMsg = "Job: " + job.getSnapshotName()
                     + " has been cancelled because automated cluster snapshot has been turn off";
         }
