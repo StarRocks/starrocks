@@ -36,7 +36,7 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
 
     private boolean firstRun;
 
-    private ClusterSnapshotJob runningJob;
+    private volatile ClusterSnapshotJob runningJob;
 
     public ClusterSnapshotCheckpointScheduler(CheckpointController feController,
             CheckpointController starMgrController) {
