@@ -197,7 +197,7 @@ public class LocalWarehouse extends Warehouse {
             // NOTE: NOT IMPLEMENTED, so the cnGroupName must be empty!
             ErrorReport.reportDdlException(ErrorCode.ERR_CNGROUP_NOT_IMPLEMENTED);
         }
-        node.setWorkerGroupId(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+        node.setWorkerGroupId(getAnyWorkerGroupId());
         node.setWarehouseId(getId());
     }
 
