@@ -768,6 +768,10 @@ public class StarOSAgent {
                 long nodeId = entry.getValue();
                 long workerId = entry.getKey();
                 ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
+                if (node == null) {
+                    iterator.remove();
+                    continue;
+                }
                 if (node.getWorkerGroupId() == workerGroupId) {
                     iterator.remove();
                     workerToId.entrySet().removeIf(e -> e.getValue() == workerId);
@@ -817,6 +821,17 @@ public class StarOSAgent {
         updateWorkerGroup(workerGroupId, replicaNumber, replicationType, WarmupLevel.WARMUP_NOT_SET);
     }
 
+    public void updateWorkerGroup(long workerGroupId, Map<String, String> properties) throws DdlException {
+        prepare();
+        try {
+            client.updateWorkerGroup(serviceId, workerGroupId, null, properties, 0, ReplicationType.NO_SET,
+                    WarmupLevel.WARMUP_NOT_SET);
+        } catch (StarClientException e) {
+            LOG.warn("Failed to update worker group properties. error: {}", e.getMessage());
+            throw new DdlException("Failed to update worker group. error: " + e.getMessage());
+        }
+    }
+
     public void updateWorkerGroup(long workerGroupId, int replicaNumber, ReplicationType replicationType,
                                   WarmupLevel warmupLevel) throws DdlException {
         prepare();
@@ -825,6 +840,19 @@ public class StarOSAgent {
         } catch (StarClientException e) {
             LOG.warn("Failed to update worker group. error: {}", e.getMessage());
             throw new DdlException("Failed to update worker group. error: " + e.getMessage());
+        }
+    }
+
+    public WorkerGroupDetailInfo getWorkerGroupInfo(long workerGroupId) throws DdlException {
+        prepare();
+        try {
+            List<WorkerGroupDetailInfo> info =
+                    client.listWorkerGroup(serviceId, Lists.newArrayList(workerGroupId), false);
+            return info.get(0);
+        } catch (StarClientException e) {
+            String errMsg = "Failed to get worker group info (id=" + workerGroupId + "). error: " + e.getMessage();
+            LOG.warn(errMsg);
+            throw new DdlException(errMsg);
         }
     }
 
