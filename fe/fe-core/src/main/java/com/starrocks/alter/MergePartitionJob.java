@@ -656,6 +656,7 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
                             + "source partitions:{}, target partition:{}",
                             jobId, dbId, tableId, sourcePartitionNames, tmpPartitionName);
                     targetTable.replaceTempPartitions(
+                            db.getId(),
                             new ArrayList<>(sourcePartitionNames), 
                             Collections.singletonList(tmpPartitionName), 
                             false, true);
