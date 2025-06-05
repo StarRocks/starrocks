@@ -36,14 +36,9 @@ SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
 | ------------------------ | ------------------------------------------------------------ |
 | PartitionId              | パーティションのIDです。                                      |
 | PartitionName            | パーティションの名前です。                                    |
-<<<<<<< HEAD
-| VisibleVersion           | 最後に成功したロードトランザクションのバージョン番号です。バージョン番号は、成功したロードトランザクションごとに1ずつ増加します。 |
-| VisibleVersionTime       | 最後に成功したロードトランザクションのタイムスタンプです。    |
-=======
 | VisibleVersion           | 最後に成功したロードトランザクションのバージョン番号です。成功するたびにバージョン番号は1ずつ増加します。 |
 | CompactVersion           | 最後に成功した Compaction のバージョン番号です。        |
 | VisibleVersionTime       | 最後に成功したロードトランザクションのタイムスタンプです。   |
->>>>>>> bfed5bc774 ([Doc] Details for SHOW PARTITION, SHOW TABLET, and SHOW PROC (#59555))
 | VisibleVersionHash       | 最後に成功したロードトランザクションのバージョン番号のハッシュ値です。 |
 | State                    | パーティションのステータスです。固定値: `Normal`。            |
 | PartitionKey             | 1つ以上のパーティション列からなるパーティションキーです。     |
