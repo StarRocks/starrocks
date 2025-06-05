@@ -405,7 +405,7 @@ public class MaterializedViewAnalyzer {
                 // check partition column must be base table's partition column
                 checkPartitionColumnWithBaseTable(statement, changedPartitionByExprs, aliasTableMap);
                 // check window function can be used in partitioned mv
-                checkWindowFunctions(statement, columnExprMap);
+                checkWindowFunctions(statement);
                 // determine mv partition 's type: list or range
                 checkMVPartitionInfoType(statement, aliasTableMap);
                 // deduce generate partition infos for list partition expressions
@@ -1301,7 +1301,7 @@ public class MaterializedViewAnalyzer {
         // if mv is partitioned, mv will be refreshed by partition.
         // if mv has window functions, it should also be partitioned by and the partition by columns
         // should contain the partition column of mv
-        private void checkWindowFunctions(CreateMaterializedViewStatement statement, Map<Column, Expr> columnExprMap) {
+        private void checkWindowFunctions(CreateMaterializedViewStatement statement) {
             List<Expr> refTablePartitionExprs = statement.getPartitionRefTableExpr();
             if (CollectionUtils.isEmpty(refTablePartitionExprs)) {
                 return;
