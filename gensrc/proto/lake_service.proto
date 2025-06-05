@@ -297,6 +297,8 @@ message VacuumRequest {
     repeated TabletInfoPB tablet_infos = 7;
     // Whether enable file bundling
     optional bool enable_file_bundling = 8;
+    // retain versions info
+    repeated int64 retain_versions = 9;
 }
 
 message VacuumResponse {

@@ -127,6 +127,19 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         }
     }
 
+    public ClusterSnapshotJob getNextClusterSnapshotJob() {
+        if (!isAutomatedSnapshotOn()) {
+            return null;
+        }
+
+        try {
+            Thread.sleep(Config.automated_cluster_snapshot_interval_seconds * 1000L);
+        } catch (InterruptedException e) {
+            LOG.error("InterruptedException: ", e);
+        }
+        return createAutomatedSnapshotJob();
+    }
+
     public ClusterSnapshotJob createAutomatedSnapshotJob() {
         long createTimeMs = System.currentTimeMillis();
         long id = GlobalStateMgr.getCurrentState().getNextId();
@@ -226,6 +239,9 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     }
 
     public void resetSnapshotJobsStateAfterRestarted(RestoredSnapshotInfo restoredSnapshotInfo) {
+        if (!isAutomatedSnapshotOn()) {
+            return;
+        }
         setLastJobFinishedAfterRestored(restoredSnapshotInfo);
         resetLastUnFinishedAutomatedSnapshotJob();
         clearFinishedAutomatedClusterSnapshotExceptLast();
@@ -299,6 +315,27 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         for (Long removeId : removeIds) {
             automatedSnapshotJobs.remove(removeId);
         }
+    }
+
+    public boolean isDbInClusterSnapshotInfo(long dbId) {
+        return false;
+    }
+
+    public boolean isTableInClusterSnapshotInfo(long dbId, long tableId) {
+        return false;
+    }
+
+    public boolean isPartitionInClusterSnapshotInfo(long dbId, long tableId, long partId) {
+        return false;
+    }
+
+    public boolean isMaterializedIndexInClusterSnapshotInfo(long dbId, long tableId, long partId, long indexId) {
+        return false;
+    }
+
+    public boolean isMaterializedIndexInClusterSnapshotInfo(
+                   long dbId, long tableId, long partId, long physicalPartId, long indexId) {
+        return false;
     }
 
     public void start() {
