@@ -257,9 +257,9 @@ public class LakeTableHelper {
                 sourceType == TransactionState.LoadJobSourceType.BATCH_LOAD_JOB;
     }
 
-    // if one of the tables in tableIdList is LakeTable with partition aggregation, return true
+    // if one of the tables in tableIdList is LakeTable with file bundling, return true
     // else return false
-    public static boolean enablePartitionAggregation(long dbId, List<Long> tableIdList) {
+    public static boolean fileBundling(long dbId, List<Long> tableIdList) {
         if (!RunMode.isSharedDataMode()) {
             return false;
         }
@@ -269,8 +269,8 @@ public class LakeTableHelper {
             if (table == null) {
                 continue;
             }
-            // check if table is LakeTable with partition aggregation
-            if (table.enablePartitionAggregation()) {
+            // check if table is LakeTable with file bundling
+            if (table.isFileBundling()) {
                 return true;
             }
         }

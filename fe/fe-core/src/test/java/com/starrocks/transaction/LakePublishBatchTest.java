@@ -84,7 +84,7 @@ public class LakePublishBatchTest {
                 ")" +
                 "DISTRIBUTED BY HASH(pk) BUCKETS 3" +
                 " PROPERTIES(\"replication_num\" = \"" + 3 +
-                "\", \"storage_medium\" = \"SSD\", \"enable_partition_aggregation\" = \"false\")";
+                "\", \"storage_medium\" = \"SSD\", \"file_bundling\" = \"false\")";
         starRocksAssert.withTable(sql1);
 
         String sql2 = "create table " + TABLE_AGG_ON +
@@ -97,7 +97,7 @@ public class LakePublishBatchTest {
                 ")" +
                 "DISTRIBUTED BY HASH(pk) BUCKETS 3" +
                 " PROPERTIES(\"replication_num\" = \"" + 3 +
-                "\", \"storage_medium\" = \"SSD\", \"enable_partition_aggregation\" = \"true\")";
+                "\", \"storage_medium\" = \"SSD\", \"file_bundling\" = \"true\")";
         starRocksAssert.withTable(sql2);
     }
 

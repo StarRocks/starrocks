@@ -73,7 +73,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     @SerializedName(value = "commitVersionMap")
     private Map<Long, Long> commitVersionMap = new HashMap<>();
     private AgentBatchTask batchTask = null;
-    private boolean enablePartitionAggregation = false;
+    private boolean isFileBundling = false;
 
     public LakeTableAlterMetaJobBase(JobType jobType) {
         super(jobType);
@@ -114,8 +114,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             this.watershedGtid = globalStateMgr.getGtidGenerator().nextGtid();
             GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this.getShadowCopy());
         }
-        // TODO(zhangqiang)
-        // if update partition aggregation, can we skip write txn log?
+
         try {
             for (Partition partition : partitions) {
                 updatePartitionTabletMeta(db, table, partition);
@@ -134,9 +133,9 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
 
     protected abstract void restoreState(LakeTableAlterMetaJobBase job);
 
-    protected abstract boolean isAggregateMetadata();
+    protected abstract boolean enableFileBundling();
 
-    protected abstract boolean isSplitMetadata();
+    protected abstract boolean disableFileBundling();
 
     @Override
     protected void runWaitingTxnJob() throws AlterCancelException {
@@ -244,7 +243,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
-            enablePartitionAggregation = table.enablePartitionAggregation();
+            isFileBundling = table.isFileBundling();
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                 Preconditions.checkState(partition != null, partitionId);
@@ -271,10 +270,10 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             txnInfo.txnType = TxnTypePB.TXN_NORMAL;
             txnInfo.gtid = watershedGtid;
             // there are two scenario we should use aggregate_publish
-            // 1. this task is change `enable_partition_aggregation`
-            // 2. the table is enable_partition_aggregation and this task is not change `enable_partition_aggregation`
+            // 1. this task is change `file_bundling` to true
+            // 2. the table is enable `file_bundling` and this task is not change `file_bundling`
             //    to false.
-            boolean useAggregatePublish = isAggregateMetadata() || (enablePartitionAggregation && !isSplitMetadata());
+            boolean useAggregatePublish = enableFileBundling() || (isFileBundling && !disableFileBundling());
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(partitionId);
                 Map<Long, MaterializedIndex> dirtyIndexMap = physicalPartitionIndexMap.row(partitionId);
@@ -427,7 +426,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             Preconditions.checkState(partition.getVisibleVersion() == commitVersion - 1,
                     "partitionVisitionVersion=" + partition.getVisibleVersion() + " commitVersion=" + commitVersion);
             partition.updateVisibleVersion(commitVersion, finishedTimeMs);
-            if (isAggregateMetadata() || isSplitMetadata()) {
+            if (enableFileBundling() || disableFileBundling()) {
                 partition.setMetadataSwitchVersion(commitVersion);
             }
             LOG.info("partitionVisibleVersion=" + partition.getVisibleVersion() + " commitVersion=" + commitVersion);

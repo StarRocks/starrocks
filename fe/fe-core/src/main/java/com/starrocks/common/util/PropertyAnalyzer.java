@@ -255,7 +255,7 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
 
-    public static final String PROPERTIES_ENABLE_PARTITION_AGGREGATION = "enable_partition_aggregation";
+    public static final String PROPERTIES_FILE_BUNDLING = "file_bundling";
 
     /**
      * Matches location labels like : ["*", "a:*", "bcd_123:*", "123bcd_:val_123", "  a :  b  "],
@@ -886,13 +886,13 @@ public class PropertyAnalyzer {
                 + " must be `true` or `false`");
     }
 
-    public static Boolean analyzeEnablePartitionAggregation(Map<String, String> properties) throws AnalysisException {
-        boolean enablePartitionAggregation = Config.enable_partition_aggregation;
-        if (properties != null && properties.containsKey(PROPERTIES_ENABLE_PARTITION_AGGREGATION)) {
-            enablePartitionAggregation = Boolean.parseBoolean(properties.get(PROPERTIES_ENABLE_PARTITION_AGGREGATION));
-            properties.remove(PROPERTIES_ENABLE_PARTITION_AGGREGATION);
+    public static Boolean analyzeFileBundling(Map<String, String> properties) throws AnalysisException {
+        boolean fileBundling = Config.enable_file_bundling;
+        if (properties != null && properties.containsKey(PROPERTIES_FILE_BUNDLING)) {
+            fileBundling = Boolean.parseBoolean(properties.get(PROPERTIES_FILE_BUNDLING));
+            properties.remove(PROPERTIES_FILE_BUNDLING);
         }
-        return enablePartitionAggregation;
+        return fileBundling;
     }
 
     public static Set<String> analyzeBloomFilterColumns(Map<String, String> properties, List<Column> columns,

@@ -185,7 +185,7 @@ public class DatabaseTransactionMgr {
 
         long tid = globalStateMgr.getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
         boolean combinedTxnLog = LakeTableHelper.supportCombinedTxnLog(sourceType);
-        boolean enablePartitionAggregation = LakeTableHelper.enablePartitionAggregation(dbId, tableIdList);
+        boolean fileBundling = LakeTableHelper.fileBundling(dbId, tableIdList);
         LOG.info("begin transaction: txn_id: {} with label {} from coordinator {}, listner id: {}",
                 tid, label, coordinator, callbackId);
         TransactionState transactionState = new TransactionState(dbId, tableIdList, tid, label, requestId, sourceType,
@@ -193,7 +193,7 @@ public class DatabaseTransactionMgr {
 
         transactionState.setPrepareTime(System.currentTimeMillis());
         transactionState.setComputeResource(computeResource);
-        transactionState.setUseCombinedTxnLog(combinedTxnLog || enablePartitionAggregation);
+        transactionState.setUseCombinedTxnLog(combinedTxnLog || fileBundling);
         transactionState.writeLock();
         try {
             writeLock();

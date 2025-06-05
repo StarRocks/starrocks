@@ -479,7 +479,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
         // version -> shadowTablets
-        boolean enablePartitionAggregation = Config.enable_partition_aggregation;
+        boolean useAggregatePublish = Config.enable_file_bundling;
         ComputeResource computeResource =  WarehouseManager.DEFAULT_RESOURCE;
         try {
             OlapTable table =
@@ -500,7 +500,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 return false;
             }
 
-            enablePartitionAggregation = table.enablePartitionAggregation();
+            useAggregatePublish = table.isFileBundling();
             for (int i = 0; i < transactionStates.size(); i++) {
                 TransactionState txnState = transactionStates.get(i);
                 computeResource = txnState.getComputeResource();
@@ -547,7 +547,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
                 // used to delete txnLog when publish success
                 Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
-                if (!enablePartitionAggregation) {
+                if (!useAggregatePublish) {
                     Utils.publishVersionBatch(publishTablets, txnInfos,
                             startVersion - 1, endVersion, compactionScores, nodeToTablets,
                             computeResource, null);
@@ -781,7 +781,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
-        boolean enablePartitionAggregation = Config.enable_partition_aggregation;
+        boolean useAggregatePublish = Config.enable_file_bundling;
         try {
             OlapTable table =
                     (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
@@ -790,7 +790,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 LOG.info("Removed non-exist table {} from transaction {}. txn_id={}", tableId, txnLabel, txnId);
                 return true;
             }
-            enablePartitionAggregation = table.enablePartitionAggregation();
+            useAggregatePublish = table.isFileBundling();
             long partitionId = partitionCommitInfo.getPhysicalPartitionId();
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             if (partition == null) {
@@ -830,7 +830,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 // Used to collect statistics when the partition is first imported
                 Map<Long, Long> tabletRowNums = new HashMap<>();
                 Utils.publishVersion(normalTablets, txnInfo, baseVersion, txnVersion, compactionScores,
-                        computeResource, tabletRowNums, enablePartitionAggregation);
+                        computeResource, tabletRowNums, useAggregatePublish);
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 partitionCommitInfo.setCompactionScore(quantiles);

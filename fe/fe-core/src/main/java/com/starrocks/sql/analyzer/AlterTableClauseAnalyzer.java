@@ -269,32 +269,32 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                         "Property " + PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE +
                                 " must be CLOUD_NATIVE or LOCAL");
             }
-        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION)) {
-            if (!properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION).equalsIgnoreCase("true") &&
-                    !properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION).equalsIgnoreCase("false")) {
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING)) {
+            if (!properties.get(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING).equalsIgnoreCase("true") &&
+                    !properties.get(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING).equalsIgnoreCase("false")) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                        "Property " + PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION +
+                        "Property " + PropertyAnalyzer.PROPERTIES_FILE_BUNDLING +
                                 " must be bool type(false/true)");
             }
 
             if (!table.isCloudNativeTable()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                            "Property " + PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION +
+                            "Property " + PropertyAnalyzer.PROPERTIES_FILE_BUNDLING +
                                     " only support cloud native table");
             }
 
-            boolean enablePartitionAggregation = properties.get(
-                            PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION).equalsIgnoreCase("true");
+            boolean fileBundling = properties.get(
+                            PropertyAnalyzer.PROPERTIES_FILE_BUNDLING).equalsIgnoreCase("true");
             OlapTable olapTable = (OlapTable) table;
-            if (enablePartitionAggregation == olapTable.enablePartitionAggregation()) {
-                String msg = String.format("table: %s enable_partition_aggregation is %s, nothing need to do",
-                        olapTable.getName(), enablePartitionAggregation);
+            if (fileBundling == olapTable.isFileBundling()) {
+                String msg = String.format("table: %s file_bundling is %s, nothing need to do",
+                        olapTable.getName(), fileBundling);
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, msg);
             }
             
-            if (!olapTable.allowUpdatePartitionAggregation()) {
+            if (!olapTable.allowUpdateFileBundling()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                            "Property " + PropertyAnalyzer.PROPERTIES_ENABLE_PARTITION_AGGREGATION +
+                            "Property " + PropertyAnalyzer.PROPERTIES_FILE_BUNDLING +
                                     " cannot be updated now because this table contains mixed metadata types "  + 
                                     "(both split and aggregate). Please wait until old metadata versions are vacuumed");
             }

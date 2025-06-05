@@ -329,7 +329,7 @@ public class CompactionScheduler extends Daemon {
         CompactionJob job = new CompactionJob(db, table, partition, txnId, Config.lake_compaction_allow_partial_success,
                                               warehouseName);
         try {
-            if (table.enablePartitionAggregation()) {
+            if (table.isFileBundling()) {
                 CompactionTask task = createAggregateCompactionTask(currentVersion, beToTablets, txnId,
                         partitionStatisticsSnapshot.getPriority());
                 task.sendRequest();

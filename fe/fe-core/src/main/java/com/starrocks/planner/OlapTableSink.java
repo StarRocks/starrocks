@@ -209,7 +209,7 @@ public class OlapTableSink extends DataSink {
         tSink.setEnable_replicated_storage(enableReplicatedStorage);
         tSink.setAutomatic_bucket_size(automaticBucketSize);
         tSink.setEncryption_meta(GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta());
-        tSink.setEnable_data_file_bundling(dstTable.enablePartitionAggregation());
+        tSink.setEnable_data_file_bundling(dstTable.isFileBundling());
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db != null) {
             tSink.setDb_name(db.getFullName());
