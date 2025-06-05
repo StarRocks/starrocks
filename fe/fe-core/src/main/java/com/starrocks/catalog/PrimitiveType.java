@@ -37,7 +37,6 @@ package com.starrocks.catalog;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSetMultimap;
-import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Lists;
 import com.starrocks.mysql.MysqlColType;
 import com.starrocks.thrift.TPrimitiveType;
@@ -76,6 +75,7 @@ public enum PrimitiveType {
     DECIMAL32("DECIMAL32", 4, TPrimitiveType.DECIMAL32),
     DECIMAL64("DECIMAL64", 8, TPrimitiveType.DECIMAL64),
     DECIMAL128("DECIMAL128", 16, TPrimitiveType.DECIMAL128),
+    DECIMAL256("DECIMAL256", 32, TPrimitiveType.DECIMAL256),
 
     JSON("JSON", 16, TPrimitiveType.JSON),
 
@@ -98,7 +98,7 @@ public enum PrimitiveType {
             ImmutableList.of(TINYINT, SMALLINT, INT, BIGINT, LARGEINT);
 
     public static final ImmutableList<PrimitiveType> FLOAT_TYPE_LIST =
-            ImmutableList.of(FLOAT, DOUBLE, DECIMALV2, DECIMAL32, DECIMAL64, DECIMAL128);
+            ImmutableList.of(FLOAT, DOUBLE, DECIMALV2, DECIMAL32, DECIMAL64, DECIMAL128, DECIMAL256);
 
     public static final ImmutableList<PrimitiveType> NUMBER_TYPE_LIST =
             ImmutableList.<PrimitiveType>builder()
@@ -142,24 +142,6 @@ public enum PrimitiveType {
                     .addAll(TIME_TYPE_LIST)
                     .addAll(STRING_TYPE_LIST)
                     .build();
-    private static final ImmutableSortedSet<String> VARIABLE_TYPE_SET =
-            ImmutableSortedSet.orderedBy(String.CASE_INSENSITIVE_ORDER)
-                    .add(PrimitiveType.CHAR.toString())
-                    .add(PrimitiveType.VARCHAR.toString())
-                    .add(PrimitiveType.DECIMALV2.toString())
-                    .add(PrimitiveType.DECIMAL32.toString())
-                    .add(PrimitiveType.DECIMAL64.toString())
-                    .add(PrimitiveType.DECIMAL128.toString())
-                    .add("DECIMAL") // generic name for all decimal types
-                    .build();
-
-    public static boolean isVariableType(String typeName) {
-        return VARIABLE_TYPE_SET.contains(typeName);
-    }
-
-    public static boolean isStaticType(String typeName) {
-        return !VARIABLE_TYPE_SET.contains(typeName);
-    }
 
     static {
         ImmutableSetMultimap.Builder<PrimitiveType, PrimitiveType> builder = ImmutableSetMultimap.builder();
@@ -180,7 +162,7 @@ public enum PrimitiveType {
         builder.putAll(CHAR, BASIC_TYPE_LIST);
 
         // Decimal
-        for (PrimitiveType decimalType : Arrays.asList(DECIMALV2, DECIMAL32, DECIMAL64, DECIMAL128)) {
+        for (PrimitiveType decimalType : Arrays.asList(DECIMALV2, DECIMAL32, DECIMAL64, DECIMAL128, DECIMAL256)) {
             builder.putAll(decimalType, BOOLEAN);
             builder.putAll(decimalType, NUMBER_TYPE_LIST);
             builder.putAll(decimalType, STRING_TYPE_LIST);
@@ -270,6 +252,8 @@ public enum PrimitiveType {
                 return DECIMAL64;
             case DECIMAL128:
                 return DECIMAL128;
+            case DECIMAL256:
+                return DECIMAL256;
             case DATE:
                 return DATE;
             case DATETIME:
@@ -293,10 +277,6 @@ public enum PrimitiveType {
             result.add(t.toThrift());
         }
         return result;
-    }
-
-    public static int getMaxSlotSize() {
-        return DECIMALV2.slotSize;
     }
 
     /**
@@ -331,6 +311,8 @@ public enum PrimitiveType {
                 return 18;
             case DECIMAL128:
                 return 38;
+            case DECIMAL256:
+                return 76;
             default:
                 Preconditions.checkState(t.isDecimalOfAnyVersion());
                 return -1;
@@ -347,6 +329,8 @@ public enum PrimitiveType {
                 return 18;
             case DECIMAL128:
                 return 38;
+            case DECIMAL256:
+                return 76;
             default:
                 Preconditions.checkState(t.isDecimalOfAnyVersion());
                 return -1;
@@ -364,10 +348,6 @@ public enum PrimitiveType {
         }
         Preconditions.checkState(type.isDecimalOfAnyVersion());
         return type;
-    }
-
-    public void setTimeType() {
-        isTimeType = true;
     }
 
     @Override
@@ -420,6 +400,9 @@ public enum PrimitiveType {
             case DECIMALV2:
             case DECIMAL128:
                 typeSize = 16;
+                break;
+            case DECIMAL256:
+                typeSize = 32;
                 break;
             case CHAR:
             case VARCHAR:
@@ -477,7 +460,7 @@ public enum PrimitiveType {
     }
 
     public boolean isDecimalV3Type() {
-        return this == DECIMAL32 || this == DECIMAL64 || this == DECIMAL128;
+        return this == DECIMAL32 || this == DECIMAL64 || this == DECIMAL128 || this == DECIMAL256;
     }
 
     public boolean isNumericType() {
@@ -553,6 +536,7 @@ public enum PrimitiveType {
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
+            case DECIMAL256:
                 return MysqlColType.MYSQL_TYPE_NEWDECIMAL;
             case VARCHAR:
                 return MysqlColType.MYSQL_TYPE_VAR_STRING;
