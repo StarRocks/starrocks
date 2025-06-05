@@ -12,7 +12,7 @@ This topic describes some frequently asked questions (FAQ) and common issues abo
 
 In most cases, you can check whether Data Cache is successfully enabled by any of the following methods:
 
-- Execute `SHOW BACKENDS` (or `SHOW COMPUTE NODES`) from your SQL client, and check the value of `DataCacheMetrics`. You can confirm that Data Cache is enbaled if the disk or memory cache quota is greater than 0.
+- Execute `SHOW BACKENDS` (or `SHOW COMPUTE NODES`) from your SQL client, and check the value of `DataCacheMetrics`. You can confirm that Data Cache is enabled if the disk or memory cache quota is greater than 0.
 
 ```SQL
 mysql> show backends \G
@@ -89,7 +89,7 @@ Some catalogs may use different data access methods based on certain conditions 
 
 ### How can I know that a query hits the cache?
 
-You can check Data Cache-related metrics in the corresponding query profiley. The metrics `DataCacheReadBytes` and `DataCacheReadCounter` indicates the local cache hit status.
+You can check Data Cache-related metrics in the corresponding query profile. The metrics `DataCacheReadBytes` and `DataCacheReadCounter` indicates the local cache hit status.
 
 ```
  - DataCacheReadBytes: 518.73 MB
@@ -115,7 +115,7 @@ You can check Data Cache-related metrics in the corresponding query profiley. Th
 Follow these steps for troubleshooting:
 
 1. Check whether Data Cache support the current catalog type.
-2. Confirm whether the query statement meets the cache population conditions. In certain cases, Data Cache will reject cache population for some queries. For details, see [Data Cache Population Rules](https://docs.starrocks.io/docs/data_source/data_cache/#population-rules).
+2. Confirm whether the query statement meets the cache population conditions. In certain cases, Data Cache will reject cache population for some queries. For details, see [Data Cache Population Rules](./data_cache.md#population-rules).
 
 The `EXPLAIN VERBOSE` command can be used to check whether a query triggers cache population.
 Example:
@@ -134,7 +134,7 @@ mysql> EXPLAIN VERBOSE SELECT col1 FROM hudi_table;
 
 In the above example, the `populate` field of the `dataCacheOptions` section is `false`, indicating the cache will not be populated for the query.
 
-To enable Data Cache for such queries, you can modify the default population behavior by setting the sysetm variable `populate_datacache_mode` to `always`.
+To enable Data Cache for such queries, you can modify the default population behavior by setting the system variable `populate_datacache_mode` to `always`.
 
 ## Data Cache Hit
 
