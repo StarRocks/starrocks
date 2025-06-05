@@ -6,6 +6,15 @@ displayed_sidebar: docs
 
 SHOW PROC shows certain indicators of the StarRocks cluster.
 
+SHOW PROC is equivalent to the the `/proc` filesystem in Linux. Similar to the paths in `/proc`, the parameters in SHOW PROC have a tree-like hierarchical structure, and each layer displays different information. Take `SHOW PROC '/dbs'` as an example:
+- `SHOW PROC '/dbs'` will return the information of all databases in the cluster.
+- `SHOW PROC '/dbs/<db_name>'` will return the information of the specified database.
+- `SHOW PROC '/dbs/<db_name>/tables'` will return the information of all tables in the specified database.
+- `SHOW PROC '/dbs/<db_name>/<table_name>'` will return the information of the specified table.
+- `SHOW PROC '/dbs/<db_name>/<table_name>/partitions'` will return the information of all partitions in the specified table.
+
+It can be specified all the way to the leaf node.
+
 :::tip
 
 This operation requires the SYSTEM-level OPERATE privilege. You can follow the instructions in [GRANT](../../account-management/GRANT.md) to grant this privilege.
@@ -29,7 +38,7 @@ SHOW PROC { '/backends' | '/compute_nodes' | '/dbs' | '/jobs'
 | ---------------------------- | ------------------------------------------------------------ |
 | '/backends'                  | Shows the information of BE nodes in the cluster.            |
 | '/compute_nodes'             | Shows the information of CN nodes in the cluster.            |
-| '/dbs'                       | Shows the information of databases in the cluster.           |
+| '/dbs'                       | Shows the information of databases, tables, partitions, and tablets in the cluster.           |
 | '/jobs'                      | Shows the information of jobs in the cluster.                |
 | '/statistic'                 | Shows the statistics of each database in the cluster.        |
 | '/tasks'                     | Shows the total number of all generic tasks and the failed tasks in the cluster. |
@@ -115,17 +124,32 @@ ClusterDecommissioned: false
 Example 2: Shows the information of databases in the cluster.
 
 ```Plain
-mysql> SHOW PROC '/dbs';
-+---------+------------------------+----------+----------------+--------------------------+---------------------+
-| DbId    | DbName                 | TableNum | Quota          | LastConsistencyCheckTime | ReplicaQuota        |
-+---------+------------------------+----------+----------------+--------------------------+---------------------+
-| 1       | information_schema     | 22       | 8388608.000 TB | NULL                     | 9223372036854775807 |
-| 840997  | tpcds_100g             | 25       | 1024.000 GB    | NULL                     | 1073741824          |
-| 1275196 | _statistics_           | 3        | 8388608.000 TB | 2022-09-06 23:00:58      | 9223372036854775807 |
-| 1286207 | tpcds_n                | 24       | 8388608.000 TB | NULL                     | 9223372036854775807 |
-| 1381289 | test                   | 6        | 8388608.000 TB | 2022-01-14 23:10:18      | 9223372036854775807 |
-| 6186781 | test_stddev            | 1        | 8388608.000 TB | 2022-09-06 23:00:58      | 9223372036854775807 |
-+---------+------------------------+----------+----------------+--------------------------+---------------------+
+mysql> show proc "/dbs";
++-------+--------------------+----------+----------------+--------------------------+---------------------+
+| DbId  | DbName             | TableNum | Quota          | LastConsistencyCheckTime | ReplicaQuota        |
++-------+--------------------+----------+----------------+--------------------------+---------------------+
+| 1     | information_schema | 54       | 8388608.000 TB | NULL                     | 9223372036854775807 |
+| 100   | sys                | 6        | 8388608.000 TB | NULL                     | 9223372036854775807 |
+| 10001 | _statistics_       | 12       | 8388608.000 TB | NULL                     | 9223372036854775807 |
+| 10015 | test               | 1        | 8388608.000 TB | NULL                     | 9223372036854775807 |
++-------+--------------------+----------+----------------+--------------------------+---------------------+
+4 rows in set (0.00 sec)
+mysql> show proc "/dbs/test";
++---------+------------------+----------+---------------------+--------------+--------+--------------+--------------------------+--------------+---------------+--------------------------------------------------------------------------------------------------------+
+| TableId | TableName        | IndexNum | PartitionColumnName | PartitionNum | State  | Type         | LastConsistencyCheckTime | ReplicaCount | PartitionType | StoragePath                                                                                            |
++---------+------------------+----------+---------------------+--------------+--------+--------------+--------------------------+--------------+---------------+--------------------------------------------------------------------------------------------------------+
+| 10207   | source_wiki_edit | 1        | event_time          | 4            | NORMAL | CLOUD_NATIVE | NULL                     | 8            | RANGE         | s3://test/xxx                                                                                          |
++---------+------------------+----------+---------------------+--------------+--------+--------------+--------------------------+--------------+---------------+--------------------------------------------------------------------------------------------------------+
+1 row in set (0.00 sec)
+mysql> show proc "/dbs/test/source_wiki_edit";
++-----------------+
+| Nodes           |
++-----------------+
+| partitions      |
+| temp_partitions |
+| index_schema    |
++-----------------+
+3 rows in set (0.00 sec)
 ```
 
 | **Return**               | **Description**                                   |
@@ -136,6 +160,19 @@ mysql> SHOW PROC '/dbs';
 | Quota                    | Storage quota of the database.                    |
 | LastConsistencyCheckTime | The last time when consistency check is executed. |
 | ReplicaQuota             | Data replica quota of the database.               |
+| TableId                  | Table ID.                                         |
+| TableName                | Table name.                                       |
+| PartitionColumnName      | Partition column name.                            |
+| PartitionNum             | Number of partitions in the table.                |
+| State                    | State of the table.                               |
+| Type                     | Type of the table.                                |
+| LastConsistencyCheckTime | The time when the last consistency check was performed. |
+| ReplicaCount             | Number of replicas for the table.                 |
+| PartitionType            | Type of the partitions in the table.              |
+| StoragePath              | Storage path of the table.                       |
+| partitions               | Partitions in the table.                          |
+| temp_partitions          | Temporary partitions in the table.                |
+| index_schema             | Synchronous materialized view in the table.       |
 
 Example 3: Shows the information of jobs in the cluster.
 
