@@ -30,7 +30,7 @@ TEST(LoadFailPointTest, tablet_writer_open) {
     tablet_writer_open_fp_action("127.0.0.1", &closure, &request);
     ASSERT_TRUE(closure.cntl.Failed());
     ASSERT_EQ(closure.cntl.ErrorText(),
-              "load_tablet_writer_open failpoint triggered failure, rpc: 127.0.0.1 -> , txn_id: 123456");
+              "load_tablet_writer_open failpoint triggered failure, rpc:  -> 127.0.0.1, txn_id: 123456");
 }
 
 TEST(LoadFailPointTest, tablet_writer_add_chunks) {
@@ -46,7 +46,7 @@ TEST(LoadFailPointTest, tablet_writer_add_chunks) {
     tablet_writer_add_chunks_fp_action("127.0.0.1", &closure, &request);
     ASSERT_TRUE(closure.cntl.Failed());
     ASSERT_EQ(closure.cntl.ErrorText(),
-              "load_tablet_writer_add_chunks failpoint triggered failure, rpc: 127.0.0.1 -> , txn_id: 123456");
+              "load_tablet_writer_add_chunks failpoint triggered failure, rpc:  -> 127.0.0.1, txn_id: 123456");
 }
 
 TEST(LoadFailPointTest, tablet_writer_add_segment) {
@@ -55,10 +55,12 @@ TEST(LoadFailPointTest, tablet_writer_add_segment) {
     request.mutable_id()->set_hi(9382);
     request.mutable_id()->set_lo(482323);
     request.set_txn_id(123456);
+    request.set_tablet_id(7890);
     tablet_writer_add_segment_fp_action("127.0.0.1", &closure, &request);
     ASSERT_TRUE(closure.cntl.Failed());
     ASSERT_EQ(closure.cntl.ErrorText(),
-              "load_tablet_writer_add_segment failpoint triggered failure, rpc: 127.0.0.1 -> , txn_id: 123456");
+              "load_tablet_writer_add_segment failpoint triggered failure, rpc:  -> 127.0.0.1, txn_id: 123456, "
+              "tablet_id: 7890");
 }
 
 TEST(LoadFailPointTest, tablet_writer_cancel) {
@@ -72,7 +74,7 @@ TEST(LoadFailPointTest, tablet_writer_cancel) {
     tablet_writer_cancel_fp_action("127.0.0.1", &closure, &closure.cntl, &request);
     ASSERT_TRUE(closure.cntl.Failed());
     ASSERT_EQ(closure.cntl.ErrorText(),
-              "load_tablet_writer_cancel failpoint triggered failure, rpc: 127.0.0.1 -> , txn_id: 123456");
+              "load_tablet_writer_cancel failpoint triggered failure, rpc:  -> 127.0.0.1, txn_id: 123456");
 }
 
 TEST(LoadFailPointTest, memtable_flush) {
