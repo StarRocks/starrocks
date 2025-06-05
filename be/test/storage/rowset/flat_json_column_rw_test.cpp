@@ -876,6 +876,17 @@ TEST_F(FlatJsonColumnRWTest, testHyperFlatJsonWithConfig) {
     EXPECT_EQ("gg", writer_opts.meta->children_columns(index++).name());
     EXPECT_EQ("remain", writer_opts.meta->children_columns(index++).name());
 
+    index = 0;
+    EXPECT_EQ(EncodingTypePB::PLAIN_ENCODING, writer_opts.meta->encoding());
+    EXPECT_EQ(EncodingTypePB::BIT_SHUFFLE, writer_opts.meta->children_columns(index++).encoding());
+    EXPECT_EQ(EncodingTypePB::BIT_SHUFFLE, writer_opts.meta->children_columns(index++).encoding());
+    EXPECT_EQ(EncodingTypePB::DICT_ENCODING, writer_opts.meta->children_columns(index++).encoding());
+    EXPECT_EQ(EncodingTypePB::DICT_ENCODING, writer_opts.meta->children_columns(index++).encoding());
+    EXPECT_EQ(EncodingTypePB::DICT_ENCODING, writer_opts.meta->children_columns(index++).encoding());
+    EXPECT_EQ(EncodingTypePB::DICT_ENCODING, writer_opts.meta->children_columns(index++).encoding());
+    EXPECT_EQ(EncodingTypePB::DICT_ENCODING, writer_opts.meta->children_columns(index++).encoding());
+    EXPECT_EQ(EncodingTypePB::PLAIN_ENCODING, writer_opts.meta->children_columns(index++).encoding());
+
     auto* read_json = down_cast<JsonColumn*>(read_col.get());
     EXPECT_TRUE(read_json->is_flat_json());
     EXPECT_EQ(5, read_col->size());
